@@ -28,6 +28,7 @@ from app.data_engine.interval_policy import parse_interval_ms
 from app.indicator import registry as indicator_registry
 from app.indicator.events import IndicatorEvent
 from app.indicator.resume import plan_indicator_resume
+from app.indicator.runtimes import PINE_COMPAT_RUNTIME_ID, normalize_runtime_id
 from app.indicator.serialization import (
     build_indicator_snapshot_payload,
     build_ws_error_payload,
@@ -231,7 +232,7 @@ async def _handle_indicator_subscribe(
     indicator_name = str(msg.get("name") or msg.get("indicator") or "").upper().strip()
     params = msg.get("params") if isinstance(msg.get("params"), dict) else {}
     history_limit = int(msg.get("historyLimit") or 500)
-    history_limit = min(max(history_limit, 1), max(int(config.PYNE_MAX_BARS), 1))
+    history_limit = min(max(history_limit, 1), 50_000)
     kind = str(msg.get("kind") or "").strip().lower()
     script = msg.get("script") if isinstance(msg.get("script"), str) else ""
     custom_id = str(
@@ -239,7 +240,7 @@ async def _handle_indicator_subscribe(
         or msg.get("customIndicatorId")
         or ""
     ).strip()
-    is_script = kind in {"script", "custom", "pyne"} or bool(custom_id) or (script and not indicator_name)
+    is_script = kind in {"script", "custom", "pyne", "pine", "pine-compat"} or bool(custom_id) or (script and not indicator_name)
 
     if not client_id:
         await send_json(build_ws_error_payload(
@@ -262,6 +263,15 @@ async def _handle_indicator_subscribe(
         ))
         return
     if is_script:
+        try:
+            runtime = normalize_runtime_id(msg.get("runtime"))
+        except ValueError as exc:
+            await send_json(build_ws_error_payload("SCRIPT_RUNTIME_INVALID", str(exc), client_id=client_id))
+            return
+        history_limit = min(
+            max(history_limit, 1),
+            max(int(config.PINE_MAX_BARS if runtime == PINE_COMPAT_RUNTIME_ID else config.PYNE_MAX_BARS), 1),
+        )
         range_service = getattr(indicator_engine, "indicator_range_service", None)
         script_revision = (
             _indicator_subscription_revision(
@@ -298,6 +308,8 @@ async def _handle_indicator_subscribe(
             script=script,
             params=params,
             security_mode=msg.get("securityMode"),
+            runtime=runtime,
+            render_hints=msg.get("renderHints") if isinstance(msg.get("renderHints"), dict) else {},
             history_limit=history_limit,
             send_json=send_json,
             stream_consumer_id=(

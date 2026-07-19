@@ -34,20 +34,27 @@ Requirements:
 - Node.js 20+
 - npm 10+
 
-Start the backend:
-
-```bash
-cd backend
-python -m pip install -r requirements.txt
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 18080
-```
-
-On Windows, you can use the helper script instead:
+Start the backend with the one-command setup:
 
 ```powershell
 cd backend
 .\dev-server.ps1
 ```
+
+On Linux/WSL:
+
+```bash
+cd backend
+sh ./dev-server.sh
+```
+
+The launcher creates a repository-local `backend/.venv`, installs backend
+dependencies only when `requirements.txt` changes, downloads the pinned
+Pine-compatible wheel for the current platform, verifies its SHA-256 and
+runtime schemas, then starts uvicorn. Later starts only perform the fast checks.
+Use `-Offline` / `--offline` after one successful setup has cached dependencies
+and the Release, or explicitly use
+`-SkipPineRuntime` / `--skip-pine-runtime` for a Pyne-only setup.
 
 Start the frontend:
 
@@ -69,15 +76,6 @@ Default URLs:
 | Backend | `http://127.0.0.1:18080` |
 | Swagger / OpenAPI | `http://127.0.0.1:18080/docs` |
 | Health | `http://127.0.0.1:18080/health` |
-
-On Linux/WSL, create a virtual environment first if desired:
-
-```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-```
 
 ## What It Does
 

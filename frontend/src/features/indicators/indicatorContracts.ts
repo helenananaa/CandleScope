@@ -790,6 +790,7 @@ export function parseIndicatorPayloadEnvelope(
     ? null
     : optionalIndicatorString(record.error, `${path}.error`);
   const code = optionalIndicatorString(record.code, `${path}.code`);
+  const runtime = optionalIndicatorString(record.runtime, `${path}.runtime`);
   const httpStatus = optionalIndicatorFiniteNumber(
     record.__httpStatus,
     `${path}.__httpStatus`,
@@ -801,6 +802,7 @@ export function parseIndicatorPayloadEnvelope(
   if (error !== undefined) envelope.error = error;
   if (record.detail !== undefined) envelope.detail = record.detail;
   if (code !== undefined) envelope.code = code;
+  if (runtime !== undefined) envelope.runtime = runtime;
   if (record.errorDetail !== undefined || record.error_detail !== undefined) {
     envelope.errorDetail = parseIndicatorErrorDetail(
       record.errorDetail ?? record.error_detail,
@@ -997,6 +999,8 @@ export function parseCustomIndicatorRecord(
       ) ?? 1,
     id: expectIndicatorNonEmptyString(record.id, `${path}.id`),
     kind: expectIndicatorNonEmptyString(record.kind, `${path}.kind`),
+    runtime:
+      optionalIndicatorString(record.runtime, `${path}.runtime`) ?? "pyne",
     name: expectIndicatorNonEmptyString(record.name, `${path}.name`),
     description:
       optionalIndicatorString(record.description, `${path}.description`) ?? "",

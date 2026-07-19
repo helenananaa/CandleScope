@@ -2,6 +2,7 @@ import type { KlineBar } from "../market-data/marketDataTypes.js";
 
 export type IndicatorParams = Record<string, unknown>;
 export type IndicatorSecurityMode = "safe" | "research" | "unsafe";
+export type IndicatorRuntimeId = "pyne" | "pine-compat";
 export type IndicatorKind = "builtin" | "script" | "custom" | "pyne";
 export type IndicatorSeriesType = "line" | "histogram" | string;
 
@@ -12,6 +13,7 @@ export interface IndicatorDefinition {
   script?: string;
   params?: IndicatorParams;
   securityMode?: IndicatorSecurityMode | string;
+  runtime?: IndicatorRuntimeId | string;
   visible?: boolean;
   lines?: IndicatorLine[];
   error?: string | null;
@@ -234,6 +236,7 @@ export interface IndicatorUnifiedAnnotation {
 export interface IndicatorPayloadEnvelope {
   ok: boolean | null;
   schemaVersion?: number;
+  runtime?: IndicatorRuntimeId | string;
   outputSchemaVersion?: number;
   error?: string | null;
   detail?: unknown;
@@ -336,6 +339,7 @@ export interface IndicatorRangeRequest {
   clientId: string;
   kind?: IndicatorKind | string;
   securityMode?: IndicatorSecurityMode | string;
+  runtime?: IndicatorRuntimeId | string;
   name?: string;
   customId?: string;
   script?: string;
@@ -363,6 +367,8 @@ export interface IndicatorRangeBatchResponse {
 export interface IndicatorComputeRequest {
   mode?: string;
   securityMode?: string;
+  runtime?: IndicatorRuntimeId | string;
+  renderHints?: Record<string, unknown>;
   name?: string;
   script?: string;
   ohlcv: IndicatorOhlcvBar[];
@@ -403,6 +409,7 @@ export interface CustomIndicatorRecord {
   schemaVersion: number;
   id: string;
   kind: string;
+  runtime: IndicatorRuntimeId | string;
   name: string;
   description: string;
   script: string;
@@ -544,6 +551,8 @@ export interface IndicatorSubscribeMessage {
   customId?: string;
   script?: string;
   securityMode?: string;
+  runtime?: IndicatorRuntimeId | string;
+  renderHints?: Record<string, unknown>;
   resumeFrom?: number;
   serverEpoch?: string;
   correctionRevision?: string;

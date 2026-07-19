@@ -1,0 +1,20 @@
+[package]
+name = "pine-python"
+version = "0.1.0"
+description.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "pine_compat"
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[dependencies]
+pine-ir = { path = "../pine-ir" }
+pine-runtime = { path = "../pine-runtime" }
+pine-sema = { path = "../pine-sema" }
+pine-syntax = { path = "../pine-syntax" }
+pyo3 = { version = "0.28.3", features = ["abi3-py310", "extension-module"] }

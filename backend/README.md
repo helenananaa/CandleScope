@@ -15,18 +15,23 @@
 
 ## Quick Start
 
-```bash
-cd backend
-python -m pip install -r requirements.txt
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 18080
-```
-
-On Windows, `dev-server.ps1` runs the same development server with UTF-8 output
-enabled:
-
 ```powershell
 .\dev-server.ps1
 ```
+
+On Linux/WSL:
+
+```bash
+sh ./dev-server.sh
+```
+
+These launchers run the idempotent `setup.ps1` / `setup.sh` first. Setup creates
+`backend/.venv`, installs requirements only when their hash changes, installs
+the pinned Pine-compatible Release wheel after SHA-256 verification, runs its
+schema/SMA smoke, and then starts the server with that exact Python. Use
+`-Offline` / `--offline` after one successful setup has prepared dependencies
+and cached the Release. A deliberate Pyne-only
+setup can use `-SkipPineRuntime` / `--skip-pine-runtime`.
 
 Default API base:
 
@@ -186,12 +191,13 @@ Long-lived plugin boundaries:
 - Optional out-of-tree plugins can be loaded with `CANDLESCOPE_EXCHANGE_PLUGINS=module.path,module.path:factory`. This path is explicit and diagnostics-backed; built-in plugins still load first.
 - The frontend consumes `/api/v1/exchanges/` for interval lists, market availability, WS mode, and user-visible limitations. Keep new exchange UI behavior in capabilities rather than hard-coded frontend branches.
 
-## Indicators And Pyne
+## Indicators And Script Runtimes
 
 Indicator docs:
 
 - [app/indicator](app/indicator/)
 - [app/indicator/pyne](app/indicator/pyne/)
+- [packages/pine-compat-runtime](../packages/pine-compat-runtime/)
 
 Built-ins include `MA`, `EMA`, `MACD`, `RSI`, `BOLL`, `ATR`, and `VOL`.
 
@@ -217,10 +223,40 @@ source path for that shell session:
 $env:CANDLESCOPE_PYNE_RUNTIME_SRC = "<path-to-pyne-runtime>\src"
 ```
 
+The Pine-compatible runtime is an explicit sibling of Pyne. Its pinned source
+lives in `packages/pine-compat-runtime`; normal CandleScope users install the
+corresponding verified binary Release rather than compiling Rust locally.
+Setup performs this automatically, or it can be invoked directly with the
+backend virtual environment:
+
+```powershell
+.\setup.ps1
+.\.venv\Scripts\python.exe scripts\ensure_pine_runtime.py --check
+```
+
+`packages/pine-compat-runtime/CANDLESCOPE_RUNTIME.json` pins the Release tag,
+commit, and manifest digest. The trusted manifest pins each platform wheel's
+name, size, and digest. The installer supports the published Windows x86-64
+and manylinux x86-64 wheels, writes only the selected backend environment and
+a per-user cache, and refuses unsupported platforms or free-threaded CPython.
+It never silently falls back to a source build. Local Rust builds remain an
+explicit developer workflow documented by the vendored package.
+
+When the wheel is absent from a manually managed environment, only requests
+with `runtime="pine-compat"` fail with `PINE_RUNTIME_UNAVAILABLE`; Pyne remains
+available. Runtime availability is exposed by `GET /api/v1/indicators/runtimes`
+and diagnostics. Existing records and requests without a runtime continue to
+default to `pyne`.
+
+Pine v1 performs historical batch execution over closed bars only. The host
+currently maps `plot`, `plotchar`, `plotshape`, `plotarrow`, `hline`, `fill`,
+`bgcolor`, `barcolor`, and alerts. It explicitly rejects `request.*`, strategy,
+imports, chart-context features, forming bars, and native drawing objects.
+
 HTTP indicator compute is offloaded through dedicated executors:
 
 - Builtin indicator HTTP compute uses one-shot engine instances so it does not mutate the app-wide realtime `IndicatorEngine`.
-- Pyne HTTP and range snapshot paths use the Pyne wait executor around the process-based runtime.
+- Pyne and Pine HTTP/range paths use separate wait executors around their process-based runtimes.
 - Both paths are guarded by `INDICATOR_HTTP_TIMEOUT_SECONDS`.
 
 ## Observability And Benchmarks
@@ -273,9 +309,11 @@ Common variables:
 | `BACKFILL_*` | historical repair intervals, fetch limits, dedup, publish mode |
 | `BAR_AGG_*` | aggregation source mode, alignment, finalization, event throttling |
 | `PYNE_*` | Pyne security, executor mode, timeouts, output limits |
+| `PINE_*` | Pine executor mode, timeouts, bar/output limits |
 | `INDICATOR_HTTP_TIMEOUT_SECONDS` | HTTP indicator compute wait cap |
 | `INDICATOR_THREAD_WORKERS` | builtin indicator executor size |
 | `PYNE_HTTP_THREAD_WORKERS` | Pyne wait executor size |
+| `PINE_HTTP_THREAD_WORKERS` | Pine wait executor size |
 | `STORAGE_THREAD_WORKERS` | storage executor size |
 | `WS_SEND_TIMEOUT_SECONDS` | WebSocket send timeout |
 | `EVENT_LOOP_LAG_INTERVAL_SECONDS` | event-loop lag sampling interval |

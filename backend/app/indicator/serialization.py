@@ -266,11 +266,17 @@ def _build_pane_layout(series: list[dict[str, Any]], annotations: list[dict[str,
     return list(panes.values())
 
 
-def serialize_pyne_result(result: Any, *, lines_on_error: bool = True) -> dict[str, Any]:
-    """Serialize a PyneResult into the frontend-facing compute shape."""
+def serialize_script_result(
+    result: Any,
+    *,
+    runtime: str,
+    lines_on_error: bool = True,
+) -> dict[str, Any]:
+    """Serialize a backend script-runtime result into the shared compute shape."""
     output = result.output or {}
     payload: dict[str, Any] = {
         "schemaVersion": INDICATOR_PAYLOAD_SCHEMA_VERSION,
+        "runtime": runtime,
         "ok": result.ok,
         "error": result.error,
         "lines": result.lines if (result.ok or lines_on_error) else [],
@@ -286,14 +292,14 @@ def serialize_pyne_result(result: Any, *, lines_on_error: bool = True) -> dict[s
         signals=output.get("signals") or [],
     ))
     if not result.ok:
-        code = result.code or "PYNE_EXECUTION_FAILED"
+        code = result.code or "SCRIPT_EXECUTION_FAILED"
         payload["code"] = code
         payload["errorDetail"] = error_detail(
             code,
-            result.error or "Pyne execution failed",
+            result.error or f"{runtime} execution failed",
             line=result.line,
             column=result.column,
-            hint=_pyne_hint(code, result.hint),
+            hint=_script_hint(runtime, code, result.hint),
         )
 
     for key in PYNE_EXTENDED_OUTPUT_KEYS:
@@ -311,12 +317,27 @@ def serialize_pyne_result(result: Any, *, lines_on_error: bool = True) -> dict[s
     return payload
 
 
+def serialize_pyne_result(result: Any, *, lines_on_error: bool = True) -> dict[str, Any]:
+    """Backward-compatible Pyne serializer."""
+    return serialize_script_result(result, runtime="pyne", lines_on_error=lines_on_error)
+
+
 def _pyne_hint(code: str, fallback: str | None) -> str | None:
     """Keep CandleScope-facing Pyne errors localized across runtime backends."""
     if code == "PYNE_SYNTAX_ERROR":
         return "这是 Python/Pyne 语法错误，请检查报错行附近的括号、缩进、逗号或赋值写法。"
     if code == "PYNE_IMPORT_BLOCKED":
         return "当前安全模式不允许该 import。可切换 research/unsafe，或配置 PYNE_ALLOWED_IMPORTS。"
+    return fallback
+
+
+def _script_hint(runtime: str, code: str, fallback: str | None) -> str | None:
+    if runtime == "pyne":
+        return _pyne_hint(code, fallback)
+    if code == "PINE_RUNTIME_UNAVAILABLE":
+        return "需要先为后端 Python 构建并安装 pine-compat-runtime 的本机 wheel。"
+    if code == "PINE_HOST_CAPABILITY_UNSUPPORTED":
+        return fallback or "首版只支持闭合 K 线指标；该 Pine 能力尚未接入 CandleScope host。"
     return fallback
 
 
@@ -396,7 +417,39 @@ def build_pyne_snapshot_payload(
     script_hash: str | None = None,
 ) -> dict[str, Any]:
     """Build a WebSocket snapshot payload for a backend-hosted Pyne script."""
-    payload = serialize_pyne_result(result, lines_on_error=False)
+    return build_script_snapshot_payload(
+        client_id=client_id,
+        indicator_id=indicator_id,
+        exchange=exchange,
+        symbol=symbol,
+        interval=interval,
+        market_type=market_type,
+        name=name,
+        params=params,
+        result=result,
+        runtime="pyne",
+        bar_time=bar_time,
+        script_hash=script_hash,
+    )
+
+
+def build_script_snapshot_payload(
+    *,
+    client_id: str,
+    indicator_id: str,
+    exchange: str,
+    symbol: str,
+    interval: str,
+    market_type: str,
+    name: str,
+    params: dict[str, Any],
+    result: Any,
+    runtime: str,
+    bar_time: int = 0,
+    script_hash: str | None = None,
+) -> dict[str, Any]:
+    """Build a WebSocket snapshot for an explicitly selected script runtime."""
+    payload = serialize_script_result(result, runtime=runtime, lines_on_error=False)
     payload.update(build_unified_output(
         indicator_id=indicator_id,
         lines=payload.get("lines") or [],
@@ -410,6 +463,7 @@ def build_pyne_snapshot_payload(
     return {
         "type": "indicator.snapshot",
         "kind": "script",
+        "runtime": runtime,
         "clientId": client_id,
         "indicatorId": indicator_id,
         "exchange": exchange,

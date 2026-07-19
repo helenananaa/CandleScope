@@ -1,0 +1,17 @@
+[package]
+name = "pine-sema"
+version = "0.1.0"
+description.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+pine-builtins = { path = "../pine-builtins" }
+pine-ir = { path = "../pine-ir" }
+pine-syntax = { path = "../pine-syntax" }
+
+[lib]
+name = "pine_sema"
+path = "src/lib.rs"

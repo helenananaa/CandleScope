@@ -7,7 +7,7 @@ import json
 from typing import Any
 
 from app.core import config
-from app.core.executors import run_indicator, run_pyne_wait, run_storage
+from app.core.executors import run_indicator, run_pine_wait, run_pyne_wait, run_storage
 from app.data_engine.interval_policy import (
     compute_bucket_end_ms,
     compute_bucket_start_ms,
@@ -25,9 +25,11 @@ from app.indicator.pyne import (
 from app.indicator.pyne.executor import execute_pyne_script
 from app.indicator.pyne.security import PyneSecurityError, PyneTimeoutError
 from app.indicator.script_identity import script_hash
+from app.indicator.runtimes import PINE_COMPAT_RUNTIME_ID, get_script_runtime, normalize_runtime_id
 from app.indicator.serialization import (
     build_indicator_snapshot_payload,
     build_pyne_snapshot_payload,
+    build_script_snapshot_payload,
 )
 
 _pyne_incremental_sessions = PyneIncrementalSessionManager()
@@ -312,12 +314,17 @@ async def compute_indicator_range_payload_async(
     interval_s = max(interval_ms // 1000, 1)
     target_bars = ((end_s - start_s) // interval_s) + 1
     if meta.get("kind") == "script":
+        runtime = normalize_runtime_id(meta.get("runtime"))
         params = meta.get("params") if isinstance(meta.get("params"), dict) else {}
-        warmup_bars = _indicator_warmup_bars("PYNE", params)
-        max_pyne_bars = max(int(config.PYNE_MAX_BARS), 1)
+        warmup_bars = _indicator_warmup_bars("PINE" if runtime == PINE_COMPAT_RUNTIME_ID else "PYNE", params)
+        max_script_bars = max(
+            int(config.PINE_MAX_BARS if runtime == PINE_COMPAT_RUNTIME_ID else config.PYNE_MAX_BARS),
+            1,
+        )
         estimated_compute_bars = target_bars + warmup_bars
-        if estimated_compute_bars > max_pyne_bars:
-            raise ValueError(f"Too many Pyne bars: {estimated_compute_bars} > {config.PYNE_MAX_BARS}")
+        if estimated_compute_bars > max_script_bars:
+            runtime_label = "Pine" if runtime == PINE_COMPAT_RUNTIME_ID else "Pyne"
+            raise ValueError(f"Too many {runtime_label} bars: {estimated_compute_bars} > {max_script_bars}")
         bars = await _query_indicator_compute_bars_async(
             dm,
             meta,
@@ -327,8 +334,10 @@ async def compute_indicator_range_payload_async(
             backfill_coordinator=backfill_coordinator,
             wait_seconds=backfill_wait_seconds,
         )
-        return await run_pyne_wait(
-            _compute_pyne_range_patch_from_bars,
+        runner = run_pine_wait if runtime == PINE_COMPAT_RUNTIME_ID else run_pyne_wait
+        compute = _compute_pine_range_patch_from_bars if runtime == PINE_COMPAT_RUNTIME_ID else _compute_pyne_range_patch_from_bars
+        return await runner(
+            compute,
             client_id,
             meta,
             start_s,
@@ -710,6 +719,55 @@ def _compute_pyne_snapshot_message(
     return payload
 
 
+def _compute_pine_snapshot_message(
+    client_id: str,
+    dm,
+    meta: dict,
+    bar_time: int = 0,
+) -> dict:
+    """Compute a closed-bar Pine snapshot; forming-bar previews are unsupported."""
+    history_limit = min(
+        max(int(meta.get("historyLimit") or 1), 1),
+        max(int(config.PINE_MAX_BARS), 1),
+    )
+    query_result = dm.query_latest(
+        meta["symbol"],
+        meta["interval"],
+        limit=history_limit,
+        exchange=meta["exchange"],
+        market_type=meta["market_type"],
+    )
+    seed_bars = confirmed_indicator_seed_bars(query_result.bars)
+    result = get_script_runtime(PINE_COMPAT_RUNTIME_ID).execute(
+        script=meta["script"],
+        ohlcv=[bar.to_dict() for bar in seed_bars],
+        params=meta.get("params") or {},
+        render_hints=meta.get("renderHints") or {},
+    )
+    payload = build_script_snapshot_payload(
+        client_id=client_id,
+        indicator_id=meta.get("indicatorId") or f"script:pine-compat:{meta['exchange']}:{meta['market_type']}:{meta['symbol']}:{meta['interval']}:{client_id}",
+        exchange=meta["exchange"],
+        symbol=meta["symbol"],
+        interval=meta["interval"],
+        market_type=meta["market_type"],
+        name=meta["name"],
+        params=meta.get("params") or {},
+        result=result,
+        runtime=PINE_COMPAT_RUNTIME_ID,
+        bar_time=bar_time,
+        script_hash=meta.get("scriptHash"),
+    )
+    if bar_time:
+        return _patch_from_snapshot(
+            payload,
+            reason="bar_closed",
+            start_s=int(bar_time),
+            end_s=int(bar_time),
+        )
+    return payload
+
+
 def _pyne_incremental_session_key(
     *,
     exchange: str,
@@ -984,6 +1042,52 @@ def _compute_pyne_range_patch_from_bars(
     return patch
 
 
+def _compute_pine_range_patch_from_bars(
+    client_id: str,
+    meta: dict,
+    start_s: int,
+    end_s: int,
+    bars: list[Any],
+    reason: str = "load_range",
+    target_bars: int | None = None,
+) -> dict:
+    params = meta.get("params") if isinstance(meta.get("params"), dict) else {}
+    warmup = _indicator_warmup_bars("PINE", params)
+    confirmed_bars = confirmed_indicator_seed_bars(bars)
+    if len(confirmed_bars) > max(int(config.PINE_MAX_BARS), 1):
+        raise ValueError(f"Too many pine-compat bars: {len(confirmed_bars)} > {config.PINE_MAX_BARS}")
+    result = get_script_runtime(PINE_COMPAT_RUNTIME_ID).execute(
+        script=meta["script"],
+        ohlcv=[bar.to_dict() for bar in confirmed_bars],
+        params=params,
+        render_hints=meta.get("renderHints") or {},
+    )
+    payload = build_script_snapshot_payload(
+        client_id=client_id,
+        indicator_id=meta.get("indicatorId") or f"script:pine-compat:{meta['exchange']}:{meta['market_type']}:{meta['symbol']}:{meta['interval']}:{client_id}",
+        exchange=meta["exchange"],
+        symbol=meta["symbol"],
+        interval=meta["interval"],
+        market_type=meta["market_type"],
+        name=meta["name"],
+        params=params,
+        result=result,
+        runtime=PINE_COMPAT_RUNTIME_ID,
+        script_hash=meta.get("scriptHash"),
+    )
+    range_start_s, range_end_s = _confirmed_target_range(confirmed_bars, start_s, end_s)
+    patch = _replace_range_from_snapshot(
+        payload,
+        reason=reason,
+        start_s=range_start_s,
+        end_s=range_end_s,
+    )
+    patch["warmupBars"] = warmup
+    if target_bars is not None:
+        patch["targetBars"] = target_bars
+    return patch
+
+
 async def _compute_pyne_snapshot_message_async(
     client_id: str,
     dm,
@@ -993,6 +1097,21 @@ async def _compute_pyne_snapshot_message_async(
     """Compute a Pyne snapshot off the event loop."""
     return await run_pyne_wait(
         _compute_pyne_snapshot_message,
+        client_id,
+        dm,
+        meta,
+        bar_time,
+    )
+
+
+async def _compute_pine_snapshot_message_async(
+    client_id: str,
+    dm,
+    meta: dict,
+    bar_time: int = 0,
+) -> dict:
+    return await run_pine_wait(
+        _compute_pine_snapshot_message,
         client_id,
         dm,
         meta,

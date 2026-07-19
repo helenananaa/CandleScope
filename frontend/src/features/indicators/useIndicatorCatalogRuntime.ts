@@ -55,6 +55,8 @@ function buildCustomIndicatorForChart(preset: CatalogCustomIndicator): Indicator
     category: preset.category || "custom",
     paneTarget: preset.paneTarget || renderPaneTarget(preset.renderHints) || "sub",
     securityMode: preset.securityMode || "safe",
+    runtime: preset.runtime || "pyne",
+    renderHints: preset.renderHints || {},
     kind: "script",
     isPreset: false,
   };

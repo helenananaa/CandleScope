@@ -37,15 +37,21 @@ from app.api.v1.stream_utils import (
     validate_ws_interval as _validate_interval_name,
 )
 from app.core import config
-from app.core.executors import executors_snapshot, run_indicator, run_pyne_wait, run_storage
+from app.core.executors import executors_snapshot, run_indicator, run_pine_wait, run_pyne_wait, run_storage
 from app.core.runtime_metrics import ws_runtime_metrics
 from app.data_engine.data_manager.models import BarData
 from app.indicator import registry, IndicatorEngine, create_engine
 from app.indicator.custom_store import CustomIndicatorStore
 from app.indicator.pyne.cache import pyne_cache
 from app.indicator.pyne import is_incremental_pyne_script
-from app.indicator.pyne.executor import execute_pyne_script
 from app.indicator.pyne.external_runtime import RuntimeBackendSnapshot, cache_stats
+from app.indicator.runtimes import (
+    PINE_COMPAT_RUNTIME_ID,
+    PYNE_RUNTIME_ID,
+    get_script_runtime,
+    normalize_runtime_id,
+    runtime_descriptors,
+)
 from app.indicator.script_identity import script_hash, short_script_hash
 from app.indicator.engine import indicator_code_hash
 from app.indicator.types import IndicatorKey
@@ -54,7 +60,7 @@ from app.indicator.range_result_service import IndicatorRangeResultService
 from app.indicator.serialization import (
     build_error_payload,
     serialize_indicator_result,
-    serialize_pyne_result,
+    serialize_script_result,
 )
 
 router = APIRouter(prefix="/indicators", tags=["indicators"])
@@ -71,18 +77,20 @@ class ComputeRequest(BaseModel):
 
     Supports two modes:
       1. Engine mode: provide ``name`` + ``params`` → uses the new engine
-      2. Script mode: provide ``script`` + ``params`` → legacy Python exec
+      2. Script mode: provide ``runtime`` + ``script`` + ``params``
     """
     name: str | None = Field(None, description="Indicator name (e.g. 'MA', 'MACD')")
-    mode: str | None = Field(None, description="'builtin' for engine mode or 'script' for Pyne mode")
+    mode: str | None = Field(None, description="'builtin' for engine mode or 'script' for a hosted runtime")
     params: dict[str, Any] = Field(default_factory=dict, description="Indicator parameters")
     exchange: str = Field("binance", description="Exchange context")
     symbol: str = Field("UNKNOWN", description="Symbol for context")
     interval: str = Field("1m", description="Interval for context")
     market_type: str = Field("spot", description="Market type context")
     ohlcv: list[dict[str, Any]] = Field(default_factory=list, description="OHLCV bar data array")
-    script: str | None = Field(None, description="Legacy Python script (optional)")
+    script: str | None = Field(None, description="Script source for the selected runtime")
     securityMode: str | None = Field(None, description="'safe', 'research', or 'unsafe' for Pyne scripts")
+    runtime: str | None = Field(None, description="Explicit script runtime: 'pyne' or 'pine-compat'")
+    renderHints: dict[str, Any] = Field(default_factory=dict, description="Host rendering hints for script output")
 
 
 class CustomIndicatorPayload(BaseModel):
@@ -93,7 +101,8 @@ class CustomIndicatorPayload(BaseModel):
     kind: str = Field("script", description="'script' or 'custom'")
     name: str = Field(..., description="Display name")
     description: str = Field("", description="Description")
-    script: str = Field(..., description="Pyne/Python script")
+    runtime: str | None = Field(None, description="'pyne' or 'pine-compat'; omitted updates preserve the stored runtime")
+    script: str = Field(..., description="Script source for the selected runtime")
     params: dict[str, Any] = Field(default_factory=dict, description="Default params")
     paramSchema: list[dict[str, Any]] = Field(default_factory=list, description="Parameter schema")
     renderHints: dict[str, Any] = Field(default_factory=dict, description="Optional rendering hints")
@@ -113,8 +122,9 @@ class IndicatorRangeRequest(BaseModel):
     name: str | None = Field(None, description="Builtin indicator name or display name")
     customId: str | None = Field(None, description="Saved custom indicator id")
     customIndicatorId: str | None = Field(None, description="Saved custom indicator id alias")
-    script: str | None = Field(None, description="Pyne/custom script")
+    script: str | None = Field(None, description="Script source for the selected runtime")
     securityMode: str | None = Field(None, description="Pyne security mode")
+    runtime: str | None = Field(None, description="Explicit script runtime: 'pyne' or 'pine-compat'")
     params: dict[str, Any] = Field(default_factory=dict, description="Indicator parameters")
     start: int = Field(..., description="Inclusive range start, unix seconds")
     end: int = Field(..., description="Inclusive range end, unix seconds")
@@ -136,6 +146,12 @@ async def list_indicators():
     """Return all registered indicator specifications."""
     specs = registry.list_specs()
     return [s.to_dict() for s in specs]
+
+
+@router.get("/runtimes")
+async def list_script_runtimes():
+    """Advertise script runtimes and current native availability."""
+    return {"schemaVersion": 1, "default": PYNE_RUNTIME_ID, "items": runtime_descriptors()}
 
 
 @router.get("/registry/{name}")
@@ -435,6 +451,19 @@ def _build_diagnostics_snapshot(
             },
             "cache": cache_stats() or pyne_cache.stats(),
         },
+        "scriptRuntimes": runtime_descriptors(),
+        "pineCompat": {
+            "executor": {
+                "mode": config.PINE_EXECUTOR_MODE,
+                "timeoutSeconds": config.PINE_EXEC_TIMEOUT_SECONDS,
+                "processGraceSeconds": config.PINE_PROCESS_GRACE_SECONDS,
+            },
+            "limits": {
+                "maxBars": config.PINE_MAX_BARS,
+                "maxOutputSeries": config.PINE_MAX_OUTPUT_SERIES,
+                "maxOutputPoints": config.PINE_MAX_OUTPUT_POINTS,
+            },
+        },
         "websocket": {
             "maxSubscriptions": config.INDICATOR_WS_MAX_SUBSCRIPTIONS,
             "queueSize": config.INDICATOR_WS_QUEUE_SIZE,
@@ -492,25 +521,42 @@ def _resolve_range_market_type(req: IndicatorRangeRequest) -> str:
     return _normalize_market_type(str(req.market_type or req.marketType or "spot"))
 
 
-def _resolve_range_script(req: IndicatorRangeRequest) -> tuple[str, str, str | None]:
+def _resolve_range_script(
+    req: IndicatorRangeRequest,
+) -> tuple[str, str, str | None, str, dict[str, Any]]:
     script = req.script or ""
     custom_id = (req.customId or req.customIndicatorId or "").strip()
     name = req.name or req.clientId
     security_mode = req.securityMode
-    if custom_id and not script.strip():
+    runtime = normalize_runtime_id(req.runtime)
+    render_hints: dict[str, Any] = {}
+    if custom_id:
         try:
             record = _custom_store.get(custom_id)
         except ValueError as exc:
             raise ValueError(str(exc)) from exc
         if record is None:
-            raise LookupError(f"Custom indicator '{custom_id}' not found.")
-        script = str(record.get("script") or "")
-        name = str(req.name or record.get("name") or custom_id)
-        if not req.params and isinstance(record.get("params"), dict):
-            req.params.update(record["params"])
-        if security_mode is None:
-            security_mode = record.get("securityMode")
-    return script, name, security_mode
+            if not script.strip():
+                raise LookupError(f"Custom indicator '{custom_id}' not found.")
+        else:
+            stored_script = str(record.get("script") or "")
+            stored_runtime = normalize_runtime_id(record.get("runtime"))
+            if script.strip() and script != stored_script:
+                raise ValueError("Custom indicator script does not match the saved record.")
+            if req.runtime is not None and runtime != stored_runtime:
+                raise ValueError("Custom indicator runtime does not match the saved record.")
+            script = stored_script
+            runtime = stored_runtime
+            name = str(req.name or record.get("name") or custom_id)
+            if not req.params and isinstance(record.get("params"), dict):
+                req.params.update(record["params"])
+            if security_mode is None:
+                security_mode = record.get("securityMode")
+            if isinstance(record.get("renderHints"), dict):
+                render_hints = dict(record["renderHints"])
+    if runtime != PYNE_RUNTIME_ID:
+        security_mode = None
+    return script, name, security_mode, runtime, render_hints
 
 
 def _build_range_meta(req: IndicatorRangeRequest) -> dict[str, Any]:
@@ -528,11 +574,11 @@ def _build_range_meta(req: IndicatorRangeRequest) -> dict[str, Any]:
     if not _validate_interval_name(interval):
         raise ValueError(f"Unsupported interval: {interval}.")
 
-    is_script = kind in {"script", "custom", "pyne"} or bool(custom_id) or (script and not indicator_name)
+    is_script = kind in {"script", "custom", "pyne", "pine", "pine-compat"} or bool(custom_id) or (script and not indicator_name)
     if is_script:
-        script, display_name, security_mode = _resolve_range_script(req)
+        script, display_name, security_mode, runtime, render_hints = _resolve_range_script(req)
         if not script.strip():
-            raise ValueError("Pyne script is required.")
+            raise ValueError("Script source is required.")
         digest = script_hash(script)
         meta = {
             "kind": "script",
@@ -542,17 +588,20 @@ def _build_range_meta(req: IndicatorRangeRequest) -> dict[str, Any]:
             "market_type": market_type,
             "name": display_name,
             "customId": custom_id or None,
-            "indicatorId": f"pyne:{exchange}:{market_type}:{symbol}:{interval}:{short_script_hash(script)}:{req.clientId}",
+            "indicatorId": f"script:{runtime}:{exchange}:{market_type}:{symbol}:{interval}:{short_script_hash(script)}:{req.clientId}",
             "scriptHash": digest,
             "script": script,
+            "runtime": runtime,
             "params": params,
             "securityMode": security_mode,
+            "renderHints": render_hints,
         }
-        try:
-            if is_incremental_pyne_script(script):
-                meta["scriptMode"] = "incremental"
-        except SyntaxError:
-            pass
+        if runtime == PYNE_RUNTIME_ID:
+            try:
+                if is_incremental_pyne_script(script):
+                    meta["scriptMode"] = "incremental"
+            except SyntaxError:
+                pass
         return meta
 
     if not indicator_name and script.startswith(_ENGINE_SCRIPT_MARKER):
@@ -911,7 +960,7 @@ async def compute(req: ComputeRequest):
     Supports two modes:
       1. If ``name`` is provided (or script starts with ENGINE marker),
          uses the new indicator engine.
-      2. If only ``script`` is provided, runs legacy Python exec mode.
+      2. If only ``script`` is provided, runs the selected hosted runtime.
 
     Returns ``{ok, error, lines, result}`` — ``lines`` is the flat list
     for direct frontend rendering, ``result`` is the full structured output.
@@ -929,9 +978,9 @@ async def compute(req: ComputeRequest):
     if mode == "script":
         if not req.script:
             return build_error_payload(
-                "PYNE_SCRIPT_REQUIRED",
-                "Script mode requires 'script'",
-                hint="请提交 Pyne 脚本文本，或切换到 builtin 模式。",
+            "SCRIPT_REQUIRED",
+            "Script mode requires 'script'",
+            hint="请提交所选 runtime 的脚本文本，或切换到 builtin 模式。",
             )
         return await _compute_script(req)
 
@@ -947,7 +996,7 @@ async def compute(req: ComputeRequest):
             )
         return await _compute_engine(indicator_name, req)
 
-    # Legacy mode: preserve old behavior for existing frontend/localStorage data.
+    # Legacy request shape: preserve Pyne as the default for existing data.
     use_engine = indicator_name is not None
     if not use_engine and req.script and req.script.startswith(_ENGINE_SCRIPT_MARKER):
         first_line = req.script.split("\n")[0]
@@ -1029,36 +1078,43 @@ async def _compute_engine(name: str, req: ComputeRequest) -> dict:
 
 
 async def _compute_script(req: ComputeRequest) -> dict:
-    """Compute using Pyne runtime (with full legacy backward compatibility).
-
-    The Pyne runtime provides a rich Pine-style namespace including
-    ta.*, input.*, plot(), color.*, math.*, crossover(), etc.
-    Legacy scripts using add_line() continue to work unchanged.
-    """
+    """Compute using the explicitly selected backend script runtime."""
+    try:
+        runtime = normalize_runtime_id(req.runtime)
+        adapter = get_script_runtime(runtime)
+    except ValueError as exc:
+        return build_error_payload("SCRIPT_RUNTIME_INVALID", str(exc))
     try:
         result = await _run_indicator_http_compute(
-            execute_pyne_script,
-            executor_kind="pyne",
+            adapter.execute,
+            executor_kind=runtime,
             script=req.script,
             ohlcv=req.ohlcv,
             params=req.params or {},
             security_mode=req.securityMode,
+            render_hints=req.renderHints,
         )
     except asyncio.TimeoutError:
+        label = "Pine" if runtime == PINE_COMPAT_RUNTIME_ID else "Pyne"
         return build_error_payload(
-            "PYNE_TIMEOUT",
-            f"Pyne script exceeded {config.INDICATOR_HTTP_TIMEOUT_SECONDS:g}s HTTP timeout",
+            "PINE_TIMEOUT" if runtime == PINE_COMPAT_RUNTIME_ID else "PYNE_TIMEOUT",
+            f"{label} script exceeded {config.INDICATOR_HTTP_TIMEOUT_SECONDS:g}s HTTP timeout",
             hint="脚本执行超时，请减少循环、缩小窗口，或调整 INDICATOR_HTTP_TIMEOUT_SECONDS。",
         )
 
-    payload = serialize_pyne_result(result)
+    payload = serialize_script_result(result, runtime=runtime)
     payload["scriptHash"] = script_hash(req.script or "")
     return payload
 
 
 async def _run_indicator_http_compute(func, *args, executor_kind: str = "indicator", **kwargs):
     """Run heavy HTTP indicator work off the event loop with a hard wait cap."""
-    runner = run_pyne_wait if executor_kind == "pyne" else run_indicator
+    if executor_kind == PYNE_RUNTIME_ID:
+        runner = run_pyne_wait
+    elif executor_kind == PINE_COMPAT_RUNTIME_ID:
+        runner = run_pine_wait
+    else:
+        runner = run_indicator
     return await asyncio.wait_for(
         runner(func, *args, **kwargs),
         timeout=max(float(config.INDICATOR_HTTP_TIMEOUT_SECONDS), 0.1),

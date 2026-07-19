@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import DATA_DIR
+from app.indicator.runtimes import PYNE_RUNTIME_ID, normalize_runtime_id
 
 
 class CustomIndicatorStore:
@@ -42,6 +43,7 @@ class CustomIndicatorStore:
                 "schemaVersion": int(item.get("schemaVersion") or existing.get("schemaVersion") or 1),
                 "id": indicator_id,
                 "kind": item.get("kind") or existing.get("kind") or "script",
+                "runtime": normalize_runtime_id(item.get("runtime") or existing.get("runtime") or PYNE_RUNTIME_ID),
                 "name": (item.get("name") or existing.get("name") or "Untitled Indicator").strip(),
                 "description": item.get("description") if item.get("description") is not None else existing.get("description", ""),
                 "script": item.get("script") if item.get("script") is not None else existing.get("script", ""),
@@ -52,6 +54,8 @@ class CustomIndicatorStore:
                 "created_at": int(existing.get("created_at") or item.get("created_at") or now),
                 "updated_at": now,
             }
+            if record["runtime"] != PYNE_RUNTIME_ID:
+                record["securityMode"] = None
 
             self._validate(record)
             items[indicator_id] = record
@@ -86,7 +90,9 @@ class CustomIndicatorStore:
         result: dict[str, dict[str, Any]] = {}
         for item in items:
             if isinstance(item, dict) and item.get("id"):
-                result[str(item["id"])] = item
+                record = dict(item)
+                record["runtime"] = normalize_runtime_id(record.get("runtime") or PYNE_RUNTIME_ID)
+                result[str(record["id"])] = record
         return result
 
     def _save(self, items: dict[str, dict[str, Any]]) -> None:
@@ -115,5 +121,6 @@ class CustomIndicatorStore:
             raise ValueError("Custom indicator script is required")
         if item.get("kind") not in {"script", "custom"}:
             raise ValueError("Custom indicator kind must be 'script' or 'custom'")
+        normalize_runtime_id(item.get("runtime"))
         if item.get("securityMode") not in {None, "safe", "research", "unsafe"}:
             raise ValueError("Custom indicator securityMode must be 'safe', 'research', or 'unsafe'")

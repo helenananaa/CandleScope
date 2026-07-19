@@ -466,7 +466,7 @@ Subsequent `PRICE_UPDATED` events send the same `prices` shape with only changed
 
 ### `WS /stream/indicators`
 
-Realtime indicator stream. It supports built-in indicators and saved/ad-hoc Pyne scripts over one WebSocket.
+Realtime indicator stream. It supports built-ins plus saved/ad-hoc scripts with an explicit Pyne or Pine-compatible runtime.
 
 Subscribe to a built-in indicator:
 
@@ -491,6 +491,7 @@ Subscribe to a Pyne script:
   "action": "subscribe",
   "clientId": "custom1",
   "kind": "script",
+  "runtime": "pyne",
   "symbol": "BTCUSDT",
   "interval": "1m",
   "script": "plot(close, title='Close')",
@@ -498,6 +499,8 @@ Subscribe to a Pyne script:
   "historyLimit": 500
 }
 ```
+
+Use the same message with `"runtime": "pine-compat"` for Pine. Version one publishes closed-bar snapshots and patches only, without forming-bar previews.
 
 Unsubscribe:
 
@@ -521,6 +524,7 @@ Server messages include sequence numbers and types such as:
 |---|---|---|
 | `GET` | `/indicators/registry` | List registered built-in specs |
 | `GET` | `/indicators/registry/{name}` | Get one built-in spec |
+| `GET` | `/indicators/runtimes` | List script runtimes, capabilities, and native availability |
 | `GET` | `/indicators/presets` | Frontend-compatible preset list |
 | `GET` | `/indicators/presets/{preset_id}` | Preset details and reference script |
 
@@ -541,6 +545,7 @@ Custom indicator payload:
   "schemaVersion": 1,
   "id": "my-script",
   "kind": "script",
+  "runtime": "pyne",
   "name": "My Script",
   "description": "",
   "script": "plot(close)",
@@ -568,6 +573,7 @@ Request body:
 ```json
 {
   "mode": "script",
+  "runtime": "pyne",
   "name": "MA",
   "params": { "period": 20 },
   "exchange": "binance",
@@ -585,9 +591,9 @@ Request body:
 Modes:
 
 - Built-in mode: `mode="builtin"` with `name`, or a preset script marker such as `# __ENGINE__:MA`.
-- Script mode: `mode="script"` with `script`; runs through Pyne.
+- Script mode: `mode="script"` with `script`; `runtime` explicitly selects `pyne` or `pine-compat`. It defaults to `pyne` for old clients and records.
 
-Pyne execution uses process mode by default and is governed by `PYNE_*` configuration. Safe mode blocks imports; research mode allows only configured imports; unsafe mode is for trusted local scripts.
+Both script runtimes use separate process executors by default. Pyne is governed by `PYNE_*`; Pine uses `PINE_*` and returns structured failures when its native wheel is unavailable or a script crosses the v1 host boundary.
 
 Response includes backward-compatible `lines` plus normalized output fields such as `series`, `annotations`, `fills`, `paneLayout`, and structured `errorDetail` on failure.
 

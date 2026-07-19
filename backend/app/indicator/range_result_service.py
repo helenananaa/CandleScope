@@ -123,6 +123,7 @@ class IndicatorRangeResultService:
             "kind": meta.get("kind") or "builtin",
             "name": str(meta.get("name") or "").upper().strip(),
             "scriptHash": meta.get("scriptHash") or "",
+            "runtime": meta.get("runtime") or "pyne",
             "codeHash": meta.get("codeHash") or "",
             "params": params,
             "securityMode": meta.get("securityMode") or "",

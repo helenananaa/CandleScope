@@ -15,17 +15,22 @@
 
 ## 快速启动
 
-```bash
-cd backend
-python -m pip install -r requirements.txt
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 18080
-```
-
-Windows 下 `dev-server.ps1` 会用同样的开发端口启动，并启用 UTF-8 输出：
-
 ```powershell
 .\dev-server.ps1
 ```
+
+Linux/WSL：
+
+```bash
+sh ./dev-server.sh
+```
+
+启动脚本会先运行幂等的 `setup.ps1` / `setup.sh`：创建 `backend/.venv`，仅在
+requirements 哈希变化时安装依赖，校验 SHA-256 后安装锁定的 Pine-compatible
+Release wheel，执行 schema/SMA smoke，并用同一个 Python 启动后端。至少成功
+setup 一次、依赖和 Release 均已缓存后可传 `-Offline` / `--offline`；明确只使用
+Pyne 时可传
+`-SkipPineRuntime` / `--skip-pine-runtime`。
 
 默认 API base：
 
@@ -187,12 +192,13 @@ Exchange plugin 暴露 capabilities、symbol normalization、REST/WS protocol sp
 - 外部插件可通过 `CANDLESCOPE_EXCHANGE_PLUGINS=module.path,module.path:factory` 显式加载。内置插件仍先加载，外部插件加载失败会进入 diagnostics，而不是静默污染 runtime。
 - 前端通过 `/api/v1/exchanges/` 消费 interval list、market availability、WS mode 和用户可见 limitations。新增交易所 UI 行为应放在 capabilities 中，而不是写新的前端硬编码分支。
 
-## 指标和 Pyne
+## 指标与脚本解释器
 
 指标文档：
 
 - [app/indicator](app/indicator/)
 - [app/indicator/pyne](app/indicator/pyne/)
+- [packages/pine-compat-runtime](../packages/pine-compat-runtime/)
 
 内置指标包括 `MA`、`EMA`、`MACD`、`RSI`、`BOLL`、`ATR` 和 `VOL`。
 
@@ -217,10 +223,36 @@ python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 18080
 $env:CANDLESCOPE_PYNE_RUNTIME_SRC = "<path-to-pyne-runtime>\src"
 ```
 
+Pine-compatible 与 Pyne 是显式并列的脚本 runtime。上游源码固定在
+`packages/pine-compat-runtime`；普通 CandleScope 用户使用经过锁定和校验的二进制
+Release wheel，不需要本地安装 Rust。setup 会自动完成，也可以在后端虚拟环境中
+单独检查：
+
+```powershell
+.\setup.ps1
+.\.venv\Scripts\python.exe scripts\ensure_pine_runtime.py --check
+```
+
+`packages/pine-compat-runtime/CANDLESCOPE_RUNTIME.json` 会锁定 Release tag、commit
+和 manifest 摘要；受信 manifest 再锁定各平台 wheel 的文件名、大小和摘要。安装器
+当前支持已发布的 Windows x86-64 与 manylinux x86-64 wheel，只写入选定的后端
+虚拟环境和用户缓存；不支持的平台或 free-threaded CPython 会明确失败，也不会静默
+退回源码编译。本地 Rust 构建仍是 vendored package 文档中的显式开发流程。
+
+如果手工管理的 Python 环境缺少 wheel，只有 `runtime="pine-compat"` 的请求会以
+`PINE_RUNTIME_UNAVAILABLE` 失败，Pyne 不受影响。`GET /api/v1/indicators/runtimes`
+和 diagnostics 会返回当前可用性。旧记录和未指定 runtime 的请求继续默认使用
+`pyne`。
+
+Pine 首版只在已闭合 K 线上做历史批计算。当前 host 支持 `plot`、
+`plotchar`、`plotshape`、`plotarrow`、`hline`、`fill`、`bgcolor`、`barcolor`
+和 alerts；`request.*`、strategy、imports、依赖 chart context 的能力、forming
+bar 和原生 drawing objects 会明确拒绝，不会静默降级。
+
 HTTP 指标计算通过专用 executor 隔离：
 
 - 内置指标 HTTP compute 使用 one-shot engine，不会修改全局实时 `IndicatorEngine`。
-- Pyne HTTP 和 range snapshot 路径通过 Pyne wait executor 包装 process runtime。
+- Pyne 和 Pine HTTP/range 路径分别通过独立 wait executor 包装 process runtime。
 - 两条路径都受 `INDICATOR_HTTP_TIMEOUT_SECONDS` 保护。
 
 ## 可观测性和压测
@@ -273,9 +305,11 @@ python scripts/bench_concurrency.py --base-url http://127.0.0.1:18080
 | `BACKFILL_*` | 历史修复 intervals、fetch limits、dedup、publish mode |
 | `BAR_AGG_*` | 聚合 source mode、alignment、finalization、event throttling |
 | `PYNE_*` | Pyne security、executor mode、timeouts、output limits |
+| `PINE_*` | Pine executor mode、timeouts、bar/output limits |
 | `INDICATOR_HTTP_TIMEOUT_SECONDS` | HTTP 指标计算等待上限 |
 | `INDICATOR_THREAD_WORKERS` | 内置指标 executor 大小 |
 | `PYNE_HTTP_THREAD_WORKERS` | Pyne wait executor 大小 |
+| `PINE_HTTP_THREAD_WORKERS` | Pine wait executor 大小 |
 | `STORAGE_THREAD_WORKERS` | storage executor 大小 |
 | `WS_SEND_TIMEOUT_SECONDS` | WebSocket send timeout |
 | `EVENT_LOOP_LAG_INTERVAL_SECONDS` | event-loop lag 采样周期 |

@@ -7,15 +7,17 @@ from typing import Any
 
 from app.api.v1.stream_indicator_payloads import (
     _compute_builtin_range_patch_from_bars,
+    _compute_pine_range_patch_from_bars,
     _compute_pyne_range_patch_from_bars,
     _indicator_warmup_bars,
     _query_indicator_compute_bars_async,
     _replace_range_from_snapshot,
 )
 from app.core import config
-from app.core.executors import run_indicator, run_pyne_wait
+from app.core.executors import run_indicator, run_pine_wait, run_pyne_wait
 from app.data_engine.interval_policy import parse_interval_ms
 from app.indicator.range_result_service import IndicatorRangeResultService
+from app.indicator.runtimes import PINE_COMPAT_RUNTIME_ID, normalize_runtime_id
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,7 +38,8 @@ def _job_target_bars(job: IndicatorRangeBatchJob) -> int:
 
 def _job_warmup(job: IndicatorRangeBatchJob) -> int:
     params = job.meta.get("params") if isinstance(job.meta.get("params"), dict) else {}
-    name = "PYNE" if job.meta.get("kind") == "script" else str(job.meta.get("name") or "")
+    runtime = normalize_runtime_id(job.meta.get("runtime")) if job.meta.get("kind") == "script" else None
+    name = ("PINE" if runtime == PINE_COMPAT_RUNTIME_ID else "PYNE") if runtime else str(job.meta.get("name") or "")
     return _indicator_warmup_bars(name, params)
 
 
@@ -55,8 +58,10 @@ def _validate_jobs(jobs: list[IndicatorRangeBatchJob]) -> None:
             raise ValueError(f"Too many indicator bars: {target_bars} > 50000")
         if job.meta.get("kind") == "script":
             estimated = target_bars + _job_warmup(job)
-            if estimated > max(int(config.PYNE_MAX_BARS), 1):
-                raise ValueError(f"Too many Pyne bars: {estimated} > {config.PYNE_MAX_BARS}")
+            runtime = normalize_runtime_id(job.meta.get("runtime"))
+            max_bars = max(int(config.PINE_MAX_BARS if runtime == PINE_COMPAT_RUNTIME_ID else config.PYNE_MAX_BARS), 1)
+            if estimated > max_bars:
+                raise ValueError(f"Too many {runtime} bars: {estimated} > {max_bars}")
 
 
 async def compute_indicator_range_batch_async(
@@ -103,8 +108,11 @@ async def compute_indicator_range_batch_async(
         async def _compute() -> dict[str, Any]:
             bars = await _shared_bars()
             if job.meta.get("kind") == "script":
-                return await run_pyne_wait(
-                    _compute_pyne_range_patch_from_bars,
+                runtime = normalize_runtime_id(job.meta.get("runtime"))
+                runner = run_pine_wait if runtime == PINE_COMPAT_RUNTIME_ID else run_pyne_wait
+                compute = _compute_pine_range_patch_from_bars if runtime == PINE_COMPAT_RUNTIME_ID else _compute_pyne_range_patch_from_bars
+                return await runner(
+                    compute,
                     job.client_id,
                     job.meta,
                     job.start,

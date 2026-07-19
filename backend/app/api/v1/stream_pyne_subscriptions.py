@@ -6,6 +6,7 @@ from typing import Any
 
 from app.api.v1.stream_indicator_payloads import (
     _compute_incremental_pyne_bar_message_async,
+    _compute_pine_snapshot_message_async,
     _compute_pyne_snapshot_message_async,
     _patch_from_snapshot,
     _pyne_incremental_session_key,
@@ -18,6 +19,7 @@ from app.data_engine.interval_policy import parse_interval_ms
 from app.indicator.custom_store import CustomIndicatorStore
 from app.indicator.pyne import PyneIncrementalSession, is_incremental_pyne_script
 from app.indicator.resume import plan_indicator_resume
+from app.indicator.runtimes import PINE_COMPAT_RUNTIME_ID, PYNE_RUNTIME_ID, normalize_runtime_id
 from app.indicator.script_identity import script_hash, short_script_hash
 from app.indicator.serialization import build_ws_error_payload
 
@@ -41,6 +43,8 @@ async def handle_pyne_indicator_subscribe(
     script: str,
     params: dict[str, Any],
     security_mode: str | None,
+    runtime: str = PYNE_RUNTIME_ID,
+    render_hints: dict[str, Any] | None = None,
     history_limit: int,
     send_json,
     stream_consumer_id: str,
@@ -52,7 +56,13 @@ async def handle_pyne_indicator_subscribe(
     client_server_epoch: str | None = None,
     client_correction_revision: int | str | None = None,
 ) -> None:
-    if custom_id and not script.strip():
+    try:
+        runtime = normalize_runtime_id(runtime)
+    except ValueError as exc:
+        await send_json(build_ws_error_payload("SCRIPT_RUNTIME_INVALID", str(exc), client_id=client_id))
+        return
+    render_hints = dict(render_hints or {})
+    if custom_id:
         try:
             record = _stream_custom_store.get(custom_id)
         except ValueError as exc:
@@ -64,24 +74,37 @@ async def handle_pyne_indicator_subscribe(
             ))
             return
         if record is None:
-            await send_json(build_ws_error_payload(
-                "CUSTOM_INDICATOR_NOT_FOUND",
-                f"Custom indicator '{custom_id}' not found.",
-                client_id=client_id,
-                hint="请确认该自定义指标已经保存到后端。",
-            ))
-            return
-        script = str(record.get("script") or "")
-        name = name or str(record.get("name") or custom_id)
-        if not params:
-            params = record.get("params") if isinstance(record.get("params"), dict) else {}
-        if security_mode is None:
-            security_mode = record.get("securityMode")
+            if not script.strip():
+                await send_json(build_ws_error_payload(
+                    "CUSTOM_INDICATOR_NOT_FOUND",
+                    f"Custom indicator '{custom_id}' not found.",
+                    client_id=client_id,
+                    hint="请确认该自定义指标已经保存到后端。",
+                ))
+                return
+        else:
+            stored_script = str(record.get("script") or "")
+            if script.strip() and script != stored_script:
+                await send_json(build_ws_error_payload(
+                    "CUSTOM_INDICATOR_MISMATCH",
+                    "Custom indicator script does not match the saved record.",
+                    client_id=client_id,
+                ))
+                return
+            script = stored_script
+            runtime = normalize_runtime_id(record.get("runtime"))
+            name = name or str(record.get("name") or custom_id)
+            if not params:
+                params = record.get("params") if isinstance(record.get("params"), dict) else {}
+            if security_mode is None:
+                security_mode = record.get("securityMode")
+            if isinstance(record.get("renderHints"), dict):
+                render_hints = dict(record["renderHints"])
 
     if not script.strip():
         await send_json(build_ws_error_payload(
-            "PYNE_SCRIPT_REQUIRED",
-            "Pyne script is required.",
+            "SCRIPT_REQUIRED",
+            "Script source is required.",
             client_id=client_id,
             hint="script/custom/pyne 订阅需要传入脚本文本。",
         ))
@@ -96,6 +119,12 @@ async def handle_pyne_indicator_subscribe(
         return
 
     await unsubscribe_client(client_id)
+    if runtime != PYNE_RUNTIME_ID:
+        security_mode = None
+    history_limit = min(
+        max(int(history_limit), 1),
+        max(int(config.PINE_MAX_BARS if runtime == PINE_COMPAT_RUNTIME_ID else config.PYNE_MAX_BARS), 1),
+    )
     digest = script_hash(script)
 
     await dm.ensure_stream(
@@ -115,18 +144,22 @@ async def handle_pyne_indicator_subscribe(
         "market_type": market_type,
         "name": name,
         "customId": custom_id or None,
-        "indicatorId": f"pyne:{exchange}:{market_type}:{symbol}:{interval}:{short_script_hash(script)}:{client_id}",
+        "indicatorId": f"script:{runtime}:{exchange}:{market_type}:{symbol}:{interval}:{short_script_hash(script)}:{client_id}",
         "scriptHash": digest,
         "script": script,
+        "runtime": runtime,
         "params": params,
         "securityMode": security_mode,
+        "renderHints": render_hints,
         "historyLimit": history_limit,
         "streamConsumerId": stream_consumer_id,
     }
-    try:
-        incremental_script = is_incremental_pyne_script(script)
-    except SyntaxError:
-        incremental_script = False
+    incremental_script = False
+    if runtime == PYNE_RUNTIME_ID:
+        try:
+            incremental_script = is_incremental_pyne_script(script)
+        except SyntaxError:
+            incremental_script = False
     if incremental_script:
         session_key = _pyne_incremental_session_key(
             exchange=exchange,
@@ -175,6 +208,11 @@ async def handle_pyne_indicator_subscribe(
         seeded = initial.get("ok") is not False
         if not seeded:
             await send_json(initial)
+    elif runtime == PINE_COMPAT_RUNTIME_ID:
+        initial = await _compute_pine_snapshot_message_async(client_id, dm, meta)
+        seeded = initial.get("ok") is not False
+        if not seeded:
+            await send_json(initial)
 
     if seeded and range_service is not None and isinstance(initial, dict):
         coverage = initial.get("range")
@@ -197,6 +235,7 @@ async def handle_pyne_indicator_subscribe(
         "clientId": client_id,
         "indicatorId": meta["indicatorId"],
         "kind": "script",
+        "runtime": runtime,
         "exchange": exchange,
         "symbol": symbol,
         "interval": interval,
@@ -204,7 +243,7 @@ async def handle_pyne_indicator_subscribe(
         "name": name,
         "customId": custom_id or None,
         "seeded": seeded,
-        "seedBars": min(max(int(history_limit), 1), max(int(config.PYNE_MAX_BARS), 1)) if incremental_script else 0,
+        "seedBars": history_limit if seeded else 0,
     }
     resume_patch = None
     if range_service is not None and isinstance(data_revision, dict):
@@ -239,6 +278,8 @@ async def handle_pyne_indicator_subscribe(
             resume_patch["dataRevision"] = data_revision
 
     await send_json(subscribed_payload)
+    if runtime == PINE_COMPAT_RUNTIME_ID and seeded and isinstance(initial, dict):
+        await send_json(initial)
     if resume_patch is not None:
         await send_json(resume_patch)
 
@@ -302,6 +343,11 @@ async def handle_pyne_indicator_subscribe(
                             start=int(coverage["start"]),
                             end=int(coverage["end"]),
                         )
+                elif runtime == PINE_COMPAT_RUNTIME_ID:
+                    refreshed = await _compute_pine_snapshot_message_async(client_id, dm, meta)
+                    if range_service is not None:
+                        refreshed["dataRevision"] = range_service.data_revision_for_meta(meta)
+                    queue_message(queue, refreshed)
                 queue_message(queue, {
                     "type": "indicator.recomputed",
                     "clientId": client_id,
@@ -328,17 +374,17 @@ async def handle_pyne_indicator_subscribe(
                     preview=event.event_type == DataEventType.BAR_UPDATED,
                 )
             else:
-                msg = await _compute_pyne_snapshot_message_async(
-                    client_id,
-                    dm,
-                    meta,
-                    bar_time=event.bar.time if event.bar else 0,
+                compute_snapshot = (
+                    _compute_pine_snapshot_message_async
+                    if runtime == PINE_COMPAT_RUNTIME_ID
+                    else _compute_pyne_snapshot_message_async
                 )
+                msg = await compute_snapshot(client_id, dm, meta, bar_time=event.bar.time if event.bar else 0)
             if range_service is not None:
                 msg["dataRevision"] = range_service.data_revision_for_meta(meta)
             queue_message(queue, msg)
 
-        custom_tasks[client_id] = asyncio.create_task(_run(), name=f"pyne_indicator_{client_id}")
+        custom_tasks[client_id] = asyncio.create_task(_run(), name=f"{runtime}_indicator_{client_id}")
 
     handle = dm.subscribe(
         callback=_on_data_event,
@@ -346,12 +392,11 @@ async def handle_pyne_indicator_subscribe(
         interval=interval,
         exchange=exchange,
         market_type=market_type,
-        event_types={
-            DataEventType.BAR_UPDATED,
-            DataEventType.BAR_CLOSED,
-            DataEventType.BAR_AMENDED,
-            DataEventType.BACKFILL_COMPLETED,
-        },
+        event_types=(
+            {DataEventType.BAR_CLOSED, DataEventType.BAR_AMENDED, DataEventType.BACKFILL_COMPLETED}
+            if runtime == PINE_COMPAT_RUNTIME_ID
+            else {DataEventType.BAR_UPDATED, DataEventType.BAR_CLOSED, DataEventType.BAR_AMENDED, DataEventType.BACKFILL_COMPLETED}
+        ),
     )
     custom_handles[client_id] = handle
 

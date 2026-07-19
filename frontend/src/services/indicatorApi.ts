@@ -136,6 +136,8 @@ export async function fetchRegistrySpec(
 export async function computeIndicator({
   mode,
   securityMode,
+  runtime,
+  renderHints,
   name,
   script,
   ohlcv,
@@ -152,6 +154,12 @@ export async function computeIndicator({
   }
   if (securityMode) {
     body.securityMode = securityMode;
+  }
+  if (runtime) {
+    body.runtime = runtime;
+  }
+  if (renderHints) {
+    body.renderHints = renderHints;
   }
   // Prefer engine name if available
   if (name) {
@@ -186,6 +194,7 @@ export async function computeIndicatorRange({
   clientId,
   kind,
   securityMode,
+  runtime,
   name,
   customId,
   script,
@@ -215,6 +224,7 @@ export async function computeIndicatorRange({
       customId,
       script,
       securityMode,
+      runtime,
       params: params || {},
       start,
       end,
@@ -271,6 +281,7 @@ export async function saveCustomIndicator({
   renderHints,
   schemaVersion,
   securityMode,
+  runtime,
 }: CustomIndicatorSaveInput): Promise<CustomIndicatorRecord> {
   const payload = await request(`${API_BASE}/indicators/custom`, {
     method: "POST",
@@ -279,6 +290,7 @@ export async function saveCustomIndicator({
       schemaVersion: schemaVersion || 1,
       id,
       kind: kind || "script",
+      runtime: runtime || "pyne",
       name,
       script,
       description,

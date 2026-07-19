@@ -135,6 +135,7 @@ function indicatorIdentity(
       indicator.name ||
       "",
     stringSignature(indicator.script || ""),
+    indicator.runtime || "pyne",
     indicator.securityMode || "",
     stableJson(computeParams || {}),
   ].join("|");

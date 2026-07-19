@@ -161,6 +161,10 @@ export function useIndicatorComputeController({
             if (indicator.securityMode !== undefined) {
               request.securityMode = indicator.securityMode;
             }
+            if (!builtin) {
+              request.runtime = indicator.runtime || "pyne";
+              if (indicator.renderHints) request.renderHints = indicator.renderHints;
+            }
             if (builtin) request.name = getBuiltinIndicatorName(indicator);
             if (indicator.script !== undefined) request.script = indicator.script;
             const result = await computeIndicator(request);

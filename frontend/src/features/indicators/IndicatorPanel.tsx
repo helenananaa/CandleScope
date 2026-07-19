@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { useIndicatorCatalogRuntime } from "./useIndicatorCatalogRuntime";
-import IndicatorEditor from "./IndicatorEditor";
+import IndicatorEditor, { PYNE_STARTER_SCRIPT } from "./IndicatorEditor";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import type { CatalogIndicator } from "./useIndicatorCatalogRuntime.js";
 import type {
@@ -103,6 +103,7 @@ interface CustomIndicatorDraft extends IndicatorDefinition {
   script: string;
   params: IndicatorParams;
   securityMode: string;
+  runtime: string;
   kind: "script";
 }
 
@@ -409,18 +410,11 @@ export default function IndicatorPanel({
     setEditingIndicator({
       id: null,
       name: "My Indicator",
-      script: `indicator("My Indicator", overlay=True)
-
-length = input.int(20, "Length", minval=1)
-src = input.source(close, "Source")
-line_color = input.color(color.orange, "Color")
-
-ma = ta.sma(src, length)
-plot(ma, "MA", color=line_color)
-`,
+      script: PYNE_STARTER_SCRIPT,
       params: {},
       description: "",
       securityMode: "safe",
+      runtime: "pyne",
       kind: "script",
       isPreset: false,
     });
@@ -444,6 +438,7 @@ plot(ma, "MA", color=line_color)
     is_builtin: false,
     category: updated.category || "custom",
     securityMode: updated.securityMode || "safe",
+    runtime: updated.runtime || "pyne",
   }), []);
 
   const handleForkBuiltin = useCallback((indicator: IndicatorEditorValue) => {
@@ -456,6 +451,7 @@ plot(ma, "MA", color=line_color)
       description: indicator.description || "",
       paneTarget: indicator.paneTarget || renderHintPaneTarget(indicator.renderHints) || "sub",
       securityMode: "safe",
+      runtime: "pyne",
     });
     setEditingIndicator(draft);
   }, [toCustomDraft]);
@@ -463,15 +459,20 @@ plot(ma, "MA", color=line_color)
   const handleEditorPreview = useCallback((updated: IndicatorEditorValue) => {
     const active = updated.id ? activeIndicators.find((i) => i.id === updated.id) : null;
     if (updated.id && active && !active.isPreset && !active.engineName) {
-      onUpdateScript(updated.id, updated.script);
-      if (updated.params) onUpdateParams(updated.id, updated.params);
+      if ((active.runtime || "pyne") !== (updated.runtime || "pyne")) {
+        onRemoveIndicator(updated.id);
+        onAddIndicator(toCustomDraft(updated));
+      } else {
+        onUpdateScript(updated.id, updated.script);
+        if (updated.params) onUpdateParams(updated.id, updated.params);
+      }
       setEditingIndicator((prev) => prev ? { ...prev, ...updated } : updated);
     } else {
       const draft = toCustomDraft({ ...updated, id: null });
       onAddIndicator(draft);
       setEditingIndicator((prev) => prev ? { ...prev, ...draft } : draft);
     }
-  }, [activeIndicators, onAddIndicator, onUpdateScript, onUpdateParams, toCustomDraft]);
+  }, [activeIndicators, onAddIndicator, onRemoveIndicator, onUpdateScript, onUpdateParams, toCustomDraft]);
 
   const handleEditorSave = useCallback(async (updated: IndicatorEditorValue) => {
     const active = updated.id ? activeIndicators.find((i) => i.id === updated.id) : null;
@@ -483,13 +484,16 @@ plot(ma, "MA", color=line_color)
       const persisted = await saveCustomIndicator({
         id: indicatorToSave.id,
         kind: "script",
+        runtime: indicatorToSave.runtime || "pyne",
         name: indicatorToSave.name,
         script: indicatorToSave.script,
         description: indicatorToSave.description || "",
         params: indicatorToSave.params || {},
         paramSchema: indicatorToSave.paramSchema || [],
         renderHints: { paneTarget: indicatorToSave.paneTarget || "sub" },
-        securityMode: indicatorToSave.securityMode || "safe",
+        ...((indicatorToSave.runtime || "pyne") === "pyne"
+          ? { securityMode: indicatorToSave.securityMode || "safe" }
+          : {}),
       });
       saved = toCustomDraft({
         ...persisted,
@@ -501,8 +505,13 @@ plot(ma, "MA", color=line_color)
 
     if (!shouldFork && activeIndicators.some((i) => i.id === saved.id)) {
       // Update existing — these already trigger pendingForceCompute in the indicators runtime
-      onUpdateScript(saved.id, saved.script);
-      if (saved.params) onUpdateParams(saved.id, saved.params);
+      if ((active?.runtime || "pyne") !== (saved.runtime || "pyne")) {
+        onRemoveIndicator(saved.id);
+        onAddIndicator(saved);
+      } else {
+        onUpdateScript(saved.id, saved.script);
+        if (saved.params) onUpdateParams(saved.id, saved.params);
+      }
     } else {
       // Add new — addIndicator already triggers pendingForceCompute
       onAddIndicator({
@@ -512,6 +521,7 @@ plot(ma, "MA", color=line_color)
         category: "custom",
         paneTarget: renderHintPaneTarget(saved.renderHints) || indicatorToSave.paneTarget || "sub",
         securityMode: saved.securityMode || indicatorToSave.securityMode || "safe",
+        runtime: saved.runtime || indicatorToSave.runtime || "pyne",
         isPreset: false,
       });
     }
@@ -519,7 +529,7 @@ plot(ma, "MA", color=line_color)
     setTab("active");
     // No need to manually call onRecompute — the state changes above
     // already set pendingForceComputeRef which triggers automatic recompute
-  }, [activeIndicators, onAddIndicator, onUpdateScript, onUpdateParams, saveCustomIndicator, toCustomDraft]);
+  }, [activeIndicators, onAddIndicator, onRemoveIndicator, onUpdateScript, onUpdateParams, saveCustomIndicator, toCustomDraft]);
 
   const handleEditorBack = useCallback(() => {
     setEditingIndicator(null);
@@ -590,7 +600,7 @@ plot(ma, "MA", color=line_color)
 
         {tab === "editor" && editingIndicator ? (
           <IndicatorEditor
-            key={`${editingIndicator.id || "new"}:${isBuiltinIndicator(editingIndicator) ? "builtin" : "script"}`}
+            key={`${editingIndicator.id || "new"}:${isBuiltinIndicator(editingIndicator) ? "builtin" : editingIndicator.runtime || "pyne"}`}
             indicator={editingIndicator}
             onSave={handleEditorSave}
             onBack={handleEditorBack}

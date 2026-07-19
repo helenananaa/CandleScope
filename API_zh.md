@@ -468,7 +468,7 @@ backfill 完成消息：
 
 ### `WS /stream/indicators`
 
-实时指标流。一个 WebSocket 连接内支持内置指标和保存/临时 Pyne 脚本。
+实时指标流。一个 WebSocket 连接内支持内置指标，以及显式选择 Pyne 或 Pine-compatible 的保存/临时脚本。
 
 订阅内置指标：
 
@@ -493,6 +493,7 @@ backfill 完成消息：
   "action": "subscribe",
   "clientId": "custom1",
   "kind": "script",
+  "runtime": "pyne",
   "symbol": "BTCUSDT",
   "interval": "1m",
   "script": "plot(close, title='Close')",
@@ -500,6 +501,8 @@ backfill 完成消息：
   "historyLimit": 500
 }
 ```
+
+Pine 脚本使用同一消息结构并设置 `"runtime": "pine-compat"`。首版只发布已闭合 K 线的 snapshot/patch，不发布 forming-bar preview。
 
 取消订阅：
 
@@ -523,6 +526,7 @@ backfill 完成消息：
 |---|---|---|
 | `GET` | `/indicators/registry` | 列出已注册内置指标 specs |
 | `GET` | `/indicators/registry/{name}` | 获取单个内置指标 spec |
+| `GET` | `/indicators/runtimes` | 返回脚本 runtime、能力和本机可用性 |
 | `GET` | `/indicators/presets` | 前端兼容 preset 列表 |
 | `GET` | `/indicators/presets/{preset_id}` | preset 详情和参考脚本 |
 
@@ -543,6 +547,7 @@ backfill 完成消息：
   "schemaVersion": 1,
   "id": "my-script",
   "kind": "script",
+  "runtime": "pyne",
   "name": "My Script",
   "description": "",
   "script": "plot(close)",
@@ -570,6 +575,7 @@ backfill 完成消息：
 ```json
 {
   "mode": "script",
+  "runtime": "pyne",
   "name": "MA",
   "params": { "period": 20 },
   "exchange": "binance",
@@ -587,9 +593,9 @@ backfill 完成消息：
 模式：
 
 - 内置模式：`mode="builtin"` 并提供 `name`，或使用 `# __ENGINE__:MA` 这类 preset marker。
-- 脚本模式：`mode="script"` 并提供 `script`；通过 Pyne 运行。
+- 脚本模式：`mode="script"` 并提供 `script`；`runtime` 明确选择 `pyne` 或 `pine-compat`，省略时为兼容旧数据默认 `pyne`。
 
-Pyne 默认使用 process executor，并受 `PYNE_*` 配置控制。safe mode 禁止 imports；research mode 只允许配置的 imports；unsafe mode 仅适合本地可信脚本。
+两种脚本 runtime 都默认使用独立 process executor。Pyne 受 `PYNE_*` 控制；Pine 受 `PINE_*` 控制，并在本机 wheel 不可用或脚本越过首版 host 能力边界时返回结构化错误。
 
 响应保留兼容旧前端的 `lines`，同时包含标准化输出字段，例如 `series`、`annotations`、`fills`、`paneLayout`；失败时返回结构化 `errorDetail`。
 

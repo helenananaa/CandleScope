@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "runtimeId": "pine-compat",
+  "package": "pine-compat-runtime",
+  "pythonModule": "pine_compat",
+  "version": "0.1.0",
+  "upstream": "https://github.com/Ryan00956/pine-compat-runtime",
+  "commit": "d0aa4af0e7e2f4c812b771c6ccd9c028169bad7a",
+  "analysisSchemaVersion": 3,
+  "runtimeSchemaVersion": 7,
+  "release": {
+    "tag": "v0.1.0",
+    "commit": "e01b756f6d70256d80903952df3022391b7d3dcf",
+    "manifestUrl": "https://github.com/Ryan00956/pine-compat-runtime/releases/download/v0.1.0/manifest.json",
+    "manifestSha256": "1734d0689b495ffb8f82d6f4c7f2ce3c6d8bfba752d31baa24c231c999aa9016",
+    "assetBaseUrl": "https://github.com/Ryan00956/pine-compat-runtime/releases/download/v0.1.0"
+  }
+}

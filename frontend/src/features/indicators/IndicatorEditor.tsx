@@ -1,5 +1,5 @@
 /**
- * IndicatorEditor — Pyne code editor for writing custom indicators.
+ * IndicatorEditor — runtime-aware editor for custom indicators.
  *
  * Uses Monaco Editor with:
  *   - Python syntax highlighting (base language)
@@ -12,16 +12,37 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
 import { registerPyneLanguageSupport } from "../../editor/pyneLanguage";
+import { registerPineLanguageSupport } from "../../editor/pineLanguage";
 import { registerPyneTheme, getPyneEditorOptions } from "../../editor/pyneTheme";
 import { usePyneSecurityPolicy } from "./usePyneSecurityPolicy";
 import type { ChangeEvent } from "react";
 import type {
   IndicatorDefinition,
   IndicatorParams,
+  IndicatorRuntimeId,
 } from "./indicatorTypes.js";
 
 /** Track whether Pyne providers have been registered globally */
 let pyneRegistered = false;
+let pineRegistered = false;
+
+export const PYNE_STARTER_SCRIPT = `indicator("My Indicator", overlay=True)
+
+length = input.int(20, "Length", minval=1)
+src = input.source(close, "Source")
+line_color = input.color(color.orange, "Color")
+
+ma = ta.sma(src, length)
+plot(ma, "MA", color=line_color)
+`;
+
+export const PINE_STARTER_SCRIPT = `//@version=6
+indicator("My Indicator", overlay=true)
+
+length = input.int(20, "Length")
+ma = ta.sma(close, length)
+plot(ma, "MA")
+`;
 
 export interface IndicatorEditorSource extends Omit<IndicatorDefinition, "id"> {
   id: string | null;
@@ -33,6 +54,7 @@ export interface IndicatorEditorValue extends Omit<IndicatorEditorSource, "name"
   script: string;
   params: IndicatorParams;
   securityMode: string;
+  runtime: IndicatorRuntimeId | string;
 }
 
 export interface IndicatorEditorPreviewState {
@@ -66,6 +88,9 @@ export default function IndicatorEditor({
   const [name, setName] = useState(indicator?.name || "My Indicator");
   const [script, setScript] = useState(indicator?.script || "");
   const [securityMode, setSecurityMode] = useState(indicator?.securityMode || "safe");
+  const [runtime, setRuntime] = useState<IndicatorRuntimeId>(
+    indicator?.runtime === "pine-compat" ? "pine-compat" : "pyne",
+  );
   const securityPolicy = usePyneSecurityPolicy();
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
 
@@ -78,9 +103,10 @@ export default function IndicatorEditor({
       params: indicator?.params || {},
       description: indicator?.description || "",
       securityMode,
+      runtime,
       isPreset: indicator?.isPreset || false,
     });
-  }, [name, script, securityMode, indicator, onPreview, previewState, readOnly]);
+  }, [name, script, securityMode, runtime, indicator, onPreview, previewState, readOnly]);
 
   const handleSave = useCallback(() => {
     if (readOnly) return;
@@ -91,9 +117,24 @@ export default function IndicatorEditor({
       params: indicator?.params || {},
       description: indicator?.description || "",
       securityMode,
+      runtime,
       isPreset: indicator?.isPreset || false,
     });
-  }, [name, script, securityMode, indicator, onSave, previewState, readOnly]);
+  }, [name, script, securityMode, runtime, indicator, onSave, previewState, readOnly]);
+
+  const handleRuntimeChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    const nextRuntime: IndicatorRuntimeId = event.target.value === "pine-compat"
+      ? "pine-compat"
+      : "pyne";
+    if (
+      indicator?.id === null
+      || script.trim() === PYNE_STARTER_SCRIPT.trim()
+      || script.trim() === PINE_STARTER_SCRIPT.trim()
+    ) {
+      setScript(nextRuntime === "pine-compat" ? PINE_STARTER_SCRIPT : PYNE_STARTER_SCRIPT);
+    }
+    setRuntime(nextRuntime);
+  }, [indicator?.id, script]);
 
   const handleSecurityModeChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
     const nextMode = event.target.value;
@@ -112,6 +153,10 @@ export default function IndicatorEditor({
    */
   const handleBeforeMount = useCallback((monaco: typeof Monaco) => {
     registerPyneTheme(monaco);
+    if (!pineRegistered) {
+      registerPineLanguageSupport(monaco);
+      pineRegistered = true;
+    }
   }, []);
 
   /**
@@ -156,7 +201,7 @@ export default function IndicatorEditor({
       <div className="indicator-editor-toolbar" style={{ padding: '12px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <span className="indicator-editor-title" style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)', letterSpacing: '0.5px' }}>
-            {readOnly ? "内置指标参考实现" : "Pyne 指标编辑器"}
+            {readOnly ? "内置指标参考实现" : `${runtime === "pine-compat" ? "Pine" : "Pyne"} 指标编辑器`}
           </span>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{name}</span>
         </div>
@@ -182,6 +227,7 @@ export default function IndicatorEditor({
                 script,
                 params: indicator.params || {},
                 securityMode,
+                runtime,
               })}
               style={{ background: 'var(--accent-blue)', color: '#fff', border: 'none', padding: '6px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '13px', boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)', transition: 'all 0.2s ease', marginLeft: '8px' }}
             >
@@ -236,8 +282,19 @@ export default function IndicatorEditor({
         {/* Code editor */}
         <div className="indicator-editor-code-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '8px', marginTop: '-8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>Pyne 脚本</span>
+            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>{runtime === "pine-compat" ? "Pine" : "Pyne"} 脚本</span>
             {!readOnly && <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
+              解释器
+              <select
+                value={runtime}
+                onChange={handleRuntimeChange}
+                style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '4px 8px', fontSize: '12px' }}
+              >
+                <option value="pyne">Pyne (Python)</option>
+                <option value="pine-compat">Pine-compatible</option>
+              </select>
+            </label>}
+            {!readOnly && runtime === "pyne" && <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
               模式
               <select
                 value={securityMode}
@@ -249,15 +306,15 @@ export default function IndicatorEditor({
                 <option value="unsafe">unsafe</option>
               </select>
             </label>}
-            {securityPolicy && (
+            {runtime === "pyne" && securityPolicy && (
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                 默认 {securityPolicy.mode} · 超时 {securityPolicy.timeoutSeconds}s
               </span>
             )}
           </div>
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>输入 <code style={{ background: 'var(--bg-tertiary)', padding: '1px 4px', borderRadius: '3px', fontSize: '11px' }}>ta.</code> <code style={{ background: 'var(--bg-tertiary)', padding: '1px 4px', borderRadius: '3px', fontSize: '11px' }}>input.</code> <code style={{ background: 'var(--bg-tertiary)', padding: '1px 4px', borderRadius: '3px', fontSize: '11px' }}>color.</code> 触发自动补全 · <kbd style={{ background: 'var(--bg-tertiary)', padding: '1px 5px', borderRadius: '3px', fontSize: '10px', border: '1px solid var(--border-color)' }}>Ctrl+Enter</kbd> 运行</span>
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>输入 <code style={{ background: 'var(--bg-tertiary)', padding: '1px 4px', borderRadius: '3px', fontSize: '11px' }}>ta.</code> <code style={{ background: 'var(--bg-tertiary)', padding: '1px 4px', borderRadius: '3px', fontSize: '11px' }}>input.</code> 触发自动补全 · <kbd style={{ background: 'var(--bg-tertiary)', padding: '1px 5px', borderRadius: '3px', fontSize: '10px', border: '1px solid var(--border-color)' }}>Ctrl+Enter</kbd> 运行</span>
         </div>
-        {securityMode === "unsafe" && (
+        {runtime === "pyne" && securityMode === "unsafe" && (
           <div style={{ marginBottom: '8px', padding: '8px 10px', border: '1px solid rgba(239, 68, 68, 0.35)', borderRadius: '6px', color: 'var(--candle-down)', background: 'rgba(239, 68, 68, 0.08)', fontSize: '12px' }}>
             unsafe mode 会允许脚本访问完整 Python 能力，包括文件、网络和交易 API。只运行完全信任的本机脚本。
           </div>
@@ -265,7 +322,7 @@ export default function IndicatorEditor({
         <div className="indicator-editor-monaco" style={{ flex: 1, minHeight: 0, border: "1px solid rgba(255, 255, 255, 0.1)", borderRadius: "10px", overflow: "hidden", boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2), inset 0 2px 4px rgba(0, 0, 0, 0.2)" }}>
           <Editor
             height="100%"
-            defaultLanguage="python"
+            language={runtime === "pine-compat" ? "pine" : "python"}
             theme="pyne-dark"
             value={script}
             onChange={(value) => {
@@ -296,7 +353,11 @@ export default function IndicatorEditor({
         ) : previewState?.id ? (
           <span style={{ color: 'var(--candle-up)' }}>✅ 运行成功，已应用至图表</span>
         ) : (
-          <span style={{ color: 'var(--text-muted)' }}>💡 Pyne API: <code>ta.sma()</code> <code>ta.ema()</code> <code>ta.rsi()</code> <code>ta.macd()</code> <code>ta.bb()</code> <code>plot()</code> <code>input.int()</code> · 输入 <code>snippet</code> 查看模板</span>
+          <span style={{ color: 'var(--text-muted)' }}>
+            {runtime === "pine-compat"
+              ? <>💡 Pine 首版：闭合 K 线指标，支持 <code>plot()</code> / <code>plotshape()</code> / <code>hline()</code>；暂不支持 request、strategy、imports 和绘图对象。</>
+              : <>💡 Pyne API: <code>ta.sma()</code> <code>ta.ema()</code> <code>ta.rsi()</code> <code>plot()</code> <code>input.int()</code></>}
+          </span>
         )}
       </div>
     </div>

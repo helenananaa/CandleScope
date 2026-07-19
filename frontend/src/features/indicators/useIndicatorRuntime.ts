@@ -446,6 +446,7 @@ function buildHostedCatchupSignature({
       indicator.id,
       indicator.engineName || "",
       stringSignature(indicator.script || ""),
+      indicator.runtime || "pyne",
       indicator.securityMode || "",
       JSON.stringify(indicator.params || {}),
     ].join(":"))
@@ -1096,6 +1097,7 @@ export function useIndicatorRuntime(
           if (message.securityMode !== undefined) {
             rangeRequest.securityMode = message.securityMode;
           }
+          if (message.runtime !== undefined) rangeRequest.runtime = message.runtime;
           const payload = await indicatorRangeBatcher.schedule(rangeRequest);
           if (payload?.ok !== false || payload.code === "INDICATOR_RANGE_EMPTY") return payload;
           if (payload.code !== "INDICATOR_RANGE_NOT_READY") {

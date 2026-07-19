@@ -56,6 +56,7 @@ export function buildIndicatorWsSignature(
         getBuiltinIndicatorName(indicator),
         isBuiltinIndicator(indicator) ? "builtin" : "script",
         stringSignature(indicator.script || ""),
+        indicator.runtime || "pyne",
         indicator.securityMode || "",
         JSON.stringify(indicator.params || {}),
       ].join(":"),
@@ -104,6 +105,8 @@ export function buildHostedSubscriptionMessage(
     message.name = getBuiltinIndicatorName(indicator);
   } else {
     message.customId = indicator.id;
+    message.runtime = indicator.runtime || "pyne";
+    if (indicator.renderHints) message.renderHints = indicator.renderHints;
     if (indicator.script !== undefined) message.script = indicator.script;
     if (indicator.securityMode !== undefined) {
       message.securityMode = indicator.securityMode;
@@ -142,6 +145,7 @@ export function buildHostedSubscriptionSignature(
     interval: message.interval,
     name: message.name || "",
     scriptHash: stringSignature(message.script || ""),
+    runtime: message.runtime || "pyne",
     securityMode: message.securityMode || "",
     params: message.params || {},
   });

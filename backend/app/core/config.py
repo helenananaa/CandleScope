@@ -205,11 +205,24 @@ PYNE_ALLOWED_IMPORTS = [
     if item.strip()
 ]
 
+# Pine-compatible runtime safety. The Rust/PyO3 package is loaded lazily so a
+# missing platform wheel disables only Pine scripts, not the CandleScope API.
+PINE_EXEC_TIMEOUT_SECONDS = float(os.getenv("PINE_EXEC_TIMEOUT_SECONDS", "5"))
+PINE_EXECUTOR_MODE = os.getenv("PINE_EXECUTOR_MODE", "process").strip().lower()
+if PINE_EXECUTOR_MODE not in {"inline", "process"}:
+    PINE_EXECUTOR_MODE = "process"
+PINE_PROCESS_GRACE_SECONDS = float(os.getenv("PINE_PROCESS_GRACE_SECONDS", "0.5"))
+PINE_MAX_BARS = int(os.getenv("PINE_MAX_BARS", "10000"))
+PINE_TICK_RECOMPUTE_MAX_BARS = int(os.getenv("PINE_TICK_RECOMPUTE_MAX_BARS", "5000"))
+PINE_MAX_OUTPUT_SERIES = int(os.getenv("PINE_MAX_OUTPUT_SERIES", "20"))
+PINE_MAX_OUTPUT_POINTS = int(os.getenv("PINE_MAX_OUTPUT_POINTS", "1000000"))
+
 # Indicator HTTP compute tuning. The API endpoint should only orchestrate work;
 # heavy builtin/Pyne computation is offloaded so it cannot block the event loop.
 INDICATOR_HTTP_TIMEOUT_SECONDS = float(os.getenv("INDICATOR_HTTP_TIMEOUT_SECONDS", "8"))
 INDICATOR_THREAD_WORKERS = int(os.getenv("INDICATOR_THREAD_WORKERS", "2"))
 PYNE_HTTP_THREAD_WORKERS = int(os.getenv("PYNE_HTTP_THREAD_WORKERS", "2"))
+PINE_HTTP_THREAD_WORKERS = int(os.getenv("PINE_HTTP_THREAD_WORKERS", "2"))
 STORAGE_THREAD_WORKERS = int(os.getenv("STORAGE_THREAD_WORKERS", "4"))
 
 # Indicator history reuse.  These caches only hold data derived from K-lines;

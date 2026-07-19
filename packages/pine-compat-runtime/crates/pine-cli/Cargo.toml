@@ -1,0 +1,18 @@
+[package]
+name = "pine-cli"
+version = "0.1.0"
+description.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "pine-compat"
+path = "src/main.rs"
+
+[dependencies]
+pine-builtins = { path = "../pine-builtins" }
+pine-runtime = { path = "../pine-runtime" }
+pine-sema = { path = "../pine-sema" }
+pine-syntax = { path = "../pine-syntax" }

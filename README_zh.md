@@ -35,20 +35,25 @@ CandleScope 是基于 FastAPI、React、Vite 和 Lightweight Charts 构建的轻
 - Node.js 20+
 - npm 10+
 
-启动后端：
-
-```bash
-cd backend
-python -m pip install -r requirements.txt
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 18080
-```
-
-Windows 下也可以直接用脚本：
+一键准备环境并启动后端：
 
 ```powershell
 cd backend
 .\dev-server.ps1
 ```
+
+Linux/WSL：
+
+```bash
+cd backend
+sh ./dev-server.sh
+```
+
+启动脚本会创建仓库本地的 `backend/.venv`，仅在 `requirements.txt` 变化时安装
+后端依赖，自动下载当前平台对应的 Pine-compatible wheel，校验 SHA-256 和 runtime
+schema 后再启动 uvicorn。后续启动只执行快速检查。至少成功 setup 一次、依赖和
+Release 均已缓存后可使用 `-Offline` / `--offline`；明确只使用 Pyne 时可传
+`-SkipPineRuntime` / `--skip-pine-runtime`。
 
 启动前端：
 
@@ -70,15 +75,6 @@ npm run dev
 | 后端 | `http://127.0.0.1:18080` |
 | Swagger / OpenAPI | `http://127.0.0.1:18080/docs` |
 | 健康检查 | `http://127.0.0.1:18080/health` |
-
-Linux/WSL 可先创建虚拟环境：
-
-```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-```
 
 ## 项目能力
 
