@@ -105,6 +105,42 @@ pub(crate) const CORE_RUNTIME_SNAPSHOT_FIXTURES: &[RuntimeSnapshotFixture] = &[
         "tests/fixtures/runtime/legacy_line_wrapping.pine",
     ),
     (
+        "runtime_legacy_v1_shared.json",
+        "tests/fixtures/legacy/v1/runtime/shared_v1.pine",
+    ),
+    (
+        "runtime_legacy_v2_core.json",
+        "tests/fixtures/legacy/v2/runtime/core_legacy.pine",
+    ),
+    (
+        "runtime_legacy_v3_core.json",
+        "tests/fixtures/legacy/v3/runtime/core_legacy.pine",
+    ),
+    (
+        "runtime_legacy_v4_expressions.json",
+        "tests/fixtures/legacy/v4/runtime/expressions_legacy.pine",
+    ),
+    (
+        "runtime_legacy_v4_inputs.json",
+        "tests/fixtures/legacy/v4/runtime/inputs_legacy.pine",
+    ),
+    (
+        "runtime_legacy_v4_logical_strict.json",
+        "tests/fixtures/legacy/v4/runtime/logical_strict_legacy.pine",
+    ),
+    (
+        "runtime_legacy_v4_session_defaults.json",
+        "tests/fixtures/legacy/v4/runtime/session_defaults_legacy.pine",
+    ),
+    (
+        "runtime_legacy_v4_outputs.json",
+        "tests/fixtures/legacy/v4/runtime/outputs_legacy.pine",
+    ),
+    (
+        "runtime_legacy_v4_security_same_context.json",
+        "tests/fixtures/legacy/v4/runtime/security_same_context_legacy.pine",
+    ),
+    (
         "runtime_line_wrapped_strings.json",
         "tests/fixtures/runtime/line_wrapped_strings.pine",
     ),

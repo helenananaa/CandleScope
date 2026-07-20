@@ -1,7 +1,33 @@
 use pine_ir::{CallSiteId, HirCallArg, HirExpr};
 
 use crate::builtins::args::call_arg_expr;
+use crate::builtins::time::calendar_timeframe_close;
 use crate::*;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RequestGaps {
+    Off,
+    On,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RequestLookahead {
+    Off,
+    On,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RequestMergePolicy {
+    gaps: RequestGaps,
+    lookahead: RequestLookahead,
+}
+
+impl RequestMergePolicy {
+    const MODERN: Self = Self {
+        gaps: RequestGaps::Off,
+        lookahead: RequestLookahead::Off,
+    };
+}
 
 impl<'a> HistoricalRuntime<'a> {
     pub(crate) fn eval_request_call(
@@ -10,9 +36,52 @@ impl<'a> HistoricalRuntime<'a> {
         call_site_id: CallSiteId,
         args: &[HirCallArg],
     ) -> Option<Result<PineValue, RuntimeError>> {
-        Some(match callee {
-            "request.security" => self.eval_request_security(call_site_id, args),
+        let (merge, legacy) = match callee {
+            "request.security" => (RequestMergePolicy::MODERN, None),
+            "$legacy.security.gaps_off.lookahead_off" => (
+                RequestMergePolicy {
+                    gaps: RequestGaps::Off,
+                    lookahead: RequestLookahead::Off,
+                },
+                legacy_source_span(args),
+            ),
+            "$legacy.security.gaps_on.lookahead_off" => (
+                RequestMergePolicy {
+                    gaps: RequestGaps::On,
+                    lookahead: RequestLookahead::Off,
+                },
+                legacy_source_span(args),
+            ),
+            "$legacy.security.gaps_off.lookahead_on" => (
+                RequestMergePolicy {
+                    gaps: RequestGaps::Off,
+                    lookahead: RequestLookahead::On,
+                },
+                legacy_source_span(args),
+            ),
+            "$legacy.security.gaps_on.lookahead_on" => (
+                RequestMergePolicy {
+                    gaps: RequestGaps::On,
+                    lookahead: RequestLookahead::On,
+                },
+                legacy_source_span(args),
+            ),
             _ => return None,
+        };
+        if merge.lookahead == RequestLookahead::On {
+            self.legacy_security_repaint_warnings
+                .entry(call_site_id)
+                .or_insert(legacy.unwrap_or((0, 0)));
+        }
+        let result = self.eval_request_security(call_site_id, args, merge);
+        Some(match legacy {
+            Some((start, end)) => result.map_err(|error| RuntimeError {
+                message: format!(
+                    "legacy security at source span {start}..{end}: {}",
+                    error.message
+                ),
+            }),
+            None => result,
         })
     }
 
@@ -20,6 +89,7 @@ impl<'a> HistoricalRuntime<'a> {
         &mut self,
         call_site_id: CallSiteId,
         args: &[HirCallArg],
+        merge: RequestMergePolicy,
     ) -> Result<PineValue, RuntimeError> {
         if !(3..=5).contains(&args.len()) {
             return Err(RuntimeError {
@@ -74,6 +144,7 @@ impl<'a> HistoricalRuntime<'a> {
             requested_timeframe,
             &chart_timeframe,
             expression,
+            merge,
         )
     }
 
@@ -84,6 +155,7 @@ impl<'a> HistoricalRuntime<'a> {
         requested_timeframe: RequestTimeframe,
         chart_timeframe: &RequestTimeframe,
         expression: &HirExpr,
+        merge: RequestMergePolicy,
     ) -> Result<PineValue, RuntimeError> {
         validate_provider_timeframe(symbol, &requested_timeframe, chart_timeframe)?;
         let key = RequestKey::new(symbol, requested_timeframe.clone());
@@ -102,8 +174,13 @@ impl<'a> HistoricalRuntime<'a> {
                 .bars(&key)
                 .map_err(|err| RuntimeError {
                     message: err.to_string(),
-                })?;
-            let requested_values = self.evaluate_requested_values(requested_bars, expression)?;
+                })?
+                .to_vec();
+            let requested_environment = self
+                .request_environment
+                .for_chart(ChartContext::new(key.symbol(), requested_timeframe.clone()));
+            let requested_values =
+                self.evaluate_requested_values(&requested_bars, expression, requested_environment)?;
             self.request_cache
                 .insert(cache_key.clone(), requested_values);
         }
@@ -119,18 +196,19 @@ impl<'a> HistoricalRuntime<'a> {
             current_time,
             &requested_timeframe,
             chart_timeframe,
+            merge,
+            self.current_bar_update_kind,
         ))
     }
 
     fn evaluate_requested_values(
-        &self,
+        &mut self,
         requested_bars: &[Bar],
         expression: &HirExpr,
+        requested_environment: RequestEnvironment,
     ) -> Result<Vec<(i64, PineValue)>, RuntimeError> {
-        let mut runtime = HistoricalRuntime::with_request_environment(
-            self.program,
-            self.request_environment.clone(),
-        );
+        let mut runtime =
+            HistoricalRuntime::with_request_environment(self.program, requested_environment);
         let mut values = Vec::with_capacity(requested_bars.len());
         for bar in requested_bars {
             values.push((
@@ -138,6 +216,8 @@ impl<'a> HistoricalRuntime<'a> {
                 runtime.eval_requested_bar_expression(*bar, expression)?,
             ));
         }
+        self.legacy_security_repaint_warnings
+            .extend(runtime.legacy_security_repaint_warnings);
         Ok(values)
     }
 
@@ -197,21 +277,83 @@ fn align_requested_value(
     current_time: i64,
     requested_timeframe: &RequestTimeframe,
     chart_timeframe: &RequestTimeframe,
+    merge: RequestMergePolicy,
+    update_kind: BarUpdateKind,
 ) -> PineValue {
-    if requested_timeframe.seconds() == chart_timeframe.seconds() {
-        return requested_values
-            .iter()
-            .find(|(time, _)| *time == current_time)
+    if requested_timeframe == chart_timeframe {
+        let matched = match merge.gaps {
+            RequestGaps::On => requested_values
+                .iter()
+                .find(|(time, _)| *time == current_time),
+            RequestGaps::Off => requested_values
+                .iter()
+                .take_while(|(time, _)| *time <= current_time)
+                .last(),
+        };
+        return matched
             .map(|(_, value)| value.clone())
             .unwrap_or(PineValue::Na);
     }
 
-    let chart_close = current_time.saturating_add(chart_timeframe.seconds().saturating_mul(1000));
-    let requested_duration = requested_timeframe.seconds().saturating_mul(1000);
-    requested_values
-        .iter()
-        .take_while(|(time, _)| time.saturating_add(requested_duration) <= chart_close)
-        .last()
+    let chart_close = request_bar_nominal_close(current_time, chart_timeframe);
+    let historical_lookahead =
+        merge.lookahead == RequestLookahead::On && update_kind == BarUpdateKind::Historical;
+    let matched = match (historical_lookahead, merge.gaps) {
+        (true, RequestGaps::On) => requested_values
+            .iter()
+            .find(|(time, _)| *time == current_time),
+        (true, RequestGaps::Off) => requested_values
+            .iter()
+            .take_while(|(time, _)| *time <= current_time)
+            .last(),
+        (false, RequestGaps::On) => requested_values
+            .iter()
+            .enumerate()
+            .find(|(index, _)| {
+                requested_bar_close(requested_values, *index, requested_timeframe) == chart_close
+            })
+            .map(|(_, value)| value),
+        (false, RequestGaps::Off) => requested_values
+            .iter()
+            .enumerate()
+            .take_while(|(index, _)| {
+                requested_bar_close(requested_values, *index, requested_timeframe) <= chart_close
+            })
+            .last()
+            .map(|(_, value)| value),
+    };
+    matched
         .map(|(_, value)| value.clone())
         .unwrap_or(PineValue::Na)
+}
+
+fn request_bar_nominal_close(open_time: i64, timeframe: &RequestTimeframe) -> i64 {
+    calendar_timeframe_close(open_time, timeframe.value(), timeframe.seconds())
+        .unwrap_or_else(|| open_time.saturating_add(timeframe.seconds().saturating_mul(1000)))
+}
+
+fn requested_bar_close(
+    requested_values: &[(i64, PineValue)],
+    index: usize,
+    timeframe: &RequestTimeframe,
+) -> i64 {
+    let open_time = requested_values[index].0;
+    let nominal_close = request_bar_nominal_close(open_time, timeframe);
+    requested_values
+        .get(index + 1)
+        .map(|(next_open, _)| *next_open)
+        .filter(|next_open| *next_open > open_time)
+        .map_or(nominal_close, |next_open| nominal_close.min(next_open))
+}
+
+fn legacy_source_span(args: &[HirCallArg]) -> Option<(i64, i64)> {
+    let literal = |name: &str| {
+        args.iter()
+            .find(|arg| arg.name.as_deref() == Some(name))
+            .and_then(|arg| match arg.value.kind {
+                pine_ir::HirExprKind::Literal(pine_ir::HirLiteral::Int(value)) => Some(value),
+                _ => None,
+            })
+    };
+    Some((literal("$legacy_span_start")?, literal("$legacy_span_end")?))
 }

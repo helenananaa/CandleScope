@@ -1,7 +1,8 @@
 use crate::PineValue;
 
 use super::model::{
-    PlotArrowSeries, PlotBarSeries, PlotCandleSeries, PlotCharSeries, PlotShapeSeries,
+    OutputMetadata, PlotArrowSeries, PlotBarSeries, PlotCandleSeries, PlotCharSeries,
+    PlotShapeSeries,
 };
 
 pub(crate) trait BarAlignedOutput {
@@ -52,6 +53,10 @@ pub(crate) struct PlotCharPoint {
     pub(crate) value: PineValue,
     pub(crate) char_value: PineValue,
     pub(crate) color: PineValue,
+    pub(crate) location: PineValue,
+    pub(crate) text: PineValue,
+    pub(crate) text_color: PineValue,
+    pub(crate) size: PineValue,
 }
 
 impl BarAlignedOutput for PlotCharSeries {
@@ -67,6 +72,11 @@ impl BarAlignedOutput for PlotCharSeries {
             values: vec![PineValue::Na; current_bar],
             chars: vec![PineValue::Na; current_bar],
             colors: vec![PineValue::Na; current_bar],
+            locations: vec![PineValue::Na; current_bar],
+            texts: vec![PineValue::Na; current_bar],
+            text_colors: vec![PineValue::Na; current_bar],
+            sizes: vec![PineValue::Na; current_bar],
+            metadata: OutputMetadata::default(),
         }
     }
 
@@ -84,6 +94,10 @@ impl BarAlignedOutput for PlotCharSeries {
         self.values.push(point.value);
         self.chars.push(point.char_value);
         self.colors.push(point.color);
+        self.locations.push(point.location);
+        self.texts.push(point.text);
+        self.text_colors.push(point.text_color);
+        self.sizes.push(point.size);
     }
 
     fn update_point(&mut self, point: Self::Point) {
@@ -96,12 +110,28 @@ impl BarAlignedOutput for PlotCharSeries {
         if let Some(current) = self.colors.last_mut() {
             *current = point.color;
         }
+        if let Some(current) = self.locations.last_mut() {
+            *current = point.location;
+        }
+        if let Some(current) = self.texts.last_mut() {
+            *current = point.text;
+        }
+        if let Some(current) = self.text_colors.last_mut() {
+            *current = point.text_color;
+        }
+        if let Some(current) = self.sizes.last_mut() {
+            *current = point.size;
+        }
     }
 
     fn push_na_point(&mut self) {
         self.values.push(PineValue::Na);
         self.chars.push(PineValue::Na);
         self.colors.push(PineValue::Na);
+        self.locations.push(PineValue::Na);
+        self.texts.push(PineValue::Na);
+        self.text_colors.push(PineValue::Na);
+        self.sizes.push(PineValue::Na);
     }
 }
 
@@ -132,6 +162,7 @@ impl BarAlignedOutput for PlotShapeSeries {
             texts: vec![PineValue::Na; current_bar],
             text_colors: vec![PineValue::Na; current_bar],
             sizes: vec![PineValue::Na; current_bar],
+            metadata: OutputMetadata::default(),
         }
     }
 
@@ -213,6 +244,7 @@ impl BarAlignedOutput for PlotArrowSeries {
             color_downs: vec![PineValue::Na; current_bar],
             min_heights: vec![PineValue::Na; current_bar],
             max_heights: vec![PineValue::Na; current_bar],
+            metadata: OutputMetadata::default(),
         }
     }
 
@@ -284,6 +316,7 @@ impl BarAlignedOutput for PlotBarSeries {
             lows: vec![PineValue::Na; current_bar],
             closes: vec![PineValue::Na; current_bar],
             colors: vec![PineValue::Na; current_bar],
+            metadata: OutputMetadata::default(),
         }
     }
 
@@ -359,6 +392,7 @@ impl BarAlignedOutput for PlotCandleSeries {
             colors: vec![PineValue::Na; current_bar],
             wick_colors: vec![PineValue::Na; current_bar],
             border_colors: vec![PineValue::Na; current_bar],
+            metadata: OutputMetadata::default(),
         }
     }
 

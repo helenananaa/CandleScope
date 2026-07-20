@@ -150,7 +150,7 @@ pub(super) const TA_VWAP_PARAMS: &[BuiltinParam] = &[
     },
     BuiltinParam {
         name: "stdev_mult",
-        accepts: Accepts::SimpleNumericCompatible,
+        accepts: Accepts::NumericCompatible,
         optional: true,
     },
 ];

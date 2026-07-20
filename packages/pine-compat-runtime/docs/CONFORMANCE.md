@@ -32,7 +32,7 @@ Runtime snapshots should be normalized JSON:
 
 ```json
 {
-  "schemaVersion": 7,
+  "schemaVersion": 8,
   "plots": [],
   "plotChars": [],
   "plotShapes": [],
@@ -59,18 +59,76 @@ The snapshot format should avoid host-specific charting details.
 Every machine-readable public output must include top-level `schemaVersion`.
 Runtime outputs use `PUBLIC_RUNTIME_SCHEMA_VERSION`; analysis outputs use
 `PUBLIC_ANALYSIS_SCHEMA_VERSION`; matrix JSON uses
-`PUBLIC_MATRIX_SCHEMA_VERSION`. Runtime output is currently `schemaVersion: 7`
+`PUBLIC_MATRIX_SCHEMA_VERSION`. Runtime output is currently `schemaVersion: 8`
 because the top-level `alerts` array is reserved, strategy order-fill alert
 payloads are exposed under `strategy.alerts`, table cell snapshots include
 host-neutral `textWrap`, linefill snapshots are exposed under `lineFills`, and
-polyline creation and lifecycle snapshots are exposed under `polylines`;
-analysis JSON is currently `schemaVersion: 3` because it exposes top-level
-`inputs` metadata with input call-site ids, names, and titles; matrix JSON
+polyline creation and lifecycle snapshots are exposed under `polylines`; plot,
+marker, bar, candle, color, hline, and fill outputs also expose normalized
+visual series and fixture-backed metadata;
+runtime results also carry `renderMetadataVersion: 1` so hosts can distinguish
+native visual metadata from host defaults. Analysis JSON is currently
+`schemaVersion: 5`; in addition to top-level `inputs` callsite metadata, it
+exposes compile-time defaults, constraints, and options plus validated
+language-version origin, dialect, script mode, and reserved legacy
+translation/emulation evidence. Matrix JSON
 remains `schemaVersion: 2`.
 The contracts are separate so runtime-only fields do not force analysis or
-matrix schema changes. The text-only CLI `analyze` output is
-diagnostic console output and is not part of the machine-readable schema until
-a JSON mode is added.
+matrix schema changes. CLI `analyze --format json`, Python analysis
+dictionaries, and WASM analysis JSON project this same analysis contract; the
+default CLI text report remains diagnostic console output.
+
+Legacy host parity has two explicit baselines. CLI runtime fixtures generate
+the ordinary `runtime_*.json` goldens listed in
+`scripts/host_parity_required.txt`. CLI legacy analysis fixtures generate the
+complete `analysis_legacy_*.json` reports listed in
+`scripts/legacy_analysis_parity_required.txt`. Python and WASM must assert every
+required golden, and `scripts/check_host_parity.py` fails missing registrations,
+missing host assertions, duplicate entries, unrecorded pairs, or runtime /
+analysis name collisions. Analysis comparisons use complete parsed JSON values,
+so every schema field and value must agree without treating object-key order as
+semantic.
+
+## Legacy Indicator Release Profiles
+
+`tests/fixtures/legacy/release_profiles.tsv` is the release execution registry.
+It contains 12 complete legacy runtime fixtures and three additional MTF rows.
+Every row pins source version, maturity, bars/request environment, realtime
+policy, original-source provenance, and a retained-value ceiling. The runtime
+release test fails if a legacy runtime fixture is missing from the registry,
+if a row changes maturity or provenance unexpectedly, or if execution diverges
+across its required modes.
+
+| Profile | Maturity | Eligible corpus | Release rows | Historical/incremental | Realtime policy |
+| --- | --- | ---: | ---: | --- | --- |
+| v4 | preview | 12 | 9 | exact parity | forming/rollback/confirmed parity |
+| v3 | preview | 7 | 2 | exact parity | forming/rollback/confirmed parity |
+| v2 | experimental | 2 | 3 | exact parity | ordinary rows parity; lookahead row forbids future leakage |
+| implicit v1 | experimental | 1 | 1 | exact parity | forming/rollback/confirmed parity |
+
+The fixed seed corpus has 22 eligible legacy indicators and six controls plus
+one excluded legacy strategy. It reaches 100% parse, analyze/lower, and
+historical-run success with zero unknown diagnostics, but it is small and has
+no external reference-output oracle. The provisional stable gate requires at
+least 50 authorized eligible scripts per profile when samples are available;
+therefore no v1-v4 profile is labeled stable. A passing feature row means that
+the named fixture-backed behavior is supported, not that its enclosing
+language profile is stable.
+
+`scripts/profile_legacy_release.py` performs an indicative end-to-end CLI
+analysis timing pass and consumes public runtime profiles to count retained
+series/window/output values. Timing is observational and machine-dependent;
+the per-row resource ceiling is deterministic and release-gated. Corpus and
+release manifests require explicit license classes and source paths, and
+privacy-preserving corpus reports omit source text and source paths.
+
+Legacy exact-alias conformance requires a paired source/canonical HIR or runtime
+comparison, an original-span translation record, a user-symbol collision
+control, and a v5/v6 negative control. Catalog validation must also prove that
+canonical targets exist and version ranges neither overlap nor enter modern
+dialects. Phase 2 exercises these requirements with a synthetic catalog only;
+production alias rows become support claims only when their owning phase adds
+fixtures and conformance metadata.
 
 The current pure-internal call-result subset normalizes an unqualified plain
 local UDF receiver through the parser-only `$call_result` prefix, exact static
@@ -1812,7 +1870,9 @@ sparse snapshots plus default 50/named 1-500 `max_boxes_count` oldest-active
 box eviction before new creation.
 The executable table subset covers
 `table.new` position/dimension creation with optional `bgcolor`,
-`frame_color`, `frame_width`, `border_color`, and `border_width` initialization
+`frame_color`, `frame_width`, `border_color`, and `border_width` initialization,
+plus accepted `force_overlay` syntax (without public-output propagation or pane
+routing),
 plus `table.cell` text/background/text-color/tooltip/font-family/text-formatting
 cell writes,
 `table.set_position` final-position mutations, including ordinary and
@@ -1959,7 +2019,8 @@ position value, including when called from ordinary and independent while-loop
 control-flow blocks, with table layout left to hosts. `table.new` optional `bgcolor`,
 `frame_color`, `frame_width`, `border_color`, and `border_width` initialize only
 the table's final background-color, frame-color, frame-width, border-color, and
-border-width values.
+border-width values. `force_overlay` is accepted, but its value is not exposed
+in public output and pane routing remains unsupported.
 `table.delete` appends an `exists: false` table snapshot, including when called
 from ordinary and independent while-loop control-flow blocks. `table.clear` removes
 already populated cells in the inclusive rectangular range from `start_column`,

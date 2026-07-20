@@ -1,5 +1,5 @@
 use crate::tables::tables_to_py;
-use pine_runtime::{PUBLIC_RUNTIME_SCHEMA_VERSION, PineValue};
+use pine_runtime::{PUBLIC_RENDER_METADATA_VERSION, PUBLIC_RUNTIME_SCHEMA_VERSION, PineValue};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyList};
 
@@ -9,6 +9,7 @@ pub(crate) fn runtime_result_to_py(
 ) -> PyResult<Py<PyAny>> {
     let output = PyDict::new(py);
     output.set_item("schemaVersion", PUBLIC_RUNTIME_SCHEMA_VERSION)?;
+    output.set_item("renderMetadataVersion", PUBLIC_RENDER_METADATA_VERSION)?;
     output.set_item("plots", plots_to_py(py, &result.plots)?)?;
     output.set_item("plotChars", plot_chars_to_py(py, &result.plot_chars)?)?;
     output.set_item("plotShapes", plot_shapes_to_py(py, &result.plot_shapes)?)?;
@@ -174,6 +175,35 @@ fn plots_to_py(py: Python<'_>, plots: &[pine_runtime::PlotSeries]) -> PyResult<P
         let item = PyDict::new(py);
         item.set_item("id", plot.id)?;
         item.set_item("values", values_to_py(py, &plot.values)?)?;
+        if plot.colors.iter().any(|value| *value != PineValue::Na) {
+            item.set_item("colors", values_to_py(py, &plot.colors)?)?;
+        }
+        set_non_default_value(py, &item, "linewidth", &plot.linewidth, &PineValue::Int(1))?;
+        set_non_default_value(
+            py,
+            &item,
+            "style",
+            &plot.style,
+            &PineValue::String("plot.style_line".to_owned()),
+        )?;
+        set_non_default_value(
+            py,
+            &item,
+            "trackPrice",
+            &plot.track_price,
+            &PineValue::Bool(false),
+        )?;
+        set_non_default_value(py, &item, "histBase", &plot.hist_base, &PineValue::Int(0))?;
+        set_non_default_value(py, &item, "join", &plot.join, &PineValue::Bool(false))?;
+        set_non_default_value(
+            py,
+            &item,
+            "format",
+            &plot.format,
+            &PineValue::String("format.inherit".to_owned()),
+        )?;
+        set_non_default_value(py, &item, "precision", &plot.precision, &PineValue::Na)?;
+        set_output_metadata(py, &item, &plot.metadata)?;
         output.append(item)?;
     }
     Ok(output.into_any().unbind())
@@ -185,6 +215,7 @@ fn colors_to_py(py: Python<'_>, colors: &[pine_runtime::ColorSeries]) -> PyResul
         let item = PyDict::new(py);
         item.set_item("id", colors.id)?;
         item.set_item("values", values_to_py(py, &colors.values)?)?;
+        set_output_metadata(py, &item, &colors.metadata)?;
         output.append(item)?;
     }
     Ok(output.into_any().unbind())
@@ -201,6 +232,11 @@ fn plot_chars_to_py(
         item.set_item("values", values_to_py(py, &plot_char.values)?)?;
         item.set_item("chars", values_to_py(py, &plot_char.chars)?)?;
         item.set_item("colors", values_to_py(py, &plot_char.colors)?)?;
+        item.set_item("locations", values_to_py(py, &plot_char.locations)?)?;
+        item.set_item("texts", values_to_py(py, &plot_char.texts)?)?;
+        item.set_item("textColors", values_to_py(py, &plot_char.text_colors)?)?;
+        item.set_item("sizes", values_to_py(py, &plot_char.sizes)?)?;
+        set_output_metadata(py, &item, &plot_char.metadata)?;
         output.append(item)?;
     }
     Ok(output.into_any().unbind())
@@ -221,6 +257,7 @@ fn plot_shapes_to_py(
         item.set_item("texts", values_to_py(py, &plot_shape.texts)?)?;
         item.set_item("textColors", values_to_py(py, &plot_shape.text_colors)?)?;
         item.set_item("sizes", values_to_py(py, &plot_shape.sizes)?)?;
+        set_output_metadata(py, &item, &plot_shape.metadata)?;
         output.append(item)?;
     }
     Ok(output.into_any().unbind())
@@ -239,6 +276,7 @@ fn plot_arrows_to_py(
         item.set_item("colorDowns", values_to_py(py, &plot_arrow.color_downs)?)?;
         item.set_item("minHeights", values_to_py(py, &plot_arrow.min_heights)?)?;
         item.set_item("maxHeights", values_to_py(py, &plot_arrow.max_heights)?)?;
+        set_output_metadata(py, &item, &plot_arrow.metadata)?;
         output.append(item)?;
     }
     Ok(output.into_any().unbind())
@@ -257,6 +295,7 @@ fn plot_bars_to_py(
         item.set_item("lows", values_to_py(py, &plot_bar.lows)?)?;
         item.set_item("closes", values_to_py(py, &plot_bar.closes)?)?;
         item.set_item("colors", values_to_py(py, &plot_bar.colors)?)?;
+        set_output_metadata(py, &item, &plot_bar.metadata)?;
         output.append(item)?;
     }
     Ok(output.into_any().unbind())
@@ -280,6 +319,7 @@ fn plot_candles_to_py(
             "borderColors",
             values_to_py(py, &plot_candle.border_colors)?,
         )?;
+        set_output_metadata(py, &item, &plot_candle.metadata)?;
         output.append(item)?;
     }
     Ok(output.into_any().unbind())
@@ -291,6 +331,42 @@ fn hlines_to_py(py: Python<'_>, hlines: &[pine_runtime::HLineOutput]) -> PyResul
         let item = PyDict::new(py);
         item.set_item("id", hline.id)?;
         item.set_item("price", value_to_py(py, &hline.price)?)?;
+        set_non_default_value(
+            py,
+            &item,
+            "title",
+            &hline.title,
+            &PineValue::String(String::new()),
+        )?;
+        set_non_default_value(
+            py,
+            &item,
+            "color",
+            &hline.color,
+            &PineValue::Color(0x787B86),
+        )?;
+        set_non_default_value(
+            py,
+            &item,
+            "style",
+            &hline.style,
+            &PineValue::String("hline.style_solid".to_owned()),
+        )?;
+        set_non_default_value(py, &item, "linewidth", &hline.linewidth, &PineValue::Int(1))?;
+        set_non_default_value(
+            py,
+            &item,
+            "editable",
+            &hline.editable,
+            &PineValue::Bool(true),
+        )?;
+        set_non_default_value(
+            py,
+            &item,
+            "display",
+            &hline.display,
+            &PineValue::String("display.all".to_owned()),
+        )?;
         output.append(item)?;
     }
     Ok(output.into_any().unbind())
@@ -303,9 +379,91 @@ fn fills_to_py(py: Python<'_>, fills: &[pine_runtime::FillOutput]) -> PyResult<P
         item.set_item("id", fill.id)?;
         item.set_item("firstId", fill.first_id)?;
         item.set_item("secondId", fill.second_id)?;
+        item.set_item("firstIsHLine", fill.first_is_hline)?;
+        item.set_item("secondIsHLine", fill.second_is_hline)?;
+        item.set_item("colors", values_to_py(py, &fill.colors)?)?;
+        set_non_default_value(
+            py,
+            &item,
+            "title",
+            &fill.title,
+            &PineValue::String(String::new()),
+        )?;
+        set_non_default_value(
+            py,
+            &item,
+            "editable",
+            &fill.editable,
+            &PineValue::Bool(true),
+        )?;
+        set_non_default_value(py, &item, "showLast", &fill.show_last, &PineValue::Na)?;
+        set_non_default_value(
+            py,
+            &item,
+            "fillGaps",
+            &fill.fill_gaps,
+            &PineValue::Bool(true),
+        )?;
+        set_non_default_value(
+            py,
+            &item,
+            "display",
+            &fill.display,
+            &PineValue::String("display.all".to_owned()),
+        )?;
         output.append(item)?;
     }
     Ok(output.into_any().unbind())
+}
+
+fn set_non_default_value(
+    py: Python<'_>,
+    item: &Bound<'_, PyDict>,
+    name: &str,
+    value: &PineValue,
+    default: &PineValue,
+) -> PyResult<()> {
+    if value != default {
+        item.set_item(name, value_to_py(py, value)?)?;
+    }
+    Ok(())
+}
+
+fn set_output_metadata(
+    py: Python<'_>,
+    item: &Bound<'_, PyDict>,
+    metadata: &pine_runtime::OutputMetadata,
+) -> PyResult<()> {
+    set_non_default_value(
+        py,
+        item,
+        "title",
+        &metadata.title,
+        &PineValue::String(String::new()),
+    )?;
+    set_non_default_value(py, item, "offset", &metadata.offset, &PineValue::Int(0))?;
+    set_non_default_value(
+        py,
+        item,
+        "editable",
+        &metadata.editable,
+        &PineValue::Bool(true),
+    )?;
+    set_non_default_value(py, item, "showLast", &metadata.show_last, &PineValue::Na)?;
+    set_non_default_value(
+        py,
+        item,
+        "display",
+        &metadata.display,
+        &PineValue::String("display.all".to_owned()),
+    )?;
+    set_non_default_value(
+        py,
+        item,
+        "forceOverlay",
+        &metadata.force_overlay,
+        &PineValue::Bool(false),
+    )
 }
 
 fn labels_to_py(py: Python<'_>, labels: &[pine_runtime::LabelOutput]) -> PyResult<Py<PyAny>> {
@@ -554,8 +712,8 @@ fn append_value(py: Python<'_>, output: &Bound<'_, PyList>, value: &PineValue) -
         PineValue::Float(_) => output.append(py.None()),
         PineValue::Bool(value) => output.append(*value),
         PineValue::String(value) => output.append(value),
-        PineValue::Color(value)
-        | PineValue::Plot(value)
+        PineValue::Color(value) => output.append(*value),
+        PineValue::Plot(value)
         | PineValue::HLine(value)
         | PineValue::Label(value)
         | PineValue::Line(value)

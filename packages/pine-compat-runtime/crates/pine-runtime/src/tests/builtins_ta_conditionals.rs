@@ -1,4 +1,3 @@
-use pine_sema::analyze_source;
 use pine_syntax::SourceFile;
 
 use super::*;
@@ -113,7 +112,7 @@ fn advances_conditional_vwap_anchor_only_when_branch_executes() {
         r#"indicator("conditional anchored vwap")
 score = close
 if close > open
-    score := ta.vwap(close, bar_index == 2)
+    score := ta.vwap(close, bar_index == 0 or bar_index == 2)
 plot(score)
 "#,
     );
@@ -134,6 +133,92 @@ plot(score)
 
     assert_eq!(result.plots.len(), 1);
     assert_values_close(&result.plots[0].values, &[10.0, 20.0, 30.0, 35.0]);
+}
+
+#[test]
+fn conditional_default_vwap_starts_in_the_bucket_where_the_callsite_first_executes() {
+    let source = SourceFile::new(
+        "test.pine",
+        r#"indicator("conditional default vwap late start")
+var float score = na
+if bar_index > 0
+    score := ta.vwap(close)
+plot(score)
+"#,
+    );
+    let analysis = analyze_source(&source);
+    assert!(
+        analysis.diagnostics.is_empty(),
+        "{:?}",
+        analysis.diagnostics
+    );
+
+    let timed_bar = |time, close| Bar {
+        time,
+        open: close,
+        high: close,
+        low: close,
+        close,
+        volume: 1.0,
+    };
+    let result = run_historical(
+        &analysis.hir.expect("HIR"),
+        &[
+            timed_bar(0, 10.0),
+            timed_bar(60_000, 20.0),
+            timed_bar(120_000, 30.0),
+        ],
+    )
+    .expect("runtime result");
+
+    assert_eq!(result.plots[0].values[0], PineValue::Na);
+    assert_values_close(&result.plots[0].values[1..], &[20.0, 25.0]);
+}
+
+#[test]
+fn conditional_default_vwap_resets_when_the_callsite_resumes_after_a_day_boundary() {
+    let source = SourceFile::new(
+        "test.pine",
+        r#"indicator("conditional default vwap missed boundary")
+score = close
+if bar_index != 1
+    score := ta.vwap(close)
+plot(score)
+"#,
+    );
+    let analysis = analyze_source(&source);
+    assert!(
+        analysis.diagnostics.is_empty(),
+        "{:?}",
+        analysis.diagnostics
+    );
+
+    let timed_bar = |time, close| Bar {
+        time,
+        open: close,
+        high: close,
+        low: close,
+        close,
+        volume: 1.0,
+    };
+    let hir = analysis.hir.expect("HIR");
+    let bars = [
+        timed_bar(0, 10.0),
+        timed_bar(86_400_000, 20.0),
+        timed_bar(86_460_000, 30.0),
+        timed_bar(86_520_000, 40.0),
+    ];
+    let result = run_historical(&hir, &bars).expect("runtime result");
+
+    let mut incremental = HistoricalRuntime::new(&hir);
+    for bar in bars {
+        incremental
+            .append_bar(bar)
+            .expect("incremental conditional vwap bar");
+    }
+
+    assert_values_close(&result.plots[0].values, &[10.0, 20.0, 30.0, 35.0]);
+    assert_eq!(incremental.result(), result);
 }
 
 #[test]

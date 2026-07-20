@@ -1,5 +1,7 @@
 use std::{env, process::ExitCode};
 
+#[cfg(test)]
+mod analysis_snapshots;
 mod bars_csv;
 mod commands;
 mod conformance;
@@ -38,7 +40,7 @@ fn run() -> Result<(), String> {
 }
 
 pub(crate) fn usage() -> String {
-    "usage: pine-compat analyze <script.pine> [--library-source KEY=path.pine]...\n       pine-compat fmt-ast <script.pine>\n       pine-compat run <script.pine> --bars <bars.csv> [--library-source KEY=path.pine]... [--request-bars SYMBOL:TIMEFRAME=bars.csv]... [--input-override CALL_SITE_ID=value]... [--profile]\n       pine-compat run <script.pine> --bars <bars.csv> --render-strategy-order-alert-template <template> --strategy-alert-index <index>\n       pine-compat run <script.pine> --bars <bars.csv> --render-strategy-running-alert <template> --strategy-alert-index <index> --running-alert-script-snapshot-id <id> --running-alert-symbol <symbol> --running-alert-timeframe <timeframe>\n       pine-compat matrix [--format text|json]".to_owned()
+    "usage: pine-compat analyze <script.pine> [--library-source KEY=path.pine]... [--format text|json]\n       pine-compat fmt-ast <script.pine>\n       pine-compat run <script.pine> --bars <bars.csv> [--chart-symbol SYMBOL] [--chart-timeframe TIMEFRAME] [--library-source KEY=path.pine]... [--request-bars SYMBOL:TIMEFRAME=bars.csv]... [--input-override CALL_SITE_ID=value]... [--profile]\n       pine-compat run <script.pine> --bars <bars.csv> --render-strategy-order-alert-template <template> --strategy-alert-index <index>\n       pine-compat run <script.pine> --bars <bars.csv> --render-strategy-running-alert <template> --strategy-alert-index <index> --running-alert-script-snapshot-id <id> --running-alert-symbol <symbol> --running-alert-timeframe <timeframe>\n       pine-compat matrix [--format text|json]".to_owned()
 }
 
 #[cfg(test)]

@@ -1,5 +1,17 @@
 pub(crate) fn runtime_fixture_bars_csv(fixture: &str) -> Option<&'static str> {
     match fixture {
+        "tests/fixtures/legacy/v2/runtime/core_legacy.pine" => Some(include_str!(
+            "../../../../tests/fixtures/legacy/v2/runtime/core_bars.csv"
+        )),
+        "tests/fixtures/legacy/v3/runtime/core_legacy.pine" => Some(include_str!(
+            "../../../../tests/fixtures/legacy/v3/runtime/core_bars.csv"
+        )),
+        "tests/fixtures/legacy/v4/runtime/logical_strict_legacy.pine" => Some(include_str!(
+            "../../../../tests/fixtures/legacy/v4/runtime/logical_strict_bars.csv"
+        )),
+        "tests/fixtures/legacy/v4/runtime/session_defaults_legacy.pine" => Some(include_str!(
+            "../../../../tests/fixtures/legacy/v4/runtime/session_weekend_bars.csv"
+        )),
         "tests/fixtures/runtime/vwma_edge_cases.pine" => Some(include_str!(
             "../../../../tests/fixtures/runtime/vwma_edge_cases_bars.csv"
         )),

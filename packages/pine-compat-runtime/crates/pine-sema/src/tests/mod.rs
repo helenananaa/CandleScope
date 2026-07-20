@@ -1,16 +1,21 @@
 use crate::{
-    Analysis, AnalysisInput, CompileCache, CompileCacheStats, SourceGraphError, analyze_source,
+    Analysis, AnalysisInput, CompileCache, CompileCacheStats, PineDialect, SourceGraphError,
 };
 use pine_ir::{HirStmtKind, PersistenceKind, VarSlotId};
 use pine_syntax::SourceFile;
 
 fn analyze(text: &str) -> Analysis {
-    analyze_source(&SourceFile::new("test.pine", text))
+    crate::analysis::analyze_source_with_implicit_dialect(
+        &SourceFile::new("test.pine", text),
+        PineDialect::V5,
+    )
 }
 
 mod compatibility;
 mod constant_call_semantics;
 mod history_constant_calls;
+mod legacy_dialect;
+mod legacy_frontend;
 mod lowering;
 mod methods;
 mod scopes;

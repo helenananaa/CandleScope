@@ -24,6 +24,28 @@ Initial value kinds:
 that erases useful diagnostics. The analyzer may use an internal "unknown due to
 na" marker while it waits for contextual type information.
 
+## Versioned Legacy Indicator Semantics
+
+Pine v1-v4 compatibility is selected from the validated source version before
+ordinary semantic analysis. A missing directive is implicit v1. The legacy
+front-end admits only indicator-mode `study(...)` in the documented subset;
+`strategy(...)` and `strategy.*` stop before broker-capable HIR. User and
+lexical symbols always resolve before version-ranged fallback names.
+
+Accepted historical calls are bound by dialect and lower to canonical HIR.
+Exact aliases become canonical built-in names, v1/v2 removed scalar
+conversions become explicit `float`/`bool` calls, `offset` becomes a history
+node, and the v1/v2 self/forward declaration subset becomes ordinary symbols
+in a bounded topological order. Result-affecting decisions are recorded as
+legacy translations or emulations with original spans. The runtime therefore
+does not evaluate rewritten source or maintain a second legacy AST.
+
+The v1/v2 declaration graph is capped at 256 active nodes and 4096 edges and
+admits only side-effect-free scalar initializers. Pine v3 untyped `na` infers
+one later stable scalar type in the focused subset. Pine v4 historical
+input/output and overload roles are bound before canonical validation. Shapes
+outside these rules fail with focused diagnostics and produce no HIR.
+
 ## Script Declarations
 
 A script may have at most one top-level declaration call. `indicator(...)`

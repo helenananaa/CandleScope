@@ -97,6 +97,11 @@ export interface IndicatorLine {
   lineStyle?: number;
   scale?: string;
   valueFormat?: string;
+  base?: number;
+  trackPrice?: boolean;
+  visible?: boolean;
+  priceFormat?: string;
+  precision?: number;
   data?: IndicatorDataEntry[];
   colorData?: IndicatorDataEntry[] | null;
 }
@@ -112,12 +117,18 @@ export interface IndicatorMarkerEntry {
   shape?: string;
   text?: string;
   color?: string;
+  size?: string | number;
 }
 
 export interface IndicatorMarkerGroup {
   id?: string;
   indicatorId?: string;
   pane?: string;
+  position?: string;
+  shape?: string;
+  text?: string;
+  color?: string;
+  size?: string | number;
   data?: IndicatorMarkerEntry[];
 }
 
@@ -140,6 +151,8 @@ export interface IndicatorFillDefinition {
   plot1_id?: string;
   plot2_id?: string;
   color?: string;
+  colorData?: IndicatorDataEntry[];
+  fillGaps?: boolean;
 }
 
 export interface FillRenderEntry {

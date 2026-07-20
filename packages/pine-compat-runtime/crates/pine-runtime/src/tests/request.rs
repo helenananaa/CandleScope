@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use pine_sema::analyze_source;
 use pine_syntax::SourceFile;
 
 use super::*;
@@ -70,6 +69,27 @@ fn external_symbol_environment_with_timeframe(
     let provider =
         InMemoryRequestDataProvider::from_streams([(key, bars)]).expect("valid request bars");
     RequestEnvironment::new(ChartContext::default(), Arc::new(provider))
+}
+
+fn external_symbol_environment_with_chart_timeframe(
+    symbol: &str,
+    requested_timeframe: &str,
+    chart_timeframe: &str,
+    bars: Vec<Bar>,
+) -> RequestEnvironment {
+    let key = RequestKey::new(
+        symbol,
+        RequestTimeframe::parse(requested_timeframe).expect("request timeframe"),
+    );
+    let provider =
+        InMemoryRequestDataProvider::from_streams([(key, bars)]).expect("valid request bars");
+    RequestEnvironment::new(
+        ChartContext::new(
+            "NASDAQ:AAPL",
+            RequestTimeframe::parse(chart_timeframe).expect("chart timeframe"),
+        ),
+        Arc::new(provider),
+    )
 }
 
 #[test]
@@ -377,7 +397,7 @@ fn request_security_same_context_returns_dmi_tuple_expression() {
 #[test]
 fn request_security_same_context_returns_vwap_bands_tuple_expression() {
     let program = compile_program(
-        "indicator(\"request vwap tuple\")\n[basis, upper, lower] = request.security(syminfo.tickerid, timeframe.period, ta.vwap(close, false, 2.0))\nplot(basis)\nplot(upper)\nplot(lower)\n",
+        "indicator(\"request vwap tuple\")\n[basis, upper, lower] = request.security(syminfo.tickerid, timeframe.period, ta.vwap(close, time == 0, 2.0))\nplot(basis)\nplot(upper)\nplot(lower)\n",
     );
     let result = run_historical(
         &program,
@@ -444,6 +464,26 @@ fn request_security_reads_same_timeframe_external_symbol_from_provider() {
         .expect("external request data should run");
 
     assert_values_close(&result.plots[0].values, &[20.0, 21.0]);
+}
+
+#[test]
+fn request_security_same_timeframe_gaps_off_forward_fills_provider_gaps() {
+    let program = compile_program(
+        "indicator(\"request external gaps\")\nplot(request.security(\"NYSE:IBM\", timeframe.period, close))\n",
+    );
+    let environment = external_symbol_environment(
+        "NYSE:IBM",
+        vec![timed_bar(0, 20.0), timed_bar(120_000, 22.0)],
+    );
+    let result = HistoricalRuntime::with_request_environment(&program, environment)
+        .run(&[
+            timed_bar(0, 5.0),
+            timed_bar(60_000, 6.0),
+            timed_bar(120_000, 7.0),
+        ])
+        .expect("default same-timeframe gaps_off should forward fill");
+
+    assert_values_close(&result.plots[0].values, &[20.0, 20.0, 22.0]);
 }
 
 #[test]
@@ -1012,7 +1052,7 @@ fn request_security_aligns_provider_higher_timeframe_dmi_tuple() {
 #[test]
 fn request_security_evaluates_provider_vwap_bands_tuple_in_requested_context() {
     let program = compile_program(
-        "indicator(\"request provider vwap tuple\")\n[basis, upper, lower] = request.security(\"NYSE:IBM\", timeframe.period, ta.vwap(close, false, 2.0))\nplot(basis)\nplot(upper)\nplot(lower)\n",
+        "indicator(\"request provider vwap tuple\")\n[basis, upper, lower] = request.security(\"NYSE:IBM\", timeframe.period, ta.vwap(close, time == 0, 2.0))\nplot(basis)\nplot(upper)\nplot(lower)\n",
     );
     let environment = external_symbol_environment(
         "NYSE:IBM",
@@ -1050,7 +1090,7 @@ fn request_security_evaluates_provider_vwap_bands_tuple_in_requested_context() {
 #[test]
 fn request_security_aligns_provider_higher_timeframe_vwap_bands_tuple() {
     let program = compile_program(
-        "indicator(\"request provider htf vwap tuple\")\n[basis, upper, lower] = request.security(\"NYSE:IBM\", \"5\", ta.vwap(close, false, 2.0))\nplot(basis)\nplot(upper)\nplot(lower)\n",
+        "indicator(\"request provider htf vwap tuple\")\n[basis, upper, lower] = request.security(\"NYSE:IBM\", \"5\", ta.vwap(close, time == 0, 2.0))\nplot(basis)\nplot(upper)\nplot(lower)\n",
     );
     let environment = external_symbol_environment_with_timeframe(
         "NYSE:IBM",
@@ -6127,6 +6167,132 @@ fn request_security_aligns_higher_timeframe_without_future_values() {
     assert_eq!(result.plots[0].values[0], PineValue::Na);
     assert_eq!(result.plots[0].values[1], PineValue::Na);
     assert_values_close(&result.plots[0].values[2..], &[100.0, 100.0, 200.0]);
+}
+
+#[test]
+fn request_security_confirms_monthly_values_at_real_utc_month_boundaries() {
+    let program = compile_program(
+        "indicator(\"request monthly\")\nplot(request.security(\"NYSE:IBM\", \"M\", close))\n",
+    );
+    let cases = [
+        (
+            "31-day month",
+            vec![
+                timed_bar(1_704_067_200_000, 100.0),
+                timed_bar(1_706_745_600_000, 200.0),
+            ],
+            vec![
+                timed_bar(1_706_486_400_000, 1.0),
+                timed_bar(1_706_572_800_000, 2.0),
+                timed_bar(1_706_659_200_000, 3.0),
+                timed_bar(1_706_745_600_000, 4.0),
+            ],
+            vec![
+                PineValue::Na,
+                PineValue::Na,
+                PineValue::Float(100.0),
+                PineValue::Float(100.0),
+            ],
+        ),
+        (
+            "28-day month without a following provider bar",
+            vec![timed_bar(1_675_209_600_000, 110.0)],
+            vec![
+                timed_bar(1_677_456_000_000, 1.0),
+                timed_bar(1_677_542_400_000, 2.0),
+                timed_bar(1_677_628_800_000, 3.0),
+            ],
+            vec![
+                PineValue::Na,
+                PineValue::Float(110.0),
+                PineValue::Float(110.0),
+            ],
+        ),
+        (
+            "29-day month",
+            vec![
+                timed_bar(1_706_745_600_000, 120.0),
+                timed_bar(1_709_251_200_000, 220.0),
+            ],
+            vec![
+                timed_bar(1_709_078_400_000, 1.0),
+                timed_bar(1_709_164_800_000, 2.0),
+                timed_bar(1_709_251_200_000, 3.0),
+            ],
+            vec![
+                PineValue::Na,
+                PineValue::Float(120.0),
+                PineValue::Float(120.0),
+            ],
+        ),
+    ];
+
+    for (name, provider_bars, chart_bars, expected) in cases {
+        let environment =
+            external_symbol_environment_with_chart_timeframe("NYSE:IBM", "M", "D", provider_bars);
+        let result = HistoricalRuntime::with_request_environment(&program, environment)
+            .run(&chart_bars)
+            .unwrap_or_else(|error| panic!("{name}: {}", error.message));
+        assert_eq!(result.plots[0].values, expected, "{name}");
+    }
+}
+
+#[test]
+fn request_security_does_not_treat_monthly_as_same_boundary_as_thirty_days() {
+    let program = compile_program(
+        "indicator(\"request monthly on 30D\")\nplot(request.security(\"NYSE:IBM\", \"M\", close))\n",
+    );
+    let environment = external_symbol_environment_with_chart_timeframe(
+        "NYSE:IBM",
+        "M",
+        "30D",
+        vec![timed_bar(1_704_067_200_000, 100.0)],
+    );
+    let result = HistoricalRuntime::with_request_environment(&program, environment)
+        .run(&[
+            timed_bar(1_704_067_200_000, 1.0),
+            timed_bar(1_706_659_200_000, 2.0),
+        ])
+        .expect("monthly request on 30D chart should run");
+
+    assert_eq!(result.plots[0].values[0], PineValue::Na);
+    assert_values_close(&result.plots[0].values[1..], &[100.0]);
+}
+
+#[test]
+fn request_security_keeps_daily_and_weekly_confirmation_boundaries() {
+    let cases = [
+        (
+            "D",
+            "60",
+            vec![timed_bar(0, 100.0), timed_bar(86_400_000, 200.0)],
+            vec![timed_bar(79_200_000, 1.0), timed_bar(82_800_000, 2.0)],
+        ),
+        (
+            "W",
+            "D",
+            vec![timed_bar(345_600_000, 100.0), timed_bar(950_400_000, 200.0)],
+            vec![timed_bar(777_600_000, 1.0), timed_bar(864_000_000, 2.0)],
+        ),
+    ];
+
+    for (requested_timeframe, chart_timeframe, provider_bars, chart_bars) in cases {
+        let program = compile_program(&format!(
+            "indicator(\"request fixed boundary\")\nplot(request.security(\"NYSE:IBM\", \"{requested_timeframe}\", close))\n"
+        ));
+        let environment = external_symbol_environment_with_chart_timeframe(
+            "NYSE:IBM",
+            requested_timeframe,
+            chart_timeframe,
+            provider_bars,
+        );
+        let result = HistoricalRuntime::with_request_environment(&program, environment)
+            .run(&chart_bars)
+            .unwrap_or_else(|error| panic!("{requested_timeframe}: {}", error.message));
+
+        assert_eq!(result.plots[0].values[0], PineValue::Na);
+        assert_values_close(&result.plots[0].values[1..], &[100.0]);
+    }
 }
 
 #[test]

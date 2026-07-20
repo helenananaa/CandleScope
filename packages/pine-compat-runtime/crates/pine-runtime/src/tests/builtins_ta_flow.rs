@@ -1,4 +1,3 @@
-use pine_sema::analyze_source;
 use pine_syntax::SourceFile;
 
 use super::*;
@@ -125,7 +124,7 @@ fn runs_vwap_over_historical_bars() {
 plot(ta.vwap)
 plot(ta.vwap(close))
 plot(ta.vwap(close, bar_index == 1))
-[basis, upper, lower] = ta.vwap(close, false, 2.0)
+[basis, upper, lower] = ta.vwap(close, bar_index == 0, 2.0)
 plot(basis)
 plot(upper)
 plot(lower)
@@ -148,7 +147,8 @@ plot(ta.vwap(bar_index == 2 ? na : close))
 
     assert_values_close(&result.plots[0].values, &[9.0, 15.75, 15.75]);
     assert_values_close(&result.plots[1].values, &[9.0, 15.75, 15.75]);
-    assert_values_close(&result.plots[2].values, &[9.0, 18.0, 18.0]);
+    assert_eq!(result.plots[2].values[0], PineValue::Na);
+    assert_values_close(&result.plots[2].values[1..], &[18.0, 18.0]);
     assert_values_close(&result.plots[3].values, &[9.0, 15.75, 15.75]);
     assert_values_close(
         &result.plots[4].values,
@@ -160,6 +160,81 @@ plot(ta.vwap(bar_index == 2 ? na : close))
     );
     assert_values_close(&result.plots[6].values[..2], &[9.0, 15.75]);
     assert_eq!(result.plots[6].values[2], PineValue::Na);
+}
+
+#[test]
+fn resets_default_vwap_on_utc_day_changes_and_waits_for_explicit_anchor() {
+    let source = SourceFile::new(
+        "test.pine",
+        r#"indicator("vwap anchors")
+plot(ta.vwap)
+plot(ta.vwap(close))
+plot(ta.vwap(close, bar_index == 1))
+[basis, upper, lower] = ta.vwap(close, bar_index == 1, close / 10)
+plot(basis)
+plot(upper)
+plot(lower)
+"#,
+    );
+    let analysis = analyze_source(&source);
+    assert!(
+        analysis.diagnostics.is_empty(),
+        "{:?}",
+        analysis.diagnostics
+    );
+
+    let bars = vec![
+        Bar {
+            time: 1,
+            open: 10.0,
+            high: 10.0,
+            low: 10.0,
+            close: 10.0,
+            volume: 1.0,
+        },
+        Bar {
+            time: 60_000,
+            open: 20.0,
+            high: 20.0,
+            low: 20.0,
+            close: 20.0,
+            volume: 1.0,
+        },
+        Bar {
+            time: 86_400_000,
+            open: 30.0,
+            high: 30.0,
+            low: 30.0,
+            close: 30.0,
+            volume: 1.0,
+        },
+        Bar {
+            time: 86_460_000,
+            open: 40.0,
+            high: 40.0,
+            low: 40.0,
+            close: 40.0,
+            volume: 1.0,
+        },
+    ];
+    let result = run_historical(&analysis.hir.expect("HIR"), &bars).expect("runtime result");
+
+    assert_values_close(&result.plots[0].values, &[10.0, 15.0, 30.0, 35.0]);
+    assert_values_close(&result.plots[1].values, &[10.0, 15.0, 30.0, 35.0]);
+    assert_eq!(result.plots[2].values[0], PineValue::Na);
+    assert_values_close(&result.plots[2].values[1..], &[20.0, 25.0, 30.0]);
+    assert_eq!(result.plots[3].values[0], PineValue::Na);
+    assert_values_close(&result.plots[3].values[1..], &[20.0, 25.0, 30.0]);
+    assert_eq!(result.plots[4].values[0], PineValue::Na);
+    assert_values_close(
+        &result.plots[4].values[1..],
+        &[20.0, 40.0, 62.659_863_237_109_04],
+    );
+    assert_eq!(result.plots[5].values[0], PineValue::Na);
+    assert_values_close(
+        &result.plots[5].values[1..],
+        &[20.0, 10.0, -2.659_863_237_109_043],
+    );
 }
 
 #[test]

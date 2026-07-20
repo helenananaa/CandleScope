@@ -47,7 +47,8 @@ export function registerPineLanguageSupport(monaco: typeof Monaco): void {
     builtins: BUILTINS,
     tokenizer: {
       root: [
-        [/^\s*\/\/@version=\d+/, "metatag"],
+        // Monarch expands @name inside regexes; @@ represents a literal @.
+        [/^\s*\/\/@@version=\d+/, "metatag"],
         [/\/\/.*$/, "comment"],
         [/[a-zA-Z_]\w*/, {
           cases: {

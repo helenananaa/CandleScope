@@ -2,12 +2,17 @@ use pine_ir::HirCallArg;
 
 use crate::*;
 
-pub(crate) fn parse_color_hex(value: &str) -> u32 {
-    u32::from_str_radix(value.trim_start_matches('#'), 16).unwrap_or(0)
+const COLOR_ALPHA_FLAG: u64 = 1 << 32;
+
+pub(crate) fn parse_color_hex(value: &str) -> u64 {
+    let digits = value.trim_start_matches('#');
+    let parsed = u32::from_str_radix(digits, 16).unwrap_or(0);
+    encode_color_literal(parsed, digits.len() == 8)
 }
 
-pub(crate) fn apply_transparency(color: u32, transp: i64) -> u32 {
-    let rgb = if color > 0xFF_FFFF { color >> 8 } else { color } & 0xFF_FFFF;
+pub(crate) fn apply_transparency(color: u64, transp: i64) -> u64 {
+    let (red, green, blue, _) = color_rgba(color);
+    let rgb = (red << 16) | (green << 8) | blue;
     let transp = transp.clamp(0, 100) as u32;
     let alpha = ((100 - transp) * 255 + 50) / 100;
     compose_color(rgb, alpha)
@@ -17,26 +22,27 @@ pub(crate) fn color_channel(value: f64) -> u32 {
     value.round().clamp(0.0, 255.0) as u32
 }
 
-pub(crate) fn color_rgba(color: u32) -> (u32, u32, u32, u32) {
-    let (rgb, alpha) = if color > 0xFF_FFFF {
-        (color >> 8, color & 0xFF)
+pub(crate) fn color_rgba(color: u64) -> (u32, u32, u32, u32) {
+    let has_alpha_flag = color & COLOR_ALPHA_FLAG != 0;
+    let payload = color & 0xFFFF_FFFF;
+    let (rgb, alpha) = if has_alpha_flag || payload > 0xFF_FFFF {
+        (payload >> 8, payload & 0xFF)
     } else {
-        (color, 0xFF)
+        (payload, 0xFF)
     };
-    ((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF, alpha)
+    (
+        ((rgb >> 16) & 0xFF) as u32,
+        ((rgb >> 8) & 0xFF) as u32,
+        (rgb & 0xFF) as u32,
+        alpha as u32,
+    )
 }
 
-pub(crate) fn compose_color(rgb: u32, alpha: u32) -> u32 {
-    let rgb = rgb & 0xFF_FFFF;
-    let alpha = alpha & 0xFF;
-    if alpha == 0xFF {
-        rgb
-    } else {
-        (rgb << 8) | alpha
-    }
+pub(crate) fn compose_color(rgb: u32, alpha: u32) -> u64 {
+    encode_color_rgba(rgb, alpha)
 }
 
-pub(crate) fn interpolate_color(bottom_color: u32, top_color: u32, ratio: f64) -> u32 {
+pub(crate) fn interpolate_color(bottom_color: u64, top_color: u64, ratio: f64) -> u64 {
     if ratio <= 0.0 {
         return bottom_color;
     }
@@ -66,7 +72,7 @@ pub(crate) enum ColorComponent {
     Transparency,
 }
 
-pub(crate) fn color_component(color: u32, component: ColorComponent) -> f64 {
+pub(crate) fn color_component(color: u64, component: ColorComponent) -> f64 {
     let (red, green, blue, alpha) = color_rgba(color);
 
     match component {
@@ -138,7 +144,10 @@ impl<'a> HistoricalRuntime<'a> {
             0
         };
         let color = (color_channel(red) << 16) | (color_channel(green) << 8) | color_channel(blue);
-        Ok(PineValue::Color(apply_transparency(color, transp)))
+        Ok(PineValue::Color(apply_transparency(
+            u64::from(color),
+            transp,
+        )))
     }
 
     pub(crate) fn eval_color_component(

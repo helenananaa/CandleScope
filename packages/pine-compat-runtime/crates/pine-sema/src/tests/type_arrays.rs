@@ -478,7 +478,8 @@ fn rejects_while_expression_nested_array_result() {
             "../../../../tests/fixtures/sema/unsupported_while_expression_nested_array_result.pine"
         ),
     );
-    let analysis = analyze_source(&source);
+    let analysis =
+        crate::analysis::analyze_source_with_implicit_dialect(&source, crate::PineDialect::V5);
 
     assert!(
         analysis

@@ -11,6 +11,7 @@ use crate::analyzer::functions::{
     contains_output_or_declaration_call, function_param_names,
     statement_contains_output_or_declaration_call,
 };
+use crate::legacy::SourcePolicy;
 use crate::source_graph::{AnalysisInput, SourceContextId, SourceId};
 use crate::types::array_kind_from_element_type_name;
 
@@ -23,6 +24,7 @@ mod side_effects;
 #[cfg(test)]
 #[path = "modules/source_context_tests.rs"]
 mod source_context_tests;
+mod version_policy;
 
 use imports::{
     detect_import_cycles, imports_in_program, validate_library_imports, validate_root_imports,
@@ -37,8 +39,25 @@ pub(crate) use model::{
 };
 use modules_rewrite::{RewriteContext, rewrite_expr, rewrite_function_body, rewrite_program};
 use side_effects::{first_statement_span, function_body_has_side_effect, visit_statement_exprs};
+use version_policy::validate_language_versions;
 
 pub(crate) fn validate_modules(input: &AnalysisInput) -> ModuleValidation {
+    validate_modules_inner(input, crate::PineDialect::V1, false)
+}
+
+#[cfg(test)]
+pub(crate) fn validate_modules_with_implicit(
+    input: &AnalysisInput,
+    implicit_dialect: crate::PineDialect,
+) -> ModuleValidation {
+    validate_modules_inner(input, implicit_dialect, true)
+}
+
+fn validate_modules_inner(
+    input: &AnalysisInput,
+    implicit_dialect: crate::PineDialect,
+    inherit_root_for_implicit_libraries: bool,
+) -> ModuleValidation {
     let graph = input.source_graph();
     let mut diagnostics = Vec::new();
     let mut modules = Vec::with_capacity(graph.libraries().len() + 1);
@@ -83,12 +102,26 @@ pub(crate) fn validate_modules(input: &AnalysisInput) -> ModuleValidation {
     validate_library_imports(&modules, &library_index, &mut diagnostics);
     detect_import_cycles(&modules, &library_index, &mut diagnostics);
 
+    let root_policy = SourcePolicy::from_program_with_implicit(&root_program, implicit_dialect);
+    validate_language_versions(
+        &modules,
+        &root_policy,
+        implicit_dialect,
+        inherit_root_for_implicit_libraries,
+        &mut diagnostics,
+    );
+    let halt_before_analysis = diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == "E_LEX_VERSION" || diagnostic.code.starts_with("E_LANGUAGE_VERSION_")
+    });
+
     let import_plan = build_import_plan(&modules, &library_index, &mut diagnostics);
     let root_program = rewrite_program(&root_program, &import_plan.root_rewrites);
 
     ModuleValidation {
         diagnostics,
         root_program,
+        root_policy,
+        halt_before_analysis,
         imported_functions: import_plan.imported_functions,
         imported_methods: import_plan.imported_methods,
         imported_user_types: import_plan.imported_user_types,

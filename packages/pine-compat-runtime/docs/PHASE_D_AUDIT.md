@@ -31,7 +31,9 @@ without syntax, semantic, runtime, fixture, docs, and public-surface agreement.
 
 These are not blockers for closing Phase D:
 
-- `ta.vwap` still documents session-derived anchoring as future work.
+- `ta.vwap` now has a fixture-backed UTC daily default anchor, explicit
+  pre-anchor behavior, and series band multipliers. Exchange calendar/timezone
+  sessions remain outside the fixed interpreter metadata model.
 - `color.*` named constants remain a common registry, not an exhaustive Pine
   color compatibility claim.
 - `input.*` and output calls accept a broad metadata subset, but host-side input

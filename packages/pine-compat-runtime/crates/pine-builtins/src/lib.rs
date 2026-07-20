@@ -9,7 +9,7 @@ mod signature;
 
 pub use constants::{
     NAMED_COLORS, NamedColor, builtin_series_value_type, named_color, named_float_constant,
-    named_int_constant, named_string_constant,
+    named_int_constant, named_string_constant, registered_value_names,
 };
 pub use history::{
     BUILTIN_HISTORY_METADATA, BuiltinHistoryMetadata, BuiltinHistoryRequirement,

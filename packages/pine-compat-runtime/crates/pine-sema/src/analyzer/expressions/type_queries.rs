@@ -1,6 +1,10 @@
 use crate::analyzer::maps::map_kind_from_template_name;
 use crate::prelude::*;
 
+mod helpers;
+
+use helpers::*;
+
 #[derive(Clone, Copy)]
 struct TupleTypeContext<'a> {
     param_types: &'a HashMap<String, PineType>,
@@ -60,7 +64,19 @@ impl Analyzer {
                             .map(|_| PineType::new(Qualifier::Const, ValueKind::String))
                     })
             }
-            ExprKind::Unary { expr, .. } => self.type_of_expr_with_params(expr, param_types),
+            ExprKind::Unary { op, expr } => {
+                self.type_of_expr_with_params(expr, param_types)
+                    .map(|pine_type| {
+                        PineType::new(
+                            pine_type.qualifier,
+                            if *op == UnaryOp::Not {
+                                ValueKind::Bool
+                            } else {
+                                pine_type.kind
+                            },
+                        )
+                    })
+            }
             ExprKind::Binary { op, left, right } => {
                 let left_type = self.type_of_expr_with_params(left, param_types)?;
                 let right_type = self.type_of_expr_with_params(right, param_types)?;
@@ -749,7 +765,11 @@ impl Analyzer {
                 context,
             ),
             ExprKind::Call { callee, args } => {
-                let name = expr_name(callee)?;
+                let source_name = expr_name(callee)?;
+                let name = self
+                    .legacy
+                    .canonical_call_name(self.current_source_context_id(), callee.span)
+                    .map_or(source_name, str::to_owned);
                 if name == "request.security" && args.len() == 3 {
                     return self.tuple_element_types_with_context(&args[2].value, context);
                 }
@@ -1419,82 +1439,4 @@ impl Analyzer {
             _ => None,
         }
     }
-}
-
-fn map_new_template_types(name: &str) -> Option<(&str, &str)> {
-    let inner = name.strip_prefix("map.new<")?.strip_suffix('>')?;
-    inner.split_once(',')
-}
-
-fn selected_branch_type(
-    condition_qualifier: Qualifier,
-    then_type: PineType,
-    else_type: PineType,
-    condition_value: bool,
-) -> Option<PineType> {
-    let selected_type = if condition_value {
-        then_type
-    } else {
-        else_type
-    };
-    Some(PineType::new(
-        strongest_qualifier(condition_qualifier, selected_type.qualifier),
-        common_kind(then_type.kind, else_type.kind)?,
-    ))
-}
-
-fn merge_tuple_element_types(
-    current: Option<Vec<PineType>>,
-    next: Vec<PineType>,
-) -> Option<Vec<PineType>> {
-    let Some(current) = current else {
-        return Some(next);
-    };
-    if current.len() != next.len() {
-        return None;
-    }
-    current
-        .into_iter()
-        .zip(next)
-        .map(|(current, next)| merge_result_types(Some(current), next))
-        .collect()
-}
-
-fn selected_tuple_branch_types(
-    condition_qualifier: Qualifier,
-    then_types: Vec<PineType>,
-    else_types: Vec<PineType>,
-    condition_value: bool,
-) -> Option<Vec<PineType>> {
-    if then_types.len() != else_types.len() {
-        return None;
-    }
-
-    let selected_types = if condition_value {
-        then_types.iter()
-    } else {
-        else_types.iter()
-    };
-
-    selected_types
-        .zip(then_types.iter().zip(else_types.iter()))
-        .map(|(selected_type, (then_type, else_type))| {
-            Some(PineType::new(
-                strongest_qualifier(condition_qualifier, selected_type.qualifier),
-                common_kind(then_type.kind, else_type.kind)?,
-            ))
-        })
-        .collect()
-}
-
-fn promote_tuple_element_qualifiers(types: Vec<PineType>, qualifier: Qualifier) -> Vec<PineType> {
-    types
-        .into_iter()
-        .map(|pine_type| {
-            PineType::new(
-                strongest_qualifier(qualifier, pine_type.qualifier),
-                pine_type.kind,
-            )
-        })
-        .collect()
 }

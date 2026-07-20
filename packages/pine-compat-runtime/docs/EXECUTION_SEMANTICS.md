@@ -34,6 +34,81 @@ rollback, and later `varip` behavior. This should be a separate milestone.
 The first public releases should either reject realtime-only features or mark
 them as approximate.
 
+## Legacy Indicator Expression Semantics
+
+Pine v1-v4 indicators use version-selected semantics where a current-language
+rewrite would change results. These rules are carried in HIR or selected from
+the HIR language version, so CLI, Python, WASM, historical, incremental, and
+realtime execution use the same contract. They never activate in v5/v6 source
+resolution, and they do not enable a legacy strategy path.
+
+`iff(condition, result1, result2)` binds the historical parameter names and
+evaluates `condition`, `result1`, and `result2` exactly once in that order.
+Both result expressions therefore advance their independent stateful callsites
+on every reached call. A true condition selects `result1`; false or `na`
+selects `result2`. The current compatibility slice accepts scalar numeric,
+bool, string, color, and `na` results and merges their types and qualifiers
+with the same branch rules used elsewhere. Ordinary `?:` remains lazy.
+
+`offset(source, offset)` binds the historical `source`/`offset` signature and
+lowers structurally to the native history HIR node rather than a runtime helper.
+It therefore shares constant-retention analysis, guarded dynamic integer
+offsets, `max_bars_back`, `na`, negative-offset diagnostics, expression-series
+storage, and realtime rollback with `source[offset]`.
+
+Pine v4 `rsi(x, y)` selects its overload from the second argument's analyzed
+type. A non-series integer uses canonical `ta.rsi(source, length)`. A series
+integer or any numeric float uses the historical two-series formula
+`100 - 100 / (1 + x / y)` and the runtime's ordinary finite arithmetic and
+`na` propagation. Non-numeric or otherwise ambiguous forms fail analysis with
+`E_LEGACY_RSI_OVERLOAD`; they do not guess a length overload.
+
+For `time()` and `time_close()`, a session string without an explicit day
+suffix uses Monday through Friday when the HIR language version is v1-v4 and
+all seven days for v5/v6. An explicit `:days` suffix always wins, and `24x7`
+always means all days. `input.session` strings are retained verbatim; the
+effective default-day policy is passed separately to session parsing.
+
+`and` and `or` evaluate both operands in v1-v5 and short-circuit only in v6.
+This includes stateful calls in the right operand. The v4 aliases `change`,
+`highest`, `lowest`, `max`, and `min` lower respectively to `ta.change`,
+`ta.highest`, `ta.lowest`, `math.max`, and `math.min` only after user-defined
+and lexical resolution fails.
+
+Pine v1/v2 global scalar declarations may use self-history and safe forward
+references. Analysis activates a bounded dependency graph only for declarations
+that need it, predeclares one canonical symbol per active node, and uses a
+stable topological order for current-bar dependencies. History-only cycles are
+accepted only when one stable scalar type can be inferred. Current cycles,
+side-effecting initializers, statement-crossing current dependencies, and
+graphs above 256 nodes or 4096 edges fail before HIR. The runtime sees ordinary
+canonical declarations and history nodes, not a separate graph evaluator.
+
+In v1/v2 arithmetic, bool operands are explicitly lowered through `float` so
+true becomes 1 and false becomes 0. In v1-v5 conditions, `not`, `and`, and `or`,
+numeric and `na` operands are explicitly lowered through `bool`: zero and `na`
+are false and every other numeric value is true. Pine v3-v6 reject implicit bool
+arithmetic, and v6 rejects implicit numeric conditions. These inserted calls
+count against ordinary lowering and callsite limits.
+
+### Legacy release execution gates
+
+Every source in `tests/fixtures/legacy/release_profiles.tsv` must match a full
+historical batch run when appended incrementally and when handed to the
+realtime engine as historical bars. Ordinary v1-v4 rows must also survive a
+mutated forming update, replacement forming update, rollback, and final
+confirmation with a result equal to batch execution. All requested-data rows
+run through their declared chart/provider profile. Runtime profile storage is
+counted against the manifest ceiling.
+
+The sole deliberate equality exception is the experimental v2 historical
+`security` lookahead profile. Historical `lookahead_on` may repaint prior/final
+historical values, while forming or confirmed realtime updates may only use
+confirmed requested values. Its release gate therefore asserts that the
+realtime value stays `na` where batch history has a future-backfilled value;
+making those results equal would leak future data. This profile is not claimed
+as batch/realtime value parity.
+
 ## Strategy Mode
 
 `strategy(...)` selects strategy mode for historical execution.
@@ -2159,7 +2234,8 @@ responsibility.
 right, and xloc snapshot values. Tables use deterministic ids,
 fixed positive
 dimensions, optional `table.new` background-color, frame-color, frame-width,
-border-color, and border-width initialization, and sparse cell snapshots for
+border-color, and border-width initialization, accepted `force_overlay` syntax
+without public-output propagation or pane routing, and sparse cell snapshots for
 text/background/text-color/width/height/text-size writes and final table-level
 mutations with `table.set_position` and
 `table.set_bgcolor`/`table.set_frame_color`/`table.set_frame_width`/
@@ -2328,7 +2404,8 @@ independent while-loop control-flow blocks. `table.new` optional
 `bgcolor`,
 `frame_color`, `frame_width`, `border_color`, and `border_width` initialize the
 table's final background-color, frame-color, frame-width, border-color, and
-border-width values.
+border-width values. `force_overlay` is accepted, but its value is not exposed
+in public output and pane routing remains unsupported.
 `table.delete` appends an `exists: false` table snapshot, including when called
 from ordinary and independent while-loop control-flow blocks. `table.clear`
 removes already populated cells
@@ -2379,6 +2456,14 @@ does not fetch data. Hosts inject immutable requested bar streams through the
 request provider contract, keyed by symbol and timeframe, and the runtime
 validates duplicate keys plus sorted unique bar times before execution.
 
+The provider environment also owns explicit chart identity. CLI callers use
+`--chart-symbol` and `--chart-timeframe`; Python callers use the optional
+`chart_symbol` and `chart_timeframe` keywords on `run_script` or `Program.run`;
+WASM callers place an optional reserved `$chart` object with string `symbol`
+and `timeframe` fields in the request-bars JSON object. Omitted identity uses
+the deterministic default chart. Invalid or empty metadata is rejected by the
+host boundary before runtime.
+
 Same-context requests whose symbol and timeframe match the chart metadata
 evaluate the requested expression in the chart context. Provider-backed
 same-or-higher-timeframe requests evaluate the supported expression in an
@@ -2393,7 +2478,8 @@ directly. The selected tuple-returning calls currently include `ta.macd`,
 `ta.bb`, `ta.kc`, `ta.supertrend`, `ta.dmi`, and
 `ta.vwap(source, anchor, stdev_mult)`.
 
-The supported provider requested expression subset includes direct OHLCV/time sources,
+The supported provider requested expression subset includes requested-context
+`syminfo.tickerid`/`timeframe.period`, direct OHLCV/time sources,
 pure arithmetic and ternaries, history references, `na`, `nz`, selected
 stateless `math.*` calls, fixed-mintick `math.round_to_mintick`, `math.sum`,
 `ta.cum`, `ta.sma`, `ta.ema`, `ta.dema`, `ta.tema`, `ta.rma`, `ta.rsi`,
@@ -2420,17 +2506,61 @@ symbol, requested timeframe, and expression identity for the duration of one
 runtime execution. Repeated identical calls reuse that cache instead of
 mutating provider data or chart state.
 
-Same-timeframe provider requests require an exact requested-bar timestamp
-match. Higher-timeframe provider requests use the default `gaps_off` and
-`lookahead_off` subset: a requested value is visible only after the requested
-bar has closed relative to the current chart bar, missing confirmed requested
-bars forward-fill the last confirmed requested value, and chart bars before the
+Same-timeframe modern provider requests use default `gaps_off`: the most recent
+requested value whose open is not later than the chart open is carried forward.
+Higher-timeframe modern provider requests use default `gaps_off` and
+`lookahead_off`: a requested value is visible only after the requested bar has
+closed relative to the current chart bar, missing confirmed requested bars
+forward-fill the last confirmed requested value, and chart bars before the
 first confirmed requested bar return `na`.
 
-Lower-timeframe `request.security`, `request.security_lower_tf`, optional
-parameters, explicit gaps/lookahead, advanced request families, provider local
-aliases, UDF calls, output/drawing/alert side effects, input declarations, and
-array mutation inside requested expressions remain unsupported.
+### Legacy `security`
+
+Accepted v1-v4 `security` calls reuse the same provider, requested-expression,
+cache, and state-isolation machinery after a version-specific signature binder.
+The executable call is intentionally lowered to an inaccessible internal HIR
+name whose suffix encodes `gaps_off|gaps_on` and
+`lookahead_off|lookahead_on`; it is not lowered to a public modern call with
+silently widened arguments. Runtime failures retain hidden start/end arguments
+for the original complete source call.
+
+The verified merge behavior is:
+
+| Context | `lookahead_off` | historical `lookahead_on` |
+| --- | --- | --- |
+| same timeframe, `gaps_off` | latest requested open not after chart open | same |
+| same timeframe, `gaps_on` | exact requested/chart open | same |
+| higher timeframe, `gaps_off` | latest requested close not after chart close | latest requested open not after chart open |
+| higher timeframe, `gaps_on` | requested close equals chart close | requested open equals chart open |
+
+Pine v1/v2 profiles default to lookahead on; Pine v3/v4 profiles default to
+lookahead off. Explicit compile-time bools and matching `barmerge` constants
+select gaps/lookahead where the historical signature exposes those arguments.
+For realtime forming and confirmed updates, legacy lookahead-on uses confirmed
+lookahead-off alignment, matching the historical/realtime handoff instead of
+exposing an unconfirmed future value. A program that actually reaches a
+lookahead-on call emits `W_LEGACY_SECURITY_LOOKAHEAD` once for that callsite.
+Warnings are returned in stable callsite order and do not make execution fail.
+
+The requested child runtime receives chart metadata for the requested symbol
+and timeframe, and its warnings are merged into the outer result. Mutable
+requested state, histories, arrays, drawings, `var` values, and stateful
+callsites stay separate from chart state. Missing streams and invalid timeframe
+relations are stable runtime errors; a legacy error begins with
+`legacy security at source span START..END:` across the host-specific error
+wrapper.
+
+`study(resolution=...)` is still rejected with one focused unsupported
+diagnostic. It requires a program-level execution coordinator for whole-script
+state, output alignment, gaps, realtime confirmation, provider identity, and
+cache ownership; treating it as a synthetic `request.security` expression
+would not preserve those semantics.
+
+Lower-timeframe `request.security`/legacy `security`,
+`request.security_lower_tf`, modern non-default gaps/lookahead, advanced
+request families, provider local aliases, UDF calls,
+output/drawing/alert side effects, input declarations, and array mutation
+inside requested expressions remain unsupported.
 
 ### `varip`
 

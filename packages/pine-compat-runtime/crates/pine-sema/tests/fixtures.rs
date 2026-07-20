@@ -1,4 +1,8 @@
-use std::{collections::HashSet, fs, path::PathBuf};
+use std::{
+    collections::HashSet,
+    fs,
+    path::{Path, PathBuf},
+};
 
 use pine_sema::{AnalysisInput, analyze_input, analyze_source};
 use pine_syntax::SourceFile;
@@ -7,6 +11,21 @@ fn workspace_fixture(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .join(path)
+}
+
+fn version_matched_fixture_library(path: &Path, root: &str) -> SourceFile {
+    let mut library = fs::read_to_string(path).expect("library fixture should be readable");
+    let root_version = root
+        .lines()
+        .find(|line| line.trim_start().starts_with("//@version="));
+    let library_version = library
+        .lines()
+        .position(|line| line.trim_start().starts_with("//@version="));
+    if let (Some(root_version), Some(0)) = (root_version, library_version) {
+        let first_newline = library.find('\n').unwrap_or(library.len());
+        library.replace_range(..first_newline, root_version.trim_start());
+    }
+    SourceFile::new(path.display().to_string(), library)
 }
 
 #[test]
@@ -1994,11 +2013,8 @@ fn accepts_supported_ta_vwap_na_stdev_mult_fixture() {
 }
 
 #[test]
-fn reports_unsupported_ta_vwap_series_stdev_mult_fixture() {
-    assert_diagnostic_messages(
-        "tests/fixtures/sema/unsupported_ta_vwap_series_stdev_mult.pine",
-        &["`ta.vwap` argument `stdev_mult` expects simple numeric-compatible, got series float"],
-    );
+fn accepts_supported_ta_vwap_series_stdev_mult_fixture() {
+    assert_valid_fixture("tests/fixtures/sema/supported_ta_vwap_series_stdev_mult.pine");
 }
 
 #[test]
@@ -14136,9 +14152,7 @@ fn reports_unsupported_imported_private_udt_constructor_fixture() {
     let text = fs::read_to_string(&path).expect("fixture should be readable");
     let source = SourceFile::new(path.display().to_string(), text);
     let library_path = workspace_fixture("tests/fixtures/libraries/import_private_udt_lib.pine");
-    let library_text =
-        fs::read_to_string(&library_path).expect("library fixture should be readable");
-    let library_source = SourceFile::new(library_path.display().to_string(), library_text);
+    let library_source = version_matched_fixture_library(&library_path, source.text());
     let input = AnalysisInput::with_library_sources(
         source,
         vec![("user/private_udt/1".to_owned(), library_source)],
@@ -14165,9 +14179,7 @@ fn reports_unsupported_import_duplicate_exported_udt_fixture() {
     let text = fs::read_to_string(&path).expect("fixture should be readable");
     let source = SourceFile::new(path.display().to_string(), text);
     let library_path = workspace_fixture("tests/fixtures/libraries/import_duplicate_udt_lib.pine");
-    let library_text =
-        fs::read_to_string(&library_path).expect("library fixture should be readable");
-    let library_source = SourceFile::new(library_path.display().to_string(), library_text);
+    let library_source = version_matched_fixture_library(&library_path, source.text());
     let input = AnalysisInput::with_library_sources(
         source,
         vec![("user/duplicate_udt/1".to_owned(), library_source)],
@@ -14196,9 +14208,7 @@ fn reports_unsupported_import_duplicate_exported_udt_const_fixture() {
     let source = SourceFile::new(path.display().to_string(), text);
     let library_path =
         workspace_fixture("tests/fixtures/libraries/import_duplicate_udt_const_lib.pine");
-    let library_text =
-        fs::read_to_string(&library_path).expect("library fixture should be readable");
-    let library_source = SourceFile::new(library_path.display().to_string(), library_text);
+    let library_source = version_matched_fixture_library(&library_path, source.text());
     let input = AnalysisInput::with_library_sources(
         source,
         vec![("user/duplicate_udt_const/1".to_owned(), library_source)],
@@ -14227,9 +14237,7 @@ fn reports_unsupported_import_duplicate_exported_udt_function_fixture() {
     let source = SourceFile::new(path.display().to_string(), text);
     let library_path =
         workspace_fixture("tests/fixtures/libraries/import_duplicate_udt_function_lib.pine");
-    let library_text =
-        fs::read_to_string(&library_path).expect("library fixture should be readable");
-    let library_source = SourceFile::new(library_path.display().to_string(), library_text);
+    let library_source = version_matched_fixture_library(&library_path, source.text());
     let input = AnalysisInput::with_library_sources(
         source,
         vec![("user/duplicate_udt_function/1".to_owned(), library_source)],
@@ -14373,9 +14381,7 @@ fn reports_unsupported_imported_user_type_array_tuple_return_identities_fixture(
     let text = fs::read_to_string(&path).expect("fixture should be readable");
     let source = SourceFile::new(path.display().to_string(), text.clone());
     let library_path = workspace_fixture(library);
-    let library_text =
-        fs::read_to_string(&library_path).expect("library fixture should be readable");
-    let library_source = SourceFile::new(library_path.display().to_string(), library_text);
+    let library_source = version_matched_fixture_library(&library_path, source.text());
     let input = AnalysisInput::with_library_sources(
         source,
         vec![("user/udt_array_returns/1".to_owned(), library_source)],
@@ -14424,9 +14430,7 @@ fn reports_unsupported_imported_user_type_array_tuple_alias_mutation_fixture() {
     let text = fs::read_to_string(&path).expect("fixture should be readable");
     let source = SourceFile::new(path.display().to_string(), text.clone());
     let library_path = workspace_fixture(library);
-    let library_text =
-        fs::read_to_string(&library_path).expect("library fixture should be readable");
-    let library_source = SourceFile::new(library_path.display().to_string(), library_text);
+    let library_source = version_matched_fixture_library(&library_path, source.text());
     let input = AnalysisInput::with_library_sources(
         source,
         vec![("user/udt_array_returns/1".to_owned(), library_source)],
@@ -23589,9 +23593,7 @@ fn assert_import_diagnostic_fixture(path: &str, code: &str) {
     let text = fs::read_to_string(&path).expect("fixture should be readable");
     let source = SourceFile::new(path.display().to_string(), text);
     let library_path = workspace_fixture("tests/fixtures/libraries/import_udt_lib.pine");
-    let library_text =
-        fs::read_to_string(&library_path).expect("library fixture should be readable");
-    let library_source = SourceFile::new(library_path.display().to_string(), library_text);
+    let library_source = version_matched_fixture_library(&library_path, source.text());
     let input = AnalysisInput::with_library_sources(
         source,
         vec![("user/udt/1".to_owned(), library_source)],
@@ -23616,9 +23618,7 @@ fn assert_import_valid_fixture(path: &str) {
     let text = fs::read_to_string(&path).expect("fixture should be readable");
     let source = SourceFile::new(path.display().to_string(), text);
     let library_path = workspace_fixture("tests/fixtures/libraries/import_udt_lib.pine");
-    let library_text =
-        fs::read_to_string(&library_path).expect("library fixture should be readable");
-    let library_source = SourceFile::new(library_path.display().to_string(), library_text);
+    let library_source = version_matched_fixture_library(&library_path, source.text());
     let input = AnalysisInput::with_library_sources(
         source,
         vec![("user/udt/1".to_owned(), library_source)],
@@ -23641,9 +23641,7 @@ fn assert_import_diagnostic_messages(path: &str, messages: &[&str]) {
     let text = fs::read_to_string(&path).expect("fixture should be readable");
     let source = SourceFile::new(path.display().to_string(), text);
     let library_path = workspace_fixture("tests/fixtures/libraries/import_udt_lib.pine");
-    let library_text =
-        fs::read_to_string(&library_path).expect("library fixture should be readable");
-    let library_source = SourceFile::new(library_path.display().to_string(), library_text);
+    let library_source = version_matched_fixture_library(&library_path, source.text());
     let input = AnalysisInput::with_library_sources(
         source,
         vec![("user/udt/1".to_owned(), library_source)],
@@ -23670,9 +23668,7 @@ fn assert_import_diagnostic_count(path: &str, expected_count: usize) {
     let text = fs::read_to_string(&path).expect("fixture should be readable");
     let source = SourceFile::new(path.display().to_string(), text);
     let library_path = workspace_fixture("tests/fixtures/libraries/import_udt_lib.pine");
-    let library_text =
-        fs::read_to_string(&library_path).expect("library fixture should be readable");
-    let library_source = SourceFile::new(library_path.display().to_string(), library_text);
+    let library_source = version_matched_fixture_library(&library_path, source.text());
     let input = AnalysisInput::with_library_sources(
         source,
         vec![("user/udt/1".to_owned(), library_source)],
@@ -23700,9 +23696,7 @@ fn assert_import_diagnostic_messages_with_library(
     let text = fs::read_to_string(&path).expect("fixture should be readable");
     let source = SourceFile::new(path.display().to_string(), text);
     let library_path = workspace_fixture(library_fixture);
-    let library_text =
-        fs::read_to_string(&library_path).expect("library fixture should be readable");
-    let library_source = SourceFile::new(library_path.display().to_string(), library_text);
+    let library_source = version_matched_fixture_library(&library_path, source.text());
     let input =
         AnalysisInput::with_library_sources(source, vec![(library_key.to_owned(), library_source)])
             .expect("library fixture input should be valid");
@@ -23732,9 +23726,7 @@ fn assert_import_diagnostic_count_with_library(
     let text = fs::read_to_string(&path).expect("fixture should be readable");
     let source = SourceFile::new(path.display().to_string(), text);
     let library_path = workspace_fixture(library_fixture);
-    let library_text =
-        fs::read_to_string(&library_path).expect("library fixture should be readable");
-    let library_source = SourceFile::new(library_path.display().to_string(), library_text);
+    let library_source = version_matched_fixture_library(&library_path, source.text());
     let input =
         AnalysisInput::with_library_sources(source, vec![(library_key.to_owned(), library_source)])
             .expect("library fixture input should be valid");
@@ -23761,9 +23753,7 @@ fn assert_import_unsupported_fixture_with_library(
     let text = fs::read_to_string(&path).expect("fixture should be readable");
     let source = SourceFile::new(path.display().to_string(), text);
     let library_path = workspace_fixture(library_fixture);
-    let library_text =
-        fs::read_to_string(&library_path).expect("library fixture should be readable");
-    let library_source = SourceFile::new(library_path.display().to_string(), library_text);
+    let library_source = version_matched_fixture_library(&library_path, source.text());
     let input =
         AnalysisInput::with_library_sources(source, vec![(library_key.to_owned(), library_source)])
             .expect("library fixture input should be valid");
@@ -23786,9 +23776,7 @@ fn assert_import_ok_fixture_with_library(path: &str, library_key: &str, library_
     let text = fs::read_to_string(&path).expect("fixture should be readable");
     let source = SourceFile::new(path.display().to_string(), text);
     let library_path = workspace_fixture(library_fixture);
-    let library_text =
-        fs::read_to_string(&library_path).expect("library fixture should be readable");
-    let library_source = SourceFile::new(library_path.display().to_string(), library_text);
+    let library_source = version_matched_fixture_library(&library_path, source.text());
     let input =
         AnalysisInput::with_library_sources(source, vec![(library_key.to_owned(), library_source)])
             .expect("library fixture input should be valid");
@@ -23814,9 +23802,7 @@ fn assert_import_ok_fixture(path: &str) {
     let text = fs::read_to_string(&path).expect("fixture should be readable");
     let source = SourceFile::new(path.display().to_string(), text);
     let library_path = workspace_fixture("tests/fixtures/libraries/import_udt_lib.pine");
-    let library_text =
-        fs::read_to_string(&library_path).expect("library fixture should be readable");
-    let library_source = SourceFile::new(library_path.display().to_string(), library_text);
+    let library_source = version_matched_fixture_library(&library_path, source.text());
     let input = AnalysisInput::with_library_sources(
         source,
         vec![("user/udt/1".to_owned(), library_source)],

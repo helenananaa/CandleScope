@@ -7,14 +7,19 @@ use super::drawings::{
     BoxOutput, LabelOutput, LineFillOutput, LineOutput, PolylineOutput, TableOutput,
 };
 use super::model::{
-    ColorSeries, FillOutput, HLineOutput, PUBLIC_RUNTIME_SCHEMA_VERSION, PlotArrowSeries,
-    PlotBarSeries, PlotCandleSeries, PlotCharSeries, PlotSeries, PlotShapeSeries, RuntimeResult,
+    ColorSeries, FillOutput, HLineOutput, PUBLIC_RENDER_METADATA_VERSION,
+    PUBLIC_RUNTIME_SCHEMA_VERSION, PlotArrowSeries, PlotBarSeries, PlotCandleSeries,
+    PlotCharSeries, PlotSeries, PlotShapeSeries, RuntimeResult,
 };
 use super::strategy::StrategyResult;
 use profile::profile_json;
 
 pub fn public_runtime_result_json(result: &RuntimeResult) -> String {
     let mut output = format!("{{\"schemaVersion\":{},", PUBLIC_RUNTIME_SCHEMA_VERSION);
+    output.push_str(&format!(
+        "\"renderMetadataVersion\":{},",
+        PUBLIC_RENDER_METADATA_VERSION
+    ));
     output.push_str("\"plots\":");
     output.push_str(&plots_json(&result.plots));
     output.push_str(",\"plotChars\":");
@@ -79,7 +84,39 @@ fn plots_json(plots: &[PlotSeries]) -> String {
         }
         output.push_str(&format!("{{\"id\":{},\"values\":[", plot.id));
         values_json_into(&mut output, &plot.values);
-        output.push_str("]}");
+        output.push(']');
+        if plot.colors.iter().any(|value| *value != PineValue::Na) {
+            push_values_field(&mut output, "colors", &plot.colors);
+        }
+        push_non_default_value_field(
+            &mut output,
+            "linewidth",
+            &plot.linewidth,
+            &PineValue::Int(1),
+        );
+        push_non_default_value_field(
+            &mut output,
+            "style",
+            &plot.style,
+            &PineValue::String("plot.style_line".to_owned()),
+        );
+        push_non_default_value_field(
+            &mut output,
+            "trackPrice",
+            &plot.track_price,
+            &PineValue::Bool(false),
+        );
+        push_non_default_value_field(&mut output, "histBase", &plot.hist_base, &PineValue::Int(0));
+        push_non_default_value_field(&mut output, "join", &plot.join, &PineValue::Bool(false));
+        push_non_default_value_field(
+            &mut output,
+            "format",
+            &plot.format,
+            &PineValue::String("format.inherit".to_owned()),
+        );
+        push_non_default_value_field(&mut output, "precision", &plot.precision, &PineValue::Na);
+        output_metadata_json_into(&mut output, &plot.metadata);
+        output.push('}');
     }
     output.push(']');
     output
@@ -93,7 +130,9 @@ fn colors_json(colors: &[ColorSeries]) -> String {
         }
         output.push_str(&format!("{{\"id\":{},\"values\":[", colors.id));
         values_json_into(&mut output, &colors.values);
-        output.push_str("]}");
+        output.push(']');
+        output_metadata_json_into(&mut output, &colors.metadata);
+        output.push('}');
     }
     output.push(']');
     output
@@ -111,7 +150,17 @@ fn plot_chars_json(plot_chars: &[PlotCharSeries]) -> String {
         values_json_into(&mut output, &plot_char.chars);
         output.push_str("],\"colors\":[");
         values_json_into(&mut output, &plot_char.colors);
-        output.push_str("]}");
+        output.push_str("],\"locations\":[");
+        values_json_into(&mut output, &plot_char.locations);
+        output.push_str("],\"texts\":[");
+        values_json_into(&mut output, &plot_char.texts);
+        output.push_str("],\"textColors\":[");
+        values_json_into(&mut output, &plot_char.text_colors);
+        output.push_str("],\"sizes\":[");
+        values_json_into(&mut output, &plot_char.sizes);
+        output.push(']');
+        output_metadata_json_into(&mut output, &plot_char.metadata);
+        output.push('}');
     }
     output.push(']');
     output
@@ -137,7 +186,9 @@ fn plot_shapes_json(plot_shapes: &[PlotShapeSeries]) -> String {
         values_json_into(&mut output, &plot_shape.text_colors);
         output.push_str("],\"sizes\":[");
         values_json_into(&mut output, &plot_shape.sizes);
-        output.push_str("]}");
+        output.push(']');
+        output_metadata_json_into(&mut output, &plot_shape.metadata);
+        output.push('}');
     }
     output.push(']');
     output
@@ -159,7 +210,9 @@ fn plot_arrows_json(plot_arrows: &[PlotArrowSeries]) -> String {
         values_json_into(&mut output, &plot_arrow.min_heights);
         output.push_str("],\"maxHeights\":[");
         values_json_into(&mut output, &plot_arrow.max_heights);
-        output.push_str("]}");
+        output.push(']');
+        output_metadata_json_into(&mut output, &plot_arrow.metadata);
+        output.push('}');
     }
     output.push(']');
     output
@@ -181,7 +234,9 @@ fn plot_bars_json(plot_bars: &[PlotBarSeries]) -> String {
         values_json_into(&mut output, &plot_bar.closes);
         output.push_str("],\"colors\":[");
         values_json_into(&mut output, &plot_bar.colors);
-        output.push_str("]}");
+        output.push(']');
+        output_metadata_json_into(&mut output, &plot_bar.metadata);
+        output.push('}');
     }
     output.push(']');
     output
@@ -207,7 +262,9 @@ fn plot_candles_json(plot_candles: &[PlotCandleSeries]) -> String {
         values_json_into(&mut output, &plot_candle.wick_colors);
         output.push_str("],\"borderColors\":[");
         values_json_into(&mut output, &plot_candle.border_colors);
-        output.push_str("]}");
+        output.push(']');
+        output_metadata_json_into(&mut output, &plot_candle.metadata);
+        output.push('}');
     }
     output.push(']');
     output
@@ -222,6 +279,57 @@ fn values_json_into(output: &mut String, values: &[PineValue]) {
     }
 }
 
+fn push_values_field(output: &mut String, name: &str, values: &[PineValue]) {
+    output.push_str(&format!(",\"{name}\":["));
+    values_json_into(output, values);
+    output.push(']');
+}
+
+fn push_value_field(output: &mut String, name: &str, value: &PineValue) {
+    output.push_str(&format!(",\"{name}\":"));
+    output.push_str(&value_json(value));
+}
+
+fn push_non_default_value_field(
+    output: &mut String,
+    name: &str,
+    value: &PineValue,
+    default: &PineValue,
+) {
+    if value != default {
+        push_value_field(output, name, value);
+    }
+}
+
+fn output_metadata_json_into(output: &mut String, metadata: &super::model::OutputMetadata) {
+    push_non_default_value_field(
+        output,
+        "title",
+        &metadata.title,
+        &PineValue::String(String::new()),
+    );
+    push_non_default_value_field(output, "offset", &metadata.offset, &PineValue::Int(0));
+    push_non_default_value_field(
+        output,
+        "editable",
+        &metadata.editable,
+        &PineValue::Bool(true),
+    );
+    push_non_default_value_field(output, "showLast", &metadata.show_last, &PineValue::Na);
+    push_non_default_value_field(
+        output,
+        "display",
+        &metadata.display,
+        &PineValue::String("display.all".to_owned()),
+    );
+    push_non_default_value_field(
+        output,
+        "forceOverlay",
+        &metadata.force_overlay,
+        &PineValue::Bool(false),
+    );
+}
+
 fn hlines_json(hlines: &[HLineOutput]) -> String {
     let mut output = String::from("[");
     for (index, hline) in hlines.iter().enumerate() {
@@ -229,10 +337,47 @@ fn hlines_json(hlines: &[HLineOutput]) -> String {
             output.push(',');
         }
         output.push_str(&format!(
-            "{{\"id\":{},\"price\":{}}}",
+            "{{\"id\":{},\"price\":{}",
             hline.id,
             value_json(&hline.price)
         ));
+        push_non_default_value_field(
+            &mut output,
+            "title",
+            &hline.title,
+            &PineValue::String(String::new()),
+        );
+        push_non_default_value_field(
+            &mut output,
+            "color",
+            &hline.color,
+            &PineValue::Color(0x787B86),
+        );
+        push_non_default_value_field(
+            &mut output,
+            "style",
+            &hline.style,
+            &PineValue::String("hline.style_solid".to_owned()),
+        );
+        push_non_default_value_field(
+            &mut output,
+            "linewidth",
+            &hline.linewidth,
+            &PineValue::Int(1),
+        );
+        push_non_default_value_field(
+            &mut output,
+            "editable",
+            &hline.editable,
+            &PineValue::Bool(true),
+        );
+        push_non_default_value_field(
+            &mut output,
+            "display",
+            &hline.display,
+            &PineValue::String("display.all".to_owned()),
+        );
+        output.push('}');
     }
     output.push(']');
     output
@@ -245,9 +390,36 @@ fn fills_json(fills: &[FillOutput]) -> String {
             output.push(',');
         }
         output.push_str(&format!(
-            "{{\"id\":{},\"firstId\":{},\"secondId\":{}}}",
-            fill.id, fill.first_id, fill.second_id
+            "{{\"id\":{},\"firstId\":{},\"secondId\":{},\"firstIsHLine\":{},\"secondIsHLine\":{}",
+            fill.id, fill.first_id, fill.second_id, fill.first_is_hline, fill.second_is_hline
         ));
+        push_values_field(&mut output, "colors", &fill.colors);
+        push_non_default_value_field(
+            &mut output,
+            "title",
+            &fill.title,
+            &PineValue::String(String::new()),
+        );
+        push_non_default_value_field(
+            &mut output,
+            "editable",
+            &fill.editable,
+            &PineValue::Bool(true),
+        );
+        push_non_default_value_field(&mut output, "showLast", &fill.show_last, &PineValue::Na);
+        push_non_default_value_field(
+            &mut output,
+            "fillGaps",
+            &fill.fill_gaps,
+            &PineValue::Bool(true),
+        );
+        push_non_default_value_field(
+            &mut output,
+            "display",
+            &fill.display,
+            &PineValue::String("display.all".to_owned()),
+        );
+        output.push('}');
     }
     output.push(']');
     output
@@ -846,14 +1018,14 @@ mod tests {
     #[test]
     fn runtime_json_serializes_non_finite_plot_floats_as_null() {
         let mut result = empty_result();
-        result.plots.push(PlotSeries {
-            id: 1,
-            values: vec![
+        result.plots.push(PlotSeries::new(
+            1,
+            vec![
                 PineValue::Float(f64::NAN),
                 PineValue::Float(f64::INFINITY),
                 PineValue::Float(1.5),
             ],
-        });
+        ));
 
         let output = public_runtime_result_json(&result);
 

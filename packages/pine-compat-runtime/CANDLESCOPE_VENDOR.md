@@ -2,7 +2,7 @@
 
 This directory is a source snapshot of
 [`Ryan00956/pine-compat-runtime`](https://github.com/Ryan00956/pine-compat-runtime)
-at commit `d0aa4af0e7e2f4c812b771c6ccd9c028169bad7a` (package version `0.1.0`).
+at commit `cec39d807a469ebae199f30bc67a91d7081a3b9f` (package version `0.2.0`).
 
 CandleScope treats this package as a sibling of `packages/pyne-runtime`. The
 backend integration lives outside this directory under
@@ -19,7 +19,7 @@ the application vendor snapshot. Crate-local test source remains present;
 Normal CandleScope setup does not compile this package. The managed plugin
 registry selects the backward-compatible `CANDLESCOPE_RUNTIME.json` lock; the
 generic loader adapts it to the shared `python-wheel` driver, which downloads
-the pinned `v0.1.0` manifest, verifies the manifest and wheel SHA-256 digests,
+the pinned `v0.2.0` manifest, verifies the manifest and wheel SHA-256 digests,
 installs the matching Windows x86-64 or manylinux x86-64 wheel into
 `backend/.venv`, and runs the Pine-specific schema/SMA probe:
 
@@ -28,10 +28,9 @@ cd backend
 .\setup.ps1
 ```
 
-The Release tag points to commit
-`e01b756f6d70256d80903952df3022391b7d3dcf`. It is four commits after the
-vendored source commit above; those commits add release automation,
-documentation, and tests without changing the runtime crates.
+The `v0.2.0` Release tag and this vendored source snapshot both point to commit
+`cec39d807a469ebae199f30bc67a91d7081a3b9f`. CandleScope-specific integration
+and installation code remains outside the upstream source snapshot.
 
 Developers can still build and install a local wheel explicitly:
 

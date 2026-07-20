@@ -37,6 +37,29 @@ test("indicator markers sort ordinal coordinates by order", () => {
   assert.deepEqual(markers.map((marker) => marker.text), ["first", "third"]);
 });
 
+test("Pine absolute markers preserve price and numeric size", () => {
+  const markers = flattenIndicatorMarkers([{
+    data: [{
+      time: 10,
+      value: 123.45,
+      position: "atPrice",
+      shape: "arrowUp",
+      color: "green",
+      size: 4,
+    }],
+  }]);
+
+  assert.deepEqual(markers, [{
+    time: 10,
+    color: "green",
+    shape: "arrowUp",
+    text: "",
+    size: 4,
+    position: "atPriceMiddle",
+    price: 123.45,
+  }]);
+});
+
 test("bgcolor regions sort by ordinal order and signature includes each coordinate", () => {
   const regions = flattenBgcolorRegions([
     { color: "red", regions: [{ time: ordinal(7, 100, 1) }] },

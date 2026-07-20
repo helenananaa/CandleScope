@@ -52,6 +52,7 @@ pub struct HistoricalRuntime<'a> {
     pub(crate) first_bar_close: Option<f64>,
     pub(crate) request_environment: RequestEnvironment,
     pub(crate) request_cache: HashMap<RequestCacheKey, Vec<(i64, PineValue)>>,
+    pub(crate) legacy_security_repaint_warnings: HashMap<CallSiteId, (i64, i64)>,
     pub(crate) eval_expr_depth: u32,
     pub(crate) series_store: SeriesStore,
     pub(crate) series_retention: SeriesRetention,
@@ -222,6 +223,7 @@ impl<'a> HistoricalRuntime<'a> {
             first_bar_close: None,
             request_environment,
             request_cache: HashMap::new(),
+            legacy_security_repaint_warnings: HashMap::new(),
             eval_expr_depth: 0,
             series_store: SeriesStore::new(),
             series_retention: SeriesRetention::from_program(program),
@@ -482,28 +484,50 @@ impl<'a> HistoricalRuntime<'a> {
     }
 
     fn runtime_diagnostics(&self) -> Vec<RuntimeDiagnostic> {
+        let mut diagnostics = self
+            .legacy_security_repaint_warnings
+            .iter()
+            .map(|(callsite, (start, end))| {
+                (
+                    callsite.0,
+                    RuntimeDiagnostic {
+                        code: "W_LEGACY_SECURITY_LOOKAHEAD".to_owned(),
+                        message: format!(
+                            "legacy security at source span {start}..{end} uses historical lookahead_on behavior and can repaint"
+                        ),
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        diagnostics.sort_by_key(|(callsite, _)| *callsite);
+        let mut diagnostics = diagnostics
+            .into_iter()
+            .map(|(_, diagnostic)| diagnostic)
+            .collect::<Vec<_>>();
+
         if self.history_dynamic_retention_misses == 0 {
-            return Vec::new();
+            return diagnostics;
         }
 
         let Some(max_bars_back) = self
             .history_dynamic_retention_max_bars_back
             .or_else(|| self.program.max_bars_back.map(|value| value as usize))
         else {
-            return Vec::new();
+            return diagnostics;
         };
 
         let max_missed_offset = self
             .history_dynamic_retention_max_missed_offset
             .unwrap_or(max_bars_back + 1);
 
-        vec![RuntimeDiagnostic {
+        diagnostics.push(RuntimeDiagnostic {
             code: "W_HISTORY_MAX_BARS_BACK".to_owned(),
             message: format!(
                 "dynamic history offsets exceeded max_bars_back={max_bars_back}; {} reads returned na, maximum requested offset was {max_missed_offset}",
                 self.history_dynamic_retention_misses
             ),
-        }]
+        });
+        diagnostics
     }
 
     #[must_use]
@@ -836,7 +860,7 @@ impl<'a> HistoricalRuntime<'a> {
     }
 
     pub(crate) fn finalize_series_outputs(&mut self) {
-        finalize_series_values(&mut self.plots, self.bars);
+        finalize_plot_values(&mut self.plots, self.bars);
         finalize_bar_aligned_outputs(&mut self.plot_chars, self.bars);
         finalize_bar_aligned_outputs(&mut self.plot_shapes, self.bars);
         finalize_bar_aligned_outputs(&mut self.plot_arrows, self.bars);
@@ -844,29 +868,97 @@ impl<'a> HistoricalRuntime<'a> {
         finalize_bar_aligned_outputs(&mut self.plot_candles, self.bars);
         finalize_series_values(&mut self.bg_colors, self.bars);
         finalize_series_values(&mut self.bar_colors, self.bars);
+        for fill in &mut self.fills {
+            while fill.colors.len() < self.bars {
+                fill.colors.push(PineValue::Na);
+            }
+            if fill.colors.len() == self.bars {
+                fill.colors.push(PineValue::Na);
+            }
+        }
     }
 
-    pub(crate) fn push_hline(&mut self, id: u32, price: PineValue) {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn push_hline(
+        &mut self,
+        id: u32,
+        price: PineValue,
+        title: PineValue,
+        color: PineValue,
+        style: PineValue,
+        linewidth: PineValue,
+        editable: PineValue,
+        display: PineValue,
+    ) {
         if self.hlines.iter().all(|hline| hline.id != id) {
-            self.hlines.push(HLineOutput { id, price });
+            self.hlines.push(HLineOutput {
+                id,
+                price,
+                title,
+                color,
+                style,
+                linewidth,
+                editable,
+                display,
+            });
         }
     }
 
-    pub(crate) fn push_fill(&mut self, id: u32, first: PineValue, second: PineValue) {
-        if self.fills.iter().any(|fill| fill.id == id) {
-            return;
-        }
-
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn push_fill(
+        &mut self,
+        id: u32,
+        first: PineValue,
+        second: PineValue,
+        color: PineValue,
+        title: PineValue,
+        editable: PineValue,
+        show_last: PineValue,
+        fill_gaps: PineValue,
+        display: PineValue,
+    ) {
+        let first_is_hline = matches!(first, PineValue::HLine(_));
+        let second_is_hline = matches!(second, PineValue::HLine(_));
         let Some(first_id) = output_id(first) else {
             return;
         };
         let Some(second_id) = output_id(second) else {
             return;
         };
+        if let Some(fill) = self.fills.iter_mut().find(|fill| fill.id == id) {
+            while fill.colors.len() < self.bars {
+                fill.colors.push(PineValue::Na);
+            }
+            if fill.colors.len() == self.bars {
+                fill.colors.push(color);
+            } else if let Some(current) = fill.colors.last_mut() {
+                *current = color;
+            }
+            fill.first_id = first_id;
+            fill.second_id = second_id;
+            fill.first_is_hline = first_is_hline;
+            fill.second_is_hline = second_is_hline;
+            fill.title = title;
+            fill.editable = editable;
+            fill.show_last = show_last;
+            fill.fill_gaps = fill_gaps;
+            fill.display = display;
+            return;
+        }
+        let mut colors = vec![PineValue::Na; self.bars];
+        colors.push(color);
         self.fills.push(FillOutput {
             id,
             first_id,
             second_id,
+            first_is_hline,
+            second_is_hline,
+            colors,
+            title,
+            editable,
+            show_last,
+            fill_gaps,
+            display,
         });
     }
 }

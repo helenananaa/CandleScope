@@ -1,5 +1,5 @@
-use pine_runtime::{PUBLIC_ANALYSIS_SCHEMA_VERSION, input_calls};
-use pine_sema::{Analysis, AnalysisInput, analyze_input};
+use pine_runtime::{PineValue, input_calls};
+use pine_sema::{Analysis, AnalysisInput, PUBLIC_ANALYSIS_SCHEMA_VERSION, analyze_input};
 use pine_syntax::{Diagnostic, Severity, SourceFile, Span};
 
 pub(crate) fn analyze_input_json(input: AnalysisInput) -> String {
@@ -15,6 +15,19 @@ fn analysis_json(source: &SourceFile, analysis: &Analysis) -> String {
         Some(version) => output.push_str(&version.to_string()),
         None => output.push_str("null"),
     }
+    output.push_str(&format!(
+        ",\"languageVersionOrigin\":\"{}\"",
+        analysis.compatibility.language_version_origin.name()
+    ));
+    output.push_str(",\"dialect\":");
+    match analysis.compatibility.dialect {
+        Some(dialect) => output.push_str(&format!("\"{}\"", dialect.name())),
+        None => output.push_str("null"),
+    }
+    output.push_str(&format!(
+        ",\"scriptMode\":\"{}\"",
+        analysis.compatibility.script_mode.name()
+    ));
     output.push_str(",\"executable\":");
     output.push_str(if analysis.hir.is_some() {
         "true"
@@ -44,16 +57,60 @@ fn analysis_json(source: &SourceFile, analysis: &Analysis) -> String {
             .iter()
             .map(|feature| (&feature.feature, Some(&feature.reason), feature.span)),
     ));
+    output.push_str(",\"legacyTranslations\":");
+    output.push_str(&legacy_translations_json(source, analysis));
+    output.push_str(",\"legacyEmulations\":");
+    output.push_str(&legacy_emulations_json(source, analysis));
     output.push_str("}}");
     output
 }
 
 pub(crate) fn analysis_error_json(message: &str) -> String {
     format!(
-        "{{\"schemaVersion\":{},\"languageVersion\":null,\"executable\":false,\"diagnostics\":[{{\"code\":\"E_HOST_INPUT\",\"severity\":\"error\",\"message\":\"{}\",\"span\":{{\"start\":0,\"end\":0,\"line\":1,\"column\":1}}}}],\"inputs\":[],\"compatibility\":{{\"supported\":[],\"unsupported\":[]}}}}",
+        "{{\"schemaVersion\":{},\"languageVersion\":null,\"languageVersionOrigin\":null,\"dialect\":null,\"scriptMode\":null,\"executable\":false,\"diagnostics\":[{{\"code\":\"E_HOST_INPUT\",\"severity\":\"error\",\"message\":\"{}\",\"span\":{{\"start\":0,\"end\":0,\"line\":1,\"column\":1}}}}],\"inputs\":[],\"compatibility\":{{\"supported\":[],\"unsupported\":[],\"legacyTranslations\":[],\"legacyEmulations\":[]}}}}",
         PUBLIC_ANALYSIS_SCHEMA_VERSION,
         json_escape(message)
     )
+}
+
+fn legacy_translations_json(source: &SourceFile, analysis: &Analysis) -> String {
+    let mut output = String::from("[");
+    for (index, translation) in analysis
+        .compatibility
+        .legacy_translations
+        .iter()
+        .enumerate()
+    {
+        if index > 0 {
+            output.push(',');
+        }
+        output.push_str(&format!(
+            "{{\"sourceFeature\":\"{}\",\"canonicalFeature\":\"{}\",\"kind\":\"{}\",\"span\":{}}}",
+            json_escape(&translation.source_feature),
+            json_escape(&translation.canonical_feature),
+            translation.kind.name(),
+            span_json(source, translation.span)
+        ));
+    }
+    output.push(']');
+    output
+}
+
+fn legacy_emulations_json(source: &SourceFile, analysis: &Analysis) -> String {
+    let mut output = String::from("[");
+    for (index, emulation) in analysis.compatibility.legacy_emulations.iter().enumerate() {
+        if index > 0 {
+            output.push(',');
+        }
+        output.push_str(&format!(
+            "{{\"feature\":\"{}\",\"behavior\":\"{}\",\"span\":{}}}",
+            json_escape(&emulation.feature),
+            json_escape(&emulation.behavior),
+            span_json(source, emulation.span)
+        ));
+    }
+    output.push(']');
+    output
 }
 
 fn inputs_json(analysis: &Analysis) -> String {
@@ -74,10 +131,44 @@ fn inputs_json(analysis: &Analysis) -> String {
             Some(title) => output.push_str(&format!("\"{}\"", json_escape(&title))),
             None => output.push_str("null"),
         }
+        output.push_str(",\"default\":");
+        match &input.default_value {
+            Some(value) => output.push_str(&input_value_json(value)),
+            None => output.push_str("null"),
+        }
+        push_optional_input_value(&mut output, "min", input.min_value.as_ref());
+        push_optional_input_value(&mut output, "max", input.max_value.as_ref());
+        push_optional_input_value(&mut output, "step", input.step.as_ref());
+        if !input.options.is_empty() {
+            output.push_str(",\"options\":[");
+            for (option_index, option) in input.options.iter().enumerate() {
+                if option_index > 0 {
+                    output.push(',');
+                }
+                output.push_str(&input_value_json(option));
+            }
+            output.push(']');
+        }
         output.push('}');
     }
     output.push(']');
     output
+}
+
+fn push_optional_input_value(output: &mut String, name: &str, value: Option<&PineValue>) {
+    if let Some(value) = value {
+        output.push_str(&format!(",\"{name}\":{}", input_value_json(value)));
+    }
+}
+
+fn input_value_json(value: &PineValue) -> String {
+    match value {
+        PineValue::Int(value) => value.to_string(),
+        PineValue::Float(value) => value.to_string(),
+        PineValue::Bool(value) => value.to_string(),
+        PineValue::String(value) => format!("\"{}\"", json_escape(value)),
+        _ => "null".to_owned(),
+    }
 }
 
 fn features_json<'a>(

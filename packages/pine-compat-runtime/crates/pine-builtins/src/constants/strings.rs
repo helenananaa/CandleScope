@@ -302,3 +302,7 @@ pub fn named_string_constant(name: &str) -> Option<&'static str> {
         .find(|constant| constant.name == name)
         .map(|constant| constant.value)
 }
+
+pub(crate) fn named_string_constant_names() -> impl Iterator<Item = &'static str> {
+    NAMED_STRING_CONSTANTS.iter().map(|constant| constant.name)
+}

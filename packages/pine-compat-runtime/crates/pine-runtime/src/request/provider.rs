@@ -176,6 +176,14 @@ impl RequestEnvironment {
     pub fn provider(&self) -> &dyn RequestDataProvider {
         self.provider.as_ref()
     }
+
+    #[must_use]
+    pub fn for_chart(&self, chart: ChartContext) -> Self {
+        Self {
+            chart,
+            provider: Arc::clone(&self.provider),
+        }
+    }
 }
 
 impl Default for RequestEnvironment {

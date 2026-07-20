@@ -1199,7 +1199,8 @@ plot(array.size(floor_values) + array.size(ceil_values) + array.size(trunc_value
 #[test]
 fn accepts_syminfo_metadata() {
     let analysis = analyze(
-        r#"indicator("syminfo")
+        r#"//@version=6
+indicator("syminfo")
 identity = syminfo.tickerid == "NASDAQ:AAPL" and syminfo.main_tickerid == "NASDAQ:AAPL" and syminfo.ticker == "AAPL" and syminfo.prefix == "NASDAQ"
 details = syminfo.description == "Apple Inc." and syminfo.type == "stock" and syminfo.currency == "USD" and syminfo.basecurrency == "USD"
 session = syminfo.session == "regular" and syminfo.timezone == "Etc/UTC" and syminfo.root == "AAPL" and syminfo.volumetype == "base"
@@ -1379,33 +1380,41 @@ fn rejects_if_branch_assignment_type_mismatch() {
 }
 
 #[test]
-fn rejects_non_bool_while_condition() {
+fn accepts_v5_numeric_while_condition_via_explicit_hir_coercion() {
     let analysis = analyze("while close\n    plot(close)\n");
 
     assert!(
-        analysis
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "E_CONDITION_TYPE"),
+        analysis.diagnostics.is_empty(),
         "{:?}",
         analysis.diagnostics
     );
-    assert!(analysis.hir.is_none());
+    assert!(analysis.hir.is_some());
+    assert!(
+        analysis
+            .compatibility
+            .legacy_emulations
+            .iter()
+            .any(|emulation| emulation.feature == "v5.numeric_to_bool")
+    );
 }
 
 #[test]
-fn rejects_while_expression_non_bool_condition() {
+fn accepts_v5_while_expression_numeric_condition_via_explicit_hir_coercion() {
     let analysis = analyze("result = while 1\n    1\nplot(result)\n");
 
     assert!(
-        analysis
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "E_CONDITION_TYPE"),
+        analysis.diagnostics.is_empty(),
         "{:?}",
         analysis.diagnostics
     );
-    assert!(analysis.hir.is_none());
+    assert!(analysis.hir.is_some());
+    assert!(
+        analysis
+            .compatibility
+            .legacy_emulations
+            .iter()
+            .any(|emulation| emulation.feature == "v5.numeric_to_bool")
+    );
 }
 
 #[test]

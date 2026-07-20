@@ -1,11 +1,14 @@
 //! Semantic analysis and compatibility gating scaffolding.
 
+pub const PUBLIC_ANALYSIS_SCHEMA_VERSION: u32 = 5;
+
 mod analysis;
 mod analyzer;
 mod cache;
 mod compatibility;
 mod constant_values;
 mod history;
+pub mod legacy;
 mod lowering;
 mod modules;
 mod resolver;
@@ -74,7 +77,14 @@ mod prelude {
 
 pub use analysis::{Analysis, analyze_input, analyze_source};
 pub use cache::{CompileCache, CompileCacheStats};
-pub use compatibility::{CompatibilityReport, FeatureUse, UnsupportedFeature};
+pub use compatibility::{
+    CompatibilityReport, FeatureUse, LegacyEmulation, LegacyTranslation, LegacyTranslationKind,
+    UnsupportedFeature,
+};
+pub use legacy::{
+    MAX_PINE_LANGUAGE_VERSION, MIN_PINE_LANGUAGE_VERSION, PineDialect, ScriptModeClassification,
+    VersionOrigin,
+};
 pub use source_graph::{
     AnalysisInput, LibrarySource, SourceGraph, SourceGraphError, SourceId, SourceUnit,
 };

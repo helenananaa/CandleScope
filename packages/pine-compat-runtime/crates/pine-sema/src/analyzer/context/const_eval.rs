@@ -60,7 +60,11 @@ impl Analyzer {
     }
 
     pub(crate) fn known_const_int_value(&self, expr: &pine_syntax::Expr) -> Option<i64> {
-        const_int_value(expr).or_else(|| self.known_const_int_value_from_symbols(expr))
+        self.legacy
+            .canonical_value_name(self.current_source_context_id(), expr.span)
+            .and_then(pine_builtins::named_int_constant)
+            .or_else(|| const_int_value(expr))
+            .or_else(|| self.known_const_int_value_from_symbols(expr))
     }
 
     /// Returns a constant integer for range validation, while preserving the
@@ -604,7 +608,17 @@ impl Analyzer {
     }
 
     pub(crate) fn known_const_string_value(&self, expr: &pine_syntax::Expr) -> Option<String> {
-        const_string_value(expr).or_else(|| self.known_const_string_value_from_symbols(expr))
+        self.legacy
+            .canonical_string_value(self.current_source_context_id(), expr.span)
+            .map(str::to_owned)
+            .or_else(|| {
+                self.legacy
+                    .canonical_value_name(self.current_source_context_id(), expr.span)
+                    .and_then(pine_builtins::named_string_constant)
+                    .map(str::to_owned)
+            })
+            .or_else(|| const_string_value(expr))
+            .or_else(|| self.known_const_string_value_from_symbols(expr))
     }
 
     fn known_const_string_value_from_symbols(&self, expr: &pine_syntax::Expr) -> Option<String> {
@@ -709,7 +723,11 @@ impl Analyzer {
     }
 
     pub(crate) fn known_const_color_value(&self, expr: &pine_syntax::Expr) -> Option<u32> {
-        const_color_value(expr).or_else(|| self.known_const_color_value_from_symbols(expr))
+        self.legacy
+            .canonical_value_name(self.current_source_context_id(), expr.span)
+            .and_then(pine_builtins::named_color)
+            .or_else(|| const_color_value(expr))
+            .or_else(|| self.known_const_color_value_from_symbols(expr))
     }
 
     fn known_const_color_value_from_symbols(&self, expr: &pine_syntax::Expr) -> Option<u32> {
@@ -805,7 +823,14 @@ impl Analyzer {
     }
 
     pub(crate) fn known_const_numeric_value(&self, expr: &pine_syntax::Expr) -> Option<f64> {
-        const_numeric_value(expr).or_else(|| self.known_const_numeric_value_from_symbols(expr))
+        self.legacy
+            .canonical_value_name(self.current_source_context_id(), expr.span)
+            .and_then(|name| {
+                pine_builtins::named_float_constant(name)
+                    .or_else(|| pine_builtins::named_int_constant(name).map(|value| value as f64))
+            })
+            .or_else(|| const_numeric_value(expr))
+            .or_else(|| self.known_const_numeric_value_from_symbols(expr))
     }
 
     fn known_const_numeric_value_from_symbols(&self, expr: &pine_syntax::Expr) -> Option<f64> {

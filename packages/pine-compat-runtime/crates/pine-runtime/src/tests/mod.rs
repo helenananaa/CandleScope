@@ -12,6 +12,7 @@ mod builtins_ta_extremes;
 mod builtins_ta_flow;
 mod builtins_time;
 mod imports;
+mod legacy_indicators;
 mod matrices;
 mod methods;
 mod outputs;
@@ -25,6 +26,23 @@ mod strategy;
 mod user_types;
 
 use super::*;
+
+fn modern_source_file(name: impl Into<String>, text: impl Into<String>) -> pine_syntax::SourceFile {
+    let name = name.into();
+    let text = text.into();
+    if text
+        .lines()
+        .any(|line| line.trim_start().starts_with("//@version="))
+    {
+        pine_syntax::SourceFile::new(name, text)
+    } else {
+        pine_syntax::SourceFile::new(name, format!("//@version=5\n{text}"))
+    }
+}
+
+fn analyze_source(source: &pine_syntax::SourceFile) -> pine_sema::Analysis {
+    pine_sema::analyze_source(&modern_source_file(source.name(), source.text()))
+}
 
 fn bar(close: f64) -> Bar {
     bar_ohlc(close, close, close, close)

@@ -9,6 +9,10 @@ pub use strategy::{
     StrategyDefaultQuantity, StrategyMarginSetting, StrategySettings,
 };
 pub use types::{PineType, Qualifier, ValueKind};
+
+/// Internal HIR argument used to carry pre-v5 output transparency without
+/// exposing it as a modern source-language parameter.
+pub const LEGACY_TRANSPARENCY_ARG: &str = "$legacy_transp";
 pub use user_types::{HirUserTypeField, HirUserTypeIdentity, HirUserTypeInfo};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

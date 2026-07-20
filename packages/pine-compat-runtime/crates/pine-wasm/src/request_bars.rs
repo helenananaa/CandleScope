@@ -15,21 +15,55 @@ pub(crate) fn request_environment_from_json(
     let object = value.as_object().ok_or_else(|| {
         "request bars must be a JSON object mapping SYMBOL:TIMEFRAME to bar arrays".to_owned()
     })?;
-    if object.is_empty() {
-        return Ok(RequestEnvironment::default());
-    }
+    let chart = parse_chart_context(object.get("$chart"))?;
 
     let mut streams = Vec::with_capacity(object.len());
     for (key, bars) in deterministic_entries(object) {
+        if key == "$chart" {
+            continue;
+        }
         let request_key = parse_request_key(key)?;
         streams.push((request_key, parse_bars(key, bars)?));
     }
+    if streams.is_empty() {
+        return Ok(RequestEnvironment::default().for_chart(chart));
+    }
     let provider =
         InMemoryRequestDataProvider::from_streams(streams).map_err(|err| err.to_string())?;
-    Ok(RequestEnvironment::new(
-        ChartContext::default(),
-        Arc::new(provider),
-    ))
+    Ok(RequestEnvironment::new(chart, Arc::new(provider)))
+}
+
+fn parse_chart_context(value: Option<&Value>) -> Result<ChartContext, String> {
+    let Some(value) = value else {
+        return Ok(ChartContext::default());
+    };
+    let object = value
+        .as_object()
+        .ok_or_else(|| "request bars `$chart` must be an object".to_owned())?;
+    if let Some(field) = object
+        .keys()
+        .find(|field| !matches!(field.as_str(), "symbol" | "timeframe"))
+    {
+        return Err(format!("request bars `$chart` has unknown field `{field}`"));
+    }
+    let mut chart = ChartContext::default();
+    if let Some(symbol) = object.get("symbol") {
+        let symbol = symbol
+            .as_str()
+            .ok_or_else(|| "request bars `$chart.symbol` must be a string".to_owned())?;
+        if symbol.trim().is_empty() {
+            return Err("request bars `$chart.symbol` must not be empty".to_owned());
+        }
+        chart = chart.with_symbol(symbol.trim());
+    }
+    if let Some(timeframe) = object.get("timeframe") {
+        let timeframe = timeframe
+            .as_str()
+            .ok_or_else(|| "request bars `$chart.timeframe` must be a string".to_owned())?;
+        let timeframe = RequestTimeframe::parse(timeframe).map_err(|err| err.to_string())?;
+        chart = chart.with_timeframe(timeframe);
+    }
+    Ok(chart)
 }
 
 fn deterministic_entries(object: &serde_json::Map<String, Value>) -> BTreeMap<&String, &Value> {
@@ -143,6 +177,36 @@ mod tests {
         assert_eq!(
             message,
             "missing request data for symbol `NYSE:IBM` timeframe `1`"
+        );
+    }
+
+    #[test]
+    fn request_bars_chart_metadata_configures_runtime_context() {
+        let environment =
+            request_environment_from_json(r#"{"$chart":{"symbol":" TEST ","timeframe":"5"}}"#)
+                .expect("chart metadata");
+
+        assert_eq!(environment.chart().symbol(), "TEST");
+        assert_eq!(environment.chart().timeframe().value(), "5");
+    }
+
+    #[test]
+    fn request_bars_rejects_invalid_chart_metadata() {
+        assert_eq!(
+            request_bars_error(r#"{"$chart":[]}"#),
+            "request bars `$chart` must be an object"
+        );
+        assert_eq!(
+            request_bars_error(r#"{"$chart":{"symbol":" "}}"#),
+            "request bars `$chart.symbol` must not be empty"
+        );
+        assert_eq!(
+            request_bars_error(r#"{"$chart":{"timeframe":"bad"}}"#),
+            "unsupported request timeframe `bad`"
+        );
+        assert_eq!(
+            request_bars_error(r#"{"$chart":{"timeFrame":"5"}}"#),
+            "request bars `$chart` has unknown field `timeFrame`"
         );
     }
 

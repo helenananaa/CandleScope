@@ -55,6 +55,6 @@ pub(crate) fn call_arg_expr<'a>(
 ) -> Option<&'a HirExpr> {
     args.iter()
         .find(|arg| arg.name.as_deref() == Some(name))
-        .or_else(|| args.get(index))
+        .or_else(|| args.get(index).filter(|arg| arg.name.is_none()))
         .map(|arg| &arg.value)
 }

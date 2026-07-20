@@ -810,6 +810,8 @@ fn validate_status_fixture_paths(
                     || fixture.starts_with("tests/fixtures/request/")
                     || fixture.starts_with("tests/fixtures/sema/supported_")
                     || fixture.starts_with("tests/fixtures/regressions/")
+                    || (fixture.starts_with("tests/fixtures/legacy/")
+                        && (fixture.contains("/runtime/") || fixture.contains("/sema/")))
             }) {
                 return Err(format!(
                     "line {line_number}: {status} feature `{feature}` must reference runtime, realtime, syntax, supported sema, or regression fixture coverage"
@@ -846,6 +848,22 @@ mod tests {
         validate_local_udt_array_param_for_in_fixture_paths,
         validate_udt_array_control_flow_fixture_paths,
     };
+
+    #[test]
+    fn accepts_versioned_legacy_runtime_and_sema_fixture_ownership() {
+        for fixture in [
+            "tests/fixtures/legacy/v4/runtime/aliases_legacy.pine",
+            "tests/fixtures/legacy/v4/sema/declaration_legacy.pine",
+        ] {
+            let tsv = format!(
+                "feature\tstatus\tnotes\tfixtures\nlegacy.test\tsupported\tversioned legacy coverage\t{fixture}\n"
+            );
+            assert!(
+                try_conformance_entries_from_tsv(&tsv).is_ok(),
+                "{fixture} should count as legacy fixture ownership"
+            );
+        }
+    }
 
     #[test]
     fn rejects_map_row_without_current_boundary_fixture_set() {

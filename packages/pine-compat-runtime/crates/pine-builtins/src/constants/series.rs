@@ -259,6 +259,10 @@ const BUILTIN_SERIES_VALUES: &[(&str, PineType)] = &[
     ),
 ];
 
+pub(crate) fn builtin_series_value_names() -> impl Iterator<Item = &'static str> {
+    BUILTIN_SERIES_VALUES.iter().map(|(name, _)| *name)
+}
+
 #[must_use]
 pub fn builtin_series_value_type(name: &str) -> Option<PineType> {
     BUILTIN_SERIES_VALUES

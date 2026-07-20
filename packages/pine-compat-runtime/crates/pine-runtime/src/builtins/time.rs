@@ -11,7 +11,9 @@ mod timestamp;
 
 use self::component::TimeComponent;
 pub(crate) use self::formatting::{format_datetime_with_timezone, format_utc_datetime};
-use self::session::{parse_time_session, parse_time_session_timezone, session_close_for_bar_open};
+use self::session::{
+    DefaultSessionDays, parse_time_session, parse_time_session_timezone, session_close_for_bar_open,
+};
 pub(crate) use self::timestamp::{format_fixed_timezone_offset, parse_fixed_timezone_offset};
 use self::timestamp::{
     numeric_timestamp_millis, parse_numeric_timestamp_timezone, parse_timestamp_date_string,
@@ -195,6 +197,16 @@ fn timeframe_bucket_bounds(bucket: i64, timeframe: &str, seconds: i64) -> Option
     let open_time = bucket.checked_mul(duration_ms)?;
     let close_time = bucket.checked_add(1)?.checked_mul(duration_ms)?;
     Some((open_time, close_time))
+}
+
+pub(crate) fn calendar_timeframe_close(
+    timestamp_ms: i64,
+    timeframe: &str,
+    seconds: i64,
+) -> Option<i64> {
+    calendar_timeframe_multiplier(timeframe, 'M')?;
+    let bucket = timeframe_change_bucket(timestamp_ms, timeframe, seconds)?;
+    timeframe_bucket_bounds(bucket, timeframe, seconds).map(|(_, close)| close)
 }
 
 fn calendar_month_start(month: i64) -> Option<i64> {
@@ -496,9 +508,23 @@ impl<'a> HistoricalRuntime<'a> {
         })?;
         let session = match args.session.as_deref() {
             Some("") | None => None,
-            Some(session) => Some(parse_time_session(session).ok_or_else(|| RuntimeError {
-                message: format!("{name} unsupported session `{session}`"),
-            })?),
+            Some(session) => Some(
+                parse_time_session(
+                    session,
+                    if self
+                        .program
+                        .language_version
+                        .is_some_and(|version| version <= 4)
+                    {
+                        DefaultSessionDays::Weekdays
+                    } else {
+                        DefaultSessionDays::All
+                    },
+                )
+                .ok_or_else(|| RuntimeError {
+                    message: format!("{name} unsupported session `{session}`"),
+                })?,
+            ),
         };
         let timeframe = if args.timeframe.is_empty() {
             DEFAULT_CHART_TIMEFRAME

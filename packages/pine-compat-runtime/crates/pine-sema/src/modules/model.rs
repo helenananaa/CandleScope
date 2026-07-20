@@ -4,12 +4,15 @@ use pine_ir::{PineType, Qualifier, ValueKind};
 use pine_syntax::{Diagnostic, Expr, FunctionBody, Program, Span};
 
 use crate::analyzer::context::{FunctionInfo, MethodInfo};
+use crate::legacy::SourcePolicy;
 use crate::source_graph::SourceId;
 
 #[derive(Debug)]
 pub(crate) struct ModuleValidation {
     pub(crate) diagnostics: Vec<Diagnostic>,
     pub(crate) root_program: Program,
+    pub(crate) root_policy: SourcePolicy,
+    pub(crate) halt_before_analysis: bool,
     pub(crate) imported_functions: HashMap<String, FunctionInfo>,
     pub(crate) imported_methods: HashMap<(String, String), MethodInfo>,
     pub(crate) imported_user_types: HashMap<String, ImportedUserTypeInfo>,

@@ -41,3 +41,7 @@ pub fn named_float_constant(name: &str) -> Option<f64> {
         .find(|constant| constant.name == name)
         .map(|constant| constant.value)
 }
+
+pub(crate) fn named_float_constant_names() -> impl Iterator<Item = &'static str> {
+    NAMED_FLOAT_CONSTANTS.iter().map(|constant| constant.name)
+}

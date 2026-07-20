@@ -1970,6 +1970,52 @@ fn polyline_fixture_rolls_back_forming_lifecycle_changes() {
     assert_values(&result.plots[0].values, &[1.0, 1.0]);
 }
 
+#[test]
+fn legacy_v4_outputs_roll_back_forming_visual_state_without_stale_values() {
+    let mut runtime = runtime_for_fixture("tests/fixtures/legacy/v4/runtime/outputs_legacy.pine");
+
+    let result = runtime
+        .update(BarUpdate::historical(bar_ohlc(1.0, 2.0)))
+        .expect("historical legacy output update");
+    assert_eq!(result.bg_colors.len(), 1);
+    assert_eq!(
+        result.bg_colors[0].values,
+        vec![PineValue::Color(0x2196F31A)]
+    );
+    assert_eq!(result.fills.len(), 2);
+    assert_eq!(result.fills[0].colors.len(), 1);
+
+    let result = runtime
+        .update(BarUpdate::forming(bar_ohlc(3.0, 1.0)))
+        .expect("forming legacy output update");
+    assert_eq!(
+        result.bg_colors[0].values,
+        vec![PineValue::Color(0x2196F31A), PineValue::Na]
+    );
+    assert_eq!(result.bar_colors[0].values[1], PineValue::Color(0xF23645));
+    assert_eq!(result.fills[0].colors.len(), 2);
+    assert_eq!(runtime.confirmed_result().bg_colors[0].values.len(), 1);
+
+    let result = runtime
+        .update(BarUpdate::forming(bar_ohlc(1.0, 4.0)))
+        .expect("replacement forming legacy output update");
+    assert_eq!(result.bg_colors.len(), 1);
+    assert_eq!(result.bg_colors[0].values.len(), 2);
+    assert_eq!(result.bg_colors[0].values[1], PineValue::Color(0x2196F31A));
+    assert_eq!(result.bar_colors[0].values[1], PineValue::Color(0x4CAF50));
+    assert_eq!(result.fills.len(), 2);
+    assert_eq!(result.fills[0].colors.len(), 2);
+
+    let result = runtime
+        .update(BarUpdate::confirmed(bar_ohlc(3.0, 2.0)))
+        .expect("confirmed legacy output update");
+    assert_eq!(
+        result.bg_colors[0].values,
+        vec![PineValue::Color(0x2196F31A), PineValue::Na]
+    );
+    assert_eq!(runtime.confirmed_result(), result);
+}
+
 fn runtime_for_fixture(path: &str) -> RealtimeRuntime<'static> {
     let hir = hir_for_fixture(path);
     RealtimeRuntime::new(Box::leak(Box::new(hir)))
@@ -2001,7 +2047,10 @@ fn analyze_realtime_fixture(source: SourceFile) -> pine_sema::Analysis {
         return analyze_source(&source);
     };
     let library_path = workspace_fixture(library_fixture);
-    let library_text = fs::read_to_string(&library_path).expect("import library fixture");
+    let library_text = version_matched_fixture_library_text(
+        source.text(),
+        fs::read_to_string(&library_path).expect("import library fixture"),
+    );
     let input = AnalysisInput::with_library_sources(
         source,
         vec![(
@@ -2011,6 +2060,20 @@ fn analyze_realtime_fixture(source: SourceFile) -> pine_sema::Analysis {
     )
     .expect("import fixture input");
     analyze_input(&input)
+}
+
+fn version_matched_fixture_library_text(root: &str, mut library: String) -> String {
+    let root_version = root
+        .lines()
+        .find(|line| line.trim_start().starts_with("//@version="));
+    let library_version = library
+        .lines()
+        .position(|line| line.trim_start().starts_with("//@version="));
+    if let (Some(root_version), Some(0)) = (root_version, library_version) {
+        let first_newline = library.find('\n').unwrap_or(library.len());
+        library.replace_range(..first_newline, root_version.trim_start());
+    }
+    library
 }
 
 fn bar(close: f64) -> Bar {

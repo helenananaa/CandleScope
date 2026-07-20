@@ -43,6 +43,11 @@ const TABLE_NEW_PARAMS: &[BuiltinParam] = &[
         accepts: Accepts::IntCompatible,
         optional: true,
     },
+    BuiltinParam {
+        name: "force_overlay",
+        accepts: Accepts::ConstBool,
+        optional: true,
+    },
 ];
 
 const fn table_param(name: &'static str, accepts: Accepts) -> BuiltinParam {

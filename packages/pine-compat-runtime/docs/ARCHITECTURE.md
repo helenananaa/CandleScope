@@ -51,6 +51,8 @@ Owns semantic analysis.
 
 Responsibilities:
 
+- Validate the closed Pine v1-v6 dialect and classify script mode before
+  ordinary call analysis.
 - Resolve names and scopes.
 - Infer value kind and qualifier.
 - Validate declaration and reassignment rules.
@@ -61,11 +63,102 @@ Responsibilities:
 The analyzer is the boundary where unsupported features should become explicit
 diagnostics instead of runtime surprises.
 
+Version and legacy-mode admission are owned by `pine-sema::legacy`. Missing
+directives select implicit v1, invalid or conflicting source-graph versions
+halt before ordinary semantic analysis, and v1-v4 strategy declarations or
+`strategy.*` references are stopped before broker-capable HIR can be produced.
+The same source policy initializes `CompatibilityReport`, so all hosts project
+one validated version, origin, dialect, script mode, and legacy report model.
+Phase 2 adds the reusable translation framework. A sorted, version-ranged rule
+catalog is consulted only as a scoped fallback after user declarations. Exact
+matches are validated using canonical built-in signatures, recorded with the
+original source span, and stored in a source-context/span-keyed lowering plan;
+HIR and runtime dispatch therefore see only canonical or inaccessible internal
+names. Focused input, output, expression, security, and overload binders remain
+separate from exact aliases, and each unsupported shape fails closed. Legacy
+translation and emulation reports are deterministically sorted and
+deduplicated before leaving semantic analysis.
+
+Phase 3 admits only Pine v4 `study(...)` declarations. A historical signature
+binder canonicalizes the supported declaration subset to named `indicator`
+arguments and stores argument-name reshaping in the source-context/span-keyed
+lowering plan. `resolution`, `resolution_gaps`, and unmapped declaration
+options fail before HIR. The first v4-only exact aliases (`sma`, `ema`, `bb`,
+`crossover`, and `abs`) reuse canonical analysis/runtime implementations; tuple
+element queries also consume the recorded canonical call name. Version-sensitive
+canonical call surfaces such as session-bearing `time(...)` are guarded until
+their focused legacy semantics phase.
+
+Phase 4 adds a focused Pine v4 input binder. Version-gated input type constants
+resolve to opaque legacy-only markers, historical overload tables bind their
+own positional and named order, and the lowering plan can now keep-and-rename
+or drop individual call arguments. The obsolete `type` argument is dropped
+while the original call expression retains its callsite allocation; HIR,
+runtime metadata, and host overrides therefore consume only canonical
+`input.*` names. The v4 integer float-metadata exception is applied only to the
+legacy validation view, so modern input qualifier and argument rules are not
+widened.
+
+Phase 5 adds a focused Pine v4 output binder for the initial ten indicator
+output families. Historical argument tables remove `transp` into an internal
+HIR marker, validate exact primitive plot/hline style ordinals, and retain all
+canonical visual arguments without synthesizing user-visible calls. Runtime
+normalization applies v4 defaults, clamps input transparency, preserves `na`
+and embedded alpha, and exposes bar-aligned visual series plus common metadata.
+Modern v5/v6 output signatures and unique style types remain unchanged.
+
+Phase 6 adds result-affecting expression compatibility: strict internal `iff`
+evaluation, structural `offset` history lowering, type-directed historical
+`rsi` overloads, and version-selected logical/session defaults. Phase 7 adds a
+focused v1-v4 `security` binder. It validates historical positional/named
+signatures and merge constants, reuses the request-expression analyzer, and
+lowers accepted calls to inaccessible HIR dispatch names that encode gaps and
+lookahead policies. Hidden span arguments preserve the original full legacy
+call for provider failures. The modern `request.security` merge surface is not
+widened by this routing. Declaration-level `study(resolution=...)` remains a
+focused unsupported program-context feature rather than being approximated by
+wrapping the AST in a request call.
+
+Phase 8 admits the fixture-backed v3 declaration/input/output surface and
+pre-v4 aliases, with a focused constraint pass for untyped `na`. Phase 9 admits
+implicit v1 and explicit v2 indicators. Its declaration resolver activates a
+bounded graph only for self/forward-dependent global scalars, predeclares one
+canonical symbol per active node, and records a stable lowering order. Removed
+bool/numeric conversions are source-span keyed semantic decisions that lower
+to ordinary canonical `float`/`bool` calls. Neither mechanism adds a legacy
+execution engine: runtime dispatch continues to consume canonical HIR.
+
+Phase 10 makes the host projection testable as one contract. CLI owns separate
+registries for runtime and complete legacy analysis goldens; Python and WASM
+consume the same files, while a static parity guard requires both assertions
+for every manifest entry. Source dialect remains the only legacy semantic
+selector. No host adapter owns a translation table, policy override, or source
+migration step.
+
+Phase 11 adds a release-evidence layer without adding another execution path.
+`tests/fixtures/legacy/release_profiles.tsv` owns the sorted v1-v4 release
+fixture registry, maturity, bar/request profile, realtime policy, provenance,
+and resource ceiling. The public runtime integration test loads that manifest
+and proves source-version selection, complete runtime-fixture coverage,
+historical/incremental/realtime behavior, MTF provider behavior, and bounded
+retained storage. `scripts/profile_legacy_release.py` measures the same rows
+through the CLI boundary. These are verification consumers of the semantic HIR
+and runtime, not a second translator or host-specific compatibility switch.
+
+The semantic compile cache includes `LEGACY_TRANSLATOR_REVISION` in every key.
+Catalog or translation-semantics changes increment that revision so cached
+analysis cannot cross translator revisions. Source name and exact source text,
+including its explicit directive or implicit-v1 absence, remain part of the
+same key; a focused cache test proves identical script bodies in implicit v1
+and explicit v2 occupy separate entries.
+
 The semantic implementation keeps orchestration separate from focused tree
 walkers. `modules.rs` owns module-graph validation while
 `modules/side_effects.rs` owns side-effect and expression visitation;
 `analyzer/context.rs` owns analyzer state and allocation while constant and
 history-offset expression evaluation lives in `analyzer/context/const_eval.rs`;
+`analyzer/expressions/resolution.rs` owns canonical and scoped legacy value
+resolution while `analyzer/expressions.rs` retains expression traversal;
 `lowering/mod.rs` owns the lowering entrypoints while reassignment collection
 and UDT parameter resolution live in dedicated lowering modules. Pure-series
 identity keeps its UDT field/value traversal in
@@ -147,12 +240,18 @@ WASM accepts a deterministic request-bars JSON object through
 `runScriptCsvWithLibrariesAndRequestBars`, and
 `Program.runCsvWithRequestBars`. WASM request keys use the same
 `SYMBOL:TIMEFRAME` format and split on the last colon, so exchange-prefixed
-symbols such as `NYSE:IBM:1` are valid. The cross-host request fixture can be
-exercised with:
+symbols such as `NYSE:IBM:1` are valid. Hosts may also set chart identity:
+CLI accepts `--chart-symbol` and `--chart-timeframe`; Python `run_script` and
+`Program.run` accept optional `chart_symbol` and `chart_timeframe` keywords;
+WASM request JSON accepts the reserved
+`"$chart":{"symbol":"...","timeframe":"..."}` object. Omitting these
+values retains the existing deterministic default chart. The cross-host
+request fixture can be exercised with:
 
 ```text
 cargo run -p pine-cli -- run tests/fixtures/request/request_security_host.pine \
   --bars tests/fixtures/request/chart_1m.csv \
+  --chart-symbol NASDAQ:AAPL --chart-timeframe 1 \
   --request-bars NYSE:IBM:1=tests/fixtures/request/ibm_1m.csv \
   --request-bars NYSE:IBM:5=tests/fixtures/request/ibm_5m.csv
 ```
@@ -166,12 +265,20 @@ uses the lowered HIR expression debug identity as the cache expression marker;
 future widening that rewrites request expressions should replace it with an
 explicit request-expression id.
 
-For higher-timeframe provider requests, alignment uses the default
-`lookahead_off`/`gaps_off` subset: same-timeframe requests still require an
-exact requested-bar timestamp match, while coarser requested bars are visible
-only after their requested bar close is not later than the current chart bar
-close. Missing higher-timeframe bars forward-fill the last confirmed requested
-value; chart bars before the first confirmed requested bar return `na`.
+Modern provider requests retain the default `lookahead_off`/`gaps_off` subset.
+Same-timeframe `gaps_off` uses the latest requested bar whose open is not later
+than the chart bar open; `gaps_on` is reserved for the legacy route and requires
+an exact boundary. Coarser lookahead-off values become visible only when the
+requested close is not later than the chart close. Legacy historical
+lookahead-on instead makes a coarser value visible from its requested open;
+forming and confirmed realtime updates intentionally use confirmed
+lookahead-off alignment. `gaps_off` forward-fills the latest eligible value,
+while `gaps_on` returns values only on the corresponding open or confirmation
+boundary. Chart bars before the first eligible requested value return `na`.
+Each provider evaluation receives a child request environment whose chart
+symbol/timeframe match the requested key; cache and callsite state remain
+isolated. Legacy missing-data errors add the original security call span, and
+v1/v2 historical lookahead emits one non-error warning per callsite.
 Lower-timeframe `request.security` alignment is intentionally not implemented
 in Phase F because it needs a separate rule for selecting intrabars inside each
 chart bar and bounded storage for multiple requested bars per chart bar. The
@@ -222,6 +329,7 @@ Planned commands:
 
 ```text
 pine-compat analyze script.pine
+pine-compat analyze script.pine --format json
 pine-compat run script.pine --bars bars.csv --out result.json
 pine-compat fmt-ast script.pine
 ```
@@ -346,7 +454,12 @@ program = compile_script(
     source,
     library_sources={"user/lib/1": 'library("lib")\n'},
 )
-result = program.run(bars, request_bars={"NYSE:IBM:1": requested_bars})
+result = program.run(
+    bars,
+    request_bars={"NYSE:IBM:1": requested_bars},
+    chart_symbol="NASDAQ:AAPL",
+    chart_timeframe="1",
+)
 ```
 
 CLI:
@@ -355,6 +468,7 @@ CLI:
 pine-compat analyze script.pine --library-source user/lib/1=lib.pine
 pine-compat run script.pine --bars bars.csv \
   --library-source user/lib/1=lib.pine \
+  --chart-symbol NASDAQ:AAPL --chart-timeframe 1 \
   --request-bars NYSE:IBM:1=ibm.csv
 ```
 
@@ -367,8 +481,10 @@ WASM request data injection is exposed through `runScriptCsvWithRequestBars`,
 `runScriptCsvWithLibrariesAndRequestBars`, and
 `Program.runCsvWithRequestBars`. The `requestBarsJson` value is an object
 mapping `SYMBOL:TIMEFRAME` keys to arrays of `{time, open, high, low, close,
-volume}` bar objects. This is explicit host-provided data; the WASM crate does
-not fetch network data, read files, or discover symbols.
+volume}` bar objects. The reserved optional `$chart` key maps to an object with
+string `symbol` and `timeframe` fields instead of a bar array. This is explicit
+host-provided data; the WASM crate does not fetch network data, read files, or
+discover symbols.
 
 WASM input overrides are exposed through `runScriptCsvWithInputOverrides`,
 `runScriptCsvWithRequestBarsAndInputOverrides`,
@@ -386,7 +502,7 @@ The core output must remain host-neutral:
 
 ```json
 {
-  "schemaVersion": 5,
+  "schemaVersion": 8,
   "plots": [],
   "plotChars": [],
   "plotShapes": [],
@@ -399,6 +515,8 @@ The core output must remain host-neutral:
   "fills": [],
   "labels": [],
   "lines": [],
+  "lineFills": [],
+  "polylines": [],
   "boxes": [],
   "tables": [],
   "alerts": [],
@@ -418,15 +536,24 @@ payloads under `strategy.alerts` without changing the top-level `alerts[]`
 callsite event shape. `schemaVersion: 5` adds host-neutral table cell
 `textWrap` snapshots. `schemaVersion: 6` adds top-level `lineFills` snapshots
 for the supported linefill subset. `schemaVersion: 7` adds top-level
-`polylines` snapshots for the supported `polyline.new` and lifecycle subset. Host integrations can adapt this model into
+`polylines` snapshots for the supported `polyline.new` and lifecycle subset.
+`schemaVersion: 8` adds normalized colors and fixture-backed visual metadata
+to plots, markers, bars, candles, colors, hlines, and fills. The completed
+contract carries `renderMetadataVersion: 1`, preserves the public
+`linewidth`/`style` field names, exposes plot `format`/`precision` and
+`forceOverlay`, identifies fill endpoint kinds, and reserves bit 32 on numeric
+colors as the alpha discriminator when an RGBA payload would otherwise look
+like `0xRRGGBB`. Host integrations can adapt this model into
 their charting or API format, but should preserve the runtime schema version
 when they forward machine-readable runtime results.
 
-Machine-readable analysis and matrix outputs use separate schema ownership:
-`PUBLIC_ANALYSIS_SCHEMA_VERSION` for WASM/Python analysis reports and
-`PUBLIC_MATRIX_SCHEMA_VERSION` for CLI matrix JSON. Runtime is currently `7`;
-analysis is currently `3` after adding top-level input call-site metadata, and
-matrix remains `2`. These contracts can evolve independently when a runtime-only
+Machine-readable analysis and matrix outputs use separate schema ownership.
+`pine-sema::PUBLIC_ANALYSIS_SCHEMA_VERSION` owns CLI/Python/WASM analysis
+reports, while `PUBLIC_MATRIX_SCHEMA_VERSION` owns CLI matrix JSON. Runtime is
+currently `8`; analysis is currently `5`, adding compile-time input defaults,
+constraints, and options to the existing version, diagnostic, dialect,
+translation/emulation, and compatibility evidence; matrix
+remains `2`. These contracts can evolve independently when a runtime-only
 output field does not affect analysis or matrix contracts.
 
 Drawing-object outputs use sparse snapshot families. The Phase E drawing

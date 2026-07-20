@@ -60,12 +60,31 @@ impl Parser {
 
     fn parse(mut self) -> Parse {
         let version = self.parse_optional_version();
+        let mut saw_version_directive = version.is_some();
         let mut statements = Vec::new();
 
         while !self.at(TokenKind::Eof) {
             self.skip_newlines();
             if self.at(TokenKind::Eof) {
                 break;
+            }
+            if matches!(self.current().kind, TokenKind::VersionDirective(_)) {
+                let (code, message) = if saw_version_directive {
+                    (
+                        "E_LANGUAGE_VERSION_DUPLICATE",
+                        "source contains more than one version directive",
+                    )
+                } else {
+                    (
+                        "E_LANGUAGE_VERSION_PLACEMENT",
+                        "version directive must appear before source statements",
+                    )
+                };
+                self.diagnostics
+                    .push(Diagnostic::error(code, message, self.current().span));
+                saw_version_directive = true;
+                self.bump();
+                continue;
             }
 
             match self.parse_stmt() {

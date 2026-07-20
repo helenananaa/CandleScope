@@ -2,7 +2,6 @@ use pine_ir::{
     HirCallArg, HirExpr, HirExprKind, HirLiteral, HirProgram, HirStmt, HirStmtKind, PineType,
     Qualifier, ScriptMode, ValueKind,
 };
-use pine_sema::analyze_source;
 use pine_syntax::SourceFile;
 
 use super::*;
@@ -10288,7 +10287,8 @@ plot(strategy.openprofit_percent)
 fn strategy_trade_count_variables_observe_pending_exit_on_next_bar() {
     let source = SourceFile::new(
         "strategy.pine",
-        r#"strategy("pending exit trade counts")
+        r#"//@version=6
+strategy("pending exit trade counts")
 if bar_index == 0
     strategy.entry("L", strategy.long, qty=1)
     strategy.exit("XL", "L", limit=2.5)

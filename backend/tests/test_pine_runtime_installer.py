@@ -19,9 +19,9 @@ def test_real_registry_migrates_pine_to_managed_plugin_contract() -> None:
 
 def test_pine_probe_remains_host_specific() -> None:
     module = SimpleNamespace(
-        analyze_script=lambda source: {"schemaVersion": 3},
+        analyze_script=lambda source: {"schemaVersion": 5},
         run_script=lambda source, bars: {
-            "schemaVersion": 7,
+            "schemaVersion": 8,
             "plots": [{"id": "sma"}],
         },
     )
@@ -31,12 +31,12 @@ def test_pine_probe_remains_host_specific() -> None:
         module,
         {
             "probe": "pine-runtime-v1",
-            "analysisSchemaVersion": 3,
-            "runtimeSchemaVersion": 7,
+            "analysisSchemaVersion": 5,
+            "runtimeSchemaVersion": 8,
         },
     )
 
-    assert result == {"analysisSchemaVersion": 3, "runtimeSchemaVersion": 7}
+    assert result == {"analysisSchemaVersion": 5, "runtimeSchemaVersion": 8}
 
 
 def test_legacy_pine_entrypoint_delegates_to_generic_installer(monkeypatch) -> None:

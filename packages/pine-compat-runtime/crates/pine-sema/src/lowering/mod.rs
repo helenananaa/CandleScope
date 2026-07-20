@@ -1,41 +1,21 @@
 use crate::prelude::*;
 
+mod blocks;
 mod budget;
 mod builtin_calls;
 mod call_result_methods;
 mod function_returns;
 mod inline_calls;
+mod legacy;
+mod legacy_conversions;
 mod literals;
 mod pure_series;
 mod reassignments;
 mod tuple_returns;
 pub(crate) mod user_types;
 
+pub(crate) use blocks::prepend_block_statements;
 pub(crate) use literals::lower_literal;
-
-pub(crate) fn prepend_block_statements(mut prefix: Vec<HirStmt>, expr: HirExpr) -> HirExpr {
-    match expr.kind {
-        HirExprKind::Block { statements, result } => {
-            prefix.extend(statements);
-            HirExpr {
-                kind: HirExprKind::Block {
-                    statements: prefix,
-                    result,
-                },
-                pine_type: expr.pine_type,
-                series_id: expr.series_id,
-            }
-        }
-        _ => HirExpr {
-            pine_type: expr.pine_type,
-            series_id: expr.series_id,
-            kind: HirExprKind::Block {
-                statements: prefix,
-                result: Box::new(expr),
-            },
-        },
-    }
-}
 
 fn builtin_qualified_series_key(parts: &[String]) -> Option<String> {
     if parts.len() < 2 {
@@ -176,7 +156,10 @@ impl Analyzer {
         debug_assert!(self.source_context_stack_is_restored());
         self.lower_reassigned_symbols = self.collect_lower_reassigned_symbols(&program.statements);
         let mut statements = Vec::new();
-        for statement in &program.statements {
+        for statement in self
+            .legacy_v2_declaration_plan
+            .lowering_order(&program.statements)
+        {
             if matches!(
                 statement.kind,
                 StmtKind::Function { .. }
@@ -203,7 +186,7 @@ impl Analyzer {
             .script_declaration
             .map_or(ScriptMode::Indicator, |(mode, _)| mode);
         let program = HirProgram {
-            language_version: program.version.map(|version| version.version),
+            language_version: self.compatibility.language_version,
             script_mode,
             strategy_settings: self.strategy_settings,
             drawing_settings: self.drawing_settings,
@@ -294,6 +277,7 @@ impl Analyzer {
     ) -> SymbolInfo {
         if !self.lower_symbol_overrides.is_empty()
             || symbol.persistence != PersistenceKind::None
+            || self.legacy_v2_predeclared_symbols.contains(&symbol.id)
             || self.lower_reassigned_symbols.contains(&symbol.id)
             || lowered_value.pine_type.qualifier != Qualifier::Series
             || is_collection_kind(lowered_value.pine_type.kind)
@@ -628,7 +612,7 @@ impl Analyzer {
                 .get(&self.binding_key(name, expr.span))
                 .is_none_or(|symbol| !self.has_lower_symbol_override(symbol.id))
         {
-            return Some(param_expr.clone());
+            return self.finish_legacy_expr_coercion(expr, param_expr.clone());
         }
 
         let pine_type = self.type_of_expr_with_params(expr, param_types)?;
@@ -637,7 +621,11 @@ impl Analyzer {
         let kind = match &expr.kind {
             ExprKind::Literal(literal) => HirExprKind::Literal(lower_literal(literal)),
             ExprKind::Identifier(name) => {
-                HirExprKind::Symbol(self.bound_symbol(name, expr.span)?.id)
+                if let Some(kind) = self.lower_legacy_value(expr.span) {
+                    kind
+                } else {
+                    HirExprKind::Symbol(self.bound_symbol(name, expr.span)?.id)
+                }
             }
             ExprKind::QualifiedName(parts) => {
                 if let Some(field) = self
@@ -648,20 +636,26 @@ impl Analyzer {
                     let receiver_symbol = self
                         .bound_symbol(&access.receiver, expr.span)
                         .or_else(|| self.scope.resolve(&access.receiver))?;
-                    return Some(HirExpr {
-                        pine_type: field,
-                        series_id,
-                        kind: HirExprKind::FieldAccess {
-                            value: Box::new(param_exprs.get(&access.receiver).cloned().unwrap_or(
-                                HirExpr {
-                                    kind: HirExprKind::Symbol(receiver_symbol.id),
-                                    pine_type: receiver_symbol.pine_type,
-                                    series_id: receiver_symbol.series_id,
-                                },
-                            )),
-                            index: access.index,
+                    return self.finish_legacy_expr_coercion(
+                        expr,
+                        HirExpr {
+                            pine_type: field,
+                            series_id,
+                            kind: HirExprKind::FieldAccess {
+                                value: Box::new(
+                                    param_exprs
+                                        .get(&access.receiver)
+                                        .cloned()
+                                        .unwrap_or(HirExpr {
+                                            kind: HirExprKind::Symbol(receiver_symbol.id),
+                                            pine_type: receiver_symbol.pine_type,
+                                            series_id: receiver_symbol.series_id,
+                                        }),
+                                ),
+                                index: access.index,
+                            },
                         },
-                    });
+                    );
                 }
                 if let Some(field) = self
                     .type_of_bound_user_type_field_access(parts, expr.span)
@@ -691,9 +685,10 @@ impl Analyzer {
                         };
                     }
                     debug_assert_eq!(value.pine_type, field);
-                    return Some(value);
+                    return self.finish_legacy_expr_coercion(expr, value);
                 }
-                HirExprKind::Builtin(parts.join("."))
+                self.lower_legacy_value(expr.span)
+                    .unwrap_or_else(|| HirExprKind::Builtin(parts.join(".")))
             }
             ExprKind::Unary { op, expr } => HirExprKind::Unary {
                 op: lower_unary_op(*op),
@@ -908,7 +903,12 @@ impl Analyzer {
                         self.imported_user_type_constructor_for_lowering(&name, args, param_types)
                     })
                 {
-                    return Some(HirExpr {
+                    let fields = constructor
+                        .field_args
+                        .iter()
+                        .map(|arg| self.lower_expr_with_params(arg, param_exprs, param_types))
+                        .collect::<Option<_>>()?;
+                    let lowered = HirExpr {
                         pine_type,
                         series_id,
                         kind: HirExprKind::UserTypeConstruct {
@@ -916,38 +916,31 @@ impl Analyzer {
                                 source_id: constructor.identity.source_id.get(),
                                 type_name: constructor.identity.name,
                             },
-                            fields: constructor
-                                .field_args
-                                .iter()
-                                .map(|arg| {
-                                    self.lower_expr_with_params(arg, param_exprs, param_types)
-                                })
-                                .collect::<Option<_>>()?,
+                            fields,
                         },
-                    });
+                    };
+                    return self.finish_legacy_expr_coercion(expr, lowered);
                 }
                 if name == "array.from"
                     && pine_type.kind == ValueKind::UserTypeArray
                     && let Some(type_name) =
                         self.user_type_array_name_of_expr_with_params(expr, param_exprs)
                 {
-                    return Some(HirExpr {
+                    let elements = args
+                        .iter()
+                        .map(|arg| {
+                            self.lower_expr_with_params(&arg.value, param_exprs, param_types)
+                        })
+                        .collect::<Option<_>>()?;
+                    let lowered = HirExpr {
                         pine_type,
                         series_id,
                         kind: HirExprKind::UserTypeArrayConstruct {
                             type_name,
-                            elements: args
-                                .iter()
-                                .map(|arg| {
-                                    self.lower_expr_with_params(
-                                        &arg.value,
-                                        param_exprs,
-                                        param_types,
-                                    )
-                                })
-                                .collect::<Option<_>>()?,
+                            elements,
                         },
-                    });
+                    };
+                    return self.finish_legacy_expr_coercion(expr, lowered);
                 }
                 if let Some(result) = self.lower_postfix_call_result_method(
                     callee,
@@ -957,7 +950,8 @@ impl Analyzer {
                     param_exprs,
                     param_types,
                 ) {
-                    return result;
+                    return result
+                        .and_then(|lowered| self.finish_legacy_expr_coercion(expr, lowered));
                 }
                 if matches!(callee.kind, ExprKind::QualifiedName(_))
                     && let Some(method_call) = self.lower_alias_qualified_user_method_call(
@@ -977,7 +971,7 @@ impl Analyzer {
                     if let Some(series_id) = pure_call_series_id {
                         method_call.series_id = Some(series_id);
                     }
-                    return Some(method_call);
+                    return self.finish_legacy_expr_coercion(expr, method_call);
                 }
                 if let Some(method_call) = self.lower_local_qualified_user_method_call(
                     &name,
@@ -995,7 +989,7 @@ impl Analyzer {
                     if let Some(series_id) = pure_call_series_id {
                         method_call.series_id = Some(series_id);
                     }
-                    return Some(method_call);
+                    return self.finish_legacy_expr_coercion(expr, method_call);
                 }
                 if let Some((receiver_name, method_name)) = method_call_parts(callee)
                     && self
@@ -1023,7 +1017,7 @@ impl Analyzer {
                     if let Some(series_id) = pure_call_series_id {
                         call.series_id = Some(series_id);
                     }
-                    return Some(call);
+                    return self.finish_legacy_expr_coercion(expr, call);
                 }
                 if self.functions.contains_key(&name) {
                     let pure_call_series_id =
@@ -1033,8 +1027,25 @@ impl Analyzer {
                     if let Some(series_id) = pure_call_series_id {
                         call.series_id = Some(series_id);
                     }
-                    return Some(call);
+                    return self.finish_legacy_expr_coercion(expr, call);
                 }
+                if let Some(lowered) = self.lower_recorded_legacy_call(
+                    callee.span,
+                    args,
+                    pine_type,
+                    series_id,
+                    param_exprs,
+                    param_types,
+                ) {
+                    return lowered
+                        .and_then(|lowered| self.finish_legacy_expr_coercion(expr, lowered));
+                }
+                let name = self
+                    .legacy
+                    .canonical_call_name(self.current_source_context_id(), callee.span)
+                    .map_or(name, str::to_owned);
+                let canonical_args = self.lower_legacy_call_args(callee.span, args);
+                let args = canonical_args.as_deref().unwrap_or(args);
                 if pine_builtins::get_phase_1_builtin(&name).is_none()
                     && !name.starts_with("map.")
                     && let Some((receiver_name, method_name)) = method_call_parts(callee)
@@ -1070,15 +1081,19 @@ impl Analyzer {
                         param_exprs,
                         param_types,
                     )?;
-                    return Some(HirExpr {
-                        pine_type,
-                        series_id,
-                        kind: HirExprKind::Call {
-                            callee: builtin_name,
-                            call_site_id: self.alloc_call_site(),
-                            args: lowered_args,
+                    let call_site_id = self.alloc_call_site();
+                    return self.finish_legacy_expr_coercion(
+                        expr,
+                        HirExpr {
+                            pine_type,
+                            series_id,
+                            kind: HirExprKind::Call {
+                                callee: builtin_name,
+                                call_site_id,
+                                args: lowered_args,
+                            },
                         },
-                    });
+                    );
                 }
                 let call_site_id = self.alloc_call_site();
                 let lowered_args =
@@ -1116,11 +1131,14 @@ impl Analyzer {
             }
         };
 
-        Some(HirExpr {
-            kind,
-            pine_type,
-            series_id,
-        })
+        self.finish_legacy_expr_coercion(
+            expr,
+            HirExpr {
+                kind,
+                pine_type,
+                series_id,
+            },
+        )
     }
 
     fn lower_expr_series_id(
@@ -1135,6 +1153,15 @@ impl Analyzer {
         }
 
         if let ExprKind::Identifier(name) = &expr.kind {
+            if let Some(canonical_name) = self
+                .legacy
+                .canonical_value_name(self.current_source_context_id(), expr.span)
+            {
+                if let Some(symbol) = self.scope.resolve(canonical_name) {
+                    return symbol.series_id;
+                }
+                return (pine_type.qualifier == Qualifier::Series).then(|| self.alloc_series());
+            }
             return self
                 .bound_symbol(name, expr.span)
                 .and_then(|symbol| symbol.series_id);

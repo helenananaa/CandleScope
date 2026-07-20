@@ -1,10 +1,11 @@
 use super::*;
-use pine_runtime::{PUBLIC_ANALYSIS_SCHEMA_VERSION, PUBLIC_RUNTIME_SCHEMA_VERSION};
+use pine_runtime::PUBLIC_RUNTIME_SCHEMA_VERSION;
+use pine_sema::PUBLIC_ANALYSIS_SCHEMA_VERSION;
 use std::{collections::HashMap, env, fs, path::PathBuf};
 
 #[test]
 fn analyzes_script_to_json() {
-    let output = analyze_script("indicator(\"demo\")\nplot(close)\n");
+    let output = analyze_script("//@version=6\nindicator(\"demo\")\nplot(close)\n");
     let parsed: serde_json::Value = serde_json::from_str(&output).expect("strict JSON output");
 
     assert_eq!(
@@ -12,8 +13,23 @@ fn analyzes_script_to_json() {
         serde_json::json!(PUBLIC_ANALYSIS_SCHEMA_VERSION)
     );
     assert_eq!(parsed["executable"], serde_json::json!(true));
+    assert_eq!(parsed["languageVersion"], serde_json::json!(6));
+    assert_eq!(
+        parsed["languageVersionOrigin"],
+        serde_json::json!("explicit")
+    );
+    assert_eq!(parsed["dialect"], serde_json::json!("v6"));
+    assert_eq!(parsed["scriptMode"], serde_json::json!("indicator"));
     assert_eq!(parsed["diagnostics"], serde_json::json!([]));
     assert_eq!(parsed["inputs"], serde_json::json!([]));
+    assert_eq!(
+        parsed["compatibility"]["legacyTranslations"],
+        serde_json::json!([])
+    );
+    assert_eq!(
+        parsed["compatibility"]["legacyEmulations"],
+        serde_json::json!([])
+    );
     assert!(
         parsed["compatibility"]["supported"]
             .as_array()
@@ -26,7 +42,7 @@ fn analyzes_script_to_json() {
 #[test]
 fn analyzes_script_input_call_sites_to_json() {
     let output = analyze_script(
-        "indicator(\"inputs\")\nlength = input.int(2, \"Length\")\nmode = input.string(\"SMA\", title=\"Mode\")\nplot(close)\n",
+        "//@version=6\nindicator(\"inputs\")\nlength = input.int(2, \"Length\", minval=1, maxval=9, step=1, options=[1, 2, 3])\nmode = input.string(\"SMA\", title=\"Mode\", options=[\"SMA\", \"EMA\"])\nplot(close)\n",
     );
     let parsed: serde_json::Value = serde_json::from_str(&output).expect("strict JSON output");
 
@@ -37,19 +53,301 @@ fn analyzes_script_input_call_sites_to_json() {
     assert_eq!(parsed["diagnostics"], serde_json::json!([]));
     assert_eq!(parsed["inputs"][0]["name"], serde_json::json!("input.int"));
     assert_eq!(parsed["inputs"][0]["title"], serde_json::json!("Length"));
+    assert_eq!(parsed["inputs"][0]["default"], serde_json::json!(2));
+    assert_eq!(parsed["inputs"][0]["min"], serde_json::json!(1));
+    assert_eq!(parsed["inputs"][0]["max"], serde_json::json!(9));
+    assert_eq!(parsed["inputs"][0]["step"], serde_json::json!(1));
+    assert_eq!(parsed["inputs"][0]["options"], serde_json::json!([1, 2, 3]));
     assert!(parsed["inputs"][0]["callSiteId"].as_u64().is_some());
     assert_eq!(
         parsed["inputs"][1]["name"],
         serde_json::json!("input.string")
     );
     assert_eq!(parsed["inputs"][1]["title"], serde_json::json!("Mode"));
+    assert_eq!(parsed["inputs"][1]["default"], serde_json::json!("SMA"));
+    assert_eq!(
+        parsed["inputs"][1]["options"],
+        serde_json::json!(["SMA", "EMA"])
+    );
     assert!(parsed["inputs"][1]["callSiteId"].as_u64().is_some());
+}
+
+#[test]
+fn analyzes_implicit_v1_legacy_indicator_contract() {
+    let output = analyze_script("study(\"legacy\")\nplot(close)\n");
+    let parsed: serde_json::Value = serde_json::from_str(&output).expect("strict JSON output");
+
+    assert_eq!(parsed["languageVersion"], serde_json::json!(1));
+    assert_eq!(
+        parsed["languageVersionOrigin"],
+        serde_json::json!("implicit")
+    );
+    assert_eq!(parsed["dialect"], serde_json::json!("v1"));
+    assert_eq!(parsed["scriptMode"], serde_json::json!("legacyIndicator"));
+    assert_eq!(parsed["executable"], serde_json::json!(true));
+    assert_eq!(parsed["diagnostics"], serde_json::json!([]));
+    assert_eq!(
+        parsed["compatibility"]["legacyTranslations"],
+        serde_json::json!([{
+            "sourceFeature": "study",
+            "canonicalFeature": "indicator",
+            "kind": "signatureReshape",
+            "span": {"start": 0, "end": 5, "line": 1, "column": 1}
+        }])
+    );
+    assert_eq!(
+        parsed["compatibility"]["legacyEmulations"],
+        serde_json::json!([])
+    );
+}
+
+#[test]
+fn analyzes_legacy_strategy_as_one_out_of_scope_error() {
+    let output = analyze_script(
+        "//@version=4\nstrategy(\"legacy\")\nstrategy.entry(\"L\", strategy.long)\n",
+    );
+    let parsed: serde_json::Value = serde_json::from_str(&output).expect("strict JSON output");
+
+    assert_eq!(parsed["languageVersion"], serde_json::json!(4));
+    assert_eq!(parsed["dialect"], serde_json::json!("v4"));
+    assert_eq!(parsed["scriptMode"], serde_json::json!("strategy"));
+    assert_eq!(parsed["diagnostics"].as_array().map(Vec::len), Some(1));
+    assert_eq!(
+        parsed["diagnostics"][0]["code"],
+        serde_json::json!("E_LEGACY_STRATEGY_OUT_OF_SCOPE")
+    );
+    assert_eq!(
+        parsed["compatibility"]["unsupported"][0]["feature"],
+        serde_json::json!("legacy strategy")
+    );
+}
+
+#[test]
+fn analyzes_executable_v4_legacy_translations() {
+    let output = analyze_script("//@version=4\nstudy(\"legacy\")\nplot(sma(close, 2))\n");
+    let parsed: serde_json::Value = serde_json::from_str(&output).expect("strict JSON output");
+
+    assert_eq!(parsed["languageVersion"], serde_json::json!(4));
+    assert_eq!(parsed["dialect"], serde_json::json!("v4"));
+    assert_eq!(parsed["scriptMode"], serde_json::json!("legacyIndicator"));
+    assert_eq!(parsed["executable"], serde_json::json!(true));
+    assert_eq!(parsed["diagnostics"], serde_json::json!([]));
+    assert_eq!(
+        parsed["compatibility"]["legacyTranslations"],
+        serde_json::json!([
+            {
+                "sourceFeature": "study",
+                "canonicalFeature": "indicator",
+                "kind": "signatureReshape",
+                "span": {"start": 13, "end": 18, "line": 2, "column": 1}
+            },
+            {
+                "sourceFeature": "sma",
+                "canonicalFeature": "ta.sma",
+                "kind": "exactAlias",
+                "span": {"start": 34, "end": 37, "line": 3, "column": 6}
+            }
+        ])
+    );
+}
+
+#[test]
+fn analyzes_executable_v3_names_constants_and_na_inference() {
+    let output = analyze_script(include_str!(
+        "../../../../tests/fixtures/legacy/v3/runtime/core_legacy.pine"
+    ));
+    let parsed: serde_json::Value = serde_json::from_str(&output).expect("strict JSON output");
+
+    assert_eq!(parsed["languageVersion"], serde_json::json!(3));
+    assert_eq!(parsed["dialect"], serde_json::json!("v3"));
+    assert_eq!(parsed["scriptMode"], serde_json::json!("legacyIndicator"));
+    assert_eq!(parsed["executable"], serde_json::json!(true));
+    assert_eq!(parsed["diagnostics"], serde_json::json!([]));
+    let translations = parsed["compatibility"]["legacyTranslations"]
+        .as_array()
+        .expect("legacy translations");
+    for (source_feature, canonical_feature) in [
+        ("study", "indicator"),
+        ("integer", "input.int"),
+        ("color", "color.new"),
+        ("n", "bar_index"),
+        ("interval", "timeframe.multiplier"),
+    ] {
+        assert!(translations.iter().any(|item| {
+            item["sourceFeature"] == source_feature && item["canonicalFeature"] == canonical_feature
+        }));
+    }
+    assert!(
+        parsed["compatibility"]["legacyEmulations"]
+            .as_array()
+            .expect("legacy emulations")
+            .iter()
+            .any(|item| item["feature"] == "v3.untyped_na")
+    );
+}
+
+#[test]
+fn analyzes_v2_graph_and_conversion_emulations() {
+    let output = analyze_script(include_str!(
+        "../../../../tests/fixtures/legacy/v2/runtime/core_legacy.pine"
+    ));
+    let parsed: serde_json::Value = serde_json::from_str(&output).expect("strict JSON output");
+
+    assert_eq!(parsed["languageVersion"], serde_json::json!(2));
+    assert_eq!(parsed["dialect"], serde_json::json!("v2"));
+    assert_eq!(parsed["scriptMode"], serde_json::json!("legacyIndicator"));
+    assert_eq!(parsed["executable"], serde_json::json!(true));
+    assert_eq!(parsed["diagnostics"], serde_json::json!([]));
+    let emulations = parsed["compatibility"]["legacyEmulations"]
+        .as_array()
+        .expect("legacy emulations");
+    for feature in [
+        "v2.self_reference",
+        "v2.forward_reference",
+        "v2.bool_arithmetic",
+        "v2.numeric_to_bool",
+    ] {
+        assert!(emulations.iter().any(|item| item["feature"] == feature));
+    }
+}
+
+#[test]
+fn legacy_analysis_profiles_match_cli_golden_snapshots() {
+    assert_analysis_snapshot(
+        "analysis_legacy_v1_shared.json",
+        &analyze_script(include_str!(
+            "../../../../tests/fixtures/legacy/v1/runtime/shared_v1.pine"
+        )),
+    );
+    assert_analysis_snapshot(
+        "analysis_legacy_v2_core.json",
+        &analyze_script(include_str!(
+            "../../../../tests/fixtures/legacy/v2/runtime/core_legacy.pine"
+        )),
+    );
+    assert_analysis_snapshot(
+        "analysis_legacy_v2_reference_cycle.json",
+        &analyze_script(include_str!(
+            "../../../../tests/fixtures/legacy/v2/unsupported/reference_cycle.pine"
+        )),
+    );
+    assert_analysis_snapshot(
+        "analysis_legacy_v3_core.json",
+        &analyze_script(include_str!(
+            "../../../../tests/fixtures/legacy/v3/runtime/core_legacy.pine"
+        )),
+    );
+    assert_analysis_snapshot(
+        "analysis_legacy_v4_inputs.json",
+        &analyze_script(include_str!(
+            "../../../../tests/fixtures/legacy/v4/runtime/inputs_legacy.pine"
+        )),
+    );
+}
+
+#[test]
+fn analyzes_v4_legacy_output_adaptations() {
+    let output = analyze_script(
+        "//@version=4\nstudy(\"outputs\")\np = plot(close, style=5, transp=40)\nbgcolor(color.blue)\n",
+    );
+    let parsed: serde_json::Value = serde_json::from_str(&output).expect("strict JSON output");
+
+    assert_eq!(parsed["executable"], serde_json::json!(true));
+    assert_eq!(parsed["diagnostics"], serde_json::json!([]));
+    let translations = parsed["compatibility"]["legacyTranslations"]
+        .as_array()
+        .expect("legacy translations");
+    assert!(translations.iter().any(|item| {
+        item["sourceFeature"] == serde_json::json!("plot")
+            && item["canonicalFeature"] == serde_json::json!("plot")
+            && item["kind"] == serde_json::json!("outputAdaptation")
+    }));
+    let emulations = parsed["compatibility"]["legacyEmulations"]
+        .as_array()
+        .expect("legacy emulations");
+    assert!(
+        emulations
+            .iter()
+            .any(|item| item["feature"] == "plot.transp")
+    );
+    assert!(
+        emulations
+            .iter()
+            .any(|item| item["feature"] == "plot.numeric_style")
+    );
+    assert!(
+        emulations
+            .iter()
+            .any(|item| item["feature"] == "bgcolor.transp")
+    );
+}
+
+#[test]
+fn analyzes_v4_legacy_expression_semantics() {
+    let output = analyze_script(
+        "//@version=4\nstudy(\"expressions\")\nplot(iff(close > open, high, low))\nplot(offset(close, 1))\nplot(rsi(close, open))\n",
+    );
+    let parsed: serde_json::Value = serde_json::from_str(&output).expect("strict JSON output");
+
+    assert_eq!(parsed["executable"], serde_json::json!(true));
+    assert_eq!(parsed["diagnostics"], serde_json::json!([]));
+    let translations = parsed["compatibility"]["legacyTranslations"]
+        .as_array()
+        .expect("legacy translations");
+    assert!(translations.iter().any(|item| {
+        item["sourceFeature"] == "iff"
+            && item["canonicalFeature"] == "eager select"
+            && item["kind"] == "expressionDesugar"
+    }));
+    assert!(translations.iter().any(|item| {
+        item["sourceFeature"] == "offset"
+            && item["canonicalFeature"] == "history access"
+            && item["kind"] == "expressionDesugar"
+    }));
+    assert!(translations.iter().any(|item| {
+        item["sourceFeature"] == "rsi"
+            && item["canonicalFeature"] == "legacy RSI two-series formula"
+            && item["kind"] == "expressionDesugar"
+    }));
+    let emulations = parsed["compatibility"]["legacyEmulations"]
+        .as_array()
+        .expect("legacy emulations");
+    assert!(emulations.iter().any(|item| item["feature"] == "iff"));
+    assert!(emulations.iter().any(|item| item["feature"] == "rsi"));
+}
+
+#[test]
+fn analyzes_v4_legacy_security_routing() {
+    let output = analyze_script(
+        "//@version=4\nstudy(\"security\")\nplot(security(syminfo.tickerid, timeframe.period, close))\n",
+    );
+    let parsed: serde_json::Value = serde_json::from_str(&output).expect("strict JSON output");
+
+    assert_eq!(parsed["executable"], serde_json::json!(true));
+    assert_eq!(parsed["diagnostics"], serde_json::json!([]));
+    let translations = parsed["compatibility"]["legacyTranslations"]
+        .as_array()
+        .expect("legacy translations");
+    assert!(translations.iter().any(|item| {
+        item["sourceFeature"] == "security"
+            && item["canonicalFeature"] == "request.security"
+            && item["kind"] == "signatureReshape"
+    }));
+    let emulations = parsed["compatibility"]["legacyEmulations"]
+        .as_array()
+        .expect("legacy emulations");
+    assert!(emulations.iter().any(|item| {
+        item["feature"] == "security.merge"
+            && item["behavior"]
+                .as_str()
+                .is_some_and(|value| value.contains("gaps_off/lookahead_off"))
+    }));
 }
 
 #[test]
 fn runs_script_from_csv_to_json() {
     let output = run_script_csv(
-        "indicator(\"demo\")\nplot(close)\n",
+        "//@version=5\nindicator(\"demo\")\nplot(close)\n",
         "time,open,high,low,close,volume\n0,1,1,1,1,1\n1,2,2,2,2,1\n",
     )
     .expect("script should run");
@@ -76,7 +374,8 @@ fn runs_script_from_csv_to_json() {
 
 #[test]
 fn runs_script_from_csv_with_input_overrides_to_json() {
-    let source = r##"indicator("input overrides")
+    let source = r##"//@version=5
+indicator("input overrides")
 length = input.int(2, "Length")
 scale = input.float(1.0, "Scale")
 enabled = input.bool(true, "Enabled")
@@ -85,6 +384,9 @@ shade = input.color(color.red, "Shade")
 base = enabled and mode == "SMA" ? ta.sma(close, length) * scale : open
 plot(base)
 plot(color.r(shade))
+plot(color.g(shade))
+plot(color.t(shade))
+bgcolor(shade)
 "##;
     let bars = "time,open,high,low,close,volume\n0,1,1,1,1,1\n1,2,2,2,2,1\n2,3,3,3,3,1\n";
     let input_ids = input_call_ids_by_title(source);
@@ -93,7 +395,7 @@ plot(color.r(shade))
         (input_ids["Scale"], serde_json::json!(2.0)),
         (input_ids["Enabled"], serde_json::json!(true)),
         (input_ids["Mode"], serde_json::json!("SMA")),
-        (input_ids["Shade"], serde_json::json!("#4CAF50")),
+        (input_ids["Shade"], serde_json::json!("#00FF0080")),
     ]);
 
     let outputs = [
@@ -125,16 +427,44 @@ plot(color.r(shade))
         let parsed: serde_json::Value = serde_json::from_str(&output).expect("strict JSON output");
 
         assert_eq!(parsed["plots"][0]["values"], serde_json::json!([2, 4, 6]));
+        assert_eq!(parsed["plots"][1]["values"], serde_json::json!([0, 0, 0]));
         assert_eq!(
-            parsed["plots"][1]["values"],
-            serde_json::json!([76, 76, 76])
+            parsed["plots"][2]["values"],
+            serde_json::json!([255, 255, 255])
+        );
+        assert_eq!(
+            parsed["plots"][3]["values"],
+            serde_json::json!([50, 50, 50])
+        );
+        assert_eq!(
+            parsed["bgColors"][0]["values"],
+            serde_json::json!([4311679104_u64, 4311679104_u64, 4311679104_u64])
         );
     }
 }
 
 #[test]
+fn runs_v4_legacy_input_overrides_through_wasm_host() {
+    let source = include_str!("../../../../tests/fixtures/legacy/v4/runtime/inputs_legacy.pine");
+    let bars = "time,open,high,low,close,volume\n0,1,1,1,1,1\n1,2,2,2,2,1\n2,3,3,3,3,1\n";
+    let input_ids = input_call_ids_by_title(source);
+    let overrides_json = input_overrides_json(&[
+        (input_ids["Length"], serde_json::json!(1)),
+        (input_ids["Scale"], serde_json::json!(2.0)),
+        (input_ids["Price"], serde_json::json!(1.0)),
+    ]);
+
+    let output = run_script_csv_with_input_overrides(source, bars, &overrides_json)
+        .expect("legacy v4 input override output");
+    let parsed: serde_json::Value = serde_json::from_str(&output).expect("strict JSON output");
+
+    assert_eq!(parsed["plots"][0]["values"], serde_json::json!([3, 5, 7]));
+}
+
+#[test]
 fn generic_color_input_override_accepts_hex_string() {
-    let source = r##"indicator("generic color")
+    let source = r##"//@version=5
+indicator("generic color")
 shade = input(color.red, "Shade")
 plot(color.r(shade))
 "##;
@@ -151,9 +481,117 @@ plot(color.r(shade))
 }
 
 #[test]
+fn generic_input_overrides_use_analyzed_value_kinds() {
+    let source = r##"//@version=5
+indicator("generic input overrides")
+text_true = input("default", "Text true")
+text_number = input("default", "Text number")
+text_color = input("default", "Text color")
+enabled = input(true, "Enabled")
+count = input(1, "Count")
+scale = input(1.0, "Scale")
+shade = input(color.red, "Shade")
+plot(text_true == "true" ? 1 : 0)
+plot(text_number == "42" ? 1 : 0)
+plot(text_color == "#00FF0080" ? 1 : 0)
+plot(enabled ? 1 : 0)
+plot(count)
+plot(scale)
+plot(color.g(shade))
+plot(color.t(shade))
+"##;
+    let bars = "time,open,high,low,close,volume\n0,1,1,1,1,1\n1,2,2,2,2,1\n2,3,3,3,3,1\n";
+    let input_ids = input_call_ids_by_title(source);
+    let overrides_json = input_overrides_json(&[
+        (input_ids["Text true"], serde_json::json!("true")),
+        (input_ids["Text number"], serde_json::json!("42")),
+        (input_ids["Text color"], serde_json::json!("#00FF0080")),
+        (input_ids["Enabled"], serde_json::json!(false)),
+        (input_ids["Count"], serde_json::json!(42)),
+        (input_ids["Scale"], serde_json::json!(2.5)),
+        (input_ids["Shade"], serde_json::json!(4311679104_u64)),
+    ]);
+
+    let output = run_script_csv_with_input_overrides(source, bars, &overrides_json)
+        .expect("generic input override output");
+    let output: serde_json::Value = serde_json::from_str(&output).expect("strict JSON output");
+
+    assert_eq!(
+        output["plots"]
+            .as_array()
+            .expect("plots")
+            .iter()
+            .map(|plot| plot["values"].clone())
+            .collect::<Vec<_>>(),
+        vec![
+            serde_json::json!([1, 1, 1]),
+            serde_json::json!([1, 1, 1]),
+            serde_json::json!([1, 1, 1]),
+            serde_json::json!([0, 0, 0]),
+            serde_json::json!([42, 42, 42]),
+            serde_json::json!([2.5, 2.5, 2.5]),
+            serde_json::json!([255, 255, 255]),
+            serde_json::json!([50, 50, 50]),
+        ]
+    );
+}
+
+#[test]
+fn input_color_override_round_trips_public_numeric_encoding_and_rejects_invalid_values() {
+    let source = r##"//@version=5
+indicator("color override")
+shade = input.color(color.red, "Shade")
+plot(color.g(shade))
+plot(color.t(shade))
+bgcolor(shade)
+"##;
+    let bars = "time,open,high,low,close,volume\n0,1,1,1,1,1\n";
+    let call_site_id = input_call_ids_by_title(source)["Shade"];
+    let overrides_json = input_overrides_json(&[(call_site_id, serde_json::json!(4311679104_u64))]);
+
+    let output = run_script_csv_with_input_overrides(source, bars, &overrides_json)
+        .expect("public numeric color override output");
+    let output: serde_json::Value = serde_json::from_str(&output).expect("strict JSON output");
+    assert_eq!(output["plots"][0]["values"], serde_json::json!([255]));
+    assert_eq!(output["plots"][1]["values"], serde_json::json!([50]));
+    assert_eq!(
+        output["bgColors"][0]["values"],
+        serde_json::json!([4311679104_u64])
+    );
+
+    for invalid in [
+        serde_json::json!(-1),
+        serde_json::json!(4311744512_u64),
+        serde_json::json!(1.5),
+        serde_json::json!(true),
+    ] {
+        let overrides_json = input_overrides_json(&[(call_site_id, invalid)]);
+        let message = run_script_csv_with_input_overrides_internal(source, bars, &overrides_json)
+            .expect_err("invalid public color override should fail");
+        assert!(message.contains("valid public color integer"));
+    }
+}
+
+#[test]
+fn input_overrides_reject_normalized_duplicate_call_site_ids() {
+    let source =
+        "//@version=5\nindicator(\"inputs\")\nlength = input.int(2, \"Length\")\nplot(length)\n";
+    let bars = "time,open,high,low,close,volume\n0,1,1,1,1,1\n";
+    let call_site_id = input_call_ids_by_title(source)["Length"];
+    let overrides_json = format!(r#"{{"{call_site_id}":1,"0{call_site_id}":2}}"#);
+
+    let message = run_script_csv_with_input_overrides_internal(source, bars, &overrides_json)
+        .expect_err("normalized duplicate input callSiteId should fail");
+
+    assert!(message.contains(&format!(
+        "duplicate input override for callSiteId {call_site_id}"
+    )));
+}
+
+#[test]
 fn input_overrides_report_unknown_call_site() {
     let message = run_script_csv_with_input_overrides_internal(
-        "indicator(\"inputs\")\nlength = input.int(2, \"Length\")\nplot(ta.sma(close, length))\n",
+        "//@version=5\nindicator(\"inputs\")\nlength = input.int(2, \"Length\")\nplot(ta.sma(close, length))\n",
         "time,open,high,low,close,volume\n0,1,1,1,1,1\n",
         r#"{"999999":1}"#,
     )
@@ -216,7 +654,7 @@ fn runs_alert_frequency_fixture_from_csv_to_json() {
 #[test]
 fn run_script_csv_serializes_non_finite_values_as_json_null() {
     let output = run_script_csv(
-        "indicator(\"nonfinite\")\nplot(1.0 / 0.0)\n",
+        "//@version=5\nindicator(\"nonfinite\")\nplot(1.0 / 0.0)\n",
         "time,open,high,low,close,volume\n0,1,1,1,1,1\n",
     )
     .expect("script should run");
@@ -327,6 +765,107 @@ fn run_script_csv_returns_hline_fill_fixture_contract() {
 }
 
 #[test]
+fn run_script_csv_returns_legacy_v4_output_contract() {
+    let output = run_script_csv(
+        include_str!("../../../../tests/fixtures/legacy/v4/runtime/outputs_legacy.pine"),
+        include_str!("../../../../tests/fixtures/runtime/bars.csv"),
+    )
+    .expect("legacy v4 output fixture should run");
+
+    assert_snapshot("runtime_legacy_v4_outputs.json", &output);
+}
+
+#[test]
+fn run_script_csv_returns_legacy_v1_shared_contract() {
+    let output = run_script_csv(
+        include_str!("../../../../tests/fixtures/legacy/v1/runtime/shared_v1.pine"),
+        include_str!("../../../../tests/fixtures/runtime/bars.csv"),
+    )
+    .expect("legacy v1 shared fixture should run");
+
+    assert_snapshot("runtime_legacy_v1_shared.json", &output);
+}
+
+#[test]
+fn run_script_csv_returns_legacy_v3_core_contract() {
+    let output = run_script_csv(
+        include_str!("../../../../tests/fixtures/legacy/v3/runtime/core_legacy.pine"),
+        include_str!("../../../../tests/fixtures/legacy/v3/runtime/core_bars.csv"),
+    )
+    .expect("legacy v3 core fixture should run");
+
+    assert_snapshot("runtime_legacy_v3_core.json", &output);
+}
+
+#[test]
+fn run_script_csv_returns_legacy_v2_core_contract() {
+    let output = run_script_csv(
+        include_str!("../../../../tests/fixtures/legacy/v2/runtime/core_legacy.pine"),
+        include_str!("../../../../tests/fixtures/legacy/v2/runtime/core_bars.csv"),
+    )
+    .expect("legacy v2 core fixture should run");
+
+    assert_snapshot("runtime_legacy_v2_core.json", &output);
+}
+
+#[test]
+fn run_script_csv_returns_legacy_v4_expression_contract() {
+    let output = run_script_csv(
+        include_str!("../../../../tests/fixtures/legacy/v4/runtime/expressions_legacy.pine"),
+        include_str!("../../../../tests/fixtures/runtime/bars.csv"),
+    )
+    .expect("legacy v4 expression fixture should run");
+
+    assert_snapshot("runtime_legacy_v4_expressions.json", &output);
+}
+
+#[test]
+fn run_script_csv_returns_legacy_v4_input_contract() {
+    let output = run_script_csv(
+        include_str!("../../../../tests/fixtures/legacy/v4/runtime/inputs_legacy.pine"),
+        include_str!("../../../../tests/fixtures/runtime/bars.csv"),
+    )
+    .expect("legacy v4 input fixture should run");
+
+    assert_snapshot("runtime_legacy_v4_inputs.json", &output);
+}
+
+#[test]
+fn run_script_csv_returns_legacy_v4_strict_logical_contract() {
+    let output = run_script_csv(
+        include_str!("../../../../tests/fixtures/legacy/v4/runtime/logical_strict_legacy.pine"),
+        include_str!("../../../../tests/fixtures/legacy/v4/runtime/logical_strict_bars.csv"),
+    )
+    .expect("legacy v4 strict logical fixture should run");
+
+    assert_snapshot("runtime_legacy_v4_logical_strict.json", &output);
+}
+
+#[test]
+fn run_script_csv_returns_legacy_v4_session_default_contract() {
+    let output = run_script_csv(
+        include_str!("../../../../tests/fixtures/legacy/v4/runtime/session_defaults_legacy.pine"),
+        include_str!("../../../../tests/fixtures/legacy/v4/runtime/session_weekend_bars.csv"),
+    )
+    .expect("legacy v4 session default fixture should run");
+
+    assert_snapshot("runtime_legacy_v4_session_defaults.json", &output);
+}
+
+#[test]
+fn run_script_csv_returns_legacy_v4_security_same_context_contract() {
+    let output = run_script_csv(
+        include_str!(
+            "../../../../tests/fixtures/legacy/v4/runtime/security_same_context_legacy.pine"
+        ),
+        include_str!("../../../../tests/fixtures/runtime/bars.csv"),
+    )
+    .expect("legacy v4 same-context security fixture should run");
+
+    assert_snapshot("runtime_legacy_v4_security_same_context.json", &output);
+}
+
+#[test]
 fn run_script_csv_returns_alertcondition_fixture_contract() {
     let output = run_script_csv(
         include_str!("../../../../tests/fixtures/runtime/alertcondition.pine"),
@@ -351,7 +890,7 @@ fn run_script_csv_returns_alert_fixture_contract() {
 #[test]
 fn run_script_csv_returns_dynamic_alert_message_events() {
     let output = run_script_csv(
-        "indicator(\"alerts\")\nalert(str.tostring(close))\n",
+        "//@version=5\nindicator(\"alerts\")\nalert(str.tostring(close))\n",
         "time,open,high,low,close,volume\n0,1,1,1,1,1\n1,2,2,2,2,1\n2,3,3,3,3,1\n",
     )
     .expect("dynamic alert message script should run");
@@ -2643,7 +3182,7 @@ fn run_script_csv_rejects_non_finite_ohlcv_values() {
         ("volume", "0,1,1,1,1,NaN"),
     ] {
         let message = run_script_csv_internal(
-            "indicator(\"nonfinite\")\nplot(close)\n",
+            "//@version=5\nindicator(\"nonfinite\")\nplot(close)\n",
             &format!("time,open,high,low,close,volume\n{row}\n"),
         )
         .expect_err("non-finite CSV value should fail");
@@ -2659,7 +3198,7 @@ fn run_script_csv_rejects_non_finite_ohlcv_values() {
 #[test]
 fn run_script_csv_rejects_duplicate_bar_times() {
     let message = run_script_csv_internal(
-        "indicator(\"duplicate\")\nplot(close)\n",
+        "//@version=5\nindicator(\"duplicate\")\nplot(close)\n",
         "time,open,high,low,close,volume\n0,1,1,1,1,1\n0,2,2,2,2,1\n",
     )
     .expect_err("duplicate main bar time should fail");
@@ -2670,7 +3209,7 @@ fn run_script_csv_rejects_duplicate_bar_times() {
 #[test]
 fn run_script_csv_rejects_unsorted_bar_times() {
     let message = run_script_csv_internal(
-        "indicator(\"unsorted\")\nplot(close)\n",
+        "//@version=5\nindicator(\"unsorted\")\nplot(close)\n",
         "time,open,high,low,close,volume\n1,2,2,2,2,1\n0,1,1,1,1,1\n",
     )
     .expect_err("unsorted main bar times should fail");
@@ -2820,7 +3359,7 @@ fn render_strategy_order_fill_running_alert_rejects_unknown_placeholder() {
 #[test]
 fn runs_strategy_exit_missing_entry_from_csv_as_noop_json() {
     let output = run_script_csv(
-        "strategy(\"exit\")\nif bar_index == 0\n    strategy.exit(\"XL\", \"L\", stop=low)\n",
+        "//@version=5\nstrategy(\"exit\")\nif bar_index == 0\n    strategy.exit(\"XL\", \"L\", stop=low)\n",
         "time,open,high,low,close,volume\n0,1,1,1,1,1\n1,2,2,2,2,1\n",
     )
     .expect("strategy exit no-op script should run");
@@ -8004,6 +8543,65 @@ fn request_host_data_runs_through_direct_wasm_api() {
 }
 
 #[test]
+fn legacy_v4_security_provider_runs_through_direct_wasm_api() {
+    let output = run_script_csv_with_request_bars(
+        include_str!("../../../../tests/fixtures/legacy/v4/runtime/security_provider_legacy.pine"),
+        include_str!("../../../../tests/fixtures/legacy/v4/runtime/security_chart_bars.csv"),
+        r#"{
+          "NYSE:IBM:5": [
+            {"time":0,"open":90,"high":110,"low":80,"close":100,"volume":10},
+            {"time":300000,"open":190,"high":210,"low":180,"close":200,"volume":20}
+          ]
+        }"#,
+    )
+    .expect("legacy v4 request fixture should run through direct WASM API");
+    let parsed: serde_json::Value = serde_json::from_str(&output).expect("strict JSON output");
+
+    assert_eq!(
+        parsed["plots"][0]["values"],
+        serde_json::json!([null, null, 100, 100, 200])
+    );
+    assert_eq!(parsed["diagnostics"], serde_json::json!([]));
+}
+
+#[test]
+fn legacy_v4_security_wasm_request_json_accepts_chart_context() {
+    let output = run_script_csv_with_request_bars(
+        "//@version=4\nstudy(\"legacy chart context\")\nplot(security(syminfo.tickerid, \"5\", close))\n",
+        include_str!("../../../../tests/fixtures/legacy/v4/runtime/security_chart_bars.csv"),
+        r#"{
+          "$chart": {"symbol":"TEST","timeframe":"1"},
+          "TEST:5": [
+            {"time":0,"open":90,"high":110,"low":80,"close":100,"volume":10},
+            {"time":300000,"open":190,"high":210,"low":180,"close":200,"volume":20}
+          ]
+        }"#,
+    )
+    .expect("WASM chart metadata should supply the legacy security context");
+    let parsed: serde_json::Value = serde_json::from_str(&output).expect("strict JSON output");
+
+    assert_eq!(
+        parsed["plots"][0]["values"],
+        serde_json::json!([null, null, 100, 100, 200])
+    );
+}
+
+#[test]
+fn legacy_v4_security_missing_provider_wasm_error_keeps_source_span() {
+    let message = run_script_csv_with_request_bars_internal(
+        include_str!("../../../../tests/fixtures/legacy/v4/runtime/security_provider_legacy.pine"),
+        include_str!("../../../../tests/fixtures/legacy/v4/runtime/security_chart_bars.csv"),
+        "{}",
+    )
+    .expect_err("legacy v4 missing provider data should fail");
+
+    assert_eq!(
+        message,
+        "runtime failed: legacy security at source span 52..84: missing request data for symbol `NYSE:IBM` timeframe `5`"
+    );
+}
+
+#[test]
 fn request_host_data_reports_missing_request_key() {
     let message = run_script_csv_with_request_bars_internal(
         REQUEST_HOST_SOURCE,
@@ -8055,10 +8653,9 @@ fn run_csv_with_request_bars_reports_missing_request_key() {
     );
 }
 
-const IMPORT_SOURCE: &str =
-    "indicator(\"imports\")\nimport user/lib/1 as lib\nplot(lib.scale(close) + lib.offset)\n";
-const IMPORT_REQUEST_SOURCE: &str = "indicator(\"import request\")\nimport user/lib/1 as lib\nsame = request.security(\"NYSE:IBM\", timeframe.period, open + close)\nhigher = request.security(\"NYSE:IBM\", \"5\", close)\nplot(lib.scale(same))\nplot(higher + lib.offset)\n";
-const IMPORT_LIBRARY_JSON: &str = "{\"user/lib/1\":\"library(\\\"lib\\\")\\nexport offset = 2\\nexport scale(value) => value * offset\\n\"}";
+const IMPORT_SOURCE: &str = "//@version=5\nindicator(\"imports\")\nimport user/lib/1 as lib\nplot(lib.scale(close) + lib.offset)\n";
+const IMPORT_REQUEST_SOURCE: &str = "//@version=5\nindicator(\"import request\")\nimport user/lib/1 as lib\nsame = request.security(\"NYSE:IBM\", timeframe.period, open + close)\nhigher = request.security(\"NYSE:IBM\", \"5\", close)\nplot(lib.scale(same))\nplot(higher + lib.offset)\n";
+const IMPORT_LIBRARY_JSON: &str = "{\"user/lib/1\":\"//@version=5\\nlibrary(\\\"lib\\\")\\nexport offset = 2\\nexport scale(value) => value * offset\\n\"}";
 
 fn import_fixture_library_json() -> String {
     serde_json::json!({
@@ -8155,7 +8752,7 @@ fn library_source_json_combined_api_reports_request_input_errors() {
 
 #[test]
 fn library_source_json_reports_missing_library() {
-    let output = analyze_script("import user/lib/1\nindicator(\"root\")\n");
+    let output = analyze_script("//@version=5\nimport user/lib/1\nindicator(\"root\")\n");
     let parsed: serde_json::Value = serde_json::from_str(&output).expect("strict JSON output");
     let diagnostic_codes = parsed["diagnostics"]
         .as_array()
@@ -8397,6 +8994,17 @@ fn assert_snapshot(name: &str, actual: &str) {
     let expected = fs::read_to_string(&snapshot_path)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", snapshot_path.display()));
     assert_eq!(actual.trim_end(), expected.trim_end(), "{name} changed");
+}
+
+fn assert_analysis_snapshot(name: &str, actual: &str) {
+    let snapshot_path = workspace_dir().join("tests/snapshots").join(name);
+    let expected = fs::read_to_string(&snapshot_path)
+        .unwrap_or_else(|err| panic!("failed to read {}: {err}", snapshot_path.display()));
+    let actual: serde_json::Value =
+        serde_json::from_str(actual).unwrap_or_else(|err| panic!("invalid {name}: {err}"));
+    let expected: serde_json::Value = serde_json::from_str(&expected)
+        .unwrap_or_else(|err| panic!("invalid {}: {err}", snapshot_path.display()));
+    assert_eq!(actual, expected, "{name} changed");
 }
 
 fn input_call_ids_by_title(source: &str) -> HashMap<String, u64> {

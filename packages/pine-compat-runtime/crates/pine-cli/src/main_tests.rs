@@ -116,7 +116,6 @@ fn expected_partial_builtin(name: &str) -> bool {
                 | "max_bars_back"
                 | "alert"
                 | "alertcondition"
-                | "ta.vwap"
                 | "ticker.heikinashi"
                 | "ticker.inherit"
                 | "ticker.kagi"
@@ -446,10 +445,10 @@ fn formats_runtime_result_json_with_schema_version() {
 #[test]
 fn formats_runtime_result_json_with_escaped_string_values() {
     let result = RuntimeResult {
-        plots: vec![PlotSeries {
-            id: 1,
-            values: vec![PineValue::String("line\nnext\t\"quoted\"".to_owned())],
-        }],
+        plots: vec![PlotSeries::new(
+            1,
+            vec![PineValue::String("line\nnext\t\"quoted\"".to_owned())],
+        )],
         plot_chars: vec![],
         plot_shapes: vec![],
         plot_arrows: vec![],
@@ -996,8 +995,10 @@ fn runtime_library_fixture_error(fixture: &str, library_sources: &[(&str, &str)]
     let libraries = library_sources
         .iter()
         .map(|(key, path)| {
-            let library_text =
-                fs::read_to_string(workspace.join(path)).expect("library fixture source");
+            let library_text = version_matched_fixture_library_text(
+                source.text(),
+                fs::read_to_string(workspace.join(path)).expect("library fixture source"),
+            );
             ((*key).to_owned(), SourceFile::new(*path, library_text))
         })
         .collect();
@@ -1022,8 +1023,10 @@ fn runtime_library_fixture_json(fixture: &str, library_sources: &[(&str, &str)])
     let libraries = library_sources
         .iter()
         .map(|(key, path)| {
-            let library_text =
-                fs::read_to_string(workspace.join(path)).expect("library fixture source");
+            let library_text = version_matched_fixture_library_text(
+                source.text(),
+                fs::read_to_string(workspace.join(path)).expect("library fixture source"),
+            );
             ((*key).to_owned(), SourceFile::new(*path, library_text))
         })
         .collect();
@@ -1039,6 +1042,20 @@ fn runtime_library_fixture_json(fixture: &str, library_sources: &[(&str, &str)])
     let result =
         run_historical(&analysis.hir.expect("fixture HIR"), &bars).expect("runtime result");
     public_runtime_result_json(&result)
+}
+
+fn version_matched_fixture_library_text(root: &str, mut library: String) -> String {
+    let root_version = root
+        .lines()
+        .find(|line| line.trim_start().starts_with("//@version="));
+    let library_version = library
+        .lines()
+        .position(|line| line.trim_start().starts_with("//@version="));
+    if let (Some(root_version), Some(0)) = (root_version, library_version) {
+        let first_newline = library.find('\n').unwrap_or(library.len());
+        library.replace_range(..first_newline, root_version.trim_start());
+    }
+    library
 }
 
 fn runtime_fixture_bars_csv(fixture: &str) -> &'static str {

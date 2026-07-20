@@ -10,7 +10,7 @@ fn analyze_with_library(root: &str, library: &str) -> Analysis {
         )],
     )
     .expect("library source should be valid");
-    crate::analyze_input(&input)
+    crate::analysis::analyze_input_with_implicit_dialect(&input, crate::PineDialect::V5)
 }
 
 #[test]
@@ -641,7 +641,7 @@ fn accepts_plotcandle() {
 #[test]
 fn accepts_minimal_label_new() {
     let analysis = analyze(
-        "id = label.new(bar_index, high, \"High\")\nomitted_text = label.new(bar_index, high)\nnamed_omitted_text = label.new(x=bar_index, y=high, xloc=xloc.bar_index)\nother = label.new(x=1, y=close, text=\"Close\", xloc=xloc.bar_index, yloc=yloc.price, color=color.green, style=label.style_label_up, textcolor=color.white, size=size.small, textalign=text.align_right, tooltip=\"Tip\", text_font_family=font.family_monospace, text_formatting=text.format_bold)\ntime_label = label.new(time, close, \"Time\", xloc=xloc.bar_time)\nabove = label.new(bar_index, high, \"Above\", yloc=yloc.abovebar)\nbelow = label.new(bar_index, low, \"Below\", yloc=yloc.belowbar)\nsquare = label.new(bar_index, high, \"Square\", style=label.style_square)\ndiamond = label.new(bar_index, high, \"Diamond\", style=label.style_diamond)\ncenter = label.new(bar_index, high, \"Center\", style=label.style_label_center)\nplot(close)\n",
+        "//@version=6\nid = label.new(bar_index, high, \"High\")\nomitted_text = label.new(bar_index, high)\nnamed_omitted_text = label.new(x=bar_index, y=high, xloc=xloc.bar_index)\nother = label.new(x=1, y=close, text=\"Close\", xloc=xloc.bar_index, yloc=yloc.price, color=color.green, style=label.style_label_up, textcolor=color.white, size=size.small, textalign=text.align_right, tooltip=\"Tip\", text_font_family=font.family_monospace, text_formatting=text.format_bold)\ntime_label = label.new(time, close, \"Time\", xloc=xloc.bar_time)\nabove = label.new(bar_index, high, \"Above\", yloc=yloc.abovebar)\nbelow = label.new(bar_index, low, \"Below\", yloc=yloc.belowbar)\nsquare = label.new(bar_index, high, \"Square\", style=label.style_square)\ndiamond = label.new(bar_index, high, \"Diamond\", style=label.style_diamond)\ncenter = label.new(bar_index, high, \"Center\", style=label.style_label_center)\nplot(close)\n",
     );
 
     assert!(
@@ -662,7 +662,7 @@ fn accepts_minimal_label_new() {
 #[test]
 fn accepts_label_new_chart_point_overload() {
     let analysis = analyze(
-        "index_point = chart.point.from_index(bar_index + 1, high)\nid = label.new(index_point, \"index\", color=color.green, style=label.style_label_up, textcolor=color.white, size=size.small, textalign=text.align_left, tooltip=\"Tip\", text_font_family=font.family_monospace, text_formatting=text.format_bold)\ntime_point = chart.point.from_time(time + 60000, low)\ntime_id = label.new(point=time_point, xloc=xloc.bar_time, yloc=yloc.belowbar)\nmissing = label.new(point=na)\nplot(label.get_x(id) + label.get_x(time_id) + nz(label.get_x(missing), 0))\n",
+        "//@version=6\nindex_point = chart.point.from_index(bar_index + 1, high)\nid = label.new(index_point, \"index\", color=color.green, style=label.style_label_up, textcolor=color.white, size=size.small, textalign=text.align_left, tooltip=\"Tip\", text_font_family=font.family_monospace, text_formatting=text.format_bold)\ntime_point = chart.point.from_time(time + 60000, low)\ntime_id = label.new(point=time_point, xloc=xloc.bar_time, yloc=yloc.belowbar)\nmissing = label.new(point=na)\nplot(label.get_x(id) + label.get_x(time_id) + nz(label.get_x(missing), 0))\n",
     );
 
     assert!(
@@ -717,7 +717,8 @@ fn rejects_unsupported_label_new_modes() {
 
 #[test]
 fn accepts_label_new_int_size() {
-    let analysis = analyze("label.new(bar_index, high, \"High\", size=12)\nplot(close)\n");
+    let analysis =
+        analyze("//@version=6\nlabel.new(bar_index, high, \"High\", size=12)\nplot(close)\n");
 
     assert!(
         analysis.diagnostics.is_empty(),
@@ -744,8 +745,9 @@ fn rejects_label_new_non_int_size() {
 
 #[test]
 fn accepts_label_set_int_size() {
-    let analysis =
-        analyze("id = label.new(bar_index, high, \"High\")\nlabel.set_size(id, 12)\nplot(close)\n");
+    let analysis = analyze(
+        "//@version=6\nid = label.new(bar_index, high, \"High\")\nlabel.set_size(id, 12)\nplot(close)\n",
+    );
 
     assert!(
         analysis.diagnostics.is_empty(),
@@ -775,7 +777,7 @@ fn rejects_label_set_non_int_size() {
 #[test]
 fn accepts_label_mutation_methods() {
     let analysis = analyze(
-        "id = label.new(bar_index, high, \"High\")\ncopy = label.copy(id)\nlabel.set_x(id, bar_index)\nlabel.set_xloc(id, time, xloc.bar_time)\nlabel.set_y(id, low)\nlabel.set_xy(id, bar_index, close)\nlabel.set_yloc(id, yloc.abovebar)\nlabel.set_text(id, \"Close\")\nlabel.set_color(id, color.green)\nlabel.set_textcolor(id, color.white)\nlabel.set_style(id, label.style_label_up)\nlabel.set_style(id, label.style_square)\nlabel.set_style(id, label.style_diamond)\nlabel.set_style(id, label.style_label_center)\nlabel.set_size(id, size.small)\nlabel.set_tooltip(id, \"Tip\")\nlabel.set_textalign(id, text.align_left)\nlabel.set_text_font_family(id, font.family_monospace)\nlabel.set_text_formatting(id, text.format_bold + text.format_italic)\nlabel.set_text_formatting(na, text.format_italic)\nlabel.set_text(na, \"noop\")\nlabel.delete(na)\nlabel.delete(id)\nplot(label.get_x(copy))\nplot(close)\n",
+        "//@version=6\nid = label.new(bar_index, high, \"High\")\ncopy = label.copy(id)\nlabel.set_x(id, bar_index)\nlabel.set_xloc(id, time, xloc.bar_time)\nlabel.set_y(id, low)\nlabel.set_xy(id, bar_index, close)\nlabel.set_yloc(id, yloc.abovebar)\nlabel.set_text(id, \"Close\")\nlabel.set_color(id, color.green)\nlabel.set_textcolor(id, color.white)\nlabel.set_style(id, label.style_label_up)\nlabel.set_style(id, label.style_square)\nlabel.set_style(id, label.style_diamond)\nlabel.set_style(id, label.style_label_center)\nlabel.set_size(id, size.small)\nlabel.set_tooltip(id, \"Tip\")\nlabel.set_textalign(id, text.align_left)\nlabel.set_text_font_family(id, font.family_monospace)\nlabel.set_text_formatting(id, text.format_bold + text.format_italic)\nlabel.set_text_formatting(na, text.format_italic)\nlabel.set_text(na, \"noop\")\nlabel.delete(na)\nlabel.delete(id)\nplot(label.get_x(copy))\nplot(close)\n",
     );
 
     assert!(
@@ -817,7 +819,7 @@ fn accepts_label_mutation_methods() {
 #[test]
 fn rejects_invalid_label_text_formatting() {
     let analysis = analyze(
-        "id = label.new(bar_index, high, \"High\", text_formatting=text.format_bold + 4)\nlabel.set_text_formatting(id, text.format_italic + 4)\nplot(close)\n",
+        "//@version=6\nid = label.new(bar_index, high, \"High\", text_formatting=text.format_bold + 4)\nlabel.set_text_formatting(id, text.format_italic + 4)\nplot(close)\n",
     );
 
     assert!(
@@ -946,7 +948,7 @@ fn rejects_unimplemented_label_methods() {
 #[test]
 fn accepts_drawing_object_method_syntax() {
     let analysis = analyze(
-        "label_id = label.new(bar_index, high, \"start\")\nline_id = line.new(bar_index, low, bar_index + 1, high)\nbox_id = box.new(bar_index, high, bar_index + 1, low)\ntable_id = table.new(position.top_right, 1, 1)\nlabel_id.set_text(\"method\")\nlabel_id.set_xy(bar_index, close)\nlabel_id.set_point(chart.point.from_index(bar_index + 1, low))\nline_id.set_xy1(bar_index, low)\nline_id.set_color(color.green)\nbox_id.set_lefttop(bar_index, high)\nbox_id.set_xloc(bar_index - 1, bar_index + 1, xloc.bar_index)\ntable_id.cell(0, 0, \"A\")\ntable_id.set_bgcolor(color.green)\nplot(str.length(label_id.get_text()))\nplot(line_id.get_x1())\nplot(box_id.get_right())\nplot(close)\n",
+        "//@version=6\nlabel_id = label.new(bar_index, high, \"start\")\nline_id = line.new(bar_index, low, bar_index + 1, high)\nbox_id = box.new(bar_index, high, bar_index + 1, low)\ntable_id = table.new(position.top_right, 1, 1)\nlabel_id.set_text(\"method\")\nlabel_id.set_xy(bar_index, close)\nlabel_id.set_point(chart.point.from_index(bar_index + 1, low))\nline_id.set_xy1(bar_index, low)\nline_id.set_color(color.green)\nbox_id.set_lefttop(bar_index, high)\nbox_id.set_xloc(bar_index - 1, bar_index + 1, xloc.bar_index)\ntable_id.cell(0, 0, \"A\")\ntable_id.set_bgcolor(color.green)\nplot(str.length(label_id.get_text()))\nplot(line_id.get_x1())\nplot(box_id.get_right())\nplot(close)\n",
     );
 
     assert!(
@@ -1259,7 +1261,7 @@ fn rejects_line_side_effects_inside_functions() {
 #[test]
 fn accepts_minimal_box_new() {
     let analysis = analyze(
-        "id = box.new(bar_index, high, bar_index, low)\nother = box.new(left=0, top=open, right=bar_index, bottom=close)\nstyled = box.new(left=bar_index, top=high, right=bar_index + 1, bottom=low, border_color=color.white, border_width=2, border_style=line.style_dashed, extend=extend.right, xloc=xloc.bar_index, bgcolor=color.green, text=\"box text\", text_size=size.small, text_color=color.white, text_halign=text.align_left, text_valign=text.align_top, text_wrap=text.wrap_auto, text_font_family=font.family_monospace, force_overlay=false, text_formatting=text.format_bold + text.format_italic)\ntime_box = box.new(left=time, top=high, right=time + 60000, bottom=low, xloc=xloc.bar_time)\nborder_solid = box.new(left=bar_index, top=high, right=bar_index + 1, bottom=low, border_style=line.style_solid)\nborder_dotted = box.new(left=bar_index, top=high, right=bar_index + 1, bottom=low, border_style=line.style_dotted)\nextend_left = box.new(left=bar_index, top=high, right=bar_index + 1, bottom=low, extend=extend.left)\nextend_both = box.new(left=bar_index, top=high, right=bar_index + 1, bottom=low, extend=extend.both)\nextend_none = box.new(left=bar_index, top=high, right=bar_index + 1, bottom=low, extend=extend.none)\ncopy = box.copy(id)\nbox.set_left(id, bar_index)\nbox.set_top(id, high)\nbox.set_right(id, bar_index)\nbox.set_bottom(id, low)\nbox.set_lefttop(id, bar_index, close)\nbox.set_rightbottom(id, bar_index, open)\nbox.set_bgcolor(id, color.green)\nbox.set_border_color(id, color.white)\nbox.set_border_width(id, 2)\nbox.set_border_style(id, line.style_solid)\nbox.set_border_style(id, line.style_dotted)\nbox.set_border_style(id, line.style_dashed)\nbox.set_extend(id, extend.right)\nbox.set_extend(id, extend.left)\nbox.set_extend(id, extend.both)\nbox.set_extend(id, extend.none)\nbox.set_xloc(id, bar_index - 2, bar_index + 2, xloc.bar_index)\nbox.set_xloc(time_box, time, time + 60000, xloc.bar_time)\nbox.set_text(id, \"box text\")\nbox.set_text_color(id, color.white)\nbox.set_text_size(id, size.small)\nbox.set_text_halign(id, text.align_left)\nbox.set_text_valign(id, text.align_top)\nbox.set_text_wrap(id, text.wrap_auto)\nbox.set_text_font_family(id, font.family_monospace)\nbox.set_text_formatting(id, text.format_bold + text.format_italic)\nbox.set_text_formatting(na, text.format_italic)\nbox.delete(na)\nbox.delete(id)\nplot(box.get_top(copy))\nplot(box.get_bottom(copy))\nplot(box.get_left(copy))\nplot(box.get_right(copy))\nplot(close)\n",
+        "//@version=6\nid = box.new(bar_index, high, bar_index, low)\nother = box.new(left=0, top=open, right=bar_index, bottom=close)\nstyled = box.new(left=bar_index, top=high, right=bar_index + 1, bottom=low, border_color=color.white, border_width=2, border_style=line.style_dashed, extend=extend.right, xloc=xloc.bar_index, bgcolor=color.green, text=\"box text\", text_size=size.small, text_color=color.white, text_halign=text.align_left, text_valign=text.align_top, text_wrap=text.wrap_auto, text_font_family=font.family_monospace, force_overlay=false, text_formatting=text.format_bold + text.format_italic)\ntime_box = box.new(left=time, top=high, right=time + 60000, bottom=low, xloc=xloc.bar_time)\nborder_solid = box.new(left=bar_index, top=high, right=bar_index + 1, bottom=low, border_style=line.style_solid)\nborder_dotted = box.new(left=bar_index, top=high, right=bar_index + 1, bottom=low, border_style=line.style_dotted)\nextend_left = box.new(left=bar_index, top=high, right=bar_index + 1, bottom=low, extend=extend.left)\nextend_both = box.new(left=bar_index, top=high, right=bar_index + 1, bottom=low, extend=extend.both)\nextend_none = box.new(left=bar_index, top=high, right=bar_index + 1, bottom=low, extend=extend.none)\ncopy = box.copy(id)\nbox.set_left(id, bar_index)\nbox.set_top(id, high)\nbox.set_right(id, bar_index)\nbox.set_bottom(id, low)\nbox.set_lefttop(id, bar_index, close)\nbox.set_rightbottom(id, bar_index, open)\nbox.set_bgcolor(id, color.green)\nbox.set_border_color(id, color.white)\nbox.set_border_width(id, 2)\nbox.set_border_style(id, line.style_solid)\nbox.set_border_style(id, line.style_dotted)\nbox.set_border_style(id, line.style_dashed)\nbox.set_extend(id, extend.right)\nbox.set_extend(id, extend.left)\nbox.set_extend(id, extend.both)\nbox.set_extend(id, extend.none)\nbox.set_xloc(id, bar_index - 2, bar_index + 2, xloc.bar_index)\nbox.set_xloc(time_box, time, time + 60000, xloc.bar_time)\nbox.set_text(id, \"box text\")\nbox.set_text_color(id, color.white)\nbox.set_text_size(id, size.small)\nbox.set_text_halign(id, text.align_left)\nbox.set_text_valign(id, text.align_top)\nbox.set_text_wrap(id, text.wrap_auto)\nbox.set_text_font_family(id, font.family_monospace)\nbox.set_text_formatting(id, text.format_bold + text.format_italic)\nbox.set_text_formatting(na, text.format_italic)\nbox.delete(na)\nbox.delete(id)\nplot(box.get_top(copy))\nplot(box.get_bottom(copy))\nplot(box.get_left(copy))\nplot(box.get_right(copy))\nplot(close)\n",
     );
 
     assert!(
@@ -1454,7 +1456,7 @@ fn rejects_box_arrow_border_styles() {
 #[test]
 fn rejects_invalid_box_text_formatting() {
     let analysis = analyze(
-        "id = box.new(bar_index, high, bar_index, low)\nbox.set_text_formatting(id, text.format_bold + 4)\nplot(close)\n",
+        "//@version=6\nid = box.new(bar_index, high, bar_index, low)\nbox.set_text_formatting(id, text.format_bold + 4)\nplot(close)\n",
     );
 
     assert!(
@@ -1470,8 +1472,9 @@ fn rejects_invalid_box_text_formatting() {
 
 #[test]
 fn accepts_box_new_int_text_size() {
-    let analysis =
-        analyze("id = box.new(bar_index, high, bar_index, low, text_size=19)\nplot(close)\n");
+    let analysis = analyze(
+        "//@version=6\nid = box.new(bar_index, high, bar_index, low, text_size=19)\nplot(close)\n",
+    );
 
     assert!(
         analysis.diagnostics.is_empty(),
@@ -1517,7 +1520,7 @@ fn rejects_box_new_float_text_size() {
 #[test]
 fn accepts_box_set_int_text_size() {
     let analysis = analyze(
-        "id = box.new(bar_index, high, bar_index, low)\nbox.set_text_size(id, 19)\nplot(close)\n",
+        "//@version=6\nid = box.new(bar_index, high, bar_index, low)\nbox.set_text_size(id, 19)\nplot(close)\n",
     );
 
     assert!(
@@ -1565,7 +1568,7 @@ fn rejects_box_set_float_text_size() {
 #[test]
 fn accepts_box_set_xloc_bar_time() {
     let analysis = analyze(
-        "id = box.new(bar_index, high, bar_index + 1, low)\nbox.set_xloc(id, time, time + 60000, xloc.bar_time)\nplot(close)\n",
+        "//@version=6\nid = box.new(bar_index, high, bar_index + 1, low)\nbox.set_xloc(id, time, time + 60000, xloc.bar_time)\nplot(close)\n",
     );
 
     assert!(
@@ -1579,7 +1582,7 @@ fn accepts_box_set_xloc_bar_time() {
 #[test]
 fn rejects_invalid_box_new_options() {
     let analysis = analyze(
-        "id = box.new(left=bar_index, top=high, right=bar_index, bottom=low, xloc=xloc.bar_time, text_formatting=text.format_bold + 4)\nplot(close)\n",
+        "//@version=6\nid = box.new(left=bar_index, top=high, right=bar_index, bottom=low, xloc=xloc.bar_time, text_formatting=text.format_bold + 4)\nplot(close)\n",
     );
 
     assert!(
@@ -1614,7 +1617,7 @@ fn rejects_box_side_effects_inside_functions() {
 #[test]
 fn accepts_minimal_table_new_and_cell() {
     let analysis = analyze(
-        "id = table.new(position.top_right, 2, 2, bgcolor=color.gray, frame_color=color.black, frame_width=2, border_color=color.white, border_width=1)\ntop_left = table.new(position.top_left, 1, 1)\ntop_center = table.new(position.top_center, 1, 1)\nmiddle_left = table.new(position.middle_left, 1, 1)\nmiddle_center = table.new(position.middle_center, 1, 1)\nmiddle_right = table.new(position.middle_right, 1, 1)\nbottom_left = table.new(position.bottom_left, 1, 1)\nbottom_center = table.new(position.bottom_center, 1, 1)\nbottom_right = table.new(position.bottom_right, 1, 1)\ntable.cell(id, 0, 0, \"A\")\ntable.cell(id, column=1, row=0, text=\"B\", bgcolor=color.green, text_color=color.white, tooltip=\"initial\", text_font_family=font.family_monospace, text_formatting=text.format_bold)\ntable.cell_set_text(id, 1, 0, \"B2\")\ntable.cell_set_bgcolor(id, 1, 0, color.red)\ntable.cell_set_text_color(id, 1, 0, color.blue)\ntable.cell_set_width(id, 1, 0, 25)\ntable.cell_set_height(id, 1, 0, 40)\ntable.cell_set_text_size(id, 1, 0, size.small)\ntable.cell_set_text_halign(id, 1, 0, text.align_left)\ntable.cell_set_text_valign(id, 1, 0, text.align_top)\ntable.cell_set_text_wrap(id, 1, 0, text.wrap_auto)\ntable.cell_set_tooltip(id, 1, 0, \"updated\")\ntable.cell_set_text_font_family(id, 1, 0, font.family_default)\ntable.cell_set_text_formatting(id, 1, 0, text.format_bold + text.format_italic)\ntable.merge_cells(id, 0, 0, 1, 0)\ntable.set_position(id, position.bottom_right)\ntable.set_bgcolor(id, color.yellow)\ntable.set_frame_color(id, color.black)\ntable.set_frame_width(id, 3)\ntable.set_border_color(id, color.white)\ntable.set_border_width(id, 4)\ntable.clear(id, 0, 0, 1, 1)\ntable.set_position(na, position.top_left)\ntable.set_bgcolor(na, color.red)\ntable.set_frame_color(na, color.blue)\ntable.set_frame_width(na, 2)\ntable.set_border_color(na, color.green)\ntable.set_border_width(na, 5)\ntable.cell_set_text(na, 0, 1, \"noop\")\ntable.cell_set_bgcolor(na, 0, 1, color.red)\ntable.cell_set_text_color(na, 0, 1, color.blue)\ntable.cell_set_width(na, 0, 1, 25)\ntable.cell_set_height(na, 0, 1, 40)\ntable.cell_set_text_size(na, 0, 1, size.small)\ntable.cell_set_text_halign(na, 0, 1, text.align_left)\ntable.cell_set_text_valign(na, 0, 1, text.align_top)\ntable.cell_set_text_wrap(na, 0, 1, text.wrap_none)\ntable.cell_set_tooltip(na, 0, 1, \"noop\")\ntable.cell_set_text_font_family(na, 0, 1, font.family_monospace)\ntable.cell_set_text_formatting(na, 0, 1, text.format_italic)\ntable.cell(na, 0, 1, \"noop\")\ntable.merge_cells(na, 0, 0, 0, 0)\ntable.clear(na, 0, 0, 0, 0)\ntable.delete(na)\ntable.delete(id)\nplot(close)\n",
+        "//@version=6\nid = table.new(position.top_right, 2, 2, bgcolor=color.gray, frame_color=color.black, frame_width=2, border_color=color.white, border_width=1)\ntop_left = table.new(position.top_left, 1, 1)\ntop_center = table.new(position.top_center, 1, 1)\nmiddle_left = table.new(position.middle_left, 1, 1)\nmiddle_center = table.new(position.middle_center, 1, 1)\nmiddle_right = table.new(position.middle_right, 1, 1)\nbottom_left = table.new(position.bottom_left, 1, 1)\nbottom_center = table.new(position.bottom_center, 1, 1)\nbottom_right = table.new(position.bottom_right, 1, 1)\ntable.cell(id, 0, 0, \"A\")\ntable.cell(id, column=1, row=0, text=\"B\", bgcolor=color.green, text_color=color.white, tooltip=\"initial\", text_font_family=font.family_monospace, text_formatting=text.format_bold)\ntable.cell_set_text(id, 1, 0, \"B2\")\ntable.cell_set_bgcolor(id, 1, 0, color.red)\ntable.cell_set_text_color(id, 1, 0, color.blue)\ntable.cell_set_width(id, 1, 0, 25)\ntable.cell_set_height(id, 1, 0, 40)\ntable.cell_set_text_size(id, 1, 0, size.small)\ntable.cell_set_text_halign(id, 1, 0, text.align_left)\ntable.cell_set_text_valign(id, 1, 0, text.align_top)\ntable.cell_set_text_wrap(id, 1, 0, text.wrap_auto)\ntable.cell_set_tooltip(id, 1, 0, \"updated\")\ntable.cell_set_text_font_family(id, 1, 0, font.family_default)\ntable.cell_set_text_formatting(id, 1, 0, text.format_bold + text.format_italic)\ntable.merge_cells(id, 0, 0, 1, 0)\ntable.set_position(id, position.bottom_right)\ntable.set_bgcolor(id, color.yellow)\ntable.set_frame_color(id, color.black)\ntable.set_frame_width(id, 3)\ntable.set_border_color(id, color.white)\ntable.set_border_width(id, 4)\ntable.clear(id, 0, 0, 1, 1)\ntable.set_position(na, position.top_left)\ntable.set_bgcolor(na, color.red)\ntable.set_frame_color(na, color.blue)\ntable.set_frame_width(na, 2)\ntable.set_border_color(na, color.green)\ntable.set_border_width(na, 5)\ntable.cell_set_text(na, 0, 1, \"noop\")\ntable.cell_set_bgcolor(na, 0, 1, color.red)\ntable.cell_set_text_color(na, 0, 1, color.blue)\ntable.cell_set_width(na, 0, 1, 25)\ntable.cell_set_height(na, 0, 1, 40)\ntable.cell_set_text_size(na, 0, 1, size.small)\ntable.cell_set_text_halign(na, 0, 1, text.align_left)\ntable.cell_set_text_valign(na, 0, 1, text.align_top)\ntable.cell_set_text_wrap(na, 0, 1, text.wrap_none)\ntable.cell_set_tooltip(na, 0, 1, \"noop\")\ntable.cell_set_text_font_family(na, 0, 1, font.family_monospace)\ntable.cell_set_text_formatting(na, 0, 1, text.format_italic)\ntable.cell(na, 0, 1, \"noop\")\ntable.merge_cells(na, 0, 0, 0, 0)\ntable.clear(na, 0, 0, 0, 0)\ntable.delete(na)\ntable.delete(id)\nplot(close)\n",
     );
 
     assert!(
@@ -1785,7 +1788,7 @@ fn rejects_invalid_table_text_wrap() {
 #[test]
 fn accepts_table_cell_int_text_size() {
     let analysis = analyze(
-        "id = table.new(position.top_right, 1, 1)\ntable.cell(id, 0, 0, \"A\", text_size=19)\nplot(close)\n",
+        "//@version=6\nid = table.new(position.top_right, 1, 1)\ntable.cell(id, 0, 0, \"A\", text_size=19)\nplot(close)\n",
     );
 
     assert!(
@@ -1833,7 +1836,7 @@ fn rejects_table_cell_float_text_size() {
 #[test]
 fn accepts_table_cell_set_int_text_size() {
     let analysis = analyze(
-        "id = table.new(position.top_right, 1, 1)\ntable.cell(id, 0, 0, \"A\")\ntable.cell_set_text_size(id, 0, 0, 19)\nplot(close)\n",
+        "//@version=6\nid = table.new(position.top_right, 1, 1)\ntable.cell(id, 0, 0, \"A\")\ntable.cell_set_text_size(id, 0, 0, 19)\nplot(close)\n",
     );
 
     assert!(
@@ -1881,7 +1884,7 @@ fn rejects_table_cell_set_float_text_size() {
 #[test]
 fn rejects_invalid_table_text_formatting() {
     let analysis = analyze(
-        "id = table.new(position.top_right, 1, 1)\ntable.cell(id, 0, 0, \"A\", text_formatting=text.format_bold + 4)\nplot(close)\n",
+        "//@version=6\nid = table.new(position.top_right, 1, 1)\ntable.cell(id, 0, 0, \"A\", text_formatting=text.format_bold + 4)\nplot(close)\n",
     );
 
     assert!(

@@ -1,5 +1,8 @@
+use crate::PineDialect;
 use crate::prelude::*;
 
+mod legacy_conversions;
+mod resolution;
 mod type_queries;
 
 #[derive(Debug, Clone)]
@@ -118,17 +121,17 @@ impl Analyzer {
                 let name = expr_name(expr)?;
                 self.resolve_qualified_value(&name, expr.span)
             }
-            ExprKind::Unary { op, expr } => {
-                let expr_type = self.analyze_expr(expr)?;
-                self.infer_unary(*op, expr_type, expr.span)
+            ExprKind::Unary { op, expr: operand } => {
+                let expr_type = self.analyze_expr(operand)?;
+                self.infer_unary_with_legacy(*op, expr_type, operand.span, expr.span)
             }
             ExprKind::Binary { op, left, right } => {
                 let left_type = self.analyze_expr(left);
                 let right_type = self.analyze_expr(right);
                 match (left_type, right_type) {
-                    (Some(left_type), Some(right_type)) => {
-                        self.infer_binary(*op, left_type, right_type, expr.span)
-                    }
+                    (Some(left_type), Some(right_type)) => self.infer_binary_with_legacy(
+                        *op, left_type, right_type, left.span, right.span, expr.span,
+                    ),
                     _ => None,
                 }
             }
@@ -1176,71 +1179,6 @@ impl Analyzer {
         );
     }
 
-    pub(crate) fn resolve_qualified_value(&mut self, name: &str, span: Span) -> Option<PineType> {
-        if self.validate_strategy_state_variable(name, span) {
-            return None;
-        }
-        if pine_builtins::named_color(name).is_some() {
-            self.compatibility.supported.push(FeatureUse {
-                feature: name.to_owned(),
-                span,
-            });
-            return Some(PineType::new(Qualifier::Const, ValueKind::Color));
-        }
-        if let Some(pine_type) = pine_builtins::builtin_series_value_type(name) {
-            self.compatibility.supported.push(FeatureUse {
-                feature: name.to_owned(),
-                span,
-            });
-            return Some(pine_type);
-        }
-        if pine_builtins::named_float_constant(name).is_some() {
-            self.compatibility.supported.push(FeatureUse {
-                feature: name.to_owned(),
-                span,
-            });
-            return Some(PineType::new(Qualifier::Const, ValueKind::Float));
-        }
-        if pine_builtins::named_int_constant(name).is_some() {
-            self.compatibility.supported.push(FeatureUse {
-                feature: name.to_owned(),
-                span,
-            });
-            return Some(PineType::new(Qualifier::Const, ValueKind::Int));
-        }
-        if pine_builtins::named_string_constant(name).is_some() {
-            self.compatibility.supported.push(FeatureUse {
-                feature: name.to_owned(),
-                span,
-            });
-            return Some(PineType::new(Qualifier::Const, ValueKind::String));
-        }
-
-        self.check_feature_name(name, span);
-        if name.starts_with("color.") {
-            self.diagnostics.push(Diagnostic::error(
-                "E_UNKNOWN_COLOR",
-                format!("unknown named color `{name}`"),
-                span,
-            ));
-        }
-        None
-    }
-
-    pub(crate) fn resolve_symbol(&mut self, name: &str, span: Span) -> Option<PineType> {
-        if let Some(symbol) = self.scope.resolve(name) {
-            self.bind_symbol(name, span, symbol);
-            Some(symbol.pine_type)
-        } else {
-            self.diagnostics.push(Diagnostic::error(
-                "E_UNKNOWN_SYMBOL",
-                format!("unknown symbol `{name}`"),
-                span,
-            ));
-            None
-        }
-    }
-
     pub(crate) fn validate_assignment(
         &mut self,
         name: &str,
@@ -1400,7 +1338,17 @@ impl Analyzer {
     }
 
     pub(crate) fn expect_bool(&mut self, pine_type: PineType, span: Span) {
-        if pine_type.kind != ValueKind::Bool {
+        if pine_type.kind == ValueKind::Bool {
+            return;
+        }
+        if self.legacy.dialect() != PineDialect::V6
+            && matches!(
+                pine_type.kind,
+                ValueKind::Int | ValueKind::Float | ValueKind::Na
+            )
+        {
+            self.record_numeric_to_bool_coercion(span);
+        } else {
             self.diagnostics.push(Diagnostic::error(
                 "E_CONDITION_TYPE",
                 format!("condition must be bool, got {}", pine_type_name(pine_type)),

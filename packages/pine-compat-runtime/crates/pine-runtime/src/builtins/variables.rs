@@ -4,7 +4,7 @@ use crate::*;
 
 pub(crate) fn eval_static_builtin_value(name: &str) -> PineValue {
     if let Some(color) = pine_builtins::named_color(name) {
-        return PineValue::Color(color);
+        return PineValue::Color(u64::from(color));
     }
     if let Some(value) = pine_builtins::named_float_constant(name) {
         return PineValue::Float(value);
@@ -15,6 +15,32 @@ pub(crate) fn eval_static_builtin_value(name: &str) -> PineValue {
     pine_builtins::named_string_constant(name)
         .map(|constant| PineValue::String(constant.to_owned()))
         .unwrap_or(PineValue::Void)
+}
+
+fn chart_symbol_part(symbol: &str, prefix: bool) -> String {
+    match (symbol.split_once(':'), prefix) {
+        (Some((prefix, _)), true) => prefix.to_owned(),
+        (Some((_, ticker)), false) => ticker.to_owned(),
+        (None, true) => String::new(),
+        (None, false) => symbol.to_owned(),
+    }
+}
+
+fn chart_timeframe_unit(timeframe: &str) -> Option<char> {
+    timeframe.chars().last().filter(char::is_ascii_alphabetic)
+}
+
+fn chart_timeframe_multiplier(timeframe: &str) -> i64 {
+    let number = if chart_timeframe_unit(timeframe).is_some() {
+        &timeframe[..timeframe.len().saturating_sub(1)]
+    } else {
+        timeframe
+    };
+    if number.is_empty() {
+        1
+    } else {
+        number.parse().unwrap_or(1)
+    }
 }
 
 impl<'a> HistoricalRuntime<'a> {
@@ -118,8 +144,20 @@ impl<'a> HistoricalRuntime<'a> {
         if name == "last_bar_time" {
             return self.last_bar_time.map_or(PineValue::Na, PineValue::Int);
         }
-        if name == "syminfo.tickerid" {
+        if matches!(name, "syminfo.tickerid" | "syminfo.main_tickerid") {
             return PineValue::String(self.request_environment.chart().symbol().to_owned());
+        }
+        if name == "syminfo.ticker" {
+            return PineValue::String(chart_symbol_part(
+                self.request_environment.chart().symbol(),
+                false,
+            ));
+        }
+        if name == "syminfo.prefix" {
+            return PineValue::String(chart_symbol_part(
+                self.request_environment.chart().symbol(),
+                true,
+            ));
         }
         if matches!(name, "timeframe.period" | "timeframe.main_period") {
             return PineValue::String(
@@ -130,29 +168,34 @@ impl<'a> HistoricalRuntime<'a> {
                     .to_owned(),
             );
         }
-        if name == "timeframe.isticks" || name == "timeframe.isseconds" {
+        let chart_timeframe = self.request_environment.chart().timeframe().value();
+        let chart_timeframe_unit = chart_timeframe_unit(chart_timeframe);
+        if name == "timeframe.isticks" {
             return PineValue::Bool(false);
+        }
+        if name == "timeframe.isseconds" {
+            return PineValue::Bool(chart_timeframe_unit == Some('S'));
         }
         if name == "timeframe.isminutes" {
-            return PineValue::Bool(true);
+            return PineValue::Bool(chart_timeframe_unit.is_none());
         }
         if name == "timeframe.isintraday" {
-            return PineValue::Bool(true);
+            return PineValue::Bool(matches!(chart_timeframe_unit, None | Some('S')));
         }
         if name == "timeframe.isdaily" {
-            return PineValue::Bool(false);
+            return PineValue::Bool(chart_timeframe_unit == Some('D'));
         }
         if name == "timeframe.isweekly" {
-            return PineValue::Bool(false);
+            return PineValue::Bool(chart_timeframe_unit == Some('W'));
         }
         if name == "timeframe.ismonthly" {
-            return PineValue::Bool(false);
+            return PineValue::Bool(chart_timeframe_unit == Some('M'));
         }
         if name == "timeframe.isdwm" {
-            return PineValue::Bool(false);
+            return PineValue::Bool(matches!(chart_timeframe_unit, Some('D' | 'W' | 'M')));
         }
         if name == "timeframe.multiplier" {
-            return PineValue::Int(1);
+            return PineValue::Int(chart_timeframe_multiplier(chart_timeframe));
         }
         if name == "chart.left_visible_bar_time" {
             return self

@@ -32,11 +32,68 @@ improved over time, but codes should remain stable once published.
 - `E_PARSE_NAME`: invalid qualified name.
 - `E_PARSE_SWITCH`: invalid switch expression.
 - `E_PARSE_TYPE`: invalid user-defined type declaration.
+- `E_LANGUAGE_VERSION_DUPLICATE`: more than one exact `//@version=N`
+  directive was found.
+- `E_LANGUAGE_VERSION_PLACEMENT`: an exact version directive appeared after a
+  source statement instead of in the leading comment/directive region.
 
 ## Semantic Analysis
 
 - `E_HOST_INPUT`: a host binding rejected malformed input before semantic
   analysis, such as invalid WASM library-source JSON.
+- `E_LANGUAGE_VERSION_`: internal diagnostic-family prefix used to stop before
+  ordinary semantic analysis; this prefix is not emitted as a complete code.
+- `E_LANGUAGE_VERSION_CONFLICT`: root and host-provided library sources select
+  different Pine language versions.
+- `E_LANGUAGE_VERSION_UNSUPPORTED`: the selected Pine language version is
+  outside the supported closed range v1 through v6.
+- `E_LEGACY_INDICATOR_DECLARATION`: a legacy source has a missing, mixed, modern,
+  or otherwise inadmissible indicator declaration; the verified v1-v4
+  `study()` subsets are executable.
+- `E_LEGACY_INPUT_OVERLOAD`: a Pine v1-v4 `input()` call has an ambiguous,
+  uninferable, forged, or unsupported historical type selection; the call is
+  rejected before canonical lowering or runtime.
+- `E_LEGACY_INPUT_CONSTANT_CONTEXT`: a legacy input type constant such as
+  `input.integer` is used outside the `type` selector of a versioned `input()`
+  annotation; internal selector markers cannot be consumed as ordinary
+  strings or propagated through aliases and expressions.
+- `E_LEGACY_OUTPUT_ARGUMENT`: a Pine v1-v4 output call uses an invalid historical
+  transparency/style value or mixes incompatible fill endpoints; the call is
+  rejected before canonical lowering or runtime.
+- `E_LEGACY_REFERENCE_GRAPH`: a Pine v1/v2 declaration graph has a duplicate or
+  otherwise structurally invalid global declaration.
+- `E_LEGACY_REFERENCE_GRAPH_LIMIT`: an active Pine v1/v2 declaration graph
+  exceeds 256 nodes or 4096 dependency edges.
+- `E_LEGACY_REFERENCE_GRAPH_UNSAFE`: an active Pine v1/v2 graph declaration
+  initializer contains a call, mutation, output, request, tuple, or complex
+  control flow outside the side-effect-free scalar subset.
+- `E_LEGACY_FORWARD_REFERENCE_UNSAFE`: a Pine v1/v2 current-bar forward
+  dependency crosses a non-declaration statement barrier and cannot be safely
+  reordered.
+- `E_LEGACY_REFERENCE_CYCLE`: Pine v1/v2 current-bar declaration dependencies
+  contain a cycle with no deterministic source-compatible evaluation order.
+- `E_LEGACY_REFERENCE_TYPE`: the bounded Pine v1/v2 declaration graph cannot
+  infer one stable scalar type for a participating declaration.
+- `E_LEGACY_RSI_OVERLOAD`: a v1-v4 `rsi(x, y)` call cannot select the
+  historical length or two-series overload from the analyzed numeric types;
+  the call is rejected instead of guessing modern `ta.rsi` behavior.
+- `E_LEGACY_SECURITY_MERGE`: a v1-v4 `security` gaps/lookahead argument is not
+  a compile-time bool or the corresponding `barmerge` constant; runtime
+  alignment is not guessed from series metadata.
+- `E_LEGACY_STRATEGY_OUT_OF_SCOPE`: a v1-v4 source declares `strategy()` or
+  references `strategy.*`; legacy strategy execution is outside this project.
+- `E_LEGACY_V3_NA_INFERENCE`: a Pine v3 untyped `na` declaration cannot infer
+  exactly one stable scalar type from a later assignment because it is
+  unresolved, collection/object-valued, or conflicts with another assignment;
+  the declaration is rejected without relaxing v4-v6 typing.
+- `E_LEGACY_VERSION_FEATURE`: a legacy source directly uses a qualified
+  built-in spelling that was introduced by a later Pine dialect; canonical
+  names produced internally by verified legacy translations remain allowed.
+
+The legacy release audit compares every `E_LEGACY_*` and `W_LEGACY_*` token
+emitted by semantic/runtime source with this document. All 16 current legacy
+codes are listed here; Phase 11 adds no public diagnostic family and does not
+change the current analysis `schemaVersion: 5` or runtime `schemaVersion: 8`.
 - `E_ASSIGN_TYPE`: reassignment type mismatch.
 - `E_BRANCH_RETURN`: branch expression body does not end with an expression.
 - `E_BRANCH_TYPE`: ternary branch type mismatch.
@@ -147,6 +204,11 @@ improved over time, but codes should remain stable once published.
 ## Runtime
 
 - `E_RUNTIME`: runtime execution emitted a host-visible diagnostic.
+- `W_LEGACY_SECURITY_LOOKAHEAD`: a reached legacy `security` callsite uses
+  historical lookahead-on alignment, whether by v1/v2 default or explicit
+  selection, and can repaint. The warning
+  is emitted once per distinct callsite in stable order and does not fail
+  execution.
 - `E_STRATEGY_MODE`: strategy-only feature is used outside `strategy()` mode or
   an unsupported strategy mode was requested.
 - `E_STRATEGY_MARGIN`: supported strategy entry fill requires more margin than

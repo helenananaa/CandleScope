@@ -1316,7 +1316,18 @@ def test_indicator_patch_from_snapshot_filters_time_series_payloads() -> None:
                 "style": {"colorData": [{"time": 20, "color": "#fff"}, {"time": 30, "color": "#000"}]},
             }
         ],
+        "fills": [{
+            "id": "fill",
+            "colorData": [{"time": 20, "color": "red"}, {"time": 30, "color": "blue"}],
+            "style": {
+                "colorData": [{"time": 10, "color": "red"}, {"time": 20, "color": "blue"}],
+            },
+        }],
         "markers": [{"id": "m1", "data": [{"time": 10}, {"time": 20}]}],
+        "bgcolors": [{
+            "id": "bg",
+            "regions": [{"time": 10, "color": "red"}, {"time": 20, "color": "blue"}],
+        }],
         "annotations": [
             {"id": "marker", "type": "marker", "data": [{"time": 10}, {"time": 20}]},
             {"id": "hline", "type": "hline", "data": [{"value": 5}]},
@@ -1331,7 +1342,10 @@ def test_indicator_patch_from_snapshot_filters_time_series_payloads() -> None:
     assert patch["lines"][0]["colorData"] == [{"time": 20, "color": "#fff"}]
     assert patch["series"][0]["data"] == [{"time": 20, "value": 2}]
     assert patch["series"][0]["style"]["colorData"] == [{"time": 20, "color": "#fff"}]
+    assert patch["fills"][0]["colorData"] == [{"time": 20, "color": "red"}]
+    assert patch["fills"][0]["style"]["colorData"] == [{"time": 20, "color": "blue"}]
     assert patch["markers"][0]["data"] == [{"time": 20}]
+    assert patch["bgcolors"][0]["regions"] == [{"time": 20, "color": "blue"}]
     assert patch["annotations"][0]["data"] == [{"time": 20}]
     assert patch["annotations"][1]["data"] == [{"value": 5}]
 

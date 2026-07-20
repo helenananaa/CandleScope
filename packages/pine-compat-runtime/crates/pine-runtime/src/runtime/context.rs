@@ -3,10 +3,25 @@ use std::cmp::Ordering;
 use chrono::{Datelike, Timelike};
 use pine_ir::{SeriesId, SymbolId};
 
-use crate::builtins::time::{dayofweek_value, timeframe_seconds, utc_datetime_from_millis};
+use crate::builtins::time::{
+    dayofweek_value, timeframe_bucket, timeframe_seconds, utc_datetime_from_millis,
+};
 use crate::*;
 
 impl<'a> HistoricalRuntime<'a> {
+    pub(crate) fn default_vwap_anchor(&self) -> bool {
+        const SECONDS_PER_DAY: i64 = 86_400;
+
+        let Some(current_time) = self.current_bar.map(|bar| bar.time) else {
+            return false;
+        };
+        let Some(previous_time) = self.previous_bar_time else {
+            return true;
+        };
+        timeframe_bucket(current_time, SECONDS_PER_DAY)
+            != timeframe_bucket(previous_time, SECONDS_PER_DAY)
+    }
+
     pub(crate) fn set_builtin_symbols(
         &mut self,
         bar: &Bar,
@@ -207,6 +222,11 @@ impl<'a> HistoricalRuntime<'a> {
     }
 
     pub(crate) fn next_vwap(&mut self, bar: &Bar) -> PineValue {
+        if self.default_vwap_anchor() {
+            self.vwap_weighted_sum = 0.0;
+            self.vwap_volume_sum = 0.0;
+        }
+
         let source = (bar.high + bar.low + bar.close) / 3.0;
         let weighted = source * bar.volume;
         if !source.is_finite() || !bar.volume.is_finite() || !weighted.is_finite() {

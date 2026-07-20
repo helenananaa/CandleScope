@@ -113,6 +113,26 @@ impl Analyzer {
         }
     }
 
+    pub(crate) fn reject_unavailable_legacy_builtin(
+        &mut self,
+        name: &str,
+        min_version: u16,
+        span: Span,
+    ) {
+        let dialect = self.legacy.dialect();
+        let reason = format!(
+            "the source spelling `{name}` requires Pine v{min_version} or later and is not available in {}",
+            dialect.name()
+        );
+        self.compatibility.unsupported.push(UnsupportedFeature {
+            feature: name.to_owned(),
+            reason: reason.clone(),
+            span,
+        });
+        self.diagnostics
+            .push(Diagnostic::error("E_LEGACY_VERSION_FEATURE", reason, span));
+    }
+
     pub(crate) fn unsupported(&mut self, feature: &str, reason: &str, span: Span) {
         self.compatibility.unsupported.push(UnsupportedFeature {
             feature: feature.to_owned(),

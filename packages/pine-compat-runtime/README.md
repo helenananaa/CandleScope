@@ -1,288 +1,323 @@
 # Pine Compat Runtime
 
-Pine Compat Runtime is a clean-room, open-source runtime for a Pine-compatible
-executable scripting subset.
+**Run Pine-style indicators and strategies on your own market data — locally,
+deterministically, and from the host you already use.**
 
-The project is intentionally designed as an embeddable language runtime, not as
-an application-specific plugin. Hosts such as charting tools, research
-notebooks, command line workflows, and CandleScope-style applications should be
-able to integrate it through adapters.
+[![Latest release](https://img.shields.io/github/v/release/Ryan00956/pine-compat-runtime?display_name=tag&sort=semver)](https://github.com/Ryan00956/pine-compat-runtime/releases/latest)
+[![CI](https://github.com/Ryan00956/pine-compat-runtime/actions/workflows/ci.yml/badge.svg)](https://github.com/Ryan00956/pine-compat-runtime/actions/workflows/ci.yml)
+[![Wheels](https://github.com/Ryan00956/pine-compat-runtime/actions/workflows/wheels.yml/badge.svg)](https://github.com/Ryan00956/pine-compat-runtime/actions/workflows/wheels.yml)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://github.com/Ryan00956/pine-compat-runtime/releases/latest)
+[![Rust 1.95+](https://img.shields.io/badge/Rust-1.95%2B-000000?logo=rust&logoColor=white)](Cargo.toml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## Goals
+Pine Compat Runtime is a clean-room, open-source runtime for an executable
+Pine-compatible subset. Feed it source code and OHLCV bars; get structured,
+host-neutral results for plots, drawings, alerts, orders, trades, positions,
+and equity.
 
-- Implement a clean-room Pine-compatible indicator and partial strategy runtime.
-- Prioritize semantic correctness over early breadth.
-- Support bar-by-bar time-series execution, historical references, `na`, `var`,
-  inputs, plotting and selected drawing side effects, and fixture-backed
-  request data.
-- Expose stable Rust, CLI, Python, and WASM entry points for the supported
-  subset.
-- Produce a host-neutral output model that charting applications can adapt.
-- Provide precise diagnostics and compatibility reports instead of silent
-  partial execution.
+It is built for charting products, research tools, notebooks, backtesting
+workflows, and anyone who wants Pine-style execution without coupling their
+application to a charting service.
 
-## Non-Goals
+> [!NOTE]
+> This project is not affiliated with, endorsed by, or sponsored by
+> TradingView. It implements a tested compatibility subset and does not claim
+> full Pine Script compatibility.
 
-- This is not affiliated with, endorsed by, or sponsored by TradingView.
-- This is not a copy of TradingView's compiler, runtime, services, data, UI, or
-  private APIs.
-- The first releases will not attempt full Pine Script compatibility.
-- Strategy backtesting, broad request families, advanced drawing systems,
-  host-delivered alert services, and full remote library registry behavior are
-  out of scope for the initial runtime.
+## Why Pine Compat Runtime?
 
-## Design Documents
+- **Bring your own data.** Run over CSV bars or in-memory OHLCV records. The
+  core does not fetch symbols, read host files, or make network requests.
+- **Embed it anywhere.** Use the Rust core, CLI, Python extension, or thin WASM
+  API without reimplementing Pine execution semantics in your host.
+- **Get useful output, not screenshots.** Results are versioned, JSON-ready
+  structures that a chart, notebook, API, or test suite can consume directly.
+- **Model time series correctly.** Historical references, persistent state,
+  stateful call sites, incremental append, and realtime forming-bar rollback
+  are runtime concepts rather than host-side approximations.
+- **Know what will run.** Unsupported features become source-spanned
+  diagnostics and compatibility reports instead of silent partial execution.
+- **Trust claims you can test.** The compatibility matrix is backed by
+  executable fixtures, cross-host parity checks, and a single release gate.
 
-- [Documentation Guide](docs/README.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Language Scope](docs/LANGUAGE_SCOPE.md)
-- [Execution Semantics](docs/EXECUTION_SEMANTICS.md)
-- [Semantic Model](docs/SEMANTIC_MODEL.md)
-- [Series Model](docs/SERIES_MODEL.md)
-- [Built-In Signatures](docs/BUILTIN_SIGNATURES.md)
-- [Conformance](docs/CONFORMANCE.md)
-- [Diagnostic Codes](docs/DIAGNOSTIC_CODES.md)
-- [Release Notes](docs/RELEASE_NOTES.md)
-- [Pure Internal Roadmap](docs/PURE_INTERNAL_ROADMAP.md)
-- [Pure Internal Map Design Gate](docs/PURE_INTERNAL_MAP_DESIGN.md)
-- [Pure Internal Matrix Design Gate](docs/PURE_INTERNAL_MATRIX_DESIGN.md)
-- [Pure Internal UDT Array Design Gate](docs/PURE_INTERNAL_UDT_ARRAY_DESIGN.md)
-- [Pure Internal Array Declaration Design Gate](docs/PURE_INTERNAL_ARRAY_DECLARATION_DESIGN.md)
-- [Pure Internal For-In Iteration Design Gate](docs/PURE_INTERNAL_FOR_IN_DESIGN.md)
-- [Phase I Execution Plan](docs/PHASE_I_EXECUTION_PLAN.md)
-- [Phase J Execution Plan](docs/PHASE_J_EXECUTION_PLAN.md)
-- [Phase J Libraries/User Types Audit](docs/PHASE_J_AUDIT.md)
-- [Phase K Execution Plan](docs/PHASE_K_EXECUTION_PLAN.md)
-- [Phase L Strategy Usability Execution Plan](docs/PHASE_L_EXECUTION_PLAN.md)
-- [Phase L Strategy Usability Audit](docs/PHASE_L_AUDIT.md)
-- [Phase M Strategy Exit Execution Plan](docs/PHASE_M_EXECUTION_PLAN.md)
-- [Phase M Strategy Exit Audit](docs/PHASE_M_AUDIT.md)
-- [Phase R Strategy Exit Bracket Execution Plan](docs/PHASE_R_EXECUTION_PLAN.md)
-- [Phase R Strategy Exit Bracket Audit](docs/PHASE_R_AUDIT.md)
-- [Phase S Strategy Exit Trailing Stop Execution Plan](docs/PHASE_S_EXECUTION_PLAN.md)
-- [Phase T WASM Request Provider Execution Plan](docs/PHASE_T_EXECUTION_PLAN.md)
-- [Phase T WASM Request Provider Audit](docs/PHASE_T_AUDIT.md)
-- [Phase F Request Platform Audit](docs/PHASE_F_AUDIT.md)
-- [Phase H Alert Audit](docs/PHASE_H_AUDIT.md)
-- [Next Language Expansion Playbook](docs/NEXT_LANGUAGE_EXPANSION_PLAYBOOK.md)
-- [Next Internal Capability Plan](docs/NEXT_INTERNAL_CAPABILITY_PLAN.md)
-- [Strategy Internal Gap Audit](docs/STRATEGY_INTERNAL_GAP_AUDIT.md)
-- [Strategy Internal Stage 8 Broker Expansion Plan](docs/STRATEGY_INTERNAL_STAGE8_BROKER_EXPANSION_PLAN.md)
-- [Task Breakdown](docs/TASK_BREAKDOWN.md)
-- [Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
-- [Compatibility, Legal, and Branding Boundaries](docs/COMPATIBILITY_AND_LEGAL.md)
+## Quick Start
 
-## Current Package Layout
+Version `0.2.0` ships ready-to-install Python wheels for CPython 3.10+ on
+glibc Linux x86-64 and Windows x86-64. See the
+[latest release](https://github.com/Ryan00956/pine-compat-runtime/releases/latest)
+for checksums and machine-readable release metadata.
 
-```text
-pine-compat-runtime/
-  crates/
-    pine-syntax/       lexer, parser, AST, source spans, diagnostics
-    pine-sema/         scope resolution, type and qualifier analysis
-    pine-ir/           HIR, MIR, and bytecode definitions
-    pine-runtime/      bar-by-bar VM, series store, state store, request data
-    pine-builtins/     ta, math, input, plot, color, time, request, alert
-    pine-cli/          command line runner and analyzer
-    pine-python/       PyO3 and maturin Python bindings
-    pine-wasm/         browser and host WASM bindings
-  tests/
-    fixtures/         runtime, sema, syntax, request, profile, realtime, etc.
-      conformance.tsv executable subset inventory
-    snapshots/        generated matrix snapshots
-  docs/
+Linux x86-64:
+
+```bash
+python -m pip install \
+  "https://github.com/Ryan00956/pine-compat-runtime/releases/download/v0.2.0/pine_compat_runtime-0.2.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
 ```
 
-## Current Baseline
+Windows x86-64:
 
-The current baseline is a fixture-backed Rust CLI and embeddable runtime that
-can parse, analyze, and execute a broad Pine-compatible indicator subset and a
-selected long-only strategy subset over CSV OHLCV data, then emit normalized
-JSON containing series, annotations, fills, diagnostics, and compatibility
-reports.
-
-The compatibility matrix and its referenced fixtures are the source of truth
-for support claims. Planning documents describe intended work but do not widen
-the executable subset. See the [Documentation Guide](docs/README.md) for the
-document hierarchy and the [Conformance](docs/CONFORMANCE.md) policy for the
-claim requirements.
-
-The project should not move into host-specific integration work until this
-standalone loop is reliable:
-
-```text
-source.pine + bars.csv
-  -> compile
-  -> analyze
-  -> run
-  -> result.json
+```powershell
+py -m pip install "https://github.com/Ryan00956/pine-compat-runtime/releases/download/v0.2.0/pine_compat_runtime-0.2.0-cp310-abi3-win_amd64.whl"
 ```
 
-The supported executable subset includes indicator scripts, historical
-bar-by-bar execution, constant and guarded dynamic integer history offsets,
-`if`/`else` blocks, `switch`, partial `for`/`while` loops, `var`, block-local
-declarations, `na`, `nz`, `input.*` defval execution, output calls, selected
-drawing objects, partial typed arrays, common `ta.*` functions, selected
-`math.*` and `str.*` functions, partial `request.security`, user-defined
-functions, fixture-backed local and imported scalar-tree user-defined types,
-pure local and imported UDT methods, named colors, color helpers, tuple returns,
-scalar and scalar typed-array `varip`, partial `alertcondition`/`alert` runtime
-events, host-provided exact-key imports for exported const expressions, pure
-exported functions, and the fixture-backed imported UDT/method subset,
-incremental append execution, realtime forming-bar rollback, partial
-strategy-mode long entries, closes, stop/limit/profit/loss exits, the first
-one-downside/one-upside `strategy.exit` bracket subset, the first trailing-stop
-`strategy.exit` subset, optional fixed-quantity and percent-quantity partial
-exits on those supported exit shapes, explicit fixed-quantity or
-percent-quantity single-trigger, bracket, and trailing multiple-exit
-reservations, the fixture-backed `strategy.order` market/limit/stop/stop-limit
-long add/increase subset and explicit-quantity reduce-only market-short subset,
-Python bindings, and a thin WASM binding.
-
-The runtime intentionally rejects unsupported features such as strategy order
-families beyond the current `strategy.entry`/`strategy.order`/
-`strategy.close`/`strategy.close_all`/`strategy.cancel`/
-`strategy.cancel_all`/`strategy.exit` subset, including `strategy.order`
-short exposure, reversals, short price-based orders, OCA, omitted short
-quantity, and broader price-based order families, same-side, 3+ trigger, or
-invalid trailing strategy exits, request
-variants outside the narrow `request.security` subset, multiple pending exits
-outside explicit fixed-quantity or percent-quantity single-trigger, bracket,
-and trailing `strategy.exit` reservations, including omitted-quantity multiple
-reservations, reservation behavior outside that subset, missing-entry future
-binding beyond the supported active-entry attachment subset, alert frequency
-values outside the fixture-backed const-string subset and placeholder
-interpolation outside the supported `alertcondition` message subset, remote
-library lookup, re-exports, imported UDT flows beyond the fixture-backed
-same-imported-identity scalar-tree subset, unsupported imported method tails,
-side-effecting exported library functions, advanced drawing
-families and methods, unsupported collection families and element types, recursive
-functions, function side effects, and unsupported `varip` value families such
-as drawing ids and tuples.
-Stateful calls inside `if` blocks advance their callsite state only when the
-branch executes; skipped bars commit `na` for series values that were not
-evaluated on that bar.
-
-## CLI
-
-Run a script against CSV bars:
-
-```text
-cargo run -p pine-cli -- run tests/fixtures/runtime/macd.pine --bars tests/fixtures/runtime/bars.csv
-```
-
-Library source text can be passed as Phase J graph input for the exact-key
-import subset:
-
-```text
-cargo run -p pine-cli -- run script.pine --bars bars.csv --library-source user/lib/1=lib.pine
-```
-
-Print the compatibility matrix:
-
-```text
-cargo run -p pine-cli -- matrix
-cargo run -p pine-cli -- matrix --format json
-```
-
-## Python Binding
-
-The Python module is exposed as `pine_compat` through PyO3 and maturin:
+Then run an indicator directly from Python:
 
 ```python
 import pine_compat
 
-program = pine_compat.compile_script('indicator("demo")\nplot(close)\n')
-result = program.run([
-    {"time": 0, "open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "volume": 1.0},
-])
+source = """//@version=6
+indicator("SMA demo")
+avg = ta.sma(close, 3)
+plot(avg, "SMA 3")
+"""
+
+bars = [
+    {"time": i, "open": close, "high": close, "low": close,
+     "close": close, "volume": 100.0}
+    for i, close in enumerate([10.0, 11.0, 12.0, 13.0])
+]
+
+result = pine_compat.run_script(source, bars)
+print(result["plots"][0]["values"])
+# [None, None, 11.0, 12.0]
 ```
 
-Python can also pass Phase J library source text:
+That same result can include chart annotations, drawing snapshots, alerts, and
+partial strategy broker output — all without requiring a chart UI.
+
+## What Works Today
+
+The current release focuses on a broad indicator runtime and a deliberately
+bounded strategy runtime.
+
+| Area | Current executable subset |
+| --- | --- |
+| Language | fixture-backed v1-v6 declarations, series and history, bounded v1/v2 declaration graphs, `var`/partial `varip`, functions, tuples, `if`, `switch`, partial `for`/`while`, strings, UDTs, and host-provided pure library imports |
+| Indicators | Common `ta.*`, selected `math.*`/`str.*`, inputs, plots, colors, alerts, drawing objects, tables, typed collections, fixture-backed `request.security`, and the documented executable Pine v1-v4 legacy-indicator subsets including `security` |
+| Execution | Deterministic historical runs, guarded history, input overrides, incremental append, and realtime forming-bar rollback |
+| Strategies | Partial long-only entries, orders, closes, cancellations, stop/limit/bracket/trailing exits, quantity reservations, positions, trades, and equity snapshots |
+| Outputs | Versioned plots, shapes, bars, candles, fills, labels, lines, line fills, polylines, boxes, tables, alerts, diagnostics, and strategy results |
+| Hosts | Rust workspace, `pine-compat` CLI, `pine_compat` Python module, and `wasm-bindgen` API |
+
+Legacy indicator compatibility is released by source version, not as one broad
+backwards-compatibility promise:
+
+| Source profile | Maturity | Current claim |
+| --- | --- | --- |
+| Pine v4 indicators | Preview | Direct execution for the conformance-listed declaration, input, alias, output, expression, session, and `security` subsets |
+| Pine v3 indicators | Preview | Direct execution for the conformance-listed pre-v4 declaration, input/output, alias, metadata, `na`, and same-context `security` subsets |
+| Pine v2 indicators | Experimental | Direct execution for the focused declaration graph, conversion, basic indicator, and historical-lookahead `security` subsets |
+| implicit Pine v1 indicators | Experimental | Direct execution for the focused v1/v2 shared `study`/input/average/plot subset |
+
+These labels reflect evidence breadth: the fixed original seed corpus contains
+only 12 v4, 7 v3, 2 v2, and 1 v1 eligible indicators. All currently pass, but
+none reaches the provisional 50-script stable-profile evidence gate. Legacy
+strategies are excluded from every profile.
+
+Support is intentionally feature-specific. Before adopting a script corpus,
+use the analyzer or the executable compatibility matrix rather than assuming
+language-wide compatibility:
+
+```bash
+cargo run -p pine-cli -- matrix
+cargo run -p pine-cli -- matrix --format json
+```
+
+The matrix in [`tests/fixtures/conformance.tsv`](tests/fixtures/conformance.tsv)
+and its referenced fixtures are the source of truth. See
+[Language Scope](docs/LANGUAGE_SCOPE.md) for the detailed boundary and
+[Conformance](docs/CONFORMANCE.md) for how claims are accepted.
+
+## Choose Your Integration
+
+| Surface | Best for | Entry point |
+| --- | --- | --- |
+| Python | notebooks, research services, data pipelines, application plugins | `pine_compat.run_script(...)` or compile once with `compile_script(...)` |
+| CLI | shell workflows, fixtures, compatibility checks, JSON generation | `pine-compat run`, `analyze`, `fmt-ast`, and `matrix` |
+| Rust | native applications and deeper runtime embedding | workspace crates under [`crates/`](crates) |
+| WASM | browser, Node.js, and sandboxed JavaScript hosts | `compileScript`, `analyzeScript`, `runScriptCsv`, and `Program.runCsv` |
+
+### Python
+
+Compile once and reuse a program across data sets or input configurations:
 
 ```python
-report = pine_compat.analyze_script(
-    'indicator("demo")\nplot(close)\n',
-    library_sources={"user/lib/1": 'library("lib")\n'},
+import pine_compat
+
+source = '''//@version=6
+indicator("Configurable SMA")
+length = input.int(20, "Length")
+plot(ta.sma(close, length))
+'''
+
+report = pine_compat.analyze_script(source)
+length_id = report["inputs"][0]["callSiteId"]
+program = pine_compat.compile_script(source)
+
+result = program.run(bars, input_overrides={length_id: 50})
+```
+
+Python can also inject deterministic requested bars and exact-key library
+sources:
+
+```python
+result = pine_compat.run_script(
+    source,
+    bars,
+    request_bars={"NYSE:IBM:5": requested_bars},
+    library_sources={"user/lib/1": library_source},
+    chart_symbol="NASDAQ:AAPL",
+    chart_timeframe="1",
 )
 ```
 
-Build locally in an active virtual environment with:
+Legacy indicators use their source version automatically; no host flag is
+needed. The same analysis schema reports the selected dialect and any
+translation/emulation evidence before execution:
 
-```text
-maturin develop --manifest-path crates/pine-python/Cargo.toml
-python -m pytest python/tests
+```python
+legacy = '''//@version=4
+study("Legacy SMA")
+length = input(20, "Length", input.integer)
+plot(sma(close, length))
+'''
+report = pine_compat.analyze_script(legacy)
+assert report["dialect"] == "v4" and report["executable"]
+result = pine_compat.run_script(legacy, bars)
 ```
 
-## WASM Binding
+The returned `executable` flag proves that this source is admitted by the
+implemented subset; it does not upgrade the whole v4 language profile beyond
+preview.
 
-The optional WASM crate exposes a thin `wasm-bindgen` API:
+### CLI
 
-- `compileScript(source)`
-- `compileScriptWithLibraries(source, librarySourcesJson)`
-- `analyzeScript(source)`
-- `analyzeScriptWithLibraries(source, librarySourcesJson)`
-- `runScriptCsv(source, barsCsv)`
-- `runScriptCsvWithRequestBars(source, barsCsv, requestBarsJson)`
-- `runScriptCsvWithLibraries(source, barsCsv, librarySourcesJson)`
-- `runScriptCsvWithLibrariesAndRequestBars(source, barsCsv, librarySourcesJson, requestBarsJson)`
-- `Program.runCsv(barsCsv)`
-- `Program.runCsvWithRequestBars(barsCsv, requestBarsJson)`
+Run a script against CSV OHLCV data and receive normalized JSON:
 
-The WASM library source argument is a deterministic JSON object mapping import
-keys to source text, for example `{"user/lib/1":"library(\"lib\")\n"}`.
-The request-bars argument is explicit host data injection, not network fetching
-or symbol discovery. It must be a JSON object keyed by `SYMBOL:TIMEFRAME`, with
-symbols split on the last colon so exchange-prefixed keys such as
-`NYSE:IBM:1` are valid:
-
-```json
-{
-  "NYSE:IBM:1": [
-    {"time": 0, "open": 10, "high": 11, "low": 9, "close": 30, "volume": 100}
-  ],
-  "NYSE:IBM:5": [
-    {"time": 300000, "open": 100, "high": 101, "low": 99, "close": 100, "volume": 500}
-  ]
-}
+```bash
+cargo run --release -p pine-cli -- run \
+  tests/fixtures/runtime/macd.pine \
+  --bars tests/fixtures/runtime/bars.csv
 ```
 
-Build it for `wasm32-unknown-unknown`, generate the JavaScript bindings, and
-exercise the real module through Node.js with:
+Analyze without executing, or inject host-owned request and library data:
 
-```text
+```bash
+cargo run -p pine-cli -- analyze script.pine
+cargo run -p pine-cli -- analyze script.pine --format json
+
+cargo run -p pine-cli -- run script.pine --bars bars.csv \
+  --chart-symbol NASDAQ:AAPL --chart-timeframe 1 \
+  --request-bars NYSE:IBM:5=ibm-5m.csv \
+  --library-source user/lib/1=lib.pine
+```
+
+### WASM
+
+The optional `pine-wasm` crate exposes thin, deterministic bindings for
+compile, analysis, CSV execution, request-bar injection, and library-source
+injection. Build and exercise the real generated JavaScript module with:
+
+```bash
 rustup target add wasm32-unknown-unknown
 scripts/check_wasm_node.sh
 ```
 
-## Development Verification
+See [Architecture](docs/ARCHITECTURE.md) for the host boundary and
+[Execution Semantics](docs/EXECUTION_SEMANTICS.md) for historical and realtime
+behavior.
 
-Run the release verification entry point before publishing changes:
+## Honest Compatibility
+
+`0.2.0` is a compatibility-focused second release, not a full drop-in
+implementation of every Pine feature. Important current boundaries include:
+
+- the strategy broker model is still a partial, primarily long-only subset;
+- `request.*` support is limited and all requested data must be supplied by the
+  host;
+- library resolution is exact-key and host-provided — there is no remote
+  registry lookup;
+- collection, drawing, alert, UDT, method, and import support is intentionally
+  limited to fixture-backed shapes;
+- Pine v4/v3 legacy-indicator profiles are previews and Pine v2/v1 profiles are
+  experimental because the authorized release corpus is small and has no
+  external reference-output oracle;
+- legacy strategies, lower-timeframe legacy `security`, and unsupported
+  whole-program `study(resolution=...)` execution remain out of scope;
+- unsupported syntax or semantics are rejected with diagnostics rather than
+  guessed.
+
+This explicit boundary is part of the product: hosts can inspect compatibility
+before execution and decide whether to run, transform, or reject a script.
+
+## Architecture
+
+The runtime is a Rust core with thin host adapters:
 
 ```text
+Pine source + host-provided data
+              │
+              ▼
+ lexer → parser → semantic analysis → HIR → bar-by-bar runtime
+              │                              │
+              ├─ diagnostics                 ├─ plots and drawings
+              └─ compatibility report        └─ alerts and strategy results
+                                             │
+                      Rust / CLI / Python / WASM
+```
+
+Core crates do not fetch network data, resolve remote libraries, or depend on a
+specific chart renderer. Hosts own data access and presentation; the runtime
+owns language semantics and normalized output.
+
+## Documentation
+
+- [Documentation Guide](docs/README.md) — where current contracts, roadmaps,
+  and historical plans live
+- [Language Scope](docs/LANGUAGE_SCOPE.md) — detailed supported and unsupported
+  language shapes
+- [Built-In Signatures](docs/BUILTIN_SIGNATURES.md) — accepted built-ins and
+  argument subsets
+- [Execution Semantics](docs/EXECUTION_SEMANTICS.md) — bar, history, state, and
+  broker behavior
+- [Diagnostic Codes](docs/DIAGNOSTIC_CODES.md) — stable diagnostic reference
+- [Release Notes](docs/RELEASE_NOTES.md) — changes in each release
+- [Releasing Binary Wheels](docs/RELEASING.md) — wheel matrix, checksums, and
+  application update contract
+- [Compatibility and Legal Boundaries](docs/COMPATIBILITY_AND_LEGAL.md) —
+  clean-room and branding policy
+
+## Build From Source
+
+The workspace requires Rust 1.95+. Python bindings require Python 3.10+ and
+`maturin`.
+
+```bash
+git clone https://github.com/Ryan00956/pine-compat-runtime.git
+cd pine-compat-runtime
+cargo build --workspace
+```
+
+Build the Python module in an active virtual environment:
+
+```bash
+python -m pip install "maturin>=1.13,<2.0" pytest
+maturin develop --manifest-path crates/pine-python/Cargo.toml
+python -m pytest python/tests
+```
+
+Before contributing or publishing, run the canonical release gate:
+
+```bash
 scripts/verify.sh
 ```
 
-This is the same canonical command list used by CI: Rust formatting, clippy,
-workspace tests, a real `wasm32-unknown-unknown` build and Node.js execution
-smoke, Python wheel build, wheel reinstall, and Python binding tests.
+It covers Rust formatting, clippy, workspace tests, source-structure and host
+parity checks, a real WASM/Node execution smoke, Python wheel build and
+reinstall, and Python binding tests. See [Releasing Binary Wheels](docs/RELEASING.md)
+for the supported release platforms and artifact contract.
 
-Prerequisites for the full gate:
+## License
 
-```text
-python3 -m pip install --upgrade pip maturin pytest
-rustup target add wasm32-unknown-unknown
-# Install Node.js 22 LTS (or newer) and ensure `node` is on PATH.
-```
-
-## Performance Profile Fixtures
-
-Run the deterministic runtime profile fixtures with:
-
-```text
-cargo test -p pine-runtime --test profile_fixtures
-```
-
-These tests use existing `RuntimeProfile` metrics rather than wall-clock timing.
-Hard failures cover severe growth in plot capacity, rolling-window storage,
-array storage, and `max_bars_back` history retention. Runtime speed remains an
-informational concern until a stable benchmark harness is added.
+[MIT](LICENSE). Pine Script is a trademark of its respective owner. This
+independent clean-room project is not affiliated with TradingView.

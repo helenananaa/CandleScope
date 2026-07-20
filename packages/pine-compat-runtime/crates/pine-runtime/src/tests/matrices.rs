@@ -1,4 +1,3 @@
-use pine_sema::analyze_source;
 use pine_syntax::SourceFile;
 
 use crate::builtins::matrices::MatrixElementKind;

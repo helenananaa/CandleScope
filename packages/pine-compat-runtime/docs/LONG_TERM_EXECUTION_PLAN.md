@@ -234,8 +234,8 @@ Closed coverage:
   `ta.bop` Balance of Power OHLC range oscillator,
   `ta.tsi` True Strength Index double-EMA momentum support,
   `ta.accdist`/`ta.iii`/`ta.nvi`/
-  `ta.obv`/`ta.pvi`/`ta.pvt`, partial `ta.vwap` variable/source/anchor/bands
-  support,
+  `ta.obv`/`ta.pvi`/`ta.pvt`, fixed-metadata `ta.vwap`
+  variable/source/anchor/bands support with UTC daily default anchoring,
   `ta.mfi` Money Flow Index support,
   `ta.pivot_point_levels` runtime-bar anchored pivot arrays,
   `ta.max`/`ta.min` all-time source extremes, `ta.tr` as a true range series
@@ -304,7 +304,9 @@ Closed coverage:
 
 Maintenance tails:
 
-- `ta.vwap` session-derived anchoring remains future work.
+- `ta.vwap` now closes the fixed-metadata UTC daily anchor contract; exchange
+  calendar/timezone session anchoring remains a host-metadata boundary rather
+  than unfinished interpreter state.
 - `color.*` named constants are a common registry, not an exhaustive claim.
 - Rust, CLI, Python, and WASM input override APIs expose call-site keyed scalar
   overrides.

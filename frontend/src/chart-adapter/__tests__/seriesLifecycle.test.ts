@@ -135,6 +135,27 @@ test("only volume-pane histograms use volume number formatting", () => {
   );
 });
 
+test("Pine histogram options preserve base, visibility, tracking, and precision", () => {
+  const options = buildIndicatorSeriesOptions({
+    type: "histogram",
+    pane: "separate",
+    base: -1,
+    visible: false,
+    trackPrice: true,
+    priceFormat: "price",
+    precision: 3,
+  });
+
+  assert.equal(options.base, -1);
+  assert.equal(options.visible, false);
+  assert.equal(options.priceLineVisible, true);
+  assert.deepEqual(options.priceFormat, {
+    type: "price",
+    precision: 3,
+    minMove: 0.001,
+  });
+});
+
 test("liquidation histograms use a symmetric zero scale and compact notional labels", () => {
   const options = buildIndicatorSeriesOptions({
     type: "histogram",

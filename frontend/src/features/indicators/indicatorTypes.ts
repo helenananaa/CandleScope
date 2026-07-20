@@ -68,7 +68,7 @@ interface IndicatorAnnotationPointFields {
   text?: string;
   position?: string;
   shape?: string;
-  size?: string;
+  size?: string | number;
   endTime?: number;
 }
 
@@ -94,6 +94,11 @@ export interface IndicatorLine {
   valueFormat?: "notional" | string;
   zIndex?: number;
   colorData?: IndicatorColorPoint[] | null;
+  base?: number;
+  trackPrice?: boolean;
+  visible?: boolean;
+  priceFormat?: string;
+  precision?: number;
 }
 
 export interface IndicatorMarker {
@@ -105,7 +110,7 @@ export interface IndicatorMarker {
   color?: string;
   text?: string;
   position?: string;
-  size?: string;
+  size?: string | number;
 }
 
 export interface IndicatorFill {
@@ -119,7 +124,14 @@ export interface IndicatorFill {
   type?: "betweenSeries" | string;
   seriesIds?: string[];
   localSeriesIds?: Array<string | null>;
-  style?: { color?: string; title?: string };
+  colorData?: IndicatorColorPoint[];
+  fillGaps?: boolean;
+  style?: {
+    color?: string;
+    title?: string;
+    colorData?: IndicatorColorPoint[];
+    fillGaps?: boolean;
+  };
   data?: IndicatorAnnotationPoint[];
 }
 
@@ -214,6 +226,11 @@ export interface IndicatorUnifiedSeries {
     lineWidth: number;
     lineStyle: number;
     colorData?: IndicatorColorPoint[];
+    base?: number;
+    trackPrice?: boolean;
+    visible?: boolean;
+    priceFormat?: string;
+    precision?: number;
   };
   scale?: string;
   zIndex?: number;

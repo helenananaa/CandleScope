@@ -16,6 +16,8 @@ impl<'a> HistoricalRuntime<'a> {
         let frame_width = self.eval_table_option_value(args, 5, "frame_width", PineValue::Na)?;
         let border_color = self.eval_table_option_value(args, 6, "border_color", PineValue::Na)?;
         let border_width = self.eval_table_option_value(args, 7, "border_width", PineValue::Na)?;
+        let _force_overlay =
+            self.eval_table_option_value(args, 8, "force_overlay", PineValue::Bool(false))?;
         if columns <= 0 || rows <= 0 {
             return Err(RuntimeError {
                 message: "table dimensions must be positive".to_owned(),

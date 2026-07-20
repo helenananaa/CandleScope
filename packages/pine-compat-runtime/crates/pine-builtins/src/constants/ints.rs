@@ -61,3 +61,7 @@ pub fn named_int_constant(name: &str) -> Option<i64> {
         .find(|constant| constant.name == name)
         .map(|constant| constant.value)
 }
+
+pub(crate) fn named_int_constant_names() -> impl Iterator<Item = &'static str> {
+    NAMED_INT_CONSTANTS.iter().map(|constant| constant.name)
+}

@@ -158,6 +158,11 @@ function normalizeIndicatorLines(lines: IndicatorLine[] = []): IndicatorLine[] {
       overlay: line.pane !== "separate" && line.pane !== "volume",
       pane: line.pane || "main",
       colorData: line.colorData || null,
+      ...(line.base !== undefined ? { base: line.base } : {}),
+      ...(line.trackPrice !== undefined ? { trackPrice: line.trackPrice } : {}),
+      ...(line.visible !== undefined ? { visible: line.visible } : {}),
+      ...(line.priceFormat !== undefined ? { priceFormat: line.priceFormat } : {}),
+      ...(line.precision !== undefined ? { precision: line.precision } : {}),
     };
   });
 }
@@ -180,6 +185,11 @@ function normalizeSeriesToLines(
       pane: item.pane || "main",
       overlay: item.pane !== "separate" && item.pane !== "volume",
       colorData: style.colorData || null,
+      ...(style.base !== undefined ? { base: style.base } : {}),
+      ...(style.trackPrice !== undefined ? { trackPrice: style.trackPrice } : {}),
+      ...(style.visible !== undefined ? { visible: style.visible } : {}),
+      ...(style.priceFormat !== undefined ? { priceFormat: style.priceFormat } : {}),
+      ...(style.precision !== undefined ? { precision: style.precision } : {}),
       data: item.data || [],
     };
   });
@@ -424,6 +434,10 @@ function auxiliaryData(item: IndicatorAuxiliaryItem): IndicatorAnnotationPoint[]
   return "data" in item && Array.isArray(item.data) ? item.data : undefined;
 }
 
+function auxiliaryColorData(item: IndicatorAuxiliaryItem): IndicatorColorPoint[] | undefined {
+  return "colorData" in item && Array.isArray(item.colorData) ? item.colorData : undefined;
+}
+
 export function mergeIndicatorItems<T extends IndicatorAuxiliaryItem>(
   existing: T[] = [],
   incoming: T[] = [],
@@ -449,11 +463,16 @@ export function mergeIndicatorItems<T extends IndicatorAuxiliaryItem>(
     }
     const currentData = auxiliaryData(current);
     const itemData = auxiliaryData(item);
+    const currentColorData = auxiliaryColorData(current);
+    const itemColorData = auxiliaryColorData(item);
     merged[existingIndex] = {
       ...current,
       ...item,
       ...(currentData || itemData
         ? { data: mergeTimeData(currentData || [], itemData || []) }
+        : {}),
+      ...(currentColorData || itemColorData
+        ? { colorData: mergeTimeData(currentColorData || [], itemColorData || []) }
         : {}),
     };
   });
@@ -470,8 +489,15 @@ export function replaceIndicatorItemsRange<T extends IndicatorAuxiliaryItem>(
 
   const merged = (existing || []).map((item) => {
     const data = auxiliaryData(item);
-    if (!data || !hasTimedData(data)) return item;
-    return { ...item, data: replaceTimeDataRange(data, [], range) };
+    const colorData = auxiliaryColorData(item);
+    if ((!data || !hasTimedData(data)) && (!colorData || !hasTimedData(colorData))) return item;
+    return {
+      ...item,
+      ...(data && hasTimedData(data) ? { data: replaceTimeDataRange(data, [], range) } : {}),
+      ...(colorData && hasTimedData(colorData)
+        ? { colorData: replaceTimeDataRange(colorData, [], range) }
+        : {}),
+    };
   });
   const indexByKey = new Map<string, number>();
   merged.forEach((item, index) => {
@@ -483,10 +509,14 @@ export function replaceIndicatorItemsRange<T extends IndicatorAuxiliaryItem>(
     const existingIndex = indexByKey.get(key);
     if (existingIndex == null) {
       const itemData = auxiliaryData(item);
+      const itemColorData = auxiliaryColorData(item);
       merged.push({
         ...item,
         ...(itemData && hasTimedData(itemData)
           ? { data: replaceTimeDataRange([], itemData, range) }
+          : {}),
+        ...(itemColorData && hasTimedData(itemColorData)
+          ? { colorData: replaceTimeDataRange([], itemColorData, range) }
           : {}),
       });
       indexByKey.set(key, merged.length - 1);
@@ -500,12 +530,24 @@ export function replaceIndicatorItemsRange<T extends IndicatorAuxiliaryItem>(
     }
     const currentData = auxiliaryData(current);
     const itemData = auxiliaryData(item);
+    const currentColorData = auxiliaryColorData(current);
+    const itemColorData = auxiliaryColorData(item);
     const timed = hasTimedData(currentData || []) || hasTimedData(itemData || []);
+    const timedColors = hasTimedData(currentColorData || []) || hasTimedData(itemColorData || []);
     merged[existingIndex] = {
       ...current,
       ...item,
       ...(timed
         ? { data: replaceTimeDataRange(currentData || [], itemData || [], range) }
+        : {}),
+      ...(timedColors
+        ? {
+            colorData: replaceTimeDataRange(
+              currentColorData || [],
+              itemColorData || [],
+              range,
+            ),
+          }
         : {}),
     };
   });
@@ -533,6 +575,8 @@ function normalizeIndicatorFills(
       const plot1Id = fill.localSeriesIds[0];
       const plot2Id = fill.localSeriesIds[1];
       const color = fill.style?.color || fill.color;
+      const colorData = fill.style?.colorData || fill.colorData;
+      const fillGaps = fill.style?.fillGaps ?? fill.fillGaps;
       if (plot1Id !== null && plot1Id !== undefined) {
         normalized.plot1_id = plot1Id;
       }
@@ -540,6 +584,8 @@ function normalizeIndicatorFills(
         normalized.plot2_id = plot2Id;
       }
       if (color !== undefined) normalized.color = color;
+      if (colorData !== undefined) normalized.colorData = colorData;
+      if (fillGaps !== undefined) normalized.fillGaps = fillGaps;
       if (fill.pane !== undefined) normalized.pane = fill.pane;
       return normalized;
     }

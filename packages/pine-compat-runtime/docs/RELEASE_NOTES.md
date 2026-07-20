@@ -2,6 +2,158 @@
 
 ## Unreleased
 
+## 0.2.0 - 2026-07-20
+
+- Hardened the legacy front-end after the release-candidate audit. Legacy
+  dialects now reject qualified APIs introduced by later Pine versions,
+  admission distinguishes a real built-in `study(...)` declaration from a
+  shadowing user function, pre-v3 ordinary built-ins reject keyword arguments
+  while historical annotation calls retain them, internal input-type markers
+  cannot be forged or used outside the `input(type=...)` selector, and positive
+  constant-expression history offsets participate correctly in the v1/v2
+  declaration graph. Pine v5 `table.new(..., force_overlay=...)` is also
+  accepted, while Pine v4 rejects both named and positional uses at analysis
+  time; public-output propagation and pane routing remain unsupported.
+- Corrected two state/time alignment bugs. Omitted-anchor `ta.vwap(source)`
+  tracks its default UTC-day bucket per callsite, so a conditionally executed
+  call starts or resets on its first execution in that bucket. Higher-timeframe
+  request alignment now uses calendar-month closes instead of fixed 30-day
+  durations, preventing `lookahead_off` from exposing 31-day monthly values
+  early or delaying 28/29-day values.
+- Closed input-override inconsistencies across CLI, Python, and WASM. Generic
+  `input()` values are parsed from their analyzed value kind instead of text
+  heuristics, normalized duplicate callsite ids fail consistently, and the
+  complete public numeric color representation—including bit-32 low-RGBA
+  encodings—can be passed back through `input.color` with range validation.
+
+- Closed the current pure-internal `ta.*` indicator surface by completing the
+  remaining `ta.vwap` row. Variable and omitted-anchor call forms now reset on
+  the runtime's UTC `1D` boundary, explicit anchors return `na` until their
+  first true value and reset before the current bar, bands accept series
+  numeric multipliers, and historical, incremental/request-context, and
+  realtime rollback evidence share the same callsite state model. Exchange
+  calendar/session metadata remains a host boundary rather than an implicit
+  runtime dependency.
+- Fixed interpreter-to-host rendering data loss discovered during CandleScope
+  integration. Explicit low-valued RGBA colors now retain their alpha channel
+  internally and across host boundaries through the versioned bit-32 alpha
+  discriminator; runtime schema 8 now advertises `renderMetadataVersion: 1`, completes plot and fill metadata,
+  and keeps the established `linewidth`/`style` field names across CLI,
+  Python, and WASM. Analysis reports are now schema 5 and expose compile-time
+  input defaults, numeric constraints, steps, and options; Python also exports
+  all three schema-version constants.
+- Closed the legacy-indicator stabilization audit with explicit release
+  maturity: Pine v4/v3 indicators are preview profiles, while Pine v2 and
+  implicit-v1 indicators are experimental. A sorted 15-row release registry
+  covers every legacy runtime fixture plus v2/v3/v4 MTF evidence across batch,
+  incremental, realtime historical handoff, forming rollback, confirmation,
+  provider alignment, and bounded runtime storage. The v2 historical
+  lookahead profile deliberately verifies no realtime future-data leakage
+  instead of asserting false batch/realtime equality.
+- Re-ran the fixed original 29-item legacy corpus twice with byte-identical
+  output: all 22 eligible indicators parse, analyze/lower, and run
+  historically, with no crash, unknown diagnostic, or scope mismatch. The
+  per-version counts of 12/7/2/1 remain below the provisional 50-script stable
+  evidence gate, and no reference-output oracle is supplied, so this result is
+  not advertised as full backwards compatibility.
+- Added a reusable legacy release profiler, deterministic retained-value
+  ceilings, explicit dialect/cache isolation tests, and an independent 4096
+  declaration-edge adversarial test. All 16 emitted legacy diagnostic codes
+  remain documented, public analysis/runtime/matrix schemas remain 5/8/2, and
+  all committed legacy corpus/release sources are marked original.
+- Closed legacy host integration with CLI-owned shared goldens across Python
+  and WASM. Required runtime parity now includes implicit v1 and v4 input
+  defaults; five complete analysis snapshots cover v1-v4 and a v2 graph error.
+  The expanded guard rejects missing registry/manifest/host assertions, while
+  focused CLI, Python, and WASM tests preserve v4 input overrides and legacy
+  request errors. Source versions remain automatic; no optional policy switch
+  or unsafe migration preview was added.
+- Added the executable Pine v1/v2 indicator slice, including implicit-v1
+  selection, historical `study`/focused `input`/`plot` admission, `sma`/`ema`,
+  a bounded scalar declaration graph for self-history and safe forward
+  references, v1/v2 bool arithmetic conversion, and v1-v5 numeric condition
+  conversion. Removed conversions lower to explicit canonical calls, unsafe or
+  cyclic graphs fail with focused diagnostics, paired v2/v6 fixtures are exact
+  across batch/incremental/realtime and CLI/Python/WASM, and all 22 eligible
+  indicators in the unchanged seed corpus now analyze, lower, and execute.
+- Added the executable Pine v3 indicator slice. Historical `study`, `input`,
+  `plot`, and `hline` signatures now bind by dialect; pre-v4 colors, the old
+  `color(...)` helper, input types, plot/hline styles, weekdays, chart metadata,
+  `interval`, `ticker`, `tickerid`, and `n` lower to canonical HIR with lexical
+  precedence and v4-v6 isolation. Fixture-backed untyped-`na` declarations
+  infer one stable scalar type from a later assignment or fail with
+  `E_LEGACY_V3_NA_INFERENCE`. Chart metadata follows the supplied symbol and
+  minute/second/day/week/month timeframe, and paired Rust, CLI, Python, and
+  WASM evidence makes all seven original v3 corpus indicators executable.
+- Added executable legacy `security` compatibility through the host-neutral
+  request provider. Pine v1/v2 and v3/v4 signatures now bind with their
+  historical default lookahead policies, verified bool/`barmerge` gaps and
+  lookahead modes, isolated requested-context state, separate historical and
+  realtime alignment, one repaint warning per lookahead-on callsite, and
+  original source spans in provider failures. CLI, Python, and WASM can all
+  supply chart identity plus requested streams; modern `request.security`
+  remains restricted to its existing default merge surface, and
+  `study(resolution=...)` remains precisely unsupported pending a whole-program
+  execution coordinator.
+- Added result-faithful Pine v4 expression/default compatibility. Historical
+  `iff` now evaluates condition/result1/result2 once in parameter order,
+  `offset` lowers to native guarded history, and `rsi(x, y)` selects the length
+  or removed two-series formula overload by analyzed type. Versioned session
+  parsing preserves the v4 weekday default without rewriting input strings,
+  v1-v5 logical operands remain strict while v6 remains lazy, and the exact v4
+  aliases `change`, `highest`, `lowest`, `max`, and `min` complete the affected
+  original fixtures. Historical, incremental, realtime, CLI, Python, and WASM
+  tests share the same compatibility report and output evidence.
+- Added faithful Pine v4 output compatibility for `plot`, marker/arrow outputs,
+  OHLC bars/candles, `hline`, both `fill` overloads, `bgcolor`, and `barcolor`.
+  Historical signatures now preserve primitive styles, output-specific
+  transparency defaults, clamping, `na`, embedded-alpha precedence, offsets,
+  visibility metadata, and realtime/incremental alignment without weakening
+  v5/v6 rules. Public runtime output is now `schemaVersion: 8`, exposing the
+  normalized visual series and metadata consistently across CLI, Python, and
+  WASM.
+- Added executable Pine v4 input compatibility. Historical `input()` overloads
+  and all eleven documented `input.*` type constants now lower to canonical
+  specialized input calls with original-span translations, stable callsite ids,
+  canonical metadata and host overrides, strict ambiguous-overload diagnostics,
+  local const aliases, modern negative controls, paired HIR/runtime fixtures,
+  and the parameter-scoped v4 integer float-metadata exception.
+- Added the first executable Pine v4 indicator slice. `study(...)` now binds
+  against its historical signature and lowers to canonical `indicator` HIR for
+  the verified single-timeframe metadata subset; `resolution`,
+  `resolution_gaps`, `explicit_plot_zorder`, and legacy session defaults fail
+  closed. The v4-only `sma`, `ema`, `bb`, `crossover`, and `abs` aliases lower
+  to existing canonical implementations with original-span reports, collision
+  precedence, modern negative controls, paired HIR/runtime fixtures, and
+  synchronized CLI, Python, WASM, and conformance coverage.
+- Added the versioned legacy compatibility front-end: validated sorted rule
+  catalogs, scoped fallback after user declarations, original-span translation
+  records, canonical-only HIR lowering, focused unsupported-known routing,
+  deterministic legacy report ordering/deduplication, and a translator revision
+  in semantic compile-cache keys. Phase 2 uses synthetic exact aliases for
+  framework tests and does not yet enable production aliases or `study()`
+  execution.
+- Established the legacy-indicator version and mode admission boundary. Pine
+  v1-v6 are represented by a closed dialect model, a missing directive selects
+  implicit v1, invalid/duplicate/misplaced directives and root/library version
+  conflicts stop before ordinary semantic analysis, and v1-v4 strategy scripts
+  now receive one stable out-of-scope diagnostic without entering broker
+  analysis.
+- Bumped public analysis reports to `schemaVersion: 4` across CLI JSON, Python,
+  and WASM. Reports now expose `languageVersionOrigin`, `dialect`, `scriptMode`,
+  `legacyTranslations`, and `legacyEmulations`; CLI `analyze` accepts
+  `--format text|json`.
+- Assigned explicit v5 directives to modern fixtures that previously depended
+  on a missing-version default. The dedicated no-directive fixture remains an
+  implicit-v1 control, while v5/v6 indicator and strategy paths retain their
+  existing behavior.
+
+## 0.1.0 - 2026-07-18
+
+- Added a GitHub Actions binary-wheel pipeline for glibc Linux x86-64 and
+  Windows x86-64, including installed-wheel tests, deterministic release
+  metadata, SHA-256 checksums, and tag-to-package version validation.
+
 - Aligned UDT `array.sort` and `array.sort_indices` runtime validation with the
   collection contract: an array element that is itself `na` now raises a stable
   runtime error, while concrete UDT elements whose selected sortable field is

@@ -53,6 +53,19 @@ function markerShape(value: string | undefined): SeriesMarkerShape {
     : "circle";
 }
 
+function markerSize(value: string | number | undefined): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
+  if (typeof value !== "string") return undefined;
+  return {
+    tiny: 1,
+    small: 2,
+    normal: 3,
+    large: 4,
+    huge: 5,
+    auto: 2,
+  }[value.toLowerCase().replace(/^size\./, "")];
+}
+
 export function flattenIndicatorMarkers(
   indicatorMarkers: IndicatorMarkerGroup[] = [],
 ): SeriesMarker<ChartTime>[] {
@@ -61,13 +74,30 @@ export function flattenIndicatorMarkers(
     if (!group.data || !Array.isArray(group.data)) continue;
     for (const m of group.data) {
       if (m.time == null) continue;
-      allMarkers.push({
+      const size = markerSize(m.size ?? group.size);
+      const common = {
         time: m.time,
-        position: markerPosition(m.position),
-        color: m.color || "#f59e0b",
-        shape: markerShape(m.shape),
-        text: m.text || "",
-      });
+        color: m.color || group.color || "#f59e0b",
+        shape: markerShape(m.shape || group.shape),
+        text: m.text || group.text || "",
+        ...(size !== undefined ? { size } : {}),
+      };
+      if (
+        String(m.position || group.position || "").toLowerCase() === "atprice"
+        && typeof m.value === "number"
+        && Number.isFinite(m.value)
+      ) {
+        allMarkers.push({
+          ...common,
+          position: "atPriceMiddle",
+          price: m.value,
+        } as SeriesMarker<ChartTime>);
+      } else {
+        allMarkers.push({
+          ...common,
+          position: markerPosition(m.position || group.position),
+        });
+      }
     }
   }
   allMarkers.sort((a, b) => compareChartTimes(a.time, b.time));

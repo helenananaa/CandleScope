@@ -22,8 +22,9 @@ from app.core import config
 from .base import PINE_COMPAT_RUNTIME_ID, ScriptRuntimeDescriptor, ScriptRuntimeResult
 
 
-PINE_ANALYSIS_SCHEMA_VERSION = 3
-PINE_RUNTIME_SCHEMA_VERSION = 7
+PINE_ANALYSIS_SCHEMA_VERSION = 5
+PINE_RUNTIME_SCHEMA_VERSION = 8
+PINE_RENDER_METADATA_VERSION = 1
 _PACKAGE_NAME = "pine-compat-runtime"
 _MODULE_NAME = "pine_compat"
 _VENDOR_ROOT = Path(__file__).resolve().parents[4] / "packages" / "pine-compat-runtime"
@@ -54,8 +55,10 @@ _HOST_BLOCKED_PREFIXES = (
     "import",
     "library",
 )
-_HOST_BLOCKED_EXACT = {"plotbar", "plotcandle"}
+_HOST_BLOCKED_EXACT = {"plotbar", "plotcandle", "plotchar", "plotarrow"}
 _UNMAPPABLE_OUTPUT_KEYS = (
+    "plotChars",
+    "plotArrows",
     "plotBars",
     "plotCandles",
     "labels",
@@ -214,6 +217,7 @@ def _normalize_bars(
     runtime_bars: list[dict[str, Any]] = []
     host_times: list[int] = []
     previous_runtime_time: int | None = None
+    previous_host_time: int | None = None
     for index, bar in enumerate(ohlcv):
         if not isinstance(bar, dict):
             return _failure("PINE_INVALID_INPUT", f"OHLCV bar {index} must be an object")
@@ -225,14 +229,22 @@ def _normalize_bars(
             if not math.isfinite(numeric_time) or not numeric_time.is_integer():
                 raise ValueError("non-integral time")
             timestamp = int(numeric_time)
-            if abs(timestamp) < 100_000_000_000:
+            if timestamp <= 0:
+                raise ValueError("non-positive time")
+            if timestamp < 100_000_000_000:
                 host_time = timestamp
                 runtime_time = timestamp * 1000
             else:
+                if timestamp >= 10_000_000_000_000:
+                    raise ValueError("unsupported timestamp unit; expected seconds or milliseconds")
+                if timestamp % 1000 != 0:
+                    raise ValueError("sub-second timestamps are not supported")
                 runtime_time = timestamp
                 host_time = timestamp // 1000
             values = {}
             for name in ("open", "high", "low", "close", "volume"):
+                if isinstance(bar[name], bool):
+                    raise TypeError(f"boolean {name}")
                 value = float(bar[name])
                 if not math.isfinite(value):
                     raise ValueError(f"non-finite {name}")
@@ -248,17 +260,40 @@ def _normalize_bars(
                 "PINE_INVALID_INPUT",
                 f"OHLCV bar times must be strictly increasing ({relation} time at index {index})",
             )
+        if previous_host_time is not None and host_time <= previous_host_time:
+            return _failure(
+                "PINE_INVALID_INPUT",
+                (
+                    "OHLCV timestamps collapse to duplicate CandleScope seconds "
+                    f"at index {index}; sub-second bars are not supported"
+                ),
+            )
+        if values["high"] < max(values["open"], values["low"], values["close"]):
+            return _failure("PINE_INVALID_INPUT", f"OHLCV bar {index} has an invalid high")
+        if values["low"] > min(values["open"], values["high"], values["close"]):
+            return _failure("PINE_INVALID_INPUT", f"OHLCV bar {index} has an invalid low")
+        if values["volume"] < 0:
+            return _failure("PINE_INVALID_INPUT", f"OHLCV bar {index} has negative volume")
         previous_runtime_time = runtime_time
+        previous_host_time = host_time
         runtime_bars.append({"time": runtime_time, **values})
         host_times.append(host_time)
     return runtime_bars, host_times
 
 
-def _normalize_overrides(params: dict[str, Any] | None) -> dict[int, Any] | ScriptRuntimeResult:
+def _normalize_overrides(
+    params: dict[str, Any] | None,
+    analysis: dict[str, Any],
+) -> dict[int, Any] | ScriptRuntimeResult:
     if params is None:
         return {}
     if not isinstance(params, dict):
         return _failure("PINE_INVALID_PARAMS", "Pine params must be an object")
+    inputs = {
+        int(item["callSiteId"]): item
+        for item in analysis.get("inputs") or []
+        if isinstance(item, dict) and isinstance(item.get("callSiteId"), int)
+    }
     overrides: dict[int, Any] = {}
     for raw_key, value in params.items():
         if isinstance(raw_key, bool):
@@ -275,6 +310,11 @@ def _normalize_overrides(params: dict[str, Any] | None) -> dict[int, Any] | Scri
                 "PINE_INVALID_PARAMS",
                 f"Pine parameter key {raw_key!r} is not a canonical input callSiteId",
             )
+        if key not in inputs:
+            return _failure(
+                "PINE_INVALID_PARAMS",
+                f"Pine parameter {key} does not match an input in this script",
+            )
         if isinstance(value, float) and not math.isfinite(value):
             return _failure("PINE_INVALID_PARAMS", f"Pine parameter {key} must be finite")
         if not isinstance(value, (str, int, float, bool)):
@@ -282,6 +322,54 @@ def _normalize_overrides(params: dict[str, Any] | None) -> dict[int, Any] | Scri
                 "PINE_INVALID_PARAMS",
                 f"Pine parameter {key} must be a string, number, or boolean",
             )
+        input_spec = inputs[key]
+        input_name = str(input_spec.get("name") or "input")
+        if input_name in {"input.int", "input.time"} and (
+            isinstance(value, bool) or not isinstance(value, int)
+        ):
+            return _failure("PINE_INVALID_PARAMS", f"Pine parameter {key} must be an integer")
+        if input_name in {"input.float", "input.price"} and (
+            isinstance(value, bool) or not isinstance(value, (int, float))
+        ):
+            return _failure("PINE_INVALID_PARAMS", f"Pine parameter {key} must be numeric")
+        if input_name == "input.bool" and not isinstance(value, bool):
+            return _failure("PINE_INVALID_PARAMS", f"Pine parameter {key} must be boolean")
+        if input_name == "input.color" and (
+            isinstance(value, bool) or not isinstance(value, (int, str))
+        ):
+            return _failure(
+                "PINE_INVALID_PARAMS",
+                f"Pine parameter {key} must be a color integer or string",
+            )
+        if input_name == "input.color" and isinstance(value, int) and not 0 <= value <= 0xFFFFFFFF:
+            return _failure(
+                "PINE_INVALID_PARAMS",
+                f"Pine parameter {key} color integer must fit in u32",
+            )
+        if input_name == "input.source":
+            return _failure(
+                "PINE_INVALID_PARAMS",
+                f"Pine parameter {key} cannot override input.source in this host",
+            )
+        if input_name in {
+            "input.string",
+            "input.symbol",
+            "input.timeframe",
+            "input.session",
+            "input.text_area",
+            "input.source",
+        } and not isinstance(value, str):
+            return _failure("PINE_INVALID_PARAMS", f"Pine parameter {key} must be a string")
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            minimum = input_spec.get("min")
+            maximum = input_spec.get("max")
+            if isinstance(minimum, (int, float)) and value < minimum:
+                return _failure("PINE_INVALID_PARAMS", f"Pine parameter {key} is below its minimum")
+            if isinstance(maximum, (int, float)) and value > maximum:
+                return _failure("PINE_INVALID_PARAMS", f"Pine parameter {key} is above its maximum")
+        options = input_spec.get("options")
+        if isinstance(options, list) and options and value not in options:
+            return _failure("PINE_INVALID_PARAMS", f"Pine parameter {key} is not one of its options")
         overrides[key] = value
     return overrides
 
@@ -303,13 +391,14 @@ def _css_color(value: Any, fallback: str) -> str:
         return value
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         return fallback
-    value &= 0xFFFFFFFF
-    if value <= 0xFFFFFF:
-        return f"#{value:06x}"
-    red = (value >> 24) & 0xFF
-    green = (value >> 16) & 0xFF
-    blue = (value >> 8) & 0xFF
-    alpha = (value & 0xFF) / 255
+    has_alpha_flag = bool(value & (1 << 32))
+    payload = value & 0xFFFFFFFF
+    if not has_alpha_flag and payload <= 0xFFFFFF:
+        return f"#{payload:06x}"
+    red = (payload >> 24) & 0xFF
+    green = (payload >> 16) & 0xFF
+    blue = (payload >> 8) & 0xFF
+    alpha = (payload & 0xFF) / 255
     return f"rgba({red},{green},{blue},{alpha:.3f})"
 
 
@@ -325,13 +414,100 @@ def _is_active(value: Any) -> bool:
     return bool(value)
 
 
-def _marker_position(value: Any) -> str:
+def _marker_position(value: Any) -> str | None:
     normalized = str(value or "abovebar").lower().removeprefix("location.")
     if normalized in {"belowbar", "bottom"}:
         return "below"
     if normalized in {"abovebar", "top"}:
         return "above"
-    return "inBar"
+    return None
+
+
+_PANE_DISPLAYS = {"display.all", "display.pane"}
+_HIDDEN_DISPLAYS = {"display.none"}
+_UNSUPPORTED_DISPLAYS = {
+    "display.data_window",
+    "display.price_scale",
+    "display.status_line",
+}
+
+
+def _render_settings(
+    item: dict[str, Any],
+    *,
+    base_pane: str,
+    fallback_title: str,
+) -> dict[str, Any] | ScriptRuntimeResult:
+    raw_offset = item.get("offset", 0)
+    raw_show_last = item.get("showLast")
+    if isinstance(raw_offset, bool) or not isinstance(raw_offset, int):
+        return _failure("PINE_RUNTIME_OUTPUT_INVALID", f"{fallback_title} has an invalid offset")
+    if raw_show_last is not None and (
+        isinstance(raw_show_last, bool) or not isinstance(raw_show_last, int) or raw_show_last < 0
+    ):
+        return _failure("PINE_RUNTIME_OUTPUT_INVALID", f"{fallback_title} has an invalid show_last")
+    display = str(item.get("display") or "display.all").lower()
+    if display in _UNSUPPORTED_DISPLAYS:
+        return _failure(
+            "PINE_HOST_DISPLAY_UNSUPPORTED",
+            f"CandleScope cannot faithfully host Pine display mode {display!r}",
+        )
+    if display not in _PANE_DISPLAYS | _HIDDEN_DISPLAYS:
+        return _failure(
+            "PINE_HOST_DISPLAY_UNSUPPORTED",
+            f"CandleScope cannot map Pine display mode {display!r}",
+        )
+    force_overlay = item.get("forceOverlay", False)
+    if not isinstance(force_overlay, bool):
+        return _failure(
+            "PINE_RUNTIME_OUTPUT_INVALID",
+            f"{fallback_title} has an invalid force_overlay value",
+        )
+    title = item.get("title")
+    if title is None or title == "":
+        title = fallback_title
+    elif not isinstance(title, str):
+        return _failure("PINE_RUNTIME_OUTPUT_INVALID", f"{fallback_title} has an invalid title")
+    return {
+        "offset": raw_offset,
+        "showLast": raw_show_last,
+        "paneVisible": display in _PANE_DISPLAYS,
+        "pane": "main" if force_overlay else base_pane,
+        "title": title,
+    }
+
+
+def _visible_source_index(index: int, total: int, show_last: int | None) -> bool:
+    return show_last is None or index >= max(total - show_last, 0)
+
+
+def _target_time(host_times: list[int], index: int, offset: int) -> int | None:
+    target = index + offset
+    return host_times[target] if 0 <= target < len(host_times) else None
+
+
+def _pine_line_style(value: Any) -> int | ScriptRuntimeResult:
+    normalized = str(value or "hline.style_solid").lower()
+    styles = {
+        "hline.style_solid": 0,
+        "hline.style_dotted": 1,
+        "hline.style_dashed": 2,
+    }
+    if normalized not in styles:
+        return _failure("PINE_HOST_RENDER_STYLE_UNSUPPORTED", f"Unsupported hline style: {normalized}")
+    return styles[normalized]
+
+
+def _marker_size(value: Any) -> int | None:
+    normalized = str(value or "size.auto").lower().removeprefix("size.")
+    return {
+        "tiny": 1,
+        "small": 2,
+        "normal": 3,
+        "large": 4,
+        "huge": 5,
+        "auto": 2,
+    }.get(normalized)
 
 
 def _input_type(name: str) -> str:
@@ -368,8 +544,19 @@ def _param_schema(analysis: dict[str, Any], overrides: dict[int, Any]) -> list[d
             "label": title,
             "pineInput": name,
         }
+        for source_key, target_key in (
+            ("default", "default"),
+            ("min", "min"),
+            ("max", "max"),
+            ("step", "step"),
+            ("options", "options"),
+        ):
+            if raw.get(source_key) is not None:
+                item[target_key] = raw[source_key]
         if call_site_id in overrides:
             item["current"] = overrides[call_site_id]
+        elif raw.get("default") is not None:
+            item["current"] = raw["default"]
         schema.append(item)
     return schema
 
@@ -391,12 +578,13 @@ def _normalize_output(
             "pine_compat runtime schema is incompatible with this CandleScope adapter",
             hint=f"Expected runtime schema {PINE_RUNTIME_SCHEMA_VERSION}; received {raw.get('schemaVersion')!r}.",
         )
+    native_render_metadata = raw.get("renderMetadataVersion") == PINE_RENDER_METADATA_VERSION
     unsupported_outputs = [key for key in _UNMAPPABLE_OUTPUT_KEYS if raw.get(key)]
     if unsupported_outputs:
         return _failure(
             "PINE_HOST_OUTPUT_UNSUPPORTED",
             f"CandleScope Pine v1 cannot render output collections: {', '.join(unsupported_outputs)}",
-            hint="请暂时改用 plot/plotshape/plotchar/plotarrow、hline、fill、bgcolor、barcolor 或 alert。",
+            hint="请暂时改用 plot、受支持样式的 plotshape、hline、fill、bgcolor、barcolor 或 alert。",
             meta={"unsupportedOutputCollections": unsupported_outputs},
         )
     runtime_diagnostics = [item for item in raw.get("diagnostics") or [] if isinstance(item, dict)]
@@ -419,33 +607,123 @@ def _normalize_output(
 
     for plot_index, plot in enumerate(raw.get("plots") or []):
         if not isinstance(plot, dict):
-            continue
+            return _failure("PINE_RUNTIME_OUTPUT_INVALID", "Pine plot output must be an object")
         plot_id = plot.get("id", plot_index)
-        color = _PALETTE[plot_index % len(_PALETTE)]
-        data = [
-            {"time": host_times[index], "value": value}
-            for index, value in enumerate(plot.get("values") or [])
-            if index < len(host_times)
-            and isinstance(value, (int, float))
-            and not isinstance(value, bool)
-            and math.isfinite(float(value))
-        ]
-        lines.append({
+        settings = _render_settings(
+            plot,
+            base_pane=pane,
+            fallback_title=f"Plot {plot_id}",
+        )
+        if isinstance(settings, ScriptRuntimeResult):
+            return settings
+        style = str(plot.get("style") or "plot.style_line").lower()
+        if style == "plot.style_line":
+            series_type = "line"
+        elif style in {"plot.style_histogram", "plot.style_columns"}:
+            series_type = "histogram"
+        else:
+            return _failure(
+                "PINE_HOST_RENDER_STYLE_UNSUPPORTED",
+                f"CandleScope cannot faithfully render {style}",
+                hint="目前 plot 仅托管 plot.style_line、plot.style_histogram 和 plot.style_columns。",
+                meta={"plotId": plot_id, "plotStyle": style},
+            )
+        line_width = plot.get("lineWidth", 1)
+        if isinstance(line_width, bool) or not isinstance(line_width, int) or line_width <= 0:
+            return _failure("PINE_RUNTIME_OUTPUT_INVALID", f"Plot {plot_id} has an invalid linewidth")
+        hist_base = plot.get("histBase", 0)
+        if isinstance(hist_base, bool) or not isinstance(hist_base, (int, float)) or not math.isfinite(float(hist_base)):
+            return _failure("PINE_RUNTIME_OUTPUT_INVALID", f"Plot {plot_id} has an invalid histbase")
+        track_price = plot.get("trackPrice", False)
+        if not isinstance(track_price, bool):
+            return _failure("PINE_RUNTIME_OUTPUT_INVALID", f"Plot {plot_id} has invalid trackprice")
+        precision = plot.get("precision")
+        if precision is not None and (
+            isinstance(precision, bool) or not isinstance(precision, int) or precision < 0 or precision > 16
+        ):
+            return _failure("PINE_RUNTIME_OUTPUT_INVALID", f"Plot {plot_id} has invalid precision")
+        values = plot.get("values") or []
+        if not isinstance(values, list):
+            return _failure("PINE_RUNTIME_OUTPUT_INVALID", f"Plot {plot_id} values must be a list")
+        colors = plot.get("colors") or []
+        if not isinstance(colors, list):
+            return _failure("PINE_RUNTIME_OUTPUT_INVALID", f"Plot {plot_id} colors must be a list")
+        default_color = _PALETTE[plot_index % len(_PALETTE)]
+        has_default_color = False
+        data: list[dict[str, Any]] = []
+        color_data: list[dict[str, Any]] = []
+        for index, value in enumerate(values):
+            if index >= len(host_times) or not _visible_source_index(index, len(host_times), settings["showLast"]):
+                continue
+            target_time = _target_time(host_times, index, settings["offset"])
+            if target_time is None:
+                continue
+            if not (
+                isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                and math.isfinite(float(value))
+            ):
+                continue
+            point: dict[str, Any] = {"time": target_time, "value": value}
+            color_value = _value_at(colors, index)
+            if color_value is not None:
+                point_color = _css_color(color_value, default_color)
+                point["color"] = point_color
+                color_data.append({"time": target_time, "color": point_color})
+                if not has_default_color:
+                    default_color = point_color
+                    has_default_color = True
+            data.append(point)
+        line: dict[str, Any] = {
             "id": f"pine-plot-{plot_id}",
-            "title": f"Plot {plot_id}",
-            "type": "line",
-            "color": color,
-            "lineWidth": 2,
-            "pane": pane,
+            "title": settings["title"],
+            "type": series_type,
+            "color": default_color,
+            "lineWidth": line_width,
+            "pane": settings["pane"],
             "data": data,
-        })
+            "base": float(hist_base),
+            "trackPrice": track_price,
+            "visible": settings["paneVisible"],
+        }
+        if color_data:
+            line["colorData"] = color_data
+        pine_format = str(plot.get("format") or "format.inherit").lower().removeprefix("format.")
+        if pine_format not in {"inherit", "price", "volume", "percent"}:
+            return _failure("PINE_HOST_FORMAT_UNSUPPORTED", f"Unsupported Pine plot format: {pine_format}")
+        if pine_format != "inherit":
+            line["priceFormat"] = pine_format
+        if precision is not None:
+            line["precision"] = precision
+        lines.append(line)
 
-    def add_marker_series(item: dict[str, Any], kind: str, series_index: int) -> None:
+    def add_marker_series(
+        item: dict[str, Any],
+        kind: str,
+        series_index: int,
+    ) -> ScriptRuntimeResult | None:
+        marker_id = item.get("id", series_index)
+        settings = _render_settings(
+            item,
+            base_pane=pane,
+            fallback_title=f"{kind} {marker_id}",
+        )
+        if isinstance(settings, ScriptRuntimeResult):
+            return settings
+        if not settings["paneVisible"]:
+            return None
         values = item.get("values") or []
+        if not isinstance(values, list):
+            return _failure("PINE_RUNTIME_OUTPUT_INVALID", f"{kind} {marker_id} values must be a list")
         points: list[dict[str, Any]] = []
         default_color = _PALETTE[(len(lines) + series_index) % len(_PALETTE)]
         for index, value in enumerate(values):
-            location_value = _value_at(item.get("locations"), index) if kind == "plotshape" else None
+            if index >= len(host_times) or not _visible_source_index(index, len(host_times), settings["showLast"]):
+                continue
+            target_time = _target_time(host_times, index, settings["offset"])
+            if target_time is None:
+                continue
+            location_value = _value_at(item.get("locations"), index)
             absolute_location = str(location_value or "").lower().endswith("absolute")
             active = (
                 value is not None
@@ -453,35 +731,59 @@ def _normalize_output(
                 and not isinstance(value, bool)
                 and math.isfinite(float(value))
             ) if absolute_location else _is_active(value)
-            if index >= len(host_times) or not active:
+            if not active:
                 continue
-            if kind == "plotchar":
-                shape = "text"
-                text = str(_value_at(item.get("chars"), index) or "•")
-                position = "above"
-                color_value = _value_at(item.get("colors"), index)
-                size = "normal"
-            elif kind == "plotshape":
-                shape = str(_value_at(item.get("styles"), index) or "circle").removeprefix("shape.")
-                text = str(_value_at(item.get("texts"), index) or "")
-                position = _marker_position(location_value)
-                color_value = _value_at(item.get("colors"), index)
-                size = str(_value_at(item.get("sizes"), index) or "normal").removeprefix("size.")
-            else:
-                up = float(value) > 0 if isinstance(value, (int, float)) else True
-                shape = "arrowUp" if up else "arrowDown"
-                text = ""
-                position = "below" if up else "above"
-                color_value = _value_at(item.get("colorUps" if up else "colorDowns"), index)
-                size = "normal"
+            shape = str(_value_at(item.get("styles"), index) or "shape.xcross").lower().removeprefix("shape.")
+            shape_map = {
+                "circle": "circle",
+                "square": "square",
+                "triangleup": "arrowUp",
+                "triangledown": "arrowDown",
+                "arrowup": "arrowUp",
+                "arrowdown": "arrowDown",
+            }
+            if shape not in shape_map:
+                return _failure(
+                    "PINE_HOST_RENDER_STYLE_UNSUPPORTED",
+                    f"CandleScope cannot faithfully render plotshape style {shape!r}",
+                    hint="目前 plotshape 仅托管 circle、square、triangleup/down 和 arrowup/down。",
+                    meta={"markerId": marker_id, "markerStyle": shape},
+                )
+            text = str(_value_at(item.get("texts"), index) or "")
+            position = "atPrice" if absolute_location else _marker_position(location_value)
+            if position is None:
+                return _failure(
+                    "PINE_HOST_RENDER_STYLE_UNSUPPORTED",
+                    f"CandleScope cannot faithfully render plotshape location {location_value!r}",
+                    meta={"markerId": marker_id},
+                )
+            color_value = _value_at(item.get("colors"), index)
+            point_color = _css_color(color_value, default_color)
+            text_color_value = _value_at(item.get("textColors"), index)
+            if text and text_color_value is not None:
+                text_color = _css_color(text_color_value, point_color)
+                if text_color != point_color:
+                    return _failure(
+                        "PINE_HOST_RENDER_STYLE_UNSUPPORTED",
+                        "CandleScope markers cannot use a text color different from the shape color",
+                        meta={"markerId": marker_id},
+                    )
+            size_value = _value_at(item.get("sizes"), index)
+            size = _marker_size(size_value)
+            if size is None:
+                return _failure(
+                    "PINE_HOST_RENDER_STYLE_UNSUPPORTED",
+                    f"CandleScope cannot faithfully render plotshape size {size_value!r}",
+                    meta={"markerId": marker_id},
+                )
             point = {
-                "time": host_times[index],
-                "shape": shape,
-                "color": _css_color(color_value, default_color),
+                "time": target_time,
+                "shape": shape_map[shape],
+                "color": point_color,
                 "text": text,
                 "position": position,
                 "size": size,
-                "pane": pane,
+                "pane": settings["pane"],
             }
             if isinstance(value, (int, float)) and not isinstance(value, bool):
                 point["value"] = value
@@ -490,75 +792,187 @@ def _normalize_output(
             first = points[0]
             markers.append({
                 "id": f"pine-{kind}-{item.get('id', series_index)}",
-                "title": f"{kind} {item.get('id', series_index)}",
+                "title": settings["title"],
                 "shape": first["shape"],
                 "color": first["color"],
                 "text": first["text"],
                 "position": first["position"],
                 "size": first["size"],
-                "pane": pane,
+                "pane": settings["pane"],
                 "data": points,
             })
+        return None
 
-    for index, item in enumerate(raw.get("plotChars") or []):
-        if isinstance(item, dict):
-            add_marker_series(item, "plotchar", index)
     for index, item in enumerate(raw.get("plotShapes") or []):
-        if isinstance(item, dict):
-            add_marker_series(item, "plotshape", index)
-    for index, item in enumerate(raw.get("plotArrows") or []):
-        if isinstance(item, dict):
-            add_marker_series(item, "plotarrow", index)
+        if not isinstance(item, dict):
+            return _failure("PINE_RUNTIME_OUTPUT_INVALID", "Pine plotshape output must be an object")
+        marker_failure = add_marker_series(item, "plotshape", index)
+        if marker_failure:
+            return marker_failure
 
     for index, item in enumerate(raw.get("bgColors") or []):
         if not isinstance(item, dict):
+            return _failure("PINE_RUNTIME_OUTPUT_INVALID", "Pine bgcolor output must be an object")
+        color_id = item.get("id", index)
+        settings = _render_settings(item, base_pane=pane, fallback_title=f"Background {color_id}")
+        if isinstance(settings, ScriptRuntimeResult):
+            return settings
+        if not settings["paneVisible"]:
             continue
-        regions = [
-            {"time": host_times[i], "color": _css_color(value, "rgba(59,130,246,0.1)")}
-            for i, value in enumerate(item.get("values") or [])
-            if i < len(host_times) and value is not None
-        ]
+        values = item.get("values") or []
+        if not isinstance(values, list):
+            return _failure("PINE_RUNTIME_OUTPUT_INVALID", f"Background {color_id} values must be a list")
+        regions = []
+        for i, value in enumerate(values):
+            if i >= len(host_times) or value is None or not _visible_source_index(i, len(host_times), settings["showLast"]):
+                continue
+            target_time = _target_time(host_times, i, settings["offset"])
+            if target_time is not None:
+                regions.append({"time": target_time, "color": _css_color(value, "rgba(59,130,246,0.1)")})
         if regions:
             bgcolors.append({
-                "id": f"pine-bgcolor-{item.get('id', index)}",
-                "title": f"Background {item.get('id', index)}",
+                "id": f"pine-bgcolor-{color_id}",
+                "title": settings["title"],
                 "color": regions[0]["color"],
-                "pane": pane,
+                "pane": settings["pane"],
                 "regions": regions,
             })
     for index, item in enumerate(raw.get("barColors") or []):
         if not isinstance(item, dict):
+            return _failure("PINE_RUNTIME_OUTPUT_INVALID", "Pine barcolor output must be an object")
+        color_id = item.get("id", index)
+        settings = _render_settings(item, base_pane="main", fallback_title=f"Bars {color_id}")
+        if isinstance(settings, ScriptRuntimeResult):
+            return settings
+        if not settings["paneVisible"]:
             continue
-        data = [
-            {"time": host_times[i], "color": _css_color(value, "#787b86")}
-            for i, value in enumerate(item.get("values") or [])
-            if i < len(host_times) and value is not None
-        ]
+        values = item.get("values") or []
+        if not isinstance(values, list):
+            return _failure("PINE_RUNTIME_OUTPUT_INVALID", f"Bars {color_id} values must be a list")
+        data = []
+        for i, value in enumerate(values):
+            if i >= len(host_times) or value is None or not _visible_source_index(i, len(host_times), settings["showLast"]):
+                continue
+            target_time = _target_time(host_times, i, settings["offset"])
+            if target_time is not None:
+                data.append({"time": target_time, "color": _css_color(value, "#787b86")})
         if data:
-            barcolors.append({"id": f"pine-barcolor-{item.get('id', index)}", "data": data})
+            barcolors.append({
+                "id": f"pine-barcolor-{color_id}",
+                "title": settings["title"],
+                "data": data,
+            })
+
+    raw_hlines_by_id: dict[Any, dict[str, Any]] = {}
     for index, item in enumerate(raw.get("hlines") or []):
-        if not isinstance(item, dict) or not isinstance(item.get("price"), (int, float)):
-            continue
-        hlines.append({
-            "id": f"pine-hline-{item.get('id', index)}",
-            "price": item["price"],
-            "title": f"HLine {item.get('id', index)}",
-            "color": "#787b86",
-            "linestyle": "dashed",
-            "linewidth": 1,
-            "pane": pane,
-        })
+        if not isinstance(item, dict):
+            return _failure("PINE_RUNTIME_OUTPUT_INVALID", "Pine hline output must be an object")
+        hline_id = item.get("id", index)
+        price = item.get("price")
+        if isinstance(price, bool) or not isinstance(price, (int, float)) or not math.isfinite(float(price)):
+            return _failure("PINE_RUNTIME_OUTPUT_INVALID", f"HLine {hline_id} has an invalid price")
+        settings = _render_settings(item, base_pane=pane, fallback_title=f"HLine {hline_id}")
+        if isinstance(settings, ScriptRuntimeResult):
+            return settings
+        line_style = _pine_line_style(item.get("lineStyle"))
+        if isinstance(line_style, ScriptRuntimeResult):
+            return line_style
+        line_width = item.get("lineWidth", 1)
+        if isinstance(line_width, bool) or not isinstance(line_width, int) or line_width <= 0:
+            return _failure("PINE_RUNTIME_OUTPUT_INVALID", f"HLine {hline_id} has an invalid linewidth")
+        raw_hlines_by_id[hline_id] = {**item, "_settings": settings}
+        if settings["paneVisible"]:
+            hlines.append({
+                "id": f"pine-hline-{hline_id}",
+                "price": price,
+                "title": settings["title"],
+                "color": _css_color(item.get("color"), "#787b86"),
+                "linestyle": line_style,
+                "linewidth": line_width,
+                "pane": settings["pane"],
+            })
+
+    hidden_hline_ids: set[Any] = set()
     for index, item in enumerate(raw.get("fills") or []):
         if not isinstance(item, dict):
+            return _failure("PINE_RUNTIME_OUTPUT_INVALID", "Pine fill output must be an object")
+        fill_id = item.get("id", index)
+        settings = _render_settings(item, base_pane=pane, fallback_title=f"Fill {fill_id}")
+        if isinstance(settings, ScriptRuntimeResult):
+            return settings
+        if not settings["paneVisible"]:
             continue
-        fills.append({
-            "id": f"pine-fill-{item.get('id', index)}",
-            "plot1_id": f"pine-plot-{item.get('firstId')}",
-            "plot2_id": f"pine-plot-{item.get('secondId')}",
-            "title": f"Fill {item.get('id', index)}",
-            "color": "rgba(59,130,246,0.12)",
-            "pane": pane,
-        })
+        first_id = item.get("firstId")
+        second_id = item.get("secondId")
+        if any(isinstance(value, bool) or not isinstance(value, int) for value in (first_id, second_id)):
+            return _failure("PINE_RUNTIME_OUTPUT_INVALID", f"Fill {fill_id} has invalid endpoint ids")
+        first_is_hline = bool(item.get("firstIsHLine", first_id in raw_hlines_by_id))
+        second_is_hline = bool(item.get("secondIsHLine", second_id in raw_hlines_by_id))
+
+        endpoint_ids: list[str] = []
+        for endpoint_id, is_hline in ((first_id, first_is_hline), (second_id, second_is_hline)):
+            if is_hline:
+                source_hline = raw_hlines_by_id.get(endpoint_id)
+                if source_hline is None:
+                    return _failure("PINE_RUNTIME_OUTPUT_INVALID", f"Fill {fill_id} references a missing hline")
+                local_id = f"pine-hline-fill-{endpoint_id}"
+                endpoint_ids.append(local_id)
+                if endpoint_id not in hidden_hline_ids:
+                    lines.append({
+                        "id": local_id,
+                        "title": "",
+                        "type": "line",
+                        "color": "rgba(0,0,0,0)",
+                        "lineWidth": 1,
+                        "pane": settings["pane"],
+                        "visible": False,
+                        "data": [
+                            {"time": timestamp, "value": source_hline["price"]}
+                            for timestamp in host_times
+                        ],
+                    })
+                    hidden_hline_ids.add(endpoint_id)
+            else:
+                local_id = f"pine-plot-{endpoint_id}"
+                if not any(line.get("id") == local_id for line in lines):
+                    return _failure("PINE_RUNTIME_OUTPUT_INVALID", f"Fill {fill_id} references a missing plot")
+                endpoint_ids.append(local_id)
+
+        fill_gaps = item.get("fillGaps", True)
+        if not isinstance(fill_gaps, bool):
+            return _failure("PINE_RUNTIME_OUTPUT_INVALID", f"Fill {fill_id} has invalid fillgaps")
+        color_values = item.get("colors") or []
+        if not isinstance(color_values, list):
+            return _failure("PINE_RUNTIME_OUTPUT_INVALID", f"Fill {fill_id} colors must be a list")
+        fallback_color = "rgba(59,130,246,0.12)"
+        color_data: list[dict[str, Any]] = []
+        for i, value in enumerate(color_values):
+            if i >= len(host_times) or value is None or not _visible_source_index(i, len(host_times), settings["showLast"]):
+                continue
+            color = _css_color(value, fallback_color)
+            if not color_data:
+                fallback_color = color
+            color_data.append({"time": host_times[i], "color": color})
+        if color_values and not color_data:
+            continue
+        distinct_colors = {point["color"] for point in color_data}
+        fill: dict[str, Any] = {
+            "id": f"pine-fill-{fill_id}",
+            "plot1_id": endpoint_ids[0],
+            "plot2_id": endpoint_ids[1],
+            "title": settings["title"],
+            "color": fallback_color,
+            "fillGaps": fill_gaps,
+            "pane": settings["pane"],
+        }
+        if color_data and (
+            settings["showLast"] is not None
+            or fill_gaps is False
+            or len(distinct_colors) > 1
+            or len(color_data) < min(len(color_values), len(host_times))
+        ):
+            fill["colorData"] = color_data
+        fills.append(fill)
     for index, alert in enumerate(raw.get("alerts") or []):
         if not isinstance(alert, dict):
             continue
@@ -626,7 +1040,8 @@ def _normalize_output(
             "languageVersion": analysis.get("languageVersion"),
             "closedBarsOnly": True,
             "pane": pane,
-            "renderMetadata": "host-defaults",
+            "renderMetadata": "pine-native" if native_render_metadata else "host-defaults",
+            "renderMetadataVersion": raw.get("renderMetadataVersion"),
             "supportedFeatures": supported,
             "outputSeries": series_count,
             "outputPoints": point_count,
@@ -656,7 +1071,7 @@ def _execute_payload(payload: dict[str, Any]) -> ScriptRuntimeResult:
         if isinstance(bars, ScriptRuntimeResult):
             return bars
         runtime_bars, host_times = bars
-        overrides = _normalize_overrides(payload.get("params"))
+        overrides = _normalize_overrides(payload.get("params"), analysis)
         if isinstance(overrides, ScriptRuntimeResult):
             return overrides
         raw = dict(module.run_script(script, runtime_bars, input_overrides=overrides))
@@ -782,6 +1197,7 @@ class PineCompatRuntimeAdapter:
         return analyze_pine_script_for_host(script)
 
     def descriptor(self) -> ScriptRuntimeDescriptor:
+        installed_render_metadata_version: int | None = None
         try:
             module = _load_module()
             source_path = str(getattr(module, "__file__", "") or "") or None
@@ -791,6 +1207,9 @@ class PineCompatRuntimeAdapter:
                 version = getattr(module, "__version__", None)
             available = True
             reason = None
+            raw_render_version = getattr(module, "RENDER_METADATA_VERSION", None)
+            if isinstance(raw_render_version, int) and not isinstance(raw_render_version, bool):
+                installed_render_metadata_version = raw_render_version
         except Exception as exc:
             source_path = str(_VENDOR_ROOT)
             version = None
@@ -812,11 +1231,14 @@ class PineCompatRuntimeAdapter:
                 "incremental": False,
                 "analysisSchemaVersion": PINE_ANALYSIS_SCHEMA_VERSION,
                 "runtimeSchemaVersion": PINE_RUNTIME_SCHEMA_VERSION,
+                "renderMetadataVersion": installed_render_metadata_version,
+                "expectedRenderMetadataVersion": PINE_RENDER_METADATA_VERSION,
+                "nativeRenderMetadata": (
+                    installed_render_metadata_version == PINE_RENDER_METADATA_VERSION
+                ),
                 "hostedOutputs": [
                     "plot",
-                    "plotchar",
                     "plotshape",
-                    "plotarrow",
                     "hline",
                     "fill",
                     "bgcolor",
@@ -829,8 +1251,23 @@ class PineCompatRuntimeAdapter:
                     "chart-context",
                     "imports",
                     "drawing-objects",
+                    "plotchar",
+                    "plotarrow",
                     "plotbar",
                     "plotcandle",
+                ],
+                "plotStyles": [
+                    "plot.style_line",
+                    "plot.style_histogram",
+                    "plot.style_columns",
+                ],
+                "plotshapeStyles": [
+                    "shape.circle",
+                    "shape.square",
+                    "shape.triangleup",
+                    "shape.triangledown",
+                    "shape.arrowup",
+                    "shape.arrowdown",
                 ],
             },
         )

@@ -1,4 +1,3 @@
-use pine_sema::analyze_source;
 use pine_syntax::SourceFile;
 
 use super::*;
@@ -71,7 +70,8 @@ plot(last_bar_time)
 fn runs_syminfo_metadata() {
     let source = SourceFile::new(
         "test.pine",
-        r#"indicator("syminfo")
+        r#"//@version=6
+indicator("syminfo")
 identity = syminfo.tickerid == "NASDAQ:AAPL" and syminfo.main_tickerid == "NASDAQ:AAPL" and syminfo.ticker == "AAPL" and syminfo.prefix == "NASDAQ"
 details = syminfo.description == "Apple Inc." and syminfo.type == "stock" and syminfo.currency == "USD" and syminfo.basecurrency == "USD"
 session = syminfo.session == "regular" and syminfo.timezone == "Etc/UTC" and syminfo.root == "AAPL" and syminfo.volumetype == "base"

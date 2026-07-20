@@ -132,6 +132,15 @@ function optionalIndicatorBoolean(
     : expectIndicatorBoolean(value, path);
 }
 
+function optionalIndicatorStringOrNumber(
+  value: unknown,
+  path: string,
+): string | number | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "string") return value;
+  return expectIndicatorFiniteNumber(value, path);
+}
+
 function parseOptionalArray<T>(
   value: unknown,
   path: string,
@@ -192,7 +201,7 @@ function parseIndicatorAnnotationPoint(
     text: optionalIndicatorString(record.text, `${path}.text`),
     position: optionalIndicatorString(record.position, `${path}.position`),
     shape: optionalIndicatorString(record.shape, `${path}.shape`),
-    size: optionalIndicatorString(record.size, `${path}.size`),
+    size: optionalIndicatorStringOrNumber(record.size, `${path}.size`),
     endTime: optionalIndicatorFiniteNumber(
       record.endTime ?? record.end_time,
       `${path}.endTime`,
@@ -261,10 +270,26 @@ function parseIndicatorLine(value: unknown, path: string): IndicatorLine {
     `${path}.zIndex`,
   );
   const overlay = optionalIndicatorBoolean(record.overlay, `${path}.overlay`);
+  const base = optionalIndicatorFiniteNumber(record.base, `${path}.base`);
+  const precision = optionalIndicatorFiniteNumber(record.precision, `${path}.precision`);
+  const trackPrice = optionalIndicatorBoolean(
+    record.trackPrice ?? record.track_price,
+    `${path}.trackPrice`,
+  );
+  const visible = optionalIndicatorBoolean(record.visible, `${path}.visible`);
+  const priceFormat = optionalIndicatorString(
+    record.priceFormat ?? record.price_format,
+    `${path}.priceFormat`,
+  );
   if (lineWidth !== undefined) line.lineWidth = lineWidth;
   if (lineStyle !== undefined) line.lineStyle = lineStyle;
   if (zIndex !== undefined) line.zIndex = zIndex;
   if (overlay !== undefined) line.overlay = overlay;
+  if (base !== undefined) line.base = base;
+  if (precision !== undefined) line.precision = precision;
+  if (trackPrice !== undefined) line.trackPrice = trackPrice;
+  if (visible !== undefined) line.visible = visible;
+  if (priceFormat !== undefined) line.priceFormat = priceFormat;
   if (record.colorData !== undefined || record.color_data !== undefined) {
     line.colorData = parseOptionalArray(
       record.colorData ?? record.color_data,
@@ -285,6 +310,20 @@ function parseIndicatorUnifiedSeries(
     style.colorData ?? style.color_data,
     `${path}.style.colorData`,
     parseIndicatorColorPoint,
+  );
+  const base = optionalIndicatorFiniteNumber(style.base, `${path}.style.base`);
+  const trackPrice = optionalIndicatorBoolean(
+    style.trackPrice ?? style.track_price,
+    `${path}.style.trackPrice`,
+  );
+  const visible = optionalIndicatorBoolean(style.visible, `${path}.style.visible`);
+  const priceFormat = optionalIndicatorString(
+    style.priceFormat ?? style.price_format,
+    `${path}.style.priceFormat`,
+  );
+  const precision = optionalIndicatorFiniteNumber(
+    style.precision,
+    `${path}.style.precision`,
   );
   const series: IndicatorUnifiedSeries = {
     id: expectIndicatorNonEmptyString(record.id, `${path}.id`),
@@ -315,6 +354,11 @@ function parseIndicatorUnifiedSeries(
           `${path}.style.lineStyle`,
         ) ?? 0,
       ...(colorData.length > 0 ? { colorData } : {}),
+      ...(base !== undefined ? { base } : {}),
+      ...(trackPrice !== undefined ? { trackPrice } : {}),
+      ...(visible !== undefined ? { visible } : {}),
+      ...(priceFormat !== undefined ? { priceFormat } : {}),
+      ...(precision !== undefined ? { precision } : {}),
     },
   };
   const indicatorId =
@@ -403,7 +447,7 @@ function parseLegacyMarker(value: unknown, path: string): IndicatorMarker {
   const color = optionalIndicatorString(record.color, `${path}.color`);
   const text = optionalIndicatorString(record.text, `${path}.text`);
   const position = optionalIndicatorString(record.position, `${path}.position`);
-  const size = optionalIndicatorString(record.size, `${path}.size`);
+  const size = optionalIndicatorStringOrNumber(record.size, `${path}.size`);
   if (indicatorId !== undefined) marker.indicatorId = indicatorId;
   if (id !== undefined) marker.id = id;
   if (pane !== undefined) marker.pane = pane;
@@ -417,6 +461,7 @@ function parseLegacyMarker(value: unknown, path: string): IndicatorMarker {
 
 function parseLegacyFill(value: unknown, path: string): IndicatorFill {
   const record = expectIndicatorRecord(value, path);
+  const rawStyle = parseStyleRecord(record.style, `${path}.style`);
   const localSeriesIds = record.localSeriesIds ?? record.local_series_ids;
   const seriesIds = record.seriesIds ?? record.series_ids;
   const parseNullableStrings = (
@@ -428,7 +473,25 @@ function parseLegacyFill(value: unknown, path: string): IndicatorFill {
         ? null
         : expectIndicatorString(item, `${itemsPath}[${index}]`),
     );
-  const fill: IndicatorFill = { style: parseStyleRecord(record.style, `${path}.style`) };
+  const styleColorData = parseOptionalArray(
+    rawStyle.colorData ?? rawStyle.color_data,
+    `${path}.style.colorData`,
+    parseIndicatorColorPoint,
+  );
+  const styleFillGaps = optionalIndicatorBoolean(
+    rawStyle.fillGaps ?? rawStyle.fill_gaps,
+    `${path}.style.fillGaps`,
+  );
+  const styleColor = optionalIndicatorString(rawStyle.color, `${path}.style.color`);
+  const styleTitle = optionalIndicatorString(rawStyle.title, `${path}.style.title`);
+  const fill: IndicatorFill = {
+    style: {
+      ...(styleColor !== undefined ? { color: styleColor } : {}),
+      ...(styleTitle !== undefined ? { title: styleTitle } : {}),
+      ...(styleColorData.length > 0 ? { colorData: styleColorData } : {}),
+      ...(styleFillGaps !== undefined ? { fillGaps: styleFillGaps } : {}),
+    },
+  };
   const indicatorId = optionalIndicatorString(
     record.indicatorId ?? record.indicator_id,
     `${path}.indicatorId`,
@@ -440,6 +503,15 @@ function parseLegacyFill(value: unknown, path: string): IndicatorFill {
   const color = optionalIndicatorString(record.color, `${path}.color`);
   const title = optionalIndicatorString(record.title, `${path}.title`);
   const type = optionalIndicatorString(record.type, `${path}.type`);
+  const colorData = parseOptionalArray(
+    record.colorData ?? record.color_data,
+    `${path}.colorData`,
+    parseIndicatorColorPoint,
+  );
+  const fillGaps = optionalIndicatorBoolean(
+    record.fillGaps ?? record.fill_gaps,
+    `${path}.fillGaps`,
+  );
   if (indicatorId !== undefined) fill.indicatorId = indicatorId;
   if (id !== undefined) fill.id = id;
   if (pane !== undefined) fill.pane = pane;
@@ -448,6 +520,8 @@ function parseLegacyFill(value: unknown, path: string): IndicatorFill {
   if (color !== undefined) fill.color = color;
   if (title !== undefined) fill.title = title;
   if (type !== undefined) fill.type = type;
+  if (colorData.length > 0) fill.colorData = colorData;
+  if (fillGaps !== undefined) fill.fillGaps = fillGaps;
   if (localSeriesIds !== undefined)
     fill.localSeriesIds = parseNullableStrings(
       localSeriesIds,

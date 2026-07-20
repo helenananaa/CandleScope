@@ -10,6 +10,21 @@ pub(super) struct TimeSession {
     days: [bool; 8],
 }
 
+#[derive(Clone, Copy)]
+pub(super) enum DefaultSessionDays {
+    Weekdays,
+    All,
+}
+
+impl DefaultSessionDays {
+    fn values(self) -> [bool; 8] {
+        match self {
+            Self::Weekdays => [false, false, true, true, true, true, true, false],
+            Self::All => all_session_days(),
+        }
+    }
+}
+
 struct TimeSessionPeriod {
     start_minute: i64,
     end_minute: i64,
@@ -62,7 +77,10 @@ impl TimeSessionTimezone {
     }
 }
 
-pub(super) fn parse_time_session(session: &str) -> Option<TimeSession> {
+pub(super) fn parse_time_session(
+    session: &str,
+    default_days: DefaultSessionDays,
+) -> Option<TimeSession> {
     if session == "24x7" {
         return Some(TimeSession {
             periods: vec![TimeSessionPeriod {
@@ -75,7 +93,7 @@ pub(super) fn parse_time_session(session: &str) -> Option<TimeSession> {
 
     let (periods, days) = match session.split_once(':') {
         Some((periods, days)) => (periods, parse_session_days(days)?),
-        None => (session, all_session_days()),
+        None => (session, default_days.values()),
     };
     if periods.is_empty() {
         return None;

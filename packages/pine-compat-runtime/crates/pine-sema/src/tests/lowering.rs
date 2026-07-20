@@ -34,7 +34,7 @@ method otherNestedSourceNamed(Point p, Wrapper other, float delta) => p.otherNes
         vec![("user/udt/1".to_owned(), library)],
     )
     .expect("valid library source");
-    crate::analyze_input(&input)
+    crate::analysis::analyze_input_with_implicit_dialect(&input, crate::PineDialect::V5)
 }
 
 #[test]
@@ -92,7 +92,8 @@ plot(rootSource(high, 3.0)[length])
     let input =
         AnalysisInput::with_library_sources(root, vec![("user/context/1".to_owned(), library)])
             .expect("dual-alias library input should be valid");
-    let analysis = crate::analyze_input(&input);
+    let analysis =
+        crate::analysis::analyze_input_with_implicit_dialect(&input, crate::PineDialect::V5);
 
     assert!(
         analysis.diagnostics.is_empty(),

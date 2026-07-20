@@ -65,6 +65,20 @@ test("realtime histogram point colors override historical colorData and survive 
   ]);
 });
 
+test("line series apply Pine per-point colorData without requiring histogram type", () => {
+  const lines = alignIndicatorLinesToTimes([{
+    id: "pine-line",
+    type: "line",
+    data: [{ time: 10, value: 1 }, { time: 20, value: 2 }],
+    colorData: [{ time: 10, color: "red" }, { time: 20, color: "green" }],
+  }], new Set([10, 20]));
+
+  assert.deepEqual(mustBeDefined(lines[0]).data, [
+    { time: 10, value: 1, color: "red" },
+    { time: 20, value: 2, color: "green" },
+  ]);
+});
+
 test("alignIndicatorMarkersToTimes and bgcolors clip payloads to the main bar time set", () => {
   const allowed = new Set([10]);
 
@@ -119,6 +133,46 @@ test("buildFillRenderEntries aligns and sorts separate ordinal time objects by o
     { time: upperAtOne, value: 1 },
     { time: upperAtTwo, value: 2 },
   ]);
+});
+
+test("buildFillRenderEntries splits dynamic Pine fill colors and honors fill gaps", () => {
+  const payload = buildFillRenderEntries(
+    [{
+      plot1_id: "upper",
+      plot2_id: "lower",
+      colorData: [
+        { time: 10, color: "red" },
+        { time: 20, color: "red" },
+        { time: 40, color: "blue" },
+      ],
+      fillGaps: false,
+    }],
+    [
+      {
+        id: "upper",
+        data: [
+          { time: 10, value: 3 },
+          { time: 20, value: 4 },
+          { time: 30, value: 5 },
+          { time: 40, value: 6 },
+        ],
+      },
+      {
+        id: "lower",
+        data: [
+          { time: 10, value: 1 },
+          { time: 20, value: 2 },
+          { time: 40, value: 3 },
+        ],
+      },
+    ],
+    "black",
+  );
+
+  assert.equal(payload.matchedFillCount, 1);
+  assert.equal(payload.entries.length, 2);
+  assert.deepEqual(payload.entries.map((entry) => entry.fillColor), ["red", "blue"]);
+  assert.deepEqual(mustBeDefined(payload.entries[1]).upperData, [{ time: 40, value: 6 }]);
 });
 
 test("buildFillRenderEntries signature includes ordinal lineage and plotted values", () => {

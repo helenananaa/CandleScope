@@ -1,6 +1,6 @@
 [package]
 name = "pine-cli"
-version = "0.1.0"
+version = "0.2.0"
 description.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -16,3 +16,6 @@ pine-builtins = { path = "../pine-builtins" }
 pine-runtime = { path = "../pine-runtime" }
 pine-sema = { path = "../pine-sema" }
 pine-syntax = { path = "../pine-syntax" }
+
+[dev-dependencies]
+serde_json = "1"

@@ -273,23 +273,39 @@ impl<'a> HistoricalRuntime<'a> {
             message: "ta.vwap missing source argument".to_owned(),
         })?;
         let source = self.eval_expr(source_arg)?;
-        let anchor = if let Some(arg) = vwap_arg(args, 1, "anchor") {
-            matches!(self.eval_expr(arg)?, PineValue::Bool(true))
+        let (anchor, default_anchor_bucket) = if let Some(arg) = vwap_arg(args, 1, "anchor") {
+            (matches!(self.eval_expr(arg)?, PineValue::Bool(true)), None)
         } else {
-            false
+            (
+                false,
+                self.current_bar.map(|bar| bar.time.div_euclid(86_400_000)),
+            )
         };
         let stdev_mult = if let Some(arg) = vwap_arg(args, 2, "stdev_mult") {
-            let Some(mult) = self.eval_expr(arg)?.as_f64() else {
-                self.vwap_call_state.remove(&call_site_id);
-                return Ok(vwap_result_na(has_bands));
-            };
-            Some(mult)
+            self.eval_expr(arg)?.as_f64()
         } else {
             None
         };
-        let (Some(source), Some(volume)) = (source.as_f64(), self.current_builtin_f64("volume"))
-        else {
-            self.vwap_call_state.remove(&call_site_id);
+        let source = source.as_f64();
+        let volume = self.current_builtin_f64("volume");
+
+        let state = self.vwap_call_state.entry(call_site_id).or_default();
+        if let Some(bucket) = default_anchor_bucket {
+            if state.default_anchor_bucket() != Some(bucket) {
+                state.start_default_anchor_bucket(bucket);
+            }
+        } else if anchor {
+            state.start();
+        } else if !state.has_started() {
+            return Ok(vwap_result_na(has_bands));
+        }
+
+        let (Some(source), Some(volume)) = (source, volume) else {
+            if let Some(bucket) = default_anchor_bucket {
+                state.start_default_anchor_bucket(bucket);
+            } else {
+                state.start();
+            }
             return Ok(vwap_result_na(has_bands));
         };
         let weighted = source * volume;
@@ -299,19 +315,12 @@ impl<'a> HistoricalRuntime<'a> {
             || !weighted.is_finite()
             || !weighted_square.is_finite()
         {
-            self.vwap_call_state.remove(&call_site_id);
+            if let Some(bucket) = default_anchor_bucket {
+                state.start_default_anchor_bucket(bucket);
+            } else {
+                state.start();
+            }
             return Ok(vwap_result_na(has_bands));
-        }
-        if let Some(mult) = stdev_mult
-            && !mult.is_finite()
-        {
-            self.vwap_call_state.remove(&call_site_id);
-            return Ok(vwap_result_na(has_bands));
-        }
-
-        let state = self.vwap_call_state.entry(call_site_id).or_default();
-        if anchor {
-            *state = VwapState::default();
         }
         state.weighted_sum += weighted;
         state.weighted_square_sum += weighted_square;
@@ -326,8 +335,11 @@ impl<'a> HistoricalRuntime<'a> {
 
         let vwap = state.weighted_sum / state.volume_sum;
         let value = finite_float_or_na(vwap);
-        let Some(mult) = stdev_mult else {
+        if !has_bands {
             return Ok(value);
+        }
+        let Some(mult) = stdev_mult.filter(|mult| mult.is_finite()) else {
+            return Ok(vwap_result_na(true));
         };
         let variance = (state.weighted_square_sum / state.volume_sum) - vwap * vwap;
         let deviation = variance.max(0.0).sqrt();

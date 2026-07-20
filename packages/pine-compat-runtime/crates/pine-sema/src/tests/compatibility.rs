@@ -3353,11 +3353,24 @@ fn source_graph_input_reports_duplicate_library_key() {
 }
 
 fn analyze_with_libraries(root: &str, libraries: Vec<(&str, &str)>) -> Analysis {
+    let root_version = root
+        .lines()
+        .find(|line| line.trim_start().starts_with("//@version="));
     let input = AnalysisInput::with_library_sources(
         SourceFile::new("root.pine", root),
         libraries
             .into_iter()
             .map(|(key, source)| {
+                let mut source = source.to_owned();
+                if let Some(root_version) = root_version
+                    && source
+                        .lines()
+                        .next()
+                        .is_some_and(|line| line.trim_start().starts_with("//@version="))
+                {
+                    let first_newline = source.find('\n').unwrap_or(source.len());
+                    source.replace_range(..first_newline, root_version.trim_start());
+                }
                 (
                     key.to_owned(),
                     SourceFile::new(format!("{key}.pine"), source),
@@ -3366,7 +3379,7 @@ fn analyze_with_libraries(root: &str, libraries: Vec<(&str, &str)>) -> Analysis 
             .collect(),
     )
     .expect("analysis input");
-    crate::analyze_input(&input)
+    crate::analysis::analyze_input_with_implicit_dialect(&input, crate::PineDialect::V5)
 }
 
 fn diagnostic_codes(analysis: &Analysis) -> Vec<&str> {

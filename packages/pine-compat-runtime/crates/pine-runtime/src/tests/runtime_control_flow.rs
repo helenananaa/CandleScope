@@ -1,4 +1,3 @@
-use pine_sema::analyze_source;
 use pine_syntax::SourceFile;
 
 use super::*;
@@ -173,6 +172,40 @@ plot(and_values.size())
     assert_eq!(result.plots.len(), 2);
     assert_values_close(&result.plots[0].values, &[1.0]);
     assert_values_close(&result.plots[1].values, &[1.0]);
+}
+
+#[test]
+fn v1_through_v5_strict_logical_ops_advance_stateful_ta_while_v6_is_lazy() {
+    let source = SourceFile::new(
+        "stateful-logical.pine",
+        include_str!("../../../../tests/fixtures/legacy/v4/runtime/logical_strict_legacy.pine"),
+    );
+    let analysis = analyze_source(&source);
+    assert!(
+        analysis.diagnostics.is_empty(),
+        "{:?}",
+        analysis.diagnostics
+    );
+    let base = analysis.hir.expect("HIR");
+    let bars = [
+        bar_ohlc(1.0, 100.0, -100.0, 1.0),
+        bar_ohlc(1.0, 1.0, 1.0, 1.0),
+        bar_ohlc(1.0, 1.0, 1.0, 1.0),
+    ];
+
+    for version in 1..=5 {
+        let mut program = base.clone();
+        program.language_version = Some(version);
+        let result = run_historical(&program, &bars).expect("strict logical run");
+        assert_values_close(&result.plots[0].values, &[0.0, 0.0, 1.0]);
+        assert_values_close(&result.plots[1].values, &[1.0, 1.0, 1.0]);
+    }
+
+    let mut v6 = base;
+    v6.language_version = Some(6);
+    let result = run_historical(&v6, &bars).expect("lazy logical run");
+    assert_values_close(&result.plots[0].values, &[0.0, 0.0, 0.0]);
+    assert_values_close(&result.plots[1].values, &[1.0, 1.0, 0.0]);
 }
 
 #[test]

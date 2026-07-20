@@ -19,6 +19,7 @@ pub struct CompileCacheStats {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct CompileCacheKey {
+    translator_revision: u32,
     name: String,
     text: String,
     libraries: Vec<CompileCacheLibraryKey>,
@@ -71,6 +72,7 @@ impl CompileCache {
 impl CompileCacheKey {
     fn from_input(input: &AnalysisInput) -> Self {
         Self {
+            translator_revision: crate::legacy::LEGACY_TRANSLATOR_REVISION,
             name: input.root().name().to_owned(),
             text: input.root().text().to_owned(),
             libraries: input
@@ -83,5 +85,56 @@ impl CompileCacheKey {
                 })
                 .collect(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn key_carries_legacy_translator_revision() {
+        let input = AnalysisInput::new(SourceFile::new("cache.pine", "//@version=6\n"));
+        let key = CompileCacheKey::from_input(&input);
+        assert_eq!(
+            key.translator_revision,
+            crate::legacy::LEGACY_TRANSLATOR_REVISION
+        );
+    }
+
+    #[test]
+    fn cache_separates_implicit_v1_and_explicit_v2_dialects() {
+        let body = "study(\"cache dialect\")\nplot(close)\n";
+        let mut cache = CompileCache::new();
+        let v1 = cache.analyze(&SourceFile::new("same.pine", body));
+        let v2 = cache.analyze(&SourceFile::new(
+            "same.pine",
+            format!("//@version=2\n{body}"),
+        ));
+
+        assert_eq!(v1.compatibility.language_version, Some(1));
+        assert_eq!(v2.compatibility.language_version, Some(2));
+        assert_eq!(
+            cache.stats(),
+            CompileCacheStats {
+                entries: 2,
+                hits: 0,
+                misses: 2,
+            }
+        );
+
+        cache.analyze(&SourceFile::new("same.pine", body));
+        cache.analyze(&SourceFile::new(
+            "same.pine",
+            format!("//@version=2\n{body}"),
+        ));
+        assert_eq!(
+            cache.stats(),
+            CompileCacheStats {
+                entries: 2,
+                hits: 2,
+                misses: 2,
+            }
+        );
     }
 }

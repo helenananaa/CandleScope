@@ -29,6 +29,30 @@ pub(crate) struct VwapState {
     weighted_sum: f64,
     weighted_square_sum: f64,
     volume_sum: f64,
+    started: bool,
+    default_anchor_bucket: Option<i64>,
+}
+
+impl VwapState {
+    pub(crate) fn start(&mut self) {
+        *self = Self {
+            started: true,
+            ..Self::default()
+        };
+    }
+
+    pub(crate) fn start_default_anchor_bucket(&mut self, bucket: i64) {
+        self.start();
+        self.default_anchor_bucket = Some(bucket);
+    }
+
+    pub(crate) fn default_anchor_bucket(self) -> Option<i64> {
+        self.default_anchor_bucket
+    }
+
+    pub(crate) fn has_started(self) -> bool {
+        self.started
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -1,10 +1,26 @@
-use pine_ir::{HirCallArg, HirExpr, HirExprKind, HirLiteral, HirProgram, HirStmt, HirStmtKind};
+use pine_ir::{
+    HirCallArg, HirExpr, HirExprKind, HirLiteral, HirProgram, HirStmt, HirStmtKind, HirUnaryOp,
+    ValueKind,
+};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+use crate::PineValue;
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct InputCall {
     pub call_site_id: u32,
     pub name: String,
+    /// The analyzer-resolved value kind returned by this input call.
+    ///
+    /// This is especially important for the generic legacy `input()` form:
+    /// hosts must parse overrides according to the resolved `defval` type
+    /// instead of guessing from a textual override.
+    pub value_kind: ValueKind,
     pub title: Option<String>,
+    pub default_value: Option<PineValue>,
+    pub min_value: Option<PineValue>,
+    pub max_value: Option<PineValue>,
+    pub step: Option<PineValue>,
+    pub options: Vec<PineValue>,
 }
 
 #[must_use]
@@ -92,7 +108,28 @@ fn collect_input_calls_from_expr(expr: &HirExpr, calls: &mut Vec<InputCall>) {
                 calls.push(InputCall {
                     call_site_id: call_site_id.0,
                     name: callee.clone(),
+                    value_kind: expr.pine_type.kind,
                     title: input_title(args),
+                    default_value: input_arg_value(args, 0, "defval"),
+                    min_value: matches!(
+                        callee.as_str(),
+                        "input.int" | "input.float" | "input.price" | "input.time"
+                    )
+                    .then(|| input_arg_value(args, 2, "minval"))
+                    .flatten(),
+                    max_value: matches!(
+                        callee.as_str(),
+                        "input.int" | "input.float" | "input.price" | "input.time"
+                    )
+                    .then(|| input_arg_value(args, 3, "maxval"))
+                    .flatten(),
+                    step: matches!(
+                        callee.as_str(),
+                        "input.int" | "input.float" | "input.price" | "input.time"
+                    )
+                    .then(|| input_arg_value(args, 4, "step"))
+                    .flatten(),
+                    options: input_options(callee, args),
                 });
             }
             for arg in args {
@@ -183,11 +220,76 @@ fn is_input_call(name: &str) -> bool {
 }
 
 fn input_title(args: &[HirCallArg]) -> Option<String> {
+    input_arg(args, 1, "title").and_then(|expr| match &expr.kind {
+        HirExprKind::Literal(HirLiteral::String(value)) => Some(value.clone()),
+        _ => None,
+    })
+}
+
+fn input_arg<'a>(args: &'a [HirCallArg], index: usize, name: &str) -> Option<&'a HirExpr> {
     args.iter()
-        .find(|arg| arg.name.as_deref() == Some("title"))
-        .or_else(|| args.get(1))
-        .and_then(|arg| match &arg.value.kind {
-            HirExprKind::Literal(HirLiteral::String(value)) => Some(value.clone()),
-            _ => None,
-        })
+        .find(|arg| arg.name.as_deref() == Some(name))
+        .or_else(|| args.get(index).filter(|arg| arg.name.is_none()))
+        .map(|arg| &arg.value)
+}
+
+fn input_arg_value(args: &[HirCallArg], index: usize, name: &str) -> Option<PineValue> {
+    input_arg(args, index, name).and_then(constant_value)
+}
+
+fn input_options(name: &str, args: &[HirCallArg]) -> Vec<PineValue> {
+    let index = if matches!(
+        name,
+        "input"
+            | "input.int"
+            | "input.float"
+            | "input.price"
+            | "input.time"
+            | "input.string"
+            | "input.symbol"
+            | "input.timeframe"
+            | "input.session"
+    ) {
+        if matches!(
+            name,
+            "input.int" | "input.float" | "input.price" | "input.time"
+        ) {
+            5
+        } else {
+            2
+        }
+    } else {
+        return Vec::new();
+    };
+    let Some(expr) = input_arg(args, index, "options") else {
+        return Vec::new();
+    };
+    match &expr.kind {
+        HirExprKind::Tuple(values) => values.iter().filter_map(constant_value).collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn constant_value(expr: &HirExpr) -> Option<PineValue> {
+    match &expr.kind {
+        HirExprKind::Literal(HirLiteral::Int(value)) => Some(PineValue::Int(*value)),
+        HirExprKind::Literal(HirLiteral::Float(value)) => Some(PineValue::Float(*value)),
+        HirExprKind::Literal(HirLiteral::Bool(value)) => Some(PineValue::Bool(*value)),
+        HirExprKind::Literal(HirLiteral::String(value)) => Some(PineValue::String(value.clone())),
+        HirExprKind::Literal(HirLiteral::ColorHex(value)) => Some(PineValue::String(value.clone())),
+        HirExprKind::Builtin(value) => Some(PineValue::String(value.clone())),
+        HirExprKind::Unary { op, expr } => {
+            let value = constant_value(expr)?;
+            match (op, value) {
+                (HirUnaryOp::Plus, value @ (PineValue::Int(_) | PineValue::Float(_))) => {
+                    Some(value)
+                }
+                (HirUnaryOp::Minus, PineValue::Int(value)) => Some(PineValue::Int(-value)),
+                (HirUnaryOp::Minus, PineValue::Float(value)) => Some(PineValue::Float(-value)),
+                (HirUnaryOp::Not, PineValue::Bool(value)) => Some(PineValue::Bool(!value)),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
 }

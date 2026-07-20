@@ -1,5 +1,6 @@
 //! Historical runtime scaffolding.
 
+pub use pine_ir::ValueKind;
 use pine_ir::{CallSiteId, HirExpr, PersistenceKind, SeriesId, SymbolId, VarSlotId};
 
 mod algorithms;
@@ -43,8 +44,8 @@ pub use output::drawings::{
 };
 pub use output::json::{public_runtime_profiled_result_json, public_runtime_result_json};
 pub use output::model::{
-    ColorSeries, FillOutput, HLineOutput, PUBLIC_ANALYSIS_SCHEMA_VERSION,
-    PUBLIC_MATRIX_SCHEMA_VERSION, PUBLIC_OUTPUT_SCHEMA_VERSION, PUBLIC_RUNTIME_SCHEMA_VERSION,
+    ColorSeries, FillOutput, HLineOutput, OutputMetadata, PUBLIC_MATRIX_SCHEMA_VERSION,
+    PUBLIC_OUTPUT_SCHEMA_VERSION, PUBLIC_RENDER_METADATA_VERSION, PUBLIC_RUNTIME_SCHEMA_VERSION,
     PlotArrowSeries, PlotBarSeries, PlotCandleSeries, PlotCharSeries, PlotSeries, PlotShapeSeries,
     RuntimeDiagnostic, RuntimeResult,
 };
@@ -78,7 +79,7 @@ pub use runtime::historical::{
 pub use runtime::realtime::RealtimeRuntime;
 pub use series::SeriesStore;
 pub use strategy::BrokerState;
-pub use value::PineValue;
+pub use value::{PineValue, encode_color_literal, encode_color_rgba, is_valid_public_color};
 
 use algorithms::numeric::finite_float_or_na;
 use algorithms::rolling_window::{
@@ -90,7 +91,7 @@ use builtins::maps::MapStorage;
 use builtins::matrices::MatrixStorage;
 use builtins::ta::{MacdState, PivotPointState, RsiState, VwapState};
 use output::align::finalize_bar_aligned_outputs;
-use output::collect::finalize_series_values;
+use output::collect::{finalize_plot_values, finalize_series_values};
 use retention::SeriesRetention;
 use runtime::expressions::values_equal;
 use runtime::statements::StmtControl;

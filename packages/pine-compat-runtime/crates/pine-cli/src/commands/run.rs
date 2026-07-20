@@ -28,6 +28,7 @@ pub(crate) fn run(args: Vec<String>) -> Result<(), String> {
 struct RunOptions {
     path: String,
     bars_path: String,
+    chart_context: ChartContext,
     profile: bool,
     request_bars: Vec<RequestBarsSpec>,
     library_sources: Vec<LibrarySourceSpec>,
@@ -109,12 +110,13 @@ fn run_profiled_json_with_options(options: &RunOptions) -> Result<String, String
     let bars_text = fs::read_to_string(&options.bars_path)
         .map_err(|err| format!("failed to read {}: {err}", options.bars_path))?;
     let bars = parse_bars_csv(&bars_text)?;
-    let request_environment = request_environment_from_specs(&options.request_bars)?;
-    let input_names = input_calls(&hir)
+    let request_environment =
+        request_environment_from_specs(&options.request_bars, options.chart_context.clone())?;
+    let input_calls = input_calls(&hir)
         .into_iter()
-        .map(|input| (input.call_site_id, input.name))
+        .map(|input| (input.call_site_id, input))
         .collect::<HashMap<_, _>>();
-    let input_overrides = input_overrides_from_specs(&options.input_overrides, &input_names)?;
+    let input_overrides = input_overrides_from_specs(&options.input_overrides, &input_calls)?;
     let result = run_historical_profiled_with_request_environment_and_input_overrides(
         &hir,
         &bars,
@@ -153,12 +155,13 @@ fn run_result_with_options(options: &RunOptions) -> Result<RuntimeResult, String
     let bars_text = fs::read_to_string(&options.bars_path)
         .map_err(|err| format!("failed to read {}: {err}", options.bars_path))?;
     let bars = parse_bars_csv(&bars_text)?;
-    let request_environment = request_environment_from_specs(&options.request_bars)?;
-    let input_names = input_calls(&hir)
+    let request_environment =
+        request_environment_from_specs(&options.request_bars, options.chart_context.clone())?;
+    let input_calls = input_calls(&hir)
         .into_iter()
-        .map(|input| (input.call_site_id, input.name))
+        .map(|input| (input.call_site_id, input))
         .collect::<HashMap<_, _>>();
-    let input_overrides = input_overrides_from_specs(&options.input_overrides, &input_names)?;
+    let input_overrides = input_overrides_from_specs(&options.input_overrides, &input_calls)?;
     run_historical_with_request_environment_and_input_overrides(
         &hir,
         &bars,
@@ -213,6 +216,7 @@ fn parse_options(args: &[String]) -> Result<RunOptions, String> {
     let mut options = RunOptions {
         path: path.clone(),
         bars_path: String::new(),
+        chart_context: ChartContext::default(),
         profile: false,
         request_bars: Vec::new(),
         library_sources: Vec::new(),
@@ -238,6 +242,25 @@ fn parse_options(args: &[String]) -> Result<RunOptions, String> {
             }
             "--profile" => {
                 options.profile = true;
+            }
+            "--chart-symbol" => {
+                index += 1;
+                let Some(value) = args.get(index) else {
+                    return Err(usage());
+                };
+                if value.trim().is_empty() {
+                    return Err("chart symbol must not be empty".to_owned());
+                }
+                options.chart_context = options.chart_context.clone().with_symbol(value.trim());
+            }
+            "--chart-timeframe" => {
+                index += 1;
+                let Some(value) = args.get(index) else {
+                    return Err(usage());
+                };
+                let timeframe =
+                    RequestTimeframe::parse(value).map_err(|error| error.to_string())?;
+                options.chart_context = options.chart_context.clone().with_timeframe(timeframe);
             }
             "--render-strategy-order-alert-template" => {
                 index += 1;
@@ -389,9 +412,12 @@ fn parse_request_bars_spec(spec: &str) -> Result<RequestBarsSpec, String> {
     })
 }
 
-fn request_environment_from_specs(specs: &[RequestBarsSpec]) -> Result<RequestEnvironment, String> {
+fn request_environment_from_specs(
+    specs: &[RequestBarsSpec],
+    chart_context: ChartContext,
+) -> Result<RequestEnvironment, String> {
     if specs.is_empty() {
-        return Ok(RequestEnvironment::default());
+        return Ok(RequestEnvironment::default().for_chart(chart_context));
     }
 
     let mut streams = Vec::with_capacity(specs.len());
@@ -402,10 +428,7 @@ fn request_environment_from_specs(specs: &[RequestBarsSpec]) -> Result<RequestEn
     }
     let provider =
         InMemoryRequestDataProvider::from_streams(streams).map_err(|err| err.to_string())?;
-    Ok(RequestEnvironment::new(
-        ChartContext::default(),
-        Arc::new(provider),
-    ))
+    Ok(RequestEnvironment::new(chart_context, Arc::new(provider)))
 }
 
 #[cfg(test)]

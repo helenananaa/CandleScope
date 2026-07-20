@@ -258,6 +258,154 @@ const fn box_param(name: &'static str, accepts: Accepts, optional: bool) -> BoxN
 }
 
 impl Analyzer {
+    pub(crate) fn validate_legacy_drawing_arg_versions(
+        &mut self,
+        signature: &BuiltinSignature,
+        args: &[CallArg],
+        arg_types: &[Option<PineType>],
+    ) {
+        let version = self.legacy.dialect().version();
+        if version >= 6 {
+            return;
+        }
+
+        let label_point_overload =
+            signature.name == "label.new" && label_new_uses_point_overload(args, arg_types);
+        let line_point_overload =
+            signature.name == "line.new" && line_new_uses_point_overload(args, arg_types);
+        let box_point_overload =
+            signature.name == "box.new" && box_new_uses_point_overload(args, arg_types);
+        let bound_params = match signature.name {
+            "label.new" => {
+                let params = if label_point_overload {
+                    LABEL_NEW_POINT_PARAMS
+                } else {
+                    LABEL_NEW_SCALAR_PARAMS
+                };
+                args.iter()
+                    .enumerate()
+                    .map(|(index, arg)| {
+                        label_new_param(params, index, arg, &mut Vec::new()).map(|param| param.name)
+                    })
+                    .collect::<Vec<_>>()
+            }
+            "line.new" => {
+                let params = if line_point_overload {
+                    LINE_NEW_POINT_PARAMS
+                } else {
+                    LINE_NEW_SCALAR_PARAMS
+                };
+                args.iter()
+                    .enumerate()
+                    .map(|(index, arg)| {
+                        line_new_param(params, index, arg, &mut Vec::new()).map(|param| param.name)
+                    })
+                    .collect::<Vec<_>>()
+            }
+            "box.new" => {
+                let params = if box_point_overload {
+                    BOX_NEW_POINT_PARAMS
+                } else {
+                    BOX_NEW_SCALAR_PARAMS
+                };
+                args.iter()
+                    .enumerate()
+                    .map(|(index, arg)| {
+                        box_new_param(params, index, arg, &mut Vec::new()).map(|param| param.name)
+                    })
+                    .collect::<Vec<_>>()
+            }
+            _ => args
+                .iter()
+                .enumerate()
+                .map(|(index, arg)| {
+                    arg.name
+                        .as_deref()
+                        .and_then(|name| {
+                            signature
+                                .params
+                                .iter()
+                                .find(|param| param.name == name)
+                                .map(|param| param.name)
+                        })
+                        .or_else(|| {
+                            arg.name
+                                .is_none()
+                                .then(|| signature.params.get(index).map(|param| param.name))
+                                .flatten()
+                        })
+                })
+                .collect::<Vec<_>>(),
+        };
+
+        let mut unavailable = Vec::new();
+        if version < 5 {
+            for (uses_point_overload, feature) in [
+                (label_point_overload, "label.new point overload"),
+                (line_point_overload, "line.new point overload"),
+                (box_point_overload, "box.new point overload"),
+            ] {
+                if uses_point_overload && let Some(arg) = args.first() {
+                    unavailable.push((feature.to_owned(), 5, arg.span));
+                }
+            }
+        }
+        for (index, (arg, param_name)) in args.iter().zip(bound_params).enumerate() {
+            let Some(param_name) = param_name else {
+                continue;
+            };
+            let is_v6_text_formatting =
+                matches!(signature.name, "label.new" | "box.new" | "table.cell")
+                    && param_name == "text_formatting";
+            let is_v6_integer_text_size = matches!(
+                (signature.name, param_name),
+                ("label.new" | "label.set_size", "size")
+                    | ("box.new" | "box.set_text_size", "text_size")
+                    | ("table.cell" | "table.cell_set_text_size", "text_size")
+            ) && arg_types
+                .get(index)
+                .copied()
+                .flatten()
+                .is_some_and(|pine_type| pine_type.kind == ValueKind::Int);
+            let is_v5_parameter = version < 5
+                && matches!(
+                    (signature.name, param_name),
+                    ("label.new", "text_font_family" | "force_overlay")
+                        | ("line.new", "force_overlay")
+                        | (
+                            "box.new",
+                            "text"
+                                | "text_size"
+                                | "text_color"
+                                | "text_halign"
+                                | "text_valign"
+                                | "text_wrap"
+                                | "text_font_family"
+                                | "force_overlay"
+                        )
+                        | ("table.new", "force_overlay")
+                        | ("table.cell", "tooltip" | "text_font_family")
+                );
+            let min_version = if is_v6_text_formatting || is_v6_integer_text_size {
+                Some(6)
+            } else if is_v5_parameter {
+                Some(5)
+            } else {
+                None
+            };
+            if let Some(min_version) = min_version {
+                unavailable.push((
+                    format!("{} argument `{param_name}`", signature.name),
+                    min_version,
+                    arg.span,
+                ));
+            }
+        }
+        for (feature, min_version, span) in unavailable {
+            self.reject_unavailable_legacy_builtin(&feature, min_version, span);
+        }
+    }
+
     pub(crate) fn validate_label_new_args(
         &mut self,
         signature: &BuiltinSignature,

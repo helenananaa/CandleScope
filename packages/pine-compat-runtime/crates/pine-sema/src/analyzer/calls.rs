@@ -10,8 +10,11 @@ mod arrays;
 mod declarations;
 mod drawing_options;
 mod helpers;
+mod legacy;
 mod matrices;
 mod return_types;
+
+use legacy::FocusedLegacyCallAnalysis;
 
 pub(crate) use helpers::{
     alias_qualified_method_name, array_call_result_builtin_name, array_method_builtin_name,
@@ -122,6 +125,17 @@ impl Analyzer {
             return None;
         };
 
+        if let Some(min_version) = crate::PineDialect::qualified_builtin_min_version(&name, true)
+            && self.legacy.dialect().version() < min_version
+        {
+            self.reject_unavailable_legacy_builtin(&name, min_version, callee.span);
+            return None;
+        }
+
+        if self.reject_legacy_named_call_args(&name, args, callee.span) {
+            return None;
+        }
+
         if name.starts_with("request.") {
             return self.analyze_request_call(&name, callee.span, args);
         }
@@ -135,6 +149,52 @@ impl Analyzer {
             .iter()
             .map(|arg| self.analyze_expr(&arg.value))
             .collect();
+
+        if self.reject_legacy_input_constant_leaks(&name, callee, args) {
+            return None;
+        }
+
+        // Scope lookup is only needed for a name that can resolve through the
+        // active legacy catalog. Keeping modern calls off this path also avoids
+        // adding stack pressure to deeply chained v5/v6 call-result analysis.
+        let is_legacy_call = self.legacy.resolve_call(&name).is_some();
+        let is_shadowed_legacy_call = is_legacy_call
+            && (self.functions.contains_key(&name)
+                || (matches!(callee.kind, ExprKind::Identifier(_))
+                    && self.scope.resolve(&name).is_some()));
+        if is_legacy_call
+            && !is_shadowed_legacy_call
+            && let FocusedLegacyCallAnalysis::Analyzed(result) =
+                self.analyze_focused_legacy_call(&name, callee.span, span, args, &arg_types)
+        {
+            return result;
+        }
+        if is_legacy_call
+            && !is_shadowed_legacy_call
+            && let Some(crate::legacy::LegacyResolution::ExactAlias(rule)) =
+                self.legacy.resolve_call(&name)
+        {
+            let canonical_name = rule
+                .canonical_name
+                .expect("validated exact legacy alias has a canonical target");
+            let signature = pine_builtins::get_phase_1_builtin(canonical_name)
+                .expect("validated exact legacy function target is registered");
+            let source_context_id = self.current_source_context_id();
+            self.legacy.record_call_translation(
+                &mut self.compatibility,
+                source_context_id,
+                callee.span,
+                rule,
+            );
+            return self.analyze_registered_builtin(
+                canonical_name,
+                signature,
+                callee.span,
+                span,
+                args,
+                &arg_types,
+            );
+        }
 
         if let Some(result) = self.analyze_array_call_result_method(callee, args, span, &arg_types)
         {
@@ -174,42 +234,14 @@ impl Analyzer {
         }
 
         if let Some(signature) = pine_builtins::get_phase_1_builtin(&name) {
-            self.check_feature_name(&name, callee.span);
-            self.validate_script_declaration_call(&name, callee.span, args);
-            self.validate_strategy_order_call(&name, callee.span, args);
-            self.validate_strategy_value_function_call(&name, callee.span);
-            if self.function_depth > 0 && is_output_or_declaration_builtin(&name) {
-                self.unsupported(
-                    "function_side_effect",
-                    "indicator, strategy, input, plot, plotchar, plotshape, plotarrow, plotbar, plotcandle, hline, fill, bgcolor, barcolor, alert, alertcondition, drawing calls, and strategy order calls are not supported inside user-defined functions",
-                    callee.span,
-                );
-            }
-            if self.function_depth > 0 && is_array_mutation_builtin(&name) {
-                self.unsupported(
-                    "function_side_effect",
-                    &unsupported_collection_mutation_udf_reason(&name),
-                    callee.span,
-                );
-            }
-
-            self.validate_call_args(signature, args, &arg_types);
-            if is_ta_vwap_bands_call(&name, args) {
-                return Some(pine_builtins::tuple_return_type());
-            }
-            if name == "array.from"
-                && let Some(
-                    UserTypeArrayElementInference::SameScalarLocal(type_name)
-                    | UserTypeArrayElementInference::SameScalarImported(type_name),
-                ) = self.array_from_user_type_element_inference(args, &arg_types)
-            {
-                let pine_type = PineType::new(Qualifier::Simple, ValueKind::UserTypeArray);
-                self.mark_expr_user_type_array(span, type_name);
-                return Some(pine_type);
-            }
-            self.mark_user_type_array_element_result(&name, span, args, &arg_types);
-            self.mark_user_type_array_result(&name, span, args, &arg_types);
-            return self.return_type_for_call(signature, args, &arg_types);
+            return self.analyze_registered_builtin(
+                &name,
+                signature,
+                callee.span,
+                span,
+                args,
+                &arg_types,
+            );
         }
 
         if matches!(callee.kind, ExprKind::QualifiedName(_))
@@ -242,6 +274,86 @@ impl Analyzer {
             return self.analyze_udf_call(&name, callee.span, span, args, &arg_types);
         }
 
+        let is_shadowed_lexical_call =
+            matches!(callee.kind, ExprKind::Identifier(_)) && self.scope.resolve(&name).is_some();
+        let legacy_resolution = if is_shadowed_lexical_call {
+            None
+        } else {
+            self.legacy.resolve_call(&name)
+        };
+        match legacy_resolution {
+            Some(crate::legacy::LegacyResolution::ExactAlias(rule)) => {
+                let canonical_name = rule
+                    .canonical_name
+                    .expect("validated exact legacy alias has a canonical target");
+                let signature = pine_builtins::get_phase_1_builtin(canonical_name)
+                    .expect("validated exact legacy function target is registered");
+                let source_context_id = self.current_source_context_id();
+                self.legacy.record_call_translation(
+                    &mut self.compatibility,
+                    source_context_id,
+                    callee.span,
+                    rule,
+                );
+                return self.analyze_registered_builtin(
+                    canonical_name,
+                    signature,
+                    callee.span,
+                    span,
+                    args,
+                    &arg_types,
+                );
+            }
+            Some(crate::legacy::LegacyResolution::Focused(rule)) => {
+                if rule.kind != crate::legacy::LegacyRuleKind::FocusedDeclaration
+                    || rule.source_name != "study"
+                {
+                    unreachable!("supported focused legacy rule has no analyzer owner")
+                }
+                let bound = match self.legacy.bind_legacy_study_args(args) {
+                    crate::legacy::LegacyStudyBinding::Bound(bound) => bound,
+                    crate::legacy::LegacyStudyBinding::Invalid(diagnostics) => {
+                        self.diagnostics.extend(diagnostics);
+                        return None;
+                    }
+                    crate::legacy::LegacyStudyBinding::Unsupported(unsupported) => {
+                        self.unsupported(unsupported.feature, unsupported.reason, unsupported.span);
+                        return None;
+                    }
+                };
+                let canonical_name = rule
+                    .canonical_name
+                    .expect("validated focused declaration has a canonical target");
+                let signature = pine_builtins::get_phase_1_builtin(canonical_name)
+                    .expect("validated focused declaration target is registered");
+                let source_context_id = self.current_source_context_id();
+                self.legacy.record_declaration_translation(
+                    &mut self.compatibility,
+                    source_context_id,
+                    callee.span,
+                    rule,
+                    bound.canonical_arg_names,
+                );
+                return self.analyze_registered_builtin(
+                    canonical_name,
+                    signature,
+                    callee.span,
+                    span,
+                    &bound.canonical_args,
+                    &arg_types,
+                );
+            }
+            Some(crate::legacy::LegacyResolution::UnsupportedKnown(rule)) => {
+                let crate::legacy::LegacyRuleSupport::UnsupportedKnown { reason } = rule.support
+                else {
+                    unreachable!("legacy resolver preserves rule support state")
+                };
+                self.unsupported(rule.source_name, reason, callee.span);
+                return None;
+            }
+            None => {}
+        }
+
         if let Some(reason) = unsupported_strategy_reason(&name) {
             self.unsupported(&name, reason, callee.span);
             return None;
@@ -268,6 +380,53 @@ impl Analyzer {
         None
     }
 
+    fn analyze_registered_builtin(
+        &mut self,
+        name: &str,
+        signature: &'static BuiltinSignature,
+        callee_span: Span,
+        call_span: Span,
+        args: &[CallArg],
+        arg_types: &[Option<PineType>],
+    ) -> Option<PineType> {
+        self.check_feature_name(name, callee_span);
+        self.validate_script_declaration_call(name, callee_span, args);
+        self.validate_strategy_order_call(name, callee_span, args);
+        self.validate_strategy_value_function_call(name, callee_span);
+        if self.function_depth > 0 && is_output_or_declaration_builtin(name) {
+            self.unsupported(
+                "function_side_effect",
+                "indicator, strategy, input, plot, plotchar, plotshape, plotarrow, plotbar, plotcandle, hline, fill, bgcolor, barcolor, alert, alertcondition, drawing calls, and strategy order calls are not supported inside user-defined functions",
+                callee_span,
+            );
+        }
+        if self.function_depth > 0 && is_array_mutation_builtin(name) {
+            self.unsupported(
+                "function_side_effect",
+                &unsupported_collection_mutation_udf_reason(name),
+                callee_span,
+            );
+        }
+
+        self.validate_call_args(signature, args, arg_types);
+        if is_ta_vwap_bands_call(name, args) {
+            return Some(pine_builtins::tuple_return_type());
+        }
+        if name == "array.from"
+            && let Some(
+                UserTypeArrayElementInference::SameScalarLocal(type_name)
+                | UserTypeArrayElementInference::SameScalarImported(type_name),
+            ) = self.array_from_user_type_element_inference(args, arg_types)
+        {
+            let pine_type = PineType::new(Qualifier::Simple, ValueKind::UserTypeArray);
+            self.mark_expr_user_type_array(call_span, type_name);
+            return Some(pine_type);
+        }
+        self.mark_user_type_array_element_result(name, call_span, args, arg_types);
+        self.mark_user_type_array_result(name, call_span, args, arg_types);
+        self.return_type_for_call(signature, args, arg_types)
+    }
+
     fn analyze_array_call_result_method(
         &mut self,
         callee: &Expr,
@@ -281,6 +440,9 @@ impl Analyzer {
         };
         if !is_array_kind(receiver_type.kind) {
             return None;
+        }
+        if self.reject_legacy_builtin_method_syntax("array call-result", method_name, callee.span) {
+            return Some(None);
         }
         let Some(builtin_name) = array_call_result_builtin_name(method_name) else {
             self.unsupported(
@@ -656,6 +818,16 @@ impl Analyzer {
             );
         }
         if let Some(builtin_name) = drawing_method_builtin_name(receiver_type.kind, method_name) {
+            if self.reject_legacy_builtin_method_syntax(receiver_name, method_name, callee.span) {
+                return MethodResolution::Resolved(None);
+            }
+            if let Some(min_version) =
+                crate::PineDialect::qualified_builtin_min_version(&builtin_name, true)
+                && self.legacy.dialect().version() < min_version
+            {
+                self.reject_unavailable_legacy_builtin(&builtin_name, min_version, callee.span);
+                return MethodResolution::Resolved(None);
+            }
             let signature = pine_builtins::get_phase_1_builtin(&builtin_name)
                 .expect("drawing method helper returned registered builtin");
             self.check_feature_name(&builtin_name, callee.span);
@@ -732,6 +904,12 @@ impl Analyzer {
                 )
                 .unwrap_or(None),
             );
+        }
+
+        if is_array_kind(receiver_type.kind)
+            && self.reject_legacy_builtin_method_syntax(receiver_name, method_name, callee.span)
+        {
+            return MethodResolution::Resolved(None);
         }
 
         let builtin_name =
@@ -813,6 +991,7 @@ impl Analyzer {
         args: &[CallArg],
         arg_types: &[Option<PineType>],
     ) {
+        self.validate_legacy_drawing_arg_versions(signature, args, arg_types);
         if is_time_function_overload(signature.name) {
             self.validate_time_function_args(signature, args, arg_types);
             return;

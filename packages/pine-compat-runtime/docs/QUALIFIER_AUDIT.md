@@ -528,7 +528,9 @@ simple or const/input consumers.
 variable, source, and source/anchor scalar forms, and its bands overload has
 fixture-backed tuple element semantics where basis, upper, and lower are each
 `series float`; all are accepted by series numeric consumers and rejected by
-const/input numeric consumers.
+const/input numeric consumers. The bands overload accepts numeric-compatible
+`stdev_mult` values through the `series` qualifier, including an independently
+changing multiplier on each bar.
 `color.new` has fixture-backed `ColorFromArg` return propagation from its base
 color argument: input color arguments produce input colors accepted by
 const/input color consumers, while simple color arguments remain simple colors

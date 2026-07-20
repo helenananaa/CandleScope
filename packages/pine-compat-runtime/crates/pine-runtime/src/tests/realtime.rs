@@ -1,4 +1,3 @@
-use pine_sema::analyze_source;
 use pine_syntax::SourceFile;
 
 use super::*;
@@ -38,6 +37,117 @@ plot(math.random(0, 1, 7))
         .update(BarUpdate::confirmed(bar(4.0)))
         .expect("confirmed update");
     assert_eq!(confirmed.plots[0].values[1], forming_value);
+}
+
+#[test]
+fn realtime_rollback_preserves_default_vwap_day_anchor_state() {
+    let source = SourceFile::new(
+        "test.pine",
+        r#"indicator("realtime vwap")
+plot(ta.vwap)
+plot(ta.vwap(close))
+"#,
+    );
+    let analysis = analyze_source(&source);
+    assert!(
+        analysis.diagnostics.is_empty(),
+        "{:?}",
+        analysis.diagnostics
+    );
+    let hir = analysis.hir.expect("HIR");
+    let timed_bar = |time, close| Bar {
+        time,
+        open: close,
+        high: close,
+        low: close,
+        close,
+        volume: 1.0,
+    };
+    let mut runtime = RealtimeRuntime::new(&hir);
+
+    runtime
+        .update(BarUpdate::historical(timed_bar(0, 10.0)))
+        .expect("first historical update");
+    runtime
+        .update(BarUpdate::historical(timed_bar(60_000, 20.0)))
+        .expect("second historical update");
+
+    let forming = runtime
+        .update(BarUpdate::forming(timed_bar(86_400_000, 30.0)))
+        .expect("new-day forming update");
+    assert_values_close(&forming.plots[0].values, &[10.0, 15.0, 30.0]);
+    assert_values_close(&forming.plots[1].values, &[10.0, 15.0, 30.0]);
+
+    let replacement = runtime
+        .update(BarUpdate::forming(timed_bar(86_400_000, 40.0)))
+        .expect("replacement forming update");
+    assert_values_close(&replacement.plots[0].values, &[10.0, 15.0, 40.0]);
+    assert_values_close(&replacement.plots[1].values, &[10.0, 15.0, 40.0]);
+
+    let confirmed = runtime
+        .update(BarUpdate::confirmed(timed_bar(86_400_000, 35.0)))
+        .expect("new-day confirmed update");
+    assert_values_close(&confirmed.plots[0].values, &[10.0, 15.0, 35.0]);
+    assert_values_close(&confirmed.plots[1].values, &[10.0, 15.0, 35.0]);
+
+    let next = runtime
+        .update(BarUpdate::confirmed(timed_bar(86_460_000, 45.0)))
+        .expect("same-day confirmed update");
+    assert_values_close(&next.plots[0].values, &[10.0, 15.0, 35.0, 40.0]);
+    assert_values_close(&next.plots[1].values, &[10.0, 15.0, 35.0, 40.0]);
+}
+
+#[test]
+fn realtime_rollback_restores_conditional_default_vwap_callsite_bucket() {
+    let source = SourceFile::new(
+        "test.pine",
+        r#"indicator("conditional realtime vwap")
+var float score = na
+if bar_index != 1
+    score := ta.vwap(close)
+plot(score)
+"#,
+    );
+    let analysis = analyze_source(&source);
+    assert!(
+        analysis.diagnostics.is_empty(),
+        "{:?}",
+        analysis.diagnostics
+    );
+    let hir = analysis.hir.expect("HIR");
+    let timed_bar = |time, close| Bar {
+        time,
+        open: close,
+        high: close,
+        low: close,
+        close,
+        volume: 1.0,
+    };
+    let mut runtime = RealtimeRuntime::new(&hir);
+
+    runtime
+        .update(BarUpdate::historical(timed_bar(0, 10.0)))
+        .expect("first historical update");
+    let skipped_boundary = runtime
+        .update(BarUpdate::forming(timed_bar(86_400_000, 20.0)))
+        .expect("skipped boundary update");
+    let skipped_boundary_replacement = runtime
+        .update(BarUpdate::forming(timed_bar(86_400_000, 25.0)))
+        .expect("skipped boundary replacement");
+    runtime
+        .update(BarUpdate::confirmed(timed_bar(86_400_000, 20.0)))
+        .expect("skipped boundary confirmation");
+    let resumed = runtime
+        .update(BarUpdate::forming(timed_bar(86_460_000, 30.0)))
+        .expect("resumed callsite update");
+    let resumed_replacement = runtime
+        .update(BarUpdate::forming(timed_bar(86_460_000, 40.0)))
+        .expect("resumed callsite replacement");
+
+    assert_values_close(&skipped_boundary.plots[0].values, &[10.0, 10.0]);
+    assert_values_close(&skipped_boundary_replacement.plots[0].values, &[10.0, 10.0]);
+    assert_values_close(&resumed.plots[0].values, &[10.0, 10.0, 30.0]);
+    assert_values_close(&resumed_replacement.plots[0].values, &[10.0, 10.0, 40.0]);
 }
 
 #[test]

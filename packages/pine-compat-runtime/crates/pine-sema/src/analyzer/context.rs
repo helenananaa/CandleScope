@@ -12,6 +12,7 @@ use pine_syntax::{Diagnostic, Expr, FunctionBody, Program, Severity, Span};
 
 use crate::analysis::Analysis;
 use crate::compatibility::CompatibilityReport;
+use crate::legacy::LegacyFrontEnd;
 use crate::modules::ImportedUserTypeInfo;
 use crate::prelude::{ExprKey, UserTypeIdentity, UserTypeInfo};
 use crate::resolver::{BindingKey, ScopeResolver, SymbolInfo};
@@ -46,6 +47,7 @@ impl Default for LoweringLimits {
 pub(crate) struct Analyzer {
     pub(crate) diagnostics: Vec<Diagnostic>,
     pub(crate) compatibility: CompatibilityReport,
+    pub(crate) legacy: LegacyFrontEnd,
     pub(crate) source_context_id: Cell<SourceContextId>,
     pub(crate) source_context_depth: Cell<usize>,
     pub(crate) scope: ScopeResolver,
@@ -60,6 +62,12 @@ pub(crate) struct Analyzer {
     pub(crate) symbol_user_type_identities: HashMap<SymbolId, UserTypeIdentity>,
     pub(crate) symbol_init_exprs: HashMap<SymbolId, SourcedExpr>,
     pub(crate) typed_na_scalar_symbols: HashSet<SymbolId>,
+    pub(crate) legacy_v3_untyped_na_symbols: HashMap<SymbolId, Span>,
+    pub(crate) legacy_v3_pending_na_symbols: HashSet<SymbolId>,
+    pub(crate) legacy_v2_declaration_plan: crate::legacy::LegacyV2DeclarationPlan,
+    pub(crate) legacy_v2_predeclared_symbols: HashSet<SymbolId>,
+    pub(crate) legacy_bool_to_float_exprs: HashSet<ExprKey>,
+    pub(crate) legacy_numeric_to_bool_exprs: HashSet<ExprKey>,
     pub(crate) non_scalar_udt_varip_symbols: HashSet<SymbolId>,
     pub(crate) symbol_user_type_arrays: HashMap<SymbolId, String>,
     pub(crate) symbol_tuple_element_types: HashMap<SymbolId, Vec<PineType>>,
@@ -366,6 +374,22 @@ impl Analyzer {
         }
     }
 
+    pub(crate) fn update_symbol_type_and_bindings(&mut self, name: &str, pine_type: PineType) {
+        let original = self.scope.resolve(name);
+        self.update_symbol_type(name, pine_type);
+        let Some(original) = original else {
+            return;
+        };
+        let Some(updated) = self.scope.resolve(name) else {
+            return;
+        };
+        for binding in self.bindings.values_mut() {
+            if binding.id == original.id {
+                *binding = updated;
+            }
+        }
+    }
+
     pub(crate) fn series_id_for_type(&mut self, pine_type: PineType) -> Option<SeriesId> {
         if pine_type.qualifier == Qualifier::Series || is_collection_kind(pine_type.kind) {
             Some(self.alloc_series())
@@ -407,6 +431,7 @@ impl Analyzer {
         };
         debug_assert!(self.source_context_stack_is_restored());
 
+        crate::legacy::normalize_legacy_report(&mut self.compatibility);
         Analysis {
             diagnostics: self.diagnostics,
             compatibility: self.compatibility,

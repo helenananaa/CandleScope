@@ -1375,11 +1375,17 @@ Current baseline:
 - numeric and const-dateString `timestamp` IANA local-time conversion with
   explicit overlap and DST gap resolution;
 - many edge-case fixtures for numeric rolling windows, `na`, tuple returns, and
-  supported qualifier families.
+  supported qualifier families;
+- every `ta.*` variable/function name in the current Pine v6 reference surface
+  has a conformance row, and the last partial row, `ta.vwap`, now has
+  fixture-backed UTC daily default anchoring, explicit pre-anchor `na`, series
+  band multipliers, request-context isolation, and realtime rollback. The
+  project also retains the additional conformance-listed `ta.ao`, `ta.bop`,
+  `ta.covariance`, `ta.dema`, and `ta.tema` helpers.
 
 Remaining internal work:
 
-- missing high-use pure `ta.*` helpers;
+- future `ta.*` additions or signature drift found by reference/corpus audits;
 - more `math.*` and `str.*` edge cases;
 - more time/session/timezone helper semantics that do not require exchange data;
 - tighter diagnostics for unsupported argument families;

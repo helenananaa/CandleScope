@@ -46,6 +46,70 @@ fn parses_version_and_indicator() {
 }
 
 #[test]
+fn accepts_exact_version_directive_after_leading_comments_and_whitespace() {
+    let parsed = parse("// license comment\n  //@version=4  \nstudy(\"Demo\")\n");
+
+    assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+    assert_eq!(
+        parsed.program.version.map(|version| version.version),
+        Some(4)
+    );
+}
+
+#[test]
+fn rejects_duplicate_version_directives_with_focused_diagnostic() {
+    let parsed = parse("//@version=5\n//@version=6\nindicator(\"Demo\")\n");
+
+    assert_eq!(
+        parsed
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.code.as_str())
+            .collect::<Vec<_>>(),
+        vec!["E_LANGUAGE_VERSION_DUPLICATE"]
+    );
+    assert_eq!(
+        parsed.program.version.map(|version| version.version),
+        Some(5)
+    );
+}
+
+#[test]
+fn rejects_version_directive_after_source_statement() {
+    let parsed = parse("indicator(\"Demo\")\n//@version=6\n");
+
+    assert_eq!(
+        parsed
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.code.as_str())
+            .collect::<Vec<_>>(),
+        vec!["E_LANGUAGE_VERSION_PLACEMENT"]
+    );
+    assert!(parsed.program.version.is_none());
+}
+
+#[test]
+fn keeps_existing_version_whitespace_policy() {
+    for source in [
+        "// @version=6\nindicator(\"Demo\")\n",
+        "//@version =6\nindicator(\"Demo\")\n",
+    ] {
+        let parsed = parse(source);
+
+        assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+        assert!(parsed.program.version.is_none());
+    }
+
+    let parsed = parse("//@version= 6  \nindicator(\"Demo\")\n");
+    assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+    assert_eq!(
+        parsed.program.version.map(|version| version.version),
+        Some(6)
+    );
+}
+
+#[test]
 fn parses_declaration_with_history_call() {
     let parsed = parse("x = ta.sma(close, 20)[1]\n");
 

@@ -24,6 +24,18 @@ impl ChartContext {
     pub fn timeframe(&self) -> &RequestTimeframe {
         &self.timeframe
     }
+
+    #[must_use]
+    pub fn with_symbol(mut self, symbol: impl Into<String>) -> Self {
+        self.symbol = symbol.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_timeframe(mut self, timeframe: RequestTimeframe) -> Self {
+        self.timeframe = timeframe;
+        self
+    }
 }
 
 impl Default for ChartContext {

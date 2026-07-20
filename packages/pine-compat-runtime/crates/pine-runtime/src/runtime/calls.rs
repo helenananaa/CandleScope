@@ -1,4 +1,4 @@
-use pine_ir::{CallSiteId, HirCallArg};
+use pine_ir::{CallSiteId, HirBinaryOp, HirCallArg, HirExpr};
 
 use crate::runtime::call_context::RuntimeCallContext;
 use crate::*;
@@ -10,6 +10,9 @@ impl<'a> HistoricalRuntime<'a> {
         call_site_id: CallSiteId,
         args: &[HirCallArg],
     ) -> Result<PineValue, RuntimeError> {
+        if let Some(result) = self.eval_legacy_call(callee, args) {
+            return result;
+        }
         if let Some(result) = self.eval_variable_call(callee, call_site_id, args) {
             return result;
         }
@@ -77,4 +80,62 @@ impl<'a> HistoricalRuntime<'a> {
             message: format!("unsupported runtime call `{callee}`"),
         })
     }
+
+    fn eval_legacy_call(
+        &mut self,
+        callee: &str,
+        args: &[HirCallArg],
+    ) -> Option<Result<PineValue, RuntimeError>> {
+        match callee {
+            "$legacy.iff" => Some(self.eval_legacy_iff(args)),
+            "$legacy.rsi_series" => Some(self.eval_legacy_rsi_series(args)),
+            _ => None,
+        }
+    }
+
+    fn eval_legacy_iff(&mut self, args: &[HirCallArg]) -> Result<PineValue, RuntimeError> {
+        let condition = self.eval_expr(legacy_arg(args, 0, "condition")?)?;
+        let result1 = self.eval_expr(legacy_arg(args, 1, "result1")?)?;
+        let result2 = self.eval_expr(legacy_arg(args, 2, "result2")?)?;
+        Ok(match condition {
+            PineValue::Bool(true) => result1,
+            PineValue::Bool(false) | PineValue::Na => result2,
+            _ => PineValue::Na,
+        })
+    }
+
+    fn eval_legacy_rsi_series(&mut self, args: &[HirCallArg]) -> Result<PineValue, RuntimeError> {
+        let x = self.eval_expr(legacy_arg(args, 0, "x")?)?;
+        let y = self.eval_expr(legacy_arg(args, 1, "y")?)?;
+        let ratio = crate::runtime::expressions::eval_binary(HirBinaryOp::Div, x, y)?;
+        let denominator = crate::runtime::expressions::eval_binary(
+            HirBinaryOp::Add,
+            PineValue::Float(1.0),
+            ratio,
+        )?;
+        let fraction = crate::runtime::expressions::eval_binary(
+            HirBinaryOp::Div,
+            PineValue::Float(100.0),
+            denominator,
+        )?;
+        crate::runtime::expressions::eval_binary(
+            HirBinaryOp::Sub,
+            PineValue::Float(100.0),
+            fraction,
+        )
+    }
+}
+
+fn legacy_arg<'a>(
+    args: &'a [HirCallArg],
+    positional: usize,
+    name: &str,
+) -> Result<&'a HirExpr, RuntimeError> {
+    args.iter()
+        .find(|arg| arg.name.as_deref() == Some(name))
+        .or_else(|| args.get(positional))
+        .map(|arg| &arg.value)
+        .ok_or_else(|| RuntimeError {
+            message: format!("internal legacy call is missing argument `{name}`"),
+        })
 }

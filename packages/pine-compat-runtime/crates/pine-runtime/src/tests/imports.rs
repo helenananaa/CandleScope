@@ -1,14 +1,13 @@
 use pine_sema::{AnalysisInput, analyze_input};
-use pine_syntax::SourceFile;
 
 use super::*;
 
 fn analyze_import(root: &str, library: &str) -> pine_sema::Analysis {
     let input = AnalysisInput::with_library_sources(
-        SourceFile::new("root.pine", root),
+        modern_source_file("root.pine", root),
         vec![(
             "user/lib/1".to_owned(),
-            SourceFile::new("lib.pine", library),
+            modern_source_file("lib.pine", library),
         )],
     )
     .expect("analysis input");
@@ -214,7 +213,7 @@ export counter() =>
 #[test]
 fn repeated_imports_of_same_source_share_exports_without_state_collision() {
     let input = AnalysisInput::with_library_sources(
-        SourceFile::new(
+        modern_source_file(
             "root.pine",
             r#"indicator("repeated imports")
 import user/lib/1 as one
@@ -224,7 +223,7 @@ plot(one.counter() + two.counter())
         ),
         vec![(
             "user/lib/1".to_owned(),
-            SourceFile::new(
+            modern_source_file(
                 "lib.pine",
                 r#"library("lib")
 export counter() =>

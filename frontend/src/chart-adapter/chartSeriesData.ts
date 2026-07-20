@@ -51,9 +51,8 @@ export function normalizeLineSeriesData(
   line: IndicatorLine | null | undefined,
   allowedTimeSet: ReadonlySet<ChartTime> | null | undefined,
 ): NormalizedIndicatorDataEntry[] {
-  const isHistogram = line?.type === "histogram";
   const sourceData = filterEntriesByTime(line?.data, allowedTimeSet);
-  if (isHistogram && line.colorData && Array.isArray(line.colorData)) {
+  if (line?.colorData && Array.isArray(line.colorData)) {
     const colorMap = new Map<string, string>();
     for (const cd of filterEntriesByTime(line.colorData, allowedTimeSet)) {
       const key = chartTimeKey(cd.time);
@@ -240,6 +239,7 @@ export function buildFillRenderEntries(
   const entries: FillRenderEntry[] = [];
   const signatureParts: string[] = [];
   let pointCount = 0;
+  let matchedFillCount = 0;
 
   for (const fillDef of indicatorFills) {
     const { plot1_id, plot2_id } = fillDef;
@@ -276,31 +276,95 @@ export function buildFillRenderEntries(
     sharedPoints.sort((a, b) => compareChartTimes(a.first.time, b.first.time));
     if (sharedPoints.length === 0) continue;
 
-    const upperData = sharedPoints.map(({ first, second }) => ({
-      time: first.time,
-      value: Math.max(first.value, second.value),
-    }));
-    const lowerData = sharedPoints.map(({ first, second }) => ({
-      time: first.time,
-      value: Math.min(first.value, second.value),
-    }));
-    const fillColor = fillDef.color || "rgba(59,130,246,0.15)";
-    entries.push({ upperData, lowerData, fillColor, backgroundColor });
+    const usesColorData = Array.isArray(fillDef.colorData);
+    const colorByKey = new Map<string, string>();
+    for (const point of fillDef.colorData || []) {
+      const key = chartTimeKey(point.time);
+      if (key !== null && point.color) colorByKey.set(key, point.color);
+    }
+    const unionTimes = new Map<string, ChartTime>();
+    for (const point of [...data1, ...data2, ...(fillDef.colorData || [])]) {
+      const key = chartTimeKey(point.time);
+      if (key !== null && point.time != null) unionTimes.set(key, point.time);
+    }
+    const orderedUnionKeys = Array.from(unionTimes.entries())
+      .sort((left, right) => compareChartTimes(left[1], right[1]))
+      .map(([key]) => key);
+    const unionOrdinal = new Map(orderedUnionKeys.map((key, index) => [key, index]));
+    const segments: Array<{
+      color: string;
+      points: typeof sharedPoints;
+    }> = [];
+    let currentColor: string | null = null;
+    let currentPoints: typeof sharedPoints = [];
+    let previousOrdinal: number | null = null;
+
+    const flushSegment = (): void => {
+      if (currentColor !== null && currentPoints.length > 0) {
+        segments.push({ color: currentColor, points: currentPoints });
+      }
+      currentColor = null;
+      currentPoints = [];
+      previousOrdinal = null;
+    };
+
+    for (const point of sharedPoints) {
+      const color = usesColorData
+        ? colorByKey.get(point.key)
+        : (fillDef.color || "rgba(59,130,246,0.15)");
+      const ordinal = unionOrdinal.get(point.key);
+      if (!color || ordinal === undefined) {
+        flushSegment();
+        continue;
+      }
+      const crossesGap = fillDef.fillGaps === false
+        && previousOrdinal !== null
+        && ordinal !== previousOrdinal + 1;
+      if (currentColor !== null && (currentColor !== color || crossesGap)) {
+        flushSegment();
+      }
+      if (currentColor === null) currentColor = color;
+      currentPoints.push(point);
+      previousOrdinal = ordinal;
+    }
+    flushSegment();
+    if (segments.length === 0) continue;
+    matchedFillCount += 1;
+
+    for (const segment of segments) {
+      const upperData = segment.points.map(({ first, second }) => ({
+        time: first.time,
+        value: Math.max(first.value, second.value),
+      }));
+      const lowerData = segment.points.map(({ first, second }) => ({
+        time: first.time,
+        value: Math.min(first.value, second.value),
+      }));
+      entries.push({
+        upperData,
+        lowerData,
+        fillColor: segment.color,
+        backgroundColor,
+      });
+      pointCount += segment.points.length;
+    }
     signatureParts.push(JSON.stringify([
       scope,
       plot1_id,
       plot2_id,
-      fillColor,
+      fillDef.fillGaps !== false,
       backgroundColor,
-      sharedPoints.map(({ key, first, second }) => [key, first.value, second.value]),
+      segments.map((segment) => [
+        segment.color,
+        segment.points.map(({ key, first, second }) => [key, first.value, second.value]),
+      ]),
     ]));
-    pointCount += sharedPoints.length;
   }
 
   return {
     entries,
     signature: signatureParts.length ? signatureParts.join("|") : "empty",
-    matchedFillCount: entries.length,
+    matchedFillCount,
     pointCount,
   };
 }

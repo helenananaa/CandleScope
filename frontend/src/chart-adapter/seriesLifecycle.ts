@@ -230,11 +230,15 @@ export function buildIndicatorSeriesOptions(
     lineWidth: isHistogram ? undefined : (line?.lineWidth || 2),
     lineStyle: isHistogram ? undefined : (line?.lineStyle || 0),
     title: "",
-    visible: true,
+    visible: line?.visible !== false,
     priceScaleId: "right",
     lastValueVisible: false,
-    priceLineVisible: false,
+    priceLineVisible: line?.trackPrice === true,
   };
+
+  if (isHistogram && Number.isFinite(line?.base)) {
+    options.base = Number(line?.base);
+  }
 
   if (!isHistogram) {
     options.crosshairMarkerVisible = crosshairMarkerVisible;
@@ -249,6 +253,19 @@ export function buildIndicatorSeriesOptions(
       type: "custom",
       minMove: 0.01,
       formatter: formatIndicatorNotional,
+    };
+  }
+
+  if (line?.priceFormat === "volume") {
+    options.priceFormat = { type: "volume" };
+  } else if (line?.priceFormat === "percent") {
+    options.priceFormat = { type: "percent" };
+  } else if (line?.priceFormat === "price" || Number.isInteger(line?.precision)) {
+    const precision = Math.max(0, Math.min(16, Number(line?.precision ?? 2)));
+    options.priceFormat = {
+      type: "price",
+      precision,
+      minMove: 10 ** -precision,
     };
   }
 

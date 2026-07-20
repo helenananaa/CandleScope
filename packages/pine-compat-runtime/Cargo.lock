@@ -290,28 +290,29 @@ dependencies = [
 
 [[package]]
 name = "pine-builtins"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "pine-ir",
 ]
 
 [[package]]
 name = "pine-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "pine-builtins",
  "pine-runtime",
  "pine-sema",
  "pine-syntax",
+ "serde_json",
 ]
 
 [[package]]
 name = "pine-ir"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "pine-python"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "pine-ir",
  "pine-runtime",
@@ -322,7 +323,7 @@ dependencies = [
 
 [[package]]
 name = "pine-runtime"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -339,7 +340,7 @@ dependencies = [
 
 [[package]]
 name = "pine-sema"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "pine-builtins",
  "pine-ir",
@@ -348,11 +349,11 @@ dependencies = [
 
 [[package]]
 name = "pine-syntax"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "pine-wasm"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "pine-ir",
  "pine-runtime",

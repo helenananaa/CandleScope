@@ -5,17 +5,66 @@ more important than broad, incomplete support.
 
 ## Version Policy
 
-The parser should recognize version declarations:
+The parser recognizes the exact `//@version=N` form for the closed v1 through
+v6 range:
 
 ```pine
+//@version=1
+//@version=2
+//@version=3
 //@version=4
 //@version=5
 //@version=6
 ```
 
-The analyzer carries the parsed version into HIR so the runtime can select
-version-specific behavior. Unsupported version-specific behavior must be
-reported in diagnostics.
+A missing directive selects v1 with origin `implicit`; it is not treated as the
+latest language. Leading comments, blank lines, and indentation before the
+directive are accepted. Whitespace after `=` and trailing whitespace retain
+the parser's existing acceptance, while `// @version=6` and
+`//@version =6` remain ordinary comments. A second exact directive or an exact
+directive after a source statement is rejected before ordinary semantic
+analysis. Versions outside v1-v6 and root/library version mismatches are also
+rejected before lowering.
+
+The analyzer carries the validated dialect into HIR so the runtime can select
+version-specific behavior. For v1-v4, script-mode classification runs before
+ordinary symbol and call diagnostics. The fixture-backed v1-v4 `study()`
+subsets are executable through versioned declaration, input, alias, output,
+and request translation. `strategy()` and any `strategy.*` use in v1-v4 stop with
+one `E_LEGACY_STRATEGY_OUT_OF_SCOPE` diagnostic; legacy strategies are not in
+scope. Explicit v5/v6 `indicator()` and `strategy()` continue through the
+existing modern paths, and legacy-only declaration names are not activated for
+modern sources.
+
+The v1-v4 compatibility front-end uses version-ranged exact rules only after
+lexical/user resolution fails. Exact translations preserve their original span
+in `legacyTranslations` and lower to canonical HIR names. The implemented
+legacy subset includes the bounded v1/v2 scalar declaration graph, historical
+bool/numeric conversions, v3 untyped-`na` inference, v1-v4 `study()` and
+focused `input()` binding, the
+conformance-listed exact aliases, the initial ten output families with
+versioned transparency/style semantics, strict `iff`, structural `offset`, the
+type-directed legacy `rsi` overload, weekday session defaults, and pre-v6
+strict logical evaluation. Recognized multi-timeframe request forms that still
+need legacy execution semantics fail as supported-known work instead of
+silently selecting modern behavior.
+
+The released indicator profiles are evidence-ranked independently from their
+individual conformance rows:
+
+| Profile | Maturity | Fixed eligible corpus | Stable gate status |
+| --- | --- | ---: | --- |
+| v4 indicator | preview | 12 | below the provisional 50-script evidence gate |
+| v3 indicator | preview | 7 | below the provisional 50-script evidence gate |
+| v2 indicator | experimental | 2 | below the provisional 50-script evidence gate |
+| implicit v1 indicator | experimental | 1 | below the provisional 50-script evidence gate |
+
+All 22 fixed original indicators parse, analyze, lower, and run historically,
+but that small non-representative corpus does not justify a stable or
+language-wide claim. Feature admission remains defined by
+`tests/fixtures/conformance.tsv`; execution-mode release coverage is frozen in
+`tests/fixtures/legacy/release_profiles.tsv`. No maturity label enables legacy
+strategies or an unlisted feature.
 
 ## Initial Supported Syntax
 
@@ -136,7 +185,8 @@ Phase 1 executable subset:
 - common `ta.*` helpers listed in
   [`BUILTIN_SIGNATURES.md`](BUILTIN_SIGNATURES.md), including moving averages,
   rolling statistics, momentum/history helpers, crosses, extremes, trend
-  checks, value lookups, true range, volume flow helpers, and partial VWAP
+  checks, value lookups, true range, volume flow helpers, and the fixed-metadata
+  UTC-daily/explicit-anchor VWAP contract
 - partial float, int, bool, string, color, label-id, line-id, linefill-id, box-id, and table-id arrays with `array.new_float`,
   `array.new_int`, `array.new_bool`, `array.new_string`, `array.new_color`,
   `array.new_label`, `array.new_line`, `array.new_linefill`, `array.new_box`,
@@ -336,8 +386,9 @@ Request data:
   `ta.vwap(source, anchor, stdev_mult)`.
 - `request.security("SYMBOL", timeframe, expression)` and
   `request.security(syminfo.tickerid, timeframe, expression)` for host-provided
-  same-or-higher-timeframe bars. The provider expression subset includes direct
-  OHLCV/time sources, pure arithmetic and ternaries, history references, `na`,
+  same-or-higher-timeframe bars. The provider expression subset includes
+  requested-context `syminfo.tickerid`/`timeframe.period`, direct OHLCV/time
+  sources, pure arithmetic and ternaries, history references, `na`,
   `nz`, selected stateless `math.*` calls, fixed-mintick
   `math.round_to_mintick`, `math.sum`, `ta.cum`, `ta.sma`, `ta.ema`,
   `ta.dema`, `ta.tema`, `ta.rma`, `ta.rsi`, `ta.tsi`, `ta.cmo`, `ta.cci`,
@@ -365,8 +416,20 @@ Request data:
   the last confirmed value.
   CLI hosts pass these bars with
   `--request-bars SYMBOL:TIMEFRAME=bars.csv`; Python hosts pass
-  `request_bars={"SYMBOL:TIMEFRAME": bars}`. WASM request dataset injection is a
-  documented temporary gap.
+  `request_bars={"SYMBOL:TIMEFRAME": bars}`; WASM hosts pass the same mapping as
+  request-bars JSON. Chart identity is explicit through CLI
+  `--chart-symbol`/`--chart-timeframe`, Python `chart_symbol`/`chart_timeframe`
+  keywords, or the WASM request JSON `$chart` object.
+- Pine v1-v4 `security(symbol, resolution, expression, ...)` for the same
+  requested-expression subset. The historical binder accepts the v1/v2
+  three-or-four-argument form and the v3/v4 three-to-five-argument positional
+  or named form. Compile-time bools or matching `barmerge` constants select
+  gaps/lookahead; v1/v2 default to historical `lookahead_on` and v3/v4 default
+  to `lookahead_off`. `gaps_on` returns values only at the selected requested
+  open/confirmation boundary, `gaps_off` carries the latest eligible value,
+  and realtime updates use confirmed alignment. A reached lookahead-on call
+  reports one non-error repaint warning per callsite. Missing streams retain
+  the original complete legacy call span.
 
 ## Explicitly Unsupported in Phase 1
 
@@ -385,6 +448,9 @@ The analyzer should reject these with clear diagnostics:
   state subset, mutable strategy state, and requested-context strategy state
 - `request.*` variants outside the narrow same-context and same-or-higher-timeframe
   provider-backed `request.security` subsets
+- legacy lower-timeframe `security`, requested expressions outside the same
+  provider-backed subset, and declaration-level `study(resolution=...)`; the
+  latter remains a precise unsupported program-context feature
 - `request.security_lower_tf`; lower-timeframe array-returning request APIs need
   typed array return semantics and host output shapes before support is claimed
 - unsupported alert frequency values outside the claimed const-string
@@ -428,23 +494,41 @@ Longer-term work for these unsupported areas is tracked in
 
 ## Compatibility Report
 
-The analyzer should return a machine-readable report:
+The analyzer returns the public analysis `schemaVersion: 5` contract from CLI
+JSON, Python, and WASM. The top-level dialect fields describe validation and
+mode classification; compatibility keeps canonical feature evidence separate
+from future legacy translations and result-affecting emulations:
 
 ```json
 {
+  "schemaVersion": 5,
   "languageVersion": 5,
-  "supported": [
-    {"feature": "ta.ema", "span": "..."}
-  ],
-  "unsupported": [
-    {
-      "feature": "request.security",
-      "reason": "Only same-context identity and same-or-higher-timeframe scalar provider requests are supported in phase 1",
-      "span": "..."
-    }
-  ]
+  "languageVersionOrigin": "explicit",
+  "dialect": "v5",
+  "scriptMode": "indicator",
+  "executable": true,
+  "diagnostics": [],
+  "inputs": [],
+  "compatibility": {
+    "supported": [
+      {"feature": "ta.ema", "span": "..."}
+    ],
+    "unsupported": [],
+    "legacyTranslations": [],
+    "legacyEmulations": []
+  }
 }
 ```
 
 The user experience should be "this part is unsupported" rather than "the
 script crashed."
+
+Legacy versions are authoritative on every host: no option is required to
+enable a valid v1-v4 indicator, and explicit v5/v6 source is never forced into
+a legacy profile. CLI owns representative complete analysis goldens for
+implicit v1 and explicit v2-v4 plus a focused v2 failure; Python and WASM
+compare their full reports with those same `schemaVersion: 5` values. Input
+records also expose compile-time `default`, `min`, `max`, `step`, and `options`
+metadata when those values are present in the supported input signature. The
+optional `legacyPolicy` rejection switch and source migration preview are not
+part of the current API or compatibility claims.

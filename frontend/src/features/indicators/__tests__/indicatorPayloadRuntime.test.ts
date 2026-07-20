@@ -144,6 +144,36 @@ test("replaceIndicatorItemsRange deletes stale timed items inside the target win
   ]);
 });
 
+test("replaceIndicatorItemsRange merges timed Pine fill colors", () => {
+  const fills = replaceIndicatorItemsRange(
+    [{
+      id: "fill",
+      indicatorId: "pine-1",
+      plot1_id: "upper",
+      plot2_id: "lower",
+      colorData: [
+        { time: 10, color: "red" },
+        { time: 20, color: "green" },
+        { time: 30, color: "blue" },
+      ],
+    }],
+    [{
+      id: "fill",
+      indicatorId: "pine-1",
+      plot1_id: "upper",
+      plot2_id: "lower",
+      colorData: [{ time: 20, color: "yellow" }],
+    }],
+    { start: 20, end: 20 },
+  );
+
+  assert.deepEqual(mustBeDefined(fills[0]).colorData, [
+    { time: 10, color: "red" },
+    { time: 20, color: "yellow" },
+    { time: 30, color: "blue" },
+  ]);
+});
+
 test("normalizeIndicatorPayload parses every unified annotation output kind", () => {
   const normalized = normalizeIndicatorPayload({
     ok: true,

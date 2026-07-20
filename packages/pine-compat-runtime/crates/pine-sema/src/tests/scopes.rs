@@ -179,18 +179,22 @@ fn accepts_selector_switch_expression() {
 }
 
 #[test]
-fn rejects_non_bool_condition_switch_arm() {
+fn accepts_v5_numeric_condition_switch_arm_via_explicit_hir_coercion() {
     let analysis = analyze("x = switch\n    close => high\n    => low\nplot(x)\n");
 
     assert!(
-        analysis
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "E_CONDITION_TYPE"),
+        analysis.diagnostics.is_empty(),
         "{:?}",
         analysis.diagnostics
     );
-    assert!(analysis.hir.is_none());
+    assert!(analysis.hir.is_some());
+    assert!(
+        analysis
+            .compatibility
+            .legacy_emulations
+            .iter()
+            .any(|emulation| emulation.feature == "v5.numeric_to_bool")
+    );
 }
 
 #[test]

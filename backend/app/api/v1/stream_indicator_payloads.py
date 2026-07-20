@@ -186,6 +186,29 @@ def _filter_payload_to_range(payload: dict[str, Any], start_s: int, end_s: int) 
             })
         next_payload["series"] = series
 
+    if isinstance(next_payload.get("fills"), list):
+        normalized_fills = []
+        for fill in next_payload["fills"]:
+            style = dict(fill.get("style") or {})
+            if style.get("colorData"):
+                style["colorData"] = _filter_points_to_range(
+                    style.get("colorData") or [], start_s, end_s,
+                )
+            normalized_fills.append({
+                **fill,
+                **(
+                    {
+                        "colorData": _filter_points_to_range(
+                            fill.get("colorData") or [], start_s, end_s,
+                        )
+                    }
+                    if fill.get("colorData")
+                    else {}
+                ),
+                "style": style,
+            })
+        next_payload["fills"] = normalized_fills
+
     # Builtin snapshots also carry the legacy ``result.outputs`` envelope.
     # Leaving it unsliced would make a tiny cache hit serialize the complete
     # WS seed history even though ``lines``/``series`` were correctly trimmed.
@@ -222,12 +245,34 @@ def _filter_payload_to_range(payload: dict[str, Any], start_s: int, end_s: int) 
             annotations.append({**item, "data": data})
         next_payload["annotations"] = annotations
 
-    for key in ("markers", "bgcolors", "barcolors", "signals"):
+    for key in ("markers", "barcolors", "signals"):
         if isinstance(next_payload.get(key), list):
             next_payload[key] = [
                 {**group, "data": _filter_points_to_range(group.get("data") or [], start_s, end_s)}
                 for group in next_payload[key]
             ]
+
+    if isinstance(next_payload.get("bgcolors"), list):
+        next_payload["bgcolors"] = [
+            {
+                **group,
+                **(
+                    {"data": _filter_points_to_range(group.get("data") or [], start_s, end_s)}
+                    if group.get("data")
+                    else {}
+                ),
+                **(
+                    {
+                        "regions": _filter_points_to_range(
+                            group.get("regions") or [], start_s, end_s,
+                        )
+                    }
+                    if group.get("regions")
+                    else {}
+                ),
+            }
+            for group in next_payload["bgcolors"]
+        ]
 
     return next_payload
 
