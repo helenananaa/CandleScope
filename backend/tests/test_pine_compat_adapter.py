@@ -73,6 +73,8 @@ def _bars() -> list[dict[str, Any]]:
 
 
 class _FakePineModule:
+    ANALYSIS_SCHEMA_VERSION = 5
+    RUNTIME_SCHEMA_VERSION = 8
     RENDER_METADATA_VERSION = 1
 
     def __init__(self, analysis: dict[str, Any], output: dict[str, Any]) -> None:
@@ -138,6 +140,53 @@ def test_pine_adapter_rejects_host_context_before_execution(monkeypatch: pytest.
     assert result.code == "PINE_HOST_CAPABILITY_UNSUPPORTED"
     assert result.meta["blockedFeatures"] == ["request.security"]
     assert module.run_calls == []
+
+
+@pytest.mark.anyio
+async def test_script_analysis_api_reports_native_and_host_capabilities(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _FakePineModule(
+        _analysis("indicator", "request.security", "plot"),
+        _runtime_output(),
+    )
+    monkeypatch.setattr(pine_adapter, "_load_module", lambda: module)
+
+    payload = await indicators_api.analyze_script(indicators_api.ScriptAnalysisRequest(
+        runtime=PINE_COMPAT_RUNTIME_ID,
+        script='indicator("Context")\nplot(request.security("AAPL", "D", close))',
+        exchange="binance",
+        market_type="spot",
+        symbol="BTCUSDT",
+        interval="1m",
+    ))
+
+    assert payload["schemaVersion"] == 1
+    assert payload["runtime"] == PINE_COMPAT_RUNTIME_ID
+    assert payload["nativeExecutable"] is True
+    assert payload["executable"] is False
+    assert payload["hostCompatibility"]["error"]["code"] == "PINE_HOST_CAPABILITY_UNSUPPORTED"
+    assert payload["diagnostics"][-1]["code"] == "PINE_HOST_CAPABILITY_UNSUPPORTED"
+    assert payload["meta"]["context"] == {
+        "exchange": "binance",
+        "marketType": "spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m",
+    }
+
+
+def test_pine_descriptor_fails_closed_on_installed_schema_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _FakePineModule(_analysis("indicator", "plot"), _runtime_output())
+    module.ANALYSIS_SCHEMA_VERSION = 4
+    monkeypatch.setattr(pine_adapter, "_load_module", lambda: module)
+
+    descriptor = pine_adapter.PineCompatRuntimeAdapter().descriptor()
+
+    assert descriptor.available is False
+    assert descriptor.capabilities["installedAnalysisSchemaVersion"] == 4
+    assert "analysis=4 (expected 5)" in (descriptor.reason or "")
 
 
 def test_pine_adapter_rejects_unmapped_native_outputs(monkeypatch: pytest.MonkeyPatch) -> None:

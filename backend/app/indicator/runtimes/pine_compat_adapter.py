@@ -19,7 +19,14 @@ from typing import Any
 
 from app.core import config
 
-from .base import PINE_COMPAT_RUNTIME_ID, ScriptRuntimeDescriptor, ScriptRuntimeResult
+from .base import (
+    PINE_COMPAT_RUNTIME_ID,
+    SCRIPT_RUNTIME_HOST_CONTRACT_VERSION,
+    ScriptRuntimeAnalysis,
+    ScriptRuntimeContext,
+    ScriptRuntimeDescriptor,
+    ScriptRuntimeResult,
+)
 
 
 PINE_ANALYSIS_SCHEMA_VERSION = 5
@@ -187,7 +194,11 @@ def _validate_analysis(analysis: dict[str, Any]) -> ScriptRuntimeResult | None:
     return None
 
 
-def analyze_pine_script_for_host(script: str) -> dict[str, Any]:
+def analyze_pine_script_for_host(
+    script: str,
+    *,
+    context: ScriptRuntimeContext | None = None,
+) -> dict[str, Any]:
     """Return native analysis plus CandleScope's explicit v1 host boundary."""
     module = _load_module()
     analysis = dict(module.analyze_script(script))
@@ -198,7 +209,64 @@ def analyze_pine_script_for_host(script: str) -> dict[str, Any]:
         "closedBarsOnly": True,
         "error": failure.to_dict() if failure else None,
     }
+    analysis["hostContext"] = context.to_dict() if context else None
     return analysis
+
+
+def _analysis_contract(
+    analysis: dict[str, Any],
+    *,
+    context: ScriptRuntimeContext | None,
+) -> ScriptRuntimeAnalysis:
+    host = analysis.get("hostCompatibility")
+    host = dict(host) if isinstance(host, dict) else {}
+    diagnostics = [dict(item) for item in analysis.get("diagnostics") or [] if isinstance(item, dict)]
+    error = host.get("error") if isinstance(host.get("error"), dict) else None
+    if error:
+        code = str(error.get("code") or "PINE_HOST_ANALYSIS_ERROR")
+        if not any(str(item.get("code") or "") == code for item in diagnostics):
+            diagnostic: dict[str, Any] = {
+                "code": code,
+                "severity": "error",
+                "message": str(error.get("error") or error.get("message") or "Pine host analysis failed"),
+            }
+            span = {
+                key: error[key]
+                for key in ("line", "column")
+                if isinstance(error.get(key), int)
+            }
+            if span:
+                diagnostic["span"] = span
+            if error.get("hint"):
+                diagnostic["hint"] = str(error["hint"])
+            diagnostics.append(diagnostic)
+    native_executable = bool(analysis.get("executable"))
+    host_executable = bool(host.get("executable"))
+    return ScriptRuntimeAnalysis(
+        runtime=PINE_COMPAT_RUNTIME_ID,
+        ok=host_executable,
+        native_executable=native_executable,
+        host_executable=host_executable,
+        diagnostics=diagnostics,
+        inputs=[dict(item) for item in analysis.get("inputs") or [] if isinstance(item, dict)],
+        compatibility=(
+            dict(analysis["compatibility"])
+            if isinstance(analysis.get("compatibility"), dict)
+            else {}
+        ),
+        host_compatibility=host,
+        dependencies=[],
+        meta={
+            "hostContractVersion": SCRIPT_RUNTIME_HOST_CONTRACT_VERSION,
+            "analysisSchemaVersion": analysis.get("schemaVersion"),
+            "languageVersion": analysis.get("languageVersion"),
+            "languageVersionOrigin": analysis.get("languageVersionOrigin"),
+            "dialect": analysis.get("dialect"),
+            "scriptMode": analysis.get("scriptMode"),
+            "dependencyPlanning": "not-available",
+            "context": context.to_dict() if context else None,
+        },
+    )
 
 
 def _normalize_bars(
@@ -1184,8 +1252,9 @@ class PineCompatRuntimeAdapter:
         params: dict[str, Any] | None = None,
         security_mode: str | None = None,
         render_hints: dict[str, Any] | None = None,
+        context: ScriptRuntimeContext | None = None,
     ) -> ScriptRuntimeResult:
-        del security_mode
+        del security_mode, context
         return execute_pine_script(
             script=script,
             ohlcv=ohlcv,
@@ -1193,10 +1262,35 @@ class PineCompatRuntimeAdapter:
             render_hints=render_hints,
         )
 
-    def analyze(self, script: str) -> dict[str, Any]:
-        return analyze_pine_script_for_host(script)
+    def analyze(
+        self,
+        *,
+        script: str,
+        security_mode: str | None = None,
+        context: ScriptRuntimeContext | None = None,
+    ) -> ScriptRuntimeAnalysis:
+        del security_mode
+        if not script.strip():
+            return ScriptRuntimeAnalysis.failure(
+                runtime=self.runtime_id,
+                code="PINE_SCRIPT_REQUIRED",
+                message="Pine script is required",
+                meta={"context": context.to_dict() if context else None},
+            )
+        try:
+            analysis = analyze_pine_script_for_host(script, context=context)
+        except Exception as exc:
+            return ScriptRuntimeAnalysis.failure(
+                runtime=self.runtime_id,
+                code="PINE_ANALYSIS_ERROR",
+                message=str(exc) or exc.__class__.__name__,
+                meta={"context": context.to_dict() if context else None},
+            )
+        return _analysis_contract(analysis, context=context)
 
     def descriptor(self) -> ScriptRuntimeDescriptor:
+        installed_analysis_schema_version: int | None = None
+        installed_runtime_schema_version: int | None = None
         installed_render_metadata_version: int | None = None
         try:
             module = _load_module()
@@ -1205,11 +1299,29 @@ class PineCompatRuntimeAdapter:
                 version = importlib_metadata.version(_PACKAGE_NAME)
             except importlib_metadata.PackageNotFoundError:
                 version = getattr(module, "__version__", None)
-            available = True
-            reason = None
+            raw_analysis_version = getattr(module, "ANALYSIS_SCHEMA_VERSION", None)
+            if isinstance(raw_analysis_version, int) and not isinstance(raw_analysis_version, bool):
+                installed_analysis_schema_version = raw_analysis_version
+            raw_runtime_version = getattr(module, "RUNTIME_SCHEMA_VERSION", None)
+            if isinstance(raw_runtime_version, int) and not isinstance(raw_runtime_version, bool):
+                installed_runtime_schema_version = raw_runtime_version
             raw_render_version = getattr(module, "RENDER_METADATA_VERSION", None)
             if isinstance(raw_render_version, int) and not isinstance(raw_render_version, bool):
                 installed_render_metadata_version = raw_render_version
+            schema_mismatches = []
+            for label, installed, expected in (
+                ("analysis", installed_analysis_schema_version, PINE_ANALYSIS_SCHEMA_VERSION),
+                ("runtime", installed_runtime_schema_version, PINE_RUNTIME_SCHEMA_VERSION),
+                ("render", installed_render_metadata_version, PINE_RENDER_METADATA_VERSION),
+            ):
+                if installed != expected:
+                    schema_mismatches.append(f"{label}={installed!r} (expected {expected})")
+            available = not schema_mismatches
+            reason = (
+                None
+                if available
+                else "pine_compat schema contract mismatch: " + ", ".join(schema_mismatches)
+            )
         except Exception as exc:
             source_path = str(_VENDOR_ROOT)
             version = None
@@ -1225,12 +1337,16 @@ class PineCompatRuntimeAdapter:
             source_path=source_path,
             reason=reason,
             capabilities={
+                "hostContractVersion": SCRIPT_RUNTIME_HOST_CONTRACT_VERSION,
+                "analysis": True,
                 "historical": True,
                 "closedBarsOnly": True,
                 "formingBar": False,
                 "incremental": False,
                 "analysisSchemaVersion": PINE_ANALYSIS_SCHEMA_VERSION,
                 "runtimeSchemaVersion": PINE_RUNTIME_SCHEMA_VERSION,
+                "installedAnalysisSchemaVersion": installed_analysis_schema_version,
+                "installedRuntimeSchemaVersion": installed_runtime_schema_version,
                 "renderMetadataVersion": installed_render_metadata_version,
                 "expectedRenderMetadataVersion": PINE_RENDER_METADATA_VERSION,
                 "nativeRenderMetadata": (

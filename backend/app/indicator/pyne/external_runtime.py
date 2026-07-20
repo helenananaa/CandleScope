@@ -100,6 +100,16 @@ def execute_pyne_script(
     return normalize_external_result(result)
 
 
+def analyze_pyne_script(
+    *,
+    script: str,
+    security_mode: str | None = None,
+) -> list[dict[str, Any]]:
+    """Run Pyne's syntax/security preflight without executing market data."""
+    settings = build_external_settings().with_security_mode(security_mode)
+    return [dict(item) for item in pn.validate(script, settings=settings)]
+
+
 def execute_pyne_script_in_process(
     *,
     script: str,

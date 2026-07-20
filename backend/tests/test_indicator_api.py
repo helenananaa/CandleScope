@@ -11,7 +11,7 @@ from app.api.v1 import indicators as indicators_api
 from app.api.v1 import stream_indicator_payloads as payload_api
 from app.api.v1 import stream_indicators as stream_api
 from app.api.v1 import stream_pyne_subscriptions as pyne_stream_api
-from app.api.v1.indicators import ComputeRequest, CustomIndicatorPayload
+from app.api.v1.indicators import ComputeRequest, CustomIndicatorPayload, ScriptAnalysisRequest
 from app.indicator import create_engine
 from app.data_engine.data_manager.models import BarData
 from app.indicator.events import IndicatorEvent, IndicatorEventType
@@ -489,6 +489,23 @@ async def test_pyne_security_policy_endpoint() -> None:
 
     assert policy["mode"] in {"safe", "research", "unsafe"}
     assert "numpy" in policy["allowedImports"]
+
+
+@pytest.mark.anyio
+async def test_pyne_analysis_endpoint_returns_structured_syntax_diagnostics() -> None:
+    payload = await indicators_api.analyze_script(ScriptAnalysisRequest(
+        runtime="pyne",
+        script="plot(",
+        symbol="BTCUSDT",
+        interval="1m",
+    ))
+
+    assert payload["schemaVersion"] == 1
+    assert payload["runtime"] == "pyne"
+    assert payload["nativeExecutable"] is False
+    assert payload["executable"] is False
+    assert payload["diagnostics"][0]["code"] == "PYNE_SYNTAX_ERROR"
+    assert payload["diagnostics"][0]["severity"] == "error"
 
 
 def test_indicator_diagnostics_snapshot_reports_runtime_state(tmp_path) -> None:

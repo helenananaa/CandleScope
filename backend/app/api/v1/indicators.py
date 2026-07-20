@@ -48,6 +48,8 @@ from app.indicator.pyne.external_runtime import RuntimeBackendSnapshot, cache_st
 from app.indicator.runtimes import (
     PINE_COMPAT_RUNTIME_ID,
     PYNE_RUNTIME_ID,
+    ScriptRuntimeAnalysis,
+    ScriptRuntimeContext,
     get_script_runtime,
     normalize_runtime_id,
     runtime_descriptors,
@@ -91,6 +93,18 @@ class ComputeRequest(BaseModel):
     securityMode: str | None = Field(None, description="'safe', 'research', or 'unsafe' for Pyne scripts")
     runtime: str | None = Field(None, description="Explicit script runtime: 'pyne' or 'pine-compat'")
     renderHints: dict[str, Any] = Field(default_factory=dict, description="Host rendering hints for script output")
+
+
+class ScriptAnalysisRequest(BaseModel):
+    """Runtime-neutral source preflight without market-data execution."""
+
+    runtime: str | None = Field(None, description="Explicit script runtime: 'pyne' or 'pine-compat'")
+    script: str = Field(..., description="Script source for the selected runtime")
+    securityMode: str | None = Field(None, description="Optional Pyne security mode")
+    exchange: str = Field("binance", description="Exchange context")
+    symbol: str = Field("UNKNOWN", description="Symbol context")
+    interval: str = Field("1m", description="Interval context")
+    market_type: str = Field("spot", description="Market type context")
 
 
 class CustomIndicatorPayload(BaseModel):
@@ -152,6 +166,59 @@ async def list_indicators():
 async def list_script_runtimes():
     """Advertise script runtimes and current native availability."""
     return {"schemaVersion": 1, "default": PYNE_RUNTIME_ID, "items": runtime_descriptors()}
+
+
+@router.post("/analyze")
+async def analyze_script(payload: ScriptAnalysisRequest):
+    """Analyze source and intersect native support with CandleScope host support."""
+    try:
+        runtime = normalize_runtime_id(payload.runtime)
+        adapter = get_script_runtime(runtime)
+    except ValueError as exc:
+        return ScriptRuntimeAnalysis.failure(
+            runtime=str(payload.runtime or PYNE_RUNTIME_ID),
+            code="SCRIPT_RUNTIME_INVALID",
+            message=str(exc),
+        ).to_dict()
+
+    context = ScriptRuntimeContext(
+        exchange=payload.exchange,
+        market_type=payload.market_type,
+        symbol=payload.symbol,
+        interval=payload.interval,
+    )
+    descriptor = adapter.descriptor()
+    if not descriptor.available:
+        return ScriptRuntimeAnalysis.failure(
+            runtime=runtime,
+            code="SCRIPT_RUNTIME_UNAVAILABLE",
+            message=descriptor.reason or f"Runtime {runtime!r} is unavailable",
+            meta={"context": context.to_dict()},
+        ).to_dict()
+
+    try:
+        result = await _run_indicator_http_compute(
+            adapter.analyze,
+            executor_kind=runtime,
+            script=payload.script,
+            security_mode=payload.securityMode,
+            context=context,
+        )
+    except asyncio.TimeoutError:
+        return ScriptRuntimeAnalysis.failure(
+            runtime=runtime,
+            code="SCRIPT_ANALYSIS_TIMEOUT",
+            message=f"Script analysis exceeded {config.INDICATOR_HTTP_TIMEOUT_SECONDS:g}s timeout",
+            meta={"context": context.to_dict()},
+        ).to_dict()
+    except Exception as exc:
+        return ScriptRuntimeAnalysis.failure(
+            runtime=runtime,
+            code="SCRIPT_ANALYSIS_FAILED",
+            message=str(exc) or exc.__class__.__name__,
+            meta={"context": context.to_dict()},
+        ).to_dict()
+    return result.to_dict()
 
 
 @router.get("/registry/{name}")
