@@ -104,6 +104,22 @@ def test_dataset_origin_builtins_require_local_available_history() -> None:
         assert plan.mode == PINE_HISTORY_MODE_AVAILABLE
 
 
+def test_dataset_end_builtins_require_complete_local_history() -> None:
+    for expression in (
+        "last_bar_index",
+        "last_bar_time",
+        "barstate.islast ? close : na",
+        "barstate.islastconfirmedhistory ? close : na",
+    ):
+        plan = plan_pine_history(
+            f'//@version=6\nindicator("End")\nplot({expression})',
+            analysis=_analysis("indicator", "plot"),
+        )
+        assert plan.mode == PINE_HISTORY_MODE_AVAILABLE
+        assert plan.requires_latest_history is True
+        assert plan.to_dict()["historyScope"] == "local-full-history"
+
+
 def test_tuple_destructuring_is_not_misread_as_dynamic_history() -> None:
     plan = plan_pine_history(
         '//@version=6\nindicator("MACD")\n[a, b, c] = ta.macd(close, 12, 26, 9)\nplot(a)',
@@ -220,6 +236,26 @@ def test_available_history_query_anchors_at_local_series_origin() -> None:
     assert dm.query_kwargs[0]["start_ms"] == bars[0].time_ms
 
 
+def test_dataset_end_query_extends_a_middle_range_through_local_latest_bar() -> None:
+    bars = _bars()
+    dm = _RangeDataManager(bars)
+    script = '//@version=6\nindicator("Last")\nplot(last_bar_index)'
+    plan = plan_pine_history(script, analysis=_analysis("indicator", "plot"))
+    target = bars[400:500]
+
+    selected = payload_api._query_indicator_compute_bars(
+        dm,
+        _pine_meta(script, plan),
+        target[0].time,
+        target[-1].time,
+        warmup_bars=0,
+    )
+
+    assert selected == bars
+    assert dm.query_kwargs[0]["start_ms"] == bars[0].time_ms
+    assert dm.query_kwargs[0]["end_ms"] == bars[-1].time_ms
+
+
 def test_available_history_query_fails_closed_above_execution_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -327,6 +363,61 @@ def test_hma_bounded_range_matches_full_history_at_target_start(
     assert first["value"] == pytest.approx(full_by_time[target[0].time])
 
 
+def test_dataset_end_range_does_not_treat_a_middle_patch_as_last_bar(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    descriptor = pine_adapter.PineCompatRuntimeAdapter().descriptor()
+    if not descriptor.available:
+        pytest.skip(descriptor.reason or "pine-compatible runtime unavailable")
+    bars = _bars()
+    dm = _RangeDataManager(bars)
+    script = (
+        '//@version=6\nindicator("Last")\n'
+        'plot(last_bar_index)\nplot(barstate.islast ? 1 : 0)'
+    )
+    plan = pine_adapter.plan_pine_script_history(script)
+    meta = _pine_meta(script, plan)
+    target = bars[400:500]
+    monkeypatch.setattr(pine_adapter.config, "PINE_EXECUTOR_MODE", "inline")
+
+    seed = payload_api._query_indicator_compute_bars(
+        dm,
+        meta,
+        target[0].time,
+        target[-1].time,
+        warmup_bars=0,
+    )
+    patch = payload_api._compute_pine_range_patch_from_bars(
+        "pine-history-test",
+        meta,
+        target[0].time,
+        target[-1].time,
+        seed,
+        target_bars=len(target),
+    )
+
+    assert {point["value"] for point in patch["lines"][0]["data"]} == {999.0}
+    assert {point["value"] for point in patch["lines"][1]["data"]} == {0.0}
+    assert patch["meta"]["historyEnd"] == {
+        "time": bars[-1].time,
+        "scope": "latest-local-closed-bar",
+    }
+
+    latest_target = bars[-100:]
+    latest_patch = payload_api._compute_pine_range_patch_from_bars(
+        "pine-history-test",
+        meta,
+        latest_target[0].time,
+        latest_target[-1].time,
+        seed,
+        target_bars=len(latest_target),
+    )
+    assert latest_patch["lines"][1]["data"][-1] == {
+        "time": bars[-1].time,
+        "value": 1.0,
+    }
+
+
 def test_cumulative_websocket_snapshot_seeds_from_origin_and_trims_output(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -374,4 +465,8 @@ def test_host_analysis_exposes_history_plan_contract() -> None:
     assert analysis.host_executable is True
     assert analysis.host_compatibility["historyPlan"]["mode"] == PINE_HISTORY_MODE_AVAILABLE
     assert analysis.meta["historyPlan"] == analysis.host_compatibility["historyPlan"]
-    assert descriptor.capabilities["historyPlanning"]["schemaVersion"] == 1
+    assert descriptor.capabilities["historyPlanning"]["schemaVersion"] == 2
+    assert (
+        descriptor.capabilities["historyPlanning"]["latestHistoryBoundary"]
+        == "latest-local-closed-bar"
+    )

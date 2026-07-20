@@ -56,6 +56,75 @@ def _payload(start: int, end: int) -> dict:
     }
 
 
+def _pine_latest_meta() -> dict:
+    return {
+        **_meta(),
+        "kind": "script",
+        "runtime": "pine-compat",
+        "name": "PINE",
+        "scriptHash": "last-bar-script",
+        "pineHistoryPlan": {
+            "schemaVersion": 2,
+            "mode": "available-history",
+            "warmupBars": 0,
+            "maxConstantOffset": 0,
+            "hasDynamicOffsets": False,
+            "requiresAvailableHistory": True,
+            "requiresLatestHistory": True,
+            "historyScope": "local-full-history",
+            "reasons": ["dataset-end"],
+            "features": [],
+        },
+    }
+
+
+def test_latest_history_pine_cache_invalidates_when_closed_edge_advances() -> None:
+    service = IndicatorRangeResultService(
+        revision_registry=SeriesRevisionRegistry(server_epoch="epoch-test"),
+        ttl_seconds=60,
+        max_entries=8,
+    )
+    meta = _pine_latest_meta()
+    start = 1_700_000_000
+    end = start + 120
+    latest = end - 60
+    payload = _payload(start, end)
+    payload["meta"] = {
+        "historyEnd": {"time": latest, "scope": "latest-local-closed-bar"},
+    }
+
+    assert service.put_payload(meta, payload, start=start, end=end) is True
+    assert service.lookup_snapshot(meta, start, end) is not None
+    assert service.revision_token_for_meta(meta).endswith(f"closed={latest}")
+
+    service.note_closed(
+        series_key="binance:spot:BTCUSDT:1m",
+        closed_through=latest + 60,
+    )
+    assert service.lookup_snapshot(meta, start, end) is None
+    assert service.snapshot()["entries"] == 0
+
+
+def test_normal_indicator_cache_survives_closed_edge_advance() -> None:
+    service = IndicatorRangeResultService(
+        revision_registry=SeriesRevisionRegistry(server_epoch="epoch-test"),
+        ttl_seconds=60,
+        max_entries=8,
+    )
+    meta = _meta()
+    start = 1_700_000_000
+    end = start + 120
+
+    assert service.put_payload(meta, _payload(start, end), start=start, end=end) is True
+    service.note_closed(
+        series_key="binance:spot:BTCUSDT:1m",
+        closed_through=end + 600,
+    )
+
+    assert service.lookup_snapshot(meta, start, end) is not None
+    assert service.snapshot()["entries"] == 1
+
+
 def test_result_service_singleflight_and_revision_invalidation() -> None:
     async def _run() -> None:
         registry = SeriesRevisionRegistry(server_epoch="epoch-test")

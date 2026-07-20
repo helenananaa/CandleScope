@@ -27,7 +27,7 @@ import re
 from typing import Any, Iterable
 
 
-PINE_HISTORY_PLAN_SCHEMA_VERSION = 1
+PINE_HISTORY_PLAN_SCHEMA_VERSION = 2
 PINE_HISTORY_MODE_BOUNDED = "bounded"
 PINE_HISTORY_MODE_AVAILABLE = "available-history"
 
@@ -40,6 +40,7 @@ class PineHistoryPlan:
     warmup_bars: int = 0
     max_constant_offset: int = 0
     has_dynamic_offsets: bool = False
+    requires_latest_history: bool = False
     reasons: tuple[str, ...] = ()
     features: tuple[str, ...] = ()
 
@@ -55,10 +56,15 @@ class PineHistoryPlan:
             "maxConstantOffset": max(0, int(self.max_constant_offset)),
             "hasDynamicOffsets": bool(self.has_dynamic_offsets),
             "requiresAvailableHistory": self.requires_available_history,
+            "requiresLatestHistory": bool(self.requires_latest_history),
             "historyScope": (
-                "local-available-history"
-                if self.requires_available_history
-                else "bounded-lookback"
+                "local-full-history"
+                if self.requires_latest_history
+                else (
+                    "local-available-history"
+                    if self.requires_available_history
+                    else "bounded-lookback"
+                )
             ),
             "reasons": list(self.reasons),
             "features": list(self.features),
@@ -76,6 +82,7 @@ class PineHistoryPlan:
             warmup_bars=max(0, int(value.get("warmupBars") or 0)),
             max_constant_offset=max(0, int(value.get("maxConstantOffset") or 0)),
             has_dynamic_offsets=bool(value.get("hasDynamicOffsets")),
+            requires_latest_history=bool(value.get("requiresLatestHistory")),
             reasons=tuple(str(item) for item in value.get("reasons") or [] if str(item)),
             features=tuple(str(item) for item in value.get("features") or [] if str(item)),
         )
@@ -503,10 +510,20 @@ def plan_pine_history(
         reasons.add("persistent-state")
     if re.search(r":=|\+=|-=|\*=|/=|%=", code):
         reasons.add("series-reassignment")
-    if re.search(r"\b(?:bar_index|last_bar_index)\b", code):
+    if re.search(r"\b(?:bar_index|last_bar_index|last_bar_time)\b", code):
         reasons.add("dataset-index")
     if re.search(r"\bbarstate\s*\.\s*isfirst\b", code):
         reasons.add("dataset-origin")
+    requires_latest_history = bool(
+        re.search(
+            r"\b(?:last_bar_index|last_bar_time)\b|"
+            r"\bbarstate\s*\.\s*(?:islast|islastconfirmedhistory)\b",
+            code,
+        )
+        or native_history.get("requiresLatestHistory")
+    )
+    if requires_latest_history:
+        reasons.add("dataset-end")
     if re.search(r"\bfixnan\s*\(", code):
         reasons.add("stateful-core")
 
@@ -547,6 +564,7 @@ def plan_pine_history(
         warmup_bars=finite_warmup,
         max_constant_offset=max_offset,
         has_dynamic_offsets=dynamic_offset,
+        requires_latest_history=requires_latest_history,
         reasons=tuple(sorted(reasons)),
         features=tuple(sorted(origin_features)),
     )

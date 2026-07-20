@@ -147,6 +147,25 @@ def test_pine_adapter_rejects_host_context_before_execution(monkeypatch: pytest.
     assert module.run_calls == []
 
 
+def test_pine_adapter_rejects_unbound_visible_chart_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _FakePineModule(
+        _analysis("indicator", "chart.right_visible_bar_time", "plot"),
+        _runtime_output(),
+    )
+    monkeypatch.setattr(pine_adapter, "_load_module", lambda: module)
+
+    result = pine_adapter.execute_pine_script(
+        script='indicator("Visible")\nplot(chart.right_visible_bar_time)',
+        ohlcv=_bars(),
+        executor_mode="inline",
+    )
+
+    assert result.ok is False
+    assert result.code == "PINE_HOST_CAPABILITY_UNSUPPORTED"
+    assert result.meta["blockedFeatures"] == ["chart.right_visible_bar_time"]
+    assert module.run_calls == []
+
+
 @pytest.mark.parametrize(
     ("context", "chart_symbol", "chart_timeframe"),
     [

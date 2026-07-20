@@ -63,7 +63,7 @@ _HOST_BLOCKED_PREFIXES = (
     "box.",
     "table.",
     "polyline.",
-    "chart.point",
+    "chart.",
     "import",
     "library",
 )
@@ -1515,6 +1515,7 @@ class PineCompatRuntimeAdapter:
                     "schemaVersion": PINE_HISTORY_PLAN_SCHEMA_VERSION,
                     "modes": ["bounded", "available-history"],
                     "availableHistoryScope": "earliest-local-bar",
+                    "latestHistoryBoundary": "latest-local-closed-bar",
                     "maxBarsPerExecution": max(int(config.PINE_MAX_BARS), 1),
                 },
                 "chartContext": {

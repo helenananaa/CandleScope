@@ -94,6 +94,7 @@ function pineHistoryPlanSummary(analysis: ScriptRuntimeAnalysis | null): string 
       : null;
   if (!rawPlan || Array.isArray(rawPlan)) return null;
   const plan = rawPlan as Record<string, unknown>;
+  if (plan.requiresLatestHistory === true) return "按本地完整闭合历史计算";
   if (plan.mode === "available-history") return "从本地最早可用 K 线起算";
   if (plan.mode !== "bounded") return null;
   const warmup = Math.max(0, Math.trunc(Number(plan.warmupBars) || 0));

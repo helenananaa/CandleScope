@@ -148,6 +148,12 @@ async def prepare_pine_history_plan_async(meta: dict[str, Any]) -> PineHistoryPl
         or normalize_runtime_id(meta.get("runtime")) != PINE_COMPAT_RUNTIME_ID
     ):
         return None
+    existing = meta.get("pineHistoryPlan")
+    if isinstance(existing, dict):
+        try:
+            return PineHistoryPlan.from_dict(existing)
+        except (TypeError, ValueError):
+            pass
     params = meta.get("params") if isinstance(meta.get("params"), dict) else {}
     try:
         plan = await run_pine_wait(
@@ -162,6 +168,12 @@ async def prepare_pine_history_plan_async(meta: dict[str, Any]) -> PineHistoryPl
 
 
 def _prepare_pine_history_plan_sync(meta: dict[str, Any]) -> PineHistoryPlan:
+    existing = meta.get("pineHistoryPlan")
+    if isinstance(existing, dict):
+        try:
+            return PineHistoryPlan.from_dict(existing)
+        except (TypeError, ValueError):
+            pass
     params = meta.get("params") if isinstance(meta.get("params"), dict) else {}
     try:
         plan = plan_pine_script_history(str(meta.get("script") or ""), params)
@@ -171,10 +183,13 @@ def _prepare_pine_history_plan_sync(meta: dict[str, Any]) -> PineHistoryPlan:
     return plan
 
 
-def _pine_local_history_start_ms(dm: Any, meta: dict[str, Any], end_ms: int) -> int | None:
+def _pine_local_history_bounds_ms(
+    dm: Any,
+    meta: dict[str, Any],
+) -> tuple[int | None, int | None]:
     get_bounds = getattr(dm, "get_bounds", None)
     if not callable(get_bounds):
-        return None
+        return None, None
     try:
         bounds = get_bounds(
             meta["symbol"],
@@ -183,24 +198,30 @@ def _pine_local_history_start_ms(dm: Any, meta: dict[str, Any], end_ms: int) -> 
             market_type=meta["market_type"],
         )
     except Exception:
-        return None
+        return None, None
     if not isinstance(bounds, dict):
-        return None
-    candidates: list[int] = []
-    for key, milliseconds in (
-        ("cache_earliest", False),
-        ("storage_earliest_ms", True),
-    ):
-        try:
-            value = int(bounds.get(key) or 0)
-        except (TypeError, ValueError):
-            continue
-        if value <= 0:
-            continue
-        normalized = value if milliseconds or value >= 100_000_000_000 else value * 1000
-        if normalized <= end_ms:
-            candidates.append(normalized)
-    return min(candidates) if candidates else None
+        return None, None
+
+    def _values(*fields: tuple[str, bool]) -> list[int]:
+        values: list[int] = []
+        for key, milliseconds in fields:
+            try:
+                value = int(bounds.get(key) or 0)
+            except (TypeError, ValueError):
+                continue
+            if value <= 0:
+                continue
+            values.append(
+                value if milliseconds or value >= 100_000_000_000 else value * 1000
+            )
+        return values
+
+    earliest = _values(("cache_earliest", False), ("storage_earliest_ms", True))
+    latest = _values(("cache_latest", False), ("storage_latest_ms", True))
+    return (
+        min(earliest) if earliest else None,
+        max(latest) if latest else None,
+    )
 
 
 def _annotate_pine_history_result(
@@ -216,9 +237,21 @@ def _annotate_pine_history_result(
         result.meta["historyOrigin"] = {
             "time": int(bars[0].time),
             "scope": (
-                "local-available-history"
-                if plan.requires_available_history
-                else "bounded-lookback"
+                "local-full-history"
+                if plan.requires_latest_history
+                else (
+                    "local-available-history"
+                    if plan.requires_available_history
+                    else "bounded-lookback"
+                )
+            ),
+        }
+        result.meta["historyEnd"] = {
+            "time": int(bars[-1].time),
+            "scope": (
+                "latest-local-closed-bar"
+                if plan.requires_latest_history
+                else "requested-range-end"
             ),
         }
         result.meta["warmupBars"] = sum(
@@ -563,7 +596,13 @@ def _query_indicator_compute_bars(
     *,
     warmup_bars: int,
 ) -> list[Any]:
-    result, start_ms, end_ms, compute_start_ms = _query_indicator_compute_result(
+    (
+        result,
+        start_ms,
+        end_ms,
+        compute_start_ms,
+        compute_end_ms,
+    ) = _query_indicator_compute_result(
         dm,
         meta,
         start_s,
@@ -578,6 +617,7 @@ def _query_indicator_compute_bars(
         start_ms,
         end_ms,
         compute_start_ms,
+        compute_end_ms,
     )
 
 
@@ -589,21 +629,31 @@ def _query_indicator_compute_result(
     *,
     warmup_bars: int,
     auto_backfill: bool,
-) -> tuple[Any, int, int, int]:
+) -> tuple[Any, int, int, int, int]:
     interval_ms = parse_interval_ms(meta["interval"])
     if interval_ms is None or interval_ms <= 0:
         raise ValueError(f"Unsupported interval: {meta['interval']}")
     start_ms = start_s * 1000
     end_ms = end_s * 1000
     compute_start_ms = max(0, start_ms - warmup_bars * interval_ms)
+    compute_end_ms = end_ms
     pine_plan = None
     if (
         meta.get("kind") == "script"
         and normalize_runtime_id(meta.get("runtime")) == PINE_COMPAT_RUNTIME_ID
     ):
         pine_plan = _pine_history_plan_from_meta(meta)
+        if pine_plan.requires_available_history or pine_plan.requires_latest_history:
+            local_start_ms, local_end_ms = _pine_local_history_bounds_ms(dm, meta)
+        else:
+            local_start_ms, local_end_ms = None, None
+        if pine_plan.requires_latest_history:
+            if local_end_ms is None:
+                raise RuntimeError(
+                    "Pine latest-history boundary is not available for this K-line series"
+                )
+            compute_end_ms = max(end_ms, local_end_ms)
         if pine_plan.requires_available_history:
-            local_start_ms = _pine_local_history_start_ms(dm, meta, end_ms)
             if local_start_ms is None:
                 raise RuntimeError(
                     "Pine available-history origin is not available for this K-line series"
@@ -650,17 +700,18 @@ def _query_indicator_compute_result(
                     compute_start_ms = previous
         needed = calendar.count_expected(
             compute_start_ms,
-            end_ms,
+            compute_end_ms,
             meta["interval"],
         )
     else:
-        needed = int((end_ms - compute_start_ms) // interval_ms) + 1
+        needed = int((compute_end_ms - compute_start_ms) // interval_ms) + 1
     if pine_plan is not None and needed > max(int(config.PINE_MAX_BARS), 1):
-        scope = (
-            "available-history seed"
-            if pine_plan.requires_available_history
-            else "bounded history seed"
-        )
+        if pine_plan.requires_latest_history:
+            scope = "full-local-history seed"
+        elif pine_plan.requires_available_history:
+            scope = "available-history seed"
+        else:
+            scope = "bounded history seed"
         raise PineHistoryLimitError(
             f"Pine {scope} requires {needed} bars, exceeding "
             f"PINE_MAX_BARS={max(int(config.PINE_MAX_BARS), 1)}"
@@ -669,7 +720,7 @@ def _query_indicator_compute_result(
         meta["symbol"],
         meta["interval"],
         start_ms=compute_start_ms,
-        end_ms=end_ms,
+        end_ms=compute_end_ms,
         limit=needed + 5,
         exchange=meta["exchange"],
         market_type=meta["market_type"],
@@ -679,7 +730,8 @@ def _query_indicator_compute_result(
     if isinstance(metadata, dict) and pine_plan is not None:
         metadata["pine_history_plan"] = pine_plan.to_dict()
         metadata["pine_history_compute_start_ms"] = compute_start_ms
-    return result, start_ms, end_ms, compute_start_ms
+        metadata["pine_history_compute_end_ms"] = compute_end_ms
+    return result, start_ms, end_ms, compute_start_ms, compute_end_ms
 
 
 def _closed_indicator_compute_bars(
@@ -689,15 +741,19 @@ def _closed_indicator_compute_bars(
     start_ms: int,
     end_ms: int,
     compute_start_ms: int | None = None,
+    compute_end_ms: int | None = None,
 ) -> list[Any]:
     if compute_start_ms is None:
         compute_start_ms = start_ms
-    if _missing_overlaps_target(result.missing_ranges, compute_start_ms, end_ms):
+    if compute_end_ms is None:
+        compute_end_ms = end_ms
+    if _missing_overlaps_target(result.missing_ranges, compute_start_ms, compute_end_ms):
         raise RuntimeError("indicator compute history is still backfilling")
     raw_bars = list(result.bars or [])
+    compute_end_s = compute_end_ms // 1000
     bars = [
         bar for bar in raw_bars
-        if bar.time <= end_s and getattr(bar, "is_closed", True)
+        if bar.time <= compute_end_s and getattr(bar, "is_closed", True)
     ]
     if not any(start_s <= bar.time <= end_s for bar in bars):
         raw_target_bars = [
@@ -738,7 +794,7 @@ async def _query_indicator_compute_bars_async(
     backfill_coordinator: Any | None,
     wait_seconds: float | None,
 ) -> list[Any]:
-    result, start_ms, end_ms, compute_start_ms = await run_storage(
+    result, start_ms, end_ms, compute_start_ms, compute_end_ms = await run_storage(
         _query_indicator_compute_result,
         dm,
         meta,
@@ -747,7 +803,11 @@ async def _query_indicator_compute_bars_async(
         warmup_bars=warmup_bars,
         auto_backfill=True,
     )
-    if not _missing_overlaps_target(result.missing_ranges, compute_start_ms, end_ms):
+    if not _missing_overlaps_target(
+        result.missing_ranges,
+        compute_start_ms,
+        compute_end_ms,
+    ):
         return _closed_indicator_compute_bars(
             result,
             start_s,
@@ -755,6 +815,7 @@ async def _query_indicator_compute_bars_async(
             start_ms,
             end_ms,
             compute_start_ms,
+            compute_end_ms,
         )
 
     metadata = result.metadata if isinstance(getattr(result, "metadata", None), dict) else {}
@@ -791,7 +852,7 @@ async def _query_indicator_compute_bars_async(
             waited_ms=waited_ms,
         ) from exc
 
-    result, start_ms, end_ms, compute_start_ms = await run_storage(
+    result, start_ms, end_ms, compute_start_ms, compute_end_ms = await run_storage(
         _query_indicator_compute_result,
         dm,
         meta,
@@ -800,7 +861,7 @@ async def _query_indicator_compute_bars_async(
         warmup_bars=warmup_bars,
         auto_backfill=False,
     )
-    if _missing_overlaps_target(result.missing_ranges, compute_start_ms, end_ms):
+    if _missing_overlaps_target(result.missing_ranges, compute_start_ms, compute_end_ms):
         waited_ms = int((asyncio.get_running_loop().time() - started) * 1000)
         raise IndicatorRangeNotReadyError(
             "target K-line range is unavailable after its backfill completed",
@@ -814,6 +875,7 @@ async def _query_indicator_compute_bars_async(
         start_ms,
         end_ms,
         compute_start_ms,
+        compute_end_ms,
     )
 
 

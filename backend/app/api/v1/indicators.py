@@ -26,6 +26,7 @@ from app.api.v1.stream_indicator_payloads import (
     IndicatorRangeNotReadyError,
     _replace_range_from_snapshot,
     compute_indicator_range_payload_async,
+    prepare_pine_history_plan_async,
 )
 from app.api.v1.indicator_range_batch import (
     IndicatorRangeBatchJob,
@@ -730,6 +731,7 @@ async def compute_range(req: IndicatorRangeRequest, request: Request):
         dm = _require_data_manager(request)
         range_service = _resolve_indicator_range_service(request)
         backfill_coordinator = _resolve_backfill_coordinator(request)
+        await prepare_pine_history_plan_async(meta)
         record_access = getattr(dm, "record_cache_access", None)
         if callable(record_access):
             await run_storage(

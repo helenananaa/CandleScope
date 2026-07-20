@@ -131,12 +131,42 @@ class IndicatorRangeResultService:
         return f"range:{hashlib.sha256(raw.encode()).hexdigest()}"
 
     def revision_token_for_meta(self, meta: dict[str, Any]) -> str:
-        return self.revisions.correction_token(
+        snapshot = self.revisions.snapshot(
             str(meta.get("symbol") or ""),
             str(meta.get("interval") or ""),
             exchange=str(meta.get("exchange") or "binance"),
             market_type=str(meta.get("market_type") or meta.get("marketType") or "spot"),
         )
+        token = f"{snapshot['serverEpoch']}:{snapshot['correctionRevision']}"
+        if self._requires_latest_history(meta):
+            token = f"{token}:closed={int(snapshot.get('closedThrough') or 0)}"
+        return token
+
+    @staticmethod
+    def _requires_latest_history(meta: dict[str, Any]) -> bool:
+        plan = meta.get("pineHistoryPlan")
+        return isinstance(plan, dict) and plan.get("requiresLatestHistory") is True
+
+    @classmethod
+    def _payload_closed_through(
+        cls,
+        meta: dict[str, Any],
+        payload: dict[str, Any],
+        fallback: int,
+    ) -> int:
+        closed_through = int(fallback)
+        if not cls._requires_latest_history(meta):
+            return closed_through
+        result_meta = payload.get("meta") if isinstance(payload, dict) else None
+        history_end = result_meta.get("historyEnd") if isinstance(result_meta, dict) else None
+        if isinstance(history_end, dict):
+            try:
+                history_end_time = int(history_end.get("time") or 0)
+            except (TypeError, ValueError):
+                history_end_time = 0
+            if history_end_time > 0:
+                return history_end_time
+        return closed_through
 
     def data_revision_for_meta(self, meta: dict[str, Any]) -> dict[str, Any]:
         payload = self.revisions.snapshot(
@@ -152,13 +182,32 @@ class IndicatorRangeResultService:
 
     def note_closed(self, *, series_key: str, closed_through: int) -> None:
         exchange, market_type, symbol, interval = series_key.split(":", 3)
-        self.revisions.observe_closed(
+        previous = self.revisions.snapshot(
+            symbol,
+            interval,
+            exchange=exchange,
+            market_type=market_type,
+        )
+        current = self.revisions.observe_closed(
             symbol,
             interval,
             int(closed_through or 0),
             exchange=exchange,
             market_type=market_type,
         )
+        if int(current.get("closedThrough") or 0) <= int(previous.get("closedThrough") or 0):
+            return
+        with self._lock:
+            before = len(self._entries)
+            self._entries = [
+                entry
+                for entry in self._entries
+                if not (
+                    entry.series_key == series_key
+                    and ":closed=" in entry.revision_token
+                )
+            ]
+            self._stats["evictions"] += before - len(self._entries)
 
     def note_correction(
         self,
@@ -273,6 +322,10 @@ class IndicatorRangeResultService:
             return False
         identity = self.identity_from_meta(meta)
         series_key = self.series_key_from_meta(meta)
+        self.note_closed(
+            series_key=series_key,
+            closed_through=self._payload_closed_through(meta, payload, int(end)),
+        )
         token = revision_token or self.revision_token_for_meta(meta)
         if token != self.revision_token_for_meta(meta):
             return False
@@ -306,7 +359,6 @@ class IndicatorRangeResultService:
             ))
             self._stats["puts"] += 1
             self._prune_locked(now)
-        self.note_closed(series_key=series_key, closed_through=int(end))
         return True
 
     async def get_or_compute(
