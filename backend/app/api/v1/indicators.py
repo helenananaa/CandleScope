@@ -1160,6 +1160,12 @@ async def _compute_script(req: ComputeRequest) -> dict:
             params=req.params or {},
             security_mode=req.securityMode,
             render_hints=req.renderHints,
+            context=ScriptRuntimeContext(
+                exchange=req.exchange,
+                market_type=req.market_type,
+                symbol=req.symbol,
+                interval=req.interval,
+            ),
         )
     except asyncio.TimeoutError:
         label = "Pine" if runtime == PINE_COMPAT_RUNTIME_ID else "Pyne"

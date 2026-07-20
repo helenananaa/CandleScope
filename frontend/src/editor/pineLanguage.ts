@@ -9,12 +9,36 @@ const KEYWORDS = [
   "not", "or", "series", "simple", "strategy", "string", "switch", "true",
   "type", "var", "varip", "while",
 ];
+const HOST_COMPLETION_KEYWORDS = KEYWORDS.filter(
+  (keyword) => !["import", "library", "strategy"].includes(keyword),
+);
 
 const BUILTINS = [
   "open", "high", "low", "close", "volume", "time", "bar_index",
-  "plot", "plotchar", "plotshape", "plotarrow", "hline", "fill", "bgcolor",
+  "plot", "plotshape", "hline", "fill", "bgcolor",
   "barcolor", "alert", "alertcondition", "input", "ta", "math", "color",
 ];
+
+let hostedContextFeatures = new Set<string>();
+
+export function configurePineHostCapabilities(
+  capabilities: Record<string, unknown> | null | undefined,
+): void {
+  const chartContext = capabilities?.chartContext;
+  if (!chartContext || typeof chartContext !== "object" || Array.isArray(chartContext)) {
+    hostedContextFeatures = new Set();
+    return;
+  }
+  const record = chartContext as Record<string, unknown>;
+  const features: string[] = [];
+  for (const value of [record.symbolFeatures, record.timeframeFeatures]) {
+    if (!Array.isArray(value)) continue;
+    for (const item of value) {
+      if (typeof item === "string") features.push(item);
+    }
+  }
+  hostedContextFeatures = new Set(features);
+}
 
 export function registerPineLanguageSupport(monaco: typeof Monaco): void {
   if (!monaco.languages.getLanguages().some((language) => language.id === PINE_LANGUAGE_ID)) {
@@ -77,9 +101,28 @@ export function registerPineLanguageSupport(monaco: typeof Monaco): void {
     triggerCharacters: ["."],
     provideCompletionItems(model, position) {
       const range = model.getWordUntilPosition(position);
-      const suggestions = [...KEYWORDS, ...BUILTINS].map((label) => ({
+      const linePrefix = model.getLineContent(position.lineNumber).slice(0, position.column - 1);
+      const contextMatch = /\b(syminfo|timeframe)\.\w*$/.exec(linePrefix);
+      const contextSuggestions = contextMatch
+        ? [...hostedContextFeatures]
+            .filter((feature) => feature.startsWith(`${contextMatch[1]}.`))
+            .map((feature) => feature.slice(feature.indexOf(".") + 1))
+        : [];
+      const rootContextSuggestions = contextMatch
+        ? []
+        : [...new Set(
+            [...hostedContextFeatures]
+              .map((feature) => feature.split(".", 1)[0])
+              .filter((value): value is string => typeof value === "string"),
+          )];
+      const labels = contextMatch
+        ? contextSuggestions
+        : [...HOST_COMPLETION_KEYWORDS, ...BUILTINS, ...rootContextSuggestions];
+      const suggestions = labels.map((label) => ({
         label,
-        kind: monaco.languages.CompletionItemKind.Keyword,
+        kind: contextMatch
+          ? monaco.languages.CompletionItemKind.Property
+          : monaco.languages.CompletionItemKind.Keyword,
         insertText: label,
         range: {
           startLineNumber: position.lineNumber,

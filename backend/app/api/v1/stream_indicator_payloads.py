@@ -25,7 +25,12 @@ from app.indicator.pyne import (
 from app.indicator.pyne.executor import execute_pyne_script
 from app.indicator.pyne.security import PyneSecurityError, PyneTimeoutError
 from app.indicator.script_identity import script_hash
-from app.indicator.runtimes import PINE_COMPAT_RUNTIME_ID, get_script_runtime, normalize_runtime_id
+from app.indicator.runtimes import (
+    PINE_COMPAT_RUNTIME_ID,
+    ScriptRuntimeContext,
+    get_script_runtime,
+    normalize_runtime_id,
+)
 from app.indicator.serialization import (
     build_indicator_snapshot_payload,
     build_pyne_snapshot_payload,
@@ -76,6 +81,15 @@ class IndicatorRangeNotReadyError(RuntimeError):
 def confirmed_indicator_seed_bars(bars: list[Any]) -> list[Any]:
     """Return only bars that are safe to commit into indicator history."""
     return [bar for bar in bars or [] if getattr(bar, "is_closed", True)]
+
+
+def _script_runtime_context(meta: dict[str, Any]) -> ScriptRuntimeContext:
+    return ScriptRuntimeContext(
+        exchange=str(meta.get("exchange") or ""),
+        market_type=str(meta.get("market_type") or meta.get("marketType") or ""),
+        symbol=str(meta.get("symbol") or ""),
+        interval=str(meta.get("interval") or ""),
+    )
 
 
 def _indicator_warmup_bars(name: str, params: dict[str, Any]) -> int:
@@ -788,6 +802,7 @@ def _compute_pine_snapshot_message(
         ohlcv=[bar.to_dict() for bar in seed_bars],
         params=meta.get("params") or {},
         render_hints=meta.get("renderHints") or {},
+        context=_script_runtime_context(meta),
     )
     payload = build_script_snapshot_payload(
         client_id=client_id,
@@ -1106,6 +1121,7 @@ def _compute_pine_range_patch_from_bars(
         ohlcv=[bar.to_dict() for bar in confirmed_bars],
         params=params,
         render_hints=meta.get("renderHints") or {},
+        context=_script_runtime_context(meta),
     )
     payload = build_script_snapshot_payload(
         client_id=client_id,

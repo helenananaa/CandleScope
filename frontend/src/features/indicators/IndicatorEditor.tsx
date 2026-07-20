@@ -12,7 +12,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
 import { registerPyneLanguageSupport } from "../../editor/pyneLanguage";
-import { registerPineLanguageSupport } from "../../editor/pineLanguage";
+import {
+  configurePineHostCapabilities,
+  registerPineLanguageSupport,
+} from "../../editor/pineLanguage";
 import { registerPyneTheme, getPyneEditorOptions } from "../../editor/pyneTheme";
 import {
   analyzeIndicatorScript,
@@ -272,6 +275,15 @@ export default function IndicatorEditor({
   const runDisabled = !readOnly && (
     effectiveAnalysisStatus !== "ready" || currentAnalysis?.executable !== true
   );
+
+  useEffect(() => {
+    configurePineHostCapabilities(
+      selectedRuntime?.id === "pine-compat" && selectedRuntime.available
+        ? selectedRuntime.capabilities
+        : null,
+    );
+    return () => { configurePineHostCapabilities(null); };
+  }, [selectedRuntime]);
 
   useEffect(() => {
     const controller = new AbortController();

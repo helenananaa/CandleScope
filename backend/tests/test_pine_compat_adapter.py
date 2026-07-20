@@ -7,10 +7,11 @@ import asyncio
 import pytest
 
 from app.api.v1 import indicators as indicators_api
+from app.api.v1 import stream_indicator_payloads as payload_api
 from app.api.v1 import stream_pyne_subscriptions as stream_subscriptions
-from app.data_engine.data_manager.models import DataEventType
+from app.data_engine.data_manager.models import BarData, DataEventType
 from app.indicator.custom_store import CustomIndicatorStore
-from app.indicator.runtimes import PINE_COMPAT_RUNTIME_ID
+from app.indicator.runtimes import PINE_COMPAT_RUNTIME_ID, ScriptRuntimeContext
 from app.indicator.runtimes import pine_compat_adapter as pine_adapter
 
 
@@ -80,7 +81,9 @@ class _FakePineModule:
     def __init__(self, analysis: dict[str, Any], output: dict[str, Any]) -> None:
         self.analysis = analysis
         self.output = output
-        self.run_calls: list[tuple[str, list[dict[str, Any]], dict[int, Any]]] = []
+        self.run_calls: list[
+            tuple[str, list[dict[str, Any]], dict[int, Any], str | None, str | None]
+        ] = []
 
     def analyze_script(self, script: str) -> dict[str, Any]:
         assert script
@@ -92,8 +95,10 @@ class _FakePineModule:
         bars: list[dict[str, Any]],
         *,
         input_overrides: dict[int, Any],
+        chart_symbol: str | None = None,
+        chart_timeframe: str | None = None,
     ) -> dict[str, Any]:
-        self.run_calls.append((script, bars, input_overrides))
+        self.run_calls.append((script, bars, input_overrides, chart_symbol, chart_timeframe))
         return self.output
 
 
@@ -142,6 +147,109 @@ def test_pine_adapter_rejects_host_context_before_execution(monkeypatch: pytest.
     assert module.run_calls == []
 
 
+@pytest.mark.parametrize(
+    ("context", "chart_symbol", "chart_timeframe"),
+    [
+        (
+            ScriptRuntimeContext("binance", "spot", "BTCUSDT", "1m"),
+            "BINANCE:BTCUSDT",
+            "1",
+        ),
+        (
+            ScriptRuntimeContext("binance", "futures", "BTCUSDT", "1h"),
+            "BINANCE:BTCUSDT.P",
+            "60",
+        ),
+        (
+            ScriptRuntimeContext("okx", "futures", "BTC-USDT-SWAP", "3d"),
+            "OKX:BTC-USDT-SWAP",
+            "3D",
+        ),
+        (
+            ScriptRuntimeContext("binance", "spot", "BTCUSDT", "1M"),
+            "BINANCE:BTCUSDT",
+            "M",
+        ),
+    ],
+)
+def test_pine_chart_context_translation_is_exact(
+    context: ScriptRuntimeContext,
+    chart_symbol: str,
+    chart_timeframe: str,
+) -> None:
+    assert pine_adapter.pine_chart_symbol(context) == chart_symbol
+    assert pine_adapter.pine_chart_timeframe(context) == chart_timeframe
+
+
+@pytest.mark.parametrize("interval", ["2s", "25h", "366d", "53w", "13M", "1H", ""])
+def test_pine_chart_timeframe_rejects_unrepresentable_intervals(interval: str) -> None:
+    context = ScriptRuntimeContext("binance", "spot", "BTCUSDT", interval)
+    assert pine_adapter.pine_chart_timeframe(context) is None
+
+
+def test_pine_adapter_injects_verified_chart_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _FakePineModule(
+        _analysis("indicator", "syminfo.tickerid", "timeframe.period", "plot"),
+        _runtime_output(),
+    )
+    monkeypatch.setattr(pine_adapter, "_load_module", lambda: module)
+    context = ScriptRuntimeContext("binance", "futures", "BTCUSDT", "1h")
+
+    result = pine_adapter.execute_pine_script(
+        script='indicator("Context")\nplot(close)',
+        ohlcv=_bars(),
+        context=context,
+        executor_mode="inline",
+    )
+
+    assert result.ok is True
+    assert module.run_calls[0][3:] == ("BINANCE:BTCUSDT.P", "60")
+    assert result.meta["hostBindings"] == {
+        "chartSymbol": "BINANCE:BTCUSDT.P",
+        "chartTimeframe": "60",
+    }
+
+
+def test_pine_adapter_keeps_unverified_timeframe_functions_blocked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _FakePineModule(
+        _analysis("indicator", "timeframe.in_seconds", "plot"),
+        _runtime_output(),
+    )
+    monkeypatch.setattr(pine_adapter, "_load_module", lambda: module)
+
+    result = pine_adapter.execute_pine_script(
+        script='indicator("Context")\nplot(timeframe.in_seconds())',
+        ohlcv=_bars(),
+        context=ScriptRuntimeContext("binance", "spot", "BTCUSDT", "1h"),
+        executor_mode="inline",
+    )
+
+    assert result.code == "PINE_HOST_CAPABILITY_UNSUPPORTED"
+    assert result.meta["blockedFeatures"] == ["timeframe.in_seconds"]
+    assert module.run_calls == []
+
+
+def test_installed_pine_runtime_consumes_verified_chart_context() -> None:
+    result = pine_adapter.execute_pine_script(
+        script=(
+            '//@version=6\nindicator("Context")\n'
+            'matches = syminfo.tickerid == "BINANCE:BTCUSDT.P" and '
+            'timeframe.period == "60" and timeframe.multiplier == 60\n'
+            'plot(matches ? 1 : 0)'
+        ),
+        ohlcv=_bars(),
+        context=ScriptRuntimeContext("binance", "futures", "BTCUSDT", "1h"),
+        executor_mode="inline",
+    )
+
+    assert result.ok is True
+    assert [point["value"] for point in result.lines[0]["data"]] == [1.0, 1.0, 1.0]
+
+
 @pytest.mark.anyio
 async def test_script_analysis_api_reports_native_and_host_capabilities(
     monkeypatch: pytest.MonkeyPatch,
@@ -172,6 +280,33 @@ async def test_script_analysis_api_reports_native_and_host_capabilities(
         "marketType": "spot",
         "symbol": "BTCUSDT",
         "interval": "1m",
+    }
+
+
+@pytest.mark.anyio
+async def test_script_analysis_api_reports_exact_host_bindings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _FakePineModule(
+        _analysis("indicator", "syminfo.tickerid", "timeframe.period", "plot"),
+        _runtime_output(),
+    )
+    monkeypatch.setattr(pine_adapter, "_load_module", lambda: module)
+
+    payload = await indicators_api.analyze_script(indicators_api.ScriptAnalysisRequest(
+        runtime=PINE_COMPAT_RUNTIME_ID,
+        script='indicator("Context")\nplot(close)',
+        exchange="binance",
+        market_type="futures",
+        symbol="BTCUSDT",
+        interval="4h",
+    ))
+
+    assert payload["nativeExecutable"] is True
+    assert payload["executable"] is True
+    assert payload["meta"]["hostBindings"] == {
+        "chartSymbol": "BINANCE:BTCUSDT.P",
+        "chartTimeframe": "240",
     }
 
 
@@ -474,6 +609,41 @@ def test_range_meta_keeps_pine_runtime_in_script_identity() -> None:
     assert "scriptMode" not in meta
 
 
+def test_pine_range_execution_preserves_chart_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _FakePineModule(
+        _analysis("indicator", "syminfo.tickerid", "timeframe.period", "plot"),
+        _runtime_output(),
+    )
+    monkeypatch.setattr(pine_adapter, "_load_module", lambda: module)
+    monkeypatch.setattr(pine_adapter.config, "PINE_EXECUTOR_MODE", "inline")
+    bars = [BarData.from_dict(item).with_closed_state(True) for item in _bars()]
+    meta = {
+        "kind": "script",
+        "runtime": PINE_COMPAT_RUNTIME_ID,
+        "exchange": "okx",
+        "market_type": "futures",
+        "symbol": "BTC-USDT-SWAP",
+        "interval": "4h",
+        "name": "Context",
+        "script": 'indicator("Context")\nplot(close)',
+        "params": {},
+        "renderHints": {},
+        "indicatorId": "context-1",
+    }
+
+    payload_api._compute_pine_range_patch_from_bars(
+        "context-1",
+        meta,
+        bars[0].time,
+        bars[-1].time,
+        bars,
+    )
+
+    assert module.run_calls[0][3:] == ("OKX:BTC-USDT-SWAP", "240")
+
+
 def test_custom_store_defaults_old_records_to_pyne_and_preserves_pine_updates(tmp_path) -> None:
     store = CustomIndicatorStore(tmp_path / "custom_indicators.json")
     legacy = store.upsert({"name": "Legacy", "script": "plot(close)"})
@@ -502,12 +672,17 @@ async def test_compute_api_dispatches_explicit_pine_runtime(
         runtime=PINE_COMPAT_RUNTIME_ID,
         script='indicator("Close")\nplot(close)',
         ohlcv=_bars(),
+        exchange="binance",
+        market_type="futures",
+        symbol="BTCUSDT",
+        interval="1h",
     ))
 
     assert payload["ok"] is True
     assert payload["runtime"] == PINE_COMPAT_RUNTIME_ID
     assert payload["lines"][0]["id"] == "pine-plot-2"
     assert payload["meta"]["closedBarsOnly"] is True
+    assert module.run_calls[0][3:] == ("BINANCE:BTCUSDT.P", "60")
 
 
 @pytest.mark.anyio
@@ -580,8 +755,13 @@ async def test_pine_ws_subscription_is_closed_bar_only(monkeypatch: pytest.Monke
 def test_pine_process_boundary_returns_structured_result() -> None:
     descriptor = pine_adapter.PineCompatRuntimeAdapter().descriptor()
     result = pine_adapter.execute_pine_script(
-        script='//@version=6\nindicator("Close", overlay=true)\nplot(close)',
+        script=(
+            '//@version=6\nindicator("Close", overlay=true)\n'
+            'matches = syminfo.tickerid == "BINANCE:BTCUSDT.P" and '
+            'timeframe.period == "60"\nplot(matches ? close : 0)'
+        ),
         ohlcv=_bars(),
+        context=ScriptRuntimeContext("binance", "futures", "BTCUSDT", "1h"),
         executor_mode="process",
         timeout_seconds=10,
     )
@@ -589,6 +769,8 @@ def test_pine_process_boundary_returns_structured_result() -> None:
     if descriptor.available:
         assert result.ok is True
         assert result.lines[0]["data"][-1]["time"] == _bars()[-1]["time"]
+        assert result.lines[0]["data"][-1]["value"] == _bars()[-1]["close"]
+        assert result.meta["hostBindings"]["chartTimeframe"] == "60"
     else:
         assert result.ok is False
         assert result.code == "PINE_RUNTIME_UNAVAILABLE"

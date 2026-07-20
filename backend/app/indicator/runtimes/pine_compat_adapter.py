@@ -63,6 +63,25 @@ _HOST_BLOCKED_PREFIXES = (
     "library",
 )
 _HOST_BLOCKED_EXACT = {"plotbar", "plotcandle", "plotchar", "plotarrow"}
+_HOST_CHART_SYMBOL_FEATURES = frozenset({
+    "syminfo.prefix",
+    "syminfo.ticker",
+    "syminfo.tickerid",
+})
+_HOST_CHART_TIMEFRAME_FEATURES = frozenset({
+    "timeframe.isdaily",
+    "timeframe.isdwm",
+    "timeframe.isintraday",
+    "timeframe.isminutes",
+    "timeframe.ismonthly",
+    "timeframe.isseconds",
+    "timeframe.isweekly",
+    "timeframe.multiplier",
+    "timeframe.period",
+})
+_PINE_SECONDS_MULTIPLIERS = frozenset({1, 5, 10, 15, 30, 45})
+_PINE_CONTEXT_TOKEN_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+_CANDLESCOPE_INTERVAL_RE = re.compile(r"^(\d+)([smhdwM])$")
 _UNMAPPABLE_OUTPUT_KEYS = (
     "plotChars",
     "plotArrows",
@@ -76,6 +95,68 @@ _UNMAPPABLE_OUTPUT_KEYS = (
     "tables",
     "strategy",
 )
+
+
+def pine_chart_symbol(context: ScriptRuntimeContext | None) -> str | None:
+    """Translate CandleScope identity into an unambiguous Pine ticker id."""
+    if context is None:
+        return None
+    exchange = str(context.exchange or "").strip().upper()
+    symbol = str(context.symbol or "").strip().upper()
+    market_type = str(context.market_type or "").strip().lower()
+    if (
+        not exchange
+        or not symbol
+        or exchange == "UNKNOWN"
+        or symbol == "UNKNOWN"
+        or not _PINE_CONTEXT_TOKEN_RE.fullmatch(exchange)
+        or not _PINE_CONTEXT_TOKEN_RE.fullmatch(symbol)
+    ):
+        return None
+    if market_type == "spot":
+        ticker = symbol
+    elif market_type in {"futures", "swap"}:
+        if exchange == "BINANCE":
+            ticker = symbol if symbol.endswith(".P") else f"{symbol}.P"
+        elif symbol.endswith(("-SWAP", "-PERP", ".P")):
+            ticker = symbol
+        else:
+            return None
+    else:
+        return None
+    return f"{exchange}:{ticker}"
+
+
+def pine_chart_timeframe(context: ScriptRuntimeContext | None) -> str | None:
+    """Translate CandleScope's case-sensitive interval into Pine notation."""
+    if context is None:
+        return None
+    match = _CANDLESCOPE_INTERVAL_RE.fullmatch(str(context.interval or "").strip())
+    if not match:
+        return None
+    multiplier = int(match.group(1))
+    unit = match.group(2)
+    if multiplier <= 0:
+        return None
+    if unit == "s":
+        return f"{multiplier}S" if multiplier in _PINE_SECONDS_MULTIPLIERS else None
+    if unit == "m":
+        return str(multiplier) if multiplier <= 1440 else None
+    if unit == "h":
+        minutes = multiplier * 60
+        return str(minutes) if minutes <= 1440 else None
+    limits = {"d": (365, "D"), "w": (52, "W"), "M": (12, "M")}
+    limit, suffix = limits[unit]
+    if multiplier > limit:
+        return None
+    return suffix if multiplier == 1 else f"{multiplier}{suffix}"
+
+
+def _pine_host_bindings(context: ScriptRuntimeContext | None) -> dict[str, str | None]:
+    return {
+        "chartSymbol": pine_chart_symbol(context),
+        "chartTimeframe": pine_chart_timeframe(context),
+    }
 
 
 def _load_module() -> Any:
@@ -119,15 +200,29 @@ def _span_location(item: dict[str, Any]) -> tuple[int | None, int | None]:
     )
 
 
-def _feature_is_host_blocked(feature: str) -> bool:
+def _feature_is_host_blocked(
+    feature: str,
+    *,
+    chart_symbol: str | None = None,
+    chart_timeframe: str | None = None,
+) -> bool:
     normalized = feature.strip().lower()
+    if normalized in _HOST_CHART_SYMBOL_FEATURES and chart_symbol is not None:
+        return False
+    if normalized in _HOST_CHART_TIMEFRAME_FEATURES and chart_timeframe is not None:
+        return False
     return normalized in _HOST_BLOCKED_EXACT or any(
         normalized == prefix.rstrip(".") or normalized.startswith(prefix)
         for prefix in _HOST_BLOCKED_PREFIXES
     )
 
 
-def _validate_analysis(analysis: dict[str, Any]) -> ScriptRuntimeResult | None:
+def _validate_analysis(
+    analysis: dict[str, Any],
+    *,
+    chart_symbol: str | None = None,
+    chart_timeframe: str | None = None,
+) -> ScriptRuntimeResult | None:
     if analysis.get("schemaVersion") != PINE_ANALYSIS_SCHEMA_VERSION:
         return _failure(
             "PINE_SCHEMA_MISMATCH",
@@ -170,7 +265,15 @@ def _validate_analysis(analysis: dict[str, Any]) -> ScriptRuntimeResult | None:
         )
 
     supported = [item for item in compatibility.get("supported") or [] if isinstance(item, dict)]
-    blocked = [item for item in supported if _feature_is_host_blocked(str(item.get("feature") or ""))]
+    blocked = [
+        item
+        for item in supported
+        if _feature_is_host_blocked(
+            str(item.get("feature") or ""),
+            chart_symbol=chart_symbol,
+            chart_timeframe=chart_timeframe,
+        )
+    ]
     if blocked:
         first = blocked[0]
         line, column = _span_location(first)
@@ -202,7 +305,12 @@ def analyze_pine_script_for_host(
     """Return native analysis plus CandleScope's explicit v1 host boundary."""
     module = _load_module()
     analysis = dict(module.analyze_script(script))
-    failure = _validate_analysis(analysis)
+    bindings = _pine_host_bindings(context)
+    failure = _validate_analysis(
+        analysis,
+        chart_symbol=bindings["chartSymbol"],
+        chart_timeframe=bindings["chartTimeframe"],
+    )
     analysis["runtime"] = PINE_COMPAT_RUNTIME_ID
     analysis["hostCompatibility"] = {
         "executable": failure is None,
@@ -210,6 +318,7 @@ def analyze_pine_script_for_host(
         "error": failure.to_dict() if failure else None,
     }
     analysis["hostContext"] = context.to_dict() if context else None
+    analysis["hostBindings"] = bindings
     return analysis
 
 
@@ -265,6 +374,11 @@ def _analysis_contract(
             "scriptMode": analysis.get("scriptMode"),
             "dependencyPlanning": "not-available",
             "context": context.to_dict() if context else None,
+            "hostBindings": (
+                dict(analysis["hostBindings"])
+                if isinstance(analysis.get("hostBindings"), dict)
+                else _pine_host_bindings(context)
+            ),
         },
     )
 
@@ -637,6 +751,7 @@ def _normalize_output(
     analysis: dict[str, Any],
     overrides: dict[int, Any],
     render_hints: dict[str, Any] | None,
+    host_bindings: dict[str, str | None] | None,
     max_output_series: int,
     max_output_points: int,
 ) -> ScriptRuntimeResult:
@@ -1113,6 +1228,7 @@ def _normalize_output(
             "supportedFeatures": supported,
             "outputSeries": series_count,
             "outputPoints": point_count,
+            "hostBindings": dict(host_bindings or {}),
         },
     )
 
@@ -1132,7 +1248,19 @@ def _execute_payload(payload: dict[str, Any]) -> ScriptRuntimeResult:
         if not script.strip():
             return _failure("PINE_SCRIPT_REQUIRED", "Pine script is required")
         analysis = dict(module.analyze_script(script))
-        failure = _validate_analysis(analysis)
+        chart_symbol = payload.get("chart_symbol")
+        chart_symbol = chart_symbol if isinstance(chart_symbol, str) and chart_symbol else None
+        chart_timeframe = payload.get("chart_timeframe")
+        chart_timeframe = (
+            chart_timeframe
+            if isinstance(chart_timeframe, str) and chart_timeframe
+            else None
+        )
+        failure = _validate_analysis(
+            analysis,
+            chart_symbol=chart_symbol,
+            chart_timeframe=chart_timeframe,
+        )
         if failure:
             return failure
         bars = _normalize_bars(payload.get("ohlcv"), max_bars=max(int(payload["max_bars"]), 1))
@@ -1142,7 +1270,12 @@ def _execute_payload(payload: dict[str, Any]) -> ScriptRuntimeResult:
         overrides = _normalize_overrides(payload.get("params"), analysis)
         if isinstance(overrides, ScriptRuntimeResult):
             return overrides
-        raw = dict(module.run_script(script, runtime_bars, input_overrides=overrides))
+        runtime_options: dict[str, Any] = {"input_overrides": overrides}
+        if chart_symbol is not None:
+            runtime_options["chart_symbol"] = chart_symbol
+        if chart_timeframe is not None:
+            runtime_options["chart_timeframe"] = chart_timeframe
+        raw = dict(module.run_script(script, runtime_bars, **runtime_options))
         return _normalize_output(
             raw,
             script=script,
@@ -1150,6 +1283,10 @@ def _execute_payload(payload: dict[str, Any]) -> ScriptRuntimeResult:
             analysis=analysis,
             overrides=overrides,
             render_hints=payload.get("render_hints"),
+            host_bindings={
+                "chartSymbol": chart_symbol,
+                "chartTimeframe": chart_timeframe,
+            },
             max_output_series=max(int(payload["max_output_series"]), 1),
             max_output_points=max(int(payload["max_output_points"]), 1),
         )
@@ -1186,9 +1323,11 @@ def execute_pine_script(
     ohlcv: list[dict[str, Any]],
     params: dict[str, Any] | None = None,
     render_hints: dict[str, Any] | None = None,
+    context: ScriptRuntimeContext | None = None,
     executor_mode: str | None = None,
     timeout_seconds: float | None = None,
 ) -> ScriptRuntimeResult:
+    bindings = _pine_host_bindings(context)
     payload = {
         "script": script,
         "ohlcv": ohlcv,
@@ -1197,6 +1336,8 @@ def execute_pine_script(
         "max_bars": max(int(config.PINE_MAX_BARS), 1),
         "max_output_series": max(int(config.PINE_MAX_OUTPUT_SERIES), 1),
         "max_output_points": max(int(config.PINE_MAX_OUTPUT_POINTS), 1),
+        "chart_symbol": bindings["chartSymbol"],
+        "chart_timeframe": bindings["chartTimeframe"],
     }
     mode = str(executor_mode or config.PINE_EXECUTOR_MODE).strip().lower()
     if mode == "inline":
@@ -1254,12 +1395,13 @@ class PineCompatRuntimeAdapter:
         render_hints: dict[str, Any] | None = None,
         context: ScriptRuntimeContext | None = None,
     ) -> ScriptRuntimeResult:
-        del security_mode, context
+        del security_mode
         return execute_pine_script(
             script=script,
             ohlcv=ohlcv,
             params=params,
             render_hints=render_hints,
+            context=context,
         )
 
     def analyze(
@@ -1343,6 +1485,11 @@ class PineCompatRuntimeAdapter:
                 "closedBarsOnly": True,
                 "formingBar": False,
                 "incremental": False,
+                "chartContext": {
+                    "symbolFeatures": sorted(_HOST_CHART_SYMBOL_FEATURES),
+                    "timeframeFeatures": sorted(_HOST_CHART_TIMEFRAME_FEATURES),
+                    "marketIdentity": "exact-or-blocked",
+                },
                 "analysisSchemaVersion": PINE_ANALYSIS_SCHEMA_VERSION,
                 "runtimeSchemaVersion": PINE_RUNTIME_SCHEMA_VERSION,
                 "installedAnalysisSchemaVersion": installed_analysis_schema_version,
