@@ -10,8 +10,10 @@ from app.api.v1.stream_indicator_payloads import (
     _compute_pine_range_patch_from_bars,
     _compute_pyne_range_patch_from_bars,
     _indicator_warmup_bars,
+    _pine_history_plan_from_meta,
     _query_indicator_compute_bars_async,
     _replace_range_from_snapshot,
+    prepare_pine_history_plan_async,
 )
 from app.core import config
 from app.core.executors import run_indicator, run_pine_wait, run_pyne_wait
@@ -39,6 +41,8 @@ def _job_target_bars(job: IndicatorRangeBatchJob) -> int:
 def _job_warmup(job: IndicatorRangeBatchJob) -> int:
     params = job.meta.get("params") if isinstance(job.meta.get("params"), dict) else {}
     runtime = normalize_runtime_id(job.meta.get("runtime")) if job.meta.get("kind") == "script" else None
+    if runtime == PINE_COMPAT_RUNTIME_ID:
+        return _pine_history_plan_from_meta(job.meta).warmup_bars
     name = ("PINE" if runtime == PINE_COMPAT_RUNTIME_ID else "PYNE") if runtime else str(job.meta.get("name") or "")
     return _indicator_warmup_bars(name, params)
 
@@ -60,7 +64,11 @@ def _validate_jobs(jobs: list[IndicatorRangeBatchJob]) -> None:
             estimated = target_bars + _job_warmup(job)
             runtime = normalize_runtime_id(job.meta.get("runtime"))
             max_bars = max(int(config.PINE_MAX_BARS if runtime == PINE_COMPAT_RUNTIME_ID else config.PYNE_MAX_BARS), 1)
-            if estimated > max_bars:
+            pine_requires_origin = (
+                runtime == PINE_COMPAT_RUNTIME_ID
+                and _pine_history_plan_from_meta(job.meta).requires_available_history
+            )
+            if not pine_requires_origin and estimated > max_bars:
                 raise ValueError(f"Too many {runtime} bars: {estimated} > {max_bars}")
 
 
@@ -76,11 +84,22 @@ async def compute_indicator_range_batch_async(
     Cache hits do not touch K-line storage.  All misses share one lazy bars
     task using the union target range and maximum warmup requirement.
     """
+    await asyncio.gather(*(prepare_pine_history_plan_async(job.meta) for job in jobs))
     _validate_jobs(jobs)
     union_start = min(job.start for job in jobs)
     union_end = max(job.end for job in jobs)
     max_warmup = max(_job_warmup(job) for job in jobs)
-    seed_meta = jobs[0].meta
+    seed_job = next(
+        (
+            job
+            for job in jobs
+            if job.meta.get("kind") == "script"
+            and normalize_runtime_id(job.meta.get("runtime")) == PINE_COMPAT_RUNTIME_ID
+            and _pine_history_plan_from_meta(job.meta).requires_available_history
+        ),
+        jobs[0],
+    )
+    seed_meta = seed_job.meta
     bars_tasks: dict[str, asyncio.Task[list[Any]]] = {}
 
     async def _shared_bars() -> list[Any]:

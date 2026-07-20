@@ -85,6 +85,21 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function pineHistoryPlanSummary(analysis: ScriptRuntimeAnalysis | null): string | null {
+  const compatibility = analysis?.hostCompatibility;
+  const rawPlan = compatibility && typeof compatibility.historyPlan === "object"
+    ? compatibility.historyPlan
+    : analysis?.meta && typeof analysis.meta.historyPlan === "object"
+      ? analysis.meta.historyPlan
+      : null;
+  if (!rawPlan || Array.isArray(rawPlan)) return null;
+  const plan = rawPlan as Record<string, unknown>;
+  if (plan.mode === "available-history") return "从本地最早可用 K 线起算";
+  if (plan.mode !== "bounded") return null;
+  const warmup = Math.max(0, Math.trunc(Number(plan.warmupBars) || 0));
+  return warmup > 0 ? `预热 ${warmup} 根` : "无需历史预热";
+}
+
 function analysisRequestKey(
   runtime: string,
   script: string,
@@ -268,6 +283,7 @@ export default function IndicatorEditor({
   const currentAnalysis = effectiveAnalysisStatus === "ready"
     ? analysisState.analysis
     : null;
+  const currentHistoryPlanSummary = pineHistoryPlanSummary(currentAnalysis);
   const analysisError = runtimeCatalogError
     ?? (effectiveAnalysisStatus === "unavailable"
       ? selectedRuntime?.reason || "当前后端未提供此运行时"
@@ -665,6 +681,7 @@ export default function IndicatorEditor({
             {currentAnalysis.diagnostics.length > 0
               ? ` · ${currentAnalysis.diagnostics.length} 条提示`
               : " · 当前宿主可执行"}
+            {currentHistoryPlanSummary ? ` · ${currentHistoryPlanSummary}` : ""}
           </span>
         ) : (
           <span style={{ color: 'var(--text-muted)' }}>

@@ -27,9 +27,13 @@ from app.indicator.pyne.security import PyneSecurityError, PyneTimeoutError
 from app.indicator.script_identity import script_hash
 from app.indicator.runtimes import (
     PINE_COMPAT_RUNTIME_ID,
+    PineHistoryPlan,
     ScriptRuntimeContext,
+    ScriptRuntimeResult,
     get_script_runtime,
     normalize_runtime_id,
+    plan_pine_history,
+    plan_pine_script_history,
 )
 from app.indicator.serialization import (
     build_indicator_snapshot_payload,
@@ -78,6 +82,10 @@ class IndicatorRangeNotReadyError(RuntimeError):
         self.waited_ms = max(0, int(waited_ms))
 
 
+class PineHistoryLimitError(ValueError):
+    """A correct Pine seed cannot fit inside the configured execution cap."""
+
+
 def confirmed_indicator_seed_bars(bars: list[Any]) -> list[Any]:
     """Return only bars that are safe to commit into indicator history."""
     return [bar for bar in bars or [] if getattr(bar, "is_closed", True)]
@@ -92,7 +100,12 @@ def _script_runtime_context(meta: dict[str, Any]) -> ScriptRuntimeContext:
     )
 
 
-def _indicator_warmup_bars(name: str, params: dict[str, Any]) -> int:
+def _indicator_warmup_bars(
+    name: str,
+    params: dict[str, Any],
+    *,
+    script: str | None = None,
+) -> int:
     normalized = str(name or "").upper().strip()
 
     def _param_int(key: str, fallback: int) -> int:
@@ -111,7 +124,106 @@ def _indicator_warmup_bars(name: str, params: dict[str, Any]) -> int:
         return _param_int("period", 20) * 5
     if normalized == "MACD":
         return _param_int("slow", 26) * 5 + _param_int("signal", 9) * 3
+    if normalized == "PINE" and script:
+        return plan_pine_history(script, params=params).warmup_bars
     return _param_int("warmup", 200)
+
+
+def _pine_history_plan_from_meta(meta: dict[str, Any]) -> PineHistoryPlan:
+    raw = meta.get("pineHistoryPlan")
+    if isinstance(raw, dict):
+        try:
+            return PineHistoryPlan.from_dict(raw)
+        except (TypeError, ValueError):
+            pass
+    params = meta.get("params") if isinstance(meta.get("params"), dict) else {}
+    return plan_pine_history(str(meta.get("script") or ""), params=params)
+
+
+async def prepare_pine_history_plan_async(meta: dict[str, Any]) -> PineHistoryPlan | None:
+    """Attach a native-analysis-backed history plan before querying K-lines."""
+
+    if (
+        meta.get("kind") != "script"
+        or normalize_runtime_id(meta.get("runtime")) != PINE_COMPAT_RUNTIME_ID
+    ):
+        return None
+    params = meta.get("params") if isinstance(meta.get("params"), dict) else {}
+    try:
+        plan = await run_pine_wait(
+            plan_pine_script_history,
+            str(meta.get("script") or ""),
+            params,
+        )
+    except Exception:
+        plan = plan_pine_history(str(meta.get("script") or ""), params=params)
+    meta["pineHistoryPlan"] = plan.to_dict()
+    return plan
+
+
+def _prepare_pine_history_plan_sync(meta: dict[str, Any]) -> PineHistoryPlan:
+    params = meta.get("params") if isinstance(meta.get("params"), dict) else {}
+    try:
+        plan = plan_pine_script_history(str(meta.get("script") or ""), params)
+    except Exception:
+        plan = plan_pine_history(str(meta.get("script") or ""), params=params)
+    meta["pineHistoryPlan"] = plan.to_dict()
+    return plan
+
+
+def _pine_local_history_start_ms(dm: Any, meta: dict[str, Any], end_ms: int) -> int | None:
+    get_bounds = getattr(dm, "get_bounds", None)
+    if not callable(get_bounds):
+        return None
+    try:
+        bounds = get_bounds(
+            meta["symbol"],
+            meta["interval"],
+            exchange=meta["exchange"],
+            market_type=meta["market_type"],
+        )
+    except Exception:
+        return None
+    if not isinstance(bounds, dict):
+        return None
+    candidates: list[int] = []
+    for key, milliseconds in (
+        ("cache_earliest", False),
+        ("storage_earliest_ms", True),
+    ):
+        try:
+            value = int(bounds.get(key) or 0)
+        except (TypeError, ValueError):
+            continue
+        if value <= 0:
+            continue
+        normalized = value if milliseconds or value >= 100_000_000_000 else value * 1000
+        if normalized <= end_ms:
+            candidates.append(normalized)
+    return min(candidates) if candidates else None
+
+
+def _annotate_pine_history_result(
+    result: ScriptRuntimeResult,
+    *,
+    plan: PineHistoryPlan,
+    bars: list[Any],
+    target_start_s: int,
+) -> None:
+    result.meta["historyPlan"] = plan.to_dict()
+    result.meta["historyBars"] = len(bars)
+    if bars:
+        result.meta["historyOrigin"] = {
+            "time": int(bars[0].time),
+            "scope": (
+                "local-available-history"
+                if plan.requires_available_history
+                else "bounded-lookback"
+            ),
+        }
+        result.meta["warmupBars"] = sum(
+            1 for bar in bars if int(getattr(bar, "time", 0)) < target_start_s
+        )
 
 
 def _range_from_indicator_command(
@@ -375,13 +487,25 @@ async def compute_indicator_range_payload_async(
     if meta.get("kind") == "script":
         runtime = normalize_runtime_id(meta.get("runtime"))
         params = meta.get("params") if isinstance(meta.get("params"), dict) else {}
-        warmup_bars = _indicator_warmup_bars("PINE" if runtime == PINE_COMPAT_RUNTIME_ID else "PYNE", params)
+        pine_plan = (
+            await prepare_pine_history_plan_async(meta)
+            if runtime == PINE_COMPAT_RUNTIME_ID
+            else None
+        )
+        warmup_bars = (
+            pine_plan.warmup_bars
+            if pine_plan is not None
+            else _indicator_warmup_bars("PYNE", params)
+        )
         max_script_bars = max(
             int(config.PINE_MAX_BARS if runtime == PINE_COMPAT_RUNTIME_ID else config.PYNE_MAX_BARS),
             1,
         )
         estimated_compute_bars = target_bars + warmup_bars
-        if estimated_compute_bars > max_script_bars:
+        if (
+            (pine_plan is None or not pine_plan.requires_available_history)
+            and estimated_compute_bars > max_script_bars
+        ):
             runtime_label = "Pine" if runtime == PINE_COMPAT_RUNTIME_ID else "Pyne"
             raise ValueError(f"Too many {runtime_label} bars: {estimated_compute_bars} > {max_script_bars}")
         bars = await _query_indicator_compute_bars_async(
@@ -439,7 +563,7 @@ def _query_indicator_compute_bars(
     *,
     warmup_bars: int,
 ) -> list[Any]:
-    result, start_ms, end_ms = _query_indicator_compute_result(
+    result, start_ms, end_ms, compute_start_ms = _query_indicator_compute_result(
         dm,
         meta,
         start_s,
@@ -447,7 +571,14 @@ def _query_indicator_compute_bars(
         warmup_bars=warmup_bars,
         auto_backfill=True,
     )
-    return _closed_indicator_compute_bars(result, start_s, end_s, start_ms, end_ms)
+    return _closed_indicator_compute_bars(
+        result,
+        start_s,
+        end_s,
+        start_ms,
+        end_ms,
+        compute_start_ms,
+    )
 
 
 def _query_indicator_compute_result(
@@ -458,13 +589,26 @@ def _query_indicator_compute_result(
     *,
     warmup_bars: int,
     auto_backfill: bool,
-) -> tuple[Any, int, int]:
+) -> tuple[Any, int, int, int]:
     interval_ms = parse_interval_ms(meta["interval"])
     if interval_ms is None or interval_ms <= 0:
         raise ValueError(f"Unsupported interval: {meta['interval']}")
     start_ms = start_s * 1000
     end_ms = end_s * 1000
     compute_start_ms = max(0, start_ms - warmup_bars * interval_ms)
+    pine_plan = None
+    if (
+        meta.get("kind") == "script"
+        and normalize_runtime_id(meta.get("runtime")) == PINE_COMPAT_RUNTIME_ID
+    ):
+        pine_plan = _pine_history_plan_from_meta(meta)
+        if pine_plan.requires_available_history:
+            local_start_ms = _pine_local_history_start_ms(dm, meta, end_ms)
+            if local_start_ms is None:
+                raise RuntimeError(
+                    "Pine available-history origin is not available for this K-line series"
+                )
+            compute_start_ms = min(start_ms, local_start_ms)
     calendar = None
     history_policy = getattr(dm, "history_policy", None)
     if history_policy is not None:
@@ -480,29 +624,30 @@ def _query_indicator_compute_result(
         except Exception:
             calendar = None
     if calendar is not None:
-        start_bucket = compute_bucket_start_ms(
-            start_ms,
-            interval_ms,
-            interval=meta["interval"],
-        )
-        anchor = calendar.previous_expected_open(
-            compute_bucket_end_ms(
-                start_bucket,
+        if pine_plan is None or not pine_plan.requires_available_history:
+            start_bucket = compute_bucket_start_ms(
+                start_ms,
                 interval_ms,
                 interval=meta["interval"],
-            ),
-            meta["interval"],
-        )
-        if anchor is not None:
-            compute_start_ms = anchor
-            for _ in range(warmup_bars):
-                previous = calendar.previous_expected_open(
-                    compute_start_ms,
-                    meta["interval"],
-                )
-                if previous is None:
-                    break
-                compute_start_ms = previous
+            )
+            anchor = calendar.previous_expected_open(
+                compute_bucket_end_ms(
+                    start_bucket,
+                    interval_ms,
+                    interval=meta["interval"],
+                ),
+                meta["interval"],
+            )
+            if anchor is not None:
+                compute_start_ms = anchor
+                for _ in range(warmup_bars):
+                    previous = calendar.previous_expected_open(
+                        compute_start_ms,
+                        meta["interval"],
+                    )
+                    if previous is None:
+                        break
+                    compute_start_ms = previous
         needed = calendar.count_expected(
             compute_start_ms,
             end_ms,
@@ -510,6 +655,16 @@ def _query_indicator_compute_result(
         )
     else:
         needed = int((end_ms - compute_start_ms) // interval_ms) + 1
+    if pine_plan is not None and needed > max(int(config.PINE_MAX_BARS), 1):
+        scope = (
+            "available-history seed"
+            if pine_plan.requires_available_history
+            else "bounded history seed"
+        )
+        raise PineHistoryLimitError(
+            f"Pine {scope} requires {needed} bars, exceeding "
+            f"PINE_MAX_BARS={max(int(config.PINE_MAX_BARS), 1)}"
+        )
     result = dm.query(
         meta["symbol"],
         meta["interval"],
@@ -520,7 +675,11 @@ def _query_indicator_compute_result(
         market_type=meta["market_type"],
         auto_backfill=auto_backfill,
     )
-    return result, start_ms, end_ms
+    metadata = getattr(result, "metadata", None)
+    if isinstance(metadata, dict) and pine_plan is not None:
+        metadata["pine_history_plan"] = pine_plan.to_dict()
+        metadata["pine_history_compute_start_ms"] = compute_start_ms
+    return result, start_ms, end_ms, compute_start_ms
 
 
 def _closed_indicator_compute_bars(
@@ -529,9 +688,12 @@ def _closed_indicator_compute_bars(
     end_s: int,
     start_ms: int,
     end_ms: int,
+    compute_start_ms: int | None = None,
 ) -> list[Any]:
-    if _missing_overlaps_target(result.missing_ranges, start_ms, end_ms):
-        raise RuntimeError("target K-line range is still backfilling")
+    if compute_start_ms is None:
+        compute_start_ms = start_ms
+    if _missing_overlaps_target(result.missing_ranges, compute_start_ms, end_ms):
+        raise RuntimeError("indicator compute history is still backfilling")
     raw_bars = list(result.bars or [])
     bars = [
         bar for bar in raw_bars
@@ -576,7 +738,7 @@ async def _query_indicator_compute_bars_async(
     backfill_coordinator: Any | None,
     wait_seconds: float | None,
 ) -> list[Any]:
-    result, start_ms, end_ms = await run_storage(
+    result, start_ms, end_ms, compute_start_ms = await run_storage(
         _query_indicator_compute_result,
         dm,
         meta,
@@ -585,8 +747,15 @@ async def _query_indicator_compute_bars_async(
         warmup_bars=warmup_bars,
         auto_backfill=True,
     )
-    if not _missing_overlaps_target(result.missing_ranges, start_ms, end_ms):
-        return _closed_indicator_compute_bars(result, start_s, end_s, start_ms, end_ms)
+    if not _missing_overlaps_target(result.missing_ranges, compute_start_ms, end_ms):
+        return _closed_indicator_compute_bars(
+            result,
+            start_s,
+            end_s,
+            start_ms,
+            end_ms,
+            compute_start_ms,
+        )
 
     metadata = result.metadata if isinstance(getattr(result, "metadata", None), dict) else {}
     request_ids = list(dict.fromkeys(
@@ -622,7 +791,7 @@ async def _query_indicator_compute_bars_async(
             waited_ms=waited_ms,
         ) from exc
 
-    result, start_ms, end_ms = await run_storage(
+    result, start_ms, end_ms, compute_start_ms = await run_storage(
         _query_indicator_compute_result,
         dm,
         meta,
@@ -631,14 +800,21 @@ async def _query_indicator_compute_bars_async(
         warmup_bars=warmup_bars,
         auto_backfill=False,
     )
-    if _missing_overlaps_target(result.missing_ranges, start_ms, end_ms):
+    if _missing_overlaps_target(result.missing_ranges, compute_start_ms, end_ms):
         waited_ms = int((asyncio.get_running_loop().time() - started) * 1000)
         raise IndicatorRangeNotReadyError(
             "target K-line range is unavailable after its backfill completed",
             request_ids=request_ids,
             waited_ms=waited_ms,
         )
-    return _closed_indicator_compute_bars(result, start_s, end_s, start_ms, end_ms)
+    return _closed_indicator_compute_bars(
+        result,
+        start_s,
+        end_s,
+        start_ms,
+        end_ms,
+        compute_start_ms,
+    )
 
 
 def _confirmed_target_range(bars: list[Any], start_s: int, end_s: int) -> tuple[int, int]:
@@ -785,24 +961,72 @@ def _compute_pine_snapshot_message(
     bar_time: int = 0,
 ) -> dict:
     """Compute a closed-bar Pine snapshot; forming-bar previews are unsupported."""
+    plan = _prepare_pine_history_plan_sync(meta)
     history_limit = min(
         max(int(meta.get("historyLimit") or 1), 1),
         max(int(config.PINE_MAX_BARS), 1),
     )
-    query_result = dm.query_latest(
-        meta["symbol"],
-        meta["interval"],
-        limit=history_limit,
-        exchange=meta["exchange"],
-        market_type=meta["market_type"],
-    )
-    seed_bars = confirmed_indicator_seed_bars(query_result.bars)
-    result = get_script_runtime(PINE_COMPAT_RUNTIME_ID).execute(
-        script=meta["script"],
-        ohlcv=[bar.to_dict() for bar in seed_bars],
-        params=meta.get("params") or {},
-        render_hints=meta.get("renderHints") or {},
-        context=_script_runtime_context(meta),
+    seed_bars: list[Any] = []
+    target_bars: list[Any] = []
+    try:
+        if plan.requires_available_history:
+            query_result = dm.query_latest(
+                meta["symbol"],
+                meta["interval"],
+                limit=history_limit,
+                exchange=meta["exchange"],
+                market_type=meta["market_type"],
+            )
+            target_bars = confirmed_indicator_seed_bars(query_result.bars)[-history_limit:]
+            if target_bars:
+                seed_bars = _query_indicator_compute_bars(
+                    dm,
+                    meta,
+                    int(target_bars[0].time),
+                    int(target_bars[-1].time),
+                    warmup_bars=plan.warmup_bars,
+                )
+        else:
+            compute_limit = history_limit + plan.warmup_bars
+            if compute_limit > max(int(config.PINE_MAX_BARS), 1):
+                raise PineHistoryLimitError(
+                    f"Pine bounded history seed requires {compute_limit} bars, exceeding "
+                    f"PINE_MAX_BARS={max(int(config.PINE_MAX_BARS), 1)}"
+                )
+            query_result = dm.query_latest(
+                meta["symbol"],
+                meta["interval"],
+                limit=max(compute_limit, 1),
+                exchange=meta["exchange"],
+                market_type=meta["market_type"],
+            )
+            seed_bars = confirmed_indicator_seed_bars(query_result.bars)
+            target_bars = seed_bars[-history_limit:]
+        result = get_script_runtime(PINE_COMPAT_RUNTIME_ID).execute(
+            script=meta["script"],
+            ohlcv=[bar.to_dict() for bar in seed_bars],
+            params=meta.get("params") or {},
+            render_hints=meta.get("renderHints") or {},
+            context=_script_runtime_context(meta),
+        )
+    except (IndicatorRangeEmptyError, RuntimeError, PineHistoryLimitError) as exc:
+        is_limit = isinstance(exc, PineHistoryLimitError)
+        result = ScriptRuntimeResult(
+            ok=False,
+            code=("PINE_HISTORY_LIMIT_EXCEEDED" if is_limit else "PINE_HISTORY_NOT_READY"),
+            error=str(exc),
+            hint=(
+                "脚本所需的起算历史超过当前 Pine 单次执行上限；请等待后续增量会话/检查点能力。"
+                if is_limit
+                else "脚本起算历史仍在补齐，完成后会自动重新计算。"
+            ),
+            meta={"runtime": PINE_COMPAT_RUNTIME_ID},
+        )
+    _annotate_pine_history_result(
+        result,
+        plan=plan,
+        bars=seed_bars,
+        target_start_s=(int(target_bars[0].time) if target_bars else int(bar_time or 0)),
     )
     payload = build_script_snapshot_payload(
         client_id=client_id,
@@ -818,6 +1042,14 @@ def _compute_pine_snapshot_message(
         bar_time=bar_time,
         script_hash=meta.get("scriptHash"),
     )
+    if target_bars:
+        payload = _filter_payload_to_range(
+            payload,
+            int(target_bars[0].time),
+            int(target_bars[-1].time),
+        )
+    payload["historyPlan"] = plan.to_dict()
+    payload["seedBars"] = len(seed_bars)
     if bar_time:
         return _patch_from_snapshot(
             payload,
@@ -1112,7 +1344,7 @@ def _compute_pine_range_patch_from_bars(
     target_bars: int | None = None,
 ) -> dict:
     params = meta.get("params") if isinstance(meta.get("params"), dict) else {}
-    warmup = _indicator_warmup_bars("PINE", params)
+    plan = _pine_history_plan_from_meta(meta)
     confirmed_bars = confirmed_indicator_seed_bars(bars)
     if len(confirmed_bars) > max(int(config.PINE_MAX_BARS), 1):
         raise ValueError(f"Too many pine-compat bars: {len(confirmed_bars)} > {config.PINE_MAX_BARS}")
@@ -1122,6 +1354,12 @@ def _compute_pine_range_patch_from_bars(
         params=params,
         render_hints=meta.get("renderHints") or {},
         context=_script_runtime_context(meta),
+    )
+    _annotate_pine_history_result(
+        result,
+        plan=plan,
+        bars=confirmed_bars,
+        target_start_s=start_s,
     )
     payload = build_script_snapshot_payload(
         client_id=client_id,
@@ -1143,7 +1381,10 @@ def _compute_pine_range_patch_from_bars(
         start_s=range_start_s,
         end_s=range_end_s,
     )
-    patch["warmupBars"] = warmup
+    patch["warmupBars"] = sum(
+        1 for bar in confirmed_bars if int(getattr(bar, "time", 0)) < start_s
+    )
+    patch["historyPlan"] = plan.to_dict()
     if target_bars is not None:
         patch["targetBars"] = target_bars
     return patch

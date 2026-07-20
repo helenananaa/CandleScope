@@ -27,6 +27,11 @@ from .base import (
     ScriptRuntimeDescriptor,
     ScriptRuntimeResult,
 )
+from .pine_history import (
+    PINE_HISTORY_PLAN_SCHEMA_VERSION,
+    PineHistoryPlan,
+    plan_pine_history,
+)
 
 
 PINE_ANALYSIS_SCHEMA_VERSION = 5
@@ -311,15 +316,29 @@ def analyze_pine_script_for_host(
         chart_symbol=bindings["chartSymbol"],
         chart_timeframe=bindings["chartTimeframe"],
     )
+    history_plan = plan_pine_history(script, analysis=analysis)
     analysis["runtime"] = PINE_COMPAT_RUNTIME_ID
     analysis["hostCompatibility"] = {
         "executable": failure is None,
         "closedBarsOnly": True,
+        "historyPlan": history_plan.to_dict(),
         "error": failure.to_dict() if failure else None,
     }
+    analysis["historyPlan"] = history_plan.to_dict()
     analysis["hostContext"] = context.to_dict() if context else None
     analysis["hostBindings"] = bindings
     return analysis
+
+
+def plan_pine_script_history(
+    script: str,
+    params: dict[str, Any] | None = None,
+) -> PineHistoryPlan:
+    """Plan hosted seed history using the installed runtime's native analysis."""
+
+    module = _load_module()
+    analysis = dict(module.analyze_script(script))
+    return plan_pine_history(script, analysis=analysis, params=params)
 
 
 def _analysis_contract(
@@ -373,6 +392,11 @@ def _analysis_contract(
             "dialect": analysis.get("dialect"),
             "scriptMode": analysis.get("scriptMode"),
             "dependencyPlanning": "not-available",
+            "historyPlan": (
+                dict(analysis["historyPlan"])
+                if isinstance(analysis.get("historyPlan"), dict)
+                else None
+            ),
             "context": context.to_dict() if context else None,
             "hostBindings": (
                 dict(analysis["hostBindings"])
@@ -1210,6 +1234,7 @@ def _normalize_output(
         for item in (analysis.get("compatibility") or {}).get("supported", [])
         if isinstance(item, dict) and item.get("feature")
     ]
+    history_plan = plan_pine_history(script, analysis=analysis, params=overrides)
     return ScriptRuntimeResult(
         ok=True,
         lines=lines,
@@ -1229,6 +1254,7 @@ def _normalize_output(
             "outputSeries": series_count,
             "outputPoints": point_count,
             "hostBindings": dict(host_bindings or {}),
+            "historyPlan": history_plan.to_dict(),
         },
     )
 
@@ -1485,6 +1511,12 @@ class PineCompatRuntimeAdapter:
                 "closedBarsOnly": True,
                 "formingBar": False,
                 "incremental": False,
+                "historyPlanning": {
+                    "schemaVersion": PINE_HISTORY_PLAN_SCHEMA_VERSION,
+                    "modes": ["bounded", "available-history"],
+                    "availableHistoryScope": "earliest-local-bar",
+                    "maxBarsPerExecution": max(int(config.PINE_MAX_BARS), 1),
+                },
                 "chartContext": {
                     "symbolFeatures": sorted(_HOST_CHART_SYMBOL_FEATURES),
                     "timeframeFeatures": sorted(_HOST_CHART_TIMEFRAME_FEATURES),
