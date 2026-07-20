@@ -17,6 +17,8 @@ import {
   expectIndicatorNonEmptyString,
   expectIndicatorRecord,
   isIndicatorRecord,
+  optionalIndicatorBoolean,
+  optionalIndicatorFiniteNumber,
   optionalIndicatorString,
   parseIndicatorPayloadEnvelope,
   parseIndicatorRange,
@@ -281,6 +283,24 @@ function parseIndicatorWsRecord(value: unknown): IndicatorWsMessage {
       record.interval,
       `${path}.interval`,
     );
+    const runtime = optionalIndicatorString(record.runtime, `${path}.runtime`);
+    const seeded = optionalIndicatorBoolean(record.seeded, `${path}.seeded`);
+    const formingBar = optionalIndicatorBoolean(
+      record.formingBar ?? record.forming_bar,
+      `${path}.formingBar`,
+    );
+    const incremental = optionalIndicatorBoolean(
+      record.incremental,
+      `${path}.incremental`,
+    );
+    const sessionMode = optionalIndicatorString(
+      record.sessionMode ?? record.session_mode,
+      `${path}.sessionMode`,
+    );
+    const seedBars = optionalIndicatorFiniteNumber(
+      record.seedBars ?? record.seed_bars,
+      `${path}.seedBars`,
+    );
     if (indicatorId !== undefined) message.indicatorId = indicatorId;
     if (resumeStatus !== undefined) message.resumeStatus = resumeStatus;
     if (resumeReasonValue === null) message.resumeReason = null;
@@ -298,6 +318,19 @@ function parseIndicatorWsRecord(value: unknown): IndicatorWsMessage {
       );
     }
     if (interval !== undefined) message.interval = interval;
+    if (runtime !== undefined) message.runtime = runtime;
+    if (seeded !== undefined) message.seeded = seeded;
+    if (formingBar !== undefined) message.formingBar = formingBar;
+    if (incremental !== undefined) message.incremental = incremental;
+    if (sessionMode !== undefined) message.sessionMode = sessionMode;
+    if (seedBars !== undefined) {
+      if (!Number.isInteger(seedBars) || seedBars < 0) {
+        throw new TypeError(
+          `Invalid indicator payload at ${path}.seedBars: expected a non-negative integer`,
+        );
+      }
+      message.seedBars = seedBars;
+    }
     return message;
   }
 

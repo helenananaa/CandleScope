@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import asyncio
@@ -11,8 +12,19 @@ from app.api.v1 import stream_indicator_payloads as payload_api
 from app.api.v1 import stream_pyne_subscriptions as stream_subscriptions
 from app.data_engine.data_manager.models import BarData, DataEventType
 from app.indicator.custom_store import CustomIndicatorStore
-from app.indicator.runtimes import PINE_COMPAT_RUNTIME_ID, ScriptRuntimeContext
+from app.indicator.runtimes import (
+    PINE_COMPAT_RUNTIME_ID,
+    PineCompatRealtimeSession,
+    ScriptRuntimeContext,
+)
 from app.indicator.runtimes import pine_compat_adapter as pine_adapter
+from app.indicator.runtimes.pine_realtime_actor import (
+    PineRealtimeActor,
+    PineRealtimeCapacityError,
+    PineRealtimeCrashedError,
+    PineRealtimeTimeoutError,
+    pine_realtime_actor_snapshot,
+)
 
 
 def _analysis(*features: str) -> dict[str, Any]:
@@ -350,6 +362,7 @@ def test_pine_descriptor_distinguishes_native_session_from_hosted_forming_bars(
     module.REALTIME_SESSION_SCHEMA_VERSION = 1
     module.create_realtime_session = lambda *_args, **_kwargs: None
     monkeypatch.setattr(pine_adapter, "_load_module", lambda: module)
+    monkeypatch.setattr(pine_adapter.config, "PINE_REALTIME_ENABLED", False)
 
     descriptor = pine_adapter.PineCompatRuntimeAdapter().descriptor()
 
@@ -361,6 +374,8 @@ def test_pine_descriptor_distinguishes_native_session_from_hosted_forming_bars(
         "hosted": False,
         "schemaVersion": 1,
         "expectedSchemaVersion": 1,
+        "maxSessions": pine_adapter.config.PINE_REALTIME_MAX_SESSIONS,
+        "commandTimeoutSeconds": pine_adapter.config.PINE_REALTIME_COMMAND_TIMEOUT_SECONDS,
     }
 
 
@@ -739,6 +754,7 @@ async def test_pine_ws_subscription_is_closed_bar_only(monkeypatch: pytest.Monke
         }
 
     monkeypatch.setattr(stream_subscriptions, "_compute_pine_snapshot_message_async", fake_snapshot)
+    monkeypatch.setattr(stream_subscriptions, "pine_realtime_host_available", lambda: False)
 
     class FakeDataManager:
         subscribe_kwargs: dict[str, Any] | None = None
@@ -790,6 +806,372 @@ async def test_pine_ws_subscription_is_closed_bar_only(monkeypatch: pytest.Monke
         DataEventType.BAR_AMENDED,
         DataEventType.BACKFILL_COMPLETED,
     }
+
+
+@pytest.mark.anyio
+async def test_pine_ws_realtime_session_serializes_forming_closed_and_reset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first_session = object()
+    reset_session = object()
+    calls: list[tuple[str, Any]] = []
+
+    async def fake_create(client_id: str, dm: Any, meta: dict[str, Any], *, reset: bool = False):
+        del dm
+        calls.append(("reset" if reset else "seed", client_id))
+        meta["_pineRealtimeSession"] = reset_session if reset else first_session
+        return {
+            "type": "indicator.snapshot",
+            "clientId": client_id,
+            "indicatorId": meta["indicatorId"],
+            "runtime": PINE_COMPAT_RUNTIME_ID,
+            "ok": True,
+            "lines": [],
+            "seedBars": 2,
+        }
+
+    async def fake_bar(
+        client_id: str,
+        meta: dict[str, Any],
+        bar: dict[str, Any],
+        *,
+        preview: bool,
+    ) -> dict[str, Any]:
+        del meta
+        calls.append(("forming" if preview else "confirmed", bar["time"]))
+        return {
+            "type": "indicator.replace_range",
+            "clientId": client_id,
+            "ok": True,
+            "reason": "bar_update" if preview else "bar_closed",
+        }
+
+    monkeypatch.setattr(stream_subscriptions, "pine_realtime_host_available", lambda: True)
+    monkeypatch.setattr(
+        stream_subscriptions,
+        "_create_pine_realtime_snapshot_message_async",
+        fake_create,
+    )
+    monkeypatch.setattr(
+        stream_subscriptions,
+        "_compute_pine_realtime_bar_message_async",
+        fake_bar,
+    )
+
+    class FakeDataManager:
+        subscribe_kwargs: dict[str, Any] | None = None
+
+        async def ensure_stream(self, *args: Any, **kwargs: Any) -> None:
+            del args, kwargs
+
+        def subscribe(self, **kwargs: Any) -> str:
+            self.subscribe_kwargs = kwargs
+            return "pine-realtime-handle"
+
+    dm = FakeDataManager()
+    sent: list[dict[str, Any]] = []
+    queued: list[dict[str, Any]] = []
+    custom_tasks: dict[str, asyncio.Task] = {}
+    client_meta: dict[str, dict[str, Any]] = {}
+
+    async def send_json(payload: dict[str, Any]) -> bool:
+        sent.append(payload)
+        return True
+
+    await stream_subscriptions.handle_pyne_indicator_subscribe(
+        dm=dm,
+        custom_handles={},
+        custom_tasks=custom_tasks,
+        queue=asyncio.Queue(),
+        client_meta=client_meta,
+        client_id="pine-live",
+        symbol="BTCUSDT",
+        interval="1m",
+        exchange="binance",
+        market_type="spot",
+        name="Pine Live",
+        custom_id="",
+        script='indicator("Live")\nplot(close)',
+        params={},
+        security_mode=None,
+        runtime=PINE_COMPAT_RUNTIME_ID,
+        history_limit=100,
+        send_json=send_json,
+        stream_consumer_id="pine-live-test",
+        unsubscribe_client=lambda _client_id: asyncio.sleep(0),
+        queue_message=lambda _queue, message: queued.append(message),
+    )
+
+    assert sent[0]["formingBar"] is True
+    assert sent[0]["incremental"] is True
+    assert sent[0]["seedBars"] == 2
+    assert dm.subscribe_kwargs is not None
+    assert dm.subscribe_kwargs["event_types"] == {
+        DataEventType.BAR_UPDATED,
+        DataEventType.BAR_CLOSED,
+        DataEventType.BAR_AMENDED,
+        DataEventType.BACKFILL_COMPLETED,
+    }
+    callback = dm.subscribe_kwargs["callback"]
+    bar = SimpleNamespace(
+        time=1_700_000_180,
+        to_dict=lambda: {**_bars()[-1], "time": 1_700_000_180},
+    )
+    await callback(SimpleNamespace(
+        event_type=DataEventType.BAR_UPDATED,
+        bar=bar,
+        detail={},
+        timestamp_ms=1,
+    ))
+    await callback(SimpleNamespace(
+        event_type=DataEventType.BAR_CLOSED,
+        bar=bar,
+        detail={},
+        timestamp_ms=2,
+    ))
+    await callback(SimpleNamespace(
+        event_type=DataEventType.BAR_AMENDED,
+        bar=bar,
+        detail={},
+        timestamp_ms=3,
+    ))
+
+    assert calls == [
+        ("seed", "pine-live"),
+        ("forming", 1_700_000_180),
+        ("confirmed", 1_700_000_180),
+        ("reset", "pine-live"),
+    ]
+    assert [message["type"] for message in queued] == [
+        "indicator.replace_range",
+        "indicator.replace_range",
+        "indicator.snapshot",
+        "indicator.recomputed",
+    ]
+    assert custom_tasks == {}
+    assert client_meta["pine-live"]["_pineRealtimeSession"] is reset_session
+
+
+def test_pine_realtime_facade_preserves_var_and_varip_tick_semantics() -> None:
+    descriptor = pine_adapter.PineCompatRuntimeAdapter().descriptor()
+    if not descriptor.capabilities["nativeRealtimeSession"]["hosted"]:
+        pytest.skip(descriptor.reason or "hosted Pine realtime session unavailable")
+    baseline_active = pine_realtime_actor_snapshot()["active"]
+    created = pine_adapter.create_pine_realtime_session(
+        script='''//@version=6
+indicator("Rollback")
+var float regular = 0.0
+varip float intrabar = 0.0
+regular += 1.0
+intrabar += 1.0
+plot(regular)
+plot(intrabar)
+''',
+        context=ScriptRuntimeContext("binance", "spot", "BTCUSDT", "1m"),
+        timeout_seconds=10,
+    )
+    assert isinstance(created, PineCompatRealtimeSession)
+    try:
+        seeded = created.seed([_bars()[0]])
+        first = created.update_forming(_bars()[1])
+        second_bar = {**_bars()[1], "close": 2.75}
+        second = created.update_forming(second_bar)
+        confirmed = created.update_confirmed({**_bars()[1], "close": 2.9})
+
+        assert seeded.ok is True
+        assert first.lines[0]["data"][-1]["value"] == 2.0
+        assert second.lines[0]["data"][-1]["value"] == 2.0
+        assert first.lines[1]["data"][-1]["value"] == 2.0
+        assert second.lines[1]["data"][-1]["value"] == 3.0
+        assert confirmed.lines[1]["data"][-1]["value"] == 4.0
+        assert second.meta["closedBarsOnly"] is False
+        assert second.meta["formingBar"] is True
+        assert confirmed.meta["closedBarsOnly"] is True
+        assert confirmed.meta["incremental"] is True
+    finally:
+        created.close()
+    assert created.is_alive is False
+    assert pine_realtime_actor_snapshot()["active"] == baseline_active
+
+
+def test_pine_realtime_preview_replaces_range_and_can_clear_stale_plot() -> None:
+    descriptor = pine_adapter.PineCompatRuntimeAdapter().descriptor()
+    if not descriptor.capabilities["nativeRealtimeSession"]["hosted"]:
+        pytest.skip(descriptor.reason or "hosted Pine realtime session unavailable")
+    script = '''//@version=6
+indicator("Conditional")
+plot(close > 2 ? close : na)
+'''
+    created = pine_adapter.create_pine_realtime_session(
+        script=script,
+        context=ScriptRuntimeContext("binance", "spot", "BTCUSDT", "1m"),
+        timeout_seconds=10,
+    )
+    assert isinstance(created, PineCompatRealtimeSession)
+    meta = {
+        "exchange": "binance",
+        "market_type": "spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m",
+        "name": "Conditional",
+        "indicatorId": "pine-conditional",
+        "script": script,
+        "scriptHash": "conditional",
+        "params": {},
+        "renderHints": {},
+        "historyLimit": 100,
+        "_pineRealtimeSession": created,
+    }
+    try:
+        assert created.seed([_bars()[0]]).ok is True
+        visible = payload_api._compute_pine_realtime_bar_message(
+            "pine-conditional",
+            meta,
+            _bars()[1],
+            preview=True,
+        )
+        cleared = payload_api._compute_pine_realtime_bar_message(
+            "pine-conditional",
+            meta,
+            {**_bars()[1], "close": 1.5},
+            preview=True,
+        )
+        confirmed = payload_api._compute_pine_realtime_bar_message(
+            "pine-conditional",
+            meta,
+            {**_bars()[1], "close": 1.5},
+            preview=False,
+        )
+
+        assert visible["type"] == "indicator.replace_range"
+        assert visible["preview"] is True
+        assert visible["formingBar"] is True
+        assert visible["lines"][0]["data"][-1] == {
+            "time": _bars()[1]["time"],
+            "value": _bars()[1]["close"],
+        }
+        assert cleared["type"] == "indicator.replace_range"
+        assert cleared["range"] == {
+            "start": _bars()[1]["time"],
+            "end": _bars()[1]["time"],
+        }
+        assert cleared["lines"][0]["data"] == []
+        assert confirmed["type"] == "indicator.replace_range"
+        assert confirmed["preview"] is False
+        assert confirmed["formingBar"] is False
+        assert confirmed["confirmed"] is True
+    finally:
+        payload_api._close_pine_realtime_meta(meta)
+
+
+def test_pine_realtime_history_limit_allows_forming_but_blocks_growth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    descriptor = pine_adapter.PineCompatRuntimeAdapter().descriptor()
+    if not descriptor.capabilities["nativeRealtimeSession"]["hosted"]:
+        pytest.skip(descriptor.reason or "hosted Pine realtime session unavailable")
+    monkeypatch.setattr(pine_adapter.config, "PINE_MAX_BARS", 1)
+    created = pine_adapter.create_pine_realtime_session(
+        script='//@version=6\nindicator("Limit")\nplot(close)',
+        context=ScriptRuntimeContext("binance", "spot", "BTCUSDT", "1m"),
+        timeout_seconds=10,
+    )
+    assert isinstance(created, PineCompatRealtimeSession)
+    try:
+        assert created.seed([_bars()[0]]).ok is True
+
+        forming = created.update_forming(_bars()[1])
+        confirmed = created.update_confirmed(_bars()[1])
+
+        assert forming.ok is True
+        assert forming.meta["formingBar"] is True
+        assert confirmed.ok is False
+        assert confirmed.code == "PINE_REALTIME_HISTORY_LIMIT_EXCEEDED"
+    finally:
+        created.close()
+
+
+def test_pine_realtime_actor_start_timeout_reclaims_capacity() -> None:
+    baseline_active = pine_realtime_actor_snapshot()["active"]
+    with pytest.raises(PineRealtimeTimeoutError):
+        PineRealtimeActor(
+            script='//@version=6\nindicator("Timeout")\nplot(close)',
+            input_overrides={},
+            chart_symbol="BINANCE:BTCUSDT",
+            chart_timeframe="1",
+            session_schema_version=1,
+            timeout_seconds=0.01,
+            grace_seconds=0.1,
+            _worker_start_delay_seconds=0.25,
+        )
+    assert pine_realtime_actor_snapshot()["active"] == baseline_active
+
+
+def test_pine_realtime_actor_crash_fails_closed_and_reclaims_capacity() -> None:
+    baseline_active = pine_realtime_actor_snapshot()["active"]
+    actor = PineRealtimeActor(
+        script='//@version=6\nindicator("Crash")\nplot(close)',
+        input_overrides={},
+        chart_symbol="BINANCE:BTCUSDT",
+        chart_timeframe="1",
+        session_schema_version=1,
+        timeout_seconds=10,
+    )
+    assert actor._process is not None
+    actor._process.terminate()
+    actor._process.join(2)
+
+    with pytest.raises(PineRealtimeCrashedError):
+        actor.result()
+
+    assert actor.is_alive is False
+    assert pine_realtime_actor_snapshot()["active"] == baseline_active
+
+
+def test_pine_realtime_actor_enforces_global_session_capacity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    baseline_active = pine_realtime_actor_snapshot()["active"]
+    monkeypatch.setattr(
+        pine_adapter.config,
+        "PINE_REALTIME_MAX_SESSIONS",
+        baseline_active + 1,
+    )
+    actor = PineRealtimeActor(
+        script='//@version=6\nindicator("Capacity")\nplot(close)',
+        input_overrides={},
+        chart_symbol="BINANCE:BTCUSDT",
+        chart_timeframe="1",
+        session_schema_version=1,
+        timeout_seconds=10,
+    )
+    try:
+        with pytest.raises(PineRealtimeCapacityError):
+            PineRealtimeActor(
+                script='//@version=6\nindicator("Rejected")\nplot(close)',
+                input_overrides={},
+                chart_symbol="BINANCE:BTCUSDT",
+                chart_timeframe="1",
+                session_schema_version=1,
+                timeout_seconds=10,
+            )
+    finally:
+        actor.close()
+    assert pine_realtime_actor_snapshot()["active"] == baseline_active
+
+
+@pytest.mark.anyio
+async def test_pine_realtime_release_marks_closed_before_actor_cleanup() -> None:
+    closed: list[bool] = []
+    session = object.__new__(PineCompatRealtimeSession)
+    session._actor = SimpleNamespace(close=lambda: closed.append(True))
+    meta: dict[str, Any] = {"_pineRealtimeSession": session}
+
+    await payload_api._release_pine_realtime_meta_async(meta)
+
+    assert meta["_pineRealtimeClosed"] is True
+    assert "_pineRealtimeSession" not in meta
+    assert closed == [True]
 
 
 def test_pine_process_boundary_returns_structured_result() -> None:

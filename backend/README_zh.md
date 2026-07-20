@@ -255,15 +255,27 @@ CPython 会明确失败，不安装未锁定的传递依赖，也不会静默退
 和 diagnostics 会返回当前可用性。旧记录和未指定 runtime 的请求继续默认使用
 `pyne`。
 
-Pine 首版只在已闭合 K 线上做历史批计算。当前 host 支持 `plot`、
-`plotchar`、`plotshape`、`plotarrow`、`hline`、`fill`、`bgcolor`、`barcolor`
-和 alerts；`request.*`、strategy、imports、依赖 chart context 的能力、forming
-bar 和原生 drawing objects 会明确拒绝，不会静默降级。
+Pine 的 HTTP/range 批计算仍只接受已闭合 K 线。若已安装的 wheel 提供
+`REALTIME_SESSION_SCHEMA_VERSION=1`，指标 WebSocket 会为每个订阅创建受上限保护的
+持久子进程会话：历史只播种一次，`BAR_UPDATED` 替换 forming bar，`BAR_CLOSED`
+提交闭合状态，backfill/amendment 会销毁旧会话并从权威历史重新播种。该路径保留
+Pine 的 `var` 回滚和 `varip` 盘中持久语义；超时、崩溃、协议错位和退订均 fail
+closed 并回收子进程。旧 wheel 没有该 ABI 时会自动保持 closed-snapshot 模式。
+
+当前 host 支持 `plot`、受支持样式的 `plotshape`、`hline`、`fill`、`bgcolor`、
+`barcolor` 和 alerts，并精确绑定可表示的 `syminfo.*` / `timeframe.*` 图表身份。
+`request.*`、strategy、imports、原生 drawing objects、`plotchar`、`plotarrow`、
+`plotbar` 和 `plotcandle` 会明确拒绝，不会静默降级。
+
+注意：仓库中的受管安装锁仍固定公开 v0.2.0。只有本地重建或后续发布、且带上述
+ABI 的 wheel 会开启 realtime；更新公开 release 与摘要锁之前，一键安装仍按
+closed-snapshot 能力运行。
 
 HTTP 指标计算通过专用 executor 隔离：
 
 - 内置指标 HTTP compute 使用 one-shot engine，不会修改全局实时 `IndicatorEngine`。
 - Pyne 和 Pine HTTP/range 路径分别通过独立 wait executor 包装 process runtime。
+- Pine WebSocket session 命令使用独立 `pine_realtime` executor 和持久 process actor。
 - 两条路径都受 `INDICATOR_HTTP_TIMEOUT_SECONDS` 保护。
 
 ## 可观测性和压测
@@ -288,6 +300,7 @@ curl http://127.0.0.1:18080/api/v1/settings/storage/health
 | `executors.*` | 每类 executor 的 submitted/active/pending 和 queue/run timing |
 | `event_bus.callback_lag` | callback subscriber queue lag 和 drops |
 | `event_bus.queue_lag` | async-iterator subscriber queue lag 和 drops |
+| `pineCompat.realtime` | Pine actor active/capacity/timeout/crash/protocol 统计 |
 | `ready_chunks` / `running_chunks` / `next_drain_in_ms` | backfill scheduler 状态 |
 
 对运行中的后端执行并发压测：
@@ -321,6 +334,10 @@ python scripts/bench_concurrency.py --base-url http://127.0.0.1:18080
 | `INDICATOR_THREAD_WORKERS` | 内置指标 executor 大小 |
 | `PYNE_HTTP_THREAD_WORKERS` | Pyne wait executor 大小 |
 | `PINE_HTTP_THREAD_WORKERS` | Pine wait executor 大小 |
+| `PINE_REALTIME_ENABLED` | 是否允许托管原生 Pine realtime session |
+| `PINE_REALTIME_COMMAND_TIMEOUT_SECONDS` | 单次 seed/forming/confirmed 命令超时 |
+| `PINE_REALTIME_MAX_SESSIONS` | 后端进程允许的 Pine realtime 子进程上限 |
+| `PINE_REALTIME_THREAD_WORKERS` | Pine realtime wait executor 大小 |
 | `STORAGE_THREAD_WORKERS` | storage executor 大小 |
 | `WS_SEND_TIMEOUT_SECONDS` | WebSocket send timeout |
 | `EVENT_LOOP_LAG_INTERVAL_SECONDS` | event-loop lag 采样周期 |

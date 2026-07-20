@@ -4,10 +4,17 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import threading
 from typing import Any
 
 from app.core import config
-from app.core.executors import run_indicator, run_pine_wait, run_pyne_wait, run_storage
+from app.core.executors import (
+    run_indicator,
+    run_pine_realtime,
+    run_pine_wait,
+    run_pyne_wait,
+    run_storage,
+)
 from app.data_engine.interval_policy import (
     compute_bucket_end_ms,
     compute_bucket_start_ms,
@@ -28,8 +35,10 @@ from app.indicator.script_identity import script_hash
 from app.indicator.runtimes import (
     PINE_COMPAT_RUNTIME_ID,
     PineHistoryPlan,
+    PineCompatRealtimeSession,
     ScriptRuntimeContext,
     ScriptRuntimeResult,
+    create_pine_realtime_session,
     get_script_runtime,
     normalize_runtime_id,
     plan_pine_history,
@@ -1016,13 +1025,10 @@ def _compute_pyne_snapshot_message(
     return payload
 
 
-def _compute_pine_snapshot_message(
-    client_id: str,
+def _query_pine_seed_bars(
     dm,
-    meta: dict,
-    bar_time: int = 0,
-) -> dict:
-    """Compute a closed-bar Pine snapshot; forming-bar previews are unsupported."""
+    meta: dict[str, Any],
+) -> tuple[PineHistoryPlan, list[Any], list[Any]]:
     plan = _prepare_pine_history_plan_sync(meta)
     history_limit = min(
         max(int(meta.get("historyLimit") or 1), 1),
@@ -1030,60 +1036,68 @@ def _compute_pine_snapshot_message(
     )
     seed_bars: list[Any] = []
     target_bars: list[Any] = []
-    try:
-        if plan.requires_available_history:
-            query_result = dm.query_latest(
-                meta["symbol"],
-                meta["interval"],
-                limit=history_limit,
-                exchange=meta["exchange"],
-                market_type=meta["market_type"],
-            )
-            target_bars = confirmed_indicator_seed_bars(query_result.bars)[-history_limit:]
-            if target_bars:
-                seed_bars = _query_indicator_compute_bars(
-                    dm,
-                    meta,
-                    int(target_bars[0].time),
-                    int(target_bars[-1].time),
-                    warmup_bars=plan.warmup_bars,
-                )
-        else:
-            compute_limit = history_limit + plan.warmup_bars
-            if compute_limit > max(int(config.PINE_MAX_BARS), 1):
-                raise PineHistoryLimitError(
-                    f"Pine bounded history seed requires {compute_limit} bars, exceeding "
-                    f"PINE_MAX_BARS={max(int(config.PINE_MAX_BARS), 1)}"
-                )
-            query_result = dm.query_latest(
-                meta["symbol"],
-                meta["interval"],
-                limit=max(compute_limit, 1),
-                exchange=meta["exchange"],
-                market_type=meta["market_type"],
-            )
-            seed_bars = confirmed_indicator_seed_bars(query_result.bars)
-            target_bars = seed_bars[-history_limit:]
-        result = get_script_runtime(PINE_COMPAT_RUNTIME_ID).execute(
-            script=meta["script"],
-            ohlcv=[bar.to_dict() for bar in seed_bars],
-            params=meta.get("params") or {},
-            render_hints=meta.get("renderHints") or {},
-            context=_script_runtime_context(meta),
+    if plan.requires_available_history:
+        query_result = dm.query_latest(
+            meta["symbol"],
+            meta["interval"],
+            limit=history_limit,
+            exchange=meta["exchange"],
+            market_type=meta["market_type"],
         )
-    except (IndicatorRangeEmptyError, RuntimeError, PineHistoryLimitError) as exc:
-        is_limit = isinstance(exc, PineHistoryLimitError)
-        result = ScriptRuntimeResult(
-            ok=False,
-            code=("PINE_HISTORY_LIMIT_EXCEEDED" if is_limit else "PINE_HISTORY_NOT_READY"),
-            error=str(exc),
-            hint=(
-                "脚本所需的起算历史超过当前 Pine 单次执行上限；请等待后续增量会话/检查点能力。"
-                if is_limit
-                else "脚本起算历史仍在补齐，完成后会自动重新计算。"
-            ),
-            meta={"runtime": PINE_COMPAT_RUNTIME_ID},
+        target_bars = confirmed_indicator_seed_bars(query_result.bars)[-history_limit:]
+        if target_bars:
+            seed_bars = _query_indicator_compute_bars(
+                dm,
+                meta,
+                int(target_bars[0].time),
+                int(target_bars[-1].time),
+                warmup_bars=plan.warmup_bars,
+            )
+    else:
+        compute_limit = history_limit + plan.warmup_bars
+        if compute_limit > max(int(config.PINE_MAX_BARS), 1):
+            raise PineHistoryLimitError(
+                f"Pine bounded history seed requires {compute_limit} bars, exceeding "
+                f"PINE_MAX_BARS={max(int(config.PINE_MAX_BARS), 1)}"
+            )
+        query_result = dm.query_latest(
+            meta["symbol"],
+            meta["interval"],
+            limit=max(compute_limit, 1),
+            exchange=meta["exchange"],
+            market_type=meta["market_type"],
         )
+        seed_bars = confirmed_indicator_seed_bars(query_result.bars)
+        target_bars = seed_bars[-history_limit:]
+    return plan, seed_bars, target_bars
+
+
+def _pine_history_failure(exc: Exception) -> ScriptRuntimeResult:
+    is_limit = isinstance(exc, PineHistoryLimitError)
+    return ScriptRuntimeResult(
+        ok=False,
+        code=("PINE_HISTORY_LIMIT_EXCEEDED" if is_limit else "PINE_HISTORY_NOT_READY"),
+        error=str(exc),
+        hint=(
+            "脚本所需的起算历史超过当前 Pine 单次执行上限；请等待后续检查点能力。"
+            if is_limit
+            else "脚本起算历史仍在补齐，完成后会自动重新计算。"
+        ),
+        meta={"runtime": PINE_COMPAT_RUNTIME_ID},
+    )
+
+
+def _build_pine_snapshot_message(
+    client_id: str,
+    meta: dict[str, Any],
+    *,
+    result: ScriptRuntimeResult,
+    plan: PineHistoryPlan,
+    seed_bars: list[Any],
+    target_bars: list[Any],
+    bar_time: int = 0,
+    realtime: bool = False,
+) -> dict[str, Any]:
     _annotate_pine_history_result(
         result,
         plan=plan,
@@ -1112,6 +1126,7 @@ def _compute_pine_snapshot_message(
         )
     payload["historyPlan"] = plan.to_dict()
     payload["seedBars"] = len(seed_bars)
+    payload["sessionMode"] = "realtime" if realtime else "closed-snapshot"
     if bar_time:
         return _patch_from_snapshot(
             payload,
@@ -1120,6 +1135,194 @@ def _compute_pine_snapshot_message(
             end_s=int(bar_time),
         )
     return payload
+
+
+def _compute_pine_snapshot_message(
+    client_id: str,
+    dm,
+    meta: dict,
+    bar_time: int = 0,
+) -> dict:
+    """Compute the backward-compatible closed-bar Pine snapshot."""
+    plan = _prepare_pine_history_plan_sync(meta)
+    seed_bars: list[Any] = []
+    target_bars: list[Any] = []
+    try:
+        plan, seed_bars, target_bars = _query_pine_seed_bars(dm, meta)
+        result = get_script_runtime(PINE_COMPAT_RUNTIME_ID).execute(
+            script=meta["script"],
+            ohlcv=[bar.to_dict() for bar in seed_bars],
+            params=meta.get("params") or {},
+            render_hints=meta.get("renderHints") or {},
+            context=_script_runtime_context(meta),
+        )
+    except (IndicatorRangeEmptyError, RuntimeError, PineHistoryLimitError) as exc:
+        result = _pine_history_failure(exc)
+    return _build_pine_snapshot_message(
+        client_id,
+        meta,
+        result=result,
+        plan=plan,
+        seed_bars=seed_bars,
+        target_bars=target_bars,
+        bar_time=bar_time,
+    )
+
+
+def _pine_realtime_meta_lock(meta: dict[str, Any]) -> Any:
+    return meta.setdefault("_pineRealtimeLock", threading.RLock())
+
+
+def _close_pine_realtime_meta(meta: dict[str, Any]) -> None:
+    with _pine_realtime_meta_lock(meta):
+        session = meta.pop("_pineRealtimeSession", None)
+    if isinstance(session, PineCompatRealtimeSession):
+        session.close()
+
+
+def _release_pine_realtime_meta(meta: dict[str, Any]) -> None:
+    with _pine_realtime_meta_lock(meta):
+        meta["_pineRealtimeClosed"] = True
+        session = meta.pop("_pineRealtimeSession", None)
+    if isinstance(session, PineCompatRealtimeSession):
+        session.close()
+
+
+def _create_pine_realtime_snapshot_message(
+    client_id: str,
+    dm,
+    meta: dict[str, Any],
+    *,
+    reset: bool = False,
+) -> dict[str, Any]:
+    """Create, seed and publish one authoritative realtime session."""
+    with _pine_realtime_meta_lock(meta):
+        already_closed = meta.get("_pineRealtimeClosed") is True
+    if already_closed:
+        result = ScriptRuntimeResult(
+            ok=False,
+            code="PINE_REALTIME_SESSION_CLOSED",
+            error="Pine realtime subscription has already been closed",
+            meta={"runtime": PINE_COMPAT_RUNTIME_ID},
+        )
+        plan = _prepare_pine_history_plan_sync(meta)
+        return _build_pine_snapshot_message(
+            client_id,
+            meta,
+            result=result,
+            plan=plan,
+            seed_bars=[],
+            target_bars=[],
+            realtime=True,
+        )
+    if reset:
+        _close_pine_realtime_meta(meta)
+    plan = _prepare_pine_history_plan_sync(meta)
+    seed_bars: list[Any] = []
+    target_bars: list[Any] = []
+    session: PineCompatRealtimeSession | None = None
+    try:
+        plan, seed_bars, target_bars = _query_pine_seed_bars(dm, meta)
+        created = create_pine_realtime_session(
+            script=meta["script"],
+            params=meta.get("params") or {},
+            render_hints=meta.get("renderHints") or {},
+            context=_script_runtime_context(meta),
+        )
+        if isinstance(created, ScriptRuntimeResult):
+            result = created
+        else:
+            session = created
+            result = session.seed([bar.to_dict() for bar in seed_bars])
+    except (IndicatorRangeEmptyError, RuntimeError, PineHistoryLimitError) as exc:
+        result = _pine_history_failure(exc)
+    if session is not None:
+        retained = False
+        with _pine_realtime_meta_lock(meta):
+            if (
+                result.ok
+                and session.is_alive
+                and meta.get("_pineRealtimeClosed") is not True
+            ):
+                meta["_pineRealtimeSession"] = session
+                retained = True
+        if not retained:
+            session.close()
+    return _build_pine_snapshot_message(
+        client_id,
+        meta,
+        result=result,
+        plan=plan,
+        seed_bars=seed_bars,
+        target_bars=target_bars,
+        realtime=True,
+    )
+
+
+def _host_bar_time(bar: dict[str, Any]) -> int:
+    value = int(bar.get("time") or 0)
+    return value // 1000 if value >= 100_000_000_000 else value
+
+
+def _compute_pine_realtime_bar_message(
+    client_id: str,
+    meta: dict[str, Any],
+    bar: dict[str, Any],
+    *,
+    preview: bool,
+) -> dict[str, Any]:
+    with _pine_realtime_meta_lock(meta):
+        session = meta.get("_pineRealtimeSession")
+        subscription_closed = meta.get("_pineRealtimeClosed") is True
+    bar_time = _host_bar_time(bar)
+    if (
+        subscription_closed
+        or not isinstance(session, PineCompatRealtimeSession)
+        or not session.is_alive
+    ):
+        result = ScriptRuntimeResult(
+            ok=False,
+            code="PINE_REALTIME_SESSION_UNAVAILABLE",
+            error="Pine realtime session is not seeded",
+            hint="等待下一根闭合 K 线或历史修订事件重新播种。",
+            meta={"runtime": PINE_COMPAT_RUNTIME_ID},
+        )
+    else:
+        result = (
+            session.update_forming(bar)
+            if preview
+            else session.update_confirmed(bar)
+        )
+        if not result.ok or not session.is_alive:
+            with _pine_realtime_meta_lock(meta):
+                if meta.get("_pineRealtimeSession") is session:
+                    meta.pop("_pineRealtimeSession", None)
+            session.close()
+    payload = build_script_snapshot_payload(
+        client_id=client_id,
+        indicator_id=meta.get("indicatorId") or f"script:pine-compat:{meta['exchange']}:{meta['market_type']}:{meta['symbol']}:{meta['interval']}:{client_id}",
+        exchange=meta["exchange"],
+        symbol=meta["symbol"],
+        interval=meta["interval"],
+        market_type=meta["market_type"],
+        name=meta["name"],
+        params=meta.get("params") or {},
+        result=result,
+        runtime=PINE_COMPAT_RUNTIME_ID,
+        bar_time=bar_time,
+        script_hash=meta.get("scriptHash"),
+    )
+    payload["sessionMode"] = "realtime"
+    payload["preview"] = bool(preview)
+    payload["formingBar"] = bool(preview)
+    payload["confirmed"] = not preview
+    payload["historyPlan"] = _pine_history_plan_from_meta(meta).to_dict()
+    return _replace_range_from_snapshot(
+        payload,
+        reason="bar_update" if preview else "bar_closed",
+        start_s=bar_time,
+        end_s=bar_time,
+    )
 
 
 def _pyne_incremental_session_key(
@@ -1481,6 +1684,50 @@ async def _compute_pine_snapshot_message_async(
         meta,
         bar_time,
     )
+
+
+async def _create_pine_realtime_snapshot_message_async(
+    client_id: str,
+    dm,
+    meta: dict[str, Any],
+    *,
+    reset: bool = False,
+) -> dict[str, Any]:
+    return await run_pine_realtime(
+        _create_pine_realtime_snapshot_message,
+        client_id,
+        dm,
+        meta,
+        reset=reset,
+    )
+
+
+async def _compute_pine_realtime_bar_message_async(
+    client_id: str,
+    meta: dict[str, Any],
+    bar: dict[str, Any],
+    *,
+    preview: bool,
+) -> dict[str, Any]:
+    return await run_pine_realtime(
+        _compute_pine_realtime_bar_message,
+        client_id,
+        meta,
+        bar,
+        preview=preview,
+    )
+
+
+async def _release_pine_realtime_meta_async(meta: dict[str, Any]) -> None:
+    if (
+        str(meta.get("runtime") or "").strip().lower() != PINE_COMPAT_RUNTIME_ID
+        and "_pineRealtimeSession" not in meta
+    ):
+        return
+    # The synchronous owner transition is lock-protected: an in-flight seed
+    # either publishes before this call and is popped, or sees the closed mark
+    # and destroys itself instead of leaking after unsubscribe.
+    await run_pine_realtime(_release_pine_realtime_meta, meta)
 
 
 async def _compute_incremental_pyne_bar_message_async(

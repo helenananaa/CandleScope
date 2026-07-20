@@ -32,6 +32,11 @@ from .pine_history import (
     PineHistoryPlan,
     plan_pine_history,
 )
+from .pine_realtime_actor import (
+    PineRealtimeActor,
+    PineRealtimeActorError,
+    PineRealtimeRemoteError,
+)
 
 
 PINE_ANALYSIS_SCHEMA_VERSION = 5
@@ -101,6 +106,33 @@ _UNMAPPABLE_OUTPUT_KEYS = (
     "tables",
     "strategy",
 )
+
+
+def _native_realtime_session_available(module: Any) -> bool:
+    return (
+        getattr(module, "REALTIME_SESSION_SCHEMA_VERSION", None)
+        == PINE_REALTIME_SESSION_SCHEMA_VERSION
+        and callable(getattr(module, "create_realtime_session", None))
+    )
+
+
+def _realtime_hosted_for_module(module: Any) -> bool:
+    return (
+        bool(config.PINE_REALTIME_ENABLED)
+        and max(int(config.PINE_REALTIME_MAX_SESSIONS), 0) > 0
+        and _native_realtime_session_available(module)
+        and getattr(module, "ANALYSIS_SCHEMA_VERSION", None) == PINE_ANALYSIS_SCHEMA_VERSION
+        and getattr(module, "RUNTIME_SCHEMA_VERSION", None) == PINE_RUNTIME_SCHEMA_VERSION
+        and getattr(module, "RENDER_METADATA_VERSION", None) == PINE_RENDER_METADATA_VERSION
+    )
+
+
+def pine_realtime_host_available() -> bool:
+    """Return whether this backend can safely host native realtime sessions."""
+    try:
+        return _realtime_hosted_for_module(_load_module())
+    except Exception:
+        return False
 
 
 def pine_chart_symbol(context: ScriptRuntimeContext | None) -> str | None:
@@ -318,10 +350,14 @@ def analyze_pine_script_for_host(
         chart_timeframe=bindings["chartTimeframe"],
     )
     history_plan = plan_pine_history(script, analysis=analysis)
+    realtime_hosted = _realtime_hosted_for_module(module)
     analysis["runtime"] = PINE_COMPAT_RUNTIME_ID
     analysis["hostCompatibility"] = {
         "executable": failure is None,
-        "closedBarsOnly": True,
+        "closedBarsOnly": not realtime_hosted,
+        "batchClosedBarsOnly": True,
+        "formingBar": realtime_hosted,
+        "incremental": realtime_hosted,
         "historyPlan": history_plan.to_dict(),
         "error": failure.to_dict() if failure else None,
     }
@@ -779,6 +815,10 @@ def _normalize_output(
     host_bindings: dict[str, str | None] | None,
     max_output_series: int,
     max_output_points: int,
+    closed_bars_only: bool = True,
+    forming_bar: bool = False,
+    incremental: bool = False,
+    realtime_state: dict[str, Any] | None = None,
 ) -> ScriptRuntimeResult:
     if raw.get("schemaVersion") != PINE_RUNTIME_SCHEMA_VERSION:
         return _failure(
@@ -1247,7 +1287,9 @@ def _normalize_output(
             "runtimeSchemaVersion": PINE_RUNTIME_SCHEMA_VERSION,
             "analysisSchemaVersion": PINE_ANALYSIS_SCHEMA_VERSION,
             "languageVersion": analysis.get("languageVersion"),
-            "closedBarsOnly": True,
+            "closedBarsOnly": bool(closed_bars_only),
+            "formingBar": bool(forming_bar),
+            "incremental": bool(incremental),
             "pane": pane,
             "renderMetadata": "pine-native" if native_render_metadata else "host-defaults",
             "renderMetadataVersion": raw.get("renderMetadataVersion"),
@@ -1256,6 +1298,11 @@ def _normalize_output(
             "outputPoints": point_count,
             "hostBindings": dict(host_bindings or {}),
             "historyPlan": history_plan.to_dict(),
+            **(
+                {"realtimeSession": dict(realtime_state)}
+                if isinstance(realtime_state, dict)
+                else {}
+            ),
         },
     )
 
@@ -1409,6 +1456,278 @@ def execute_pine_script(
             sender.close()
 
 
+class PineCompatRealtimeSession:
+    """CandleScope-normalized facade over one native realtime actor."""
+
+    def __init__(
+        self,
+        *,
+        actor: PineRealtimeActor,
+        script: str,
+        analysis: dict[str, Any],
+        overrides: dict[int, Any],
+        render_hints: dict[str, Any],
+        host_bindings: dict[str, str | None],
+    ) -> None:
+        self._actor = actor
+        self._script = script
+        self._analysis = analysis
+        self._overrides = overrides
+        self._render_hints = render_hints
+        self._host_bindings = host_bindings
+        self._host_times: list[int] = []
+        self._forming_host_time: int | None = None
+        self._history_plan = plan_pine_history(
+            script,
+            analysis=analysis,
+            params=overrides,
+        )
+
+    @property
+    def pid(self) -> int | None:
+        return self._actor.pid
+
+    @property
+    def is_alive(self) -> bool:
+        return self._actor.is_alive
+
+    @property
+    def confirmed_times(self) -> list[int]:
+        return list(self._host_times)
+
+    @property
+    def forming_time(self) -> int | None:
+        return self._forming_host_time
+
+    def seed(self, ohlcv: list[dict[str, Any]]) -> ScriptRuntimeResult:
+        normalized = _normalize_bars(
+            ohlcv,
+            max_bars=max(int(config.PINE_MAX_BARS), 1),
+        )
+        if isinstance(normalized, ScriptRuntimeResult):
+            return normalized
+        runtime_bars, host_times = normalized
+        try:
+            raw = self._actor.seed(runtime_bars)
+        except PineRealtimeActorError as exc:
+            return self._actor_failure(exc)
+        self._host_times = host_times
+        self._forming_host_time = None
+        return self._normalize(raw, forming=False)
+
+    def update_forming(self, bar: dict[str, Any]) -> ScriptRuntimeResult:
+        normalized = self._normalize_update_bar(bar)
+        if isinstance(normalized, ScriptRuntimeResult):
+            return normalized
+        runtime_bar, host_time = normalized
+        try:
+            raw = self._actor.update_forming(runtime_bar)
+        except PineRealtimeActorError as exc:
+            return self._actor_failure(exc)
+        self._forming_host_time = host_time
+        return self._normalize(raw, forming=True)
+
+    def update_confirmed(self, bar: dict[str, Any]) -> ScriptRuntimeResult:
+        normalized = self._normalize_update_bar(bar)
+        if isinstance(normalized, ScriptRuntimeResult):
+            return normalized
+        runtime_bar, host_time = normalized
+        if len(self._host_times) >= max(int(config.PINE_MAX_BARS), 1):
+            return self._history_limit_failure()
+        try:
+            raw = self._actor.update_confirmed(runtime_bar)
+        except PineRealtimeActorError as exc:
+            return self._actor_failure(exc)
+        self._host_times.append(host_time)
+        self._forming_host_time = None
+        return self._normalize(raw, forming=False)
+
+    def close(self) -> None:
+        self._actor.close()
+
+    def _normalize_update_bar(
+        self,
+        bar: dict[str, Any],
+    ) -> tuple[dict[str, Any], int] | ScriptRuntimeResult:
+        normalized = _normalize_bars([bar], max_bars=1)
+        if isinstance(normalized, ScriptRuntimeResult):
+            return normalized
+        runtime_bars, host_times = normalized
+        return runtime_bars[0], host_times[0]
+
+    def _normalize(self, raw: dict[str, Any], *, forming: bool) -> ScriptRuntimeResult:
+        active_times = [
+            *self._host_times,
+            *(
+                [self._forming_host_time]
+                if forming and self._forming_host_time is not None
+                else []
+            ),
+        ]
+        state = self._public_state()
+        result = _normalize_output(
+            raw,
+            script=self._script,
+            host_times=active_times,
+            analysis=self._analysis,
+            overrides=self._overrides,
+            render_hints=self._render_hints,
+            host_bindings=self._host_bindings,
+            max_output_series=max(int(config.PINE_MAX_OUTPUT_SERIES), 1),
+            max_output_points=max(int(config.PINE_MAX_OUTPUT_POINTS), 1),
+            closed_bars_only=not forming,
+            forming_bar=forming,
+            incremental=True,
+            realtime_state=state,
+        )
+        if not result.ok:
+            return result
+        result.meta["historyBars"] = len(self._host_times)
+        if self._host_times:
+            result.meta["historyOrigin"] = {
+                "time": self._host_times[0],
+                "scope": (
+                    "local-full-history"
+                    if self._history_plan.requires_latest_history
+                    else (
+                        "local-available-history"
+                        if self._history_plan.requires_available_history
+                        else "bounded-lookback"
+                    )
+                ),
+            }
+            result.meta["historyEnd"] = {
+                "time": self._host_times[-1],
+                "scope": (
+                    "latest-local-closed-bar"
+                    if self._history_plan.requires_latest_history
+                    else "confirmed-session-edge"
+                ),
+            }
+        return result
+
+    def _public_state(self) -> dict[str, Any]:
+        state = self._actor.state
+
+        def _seconds(value: Any) -> int | None:
+            if isinstance(value, bool) or not isinstance(value, int):
+                return None
+            return value // 1000
+
+        return {
+            "schemaVersion": state.get("schemaVersion"),
+            "confirmedBars": state.get("confirmedBars"),
+            "lastConfirmedTime": _seconds(state.get("lastConfirmedTime")),
+            "formingTime": _seconds(state.get("formingTime")),
+        }
+
+    @staticmethod
+    def _actor_failure(exc: PineRealtimeActorError) -> ScriptRuntimeResult:
+        return _failure(
+            exc.code,
+            str(exc) or exc.__class__.__name__,
+            hint=(
+                "Pine 实时子进程已失效；当前结果不会继续复用，下一根闭合 K 线会尝试重新播种。"
+                if not isinstance(exc, PineRealtimeRemoteError)
+                else "Pine 实时更新被原生运行时拒绝；请检查 K 线时间顺序和脚本运行期错误。"
+            ),
+            meta={"realtimeSession": {"alive": False}},
+        )
+
+    @staticmethod
+    def _history_limit_failure() -> ScriptRuntimeResult:
+        return _failure(
+            "PINE_REALTIME_HISTORY_LIMIT_EXCEEDED",
+            (
+                "Pine realtime session reached its confirmed-history limit "
+                f"({max(int(config.PINE_MAX_BARS), 1)} bars)"
+            ),
+            hint="该脚本无法在不丢失语义的情况下继续增长；等待后续检查点/安全裁剪能力。",
+        )
+
+
+def create_pine_realtime_session(
+    *,
+    script: str,
+    params: dict[str, Any] | None = None,
+    render_hints: dict[str, Any] | None = None,
+    context: ScriptRuntimeContext | None = None,
+    timeout_seconds: float | None = None,
+) -> PineCompatRealtimeSession | ScriptRuntimeResult:
+    """Validate host contracts and start a persistent native session."""
+    if not bool(config.PINE_REALTIME_ENABLED):
+        return _failure("PINE_REALTIME_UNAVAILABLE", "Pine realtime hosting is disabled")
+    if not script.strip():
+        return _failure("PINE_SCRIPT_REQUIRED", "Pine script is required")
+    try:
+        module = _load_module()
+    except Exception as exc:
+        return _failure(
+            "PINE_RUNTIME_UNAVAILABLE",
+            f"Pine runtime is not installed for this backend: {exc}",
+        )
+    if not _native_realtime_session_available(module):
+        return _failure(
+            "PINE_REALTIME_UNAVAILABLE",
+            "Installed pine_compat runtime does not expose the expected realtime session ABI",
+            hint=(
+                f"需要 REALTIME_SESSION_SCHEMA_VERSION={PINE_REALTIME_SESSION_SCHEMA_VERSION}。"
+            ),
+        )
+    schema_mismatches = []
+    for label, installed, expected in (
+        ("analysis", getattr(module, "ANALYSIS_SCHEMA_VERSION", None), PINE_ANALYSIS_SCHEMA_VERSION),
+        ("runtime", getattr(module, "RUNTIME_SCHEMA_VERSION", None), PINE_RUNTIME_SCHEMA_VERSION),
+        ("render", getattr(module, "RENDER_METADATA_VERSION", None), PINE_RENDER_METADATA_VERSION),
+    ):
+        if installed != expected:
+            schema_mismatches.append(f"{label}={installed!r} (expected {expected})")
+    if schema_mismatches:
+        return _failure(
+            "PINE_SCHEMA_MISMATCH",
+            "pine_compat schema contract mismatch: " + ", ".join(schema_mismatches),
+        )
+    try:
+        analysis = dict(module.analyze_script(script))
+    except Exception as exc:
+        return _failure("PINE_ANALYSIS_ERROR", str(exc) or exc.__class__.__name__)
+    bindings = _pine_host_bindings(context)
+    failure = _validate_analysis(
+        analysis,
+        chart_symbol=bindings["chartSymbol"],
+        chart_timeframe=bindings["chartTimeframe"],
+    )
+    if failure is not None:
+        return failure
+    overrides = _normalize_overrides(params, analysis)
+    if isinstance(overrides, ScriptRuntimeResult):
+        return overrides
+    try:
+        actor = PineRealtimeActor(
+            script=script,
+            input_overrides=overrides,
+            chart_symbol=bindings["chartSymbol"],
+            chart_timeframe=bindings["chartTimeframe"],
+            session_schema_version=PINE_REALTIME_SESSION_SCHEMA_VERSION,
+            timeout_seconds=timeout_seconds,
+        )
+    except PineRealtimeActorError as exc:
+        return PineCompatRealtimeSession._actor_failure(exc)
+    except Exception as exc:
+        return _failure(
+            "PINE_REALTIME_PROCESS_FAILED",
+            str(exc) or exc.__class__.__name__,
+        )
+    return PineCompatRealtimeSession(
+        actor=actor,
+        script=script,
+        analysis=analysis,
+        overrides=overrides,
+        render_hints=dict(render_hints or {}),
+        host_bindings=bindings,
+    )
+
+
 class PineCompatRuntimeAdapter:
     runtime_id = PINE_COMPAT_RUNTIME_ID
 
@@ -1489,11 +1808,7 @@ class PineCompatRuntimeAdapter:
                 and not isinstance(raw_realtime_session_version, bool)
             ):
                 installed_realtime_session_schema_version = raw_realtime_session_version
-            native_realtime_session = (
-                installed_realtime_session_schema_version
-                == PINE_REALTIME_SESSION_SCHEMA_VERSION
-                and callable(getattr(module, "create_realtime_session", None))
-            )
+            native_realtime_session = _native_realtime_session_available(module)
             schema_mismatches = []
             for label, installed, expected in (
                 ("analysis", installed_analysis_schema_version, PINE_ANALYSIS_SCHEMA_VERSION),
@@ -1503,6 +1818,12 @@ class PineCompatRuntimeAdapter:
                 if installed != expected:
                     schema_mismatches.append(f"{label}={installed!r} (expected {expected})")
             available = not schema_mismatches
+            hosted_realtime_session = (
+                available
+                and native_realtime_session
+                and bool(config.PINE_REALTIME_ENABLED)
+                and max(int(config.PINE_REALTIME_MAX_SESSIONS), 0) > 0
+            )
             reason = (
                 None
                 if available
@@ -1513,6 +1834,7 @@ class PineCompatRuntimeAdapter:
             version = None
             available = False
             reason = str(exc)
+            hosted_realtime_session = False
         return ScriptRuntimeDescriptor(
             id=self.runtime_id,
             label="Pine-compatible",
@@ -1526,14 +1848,20 @@ class PineCompatRuntimeAdapter:
                 "hostContractVersion": SCRIPT_RUNTIME_HOST_CONTRACT_VERSION,
                 "analysis": True,
                 "historical": True,
-                "closedBarsOnly": True,
-                "formingBar": False,
-                "incremental": False,
+                "closedBarsOnly": not hosted_realtime_session,
+                "batchClosedBarsOnly": True,
+                "formingBar": hosted_realtime_session,
+                "incremental": hosted_realtime_session,
                 "nativeRealtimeSession": {
                     "available": native_realtime_session,
-                    "hosted": False,
+                    "hosted": hosted_realtime_session,
                     "schemaVersion": installed_realtime_session_schema_version,
                     "expectedSchemaVersion": PINE_REALTIME_SESSION_SCHEMA_VERSION,
+                    "maxSessions": max(int(config.PINE_REALTIME_MAX_SESSIONS), 0),
+                    "commandTimeoutSeconds": max(
+                        float(config.PINE_REALTIME_COMMAND_TIMEOUT_SECONDS),
+                        0.0,
+                    ),
                 },
                 "historyPlanning": {
                     "schemaVersion": PINE_HISTORY_PLAN_SCHEMA_VERSION,

@@ -17,7 +17,13 @@ from .pine_history import (
     PineHistoryPlan,
     plan_pine_history,
 )
-from .pine_compat_adapter import plan_pine_script_history
+from .pine_compat_adapter import (
+    PineCompatRealtimeSession,
+    create_pine_realtime_session,
+    pine_realtime_host_available,
+    plan_pine_script_history,
+)
+from .pine_realtime_actor import pine_realtime_actor_snapshot
 from .registry import get_script_runtime, normalize_runtime_id, runtime_descriptors
 
 __all__ = [
@@ -33,9 +39,13 @@ __all__ = [
     "ScriptRuntimeDescriptor",
     "ScriptRuntimeResult",
     "PineHistoryPlan",
+    "PineCompatRealtimeSession",
+    "create_pine_realtime_session",
     "get_script_runtime",
     "normalize_runtime_id",
     "plan_pine_history",
+    "pine_realtime_actor_snapshot",
+    "pine_realtime_host_available",
     "plan_pine_script_history",
     "runtime_descriptors",
 ]

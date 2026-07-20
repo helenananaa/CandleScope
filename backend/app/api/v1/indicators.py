@@ -53,6 +53,7 @@ from app.indicator.runtimes import (
     ScriptRuntimeContext,
     get_script_runtime,
     normalize_runtime_id,
+    pine_realtime_actor_snapshot,
     runtime_descriptors,
 )
 from app.indicator.script_identity import script_hash, short_script_hash
@@ -531,6 +532,7 @@ def _build_diagnostics_snapshot(
                 "maxOutputSeries": config.PINE_MAX_OUTPUT_SERIES,
                 "maxOutputPoints": config.PINE_MAX_OUTPUT_POINTS,
             },
+            "realtime": pine_realtime_actor_snapshot(),
         },
         "websocket": {
             "maxSubscriptions": config.INDICATOR_WS_MAX_SUBSCRIPTIONS,

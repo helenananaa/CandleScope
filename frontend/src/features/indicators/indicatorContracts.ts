@@ -128,7 +128,7 @@ export function indicatorStringArray(value: unknown, path: string): string[] {
   );
 }
 
-function optionalIndicatorBoolean(
+export function optionalIndicatorBoolean(
   value: unknown,
   path: string,
 ): boolean | undefined {
@@ -1000,6 +1000,15 @@ export function parseIndicatorPayloadEnvelope(
       `${path}.dataRevision`,
     );
   }
+  for (const field of ["preview", "formingBar", "confirmed"] as const) {
+    const parsed = optionalIndicatorBoolean(record[field], `${path}.${field}`);
+    if (parsed !== undefined) envelope[field] = parsed;
+  }
+  const sessionMode = optionalIndicatorString(
+    record.sessionMode ?? record.session_mode,
+    `${path}.sessionMode`,
+  );
+  if (sessionMode !== undefined) envelope.sessionMode = sessionMode;
   if (httpStatus !== undefined) envelope.__httpStatus = httpStatus;
   if (record.history_state !== undefined && record.history_state !== null) {
     const historyState = expectIndicatorString(record.history_state, `${path}.history_state`);

@@ -6,8 +6,10 @@ from typing import Any
 
 from app.api.v1.stream_indicator_payloads import (
     _compute_incremental_pyne_bar_message_async,
+    _compute_pine_realtime_bar_message_async,
     _compute_pine_snapshot_message_async,
     _compute_pyne_snapshot_message_async,
+    _create_pine_realtime_snapshot_message_async,
     _patch_from_snapshot,
     _pyne_incremental_session_key,
     _pyne_incremental_sessions,
@@ -19,7 +21,12 @@ from app.data_engine.interval_policy import parse_interval_ms
 from app.indicator.custom_store import CustomIndicatorStore
 from app.indicator.pyne import PyneIncrementalSession, is_incremental_pyne_script
 from app.indicator.resume import plan_indicator_resume
-from app.indicator.runtimes import PINE_COMPAT_RUNTIME_ID, PYNE_RUNTIME_ID, normalize_runtime_id
+from app.indicator.runtimes import (
+    PINE_COMPAT_RUNTIME_ID,
+    PYNE_RUNTIME_ID,
+    normalize_runtime_id,
+    pine_realtime_host_available,
+)
 from app.indicator.script_identity import script_hash, short_script_hash
 from app.indicator.serialization import build_ws_error_payload
 
@@ -155,11 +162,15 @@ async def handle_pyne_indicator_subscribe(
         "streamConsumerId": stream_consumer_id,
     }
     incremental_script = False
+    pine_realtime_hosted = False
     if runtime == PYNE_RUNTIME_ID:
         try:
             incremental_script = is_incremental_pyne_script(script)
         except SyntaxError:
             incremental_script = False
+    elif runtime == PINE_COMPAT_RUNTIME_ID:
+        pine_realtime_hosted = pine_realtime_host_available()
+        meta["pineRealtimeHosted"] = pine_realtime_hosted
     if incremental_script:
         session_key = _pyne_incremental_session_key(
             exchange=exchange,
@@ -209,7 +220,11 @@ async def handle_pyne_indicator_subscribe(
         if not seeded:
             await send_json(initial)
     elif runtime == PINE_COMPAT_RUNTIME_ID:
-        initial = await _compute_pine_snapshot_message_async(client_id, dm, meta)
+        initial = await (
+            _create_pine_realtime_snapshot_message_async(client_id, dm, meta)
+            if pine_realtime_hosted
+            else _compute_pine_snapshot_message_async(client_id, dm, meta)
+        )
         seeded = initial.get("ok") is not False
         if not seeded:
             await send_json(initial)
@@ -243,7 +258,20 @@ async def handle_pyne_indicator_subscribe(
         "name": name,
         "customId": custom_id or None,
         "seeded": seeded,
-        "seedBars": history_limit if seeded else 0,
+        "seedBars": (
+            int(initial.get("seedBars") or 0)
+            if seeded and isinstance(initial, dict)
+            else 0
+        ),
+        **(
+            {
+                "formingBar": pine_realtime_hosted,
+                "incremental": pine_realtime_hosted,
+                "sessionMode": "realtime" if pine_realtime_hosted else "closed-snapshot",
+            }
+            if runtime == PINE_COMPAT_RUNTIME_ID
+            else {}
+        ),
     }
     resume_patch = None
     if range_service is not None and isinstance(data_revision, dict):
@@ -284,10 +312,6 @@ async def handle_pyne_indicator_subscribe(
         await send_json(resume_patch)
 
     async def _on_data_event(event) -> None:
-        existing = custom_tasks.get(client_id)
-        if existing is not None and not existing.done():
-            existing.cancel()
-
         async def _run() -> None:
             if event.event_type in {DataEventType.BACKFILL_COMPLETED, DataEventType.BAR_AMENDED}:
                 dirty_range = _correction_range(event)
@@ -344,9 +368,26 @@ async def handle_pyne_indicator_subscribe(
                             end=int(coverage["end"]),
                         )
                 elif runtime == PINE_COMPAT_RUNTIME_ID:
-                    refreshed = await _compute_pine_snapshot_message_async(client_id, dm, meta)
+                    refreshed = await (
+                        _create_pine_realtime_snapshot_message_async(
+                            client_id,
+                            dm,
+                            meta,
+                            reset=True,
+                        )
+                        if pine_realtime_hosted
+                        else _compute_pine_snapshot_message_async(client_id, dm, meta)
+                    )
                     if range_service is not None:
                         refreshed["dataRevision"] = range_service.data_revision_for_meta(meta)
+                        coverage = refreshed.get("range")
+                        if refreshed.get("ok") is not False and isinstance(coverage, dict):
+                            range_service.put_payload(
+                                meta,
+                                refreshed,
+                                start=int(coverage["start"]),
+                                end=int(coverage["end"]),
+                            )
                     queue_message(queue, refreshed)
                 queue_message(queue, {
                     "type": "indicator.recomputed",
@@ -373,6 +414,32 @@ async def handle_pyne_indicator_subscribe(
                     event.bar.to_dict(),
                     preview=event.event_type == DataEventType.BAR_UPDATED,
                 )
+            elif runtime == PINE_COMPAT_RUNTIME_ID and pine_realtime_hosted:
+                if event.bar is None:
+                    return
+                if event.event_type == DataEventType.BAR_UPDATED:
+                    if meta.get("_pineRealtimeSession") is None:
+                        return
+                    msg = await _compute_pine_realtime_bar_message_async(
+                        client_id,
+                        meta,
+                        event.bar.to_dict(),
+                        preview=True,
+                    )
+                elif meta.get("_pineRealtimeSession") is None:
+                    msg = await _create_pine_realtime_snapshot_message_async(
+                        client_id,
+                        dm,
+                        meta,
+                        reset=True,
+                    )
+                else:
+                    msg = await _compute_pine_realtime_bar_message_async(
+                        client_id,
+                        meta,
+                        event.bar.to_dict(),
+                        preview=False,
+                    )
             else:
                 compute_snapshot = (
                     _compute_pine_snapshot_message_async
@@ -384,6 +451,15 @@ async def handle_pyne_indicator_subscribe(
                 msg["dataRevision"] = range_service.data_revision_for_meta(meta)
             queue_message(queue, msg)
 
+        if runtime == PINE_COMPAT_RUNTIME_ID and pine_realtime_hosted:
+            # DataEventBus already serializes this subscriber's callback.  Do
+            # not cancel an in-flight actor request: a late pipe response must
+            # never become the next bar's response.
+            await _run()
+            return
+        existing = custom_tasks.get(client_id)
+        if existing is not None and not existing.done():
+            existing.cancel()
         custom_tasks[client_id] = asyncio.create_task(_run(), name=f"{runtime}_indicator_{client_id}")
 
     handle = dm.subscribe(
@@ -393,7 +469,20 @@ async def handle_pyne_indicator_subscribe(
         exchange=exchange,
         market_type=market_type,
         event_types=(
-            {DataEventType.BAR_CLOSED, DataEventType.BAR_AMENDED, DataEventType.BACKFILL_COMPLETED}
+            (
+                {
+                    DataEventType.BAR_UPDATED,
+                    DataEventType.BAR_CLOSED,
+                    DataEventType.BAR_AMENDED,
+                    DataEventType.BACKFILL_COMPLETED,
+                }
+                if pine_realtime_hosted
+                else {
+                    DataEventType.BAR_CLOSED,
+                    DataEventType.BAR_AMENDED,
+                    DataEventType.BACKFILL_COMPLETED,
+                }
+            )
             if runtime == PINE_COMPAT_RUNTIME_ID
             else {DataEventType.BAR_UPDATED, DataEventType.BAR_CLOSED, DataEventType.BAR_AMENDED, DataEventType.BACKFILL_COMPLETED}
         ),

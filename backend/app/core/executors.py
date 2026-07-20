@@ -90,6 +90,7 @@ def _worker_count(value: int, default: int) -> int:
 _indicator_workers = _worker_count(config.INDICATOR_THREAD_WORKERS, 2)
 _pyne_wait_workers = _worker_count(config.PYNE_HTTP_THREAD_WORKERS, 2)
 _pine_wait_workers = _worker_count(config.PINE_HTTP_THREAD_WORKERS, 2)
+_pine_realtime_workers = _worker_count(config.PINE_REALTIME_THREAD_WORKERS, 4)
 _storage_workers = _worker_count(config.STORAGE_THREAD_WORKERS, 4)
 
 _indicator_executor = ThreadPoolExecutor(
@@ -104,6 +105,10 @@ _pine_wait_executor = ThreadPoolExecutor(
     max_workers=_pine_wait_workers,
     thread_name_prefix="pine-wait",
 )
+_pine_realtime_executor = ThreadPoolExecutor(
+    max_workers=_pine_realtime_workers,
+    thread_name_prefix="pine-realtime",
+)
 _storage_executor = ThreadPoolExecutor(
     max_workers=_storage_workers,
     thread_name_prefix="storage",
@@ -112,6 +117,7 @@ _stats: dict[str, _ExecutorStats] = {
     "indicator": _ExecutorStats("indicator", _indicator_workers),
     "pyne_wait": _ExecutorStats("pyne_wait", _pyne_wait_workers),
     "pine_wait": _ExecutorStats("pine_wait", _pine_wait_workers),
+    "pine_realtime": _ExecutorStats("pine_realtime", _pine_realtime_workers),
     "storage": _ExecutorStats("storage", _storage_workers),
 }
 
@@ -152,6 +158,10 @@ async def run_pyne_wait(func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
 
 async def run_pine_wait(func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
     return await _run("pine_wait", _pine_wait_executor, func, *args, **kwargs)
+
+
+async def run_pine_realtime(func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+    return await _run("pine_realtime", _pine_realtime_executor, func, *args, **kwargs)
 
 
 async def run_storage(func: Callable[..., T], *args: Any, **kwargs: Any) -> T:

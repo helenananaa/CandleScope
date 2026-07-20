@@ -820,10 +820,11 @@ export function useIndicatorRuntime(
     const range = payload?.range;
     const indicator = activeIndicatorsRef.current.find((item) => item.id === indicatorId);
     if (!indicator) return;
-    const dataRevision = normalizeIndicatorRevision(payload);
+    const isPreview = payload?.preview === true || payload?.formingBar === true;
+    const dataRevision = isPreview ? null : normalizeIndicatorRevision(payload);
     if (dataRevision) seriesRevisionRef.current = dataRevision;
     const resolvedEmpty = isResolvedIndicatorRangeEmpty(payload);
-    if (payload?.ok !== false || resolvedEmpty) {
+    if (!isPreview && (payload?.ok !== false || resolvedEmpty)) {
       replaceCachedIndicatorRange(indicator, getIndicatorCacheContext(), normalized, range, {
         revision: dataRevision,
       });

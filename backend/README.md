@@ -264,15 +264,32 @@ available. Runtime availability is exposed by `GET /api/v1/indicators/runtimes`
 and diagnostics. Existing records and requests without a runtime continue to
 default to `pyne`.
 
-Pine v1 performs historical batch execution over closed bars only. The host
-currently maps `plot`, `plotchar`, `plotshape`, `plotarrow`, `hline`, `fill`,
-`bgcolor`, `barcolor`, and alerts. It explicitly rejects `request.*`, strategy,
-imports, chart-context features, forming bars, and native drawing objects.
+Pine HTTP/range batch execution remains closed-bar only. When the installed
+wheel exposes `REALTIME_SESSION_SCHEMA_VERSION=1`, the indicator WebSocket
+creates a capacity-bounded persistent child-process session per subscription:
+history is seeded once, `BAR_UPDATED` replaces the forming bar, `BAR_CLOSED`
+commits it, and backfill/amendment destroys and reseeds from authoritative
+history. This preserves Pine `var` rollback and intrabar `varip` persistence;
+timeouts, crashes, protocol mismatches, and unsubscribe all fail closed and
+reclaim the child. Wheels without that ABI automatically retain the
+closed-snapshot path.
+
+The host currently maps `plot`, supported `plotshape` styles, `hline`, `fill`,
+`bgcolor`, `barcolor`, and alerts, and binds representable `syminfo.*` and
+`timeframe.*` chart identity exactly. It explicitly rejects `request.*`,
+strategy, imports, native drawing objects, `plotchar`, `plotarrow`, `plotbar`,
+and `plotcandle` instead of approximating them.
+
+The managed install lock still pins the public v0.2.0 release. Realtime is
+therefore enabled only for a locally rebuilt or future published wheel carrying
+the ABI above; one-click installs remain closed-snapshot until the public
+release and digest lock are advanced.
 
 HTTP indicator compute is offloaded through dedicated executors:
 
 - Builtin indicator HTTP compute uses one-shot engine instances so it does not mutate the app-wide realtime `IndicatorEngine`.
 - Pyne and Pine HTTP/range paths use separate wait executors around their process-based runtimes.
+- Pine WebSocket session commands use a separate `pine_realtime` executor and persistent process actors.
 - Both paths are guarded by `INDICATOR_HTTP_TIMEOUT_SECONDS`.
 
 ## Observability And Benchmarks
@@ -297,6 +314,7 @@ Important fields:
 | `executors.*` | per-executor submitted/active/pending and queue/run timing |
 | `event_bus.callback_lag` | callback subscriber queue lag and drops |
 | `event_bus.queue_lag` | async-iterator subscriber queue lag and drops |
+| `pineCompat.realtime` | Pine actor active/capacity/timeout/crash/protocol counters |
 | `ready_chunks` / `running_chunks` / `next_drain_in_ms` | backfill scheduler state |
 
 Run the concurrency benchmark against a live backend:
@@ -330,6 +348,10 @@ Common variables:
 | `INDICATOR_THREAD_WORKERS` | builtin indicator executor size |
 | `PYNE_HTTP_THREAD_WORKERS` | Pyne wait executor size |
 | `PINE_HTTP_THREAD_WORKERS` | Pine wait executor size |
+| `PINE_REALTIME_ENABLED` | enable hosted native Pine realtime sessions |
+| `PINE_REALTIME_COMMAND_TIMEOUT_SECONDS` | per seed/forming/confirmed command timeout |
+| `PINE_REALTIME_MAX_SESSIONS` | process-wide Pine realtime child-process cap |
+| `PINE_REALTIME_THREAD_WORKERS` | Pine realtime wait executor size |
 | `STORAGE_THREAD_WORKERS` | storage executor size |
 | `WS_SEND_TIMEOUT_SECONDS` | WebSocket send timeout |
 | `EVENT_LOOP_LAG_INTERVAL_SECONDS` | event-loop lag sampling interval |

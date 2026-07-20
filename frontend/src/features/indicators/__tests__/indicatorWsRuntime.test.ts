@@ -104,6 +104,12 @@ test("indicator.subscribed dispatches revision and resume acknowledgement", () =
     clientId: "ma-1",
     resumeStatus: "up_to_date",
     dataRevision: { correctionRevision: 3 },
+    runtime: "pine-compat",
+    seeded: true,
+    seedBars: 250,
+    formingBar: true,
+    incremental: true,
+    sessionMode: "realtime",
   }), {
     onSubscribed,
   }), true);
@@ -112,6 +118,16 @@ test("indicator.subscribed dispatches revision and resume acknowledgement", () =
     malformedFixture<{ resumeStatus: unknown }>(mustBeDefined(calls[0]).payload).resumeStatus,
     "up_to_date",
   );
+  const payload = malformedFixture<{
+    formingBar: unknown;
+    incremental: unknown;
+    seedBars: unknown;
+    sessionMode: unknown;
+  }>(mustBeDefined(calls[0]).payload);
+  assert.equal(payload.formingBar, true);
+  assert.equal(payload.incremental, true);
+  assert.equal(payload.seedBars, 250);
+  assert.equal(payload.sessionMode, "realtime");
 });
 
 test("history-required preserves compatible cache unless revision data invalidates it", () => {
@@ -166,6 +182,27 @@ test("WebSocket parser returns a typed patch message", () => {
   assert.equal(parsed.message.seq, 8);
   assert.equal(mustBeDefined(parsed.message.dataRevision).correctionRevision, "3");
   assert.deepEqual(parsed.message.range, { start: 100, end: 200 });
+});
+
+test("WebSocket parser preserves Pine forming replacement metadata", () => {
+  const parsed = parseIndicatorWsMessage(JSON.stringify({
+    type: "indicator.replace_range",
+    clientId: "pine-live",
+    range: { start: 200, end: 200 },
+    preview: true,
+    formingBar: true,
+    confirmed: false,
+    sessionMode: "realtime",
+    lines: [{ id: "pine-plot-1", data: [] }],
+  }));
+
+  assert.equal(parsed.ok, true);
+  if (!parsed.ok) assert.fail("Expected typed replacement message");
+  assert.equal(parsed.message.type, "indicator.replace_range");
+  assert.equal(parsed.message.preview, true);
+  assert.equal(parsed.message.formingBar, true);
+  assert.equal(parsed.message.confirmed, false);
+  assert.equal(parsed.message.sessionMode, "realtime");
 });
 
 test("WebSocket parser preserves the OHLC bar used for realtime indicator values", () => {

@@ -11,6 +11,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from app.api.v1.stream_indicator_payloads import (
     _indicator_event_to_ws_message,
     _patch_from_snapshot,
+    _release_pine_realtime_meta_async,
     _release_pyne_incremental_meta,
     confirmed_indicator_seed_bars,
 )
@@ -642,6 +643,7 @@ async def _unsubscribe_indicator_client(
 
     meta = client_meta.pop(client_id, None)
     if meta is not None:
+        await _release_pine_realtime_meta_async(meta)
         await _release_indicator_stream(dm, meta)
         _release_pyne_incremental_meta(meta)
 

@@ -1,8 +1,11 @@
 # CandleScope vendored package
 
-This directory is a source snapshot of
+This directory is based on the source snapshot of
 [`Ryan00956/pine-compat-runtime`](https://github.com/Ryan00956/pine-compat-runtime)
 at commit `cec39d807a469ebae199f30bc67a91d7081a3b9f` (package version `0.2.0`).
+It also carries CandleScope-side forward patches for deterministic local
+dataset endpoints and the versioned native realtime-session ABI. Those patches
+are not present in the public v0.2.0 wheel selected by the managed lock below.
 
 CandleScope treats this package as a sibling of `packages/pyne-runtime`. The
 backend integration lives outside this directory under
@@ -29,8 +32,10 @@ cd backend
 ```
 
 The `v0.2.0` Release tag and this vendored source snapshot both point to commit
-`cec39d807a469ebae199f30bc67a91d7081a3b9f`. CandleScope-specific integration
-and installation code remains outside the upstream source snapshot.
+`cec39d807a469ebae199f30bc67a91d7081a3b9f`; the forward patches described
+above are repository-local until a newer runtime release is published and the
+verified manifest/digest lock is advanced. CandleScope host integration and
+installation code remains outside the runtime package.
 
 Developers can still build and install a local wheel explicitly:
 

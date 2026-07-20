@@ -335,6 +335,10 @@ export interface IndicatorPayloadEnvelope {
   param_schema: IndicatorParameterSchema[];
   range?: IndicatorRange;
   dataRevision?: IndicatorRevision;
+  preview?: boolean;
+  formingBar?: boolean;
+  confirmed?: boolean;
+  sessionMode?: string;
   __httpStatus?: number;
   history_state?: "ready" | "pending" | "exhausted";
   complete?: boolean;
@@ -693,6 +697,12 @@ export interface IndicatorSubscribedMessage extends IndicatorWsBase {
   revision?: IndicatorRevision;
   interval?: string;
   range?: IndicatorRange;
+  runtime?: IndicatorRuntimeId | string;
+  seeded?: boolean;
+  seedBars?: number;
+  formingBar?: boolean;
+  incremental?: boolean;
+  sessionMode?: string;
   resumeRange?: IndicatorRange;
   resume_range?: IndicatorRange;
   historyRange?: IndicatorRange;
