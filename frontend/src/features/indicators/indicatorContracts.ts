@@ -23,6 +23,11 @@ import type {
   IndicatorUnifiedSeries,
   IndicatorValuePoint,
   PyneSecurityPolicy,
+  ScriptRuntimeAnalysis,
+  ScriptRuntimeCatalog,
+  ScriptRuntimeDescriptor,
+  ScriptRuntimeDiagnostic,
+  ScriptRuntimeDiagnosticSpan,
 } from "./indicatorTypes.js";
 
 export class IndicatorPayloadError extends TypeError {
@@ -150,6 +155,109 @@ function parseOptionalArray<T>(
   return expectIndicatorArray(value, path).map((item, index) =>
     parser(item, `${path}[${index}]`),
   );
+}
+
+function parseScriptRuntimeDescriptor(
+  value: unknown,
+  path: string,
+): ScriptRuntimeDescriptor {
+  const record = expectIndicatorRecord(value, path);
+  const nullableString = (field: string): string | null => {
+    const raw = record[field];
+    return raw === undefined || raw === null
+      ? null
+      : expectIndicatorString(raw, `${path}.${field}`);
+  };
+  return {
+    id: expectIndicatorNonEmptyString(record.id, `${path}.id`),
+    label: expectIndicatorNonEmptyString(record.label, `${path}.label`),
+    language: expectIndicatorNonEmptyString(record.language, `${path}.language`),
+    package: expectIndicatorNonEmptyString(record.package, `${path}.package`),
+    available: expectIndicatorBoolean(record.available, `${path}.available`),
+    version: nullableString("version"),
+    sourcePath: nullableString("sourcePath"),
+    reason: nullableString("reason"),
+    capabilities: expectIndicatorRecord(record.capabilities, `${path}.capabilities`),
+  };
+}
+
+function parseScriptRuntimeDiagnosticSpan(
+  value: unknown,
+  path: string,
+): ScriptRuntimeDiagnosticSpan {
+  const record = expectIndicatorRecord(value, path);
+  const parsed: ScriptRuntimeDiagnosticSpan = {};
+  for (const key of ["line", "column", "endLine", "endColumn", "start", "end"] as const) {
+    const item = optionalIndicatorFiniteNumber(record[key], `${path}.${key}`);
+    if (item !== undefined) parsed[key] = item;
+  }
+  return parsed;
+}
+
+function parseScriptRuntimeDiagnostic(
+  value: unknown,
+  path: string,
+): ScriptRuntimeDiagnostic {
+  const record = expectIndicatorRecord(value, path);
+  const diagnostic: ScriptRuntimeDiagnostic = {
+    code: expectIndicatorNonEmptyString(record.code, `${path}.code`),
+    severity: expectIndicatorNonEmptyString(record.severity, `${path}.severity`),
+    message: expectIndicatorNonEmptyString(record.message, `${path}.message`),
+  };
+  if (record.span !== undefined && record.span !== null) {
+    diagnostic.span = parseScriptRuntimeDiagnosticSpan(record.span, `${path}.span`);
+  }
+  const hint = optionalIndicatorString(record.hint, `${path}.hint`);
+  if (hint !== undefined) diagnostic.hint = hint;
+  return diagnostic;
+}
+
+function parseRecordArray(value: unknown, path: string): Record<string, unknown>[] {
+  return expectIndicatorArray(value, path).map((item, index) => (
+    expectIndicatorRecord(item, `${path}[${index}]`)
+  ));
+}
+
+export function parseScriptRuntimeCatalog(
+  value: unknown,
+  path = "scriptRuntimeCatalog",
+): ScriptRuntimeCatalog {
+  const record = expectIndicatorRecord(value, path);
+  return {
+    schemaVersion: expectIndicatorPositiveInteger(record.schemaVersion, `${path}.schemaVersion`),
+    default: expectIndicatorNonEmptyString(record.default, `${path}.default`),
+    items: expectIndicatorArray(record.items, `${path}.items`).map((item, index) => (
+      parseScriptRuntimeDescriptor(item, `${path}.items[${index}]`)
+    )),
+  };
+}
+
+export function parseScriptRuntimeAnalysis(
+  value: unknown,
+  path = "scriptRuntimeAnalysis",
+): ScriptRuntimeAnalysis {
+  const record = expectIndicatorRecord(value, path);
+  return {
+    schemaVersion: expectIndicatorPositiveInteger(record.schemaVersion, `${path}.schemaVersion`),
+    runtime: expectIndicatorNonEmptyString(record.runtime, `${path}.runtime`),
+    ok: expectIndicatorBoolean(record.ok, `${path}.ok`),
+    nativeExecutable: expectIndicatorBoolean(
+      record.nativeExecutable,
+      `${path}.nativeExecutable`,
+    ),
+    executable: expectIndicatorBoolean(record.executable, `${path}.executable`),
+    diagnostics: expectIndicatorArray(record.diagnostics, `${path}.diagnostics`).map(
+      (item, index) => parseScriptRuntimeDiagnostic(item, `${path}.diagnostics[${index}]`),
+    ),
+    inputs: parseRecordArray(record.inputs, `${path}.inputs`),
+    compatibility: expectIndicatorRecord(record.compatibility, `${path}.compatibility`),
+    hostCompatibility: expectIndicatorRecord(
+      record.hostCompatibility,
+      `${path}.hostCompatibility`,
+    ),
+    dependencies: parseRecordArray(record.dependencies, `${path}.dependencies`),
+    meta: expectIndicatorRecord(record.meta, `${path}.meta`),
+  };
 }
 
 function parseIndicatorValuePoint(

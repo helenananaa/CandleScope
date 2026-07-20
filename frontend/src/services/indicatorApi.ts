@@ -24,6 +24,8 @@ import {
   parseIndicatorRegistryList,
   parseIndicatorRegistrySpec,
   parsePyneSecurityPolicy,
+  parseScriptRuntimeAnalysis,
+  parseScriptRuntimeCatalog,
 } from "../features/indicators/indicatorContracts.js";
 import type {
   CustomIndicatorRecord,
@@ -36,6 +38,9 @@ import type {
   IndicatorRangeRequest,
   IndicatorRegistrySpec,
   PyneSecurityPolicy,
+  ScriptRuntimeAnalysis,
+  ScriptRuntimeAnalysisRequest,
+  ScriptRuntimeCatalog,
 } from "../features/indicators/indicatorTypes.js";
 
 interface IndicatorRequestOptions extends RequestInit {
@@ -105,6 +110,42 @@ export async function fetchRegistrySpec(
     `${API_BASE}/indicators/registry/${encodeURIComponent(name)}`,
   );
   return parseIndicatorRegistrySpec(payload);
+}
+
+/** Discover installed hosted script runtimes and their current capabilities. */
+export async function fetchScriptRuntimes(
+  signal?: AbortSignal,
+): Promise<ScriptRuntimeCatalog> {
+  return parseScriptRuntimeCatalog(await request(`${API_BASE}/indicators/runtimes`, {
+    ...indicatorSignalOptions(signal),
+  }));
+}
+
+/** Analyze source without executing market data. */
+export async function analyzeIndicatorScript({
+  runtime,
+  script,
+  securityMode,
+  exchange,
+  marketType,
+  symbol,
+  interval,
+  signal,
+}: ScriptRuntimeAnalysisRequest): Promise<ScriptRuntimeAnalysis> {
+  return parseScriptRuntimeAnalysis(await request(`${API_BASE}/indicators/analyze`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    ...indicatorSignalOptions(signal),
+    body: JSON.stringify({
+      runtime,
+      script,
+      securityMode,
+      exchange,
+      market_type: marketType,
+      symbol,
+      interval,
+    }),
+  }));
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -6,6 +6,69 @@ export type IndicatorRuntimeId = "pyne" | "pine-compat";
 export type IndicatorKind = "builtin" | "script" | "custom" | "pyne";
 export type IndicatorSeriesType = "line" | "histogram" | string;
 
+export interface ScriptRuntimeContext {
+  exchange: string;
+  marketType: string;
+  symbol: string;
+  interval: string;
+}
+
+export interface ScriptRuntimeDescriptor {
+  id: string;
+  label: string;
+  language: string;
+  package: string;
+  available: boolean;
+  version: string | null;
+  sourcePath: string | null;
+  reason: string | null;
+  capabilities: Record<string, unknown>;
+}
+
+export interface ScriptRuntimeCatalog {
+  schemaVersion: number;
+  default: string;
+  items: ScriptRuntimeDescriptor[];
+}
+
+export interface ScriptRuntimeDiagnosticSpan {
+  line?: number;
+  column?: number;
+  endLine?: number;
+  endColumn?: number;
+  start?: number;
+  end?: number;
+}
+
+export interface ScriptRuntimeDiagnostic {
+  code: string;
+  severity: string;
+  message: string;
+  span?: ScriptRuntimeDiagnosticSpan;
+  hint?: string;
+}
+
+export interface ScriptRuntimeAnalysis {
+  schemaVersion: number;
+  runtime: string;
+  ok: boolean;
+  nativeExecutable: boolean;
+  executable: boolean;
+  diagnostics: ScriptRuntimeDiagnostic[];
+  inputs: Record<string, unknown>[];
+  compatibility: Record<string, unknown>;
+  hostCompatibility: Record<string, unknown>;
+  dependencies: Record<string, unknown>[];
+  meta: Record<string, unknown>;
+}
+
+export interface ScriptRuntimeAnalysisRequest extends ScriptRuntimeContext {
+  runtime: string;
+  script: string;
+  securityMode?: string;
+  signal?: AbortSignal;
+}
+
 export interface IndicatorDefinition {
   id: string;
   name?: string;

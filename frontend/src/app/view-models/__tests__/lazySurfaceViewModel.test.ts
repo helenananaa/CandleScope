@@ -53,6 +53,12 @@ test("indicator panel receives capability-aware market studies and routed action
   });
 
   const panel = buildLazySurfaceViewModel(context).indicatorPanel;
+  assert.deepEqual(panel.runtimeContext, {
+    exchange: "binance",
+    marketType: "spot",
+    symbol: "BTCUSDT",
+    interval: "1m",
+  });
   assert.deepEqual(panel.marketStudies?.[0], {
     id: "market:funding-rate",
     name: "资金费率",

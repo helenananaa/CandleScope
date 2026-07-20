@@ -8,23 +8,137 @@
  *   - Custom dark theme optimized for trading scripts
  *   - Code snippet templates for common indicators
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
 import { registerPyneLanguageSupport } from "../../editor/pyneLanguage";
 import { registerPineLanguageSupport } from "../../editor/pineLanguage";
 import { registerPyneTheme, getPyneEditorOptions } from "../../editor/pyneTheme";
+import {
+  analyzeIndicatorScript,
+  fetchScriptRuntimes,
+} from "../../services/indicatorApi.js";
 import { usePyneSecurityPolicy } from "./usePyneSecurityPolicy";
 import type { ChangeEvent } from "react";
 import type {
   IndicatorDefinition,
   IndicatorParams,
   IndicatorRuntimeId,
+  ScriptRuntimeAnalysis,
+  ScriptRuntimeCatalog,
+  ScriptRuntimeContext,
+  ScriptRuntimeDescriptor,
 } from "./indicatorTypes.js";
 
 /** Track whether Pyne providers have been registered globally */
 let pyneRegistered = false;
 let pineRegistered = false;
+const SCRIPT_ANALYSIS_MARKER_OWNER = "candlescope-script-runtime";
+const SCRIPT_ANALYSIS_DEBOUNCE_MS = 300;
+
+type ScriptAnalysisStatus =
+  | "pending"
+  | "analyzing"
+  | "ready"
+  | "error";
+
+interface ScriptAnalysisState {
+  status: ScriptAnalysisStatus;
+  requestKey: string;
+  analysis: ScriptRuntimeAnalysis | null;
+  error: string | null;
+}
+
+const RUNTIME_DISCOVERY_FALLBACKS: ScriptRuntimeDescriptor[] = [
+  {
+    id: "pyne",
+    label: "Pyne",
+    language: "Python",
+    package: "pyne-runtime",
+    available: true,
+    version: null,
+    sourcePath: null,
+    reason: null,
+    capabilities: {},
+  },
+  {
+    id: "pine-compat",
+    label: "Pine-compatible",
+    language: "Pine",
+    package: "pine-compat-runtime",
+    available: true,
+    version: null,
+    sourcePath: null,
+    reason: null,
+    capabilities: {},
+  },
+];
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function analysisRequestKey(
+  runtime: string,
+  script: string,
+  securityMode: string,
+  context: ScriptRuntimeContext,
+): string {
+  return JSON.stringify([runtime, script, securityMode, context]);
+}
+
+function applyAnalysisMarkers(
+  monaco: typeof Monaco,
+  editor: Monaco.editor.IStandaloneCodeEditor,
+  analysis: ScriptRuntimeAnalysis | null,
+): void {
+  const model = editor.getModel();
+  if (!model) return;
+  const markers: Monaco.editor.IMarkerData[] = (analysis?.diagnostics ?? []).map((diagnostic) => {
+    const requestedLine = Math.trunc(diagnostic.span?.line ?? 1);
+    const startLineNumber = Math.min(Math.max(requestedLine, 1), model.getLineCount());
+    const requestedColumn = Math.trunc(diagnostic.span?.column ?? 1);
+    const startColumn = Math.min(
+      Math.max(requestedColumn, 1),
+      model.getLineMaxColumn(startLineNumber),
+    );
+    const requestedEndLine = Math.trunc(diagnostic.span?.endLine ?? startLineNumber);
+    const endLineNumber = Math.min(
+      Math.max(requestedEndLine, startLineNumber),
+      model.getLineCount(),
+    );
+    const requestedEndColumn = Math.trunc(
+      diagnostic.span?.endColumn ?? (endLineNumber === startLineNumber ? startColumn + 1 : 1),
+    );
+    const endColumn = Math.min(
+      Math.max(requestedEndColumn, endLineNumber === startLineNumber ? startColumn + 1 : 1),
+      model.getLineMaxColumn(endLineNumber),
+    );
+    const severity = diagnostic.severity === "warning"
+      ? monaco.MarkerSeverity.Warning
+      : diagnostic.severity === "info"
+        ? monaco.MarkerSeverity.Info
+        : diagnostic.severity === "hint"
+          ? monaco.MarkerSeverity.Hint
+          : monaco.MarkerSeverity.Error;
+    return {
+      code: diagnostic.code,
+      severity,
+      message: diagnostic.hint
+        ? `${diagnostic.message}\n${diagnostic.hint}`
+        : diagnostic.message,
+      startLineNumber,
+      startColumn,
+      endLineNumber,
+      endColumn,
+    };
+  });
+  monaco.editor.setModelMarkers(model, SCRIPT_ANALYSIS_MARKER_OWNER, markers);
+}
 
 export const PYNE_STARTER_SCRIPT = `indicator("My Indicator", overlay=True)
 
@@ -72,6 +186,7 @@ export interface IndicatorEditorProps {
   onForkBuiltin?: (value: IndicatorEditorValue) => void;
   readOnly?: boolean;
   previewState?: IndicatorEditorPreviewState | null;
+  runtimeContext: ScriptRuntimeContext;
   onToggleVisibility(id: string): void;
 }
 
@@ -83,19 +198,154 @@ export default function IndicatorEditor({
   onForkBuiltin,
   readOnly = false,
   previewState, // { id: string | null, error: string | null, visible: boolean, isComputing: boolean }
+  runtimeContext,
   onToggleVisibility
 }: IndicatorEditorProps) {
   const [name, setName] = useState(indicator?.name || "My Indicator");
   const [script, setScript] = useState(indicator?.script || "");
   const [securityMode, setSecurityMode] = useState(indicator?.securityMode || "safe");
-  const [runtime, setRuntime] = useState<IndicatorRuntimeId>(
-    indicator?.runtime === "pine-compat" ? "pine-compat" : "pyne",
-  );
+  const [runtime, setRuntime] = useState(indicator?.runtime || "pyne");
+  const [runtimeCatalog, setRuntimeCatalog] = useState<ScriptRuntimeCatalog | null>(null);
+  const [runtimeCatalogError, setRuntimeCatalogError] = useState<string | null>(null);
+  const [analysisState, setAnalysisState] = useState<ScriptAnalysisState>({
+    status: "pending",
+    requestKey: "",
+    analysis: null,
+    error: null,
+  });
   const securityPolicy = usePyneSecurityPolicy();
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
+  const monacoRef = useRef<typeof Monaco | null>(null);
+  const markerAnalysisRef = useRef<ScriptRuntimeAnalysis | null>(null);
+  const {
+    exchange: runtimeExchange,
+    marketType: runtimeMarketType,
+    symbol: runtimeSymbol,
+    interval: runtimeInterval,
+  } = runtimeContext;
+  const runtimeOptions = useMemo(() => {
+    const discovered = runtimeCatalog?.items ?? RUNTIME_DISCOVERY_FALLBACKS;
+    if (discovered.some((item) => item.id === runtime)) return discovered;
+    return [
+      ...discovered,
+      {
+        id: runtime,
+        label: runtime,
+        language: runtime,
+        package: runtime,
+        available: false,
+        version: null,
+        sourcePath: null,
+        reason: "当前后端未声明此运行时",
+        capabilities: {},
+      },
+    ];
+  }, [runtime, runtimeCatalog]);
+  const selectedRuntime = runtimeCatalog?.items.find((item) => item.id === runtime) ?? null;
+  const currentAnalysisKey = analysisRequestKey(
+    runtime,
+    script,
+    securityMode,
+    {
+      exchange: runtimeExchange,
+      marketType: runtimeMarketType,
+      symbol: runtimeSymbol,
+      interval: runtimeInterval,
+    },
+  );
+  const effectiveAnalysisStatus = runtimeCatalogError
+    ? "error"
+    : runtimeCatalog === null
+      ? "discovering"
+      : selectedRuntime === null || !selectedRuntime.available
+        ? "unavailable"
+        : analysisState.requestKey !== currentAnalysisKey
+          ? "pending"
+          : analysisState.status;
+  const currentAnalysis = effectiveAnalysisStatus === "ready"
+    ? analysisState.analysis
+    : null;
+  const analysisError = runtimeCatalogError
+    ?? (effectiveAnalysisStatus === "unavailable"
+      ? selectedRuntime?.reason || "当前后端未提供此运行时"
+      : analysisState.error);
+  const runDisabled = !readOnly && (
+    effectiveAnalysisStatus !== "ready" || currentAnalysis?.executable !== true
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchScriptRuntimes(controller.signal).then((catalog) => {
+      setRuntimeCatalog(catalog);
+      setRuntimeCatalogError(null);
+    }).catch((error: unknown) => {
+      if (!isAbortError(error)) setRuntimeCatalogError(errorMessage(error));
+    });
+    return () => { controller.abort(); };
+  }, []);
+
+  useEffect(() => {
+    if (readOnly || !selectedRuntime?.available) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setAnalysisState({
+        status: "analyzing",
+        requestKey: currentAnalysisKey,
+        analysis: null,
+        error: null,
+      });
+      void analyzeIndicatorScript({
+        runtime,
+        script,
+        ...(runtime === "pyne" ? { securityMode } : {}),
+        exchange: runtimeExchange,
+        marketType: runtimeMarketType,
+        symbol: runtimeSymbol,
+        interval: runtimeInterval,
+        signal: controller.signal,
+      }).then((analysis) => {
+        setAnalysisState({
+          status: "ready",
+          requestKey: currentAnalysisKey,
+          analysis,
+          error: null,
+        });
+      }).catch((error: unknown) => {
+        if (isAbortError(error)) return;
+        setAnalysisState({
+          status: "error",
+          requestKey: currentAnalysisKey,
+          analysis: null,
+          error: errorMessage(error),
+        });
+      });
+    }, SCRIPT_ANALYSIS_DEBOUNCE_MS);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [
+    currentAnalysisKey,
+    readOnly,
+    runtime,
+    runtimeExchange,
+    runtimeInterval,
+    runtimeMarketType,
+    runtimeSymbol,
+    script,
+    securityMode,
+    selectedRuntime?.available,
+  ]);
+
+  useEffect(() => {
+    markerAnalysisRef.current = currentAnalysis;
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    if (editor && monaco) applyAnalysisMarkers(monaco, editor, currentAnalysis);
+  }, [currentAnalysis]);
 
   const handlePreview = useCallback(() => {
-    if (readOnly) return;
+    if (readOnly || runDisabled) return;
     onPreview({
       id: indicator?.id || previewState?.id || null,
       name,
@@ -106,7 +356,7 @@ export default function IndicatorEditor({
       runtime,
       isPreset: indicator?.isPreset || false,
     });
-  }, [name, script, securityMode, runtime, indicator, onPreview, previewState, readOnly]);
+  }, [name, script, securityMode, runtime, indicator, onPreview, previewState, readOnly, runDisabled]);
 
   const handleSave = useCallback(() => {
     if (readOnly) return;
@@ -123,9 +373,7 @@ export default function IndicatorEditor({
   }, [name, script, securityMode, runtime, indicator, onSave, previewState, readOnly]);
 
   const handleRuntimeChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
-    const nextRuntime: IndicatorRuntimeId = event.target.value === "pine-compat"
-      ? "pine-compat"
-      : "pyne";
+    const nextRuntime = event.target.value;
     if (
       indicator?.id === null
       || script.trim() === PYNE_STARTER_SCRIPT.trim()
@@ -168,6 +416,8 @@ export default function IndicatorEditor({
     monaco: typeof Monaco,
   ) => {
     editorRef.current = editor;
+    monacoRef.current = monaco;
+    applyAnalysisMarkers(monaco, editor, markerAnalysisRef.current);
 
     // Register Pyne providers once (they're global to the Monaco instance)
     if (!pyneRegistered) {
@@ -191,7 +441,11 @@ export default function IndicatorEditor({
   useEffect(() => {
     return () => {
       // Don't dispose global providers — they persist across editor instances
+      const editor = editorRef.current;
+      const monaco = monacoRef.current;
+      if (editor && monaco) applyAnalysisMarkers(monaco, editor, null);
       editorRef.current = null;
+      monacoRef.current = null;
     };
   }, []);
 
@@ -238,9 +492,15 @@ export default function IndicatorEditor({
               <button
                 className="indicator-editor-run"
                 onClick={handlePreview}
-                style={{ background: 'var(--bg-tertiary)', color: 'var(--accent-blue)', border: '1px solid var(--accent-blue)', padding: '6px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '13px', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', gap: '6px' }}
+                disabled={runDisabled}
+                title={runDisabled ? "脚本必须先通过当前运行时与宿主分析" : "运行到图表"}
+                style={{ background: 'var(--bg-tertiary)', color: runDisabled ? 'var(--text-muted)' : 'var(--accent-blue)', border: `1px solid ${runDisabled ? 'var(--border-color)' : 'var(--accent-blue)'}`, padding: '6px 16px', borderRadius: '6px', fontWeight: 600, cursor: runDisabled ? 'not-allowed' : 'pointer', fontSize: '13px', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', gap: '6px', opacity: runDisabled ? 0.7 : 1 }}
               >
-                {previewState?.isComputing ? "⏳ 计算中..." : "▶ 运行到图表"}
+                {previewState?.isComputing
+                  ? "⏳ 计算中..."
+                  : effectiveAnalysisStatus === "analyzing" || effectiveAnalysisStatus === "pending"
+                    ? "⏳ 分析中..."
+                    : "▶ 运行到图表"}
               </button>
               <button
                 className="indicator-editor-save"
@@ -290,8 +550,17 @@ export default function IndicatorEditor({
                 onChange={handleRuntimeChange}
                 style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '4px 8px', fontSize: '12px' }}
               >
-                <option value="pyne">Pyne (Python)</option>
-                <option value="pine-compat">Pine-compatible</option>
+                {runtimeOptions.map((descriptor) => (
+                  <option
+                    key={descriptor.id}
+                    value={descriptor.id}
+                    disabled={!descriptor.available}
+                  >
+                    {descriptor.label}
+                    {descriptor.version ? ` ${descriptor.version}` : ""}
+                    {!descriptor.available ? "（不可用）" : ""}
+                  </option>
+                ))}
               </select>
             </label>}
             {!readOnly && runtime === "pyne" && <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
@@ -309,6 +578,19 @@ export default function IndicatorEditor({
             {runtime === "pyne" && securityPolicy && (
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                 默认 {securityPolicy.mode} · 超时 {securityPolicy.timeoutSeconds}s
+              </span>
+            )}
+            {selectedRuntime && (
+              <span
+                title={selectedRuntime.reason || selectedRuntime.sourcePath || undefined}
+                style={{
+                  fontSize: '11px',
+                  color: selectedRuntime.available ? 'var(--candle-up)' : 'var(--candle-down)',
+                }}
+              >
+                {selectedRuntime.available
+                  ? `${selectedRuntime.version || "版本未知"} · ${selectedRuntime.capabilities.incremental === true ? "增量" : "历史快照"}`
+                  : `不可用：${selectedRuntime.reason || "未声明原因"}`}
               </span>
             )}
           </div>
@@ -346,17 +628,35 @@ export default function IndicatorEditor({
       <div className="indicator-editor-console" style={{ padding: '8px 24px', background: 'var(--bg-primary)', borderTop: '1px solid var(--border-color)', minHeight: '40px', flexShrink: 0, display: 'flex', alignItems: 'center', fontFamily: "'JetBrains Mono', monospace", fontSize: '12px', overflowY: 'auto' }}>
         {readOnly ? (
           <span style={{ color: 'var(--text-muted)' }}>内置指标由 IndicatorEngine 计算；这里仅展示参考实现，修改代码不会影响图表。需要改代码时请先复制为自定义指标。</span>
+        ) : effectiveAnalysisStatus === "discovering" ? (
+          <span style={{ color: 'var(--text-muted)' }}>⏳ 正在发现后端脚本运行时...</span>
+        ) : effectiveAnalysisStatus === "pending" || effectiveAnalysisStatus === "analyzing" ? (
+          <span style={{ color: 'var(--accent-blue)' }}>⏳ 正在检查语法与 CandleScope 宿主能力...</span>
+        ) : effectiveAnalysisStatus === "error" || effectiveAnalysisStatus === "unavailable" ? (
+          <span style={{ color: 'var(--candle-down)', whiteSpace: 'pre-wrap' }}>❌ 运行时分析不可用：{analysisError || "未知错误"}</span>
+        ) : currentAnalysis && !currentAnalysis.executable ? (
+          <span style={{ color: 'var(--candle-down)', whiteSpace: 'pre-wrap' }}>
+            ❌ {currentAnalysis.nativeExecutable ? "脚本可由解释器执行，但当前 CandleScope 宿主不能执行" : "脚本未通过解释器分析"}
+            {currentAnalysis.diagnostics[0]
+              ? ` · [${currentAnalysis.diagnostics[0].code}] ${currentAnalysis.diagnostics[0].message}${currentAnalysis.diagnostics[0].hint ? `\n${currentAnalysis.diagnostics[0].hint}` : ""}`
+              : ""}
+          </span>
         ) : previewState?.error ? (
           <span style={{ color: 'var(--candle-down)', whiteSpace: 'pre-wrap' }}>❌ {previewState.error}</span>
         ) : previewState?.isComputing ? (
           <span style={{ color: 'var(--accent-blue)' }}>⏳ 正在计算指标数据...</span>
         ) : previewState?.id ? (
           <span style={{ color: 'var(--candle-up)' }}>✅ 运行成功，已应用至图表</span>
+        ) : currentAnalysis?.executable ? (
+          <span style={{ color: 'var(--candle-up)' }}>
+            ✅ {selectedRuntime?.label || runtime} {selectedRuntime?.version || ""} 分析通过
+            {currentAnalysis.diagnostics.length > 0
+              ? ` · ${currentAnalysis.diagnostics.length} 条提示`
+              : " · 当前宿主可执行"}
+          </span>
         ) : (
           <span style={{ color: 'var(--text-muted)' }}>
-            {runtime === "pine-compat"
-              ? <>💡 Pine 首版：闭合 K 线指标，支持 <code>plot()</code> / <code>plotshape()</code> / <code>hline()</code>；暂不支持 request、strategy、imports 和绘图对象。</>
-              : <>💡 Pyne API: <code>ta.sma()</code> <code>ta.ema()</code> <code>ta.rsi()</code> <code>plot()</code> <code>input.int()</code></>}
+            等待运行时分析结果
           </span>
         )}
       </div>

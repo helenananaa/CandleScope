@@ -15,6 +15,7 @@ import type {
   IndicatorDefinition,
   IndicatorParameterSchema,
   IndicatorParams,
+  ScriptRuntimeContext,
 } from "./indicatorTypes.js";
 import type {
   IndicatorEditorSource,
@@ -110,6 +111,7 @@ interface CustomIndicatorDraft extends IndicatorDefinition {
 export interface IndicatorPanelProps {
   isOpen: boolean;
   onClose(): void;
+  runtimeContext: ScriptRuntimeContext;
   activeIndicators: IndicatorDefinition[];
   paramSchemas?: Record<string, IndicatorParameterSchema[]>;
   onAddIndicator(indicator: IndicatorDefinition): void;
@@ -246,6 +248,7 @@ function marketStudyMatchesSearch(
 export default function IndicatorPanel({
   isOpen,
   onClose,
+  runtimeContext,
   activeIndicators,
   paramSchemas = {},
   onAddIndicator,
@@ -608,6 +611,7 @@ export default function IndicatorPanel({
             onForkBuiltin={handleForkBuiltin}
             readOnly={isBuiltinIndicator(editingIndicator)}
             previewState={previewState}
+            runtimeContext={runtimeContext}
             onToggleVisibility={onToggleVisibility}
           />
         ) : (

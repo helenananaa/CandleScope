@@ -42,6 +42,7 @@ export function buildLazySurfaceViewModel({
     indicatorPanel: {
       isOpen: indicatorView.isPanelOpen,
       onClose: indicatorActions.closePanel,
+      runtimeContext: { exchange, marketType, symbol, interval },
       activeIndicators: indicatorView.activeIndicators,
       paramSchemas: indicatorView.paramSchemas,
       computing: indicatorComputing,
