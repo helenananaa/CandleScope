@@ -1,8 +1,29 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    ops::Deref,
+    sync::Arc,
+};
 
 use pine_ir::{HirProgram, ScriptMode};
 
 use crate::*;
+
+#[derive(Clone)]
+pub(crate) enum RuntimeProgram<'a> {
+    Borrowed(&'a HirProgram),
+    Owned(Arc<HirProgram>),
+}
+
+impl Deref for RuntimeProgram<'_> {
+    type Target = HirProgram;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Borrowed(program) => program,
+            Self::Owned(program) => program,
+        }
+    }
+}
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct InputOverrides {
@@ -38,7 +59,7 @@ impl InputOverrides {
 
 #[derive(Clone)]
 pub struct HistoricalRuntime<'a> {
-    pub(crate) program: &'a HirProgram,
+    pub(crate) program: RuntimeProgram<'a>,
     pub(crate) input_overrides: InputOverrides,
     pub(crate) bars: usize,
     pub(crate) historical_end: Option<usize>,
@@ -208,6 +229,26 @@ impl<'a> HistoricalRuntime<'a> {
         program: &'a HirProgram,
         request_environment: RequestEnvironment,
     ) -> Self {
+        Self::with_runtime_program(RuntimeProgram::Borrowed(program), request_environment)
+    }
+
+    pub(crate) fn with_runtime_program(
+        program: RuntimeProgram<'a>,
+        request_environment: RequestEnvironment,
+    ) -> Self {
+        let series_retention = SeriesRetention::from_program(&program);
+        let strategy_broker = BrokerState::new_with_account_settings_and_pyramiding(
+            program.strategy_settings.initial_capital,
+            program.strategy_settings.commission,
+            program.strategy_settings.slippage_ticks
+                * pine_builtins::named_float_constant("syminfo.mintick").unwrap_or(0.01),
+            program.strategy_settings.backtest_fill_limit_ticks
+                * pine_builtins::named_float_constant("syminfo.mintick").unwrap_or(0.01),
+            program.strategy_settings.margin_long,
+            program.strategy_settings.margin_short,
+            program.strategy_settings.pyramiding_limit,
+        )
+        .with_close_entries_rule(program.strategy_settings.close_entries_rule);
         Self {
             program,
             input_overrides: InputOverrides::new(),
@@ -226,7 +267,7 @@ impl<'a> HistoricalRuntime<'a> {
             legacy_security_repaint_warnings: HashMap::new(),
             eval_expr_depth: 0,
             series_store: SeriesStore::new(),
-            series_retention: SeriesRetention::from_program(program),
+            series_retention,
             history_dynamic_retention_misses: 0,
             history_dynamic_retention_max_bars_back: None,
             history_dynamic_retention_max_missed_offset: None,
@@ -288,18 +329,7 @@ impl<'a> HistoricalRuntime<'a> {
             tables: Vec::new(),
             alerts: Vec::new(),
             alert_once_per_bar_calls: HashSet::new(),
-            strategy_broker: BrokerState::new_with_account_settings_and_pyramiding(
-                program.strategy_settings.initial_capital,
-                program.strategy_settings.commission,
-                program.strategy_settings.slippage_ticks
-                    * pine_builtins::named_float_constant("syminfo.mintick").unwrap_or(0.01),
-                program.strategy_settings.backtest_fill_limit_ticks
-                    * pine_builtins::named_float_constant("syminfo.mintick").unwrap_or(0.01),
-                program.strategy_settings.margin_long,
-                program.strategy_settings.margin_short,
-                program.strategy_settings.pyramiding_limit,
-            )
-            .with_close_entries_rule(program.strategy_settings.close_entries_rule),
+            strategy_broker,
             next_label_id: 1,
             next_line_id: 1,
             next_line_fill_id: 1,
@@ -330,6 +360,13 @@ impl<'a> HistoricalRuntime<'a> {
     #[must_use]
     pub fn request_environment(&self) -> &RequestEnvironment {
         &self.request_environment
+    }
+
+    pub(crate) fn fork_with_request_environment(
+        &self,
+        request_environment: RequestEnvironment,
+    ) -> Self {
+        Self::with_runtime_program(self.program.clone(), request_environment)
     }
 
     pub(crate) fn run(mut self, bars: &[Bar]) -> Result<RuntimeResult, RuntimeError> {
@@ -429,7 +466,8 @@ impl<'a> HistoricalRuntime<'a> {
         }
         self.set_builtin_symbols(&bar, bar_index)?;
 
-        for statement in &self.program.statements {
+        let program = self.program.clone();
+        for statement in &program.statements {
             match self.eval_stmt(statement) {
                 Ok(StmtControl::None) => {}
                 Ok(StmtControl::Break | StmtControl::Continue) => {
@@ -960,5 +998,20 @@ impl<'a> HistoricalRuntime<'a> {
             fill_gaps,
             display,
         });
+    }
+}
+
+impl HistoricalRuntime<'static> {
+    pub(crate) fn with_owned_program_and_request_environment_and_input_overrides(
+        program: HirProgram,
+        request_environment: RequestEnvironment,
+        input_overrides: InputOverrides,
+    ) -> Self {
+        let mut runtime = Self::with_runtime_program(
+            RuntimeProgram::Owned(Arc::new(program)),
+            request_environment,
+        );
+        runtime.input_overrides = input_overrides;
+        runtime
     }
 }

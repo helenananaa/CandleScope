@@ -37,6 +37,7 @@ from .pine_history import (
 PINE_ANALYSIS_SCHEMA_VERSION = 5
 PINE_RUNTIME_SCHEMA_VERSION = 8
 PINE_RENDER_METADATA_VERSION = 1
+PINE_REALTIME_SESSION_SCHEMA_VERSION = 1
 _PACKAGE_NAME = "pine-compat-runtime"
 _MODULE_NAME = "pine_compat"
 _VENDOR_ROOT = Path(__file__).resolve().parents[4] / "packages" / "pine-compat-runtime"
@@ -1460,6 +1461,8 @@ class PineCompatRuntimeAdapter:
         installed_analysis_schema_version: int | None = None
         installed_runtime_schema_version: int | None = None
         installed_render_metadata_version: int | None = None
+        installed_realtime_session_schema_version: int | None = None
+        native_realtime_session = False
         try:
             module = _load_module()
             source_path = str(getattr(module, "__file__", "") or "") or None
@@ -1476,6 +1479,21 @@ class PineCompatRuntimeAdapter:
             raw_render_version = getattr(module, "RENDER_METADATA_VERSION", None)
             if isinstance(raw_render_version, int) and not isinstance(raw_render_version, bool):
                 installed_render_metadata_version = raw_render_version
+            raw_realtime_session_version = getattr(
+                module,
+                "REALTIME_SESSION_SCHEMA_VERSION",
+                None,
+            )
+            if (
+                isinstance(raw_realtime_session_version, int)
+                and not isinstance(raw_realtime_session_version, bool)
+            ):
+                installed_realtime_session_schema_version = raw_realtime_session_version
+            native_realtime_session = (
+                installed_realtime_session_schema_version
+                == PINE_REALTIME_SESSION_SCHEMA_VERSION
+                and callable(getattr(module, "create_realtime_session", None))
+            )
             schema_mismatches = []
             for label, installed, expected in (
                 ("analysis", installed_analysis_schema_version, PINE_ANALYSIS_SCHEMA_VERSION),
@@ -1511,6 +1529,12 @@ class PineCompatRuntimeAdapter:
                 "closedBarsOnly": True,
                 "formingBar": False,
                 "incremental": False,
+                "nativeRealtimeSession": {
+                    "available": native_realtime_session,
+                    "hosted": False,
+                    "schemaVersion": installed_realtime_session_schema_version,
+                    "expectedSchemaVersion": PINE_REALTIME_SESSION_SCHEMA_VERSION,
+                },
                 "historyPlanning": {
                     "schemaVersion": PINE_HISTORY_PLAN_SCHEMA_VERSION,
                     "modes": ["bounded", "available-history"],

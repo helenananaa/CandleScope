@@ -2018,7 +2018,7 @@ fn legacy_v4_outputs_roll_back_forming_visual_state_without_stale_values() {
 
 fn runtime_for_fixture(path: &str) -> RealtimeRuntime<'static> {
     let hir = hir_for_fixture(path);
-    RealtimeRuntime::new(Box::leak(Box::new(hir)))
+    RealtimeRuntime::from_program(hir)
 }
 
 fn hir_for_fixture(path: &str) -> pine_ir::HirProgram {

@@ -24,6 +24,22 @@ impl<'a> RealtimeRuntime<'a> {
     }
 
     #[must_use]
+    pub fn with_request_environment_and_input_overrides(
+        program: &'a HirProgram,
+        request_environment: RequestEnvironment,
+        input_overrides: InputOverrides,
+    ) -> Self {
+        Self {
+            confirmed: HistoricalRuntime::with_request_environment_and_input_overrides(
+                program,
+                request_environment,
+                input_overrides,
+            ),
+            forming: None,
+        }
+    }
+
+    #[must_use]
     pub fn request_environment(&self) -> &RequestEnvironment {
         self.forming
             .as_ref()
@@ -65,6 +81,14 @@ impl<'a> RealtimeRuntime<'a> {
         }
     }
 
+    pub fn seed_historical(&mut self, bars: &[Bar]) -> Result<RuntimeResult, RuntimeError> {
+        let mut runtime = self.confirmed.clone();
+        runtime.append_bars(bars)?;
+        self.confirmed = runtime;
+        self.forming = None;
+        Ok(self.confirmed.result())
+    }
+
     #[must_use]
     pub fn result(&self) -> RuntimeResult {
         self.forming.as_ref().unwrap_or(&self.confirmed).result()
@@ -83,5 +107,33 @@ impl<'a> RealtimeRuntime<'a> {
     #[must_use]
     pub fn confirmed_profile(&self) -> RuntimeProfile {
         self.confirmed.profile()
+    }
+}
+
+impl RealtimeRuntime<'static> {
+    #[must_use]
+    pub fn from_program(program: HirProgram) -> Self {
+        Self::from_program_with_request_environment_and_input_overrides(
+            program,
+            RequestEnvironment::default(),
+            InputOverrides::new(),
+        )
+    }
+
+    #[must_use]
+    pub fn from_program_with_request_environment_and_input_overrides(
+        program: HirProgram,
+        request_environment: RequestEnvironment,
+        input_overrides: InputOverrides,
+    ) -> Self {
+        Self {
+            confirmed:
+                HistoricalRuntime::with_owned_program_and_request_environment_and_input_overrides(
+                    program,
+                    request_environment,
+                    input_overrides,
+                ),
+            forming: None,
+        }
     }
 }

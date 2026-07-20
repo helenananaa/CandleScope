@@ -343,6 +343,27 @@ def test_pine_descriptor_fails_closed_on_installed_schema_drift(
     assert "analysis=4 (expected 5)" in (descriptor.reason or "")
 
 
+def test_pine_descriptor_distinguishes_native_session_from_hosted_forming_bars(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _FakePineModule(_analysis("indicator", "plot"), _runtime_output())
+    module.REALTIME_SESSION_SCHEMA_VERSION = 1
+    module.create_realtime_session = lambda *_args, **_kwargs: None
+    monkeypatch.setattr(pine_adapter, "_load_module", lambda: module)
+
+    descriptor = pine_adapter.PineCompatRuntimeAdapter().descriptor()
+
+    assert descriptor.available is True
+    assert descriptor.capabilities["formingBar"] is False
+    assert descriptor.capabilities["incremental"] is False
+    assert descriptor.capabilities["nativeRealtimeSession"] == {
+        "available": True,
+        "hosted": False,
+        "schemaVersion": 1,
+        "expectedSchemaVersion": 1,
+    }
+
+
 def test_pine_adapter_rejects_unmapped_native_outputs(monkeypatch: pytest.MonkeyPatch) -> None:
     module = _FakePineModule(
         _analysis("indicator", "plot"),

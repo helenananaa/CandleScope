@@ -132,7 +132,7 @@ and its referenced fixtures are the source of truth. See
 
 | Surface | Best for | Entry point |
 | --- | --- | --- |
-| Python | notebooks, research services, data pipelines, application plugins | `pine_compat.run_script(...)` or compile once with `compile_script(...)` |
+| Python | notebooks, research services, data pipelines, application plugins | `run_script(...)`, reusable `Program`, or persistent `RealtimeSession` |
 | CLI | shell workflows, fixtures, compatibility checks, JSON generation | `pine-compat run`, `analyze`, `fmt-ast`, and `matrix` |
 | Rust | native applications and deeper runtime embedding | workspace crates under [`crates/`](crates) |
 | WASM | browser, Node.js, and sandboxed JavaScript hosts | `compileScript`, `analyzeScript`, `runScriptCsv`, and `Program.runCsv` |
@@ -156,6 +156,23 @@ program = pine_compat.compile_script(source)
 
 result = program.run(bars, input_overrides={length_id: 50})
 ```
+
+For a persistent realtime stream, create one session, seed its complete
+confirmed history once, replace the current forming bar as ticks arrive, and
+commit that same timestamp when the bar closes:
+
+```python
+session = program.realtime_session(input_overrides={length_id: 50})
+snapshot = session.seed(confirmed_bars)
+preview = session.update_forming(forming_bar)
+preview = session.update_forming(replacement_forming_bar)
+confirmed = session.update_confirmed(closed_bar)
+```
+
+`update_forming` rolls ordinary `var` state back to the last confirmed bar and
+preserves `varip` state across replacements. The session rejects updates before
+seeding, regressive confirmed timestamps, and a forming/confirmed timestamp
+mismatch. `REALTIME_SESSION_SCHEMA_VERSION` versions this lifecycle contract.
 
 Python can also inject deterministic requested bars and exact-key library
 sources:

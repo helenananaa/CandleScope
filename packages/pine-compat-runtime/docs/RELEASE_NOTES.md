@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added the versioned Python `RealtimeSession` ABI. A compiled program can now
+  own a persistent native realtime runtime without leaking its HIR, seed a
+  complete historical batch with correct dataset-end semantics, replace a
+  forming bar with rollback/`varip` persistence, and commit the matching
+  confirmed bar. Lifecycle timestamps fail closed when they regress or skip an
+  unresolved forming bar.
+
 ## 0.2.0 - 2026-07-20
 
 - Hardened the legacy front-end after the release-candidate audit. Legacy

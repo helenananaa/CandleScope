@@ -207,8 +207,7 @@ impl<'a> HistoricalRuntime<'a> {
         expression: &HirExpr,
         requested_environment: RequestEnvironment,
     ) -> Result<Vec<(i64, PineValue)>, RuntimeError> {
-        let mut runtime =
-            HistoricalRuntime::with_request_environment(self.program, requested_environment);
+        let mut runtime = self.fork_with_request_environment(requested_environment);
         let mut values = Vec::with_capacity(requested_bars.len());
         for bar in requested_bars {
             values.push((

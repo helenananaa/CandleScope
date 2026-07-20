@@ -15,12 +15,14 @@ use pyo3::types::{PyAny, PyBool, PyDict, PyList, PyModule, PySequence};
 mod alerts;
 mod diagnostics;
 mod outputs;
+mod realtime;
 mod tables;
 #[cfg(test)]
 mod tests;
 use alerts::{render_strategy_order_fill_alert_template, render_strategy_order_fill_running_alert};
 use diagnostics::{diagnostics_have_errors, format_diagnostics, severity_name};
 use outputs::{runtime_result_to_py, value_to_py};
+use realtime::PyRealtimeSession;
 
 #[pyclass(name = "Program", skip_from_py_object)]
 #[derive(Clone)]
@@ -58,6 +60,29 @@ impl PyProgram {
         )
         .map_err(|err| PyValueError::new_err(err.message))?;
         runtime_result_to_py(py, &result)
+    }
+
+    #[pyo3(signature = (
+        request_bars=None,
+        input_overrides=None,
+        chart_symbol=None,
+        chart_timeframe=None
+    ))]
+    fn realtime_session(
+        &self,
+        request_bars: Option<&Bound<'_, PyAny>>,
+        input_overrides: Option<&Bound<'_, PyAny>>,
+        chart_symbol: Option<&str>,
+        chart_timeframe: Option<&str>,
+    ) -> PyResult<PyRealtimeSession> {
+        let request_environment =
+            parse_request_environment(request_bars, chart_symbol, chart_timeframe)?;
+        let input_overrides = parse_input_overrides(input_overrides, &self.hir)?;
+        Ok(PyRealtimeSession::new(
+            self.hir.clone(),
+            request_environment,
+            input_overrides,
+        ))
     }
 }
 
@@ -127,6 +152,7 @@ fn pine_compat(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("RUNTIME_SCHEMA_VERSION", PUBLIC_RUNTIME_SCHEMA_VERSION)?;
     module.add("RENDER_METADATA_VERSION", PUBLIC_RENDER_METADATA_VERSION)?;
     module.add_class::<PyProgram>()?;
+    realtime::register(module)?;
     module.add_function(wrap_pyfunction!(compile_script, module)?)?;
     module.add_function(wrap_pyfunction!(analyze_script, module)?)?;
     module.add_function(wrap_pyfunction!(run_script, module)?)?;
