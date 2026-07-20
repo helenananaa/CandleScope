@@ -10,7 +10,10 @@ let fetchScriptRuntimes: typeof IndicatorApiModule.fetchScriptRuntimes;
 let analyzeIndicatorScript: typeof IndicatorApiModule.analyzeIndicatorScript;
 
 test.before(async () => {
-  server = await createServer({ appType: "custom", server: { middlewareMode: true } });
+  server = await createServer({
+    appType: "custom",
+    server: { middlewareMode: true, hmr: false, ws: false },
+  });
   const module = await server.ssrLoadModule(
     "/src/services/indicatorApi.js",
   ) as typeof IndicatorApiModule;
