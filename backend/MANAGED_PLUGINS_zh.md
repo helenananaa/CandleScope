@@ -10,9 +10,11 @@ plugin API 分离，只负责把仓库内明确声明、锁定的产物安全地
 - 每份 `CANDLESCOPE_PLUGIN.json` 是不可变安装锁，声明插件身份、安装驱动、Python
   distribution/module/version、源码与 Release 身份、manifest 摘要和验证探针。
 - `scripts/managed_plugin_installer.py` 统一完成注册表/锁校验、限长 HTTPS 下载、
-  SHA-256 校验、原子缓存、平台选择、安装、stamp 和独立进程复验。
+  SHA-256 校验、原子缓存、平台选择、安装、stamp、独立进程复验，以及升级失败后的
+  已校验缓存回滚。
 - `scripts/managed_plugin_probes.py` 只放宿主语义检查。普通 Python 插件使用通用
-  `python-import`；Pine 使用 `pine-runtime-v1` 做 schema/SMA smoke。
+  `python-import`；Pine 的公开 v0.2 锁使用 `pine-runtime-v1` 做 schema/SMA smoke，
+  realtime 发布锁则使用 `pine-runtime-v2` 校验渲染元数据和真实持久会话生命周期。
 
 当前只有 `python-wheel` 驱动，并固定使用
 `pip --no-index --no-deps --force-reinstall` 安装一个已校验 wheel。依赖必须进入后端
@@ -38,6 +40,12 @@ plugin API 分离，只负责把仓库内明确声明、锁定的产物安全地
 `<venv>/.candlescope/plugins/<plugin-id>.json`。Pine 的旧
 `pine-runtime-install.json` 仍可读取，正常 setup 会原地生成新 stamp 而不重装；
 `--check` 始终只读。
+
+替换已安装插件前，只有 canonical/legacy stamp 的插件、package、module 身份一致，且
+旧缓存 wheel 仍与 stamp 中的 SHA-256 匹配，安装器才会记录回滚源。新 wheel 安装或
+探针失败时，会重装这一个确定的旧 wheel，在独立进程复验版本/导入，并恢复 canonical
+stamp。首次安装、缓存缺失或被改动、stamp 非法、恢复失败都不存在可信回滚路径，因而
+直接 fail closed。
 
 ## 新增 verified wheel 插件
 

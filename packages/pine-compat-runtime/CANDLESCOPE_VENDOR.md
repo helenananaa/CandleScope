@@ -37,6 +37,25 @@ above are repository-local until a newer runtime release is published and the
 verified manifest/digest lock is advanced. CandleScope host integration and
 installation code remains outside the runtime package.
 
+Once that newer Release has published both required wheels and its exact
+manifest, prepare—but do not silently apply—the next CandleScope lock with:
+
+```powershell
+backend\.venv\Scripts\python.exe backend\scripts\prepare_pine_runtime_release.py `
+  --manifest <release-assets>\manifest.json `
+  --assets-dir <release-assets>
+
+# Repeat with --write only after reviewing the rendered lock.
+```
+
+The preparation step requires the Windows and manylinux `cp310-abi3` wheels,
+checks their embedded package metadata, size, and SHA-256, binds the full source
+commit and Release identity, and selects the `pine-runtime-v2` probe. That probe
+executes seed/forming/confirmed transitions to prove the realtime ABI rather
+than trusting exported constants alone. A failed upgrade can restore only a
+same-identity, hash-matching cached predecessor; otherwise installation fails
+closed.
+
 Developers can still build and install a local wheel explicitly:
 
 ```powershell

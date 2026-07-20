@@ -253,6 +253,13 @@ writes only the selected backend environment and a per-user cache, and refuses
 unsupported platforms or free-threaded CPython. It never installs transitive
 dependencies or silently falls back to a source build.
 
+An upgrade rollback is available only when the previous canonical or legacy
+stamp has the same plugin identity and its cached wheel still matches the
+stamped SHA-256. If the new install or semantic probe fails, setup reinstalls
+that exact wheel, verifies it in a fresh process, and restores its canonical
+stamp. Missing or untrusted rollback material is reported and the operation
+fails closed.
+
 Adding another verified wheel plugin requires a plugin lock plus one registry
 entry; `python-import` supplies the generic version/import probe. A richer host
 contract can add a named probe without duplicating the download/install path.
@@ -284,6 +291,14 @@ The managed install lock still pins the public v0.2.0 release. Realtime is
 therefore enabled only for a locally rebuilt or future published wheel carrying
 the ABI above; one-click installs remain closed-snapshot until the public
 release and digest lock are advanced.
+
+After such a Release contains the complete Windows and manylinux wheel matrix
+plus its exact `manifest.json`, maintainers can render the next lock with
+`scripts/prepare_pine_runtime_release.py`. The tool rebuilds nothing and uploads
+nothing: it verifies stable-version monotonicity, release/source identity,
+wheel tags, wheel metadata, sizes, and SHA-256 digests, then emits a candidate
+lock configured for the `pine-runtime-v2` post-install probe. The checked-in
+lock changes only with an explicit reviewed `--write` invocation.
 
 HTTP indicator compute is offloaded through dedicated executors:
 

@@ -14,10 +14,13 @@ environment.
   digest, and verification probe.
 - `scripts/managed_plugin_installer.py` owns registry/lock validation, bounded
   HTTPS downloads, SHA-256 checks, atomic cache writes, platform selection,
-  installation, stamps, and fresh-process verification.
+  installation, stamps, fresh-process verification, and verified-cache
+  rollback after a failed upgrade.
 - `scripts/managed_plugin_probes.py` owns host-specific semantic checks. The
   built-in `python-import` probe needs no plugin-specific code; Pine uses
-  `pine-runtime-v1` for its schema/SMA smoke.
+  `pine-runtime-v1` for the public v0.2 schema/SMA smoke and
+  `pine-runtime-v2` for render metadata plus an actual persistent realtime
+  session lifecycle.
 
 The only current install driver is `python-wheel`. It installs one verified
 wheel with `pip --no-index --no-deps --force-reinstall`. Dependencies must be
@@ -45,6 +48,14 @@ accepted for migration. Canonical stamps live under
 `<venv>/.candlescope/plugins/<plugin-id>.json`. Pine's old
 `pine-runtime-install.json` stamp is accepted and migrated on a normal setup;
 `--check` remains read-only.
+
+Before replacing an installed plugin, the installer records a rollback source
+only when the canonical or legacy stamp has the same plugin/package/driver
+identity and its cached wheel still matches the stamped SHA-256. If installing
+or probing the new wheel fails, that exact old wheel is reinstalled, checked in
+a fresh process, and its canonical stamp is restored. A first install, missing
+or modified cache entry, invalid stamp, or failed restore has no trusted
+rollback path and therefore fails closed.
 
 ## Adding a verified Python wheel plugin
 

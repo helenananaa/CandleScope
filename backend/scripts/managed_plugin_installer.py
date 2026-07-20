@@ -87,6 +87,14 @@ class ManagedStamp:
     legacy: bool
 
 
+@dataclass(frozen=True, slots=True)
+class PreviousInstall:
+    artifact_path: Path
+    stamp_path: Path
+    stamp_bytes: bytes
+    version: str
+
+
 def default_registry_path() -> Path:
     return Path(__file__).resolve().parents[1] / "CANDLESCOPE_PLUGINS.json"
 
@@ -200,6 +208,30 @@ def _upgrade_legacy_pine_lock(root: Mapping[str, Any]) -> Mapping[str, Any]:
     if asset_base_url != expected_base_url or manifest_url != f"{expected_base_url}/manifest.json":
         raise InstallerError("legacy Pine release URLs are outside the pinned GitHub release")
 
+    verification: dict[str, Any] = {
+        "probe": "pine-runtime-v1",
+        "analysisSchemaVersion": analysis_schema,
+        "runtimeSchemaVersion": runtime_schema,
+    }
+    raw_render_metadata = root.get("renderMetadataVersion")
+    raw_realtime_session = root.get("realtimeSessionSchemaVersion")
+    if raw_render_metadata is not None or raw_realtime_session is not None:
+        render_metadata = _require_positive_int(
+            root,
+            "renderMetadataVersion",
+            "legacy Pine runtime lock",
+        )
+        realtime_session = _require_positive_int(
+            root,
+            "realtimeSessionSchemaVersion",
+            "legacy Pine runtime lock",
+        )
+        verification.update({
+            "probe": "pine-runtime-v2",
+            "renderMetadataVersion": render_metadata,
+            "realtimeSessionSchemaVersion": realtime_session,
+        })
+
     return {
         "schemaVersion": PLUGIN_LOCK_SCHEMA_VERSION,
         "pluginId": plugin_id,
@@ -215,11 +247,7 @@ def _upgrade_legacy_pine_lock(root: Mapping[str, Any]) -> Mapping[str, Any]:
         },
         "source": {"url": upstream, "commit": source_commit},
         "release": dict(release),
-        "verification": {
-            "probe": "pine-runtime-v1",
-            "analysisSchemaVersion": analysis_schema,
-            "runtimeSchemaVersion": runtime_schema,
-        },
+        "verification": verification,
         "legacyStampFiles": ["pine-runtime-install.json"],
     }
 
@@ -885,6 +913,147 @@ def write_install_stamp(
     return stamp_path
 
 
+def _plain_path_component(value: Any) -> str | None:
+    if not isinstance(value, str) or not value or value in {".", ".."}:
+        return None
+    if value != Path(value).name or "/" in value or "\\" in value:
+        return None
+    return value
+
+
+def _capture_previous_install(
+    lock: PluginLock,
+    *,
+    cache_dir: Path,
+) -> PreviousInstall | None:
+    """Return a hash-verified rollback source without trusting the new lock."""
+
+    canonical_path = install_stamp_path(lock.plugin_id)
+    stamp_paths = [
+        canonical_path,
+        *(Path(sys.prefix) / ".candlescope" / name for name in lock.legacy_stamp_files),
+    ]
+    for stamp_path in stamp_paths:
+        try:
+            raw = stamp_path.read_bytes()
+            value = _decode_json(raw, "previous managed plugin install stamp")
+        except (OSError, InstallerError):
+            continue
+        legacy = value.get("schemaVersion") == LEGACY_INSTALL_STAMP_SCHEMA_VERSION
+        if legacy:
+            if value.get("package") != lock.package:
+                continue
+            filename_key = "wheelFilename"
+            digest_key = "wheelSha256"
+        elif value.get("schemaVersion") == INSTALL_STAMP_SCHEMA_VERSION:
+            if (
+                value.get("pluginId") != lock.plugin_id
+                or value.get("installerKind") != lock.installer_kind
+                or value.get("package") != lock.package
+            ):
+                continue
+            filename_key = "artifactFilename"
+            digest_key = "artifactSha256"
+        else:
+            continue
+        version = _plain_path_component(value.get("version"))
+        tag = _plain_path_component(value.get("tag"))
+        filename = _plain_path_component(value.get(filename_key))
+        digest = value.get(digest_key)
+        release_commit = value.get("releaseCommit")
+        manifest_digest = value.get("manifestSha256")
+        if (
+            version is None
+            or tag is None
+            or filename is None
+            or not isinstance(digest, str)
+            or _HEX_64.fullmatch(digest) is None
+            or not isinstance(release_commit, str)
+            or _HEX_40.fullmatch(release_commit) is None
+            or not isinstance(manifest_digest, str)
+            or _HEX_64.fullmatch(manifest_digest) is None
+        ):
+            continue
+        artifact_path = cache_dir / lock.package / tag / filename
+        if not _file_matches(artifact_path, digest):
+            continue
+        if legacy:
+            restored_stamp = {
+                "schemaVersion": INSTALL_STAMP_SCHEMA_VERSION,
+                "pluginId": lock.plugin_id,
+                "installerKind": lock.installer_kind,
+                "package": lock.package,
+                "version": version,
+                "tag": tag,
+                "releaseCommit": release_commit,
+                "manifestSha256": manifest_digest,
+                "artifactFilename": filename,
+                "artifactSha256": digest,
+            }
+            restored_bytes = (
+                json.dumps(restored_stamp, indent=2, sort_keys=True) + "\n"
+            ).encode("utf-8")
+        else:
+            restored_bytes = raw
+        return PreviousInstall(
+            artifact_path=artifact_path,
+            stamp_path=canonical_path,
+            stamp_bytes=restored_bytes,
+            version=version,
+        )
+    return None
+
+
+def _probe_package_identity(
+    lock: PluginLock,
+    *,
+    expected_version: str,
+) -> dict[str, Any]:
+    code = (
+        "import importlib, importlib.metadata, json, sys; "
+        "actual = importlib.metadata.version(sys.argv[1]); "
+        "assert actual == sys.argv[3], f'version {actual!r} != {sys.argv[3]!r}'; "
+        "module = importlib.import_module(sys.argv[2]); "
+        "print(json.dumps({'ok': True, 'sourcePath': str(getattr(module, '__file__', ''))}))"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", code, lock.package, lock.module, expected_version],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if completed.returncode != 0:
+        return {
+            "ok": False,
+            "reason": completed.stderr.strip()
+            or completed.stdout.strip()
+            or f"identity probe exited with code {completed.returncode}",
+        }
+    return {"ok": True}
+
+
+def _restore_previous_install(
+    lock: PluginLock,
+    previous: PreviousInstall | None,
+) -> str:
+    if previous is None:
+        return "rollback unavailable: no hash-verified cached previous artifact"
+    try:
+        install_artifact(lock, previous.artifact_path)
+        probe = _probe_package_identity(lock, expected_version=previous.version)
+        if probe.get("ok") is not True:
+            return (
+                f"rollback failed for {previous.version}: "
+                f"{probe.get('reason') or 'identity probe failed'}"
+            )
+        _atomic_write(previous.stamp_path, previous.stamp_bytes)
+        return f"restored previous {lock.package} {previous.version}"
+    except Exception as exc:
+        return f"rollback failed for {previous.version}: {exc}"
+
+
 def migrate_legacy_stamp(
     lock: PluginLock,
     managed_stamp: ManagedStamp,
@@ -1079,25 +1248,30 @@ def ensure_managed_plugin(
         offline=offline,
         timeout=timeout,
     )
+    previous = _capture_previous_install(lock, cache_dir=resolved_cache)
     _print_plugin(
         lock,
         f"installing verified artifact {artifact_path.name}",
         quiet=quiet,
     )
-    install_artifact(lock, artifact_path)
-    verified = probe_installed_plugin(lock, require_stamp=False)
-    if verified.get("ok") is not True:
-        raise InstallerError(
-            f"installed {lock.display_name} failed its {lock.probe_kind} probe: "
-            f"{verified.get('reason') or 'unknown reason'}"
-        )
-    write_install_stamp(lock, asset)
-    managed_probe = probe_installed_plugin(lock)
-    if managed_probe.get("ok") is not True:
-        raise InstallerError(
-            f"installed {lock.display_name} did not retain its managed release identity: "
-            f"{managed_probe.get('reason') or 'unknown reason'}"
-        )
+    try:
+        install_artifact(lock, artifact_path)
+        verified = probe_installed_plugin(lock, require_stamp=False)
+        if verified.get("ok") is not True:
+            raise InstallerError(
+                f"installed {lock.display_name} failed its {lock.probe_kind} probe: "
+                f"{verified.get('reason') or 'unknown reason'}"
+            )
+        write_install_stamp(lock, asset)
+        managed_probe = probe_installed_plugin(lock)
+        if managed_probe.get("ok") is not True:
+            raise InstallerError(
+                f"installed {lock.display_name} did not retain its managed release identity: "
+                f"{managed_probe.get('reason') or 'unknown reason'}"
+            )
+    except Exception as exc:
+        rollback = _restore_previous_install(lock, previous)
+        raise InstallerError(f"{exc}; {rollback}") from exc
     _print_plugin(
         lock,
         f"installed {lock.package} {lock.version} and passed {lock.probe_kind}",

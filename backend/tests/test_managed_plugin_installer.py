@@ -485,6 +485,106 @@ def test_ready_legacy_stamp_migrates_only_during_normal_ensure(
     assert len(migrations) == expected_migrations
 
 
+def test_failed_upgrade_restores_hash_verified_cached_previous_wheel(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lock = _load_lock(tmp_path)
+    cache_dir = tmp_path / "cache"
+    previous_version = "1.2.2"
+    previous_tag = "release-1.2.2"
+    previous_name = "example_plugin-1.2.2-cp310-abi3-win_amd64.whl"
+    previous_payload = b"previous verified wheel"
+    previous_digest = hashlib.sha256(previous_payload).hexdigest()
+    previous_artifact = cache_dir / lock.package / previous_tag / previous_name
+    previous_artifact.parent.mkdir(parents=True)
+    previous_artifact.write_bytes(previous_payload)
+    stamp_path = tmp_path / "prefix" / ".candlescope" / "plugins" / "example.json"
+    stamp_path.parent.mkdir(parents=True)
+    previous_stamp = {
+        "schemaVersion": installer.INSTALL_STAMP_SCHEMA_VERSION,
+        "pluginId": lock.plugin_id,
+        "installerKind": lock.installer_kind,
+        "package": lock.package,
+        "version": previous_version,
+        "tag": previous_tag,
+        "releaseCommit": "c" * 40,
+        "manifestSha256": "d" * 64,
+        "artifactFilename": previous_name,
+        "artifactSha256": previous_digest,
+    }
+    stamp_path.write_text(json.dumps(previous_stamp), encoding="utf-8")
+    monkeypatch.setattr(
+        installer,
+        "install_stamp_path",
+        lambda plugin_id, prefix=None: stamp_path,
+    )
+    manifest = installer.validate_release_manifest(_manifest_bytes(), lock)
+    new_artifact = tmp_path / WINDOWS_WHEEL
+    new_artifact.write_bytes(b"new wheel")
+    monkeypatch.setattr(installer, "load_pinned_manifest", lambda *args, **kwargs: manifest)
+    monkeypatch.setattr(
+        installer,
+        "ensure_cached_artifact",
+        lambda *args, **kwargs: new_artifact,
+    )
+    probe_calls = 0
+
+    def probe(_lock: installer.PluginLock, *, require_stamp: bool = True) -> dict[str, object]:
+        nonlocal probe_calls
+        probe_calls += 1
+        return (
+            {"ok": False, "reason": "old version differs"}
+            if probe_calls == 1
+            else {"ok": False, "reason": "new realtime ABI failed"}
+        )
+
+    monkeypatch.setattr(installer, "probe_installed_plugin", probe)
+    installed: list[Path] = []
+    monkeypatch.setattr(
+        installer,
+        "install_artifact",
+        lambda _lock, path: installed.append(path),
+    )
+    monkeypatch.setattr(
+        installer,
+        "_probe_package_identity",
+        lambda _lock, *, expected_version: {"ok": expected_version == previous_version},
+    )
+
+    with pytest.raises(installer.InstallerError, match="restored previous.*1.2.2"):
+        installer.ensure_managed_plugin(lock, cache_dir=cache_dir, quiet=True)
+
+    assert installed == [new_artifact, previous_artifact]
+    assert json.loads(stamp_path.read_text(encoding="utf-8")) == previous_stamp
+
+
+def test_failed_first_install_reports_when_rollback_is_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lock = _load_lock(tmp_path)
+    manifest = installer.validate_release_manifest(_manifest_bytes(), lock)
+    new_artifact = tmp_path / WINDOWS_WHEEL
+    new_artifact.write_bytes(b"new wheel")
+    monkeypatch.setattr(
+        installer,
+        "probe_installed_plugin",
+        lambda *args, **kwargs: {"ok": False, "reason": "probe failed"},
+    )
+    monkeypatch.setattr(installer, "load_pinned_manifest", lambda *args, **kwargs: manifest)
+    monkeypatch.setattr(
+        installer,
+        "ensure_cached_artifact",
+        lambda *args, **kwargs: new_artifact,
+    )
+    monkeypatch.setattr(installer, "install_artifact", lambda *args, **kwargs: None)
+    monkeypatch.setattr(installer, "_capture_previous_install", lambda *args, **kwargs: None)
+
+    with pytest.raises(installer.InstallerError, match="rollback unavailable"):
+        installer.ensure_managed_plugin(lock, cache_dir=tmp_path / "cache", quiet=True)
+
+
 def test_plugin_selection_supports_auto_explicit_and_exclude(tmp_path: Path) -> None:
     raw = _manifest_bytes()
     first = _write_lock(tmp_path, raw, filename="first.json", plugin_id="first")

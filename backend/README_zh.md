@@ -246,6 +246,11 @@ tag、commit 和 manifest 摘要，受信 manifest 再锁定各平台 wheel 的�
 x86-64 wheel，只写入选定的后端虚拟环境和用户缓存；不支持的平台或 free-threaded
 CPython 会明确失败，不安装未锁定的传递依赖，也不会静默退回源码编译。
 
+升级回滚只在旧 canonical/legacy stamp 的插件身份一致、且旧缓存 wheel 仍与 stamp
+中的 SHA-256 匹配时可用。新安装或语义探针失败后，setup 会重装这一确定的旧 wheel，
+在独立进程复验并恢复 canonical stamp。若回滚材料缺失或不可信，则明确报告并 fail
+closed。
+
 以后新增普通 wheel 插件只需增加一份插件锁和一条注册项；通用 `python-import`
 探针会校验版本和导入，需要更强语义时再加命名探针，不必复制下载/安装逻辑。完整
 扩展说明见 [MANAGED_PLUGINS_zh.md](MANAGED_PLUGINS_zh.md)。
@@ -270,6 +275,12 @@ closed 并回收子进程。旧 wheel 没有该 ABI 时会自动保持 closed-sn
 注意：仓库中的受管安装锁仍固定公开 v0.2.0。只有本地重建或后续发布、且带上述
 ABI 的 wheel 会开启 realtime；更新公开 release 与摘要锁之前，一键安装仍按
 closed-snapshot 能力运行。
+
+当后续 Release 同时提供完整 Windows/manylinux wheel 矩阵及精确 `manifest.json`
+后，维护者可用 `scripts/prepare_pine_runtime_release.py` 渲染下一份锁。该工具既不
+构建也不上传；它会校验稳定版本递增、release/source 身份、wheel tags、wheel
+metadata、字节数和 SHA-256，再输出启用 `pine-runtime-v2` 安装后探针的候选锁。
+只有显式审阅后的 `--write` 才会改动仓库锁文件。
 
 HTTP 指标计算通过专用 executor 隔离：
 
