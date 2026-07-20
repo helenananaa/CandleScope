@@ -26,11 +26,11 @@ sh ./dev-server.sh
 ```
 
 启动脚本会先运行幂等的 `setup.ps1` / `setup.sh`：创建 `backend/.venv`，仅在
-requirements 哈希变化时安装依赖，校验 SHA-256 后安装锁定的 Pine-compatible
-Release wheel，执行 schema/SMA smoke，并用同一个 Python 启动后端。至少成功
-setup 一次、依赖和 Release 均已缓存后可传 `-Offline` / `--offline`；明确只使用
-Pyne 时可传
-`-SkipPineRuntime` / `--skip-pine-runtime`。
+requirements 哈希变化时安装依赖，再根据注册表准备所有自动安装的受管插件，完成
+锁定 manifest、SHA-256 与宿主探针校验，并用同一个 Python 启动后端。至少成功
+setup 一次、依赖和 Release 均已缓存后可传 `-Offline` / `--offline`；
+`-SkipManagedPlugins` / `--skip-managed-plugins` 会跳过全部受管插件，保留的
+`-SkipPineRuntime` / `--skip-pine-runtime` 只排除 Pine。
 
 默认 API base：
 
@@ -223,21 +223,32 @@ python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 18080
 $env:CANDLESCOPE_PYNE_RUNTIME_SRC = "<path-to-pyne-runtime>\src"
 ```
 
-Pine-compatible 与 Pyne 是显式并列的脚本 runtime。上游源码固定在
-`packages/pine-compat-runtime`；普通 CandleScope 用户使用经过锁定和校验的二进制
-Release wheel，不需要本地安装 Rust。setup 会自动完成，也可以在后端虚拟环境中
-单独检查：
+受管插件 setup 现在由注册表驱动：`CANDLESCOPE_PLUGINS.json` 选择需要自动准备的
+插件锁；通用安装层统一负责 HTTPS 下载、manifest/产物摘要校验、平台选择、原子
+缓存、安装 stamp 和独立进程探针。Pine 是第一个接入者，仍与 Pyne 显式并列；其
+上游源码固定在 `packages/pine-compat-runtime`，普通用户安装经过锁定和校验的二进制
+Release wheel，不需要本地安装 Rust。
+
+可以检查整个受管集合，也保留 Pine-only 兼容命令：
 
 ```powershell
 .\setup.ps1
+.\.venv\Scripts\python.exe scripts\ensure_managed_plugins.py --list
+.\.venv\Scripts\python.exe scripts\ensure_managed_plugins.py --check
 .\.venv\Scripts\python.exe scripts\ensure_pine_runtime.py --check
 ```
 
-`packages/pine-compat-runtime/CANDLESCOPE_RUNTIME.json` 会锁定 Release tag、commit
-和 manifest 摘要；受信 manifest 再锁定各平台 wheel 的文件名、大小和摘要。安装器
-当前支持已发布的 Windows x86-64 与 manylinux x86-64 wheel，只写入选定的后端
-虚拟环境和用户缓存；不支持的平台或 free-threaded CPython 会明确失败，也不会静默
-退回源码编译。本地 Rust 构建仍是 vendored package 文档中的显式开发流程。
+为保持向后兼容，Pine 继续使用原有
+`packages/pine-compat-runtime/CANDLESCOPE_RUNTIME.json` 路径和 schema；通用加载器
+会把它适配成受管插件契约，并派生锁定的 wheel 契约与 Pine 探针。它锁定 Release
+tag、commit 和 manifest 摘要，受信 manifest 再锁定各平台 wheel 的文件名、大小和
+摘要。当前 `python-wheel` 驱动支持已发布的 Windows x86-64 与 manylinux
+x86-64 wheel，只写入选定的后端虚拟环境和用户缓存；不支持的平台或 free-threaded
+CPython 会明确失败，不安装未锁定的传递依赖，也不会静默退回源码编译。
+
+以后新增普通 wheel 插件只需增加一份插件锁和一条注册项；通用 `python-import`
+探针会校验版本和导入，需要更强语义时再加命名探针，不必复制下载/安装逻辑。完整
+扩展说明见 [MANAGED_PLUGINS_zh.md](MANAGED_PLUGINS_zh.md)。
 
 如果手工管理的 Python 环境缺少 wheel，只有 `runtime="pine-compat"` 的请求会以
 `PINE_RUNTIME_UNAVAILABLE` 失败，Pyne 不受影响。`GET /api/v1/indicators/runtimes`

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "plugins": [
+    {
+      "id": "pine-compat",
+      "lockFile": "../packages/pine-compat-runtime/CANDLESCOPE_RUNTIME.json",
+      "autoInstall": true
+    }
+  ]
+}

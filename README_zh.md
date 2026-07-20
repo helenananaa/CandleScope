@@ -50,10 +50,12 @@ sh ./dev-server.sh
 ```
 
 启动脚本会创建仓库本地的 `backend/.venv`，仅在 `requirements.txt` 变化时安装
-后端依赖，自动下载当前平台对应的 Pine-compatible wheel，校验 SHA-256 和 runtime
-schema 后再启动 uvicorn。后续启动只执行快速检查。至少成功 setup 一次、依赖和
-Release 均已缓存后可使用 `-Offline` / `--offline`；明确只使用 Pyne 时可传
-`-SkipPineRuntime` / `--skip-pine-runtime`。
+后端依赖，然后准备 `backend/CANDLESCOPE_PLUGINS.json` 中所有自动安装项。当前
+Pine 插件会下载本平台对应的锁定 wheel，校验 manifest 与产物 SHA-256，并通过
+runtime 探针后再启动 uvicorn；后续启动只执行快速的身份、导入与探针检查。至少
+成功 setup 一次且依赖和 Release 均已缓存后，可使用 `-Offline` / `--offline`；
+`-SkipManagedPlugins` / `--skip-managed-plugins` 会跳过整个受管插件层，保留的
+`-SkipPineRuntime` / `--skip-pine-runtime` 则只排除 Pine。
 
 启动前端：
 

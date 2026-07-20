@@ -3,7 +3,8 @@ param(
     [string]$PythonExecutable = "",
     [switch]$Offline,
     [switch]$SkipPineRuntime,
-    [switch]$ForceDependencies
+    [switch]$ForceDependencies,
+    [switch]$SkipManagedPlugins
 )
 
 $ErrorActionPreference = "Stop"
@@ -15,7 +16,7 @@ $venvDir = Join-Path $backendDir ".venv"
 $venvPython = Join-Path $venvDir "Scripts\python.exe"
 $requirementsPath = Join-Path $backendDir "requirements.txt"
 $requirementsMarker = Join-Path $venvDir ".candlescope-requirements.sha256"
-$ensureRuntime = Join-Path $backendDir "scripts\ensure_pine_runtime.py"
+$ensurePlugins = Join-Path $backendDir "scripts\ensure_managed_plugins.py"
 
 function Test-CompatiblePython {
     param(
@@ -120,18 +121,21 @@ if ($ForceDependencies -or $installedRequirementsHash -ne $requirementsHash) {
     Write-Host "[setup] Backend dependencies are current"
 }
 
-if (-not $SkipPineRuntime) {
-    $runtimeArguments = @($ensureRuntime)
+if (-not $SkipManagedPlugins) {
+    $pluginArguments = @($ensurePlugins)
     if ($Offline) {
-        $runtimeArguments += "--offline"
+        $pluginArguments += "--offline"
     }
-    Write-Host "[setup] Verifying Pine-compatible runtime"
+    if ($SkipPineRuntime) {
+        $pluginArguments += @("--exclude", "pine-compat")
+    }
+    Write-Host "[setup] Verifying managed plugins"
     Invoke-CheckedCommand `
         -Executable $venvPython `
-        -CommandArguments $runtimeArguments `
-        -FailureMessage "Unable to prepare the Pine-compatible runtime"
+        -CommandArguments $pluginArguments `
+        -FailureMessage "Unable to prepare managed plugins"
 } else {
-    Write-Host "[setup] Pine-compatible runtime was explicitly skipped"
+    Write-Host "[setup] Managed plugins were explicitly skipped"
 }
 
 Write-Host "[setup] Backend environment is ready: $venvPython"

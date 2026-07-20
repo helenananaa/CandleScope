@@ -49,12 +49,15 @@ sh ./dev-server.sh
 ```
 
 The launcher creates a repository-local `backend/.venv`, installs backend
-dependencies only when `requirements.txt` changes, downloads the pinned
-Pine-compatible wheel for the current platform, verifies its SHA-256 and
-runtime schemas, then starts uvicorn. Later starts only perform the fast checks.
-Use `-Offline` / `--offline` after one successful setup has cached dependencies
-and the Release, or explicitly use
-`-SkipPineRuntime` / `--skip-pine-runtime` for a Pyne-only setup.
+dependencies only when `requirements.txt` changes, then prepares every
+auto-install entry in `backend/CANDLESCOPE_PLUGINS.json`. The current Pine entry
+downloads a pinned wheel for the active platform, verifies its manifest and
+artifact SHA-256, and passes its runtime probe before uvicorn starts. Later
+starts only perform fast identity/import/probe checks. Use `-Offline` /
+`--offline` after one successful setup has cached dependencies and Releases,
+`-SkipManagedPlugins` / `--skip-managed-plugins` to skip the whole managed
+plugin layer, or the retained `-SkipPineRuntime` / `--skip-pine-runtime` alias
+to exclude only Pine.
 
 Start the frontend:
 

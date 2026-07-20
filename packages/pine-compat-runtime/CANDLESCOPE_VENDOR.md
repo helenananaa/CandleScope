@@ -16,10 +16,12 @@ the application vendor snapshot. Crate-local test source remains present;
 `pine-python` is self-contained and validated here, while `pine-cli` and
 `pine-wasm` test targets require the omitted upstream repository fixtures.
 
-Normal CandleScope setup does not compile this package. It reads
-`CANDLESCOPE_RUNTIME.json`, downloads the pinned `v0.1.0` wheel manifest,
-verifies the manifest and wheel SHA-256 digests, and installs the matching
-Windows x86-64 or manylinux x86-64 wheel into `backend/.venv`:
+Normal CandleScope setup does not compile this package. The managed plugin
+registry selects the backward-compatible `CANDLESCOPE_RUNTIME.json` lock; the
+generic loader adapts it to the shared `python-wheel` driver, which downloads
+the pinned `v0.1.0` manifest, verifies the manifest and wheel SHA-256 digests,
+installs the matching Windows x86-64 or manylinux x86-64 wheel into
+`backend/.venv`, and runs the Pine-specific schema/SMA probe:
 
 ```powershell
 cd backend

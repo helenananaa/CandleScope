@@ -7,14 +7,16 @@ bootstrap_python=${CANDLESCOPE_PYTHON:-python3}
 venv_python="$venv_dir/bin/python"
 requirements="$backend_dir/requirements.txt"
 requirements_marker="$venv_dir/.candlescope-requirements.sha256"
-ensure_runtime="$backend_dir/scripts/ensure_pine_runtime.py"
+ensure_plugins="$backend_dir/scripts/ensure_managed_plugins.py"
 offline=0
+skip_plugins=0
 skip_pine=0
 force_dependencies=0
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --offline) offline=1 ;;
+        --skip-managed-plugins) skip_plugins=1 ;;
         --skip-pine-runtime) skip_pine=1 ;;
         --force-dependencies) force_dependencies=1 ;;
         *) printf 'unknown setup option: %s\n' "$1" >&2; exit 2 ;;
@@ -65,15 +67,19 @@ else
     printf '[setup] Backend dependencies are current\n'
 fi
 
-if [ "$skip_pine" -eq 0 ]; then
-    printf '[setup] Verifying Pine-compatible runtime\n'
-    if [ "$offline" -eq 1 ]; then
-        "$venv_python" "$ensure_runtime" --offline
+if [ "$skip_plugins" -eq 0 ]; then
+    printf '[setup] Verifying managed plugins\n'
+    if [ "$offline" -eq 1 ] && [ "$skip_pine" -eq 1 ]; then
+        "$venv_python" "$ensure_plugins" --offline --exclude pine-compat
+    elif [ "$offline" -eq 1 ]; then
+        "$venv_python" "$ensure_plugins" --offline
+    elif [ "$skip_pine" -eq 1 ]; then
+        "$venv_python" "$ensure_plugins" --exclude pine-compat
     else
-        "$venv_python" "$ensure_runtime"
+        "$venv_python" "$ensure_plugins"
     fi
 else
-    printf '[setup] Pine-compatible runtime was explicitly skipped\n'
+    printf '[setup] Managed plugins were explicitly skipped\n'
 fi
 
 printf '[setup] Backend environment is ready: %s\n' "$venv_python"

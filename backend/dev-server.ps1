@@ -2,7 +2,8 @@
 param(
     [switch]$Offline,
     [switch]$SkipPineRuntime,
-    [switch]$ForceDependencies
+    [switch]$ForceDependencies,
+    [switch]$SkipManagedPlugins
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,6 +13,9 @@ $env:PYTHONUTF8 = "1"
 $setupArguments = @()
 if ($Offline) {
     $setupArguments += "-Offline"
+}
+if ($SkipManagedPlugins) {
+    $setupArguments += "-SkipManagedPlugins"
 }
 if ($SkipPineRuntime) {
     $setupArguments += "-SkipPineRuntime"

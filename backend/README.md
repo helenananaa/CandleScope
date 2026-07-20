@@ -26,12 +26,13 @@ sh ./dev-server.sh
 ```
 
 These launchers run the idempotent `setup.ps1` / `setup.sh` first. Setup creates
-`backend/.venv`, installs requirements only when their hash changes, installs
-the pinned Pine-compatible Release wheel after SHA-256 verification, runs its
-schema/SMA smoke, and then starts the server with that exact Python. Use
-`-Offline` / `--offline` after one successful setup has prepared dependencies
-and cached the Release. A deliberate Pyne-only
-setup can use `-SkipPineRuntime` / `--skip-pine-runtime`.
+`backend/.venv`, installs requirements only when their hash changes, then
+prepares the registry's auto-install managed plugins with pinned manifests,
+SHA-256 checks, and host probes. It starts the server with that exact Python.
+Use `-Offline` / `--offline` after one successful setup has prepared
+dependencies and cached Releases. Use `-SkipManagedPlugins` /
+`--skip-managed-plugins` to skip all managed plugins; the retained
+`-SkipPineRuntime` / `--skip-pine-runtime` option excludes only Pine.
 
 Default API base:
 
@@ -223,24 +224,39 @@ source path for that shell session:
 $env:CANDLESCOPE_PYNE_RUNTIME_SRC = "<path-to-pyne-runtime>\src"
 ```
 
-The Pine-compatible runtime is an explicit sibling of Pyne. Its pinned source
-lives in `packages/pine-compat-runtime`; normal CandleScope users install the
-corresponding verified binary Release rather than compiling Rust locally.
-Setup performs this automatically, or it can be invoked directly with the
-backend virtual environment:
+Managed plugin setup is registry-driven. `CANDLESCOPE_PLUGINS.json` selects the
+checked-in plugin locks that setup prepares; the shared installer owns HTTPS
+download, manifest/artifact digest verification, platform selection, atomic
+cache writes, installation stamps, and fresh-process probes. Pine is the first
+consumer and remains an explicit sibling of Pyne. Its pinned source lives in
+`packages/pine-compat-runtime`; normal users install the verified binary
+Release rather than compiling Rust locally.
+
+Inspect or check the managed set, or use the retained Pine-only compatibility
+entrypoint:
 
 ```powershell
 .\setup.ps1
+.\.venv\Scripts\python.exe scripts\ensure_managed_plugins.py --list
+.\.venv\Scripts\python.exe scripts\ensure_managed_plugins.py --check
 .\.venv\Scripts\python.exe scripts\ensure_pine_runtime.py --check
 ```
 
-`packages/pine-compat-runtime/CANDLESCOPE_RUNTIME.json` pins the Release tag,
-commit, and manifest digest. The trusted manifest pins each platform wheel's
-name, size, and digest. The installer supports the published Windows x86-64
-and manylinux x86-64 wheels, writes only the selected backend environment and
-a per-user cache, and refuses unsupported platforms or free-threaded CPython.
-It never silently falls back to a source build. Local Rust builds remain an
-explicit developer workflow documented by the vendored package.
+Pine keeps its existing
+`packages/pine-compat-runtime/CANDLESCOPE_RUNTIME.json` path and schema for
+backward compatibility; the generic loader adapts it to the managed-plugin
+contract and derives the locked wheel contract and Pine probe. It pins the
+Release tag, commit, and manifest digest. The trusted manifest
+pins every platform wheel's name, size, and digest. The current `python-wheel`
+driver supports the published Windows x86-64 and manylinux x86-64 wheels,
+writes only the selected backend environment and a per-user cache, and refuses
+unsupported platforms or free-threaded CPython. It never installs transitive
+dependencies or silently falls back to a source build.
+
+Adding another verified wheel plugin requires a plugin lock plus one registry
+entry; `python-import` supplies the generic version/import probe. A richer host
+contract can add a named probe without duplicating the download/install path.
+See [MANAGED_PLUGINS.md](MANAGED_PLUGINS.md) for the schema and extension path.
 
 When the wheel is absent from a manually managed environment, only requests
 with `runtime="pine-compat"` fail with `PINE_RUNTIME_UNAVAILABLE`; Pyne remains
