@@ -32,3 +32,23 @@ export interface LocalDatasetListResponse {
   datasets: LocalDatasetManifest[];
   count: number;
 }
+
+export type LocalEventTimeResolutionMode = "exact" | "containing";
+
+export interface LocalEventTimeResolution {
+  input_index: number;
+  input_time_ms: number;
+  matched: boolean;
+  bar_open_ms?: number;
+  bar_close_ms?: number;
+  delta_ms?: number;
+}
+
+export interface LocalEventTimeResolutionResponse {
+  dataset_id: string;
+  data_epoch: string;
+  mode: LocalEventTimeResolutionMode;
+  matched: number;
+  rejected: number;
+  results: LocalEventTimeResolution[];
+}

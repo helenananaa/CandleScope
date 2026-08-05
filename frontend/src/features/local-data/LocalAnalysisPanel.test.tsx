@@ -61,6 +61,7 @@ test("analysis panel exposes generic marker presets and a selected K-line anchor
   assert.match(html, /平仓/);
   assert.match(html, /自定义/);
   assert.match(html, /添加到图表/);
+  assert.match(html, /导入事件 CSV/);
   assert.doesNotMatch(html, /添加到图表[^>]*disabled/);
 });
 

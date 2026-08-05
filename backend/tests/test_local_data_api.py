@@ -53,6 +53,43 @@ def test_import_list_and_query_local_csv(tmp_path: Path, monkeypatch) -> None:
     assert latest.json()["source"] == "local_dataset"
 
 
+def test_event_time_resolution_endpoint_preserves_input_order(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = _client(tmp_path, monkeypatch)
+    imported = client.post(
+        "/api/v1/local/imports/csv",
+        params={
+            "name": "Event bars",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "timestamp_unit": "ms",
+        },
+        content=(
+            "time,open,high,low,close\n"
+            "1704067200000,100,102,99,101\n"
+            "1704067260000,101,103,100,102\n"
+        ),
+        headers={"content-type": "text/csv"},
+    ).json()
+
+    response = client.post(
+        f"/api/v1/local/datasets/{imported['dataset_id']}/events/resolve-times",
+        json={
+            "data_epoch": imported["data_epoch"],
+            "times_ms": [1704067230000, 1704067260000, 1704067400000],
+            "mode": "containing",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [result["input_index"] for result in body["results"]] == [0, 1, 2]
+    assert [result["matched"] for result in body["results"]] == [True, True, False]
+    assert body["matched"] == 2
+    assert body["rejected"] == 1
+
+
 def test_import_accepts_default_volume_mapping_for_tradingview(
     tmp_path: Path, monkeypatch
 ) -> None:

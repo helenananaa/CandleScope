@@ -123,3 +123,47 @@ test("different dataset revisions never share analysis events", () => {
   }, { storage });
   assert.equal(nextRevision.getSnapshot().events.length, 0);
 });
+
+test("CSV events import atomically and repeated source rows are skipped", () => {
+  const storage = new MemoryStorage();
+  const store = new LocalAnalysisEventStore(identity, {
+    storage,
+    now: () => new Date("2026-08-05T00:00:00Z"),
+  });
+  const drafts = [{
+    id: `csv:${"a".repeat(64)}:2`,
+    time: 1_700_000_000,
+    price: 42_000,
+    kind: "entry" as const,
+    label: "CSV entry",
+    note: "model=alpha",
+    color: "#22c55e",
+    source: "csv" as const,
+    extra: { csv_row: 2, model_score: "0.83" },
+  }];
+
+  assert.deepEqual(store.importBatch(drafts), { imported: 1, skipped: 0 });
+  assert.deepEqual(store.importBatch(drafts), { imported: 0, skipped: 1 });
+  assert.equal(store.getSnapshot().events[0]?.source, "csv");
+  assert.equal(store.getSnapshot().events[0]?.extra.model_score, "0.83");
+
+  const restored = new LocalAnalysisEventStore(identity, { storage });
+  assert.equal(restored.getSnapshot().events[0]?.source, "csv");
+});
+
+test("a duplicate ID inside one CSV batch fails without publishing any row", () => {
+  const store = new LocalAnalysisEventStore(identity, { storage: new MemoryStorage() });
+  const draft = {
+    id: "csv:duplicate:2",
+    time: 1_700_000_000,
+    price: null,
+    kind: "note" as const,
+    label: "",
+    note: "",
+    color: "#f59e0b",
+    source: "csv" as const,
+    extra: {},
+  };
+  assert.throws(() => store.importBatch([draft, draft]), /重复/);
+  assert.equal(store.getSnapshot().events.length, 0);
+});

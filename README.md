@@ -93,7 +93,7 @@ To turn a user-supplied CSV into an annotated chart, start the local analysis pa
 .\start-local-offline.ps1
 ```
 
-Open `http://127.0.0.1:15173/local.html`. It supports TradingView OHLC/OHLCV CSVs, generic event markers, notes, and dataset-revision-scoped local persistence. Entry, exit, and signal are convenient marker presets rather than a fixed order schema. Local charts never silently fetch or mix in live bars. See the [local analysis contract](docs/local-offline-mode.md) for the CSV, storage, and analysis boundaries.
+Open `http://127.0.0.1:15173/local.html`. It supports TradingView OHLC/OHLCV CSVs, generic manual markers, arbitrary event CSV column mapping, notes, and dataset-revision-scoped local persistence. Entry, exit, and signal are convenient marker presets rather than a fixed order schema. Local charts never silently fetch or mix in live bars. See the [local analysis contract](docs/local-offline-mode.md) for the CSV, storage, and analysis boundaries.
 
 ## What It Does
 

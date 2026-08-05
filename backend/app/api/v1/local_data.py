@@ -4,15 +4,22 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 
 from app.core.config import LOCAL_DATA_MAX_UPLOAD_BYTES, RUNTIME_MODE
 from app.local_data import LocalDatasetError, LocalDatasetService, LocalImportOptions
 
 
 router = APIRouter(prefix="/local", tags=["local-data"])
+
+
+class ResolveEventTimesRequest(BaseModel):
+    data_epoch: str = Field(min_length=8, max_length=80)
+    times_ms: list[int] = Field(min_length=1, max_length=5_000)
+    mode: Literal["exact", "containing"]
 
 
 def _service(request: Request) -> LocalDatasetService:
@@ -33,7 +40,7 @@ def _translate_error(exc: LocalDatasetError) -> HTTPException:
         404
         if exc.code == "dataset_not_found"
         else 409
-        if exc.code == "dataset_corrupt"
+        if exc.code in {"dataset_corrupt", "dataset_revision_changed"}
         else 422
     )
     return HTTPException(
@@ -70,6 +77,24 @@ async def list_datasets(request: Request) -> dict[str, Any]:
 async def get_dataset(dataset_id: str, request: Request) -> dict[str, Any]:
     try:
         return await asyncio.to_thread(_service(request).get_manifest, dataset_id)
+    except LocalDatasetError as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post("/datasets/{dataset_id}/events/resolve-times")
+async def resolve_event_times(
+    dataset_id: str,
+    body: ResolveEventTimesRequest,
+    request: Request,
+) -> dict[str, Any]:
+    try:
+        return await asyncio.to_thread(
+            _service(request).resolve_event_times,
+            dataset_id,
+            data_epoch=body.data_epoch,
+            times_ms=body.times_ms,
+            mode=body.mode,
+        )
     except LocalDatasetError as exc:
         raise _translate_error(exc) from exc
 

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { MainSeriesCrosshairValue } from "../../chart-adapter/chartAdapterTypes.js";
+import LocalAnalysisCsvImport from "./LocalAnalysisCsvImport.js";
 import type { LocalAnalysisEventStore } from "./localAnalysisStore.js";
 import {
   LOCAL_ANALYSIS_EVENT_KINDS,
@@ -198,6 +199,13 @@ export default function LocalAnalysisPanel({
         </div>
       </div>
 
+      <LocalAnalysisCsvImport
+        manifest={manifest}
+        eventStore={eventStore}
+        storageError={snapshot.storage_error}
+        onError={onError}
+      />
+
       <div className="local-analysis-list-head">
         <strong>项目事件</strong>
         <select value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)}>
@@ -217,7 +225,7 @@ export default function LocalAnalysisPanel({
             <button type="button" className="local-analysis-event-main" onClick={() => onFocus(event)}>
               <i style={{ background: event.color }} />
               <span>
-                <strong>{eventTitle(event)}</strong>
+                <strong>{eventTitle(event)}{event.source === "csv" ? " · CSV" : ""}</strong>
                 <small>{formatEventTime(event.time, manifest.timezone)} · {formatPrice(event.price)}</small>
                 {event.note && <em>{event.note}</em>}
               </span>

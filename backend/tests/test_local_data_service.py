@@ -225,3 +225,51 @@ def test_import_can_require_volume(tmp_path: Path) -> None:
                 volume_required=True,
             ),
         )
+
+
+def test_resolve_event_times_is_revision_scoped_and_gap_aware(tmp_path: Path) -> None:
+    service = LocalDatasetService(tmp_path / "local-data")
+    manifest = service.import_csv(
+        _write_csv(
+            tmp_path / "events-bars.csv",
+            "time,open,high,low,close\n"
+            "1704067200000,100,102,99,101\n"
+            "1704067260000,101,103,100,102\n"
+            "1704067380000,103,105,102,104\n",
+        ),
+        LocalImportOptions(
+            name="Event mapping",
+            symbol="BTCUSDT",
+            interval="1m",
+            timestamp_unit="ms",
+        ),
+    )
+
+    exact = service.resolve_event_times(
+        manifest["dataset_id"],
+        data_epoch=manifest["data_epoch"],
+        times_ms=[1704067200000, 1704067230000],
+        mode="exact",
+    )
+    assert exact["matched"] == 1
+    assert exact["results"][0]["bar_open_ms"] == 1704067200000
+    assert exact["results"][1]["matched"] is False
+
+    containing = service.resolve_event_times(
+        manifest["dataset_id"],
+        data_epoch=manifest["data_epoch"],
+        times_ms=[1704067230000, 1704067330000],
+        mode="containing",
+    )
+    assert containing["results"][0]["bar_open_ms"] == 1704067200000
+    assert containing["results"][0]["delta_ms"] == 30000
+    assert containing["results"][1]["matched"] is False
+
+    with pytest.raises(LocalDatasetError) as stale:
+        service.resolve_event_times(
+            manifest["dataset_id"],
+            data_epoch="sha256:" + "0" * 64,
+            times_ms=[1704067200000],
+            mode="exact",
+        )
+    assert stale.value.code == "dataset_revision_changed"

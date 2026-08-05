@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { listLocalDatasets, LocalKlineApi } from "./localDataApi.js";
+import { listLocalDatasets, LocalKlineApi, resolveLocalEventTimes } from "./localDataApi.js";
 import { toEpochSeconds } from "../market-data/marketDataTypes.js";
+import type { LocalDatasetManifest } from "./localDataTypes.js";
 
 
 function jsonResponse(payload: unknown, init: ResponseInit = {}): Response {
@@ -13,7 +14,7 @@ function jsonResponse(payload: unknown, init: ResponseInit = {}): Response {
   });
 }
 
-function manifest() {
+function manifest(): LocalDatasetManifest {
   return {
     schema_version: 1,
     dataset_id: "local-0123456789abcdef0123456789abcdef",
@@ -22,6 +23,7 @@ function manifest() {
     source: "local_dataset",
     symbol: "BTC-USDT",
     interval: "1m",
+    volume_available: true,
     timezone: "UTC",
     timestamp_semantics: "bar_open",
     rows: 2,
@@ -125,4 +127,45 @@ test("local kline adapter omits volume when the dataset marks it unavailable", a
   );
 
   assert.equal(Object.hasOwn(result.data?.[0] ?? {}, "volume"), false);
+});
+
+test("event time resolution posts immutable identity and validates ordered results", async (context) => {
+  const originalFetch = globalThis.fetch;
+  context.after(() => { globalThis.fetch = originalFetch; });
+  let requestBody: unknown;
+  globalThis.fetch = async (_url, init) => {
+    requestBody = JSON.parse(String(init?.body));
+    return jsonResponse({
+      dataset_id: manifest().dataset_id,
+      data_epoch: manifest().data_epoch,
+      mode: "containing",
+      matched: 1,
+      rejected: 1,
+      results: [
+        {
+          input_index: 0,
+          input_time_ms: 1_704_067_230_000,
+          matched: true,
+          bar_open_ms: 1_704_067_200_000,
+          bar_close_ms: 1_704_067_259_999,
+          delta_ms: 30_000,
+        },
+        { input_index: 1, input_time_ms: 1_704_067_500_000, matched: false },
+      ],
+    });
+  };
+
+  const result = await resolveLocalEventTimes(
+    manifest(),
+    [1_704_067_230_000, 1_704_067_500_000],
+    "containing",
+  );
+
+  assert.deepEqual(requestBody, {
+    data_epoch: manifest().data_epoch,
+    times_ms: [1_704_067_230_000, 1_704_067_500_000],
+    mode: "containing",
+  });
+  assert.equal(result.results[0]?.bar_open_ms, 1_704_067_200_000);
+  assert.equal(result.results[1]?.matched, false);
 });

@@ -23,10 +23,21 @@ export interface LocalAnalysisEvent {
   label: string;
   note: string;
   color: string;
-  source: "manual";
+  source: "manual" | "csv";
   extra: Readonly<Record<string, unknown>>;
   created_at: string;
   updated_at: string;
+}
+
+export interface LocalAnalysisEventImportDraft extends LocalAnalysisEventDraft {
+  id: string;
+  source: "csv";
+  extra: Readonly<Record<string, unknown>>;
+}
+
+export interface LocalAnalysisImportResult {
+  imported: number;
+  skipped: number;
 }
 
 export interface LocalAnalysisEventDraft {

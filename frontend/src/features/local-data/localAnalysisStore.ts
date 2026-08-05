@@ -2,8 +2,10 @@ import {
   LOCAL_ANALYSIS_EVENT_KINDS,
   type LocalAnalysisEvent,
   type LocalAnalysisEventDraft,
+  type LocalAnalysisEventImportDraft,
   type LocalAnalysisEventKind,
   type LocalAnalysisIdentity,
+  type LocalAnalysisImportResult,
   type LocalAnalysisSnapshot,
 } from "./localAnalysisTypes.js";
 
@@ -72,7 +74,7 @@ function parseEvent(
     || !isEventKind(record.kind)
     || typeof record.color !== "string"
     || !COLOR_PATTERN.test(record.color)
-    || record.source !== "manual"
+    || (record.source !== "manual" && record.source !== "csv")
     || typeof record.created_at !== "string"
     || !Number.isFinite(Date.parse(record.created_at))
     || typeof record.updated_at !== "string"
@@ -93,7 +95,7 @@ function parseEvent(
     label,
     note,
     color: record.color.toLowerCase(),
-    source: "manual",
+    source: record.source,
     extra: Object.freeze({ ...extra }),
     created_at: record.created_at,
     updated_at: record.updated_at,
@@ -213,6 +215,36 @@ export class LocalAnalysisEventStore {
     });
     this.commit([...this.snapshot.events, event]);
     return event;
+  }
+
+  importBatch(drafts: readonly LocalAnalysisEventImportDraft[]): LocalAnalysisImportResult {
+    this.ensureWritable();
+    const currentIds = new Set(this.snapshot.events.map((event) => event.id));
+    const batchIds = new Set<string>();
+    const pending = drafts.filter((draft) => {
+      if (draft.id.length < 1 || draft.id.length > 200 || batchIds.has(draft.id)) {
+        throw new LocalAnalysisStorageError("事件 CSV 包含无效或重复的导入 ID");
+      }
+      batchIds.add(draft.id);
+      return !currentIds.has(draft.id);
+    });
+    if (this.snapshot.events.length + pending.length > MAX_EVENTS) {
+      throw new LocalAnalysisStorageError(`每个分析项目最多保存 ${MAX_EVENTS} 个标记`);
+    }
+    if (pending.length === 0) return { imported: 0, skipped: drafts.length };
+    const timestamp = this.now().toISOString();
+    const imported = pending.map((draft) => Object.freeze({
+      id: draft.id,
+      dataset_id: this.identity.datasetId,
+      data_epoch: this.identity.dataEpoch,
+      ...this.normalizeDraft(draft),
+      source: "csv" as const,
+      extra: Object.freeze({ ...draft.extra }),
+      created_at: timestamp,
+      updated_at: timestamp,
+    }));
+    this.commit([...this.snapshot.events, ...imported]);
+    return { imported: imported.length, skipped: drafts.length - imported.length };
   }
 
   update(eventId: string, draft: LocalAnalysisEventDraft): LocalAnalysisEvent {

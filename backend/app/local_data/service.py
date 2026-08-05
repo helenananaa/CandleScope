@@ -737,6 +737,103 @@ class LocalDatasetService:
             "missing_ranges": [],
         }
 
+    def resolve_event_times(
+        self,
+        dataset_id: str,
+        *,
+        data_epoch: str,
+        times_ms: list[int],
+        mode: str,
+    ) -> dict[str, Any]:
+        """Resolve user event timestamps against one immutable dataset revision."""
+        manifest = self.get_manifest(dataset_id)
+        if manifest["data_epoch"] != data_epoch:
+            raise LocalDatasetError(
+                "Dataset revision changed; reload it before importing events",
+                code="dataset_revision_changed",
+            )
+        if mode not in {"exact", "containing"}:
+            raise LocalDatasetError("Event time mode must be exact or containing")
+        if not times_ms or len(times_ms) > 5_000:
+            raise LocalDatasetError("Event time batch must contain 1 to 5000 rows")
+        if any(
+            not isinstance(value, int) or isinstance(value, bool) or value <= 0
+            for value in times_ms
+        ):
+            raise LocalDatasetError(
+                "Event timestamps must be positive integer milliseconds"
+            )
+
+        revision = data_epoch.removeprefix("sha256:")
+        if EPOCH_RE.fullmatch(revision) is None:
+            raise LocalDatasetError(
+                "Dataset revision changed; reload it before importing events",
+                code="dataset_revision_changed",
+            )
+        revision_dir = self.root / dataset_id / revision
+        if not revision_dir.is_dir():
+            raise LocalDatasetError(
+                "Dataset revision not found", code="dataset_corrupt"
+            )
+        # Open the revision that was validated above, rather than resolving
+        # current.json a second time and risking a cross-revision race.
+        db_path = revision_dir / "bars.sqlite"
+        uri = f"file:{db_path.as_posix()}?mode=ro"
+        connection = sqlite3.connect(uri, uri=True)
+        try:
+            connection.row_factory = sqlite3.Row
+            if mode == "exact":
+                statement = (
+                    "SELECT open_time_ms, close_time_ms FROM bars "
+                    "WHERE open_time_ms = ?"
+                )
+            else:
+                statement = (
+                    "SELECT open_time_ms, close_time_ms FROM bars "
+                    "WHERE open_time_ms <= ? AND close_time_ms >= ? "
+                    "ORDER BY open_time_ms DESC LIMIT 1"
+                )
+            results: list[dict[str, Any]] = []
+            matched = 0
+            for index, input_time_ms in enumerate(times_ms):
+                parameters = (
+                    (input_time_ms,)
+                    if mode == "exact"
+                    else (input_time_ms, input_time_ms)
+                )
+                row = connection.execute(statement, parameters).fetchone()
+                if row is None:
+                    results.append(
+                        {
+                            "input_index": index,
+                            "input_time_ms": input_time_ms,
+                            "matched": False,
+                        }
+                    )
+                    continue
+                open_time_ms = int(row["open_time_ms"])
+                matched += 1
+                results.append(
+                    {
+                        "input_index": index,
+                        "input_time_ms": input_time_ms,
+                        "matched": True,
+                        "bar_open_ms": open_time_ms,
+                        "bar_close_ms": int(row["close_time_ms"]),
+                        "delta_ms": input_time_ms - open_time_ms,
+                    }
+                )
+        finally:
+            connection.close()
+        return {
+            "dataset_id": dataset_id,
+            "data_epoch": manifest["data_epoch"],
+            "mode": mode,
+            "matched": matched,
+            "rejected": len(times_ms) - matched,
+            "results": results,
+        }
+
     @staticmethod
     def _wire_bar(row: sqlite3.Row) -> dict[str, Any]:
         result = {

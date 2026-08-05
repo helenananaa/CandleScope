@@ -21,6 +21,9 @@ import {
 import type {
   LocalDatasetListResponse,
   LocalDatasetManifest,
+  LocalEventTimeResolution,
+  LocalEventTimeResolutionMode,
+  LocalEventTimeResolutionResponse,
   LocalImportInput,
 } from "./localDataTypes.js";
 
@@ -133,6 +136,71 @@ export async function importLocalCsv(input: LocalImportInput): Promise<LocalData
     body: input.file,
   }));
   return expectManifest(payload);
+}
+
+export async function resolveLocalEventTimes(
+  manifest: LocalDatasetManifest,
+  timesMs: readonly number[],
+  mode: LocalEventTimeResolutionMode,
+  signal?: AbortSignal,
+): Promise<LocalEventTimeResolutionResponse> {
+  const payload = await responseJson(await fetch(
+    localUrl(`/datasets/${encodeURIComponent(manifest.dataset_id)}/events/resolve-times`),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ data_epoch: manifest.data_epoch, times_ms: timesMs, mode }),
+      ...(signal === undefined ? {} : { signal }),
+    },
+  ));
+  if (!isJsonRecord(payload)
+    || payload.dataset_id !== manifest.dataset_id
+    || payload.data_epoch !== manifest.data_epoch
+    || payload.mode !== mode
+    || !Array.isArray(payload.results)) {
+    throw new TypeError("Event time resolution response is invalid");
+  }
+  const results: LocalEventTimeResolution[] = payload.results.map((value, index) => {
+    if (!isJsonRecord(value)
+      || value.input_index !== index
+      || typeof value.input_time_ms !== "number"
+      || !Number.isFinite(value.input_time_ms)
+      || typeof value.matched !== "boolean") {
+      throw new TypeError("Event time resolution row is invalid");
+    }
+    if (!value.matched) {
+      return {
+        input_index: index,
+        input_time_ms: value.input_time_ms,
+        matched: false,
+      };
+    }
+    for (const key of ["bar_open_ms", "bar_close_ms", "delta_ms"] as const) {
+      if (typeof value[key] !== "number" || !Number.isFinite(value[key])) {
+        throw new TypeError(`Event time resolution field ${key} is invalid`);
+      }
+    }
+    return {
+      input_index: index,
+      input_time_ms: value.input_time_ms,
+      matched: true,
+      bar_open_ms: value.bar_open_ms as number,
+      bar_close_ms: value.bar_close_ms as number,
+      delta_ms: value.delta_ms as number,
+    };
+  });
+  const matched = results.filter((result) => result.matched).length;
+  if (payload.matched !== matched || payload.rejected !== results.length - matched) {
+    throw new TypeError("Event time resolution counts are invalid");
+  }
+  return {
+    dataset_id: manifest.dataset_id,
+    data_epoch: manifest.data_epoch,
+    mode,
+    matched,
+    rejected: results.length - matched,
+    results,
+  };
 }
 
 function toKlineFetchResult(payload: unknown, operation: string): KlineFetchResult {
