@@ -51,3 +51,27 @@ def test_import_list_and_query_local_csv(tmp_path: Path, monkeypatch) -> None:
     assert latest.status_code == 200
     assert [row["close"] for row in latest.json()["data"]] == [101.0, 102.0]
     assert latest.json()["source"] == "local_dataset"
+
+
+def test_import_accepts_default_volume_mapping_for_tradingview(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = _client(tmp_path, monkeypatch)
+    response = client.post(
+        "/api/v1/local/imports/csv",
+        params={
+            "name": "TradingView BTC",
+            "symbol": "BINANCE:BTCUSDT",
+            "interval": "1m",
+            "timestamp_unit": "s",
+        },
+        content=(
+            "time,open,high,low,close,Volume\n"
+            "1785608340,62632.54,62640,62600.01,62603.16,18.97148\n"
+            "1785608400,62617.85,62630,62533.54,62569.41,26.64177\n"
+        ),
+        headers={"content-type": "text/csv"},
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["rows"] == 2

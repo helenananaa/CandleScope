@@ -17,7 +17,11 @@ from pathlib import Path
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from app.data_engine.interval_policy import IntervalSpec, parse_interval_spec
+from app.data_engine.interval_policy import (
+    IntervalAlignment,
+    IntervalSpec,
+    parse_interval_spec,
+)
 
 
 DATASET_ID_RE = re.compile(r"^local-[0-9a-f]{32}$")
@@ -100,7 +104,9 @@ class LocalDatasetService:
         staging = self.root / ".staging" / f"{dataset_id}-{uuid.uuid4().hex}"
         staging.mkdir(parents=True)
         try:
-            bars, excluded_ranges = self._parse_csv(csv_path, options, interval)
+            bars, excluded_ranges, resolved_columns = self._parse_csv(
+                csv_path, options, interval
+            )
             epoch_hex = self._content_epoch(symbol, interval, bars, excluded_ranges)
             manifest = self._write_staging_dataset(
                 staging,
@@ -112,6 +118,7 @@ class LocalDatasetService:
                 options=options,
                 bars=bars,
                 excluded_ranges=excluded_ranges,
+                resolved_columns=resolved_columns,
             )
             published = self._publish(staging, dataset_id, epoch_hex, manifest)
             staging = None
@@ -125,7 +132,11 @@ class LocalDatasetService:
         csv_path: Path,
         options: LocalImportOptions,
         interval: IntervalSpec,
-    ) -> tuple[list[_NormalizedBar], list[dict[str, Any]]]:
+    ) -> tuple[
+        list[_NormalizedBar],
+        list[dict[str, Any]],
+        dict[str, str],
+    ]:
         required = {
             "time": options.time_column,
             "open": options.open_column,
@@ -153,23 +164,21 @@ class LocalDatasetService:
             reader = csv.DictReader(handle)
             if reader.fieldnames is None:
                 raise LocalDatasetError("CSV must contain a header row")
-            missing = [
-                column
-                for column in required.values()
-                if column not in reader.fieldnames
-            ]
-            configured_optional = [column for column in optional.values() if column]
-            missing.extend(
-                column
-                for column in configured_optional
-                if column not in reader.fieldnames
+            resolved_columns = self._resolve_columns(
+                reader.fieldnames,
+                {
+                    **required,
+                    **{key: column for key, column in optional.items() if column},
+                },
             )
-            if missing:
-                raise LocalDatasetError(
-                    f"CSV columns not found: {', '.join(sorted(set(missing)))}"
-                )
+            required = {key: resolved_columns[key] for key in required}
+            optional = {
+                key: resolved_columns.get(key)
+                for key in optional
+            }
 
             previous_open: int | None = None
+            fixed_alignment_offset_ms: int | None = None
             for source_row, row in enumerate(reader, start=2):
                 if not any((value or "").strip() for value in row.values()):
                     continue
@@ -179,7 +188,16 @@ class LocalDatasetService:
                     timezone_info,
                     source_row,
                 )
-                if interval.floor_ms(open_ms) != open_ms:
+                if interval.alignment is IntervalAlignment.FIXED_EPOCH:
+                    row_offset_ms = open_ms % interval.nominal_ms
+                    if fixed_alignment_offset_ms is None:
+                        fixed_alignment_offset_ms = row_offset_ms
+                    elif row_offset_ms != fixed_alignment_offset_ms:
+                        raise LocalDatasetError(
+                            f"Row {source_row}: timestamp phase does not match "
+                            f"the first {interval.canonical} bar"
+                        )
+                elif interval.floor_ms(open_ms) != open_ms:
                     raise LocalDatasetError(
                         f"Row {source_row}: timestamp is not aligned to {interval.canonical}"
                     )
@@ -275,7 +293,38 @@ class LocalDatasetService:
         if not options.last_bar_closed:
             last = bars[-1]
             bars[-1] = _NormalizedBar(**{**asdict(last), "is_closed": False})
-        return bars, gaps
+        return bars, gaps, resolved_columns
+
+    @staticmethod
+    def _resolve_columns(
+        fieldnames: list[str],
+        configured: dict[str, str],
+    ) -> dict[str, str]:
+        folded: dict[str, list[str]] = {}
+        for fieldname in fieldnames:
+            folded.setdefault(fieldname.strip().casefold(), []).append(fieldname)
+
+        resolved: dict[str, str] = {}
+        missing: list[str] = []
+        for logical_name, requested in configured.items():
+            if requested in fieldnames:
+                resolved[logical_name] = requested
+                continue
+            matches = folded.get(requested.strip().casefold(), [])
+            if len(matches) == 1:
+                resolved[logical_name] = matches[0]
+            elif len(matches) > 1:
+                raise LocalDatasetError(
+                    f"CSV column is ambiguous ignoring case: {requested}"
+                )
+            else:
+                missing.append(requested)
+
+        if missing:
+            raise LocalDatasetError(
+                f"CSV columns not found: {', '.join(sorted(set(missing)))}"
+            )
+        return resolved
 
     @staticmethod
     def _parse_decimal(raw: str | None, field: str, row: int) -> Decimal:
@@ -378,6 +427,7 @@ class LocalDatasetService:
         options: LocalImportOptions,
         bars: list[_NormalizedBar],
         excluded_ranges: list[dict[str, Any]],
+        resolved_columns: dict[str, str],
     ) -> dict[str, Any]:
         db_path = staging / "bars.sqlite"
         connection = sqlite3.connect(db_path)
@@ -456,6 +506,12 @@ class LocalDatasetService:
             "source": "local_dataset",
             "symbol": symbol,
             "interval": interval.canonical,
+            "alignment": interval.alignment.value,
+            "alignment_offset_ms": (
+                bars[0].open_time_ms % interval.nominal_ms
+                if interval.alignment is IntervalAlignment.FIXED_EPOCH
+                else 0
+            ),
             "timezone": options.timezone_name,
             "timestamp_semantics": "bar_open",
             "rows": len(bars),
@@ -478,9 +534,9 @@ class LocalDatasetService:
             "importer": "candlescope.local.csv.v1",
             "imported_at": now,
             "columns": {
-                key: value
-                for key, value in asdict(options).items()
-                if key.endswith("_column") and value
+                f"{key}_column": value
+                for key, value in resolved_columns.items()
+                if value
             },
             "timestamp_unit": options.timestamp_unit,
             "timezone": options.timezone_name,
