@@ -94,6 +94,7 @@ import {
 } from "./singleChartPaneGeometry";
 import { IndicatorPaneLabels, MainChartLegend } from "./ChartPaneLegends";
 import { shouldUseLatestChartPaneLegend } from "./chartPaneLegendModel";
+import { buildChartNavigationWindow } from "./chartNavigationModel";
 import MarketPaneLabels from "./MarketPaneLabels";
 import PaneControlBar from "./PaneControlBar";
 import { createPaneCrosshairStoreLifecycle } from "./paneCrosshairStore";
@@ -253,6 +254,10 @@ export interface SingleChartPanesProps {
   interval: IntervalString;
   loading?: boolean;
   onCrosshairMove?: ((value: MainSeriesCrosshairValue | null) => void) | null;
+  navigationTarget?: {
+    requestId: number;
+    time: number;
+  } | null;
   onNeedMoreLeft?: LoadMoreLeft | null;
   onNeedMoreRight?: (() => Promise<boolean>) | null;
   canLoadMoreLeft?: boolean;
@@ -1219,6 +1224,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   interval,
   loading = false,
   onCrosshairMove,
+  navigationTarget = null,
   onNeedMoreLeft,
   onNeedMoreRight = null,
   canLoadMoreLeft = true,
@@ -1433,6 +1439,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   const selectedDrawingsByPaneRef = useRef<Map<string, SelectedDrawingMeta>>(new Map());
   const drawingsHiddenRef = useRef(false);
   const [seriesReady, setSeriesReady] = useState(0);
+  const appliedNavigationRequestRef = useRef<number | null>(null);
   const paneCrosshairStoreLifecycle = useMemo(
     () => createPaneCrosshairStoreLifecycle(),
     [],
@@ -3168,6 +3175,27 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       crosshair: buildCrosshairOptions(showCrosshairDetails),
     });
   }, [seriesReady, showCrosshairDetails]);
+
+  useEffect(() => {
+    if (navigationTarget === null
+      || appliedNavigationRequestRef.current === navigationTarget.requestId
+      || !Number.isFinite(navigationTarget.time)) return;
+    const plan = buildChartNavigationWindow(displayRowsRef.current, navigationTarget.time);
+    if (plan === null) return;
+    let restored = false;
+    if (plan.timeRange !== null) {
+      restored = viewportControllerRef.current?.navigateTimeRange(
+        plan.timeRange,
+        { immediate: true },
+      ) ?? false;
+    } else {
+      restored = viewportControllerRef.current?.restoreProjectionRange(
+        plan.logicalRange,
+        { immediate: true },
+      ) ?? false;
+    }
+    if (restored) appliedNavigationRequestRef.current = navigationTarget.requestId;
+  }, [navigationTarget, seriesReady, seriesStore?.axisRevision]);
 
   useEffect(() => {
     const container = containerRef.current;

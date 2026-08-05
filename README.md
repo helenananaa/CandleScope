@@ -15,7 +15,7 @@ Lightweight trading chart software built with FastAPI, React, Vite, and Lightwei
 ## Contents
 
 - [Quick Start](#quick-start)
-- [Local Offline Mode](#local-offline-mode)
+- [Local Analysis Mode](#local-analysis-mode)
 - [What It Does](#what-it-does)
 - [Replay Training (Opt-In)](#replay-training-opt-in)
 - [Architecture](#architecture)
@@ -85,15 +85,15 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-## Local Offline Mode
+## Local Analysis Mode
 
-To view only user-supplied data, start the separate `LOCAL_OFFLINE` profile:
+To turn a user-supplied CSV into an annotated chart, start the local analysis page:
 
 ```powershell
 .\start-local-offline.ps1
 ```
 
-Open `http://127.0.0.1:15173/local.html`. This profile does not load exchanges, live WebSockets, polling, backfill, replay, or plugin hosts. TradingView OHLC and OHLCV CSVs are supported; unavailable volume is disclosed and never zero-filled. See the [local-offline mode contract](docs/local-offline-mode.md) for the CSV format, immutable storage layout, and enforced network boundary.
+Open `http://127.0.0.1:15173/local.html`. It supports TradingView OHLC/OHLCV CSVs, generic event markers, notes, and dataset-revision-scoped local persistence. Entry, exit, and signal are convenient marker presets rather than a fixed order schema. Local charts never silently fetch or mix in live bars. See the [local analysis contract](docs/local-offline-mode.md) for the CSV, storage, and analysis boundaries.
 
 ## What It Does
 

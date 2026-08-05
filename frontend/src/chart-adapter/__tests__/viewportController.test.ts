@@ -78,6 +78,14 @@ test("semantic fit falls back when the content provider has no usable range", ()
   assert.deepEqual(calls, [["fitContent"]]);
 });
 
+test("explicit time navigation applies immediately through the viewport authority", () => {
+  const { chart, calls } = createChart();
+  const controller = new ViewportController({ chartProvider: () => chart });
+
+  assert.equal(controller.navigateTimeRange({ from: 100, to: 200 }), true);
+  assert.deepEqual(calls, [["setVisibleRange", { from: 100, to: 200 }]]);
+});
+
 test("interaction lock queues the highest priority intent", () => {
   const { chart, calls } = createChart();
   let unlock: (() => void) | undefined;

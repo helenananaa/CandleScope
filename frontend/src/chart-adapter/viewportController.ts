@@ -292,6 +292,24 @@ export class ViewportController {
       : this.applyIntent("projectionRestore", PRIORITY.restore, apply);
   }
 
+  navigateTimeRange(
+    timeRange: { from: ChartTime; to: ChartTime } | null | undefined,
+    {
+      immediate = true,
+    }: {
+      immediate?: boolean;
+    } = {},
+  ): boolean {
+    if (!timeRange) return false;
+    const apply = (timeScale: AdapterTimeScale) => safeCall(() => {
+      timeScale.setVisibleRange(timeRange);
+      return true;
+    }, false);
+    return immediate
+      ? this.applyImmediateIntent(apply)
+      : this.applyIntent("timeNavigation", PRIORITY.restore, apply);
+  }
+
   followLatest(
     contentLastLogical: number,
     {

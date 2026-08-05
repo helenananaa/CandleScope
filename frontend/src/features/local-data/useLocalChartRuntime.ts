@@ -15,6 +15,7 @@ export interface LocalChartRuntime {
   error: string | null;
   hasMoreLeft: boolean;
   loadMoreLeft(oldestLoadedTime?: EpochSeconds | null): Promise<void>;
+  focusTime(time: number): Promise<boolean>;
   retry(): void;
 }
 
@@ -102,6 +103,37 @@ export function useLocalChartRuntime(manifest: LocalDatasetManifest): LocalChart
     }
   }, [feed, hasMoreLeft, loadingMore, series, seriesStore]);
 
+  const focusTime = useCallback(async (time: number): Promise<boolean> => {
+    if (!Number.isFinite(time) || time <= 0) return false;
+    const target = time as EpochSeconds;
+    if (seriesStore.hasTime(target)) return true;
+    const intervalSeconds = parseIntervalSeconds(manifest.interval) ?? 60;
+    const radius = Math.max(intervalSeconds * 120, 3_600);
+    setLoadingMore(true);
+    setError(null);
+    try {
+      await feed.getRange(series, {
+        startSec: Math.max(1, time - radius) as EpochSeconds,
+        endSec: (time + radius) as EpochSeconds,
+        repair: "none",
+        strict: false,
+        commit: "active",
+        source: "local-analysis-focus",
+        maxPages: 2,
+      });
+      if (!seriesStore.hasTime(target)) {
+        setError("标记对应的 K 线不在当前数据集内");
+        return false;
+      }
+      return true;
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "无法定位分析标记");
+      return false;
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [feed, manifest.interval, series, seriesStore]);
+
   const retry = useCallback(() => setAttempt((value) => value + 1), []);
   return {
     seriesStore,
@@ -110,6 +142,7 @@ export function useLocalChartRuntime(manifest: LocalDatasetManifest): LocalChart
     error,
     hasMoreLeft,
     loadMoreLeft,
+    focusTime,
     retry,
   };
 }

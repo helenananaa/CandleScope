@@ -15,7 +15,7 @@ CandleScope 是基于 FastAPI、React、Vite 和 Lightweight Charts 构建的轻
 ## 目录
 
 - [快速开始](#快速开始)
-- [本地离线模式](#本地离线模式)
+- [本地分析模式](#本地分析模式)
 - [项目能力](#项目能力)
 - [架构](#架构)
 - [Backfill 智能调度摘要](#backfill-智能调度摘要)
@@ -85,15 +85,15 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-## 本地离线模式
+## 本地分析模式
 
-只查看用户提供的数据时，可以启动独立 `LOCAL_OFFLINE` profile：
+需要把用户提供的 CSV 画成 K 线并做手工研究时，可以启动独立的本地分析页面：
 
 ```powershell
 .\start-local-offline.ps1
 ```
 
-页面入口为 `http://127.0.0.1:15173/local.html`。该 profile 不加载交易所、直播 WebSocket、轮询、Backfill、Replay 或插件 host；支持 TradingView OHLC/OHLCV CSV，缺失成交量会明确标记为不可用而不会填零。CSV 合同、不可变存储和离线边界见 [本地离线模式文档](docs/local-offline-mode.md)。
+页面入口为 `http://127.0.0.1:15173/local.html`。它支持 TradingView OHLC/OHLCV CSV、通用事件标记、备注和数据集版本绑定的本地持久化；开仓、平仓和策略信号只是快捷类型，底层并不限定用户用途。该页面不会为本地数据偷偷补线上 K 线或混入直播数据。CSV、存储和分析合同见 [本地分析模式文档](docs/local-offline-mode.md)。
 
 ## 项目能力
 

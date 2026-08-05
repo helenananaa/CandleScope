@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import type { ReactNode } from "react";
 import SingleChartPanes from "../../components/SingleChartPanes.js";
+import type { MainSeriesCrosshairValue } from "../../chart-adapter/chartAdapterTypes.js";
 import { ChartErrorBoundary } from "../../app/AppProviders.js";
 import MarketPageFrame from "../../app/MarketPageFrame.js";
 import MarketStatusBar from "../../app/MarketStatusBar.js";
@@ -11,6 +13,16 @@ import {
   LocalDataApiError,
 } from "./localDataApi.js";
 import type { LocalDatasetManifest } from "./localDataTypes.js";
+import LocalAnalysisPanel from "./LocalAnalysisPanel.js";
+import { createLocalAnalysisMarkerSource } from "./localAnalysisMarkerSource.js";
+import {
+  EMPTY_LOCAL_ANALYSIS_SNAPSHOT,
+  LocalAnalysisEventStore,
+} from "./localAnalysisStore.js";
+import type {
+  LocalAnalysisEvent,
+  LocalAnalysisFocusRequest,
+} from "./localAnalysisTypes.js";
 import { useLocalChartRuntime } from "./useLocalChartRuntime.js";
 
 
@@ -142,12 +154,14 @@ function LocalDatasetRail({
   importing,
   onSelect,
   onImport,
+  analysis,
 }: {
   datasets: LocalDatasetManifest[];
   selectedId: string | null;
   importing: boolean;
   onSelect(datasetId: string): void;
   onImport: Parameters<typeof LocalImportForm>[0]["onImport"];
+  analysis: ReactNode;
 }) {
   return (
     <aside className="local-data-rail" aria-label="本地数据资料库">
@@ -176,12 +190,39 @@ function LocalDatasetRail({
           ))}
         </div>
       </section>
+      {analysis}
     </aside>
   );
 }
 
-function LocalChart({ manifest }: { manifest: LocalDatasetManifest }) {
+function LocalChart({
+  manifest,
+  eventStore,
+  focusRequest,
+  onCrosshairMove,
+}: {
+  manifest: LocalDatasetManifest;
+  eventStore: LocalAnalysisEventStore;
+  focusRequest: LocalAnalysisFocusRequest | null;
+  onCrosshairMove(value: MainSeriesCrosshairValue | null): void;
+}) {
   const runtime = useLocalChartRuntime(manifest);
+  const focusTime = runtime.focusTime;
+  const markerSource = useMemo(() => createLocalAnalysisMarkerSource({
+    eventStore,
+    seriesStore: runtime.seriesStore,
+  }), [eventStore, runtime.seriesStore]);
+  const [navigationTarget, setNavigationTarget] = useState<LocalAnalysisFocusRequest | null>(null);
+
+  useEffect(() => {
+    if (focusRequest === null) return undefined;
+    let active = true;
+    void focusTime(focusRequest.time).then((available) => {
+      if (active && available) setNavigationTarget(focusRequest);
+    });
+    return () => { active = false; };
+  }, [focusRequest, focusTime]);
+
   return (
     <>
       {runtime.error !== null && (
@@ -197,6 +238,8 @@ function LocalChart({ manifest }: { manifest: LocalDatasetManifest }) {
           drawingKeyBase={`local:${manifest.dataset_id}:${manifest.data_epoch}`}
           interval={manifest.interval}
           loading={runtime.loading || runtime.loadingMore}
+          onCrosshairMove={onCrosshairMove}
+          navigationTarget={navigationTarget}
           onNeedMoreLeft={runtime.loadMoreLeft}
           canLoadMoreLeft={runtime.hasMoreLeft}
           canRestoreLatestWindow={false}
@@ -207,6 +250,7 @@ function LocalChart({ manifest }: { manifest: LocalDatasetManifest }) {
           customBg="#0a0e17"
           timezone={manifest.timezone}
           followLatest={false}
+          externalMarkerSource={markerSource}
         />
       </ChartErrorBoundary>
     </>
@@ -217,8 +261,8 @@ function EmptyChart() {
   return (
     <div className="local-chart-empty">
       <div className="local-empty-icon">CSV</div>
-      <h1>导入数据后直接看盘</h1>
-      <p>本地模式没有行情连接、后台补数或网络插件。你提供的数据就是完整边界。</p>
+      <h1>把表格数据变成可分析的 K 线</h1>
+      <p>导入 OHLC CSV 后，可以直接看图、添加事件标记、写备注和保存绘图。</p>
     </div>
   );
 }
@@ -229,6 +273,8 @@ export default function LocalApp() {
   const [loadingLibrary, setLoadingLibrary] = useState(true);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastCrosshair, setLastCrosshair] = useState<MainSeriesCrosshairValue | null>(null);
+  const [focusRequest, setFocusRequest] = useState<LocalAnalysisFocusRequest | null>(null);
 
   const refresh = useCallback(async (preferredId?: string) => {
     const loaded = await listLocalDatasets();
@@ -258,6 +304,33 @@ export default function LocalApp() {
     () => datasets.find((dataset) => dataset.dataset_id === selectedId) ?? null,
     [datasets, selectedId],
   );
+  const analysisStore = useMemo(() => selected === null ? null : new LocalAnalysisEventStore({
+    datasetId: selected.dataset_id,
+    dataEpoch: selected.data_epoch,
+  }), [selected]);
+  const subscribeAnalysis = useCallback((listener: () => void) => (
+    analysisStore?.subscribe(listener) ?? (() => undefined)
+  ), [analysisStore]);
+  const getAnalysisSnapshot = useCallback(() => (
+    analysisStore?.getSnapshot() ?? EMPTY_LOCAL_ANALYSIS_SNAPSHOT
+  ), [analysisStore]);
+  const analysisSnapshot = useSyncExternalStore(
+    subscribeAnalysis,
+    getAnalysisSnapshot,
+    () => EMPTY_LOCAL_ANALYSIS_SNAPSHOT,
+  );
+
+  useEffect(() => {
+    setLastCrosshair(null);
+    setFocusRequest(null);
+  }, [selected?.data_epoch, selected?.dataset_id]);
+
+  const focusAnalysisEvent = useCallback((event: LocalAnalysisEvent) => {
+    setFocusRequest((current) => ({
+      requestId: (current?.requestId ?? 0) + 1,
+      time: event.time,
+    }));
+  }, []);
 
   const handleImport: Parameters<typeof LocalImportForm>[0]["onImport"] = async (input) => {
     setImporting(true);
@@ -279,15 +352,15 @@ export default function LocalApp() {
         <MarketTopBarFrame
           source="local"
           brandIcon="◫"
-          brandText="CandleScope Local"
+          brandText="CandleScope Analyze"
           identity={selected ? (
             <div className="local-top-identity">
               <strong>{selected.symbol}</strong>
               <span>{selected.name}</span>
             </div>
           ) : null}
-          controls={<span className="local-offline-badge">● 本地离线</span>}
-          trailing={<span className="local-network-truth">无 WebSocket · 无轮询 · 无自动补数</span>}
+          controls={<span className="local-offline-badge">● 本地分析</span>}
+          trailing={<span className="local-network-truth">CSV 数据 · 事件标记 · 本地绘图</span>}
         />
       )}
       intervalSelector={(
@@ -300,7 +373,17 @@ export default function LocalApp() {
         <MarketWorkspaceFrame
           toolbar={null}
           exportOverlay={null}
-          chart={selected ? <LocalChart key={selected.data_epoch} manifest={selected} /> : <EmptyChart />}
+          chart={selected && analysisStore ? (
+            <LocalChart
+              key={selected.data_epoch}
+              manifest={selected}
+              eventStore={analysisStore}
+              focusRequest={focusRequest}
+              onCrosshairMove={(value) => {
+                if (value !== null) setLastCrosshair(value);
+              }}
+            />
+          ) : <EmptyChart />}
           rightRail={(
             <LocalDatasetRail
               datasets={datasets}
@@ -308,6 +391,17 @@ export default function LocalApp() {
               importing={importing}
               onSelect={setSelectedId}
               onImport={handleImport}
+              analysis={selected && analysisStore ? (
+                <LocalAnalysisPanel
+                  key={selected.data_epoch}
+                  manifest={selected}
+                  snapshot={analysisSnapshot}
+                  eventStore={analysisStore}
+                  crosshair={lastCrosshair}
+                  onFocus={focusAnalysisEvent}
+                  onError={setError}
+                />
+              ) : null}
             />
           )}
         />
@@ -322,8 +416,8 @@ export default function LocalApp() {
         <MarketStatusBar
           source="local"
           connectionStatus={error === null ? "offline-ready" : "error"}
-          left={<><span className="status-dot connected" />LOCAL_OFFLINE · LOOPBACK ONLY</>}
-          right={selected ? <>{selected.excluded_range_count} 个数据缺口 · 导入于 {formatDate(selected.imported_at)}</> : loadingLibrary ? "正在读取本地资料库…" : "未选择数据集"}
+          left={<><span className="status-dot connected" />LOCAL DATASET · ANALYSIS READY</>}
+          right={selected ? <>{analysisSnapshot.events.length} 个标记 · {selected.excluded_range_count} 个数据缺口 · 导入于 {formatDate(selected.imported_at)}</> : loadingLibrary ? "正在读取本地资料库…" : "未选择数据集"}
         />
       )}
     />
