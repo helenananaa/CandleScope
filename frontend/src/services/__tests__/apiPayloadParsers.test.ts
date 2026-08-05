@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ApiPayloadError, parseKlineBar } from "../apiPayloadParsers.js";
+import {
+  ApiPayloadError,
+  parseKlineBar,
+  parseKlineResponse,
+} from "../apiPayloadParsers.js";
 
 const BASE_BAR = Object.freeze({
   time: 1_700_000_000,
@@ -56,4 +60,22 @@ test("parseKlineBar rejects malformed order-flow enhancements", () => {
     },
   }), ApiPayloadError);
   assert.throws(() => parseKlineBar({ ...BASE_BAR, trades: 1.5 }), ApiPayloadError);
+});
+
+test("missing volume is accepted only when the response marks it unavailable", () => {
+  const withoutVolume = {
+    time: BASE_BAR.time,
+    open: BASE_BAR.open,
+    high: BASE_BAR.high,
+    low: BASE_BAR.low,
+    close: BASE_BAR.close,
+    volume: null,
+  };
+
+  assert.throws(() => parseKlineBar(withoutVolume), ApiPayloadError);
+  const parsed = parseKlineResponse({
+    data: [withoutVolume],
+    volume_available: false,
+  });
+  assert.equal(Object.hasOwn(parsed.data[0] ?? {}, "volume"), false);
 });

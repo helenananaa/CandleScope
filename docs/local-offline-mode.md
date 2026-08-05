@@ -40,7 +40,7 @@ cd backend
 
 ## CSV 合同
 
-第一阶段支持一份 CSV 对应一个商品和一个周期。默认列名：
+第一阶段支持一份 CSV 对应一个商品和一个周期。必需 OHLC 列和可选成交量列的默认名称：
 
 ```csv
 time,open,high,low,close,volume
@@ -48,7 +48,7 @@ time,open,high,low,close,volume
 1704067260000,42080,42210,42020,42190,98.2
 ```
 
-标准列名按大小写不敏感匹配，因此 TradingView 导出的 `Volume` 会自动映射为成交量；若忽略大小写后存在多个同名列，导入器会拒绝含糊映射。
+标准列名按大小写不敏感匹配，因此 TradingView 导出的 `Volume` 会自动映射为成交量；若忽略大小写后存在多个同名列，导入器会拒绝含糊映射。`volume` 缺失时，数据集会明确写入 `volume_available=false`，SQLite 和 K 线 API 使用 `null`，前端不绘制或显示成交量；任何一层都不会把缺失值改写成 `0`。导入页也可以选择“成交量必须存在”，此时缺列会拒绝发布。
 
 导入页需要用户确认：
 
@@ -56,10 +56,11 @@ time,open,high,low,close,volume
 - 周期，例如 `1m`、`5m`、`1h`、`1d`、`1w` 或 `1M`；
 - 时间格式：Unix 秒、Unix 毫秒或 ISO 时间；
 - 无时区 ISO 时间使用的 IANA 时区，例如 `UTC`、`Asia/Shanghai`。
+- 成交量是可选还是必须存在；默认允许可审计的 OHLC-only 数据集。
 
 导入器会拒绝重复或乱序时间、非有限数值、负成交量、同一文件内周期相位变化的时间戳，以及不满足 OHLC 关系的行。固定周期以第一根 K 线确定稳定相位，从而兼容 TradingView 中按交易时段对齐的 2 小时等 K 线；周线和月线仍按各自的日历边界严格校验。源数据中的缺口会写入 `excluded_ranges`，视为数据集的终止事实；本地模式不会尝试联网修复或静默填充。
 
-后端也支持可选字段映射：`quote_volume`、`trades`、`taker_buy_base`、`taker_buy_quote`。当前页面只暴露标准 OHLCV 列；自定义列映射可直接使用 `/api/v1/local/imports/csv` API。
+后端也支持可选字段映射：`quote_volume`、`trades`、`taker_buy_base`、`taker_buy_quote`。当前页面只暴露标准 OHLC/OHLCV 列；自定义列映射可直接使用 `/api/v1/local/imports/csv` API。
 
 ## 存储与可复现性
 
@@ -87,4 +88,4 @@ local-data/
 
 ## 第一阶段范围
 
-已支持 CSV 导入、严格校验、不可变版本、数据集列表、静态 K 线、左侧历史分页、缺口披露和本地绘图存储基础。当前暂不支持 Excel/Parquet、一个数据集内多商品或多周期、重采样、直播功能、本地指标管理 UI、插件和回放。后续功能必须继续走本地 profile 的显式能力白名单，不能复用直播 fallback。
+已支持 OHLC/OHLCV CSV 导入、严格校验、不可变版本、数据集列表、静态 K 线、左侧历史分页、缺口披露和本地绘图存储基础。当前暂不支持 Excel/Parquet、一个数据集内多商品或多周期、重采样、直播功能、本地指标管理 UI、插件和回放。后续功能必须继续走本地 profile 的显式能力白名单，不能复用直播 fallback。

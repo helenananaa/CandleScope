@@ -613,3 +613,12 @@ test("derived chart crosshair does not present one source bar as synthetic volum
     volume: null,
   });
 });
+
+test("crosshair keeps unavailable volume null and preserves real zero", () => {
+  const price = { time: 10, open: 100, high: 102, low: 99, close: 101 };
+  assert.equal(buildMainSeriesCrosshairValue(10, price)?.volume, null);
+  assert.equal(buildMainSeriesCrosshairValue(
+    10,
+    { ...price, volume: 0 },
+  )?.volume, 0);
+});

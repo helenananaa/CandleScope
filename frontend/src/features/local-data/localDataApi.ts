@@ -91,10 +91,16 @@ function expectManifest(value: unknown): LocalDatasetManifest {
   if (typeof value.all_rows_final !== "boolean") {
     throw new TypeError("Local dataset manifest field all_rows_final is invalid");
   }
+  if (value.volume_available !== undefined && typeof value.volume_available !== "boolean") {
+    throw new TypeError("Local dataset manifest field volume_available is invalid");
+  }
   if (value.source !== "local_dataset" || value.timestamp_semantics !== "bar_open") {
     throw new TypeError("Local dataset manifest has unsupported source semantics");
   }
-  return value as unknown as LocalDatasetManifest;
+  return {
+    ...value,
+    volume_available: value.volume_available ?? true,
+  } as unknown as LocalDatasetManifest;
 }
 
 export async function listLocalDatasets(signal?: AbortSignal): Promise<LocalDatasetManifest[]> {
@@ -119,6 +125,7 @@ export async function importLocalCsv(input: LocalImportInput): Promise<LocalData
     interval: input.interval,
     timezone: input.timezone,
     timestamp_unit: input.timestampUnit,
+    volume_required: input.volumeRequired,
   });
   const payload = await responseJson(await fetch(url, {
     method: "POST",

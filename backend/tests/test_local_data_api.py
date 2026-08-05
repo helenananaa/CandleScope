@@ -75,3 +75,50 @@ def test_import_accepts_default_volume_mapping_for_tradingview(
 
     assert response.status_code == 201, response.text
     assert response.json()["rows"] == 2
+
+
+def test_import_exposes_ohlc_only_without_fabricating_volume(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = _client(tmp_path, monkeypatch)
+    csv_body = (
+        "time,open,high,low,close\n"
+        "1739577600,97500,98000,97000,97750\n"
+        "1739664000,97750,99000,97500,98500\n"
+    )
+    imported = client.post(
+        "/api/v1/local/imports/csv",
+        params={
+            "name": "TradingView OHLC only",
+            "symbol": "BINANCE:BTCUSDT",
+            "interval": "1d",
+            "timestamp_unit": "s",
+        },
+        content=csv_body,
+        headers={"content-type": "text/csv"},
+    )
+
+    assert imported.status_code == 201, imported.text
+    assert imported.json()["volume_available"] is False
+    dataset_id = imported.json()["dataset_id"]
+    latest = client.get(
+        f"/api/v1/local/datasets/{dataset_id}/klines/latest",
+        params={"interval": "1d", "limit": 10},
+    )
+    assert latest.status_code == 200
+    assert latest.json()["volume_available"] is False
+    assert [row["volume"] for row in latest.json()["data"]] == [None, None]
+
+    required = client.post(
+        "/api/v1/local/imports/csv",
+        params={
+            "name": "Volume required",
+            "symbol": "BINANCE:BTCUSDT",
+            "interval": "1d",
+            "timestamp_unit": "s",
+            "volume_required": True,
+        },
+        content=csv_body,
+        headers={"content-type": "text/csv"},
+    )
+    assert required.status_code == 422

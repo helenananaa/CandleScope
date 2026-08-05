@@ -172,3 +172,56 @@ def test_import_rejects_timestamp_phase_change(tmp_path: Path) -> None:
                 timestamp_unit="s",
             ),
         )
+
+
+def test_import_preserves_missing_volume_as_unavailable(tmp_path: Path) -> None:
+    service = LocalDatasetService(tmp_path / "local-data")
+    manifest = service.import_csv(
+        _write_csv(
+            tmp_path / "ohlc-only.csv",
+            "time,open,high,low,close\n"
+            "1739577600,97500,98000,97000,97750\n"
+            "1739664000,97750,99000,97500,98500\n",
+        ),
+        LocalImportOptions(
+            name="TradingView OHLC only",
+            symbol="BINANCE:BTCUSDT",
+            interval="1d",
+            timestamp_unit="s",
+        ),
+    )
+
+    assert manifest["schema_version"] == 2
+    assert manifest["volume_available"] is False
+    page = service.query(manifest["dataset_id"], interval="1d", limit=10)
+    assert page["volume_available"] is False
+    assert [row["volume"] for row in page["data"]] == [None, None]
+    revision = manifest["data_epoch"].removeprefix("sha256:")
+    quality = json.loads(
+        (
+            service.root
+            / manifest["dataset_id"]
+            / revision
+            / "quality-report.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert quality["missing_volume_rows"] == 2
+
+
+def test_import_can_require_volume(tmp_path: Path) -> None:
+    service = LocalDatasetService(tmp_path / "local-data")
+    with pytest.raises(LocalDatasetError, match="columns not found: volume"):
+        service.import_csv(
+            _write_csv(
+                tmp_path / "ohlc-only.csv",
+                "time,open,high,low,close\n"
+                "1739577600,97500,98000,97000,97750\n",
+            ),
+            LocalImportOptions(
+                name="Volume required",
+                symbol="BINANCE:BTCUSDT",
+                interval="1d",
+                timestamp_unit="s",
+                volume_required=True,
+            ),
+        )

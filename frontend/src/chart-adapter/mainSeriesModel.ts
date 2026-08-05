@@ -584,6 +584,7 @@ export function buildMainSeriesCrosshairValue(
   const high = finiteNumber(displayRow?.high);
   const low = finiteNumber(displayRow?.low);
   const close = finiteNumber(displayRow?.close);
+  const volume = finiteNumber(volumeRow?.volume);
   if (time == null || open == null || high == null || low == null || close == null) return null;
   return {
     time,
@@ -591,6 +592,6 @@ export function buildMainSeriesCrosshairValue(
     high,
     low,
     close,
-    volume: includeVolume ? (finiteNumber(volumeRow?.volume) || 0) : null,
+    volume: includeVolume ? volume : null,
   };
 }

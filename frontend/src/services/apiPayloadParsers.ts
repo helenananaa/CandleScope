@@ -18,7 +18,7 @@ export interface TransportKlineBar extends JsonRecord {
   high: number;
   low: number;
   close: number;
-  volume: number;
+  volume?: number;
   is_closed?: boolean;
   quote_volume?: number | null;
   trades?: number | null;
@@ -37,6 +37,7 @@ export interface TransportKlineOrderFlow extends JsonRecord {
 export interface TransportKlineResponse extends JsonRecord {
   data: TransportKlineBar[];
   all_rows_final?: boolean;
+  volume_available?: boolean;
   has_more?: boolean;
   truncated?: boolean;
   next_end_ms?: number | null;
@@ -200,7 +201,11 @@ function parseKlineOrderFlow(value: unknown, path: string): TransportKlineOrderF
   };
 }
 
-export function parseKlineBar(value: unknown, path = "kline"): TransportKlineBar {
+export function parseKlineBar(
+  value: unknown,
+  path = "kline",
+  { allowMissingVolume = false }: { allowMissingVolume?: boolean } = {},
+): TransportKlineBar {
   const record = expectRecord(value, path);
   const time = expectNonNegativeInteger(record.time, `${path}.time`);
   if (time > MAX_EPOCH_SECONDS) {
@@ -214,8 +219,16 @@ export function parseKlineBar(value: unknown, path = "kline"): TransportKlineBar
     high: expectFiniteNumber(record.high, `${path}.high`),
     low: expectFiniteNumber(record.low, `${path}.low`),
     close: expectFiniteNumber(record.close, `${path}.close`),
-    volume: expectFiniteNumber(record.volume, `${path}.volume`),
   };
+  if (record.volume == null) {
+    if (!allowMissingVolume) {
+      bar.volume = expectFiniteNumber(record.volume, `${path}.volume`);
+    } else {
+      delete bar.volume;
+    }
+  } else {
+    bar.volume = expectFiniteNumber(record.volume, `${path}.volume`);
+  }
   if ("is_closed" in record) {
     bar.is_closed = expectBoolean(record.is_closed, `${path}.is_closed`);
   }
@@ -247,7 +260,11 @@ export function parseKlineResponse(
 
   const result: TransportKlineResponse = {
     ...record,
-    data: record.data.map((item, index) => parseKlineBar(item, `${path}.data[${index}]`)),
+    data: record.data.map((item, index) => parseKlineBar(
+      item,
+      `${path}.data[${index}]`,
+      { allowMissingVolume: record.volume_available === false },
+    )),
   };
 
   for (const key of [
@@ -257,6 +274,7 @@ export function parseKlineResponse(
     "backfill_triggered",
     "verified_contiguous",
     "all_rows_final",
+    "volume_available",
     "renderable",
   ]) {
     optionalBoolean(record, key, path);

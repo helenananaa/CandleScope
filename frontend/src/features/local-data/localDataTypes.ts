@@ -6,6 +6,7 @@ export interface LocalDatasetManifest {
   source: "local_dataset";
   symbol: string;
   interval: string;
+  volume_available: boolean;
   timezone: string;
   timestamp_semantics: "bar_open";
   rows: number;
@@ -24,6 +25,7 @@ export interface LocalImportInput {
   interval: string;
   timezone: string;
   timestampUnit: "auto" | "s" | "ms" | "iso";
+  volumeRequired: boolean;
 }
 
 export interface LocalDatasetListResponse {

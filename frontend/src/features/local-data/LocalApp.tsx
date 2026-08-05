@@ -42,6 +42,7 @@ function LocalImportForm({
     interval: string;
     timezone: string;
     timestampUnit: "auto" | "s" | "ms" | "iso";
+    volumeRequired: boolean;
   }): Promise<void>;
 }) {
   const [file, setFile] = useState<File | null>(null);
@@ -50,6 +51,7 @@ function LocalImportForm({
   const [interval, setInterval] = useState("1m");
   const [timezone, setTimezone] = useState("UTC");
   const [timestampUnit, setTimestampUnit] = useState<"auto" | "s" | "ms" | "iso">("auto");
+  const [volumeRequired, setVolumeRequired] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   return (
@@ -65,6 +67,7 @@ function LocalImportForm({
           interval,
           timezone,
           timestampUnit,
+          volumeRequired,
         }).then(() => {
           setFile(null);
           setName("");
@@ -114,8 +117,18 @@ function LocalImportForm({
             <option value="iso">ISO 时间</option>
           </select>
         </label>
+        <label>
+          成交量
+          <select
+            value={volumeRequired ? "required" : "optional"}
+            onChange={(event) => setVolumeRequired(event.target.value === "required")}
+          >
+            <option value="optional">可选，缺失时标记不可用</option>
+            <option value="required">必须存在</option>
+          </select>
+        </label>
       </div>
-      <p>标准列名：time, open, high, low, close, volume。缺口会保留并标记，不会联网补齐。</p>
+      <p>必需列：time, open, high, low, close。volume/Volume 可选；缺失时明确标记为不可用，不会填 0。</p>
       <button type="submit" disabled={file === null || importing}>
         {importing ? "正在校验并导入…" : "导入到本地资料库"}
       </button>
@@ -149,7 +162,7 @@ function LocalDatasetRail({
         </header>
         <div className="local-dataset-list">
           {datasets.length === 0 ? (
-            <div className="local-dataset-empty">还没有数据集。先导入一份标准 OHLCV CSV。</div>
+            <div className="local-dataset-empty">还没有数据集。先导入一份标准 OHLC 或 OHLCV CSV。</div>
           ) : datasets.map((dataset) => (
             <button
               type="button"
@@ -157,7 +170,7 @@ function LocalDatasetRail({
               className={dataset.dataset_id === selectedId ? "active" : ""}
               onClick={() => onSelect(dataset.dataset_id)}
             >
-              <span><strong>{dataset.name}</strong><em>{dataset.symbol} · {dataset.interval}</em></span>
+              <span><strong>{dataset.name}</strong><em>{dataset.symbol} · {dataset.interval} · {dataset.volume_available ? "OHLCV" : "OHLC-only"}</em></span>
               <span><b>{formatRows(dataset.rows)}</b><small>{dataset.excluded_range_count} 缺口</small></span>
             </button>
           ))}
@@ -279,7 +292,7 @@ export default function LocalApp() {
       )}
       intervalSelector={(
         <div className="local-dataset-truthbar">
-          <span>{selected ? `${selected.interval} · ${selected.timezone} · ${formatRows(selected.rows)} bars` : "等待本地数据"}</span>
+          <span>{selected ? `${selected.interval} · ${selected.timezone} · ${formatRows(selected.rows)} bars · ${selected.volume_available ? "OHLCV" : "OHLC-only / 成交量不可用"}` : "等待本地数据"}</span>
           <span>{selected ? `dataEpoch ${selected.data_epoch.slice(7, 19)}` : "source: local_dataset"}</span>
         </div>
       )}

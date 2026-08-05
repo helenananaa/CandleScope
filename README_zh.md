@@ -93,7 +93,7 @@ python -m pip install -r requirements.txt
 .\start-local-offline.ps1
 ```
 
-页面入口为 `http://127.0.0.1:15173/local.html`。该 profile 不加载交易所、直播 WebSocket、轮询、Backfill、Replay 或插件 host；CSV 合同、不可变存储和离线边界见 [本地离线模式文档](docs/local-offline-mode.md)。
+页面入口为 `http://127.0.0.1:15173/local.html`。该 profile 不加载交易所、直播 WebSocket、轮询、Backfill、Replay 或插件 host；支持 TradingView OHLC/OHLCV CSV，缺失成交量会明确标记为不可用而不会填零。CSV 合同、不可变存储和离线边界见 [本地离线模式文档](docs/local-offline-mode.md)。
 
 ## 项目能力
 

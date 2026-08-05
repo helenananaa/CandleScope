@@ -26,7 +26,7 @@ from app.data_engine.interval_policy import (
 
 DATASET_ID_RE = re.compile(r"^local-[0-9a-f]{32}$")
 EPOCH_RE = re.compile(r"^[0-9a-f]{64}$")
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class LocalDatasetError(ValueError):
@@ -48,6 +48,7 @@ class LocalImportOptions:
     low_column: str = "low"
     close_column: str = "close"
     volume_column: str = "volume"
+    volume_required: bool = False
     quote_volume_column: str | None = None
     trades_column: str | None = None
     taker_buy_base_column: str | None = None
@@ -64,7 +65,7 @@ class _NormalizedBar:
     high: str
     low: str
     close: str
-    volume: str
+    volume: str | None
     quote_volume: str | None
     trades: int | None
     taker_buy_base: str | None
@@ -135,7 +136,7 @@ class LocalDatasetService:
     ) -> tuple[
         list[_NormalizedBar],
         list[dict[str, Any]],
-        dict[str, str],
+        dict[str, str | None],
     ]:
         required = {
             "time": options.time_column,
@@ -143,7 +144,6 @@ class LocalDatasetService:
             "high": options.high_column,
             "low": options.low_column,
             "close": options.close_column,
-            "volume": options.volume_column,
         }
         optional = {
             "quote_volume": options.quote_volume_column,
@@ -168,8 +168,10 @@ class LocalDatasetService:
                 reader.fieldnames,
                 {
                     **required,
+                    "volume": options.volume_column,
                     **{key: column for key, column in optional.items() if column},
                 },
+                optional_missing=set() if options.volume_required else {"volume"},
             )
             required = {key: resolved_columns[key] for key in required}
             optional = {
@@ -212,6 +214,14 @@ class LocalDatasetService:
                     for key, column in required.items()
                     if key != "time"
                 }
+                volume_column = resolved_columns["volume"]
+                volume = (
+                    self._parse_decimal(
+                        row.get(volume_column, ""), "volume", source_row
+                    )
+                    if volume_column is not None
+                    else None
+                )
                 if values["high"] < max(values["open"], values["close"]):
                     raise LocalDatasetError(
                         f"Row {source_row}: high is below open or close"
@@ -222,7 +232,7 @@ class LocalDatasetService:
                     )
                 if values["low"] > values["high"]:
                     raise LocalDatasetError(f"Row {source_row}: low exceeds high")
-                if values["volume"] < 0:
+                if volume is not None and volume < 0:
                     raise LocalDatasetError(
                         f"Row {source_row}: volume must be non-negative"
                     )
@@ -271,7 +281,11 @@ class LocalDatasetService:
                         high=self._decimal_text(values["high"]),
                         low=self._decimal_text(values["low"]),
                         close=self._decimal_text(values["close"]),
-                        volume=self._decimal_text(values["volume"]),
+                        volume=(
+                            self._decimal_text(volume)
+                            if volume is not None
+                            else None
+                        ),
                         quote_volume=self._optional_decimal_text(
                             parsed_optional["quote_volume"]
                         ),
@@ -299,12 +313,15 @@ class LocalDatasetService:
     def _resolve_columns(
         fieldnames: list[str],
         configured: dict[str, str],
-    ) -> dict[str, str]:
+        *,
+        optional_missing: set[str] | None = None,
+    ) -> dict[str, str | None]:
+        optional_missing = optional_missing or set()
         folded: dict[str, list[str]] = {}
         for fieldname in fieldnames:
             folded.setdefault(fieldname.strip().casefold(), []).append(fieldname)
 
-        resolved: dict[str, str] = {}
+        resolved: dict[str, str | None] = {}
         missing: list[str] = []
         for logical_name, requested in configured.items():
             if requested in fieldnames:
@@ -317,6 +334,8 @@ class LocalDatasetService:
                 raise LocalDatasetError(
                     f"CSV column is ambiguous ignoring case: {requested}"
                 )
+            elif logical_name in optional_missing:
+                resolved[logical_name] = None
             else:
                 missing.append(requested)
 
@@ -427,7 +446,7 @@ class LocalDatasetService:
         options: LocalImportOptions,
         bars: list[_NormalizedBar],
         excluded_ranges: list[dict[str, Any]],
-        resolved_columns: dict[str, str],
+        resolved_columns: dict[str, str | None],
     ) -> dict[str, Any]:
         db_path = staging / "bars.sqlite"
         connection = sqlite3.connect(db_path)
@@ -443,7 +462,7 @@ class LocalDatasetService:
                     high TEXT NOT NULL,
                     low TEXT NOT NULL,
                     close TEXT NOT NULL,
-                    volume TEXT NOT NULL,
+                    volume TEXT,
                     quote_volume TEXT,
                     trades INTEGER,
                     taker_buy_base TEXT,
@@ -506,6 +525,7 @@ class LocalDatasetService:
             "source": "local_dataset",
             "symbol": symbol,
             "interval": interval.canonical,
+            "volume_available": resolved_columns["volume"] is not None,
             "alignment": interval.alignment.value,
             "alignment_offset_ms": (
                 bars[0].open_time_ms % interval.nominal_ms
@@ -529,6 +549,10 @@ class LocalDatasetService:
             "duplicates": 0,
             "out_of_order": 0,
             "invalid_rows": 0,
+            "volume_available": resolved_columns["volume"] is not None,
+            "missing_volume_rows": (
+                0 if resolved_columns["volume"] is not None else len(bars)
+            ),
         }
         receipt = {
             "importer": "candlescope.local.csv.v1",
@@ -540,6 +564,7 @@ class LocalDatasetService:
             },
             "timestamp_unit": options.timestamp_unit,
             "timezone": options.timezone_name,
+            "volume_required": options.volume_required,
         }
         self._write_json(staging / "manifest.json", manifest)
         self._write_json(staging / "quality-report.json", quality)
@@ -627,6 +652,7 @@ class LocalDatasetService:
             raise LocalDatasetError(
                 "Dataset manifest is unreadable", code="dataset_corrupt"
             ) from exc
+        manifest.setdefault("volume_available", True)
         return manifest
 
     def query(
@@ -689,6 +715,7 @@ class LocalDatasetService:
             "data_epoch": manifest["data_epoch"],
             "symbol": manifest["symbol"],
             "interval": manifest["interval"],
+            "volume_available": manifest["volume_available"],
             "data": rows,
             "count": len(rows),
             "all_rows_final": all(row["is_closed"] for row in rows),
@@ -718,7 +745,7 @@ class LocalDatasetService:
             "high": float(row["high"]),
             "low": float(row["low"]),
             "close": float(row["close"]),
-            "volume": float(row["volume"]),
+            "volume": None if row["volume"] is None else float(row["volume"]),
             "is_closed": bool(row["is_closed"]),
         }
         for key in ("quote_volume", "taker_buy_base", "taker_buy_quote"):

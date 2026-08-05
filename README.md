@@ -93,7 +93,7 @@ To view only user-supplied data, start the separate `LOCAL_OFFLINE` profile:
 .\start-local-offline.ps1
 ```
 
-Open `http://127.0.0.1:15173/local.html`. This profile does not load exchanges, live WebSockets, polling, backfill, replay, or plugin hosts. See the [local-offline mode contract](docs/local-offline-mode.md) for the CSV format, immutable storage layout, and enforced network boundary.
+Open `http://127.0.0.1:15173/local.html`. This profile does not load exchanges, live WebSockets, polling, backfill, replay, or plugin hosts. TradingView OHLC and OHLCV CSVs are supported; unavailable volume is disclosed and never zero-filled. See the [local-offline mode contract](docs/local-offline-mode.md) for the CSV format, immutable storage layout, and enforced network boundary.
 
 ## What It Does
 

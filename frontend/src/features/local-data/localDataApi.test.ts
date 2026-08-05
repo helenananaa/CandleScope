@@ -48,6 +48,7 @@ test("local dataset library validates manifests", async (context) => {
   assert.equal(capturedUrl, "/api/v1/local/datasets");
   assert.equal(datasets[0]?.source, "local_dataset");
   assert.equal(datasets[0]?.rows, 2);
+  assert.equal(datasets[0]?.volume_available, true);
 });
 
 test("local kline adapter uses dataset-scoped HTTP and exposes no stream URL", async (context) => {
@@ -92,4 +93,36 @@ test("local kline adapter uses dataset-scoped HTTP and exposes no stream URL", a
   assert.equal(result.data?.[0]?.time, toEpochSeconds(1_704_067_200));
   assert.equal(result.retryable, false);
   assert.equal(api.getMultiStreamUrl(), "");
+});
+
+test("local kline adapter omits volume when the dataset marks it unavailable", async (context) => {
+  const originalFetch = globalThis.fetch;
+  context.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async () => jsonResponse({
+    source: "local_dataset",
+    volume_available: false,
+    data: [{
+      time: 1_704_067_200,
+      open: 100,
+      high: 102,
+      low: 99,
+      close: 101,
+      volume: null,
+      is_closed: true,
+    }],
+    has_more: false,
+  });
+  const api = new LocalKlineApi("local-0123456789abcdef0123456789abcdef");
+
+  const result = await api.fetchLatestKlines(
+    "BTC-USDT",
+    "1m",
+    10,
+    "local",
+    "local",
+    "local",
+    {},
+  );
+
+  assert.equal(Object.hasOwn(result.data?.[0] ?? {}, "volume"), false);
 });
