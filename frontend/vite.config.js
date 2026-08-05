@@ -31,6 +31,7 @@ export default defineConfig({
         : {}),
       input: {
         live: resolve(import.meta.dirname, 'index.html'),
+        local: resolve(import.meta.dirname, 'local.html'),
         replay: resolve(import.meta.dirname, 'replay.html'),
         ...(replaySoakProjectionEnabled
           ? {

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 
 export interface MarketTopBarFrameProps {
-  readonly source?: "live" | "replay";
+  readonly source?: "live" | "replay" | "local";
   readonly className?: string;
   readonly brandIcon?: ReactNode;
   readonly brandText?: ReactNode;
@@ -15,7 +15,7 @@ export interface MarketTopBarFrameProps {
   readonly trailing?: ReactNode;
 }
 
-/** Shared top-bar ownership and slot order for live and replay market pages. */
+/** Shared top-bar ownership and slot order for live, replay, and local pages. */
 export default function MarketTopBarFrame({
   source = "live",
   className = "",

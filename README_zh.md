@@ -15,6 +15,7 @@ CandleScope 是基于 FastAPI、React、Vite 和 Lightweight Charts 构建的轻
 ## 目录
 
 - [快速开始](#快速开始)
+- [本地离线模式](#本地离线模式)
 - [项目能力](#项目能力)
 - [架构](#架构)
 - [Backfill 智能调度摘要](#backfill-智能调度摘要)
@@ -83,6 +84,16 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
+
+## 本地离线模式
+
+只查看用户提供的数据时，可以启动独立 `LOCAL_OFFLINE` profile：
+
+```powershell
+.\start-local-offline.ps1
+```
+
+页面入口为 `http://127.0.0.1:15173/local.html`。该 profile 不加载交易所、直播 WebSocket、轮询、Backfill、Replay 或插件 host；CSV 合同、不可变存储和离线边界见 [本地离线模式文档](docs/local-offline-mode.md)。
 
 ## 项目能力
 

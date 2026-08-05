@@ -15,6 +15,7 @@ Lightweight trading chart software built with FastAPI, React, Vite, and Lightwei
 ## Contents
 
 - [Quick Start](#quick-start)
+- [Local Offline Mode](#local-offline-mode)
 - [What It Does](#what-it-does)
 - [Replay Training (Opt-In)](#replay-training-opt-in)
 - [Architecture](#architecture)
@@ -83,6 +84,16 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
+
+## Local Offline Mode
+
+To view only user-supplied data, start the separate `LOCAL_OFFLINE` profile:
+
+```powershell
+.\start-local-offline.ps1
+```
+
+Open `http://127.0.0.1:15173/local.html`. This profile does not load exchanges, live WebSockets, polling, backfill, replay, or plugin hosts. See the [local-offline mode contract](docs/local-offline-mode.md) for the CSV format, immutable storage layout, and enforced network boundary.
 
 ## What It Does
 
