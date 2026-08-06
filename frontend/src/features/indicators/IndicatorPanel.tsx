@@ -134,6 +134,7 @@ export interface IndicatorPanelProps {
   allowedSecurityModes?: readonly string[];
   staticCatalog?: StaticIndicatorCatalog | null;
   allowCustomIndicators?: boolean;
+  customIndicatorsUnavailableReason?: string | null;
   isOpen: boolean;
   onClose(): void;
   activeIndicators: IndicatorDefinition[];
@@ -291,6 +292,7 @@ export default function IndicatorPanel({
   allowedSecurityModes,
   staticCatalog = null,
   allowCustomIndicators = true,
+  customIndicatorsUnavailableReason = null,
   isOpen,
   onClose,
   activeIndicators,
@@ -753,6 +755,15 @@ plot(ma, "MA", color=line_color)
                   + 自定义
                 </button>
               )}
+              {!allowCustomIndicators && customIndicatorsUnavailableReason && (
+                <button
+                  className="indicator-tab indicator-tab-create"
+                  disabled
+                  title={customIndicatorsUnavailableReason}
+                >
+                  + 自定义
+                </button>
+              )}
             </div>
 
             {/* Content */}
@@ -908,7 +919,9 @@ plot(ma, "MA", color=line_color)
                       <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
                       <div>暂未添加指标</div>
                       <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-                        {allowCustomIndicators ? "从指标库选择或创建自定义指标" : "从指标库选择一个内置指标"}
+                        {allowCustomIndicators
+                          ? "从指标库选择或创建自定义指标"
+                          : customIndicatorsUnavailableReason ?? "从指标库选择一个内置指标"}
                       </div>
                     </div>
                   ) : (

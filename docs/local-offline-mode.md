@@ -95,11 +95,13 @@ local-data/
 
 事件保存在浏览器本地存储中，键包含 `dataset_id + data_epoch`；因此同一数据集的新修订不会继承旧修订的标记。绘图继续使用同一数据身份下的绘图存储。写入失败时事件不会只停留在内存里伪装成已保存；损坏的事件文档会 fail closed，并由用户显式重置。
 
-## 静态本地指标
+## 共享指标体验
 
-本地分析页复用正式行情页的指标面板，可以添加多个 MA、EMA、RSI、MACD 和 BOLL 实例，修改周期、价格源和颜色，隐藏、删除或手动重新计算。MA、EMA 和 BOLL 叠加在主图，RSI 和 MACD 使用独立窗格；选择与参数按 `dataset_id + data_epoch` 保存在浏览器中，刷新页面后会恢复。同类指标可以同时存在，例如 MA(20) 与 MA(60)。面板在本地 profile 下使用静态目录，不请求线上预设或自定义脚本接口。
+本地分析页复用正式行情页的 `IndicatorPanel`、显式-bars 指标 Runtime、计算调度、输出归一化和窗格投影。指标目录不再在前端维护第二份清单，而是由 `/api/v1/local/indicators/presets` 从正式内置注册表投影；因此名称、默认参数、参数 schema、窗格目标和新增内置指标都使用同一来源。当前注册表包含 MA、EMA、RSI、MACD、BOLL、ATR 和 VOL；VOL 只有在数据集确实包含 volume 列时才能添加，OHLC-only 数据集仍会显示该项目及不可用原因。
 
-计算请求只提交指标身份与参数。后端根据请求中的 `dataset_id + data_epoch` 打开对应不可变 SQLite 修订，读取全部已导入行并执行一次性内置计算，不接收浏览器提供的 OHLCV，不创建 DataManager、交易所连接、回填、指标 WebSocket 或插件 host。源数据缺口不会修复或插值，指标把现有导入行按时间顺序计算。OHLC-only 数据集仍可使用这五种价格指标；成交量类指标不在本地目录中，缺失成交量不会被当成真实的零成交量。
+选择与参数按 `dataset_id + data_epoch` 保存在浏览器中，刷新页面后会恢复；同类指标仍可同时存在，例如 MA(20) 与 MA(60)。Pine/Pyne 自定义脚本 Runtime 没有在离线 profile 中启动，面板保留禁用的“自定义”入口并说明原因，不会静默请求普通在线指标 API。
+
+共享 Runtime 注入的是数据集绑定的本地计算 transport。计算请求只提交指标身份与参数；后端根据 `dataset_id + data_epoch` 打开对应不可变 SQLite 修订，读取全部已导入行并执行一次性内置计算，不接收浏览器提供的 OHLCV，不创建 DataManager、交易所连接、回填、指标 WebSocket 或插件 host。源数据缺口不会修复或插值，缺失成交量也不会被当成真实的零成交量。
 
 当前一次静态计算最多支持 50,000 根 K 线，超过时明确拒绝，不会截断后冒充完整结果。Pine/Pyne 和自定义脚本尚未进入本地 profile；后续接入时必须继续使用显式的本地执行合同，不能回退到在线指标、插件或行情链路。
 
@@ -109,9 +111,10 @@ local-data/
 - Python 进程安装 loopback-only 网络 guard，在 DNS、TCP connect 和 UDP send 边界阻断非 loopback 目标。
 - `local.html` 使用 `LocalKlineApi` 和静态 `SeriesWindowStore`，没有 WebSocket URL，也没有定时轮询。
 - 本地工作区复用正式 `DrawingToolbar` 与 Drawing Engine；绘图仍按 `dataset_id + data_epoch` 隔离保存。
-- 静态指标只调用数据集绑定的 `/api/v1/local/datasets/{dataset_id}/indicators/compute/batch`，结果带回同一 `data_epoch`；普通 `/api/v1/indicators/*` 路由仍不加载。
+- 图表外观设置、图表类型及其高级参数、价格轴偏好、视口保存和截图导出复用正式图表 Runtime；数据集身份仍独立保存视口。
+- 指标只调用数据集绑定的 `/api/v1/local/datasets/{dataset_id}/indicators/compute/batch`，结果带回同一 `data_epoch`；普通 `/api/v1/indicators/*` 路由仍不加载。
 - 当前 profile 的网络 guard 是防止本地数据链路误入线上 fallback 的应用内防线，并不表示使用本地分析功能时要求电脑处于断网状态。
 
 ## 第一阶段范围
 
-已支持 OHLC/OHLCV CSV 导入、严格校验、不可变版本、数据集列表、静态 K 线、左侧历史分页、缺口披露、MA/EMA/RSI/MACD/BOLL 静态指标、通用手工事件、任意事件 CSV 列映射、逐行拒绝报告、事件筛选与定位，以及本地绘图存储基础。当前暂不支持 Excel/Parquet、一个数据集内多商品或多周期、重采样、成交量指标、Pine/Pyne、自定义脚本、插件和回放。后续功能可以扩展为统一应用里的“本地数据源”，但必须继续保持数据身份和 fallback 隔离。
+已支持 OHLC/OHLCV CSV 导入、严格校验、不可变版本、数据集列表、静态 K 线、左侧历史分页、缺口披露、共享内置指标目录、ATR、按数据能力开放的 VOL、正式图表设置/价格轴/视口/导出、通用手工事件、任意事件 CSV 列映射、逐行拒绝报告、事件筛选与定位，以及本地绘图存储。当前暂不支持 Excel/Parquet、一个数据集内多商品或多周期、重采样、Pine/Pyne 自定义脚本、插件和回放；这些能力不能以在线 fallback 方式进入本地 profile。

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import SingleChartPanes from "../../components/SingleChartPanes.js";
 import type { MainSeriesCrosshairValue } from "../../chart-adapter/chartAdapterTypes.js";
 import { useChartSurfaceRuntime } from "../../chart-adapter/useChartSurfaceRuntime.js";
@@ -10,7 +10,18 @@ import MarketStatusBar from "../../app/MarketStatusBar.js";
 import MarketTopBarFrame from "../../app/MarketTopBarFrame.js";
 import MarketWorkspaceFrame from "../../app/MarketWorkspaceFrame.js";
 import DrawingToolbar from "../../components/DrawingToolbar.js";
+import ExportPanel from "../export/ExportPanel.js";
+import { useExportRuntime } from "../export/useExportRuntime.js";
 import {
+  loadUserPrefs,
+  updateUserPref,
+} from "../chart-session/chartSessionModel.js";
+import {
+  getVisibleRangeForInterval,
+  saveVisibleRangeForInterval,
+} from "../chart-session/visibleRangeStorage.js";
+import {
+  fetchLocalIndicatorPresets,
   importLocalCsv,
   listLocalDatasets,
   LocalDataApiError,
@@ -32,27 +43,21 @@ import {
 } from "./useLocalChartRuntime.js";
 import { useLocalIndicatorRuntime } from "./useLocalIndicatorRuntime.js";
 import type { IndicatorRuntime } from "../indicators/indicatorRuntimeContract.js";
+import type { IndicatorPreset } from "../indicators/indicatorTypes.js";
 import IndicatorPanel from "../indicators/IndicatorPanel.js";
-import type { StaticIndicatorCatalog } from "../indicators/useIndicatorCatalogRuntime.js";
 import { useDrawingRuntime } from "../drawings/useDrawingRuntime.js";
 import type { DrawingRuntime } from "../drawings/useDrawingRuntime.js";
 import type { DrawingToolId } from "../drawings/drawingTypes.js";
-import type { MainChartType } from "../../shared/mainChartTypes.js";
+import SettingsModal from "../settings/SettingsModal.js";
 import {
-  createLocalIndicatorDefinition,
-  LOCAL_INDICATOR_PRESETS,
-  localIndicatorCatalogEntry,
+  useChartSettingsRuntime,
+} from "../settings/chartAppearanceSettings.js";
+import type { ChartSettings } from "../settings/chartAppearanceSettings.js";
+import { usePriceScalePrefs } from "../settings/priceScalePrefsRuntime.js";
+import {
+  createLocalIndicatorCatalog,
+  resolveLocalIndicatorSupport,
 } from "./localIndicatorCatalog.js";
-
-
-const LOCAL_STATIC_INDICATOR_CATALOG: StaticIndicatorCatalog = {
-  presets: LOCAL_INDICATOR_PRESETS,
-  resolvePresetForChart(preset) {
-    const entry = localIndicatorCatalogEntry(preset.engineName);
-    if (entry === null) throw new Error("该指标不属于本地静态目录");
-    return createLocalIndicatorDefinition(entry.engineName);
-  },
-};
 
 
 function formatRows(rows: number): string {
@@ -226,48 +231,47 @@ function LocalDatasetRail({
 
 function LocalChart({
   manifest,
+  runtime,
+  dataMeta,
   eventStore,
   focusRequest,
   indicators,
   chartSurfaceRef,
   drawings,
   drawingTool,
-  chartType,
+  settings,
+  resolvedTheme,
+  invertScale,
+  priceScaleMode,
+  savedVisibleRange,
+  onVisibleRangeChange,
+  onInvertScaleChange,
+  onPriceScaleModeChange,
   onDrawingInteractionReadyChange,
   onRemoveIndicator,
   onCrosshairMove,
 }: {
   manifest: LocalDatasetManifest;
+  runtime: ReturnType<typeof useLocalChartRuntime>;
+  dataMeta: ReturnType<typeof buildLocalChartDataMeta>;
   eventStore: LocalAnalysisEventStore;
   focusRequest: LocalAnalysisFocusRequest | null;
   indicators: IndicatorRuntime;
   chartSurfaceRef: ReturnType<typeof useChartSurfaceRuntime>["ref"];
   drawings: DrawingRuntime;
   drawingTool: DrawingToolId | null;
-  chartType: MainChartType;
+  settings: ChartSettings;
+  resolvedTheme: string;
+  invertScale: boolean;
+  priceScaleMode: number;
+  savedVisibleRange: ReturnType<typeof getVisibleRangeForInterval>;
+  onVisibleRangeChange(range: unknown): void;
+  onInvertScaleChange(value: boolean): void;
+  onPriceScaleModeChange(mode: number): void;
   onDrawingInteractionReadyChange(ready: boolean): void;
   onRemoveIndicator(indicatorId: string): void;
   onCrosshairMove(value: MainSeriesCrosshairValue | null): void;
 }) {
-  const runtime = useLocalChartRuntime(manifest);
-  const subscribeSeries = useCallback(
-    (listener: () => void) => runtime.seriesStore.subscribe(listener),
-    [runtime.seriesStore],
-  );
-  const getSeriesVersion = useCallback(
-    () => Number(runtime.seriesStore.version),
-    [runtime.seriesStore],
-  );
-  const seriesVersion = useSyncExternalStore(
-    subscribeSeries,
-    getSeriesVersion,
-    getSeriesVersion,
-  );
-  const dataMeta = useMemo(() => buildLocalChartDataMeta(
-    runtime.seriesStore,
-    runtime.loading || runtime.loadingMore ? "loading" : "ready",
-    seriesVersion,
-  ), [runtime.loading, runtime.loadingMore, runtime.seriesStore, seriesVersion]);
   const focusTime = runtime.focusTime;
   const markerSource = useMemo(() => createLocalAnalysisMarkerSource({
     eventStore,
@@ -307,12 +311,26 @@ function LocalChart({
           canLoadMoreLeft={runtime.hasMoreLeft}
           canRestoreLatestWindow={false}
           datasetKey={`local:${manifest.dataset_id}:${manifest.data_epoch}`}
-          upColor="#22c55e"
-          downColor="#ef4444"
-          chartType={chartType}
-          theme="dark"
-          customBg="#0a0e17"
-          timezone={manifest.timezone}
+          upColor={settings.upColor}
+          downColor={settings.downColor}
+          chartType={settings.chartType}
+          renkoBoxSizeMode={settings.renkoBoxSizeMode}
+          renkoAtrLength={settings.renkoAtrLength}
+          renkoBoxSize={settings.renkoBoxSize}
+          pointFigureBoxSizeMode={settings.pointFigureBoxSizeMode}
+          pointFigureAtrLength={settings.pointFigureAtrLength}
+          pointFigureBoxSize={settings.pointFigureBoxSize}
+          pointFigureReversalAmount={settings.pointFigureReversalAmount}
+          kagiReversalMode={settings.kagiReversalMode}
+          kagiAtrLength={settings.kagiAtrLength}
+          kagiReversalAmount={settings.kagiReversalAmount}
+          lineBreakNumberOfLines={settings.lineBreakNumberOfLines}
+          theme={resolvedTheme}
+          customBg={settings.customBg}
+          timezone={settings.timezone ?? manifest.timezone}
+          savedVisibleRange={savedVisibleRange}
+          onViewportRangeChange={indicators.actions.ensureVisibleIndicatorRange}
+          onVisibleRangeChange={onVisibleRangeChange}
           followLatest={false}
           externalMarkerSource={markerSource}
           drawingTool={drawingTool}
@@ -336,6 +354,10 @@ function LocalChart({
           indicatorHlines={indicators.view.hlines}
           indicatorBgcolors={indicators.view.bgcolors}
           indicatorBarcolors={indicators.view.barcolors}
+          invertScale={invertScale}
+          onInvertScaleChange={onInvertScaleChange}
+          priceScaleMode={priceScaleMode}
+          onPriceScaleModeChange={onPriceScaleModeChange}
           onRemoveSubPane={(pane) => {
             if (pane.owner?.kind === "indicator") {
               onRemoveIndicator(pane.owner.id);
@@ -349,6 +371,7 @@ function LocalChart({
 
 function LocalDatasetWorkspace({
   manifest,
+  indicatorPresets,
   eventStore,
   focusRequest,
   datasets,
@@ -359,8 +382,14 @@ function LocalDatasetWorkspace({
   indicatorPanelOpen,
   onCloseIndicatorPanel,
   onCrosshairMove,
+  onActiveIndicatorCountChange,
+  pageExportRef,
+  settings,
+  onSettingsChange,
+  resolvedTheme,
 }: {
   manifest: LocalDatasetManifest;
+  indicatorPresets: readonly IndicatorPreset[];
   eventStore: LocalAnalysisEventStore;
   focusRequest: LocalAnalysisFocusRequest | null;
   datasets: LocalDatasetManifest[];
@@ -371,15 +400,90 @@ function LocalDatasetWorkspace({
   indicatorPanelOpen: boolean;
   onCloseIndicatorPanel(): void;
   onCrosshairMove(value: MainSeriesCrosshairValue | null): void;
+  onActiveIndicatorCountChange(count: number): void;
+  pageExportRef: RefObject<HTMLDivElement | null>;
+  settings: ChartSettings;
+  onSettingsChange(settings: ChartSettings): void;
+  resolvedTheme: string;
 }) {
-  const indicators = useLocalIndicatorRuntime(manifest);
   const chartSurface = useChartSurfaceRuntime();
+  const chartRuntime = useLocalChartRuntime(manifest);
+  const subscribeSeries = useCallback(
+    (listener: () => void) => chartRuntime.seriesStore.subscribe(listener),
+    [chartRuntime.seriesStore],
+  );
+  const getSeriesVersion = useCallback(
+    () => Number(chartRuntime.seriesStore.version),
+    [chartRuntime.seriesStore],
+  );
+  const seriesVersion = useSyncExternalStore(
+    subscribeSeries,
+    getSeriesVersion,
+    getSeriesVersion,
+  );
+  const bars = useMemo(() => {
+    void seriesVersion;
+    return chartRuntime.seriesStore.snapshot();
+  }, [chartRuntime.seriesStore, seriesVersion]);
+  const dataMeta = useMemo(() => buildLocalChartDataMeta(
+    chartRuntime.seriesStore,
+    chartRuntime.loading || chartRuntime.loadingMore ? "loading" : "ready",
+    seriesVersion,
+  ), [
+    chartRuntime.loading,
+    chartRuntime.loadingMore,
+    chartRuntime.seriesStore,
+    seriesVersion,
+  ]);
+  const indicators = useLocalIndicatorRuntime({
+    manifest,
+    bars,
+    chartDataMeta: dataMeta,
+    seriesVersion,
+    candleUpColor: settings.upColor,
+    candleDownColor: settings.downColor,
+  });
   const drawings = useDrawingRuntime({
     chartSurfaceActions: chartSurface.actions,
     session: null,
   });
+  const priceScale = usePriceScalePrefs({ loadUserPrefs, updateUserPref });
+  const exportFlow = useExportRuntime({
+    session: null,
+    metadata: {
+      exchange: "local",
+      marketType: manifest.dataset_id,
+      symbol: manifest.symbol,
+      interval: manifest.interval,
+    },
+    resolvedTheme,
+    chartSurfaceActions: chartSurface.actions,
+    pageExportRef,
+    drawings,
+    loadUserPrefs,
+    updateUserPref,
+  });
+  const indicatorCatalog = useMemo(
+    () => createLocalIndicatorCatalog(indicatorPresets),
+    [indicatorPresets],
+  );
+  const savedVisibleRange = useMemo(() => getVisibleRangeForInterval(
+    manifest.symbol,
+    manifest.interval,
+    manifest.dataset_id,
+    "local",
+  ), [manifest.dataset_id, manifest.interval, manifest.symbol]);
+  const handleVisibleRangeChange = useCallback((range: unknown) => {
+    saveVisibleRangeForInterval(
+      manifest.symbol,
+      manifest.interval,
+      range,
+      manifest.dataset_id,
+      "local",
+      dataMeta,
+    );
+  }, [dataMeta, manifest.dataset_id, manifest.interval, manifest.symbol]);
   const [drawingInteractionReady, setDrawingInteractionReady] = useState(false);
-  const [chartType, setChartType] = useState<MainChartType>("candlestick");
   const drawingTool = drawingToolWhenInteractionReady(
     drawings.view.drawingTool,
     drawingInteractionReady,
@@ -388,6 +492,9 @@ function LocalDatasetWorkspace({
     drawings.actions.handleIndicatorRemoved(indicatorId);
     indicators.actions.removeIndicator(indicatorId);
   }, [drawings.actions, indicators.actions]);
+  useEffect(() => {
+    onActiveIndicatorCountChange(indicators.view.activeIndicators.length);
+  }, [indicators.view.activeIndicators.length, onActiveIndicatorCountChange]);
   return (
     <>
       <MarketWorkspaceFrame
@@ -421,21 +528,48 @@ function LocalDatasetWorkspace({
             onPositionSizeChange={drawings.actions.handlePositionSizeChange}
             selectedDrawing={drawings.view.selectedDrawing}
             onSelectedDrawingStyleChange={drawings.actions.handleSelectedDrawingStyleChange}
-            chartType={chartType}
-            onChartTypeChange={setChartType}
+            exportPanelOpen={exportFlow.view.isOpen}
+            exportInProgress={exportFlow.status.inProgress}
+            onToggleExportPanel={exportFlow.actions.togglePanel}
+            chartType={settings.chartType}
+            onChartTypeChange={(chartType) => onSettingsChange({ ...settings, chartType })}
           />
         )}
-        exportOverlay={null}
+        exportOverlay={exportFlow.view.isOpen ? (
+          <ExportPanel
+            isOpen={exportFlow.view.isOpen}
+            options={exportFlow.view.options}
+            onOptionsChange={exportFlow.actions.updateOptions}
+            onExport={exportFlow.actions.exportChart}
+            onClose={exportFlow.actions.closePanel}
+            inProgress={exportFlow.status.inProgress}
+            error={exportFlow.view.error}
+            notice={exportFlow.view.notice}
+            metadata={exportFlow.view.metadata}
+            loading={chartRuntime.loading || chartRuntime.loadingMore}
+            indicatorComputing={indicators.status.computing}
+            preview={exportFlow.view.preview}
+          />
+        ) : null}
         chart={(
           <LocalChart
             manifest={manifest}
+            runtime={chartRuntime}
+            dataMeta={dataMeta}
             eventStore={eventStore}
             focusRequest={focusRequest}
             indicators={indicators}
             chartSurfaceRef={chartSurface.ref}
             drawings={drawings}
             drawingTool={drawingTool}
-            chartType={chartType}
+            settings={settings}
+            resolvedTheme={resolvedTheme}
+            invertScale={priceScale.invertScale}
+            priceScaleMode={priceScale.priceScaleMode}
+            savedVisibleRange={savedVisibleRange}
+            onVisibleRangeChange={handleVisibleRangeChange}
+            onInvertScaleChange={priceScale.handleInvertScaleChange}
+            onPriceScaleModeChange={priceScale.handlePriceScaleModeChange}
             onDrawingInteractionReadyChange={setDrawingInteractionReady}
             onRemoveIndicator={removeIndicator}
             onCrosshairMove={onCrosshairMove}
@@ -453,8 +587,9 @@ function LocalDatasetWorkspace({
         )}
       />
       <IndicatorPanel
-        staticCatalog={LOCAL_STATIC_INDICATOR_CATALOG}
+        staticCatalog={indicatorCatalog}
         allowCustomIndicators={false}
+        customIndicatorsUnavailableReason="离线 profile 未启动自定义脚本运行时"
         isOpen={indicatorPanelOpen}
         onClose={onCloseIndicatorPanel}
         activeIndicators={indicators.view.activeIndicators}
@@ -467,9 +602,13 @@ function LocalDatasetWorkspace({
         computing={indicators.status.computing}
         realtimeMode="historical-only"
         onRecompute={indicators.actions.recompute}
+        resolveIndicatorSupport={(indicator) => resolveLocalIndicatorSupport(
+          indicator,
+          manifest,
+        )}
         modeNotice={{
           label: "本地 CSV",
-          description: "只计算当前不可变 dataEpoch 的已导入行；不联网、不回填。",
+          description: "共享指标 Runtime，只计算当前不可变 dataEpoch；不联网、不回填。",
         }}
       />
     </>
@@ -487,12 +626,17 @@ function EmptyChart() {
 }
 
 export default function LocalApp() {
+  const pageExportRef = useRef<HTMLDivElement | null>(null);
+  const { settings, setSettings, resolvedTheme } = useChartSettingsRuntime();
   const [datasets, setDatasets] = useState<LocalDatasetManifest[]>([]);
+  const [indicatorPresets, setIndicatorPresets] = useState<IndicatorPreset[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loadingLibrary, setLoadingLibrary] = useState(true);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [indicatorPanelOpen, setIndicatorPanelOpen] = useState(false);
+  const [activeIndicatorCount, setActiveIndicatorCount] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [lastCrosshair, setLastCrosshair] = useState<MainSeriesCrosshairValue | null>(null);
   const [focusRequest, setFocusRequest] = useState<LocalAnalysisFocusRequest | null>(null);
 
@@ -509,8 +653,12 @@ export default function LocalApp() {
   useEffect(() => {
     const controller = new AbortController();
     setLoadingLibrary(true);
-    listLocalDatasets(controller.signal).then((loaded) => {
+    Promise.all([
+      listLocalDatasets(controller.signal),
+      fetchLocalIndicatorPresets(controller.signal),
+    ]).then(([loaded, presets]) => {
       setDatasets(loaded);
+      setIndicatorPresets(presets);
       setSelectedId(loaded[0]?.dataset_id ?? null);
     }).catch((reason: unknown) => {
       if (!controller.signal.aborted) setError(errorMessage(reason));
@@ -544,6 +692,7 @@ export default function LocalApp() {
     setLastCrosshair(null);
     setFocusRequest(null);
     setIndicatorPanelOpen(false);
+    setActiveIndicatorCount(0);
   }, [selected?.data_epoch, selected?.dataset_id]);
 
   const focusAnalysisEvent = useCallback((event: LocalAnalysisEvent) => {
@@ -569,6 +718,7 @@ export default function LocalApp() {
 
   return (
     <MarketPageFrame
+      rootRef={pageExportRef}
       topBar={(
         <MarketTopBarFrame
           source="local"
@@ -583,12 +733,24 @@ export default function LocalApp() {
           controls={<>
             <button
               type="button"
+              className="settings-btn"
+              onClick={() => setSettingsOpen(true)}
+              title="设置"
+              aria-label="设置"
+            >
+              ⚙️
+            </button>
+            <button
+              type="button"
               className={`indicator-toggle-btn ${indicatorPanelOpen ? "active" : ""}`}
               disabled={selected === null}
               onClick={() => setIndicatorPanelOpen((open) => !open)}
               title="指标 (Indicators)"
             >
               📊
+              {activeIndicatorCount > 0 && (
+                <span className="indicator-badge">{activeIndicatorCount}</span>
+              )}
             </button>
             <span className="local-offline-badge">● 本地分析</span>
           </>}
@@ -606,6 +768,7 @@ export default function LocalApp() {
           <LocalDatasetWorkspace
             key={selected.data_epoch}
             manifest={selected}
+            indicatorPresets={indicatorPresets}
             eventStore={analysisStore}
             focusRequest={focusRequest}
             datasets={datasets}
@@ -628,6 +791,11 @@ export default function LocalApp() {
             onCrosshairMove={(value) => {
               if (value !== null) setLastCrosshair(value);
             }}
+            onActiveIndicatorCountChange={setActiveIndicatorCount}
+            pageExportRef={pageExportRef}
+            settings={settings}
+            onSettingsChange={setSettings}
+            resolvedTheme={resolvedTheme}
           />
         ) : (
           <MarketWorkspaceFrame
@@ -647,11 +815,27 @@ export default function LocalApp() {
           />
         )
       )}
-      featureSurfaces={error === null ? null : (
-        <div className="local-global-error" role="alert">
-          <span>{error}</span>
-          <button type="button" onClick={() => setError(null)}>关闭</button>
-        </div>
+      featureSurfaces={(
+        <>
+          {error !== null && (
+            <div className="local-global-error" role="alert">
+              <span>{error}</span>
+              <button type="button" onClick={() => setError(null)}>关闭</button>
+            </div>
+          )}
+          <SettingsModal
+            isOpen={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            settings={settings}
+            onUpdate={setSettings}
+            currentSymbol={selected?.symbol ?? ""}
+            currentMarketType={selected?.dataset_id ?? "local"}
+            currentExchange="local"
+            allowedCategories={["appearance", "about"]}
+            backendFeaturesEnabled={false}
+            dataWorkbenchEnabled={false}
+          />
+        </>
       )}
       statusBar={(
         <MarketStatusBar

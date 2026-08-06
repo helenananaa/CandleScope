@@ -14,6 +14,7 @@ import {
 import type {
   ActiveIndicatorPersistence,
 } from "./activeIndicatorStore.js";
+import type { IndicatorComputeBatchExecutor } from "./indicatorComputeController.js";
 import { useIndicatorComputeController } from "./indicatorComputeController.js";
 import { resolveLocalIndicatorExecution } from "./indicatorComputeJobRuntime.js";
 import {
@@ -50,6 +51,7 @@ export interface UseProvidedBarsIndicatorRuntimeOptions {
   bars: KlineBar[];
   candleDownColor?: string;
   candleUpColor?: string;
+  computeBatch?: IndicatorComputeBatchExecutor;
   chartDataMeta?: ChartDataCommitMeta | null;
   datasetKey: string;
   exchange: string;
@@ -311,6 +313,7 @@ export function useProvidedBarsIndicatorRuntime({
   bars,
   candleDownColor = "#ef4444",
   candleUpColor = "#22c55e",
+  computeBatch,
   chartDataMeta = null,
   datasetKey,
   exchange,
@@ -394,6 +397,7 @@ export function useProvidedBarsIndicatorRuntime({
     candleDownColorRef,
     candleUpColor,
     candleUpColorRef,
+    ...(computeBatch === undefined ? {} : { computeBatch }),
     chartData: bars,
     chartDataMeta,
     chartDataMetaRef,

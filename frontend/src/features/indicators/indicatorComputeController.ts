@@ -35,12 +35,18 @@ import {
 import type { ChartDataCommitMeta } from "../market-data/useChartDataRuntime.js";
 import type { KlineBar } from "../market-data/marketDataTypes.js";
 import type {
+  IndicatorComputeBatchResponse,
   IndicatorComputeRequest,
   IndicatorComputeBatchItem,
   IndicatorComputeBatchJob,
   IndicatorDefinition,
   IndicatorOutputAction,
 } from "./indicatorTypes.js";
+
+export type IndicatorComputeBatchExecutor = (input: {
+  jobs: IndicatorComputeBatchJob[];
+  signal?: AbortSignal;
+}) => Promise<IndicatorComputeBatchResponse>;
 
 export interface UseIndicatorComputeControllerOptions {
   activeIndicators: IndicatorDefinition[];
@@ -49,6 +55,7 @@ export interface UseIndicatorComputeControllerOptions {
   candleDownColorRef: MutableRefObject<string>;
   candleUpColor: string;
   candleUpColorRef: MutableRefObject<string>;
+  computeBatch?: IndicatorComputeBatchExecutor;
   chartData: KlineBar[];
   chartDataMeta: ChartDataCommitMeta | null;
   chartDataMetaRef: MutableRefObject<ChartDataCommitMeta | null>;
@@ -128,6 +135,7 @@ export function useIndicatorComputeController({
   candleDownColorRef,
   candleUpColor,
   candleUpColorRef,
+  computeBatch = computeIndicatorBatch,
   chartData,
   chartDataMeta,
   chartDataMetaRef,
@@ -301,7 +309,7 @@ export function useIndicatorComputeController({
           });
           try {
             const responses = await Promise.all(
-              chunks.map((chunk) => computeIndicatorBatch({ jobs: chunk, signal })),
+              chunks.map((chunk) => computeBatch({ jobs: chunk, signal })),
             );
             return responses.flatMap((response) => response.results);
           } finally {
@@ -495,6 +503,7 @@ export function useIndicatorComputeController({
     candleDownColorRef,
     candleUpColorRef,
     chartDataRef,
+    computeBatch,
     historyLimit,
     jobCoordinator,
     outputDispatch,

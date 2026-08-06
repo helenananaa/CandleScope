@@ -15,6 +15,7 @@ export { SETTINGS_CATEGORIES };
 
 export interface UseSettingsRuntimeOptions {
   isOpen: boolean;
+  backendFeaturesEnabled?: boolean;
   settings: ChartSettings;
   onUpdate(settings: ChartSettings): void;
   currentSymbol?: string;
@@ -35,6 +36,7 @@ export interface SettingsRuntime {
 
 export function useSettingsRuntime({
   isOpen,
+  backendFeaturesEnabled = true,
   settings,
   onUpdate,
   currentSymbol = "",
@@ -45,10 +47,11 @@ export function useSettingsRuntime({
   trimChartDataCacheEntries = null,
 }: UseSettingsRuntimeOptions): SettingsRuntime {
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const exchangeRuntime = useExchangeSettingsRuntime({ isOpen });
-  const proxyRuntime = useProxySettingsRuntime({ isOpen });
+  const backendRuntimeOpen = isOpen && backendFeaturesEnabled;
+  const exchangeRuntime = useExchangeSettingsRuntime({ isOpen: backendRuntimeOpen });
+  const proxyRuntime = useProxySettingsRuntime({ isOpen: backendRuntimeOpen });
   const maintenanceRuntime = useSettingsMaintenanceRuntime({
-    isOpen,
+    isOpen: backendRuntimeOpen,
     currentSymbol,
     currentMarketType,
     currentExchange,
@@ -56,7 +59,7 @@ export function useSettingsRuntime({
   });
   const cacheDiagnosticsRuntime = useCacheDiagnosticsRuntime({
     chartDataCacheDiagnostics,
-    isOpen,
+    isOpen: backendRuntimeOpen,
     settings,
     trimChartDataCacheEntries,
   });

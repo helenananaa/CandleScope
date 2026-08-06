@@ -11,7 +11,9 @@ from app.indicator import create_engine, registry
 
 
 MAX_LOCAL_INDICATOR_BARS = 50_000
-LOCAL_INDICATOR_NAMES = frozenset({"MA", "EMA", "RSI", "MACD", "BOLL"})
+# The shared registry is the catalog truth. Dataset capabilities, rather than
+# a second product list, decide whether a registered builtin can execute.
+LOCAL_INDICATOR_NAMES = frozenset(spec.name for spec in registry.list_specs())
 _COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
@@ -56,10 +58,17 @@ def _serialize_result(result: Any) -> dict[str, Any]:
     }
 
 
-def _normalize_params(name: str, supplied: dict[str, Any]) -> dict[str, Any]:
+def _normalize_params(
+    name: str,
+    supplied: dict[str, Any],
+    *,
+    volume_available: bool,
+) -> dict[str, Any]:
     spec = registry.get_spec(name)
     if spec is None or name not in LOCAL_INDICATOR_NAMES:
         raise ValueError(f"Indicator '{name}' is not available in local analysis mode")
+    if name == "VOL" and not volume_available:
+        raise ValueError("VOL requires an imported volume column")
     schema_by_key = {parameter.key: parameter for parameter in spec.param_schema}
     unknown = sorted(set(supplied) - set(schema_by_key))
     if unknown:
@@ -109,9 +118,9 @@ def _normalize_params(name: str, supplied: dict[str, Any]) -> dict[str, Any]:
 def _bars_from_rows(rows: list[dict[str, Any]]) -> list[BarData]:
     bars: list[BarData] = []
     for row in rows:
-        # The local whitelist is price-only. BarData requires a volume float,
-        # so missing volume gets an internal placeholder that no allowed
-        # indicator can read; the dataset API continues to expose it as null.
+        # BarData requires a volume float. Missing volume gets an internal
+        # placeholder, while capability checks keep volume-dependent builtins
+        # unavailable and the dataset API continues to expose volume as null.
         volume = row.get("volume")
         bars.append(
             BarData(
@@ -134,6 +143,7 @@ def compute_local_indicator_batch(
     data_epoch: str,
     symbol: str,
     interval: str,
+    volume_available: bool,
     rows: list[dict[str, Any]],
     requests: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -148,7 +158,11 @@ def compute_local_indicator_batch(
             name = str(item["name"]).upper()
             spec = registry.get_spec(name)
             try:
-                params = _normalize_params(name, dict(item.get("params") or {}))
+                params = _normalize_params(
+                    name,
+                    dict(item.get("params") or {}),
+                    volume_available=volume_available,
+                )
                 result = engine.compute(
                     symbol=symbol,
                     interval=interval,

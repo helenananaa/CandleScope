@@ -18,10 +18,14 @@ import {
   parseKlineResponse,
   type TransportKlineResponse,
 } from "../../services/apiPayloadParsers.js";
-import { parseIndicatorComputeBatchResponse } from "../indicators/indicatorContracts.js";
+import {
+  parseIndicatorComputeBatchResponse,
+  parseIndicatorPresetList,
+} from "../indicators/indicatorContracts.js";
 import type {
   IndicatorComputeBatchResponse,
   IndicatorParams,
+  IndicatorPreset,
 } from "../indicators/indicatorTypes.js";
 import type {
   LocalDatasetListResponse,
@@ -125,6 +129,15 @@ export async function listLocalDatasets(signal?: AbortSignal): Promise<LocalData
     count: typeof payload.count === "number" ? payload.count : payload.datasets.length,
   };
   return parsed.datasets;
+}
+
+export async function fetchLocalIndicatorPresets(
+  signal?: AbortSignal,
+): Promise<IndicatorPreset[]> {
+  return parseIndicatorPresetList(await responseJson(await fetch(
+    localUrl("/indicators/presets"),
+    signal === undefined ? {} : { signal },
+  )));
 }
 
 export async function importLocalCsv(input: LocalImportInput): Promise<LocalDatasetManifest> {

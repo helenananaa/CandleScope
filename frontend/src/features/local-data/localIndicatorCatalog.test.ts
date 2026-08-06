@@ -1,52 +1,64 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import type { IndicatorPreset } from "../indicators/indicatorTypes.js";
 import {
-  createLocalIndicatorDefinition,
-  LOCAL_INDICATOR_PRESETS,
-  normalizeLocalIndicatorDefinition,
+  createLocalIndicatorCatalog,
+  resolveLocalIndicatorSupport,
 } from "./localIndicatorCatalog.js";
+import type { LocalDatasetManifest } from "./localDataTypes.js";
 
 
-test("local indicator catalog supports multiple instances of one builtin", () => {
-  const first = createLocalIndicatorDefinition("MA");
-  const second = createLocalIndicatorDefinition("MA");
+function preset(engineName: string): IndicatorPreset {
+  return {
+    id: engineName.toLowerCase(),
+    name: engineName,
+    engineName,
+    script: `# __ENGINE__:${engineName}`,
+    params: {},
+    description: `${engineName} shared preset`,
+    category: "shared",
+    paramSchema: [],
+    outputs: [engineName],
+    is_builtin: true,
+    defaultEnabled: false,
+    paneTarget: engineName === "MA" ? "main" : "sub",
+  };
+}
 
+const manifest = {
+  dataset_id: "local-0123456789abcdef0123456789abcdef",
+  data_epoch: `sha256:${"1".repeat(64)}`,
+  volume_available: false,
+} as LocalDatasetManifest;
+
+test("local catalog projects the shared server presets without a second product list", async () => {
+  const presets = ["MA", "EMA", "RSI", "MACD", "BOLL", "ATR", "VOL"].map(preset);
+  const catalog = createLocalIndicatorCatalog(presets);
+
+  assert.equal(catalog.presets, presets);
+  const first = await catalog.resolvePresetForChart(presets[0]!);
+  const second = await catalog.resolvePresetForChart(presets[0]!);
   assert.notEqual(first.id, second.id);
   assert.equal(first.executionTarget, "local");
   assert.equal(first.engineName, "MA");
 });
 
-test("the shared indicator panel receives only the five local static presets", () => {
-  assert.deepEqual(
-    LOCAL_INDICATOR_PRESETS.map((preset) => preset.engineName),
-    ["MA", "EMA", "RSI", "MACD", "BOLL"],
-  );
-  assert.equal(LOCAL_INDICATOR_PRESETS.every((preset) => (
-    preset.executionTarget === "local" && preset.is_builtin
-  )), true);
-});
-
-test("persisted local indicator definitions are fail-closed and parameter bounded", () => {
-  const normalized = normalizeLocalIndicatorDefinition({
-    id: "local-ma-saved",
-    engineName: "MA",
-    executionTarget: "hosted",
-    params: { period: 0, source: "volume", color: "bad", extra: 12 },
+test("local support is capability driven and leaves unavailable shared items visible", () => {
+  assert.deepEqual(resolveLocalIndicatorSupport(preset("ATR"), manifest), {
+    supported: true,
+    reason: null,
   });
-
-  assert.deepEqual(normalized?.params, {
-    period: 20,
-    source: "close",
-    color: "#f59e0b",
+  assert.deepEqual(resolveLocalIndicatorSupport(preset("VOL"), manifest), {
+    supported: false,
+    reason: "当前数据集没有 volume 列",
   });
-  assert.equal(normalized?.executionTarget, "local");
-  assert.equal(normalizeLocalIndicatorDefinition({
-    id: "foreign-indicator",
-    engineName: "MA",
-  }), null);
-  assert.equal(normalizeLocalIndicatorDefinition({
-    id: "local-script-one",
-    engineName: "CUSTOM",
-  }), null);
+  assert.deepEqual(resolveLocalIndicatorSupport({
+    id: "custom",
+    kind: "script",
+    script: "plot(close)",
+  }, manifest), {
+    supported: false,
+    reason: "离线 profile 未启动自定义脚本运行时",
+  });
 });

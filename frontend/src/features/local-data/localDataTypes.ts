@@ -53,4 +53,5 @@ export interface LocalEventTimeResolutionResponse {
   results: LocalEventTimeResolution[];
 }
 
-export type LocalIndicatorName = "MA" | "EMA" | "RSI" | "MACD" | "BOLL";
+/** Backend shared-registry name; validation remains server-authoritative. */
+export type LocalIndicatorName = string;

@@ -161,7 +161,7 @@ def test_import_exposes_ohlc_only_without_fabricating_volume(
     assert required.status_code == 422
 
 
-def test_static_local_indicators_are_revision_bound_and_price_only(
+def test_local_builtin_indicators_are_revision_bound_and_capability_gated(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = _client(tmp_path, monkeypatch)
@@ -222,6 +222,18 @@ def test_static_local_indicators_are_revision_bound_and_price_only(
                     "params": {"period": 3, "mult": 2},
                 },
                 {
+                    "jobKey": "atr-3",
+                    "clientId": "local-atr-one",
+                    "name": "ATR",
+                    "params": {"period": 3},
+                },
+                {
+                    "jobKey": "vol-missing",
+                    "clientId": "local-vol-missing",
+                    "name": "VOL",
+                    "params": {},
+                },
+                {
                     "jobKey": "macd-invalid",
                     "clientId": "local-macd-invalid",
                     "name": "MACD",
@@ -250,12 +262,16 @@ def test_static_local_indicators_are_revision_bound_and_price_only(
         "local-rsi-one",
         "local-macd-valid",
         "local-boll-one",
+        "local-atr-one",
     ):
         assert by_client[client_id]["ok"] is True
         assert by_client[client_id]["lines"]
     assert by_client["local-rsi-one"]["lines"][0]["pane"] == "separate"
     assert len(by_client["local-macd-valid"]["lines"]) == 3
     assert len(by_client["local-boll-one"]["lines"]) == 3
+    assert by_client["local-vol-missing"]["code"] == (
+        "LOCAL_INDICATOR_PARAMS_INVALID"
+    )
     assert by_client["local-macd-invalid"]["code"] == (
         "LOCAL_INDICATOR_PARAMS_INVALID"
     )
@@ -277,3 +293,47 @@ def test_static_local_indicators_are_revision_bound_and_price_only(
     )
     assert stale.status_code == 409
     assert stale.json()["detail"]["code"] == "dataset_revision_changed"
+
+
+def test_local_indicator_catalog_and_volume_capability(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = _client(tmp_path, monkeypatch)
+    catalog = client.get("/api/v1/local/indicators/presets")
+    assert catalog.status_code == 200
+    names = {item["engineName"] for item in catalog.json()}
+    assert {"MA", "EMA", "RSI", "MACD", "BOLL", "ATR", "VOL"} <= names
+
+    rows = ["time,open,high,low,close,volume"]
+    for index in range(8):
+        timestamp = 1704067200 + index * 60
+        close = 101 + index
+        rows.append(f"{timestamp},{close - 1},{close + 1},{close - 2},{close},{10 + index}")
+    imported = client.post(
+        "/api/v1/local/imports/csv",
+        params={
+            "name": "Volume indicator",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "timestamp_unit": "s",
+        },
+        content="\n".join(rows) + "\n",
+        headers={"content-type": "text/csv"},
+    ).json()
+    response = client.post(
+        f"/api/v1/local/datasets/{imported['dataset_id']}/indicators/compute/batch",
+        json={
+            "schemaVersion": 1,
+            "data_epoch": imported["data_epoch"],
+            "requests": [{
+                "jobKey": "vol-ready",
+                "clientId": "local-vol-ready",
+                "name": "VOL",
+                "params": {},
+            }],
+        },
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()["results"][0]["payload"]
+    assert result["ok"] is True
+    assert result["lines"][0]["data"][-1]["value"] == 17.0

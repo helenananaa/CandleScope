@@ -9,7 +9,9 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from app.api.v1.indicators import _spec_to_preset
 from app.core.config import LOCAL_DATA_MAX_UPLOAD_BYTES, RUNTIME_MODE
+from app.indicator import registry
 from app.local_data import LocalDatasetError, LocalDatasetService, LocalImportOptions
 from app.local_data.indicator_compute import (
     LOCAL_INDICATOR_NAMES,
@@ -30,7 +32,7 @@ class ResolveEventTimesRequest(BaseModel):
 class LocalIndicatorComputeItem(BaseModel):
     jobKey: str = Field(min_length=1, max_length=256)
     clientId: str = Field(min_length=1, max_length=256)
-    name: Literal["MA", "EMA", "RSI", "MACD", "BOLL"]
+    name: str = Field(min_length=1, max_length=80)
     params: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -93,6 +95,13 @@ async def list_datasets(request: Request) -> dict[str, Any]:
     return {"datasets": datasets, "count": len(datasets)}
 
 
+@router.get("/indicators/presets")
+async def list_local_indicator_presets(request: Request) -> list[dict[str, Any]]:
+    """Expose the shared builtin catalog without enabling the live indicator API."""
+    _service(request)
+    return [_spec_to_preset(spec.to_dict()) for spec in registry.list_specs()]
+
+
 @router.get("/datasets/{dataset_id}")
 async def get_dataset(dataset_id: str, request: Request) -> dict[str, Any]:
     try:
@@ -144,6 +153,7 @@ async def compute_local_indicators(
             data_epoch=body.data_epoch,
             symbol=manifest["symbol"],
             interval=manifest["interval"],
+            volume_available=bool(manifest.get("volume_available")),
             rows=rows,
             requests=[item.model_dump() for item in body.requests],
         )

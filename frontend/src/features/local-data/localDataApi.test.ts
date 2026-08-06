@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   computeLocalIndicatorBatch,
+  fetchLocalIndicatorPresets,
   listLocalDatasets,
   LocalKlineApi,
   resolveLocalEventTimes,
@@ -56,6 +57,33 @@ test("local dataset library validates manifests", async (context) => {
   assert.equal(datasets[0]?.source, "local_dataset");
   assert.equal(datasets[0]?.rows, 2);
   assert.equal(datasets[0]?.volume_available, true);
+});
+
+test("local indicator catalog uses the shared preset wire contract", async (context) => {
+  const originalFetch = globalThis.fetch;
+  context.after(() => { globalThis.fetch = originalFetch; });
+  let capturedUrl = "";
+  globalThis.fetch = async (url) => {
+    capturedUrl = String(url);
+    return jsonResponse([{
+      id: "atr",
+      name: "Average True Range",
+      engineName: "ATR",
+      script: "# __ENGINE__:ATR",
+      params: { period: 14 },
+      description: "ATR",
+      category: "volatility",
+      paramSchema: [{ key: "period", label: "Period", type: "int", default: 14 }],
+      outputs: ["ATR"],
+      is_builtin: true,
+      defaultEnabled: false,
+      paneTarget: "sub",
+    }]);
+  };
+
+  const presets = await fetchLocalIndicatorPresets();
+  assert.match(capturedUrl, /\/api\/v1\/local\/indicators\/presets$/);
+  assert.equal(presets[0]?.engineName, "ATR");
 });
 
 test("local kline adapter uses dataset-scoped HTTP and exposes no stream URL", async (context) => {
