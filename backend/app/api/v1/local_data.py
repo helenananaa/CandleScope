@@ -11,6 +11,11 @@ from pydantic import BaseModel, Field
 
 from app.core.config import LOCAL_DATA_MAX_UPLOAD_BYTES, RUNTIME_MODE
 from app.local_data import LocalDatasetError, LocalDatasetService, LocalImportOptions
+from app.local_data.indicator_compute import (
+    LOCAL_INDICATOR_NAMES,
+    MAX_LOCAL_INDICATOR_BARS,
+    compute_local_indicator_batch,
+)
 
 
 router = APIRouter(prefix="/local", tags=["local-data"])
@@ -20,6 +25,19 @@ class ResolveEventTimesRequest(BaseModel):
     data_epoch: str = Field(min_length=8, max_length=80)
     times_ms: list[int] = Field(min_length=1, max_length=5_000)
     mode: Literal["exact", "containing"]
+
+
+class LocalIndicatorComputeItem(BaseModel):
+    jobKey: str = Field(min_length=1, max_length=256)
+    clientId: str = Field(min_length=1, max_length=256)
+    name: Literal["MA", "EMA", "RSI", "MACD", "BOLL"]
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class LocalIndicatorComputeBatchRequest(BaseModel):
+    schemaVersion: Literal[1] = 1
+    data_epoch: str = Field(min_length=8, max_length=80)
+    requests: list[LocalIndicatorComputeItem] = Field(min_length=1, max_length=32)
 
 
 def _service(request: Request) -> LocalDatasetService:
@@ -61,6 +79,8 @@ async def capabilities(request: Request) -> dict[str, Any]:
         "realtime": False,
         "backfill": False,
         "gaps_are_terminal": True,
+        "static_indicators": sorted(LOCAL_INDICATOR_NAMES),
+        "static_indicator_max_bars": MAX_LOCAL_INDICATOR_BARS,
         "max_upload_bytes": LOCAL_DATA_MAX_UPLOAD_BYTES,
         "datasets": len(await asyncio.to_thread(service.list_datasets)),
     }
@@ -95,6 +115,41 @@ async def resolve_event_times(
             times_ms=body.times_ms,
             mode=body.mode,
         )
+    except LocalDatasetError as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post("/datasets/{dataset_id}/indicators/compute/batch")
+async def compute_local_indicators(
+    dataset_id: str,
+    body: LocalIndicatorComputeBatchRequest,
+    request: Request,
+) -> dict[str, Any]:
+    job_keys = [item.jobKey for item in body.requests]
+    client_ids = [item.clientId for item in body.requests]
+    if any(value != value.strip() for value in [*job_keys, *client_ids]):
+        raise HTTPException(status_code=422, detail="Indicator identities must be trimmed")
+    if len(set(job_keys)) != len(job_keys) or len(set(client_ids)) != len(client_ids):
+        raise HTTPException(status_code=422, detail="Indicator identities must be unique")
+    service = _service(request)
+
+    def _compute() -> dict[str, Any]:
+        manifest, rows = service.load_revision_bars(
+            dataset_id,
+            data_epoch=body.data_epoch,
+            max_rows=MAX_LOCAL_INDICATOR_BARS,
+        )
+        return compute_local_indicator_batch(
+            dataset_id=dataset_id,
+            data_epoch=body.data_epoch,
+            symbol=manifest["symbol"],
+            interval=manifest["interval"],
+            rows=rows,
+            requests=[item.model_dump() for item in body.requests],
+        )
+
+    try:
+        return await asyncio.to_thread(_compute)
     except LocalDatasetError as exc:
         raise _translate_error(exc) from exc
 

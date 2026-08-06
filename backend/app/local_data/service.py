@@ -655,6 +655,67 @@ class LocalDatasetService:
         manifest.setdefault("volume_available", True)
         return manifest
 
+    def _validated_revision_dir(
+        self,
+        dataset_id: str,
+        data_epoch: str,
+    ) -> tuple[dict[str, Any], Path]:
+        """Resolve one caller-pinned immutable revision without a second current lookup."""
+        manifest = self.get_manifest(dataset_id)
+        if manifest["data_epoch"] != data_epoch:
+            raise LocalDatasetError(
+                "Dataset revision changed; reload it before continuing",
+                code="dataset_revision_changed",
+            )
+        revision = data_epoch.removeprefix("sha256:")
+        if EPOCH_RE.fullmatch(revision) is None:
+            raise LocalDatasetError(
+                "Dataset revision changed; reload it before continuing",
+                code="dataset_revision_changed",
+            )
+        revision_dir = self.root / dataset_id / revision
+        if not revision_dir.is_dir():
+            raise LocalDatasetError(
+                "Dataset revision not found", code="dataset_corrupt"
+            )
+        return manifest, revision_dir
+
+    def load_revision_bars(
+        self,
+        dataset_id: str,
+        *,
+        data_epoch: str,
+        max_rows: int,
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        """Load all rows from exactly one immutable revision for static analysis."""
+        if max_rows < 1:
+            raise ValueError("max_rows must be positive")
+        manifest, revision_dir = self._validated_revision_dir(
+            dataset_id,
+            data_epoch,
+        )
+        db_path = revision_dir / "bars.sqlite"
+        uri = f"file:{db_path.as_posix()}?mode=ro"
+        connection = sqlite3.connect(uri, uri=True)
+        try:
+            connection.row_factory = sqlite3.Row
+            selected = connection.execute(
+                "SELECT * FROM bars ORDER BY open_time_ms ASC LIMIT ?",
+                (max_rows + 1,),
+            ).fetchall()
+        except sqlite3.DatabaseError as exc:
+            raise LocalDatasetError(
+                "Dataset bars are unreadable", code="dataset_corrupt"
+            ) from exc
+        finally:
+            connection.close()
+        if len(selected) > max_rows:
+            raise LocalDatasetError(
+                f"Static indicators currently support at most {max_rows} bars",
+                code="indicator_dataset_too_large",
+            )
+        return manifest, [self._wire_bar(row) for row in selected]
+
     def query(
         self,
         dataset_id: str,
@@ -746,12 +807,7 @@ class LocalDatasetService:
         mode: str,
     ) -> dict[str, Any]:
         """Resolve user event timestamps against one immutable dataset revision."""
-        manifest = self.get_manifest(dataset_id)
-        if manifest["data_epoch"] != data_epoch:
-            raise LocalDatasetError(
-                "Dataset revision changed; reload it before importing events",
-                code="dataset_revision_changed",
-            )
+        manifest, revision_dir = self._validated_revision_dir(dataset_id, data_epoch)
         if mode not in {"exact", "containing"}:
             raise LocalDatasetError("Event time mode must be exact or containing")
         if not times_ms or len(times_ms) > 5_000:
@@ -764,17 +820,6 @@ class LocalDatasetService:
                 "Event timestamps must be positive integer milliseconds"
             )
 
-        revision = data_epoch.removeprefix("sha256:")
-        if EPOCH_RE.fullmatch(revision) is None:
-            raise LocalDatasetError(
-                "Dataset revision changed; reload it before importing events",
-                code="dataset_revision_changed",
-            )
-        revision_dir = self.root / dataset_id / revision
-        if not revision_dir.is_dir():
-            raise LocalDatasetError(
-                "Dataset revision not found", code="dataset_corrupt"
-            )
         # Open the revision that was validated above, rather than resolving
         # current.json a second time and risking a cross-revision race.
         db_path = revision_dir / "bars.sqlite"

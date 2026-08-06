@@ -52,3 +52,5 @@ export interface LocalEventTimeResolutionResponse {
   rejected: number;
   results: LocalEventTimeResolution[];
 }
+
+export type LocalIndicatorName = "MA" | "EMA" | "RSI" | "MACD" | "BOLL";

@@ -159,3 +159,121 @@ def test_import_exposes_ohlc_only_without_fabricating_volume(
         headers={"content-type": "text/csv"},
     )
     assert required.status_code == 422
+
+
+def test_static_local_indicators_are_revision_bound_and_price_only(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = _client(tmp_path, monkeypatch)
+    rows = ["time,open,high,low,close"]
+    for index in range(40):
+        timestamp = 1704067200 + index * 60
+        close = 101 + index
+        rows.append(f"{timestamp},{close - 1},{close + 1},{close - 2},{close}")
+    imported = client.post(
+        "/api/v1/local/imports/csv",
+        params={
+            "name": "OHLC indicators",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "timestamp_unit": "s",
+        },
+        content="\n".join(rows) + "\n",
+        headers={"content-type": "text/csv"},
+    ).json()
+    endpoint = (
+        f"/api/v1/local/datasets/{imported['dataset_id']}"
+        "/indicators/compute/batch"
+    )
+    response = client.post(
+        endpoint,
+        json={
+            "schemaVersion": 1,
+            "data_epoch": imported["data_epoch"],
+            "requests": [
+                {
+                    "jobKey": "ma-3",
+                    "clientId": "local-ma-one",
+                    "name": "MA",
+                    "params": {"period": 3, "source": "close"},
+                },
+                {
+                    "jobKey": "ema-3",
+                    "clientId": "local-ema-one",
+                    "name": "EMA",
+                    "params": {"period": 3, "source": "close"},
+                },
+                {
+                    "jobKey": "rsi-2",
+                    "clientId": "local-rsi-one",
+                    "name": "RSI",
+                    "params": {"period": 2, "source": "close"},
+                },
+                {
+                    "jobKey": "macd-valid",
+                    "clientId": "local-macd-valid",
+                    "name": "MACD",
+                    "params": {"fast": 2, "slow": 3, "signal": 2},
+                },
+                {
+                    "jobKey": "boll-3",
+                    "clientId": "local-boll-one",
+                    "name": "BOLL",
+                    "params": {"period": 3, "mult": 2},
+                },
+                {
+                    "jobKey": "macd-invalid",
+                    "clientId": "local-macd-invalid",
+                    "name": "MACD",
+                    "params": {"fast": 30, "slow": 20, "signal": 9},
+                },
+            ],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["source"] == "local_dataset"
+    assert payload["data_epoch"] == imported["data_epoch"]
+    assert payload["ok"] is False
+    ma_payload = payload["results"][0]["payload"]
+    assert ma_payload["ok"] is True
+    assert ma_payload["dataRevision"]["token"] == imported["data_epoch"]
+    assert ma_payload["lines"][0]["data"][0] == {
+        "time": 1704067320,
+        "value": 102.0,
+    }
+    by_client = {item["clientId"]: item["payload"] for item in payload["results"]}
+    for client_id in (
+        "local-ma-one",
+        "local-ema-one",
+        "local-rsi-one",
+        "local-macd-valid",
+        "local-boll-one",
+    ):
+        assert by_client[client_id]["ok"] is True
+        assert by_client[client_id]["lines"]
+    assert by_client["local-rsi-one"]["lines"][0]["pane"] == "separate"
+    assert len(by_client["local-macd-valid"]["lines"]) == 3
+    assert len(by_client["local-boll-one"]["lines"]) == 3
+    assert by_client["local-macd-invalid"]["code"] == (
+        "LOCAL_INDICATOR_PARAMS_INVALID"
+    )
+
+    stale = client.post(
+        endpoint,
+        json={
+            "schemaVersion": 1,
+            "data_epoch": "sha256:" + "0" * 64,
+            "requests": [
+                {
+                    "jobKey": "ma-stale",
+                    "clientId": "local-ma-stale",
+                    "name": "MA",
+                    "params": {"period": 3},
+                }
+            ],
+        },
+    )
+    assert stale.status_code == 409
+    assert stale.json()["detail"]["code"] == "dataset_revision_changed"

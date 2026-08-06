@@ -14,6 +14,7 @@ import {
 } from "./localDataApi.js";
 import type { LocalDatasetManifest } from "./localDataTypes.js";
 import LocalAnalysisPanel from "./LocalAnalysisPanel.js";
+import LocalIndicatorPanel from "./LocalIndicatorPanel.js";
 import { createLocalAnalysisMarkerSource } from "./localAnalysisMarkerSource.js";
 import {
   EMPTY_LOCAL_ANALYSIS_SNAPSHOT,
@@ -23,7 +24,12 @@ import type {
   LocalAnalysisEvent,
   LocalAnalysisFocusRequest,
 } from "./localAnalysisTypes.js";
-import { useLocalChartRuntime } from "./useLocalChartRuntime.js";
+import {
+  buildLocalChartDataMeta,
+  useLocalChartRuntime,
+} from "./useLocalChartRuntime.js";
+import { useLocalIndicatorRuntime } from "./useLocalIndicatorRuntime.js";
+import type { IndicatorRuntime } from "../indicators/indicatorRuntimeContract.js";
 
 
 function formatRows(rows: number): string {
@@ -154,6 +160,7 @@ function LocalDatasetRail({
   importing,
   onSelect,
   onImport,
+  indicators,
   analysis,
 }: {
   datasets: LocalDatasetManifest[];
@@ -161,6 +168,7 @@ function LocalDatasetRail({
   importing: boolean;
   onSelect(datasetId: string): void;
   onImport: Parameters<typeof LocalImportForm>[0]["onImport"];
+  indicators: ReactNode;
   analysis: ReactNode;
 }) {
   return (
@@ -190,6 +198,7 @@ function LocalDatasetRail({
           ))}
         </div>
       </section>
+      {indicators}
       {analysis}
     </aside>
   );
@@ -199,14 +208,34 @@ function LocalChart({
   manifest,
   eventStore,
   focusRequest,
+  indicators,
   onCrosshairMove,
 }: {
   manifest: LocalDatasetManifest;
   eventStore: LocalAnalysisEventStore;
   focusRequest: LocalAnalysisFocusRequest | null;
+  indicators: IndicatorRuntime;
   onCrosshairMove(value: MainSeriesCrosshairValue | null): void;
 }) {
   const runtime = useLocalChartRuntime(manifest);
+  const subscribeSeries = useCallback(
+    (listener: () => void) => runtime.seriesStore.subscribe(listener),
+    [runtime.seriesStore],
+  );
+  const getSeriesVersion = useCallback(
+    () => Number(runtime.seriesStore.version),
+    [runtime.seriesStore],
+  );
+  const seriesVersion = useSyncExternalStore(
+    subscribeSeries,
+    getSeriesVersion,
+    getSeriesVersion,
+  );
+  const dataMeta = useMemo(() => buildLocalChartDataMeta(
+    runtime.seriesStore,
+    runtime.loading || runtime.loadingMore ? "loading" : "ready",
+    seriesVersion,
+  ), [runtime.loading, runtime.loadingMore, runtime.seriesStore, seriesVersion]);
   const focusTime = runtime.focusTime;
   const markerSource = useMemo(() => createLocalAnalysisMarkerSource({
     eventStore,
@@ -238,6 +267,7 @@ function LocalChart({
           drawingKeyBase={`local:${manifest.dataset_id}:${manifest.data_epoch}`}
           interval={manifest.interval}
           loading={runtime.loading || runtime.loadingMore}
+          dataMeta={dataMeta}
           onCrosshairMove={onCrosshairMove}
           navigationTarget={navigationTarget}
           onNeedMoreLeft={runtime.loadMoreLeft}
@@ -251,9 +281,71 @@ function LocalChart({
           timezone={manifest.timezone}
           followLatest={false}
           externalMarkerSource={markerSource}
+          mainOverlayLines={indicators.view.mainOverlayLines}
+          subPanes={indicators.view.subPanes}
+          indicatorMarkers={indicators.view.markers}
+          indicatorFills={indicators.view.fills}
+          indicatorHlines={indicators.view.hlines}
+          indicatorBgcolors={indicators.view.bgcolors}
+          indicatorBarcolors={indicators.view.barcolors}
+          onRemoveSubPane={(pane) => {
+            if (pane.owner?.kind === "indicator") {
+              indicators.actions.removeIndicator(pane.owner.id);
+            }
+          }}
         />
       </ChartErrorBoundary>
     </>
+  );
+}
+
+function LocalDatasetWorkspace({
+  manifest,
+  eventStore,
+  focusRequest,
+  datasets,
+  importing,
+  onSelect,
+  onImport,
+  analysis,
+  onCrosshairMove,
+}: {
+  manifest: LocalDatasetManifest;
+  eventStore: LocalAnalysisEventStore;
+  focusRequest: LocalAnalysisFocusRequest | null;
+  datasets: LocalDatasetManifest[];
+  importing: boolean;
+  onSelect(datasetId: string): void;
+  onImport: Parameters<typeof LocalImportForm>[0]["onImport"];
+  analysis: ReactNode;
+  onCrosshairMove(value: MainSeriesCrosshairValue | null): void;
+}) {
+  const indicators = useLocalIndicatorRuntime(manifest);
+  return (
+    <MarketWorkspaceFrame
+      toolbar={null}
+      exportOverlay={null}
+      chart={(
+        <LocalChart
+          manifest={manifest}
+          eventStore={eventStore}
+          focusRequest={focusRequest}
+          indicators={indicators}
+          onCrosshairMove={onCrosshairMove}
+        />
+      )}
+      rightRail={(
+        <LocalDatasetRail
+          datasets={datasets}
+          selectedId={manifest.dataset_id}
+          importing={importing}
+          onSelect={onSelect}
+          onImport={onImport}
+          indicators={<LocalIndicatorPanel manifest={manifest} runtime={indicators} />}
+          analysis={analysis}
+        />
+      )}
+    />
   );
 }
 
@@ -370,41 +462,49 @@ export default function LocalApp() {
         </div>
       )}
       workspace={(
-        <MarketWorkspaceFrame
-          toolbar={null}
-          exportOverlay={null}
-          chart={selected && analysisStore ? (
-            <LocalChart
-              key={selected.data_epoch}
-              manifest={selected}
-              eventStore={analysisStore}
-              focusRequest={focusRequest}
-              onCrosshairMove={(value) => {
-                if (value !== null) setLastCrosshair(value);
-              }}
-            />
-          ) : <EmptyChart />}
-          rightRail={(
-            <LocalDatasetRail
-              datasets={datasets}
-              selectedId={selectedId}
-              importing={importing}
-              onSelect={setSelectedId}
-              onImport={handleImport}
-              analysis={selected && analysisStore ? (
-                <LocalAnalysisPanel
-                  key={selected.data_epoch}
-                  manifest={selected}
-                  snapshot={analysisSnapshot}
-                  eventStore={analysisStore}
-                  crosshair={lastCrosshair}
-                  onFocus={focusAnalysisEvent}
-                  onError={setError}
-                />
-              ) : null}
-            />
-          )}
-        />
+        selected && analysisStore ? (
+          <LocalDatasetWorkspace
+            key={selected.data_epoch}
+            manifest={selected}
+            eventStore={analysisStore}
+            focusRequest={focusRequest}
+            datasets={datasets}
+            importing={importing}
+            onSelect={setSelectedId}
+            onImport={handleImport}
+            analysis={(
+              <LocalAnalysisPanel
+                key={selected.data_epoch}
+                manifest={selected}
+                snapshot={analysisSnapshot}
+                eventStore={analysisStore}
+                crosshair={lastCrosshair}
+                onFocus={focusAnalysisEvent}
+                onError={setError}
+              />
+            )}
+            onCrosshairMove={(value) => {
+              if (value !== null) setLastCrosshair(value);
+            }}
+          />
+        ) : (
+          <MarketWorkspaceFrame
+            toolbar={null}
+            exportOverlay={null}
+            chart={<EmptyChart />}
+            rightRail={(
+              <LocalDatasetRail
+                datasets={datasets}
+                selectedId={selectedId}
+                importing={importing}
+                onSelect={setSelectedId}
+                onImport={handleImport}
+                indicators={null}
+                analysis={null}
+              />
+            )}
+          />
+        )
       )}
       featureSurfaces={error === null ? null : (
         <div className="local-global-error" role="alert">

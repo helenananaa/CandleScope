@@ -95,13 +95,22 @@ local-data/
 
 事件保存在浏览器本地存储中，键包含 `dataset_id + data_epoch`；因此同一数据集的新修订不会继承旧修订的标记。绘图继续使用同一数据身份下的绘图存储。写入失败时事件不会只停留在内存里伪装成已保存；损坏的事件文档会 fail closed，并由用户显式重置。
 
+## 静态本地指标
+
+本地分析页可以添加多个 MA、EMA、RSI、MACD 和 BOLL 实例，修改周期、价格源和颜色，隐藏、删除或手动重新计算。MA、EMA 和 BOLL 叠加在主图，RSI 和 MACD 使用独立窗格；选择与参数按 `dataset_id + data_epoch` 保存在浏览器中，刷新页面后会恢复。同类指标可以同时存在，例如 MA(20) 与 MA(60)。
+
+计算请求只提交指标身份与参数。后端根据请求中的 `dataset_id + data_epoch` 打开对应不可变 SQLite 修订，读取全部已导入行并执行一次性内置计算，不接收浏览器提供的 OHLCV，不创建 DataManager、交易所连接、回填、指标 WebSocket 或插件 host。源数据缺口不会修复或插值，指标把现有导入行按时间顺序计算。OHLC-only 数据集仍可使用这五种价格指标；成交量类指标不在本地目录中，缺失成交量不会被当成真实的零成交量。
+
+当前一次静态计算最多支持 50,000 根 K 线，超过时明确拒绝，不会截断后冒充完整结果。Pine/Pyne 和自定义脚本尚未进入本地 profile；后续接入时必须继续使用显式的本地执行合同，不能回退到在线指标、插件或行情链路。
+
 ## 本地数据边界
 
 - 本地 profile 只注册 `/api/v1/local/*`、健康检查和 API 文档；直播、回放和插件 API 不加载，并由 profile middleware 拒绝。
 - Python 进程安装 loopback-only 网络 guard，在 DNS、TCP connect 和 UDP send 边界阻断非 loopback 目标。
 - `local.html` 使用 `LocalKlineApi` 和静态 `SeriesWindowStore`，没有 WebSocket URL，也没有定时轮询。
+- 静态指标只调用数据集绑定的 `/api/v1/local/datasets/{dataset_id}/indicators/compute/batch`，结果带回同一 `data_epoch`；普通 `/api/v1/indicators/*` 路由仍不加载。
 - 当前 profile 的网络 guard 是防止本地数据链路误入线上 fallback 的应用内防线，并不表示使用本地分析功能时要求电脑处于断网状态。
 
 ## 第一阶段范围
 
-已支持 OHLC/OHLCV CSV 导入、严格校验、不可变版本、数据集列表、静态 K 线、左侧历史分页、缺口披露、通用手工事件、任意事件 CSV 列映射、逐行拒绝报告、事件筛选与定位，以及本地绘图存储基础。当前暂不支持 Excel/Parquet、一个数据集内多商品或多周期、重采样、本地指标管理 UI、插件和回放。后续功能可以扩展为统一应用里的“本地数据源”，但必须继续保持数据身份和 fallback 隔离。
+已支持 OHLC/OHLCV CSV 导入、严格校验、不可变版本、数据集列表、静态 K 线、左侧历史分页、缺口披露、MA/EMA/RSI/MACD/BOLL 静态指标、通用手工事件、任意事件 CSV 列映射、逐行拒绝报告、事件筛选与定位，以及本地绘图存储基础。当前暂不支持 Excel/Parquet、一个数据集内多商品或多周期、重采样、成交量指标、Pine/Pyne、自定义脚本、插件和回放。后续功能可以扩展为统一应用里的“本地数据源”，但必须继续保持数据身份和 fallback 隔离。

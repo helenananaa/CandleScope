@@ -6,6 +6,7 @@ import { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
 import { parseIntervalSeconds } from "../../utils/intervals.js";
 import { LocalKlineApi } from "./localDataApi.js";
 import type { LocalDatasetManifest } from "./localDataTypes.js";
+import type { ChartDataCommitMeta } from "../market-data/useChartDataRuntime.js";
 
 
 export interface LocalChartRuntime {
@@ -21,6 +22,32 @@ export interface LocalChartRuntime {
 
 function resultHasMore(result: FeedResult | AppliedKlineResult): boolean {
   return result.has_more === true;
+}
+
+export function buildLocalChartDataMeta(
+  seriesStore: SeriesWindowStore,
+  status: "loading" | "ready",
+  observedVersion = Number(seriesStore.version),
+): ChartDataCommitMeta {
+  const description = seriesStore.describe();
+  return {
+    version: observedVersion,
+    status,
+    source: "local_dataset",
+    seriesKey: seriesStore.seriesKey,
+    bars: description.bars,
+    firstTime: description.firstTime,
+    lastTime: description.lastTime,
+    coverage: {
+      from: description.coverage.firstTime,
+      to: description.coverage.lastTime,
+      bars: description.coverage.bars,
+    },
+    committedAt: null,
+    optimistic: false,
+    historyComplete: true,
+    dataRevision: seriesStore.seriesKey,
+  };
 }
 
 export function useLocalChartRuntime(manifest: LocalDatasetManifest): LocalChartRuntime {

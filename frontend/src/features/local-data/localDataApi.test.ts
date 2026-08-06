@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { listLocalDatasets, LocalKlineApi, resolveLocalEventTimes } from "./localDataApi.js";
+import {
+  computeLocalIndicatorBatch,
+  listLocalDatasets,
+  LocalKlineApi,
+  resolveLocalEventTimes,
+} from "./localDataApi.js";
 import { toEpochSeconds } from "../market-data/marketDataTypes.js";
 import type { LocalDatasetManifest } from "./localDataTypes.js";
 
@@ -168,4 +173,52 @@ test("event time resolution posts immutable identity and validates ordered resul
   });
   assert.equal(result.results[0]?.bar_open_ms, 1_704_067_200_000);
   assert.equal(result.results[1]?.matched, false);
+});
+
+test("local indicator compute sends identities and params without browser OHLCV", async (context) => {
+  const originalFetch = globalThis.fetch;
+  context.after(() => { globalThis.fetch = originalFetch; });
+  let requestBody: Record<string, unknown> = {};
+  globalThis.fetch = async (_url, init) => {
+    requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return jsonResponse({
+      schemaVersion: 1,
+      type: "local.indicator.compute_batch",
+      source: "local_dataset",
+      dataset_id: manifest().dataset_id,
+      data_epoch: manifest().data_epoch,
+      ok: true,
+      results: [{
+        clientId: "local-ma-one",
+        jobKey: "ma-job-one",
+        payload: {
+          schemaVersion: 1,
+          ok: true,
+          error: null,
+          lines: [{
+            name: "MA(3)",
+            pane: "main",
+            data: [{ time: 1_704_067_320, value: 102 }],
+          }],
+        },
+      }],
+    });
+  };
+
+  const result = await computeLocalIndicatorBatch(manifest(), [{
+    clientId: "local-ma-one",
+    jobKey: "ma-job-one",
+    name: "MA",
+    params: { period: 3, source: "close" },
+  }]);
+
+  assert.equal(Object.hasOwn(requestBody, "ohlcv"), false);
+  assert.equal(requestBody.data_epoch, manifest().data_epoch);
+  assert.deepEqual(requestBody.requests, [{
+    clientId: "local-ma-one",
+    jobKey: "ma-job-one",
+    name: "MA",
+    params: { period: 3, source: "close" },
+  }]);
+  assert.equal(result.results[0]?.payload.lines[0]?.data[0]?.value, 102);
 });

@@ -18,6 +18,11 @@ import {
   parseKlineResponse,
   type TransportKlineResponse,
 } from "../../services/apiPayloadParsers.js";
+import { parseIndicatorComputeBatchResponse } from "../indicators/indicatorContracts.js";
+import type {
+  IndicatorComputeBatchResponse,
+  IndicatorParams,
+} from "../indicators/indicatorTypes.js";
 import type {
   LocalDatasetListResponse,
   LocalDatasetManifest,
@@ -25,6 +30,7 @@ import type {
   LocalEventTimeResolutionMode,
   LocalEventTimeResolutionResponse,
   LocalImportInput,
+  LocalIndicatorName,
 } from "./localDataTypes.js";
 
 
@@ -201,6 +207,54 @@ export async function resolveLocalEventTimes(
     rejected: results.length - matched,
     results,
   };
+}
+
+export interface LocalIndicatorComputeJob {
+  clientId: string;
+  jobKey: string;
+  name: LocalIndicatorName;
+  params: IndicatorParams;
+}
+
+export async function computeLocalIndicatorBatch(
+  manifest: LocalDatasetManifest,
+  jobs: readonly LocalIndicatorComputeJob[],
+  signal?: AbortSignal,
+): Promise<IndicatorComputeBatchResponse> {
+  if (jobs.length < 1 || jobs.length > 32) {
+    throw new RangeError("Local indicator batch requires between 1 and 32 jobs");
+  }
+  const payload = await responseJson(await fetch(
+    localUrl(`/datasets/${encodeURIComponent(manifest.dataset_id)}/indicators/compute/batch`),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        schemaVersion: 1,
+        data_epoch: manifest.data_epoch,
+        requests: jobs,
+      }),
+      ...(signal === undefined ? {} : { signal }),
+    },
+  ));
+  if (!isJsonRecord(payload)
+    || payload.source !== "local_dataset"
+    || payload.dataset_id !== manifest.dataset_id
+    || payload.data_epoch !== manifest.data_epoch) {
+    throw new TypeError("Local indicator response identity is invalid");
+  }
+  const parsed = parseIndicatorComputeBatchResponse(payload);
+  if (parsed.results.length !== jobs.length) {
+    throw new TypeError("Local indicator response count is invalid");
+  }
+  for (let index = 0; index < jobs.length; index += 1) {
+    const expected = jobs[index];
+    const actual = parsed.results[index];
+    if (actual?.clientId !== expected?.clientId || actual?.jobKey !== expected?.jobKey) {
+      throw new TypeError("Local indicator response order or identity is invalid");
+    }
+  }
+  return parsed;
 }
 
 function toKlineFetchResult(payload: unknown, operation: string): KlineFetchResult {
