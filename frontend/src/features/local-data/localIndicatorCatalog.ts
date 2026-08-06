@@ -2,6 +2,7 @@ import type {
   IndicatorDefinition,
   IndicatorParameterSchema,
   IndicatorParams,
+  IndicatorPreset,
 } from "../indicators/indicatorTypes.js";
 import type { LocalIndicatorName } from "./localDataTypes.js";
 
@@ -11,6 +12,7 @@ export interface LocalIndicatorCatalogEntry {
   name: string;
   shortName: string;
   description: string;
+  category: "trend" | "oscillator" | "volatility";
   paneTarget: "main" | "sub";
   params: IndicatorParams;
   paramSchema: IndicatorParameterSchema[];
@@ -24,6 +26,7 @@ export const LOCAL_INDICATOR_CATALOG: readonly LocalIndicatorCatalogEntry[] = [
     name: "移动平均线",
     shortName: "MA",
     description: "简单移动平均线，叠加在主图。",
+    category: "trend",
     paneTarget: "main",
     params: { period: 20, source: "close", color: "#f59e0b" },
     paramSchema: [
@@ -37,6 +40,7 @@ export const LOCAL_INDICATOR_CATALOG: readonly LocalIndicatorCatalogEntry[] = [
     name: "指数移动平均线",
     shortName: "EMA",
     description: "指数加权移动平均线，叠加在主图。",
+    category: "trend",
     paneTarget: "main",
     params: { period: 20, source: "close", color: "#3b82f6" },
     paramSchema: [
@@ -50,6 +54,7 @@ export const LOCAL_INDICATOR_CATALOG: readonly LocalIndicatorCatalogEntry[] = [
     name: "相对强弱指标",
     shortName: "RSI",
     description: "独立窗格中的相对强弱指标。",
+    category: "oscillator",
     paneTarget: "sub",
     params: { period: 14, source: "close", color: "#a855f7" },
     paramSchema: [
@@ -63,6 +68,7 @@ export const LOCAL_INDICATOR_CATALOG: readonly LocalIndicatorCatalogEntry[] = [
     name: "指数平滑异同移动平均线",
     shortName: "MACD",
     description: "DIF、DEA 与柱状图，显示在独立窗格。",
+    category: "oscillator",
     paneTarget: "sub",
     params: {
       fast: 12,
@@ -86,6 +92,7 @@ export const LOCAL_INDICATOR_CATALOG: readonly LocalIndicatorCatalogEntry[] = [
     name: "布林带",
     shortName: "BOLL",
     description: "中轨、上轨和下轨，叠加在主图。",
+    category: "volatility",
     paneTarget: "main",
     params: {
       period: 20,
@@ -105,6 +112,33 @@ export const LOCAL_INDICATOR_CATALOG: readonly LocalIndicatorCatalogEntry[] = [
     ],
   },
 ] as const;
+
+const OUTPUTS_BY_NAME: Readonly<Record<LocalIndicatorName, readonly string[]>> = {
+  MA: ["MA"],
+  EMA: ["EMA"],
+  RSI: ["RSI"],
+  MACD: ["DIF", "DEA", "MACD"],
+  BOLL: ["middle", "upper", "lower"],
+};
+
+export const LOCAL_INDICATOR_PRESETS: readonly IndicatorPreset[] = (
+  LOCAL_INDICATOR_CATALOG.map((entry) => ({
+    id: `local-catalog-${entry.engineName.toLowerCase()}`,
+    executionTarget: "local" as const,
+    name: entry.name,
+    engineName: entry.engineName,
+    script: `# __ENGINE__:${entry.engineName}`,
+    params: { ...entry.params },
+    description: entry.description,
+    category: entry.category,
+    paramSchema: entry.paramSchema.map((schema) => ({ ...schema })),
+    outputs: [...OUTPUTS_BY_NAME[entry.engineName]],
+    is_builtin: true,
+    isPreset: true,
+    defaultEnabled: false,
+    paneTarget: entry.paneTarget,
+  }))
+);
 
 const CATALOG_BY_NAME = new Map(
   LOCAL_INDICATOR_CATALOG.map((entry) => [entry.engineName, entry]),

@@ -2,11 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { ReactNode } from "react";
 import SingleChartPanes from "../../components/SingleChartPanes.js";
 import type { MainSeriesCrosshairValue } from "../../chart-adapter/chartAdapterTypes.js";
+import { useChartSurfaceRuntime } from "../../chart-adapter/useChartSurfaceRuntime.js";
 import { ChartErrorBoundary } from "../../app/AppProviders.js";
+import { drawingToolWhenInteractionReady } from "../../app/drawingInteractionReadiness.js";
 import MarketPageFrame from "../../app/MarketPageFrame.js";
 import MarketStatusBar from "../../app/MarketStatusBar.js";
 import MarketTopBarFrame from "../../app/MarketTopBarFrame.js";
 import MarketWorkspaceFrame from "../../app/MarketWorkspaceFrame.js";
+import DrawingToolbar from "../../components/DrawingToolbar.js";
 import {
   importLocalCsv,
   listLocalDatasets,
@@ -14,7 +17,6 @@ import {
 } from "./localDataApi.js";
 import type { LocalDatasetManifest } from "./localDataTypes.js";
 import LocalAnalysisPanel from "./LocalAnalysisPanel.js";
-import LocalIndicatorPanel from "./LocalIndicatorPanel.js";
 import { createLocalAnalysisMarkerSource } from "./localAnalysisMarkerSource.js";
 import {
   EMPTY_LOCAL_ANALYSIS_SNAPSHOT,
@@ -30,6 +32,27 @@ import {
 } from "./useLocalChartRuntime.js";
 import { useLocalIndicatorRuntime } from "./useLocalIndicatorRuntime.js";
 import type { IndicatorRuntime } from "../indicators/indicatorRuntimeContract.js";
+import IndicatorPanel from "../indicators/IndicatorPanel.js";
+import type { StaticIndicatorCatalog } from "../indicators/useIndicatorCatalogRuntime.js";
+import { useDrawingRuntime } from "../drawings/useDrawingRuntime.js";
+import type { DrawingRuntime } from "../drawings/useDrawingRuntime.js";
+import type { DrawingToolId } from "../drawings/drawingTypes.js";
+import type { MainChartType } from "../../shared/mainChartTypes.js";
+import {
+  createLocalIndicatorDefinition,
+  LOCAL_INDICATOR_PRESETS,
+  localIndicatorCatalogEntry,
+} from "./localIndicatorCatalog.js";
+
+
+const LOCAL_STATIC_INDICATOR_CATALOG: StaticIndicatorCatalog = {
+  presets: LOCAL_INDICATOR_PRESETS,
+  resolvePresetForChart(preset) {
+    const entry = localIndicatorCatalogEntry(preset.engineName);
+    if (entry === null) throw new Error("该指标不属于本地静态目录");
+    return createLocalIndicatorDefinition(entry.engineName);
+  },
+};
 
 
 function formatRows(rows: number): string {
@@ -160,7 +183,6 @@ function LocalDatasetRail({
   importing,
   onSelect,
   onImport,
-  indicators,
   analysis,
 }: {
   datasets: LocalDatasetManifest[];
@@ -168,7 +190,6 @@ function LocalDatasetRail({
   importing: boolean;
   onSelect(datasetId: string): void;
   onImport: Parameters<typeof LocalImportForm>[0]["onImport"];
-  indicators: ReactNode;
   analysis: ReactNode;
 }) {
   return (
@@ -198,7 +219,6 @@ function LocalDatasetRail({
           ))}
         </div>
       </section>
-      {indicators}
       {analysis}
     </aside>
   );
@@ -209,12 +229,24 @@ function LocalChart({
   eventStore,
   focusRequest,
   indicators,
+  chartSurfaceRef,
+  drawings,
+  drawingTool,
+  chartType,
+  onDrawingInteractionReadyChange,
+  onRemoveIndicator,
   onCrosshairMove,
 }: {
   manifest: LocalDatasetManifest;
   eventStore: LocalAnalysisEventStore;
   focusRequest: LocalAnalysisFocusRequest | null;
   indicators: IndicatorRuntime;
+  chartSurfaceRef: ReturnType<typeof useChartSurfaceRuntime>["ref"];
+  drawings: DrawingRuntime;
+  drawingTool: DrawingToolId | null;
+  chartType: MainChartType;
+  onDrawingInteractionReadyChange(ready: boolean): void;
+  onRemoveIndicator(indicatorId: string): void;
   onCrosshairMove(value: MainSeriesCrosshairValue | null): void;
 }) {
   const runtime = useLocalChartRuntime(manifest);
@@ -262,6 +294,7 @@ function LocalChart({
       )}
       <ChartErrorBoundary>
         <SingleChartPanes
+          ref={chartSurfaceRef}
           seriesStore={runtime.seriesStore}
           symbol={manifest.symbol}
           drawingKeyBase={`local:${manifest.dataset_id}:${manifest.data_epoch}`}
@@ -276,11 +309,26 @@ function LocalChart({
           datasetKey={`local:${manifest.dataset_id}:${manifest.data_epoch}`}
           upColor="#22c55e"
           downColor="#ef4444"
+          chartType={chartType}
           theme="dark"
           customBg="#0a0e17"
           timezone={manifest.timezone}
           followLatest={false}
           externalMarkerSource={markerSource}
+          drawingTool={drawingTool}
+          onDrawingToolChange={drawings.actions.setDrawingTool}
+          onDrawingInteractionReadyChange={onDrawingInteractionReadyChange}
+          penColor={drawings.view.penColor}
+          penSize={drawings.view.penSize}
+          textFontSize={drawings.view.textFontSize}
+          textBold={drawings.view.textBold}
+          textItalic={drawings.view.textItalic}
+          fibLevels={drawings.view.fibLevels}
+          fibInverted={drawings.view.fibInverted}
+          positionSize={drawings.view.positionSize}
+          drawingSnapEnabled={drawings.view.drawingSnapEnabled}
+          drawingContinuousEnabled={drawings.view.drawingContinuousEnabled}
+          onSelectedDrawingChange={drawings.actions.handleSelectedDrawingChange}
           mainOverlayLines={indicators.view.mainOverlayLines}
           subPanes={indicators.view.subPanes}
           indicatorMarkers={indicators.view.markers}
@@ -290,7 +338,7 @@ function LocalChart({
           indicatorBarcolors={indicators.view.barcolors}
           onRemoveSubPane={(pane) => {
             if (pane.owner?.kind === "indicator") {
-              indicators.actions.removeIndicator(pane.owner.id);
+              onRemoveIndicator(pane.owner.id);
             }
           }}
         />
@@ -308,6 +356,8 @@ function LocalDatasetWorkspace({
   onSelect,
   onImport,
   analysis,
+  indicatorPanelOpen,
+  onCloseIndicatorPanel,
   onCrosshairMove,
 }: {
   manifest: LocalDatasetManifest;
@@ -318,34 +368,111 @@ function LocalDatasetWorkspace({
   onSelect(datasetId: string): void;
   onImport: Parameters<typeof LocalImportForm>[0]["onImport"];
   analysis: ReactNode;
+  indicatorPanelOpen: boolean;
+  onCloseIndicatorPanel(): void;
   onCrosshairMove(value: MainSeriesCrosshairValue | null): void;
 }) {
   const indicators = useLocalIndicatorRuntime(manifest);
+  const chartSurface = useChartSurfaceRuntime();
+  const drawings = useDrawingRuntime({
+    chartSurfaceActions: chartSurface.actions,
+    session: null,
+  });
+  const [drawingInteractionReady, setDrawingInteractionReady] = useState(false);
+  const [chartType, setChartType] = useState<MainChartType>("candlestick");
+  const drawingTool = drawingToolWhenInteractionReady(
+    drawings.view.drawingTool,
+    drawingInteractionReady,
+  );
+  const removeIndicator = useCallback((indicatorId: string) => {
+    drawings.actions.handleIndicatorRemoved(indicatorId);
+    indicators.actions.removeIndicator(indicatorId);
+  }, [drawings.actions, indicators.actions]);
   return (
-    <MarketWorkspaceFrame
-      toolbar={null}
-      exportOverlay={null}
-      chart={(
-        <LocalChart
-          manifest={manifest}
-          eventStore={eventStore}
-          focusRequest={focusRequest}
-          indicators={indicators}
-          onCrosshairMove={onCrosshairMove}
-        />
-      )}
-      rightRail={(
-        <LocalDatasetRail
-          datasets={datasets}
-          selectedId={manifest.dataset_id}
-          importing={importing}
-          onSelect={onSelect}
-          onImport={onImport}
-          indicators={<LocalIndicatorPanel manifest={manifest} runtime={indicators} />}
-          analysis={analysis}
-        />
-      )}
-    />
+    <>
+      <MarketWorkspaceFrame
+        toolbar={(
+          <DrawingToolbar
+            activeTool={drawingTool}
+            onToolChange={drawings.actions.setDrawingTool}
+            drawingInteractionReady={drawingInteractionReady}
+            penColor={drawings.view.penColor}
+            onPenColorChange={drawings.actions.setPenColor}
+            penSize={drawings.view.penSize}
+            onPenSizeChange={drawings.actions.setPenSize}
+            onClearAll={drawings.actions.handleClearDrawing}
+            drawingsHidden={drawings.view.drawingsHidden}
+            onToggleDrawingsHidden={drawings.actions.handleToggleDrawingsHidden}
+            drawingSnapEnabled={drawings.view.drawingSnapEnabled}
+            onDrawingSnapEnabledChange={drawings.actions.handleDrawingSnapEnabledChange}
+            drawingContinuousEnabled={drawings.view.drawingContinuousEnabled}
+            onDrawingContinuousEnabledChange={drawings.actions.handleDrawingContinuousEnabledChange}
+            textFontSize={drawings.view.textFontSize}
+            onTextFontSizeChange={drawings.actions.setTextFontSize}
+            textBold={drawings.view.textBold}
+            onTextBoldChange={drawings.actions.setTextBold}
+            textItalic={drawings.view.textItalic}
+            onTextItalicChange={drawings.actions.setTextItalic}
+            fibLevels={drawings.view.fibLevels}
+            onFibLevelsChange={drawings.actions.handleFibLevelsChange}
+            fibInverted={drawings.view.fibInverted}
+            onFibInvertedChange={drawings.actions.handleFibInvertedChange}
+            positionSize={drawings.view.positionSize}
+            onPositionSizeChange={drawings.actions.handlePositionSizeChange}
+            selectedDrawing={drawings.view.selectedDrawing}
+            onSelectedDrawingStyleChange={drawings.actions.handleSelectedDrawingStyleChange}
+            chartType={chartType}
+            onChartTypeChange={setChartType}
+          />
+        )}
+        exportOverlay={null}
+        chart={(
+          <LocalChart
+            manifest={manifest}
+            eventStore={eventStore}
+            focusRequest={focusRequest}
+            indicators={indicators}
+            chartSurfaceRef={chartSurface.ref}
+            drawings={drawings}
+            drawingTool={drawingTool}
+            chartType={chartType}
+            onDrawingInteractionReadyChange={setDrawingInteractionReady}
+            onRemoveIndicator={removeIndicator}
+            onCrosshairMove={onCrosshairMove}
+          />
+        )}
+        rightRail={(
+          <LocalDatasetRail
+            datasets={datasets}
+            selectedId={manifest.dataset_id}
+            importing={importing}
+            onSelect={onSelect}
+            onImport={onImport}
+            analysis={analysis}
+          />
+        )}
+      />
+      <IndicatorPanel
+        staticCatalog={LOCAL_STATIC_INDICATOR_CATALOG}
+        allowCustomIndicators={false}
+        isOpen={indicatorPanelOpen}
+        onClose={onCloseIndicatorPanel}
+        activeIndicators={indicators.view.activeIndicators}
+        paramSchemas={indicators.view.paramSchemas}
+        onAddIndicator={indicators.actions.addIndicator}
+        onRemoveIndicator={removeIndicator}
+        onToggleVisibility={indicators.actions.toggleVisibility}
+        onUpdateParams={indicators.actions.updateIndicatorParams}
+        onUpdateScript={indicators.actions.updateIndicatorScript}
+        computing={indicators.status.computing}
+        realtimeMode="historical-only"
+        onRecompute={indicators.actions.recompute}
+        modeNotice={{
+          label: "本地 CSV",
+          description: "只计算当前不可变 dataEpoch 的已导入行；不联网、不回填。",
+        }}
+      />
+    </>
   );
 }
 
@@ -365,6 +492,7 @@ export default function LocalApp() {
   const [loadingLibrary, setLoadingLibrary] = useState(true);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [indicatorPanelOpen, setIndicatorPanelOpen] = useState(false);
   const [lastCrosshair, setLastCrosshair] = useState<MainSeriesCrosshairValue | null>(null);
   const [focusRequest, setFocusRequest] = useState<LocalAnalysisFocusRequest | null>(null);
 
@@ -415,6 +543,7 @@ export default function LocalApp() {
   useEffect(() => {
     setLastCrosshair(null);
     setFocusRequest(null);
+    setIndicatorPanelOpen(false);
   }, [selected?.data_epoch, selected?.dataset_id]);
 
   const focusAnalysisEvent = useCallback((event: LocalAnalysisEvent) => {
@@ -451,7 +580,18 @@ export default function LocalApp() {
               <span>{selected.name}</span>
             </div>
           ) : null}
-          controls={<span className="local-offline-badge">● 本地分析</span>}
+          controls={<>
+            <button
+              type="button"
+              className={`indicator-toggle-btn ${indicatorPanelOpen ? "active" : ""}`}
+              disabled={selected === null}
+              onClick={() => setIndicatorPanelOpen((open) => !open)}
+              title="指标 (Indicators)"
+            >
+              📊
+            </button>
+            <span className="local-offline-badge">● 本地分析</span>
+          </>}
           trailing={<span className="local-network-truth">CSV 数据 · 事件标记 · 本地绘图</span>}
         />
       )}
@@ -472,6 +612,8 @@ export default function LocalApp() {
             importing={importing}
             onSelect={setSelectedId}
             onImport={handleImport}
+            indicatorPanelOpen={indicatorPanelOpen}
+            onCloseIndicatorPanel={() => setIndicatorPanelOpen(false)}
             analysis={(
               <LocalAnalysisPanel
                 key={selected.data_epoch}
@@ -499,7 +641,6 @@ export default function LocalApp() {
                 importing={importing}
                 onSelect={setSelectedId}
                 onImport={handleImport}
-                indicators={null}
                 analysis={null}
               />
             )}

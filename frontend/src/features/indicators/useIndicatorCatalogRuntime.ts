@@ -27,6 +27,13 @@ export type CatalogIndicator = IndicatorPreset | CatalogCustomIndicator | Indica
 type CatalogFallback = Partial<CustomIndicatorRecord>
   & Partial<Pick<IndicatorDefinition, "category" | "paneTarget">>;
 
+export interface StaticIndicatorCatalog {
+  readonly presets: readonly IndicatorPreset[];
+  resolvePresetForChart(
+    preset: CatalogIndicator,
+  ): IndicatorDefinition | Promise<IndicatorDefinition>;
+}
+
 function renderPaneTarget(value: Record<string, unknown> | undefined): string | null {
   return typeof value?.paneTarget === "string" ? value.paneTarget : null;
 }
@@ -87,6 +94,7 @@ function isCustomPreset(preset: CatalogIndicator): preset is CatalogCustomIndica
 
 export interface UseIndicatorCatalogRuntimeOptions {
   isOpen: boolean;
+  staticCatalog?: StaticIndicatorCatalog | null;
 }
 
 export interface IndicatorCatalogRuntime {
@@ -181,8 +189,9 @@ const indicatorCatalogStore = createIndicatorCatalogStore(async () => {
 export function shouldLoadIndicatorCatalog(
   isOpen: boolean,
   snapshot: IndicatorCatalogSnapshot | null,
+  staticCatalog: StaticIndicatorCatalog | null = null,
 ): boolean {
-  return isOpen && snapshot === null;
+  return staticCatalog === null && isOpen && snapshot === null;
 }
 
 export function shouldShowIndicatorCatalogLoading(
@@ -195,9 +204,12 @@ export function shouldShowIndicatorCatalogLoading(
 
 export function useIndicatorCatalogRuntime({
   isOpen,
+  staticCatalog = null,
 }: UseIndicatorCatalogRuntimeOptions): IndicatorCatalogRuntime {
   const [presets, setPresets] = useState<IndicatorPreset[]>(() => (
-    indicatorCatalogStore.getSnapshot()?.presets || []
+    staticCatalog === null
+      ? indicatorCatalogStore.getSnapshot()?.presets || []
+      : [...staticCatalog.presets]
   ));
   const [customIndicators, setCustomIndicators] = useState<CatalogCustomIndicator[]>(() => (
     indicatorCatalogStore.getSnapshot()?.customIndicators || []
@@ -206,7 +218,7 @@ export function useIndicatorCatalogRuntime({
 
   useEffect(() => {
     const cached = indicatorCatalogStore.getSnapshot();
-    if (!shouldLoadIndicatorCatalog(isOpen, cached)) {
+    if (!shouldLoadIndicatorCatalog(isOpen, cached, staticCatalog)) {
       return undefined;
     }
 
@@ -235,15 +247,18 @@ export function useIndicatorCatalogRuntime({
       // still consume it.  This only prevents a closed panel from updating.
       active = false;
     };
-  }, [isOpen]);
+  }, [isOpen, staticCatalog]);
 
   const resolvePresetForChart = useCallback(async (preset: CatalogIndicator) => {
+    if (staticCatalog !== null) {
+      return staticCatalog.resolvePresetForChart(preset);
+    }
     if (isCustomPreset(preset)) {
       return buildCustomIndicatorForChart(preset);
     }
     const fullPreset = await fetchPreset(preset.id);
     return buildBuiltinIndicatorForChart(fullPreset);
-  }, []);
+  }, [staticCatalog]);
 
   const removeCustomIndicator = useCallback((id: string) => {
     const remove = (current: CatalogCustomIndicator[]) => (
@@ -277,28 +292,38 @@ export function useIndicatorCatalogRuntime({
   }, []);
 
   const deleteCustomIndicator = useCallback(async (id: string) => {
+    if (staticCatalog !== null) {
+      throw new Error("Static indicator catalogs do not support deletion");
+    }
     await deleteCustomIndicatorRequest(id);
     removeCustomIndicator(id);
-  }, [removeCustomIndicator]);
+  }, [removeCustomIndicator, staticCatalog]);
 
   const saveCustomIndicator = useCallback(async (draft: CustomIndicatorSaveInput) => {
+    if (staticCatalog !== null) {
+      throw new Error("Static indicator catalogs do not support custom indicators");
+    }
     const saved = await saveCustomIndicatorRequest(draft);
     upsertCustomIndicator(saved, draft);
     return saved;
-  }, [upsertCustomIndicator]);
+  }, [staticCatalog, upsertCustomIndicator]);
 
   // Read a completed shared request synchronously during render.  This avoids
   // a close/reopen frame that briefly shows a spinner for catalog data already
   // in memory, while local state remains the source during the first request.
   const cached = indicatorCatalogStore.getSnapshot();
-  const resolvedPresets = cached?.presets || presets;
-  const resolvedCustomIndicators = cached?.customIndicators || customIndicators;
+  const resolvedPresets = staticCatalog === null
+    ? cached?.presets || presets
+    : [...staticCatalog.presets];
+  const resolvedCustomIndicators = staticCatalog === null
+    ? cached?.customIndicators || customIndicators
+    : [];
 
   return {
     customIndicators: resolvedCustomIndicators,
     deleteCustomIndicator,
     presets: resolvedPresets,
-    presetsLoading: cached ? false : presetsLoading,
+    presetsLoading: staticCatalog !== null || cached ? false : presetsLoading,
     removeCustomIndicator,
     resolvePresetForChart,
     saveCustomIndicator,

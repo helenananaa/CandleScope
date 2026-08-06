@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   createLocalIndicatorDefinition,
+  LOCAL_INDICATOR_PRESETS,
   normalizeLocalIndicatorDefinition,
 } from "./localIndicatorCatalog.js";
 
@@ -14,6 +15,16 @@ test("local indicator catalog supports multiple instances of one builtin", () =>
   assert.notEqual(first.id, second.id);
   assert.equal(first.executionTarget, "local");
   assert.equal(first.engineName, "MA");
+});
+
+test("the shared indicator panel receives only the five local static presets", () => {
+  assert.deepEqual(
+    LOCAL_INDICATOR_PRESETS.map((preset) => preset.engineName),
+    ["MA", "EMA", "RSI", "MACD", "BOLL"],
+  );
+  assert.equal(LOCAL_INDICATOR_PRESETS.every((preset) => (
+    preset.executionTarget === "local" && preset.is_builtin
+  )), true);
 });
 
 test("persisted local indicator definitions are fail-closed and parameter bounded", () => {

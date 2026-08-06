@@ -7,6 +7,7 @@ import {
   shouldShowIndicatorCatalogLoading,
 } from "../useIndicatorCatalogRuntime.js";
 import type { CatalogCustomIndicator, IndicatorCatalogSnapshot } from "../useIndicatorCatalogRuntime.js";
+import type { StaticIndicatorCatalog } from "../useIndicatorCatalogRuntime.js";
 
 function deferred<T>() {
   let resolve: (value: T) => void = () => undefined;
@@ -51,6 +52,15 @@ test("catalog stays lazy while the panel is closed", () => {
   const store = createIndicatorCatalogStore(async () => loadedCatalog);
   assert.equal(shouldLoadIndicatorCatalog(false, store.getSnapshot()), false);
   assert.equal(store.getSnapshot(), null);
+});
+
+test("a static catalog never requests the hosted indicator catalog", () => {
+  const staticCatalog: StaticIndicatorCatalog = {
+    presets: loadedCatalog.presets,
+    resolvePresetForChart: (preset) => preset,
+  };
+
+  assert.equal(shouldLoadIndicatorCatalog(true, null, staticCatalog), false);
 });
 
 test("concurrent opens share one catalog request and later opens reuse its snapshot", async () => {

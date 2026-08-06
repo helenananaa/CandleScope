@@ -97,7 +97,7 @@ local-data/
 
 ## 静态本地指标
 
-本地分析页可以添加多个 MA、EMA、RSI、MACD 和 BOLL 实例，修改周期、价格源和颜色，隐藏、删除或手动重新计算。MA、EMA 和 BOLL 叠加在主图，RSI 和 MACD 使用独立窗格；选择与参数按 `dataset_id + data_epoch` 保存在浏览器中，刷新页面后会恢复。同类指标可以同时存在，例如 MA(20) 与 MA(60)。
+本地分析页复用正式行情页的指标面板，可以添加多个 MA、EMA、RSI、MACD 和 BOLL 实例，修改周期、价格源和颜色，隐藏、删除或手动重新计算。MA、EMA 和 BOLL 叠加在主图，RSI 和 MACD 使用独立窗格；选择与参数按 `dataset_id + data_epoch` 保存在浏览器中，刷新页面后会恢复。同类指标可以同时存在，例如 MA(20) 与 MA(60)。面板在本地 profile 下使用静态目录，不请求线上预设或自定义脚本接口。
 
 计算请求只提交指标身份与参数。后端根据请求中的 `dataset_id + data_epoch` 打开对应不可变 SQLite 修订，读取全部已导入行并执行一次性内置计算，不接收浏览器提供的 OHLCV，不创建 DataManager、交易所连接、回填、指标 WebSocket 或插件 host。源数据缺口不会修复或插值，指标把现有导入行按时间顺序计算。OHLC-only 数据集仍可使用这五种价格指标；成交量类指标不在本地目录中，缺失成交量不会被当成真实的零成交量。
 
@@ -108,6 +108,7 @@ local-data/
 - 本地 profile 只注册 `/api/v1/local/*`、健康检查和 API 文档；直播、回放和插件 API 不加载，并由 profile middleware 拒绝。
 - Python 进程安装 loopback-only 网络 guard，在 DNS、TCP connect 和 UDP send 边界阻断非 loopback 目标。
 - `local.html` 使用 `LocalKlineApi` 和静态 `SeriesWindowStore`，没有 WebSocket URL，也没有定时轮询。
+- 本地工作区复用正式 `DrawingToolbar` 与 Drawing Engine；绘图仍按 `dataset_id + data_epoch` 隔离保存。
 - 静态指标只调用数据集绑定的 `/api/v1/local/datasets/{dataset_id}/indicators/compute/batch`，结果带回同一 `data_epoch`；普通 `/api/v1/indicators/*` 路由仍不加载。
 - 当前 profile 的网络 guard 是防止本地数据链路误入线上 fallback 的应用内防线，并不表示使用本地分析功能时要求电脑处于断网状态。
 

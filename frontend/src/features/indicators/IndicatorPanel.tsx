@@ -13,7 +13,10 @@ import {
 } from "./useIndicatorCatalogRuntime";
 import IndicatorEditor from "./IndicatorEditor";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
-import type { CatalogIndicator } from "./useIndicatorCatalogRuntime.js";
+import type {
+  CatalogIndicator,
+  StaticIndicatorCatalog,
+} from "./useIndicatorCatalogRuntime.js";
 import type {
   CustomIndicatorRecord,
   IndicatorDefinition,
@@ -129,6 +132,8 @@ interface CustomIndicatorDraft extends IndicatorDefinition {
 export interface IndicatorPanelProps {
   allowedScriptLanguages?: readonly string[];
   allowedSecurityModes?: readonly string[];
+  staticCatalog?: StaticIndicatorCatalog | null;
+  allowCustomIndicators?: boolean;
   isOpen: boolean;
   onClose(): void;
   activeIndicators: IndicatorDefinition[];
@@ -284,6 +289,8 @@ function marketStudyMatchesSearch(
 export default function IndicatorPanel({
   allowedScriptLanguages,
   allowedSecurityModes,
+  staticCatalog = null,
+  allowCustomIndicators = true,
   isOpen,
   onClose,
   activeIndicators,
@@ -311,7 +318,7 @@ export default function IndicatorPanel({
     presetsLoading,
     resolvePresetForChart,
     saveCustomIndicator,
-  } = useIndicatorCatalogRuntime({ isOpen });
+  } = useIndicatorCatalogRuntime({ isOpen, staticCatalog });
   const [searchQuery, setSearchQuery] = useState("");
   const [editingIndicator, setEditingIndicator] = useState<IndicatorEditorSource | null>(null);
   const activeMarketStudies = marketStudies.filter((study) => study.added);
@@ -737,13 +744,15 @@ plot(ma, "MA", color=line_color)
               >
                 已添加 {activeItemCount > 0 && `(${activeItemCount})`}
               </button>
-              <button
-                className="indicator-tab indicator-tab-create"
-                onClick={handleCreateCustom}
-                title="创建自定义指标"
-              >
-                + 自定义
-              </button>
+              {allowCustomIndicators && (
+                <button
+                  className="indicator-tab indicator-tab-create"
+                  onClick={handleCreateCustom}
+                  title="创建自定义指标"
+                >
+                  + 自定义
+                </button>
+              )}
             </div>
 
             {/* Content */}
@@ -899,7 +908,7 @@ plot(ma, "MA", color=line_color)
                       <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
                       <div>暂未添加指标</div>
                       <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-                        从指标库选择或创建自定义指标
+                        {allowCustomIndicators ? "从指标库选择或创建自定义指标" : "从指标库选择一个内置指标"}
                       </div>
                     </div>
                   ) : (
@@ -927,13 +936,15 @@ plot(ma, "MA", color=line_color)
                             <span className="indicator-error-badge" title={ind.error}>⚠️</span>
                           )}
                           <div className="indicator-active-actions">
-                            <button
-                              className="indicator-action-btn"
-                              onClick={() => handleEditIndicator(ind)}
-                              title={isBuiltinIndicator(ind) ? "查看参考实现" : "编辑代码"}
-                            >
-                              {isBuiltinIndicator(ind) ? "📖" : "✏️"}
-                            </button>
+                            {allowCustomIndicators && (
+                              <button
+                                className="indicator-action-btn"
+                                onClick={() => handleEditIndicator(ind)}
+                                title={isBuiltinIndicator(ind) ? "查看参考实现" : "编辑代码"}
+                              >
+                                {isBuiltinIndicator(ind) ? "📖" : "✏️"}
+                              </button>
+                            )}
                             <button
                               className="indicator-action-btn indicator-remove-btn"
                               onClick={() => onRemoveIndicator(ind.id)}
