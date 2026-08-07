@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import time
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -182,8 +183,7 @@ def test_local_builtin_indicators_are_revision_bound_and_capability_gated(
         headers={"content-type": "text/csv"},
     ).json()
     endpoint = (
-        f"/api/v1/local/datasets/{imported['dataset_id']}"
-        "/indicators/compute/batch"
+        f"/api/v1/local/datasets/{imported['dataset_id']}/indicators/compute/batch"
     )
     response = client.post(
         endpoint,
@@ -269,12 +269,8 @@ def test_local_builtin_indicators_are_revision_bound_and_capability_gated(
     assert by_client["local-rsi-one"]["lines"][0]["pane"] == "separate"
     assert len(by_client["local-macd-valid"]["lines"]) == 3
     assert len(by_client["local-boll-one"]["lines"]) == 3
-    assert by_client["local-vol-missing"]["code"] == (
-        "LOCAL_INDICATOR_PARAMS_INVALID"
-    )
-    assert by_client["local-macd-invalid"]["code"] == (
-        "LOCAL_INDICATOR_PARAMS_INVALID"
-    )
+    assert by_client["local-vol-missing"]["code"] == ("LOCAL_INDICATOR_PARAMS_INVALID")
+    assert by_client["local-macd-invalid"]["code"] == ("LOCAL_INDICATOR_PARAMS_INVALID")
 
     stale = client.post(
         endpoint,
@@ -308,7 +304,9 @@ def test_local_indicator_catalog_and_volume_capability(
     for index in range(8):
         timestamp = 1704067200 + index * 60
         close = 101 + index
-        rows.append(f"{timestamp},{close - 1},{close + 1},{close - 2},{close},{10 + index}")
+        rows.append(
+            f"{timestamp},{close - 1},{close + 1},{close - 2},{close},{10 + index}"
+        )
     imported = client.post(
         "/api/v1/local/imports/csv",
         params={
@@ -325,15 +323,126 @@ def test_local_indicator_catalog_and_volume_capability(
         json={
             "schemaVersion": 1,
             "data_epoch": imported["data_epoch"],
-            "requests": [{
-                "jobKey": "vol-ready",
-                "clientId": "local-vol-ready",
-                "name": "VOL",
-                "params": {},
-            }],
+            "requests": [
+                {
+                    "jobKey": "vol-ready",
+                    "clientId": "local-vol-ready",
+                    "name": "VOL",
+                    "params": {},
+                }
+            ],
         },
     )
     assert response.status_code == 200, response.text
     result = response.json()["results"][0]["payload"]
     assert result["ok"] is True
     assert result["lines"][0]["data"][-1]["value"] == 17.0
+    assert response.json()["cache"] == "miss"
+    repeated = client.post(
+        f"/api/v1/local/datasets/{imported['dataset_id']}/indicators/compute/batch",
+        json={
+            "schemaVersion": 1,
+            "data_epoch": imported["data_epoch"],
+            "requests": [
+                {
+                    "jobKey": "vol-ready",
+                    "clientId": "local-vol-ready",
+                    "name": "VOL",
+                    "params": {},
+                }
+            ],
+        },
+    )
+    assert repeated.status_code == 200
+    assert repeated.json()["cache"] == "hit"
+
+
+def test_background_import_job_and_library_api(tmp_path: Path, monkeypatch) -> None:
+    client = _client(tmp_path, monkeypatch)
+    response = client.post(
+        "/api/v1/local/imports/csv/jobs",
+        params={
+            "name": "Background BTC",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "timestamp_unit": "ms",
+        },
+        content=(
+            "time,open,high,low,close\n1704067200000,1,2,1,2\n1704067260000,2,3,2,3\n"
+        ),
+        headers={"content-type": "text/csv"},
+    )
+    assert response.status_code == 202, response.text
+    job_id = response.json()["job_id"]
+    for _ in range(100):
+        job = client.get(f"/api/v1/local/imports/jobs/{job_id}").json()
+        if job["status"] in {"completed", "failed", "cancelled"}:
+            break
+        time.sleep(0.01)
+    assert job["status"] == "completed", job
+    dataset = job["dataset"]
+
+    renamed = client.patch(
+        f"/api/v1/local/datasets/{dataset['dataset_id']}",
+        json={"name": "Renamed locally"},
+    )
+    assert renamed.status_code == 200
+    assert renamed.json()["name"] == "Renamed locally"
+    quality = client.get(
+        f"/api/v1/local/datasets/{dataset['dataset_id']}/quality",
+        params={"data_epoch": dataset["data_epoch"]},
+    )
+    assert quality.status_code == 200
+    assert quality.json()["quality"]["rows"] == 2
+
+    deleted = client.delete(f"/api/v1/local/datasets/{dataset['dataset_id']}")
+    assert deleted.status_code == 200
+    trash_id = deleted.json()["trash_id"]
+    restored = client.post(f"/api/v1/local/trash/{trash_id}/restore")
+    assert restored.status_code == 200
+    assert restored.json()["name"] == "Renamed locally"
+
+
+def test_project_package_api_round_trip_remaps_collision(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = _client(tmp_path, monkeypatch)
+    imported = client.post(
+        "/api/v1/local/imports/csv",
+        params={
+            "name": "Portable API project",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "timestamp_unit": "ms",
+        },
+        content=(
+            "time,open,high,low,close\n1704067200000,1,2,1,2\n1704067260000,2,3,2,3\n"
+        ),
+        headers={"content-type": "text/csv"},
+    ).json()
+    exported = client.post(
+        f"/api/v1/local/projects/{imported['dataset_id']}/export",
+        json={
+            "data_epoch": imported["data_epoch"],
+            "client_state": {
+                "schema_version": 1,
+                "events": [],
+                "indicators": [],
+                "drawings": [],
+                "settings": {},
+            },
+        },
+    )
+    assert exported.status_code == 200, exported.text
+    assert exported.headers["content-type"].startswith(
+        "application/vnd.candlescope.local-project+zip"
+    )
+    restored = client.post(
+        "/api/v1/local/projects/import",
+        content=exported.content,
+        headers={"content-type": "application/vnd.candlescope.local-project+zip"},
+    )
+    assert restored.status_code == 201, restored.text
+    assert restored.json()["identity_changed"] is True
+    assert restored.json()["dataset_id"] != imported["dataset_id"]
+    assert restored.json()["client_state"]["schema_version"] == 1

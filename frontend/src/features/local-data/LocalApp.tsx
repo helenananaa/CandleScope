@@ -21,12 +21,35 @@ import {
   saveVisibleRangeForInterval,
 } from "../chart-session/visibleRangeStorage.js";
 import {
+  activateLocalRevision,
+  cancelLocalImportJob,
+  compareLocalRevisions,
+  createLocalImportJob,
+  exportLocalProject,
+  fetchLocalRevisionDetails,
   fetchLocalIndicatorPresets,
-  importLocalCsv,
+  getLocalImportJob,
+  importLocalProject,
   listLocalDatasets,
+  listLocalRevisions,
+  listLocalTrash,
   LocalDataApiError,
+  restoreLocalTrash,
+  trashLocalDataset,
+  updateLocalDataset,
 } from "./localDataApi.js";
-import type { LocalDatasetManifest } from "./localDataTypes.js";
+import type {
+  LocalDatasetManifest,
+  LocalDatasetRevision,
+  LocalImportJob,
+  LocalRevisionComparison,
+  LocalRevisionDetails,
+  LocalTrashEntry,
+} from "./localDataTypes.js";
+import {
+  captureLocalProjectState,
+  restoreLocalProjectState,
+} from "./localProjectState.js";
 import LocalAnalysisPanel from "./LocalAnalysisPanel.js";
 import { createLocalAnalysisMarkerSource } from "./localAnalysisMarkerSource.js";
 import {
@@ -76,11 +99,23 @@ function errorMessage(reason: unknown): string {
   return reason instanceof Error ? reason.message : "本地数据操作失败";
 }
 
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
 function LocalImportForm({
   importing,
+  importJob,
+  uploadProgress,
+  selected,
+  onCancel,
   onImport,
 }: {
   importing: boolean;
+  importJob: LocalImportJob | null;
+  uploadProgress: number | null;
+  selected: LocalDatasetManifest | null;
+  onCancel(): void;
   onImport(input: {
     file: File;
     name: string;
@@ -89,6 +124,7 @@ function LocalImportForm({
     timezone: string;
     timestampUnit: "auto" | "s" | "ms" | "iso";
     volumeRequired: boolean;
+    datasetId?: string;
   }): Promise<void>;
 }) {
   const [file, setFile] = useState<File | null>(null);
@@ -98,6 +134,7 @@ function LocalImportForm({
   const [timezone, setTimezone] = useState("UTC");
   const [timestampUnit, setTimestampUnit] = useState<"auto" | "s" | "ms" | "iso">("auto");
   const [volumeRequired, setVolumeRequired] = useState(false);
+  const [asRevision, setAsRevision] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   return (
@@ -114,6 +151,7 @@ function LocalImportForm({
           timezone,
           timestampUnit,
           volumeRequired,
+          ...(asRevision && selected !== null ? { datasetId: selected.dataset_id } : {}),
         }).then(() => {
           setFile(null);
           setName("");
@@ -175,9 +213,26 @@ function LocalImportForm({
         </label>
       </div>
       <p>必需列：time, open, high, low, close。volume/Volume 可选；缺失时明确标记为不可用，不会填 0。</p>
+      {selected !== null && (
+        <label className="local-revision-choice">
+          <input
+            type="checkbox"
+            checked={asRevision}
+            onChange={(event) => setAsRevision(event.target.checked)}
+          />
+          作为“{selected.name}”的新修订导入（商品与周期必须一致）
+        </label>
+      )}
       <button type="submit" disabled={file === null || importing}>
-        {importing ? "正在校验并导入…" : "导入到本地资料库"}
+        {importing ? "正在后台校验并导入…" : "导入到本地资料库"}
       </button>
+      {importing && (
+        <div className="local-import-progress" role="status">
+          <div><span>{importJob?.stage ?? "uploading"}</span><b>{importJob ? `${formatRows(importJob.processed_rows)} 行` : `${Math.round((uploadProgress ?? 0) * 100)}%`}</b></div>
+          <progress value={importJob?.total_rows ? importJob.processed_rows / importJob.total_rows : (uploadProgress ?? undefined)} />
+          <button type="button" onClick={onCancel}>取消导入</button>
+        </div>
+      )}
     </form>
   );
 }
@@ -186,20 +241,35 @@ function LocalDatasetRail({
   datasets,
   selectedId,
   importing,
+  importJob,
+  uploadProgress,
   onSelect,
   onImport,
+  onCancelImport,
+  management,
   analysis,
 }: {
   datasets: LocalDatasetManifest[];
   selectedId: string | null;
   importing: boolean;
+  importJob: LocalImportJob | null;
+  uploadProgress: number | null;
   onSelect(datasetId: string): void;
   onImport: Parameters<typeof LocalImportForm>[0]["onImport"];
+  onCancelImport(): void;
+  management: ReactNode;
   analysis: ReactNode;
 }) {
   return (
     <aside className="local-data-rail" aria-label="本地数据资料库">
-      <LocalImportForm importing={importing} onImport={onImport} />
+      <LocalImportForm
+        importing={importing}
+        importJob={importJob}
+        uploadProgress={uploadProgress}
+        selected={datasets.find((dataset) => dataset.dataset_id === selectedId) ?? null}
+        onCancel={onCancelImport}
+        onImport={onImport}
+      />
       <section className="local-dataset-library">
         <header>
           <div>
@@ -224,8 +294,184 @@ function LocalDatasetRail({
           ))}
         </div>
       </section>
+      {management}
       {analysis}
     </aside>
+  );
+}
+
+function LocalDatasetManagement({
+  manifest,
+  settings,
+  events,
+  onChanged,
+  onSettingsImported,
+  onError,
+}: {
+  manifest: LocalDatasetManifest | null;
+  settings: ChartSettings;
+  events: readonly LocalAnalysisEvent[];
+  onChanged(preferredId?: string): Promise<void>;
+  onSettingsImported(settings: ChartSettings): void;
+  onError(message: string): void;
+}) {
+  const [revisions, setRevisions] = useState<LocalDatasetRevision[]>([]);
+  const [details, setDetails] = useState<LocalRevisionDetails | null>(null);
+  const [comparison, setComparison] = useState<LocalRevisionComparison | null>(null);
+  const [trash, setTrash] = useState<LocalTrashEntry[]>([]);
+  const [archived, setArchived] = useState<LocalDatasetManifest[]>([]);
+  const [draftName, setDraftName] = useState(manifest?.name ?? "");
+  const [busy, setBusy] = useState<string | null>(null);
+  const packageInputRef = useRef<HTMLInputElement | null>(null);
+
+  const reloadMetadata = useCallback(async () => {
+    const [loadedTrash, allDatasets, loadedRevisions, loadedDetails] = await Promise.all([
+      listLocalTrash(),
+      listLocalDatasets(undefined, true),
+      manifest === null ? Promise.resolve([]) : listLocalRevisions(manifest.dataset_id),
+      manifest === null ? Promise.resolve(null) : fetchLocalRevisionDetails(manifest),
+    ]);
+    setTrash(loadedTrash);
+    setArchived(allDatasets.filter((dataset) => dataset.archived === true));
+    setRevisions(loadedRevisions);
+    setDetails(loadedDetails);
+  }, [manifest]);
+
+  useEffect(() => {
+    setDraftName(manifest?.name ?? "");
+    setComparison(null);
+    void reloadMetadata().catch((reason: unknown) => onError(errorMessage(reason)));
+  }, [manifest, onError, reloadMetadata]);
+
+  const run = useCallback(async (label: string, action: () => Promise<void>) => {
+    setBusy(label);
+    try {
+      await action();
+    } catch (reason) {
+      onError(errorMessage(reason));
+    } finally {
+      setBusy(null);
+    }
+  }, [onError]);
+
+  return (
+    <section className="local-dataset-management">
+      <header>
+        <div><span>DATA OPS</span><strong>质量 · 修订 · 项目包</strong></div>
+        <small>{busy ?? "ready"}</small>
+      </header>
+      {manifest !== null && (
+        <>
+          <div className="local-library-actions">
+            <input value={draftName} onChange={(event) => setDraftName(event.target.value)} aria-label="数据集名称" />
+            <button type="button" disabled={busy !== null || !draftName.trim() || draftName.trim() === manifest.name} onClick={() => void run("renaming", async () => {
+              await updateLocalDataset(manifest.dataset_id, { name: draftName.trim() });
+              await onChanged(manifest.dataset_id);
+            })}>重命名</button>
+            <button type="button" disabled={busy !== null} onClick={() => void run("archiving", async () => {
+              await updateLocalDataset(manifest.dataset_id, { archived: true });
+              await onChanged();
+            })}>归档</button>
+            <button type="button" className="danger" disabled={busy !== null} onClick={() => {
+              if (!window.confirm(`把“${manifest.name}”移入回收站？可在此处恢复。`)) return;
+              void run("trashing", async () => {
+                await trashLocalDataset(manifest.dataset_id);
+                await onChanged();
+                await reloadMetadata();
+              });
+            }}>移入回收站</button>
+          </div>
+          <div className="local-quality-card">
+            <div><span>当前质量</span><strong>{details?.quality.status ?? "读取中"}</strong></div>
+            <dl>
+              <div><dt>行数</dt><dd>{formatRows(details?.quality.rows ?? manifest.rows)}</dd></div>
+              <div><dt>缺口</dt><dd>{details?.quality.excluded_ranges.length ?? manifest.excluded_range_count}</dd></div>
+              <div><dt>无成交量</dt><dd>{formatRows(details?.quality.missing_volume_rows ?? 0)}</dd></div>
+              <div><dt>修订</dt><dd>{manifest.revision_count ?? revisions.length}</dd></div>
+            </dl>
+            {(details?.quality.excluded_ranges.length ?? 0) > 0 && (
+              <ul>{details?.quality.excluded_ranges.slice(0, 3).map((gap) => (
+                <li key={`${gap.start_ms}-${gap.end_ms}`}>{new Date(gap.start_ms).toLocaleString("zh-CN")} · 缺 {gap.missing_bars} 根</li>
+              ))}</ul>
+            )}
+          </div>
+          <div className="local-revision-list">
+            <strong>修订历史</strong>
+            {revisions.map((revision) => (
+              <div key={revision.data_epoch} className={revision.current ? "current" : ""}>
+                <span><b>{revision.data_epoch.slice(7, 17)}</b><small>{formatDate(revision.imported_at)} · {formatRows(revision.rows)} 行 · {revision.quality_status}</small></span>
+                {revision.current ? <em>当前</em> : <span className="local-revision-actions">
+                  <button type="button" disabled={busy !== null} onClick={() => void run("comparing", async () => {
+                    setComparison(await compareLocalRevisions(manifest.dataset_id, revision.data_epoch, manifest.data_epoch));
+                  })}>对比</button>
+                  <button type="button" disabled={busy !== null} onClick={() => {
+                    if (!window.confirm("切换到这个历史修订？现有修订仍会保留。")) return;
+                    void run("switching", async () => {
+                      await activateLocalRevision(manifest, revision.data_epoch);
+                      await onChanged(manifest.dataset_id);
+                    });
+                  }}>切换</button>
+                </span>}
+              </div>
+            ))}
+          </div>
+          {comparison !== null && (
+            <div className="local-revision-comparison">
+              <span>修订差异</span>
+              <b>新增 {comparison.added} · 删除 {comparison.removed} · 变更 {comparison.changed} · 相同 {comparison.unchanged}</b>
+            </div>
+          )}
+          <button type="button" className="local-project-export" disabled={busy !== null} onClick={() => void run("exporting", async () => {
+            const state = await captureLocalProjectState(manifest, settings, events);
+            await exportLocalProject(manifest, state);
+          })}>导出完整项目包</button>
+        </>
+      )}
+      <label className="local-project-import">
+        <span>导入 .csproject 项目包</span>
+        <input
+          ref={packageInputRef}
+          type="file"
+          accept=".csproject,application/zip,application/vnd.candlescope.local-project+zip"
+          disabled={busy !== null}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            void run("importing project", async () => {
+              const imported = await importLocalProject(file);
+              await onChanged(imported.dataset_id);
+              const importedSettings = await restoreLocalProjectState(imported.dataset, imported.client_state);
+              if (importedSettings !== null) onSettingsImported(importedSettings);
+              await onChanged(imported.dataset_id);
+            }).finally(() => {
+              if (packageInputRef.current !== null) packageInputRef.current.value = "";
+            });
+          }}
+        />
+      </label>
+      {archived.length > 0 && (
+        <div className="local-trash-list">
+          <strong>已归档</strong>
+          {archived.map((dataset) => (
+            <div key={dataset.dataset_id}><span>{dataset.name}<small>{dataset.symbol} · {dataset.interval}</small></span><button type="button" disabled={busy !== null} onClick={() => void run("unarchiving", async () => {
+              await updateLocalDataset(dataset.dataset_id, { archived: false });
+              await onChanged(dataset.dataset_id);
+            })}>恢复到资料库</button></div>
+          ))}
+        </div>
+      )}
+      {trash.length > 0 && (
+        <div className="local-trash-list">
+          <strong>回收站</strong>
+          {trash.slice(0, 3).map((entry) => (
+            <div key={entry.trash_id}><span>{entry.name}<small>{formatDate(entry.deleted_at)}</small></span><button type="button" disabled={busy !== null} onClick={() => void run("restoring", async () => {
+              const restored = await restoreLocalTrash(entry.trash_id);
+              await onChanged(restored.dataset_id);
+            })}>恢复</button></div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -376,8 +622,12 @@ function LocalDatasetWorkspace({
   focusRequest,
   datasets,
   importing,
+  importJob,
+  uploadProgress,
   onSelect,
   onImport,
+  onCancelImport,
+  management,
   analysis,
   indicatorPanelOpen,
   onCloseIndicatorPanel,
@@ -394,8 +644,12 @@ function LocalDatasetWorkspace({
   focusRequest: LocalAnalysisFocusRequest | null;
   datasets: LocalDatasetManifest[];
   importing: boolean;
+  importJob: LocalImportJob | null;
+  uploadProgress: number | null;
   onSelect(datasetId: string): void;
   onImport: Parameters<typeof LocalImportForm>[0]["onImport"];
+  onCancelImport(): void;
+  management: ReactNode;
   analysis: ReactNode;
   indicatorPanelOpen: boolean;
   onCloseIndicatorPanel(): void;
@@ -580,8 +834,12 @@ function LocalDatasetWorkspace({
             datasets={datasets}
             selectedId={manifest.dataset_id}
             importing={importing}
+            importJob={importJob}
+            uploadProgress={uploadProgress}
             onSelect={onSelect}
             onImport={onImport}
+            onCancelImport={onCancelImport}
+            management={management}
             analysis={analysis}
           />
         )}
@@ -633,6 +891,10 @@ export default function LocalApp() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loadingLibrary, setLoadingLibrary] = useState(true);
   const [importing, setImporting] = useState(false);
+  const [importJob, setImportJob] = useState<LocalImportJob | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const importAbortRef = useRef<AbortController | null>(null);
+  const importJobRef = useRef<LocalImportJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [indicatorPanelOpen, setIndicatorPanelOpen] = useState(false);
   const [activeIndicatorCount, setActiveIndicatorCount] = useState(0);
@@ -704,17 +966,68 @@ export default function LocalApp() {
 
   const handleImport: Parameters<typeof LocalImportForm>[0]["onImport"] = async (input) => {
     setImporting(true);
+    setImportJob(null);
+    setUploadProgress(0);
     setError(null);
+    const controller = new AbortController();
+    importAbortRef.current = controller;
     try {
-      const manifest = await importLocalCsv(input);
-      await refresh(manifest.dataset_id);
+      let job = await createLocalImportJob(input, {
+        signal: controller.signal,
+        onUploadProgress: setUploadProgress,
+      });
+      importJobRef.current = job;
+      setImportJob(job);
+      setUploadProgress(1);
+      while (job.status === "queued" || job.status === "running") {
+        await wait(250);
+        job = await getLocalImportJob(job.job_id);
+        importJobRef.current = job;
+        setImportJob(job);
+      }
+      if (job.status === "completed" && job.dataset !== null) {
+        await refresh(job.dataset.dataset_id);
+      } else if (job.status !== "cancelled") {
+        throw new LocalDataApiError(
+          job.error?.message ?? "后台导入失败",
+          422,
+          job.error?.code ?? "import_failed",
+        );
+      }
     } catch (reason) {
+      if (reason instanceof DOMException && reason.name === "AbortError") return;
       setError(errorMessage(reason));
       throw reason;
     } finally {
+      importAbortRef.current = null;
+      importJobRef.current = null;
       setImporting(false);
+      setImportJob(null);
+      setUploadProgress(null);
     }
   };
+
+  const cancelImport = useCallback(() => {
+    importAbortRef.current?.abort();
+    const jobId = importJobRef.current?.job_id;
+    if (jobId !== undefined) {
+      void cancelLocalImportJob(jobId).then((job) => {
+        importJobRef.current = job;
+        setImportJob(job);
+      }).catch((reason: unknown) => setError(errorMessage(reason)));
+    }
+  }, []);
+
+  const management = (
+    <LocalDatasetManagement
+      manifest={selected}
+      settings={settings}
+      events={analysisSnapshot.events}
+      onChanged={refresh}
+      onSettingsImported={setSettings}
+      onError={setError}
+    />
+  );
 
   return (
     <MarketPageFrame
@@ -773,8 +1086,12 @@ export default function LocalApp() {
             focusRequest={focusRequest}
             datasets={datasets}
             importing={importing}
+            importJob={importJob}
+            uploadProgress={uploadProgress}
             onSelect={setSelectedId}
             onImport={handleImport}
+            onCancelImport={cancelImport}
+            management={management}
             indicatorPanelOpen={indicatorPanelOpen}
             onCloseIndicatorPanel={() => setIndicatorPanelOpen(false)}
             analysis={(
@@ -807,8 +1124,12 @@ export default function LocalApp() {
                 datasets={datasets}
                 selectedId={selectedId}
                 importing={importing}
+                importJob={importJob}
+                uploadProgress={uploadProgress}
                 onSelect={setSelectedId}
                 onImport={handleImport}
+                onCancelImport={cancelImport}
+                management={management}
                 analysis={null}
               />
             )}

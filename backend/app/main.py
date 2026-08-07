@@ -240,6 +240,7 @@ async def startup_event() -> None:
         local_runtime.start()
         app.state.local_offline_runtime = local_runtime
         app.state.local_data_service = local_runtime.service
+        app.state.local_import_jobs = local_runtime.jobs
         app.state.data_manager = None
         logger.info("Started LOCAL_OFFLINE runtime at %s", LOCAL_DATA_DIR)
         print("[startup] LOCAL_OFFLINE runtime [ok]")

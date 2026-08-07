@@ -30,11 +30,16 @@ import type {
 import type {
   LocalDatasetListResponse,
   LocalDatasetManifest,
+  LocalDatasetRevision,
   LocalEventTimeResolution,
   LocalEventTimeResolutionMode,
   LocalEventTimeResolutionResponse,
   LocalImportInput,
+  LocalImportJob,
   LocalIndicatorName,
+  LocalRevisionComparison,
+  LocalRevisionDetails,
+  LocalTrashEntry,
 } from "./localDataTypes.js";
 
 
@@ -113,12 +118,17 @@ function expectManifest(value: unknown): LocalDatasetManifest {
   return {
     ...value,
     volume_available: value.volume_available ?? true,
+    archived: value.archived ?? false,
+    revision_count: value.revision_count ?? 1,
   } as unknown as LocalDatasetManifest;
 }
 
-export async function listLocalDatasets(signal?: AbortSignal): Promise<LocalDatasetManifest[]> {
+export async function listLocalDatasets(
+  signal?: AbortSignal,
+  includeArchived = false,
+): Promise<LocalDatasetManifest[]> {
   const payload = await responseJson(await fetch(
-    localUrl("/datasets"),
+    localUrl("/datasets", { include_archived: includeArchived || undefined }),
     signal === undefined ? {} : { signal },
   ));
   if (!isJsonRecord(payload) || !Array.isArray(payload.datasets)) {
@@ -148,6 +158,7 @@ export async function importLocalCsv(input: LocalImportInput): Promise<LocalData
     timezone: input.timezone,
     timestamp_unit: input.timestampUnit,
     volume_required: input.volumeRequired,
+    dataset_id: input.datasetId,
   });
   const payload = await responseJson(await fetch(url, {
     method: "POST",
@@ -155,6 +166,199 @@ export async function importLocalCsv(input: LocalImportInput): Promise<LocalData
     body: input.file,
   }));
   return expectManifest(payload);
+}
+
+function expectImportJob(value: unknown): LocalImportJob {
+  if (!isJsonRecord(value)
+    || typeof value.job_id !== "string"
+    || value.kind !== "csv_import"
+    || !["queued", "running", "completed", "failed", "cancelled"].includes(String(value.status))
+    || typeof value.stage !== "string"
+    || typeof value.processed_rows !== "number") {
+    throw new TypeError("Local import job response is invalid");
+  }
+  return {
+    ...value,
+    dataset: value.dataset === null ? null : expectManifest(value.dataset),
+  } as unknown as LocalImportJob;
+}
+
+export function createLocalImportJob(
+  input: LocalImportInput,
+  options: { signal?: AbortSignal; onUploadProgress?: (fraction: number) => void } = {},
+): Promise<LocalImportJob> {
+  const url = localUrl("/imports/csv/jobs", {
+    name: input.name,
+    symbol: input.symbol,
+    interval: input.interval,
+    timezone: input.timezone,
+    timestamp_unit: input.timestampUnit,
+    volume_required: input.volumeRequired,
+    dataset_id: input.datasetId,
+  });
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const abort = () => xhr.abort();
+    xhr.open("POST", url);
+    xhr.setRequestHeader("Content-Type", "text/csv");
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) options.onUploadProgress?.(event.loaded / event.total);
+    };
+    xhr.onerror = () => reject(new LocalDataApiError("CSV 上传失败", 0, "upload_failed"));
+    xhr.onabort = () => reject(new DOMException("Upload aborted", "AbortError"));
+    xhr.onload = () => {
+      options.signal?.removeEventListener("abort", abort);
+      let payload: unknown = null;
+      try { payload = JSON.parse(xhr.responseText); } catch { /* handled below */ }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(expectImportJob(payload));
+        } catch (reason) {
+          reject(reason instanceof Error ? reason : new TypeError("Local import job response is invalid"));
+        }
+        return;
+      }
+      const detail = isJsonRecord(payload) ? payload.detail : null;
+      reject(new LocalDataApiError(
+        isJsonRecord(detail) && typeof detail.message === "string" ? detail.message : `HTTP ${xhr.status}`,
+        xhr.status,
+        isJsonRecord(detail) && typeof detail.code === "string" ? detail.code : null,
+      ));
+    };
+    options.signal?.addEventListener("abort", abort, { once: true });
+    xhr.send(input.file);
+  });
+}
+
+export async function getLocalImportJob(jobId: string): Promise<LocalImportJob> {
+  return expectImportJob(await responseJson(await fetch(
+    localUrl(`/imports/jobs/${encodeURIComponent(jobId)}`),
+  )));
+}
+
+export async function cancelLocalImportJob(jobId: string): Promise<LocalImportJob> {
+  return expectImportJob(await responseJson(await fetch(
+    localUrl(`/imports/jobs/${encodeURIComponent(jobId)}`),
+    { method: "DELETE" },
+  )));
+}
+
+export async function updateLocalDataset(
+  datasetId: string,
+  patch: { name?: string; archived?: boolean },
+): Promise<LocalDatasetManifest> {
+  return expectManifest(await responseJson(await fetch(
+    localUrl(`/datasets/${encodeURIComponent(datasetId)}`),
+    { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) },
+  )));
+}
+
+export async function trashLocalDataset(datasetId: string): Promise<LocalTrashEntry> {
+  return await responseJson(await fetch(
+    localUrl(`/datasets/${encodeURIComponent(datasetId)}`),
+    { method: "DELETE" },
+  )) as LocalTrashEntry;
+}
+
+export async function listLocalTrash(): Promise<LocalTrashEntry[]> {
+  const payload = await responseJson(await fetch(localUrl("/trash")));
+  if (!isJsonRecord(payload) || !Array.isArray(payload.entries)) throw new TypeError("Trash response is invalid");
+  return payload.entries as unknown as LocalTrashEntry[];
+}
+
+export async function restoreLocalTrash(trashId: string): Promise<LocalDatasetManifest> {
+  return expectManifest(await responseJson(await fetch(
+    localUrl(`/trash/${encodeURIComponent(trashId)}/restore`),
+    { method: "POST" },
+  )));
+}
+
+export async function listLocalRevisions(datasetId: string): Promise<LocalDatasetRevision[]> {
+  const payload = await responseJson(await fetch(
+    localUrl(`/datasets/${encodeURIComponent(datasetId)}/revisions`),
+  ));
+  if (!isJsonRecord(payload) || !Array.isArray(payload.revisions)) throw new TypeError("Revision response is invalid");
+  return payload.revisions.map((value) => ({
+    ...expectManifest(value),
+    current: isJsonRecord(value) && value.current === true,
+    quality_status: isJsonRecord(value) && typeof value.quality_status === "string" ? value.quality_status : "unknown",
+  }));
+}
+
+export async function fetchLocalRevisionDetails(
+  manifest: LocalDatasetManifest,
+): Promise<LocalRevisionDetails> {
+  return await responseJson(await fetch(localUrl(
+    `/datasets/${encodeURIComponent(manifest.dataset_id)}/quality`,
+    { data_epoch: manifest.data_epoch },
+  ))) as LocalRevisionDetails;
+}
+
+export async function compareLocalRevisions(
+  datasetId: string,
+  leftEpoch: string,
+  rightEpoch: string,
+): Promise<LocalRevisionComparison> {
+  return await responseJson(await fetch(localUrl(
+    `/datasets/${encodeURIComponent(datasetId)}/revisions/compare`,
+    { left_epoch: leftEpoch, right_epoch: rightEpoch },
+  ))) as LocalRevisionComparison;
+}
+
+export async function activateLocalRevision(
+  manifest: LocalDatasetManifest,
+  dataEpoch: string,
+): Promise<LocalDatasetManifest> {
+  return expectManifest(await responseJson(await fetch(
+    localUrl(`/datasets/${encodeURIComponent(manifest.dataset_id)}/revisions/activate`),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ data_epoch: dataEpoch, expected_current_epoch: manifest.data_epoch }),
+    },
+  )));
+}
+
+export async function exportLocalProject(
+  manifest: LocalDatasetManifest,
+  clientState: Record<string, unknown>,
+): Promise<void> {
+  const response = await fetch(
+    localUrl(`/projects/${encodeURIComponent(manifest.dataset_id)}/export`),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ data_epoch: manifest.data_epoch, client_state: clientState }),
+    },
+  );
+  if (!response.ok) { await responseJson(response); return; }
+  const href = URL.createObjectURL(await response.blob());
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.download = `${manifest.name.replace(/[^\w.-]+/g, "-") || manifest.dataset_id}.csproject`;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(href), 1_000);
+}
+
+export interface LocalProjectImportResult {
+  dataset: LocalDatasetManifest;
+  source_dataset_id: string;
+  dataset_id: string;
+  identity_changed: boolean;
+  revision_count: number;
+  client_state: Record<string, unknown>;
+}
+
+export async function importLocalProject(file: File): Promise<LocalProjectImportResult> {
+  const payload = await responseJson(await fetch(localUrl("/projects/import"), {
+    method: "POST",
+    headers: { "Content-Type": "application/vnd.candlescope.local-project+zip" },
+    body: file,
+  }));
+  if (!isJsonRecord(payload)) throw new TypeError("Project import response is invalid");
+  return { ...payload, dataset: expectManifest(payload.dataset) } as unknown as LocalProjectImportResult;
 }
 
 export async function resolveLocalEventTimes(

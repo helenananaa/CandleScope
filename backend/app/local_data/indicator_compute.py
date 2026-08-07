@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 import re
 from typing import Any
 
@@ -10,7 +11,11 @@ from app.data_engine.data_manager.models import BarData
 from app.indicator import create_engine, registry
 
 
-MAX_LOCAL_INDICATOR_BARS = 50_000
+MAX_LOCAL_INDICATOR_BARS = int(
+    os.getenv("CANDLESCOPE_LOCAL_INDICATOR_MAX_BARS", "250000")
+)
+if MAX_LOCAL_INDICATOR_BARS < 1:
+    raise ValueError("CANDLESCOPE_LOCAL_INDICATOR_MAX_BARS must be positive")
 # The shared registry is the catalog truth. Dataset capabilities, rather than
 # a second product list, decide whether a registered builtin can execute.
 LOCAL_INDICATOR_NAMES = frozenset(spec.name for spec in registry.list_specs())

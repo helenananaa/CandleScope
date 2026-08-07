@@ -144,10 +144,7 @@ def test_import_accepts_tradingview_column_case_and_session_phase(
     revision = manifest["data_epoch"].removeprefix("sha256:")
     receipt = json.loads(
         (
-            service.root
-            / manifest["dataset_id"]
-            / revision
-            / "import-receipt.json"
+            service.root / manifest["dataset_id"] / revision / "import-receipt.json"
         ).read_text(encoding="utf-8")
     )
     assert receipt["columns"]["volume_column"] == "Volume"
@@ -157,9 +154,7 @@ def test_import_rejects_timestamp_phase_change(tmp_path: Path) -> None:
     service = LocalDatasetService(tmp_path / "local-data")
     csv_path = _write_csv(
         tmp_path / "phase-change.csv",
-        "time,open,high,low,close,Volume\n"
-        "1762779600,1,2,1,2,3\n"
-        "1762790400,2,3,2,3,4\n",
+        "time,open,high,low,close,Volume\n1762779600,1,2,1,2,3\n1762790400,2,3,2,3,4\n",
     )
 
     with pytest.raises(LocalDatasetError, match="timestamp phase"):
@@ -199,10 +194,7 @@ def test_import_preserves_missing_volume_as_unavailable(tmp_path: Path) -> None:
     revision = manifest["data_epoch"].removeprefix("sha256:")
     quality = json.loads(
         (
-            service.root
-            / manifest["dataset_id"]
-            / revision
-            / "quality-report.json"
+            service.root / manifest["dataset_id"] / revision / "quality-report.json"
         ).read_text(encoding="utf-8")
     )
     assert quality["missing_volume_rows"] == 2
@@ -214,8 +206,7 @@ def test_import_can_require_volume(tmp_path: Path) -> None:
         service.import_csv(
             _write_csv(
                 tmp_path / "ohlc-only.csv",
-                "time,open,high,low,close\n"
-                "1739577600,97500,98000,97000,97750\n",
+                "time,open,high,low,close\n1739577600,97500,98000,97000,97750\n",
             ),
             LocalImportOptions(
                 name="Volume required",
@@ -273,3 +264,121 @@ def test_resolve_event_times_is_revision_scoped_and_gap_aware(tmp_path: Path) ->
             mode="exact",
         )
     assert stale.value.code == "dataset_revision_changed"
+
+
+def test_library_revision_quality_compare_rollback_and_trash(tmp_path: Path) -> None:
+    service = LocalDatasetService(tmp_path / "local-data")
+    first = service.import_csv(
+        _write_csv(
+            tmp_path / "first.csv",
+            "time,open,high,low,close\n1704067200000,1,2,1,2\n1704067260000,2,3,2,3\n",
+        ),
+        LocalImportOptions(
+            name="Version one",
+            symbol="BTCUSDT",
+            interval="1m",
+            timestamp_unit="ms",
+        ),
+    )
+    renamed = service.update_library_metadata(
+        first["dataset_id"], name="Research set", archived=True
+    )
+    assert renamed["name"] == "Research set"
+    assert renamed["archived"] is True
+    assert service.list_datasets() == []
+    assert service.list_datasets(include_archived=True)[0]["name"] == "Research set"
+
+    second = service.import_csv(
+        _write_csv(
+            tmp_path / "second.csv",
+            "time,open,high,low,close\n"
+            "1704067200000,1,2,1,2\n"
+            "1704067260000,2,4,2,4\n"
+            "1704067320000,4,5,4,5\n",
+        ),
+        LocalImportOptions(
+            name="Ignored revision label",
+            symbol="BTCUSDT",
+            interval="1m",
+            timestamp_unit="ms",
+            dataset_id=first["dataset_id"],
+        ),
+    )
+    assert second["name"] == "Research set"
+    assert second["revision_count"] == 2
+    comparison = service.compare_revisions(
+        first["dataset_id"],
+        left_epoch=first["data_epoch"],
+        right_epoch=second["data_epoch"],
+    )
+    assert comparison["added"] == 1
+    assert comparison["changed"] == 1
+    assert comparison["unchanged"] == 1
+    details = service.revision_details(first["dataset_id"], second["data_epoch"])
+    assert details["quality"]["status"] == "accepted"
+
+    rolled_back = service.activate_revision(
+        first["dataset_id"],
+        data_epoch=first["data_epoch"],
+        expected_current_epoch=second["data_epoch"],
+    )
+    assert rolled_back["data_epoch"] == first["data_epoch"]
+    entry = service.trash_dataset(first["dataset_id"])
+    assert service.list_datasets(include_archived=True) == []
+    restored = service.restore_trash(entry["trash_id"])
+    assert restored["dataset_id"] == first["dataset_id"]
+    assert restored["data_epoch"] == first["data_epoch"]
+
+
+def test_project_package_round_trip_and_collision_remap(tmp_path: Path) -> None:
+    service = LocalDatasetService(tmp_path / "local-data")
+    manifest = service.import_csv(
+        _write_csv(tmp_path / "bars.csv"),
+        LocalImportOptions(
+            name="Portable project",
+            symbol="BTCUSDT",
+            interval="1m",
+            timestamp_unit="ms",
+        ),
+    )
+    package = service.export_project_package(
+        manifest["dataset_id"],
+        data_epoch=manifest["data_epoch"],
+        client_state={"events": [{"label": "FOMC"}], "indicators": [{"name": "MA"}]},
+    )
+    assert package.suffix == ".csproject"
+
+    imported = service.import_project_package(package)
+    assert imported["identity_changed"] is True
+    assert imported["dataset_id"] != manifest["dataset_id"]
+    assert imported["dataset"]["data_epoch"] == manifest["data_epoch"]
+    assert imported["client_state"]["events"][0]["label"] == "FOMC"
+    assert (
+        service.query(imported["dataset_id"], interval="1m", limit=10)["count"]
+        == manifest["rows"]
+    )
+
+
+def test_new_revision_rejects_identity_change(tmp_path: Path) -> None:
+    service = LocalDatasetService(tmp_path / "local-data")
+    manifest = service.import_csv(
+        _write_csv(tmp_path / "bars.csv"),
+        LocalImportOptions(
+            name="Identity",
+            symbol="BTCUSDT",
+            interval="1m",
+            timestamp_unit="ms",
+        ),
+    )
+    with pytest.raises(LocalDatasetError) as error:
+        service.import_csv(
+            _write_csv(tmp_path / "other.csv"),
+            LocalImportOptions(
+                name="Identity",
+                symbol="ETHUSDT",
+                interval="1m",
+                timestamp_unit="ms",
+                dataset_id=manifest["dataset_id"],
+            ),
+        )
+    assert error.value.code == "dataset_identity_mismatch"

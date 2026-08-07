@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .network_guard import OfflineNetworkGuard
+from .jobs import LocalImportJobManager
 from .service import LocalDatasetService
 
 
@@ -67,6 +68,7 @@ class LocalOfflineProfileMiddleware:
 class LocalOfflineRuntime:
     def __init__(self, root: Path) -> None:
         self.service = LocalDatasetService(root)
+        self.jobs = LocalImportJobManager(self.service)
         self.network_guard = OfflineNetworkGuard()
 
     def start(self) -> None:
@@ -74,6 +76,7 @@ class LocalOfflineRuntime:
         self.network_guard.install()
 
     def shutdown(self) -> None:
+        self.jobs.shutdown()
         self.network_guard.uninstall()
 
     def diagnostics(self) -> dict[str, Any]:

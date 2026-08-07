@@ -10,11 +10,12 @@ import re
 import shutil
 import sqlite3
 import uuid
+import zipfile
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
-from typing import Any, Iterable
+from pathlib import Path, PurePosixPath
+from typing import Any, Callable, Iterable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.data_engine.interval_policy import (
@@ -27,6 +28,14 @@ from app.data_engine.interval_policy import (
 DATASET_ID_RE = re.compile(r"^local-[0-9a-f]{32}$")
 EPOCH_RE = re.compile(r"^[0-9a-f]{64}$")
 SCHEMA_VERSION = 2
+PROJECT_PACKAGE_SCHEMA_VERSION = 1
+MAX_PROJECT_PACKAGE_ENTRIES = 2_000
+MAX_PROJECT_PACKAGE_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
+MAX_PROJECT_CLIENT_STATE_BYTES = 32 * 1024 * 1024
+MAX_PROJECT_MANIFEST_BYTES = 4 * 1024 * 1024
+
+ProgressCallback = Callable[[str, int, int | None], None]
+CancellationCheck = Callable[[], bool]
 
 
 class LocalDatasetError(ValueError):
@@ -82,13 +91,25 @@ class LocalDatasetService:
         self.root.mkdir(parents=True, exist_ok=True)
         (self.root / ".staging").mkdir(exist_ok=True)
         (self.root / ".uploads").mkdir(exist_ok=True)
+        (self.root / ".exports").mkdir(exist_ok=True)
+        (self.root / ".trash").mkdir(exist_ok=True)
+        (self.root / ".cache").mkdir(exist_ok=True)
 
     def new_upload_path(self) -> Path:
         self.start()
         return self.root / ".uploads" / f"{uuid.uuid4().hex}.csv"
 
-    def import_csv(self, csv_path: Path, options: LocalImportOptions) -> dict[str, Any]:
+    def import_csv(
+        self,
+        csv_path: Path,
+        options: LocalImportOptions,
+        *,
+        progress: ProgressCallback | None = None,
+        cancelled: CancellationCheck | None = None,
+    ) -> dict[str, Any]:
         self.start()
+        self._raise_if_cancelled(cancelled)
+        self._report_progress(progress, "validating", 0, None)
         interval = parse_interval_spec(options.interval)
         if interval is None:
             raise LocalDatasetError(f"Unsupported interval: {options.interval}")
@@ -101,13 +122,26 @@ class LocalDatasetService:
             raise LocalDatasetError("Dataset name is required")
         if not symbol:
             raise LocalDatasetError("Symbol is required")
+        if options.dataset_id is not None and (self.root / dataset_id).exists():
+            current = self.get_manifest(dataset_id)
+            if current["symbol"] != symbol or current["interval"] != interval.canonical:
+                raise LocalDatasetError(
+                    "A new revision must keep the dataset symbol and interval",
+                    code="dataset_identity_mismatch",
+                )
 
         staging = self.root / ".staging" / f"{dataset_id}-{uuid.uuid4().hex}"
         staging.mkdir(parents=True)
         try:
             bars, excluded_ranges, resolved_columns = self._parse_csv(
-                csv_path, options, interval
+                csv_path,
+                options,
+                interval,
+                progress=progress,
+                cancelled=cancelled,
             )
+            self._raise_if_cancelled(cancelled)
+            self._report_progress(progress, "building_revision", len(bars), len(bars))
             epoch_hex = self._content_epoch(symbol, interval, bars, excluded_ranges)
             manifest = self._write_staging_dataset(
                 staging,
@@ -121,8 +155,10 @@ class LocalDatasetService:
                 excluded_ranges=excluded_ranges,
                 resolved_columns=resolved_columns,
             )
+            self._raise_if_cancelled(cancelled)
             published = self._publish(staging, dataset_id, epoch_hex, manifest)
             staging = None
+            self._report_progress(progress, "completed", len(bars), len(bars))
             return published
         finally:
             if staging is not None and staging.exists():
@@ -133,6 +169,9 @@ class LocalDatasetService:
         csv_path: Path,
         options: LocalImportOptions,
         interval: IntervalSpec,
+        *,
+        progress: ProgressCallback | None = None,
+        cancelled: CancellationCheck | None = None,
     ) -> tuple[
         list[_NormalizedBar],
         list[dict[str, Any]],
@@ -174,14 +213,14 @@ class LocalDatasetService:
                 optional_missing=set() if options.volume_required else {"volume"},
             )
             required = {key: resolved_columns[key] for key in required}
-            optional = {
-                key: resolved_columns.get(key)
-                for key in optional
-            }
+            optional = {key: resolved_columns.get(key) for key in optional}
 
             previous_open: int | None = None
             fixed_alignment_offset_ms: int | None = None
             for source_row, row in enumerate(reader, start=2):
+                if source_row % 1_000 == 0:
+                    self._raise_if_cancelled(cancelled)
+                    self._report_progress(progress, "parsing", source_row - 2, None)
                 if not any((value or "").strip() for value in row.values()):
                     continue
                 open_ms = self._parse_time(
@@ -282,9 +321,7 @@ class LocalDatasetService:
                         low=self._decimal_text(values["low"]),
                         close=self._decimal_text(values["close"]),
                         volume=(
-                            self._decimal_text(volume)
-                            if volume is not None
-                            else None
+                            self._decimal_text(volume) if volume is not None else None
                         ),
                         quote_volume=self._optional_decimal_text(
                             parsed_optional["quote_volume"]
@@ -308,6 +345,21 @@ class LocalDatasetService:
             last = bars[-1]
             bars[-1] = _NormalizedBar(**{**asdict(last), "is_closed": False})
         return bars, gaps, resolved_columns
+
+    @staticmethod
+    def _report_progress(
+        callback: ProgressCallback | None,
+        stage: str,
+        processed: int,
+        total: int | None,
+    ) -> None:
+        if callback is not None:
+            callback(stage, processed, total)
+
+    @staticmethod
+    def _raise_if_cancelled(cancelled: CancellationCheck | None) -> None:
+        if cancelled is not None and cancelled():
+            raise LocalDatasetError("Import cancelled", code="job_cancelled")
 
     @staticmethod
     def _resolve_columns(
@@ -589,6 +641,16 @@ class LocalDatasetService:
             dataset_root / "current.json",
             {"data_epoch": manifest["data_epoch"], "revision": epoch_hex},
         )
+        metadata_path = dataset_root / "library.json"
+        if not metadata_path.exists():
+            self._write_json(
+                metadata_path,
+                {
+                    "name": manifest["name"],
+                    "archived": False,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+            )
         return self.get_manifest(dataset_id)
 
     @staticmethod
@@ -609,14 +671,57 @@ class LocalDatasetService:
                 digest.update(chunk)
         return digest.hexdigest()
 
-    def list_datasets(self) -> list[dict[str, Any]]:
+    def read_analysis_cache(
+        self,
+        dataset_id: str,
+        *,
+        data_epoch: str,
+        cache_key: str,
+    ) -> dict[str, Any] | None:
+        self._validated_revision_dir(dataset_id, data_epoch)
+        if re.fullmatch(r"[0-9a-f]{64}", cache_key) is None:
+            raise ValueError("cache_key must be a SHA-256 hex digest")
+        path = (
+            self.root
+            / ".cache"
+            / dataset_id
+            / data_epoch.removeprefix("sha256:")
+            / f"{cache_key}.json"
+        )
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return None
+        except (OSError, json.JSONDecodeError):
+            path.unlink(missing_ok=True)
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    def write_analysis_cache(
+        self,
+        dataset_id: str,
+        *,
+        data_epoch: str,
+        cache_key: str,
+        payload: dict[str, Any],
+    ) -> None:
+        self._validated_revision_dir(dataset_id, data_epoch)
+        directory = (
+            self.root / ".cache" / dataset_id / data_epoch.removeprefix("sha256:")
+        )
+        directory.mkdir(parents=True, exist_ok=True)
+        self._write_json(directory / f"{cache_key}.json", payload)
+
+    def list_datasets(self, *, include_archived: bool = False) -> list[dict[str, Any]]:
         if not self.root.exists():
             return []
         manifests = []
         for candidate in sorted(self.root.iterdir()):
             if candidate.is_dir() and DATASET_ID_RE.fullmatch(candidate.name):
                 try:
-                    manifests.append(self.get_manifest(candidate.name))
+                    manifest = self.get_manifest(candidate.name)
+                    if include_archived or not manifest["archived"]:
+                        manifests.append(manifest)
                 except LocalDatasetError:
                     continue
         return sorted(manifests, key=lambda item: item["imported_at"], reverse=True)
@@ -653,7 +758,238 @@ class LocalDatasetService:
                 "Dataset manifest is unreadable", code="dataset_corrupt"
             ) from exc
         manifest.setdefault("volume_available", True)
+        metadata = self._read_library_metadata(dataset_id, manifest)
+        manifest["name"] = metadata["name"]
+        manifest["archived"] = metadata["archived"]
+        manifest["revision_count"] = len(self.list_revisions(dataset_id))
         return manifest
+
+    def _read_library_metadata(
+        self,
+        dataset_id: str,
+        manifest: dict[str, Any],
+    ) -> dict[str, Any]:
+        path = self.root / dataset_id / "library.json"
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return {"name": manifest["name"], "archived": False}
+        except (OSError, json.JSONDecodeError) as exc:
+            raise LocalDatasetError(
+                "Dataset library metadata is unreadable", code="dataset_corrupt"
+            ) from exc
+        name = payload.get("name")
+        archived = payload.get("archived", False)
+        if (
+            not isinstance(name, str)
+            or not name.strip()
+            or not isinstance(archived, bool)
+        ):
+            raise LocalDatasetError(
+                "Dataset library metadata is invalid", code="dataset_corrupt"
+            )
+        return {"name": name.strip(), "archived": archived}
+
+    def update_library_metadata(
+        self,
+        dataset_id: str,
+        *,
+        name: str | None = None,
+        archived: bool | None = None,
+    ) -> dict[str, Any]:
+        manifest = self.get_manifest(dataset_id)
+        current = self._read_library_metadata(dataset_id, manifest)
+        if name is not None:
+            name = name.strip()
+            if not name:
+                raise LocalDatasetError("Dataset name is required")
+            current["name"] = name
+        if archived is not None:
+            current["archived"] = bool(archived)
+        current["updated_at"] = datetime.now(timezone.utc).isoformat()
+        self._write_json(self.root / dataset_id / "library.json", current)
+        return self.get_manifest(dataset_id)
+
+    def trash_dataset(self, dataset_id: str) -> dict[str, Any]:
+        manifest = self.get_manifest(dataset_id)
+        trash_id = f"trash-{uuid.uuid4().hex}"
+        trash_root = self.root / ".trash" / trash_id
+        trash_root.mkdir(parents=True)
+        self._write_json(
+            trash_root / "entry.json",
+            {
+                "trash_id": trash_id,
+                "dataset_id": dataset_id,
+                "name": manifest["name"],
+                "deleted_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        os.replace(self.root / dataset_id, trash_root / dataset_id)
+        return json.loads((trash_root / "entry.json").read_text(encoding="utf-8"))
+
+    def list_trash(self) -> list[dict[str, Any]]:
+        self.start()
+        entries: list[dict[str, Any]] = []
+        for candidate in (self.root / ".trash").iterdir():
+            try:
+                payload = json.loads(
+                    (candidate / "entry.json").read_text(encoding="utf-8")
+                )
+            except (OSError, json.JSONDecodeError):
+                continue
+            if isinstance(payload, dict):
+                entries.append(payload)
+        return sorted(
+            entries, key=lambda item: str(item.get("deleted_at", "")), reverse=True
+        )
+
+    def restore_trash(self, trash_id: str) -> dict[str, Any]:
+        if re.fullmatch(r"trash-[0-9a-f]{32}", trash_id) is None:
+            raise LocalDatasetError("Trash entry not found", code="dataset_not_found")
+        trash_root = self.root / ".trash" / trash_id
+        try:
+            entry = json.loads((trash_root / "entry.json").read_text(encoding="utf-8"))
+            dataset_id = entry["dataset_id"]
+        except (OSError, KeyError, json.JSONDecodeError) as exc:
+            raise LocalDatasetError(
+                "Trash entry not found", code="dataset_not_found"
+            ) from exc
+        target = self.root / dataset_id
+        if target.exists():
+            raise LocalDatasetError(
+                "A dataset with this identity already exists",
+                code="dataset_identity_conflict",
+            )
+        os.replace(trash_root / dataset_id, target)
+        shutil.rmtree(trash_root)
+        return self.get_manifest(dataset_id)
+
+    def _specific_revision_dir(self, dataset_id: str, data_epoch: str) -> Path:
+        if DATASET_ID_RE.fullmatch(dataset_id) is None:
+            raise LocalDatasetError("Dataset not found", code="dataset_not_found")
+        revision = data_epoch.removeprefix("sha256:")
+        if EPOCH_RE.fullmatch(revision) is None:
+            raise LocalDatasetError(
+                "Dataset revision not found", code="dataset_not_found"
+            )
+        path = self.root / dataset_id / revision
+        if not path.is_dir():
+            raise LocalDatasetError(
+                "Dataset revision not found", code="dataset_not_found"
+            )
+        return path
+
+    def list_revisions(self, dataset_id: str) -> list[dict[str, Any]]:
+        dataset_root = self.root / dataset_id
+        if not dataset_root.is_dir() or DATASET_ID_RE.fullmatch(dataset_id) is None:
+            raise LocalDatasetError("Dataset not found", code="dataset_not_found")
+        current_dir = self._revision_dir(dataset_id).name
+        revisions: list[dict[str, Any]] = []
+        for candidate in dataset_root.iterdir():
+            if not candidate.is_dir() or EPOCH_RE.fullmatch(candidate.name) is None:
+                continue
+            try:
+                manifest = json.loads(
+                    (candidate / "manifest.json").read_text(encoding="utf-8")
+                )
+                quality = json.loads(
+                    (candidate / "quality-report.json").read_text(encoding="utf-8")
+                )
+            except (OSError, json.JSONDecodeError):
+                continue
+            revisions.append(
+                {
+                    **manifest,
+                    "current": candidate.name == current_dir,
+                    "quality_status": quality.get("status", "unknown"),
+                }
+            )
+        return sorted(revisions, key=lambda item: item["imported_at"], reverse=True)
+
+    def revision_details(self, dataset_id: str, data_epoch: str) -> dict[str, Any]:
+        revision_dir = self._specific_revision_dir(dataset_id, data_epoch)
+        try:
+            manifest = json.loads(
+                (revision_dir / "manifest.json").read_text(encoding="utf-8")
+            )
+            quality = json.loads(
+                (revision_dir / "quality-report.json").read_text(encoding="utf-8")
+            )
+            receipt = json.loads(
+                (revision_dir / "import-receipt.json").read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            raise LocalDatasetError(
+                "Dataset revision is unreadable", code="dataset_corrupt"
+            ) from exc
+        return {"manifest": manifest, "quality": quality, "receipt": receipt}
+
+    def activate_revision(
+        self,
+        dataset_id: str,
+        *,
+        data_epoch: str,
+        expected_current_epoch: str,
+    ) -> dict[str, Any]:
+        current = self.get_manifest(dataset_id)
+        if current["data_epoch"] != expected_current_epoch:
+            raise LocalDatasetError(
+                "Dataset revision changed; reload it before continuing",
+                code="dataset_revision_changed",
+            )
+        revision_dir = self._specific_revision_dir(dataset_id, data_epoch)
+        self._write_json(
+            self.root / dataset_id / "current.json",
+            {"data_epoch": data_epoch, "revision": revision_dir.name},
+        )
+        return self.get_manifest(dataset_id)
+
+    def compare_revisions(
+        self,
+        dataset_id: str,
+        *,
+        left_epoch: str,
+        right_epoch: str,
+    ) -> dict[str, Any]:
+        left = self._specific_revision_dir(dataset_id, left_epoch) / "bars.sqlite"
+        right = self._specific_revision_dir(dataset_id, right_epoch) / "bars.sqlite"
+        connection = sqlite3.connect(f"file:{left.as_posix()}?mode=ro", uri=True)
+        try:
+            connection.execute("ATTACH DATABASE ? AS right_revision", (str(right),))
+            added = connection.execute(
+                "SELECT COUNT(*) FROM right_revision.bars r LEFT JOIN bars l USING(open_time_ms) WHERE l.open_time_ms IS NULL"
+            ).fetchone()[0]
+            removed = connection.execute(
+                "SELECT COUNT(*) FROM bars l LEFT JOIN right_revision.bars r USING(open_time_ms) WHERE r.open_time_ms IS NULL"
+            ).fetchone()[0]
+            fields = "open,high,low,close,volume,quote_volume,trades,taker_buy_base,taker_buy_quote,is_closed"
+            changed_predicate = " OR ".join(
+                f"l.{field} IS NOT r.{field}" for field in fields.split(",")
+            )
+            changed_row = connection.execute(
+                f"SELECT COUNT(*), MIN(l.open_time_ms), MAX(l.open_time_ms) FROM bars l JOIN right_revision.bars r USING(open_time_ms) WHERE {changed_predicate}"
+            ).fetchone()
+            common = connection.execute(
+                "SELECT COUNT(*) FROM bars l JOIN right_revision.bars r USING(open_time_ms)"
+            ).fetchone()[0]
+        except sqlite3.DatabaseError as exc:
+            raise LocalDatasetError(
+                "Dataset revisions are unreadable", code="dataset_corrupt"
+            ) from exc
+        finally:
+            connection.close()
+        changed = int(changed_row[0])
+        return {
+            "dataset_id": dataset_id,
+            "left_epoch": left_epoch,
+            "right_epoch": right_epoch,
+            "added": int(added),
+            "removed": int(removed),
+            "changed": changed,
+            "unchanged": int(common) - changed,
+            "first_changed_ms": changed_row[1],
+            "last_changed_ms": changed_row[2],
+        }
 
     def _validated_revision_dir(
         self,
@@ -878,6 +1214,227 @@ class LocalDatasetService:
             "rejected": len(times_ms) - matched,
             "results": results,
         }
+
+    def export_project_package(
+        self,
+        dataset_id: str,
+        *,
+        data_epoch: str,
+        client_state: dict[str, Any],
+    ) -> Path:
+        """Create a portable package pinned to the caller's current revision."""
+        manifest, _ = self._validated_revision_dir(dataset_id, data_epoch)
+        dataset_root = self.root / dataset_id
+        package_path = (
+            self.root / ".exports" / f"{dataset_id}-{uuid.uuid4().hex}.csproject"
+        )
+        files: dict[str, str] = {}
+        selected: list[tuple[Path, str]] = []
+        for path in dataset_root.rglob("*"):
+            if path.is_file() and "indicator-cache" not in path.parts:
+                archive_name = f"dataset/{path.relative_to(dataset_root).as_posix()}"
+                selected.append((path, archive_name))
+                files[archive_name] = self._file_sha256(path)
+        client_bytes = json.dumps(
+            client_state,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        if len(client_bytes) > MAX_PROJECT_CLIENT_STATE_BYTES:
+            raise LocalDatasetError("Project client state exceeds the safe limit")
+        files["client-state.json"] = hashlib.sha256(client_bytes).hexdigest()
+        package = {
+            "schema_version": PROJECT_PACKAGE_SCHEMA_VERSION,
+            "kind": "candlescope.local.project",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "dataset_id": dataset_id,
+            "data_epoch": data_epoch,
+            "name": manifest["name"],
+            "files": files,
+        }
+        with zipfile.ZipFile(
+            package_path,
+            "w",
+            compression=zipfile.ZIP_DEFLATED,
+            compresslevel=6,
+        ) as archive:
+            archive.writestr("client-state.json", client_bytes)
+            for path, archive_name in selected:
+                archive.write(path, archive_name)
+            archive.writestr(
+                "package.json",
+                json.dumps(package, ensure_ascii=False, indent=2, sort_keys=True)
+                + "\n",
+            )
+        return package_path
+
+    def import_project_package(self, package_path: Path) -> dict[str, Any]:
+        """Validate and atomically install a portable project package."""
+        self.start()
+        staging = self.root / ".staging" / f"project-{uuid.uuid4().hex}"
+        staging.mkdir(parents=True)
+        try:
+            with zipfile.ZipFile(package_path) as archive:
+                entries = archive.infolist()
+                if len(entries) > MAX_PROJECT_PACKAGE_ENTRIES:
+                    raise LocalDatasetError("Project package contains too many files")
+                total_size = sum(entry.file_size for entry in entries)
+                if total_size > MAX_PROJECT_PACKAGE_UNCOMPRESSED_BYTES:
+                    raise LocalDatasetError(
+                        "Project package expands beyond the safe limit"
+                    )
+                names = {entry.filename for entry in entries}
+                if len(names) != len(entries):
+                    raise LocalDatasetError("Project package contains duplicate paths")
+                if "package.json" not in names or "client-state.json" not in names:
+                    raise LocalDatasetError("Project package is missing its manifest")
+                entries_by_name = {entry.filename: entry for entry in entries}
+                if (
+                    entries_by_name["package.json"].file_size
+                    > MAX_PROJECT_MANIFEST_BYTES
+                ):
+                    raise LocalDatasetError(
+                        "Project package manifest exceeds the safe limit"
+                    )
+                client_entry = entries_by_name["client-state.json"]
+                if client_entry.file_size > MAX_PROJECT_CLIENT_STATE_BYTES:
+                    raise LocalDatasetError(
+                        "Project client state exceeds the safe limit"
+                    )
+                for entry in entries:
+                    if entry.is_dir() or not self._safe_archive_name(entry.filename):
+                        raise LocalDatasetError(
+                            "Project package contains an unsafe path"
+                        )
+                    if (
+                        entry.filename != "package.json"
+                        and entry.filename != "client-state.json"
+                        and not entry.filename.startswith("dataset/")
+                    ):
+                        raise LocalDatasetError(
+                            "Project package contains an unsupported file"
+                        )
+                package = json.loads(archive.read("package.json"))
+                if (
+                    package.get("kind") != "candlescope.local.project"
+                    or package.get("schema_version") != PROJECT_PACKAGE_SCHEMA_VERSION
+                    or not isinstance(package.get("files"), dict)
+                ):
+                    raise LocalDatasetError("Unsupported project package")
+                declared_files: dict[str, str] = package["files"]
+                if set(declared_files) != names - {"package.json"}:
+                    raise LocalDatasetError(
+                        "Project package file inventory does not match"
+                    )
+                for name, expected_hash in declared_files.items():
+                    destination = staging / PurePosixPath(name)
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    digest = hashlib.sha256()
+                    with (
+                        archive.open(entries_by_name[name]) as source,
+                        destination.open("xb") as target,
+                    ):
+                        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                            digest.update(chunk)
+                            target.write(chunk)
+                    if digest.hexdigest() != expected_hash:
+                        raise LocalDatasetError("Project package checksum mismatch")
+
+            old_dataset_id = package.get("dataset_id")
+            old_epoch = package.get("data_epoch")
+            if (
+                not isinstance(old_dataset_id, str)
+                or DATASET_ID_RE.fullmatch(old_dataset_id) is None
+            ):
+                raise LocalDatasetError("Project package dataset identity is invalid")
+            if not isinstance(old_epoch, str):
+                raise LocalDatasetError("Project package revision identity is invalid")
+            source_root = staging / "dataset"
+            current = json.loads(
+                (source_root / "current.json").read_text(encoding="utf-8")
+            )
+            if current.get("data_epoch") != old_epoch:
+                raise LocalDatasetError(
+                    "Project package current revision does not match"
+                )
+            new_dataset_id = (
+                old_dataset_id
+                if not (self.root / old_dataset_id).exists()
+                else f"local-{uuid.uuid4().hex}"
+            )
+            revision_count = 0
+            for revision_dir in source_root.iterdir():
+                if (
+                    not revision_dir.is_dir()
+                    or EPOCH_RE.fullmatch(revision_dir.name) is None
+                ):
+                    continue
+                self._validate_packaged_revision(revision_dir, old_dataset_id)
+                manifest_path = revision_dir / "manifest.json"
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                manifest["dataset_id"] = new_dataset_id
+                self._write_json(manifest_path, manifest)
+                revision_count += 1
+            if revision_count < 1:
+                raise LocalDatasetError("Project package contains no dataset revisions")
+            client_state = json.loads(
+                (staging / "client-state.json").read_text(encoding="utf-8")
+            )
+            if not isinstance(client_state, dict):
+                raise LocalDatasetError("Project package client state is invalid")
+            os.replace(source_root, self.root / new_dataset_id)
+            return {
+                "dataset": self.get_manifest(new_dataset_id),
+                "source_dataset_id": old_dataset_id,
+                "dataset_id": new_dataset_id,
+                "identity_changed": old_dataset_id != new_dataset_id,
+                "revision_count": revision_count,
+                "client_state": client_state,
+            }
+        except (
+            zipfile.BadZipFile,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+            OSError,
+        ) as exc:
+            if isinstance(exc, LocalDatasetError):
+                raise
+            raise LocalDatasetError("Project package is unreadable") from exc
+        finally:
+            if staging.exists():
+                shutil.rmtree(staging)
+
+    def _validate_packaged_revision(self, revision_dir: Path, dataset_id: str) -> None:
+        try:
+            manifest = json.loads(
+                (revision_dir / "manifest.json").read_text(encoding="utf-8")
+            )
+            if manifest["dataset_id"] != dataset_id:
+                raise LocalDatasetError("Project package mixes dataset identities")
+            if manifest["data_epoch"] != f"sha256:{revision_dir.name}":
+                raise LocalDatasetError("Project package revision path does not match")
+            db_path = revision_dir / "bars.sqlite"
+            if self._file_sha256(db_path) != manifest["sqlite_sha256"]:
+                raise LocalDatasetError("Project package dataset checksum mismatch")
+            connection = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True)
+            try:
+                check = connection.execute("PRAGMA quick_check").fetchone()
+            finally:
+                connection.close()
+            if not check or check[0] != "ok":
+                raise LocalDatasetError("Project package SQLite integrity check failed")
+        except (OSError, KeyError, json.JSONDecodeError, sqlite3.DatabaseError) as exc:
+            if isinstance(exc, LocalDatasetError):
+                raise
+            raise LocalDatasetError("Project package revision is unreadable") from exc
+
+    @staticmethod
+    def _safe_archive_name(name: str) -> bool:
+        if not name or "\\" in name:
+            return False
+        path = PurePosixPath(name)
+        return not path.is_absolute() and ".." not in path.parts
 
     @staticmethod
     def _wire_bar(row: sqlite3.Row) -> dict[str, Any]:
