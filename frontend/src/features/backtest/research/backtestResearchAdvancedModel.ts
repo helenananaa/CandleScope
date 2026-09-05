@@ -73,6 +73,7 @@ export function composeResearchRunDraft(input: {
   const parsed = parseResearchRunConfig(input.run);
   const existing = parsed.strategy_revision_id === input.revisionId ? parsed : {};
   const fidelityMode = String(existing.fidelity_mode ?? input.run?.fidelity_mode ?? "BAR_APPROX");
+  const overrides = input.context?.execution_overrides;
   return {
     initial_balance: "10000",
     slippage_bps: "1",
@@ -110,10 +111,15 @@ export function composeResearchRunDraft(input: {
     sample_role: "IN_SAMPLE",
     gap_policy: "REJECT",
     signal_trace_mode: "PAGED_V1",
-    parameters: input.context?.parameters ?? {},
     warmup_bars: 0,
     output_mode: input.outputMode ?? "TARGET_POSITION",
     ...existing,
+    ...(overrides ? {
+      initial_balance: overrides.initialBalance, equity_percent: overrides.equityPercent, leverage: overrides.leverage,
+      taker_fee_bps: overrides.feeBps, maker_fee_bps: overrides.feeBps, slippage_bps: overrides.slippageBps,
+      fee_source: "user-defined", sizing_policy: "EQUITY_PERCENT_V1",
+    } : {}),
+    parameters: input.context?.parameters ?? existing.parameters ?? {},
     strategy_revision_id: input.revisionId,
     dataset_id: input.dataset?.dataset_id ?? "",
     data_epoch: input.snapshot?.data_epoch ?? input.dataset?.data_epoch ?? "",

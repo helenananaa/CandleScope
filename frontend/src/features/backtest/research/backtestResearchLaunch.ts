@@ -46,6 +46,7 @@ export function buildBacktestResearchLaunchContext(input: {
     strategy_revision_id: input.attachment.strategyRevisionId,
     parameters: { ...input.attachment.parameters },
     quick_preset_id: input.attachment.quickPresetId,
+    ...(input.attachment.executionOverrides ? { execution_overrides: { ...input.attachment.executionOverrides } } : {}),
     chart_session: {
       exchange: input.session.exchange,
       market_type: input.session.marketType,
@@ -54,12 +55,8 @@ export function buildBacktestResearchLaunchContext(input: {
     },
     range: {
       mode: rangeMode,
-      start_time_ms: Number.isSafeInteger(resultStart)
-        ? resultStart
-        : customRange?.startMs ?? null,
-      end_time_ms: Number.isSafeInteger(resultEnd)
-        ? resultEnd
-        : customRange?.endMs ?? null,
+      start_time_ms: customRange?.startMs ?? (Number.isSafeInteger(resultStart) ? resultStart : null),
+      end_time_ms: customRange?.endMs ?? (Number.isSafeInteger(resultEnd) ? resultEnd : null),
     },
     dataset_identity: resolvedDataset,
     latest_run_id: input.result?.run.run_id ?? input.activeRunId,

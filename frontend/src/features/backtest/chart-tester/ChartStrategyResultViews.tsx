@@ -7,6 +7,8 @@ import {
 
 import BacktestEquityCurve from "../BacktestEquityCurve.js";
 import { t } from "../../../i18n/index.js";
+import { useLocale } from "../../../i18n/useLocale.js";
+import { formatDecimal } from "../../../shared/formatDecimal.js";
 import type {
   RecentRunCompareV1,
   TradeExplanationV1,
@@ -15,9 +17,9 @@ import type { ChartStrategyResultBundle } from "./chartStrategyResultCache.js";
 import {
   CHART_STRATEGY_TRADE_ROW_HEIGHT,
   chartStrategyMaxDrawdown,
-  chartStrategyMetricValue,
   chartStrategyTradeFocusTimeMs,
   chartStrategyVirtualTradeWindow,
+  chartStrategyWinRate,
 } from "./chartStrategyResultModel.js";
 
 function dateTime(value: number, locale: string): string {
@@ -208,6 +210,7 @@ export function ChartStrategyResultOverview({
   onOpenAdvanced?: () => void;
 }) {
   const { report, chart, run } = result;
+  const locale = useLocale();
   const trades = report.trades ?? [];
   const latest = trades.at(-1) ?? null;
   const equity = report.performance?.equity_daily ?? chart.equity_curve;
@@ -233,8 +236,8 @@ export function ChartStrategyResultOverview({
       <div className="chart-strategy-result-metrics">
         <ResultMetric
           label={t("chartTester.result.netPnl")}
-          value={`${report.metrics.realized_net_pnl ?? "—"} USDT`}
-          detail={report.report_label}
+          value={`${formatDecimal(String(report.metrics.realized_net_pnl ?? "—"))} USDT`}
+          detail={report.report_label === "APPROXIMATE" ? t("chartTester.result.fidelityFast") : report.report_label}
         />
         <ResultMetric
           label={t("chartTester.result.maxDrawdown")}
@@ -248,7 +251,7 @@ export function ChartStrategyResultOverview({
         />
         <ResultMetric
           label={t("chartTester.result.winRate")}
-          value={chartStrategyMetricValue(report.metrics.win_rate)}
+          value={Number(report.metrics.trade_count ?? trades.length) === 0 ? "—" : chartStrategyWinRate(report.metrics.win_rate, locale)}
           detail={t("chartTester.result.runShort", { run: run.run_id.slice(-8) })}
         />
       </div>
@@ -409,8 +412,8 @@ export function ChartStrategyTradeList({
                   <span>{trade.side ?? "—"}</span>
                   <span title={Number.isFinite(entryTime) ? dateTime(entryTime, locale) : "—"}>{trade.entry_price ?? "—"}</span>
                   <span>{trade.exit_price ?? "—"}</span>
-                  <span className={signedClass(trade.net_pnl ?? "")}>{trade.net_pnl ?? "—"}</span>
-                  <span>{trade.fees ?? "—"}</span>
+                  <span title={trade.net_pnl ?? undefined} className={signedClass(trade.net_pnl ?? "")}>{formatDecimal(trade.net_pnl ?? "—")}</span>
+                  <span title={trade.fees ?? undefined}>{formatDecimal(trade.fees ?? "—", 4)}</span>
                 </button>
               );
             })}

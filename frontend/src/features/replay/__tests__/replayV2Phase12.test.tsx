@@ -266,7 +266,7 @@ test("manual create panel renders UTC setup and defers product coverage to the R
   assert.match(markup, /type="datetime-local"/);
   assert.match(markup, /UTC/);
   assert.match(markup, /创建确认后 T0 永久不变/);
-  assert.match(markup, /确认时间并创建 Run/);
+  assert.match(markup, /确认起点并开始训练/);
   assert.doesNotMatch(markup, /使用最早合格起点|个合格随机窗口/);
   assert.doesNotMatch(markup, /请求开始时间（ms）/);
 });

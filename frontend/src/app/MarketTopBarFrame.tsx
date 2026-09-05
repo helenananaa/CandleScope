@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import BrandMark, { BrandWordmark } from "../components/brand/BrandMark.js";
+import WorkspaceNavigation from "./WorkspaceNavigation.js";
 
 export interface MarketTopBarFrameProps {
   readonly source?: "live" | "replay" | "local" | "research";
@@ -7,6 +8,8 @@ export interface MarketTopBarFrameProps {
   readonly brandIcon?: ReactNode;
   readonly brandText?: ReactNode;
   readonly navigation?: ReactNode;
+  readonly taskNavigation?: ReactNode;
+  readonly offline?: boolean;
   readonly identity?: ReactNode;
   readonly controls?: ReactNode;
   readonly quote?: ReactNode;
@@ -22,6 +25,8 @@ export default function MarketTopBarFrame({
   brandIcon,
   brandText,
   navigation = null,
+  taskNavigation,
+  offline = false,
   identity = null,
   controls = null,
   quote = null,
@@ -44,6 +49,7 @@ export default function MarketTopBarFrame({
           ? <BrandWordmark />
           : <span className="logo-text">{brandText}</span>}
       </div>
+      {taskNavigation === undefined ? <WorkspaceNavigation active={source === "live" ? "live" : source === "replay" ? "replay" : "research"} offline={offline} /> : taskNavigation}
       {navigation}
       {identity}
       {controls}

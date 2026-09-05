@@ -5,7 +5,17 @@ import {
   chartStrategyResultIncludedInExportScope,
   chartStrategyTradeFocusTimeMs,
   chartStrategyVirtualTradeWindow,
+  chartStrategyWinRate,
 } from "../chartStrategyResultModel.js";
+
+test("win rate renders the backend fraction as a percentage and preserves unavailable metrics", () => {
+  assert.equal(chartStrategyWinRate("1", "en"), "100%");
+  assert.equal(chartStrategyWinRate("0.125", "en"), "12.5%");
+  assert.equal(chartStrategyWinRate({ value: null, reason: "NO_CLOSED_TRADES" }, "en"), "—");
+  assert.equal(chartStrategyWinRate({ value: "0.5" }, "en"), "50%");
+  assert.equal(chartStrategyWinRate("25%", "en"), "25%");
+  assert.equal(chartStrategyWinRate("unknown", "en"), "—");
+});
 
 test("100k trade virtualization keeps the rendered window bounded", () => {
   const first = chartStrategyVirtualTradeWindow({

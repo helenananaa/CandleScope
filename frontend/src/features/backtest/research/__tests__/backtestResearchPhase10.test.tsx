@@ -251,7 +251,7 @@ test("quick tester launch context carries IDs and frozen selection without sourc
     entryTask: "PARAMETER_ROBUSTNESS",
   });
   assert.equal(payload.latest_run_id, result.run.run_id);
-  assert.deepEqual(payload.range, { mode: "CUSTOM", start_time_ms: 1000, end_time_ms: 2000 });
+  assert.deepEqual(payload.range, { mode: "CUSTOM", start_time_ms: 10, end_time_ms: 20 });
   assert.equal("source" in payload, false);
   assert.equal(payload.entry_task, "PARAMETER_ROBUSTNESS");
   assert.equal(backtestResearchContextHref("brc_context_12345678"), "/backtest.html?context=brc_context_12345678");

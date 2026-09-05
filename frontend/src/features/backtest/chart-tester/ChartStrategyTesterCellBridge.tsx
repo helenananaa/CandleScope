@@ -58,6 +58,7 @@ import {
   type ChartStrategyAutoRunPauseReason,
 } from "./chartStrategyAutoRunCoordinator.js";
 import "./chartStrategyTester.css";
+import { saveResearchHandoff } from "../../strategy-research/strategyResearchHandoff.js";
 
 const runtimeFactory = new ChartStrategyTesterRuntimeFactory(true);
 
@@ -151,6 +152,7 @@ export default function ChartStrategyTesterCellBridge({
       customRange: attachment.customRange,
       fidelityPreference: attachment.fidelityPreference,
       quickPresetId: attachment.quickPresetId,
+      executionOverrides: attachment.executionOverrides,
     })
     : null;
   const autoRunContext = useMemo<ChartStrategyAutoRunContext>(() => ({
@@ -746,6 +748,11 @@ export default function ChartStrategyTesterCellBridge({
       onResumeObserving={handleResumeObserving}
       onSourceDirty={() => setSourceDiagnostics([])}
       onOpenAdvanced={handleOpenAdvanced}
+      onOpenWorkspace={() => {
+        if (!attachment) return;
+        try { window.location.assign(saveResearchHandoff({ session, workspaceId, cellId, attachment, runId: result?.run.run_id ?? null })); }
+        catch (reason) { setResultError(reason instanceof Error ? reason.message : String(reason)); }
+      }}
       onOpenBatchStudy={handleOpenBatchStudy}
       onClose={onClosePanel}
     />,

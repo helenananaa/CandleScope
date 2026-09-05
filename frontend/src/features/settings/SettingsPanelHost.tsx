@@ -1,3 +1,4 @@
+import { useState } from "react";
 import AboutSettingsPanel from "./panels/AboutSettingsPanel.js";
 import CacheDiagnosticsPanel from "./panels/CacheDiagnosticsPanel.js";
 import CacheLimitsPanel from "./panels/CacheLimitsPanel.js";
@@ -26,6 +27,7 @@ export default function SettingsPanelHost({
   onOpenDataWorkbench,
 }: SettingsPanelHostProps) {
   useLocale();
+  const [dataView, setDataView] = useState<"library" | "storage">("library");
   switch (activeCategory) {
     case "appearance":
       return <ChartAppearancePanel {...panelModel.appearance} />;
@@ -36,10 +38,19 @@ export default function SettingsPanelHost({
     case "data":
       return (
         <>
-          <DataWorkbenchLaunchPanel onOpen={onOpenDataWorkbench} />
+          <nav className="settings-data-navigation" aria-label={t("settings.category.data")}>
+            <button type="button" aria-pressed={dataView === "library"} onClick={() => setDataView("library")}>{t("ux.dataLibrary")}</button>
+            <button type="button" aria-pressed={dataView === "storage"} onClick={() => setDataView("storage")}>{t("ux.storage")}</button>
+          </nav>
+          <section hidden={dataView !== "library"}>
+            <a className="st-btn st-btn-primary" href="/strategy.html?action=import">{t("research.source.openLibrary")}</a>
+            <DataWorkbenchLaunchPanel onOpen={onOpenDataWorkbench} />
+            <StorageMaintenancePanel {...panelModel.data.maintenance} />
+          </section>
+          <section hidden={dataView !== "storage"}>
           <CacheDiagnosticsPanel {...panelModel.data.cacheDiagnostics} />
           <CacheLimitsPanel {...panelModel.data.cacheLimits} />
-          <StorageMaintenancePanel {...panelModel.data.maintenance} />
+          </section>
         </>
       );
     case "plugins":

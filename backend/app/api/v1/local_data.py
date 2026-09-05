@@ -492,6 +492,12 @@ async def create_import_job(
         str, Query(alias="timezone", min_length=1, max_length=80)
     ] = "UTC",
     timestamp_unit: Annotated[str, Query(pattern="^(auto|s|ms|iso)$")] = "auto",
+    time_column: Annotated[str, Query(min_length=1)] = "time",
+    open_column: Annotated[str, Query(min_length=1)] = "open",
+    high_column: Annotated[str, Query(min_length=1)] = "high",
+    low_column: Annotated[str, Query(min_length=1)] = "low",
+    close_column: Annotated[str, Query(min_length=1)] = "close",
+    volume_column: Annotated[str, Query(min_length=1)] = "volume",
     volume_required: bool = False,
     dataset_id: str | None = None,
 ) -> dict[str, Any]:
@@ -506,6 +512,12 @@ async def create_import_job(
             interval=interval,
             timezone_name=timezone_name,
             timestamp_unit=timestamp_unit,
+            time_column=time_column,
+            open_column=open_column,
+            high_column=high_column,
+            low_column=low_column,
+            close_column=close_column,
+            volume_column=volume_column,
             volume_required=volume_required,
             dataset_id=dataset_id,
         )

@@ -23,6 +23,7 @@ export interface LocalDatasetManifest {
 }
 
 export interface LocalImportInput {
+  columns?: Partial<Record<"time" | "open" | "high" | "low" | "close" | "volume", string>>;
   file: File;
   name: string;
   symbol: string;

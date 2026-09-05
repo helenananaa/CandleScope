@@ -20,6 +20,7 @@ import { useAdvancedMarketSummary } from "../features/advanced-market-data/useAd
 import { t } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
 import MarketTopBarFrame from "./MarketTopBarFrame.js";
+import WorkspaceNavigation from "./WorkspaceNavigation.js";
 
 export interface TopBarSymbolSearchModel extends Omit<SymbolSearchProps, "onSelect"> {
   onSelectSymbol: SymbolSearchProps["onSelect"];
@@ -85,44 +86,7 @@ function TopBar({
   return (
     <MarketTopBarFrame
       source="live"
-      navigation={<>
-        {replayEntry.state === "enabled" && (
-        <button
-          className="replay-entry-link"
-          data-replay-entry="enabled"
-          type="button"
-          onPointerEnter={loadReplayLauncherDialog}
-          onMouseEnter={loadReplayLauncherDialog}
-          onFocus={loadReplayLauncherDialog}
-          onClick={onOpenReplayLauncher}
-        >
-          {t("shell.replay")}
-        </button>
-        )}
-        {(replayEntry.state === "checking" || replayEntry.state === "disabled") && (
-        <button
-          className="replay-entry-link replay-entry-disabled"
-          data-replay-entry={replayEntry.state}
-          type="button"
-          disabled
-          title={replayEntry.reason}
-        >
-          {t("shell.replay")}
-        </button>
-        )}
-        {backtestEntryEnabled && (
-        <a
-          className="replay-entry-link backtest-entry-link"
-          data-backtest-entry="enabled"
-          data-strategy-entry="enabled"
-          href="/strategy.html"
-          target="_blank"
-          rel="noreferrer"
-        >
-          {t("shell.strategy")}
-        </a>
-        )}
-      </>}
+      taskNavigation={<WorkspaceNavigation active="live" onReplay={() => { void loadReplayLauncherDialog(); onOpenReplayLauncher(); }} replayDisabled={replayEntry.state !== "enabled"} replayReason={replayEntry.state === "enabled" ? undefined : replayEntry.reason} researchEnabled={backtestEntryEnabled} />}
       identity={<>
         <SymbolSearch
           currentSymbol={currentSymbol}

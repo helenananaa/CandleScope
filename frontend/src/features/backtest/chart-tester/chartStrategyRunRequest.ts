@@ -7,6 +7,7 @@ import {
   type ChartContextResolveRequest,
   type StrategyRevisionRecord,
 } from "../backtestApi.js";
+import { validExecutionOverrides } from "../../../shared/strategyRunSettings.js";
 import { pollBacktestRunToTerminal, type waitForBacktestPoll } from "../backtestRunClient.js";
 import type { BacktestRunRecord } from "../backtestTypes.js";
 import {
@@ -137,6 +138,9 @@ export async function freezeChartStrategyRunRequest(
   request: ChartStrategyRunRequest,
 ): Promise<ChartStrategyFrozenRunRequest> {
   const cloned = cloneFrozen(request);
+  if (cloned.attachment.executionOverrides !== undefined && !validExecutionOverrides(cloned.attachment.executionOverrides)) {
+    throw new ChartStrategyRunError("INVALID_EXECUTION_SETTINGS", "Invalid account or cost settings", { next_step: "check capital, position, leverage and costs" });
+  }
   const parameterHash = await chartStrategySha256(cloned.attachment.parameters);
   return Object.freeze({
     ...cloned,
@@ -252,6 +256,7 @@ export function buildChartStrategyRunBody(input: {
       { next_step: "use the resolved market preset and run again" },
     );
   }
+  const overrides = input.frozen.attachment.executionOverrides;
   return {
     strategy_revision_id: input.revision.revision_id,
     dataset_id: identity.datasetId,
@@ -271,17 +276,17 @@ export function buildChartStrategyRunBody(input: {
     signal_trace_mode: "PAGED_V1",
     account_model: requireString(account, "account_model"),
     contract_data_mode: requireString(account, "contract_data_mode"),
-    initial_balance: requireString(account, "initial_cash"),
-    slippage_bps: requireString(cost, "slippage_bps"),
-    taker_fee_bps: feeBps,
-    maker_fee_bps: feeBps,
-    fee_source: feeSource,
+    initial_balance: overrides?.initialBalance ?? requireString(account, "initial_cash"),
+    slippage_bps: overrides?.slippageBps ?? requireString(cost, "slippage_bps"),
+    taker_fee_bps: overrides?.feeBps ?? feeBps,
+    maker_fee_bps: overrides?.feeBps ?? feeBps,
+    fee_source: overrides ? "user-defined" : feeSource,
     funding_rate: "0",
     funding_interval_hours: 8,
     funding_mode: requireString(account, "funding_mode"),
-    leverage: requireString(account, "leverage"),
+    leverage: overrides?.leverage ?? requireString(account, "leverage"),
     sizing_policy: requireString(account, "sizing_policy"),
-    equity_percent: requireString(account, "equity_percent"),
+    equity_percent: overrides?.equityPercent ?? requireString(account, "equity_percent"),
     execution_model_revision: requireString(account, "execution_model_revision"),
     participation_rate: "0.1",
     latency_ms: 0,

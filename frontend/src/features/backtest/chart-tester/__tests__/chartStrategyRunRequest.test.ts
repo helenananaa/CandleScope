@@ -49,6 +49,20 @@ const request: ChartStrategyRunRequest = {
   },
 };
 
+test("custom conditions are frozen into the actual request with explicit fee provenance", async () => {
+  const executionOverrides = { initialBalance: "2000", equityPercent: "25", leverage: "2", feeBps: "7", slippageBps: "3" };
+  const frozen = await freezeChartStrategyRunRequest({ ...request, attachment: { ...request.attachment, executionOverrides } });
+  executionOverrides.initialBalance = "9000";
+  const body = buildChartStrategyRunBody({ frozen, revision, resolution: resolution() });
+  assert.equal(body.initial_balance, "2000");
+  assert.equal(body.equity_percent, "25");
+  assert.equal(body.leverage, "2");
+  assert.equal(body.taker_fee_bps, "7");
+  assert.equal(body.slippage_bps, "3");
+  assert.equal(body.fee_source, "user-defined");
+  await assert.rejects(freezeChartStrategyRunRequest({ ...request, attachment: { ...request.attachment, executionOverrides: { ...executionOverrides, leverage: "0" } } }));
+});
+
 const revision: StrategyRevisionRecord = {
   revision_id: "srv2_chart",
   provider_kind: "PYNE_CHART_V1",

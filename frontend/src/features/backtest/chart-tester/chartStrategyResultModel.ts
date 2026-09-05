@@ -47,6 +47,15 @@ export function chartStrategyMetricValue(value: unknown, fallback = "—"): stri
   return String(value);
 }
 
+export function chartStrategyWinRate(value: unknown, locale: string): string {
+  const raw = chartStrategyMetricValue(value);
+  if (raw === "—" || raw.endsWith("%")) return raw;
+  const ratio = Number(raw);
+  return Number.isFinite(ratio) && ratio >= 0 && ratio <= 1
+    ? new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 1 }).format(ratio)
+    : "—";
+}
+
 export function chartStrategyMaxDrawdown(report: BacktestReport): string {
   const risk = report.performance?.risk ?? {};
   return chartStrategyMetricValue(

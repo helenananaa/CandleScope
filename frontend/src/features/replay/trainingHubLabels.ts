@@ -1,4 +1,5 @@
 import { t } from "../../i18n/index.js";
+import { formatDecimal } from "../../shared/formatDecimal.js";
 import type { ReplayCatalogEntry } from "./replayTypes.js";
 import type {
   ReplayV2IntegrityMode,
@@ -118,11 +119,8 @@ export function formatReplayUtcDateTime(ms: number): string {
   return `${formatReplayUtcDate(ms)} ${padUtc(instant.getUTCHours())}:${padUtc(instant.getUTCMinutes())} UTC`;
 }
 
-export function formatTrainingEquity(value: string): string {
-  if (!/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) return value;
-  const [whole = "0", fraction] = value.split(".");
-  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return fraction === undefined ? grouped : `${grouped}.${fraction}`;
+export function formatTrainingEquity(value: string, maximumFractionDigits = 2): string {
+  return formatDecimal(value, maximumFractionDigits);
 }
 
 export function formatReplayMarketCoverage(

@@ -22,12 +22,15 @@ import type { ChartStrategyRunRequest } from "../backtest/chart-tester/chartStra
 import type { LocalDatasetManifest } from "../local-data/localDataTypes.js";
 import type { ResearchRuntimeMode, ResearchSourceRefV1 } from "../research-data/researchDataTypes.js";
 import { StrategyResearchRunEffectGuard } from "./strategyResearchRunLifecycle.js";
+import { pollBacktestRunToTerminal } from "../backtest/backtestRunClient.js";
+import { DEFAULT_STRATEGY_RUN_SETTINGS, validStrategyRunSettings, type StrategyRunSettings } from "../../shared/strategyRunSettings.js";
 
 export function sessionFromResearchSource(
   source: ResearchSourceRefV1 | null,
   imported: LocalDatasetManifest | null,
   interval: string | null,
 ): ChartSession | null {
+  if (source?.kind === "CURRENT_CHART") return { exchange: source.exchange, marketType: source.marketType, symbol: source.symbol, interval: source.interval };
   if (source?.kind === "IMPORTED_DATASET" && imported !== null) {
     return {
       exchange: "local",
@@ -51,6 +54,8 @@ export function useStrategyResearchRun(input: {
   runtimeMode: ResearchRuntimeMode;
   draftId: string | null;
   draftContentRevision: number;
+  configuration?: StrategyRunSettings | undefined;
+  restoreRunId?: string | null;
   onRunId(runId: string | null): void;
 }) {
   const tester = useMemo(() => new ChartStrategyTesterRuntime("strategy-research", null), []);
@@ -58,9 +63,28 @@ export function useStrategyResearchRun(input: {
   const [result, setResult] = useState<ChartStrategyResultBundle | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [needsData, setNeedsData] = useState<ChartContextResolution | null>(null);
+  const [restoringRun, setRestoringRun] = useState(false);
   const pendingRequestRef = useRef<ChartStrategyRunRequest | null>(null);
   const lifecycle = useMemo(() => new StrategyResearchRunEffectGuard(), []);
-  const session = sessionFromResearchSource(input.source, input.imported, input.interval);
+  const session = useMemo(() => sessionFromResearchSource(input.source, input.imported, input.interval), [input.source, input.imported, input.interval]);
+  const configuration = input.configuration ?? DEFAULT_STRATEGY_RUN_SETTINGS;
+
+  useEffect(() => {
+    const runId = input.restoreRunId;
+    if (!runId || tester.snapshot().activeRunId === runId) return;
+    const controller = new AbortController();
+    setRestoringRun(true);
+    void defaultBacktestApi.getRun(runId, controller.signal).then(async (record) => {
+      const terminal = record.state === "QUEUED" || record.state === "RUNNING"
+        ? await pollBacktestRunToTerminal({ api: defaultBacktestApi, runId, signal: controller.signal }) : record;
+      if (terminal.state !== "COMPLETED") throw new Error(`Backtest ${terminal.state}: ${terminal.failure_code ?? runId}`);
+      return chartStrategyResultCache.load(defaultBacktestApi, runId, controller.signal);
+    }).then((bundle) => {
+      if (!controller.signal.aborted) setResult(bundle);
+    }).catch((reason: unknown) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason)); })
+      .finally(() => { if (!controller.signal.aborted) setRestoringRun(false); });
+    return () => controller.abort();
+  }, [input.restoreRunId, tester]);
 
   useEffect(() => tester.subscribe(() => setTesterVersion((value) => value + 1)), [tester]);
   // StrictMode replays this effect immediately; the guard ignores the
@@ -79,11 +103,10 @@ export function useStrategyResearchRun(input: {
         displayName: "",
         language: "pyne",
         parameters: {},
-        rangeMode: "ALL_AVAILABLE",
-        customRange: null,
         fidelityPreference: "FAST",
         quickPresetId: session.marketType === "spot" ? "CRYPTO_SPOT_STANDARD_V1" : "CRYPTO_PERP_STANDARD_V1",
         autoRun: false,
+        ...configuration,
       },
       draftContentRevision: input.draftContentRevision,
       sourceKind: source.kind,
@@ -91,11 +114,22 @@ export function useStrategyResearchRun(input: {
         ? { datasetId: source.datasetId, dataEpoch: source.dataEpoch }
         : {}),
     } : null);
-    if (tester.snapshot().generation !== before) pendingRequestRef.current = null;
-  }, [input.draftContentRevision, input.draftId, input.source, session, tester]);
+    if (tester.snapshot().generation !== before) {
+      pendingRequestRef.current = null;
+      setNeedsData(null);
+    }
+  }, [configuration, input.draftContentRevision, input.draftId, input.source, session, tester]);
 
   const snapshot = tester.snapshot();
   const barOnly = input.source?.kind === "IMPORTED_DATASET";
+  const restoredContextChanged = result !== null && session !== null && (
+    result.chart.symbol !== session.symbol || result.chart.interval !== session.interval
+    || (input.source?.kind === "IMPORTED_DATASET" && (
+      result.run.dataset_id !== input.source.datasetId || result.run.data_epoch !== input.source.dataEpoch
+    ))
+  );
+  const inputStale = snapshot.status === "STALE" || restoredContextChanged;
+  const updatingResult = result !== null && ["RESOLVING", "QUEUED", "RUNNING"].includes(snapshot.status);
 
   const execute = useCallback(async (request: ChartStrategyRunRequest, materialize?: ChartContextResolution | null) => {
     pendingRequestRef.current = request;
@@ -110,11 +144,12 @@ export function useStrategyResearchRun(input: {
     try {
       const source = input.source;
       const imported = input.imported;
+      if (!validStrategyRunSettings(configuration)) throw new Error("Invalid backtest conditions");
       if (source === null) throw new Error("source required");
-      if (source.kind === "CURRENT_CHART") {
+      if (source.kind === "CURRENT_CHART" && input.runtimeMode === "LOCAL_OFFLINE") {
         throw new ChartStrategyRunError(
           "CURRENT_CHART_UNBOUND",
-          "this workspace is not bound to a live chart session",
+          "live chart backtesting is unavailable in the offline runtime",
           { next_step: "use the market-page strategy tester or imported library data" },
         );
       }
@@ -132,27 +167,33 @@ export function useStrategyResearchRun(input: {
           { next_step: "use imported library data" },
         );
       }
-      if (source.kind !== "IMPORTED_DATASET" || imported === null) {
+      if (source.kind !== "CURRENT_CHART" && (source.kind !== "IMPORTED_DATASET" || imported === null)) {
         throw new ChartStrategyRunError(
           "SOURCE_UNSUPPORTED",
           "this workspace can only run imported library data",
           { next_step: "select imported library data" },
         );
       }
-      const researchSource = {
+      const researchSource = source.kind === "CURRENT_CHART" ? {
+        kind: "CURRENT_CHART" as const,
+        materializeResolution: materialize ?? null,
+      } : {
         kind: "IMPORTED_DATASET" as const,
-        datasetId: source.datasetId,
-        dataEpoch: source.dataEpoch,
+        datasetId: imported!.dataset_id,
+        dataEpoch: imported!.data_epoch,
         interval: input.interval ?? source.interval,
-        symbol: imported.symbol,
-        startTimeMs: imported.first_open_ms,
-        endTimeMs: imported.last_open_ms + 1,
+        symbol: imported!.symbol,
+        startTimeMs: configuration.customRange?.startMs ?? imported!.first_open_ms,
+        endTimeMs: configuration.customRange?.endMs ?? imported!.last_open_ms + 1,
         quality: qualitySummaryFromImportedManifest({
-          rows: imported.rows,
-          excludedRangeCount: imported.excluded_range_count,
-          volumeAvailable: imported.volume_available,
+          rows: imported!.rows,
+          excludedRangeCount: imported!.excluded_range_count,
+          volumeAvailable: imported!.volume_available,
         }),
       };
+      if (researchSource.kind === "IMPORTED_DATASET" && imported && (researchSource.startTimeMs < imported.first_open_ms || researchSource.endTimeMs > imported.last_open_ms + 1)) {
+        throw new ChartStrategyRunError("DATA_COVERAGE_INCOMPLETE", "The selected dates exceed the imported data coverage", { next_step: "choose dates within the data coverage" });
+      }
       const outcome = await runResearchBacktest({
         api: defaultBacktestApi,
         request,
@@ -201,6 +242,7 @@ export function useStrategyResearchRun(input: {
       );
       if (!stillCurrent()) return;
       setResult(bundle);
+      input.onRunId(outcome.run.run_id);
     } catch (reason) {
       if (!stillCurrent() || isAbortError(reason)) return;
       const diagnostics = chartStrategyRunDiagnostics(reason);
@@ -213,7 +255,7 @@ export function useStrategyResearchRun(input: {
     } finally {
       untrack();
     }
-  }, [input, tester]);
+  }, [configuration, input, tester]);
 
   const onRun = useCallback((request: ChartStrategyRunRequest) => {
     void execute(request, null);
@@ -228,12 +270,14 @@ export function useStrategyResearchRun(input: {
   return {
     session,
     barOnly,
-    runStatus: snapshot.status as ChartStrategyTesterStatus,
-    stale: snapshot.status === "STALE",
+    runStatus: (restoringRun ? "RUNNING" : snapshot.status) as ChartStrategyTesterStatus,
+    stale: inputStale || updatingResult,
+    inputStale,
     staleReasons: snapshot.staleReasons as ChartStrategyTesterStaleReason[],
     result,
     error,
     needsData: needsData !== null,
+    dataResolution: needsData,
     onRun,
     onConfirmNeedsData,
     tester,

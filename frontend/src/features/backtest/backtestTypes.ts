@@ -24,6 +24,7 @@ export interface BacktestResearchDatasetIdentity {
 }
 
 export interface BacktestResearchLaunchContext {
+  execution_overrides?: import("../../shared/strategyRunSettings.js").StrategyExecutionOverrides | null;
   schema_version: "candlescope.backtest-research-launch-context/1";
   context_id: string;
   context_hash: string;

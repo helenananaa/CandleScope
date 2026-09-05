@@ -47,6 +47,9 @@ import {
 import { StrategyResearchRuntime } from "./StrategyResearchRuntime.js";
 import { StrategyResearchResultPanel } from "./StrategyResearchResultPanel.js";
 import { StrategyResearchScriptPanel } from "./StrategyResearchScriptPanel.js";
+import { getChartStrategyDraftStore } from "../backtest/chart-tester/chartStrategyTesterDrafts.js";
+import { saveResearchTemplate } from "./strategyTemplateDraft.js";
+import { readResearchHandoff } from "./strategyResearchHandoff.js";
 import { StrategyResearchShell } from "./StrategyResearchShell.js";
 import { useStrategyResearchRun } from "./useStrategyResearchRun.js";
 import { loadStrategyResearchHostHealth } from "./strategyResearchHostHealth.js";
@@ -56,6 +59,8 @@ import { StrategyResearchCompatNotice } from "./StrategyResearchCompatNotice.js"
 import { MarketDataWorkspaceProvider } from "../market-data/MarketDataWorkspaceProvider.js";
 
 const BacktestResearchApp = lazy(() => import("../backtest/research/BacktestResearchApp.js"));
+const StrategyResearchLiveChart = lazy(() => import("./StrategyResearchLiveChart.js"));
+const StrategyRunHistory = lazy(() => import("./StrategyRunHistory.js"));
 import {
   strategyResearchDeepLinkSearch,
   strategyResearchLaunchActions,
@@ -117,6 +122,7 @@ export default function StrategyResearchApp({
   const pageExportRef = useRef<HTMLDivElement | null>(null);
   const { settings, setSettings, resolvedTheme } = useChartSettingsRuntime();
   const library = useResearchDataLibrary();
+  const handoff = useMemo(() => intent.kind === "handoff" ? readResearchHandoff(intent.id) : null, [intent]);
   const [runtime] = useState(() => {
     const created = new StrategyResearchRuntime({
       libraryEnabled,
@@ -125,10 +131,19 @@ export default function StrategyResearchApp({
     for (const action of strategyResearchLaunchActions(intent)) {
       created.dispatch(action);
     }
+    if (handoff) {
+      created.dispatch({ type: "source/select", source: handoff.source });
+      created.dispatch({ type: "script/setDraft", draftId: handoff.draftId });
+      created.dispatch({ type: "script/configure", configuration: handoff.configuration });
+      if (handoff.runId) created.dispatch({ type: "result/setRun", runId: handoff.runId });
+    }
     return created;
   });
   const [, bump] = useReducer((value: number) => value + 1, 0);
   const state: StrategyResearchState = runtime.state;
+  useEffect(() => {
+    if (intent.kind === "handoff" && handoff) window.history.replaceState(null, "", "/strategy.html");
+  }, [handoff, intent.kind]);
   const visualState = strategyResearchVisualState(intent, state);
   const dispatch = useCallback((action: Parameters<StrategyResearchRuntime["dispatch"]>[0]) => {
     const previous = runtime.state;
@@ -167,11 +182,13 @@ export default function StrategyResearchApp({
   }, [dispatch, launchImported, library.loadingLibrary, library.selected, source]);
 
   const [networkDiagnostics, setNetworkDiagnostics] = useState<StrategyResearchNetworkDiagnostics | null>(null);
+  const [hostReady, setHostReady] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
     void loadStrategyResearchHostHealth(controller.signal).then((health) => {
       runtime.runtimeMode = health.runtimeMode;
+      setHostReady(true);
       setNetworkDiagnostics(health.network);
       bump();
     }).catch((reason: unknown) => {
@@ -199,6 +216,7 @@ export default function StrategyResearchApp({
     const dataset = library.datasets.find((entry) => entry.dataset_id === datasetId);
     if (dataset === undefined) return;
     dispatchImportedSource(dispatch, runtime.state.source.source, dataset);
+    dispatch({ type: "source/libraryOpen", open: false });
   }, [dispatch, library.datasets, runtime]);
 
   const handleRevisionActivated = useCallback((manifest: LocalDatasetManifest) => {
@@ -294,16 +312,34 @@ export default function StrategyResearchApp({
   const handleDraftRevision = useCallback((revision: number) => {
     dispatch({ type: "script/setContentRevision", revision });
   }, [dispatch]);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const selectingTemplateRef = useRef(false);
+  const selectTemplate = useCallback((templateId: string) => {
+    if (selectingTemplateRef.current) return;
+    selectingTemplateRef.current = true;
+    setSavingTemplate(true);
+    void saveResearchTemplate(getChartStrategyDraftStore(), templateId).then((draft) => {
+      dispatch({ type: "script/setDraft", draftId: draft.id });
+      dispatch({ type: "source/libraryOpen", open: true });
+    }).catch(() => library.setError(t("chartTester.autosave.error"))).finally(() => {
+      selectingTemplateRef.current = false;
+      setSavingTemplate(false);
+    });
+  }, [dispatch, library]);
   const researchRun = useStrategyResearchRun({
     source,
     imported: importedManifest,
-    interval: selectedInterval,
-    runtimeMode: runtime.runtimeMode,
+    interval: source?.kind === "CURRENT_CHART" ? source.interval : selectedInterval,
+    runtimeMode: hostReady ? runtime.runtimeMode : "LOCAL_OFFLINE",
     draftId: state.script.draftId,
     draftContentRevision: state.script.contentRevision,
+    configuration: state.script.configuration,
+    restoreRunId: state.result.runId,
     onRunId: handleRunId,
   });
   const [advancedError, setAdvancedError] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  useEffect(() => { if (researchRun.inputStale && !state.result.stale) dispatch({ type: "result/invalidate" }); }, [dispatch, researchRun.inputStale, state.result.stale]);
   const openAdvanced = useCallback(() => {
     if (researchRun.session === null || source === null) {
       setAdvancedError(t("strategy.advancedNeedSource"));
@@ -319,12 +355,13 @@ export default function StrategyResearchApp({
       session: researchRun.session,
       draftId: state.script.draftId,
       result: researchRun.result,
+      configuration: state.script.configuration,
     }).then((href) => {
       window.location.assign(href);
     }).catch((reason: unknown) => {
       setAdvancedError(reason instanceof Error ? reason.message : String(reason));
     });
-  }, [researchRun.result, researchRun.session, source, state.script.draftId]);
+  }, [researchRun.result, researchRun.session, source, state.script.draftId, state.script.configuration]);
 
   const drawer = (
     <StrategyResearchDrawerBoundary
@@ -332,6 +369,7 @@ export default function StrategyResearchApp({
     >
       <ResearchDataDrawer
         open={state.source.libraryOpen}
+        availableKinds={["IMPORTED_DATASET"]}
         runtimeMode={runtime.runtimeMode}
         capabilities={capabilities}
         libraryEnabled={runtime.libraryEnabled}
@@ -344,7 +382,10 @@ export default function StrategyResearchApp({
         onSettingsImported={setSettings}
         onImport={async (input) => {
           const dataset = await library.handleImport(input);
-          if (dataset) dispatchImportedSource(dispatch, runtime.state.source.source, dataset);
+          if (dataset) {
+            dispatchImportedSource(dispatch, runtime.state.source.source, dataset);
+            dispatch({ type: "source/libraryOpen", open: false });
+          }
         }}
         onClose={() => dispatch({ type: "source/libraryOpen", open: false })}
       />
@@ -366,11 +407,14 @@ export default function StrategyResearchApp({
         onRun={researchRun.onRun}
         onConfirmNeedsData={researchRun.onConfirmNeedsData}
         onOpenAdvanced={openAdvanced}
+        configuration={state.script.configuration}
+        onConfigure={(configuration) => dispatch({ type: "script/configure", configuration })}
       />
     </div>
   );
   const result = (
     <StrategyResearchResultPanel
+      key={researchRun.result?.run.run_id ?? "pending"}
       result={researchRun.result}
       stale={researchRun.stale || state.result.stale}
       staleReasons={researchRun.staleReasons}
@@ -378,12 +422,21 @@ export default function StrategyResearchApp({
       error={researchRun.error}
       runStatus={researchRun.runStatus}
       network={networkDiagnostics}
+      dataResolution={researchRun.dataResolution}
       onOpenAdvanced={openAdvanced}
+      onLocateTrade={(timeMs) => setFocusedAnalysis((current) => ({
+        scope: chartUiScope,
+        value: {
+          requestId: (current.scope === chartUiScope ? current.value?.requestId ?? 0 : 0) + 1,
+          time: Math.floor(timeMs / 1000),
+        },
+      }))}
     />
   );
   const advancedWorkspace = intent.kind === "advanced" || intent.kind === "deep-link";
   const controls = (
     <>
+      <button type="button" onClick={() => setHistoryOpen((open) => !open)} aria-expanded={historyOpen}>{t("ux.history")}</button>
       <button
         type="button"
         className="settings-btn"
@@ -409,6 +462,11 @@ export default function StrategyResearchApp({
   );
   const extraSurfaces = (
     <>
+      {historyOpen && <aside className="research-data-drawer" role="dialog" aria-label={t("ux.history")}>
+        <header><strong>{t("ux.history")}</strong><button type="button" onClick={() => setHistoryOpen(false)}>{t("backtest.close")}</button></header>
+        <Suspense fallback={<p>{t("research.loading")}</p>}><StrategyRunHistory draftId={state.script.draftId} currentRunId={researchRun.result?.run.run_id ?? null} onOpen={(runId) => { dispatch({ type: "result/viewHistory", runId }); setHistoryOpen(false); }} /></Suspense>
+      </aside>}
+      {intent.kind === "handoff" && !handoff && <p role="alert">{t("ux.handoffMissing")}</p>}
       {(intent.page === "local" || intent.page === "backtest") ? (
         <StrategyResearchCompatNotice page={intent.page} />
       ) : null}
@@ -442,6 +500,8 @@ export default function StrategyResearchApp({
   const shellShared = {
     visualState,
     source,
+    ...(importedManifest ? { sourceLabel: `${importedManifest.name} · ${importedManifest.symbol}` }
+      : source?.kind === "CURRENT_CHART" ? { sourceLabel: `${source.symbol} · ${source.interval} · ${source.exchange}` } : {}),
     libraryEnabled: runtime.libraryEnabled,
     libraryOpen: state.source.libraryOpen,
     currentChartEnabled: false,
@@ -560,11 +620,16 @@ export default function StrategyResearchApp({
       exportOverlay={null}
       chart={
         source?.kind === "CURRENT_CHART"
-          ? <StrategyResearchCurrentChart />
+          ? hostReady && runtime.runtimeMode === "LIVE" && researchRun.session
+            ? <MarketDataWorkspaceProvider><Suspense fallback={<p>{t("research.loading")}</p>}><StrategyResearchLiveChart session={researchRun.session} result={researchRun.result} focusRequest={focusRequest} /></Suspense></MarketDataWorkspaceProvider>
+            : <StrategyResearchCurrentChart />
           : (
             <StrategyResearchFirstOpen
               libraryEnabled={runtime.libraryEnabled}
               runtimeMode={runtime.runtimeMode}
+              draftId={state.script.draftId}
+              saving={savingTemplate}
+              onSelectTemplate={selectTemplate}
               onOpenLibrary={() => dispatch({ type: "source/libraryOpen", open: true })}
             />
           )

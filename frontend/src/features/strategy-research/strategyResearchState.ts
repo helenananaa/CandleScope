@@ -1,4 +1,5 @@
 import type { ResearchSourceRefV1 } from "../research-data/researchDataTypes.js";
+import { validStrategyRunSettings, type StrategyRunSettings } from "../../shared/strategyRunSettings.js";
 import { parseResearchSourceRef, ResearchDataError } from "../research-data/researchDataSourceModel.js";
 
 export const STRATEGY_RESEARCH_WORKSPACE_KEY = "candlescope:strategy-research:v1";
@@ -17,6 +18,7 @@ export type StrategyResearchSourceSlice = {
 };
 
 export type StrategyResearchScriptSlice = {
+  configuration?: StrategyRunSettings;
   draftId: string | null;
   contentRevision: number;
 };
@@ -34,6 +36,9 @@ export type StrategyResearchState = {
 };
 
 export type StrategyResearchAction =
+  | { type: "result/viewHistory"; runId: string }
+  | { type: "result/invalidate" }
+  | { type: "script/configure"; configuration: StrategyRunSettings }
   | { type: "source/select"; source: ResearchSourceRefV1 }
   | { type: "source/clear" }
   | { type: "source/revisionChanged"; source: ResearchSourceRefV1 }
@@ -55,6 +60,10 @@ export function strategyResearchReducer(
   action: StrategyResearchAction,
 ): StrategyResearchState {
   switch (action.type) {
+    case "result/viewHistory": return { ...state, result: { runId: action.runId, stale: true, staleReason: null } };
+    case "result/invalidate": return { ...state, result: { ...state.result, stale: true } };
+    case "script/configure":
+      return { ...state, script: { ...state.script, configuration: action.configuration }, result: state.result.runId ? { ...state.result, stale: true, staleReason: "RANGE_CHANGED" } : state.result };
     case "source/select":
       return {
         ...state,
@@ -115,6 +124,9 @@ export function persistStrategyResearchWorkspace(state: StrategyResearchState): 
     source: state.source.source,
     libraryOpen: state.source.libraryOpen,
     draftId: state.script.draftId,
+    contentRevision: state.script.contentRevision,
+    configuration: state.script.configuration,
+    stale: state.result.stale,
     runId: state.result.runId,
   };
   try {
@@ -148,10 +160,13 @@ export function loadStrategyResearchWorkspace(): StrategyResearchState {
         previewFrozen: false,
         libraryOpen: record.libraryOpen === true,
       },
-      script: { draftId: typeof record.draftId === "string" ? record.draftId : null, contentRevision: 0 },
+      script: { draftId: typeof record.draftId === "string" ? record.draftId : null,
+        contentRevision: typeof record.contentRevision === "number" ? record.contentRevision : 0,
+        ...(validStrategyRunSettings(record.configuration) ? { configuration: record.configuration } : {}),
+      },
       result: {
         runId: typeof record.runId === "string" ? record.runId : null,
-        stale: false,
+        stale: record.stale === true || (typeof record.runId === "string" && typeof record.contentRevision !== "number"),
         staleReason: null,
       },
     };

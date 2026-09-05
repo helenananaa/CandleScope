@@ -88,6 +88,7 @@ export interface ChartCellPriceScale {
 }
 
 export interface ChartStrategyAttachmentRecord {
+  executionOverrides?: import("../../shared/strategyRunSettings.js").StrategyExecutionOverrides;
   schemaVersion: 1;
   strategyDraftId: string | null;
   strategyRevisionId: string | null;

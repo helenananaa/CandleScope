@@ -49,6 +49,6 @@ export class StrategyResearchRuntime {
   }
 
   currentChartRunnable(): boolean {
-    return false;
+    return this.runtimeMode === "LIVE" && this.state.source.source?.kind === "CURRENT_CHART";
   }
 }
