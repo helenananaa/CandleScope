@@ -3116,6 +3116,7 @@ export const fr = {
   "orderBook.rt.seqGap": "Écart de séquence détecté ; resynchronisation",
   "orderBook.rt.reconnectWait": "Reconnexion amont ; en attente de resynchronisation",
   "orderBook.rt.resyncGeneric": "Carnet d’ordres indisponible ; resynchronisation",
+  "orderBook.lastReceived": "Dernière réception valide",
   "orderBook.rt.staleSnapshot": "L’instantané du carnet d’ordres n’a pas été mis à jour depuis trop longtemps",
   "orderBook.rt.disconnected": "Connexion du carnet d’ordres interrompue",
   "trade.rt.binanceOnly": "Le flux ne prend actuellement en charge que Binance",

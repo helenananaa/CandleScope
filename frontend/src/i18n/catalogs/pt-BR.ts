@@ -3178,6 +3178,7 @@ export const ptBR = {
   "orderBook.rt.seqGap": "Lacuna de sequência detectada; ressincronizando",
   "orderBook.rt.reconnectWait": "A origem está reconectando; aguardando ressincronizar",
   "orderBook.rt.resyncGeneric": "Livro de ofertas indisponível; ressincronizando",
+  "orderBook.lastReceived": "Último recebimento válido",
   "orderBook.rt.staleSnapshot": "O snapshot do livro de ofertas não é atualizado há tempo demais",
   "orderBook.rt.disconnected": "Conexão do livro de ofertas interrompida",
 

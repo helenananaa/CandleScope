@@ -3173,6 +3173,7 @@ export const en = {
   "orderBook.rt.seqGap": "Sequence gap detected; resyncing",
   "orderBook.rt.reconnectWait": "Upstream reconnecting; waiting to resync",
   "orderBook.rt.resyncGeneric": "Order book unavailable; resyncing",
+  "orderBook.lastReceived": "Last valid receipt",
   "orderBook.rt.staleSnapshot": "Order-book snapshot has not updated for too long",
   "orderBook.rt.disconnected": "Order-book connection interrupted",
 

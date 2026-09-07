@@ -3171,6 +3171,7 @@ export const zhCN = {
   "orderBook.rt.seqGap": "检测到序列缺口，正在重新同步",
   "orderBook.rt.reconnectWait": "上游连接恢复中，等待重新同步",
   "orderBook.rt.resyncGeneric": "订单簿暂不可用，正在重新同步",
+  "orderBook.lastReceived": "最后有效接收",
   "orderBook.rt.staleSnapshot": "盘口快照长时间未更新",
   "orderBook.rt.disconnected": "订单簿连接中断",
 

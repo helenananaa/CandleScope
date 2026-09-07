@@ -3116,6 +3116,7 @@ export const zhTW = {
   "orderBook.rt.seqGap": "檢測到序列缺口，正在重新同步",
   "orderBook.rt.reconnectWait": "上游連線恢復中，等待重新同步",
   "orderBook.rt.resyncGeneric": "訂單簿暫不可用，正在重新同步",
+  "orderBook.lastReceived": "最後有效接收",
   "orderBook.rt.staleSnapshot": "盤口快照長時間未更新",
   "orderBook.rt.disconnected": "訂單簿連線中斷",
   "trade.rt.binanceOnly": "逐筆訂單流目前僅支援 Binance",

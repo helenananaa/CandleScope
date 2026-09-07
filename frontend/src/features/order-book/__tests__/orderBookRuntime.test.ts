@@ -173,12 +173,18 @@ test("latest-only store coalesces frames and stale status cancels pending books"
   frames.get(1)?.();
   assert.equal(store.getSnapshot().book?.revision, 2);
   assert.equal(notifications, 1);
+  assert.equal(store.getSnapshot().lastReceivedAtMs, parsedBook("partial", 2).receivedAtMs);
 
   store.publishBook(parsedBook("partial", 3));
   store.publishStatus("stale", { message: "silent", clearBook: true });
   assert.equal(store.getSnapshot().status, "stale");
   assert.equal(store.getSnapshot().book, null);
   assert.equal(frames.has(2), false);
+  assert.equal(store.getSnapshot().lastReceivedAtMs, parsedBook("partial", 2).receivedAtMs);
+  store.publishStatus("reconnecting", { clearBook: true });
+  assert.equal(store.getSnapshot().lastReceivedAtMs, parsedBook("partial", 2).receivedAtMs);
+  store.reset();
+  assert.equal(store.getSnapshot().lastReceivedAtMs, null);
 });
 
 test("preference loading clamps height and rejects corrupt enum values", () => {

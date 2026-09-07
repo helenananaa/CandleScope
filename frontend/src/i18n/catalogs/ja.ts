@@ -3116,6 +3116,7 @@ export const ja = {
   "orderBook.rt.seqGap": "シーケンスギャップを検出、再同期中",
   "orderBook.rt.reconnectWait": "上流接続の復旧中、再同期を待機",
   "orderBook.rt.resyncGeneric": "板情報は一時利用不可、再同期中",
+  "orderBook.lastReceived": "最終有効受信",
   "orderBook.rt.staleSnapshot": "板のスナップショットが長時間更新されていません",
   "orderBook.rt.disconnected": "板情報の接続が切断されました",
   "trade.rt.binanceOnly": "約定テープは現在 Binance のみ対応",

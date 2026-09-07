@@ -3116,6 +3116,7 @@ export const ru = {
   "orderBook.rt.seqGap": "Обнаружен пробел последовательности; повторная синхронизация",
   "orderBook.rt.reconnectWait": "Исходящее соединение восстанавливается; ожидание повторной синхронизации",
   "orderBook.rt.resyncGeneric": "Книга ордеров недоступен; повторная синхронизация",
+  "orderBook.lastReceived": "Последний корректный приём",
   "orderBook.rt.staleSnapshot": "Снимок книги ордеров слишком долго не обновлялся",
   "orderBook.rt.disconnected": "Соединение книги ордеров прервано",
   "trade.rt.binanceOnly": "Лента сделок сейчас поддерживает только Binance",

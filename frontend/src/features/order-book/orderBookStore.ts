@@ -27,7 +27,7 @@ function initialSnapshot(
   status: OrderBookConnectionStatus = "idle",
   message: string | null = null,
 ): OrderBookStoreSnapshot {
-  return Object.freeze({ status, book: null, message, error: null, version: 0 });
+  return Object.freeze({ status, book: null, lastReceivedAtMs: null, message, error: null, version: 0 });
 }
 
 export function createOrderBookStore(
@@ -64,7 +64,7 @@ export function createOrderBookStore(
       current.book?.topic === book.topic
       && current.book.revision >= book.revision
     ) return;
-    commit({ status: "live", book, message: null, error: null });
+    commit({ status: "live", book, lastReceivedAtMs: book.receivedAtMs, message: null, error: null });
   };
 
   return {
@@ -87,6 +87,7 @@ export function createOrderBookStore(
       const clearBook = options.clearBook ?? status !== "idle";
       commit({
         status,
+        lastReceivedAtMs: current.lastReceivedAtMs,
         book: clearBook ? null : current.book,
         message: options.message ?? null,
         error: options.error ?? null,
@@ -94,7 +95,7 @@ export function createOrderBookStore(
     },
     reset: (status = "idle", message = null) => {
       cancelPending();
-      commit({ status, book: null, message, error: null });
+      commit({ status, book: null, lastReceivedAtMs: null, message, error: null });
     },
     destroy: () => {
       cancelPending();

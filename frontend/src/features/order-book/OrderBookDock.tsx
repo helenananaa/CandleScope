@@ -6,7 +6,7 @@ import React, {
   useState,
   useSyncExternalStore,
 } from "react";
-import { t } from "../../i18n/index.js";
+import { t, getDateTimeLocale } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import type {
   FullOutputLimit,
@@ -319,6 +319,14 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
           {orderBookStatusLabel(snapshot.status)}
         </span>
       </header>
+      {snapshot.lastReceivedAtMs !== null && (
+        <div className="ob-last-update">
+          {t("orderBook.lastReceived")} {" "}
+          <time dateTime={new Date(snapshot.lastReceivedAtMs).toISOString()}>
+            {new Date(snapshot.lastReceivedAtMs).toLocaleString(getDateTimeLocale(), { hour12: false })}
+          </time>
+        </div>
+      )}
 
       <>
           <div className="ob-controls">

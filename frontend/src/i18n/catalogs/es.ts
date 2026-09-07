@@ -3125,6 +3125,7 @@ export const es = {
   "orderBook.rt.seqGap": "Hueco de secuencia detectado; resincronizando",
   "orderBook.rt.reconnectWait": "El origen se está reconectando; esperando para resincronizar",
   "orderBook.rt.resyncGeneric": "Libro de órdenes no disponible; resincronizando",
+  "orderBook.lastReceived": "Última recepción válida",
   "orderBook.rt.staleSnapshot": "La instantánea del libro de órdenes lleva demasiado tiempo sin actualizarse",
   "orderBook.rt.disconnected": "Conexión del libro de órdenes interrumpida",
   "trade.rt.binanceOnly": "La cinta actualmente solo admite Binance",

@@ -3116,6 +3116,7 @@ export const ko = {
   "orderBook.rt.seqGap": "시퀀스 갭 감지. 재동기화 중",
   "orderBook.rt.reconnectWait": "업스트림 재연결 중. 재동기화 대기",
   "orderBook.rt.resyncGeneric": "호가창을 사용할 수 없음. 재동기화 중",
+  "orderBook.lastReceived": "마지막 유효 수신",
   "orderBook.rt.staleSnapshot": "호가창 스냅샷이 너무 오래 갱신되지 않음",
   "orderBook.rt.disconnected": "호가창 연결이 끊김",
   "trade.rt.binanceOnly": "체결은 현재 Binance만 지원",
