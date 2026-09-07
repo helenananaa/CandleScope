@@ -2270,6 +2270,20 @@ input[type="color"] {
   font-weight: 500;
 }
 
+.st-shortcut-item {
+  gap: 20px;
+}
+
+.st-shortcut-item kbd {
+  flex-shrink: 0;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.st-shortcut-item .st-stack-label {
+  text-align: right;
+}
+
 
 /* ── Exchange connectivity test results ─────────────────── */
 .st-exchange-results {

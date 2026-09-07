@@ -7,6 +7,7 @@ export type AboutSettingsPanelProps = Record<string, never>;
 export default function AboutSettingsPanel(props: AboutSettingsPanelProps) {
     void props;
     useLocale();
+    const modifier = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform) ? "⌘" : "Ctrl";
     return (
         <>
             <div className="st-group">
@@ -47,18 +48,18 @@ export default function AboutSettingsPanel(props: AboutSettingsPanelProps) {
             <div className="st-group">
                 <div className="st-group-title">{t("settings.about.shortcuts")}</div>
                 <div className="st-about-stack">
-                    <div className="st-stack-item">
-                        <span className="st-stack-label">⚙️</span>
-                        <span className="st-stack-value">{t("settings.about.settings")}</span>
-                    </div>
-                    <div className="st-stack-item">
-                        <span className="st-stack-label">📊</span>
-                        <span className="st-stack-value">{t("settings.about.indicators")}</span>
-                    </div>
-                    <div className="st-stack-item">
-                        <span className="st-stack-label">✎</span>
-                        <span className="st-stack-value">{t("settings.about.intervals")}</span>
-                    </div>
+                    {[
+                        [`${modifier} + K`, t("settings.about.shortcutSearch")],
+                        ["/", t("settings.about.shortcutSearchSlash")],
+                        ["Esc", t("settings.about.shortcutSearchClose")],
+                        [`${modifier} + Z`, t("settings.about.shortcutWorkspaceUndo")],
+                        [`${modifier} + Shift + Z`, t("settings.about.shortcutWorkspaceRedo")],
+                    ].map(([keys, description]) => (
+                        <div className="st-stack-item st-shortcut-item" key={keys}>
+                            <kbd className="st-stack-value">{keys}</kbd>
+                            <span className="st-stack-label">{description}</span>
+                        </div>
+                    ))}
                 </div>
             </div>
         </>
