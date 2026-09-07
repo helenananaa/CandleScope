@@ -1338,6 +1338,7 @@ export function PluginSettingsPanel({ runtime }: { runtime: PluginPlatformRuntim
     }
   };
   const runtimeCount = compatibility?.contributions.length ?? 0;
+  const availableRuntimeCount = compatibility?.contributions.filter((item) => item.available).length ?? 0;
   const marketplaceEnabled = runtime.view.marketplaceCatalog?.enabled === true;
   return (
     <div className="plugin-settings-page" data-testid="plugin-manager">
@@ -1366,7 +1367,7 @@ export function PluginSettingsPanel({ runtime }: { runtime: PluginPlatformRuntim
               <h3>{t("plugin.scriptRuntimes")}</h3>
               <p>{t("plugin.runtimeDesc")}</p>
             </div>
-            <span className="plugin-state-pill is-ready">{t("plugin.availableCount", { count: runtimeCount })}</span>
+            <span className={`plugin-state-pill ${availableRuntimeCount > 0 ? "is-ready" : "is-muted"}`}>{t("plugin.availableCount", { count: availableRuntimeCount })}</span>
           </header>
           <div className="plugin-runtime-list">
             {compatibility.contributions.map((contribution) => (
