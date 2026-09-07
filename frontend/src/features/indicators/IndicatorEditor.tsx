@@ -303,17 +303,17 @@ export default function IndicatorEditor({
   return (
     <div className="indicator-editor" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Toolbar */}
-      <div className="indicator-editor-toolbar" style={{ padding: '12px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+      <div className="indicator-editor-toolbar" style={{ padding: '12px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px 16px', flexWrap: 'wrap', flex: '1 1 240px', minWidth: 0 }}>
           <span className="indicator-editor-title" style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)', letterSpacing: '0.5px' }}>
             {readOnly
               ? t("indicator.editor.builtinRef")
               : t("indicator.editor.title", { language: displayedLanguage?.name || requestedLanguageId || t("indicator.editor.fallbackLanguage") })}
           </span>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{name}</span>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)', overflowWrap: 'anywhere' }}>{name}</span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="indicator-editor-toolbar-actions" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
           {previewState?.id && !readOnly && (
             <button
               onClick={() => {

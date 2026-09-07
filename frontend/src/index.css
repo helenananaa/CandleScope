@@ -15004,3 +15004,9 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
   .replay-market-picker-reason { max-width: none; text-align: left; }
   .replay-market-picker-row-main dd { white-space: normal; }
 }
+
+
+.indicator-editor-toolbar-actions > button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
