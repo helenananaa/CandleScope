@@ -662,6 +662,7 @@ export const zhTW = {
   "indicator.viewReference": "檢視參考實現",
   "indicator.editCode": "編輯程式碼",
   "indicator.remove": "移除",
+  "indicator.marketDataBadge": "行情資料",
   "indicator.marketError": "市場指標錯誤",
   "indicator.recalculate": "🔄 重新計算全部",
   "indicator.deleteConfirm": "刪除自訂指標 \"{name}\"？如果它已新增到圖表，也會一併移除。",

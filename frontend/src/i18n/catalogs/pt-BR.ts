@@ -679,6 +679,7 @@ export const ptBR = {
   "indicator.viewReference": "Ver implementação de referência",
   "indicator.editCode": "Editar código",
   "indicator.remove": "Remover",
+  "indicator.marketDataBadge": "Dados de mercado",
   "indicator.marketError": "Erro do estudo de mercado",
   "indicator.recalculate": "🔄 Recalcular todos",
   "indicator.deleteConfirm": "Excluir o indicador personalizado \"{name}\"? Se estiver no gráfico, ele também será removido.",

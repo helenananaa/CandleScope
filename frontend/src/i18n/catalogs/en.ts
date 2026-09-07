@@ -677,6 +677,7 @@ export const en = {
   "indicator.viewReference": "View reference implementation",
   "indicator.editCode": "Edit code",
   "indicator.remove": "Remove",
+  "indicator.marketDataBadge": "Market data",
   "indicator.marketError": "Market-study error",
   "indicator.recalculate": "🔄 Recalculate all",
   "indicator.deleteConfirm": "Delete custom indicator \"{name}\"? If it is on the chart, it will be removed too.",

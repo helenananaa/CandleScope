@@ -675,6 +675,7 @@ export const zhCN = {
   "indicator.viewReference": "查看参考实现",
   "indicator.editCode": "编辑代码",
   "indicator.remove": "移除",
+  "indicator.marketDataBadge": "行情数据",
   "indicator.marketError": "市场指标错误",
   "indicator.recalculate": "🔄 重新计算全部",
   "indicator.deleteConfirm": "删除自定义指标 \"{name}\"？如果它已添加到图表，也会一并移除。",

@@ -668,6 +668,7 @@ export const es = {
   "indicator.viewReference": "Ver la implementación de referencia",
   "indicator.editCode": "Editar código",
   "indicator.remove": "Quitar",
+  "indicator.marketDataBadge": "Datos de mercado",
   "indicator.marketError": "Error de estudio de mercado",
   "indicator.recalculate": "🔄 Recalcular todo",
   "indicator.deleteConfirm": "¿Eliminar el indicador personalizado \"{name}\"? Si está en el gráfico, también se quitará.",

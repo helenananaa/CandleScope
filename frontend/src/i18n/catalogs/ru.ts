@@ -662,6 +662,7 @@ export const ru = {
   "indicator.viewReference": "Посмотреть эталонную реализацию",
   "indicator.editCode": "Редактировать код",
   "indicator.remove": "Убрать",
+  "indicator.marketDataBadge": "Рыночные данные",
   "indicator.marketError": "Ошибка рыночного индикатора",
   "indicator.recalculate": "🔄 Пересчитать все",
   "indicator.deleteConfirm": "Удалить пользовательский индикатор «{name}»? Если он на графике, он тоже будет убран.",

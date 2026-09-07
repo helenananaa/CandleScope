@@ -662,6 +662,7 @@ export const fr = {
   "indicator.viewReference": "Voir l’implémentation de référence",
   "indicator.editCode": "Modifier le code",
   "indicator.remove": "Retirer",
+  "indicator.marketDataBadge": "Données de marché",
   "indicator.marketError": "Erreur d’étude de marché",
   "indicator.recalculate": "🔄 Tout recalculer",
   "indicator.deleteConfirm": "Supprimer l’indicateur personnalisé « {name} » ? S’il est sur le graphique, il sera aussi retiré.",

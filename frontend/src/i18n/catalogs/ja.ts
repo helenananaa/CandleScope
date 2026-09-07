@@ -662,6 +662,7 @@ export const ja = {
   "indicator.viewReference": "参考実装を表示",
   "indicator.editCode": "コードを編集",
   "indicator.remove": "削除",
+  "indicator.marketDataBadge": "市場データ",
   "indicator.marketError": "市場インジケーターエラー",
   "indicator.recalculate": "🔄 すべて再計算",
   "indicator.deleteConfirm": "カスタムインジケーター「{name}」を削除しますか？チャートに追加済みの場合はそれも削除されます。",

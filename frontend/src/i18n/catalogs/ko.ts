@@ -662,6 +662,7 @@ export const ko = {
   "indicator.viewReference": "참고 구현 보기",
   "indicator.editCode": "코드 편집",
   "indicator.remove": "제거",
+  "indicator.marketDataBadge": "시장 데이터",
   "indicator.marketError": "시장 지표 오류",
   "indicator.recalculate": "🔄 전체 다시 계산",
   "indicator.deleteConfirm": "사용자 지정 지표 \"{name}\" 삭제? 차트에 있으면 함께 제거됨.",

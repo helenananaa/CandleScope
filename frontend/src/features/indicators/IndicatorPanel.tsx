@@ -882,7 +882,7 @@ plot(ma, "MA", color=line_color)
                               <div className="indicator-preset-info">
                                 <span className="indicator-preset-name">
                                   {study.name}
-                                  <IndicatorBadge tone="neutral">market-data</IndicatorBadge>
+                                  <IndicatorBadge tone="neutral">{t("indicator.marketDataBadge")}</IndicatorBadge>
                                   <IndicatorBadge tone="sub">{t("indicator.subPane")}</IndicatorBadge>
                                   {!study.supported && (
                                     <IndicatorBadge tone="neutral">{t("indicator.unavailable")}</IndicatorBadge>
@@ -1061,7 +1061,7 @@ plot(ma, "MA", color=line_color)
                               </button>
                               <span className="indicator-active-name">
                                 {study.name}
-                                <IndicatorBadge tone="neutral">market-data</IndicatorBadge>
+                                <IndicatorBadge tone="neutral">{t("indicator.marketDataBadge")}</IndicatorBadge>
                                 <IndicatorBadge tone="sub">{t("indicator.subPane")}</IndicatorBadge>
                                 {statusLabel && (
                                   <IndicatorBadge tone="neutral">{statusLabel}</IndicatorBadge>
