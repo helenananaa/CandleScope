@@ -1224,9 +1224,9 @@ test("hub markup exposes saves, native actions, filters and explicit unavailable
   assert.match(html, /HIDE_MINUTE/);
   assert.match(html, /Practice 可审计变更白名单/);
   assert.match(html, /历史盘口.*连续、可 pin/);
-  assert.match(html, /商品在 Run 内选择/);
-  assert.match(html, /创建时不固定商品、交易所、市场类型、基础周期或数据集/);
-  assert.match(html, /原子创建首条 MarketTrack/);
+  assert.match(html, /创建训练后选择商品/);
+  assert.match(html, /创建时确定开始时间，暂不绑定商品、交易所、市场类型、基础周期或数据集/);
+  assert.match(html, /检查通过后才会加入训练/);
   assert.match(html, /缺少可近似项时自动使用清楚标记的 HEDGE_HYBRID/);
   assert.match(html, /HEDGE 会优先绑定完整历史输入/);
   assert.doesNotMatch(html, /DETERMINISTIC_SIMULATION[^<]*disabled|APPROX_PROXY[^<]*disabled/);
@@ -1234,8 +1234,8 @@ test("hub markup exposes saves, native actions, filters and explicit unavailable
   assert.match(html, /指标预热 BAR/);
   assert.match(html, /全部可用（默认，按需加载）/);
   assert.match(html, /像实时行情一样向左按需分页/);
-  assert.match(html, /确认时间并创建 Run/);
-  assert.match(html, /创建确认后 T0 永久不变/);
+  assert.match(html, /确认时间并创建训练/);
+  assert.match(html, /确认创建后，开始时间不可更改/);
   assert.match(html, /不含真实盘口排队/);
   assert.doesNotMatch(html, /1710000000000|dataset_epoch|snapshot_blob/);
 });
