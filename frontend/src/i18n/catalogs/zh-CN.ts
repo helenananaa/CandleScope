@@ -1069,6 +1069,13 @@ export const zhCN = {
   "settings.about.indicators": "指标面板",
   "settings.about.intervals": "管理自定义周期",
 
+  "settings.proxy.exchangeNetwork": "交易所网络",
+  "settings.proxy.dataEngine": "本地数据引擎",
+  "settings.proxy.engineReady": "已启动",
+  "settings.proxy.engineNotReady": "未就绪，请检查本地服务启动日志",
+  "settings.proxy.engineError": "状态检查失败，请查看本地服务日志",
+  "settings.proxy.engineUnknown": "状态未知，请确认本地服务可用且版本一致",
+  "settings.proxy.engineScope": "网络检测仅证明接口可达；引擎启动也不保证指定交易对已有历史数据。",
   "settings.proxy.title": "代理模式",
   "settings.proxy.desc": "选择访问交易所 API 的网络代理方式",
   "settings.proxy.system": "系统代理",

@@ -1073,6 +1073,13 @@ export const ptBR = {
   "settings.about.indicators": "Indicadores",
   "settings.about.intervals": "Gerenciar intervalos personalizados",
 
+  "settings.proxy.exchangeNetwork": "Rede das bolsas",
+  "settings.proxy.dataEngine": "Mecanismo de dados local",
+  "settings.proxy.engineReady": "Iniciado",
+  "settings.proxy.engineNotReady": "Não está pronto; verifique os logs de inicialização",
+  "settings.proxy.engineError": "Falha na verificação; consulte os logs locais",
+  "settings.proxy.engineUnknown": "Estado desconhecido; verifique o serviço local e as versões",
+  "settings.proxy.engineScope": "O teste de rede confirma apenas o acesso às APIs. Um mecanismo iniciado não garante o histórico de um ativo.",
   "settings.proxy.title": "Modo de proxy",
   "settings.proxy.desc": "Como o CandleScope acessa as APIs das exchanges",
   "settings.proxy.system": "Proxy do sistema",

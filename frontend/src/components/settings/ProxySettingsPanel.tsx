@@ -112,7 +112,9 @@ export default function ProxySettingsPanel({
             </div>
 
             {proxyTestResult && (
+                <>
                 <div className={`st-result ${proxyTestResult.success ? 'st-result-ok' : proxyTestResult.partial ? 'st-result-warn' : 'st-result-fail'}`}>
+                    <strong>{t("settings.proxy.exchangeNetwork")}</strong><br />
                     <span>{proxyTestResult.success ? '✅' : proxyTestResult.partial ? '⚠️' : '❌'} {proxyTestResult.message}</span>
                     {proxyTestResult.proxy_used && (
                         <div className="st-result-detail">{t("settings.proxy.used", { proxy: proxyTestResult.proxy_used })}</div>
@@ -129,6 +131,14 @@ export default function ProxySettingsPanel({
                         </div>
                     )}
                 </div>
+                <div className={`st-result ${proxyTestResult.data_engine === "ready" ? "st-result-ok" : "st-result-warn"}`}>
+                    <strong>{t("settings.proxy.dataEngine")}</strong>
+                    <div>{t(proxyTestResult.data_engine === "ready" ? "settings.proxy.engineReady"
+                        : proxyTestResult.data_engine === "not_initialized" || proxyTestResult.data_engine === "not_started" ? "settings.proxy.engineNotReady"
+                        : proxyTestResult.data_engine === "error" ? "settings.proxy.engineError" : "settings.proxy.engineUnknown")}</div>
+                    <div className="st-result-detail">{t("settings.proxy.engineScope")}</div>
+                </div>
+                </>
             )}
 
             {proxySaveMsg && (

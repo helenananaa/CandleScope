@@ -1071,6 +1071,13 @@ export const en = {
   "settings.about.indicators": "Indicators",
   "settings.about.intervals": "Manage custom intervals",
 
+  "settings.proxy.exchangeNetwork": "Exchange network",
+  "settings.proxy.dataEngine": "Local data engine",
+  "settings.proxy.engineReady": "Started",
+  "settings.proxy.engineNotReady": "Not ready; check local service startup logs",
+  "settings.proxy.engineError": "Health check failed; inspect local service logs",
+  "settings.proxy.engineUnknown": "Unknown; check local service availability and version compatibility",
+  "settings.proxy.engineScope": "Network tests prove endpoint reachability only. A started engine does not guarantee history for a specific symbol.",
   "settings.proxy.title": "Proxy mode",
   "settings.proxy.desc": "How CandleScope reaches exchange APIs",
   "settings.proxy.system": "System proxy",
