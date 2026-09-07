@@ -1,3 +1,4 @@
+import { snapshotDeliveryLabel } from "./orderBookDelivery.js";
 import React, {
   useCallback,
   useLayoutEffect,
@@ -51,15 +52,6 @@ function orderBookStatusLabel(status: OrderBookConnectionStatus): string {
   return t(ORDER_BOOK_STATUS_KEYS[status]);
 }
 
-function snapshotDeliveryLabel(
-  mode: "partial" | "full",
-  snapshotMode: "live_snapshot" | "polling_snapshot" | null,
-): string {
-  if (mode === "full") return t("orderBook.delivery.strictContinuous");
-  return snapshotMode === "polling_snapshot"
-    ? t("orderBook.delivery.pollingSnapshot")
-    : t("orderBook.delivery.liveSnapshot");
-}
 
 function orderBookStatusDetail(
   status: OrderBookConnectionStatus,
@@ -284,7 +276,7 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
     ? PARTIAL_PRICE_GROUPINGS
     : FULL_PRICE_GROUPINGS;
   const symbol = view.identity.symbol.replace(/USDT$|USDC$/, "");
-  const deliveryLabel = snapshotDeliveryLabel(view.preferences.mode, view.snapshotMode);
+  const deliveryLabel = snapshotDeliveryLabel(view.preferences.mode, view.snapshotMode, snapshot.book?.source);
 
   return (
     <section

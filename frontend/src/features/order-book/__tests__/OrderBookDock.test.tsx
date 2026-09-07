@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { t } from "../../../i18n/index.js";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import OrderBookDock from "../OrderBookDock.js";
+import { snapshotDeliveryLabel } from "../orderBookDelivery.js";
 import { createOrderBookStore } from "../orderBookStore.js";
 import { DEFAULT_ORDER_BOOK_PREFERENCES } from "../orderBookPreferencesStore.js";
 import type { OrderBookRuntime } from "../orderBookTypes.js";
@@ -31,4 +33,12 @@ test("dock renders stream failure detail and retry instead of generic support te
   store.publishStatus("error", { error: "Subscription timed out" });
   assert.match(renderToStaticMarkup(<OrderBookDock runtime={runtime} height={300} />), /<span>Subscription timed out<\/span>/);
   store.destroy();
+});
+
+
+test("actual snapshot source takes precedence over advertised delivery capability", () => {
+  assert.equal(snapshotDeliveryLabel("partial", "live_snapshot", "http"), t("orderBook.delivery.pollingSnapshot"));
+  assert.equal(snapshotDeliveryLabel("partial", "polling_snapshot", "websocket"), t("orderBook.delivery.liveSnapshot"));
+  assert.equal(snapshotDeliveryLabel("partial", "polling_snapshot"), t("orderBook.delivery.pollingSnapshot"));
+  assert.equal(snapshotDeliveryLabel("full", "live_snapshot", "websocket"), t("orderBook.delivery.strictContinuous"));
 });
