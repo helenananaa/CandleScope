@@ -55,6 +55,17 @@ export function chartStrategyMaxDrawdown(report: BacktestReport): string {
   );
 }
 
+export function chartStrategyDrawdownDetailKey(report: BacktestReport) {
+  const risk = report.performance?.risk ?? {};
+  const metric = risk.max_drawdown ?? risk.max_drawdown_percent ?? risk.maximum_drawdown;
+  if (chartStrategyMetricValue(metric) !== "—") return "chartTester.result.drawdownBasis" as const;
+  if (metric === null || metric === undefined) return "chartTester.result.drawdownMissing" as const;
+  if (typeof metric === "object" && metric.reason === "INSUFFICIENT_EQUITY_SAMPLES") {
+    return "chartTester.result.drawdownSamples" as const;
+  }
+  return "chartTester.result.drawdownUnavailable" as const;
+}
+
 export function chartStrategyTradeFocusTimeMs(trade: Record<string, unknown>): number | null {
   const value = Number(trade.entry_time_ms ?? trade.exit_time_ms);
   return Number.isFinite(value) ? value : null;

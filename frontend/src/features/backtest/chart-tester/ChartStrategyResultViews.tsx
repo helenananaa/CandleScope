@@ -15,6 +15,7 @@ import type { ChartStrategyResultBundle } from "./chartStrategyResultCache.js";
 import {
   CHART_STRATEGY_TRADE_ROW_HEIGHT,
   chartStrategyMaxDrawdown,
+  chartStrategyDrawdownDetailKey,
   chartStrategyMetricValue,
   formatChartStrategyNumber,
   chartStrategyTradeFocusTimeMs,
@@ -190,7 +191,7 @@ function ResultMetric({ label, value, detail = "", rawValue = value }: { label: 
     <div className="chart-strategy-result-metric">
       <span>{label}</span>
       <strong title={rawValue} className={signedClass(rawValue)}>{value}</strong>
-      {detail && <small>{detail}</small>}
+      {detail && <small title={detail}>{detail}</small>}
     </div>
   );
 }
@@ -241,7 +242,7 @@ export function ChartStrategyResultOverview({
         <ResultMetric
           label={t("chartTester.result.maxDrawdown")}
           value={chartStrategyMaxDrawdown(report)}
-          detail={t("chartTester.result.closedBasis")}
+          detail={t(chartStrategyDrawdownDetailKey(report))}
         />
         <ResultMetric
           label={t("chartTester.result.trades")}
