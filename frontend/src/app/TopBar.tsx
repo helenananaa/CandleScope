@@ -20,6 +20,7 @@ import { useAdvancedMarketSummary } from "../features/advanced-market-data/useAd
 import { t } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
 import MarketTopBarFrame from "./MarketTopBarFrame.js";
+import { AlertRailIcon, CapabilityRailIcon, ProfileRailIcon } from "./marketRailIcons.js";
 
 export interface TopBarSymbolSearchModel extends Omit<SymbolSearchProps, "onSelect"> {
   onSelectSymbol: SymbolSearchProps["onSelect"];
@@ -138,7 +139,7 @@ function TopBar({
       </>}
       controls={<>
         <button
-        className="settings-btn"
+        className="settings-btn indicator-toggle-btn"
         title={t("shell.settings")}
         aria-label={t("shell.settings")}
         onPointerEnter={loadSettingsModal}
@@ -149,24 +150,18 @@ function TopBar({
           markPerf("lazy.settings.open.start", { trigger: "button" });
           onOpenSettings();
         }}
-        style={{
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          fontSize: "18px",
-          padding: "4px",
-          display: "flex",
-        }}
       >
-        ⚙️
+        <span aria-hidden="true" style={{ display: "flex" }}><CapabilityRailIcon /></span>
         </button>
 
         <button
         className={`indicator-toggle-btn ${indicatorPanelOpen ? "active" : ""}`}
         onClick={onToggleIndicatorPanel}
         title={t("shell.indicators")}
+        aria-label={`${t("shell.indicators")} ${activeIndicatorCount}`}
+        aria-expanded={indicatorPanelOpen}
       >
-        📊
+        <span aria-hidden="true" style={{ display: "flex" }}><ProfileRailIcon /></span>
         {activeIndicatorCount > 0 && (
           <span className="indicator-badge">{activeIndicatorCount}</span>
         )}
@@ -176,8 +171,10 @@ function TopBar({
         className={`indicator-toggle-btn alert-toggle-btn ${alertPanelOpen ? "active" : ""}`}
         onClick={onToggleAlertPanel}
         title={t("shell.alerts")}
+        aria-label={t("shell.alerts")}
+        aria-expanded={alertPanelOpen}
       >
-        🔔
+        <span aria-hidden="true" style={{ display: "flex" }}><AlertRailIcon /></span>
         </button>
         {extensionControls}
       </>}
