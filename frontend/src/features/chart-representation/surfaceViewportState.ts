@@ -147,14 +147,24 @@ export function planSurfaceViewportRestore(
   if (!snapshot || snapshot.datasetKey !== datasetKey) return null;
   const sameSurface = snapshot.surfaceConfigKey === surfaceConfigKey
     && snapshot.axisMode === axisMode;
+  // Source-bar density can dwarf a sparse synthetic projection. Only adapt
+  // during a representation/dataset transfer; an exact-surface user zoom is
+  // intentional and must survive restoration unchanged.
+  const adaptSparseProjection = axisMode === "derived-ordinal"
+    && (!sameSurface || snapshot.transferredFromDatasetKey !== undefined)
+    && displayRows.length > 0
+    && snapshot.logicalSpan > displayRows.length;
+  const logicalSpan = adaptSparseProjection ? Math.max(1, displayRows.length) : snapshot.logicalSpan;
   const logicalRange = mapSourceViewportAnchorToDisplayLogicalRange(displayRows, {
     anchorTime: sameSurface ? snapshot.anchorTime : snapshot.anchorSourceTime,
     sourceTime: snapshot.anchorSourceTime,
-    logicalSpan: snapshot.logicalSpan,
-    screenOffset: snapshot.screenOffset,
+    logicalSpan,
+    screenOffset: adaptSparseProjection
+      ? snapshot.screenOffset * logicalSpan / snapshot.logicalSpan
+      : snapshot.screenOffset,
   });
   return {
-    barSpacing: sameSurface ? snapshot.barSpacing : null,
+    barSpacing: sameSurface && !adaptSparseProjection ? snapshot.barSpacing : null,
     logicalRange,
     sameSurface,
   };
@@ -235,6 +245,7 @@ export function transferSurfaceViewportSnapshot(
     // Axis coordinates are dataset-local (a coarse bucket open or an ordinal
     // order). Cross-dataset restoration must resolve from stable source time.
     anchorTime: snapshot.anchorSourceTime,
+    transferredFromDatasetKey: fromDatasetKey,
     datasetKey: toDatasetKey,
   };
 }
