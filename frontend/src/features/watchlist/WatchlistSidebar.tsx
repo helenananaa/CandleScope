@@ -1,3 +1,4 @@
+import { watchlistDisplayName } from "./watchlistDisplayName.js";
 import { memo, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { t, translateExchangeName, translateMarketType } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -86,11 +87,7 @@ function watchlistColorStyle(color: string): WatchlistCssVars {
   return { "--wl-color": color || "#3b82f6" };
 }
 
-function watchlistDisplayName(watchlist: WatchlistGroup): string {
-  return watchlist.id === "default" && watchlist.name === "Watchlist"
-    ? t("watchlist.title")
-    : watchlist.name;
-}
+
 
 const emptyUnsubscribe = (): void => {};
 
