@@ -15010,3 +15010,39 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
   flex-shrink: 0;
   white-space: nowrap;
 }
+
+/* Keep sub-pane legends inside their own chart pane, including during resize. */
+.indicator-pane-label,
+.advanced-market-pane-label {
+  max-height: var(--pane-label-max-height, none);
+  box-sizing: border-box;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.indicator-pane-label[data-pane-compact='true'],
+.advanced-market-pane-label[data-pane-compact='true'] {
+  max-width: calc(100% - 90px);
+  flex-direction: row;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.indicator-pane-label[data-pane-compact='true'] .chart-legend-values {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.indicator-pane-label[data-pane-compact='true'] .chart-pane-label-heading,
+.advanced-market-pane-label[data-pane-compact='true'] .advanced-market-pane-heading {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.indicator-pane-label[data-pane-compact='true'] .chart-legend-line-name,
+.advanced-market-pane-label[data-pane-compact='true'] .advanced-market-pane-source,
+.advanced-market-pane-label[data-pane-compact='true'] .advanced-market-pane-countdown,
+.advanced-market-pane-label[data-pane-compact='true'] .advanced-market-pane-legend {
+  display: none;
+}

@@ -235,6 +235,7 @@ const IndicatorPaneLabel = memo(function IndicatorPaneLabel({
       data-pane-id={pane.id}
       role="group"
       aria-label={ariaLabel}
+      title={ariaLabel}
     >
       <span className="chart-pane-label-heading">{pane.label}</span>
       {entries.length > 0 && <LegendValues entries={entries} showLineNames={entries.length > 1} />}

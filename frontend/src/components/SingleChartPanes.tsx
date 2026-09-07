@@ -2164,6 +2164,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       for (const [index, paneId] of activePaneIds.entries()) {
         for (const element of overlaysById.get(paneId) || []) {
           element.style.top = `${paneTop + 6}px`;
+          element.style.setProperty("--pane-label-max-height", `${Math.max(0, (heights[index] || 0) - 12)}px`);
+          element.dataset.paneCompact = (heights[index] || 0) < 100 ? "true" : "false";
         }
         paneTop += heights[index] || 0;
       }
