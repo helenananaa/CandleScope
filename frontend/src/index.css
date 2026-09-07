@@ -1813,6 +1813,8 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 
 /* ── 交易对选择器（触发按钮） ────────────────────────────── */
 .symbol-selector {
+  min-width: 120px;
+  max-width: 280px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1831,6 +1833,11 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 
 .symbol-name {
+  min-width: 0;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 600;
   font-size: 14px;
   color: var(--text-primary);
@@ -15101,4 +15108,11 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
   background: var(--text-muted);
   border: 3px solid var(--bg-secondary);
   border-radius: 7px;
+}
+
+.symbol-selector > .symbol-exchange,
+.symbol-selector > .symbol-market-badge,
+.symbol-selector > .symbol-shortcut-badge {
+  flex-shrink: 0;
+  white-space: nowrap;
 }

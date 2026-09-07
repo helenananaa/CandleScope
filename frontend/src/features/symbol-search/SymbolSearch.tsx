@@ -76,7 +76,7 @@ export default function SymbolSearch({
         onClick={handleOpen}
         title={t("search.title")}
       >
-        <span className="symbol-name">{currentSymbol}</span>
+        <span className="symbol-name" title={currentSymbol}>{currentSymbol}</span>
         {currentMarketType === "futures" && (
           <span className="symbol-market-badge futures">{translateMarketType("futures")}</span>
         )}
