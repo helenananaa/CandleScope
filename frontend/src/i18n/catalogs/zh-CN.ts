@@ -3618,7 +3618,7 @@ export const zhCN = {
   "drawing.settings.freehandSize": "{tool}大小：{size}px",
   "chart.dataLoadFailed": "数据加载失败",
   "chart.dataLoadDetail": "该图表未返回可用的历史行情数据。",
-  "chart.backendHint": "请确认后端已运行：uvicorn app.main:app --reload",
+  "chart.backendHint": "请先重试。若仍失败，请检查本地服务是否启动及其启动日志；网络连通并不代表数据引擎已就绪。",
   "backtest.researchKicker": "CANDLESCOPE 研究",
   "backtest.nav.market": "行情",
   "backtest.section.dataset": "数据与区间",

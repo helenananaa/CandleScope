@@ -3625,7 +3625,7 @@ export const ptBR = {
   "drawing.settings.freehandSize": "Tamanho de {tool}: {size}px",
   "chart.dataLoadFailed": "Falha ao carregar dados",
   "chart.dataLoadDetail": "Nenhum dado histórico utilizável foi devolvido para este gráfico.",
-  "chart.backendHint": "Garanta que o backend esteja em execução: uvicorn app.main:app --reload",
+  "chart.backendHint": "Tente novamente. Se a falha persistir, verifique o serviço local e seus logs de inicialização. A conexão de rede não garante que o mecanismo de dados esteja pronto.",
   "backtest.researchKicker": "PESQUISA CANDLESCOPE",
   "backtest.nav.market": "Gráficos",
   "backtest.section.dataset": "Dados e janela",

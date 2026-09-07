@@ -3565,7 +3565,7 @@ export const es = {
   "drawing.settings.freehandSize": "Tamaño de {tool}: {size}px",
   "chart.dataLoadFailed": "Error al cargar los datos",
   "chart.dataLoadDetail": "No se devolvieron datos históricos utilizables para este gráfico.",
-  "chart.backendHint": "Asegúrese de que el backend esté en ejecución: uvicorn app.main:app --reload",
+  "chart.backendHint": "Reintente. Si sigue fallando, compruebe el servicio local y sus registros de inicio. La conectividad de red no garantiza que el motor de datos esté listo.",
   "backtest.researchKicker": "INVESTIGACIÓN CANDLESCOPE",
   "backtest.nav.market": "Gráficos",
   "backtest.section.dataset": "Datos y ventana",

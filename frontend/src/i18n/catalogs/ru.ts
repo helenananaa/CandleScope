@@ -3556,7 +3556,7 @@ export const ru = {
   "drawing.settings.freehandSize": "Размер {tool}: {size}px",
   "chart.dataLoadFailed": "Не удалось загрузить данные",
   "chart.dataLoadDetail": "Для этого графика не получены пригодные исторические данные.",
-  "chart.backendHint": "Убедитесь, что серверная часть запущена: uvicorn app.main:app --reload",
+  "chart.backendHint": "Повторите попытку. Если ошибка сохраняется, проверьте локальную службу и журнал её запуска. Доступность сети не означает готовность механизма данных.",
   "backtest.researchKicker": "ИССЛЕДОВАНИЯ CANDLESCOPE",
   "backtest.nav.market": "Графики",
   "backtest.section.dataset": "Данные и окно",

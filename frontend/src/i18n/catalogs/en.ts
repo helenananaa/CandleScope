@@ -3620,7 +3620,7 @@ export const en = {
   "drawing.settings.freehandSize": "{tool} size: {size}px",
   "chart.dataLoadFailed": "Data load failed",
   "chart.dataLoadDetail": "No usable historical data was returned for this chart.",
-  "chart.backendHint": "Ensure the backend is running: uvicorn app.main:app --reload",
+  "chart.backendHint": "Retry first. If it still fails, check that the local service is running and inspect its startup logs. Network connectivity does not mean the data engine is ready.",
   "backtest.researchKicker": "CANDLESCOPE RESEARCH",
   "backtest.nav.market": "Charts",
   "backtest.section.dataset": "Data & window",

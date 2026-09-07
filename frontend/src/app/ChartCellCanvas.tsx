@@ -1,4 +1,5 @@
 import React from "react";
+import { ChartLoadError } from "./ChartLoadError.js";
 import SingleChartPanes from "../components/SingleChartPanes.js";
 import { combineExternalMarkerSources } from "../chart-adapter/externalMarkerSource.js";
 import type { ExternalMarkerSource } from "../chart-adapter/externalMarkerSource.js";
@@ -12,7 +13,6 @@ import { ChartErrorBoundary } from "./AppProviders.js";
 import { drawingToolWhenInteractionReady } from "./drawingInteractionReadiness.js";
 import type { ChartWorkspaceChartModel } from "./ChartWorkspace.js";
 import type { ComponentType, PropsWithChildren } from "react";
-import { t } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
 
 export interface ChartCellCanvasProps {
@@ -81,23 +81,7 @@ function ChartCellCanvas({
 
   if (chart.error) {
     return (
-      <div className="chart-area">
-        <div className="error-overlay">
-          <div className="error-icon">!</div>
-          <div className="error-message">
-            <strong>{t("chart.dataLoadFailed")}</strong>
-            <br />
-            {t("chart.dataLoadDetail")}
-            <br />
-            <small style={{ color: "var(--text-muted)", marginTop: 8, display: "block" }}>
-              {t("chart.backendHint")}
-            </small>
-          </div>
-          <button className="retry-btn" onClick={chart.onRetryLoad} id="retry-btn">
-            {t("shell.retry")}
-          </button>
-        </div>
-      </div>
+      <ChartLoadError error={chart.error} onRetry={chart.onRetryLoad} />
     );
   }
 

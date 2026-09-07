@@ -3556,7 +3556,7 @@ export const ko = {
   "drawing.settings.freehandSize": "{tool} 크기: {size}px",
   "chart.dataLoadFailed": "데이터 로드 실패",
   "chart.dataLoadDetail": "이 차트에 사용 가능한 과거 데이터가 반환되지 않음.",
-  "chart.backendHint": "백엔드가 실행 중인지 확인: uvicorn app.main:app --reload",
+  "chart.backendHint": "먼저 다시 시도하세요. 계속 실패하면 로컬 서비스 실행 상태와 시작 로그를 확인하세요. 네트워크 연결 성공이 데이터 엔진 준비 완료를 의미하지는 않습니다.",
   "backtest.researchKicker": "CANDLESCOPE 연구",
   "backtest.nav.market": "차트",
   "backtest.section.dataset": "데이터와 구간",

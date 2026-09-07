@@ -3556,7 +3556,7 @@ export const ja = {
   "drawing.settings.freehandSize": "{tool}のサイズ：{size}px",
   "chart.dataLoadFailed": "データの読み込みに失敗",
   "chart.dataLoadDetail": "このチャートに利用可能な履歴データが返りませんでした。",
-  "chart.backendHint": "バックエンドが起動しているか確認してください: uvicorn app.main:app --reload",
+  "chart.backendHint": "まず再試行してください。失敗が続く場合はローカルサービスの起動状態と起動ログを確認してください。ネットワーク接続成功はデータエンジンの準備完了を意味しません。",
   "backtest.researchKicker": "CANDLESCOPE リサーチ",
   "backtest.nav.market": "チャート",
   "backtest.section.dataset": "データと期間",

@@ -3556,7 +3556,7 @@ export const zhTW = {
   "drawing.settings.freehandSize": "{tool}大小：{size}px",
   "chart.dataLoadFailed": "資料載入失敗",
   "chart.dataLoadDetail": "該圖表未返回可用的歷史行情資料。",
-  "chart.backendHint": "請確認後端已執行：uvicorn app.main:app --reload",
+  "chart.backendHint": "請先重試。若仍失敗，請檢查本機服務是否啟動及其啟動日誌；網路連通並不代表資料引擎已就緒。",
   "backtest.researchKicker": "CANDLESCOPE 研究",
   "backtest.nav.market": "行情",
   "backtest.section.dataset": "資料與區間",

@@ -3556,7 +3556,7 @@ export const fr = {
   "drawing.settings.freehandSize": "Taille {tool} : {size}px",
   "chart.dataLoadFailed": "Échec du chargement des données",
   "chart.dataLoadDetail": "Aucune donnée historique utilisable n’a été renvoyée pour ce graphique.",
-  "chart.backendHint": "Vérifiez que le backend est en cours d’exécution : uvicorn app.main:app --reload",
+  "chart.backendHint": "Réessayez. Si l’échec persiste, vérifiez le service local et ses journaux de démarrage. Une connexion réseau réussie ne garantit pas que le moteur de données est prêt.",
   "backtest.researchKicker": "RECHERCHE CANDLESCOPE",
   "backtest.nav.market": "Graphiques",
   "backtest.section.dataset": "Données et fenêtre",
