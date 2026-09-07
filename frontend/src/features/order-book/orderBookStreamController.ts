@@ -208,6 +208,8 @@ export class OrderBookStreamController {
           this.clearCommandTimer();
           this.pendingRequestId = null;
           this.subscribed = true;
+          // A successful subscription does not guarantee that a first book arrives.
+          this.armStaleWatchdog();
           this.reconnectDelayMs = this.reconnectBaseMs;
           return;
         }
@@ -228,6 +230,7 @@ export class OrderBookStreamController {
           if (latest) {
             this.store.publishBook(latest);
             if (this.mode === "partial") this.armStaleWatchdog();
+            else this.clearStaleTimer();
           }
           return;
         }
