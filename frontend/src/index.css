@@ -15046,3 +15046,31 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 .advanced-market-pane-label[data-pane-compact='true'] .advanced-market-pane-legend {
   display: none;
 }
+
+/* Adapt to each chart cell, not the browser viewport. Full values remain in
+   the accessible label and native tooltip. */
+.chart-main-legend {
+  pointer-events: auto;
+}
+
+.chart-main-legend[data-pane-width='medium'],
+.chart-main-legend[data-pane-width='narrow'] {
+  max-width: calc(100% - 90px);
+}
+
+.chart-main-legend[data-pane-width='medium'] .chart-main-secondary,
+.chart-main-legend[data-pane-width='narrow'] .chart-main-secondary,
+.chart-main-legend[data-pane-width='narrow'] .chart-main-range,
+.chart-main-legend[data-pane-width='narrow'] .chart-main-change-absolute {
+  display: none;
+}
+
+.chart-main-legend[data-pane-width='narrow'] {
+  max-height: 40px;
+  overflow: hidden;
+}
+
+.chart-main-legend[data-pane-width='narrow'] .chart-main-ohlcv {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}

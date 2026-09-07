@@ -174,25 +174,27 @@ export const MainChartLegend = memo(function MainChartLegend({
     })
     : t("legend.indicatorsAria");
 
+  const fullLabel = [ariaLabel, ...indicatorEntries.map((entry) => `${entry.label} ${formatLegendValue(entry)}`)].join("，");
+
   return (
-    <div className="chart-main-legend pane-overlay-anchor" data-pane-id="main" role="group" aria-label={ariaLabel}>
+    <div className="chart-main-legend pane-overlay-anchor" data-pane-id="main" role="group" aria-label={fullLabel} title={fullLabel} tabIndex={0}>
       {mainData && (
         <span className="chart-main-ohlcv" data-candle-direction={isUp ? "up" : "down"}>
-          <span><span className="chart-legend-key">O</span>{formatPrice(mainData.open)}</span>
-          <span><span className="chart-legend-key">H</span><strong>{formatPrice(mainData.high)}</strong></span>
-          <span><span className="chart-legend-key">L</span><strong>{formatPrice(mainData.low)}</strong></span>
+          <span className="chart-main-range"><span className="chart-legend-key">O</span>{formatPrice(mainData.open)}</span>
+          <span className="chart-main-range"><span className="chart-legend-key">H</span><strong>{formatPrice(mainData.high)}</strong></span>
+          <span className="chart-main-range"><span className="chart-legend-key">L</span><strong>{formatPrice(mainData.low)}</strong></span>
           <span><span className="chart-legend-key">C</span><strong>{formatPrice(mainData.close)}</strong></span>
-          <span><span className="chart-legend-key">Vol</span>{formatVolume(mainData.volume)}</span>
+          <span className="chart-main-secondary"><span className="chart-legend-key">Vol</span>{formatVolume(mainData.volume)}</span>
           {marketSummary && (
             <span>
               <span className="chart-legend-key">{t("legend.change")}</span>
               <strong>
-                {isUp ? "+" : "-"}{formatPriceDiff(mainData.close - mainData.open)} / {isUp ? "+" : ""}{marketSummary.priceChange.toFixed(2)}%
+                <span className="chart-main-change-absolute">{isUp ? "+" : "-"}{formatPriceDiff(mainData.close - mainData.open)} / </span>{isUp ? "+" : ""}{marketSummary.priceChange.toFixed(2)}%
               </strong>
             </span>
           )}
           {marketSummary && (
-            <span><span className="chart-legend-key">{t("legend.amplitude")}</span>{marketSummary.amplitude}%</span>
+            <span className="chart-main-secondary"><span className="chart-legend-key">{t("legend.amplitude")}</span>{marketSummary.amplitude}%</span>
           )}
         </span>
       )}

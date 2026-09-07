@@ -2166,6 +2166,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           element.style.top = `${paneTop + 6}px`;
           element.style.setProperty("--pane-label-max-height", `${Math.max(0, (heights[index] || 0) - 12)}px`);
           element.dataset.paneCompact = (heights[index] || 0) < 100 ? "true" : "false";
+          element.dataset.paneWidth = wrapper.clientWidth < 600 ? "narrow" : wrapper.clientWidth < 900 ? "medium" : "wide";
         }
         paneTop += heights[index] || 0;
       }
