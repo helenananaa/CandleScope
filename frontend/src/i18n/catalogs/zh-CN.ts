@@ -410,6 +410,8 @@ export const zhCN = {
   "trade.status.waiting": "等待成交",
   "trade.status.connecting": "连接中",
   "trade.status.reconnecting": "重连中",
+  "trade.status.quiet": "60 秒无新成交",
+  "trade.lastTime": "最新成交",
   "trade.status.live": "实时连续",
   "trade.status.gap": "存在缺口",
   "trade.status.error": "错误",

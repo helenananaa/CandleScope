@@ -402,6 +402,8 @@ export const ko = {
   "trade.status.waiting": "체결 대기 중",
   "trade.status.connecting": "연결 중",
   "trade.status.reconnecting": "다시 연결 중",
+  "trade.status.quiet": "60초간 새 체결 없음",
+  "trade.lastTime": "마지막 체결",
   "trade.status.live": "실시간 스트림",
   "trade.status.gap": "갭",
   "trade.status.error": "오류",

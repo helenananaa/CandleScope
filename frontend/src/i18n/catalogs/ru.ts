@@ -402,6 +402,8 @@ export const ru = {
   "trade.status.waiting": "Ожидание сделок",
   "trade.status.connecting": "Подключение",
   "trade.status.reconnecting": "Переподключение",
+  "trade.status.quiet": "Нет сделок 60 с",
+  "trade.lastTime": "Последняя сделка",
   "trade.status.live": "Онлайн-поток",
   "trade.status.gap": "Разрыв",
   "trade.status.error": "Ошибка",

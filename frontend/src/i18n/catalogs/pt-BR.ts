@@ -414,6 +414,8 @@ export const ptBR = {
   "trade.status.waiting": "Aguardando negociações",
   "trade.status.connecting": "Conectando",
   "trade.status.reconnecting": "Reconectando",
+  "trade.status.quiet": "Sem negociações há 60 s",
+  "trade.lastTime": "Última negociação",
   "trade.status.live": "Fluxo ao vivo",
   "trade.status.gap": "Lacuna",
   "trade.status.error": "Erro",

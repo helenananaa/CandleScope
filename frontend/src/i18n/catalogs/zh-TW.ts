@@ -402,6 +402,8 @@ export const zhTW = {
   "trade.status.waiting": "等待成交",
   "trade.status.connecting": "連線中",
   "trade.status.reconnecting": "重連中",
+  "trade.status.quiet": "60 秒無新成交",
+  "trade.lastTime": "最新成交",
   "trade.status.live": "即時連續",
   "trade.status.gap": "存在缺口",
   "trade.status.error": "錯誤",

@@ -1331,6 +1331,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   background: currentColor;
 }
 
+.tf-status-quiet { color: var(--text-secondary); }
 .tf-status-live { color: var(--tf-buy); }
 .tf-status-connecting,
 .tf-status-reconnecting { color: var(--accent-blue); }

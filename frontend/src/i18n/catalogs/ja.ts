@@ -402,6 +402,8 @@ export const ja = {
   "trade.status.waiting": "約定待ち",
   "trade.status.connecting": "接続中",
   "trade.status.reconnecting": "再接続中",
+  "trade.status.quiet": "60秒間約定なし",
+  "trade.lastTime": "最終約定",
   "trade.status.live": "リアルタイム連続",
   "trade.status.gap": "ギャップあり",
   "trade.status.error": "エラー",

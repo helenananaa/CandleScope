@@ -1,6 +1,7 @@
-import React, { useCallback, useMemo, useSyncExternalStore } from "react";
+import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { getDateTimeLocale, t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
+import { isTradeFlowQuiet, latestTradeTime } from "./tradeFlowFreshness.js";
 import { buildTradeFlowProfile } from "./tradeFlowProfile.js";
 import {
   TRADE_FLOW_BUBBLE_OPTIONS,
@@ -80,10 +81,24 @@ function TradeFlowStatus({ store }: { store: TradeFlowExternalStore }) {
     () => store.getSnapshot().status,
     () => store.getServerSnapshot().status,
   );
+  const lastTradeTime = useSyncExternalStore(
+    store.subscribe,
+    () => latestTradeTime(store.getSnapshot().records),
+    () => latestTradeTime(store.getServerSnapshot().records),
+  );
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (status !== "live") return undefined;
+    const timer = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(timer);
+  }, [status]);
+  const quiet = isTradeFlowQuiet(status, lastTradeTime, now);
+  const label = quiet ? t("trade.status.quiet") : tradeStatusLabel(status);
+  const detail = lastTradeTime === null ? label : `${label} · ${t("trade.lastTime")} ${new Date(lastTradeTime).toLocaleString(getDateTimeLocale(), { hour12: false })}`;
   return (
-    <span className={`tf-status tf-status-${status}`} title={tradeStatusLabel(status)}>
+    <span className={`tf-status tf-status-${quiet ? "quiet" : status}`} title={detail} aria-label={detail}>
       <span className="tf-status-dot" aria-hidden="true" />
-      {tradeStatusLabel(status)}
+      {label}
     </span>
   );
 }

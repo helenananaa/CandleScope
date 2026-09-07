@@ -408,6 +408,8 @@ export const es = {
   "trade.status.waiting": "Esperando operaciones",
   "trade.status.connecting": "Conectando",
   "trade.status.reconnecting": "Reconectando",
+  "trade.status.quiet": "Sin operaciones durante 60 s",
+  "trade.lastTime": "Última operación",
   "trade.status.live": "Transmisión en vivo",
   "trade.status.gap": "Hueco",
   "trade.status.error": "Error",

@@ -402,6 +402,8 @@ export const fr = {
   "trade.status.waiting": "En attente de transactions",
   "trade.status.connecting": "Connexion",
   "trade.status.reconnecting": "Reconnexion",
+  "trade.status.quiet": "Aucune transaction depuis 60 s",
+  "trade.lastTime": "Dernière transaction",
   "trade.status.live": "Flux en direct",
   "trade.status.gap": "Lacune",
   "trade.status.error": "Erreur",
