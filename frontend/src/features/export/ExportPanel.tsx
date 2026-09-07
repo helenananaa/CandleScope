@@ -1,4 +1,5 @@
-import { memo, useMemo } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import ExportPreviewPanel from "./ExportPreviewPanel";
@@ -70,6 +71,13 @@ const ExportPanel = memo(function ExportPanel({
   preview = null,
 }: ExportPanelProps) {
   useLocale();
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!isOpen || !dialog) return;
+    dialog.showModal();
+    return () => dialog.close();
+  }, [isOpen]);
   const filenamePreview = useMemo(() => buildExportFilename({
     prefix: options.filenamePrefix || "candlescope",
     ...(metadata.exchange === undefined ? {} : { exchange: metadata.exchange }),
@@ -85,8 +93,11 @@ const ExportPanel = memo(function ExportPanel({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="export-panel export-workspace export-exclude" role="dialog" aria-label={t("export.aria")}>
+  return createPortal(
+    <dialog ref={dialogRef} className="export-panel export-workspace export-exclude" aria-label={t("export.aria")}
+      onCancel={(event) => { event.preventDefault(); onClose(); }}
+      onKeyDown={(event) => event.stopPropagation()}
+    >
       <div className="export-panel-header">
         <div>
           <div className="export-panel-title">{t("export.title")}</div>
@@ -240,19 +251,7 @@ const ExportPanel = memo(function ExportPanel({
           {error && <div className="export-panel-message error">{error}</div>}
           {notice && !error && <div className="export-panel-message success">{notice}</div>}
 
-          <div className="export-panel-actions">
-            <button type="button" className="export-secondary-btn" onClick={onClose} disabled={inProgress}>{t("export.closeBtn")}</button>
-            <button
-              type="button"
-              data-export-action="save"
-              className="export-primary-btn"
-              onClick={() => onExport(options)}
-              disabled={saveDisabled}
-              title={preview?.loading ? t("export.previewLoadingTitle") : canSavePreview ? t("export.savePreview") : t("export.needPreview")}
-            >
-              {inProgress ? t("export.saving") : preview?.loading ? t("export.generating") : t("export.saveCurrent")}
-            </button>
-          </div>
+
         </div>
 
         <ExportPreviewPanel
@@ -270,7 +269,21 @@ const ExportPanel = memo(function ExportPanel({
           })}
         />
       </div>
-    </div>
+      <div className="export-panel-actions">
+        <button type="button" className="export-secondary-btn" onClick={onClose} disabled={inProgress}>{t("export.closeBtn")}</button>
+        <button
+          type="button"
+          data-export-action="save"
+          className="export-primary-btn"
+          onClick={() => onExport(options)}
+          disabled={saveDisabled}
+          title={preview?.loading ? t("export.previewLoadingTitle") : canSavePreview ? t("export.savePreview") : t("export.needPreview")}
+        >
+          {inProgress ? t("export.saving") : preview?.loading ? t("export.generating") : t("export.saveCurrent")}
+        </button>
+      </div>
+    </dialog>,
+    document.body,
   );
 });
 

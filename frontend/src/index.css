@@ -3267,11 +3267,11 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 
 /* ── 截图导出面板 ────────────────────────────────────────── */
 .export-panel {
-  position: absolute;
-  top: 10px;
-  left: 48px;
-  width: min(980px, calc(100vw - 96px), calc(100% - 58px));
-  max-height: calc(100% - 20px);
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(980px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
   overflow: hidden;
   z-index: 90;
   padding: 14px;
@@ -3280,14 +3280,13 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   border-radius: 16px;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   backdrop-filter: blur(14px);
-  animation: export-panel-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+
   display: flex;
   flex-direction: column;
 }
 
-@keyframes export-panel-in {
-  from { opacity: 0; transform: translateX(-6px) scale(0.98); }
-  to { opacity: 1; transform: translateX(0) scale(1); }
+.export-panel::backdrop {
+  background: rgba(0, 0, 0, 0.45);
 }
 
 [data-theme='light'] .export-panel {
@@ -3558,6 +3557,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 
 .export-panel-actions {
+  flex-shrink: 0;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -3839,9 +3839,9 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   font-weight: 800;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 700px) {
   .export-panel {
-    width: min(560px, calc(100vw - 76px), calc(100% - 58px));
+    width: calc(100vw - 24px);
   }
 
   .export-workspace-body {
