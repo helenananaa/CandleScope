@@ -79,6 +79,7 @@ function buildBuiltinIndicatorForChart(fullPreset: IndicatorPreset): IndicatorDe
     engineName: fullPreset.engineName || null,
     script: fullPreset.script,
     params: fullPreset.params || {},
+    paramSchema: fullPreset.paramSchema || [],
     description: fullPreset.description || "",
     category: fullPreset.category || "",
     paneTarget: fullPreset.paneTarget || "sub",

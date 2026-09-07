@@ -14,6 +14,7 @@ import {
   shouldShowIndicatorCatalogLoading,
   useIndicatorCatalogRuntime,
 } from "./useIndicatorCatalogRuntime";
+import { IndicatorNumberInput } from "./IndicatorNumberInput.js";
 import IndicatorEditor from "./IndicatorEditor";
 import type { ReactNode } from "react";
 import type { CatalogIndicator } from "./useIndicatorCatalogRuntime.js";
@@ -358,8 +359,13 @@ export default function IndicatorPanel({
   const getSchemaForIndicator = useCallback((indicator: IndicatorDefinition): UiParamSchema[] => {
     const liveSchema = normalizeParamSchema(paramSchemas[indicator.id]);
     if (liveSchema.length > 0) return liveSchema;
-    return normalizeParamSchema(indicator.paramSchema);
-  }, [paramSchemas]);
+    const savedSchema = normalizeParamSchema(indicator.paramSchema);
+    if (savedSchema.length > 0) return savedSchema;
+    const preset = isBuiltinIndicator(indicator)
+      ? presets.find((item) => item.engineName === indicator.engineName || item.id === indicator.id)
+      : undefined;
+    return normalizeParamSchema(preset?.paramSchema);
+  }, [paramSchemas, presets]);
 
   const handleParamChange = useCallback((
     indicator: IndicatorDefinition,
@@ -414,10 +420,24 @@ export default function IndicatorPanel({
       );
     }
 
+    if (type === "int" || type === "float") {
+      return (
+        <IndicatorNumberInput
+          key={`${indicator.id}:${schema.key}:${String(value)}`}
+          value={String(value)}
+          title={common.title}
+          min={schema.min}
+          max={schema.max}
+          step={schema.step ?? (type === "int" ? 1 : 0.1)}
+          onCommit={(next) => handleParamChange(indicator, schema.key, next, true)}
+        />
+      );
+    }
+
     return (
       <input
         {...common}
-        type={type === "color" ? "color" : type === "int" || type === "float" ? "number" : "text"}
+        type={type === "color" ? "color" : "text"}
         value={renderInputValue(value)}
         onBlur={() => onRecompute?.(true)}
         min={schema.min}
