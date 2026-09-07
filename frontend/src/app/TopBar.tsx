@@ -83,6 +83,31 @@ function TopBar({
     ? "--"
     : `${advancedSummary.basis >= 0 ? "+" : "-"}${formatPrice(Math.abs(advancedSummary.basis))}`;
 
+  const marketMetrics = (
+    <div
+      className={`advanced-market-summary advanced-market-summary-${advancedSummary.connectionStatus}`}
+      aria-label={t("shell.derivativesSummary")}
+    >
+      <div className="advanced-market-chip" data-market-metric="mark-price">
+        <span className="advanced-market-chip-label">{t("shell.mark")}</span>
+        <span className="advanced-market-chip-value">{formatPrice(advancedSummary.markPrice)}</span>
+      </div>
+      <div className="advanced-market-chip" data-market-metric="index-price">
+        <span className="advanced-market-chip-label">{t("shell.index")}</span>
+        <span className="advanced-market-chip-value">{formatPrice(advancedSummary.indexPrice)}</span>
+      </div>
+      <div className="advanced-market-chip" data-market-metric="basis">
+        <span className="advanced-market-chip-label">{t("shell.basis")}</span>
+        <span className="advanced-market-chip-value">{basisText}</span>
+        {advancedSummary.basisBps != null && (
+          <span className="advanced-market-chip-suffix">
+            {advancedSummary.basisBps >= 0 ? "+" : ""}{advancedSummary.basisBps.toFixed(2)} bps
+          </span>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <MarketTopBarFrame
       source="live"
@@ -189,28 +214,24 @@ function TopBar({
         </div>
       )}
       marketMetrics={advancedMarketData.summaryEnabled && (
-        <div
-          className={`advanced-market-summary advanced-market-summary-${advancedSummary.connectionStatus}`}
-          aria-label={t("shell.derivativesSummary")}
-        >
-          <div className="advanced-market-chip" data-market-metric="mark-price">
-            <span className="advanced-market-chip-label">{t("shell.mark")}</span>
-            <span className="advanced-market-chip-value">{formatPrice(advancedSummary.markPrice)}</span>
-          </div>
-          <div className="advanced-market-chip" data-market-metric="index-price">
-            <span className="advanced-market-chip-label">{t("shell.index")}</span>
-            <span className="advanced-market-chip-value">{formatPrice(advancedSummary.indexPrice)}</span>
-          </div>
-          <div className="advanced-market-chip" data-market-metric="basis">
-            <span className="advanced-market-chip-label">{t("shell.basis")}</span>
-            <span className="advanced-market-chip-value">{basisText}</span>
-            {advancedSummary.basisBps != null && (
-              <span className="advanced-market-chip-suffix">
-                {advancedSummary.basisBps >= 0 ? "+" : ""}{advancedSummary.basisBps.toFixed(2)} bps
-              </span>
-            )}
-          </div>
-        </div>
+        <>
+          <div className="live-market-metrics-inline">{marketMetrics}</div>
+          <details
+            className="live-market-metrics-compact"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.currentTarget.open = false;
+                event.stopPropagation();
+              }
+            }}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
+            }}
+          >
+            <summary>{t("shell.derivativesSummary")}</summary>
+            {marketMetrics}
+          </details>
+        </>
       )}
     />
   );
