@@ -15074,3 +15074,30 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
   flex-wrap: nowrap;
   white-space: nowrap;
 }
+
+.chart-pane-scroll-viewport {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+
+.chart-pane-scroll-viewport > .multi-pane-chart {
+  flex: 1 0 0px;
+  height: 0;
+}
+
+.chart-pane-scroll-viewport::-webkit-scrollbar {
+  width: 14px;
+}
+.chart-pane-scroll-viewport::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+.chart-pane-scroll-viewport::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border: 3px solid var(--bg-secondary);
+  border-radius: 7px;
+}
