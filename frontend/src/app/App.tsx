@@ -83,14 +83,6 @@ const PHASE8_BUILTIN_INDICATORS: readonly IndicatorDefinition[] = Object.freeze(
   }),
 ]);
 
-function isEditableKeyboardTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable
-    || target.tagName === "INPUT"
-    || target.tagName === "TEXTAREA"
-    || target.tagName === "SELECT";
-}
-
 function LiveWorkspaceApp() {
   const workspaceBus = CHART_WORKSPACE_FEATURE_FLAGS.multiChart64Enabled
     ? defaultWorkspaceBus(desktopWindowManager.windowId)
@@ -510,40 +502,6 @@ function LiveWorkspaceApp() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [toggleWorkspaceMaximize, workspace.view.window.maximizedCellId]);
-
-  const undoWorkspaceLayout = workspace.actions.undoLayout;
-  const redoWorkspaceLayout = workspace.actions.redoLayout;
-  const layoutLocked = workspace.view.layoutLocked;
-  const canUndoWorkspaceLayout = workspace.view.canUndoLayout;
-  const canRedoWorkspaceLayout = workspace.view.canRedoLayout;
-  useEffect(() => {
-    if (layoutLocked || (!canUndoWorkspaceLayout && !canRedoWorkspaceLayout)) return undefined;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((!event.ctrlKey && !event.metaKey)
-        || event.altKey
-        || isEditableKeyboardTarget(event.target)) return;
-      const key = event.key.toLocaleLowerCase();
-      const command = key === "z" && !event.shiftKey
-        ? "undo"
-        : (key === "y" && !event.shiftKey) || (key === "z" && event.shiftKey)
-          ? "redo"
-          : null;
-      if (command === null
-        || (command === "undo" && !canUndoWorkspaceLayout)
-        || (command === "redo" && !canRedoWorkspaceLayout)) return;
-      event.preventDefault();
-      if (command === "undo") undoWorkspaceLayout();
-      else redoWorkspaceLayout();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [
-    canRedoWorkspaceLayout,
-    canUndoWorkspaceLayout,
-    layoutLocked,
-    redoWorkspaceLayout,
-    undoWorkspaceLayout,
-  ]);
 
   const [topBarHost, setTopBarHost] = useState<HTMLElement | null>(null);
   const [intervalSelectorHost, setIntervalSelectorHost] = useState<HTMLElement | null>(null);

@@ -3,6 +3,7 @@ import {
   useState,
   type CSSProperties,
   type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { t, type MessageKey } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -37,6 +38,8 @@ import type {
   ChartWorkspaceRuntime,
   ChartWorkspaceSaveState,
 } from "./useChartWorkspaceRuntime.js";
+
+import { workspaceHistoryShortcut } from "./workspaceHistoryShortcut.js";
 
 type WorkspacePanelTab = "workspaces" | "layout" | "links";
 
@@ -303,10 +306,29 @@ export default function WorkspacePanel({
     setEditingName(false);
   };
 
+  const handleHistoryKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    const target = event.target;
+    const editable = target instanceof HTMLElement && (
+      target.isContentEditable || target.closest("input, textarea, select") !== null
+    );
+    const command = workspaceHistoryShortcut(event, {
+      enabled: view.ready && !view.layoutLocked,
+      editable,
+      canUndo: view.canUndoLayout,
+      canRedo: view.canRedoLayout,
+    });
+    if (!command) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (command === "undo") actions.undoLayout();
+    else actions.redoLayout();
+  };
+
   return (
     <div className={`workspace-panel-overlay right-drawer-overlay ${isResizing ? "is-resizing" : ""}`}>
       <aside
         className="workspace-panel"
+        onKeyDown={handleHistoryKeyDown}
         role="dialog"
         aria-modal="true"
         aria-label={t("workspace.manage")}
