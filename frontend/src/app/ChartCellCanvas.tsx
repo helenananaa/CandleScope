@@ -81,7 +81,7 @@ function ChartCellCanvas({
 
   if (chart.error) {
     return (
-      <ChartLoadError error={chart.error} onRetry={chart.onRetryLoad} />
+      <ChartLoadError error={chart.error} context={{ symbol: chart.chartProps.symbol, interval: chart.chartProps.interval }} onRetry={chart.onRetryLoad} />
     );
   }
 
