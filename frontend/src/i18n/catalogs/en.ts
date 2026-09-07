@@ -414,7 +414,7 @@ export const en = {
   "trade.status.reconnecting": "Reconnecting",
   "trade.status.quiet": "No trades for 60s",
   "trade.lastTime": "Last trade",
-  "trade.status.live": "Live stream",
+  "trade.status.live": "Recent trades",
   "trade.status.gap": "Gap",
   "trade.status.error": "Error",
 

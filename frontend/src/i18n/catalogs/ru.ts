@@ -404,7 +404,7 @@ export const ru = {
   "trade.status.reconnecting": "Переподключение",
   "trade.status.quiet": "Нет сделок 60 с",
   "trade.lastTime": "Последняя сделка",
-  "trade.status.live": "Онлайн-поток",
+  "trade.status.live": "Недавние сделки",
   "trade.status.gap": "Разрыв",
   "trade.status.error": "Ошибка",
   "legend.mainAria": "Основной график: открытие {open}, максимум {high}, минимум {low}, закрытие {close}, объём {volume}, изменение {diff}, изменение% {change}%, амплитуда {amplitude}%",

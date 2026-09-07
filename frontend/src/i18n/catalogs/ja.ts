@@ -404,7 +404,7 @@ export const ja = {
   "trade.status.reconnecting": "再接続中",
   "trade.status.quiet": "60秒間約定なし",
   "trade.lastTime": "最終約定",
-  "trade.status.live": "リアルタイム連続",
+  "trade.status.live": "直近の約定あり",
   "trade.status.gap": "ギャップあり",
   "trade.status.error": "エラー",
   "legend.mainAria": "主チャート：始値 {open}、高値 {high}、安値 {low}、終値 {close}、出来高 {volume}、騰落 {diff}、騰落率 {change}%、振幅 {amplitude}%",

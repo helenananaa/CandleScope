@@ -404,7 +404,7 @@ export const fr = {
   "trade.status.reconnecting": "Reconnexion",
   "trade.status.quiet": "Aucune transaction depuis 60 s",
   "trade.lastTime": "Dernière transaction",
-  "trade.status.live": "Flux en direct",
+  "trade.status.live": "Transactions récentes",
   "trade.status.gap": "Lacune",
   "trade.status.error": "Erreur",
   "legend.mainAria": "Graphique principal : ouverture {open}, plus haut {high}, plus bas {low}, clôture {close}, volume {volume}, variation {diff}, variation % {change} %, amplitude {amplitude} %",

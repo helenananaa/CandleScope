@@ -410,7 +410,7 @@ export const es = {
   "trade.status.reconnecting": "Reconectando",
   "trade.status.quiet": "Sin operaciones durante 60 s",
   "trade.lastTime": "Última operación",
-  "trade.status.live": "Transmisión en vivo",
+  "trade.status.live": "Operaciones recientes",
   "trade.status.gap": "Hueco",
   "trade.status.error": "Error",
   "legend.mainAria": "Gráfico principal: apertura {open}, máximo {high}, mínimo {low}, cierre {close}, volumen {volume}, variación {diff}, variación% {change}%, amplitud {amplitude}%",

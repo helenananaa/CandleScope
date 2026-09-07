@@ -404,7 +404,7 @@ export const ko = {
   "trade.status.reconnecting": "다시 연결 중",
   "trade.status.quiet": "60초간 새 체결 없음",
   "trade.lastTime": "마지막 체결",
-  "trade.status.live": "실시간 스트림",
+  "trade.status.live": "최근 체결 있음",
   "trade.status.gap": "갭",
   "trade.status.error": "오류",
   "legend.mainAria": "메인 차트: 시가 {open}, 고가 {high}, 저가 {low}, 종가 {close}, 거래량 {volume}, 등락 {diff}, 등락률 {change}%, 진폭 {amplitude}%",

@@ -404,7 +404,7 @@ export const zhTW = {
   "trade.status.reconnecting": "重連中",
   "trade.status.quiet": "60 秒無新成交",
   "trade.lastTime": "最新成交",
-  "trade.status.live": "即時連續",
+  "trade.status.live": "有新成交",
   "trade.status.gap": "存在缺口",
   "trade.status.error": "錯誤",
   "legend.mainAria": "主圖資訊：開盤 {open}，最高 {high}，最低 {low}，收盤 {close}，成交量 {volume}，漲跌 {diff}，漲跌幅 {change}%，振幅 {amplitude}%",
