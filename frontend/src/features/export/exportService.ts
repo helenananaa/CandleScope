@@ -1,4 +1,5 @@
 import { toCanvas } from "html-to-image";
+import { freezePageCapture } from "./freezePageCapture.js";
 import { t } from "../../i18n/index.js";
 import {
   assertExportPixelBudget,
@@ -306,6 +307,7 @@ function captureCanvasFallback(
 async function captureElementToCanvas(
   targetElement: HTMLElement,
   options: ExportOptions,
+  lifecycle: ExportCaptureLifecycle,
 ): Promise<HTMLCanvasElement> {
   const rect = targetElement.getBoundingClientRect();
   const scale = Number(options.scale) || 1;
@@ -326,8 +328,27 @@ async function captureElementToCanvas(
     }
   }
 
+  // Fix DOM, computed styles and canvas pixels before releasing the drawing
+  // lease. Async DOM rasterization must never read from the live scene.
+  const captureTarget = options.scope === "page"
+    ? freezePageCapture(targetElement, shouldIncludeNode)
+    : targetElement;
+  const snapshotHost = options.scope === "page" ? document.createElement("div") : null;
+
   try {
-    return await toCanvas(targetElement, {
+    if (snapshotHost) {
+      await lifecycle.afterCapture?.();
+      // html-to-image reads computed styles while cloning. A detached tree
+      // loses those styles in Chromium, so mount only the frozen copy offscreen.
+      snapshotHost.style.cssText = `position:fixed;left:-100000px;top:0;width:${rect.width}px;height:${rect.height}px;pointer-events:none;contain:strict`;
+      snapshotHost.setAttribute("aria-hidden", "true");
+      snapshotHost.inert = true;
+      captureTarget.style.width = `${rect.width}px`;
+      captureTarget.style.height = `${rect.height}px`;
+      snapshotHost.appendChild(captureTarget);
+      document.body.appendChild(snapshotHost);
+    }
+    return await toCanvas(captureTarget, {
       ...(backgroundColor === undefined ? {} : { backgroundColor }),
       cacheBust: true,
       filter: shouldIncludeNode,
@@ -344,6 +365,8 @@ async function captureElementToCanvas(
   } catch (error) {
     if (options.scope === "page") throw error;
     return captureCanvasFallback(targetElement, options);
+  } finally {
+    snapshotHost?.remove();
   }
 }
 
@@ -472,8 +495,8 @@ export async function renderExportImage(
     throw new Error(t("export.chartNotReady"));
   }
 
-  const capturedCanvas = await captureElementToCanvas(targetElement, options);
-  await lifecycle.afterCapture?.();
+  const capturedCanvas = await captureElementToCanvas(targetElement, options, lifecycle);
+  if (options.scope !== "page") await lifecycle.afterCapture?.();
   const scopedCanvas = options.scope === "main-pane"
     ? cropCapturedCanvas(capturedCanvas, snapshot?.mainPane?.captureRect, targetElement)
     : capturedCanvas;
