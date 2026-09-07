@@ -679,6 +679,7 @@ export const ja = {
   "indicator.editor.languageUnavailable": "{language}（現在利用不可）",
   "indicator.editor.mode": "モード",
   "indicator.editor.policy": "デフォルト {mode} · タイムアウト {timeout}s",
+  "indicator.editor.runtimeUnavailableHelp": "スクリプト実行環境が利用できません。設定のプラグイン管理で、インストール済み・有効・現在の環境に対応しているか確認してください。内蔵指標は利用できます。",
   "indicator.editor.runtimeMissing": "ランタイムカタログを利用できません：{error}",
   "indicator.editor.unsafeHint": "unsafe mode はファイル、ネットワーク、取引APIを含む完全な Python 機能を許可します。完全に信頼できるローカルスクリプトのみ実行してください。",
   "indicator.editor.builtinHint": "組み込みインジケーターは IndicatorEngine が計算します。これは参考表示であり、コードを編集してもチャートは変わりません。コードを変更する場合は先にカスタムインジケーターとしてコピーしてください。",

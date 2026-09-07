@@ -692,6 +692,7 @@ export const zhCN = {
   "indicator.editor.languageUnavailable": "{language}（当前不可用）",
   "indicator.editor.mode": "模式",
   "indicator.editor.policy": "默认 {mode} · 超时 {timeout}s",
+  "indicator.editor.runtimeUnavailableHelp": "脚本运行时当前不可用。请在设置的插件管理中检查运行时是否已安装、启用并兼容当前平台；内置指标仍可使用。",
   "indicator.editor.runtimeMissing": "运行时目录不可用：{error}",
   "indicator.editor.unsafeHint": "unsafe mode 会允许脚本访问完整 Python 能力，包括文件、网络和交易 API。只运行完全信任的本机脚本。",
   "indicator.editor.builtinHint": "内置指标由 IndicatorEngine 计算；这里仅展示参考实现，修改代码不会影响图表。需要改代码时请先复制为自定义指标。",

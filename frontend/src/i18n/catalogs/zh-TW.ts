@@ -679,6 +679,7 @@ export const zhTW = {
   "indicator.editor.languageUnavailable": "{language}（當前不可用）",
   "indicator.editor.mode": "模式",
   "indicator.editor.policy": "預設 {mode} · 超時 {timeout}s",
+  "indicator.editor.runtimeUnavailableHelp": "腳本執行環境目前不可用。請在設定的外掛管理中檢查是否已安裝、啟用並相容目前平台；內建指標仍可使用。",
   "indicator.editor.runtimeMissing": "執行時目錄不可用：{error}",
   "indicator.editor.unsafeHint": "unsafe mode 會允許腳本存取完整 Python 能力，包括檔案、網路和交易 API。只執行完全信任的本機腳本。",
   "indicator.editor.builtinHint": "內建指標由 IndicatorEngine 計算；這裡僅展示參考實現，修改程式碼不會影響圖表。需要改程式碼時請先複製為自訂指標。",

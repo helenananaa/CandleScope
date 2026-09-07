@@ -685,6 +685,7 @@ export const es = {
   "indicator.editor.languageUnavailable": "{language} (no disponible)",
   "indicator.editor.mode": "Modo",
   "indicator.editor.policy": "Predeterminado {mode} · tiempo de espera {timeout}s",
+  "indicator.editor.runtimeUnavailableHelp": "Los motores de scripts no están disponibles. En Configuración → Plugins, compruebe la instalación, activación y compatibilidad con esta plataforma. Los indicadores integrados siguen disponibles.",
   "indicator.editor.runtimeMissing": "Catálogo de runtime no disponible: {error}",
   "indicator.editor.unsafeHint": "El modo inseguro concede todas las capacidades de Python, incluidos archivos, red y API de trading. Ejecutar solo scripts locales de plena confianza.",
   "indicator.editor.builtinHint": "Los indicadores integrados los calcula IndicatorEngine. Esta es una vista de referencia; editar el código no cambiará el gráfico. Copiarlo primero como indicador personalizado.",

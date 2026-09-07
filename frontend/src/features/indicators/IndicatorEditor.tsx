@@ -456,6 +456,11 @@ export default function IndicatorEditor({
             <kbd style={{ background: 'var(--bg-tertiary)', padding: '1px 5px', borderRadius: '3px', fontSize: '10px', border: '1px solid var(--border-color)' }}>Ctrl+Enter</kbd> {t("indicator.editor.runKbd")}
           </span>
         </div>
+        {!readOnly && allowedRuntimeCatalog && !languageReady && (
+          <div role="status" style={{ marginBottom: 8, color: "var(--text-secondary)", fontSize: 12 }}>
+            {t("indicator.editor.runtimeUnavailableHelp")}
+          </div>
+        )}
         {runtimeCatalogError && (
           <div style={{ marginBottom: '8px', color: 'var(--candle-down)', fontSize: '12px' }}>
             {t("indicator.editor.runtimeMissing", { error: runtimeCatalogError })}

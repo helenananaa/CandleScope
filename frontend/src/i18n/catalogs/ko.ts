@@ -679,6 +679,7 @@ export const ko = {
   "indicator.editor.languageUnavailable": "{language} (사용 불가)",
   "indicator.editor.mode": "모드",
   "indicator.editor.policy": "기본 {mode} · 제한 시간 {timeout}s",
+  "indicator.editor.runtimeUnavailableHelp": "스크립트 런타임을 사용할 수 없습니다. 설정의 플러그인 관리에서 설치, 활성화 및 현재 플랫폼 호환성을 확인하세요. 기본 지표는 사용할 수 있습니다.",
   "indicator.editor.runtimeMissing": "런타임 카탈로그 사용 불가: {error}",
   "indicator.editor.unsafeHint": "Unsafe 모드는 파일, 네트워크, 거래 API를 포함한 전체 Python 권한을 부여함. 완전히 신뢰하는 로컬 스크립트만 실행.",
   "indicator.editor.builtinHint": "내장 지표는 IndicatorEngine이 계산함. 여기는 참고용이며 코드 수정은 차트에 반영되지 않음. 코드를 바꾸려면 먼저 사용자 지정 지표로 복사.",

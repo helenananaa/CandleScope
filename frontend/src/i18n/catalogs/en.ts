@@ -694,6 +694,7 @@ export const en = {
   "indicator.editor.languageUnavailable": "{language} (unavailable)",
   "indicator.editor.mode": "Mode",
   "indicator.editor.policy": "Default {mode} · timeout {timeout}s",
+  "indicator.editor.runtimeUnavailableHelp": "Script runtimes are unavailable. In Settings → Plugins, check that a runtime is installed, enabled and compatible with this platform. Built-in indicators remain available.",
   "indicator.editor.runtimeMissing": "Runtime catalog unavailable: {error}",
   "indicator.editor.unsafeHint": "Unsafe mode grants full Python capabilities, including files, network, and trading APIs. Only run fully trusted local scripts.",
   "indicator.editor.builtinHint": "Built-in indicators are computed by IndicatorEngine. This is a reference view; editing the code will not change the chart. Fork it as a custom indicator first.",

@@ -696,6 +696,7 @@ export const ptBR = {
   "indicator.editor.languageUnavailable": "{language} (indisponível)",
   "indicator.editor.mode": "Modo",
   "indicator.editor.policy": "Padrão {mode} · tempo limite {timeout}s",
+  "indicator.editor.runtimeUnavailableHelp": "Os ambientes de scripts estão indisponíveis. Em Configurações → Plugins, verifique instalação, ativação e compatibilidade com esta plataforma. Os indicadores integrados continuam disponíveis.",
   "indicator.editor.runtimeMissing": "Catálogo de runtime indisponível: {error}",
   "indicator.editor.unsafeHint": "O modo inseguro concede capacidades completas de Python, incluindo arquivos, rede e APIs de negociação. Execute somente código local totalmente confiável.",
   "indicator.editor.builtinHint": "Os indicadores integrados são calculados pelo IndicatorEngine. Esta é uma visualização de referência; editar o código não altera o gráfico. Faça um fork como indicador personalizado primeiro.",

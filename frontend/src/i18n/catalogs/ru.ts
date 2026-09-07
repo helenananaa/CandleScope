@@ -679,6 +679,7 @@ export const ru = {
   "indicator.editor.languageUnavailable": "{language} (недоступен)",
   "indicator.editor.mode": "Режим",
   "indicator.editor.policy": "По умолчанию {mode} · таймаут {timeout} с",
+  "indicator.editor.runtimeUnavailableHelp": "Среды выполнения скриптов недоступны. В настройках плагинов проверьте установку, включение и совместимость с платформой. Встроенные индикаторы остаются доступны.",
   "indicator.editor.runtimeMissing": "Каталог сред выполнения недоступен: {error}",
   "indicator.editor.unsafeHint": "Небезопасный режим даёт полный доступ к возможностям Python, включая файлы, сеть и торговые API. Запускайте только полностью доверенные локальные скрипты.",
   "indicator.editor.builtinHint": "Встроенные индикаторы вычисляет IndicatorEngine. Это эталонный просмотр; правка кода не изменит график. Сначала скопируйте его как пользовательский индикатор.",
