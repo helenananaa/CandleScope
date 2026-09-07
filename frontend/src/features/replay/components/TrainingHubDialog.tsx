@@ -37,6 +37,7 @@ export interface TrainingHubDialogProps {
   readonly presentation?: "page" | "modal";
   readonly onRequestClose?: () => void;
   readonly launchLabel?: string;
+  readonly onPrepareData?: () => void;
 }
 
 function patchDraft(
@@ -98,7 +99,7 @@ export function TrainingRunDeleteConfirmation({
   );
 }
 
-function TrainingRunCreatePanel({ runtime }: TrainingHubDialogProps) {
+function TrainingRunCreatePanel({ runtime, onPrepareData }: TrainingHubDialogProps) {
   useLocale();
   const { draft, evaluation } = runtime;
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -192,6 +193,16 @@ function TrainingRunCreatePanel({ runtime }: TrainingHubDialogProps) {
 
         <div className="training-hub-create-body">
           <div className="training-hub-create-main">
+            {onPrepareData && draft.sourceKind === "BAR" && runtime.catalog !== null
+              && runtime.catalog.entries.every((entry) => entry.eligible_ranges.length === 0) && (
+              <section className="training-hub-form-section" role="status">
+                <div className="training-hub-section-body">
+                  <strong>{t("replay.hub.prepareDataTitle")}</strong>
+                  <p>{t("replay.hub.prepareDataHint")}</p>
+                  <button className="replay-primary-action" type="button" disabled={busy} onClick={onPrepareData}>{t("replay.hub.prepareDataAction")}</button>
+                </div>
+              </section>
+            )}
             <section className="training-hub-form-section" id="training-hub-create-start">
               <header>
                 <div><h3>{t("replay.hub.sectionStart")}</h3><p>{t("replay.hub.startHint")}</p></div>
@@ -651,6 +662,7 @@ export default function TrainingHubDialog({
   presentation = "page",
   onRequestClose,
   launchLabel,
+  onPrepareData,
 }: TrainingHubDialogProps) {
   useLocale();
   const busy = runtime.operation !== null;
@@ -859,7 +871,7 @@ export default function TrainingHubDialog({
             </button>
           </div>
         )}
-        <TrainingRunCreatePanel runtime={runtime} />
+        <TrainingRunCreatePanel runtime={runtime} {...(onPrepareData ? { onPrepareData } : {})} />
         <ReplayStorageGovernancePanel runtime={runtime} />
       </section>
       {deleteCandidate !== null && (

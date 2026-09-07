@@ -1189,6 +1189,17 @@ test("hub markup exposes saves, native actions, filters and explicit unavailable
     },
   } satisfies TrainingHubRuntime;
   const html = renderToStaticMarkup(<TrainingHubDialog runtime={runtime} />);
+  assert.doesNotMatch(html, /准备历史数据/);
+  const noCoverage: typeof catalog = { ...catalog, entries: [] };
+  const renderPreparation = (sourceKind: "BAR" | "AGG_TRADE", nextCatalog = noCoverage) =>
+    renderToStaticMarkup(<TrainingHubDialog
+      runtime={{ ...runtime, catalog: nextCatalog, draft: { ...draft, sourceKind } }}
+      onPrepareData={() => {}}
+    />);
+  assert.match(renderPreparation("BAR"), /准备历史数据/);
+  assert.match(renderPreparation("BAR"), /返回后会重新检查覆盖，并保留训练设置/);
+  assert.doesNotMatch(renderPreparation("AGG_TRADE"), /准备历史数据/);
+  assert.doesNotMatch(renderPreparation("BAR", hedgeCatalog()), /准备历史数据/);
   assert.match(html, /role="dialog"/);
   assert.match(html, /训练存档大厅/);
   assert.match(html, /BTC 手动训练/);

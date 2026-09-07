@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import TrainingHubDialog from "../replay/components/TrainingHubDialog.js";
@@ -7,6 +7,8 @@ import {
   useTrainingHub,
   type TrainingHubRuntime,
 } from "../replay/useTrainingHub.js";
+
+const DataWorkbenchModal = lazy(() => import("../data-workbench/DataWorkbenchModal.js"));
 
 export interface ReplayLauncherDialogProps {
   readonly launchContext: ReplayLaunchContext;
@@ -25,6 +27,7 @@ export default function ReplayLauncherDialog({
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const pendingReplayWindowRef = useRef<Window | null>(null);
   const [blockedUrl, setBlockedUrl] = useState<string | null>(null);
+  const [preparingData, setPreparingData] = useState(false);
   const reserveReplayWindow = useCallback(() => {
     setBlockedUrl(null);
     if (window.candlescopeDesktop?.openAppPage) return;
@@ -66,6 +69,10 @@ export default function ReplayLauncherDialog({
     onRequestClose();
   }, [onRequestClose]);
   const runtime = useTrainingHub({ launchContext, navigateToRun });
+  const returnFromData = () => {
+    setPreparingData(false);
+    void runtime.actions.openCreate();
+  };
   const launcherRuntime = useMemo<TrainingHubRuntime>(() => ({
     ...runtime,
     actions: {
@@ -94,6 +101,11 @@ export default function ReplayLauncherDialog({
     };
   }, []);
 
+  useEffect(() => {
+    // The previous view's focused button unmounts when switching views.
+    overlayRef.current?.focus();
+  }, [preparingData]);
+
   const launchLabel = t("replay.launcher.context", {
     identity: `${launchContext.exchange} · ${launchContext.market_type} · ${launchContext.symbol}`,
     interval: launchContext.display_interval,
@@ -112,6 +124,11 @@ export default function ReplayLauncherDialog({
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.preventDefault();
+          if (preparingData) {
+            event.stopPropagation();
+            returnFromData();
+            return;
+          }
           onRequestClose();
           return;
         }
@@ -146,12 +163,23 @@ export default function ReplayLauncherDialog({
           </a>
         </div>
       )}
-      <TrainingHubDialog
+      {preparingData ? (
+        <Suspense fallback={<div role="status">{t("replay.hub.createLoading")}</div>}>
+          <DataWorkbenchModal
+            isOpen
+            onClose={returnFromData}
+            currentExchange={launchContext.exchange}
+            currentMarketType={launchContext.market_type}
+            currentSymbol={launchContext.symbol}
+          />
+        </Suspense>
+      ) : <TrainingHubDialog
         runtime={launcherRuntime}
         presentation="modal"
         launchLabel={launchLabel}
         onRequestClose={onRequestClose}
-      />
+        onPrepareData={() => setPreparingData(true)}
+      />}
     </div>
   );
 }
