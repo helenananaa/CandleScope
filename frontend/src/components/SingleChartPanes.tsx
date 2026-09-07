@@ -5331,6 +5331,12 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
 
   return (
     <div className="chart-area chart-pane-scroll-viewport">
+      {usesDerivedAxis && (
+        <details className="synthetic-chart-notice" key={resolvedChartType}>
+          <summary title={syntheticChartNotice.title}>{syntheticChartNotice.title}</summary>
+          <p>{`${syntheticChartNotice.detail} · ${t("workspace.chartNotice")}`}</p>
+        </details>
+      )}
     <div
       style={{ minHeight: readableMinimums.reduce((sum, height) => sum + height, 0) + 32 + activePaneIds.length }}
       className="chart-area multi-pane-chart"
@@ -5427,14 +5433,6 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         </div>
       )}
 
-      {usesDerivedAxis && (
-        <div className="synthetic-chart-notice" role="status">
-          <strong>{syntheticChartNotice.title}</strong>
-          <span>
-            {`${syntheticChartNotice.detail} · ${t("workspace.chartNotice")}`}
-          </span>
-        </div>
-      )}
 
       {contextMenu && (
         <div

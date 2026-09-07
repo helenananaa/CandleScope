@@ -8621,27 +8621,28 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 
 .synthetic-chart-notice {
-  position: absolute;
-  top: 8px;
-  right: 232px;
-  z-index: 12;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: min(520px, calc(100% - 280px));
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 0;
   padding: 5px 9px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: var(--radius-sm);
+  border-bottom: 1px solid var(--border-color);
   color: var(--text-muted);
-  background: rgba(15, 23, 42, 0.78);
+  background: var(--bg-secondary);
   font-size: 11px;
-  line-height: 1.2;
-  pointer-events: none;
+  line-height: 1.4;
 }
 
-.synthetic-chart-notice strong {
+.synthetic-chart-notice summary {
   color: var(--text-primary);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.synthetic-chart-notice p {
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
 }
 
 [data-theme='light'] .synthetic-chart-notice {
