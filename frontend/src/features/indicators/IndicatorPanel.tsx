@@ -14,6 +14,7 @@ import {
   shouldShowIndicatorCatalogLoading,
   useIndicatorCatalogRuntime,
 } from "./useIndicatorCatalogRuntime";
+import { indicatorDisplayName } from "./indicatorDisplayName.js";
 import { IndicatorNumberInput } from "./IndicatorNumberInput.js";
 import { indicatorParamLabel, indicatorSourceLabel } from "./indicatorParamLabels.js";
 import IndicatorEditor from "./IndicatorEditor";
@@ -638,6 +639,7 @@ plot(ma, "MA", color=line_color)
     const q = searchQuery.toLowerCase();
     return (
       p.name.toLowerCase().includes(q) ||
+      indicatorDisplayName(p).toLowerCase().includes(q) ||
       p.id.toLowerCase().includes(q) ||
       (p.description || "").toLowerCase().includes(q) ||
       (p.category || "").toLowerCase().includes(q)
@@ -820,7 +822,7 @@ plot(ma, "MA", color=line_color)
                           >
                             <div className="indicator-preset-info">
                               <span className="indicator-preset-name">
-                                {preset.name}
+                                {indicatorDisplayName(preset)}
                                 <IndicatorBadge tone={isBuiltinIndicator(preset) ? "builtin" : "custom"}>
                                   {isBuiltinIndicator(preset) ? t("indicator.builtin") : t("indicator.customBadge")}
                                 </IndicatorBadge>
@@ -949,7 +951,7 @@ plot(ma, "MA", color=line_color)
                             {ind.visible ? "👁" : "👁‍🗨"}
                           </button>
                           <span className="indicator-active-name">
-                            {ind.name}
+                            {indicatorDisplayName(ind)}
                             <IndicatorBadge tone={isBuiltinIndicator(ind) ? "builtin" : "custom"}>
                               {isBuiltinIndicator(ind) ? t("indicator.builtin") : t("indicator.customBadge")}
                             </IndicatorBadge>
