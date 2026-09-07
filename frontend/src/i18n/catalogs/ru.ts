@@ -980,6 +980,8 @@ export const ru = {
   "export.hideDrawings": "Скрыть рисунки при экспорте",
   "export.hideDrawingsDesc": "Временно скрываются в предпросмотре и при сохранении, затем восстанавливаются.",
   "export.watermark": "Водяной знак",
+  "export.includeContext": "Включить информацию о графике",
+  "export.includeContextDesc": "Добавить биржу, инструмент, интервал и параметры индикаторов над изображением. Отключите для экспорта только графики.",
   "export.watermarkDesc": "По умолчанию CandleScope, биржа, символ и интервал.",
   "export.watermarkText": "Текст водяного знака",
   "export.watermarkPlaceholder": "Оставьте пустым для автогенерации",

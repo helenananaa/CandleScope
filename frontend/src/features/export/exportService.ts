@@ -1,5 +1,6 @@
 import { toCanvas } from "html-to-image";
 import { freezePageCapture } from "./freezePageCapture.js";
+import { buildExportContextLines, wrapExportContext } from "./exportContext.js";
 import { t } from "../../i18n/index.js";
 import {
   assertExportPixelBudget,
@@ -25,6 +26,7 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   quality: 0.92,
   backgroundColor: "auto",
   hideDrawings: false,
+  includeContext: true,
   watermarkEnabled: false,
   watermarkText: "",
   filenamePrefix: "candlescope",
@@ -163,9 +165,17 @@ function finalizeCanvas(
 ): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = sourceCanvas.width;
-  canvas.height = sourceCanvas.height;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error(t("export.canvasFailed"));
+
+  const font = `${12 * options.scale}px Inter, system-ui, -apple-system, sans-serif`;
+  const padding = 12 * options.scale;
+  const lineHeight = 18 * options.scale;
+  ctx.font = font;
+  const contextLines = wrapExportContext(buildExportContextLines(options), Math.max(1, canvas.width - padding * 2), (text) => ctx.measureText(text).width);
+  const headerHeight = contextLines.length ? contextLines.length * lineHeight + padding * 2 : 0;
+  assertExportPixelBudget(canvas.width, sourceCanvas.height + headerHeight, 1);
+  canvas.height = sourceCanvas.height + headerHeight;
 
   const background = resolveBackgroundColor(targetElement, options.backgroundColor, options.format);
   if (background || options.format === "jpeg") {
@@ -173,7 +183,16 @@ function finalizeCanvas(
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
-  ctx.drawImage(sourceCanvas, 0, 0);
+  ctx.drawImage(sourceCanvas, 0, headerHeight);
+  if (headerHeight) {
+    const light = options.metadata?.theme === "light";
+    ctx.fillStyle = light ? "#f8fafc" : "#0f172a";
+    ctx.fillRect(0, 0, canvas.width, headerHeight);
+    ctx.fillStyle = light ? "#1e293b" : "#e2e8f0";
+    ctx.font = font;
+    ctx.textBaseline = "top";
+    contextLines.forEach((line, index) => ctx.fillText(line, padding, padding + index * lineHeight));
+  }
 
   if (options.watermarkEnabled) {
     const watermark = options.watermarkText?.trim() || buildDefaultWatermark(options.metadata);
@@ -409,6 +428,11 @@ function metadataFrom(value: unknown): ExportMetadata | undefined {
   for (const key of ["exchange", "marketType", "symbol", "interval", "theme"] as const) {
     if (typeof value[key] === "string") metadata[key] = value[key];
   }
+  if (Array.isArray(value.indicators)) {
+    metadata.indicators = value.indicators.filter(isRecord)
+      .filter((indicator) => typeof indicator.label === "string")
+      .map((indicator) => ({ label: indicator.label as string, mainPane: indicator.mainPane === true }));
+  }
   return metadata;
 }
 
@@ -429,6 +453,7 @@ export function normalizeExportOptions(rawOptions: unknown = {}): ExportOptions 
     hideDrawings: typeof raw.hideDrawings === "boolean"
       ? raw.hideDrawings
       : DEFAULT_EXPORT_OPTIONS.hideDrawings,
+    includeContext: typeof raw.includeContext === "boolean" ? raw.includeContext : DEFAULT_EXPORT_OPTIONS.includeContext,
     watermarkEnabled: typeof raw.watermarkEnabled === "boolean"
       ? raw.watermarkEnabled
       : DEFAULT_EXPORT_OPTIONS.watermarkEnabled,
@@ -458,6 +483,7 @@ export function buildExportOptionsKey(rawOptions: unknown = {}): string {
     quality: Number(options.quality) || DEFAULT_EXPORT_OPTIONS.quality,
     backgroundColor: options.backgroundColor || "auto",
     hideDrawings: !!options.hideDrawings,
+    includeContext: options.includeContext,
     watermarkEnabled: !!options.watermarkEnabled,
     watermarkText: options.watermarkText || "",
     filenamePrefix: options.filenamePrefix || "candlescope",
@@ -467,6 +493,7 @@ export function buildExportOptionsKey(rawOptions: unknown = {}): string {
     symbol: metadata.symbol || "",
     interval: metadata.interval || "",
     theme: metadata.theme || "",
+    indicators: metadata.indicators || [],
   });
 }
 

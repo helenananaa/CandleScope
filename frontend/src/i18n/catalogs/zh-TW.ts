@@ -980,6 +980,8 @@ export const zhTW = {
   "export.hideDrawings": "匯出時隱藏繪圖",
   "export.hideDrawingsDesc": "預覽和儲存都會臨時隱藏，生成後恢復。",
   "export.watermark": "新增水印",
+  "export.includeContext": "保留圖表資訊",
+  "export.includeContextDesc": "在圖片上方顯示交易所、交易對、週期和指標參數；關閉後僅匯出圖形。",
   "export.watermarkDesc": "預設使用 CandleScope、交易所、交易對和週期。",
   "export.watermarkText": "水印文字",
   "export.watermarkPlaceholder": "留空則自動生成",

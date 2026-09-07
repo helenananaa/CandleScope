@@ -986,6 +986,8 @@ export const es = {
   "export.hideDrawings": "Ocultar dibujos al exportar",
   "export.hideDrawingsDesc": "Se ocultan temporalmente en la vista previa y al guardar, y luego se restauran.",
   "export.watermark": "Marca de agua",
+  "export.includeContext": "Incluir información del gráfico",
+  "export.includeContextDesc": "Añadir mercado, símbolo, intervalo y parámetros de indicadores sobre la imagen. Desactivar para exportar solo el gráfico.",
   "export.watermarkDesc": "De forma predeterminada: CandleScope, exchange, símbolo e intervalo.",
   "export.watermarkText": "Texto de la marca de agua",
   "export.watermarkPlaceholder": "Dejar en blanco para generar automáticamente",

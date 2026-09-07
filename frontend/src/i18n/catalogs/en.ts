@@ -998,6 +998,8 @@ export const en = {
   "export.hideDrawings": "Hide drawings on export",
   "export.hideDrawingsDesc": "Temporarily hidden in preview and save, then restored.",
   "export.watermark": "Watermark",
+  "export.includeContext": "Include chart information",
+  "export.includeContextDesc": "Add exchange, symbol, interval and indicator parameters above the image. Turn off for graphics only.",
   "export.watermarkDesc": "Defaults to CandleScope, exchange, symbol, and interval.",
   "export.watermarkText": "Watermark text",
   "export.watermarkPlaceholder": "Leave blank to auto-generate",

@@ -980,6 +980,8 @@ export const ko = {
   "export.hideDrawings": "내보내기 시 그리기 숨기기",
   "export.hideDrawingsDesc": "미리보기와 저장에서 잠시 숨긴 뒤 복원.",
   "export.watermark": "워터마크",
+  "export.includeContext": "차트 정보 포함",
+  "export.includeContextDesc": "이미지 위에 거래소, 종목, 주기와 지표 매개변수를 표시합니다. 끄면 그래픽만 내보냅니다.",
   "export.watermarkDesc": "기본값은 CandleScope, 거래소, 종목, 주기.",
   "export.watermarkText": "워터마크 텍스트",
   "export.watermarkPlaceholder": "비우면 자동 생성",

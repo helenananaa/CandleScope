@@ -980,6 +980,8 @@ export const fr = {
   "export.hideDrawings": "Masquer les dessins à l’export",
   "export.hideDrawingsDesc": "Masqués temporairement dans l’aperçu et l’enregistrement, puis restaurés.",
   "export.watermark": "Filigrane",
+  "export.includeContext": "Inclure les informations du graphique",
+  "export.includeContextDesc": "Ajouter la plateforme, le symbole, la période et les paramètres des indicateurs au-dessus de l’image. Désactiver pour le graphique seul.",
   "export.watermarkDesc": "Par défaut CandleScope, exchange, symbole et intervalle.",
   "export.watermarkText": "Texte du filigrane",
   "export.watermarkPlaceholder": "Laisser vide pour générer automatiquement",

@@ -996,6 +996,8 @@ export const zhCN = {
   "export.hideDrawings": "导出时隐藏绘图",
   "export.hideDrawingsDesc": "预览和保存都会临时隐藏，生成后恢复。",
   "export.watermark": "添加水印",
+  "export.includeContext": "保留图表信息",
+  "export.includeContextDesc": "在图片上方显示交易所、交易对、周期和指标参数；关闭后仅导出图形。",
   "export.watermarkDesc": "默认使用 CandleScope、交易所、交易对和周期。",
   "export.watermarkText": "水印文本",
   "export.watermarkPlaceholder": "留空则自动生成",

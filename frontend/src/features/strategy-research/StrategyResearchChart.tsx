@@ -322,6 +322,7 @@ export function StrategyResearchImportedWorkspace({
   });
   const priceScale = usePriceScalePrefs({ loadUserPrefs, updateUserPref });
   const exportFlow = useExportRuntime({
+    indicators: indicators.view.activeIndicators,
     session: null,
     metadata: {
       exchange: "local",

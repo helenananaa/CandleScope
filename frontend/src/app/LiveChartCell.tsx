@@ -476,6 +476,7 @@ function LiveChartCell({
     workSchedulerCellId: cell.id,
   });
   const exportFlow = useExportRuntime({
+    indicators: indicators.view.activeIndicators,
     session: chartSession,
     resolvedTheme: globalSettings.resolvedTheme,
     chartSurfaceActions: chartSurface.actions,

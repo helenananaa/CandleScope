@@ -1000,6 +1000,8 @@ export const ptBR = {
   "export.hideDrawings": "Ocultar desenhos na exportação",
   "export.hideDrawingsDesc": "Ocultos temporariamente na prévia e no salvamento, depois restaurados.",
   "export.watermark": "Marca d’água",
+  "export.includeContext": "Incluir informações do gráfico",
+  "export.includeContextDesc": "Adicionar bolsa, ativo, intervalo e parâmetros dos indicadores acima da imagem. Desative para exportar apenas o gráfico.",
   "export.watermarkDesc": "O padrão é CandleScope, exchange, ativo e intervalo.",
   "export.watermarkText": "Texto da marca d’água",
   "export.watermarkPlaceholder": "Deixe em branco para gerar automaticamente",

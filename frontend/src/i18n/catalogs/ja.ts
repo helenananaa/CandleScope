@@ -980,6 +980,8 @@ export const ja = {
   "export.hideDrawings": "エクスポート時に描画を非表示",
   "export.hideDrawingsDesc": "プレビューと保存では一時的に非表示にし、完了後に復元します。",
   "export.watermark": "透かし",
+  "export.includeContext": "チャート情報を含める",
+  "export.includeContextDesc": "画像の上に取引所、銘柄、時間足、指標パラメータを表示します。オフにすると図のみを書き出します。",
   "export.watermarkDesc": "デフォルトは CandleScope、取引所、銘柄、時間足です。",
   "export.watermarkText": "透かしテキスト",
   "export.watermarkPlaceholder": "空欄なら自動生成",

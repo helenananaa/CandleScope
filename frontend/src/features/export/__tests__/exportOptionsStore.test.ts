@@ -47,6 +47,7 @@ test("loadExportOptions rejects malformed preference shapes", () => {
     quality: 0.92,
     backgroundColor: "auto",
     hideDrawings: false,
+    includeContext: true,
     watermarkEnabled: false,
     watermarkText: "",
     filenamePrefix: "candlescope",

@@ -198,6 +198,18 @@ const ExportPanel = memo(function ExportPanel({
           )}
 
           <section className="export-panel-section export-check-list">
+            {options.scope !== "page" && <label className="export-checkbox-row">
+              <input
+                type="checkbox"
+                data-export-option="include-context"
+                checked={options.includeContext}
+                onChange={(event) => patchOptions(options, onOptionsChange, { includeContext: event.target.checked })}
+              />
+              <span>
+                <strong>{t("export.includeContext")}</strong>
+                <small>{t("export.includeContextDesc")}</small>
+              </span>
+            </label>}
             <label className="export-checkbox-row">
               <input
                 type="checkbox"
