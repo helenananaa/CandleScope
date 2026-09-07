@@ -496,7 +496,7 @@ function LiveWorkspaceApp() {
   useEffect(() => {
     if (workspace.view.window.maximizedCellId == null) return undefined;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || event.defaultPrevented) return;
       toggleWorkspaceMaximize(workspace.view.window.maximizedCellId!);
     };
     window.addEventListener("keydown", handleKeyDown);
