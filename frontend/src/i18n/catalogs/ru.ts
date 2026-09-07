@@ -399,6 +399,7 @@ export const ru = {
   "trade.buySell": "B×S",
   "trade.status.idle": "Выкл.",
   "trade.status.unsupported": "Недоступно",
+  "trade.status.waiting": "Ожидание сделок",
   "trade.status.connecting": "Подключение",
   "trade.status.reconnecting": "Переподключение",
   "trade.status.live": "Онлайн-поток",

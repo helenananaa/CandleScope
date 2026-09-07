@@ -405,6 +405,7 @@ export const es = {
   "trade.buySell": "B×S",
   "trade.status.idle": "Desactivado",
   "trade.status.unsupported": "No disponible",
+  "trade.status.waiting": "Esperando operaciones",
   "trade.status.connecting": "Conectando",
   "trade.status.reconnecting": "Reconectando",
   "trade.status.live": "Transmisión en vivo",

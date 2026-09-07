@@ -399,6 +399,7 @@ export const fr = {
   "trade.buySell": "A×V",
   "trade.status.idle": "Désactivé",
   "trade.status.unsupported": "Indisponible",
+  "trade.status.waiting": "En attente de transactions",
   "trade.status.connecting": "Connexion",
   "trade.status.reconnecting": "Reconnexion",
   "trade.status.live": "Flux en direct",

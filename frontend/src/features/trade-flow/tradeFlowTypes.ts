@@ -12,6 +12,7 @@ import type {
 export type TradeFlowConnectionStatus =
   | "idle"
   | "unsupported"
+  | "waiting"
   | "connecting"
   | "reconnecting"
   | "live"

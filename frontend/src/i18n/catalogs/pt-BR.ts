@@ -411,6 +411,7 @@ export const ptBR = {
   "trade.buySell": "C×V",
   "trade.status.idle": "Desligado",
   "trade.status.unsupported": "Indisponível",
+  "trade.status.waiting": "Aguardando negociações",
   "trade.status.connecting": "Conectando",
   "trade.status.reconnecting": "Reconectando",
   "trade.status.live": "Fluxo ao vivo",

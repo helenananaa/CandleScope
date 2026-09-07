@@ -399,6 +399,7 @@ export const ko = {
   "trade.buySell": "매수×매도",
   "trade.status.idle": "꺼짐",
   "trade.status.unsupported": "사용 불가",
+  "trade.status.waiting": "체결 대기 중",
   "trade.status.connecting": "연결 중",
   "trade.status.reconnecting": "다시 연결 중",
   "trade.status.live": "실시간 스트림",

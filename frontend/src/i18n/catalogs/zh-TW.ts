@@ -399,6 +399,7 @@ export const zhTW = {
   "trade.buySell": "買×賣",
   "trade.status.idle": "未啟用",
   "trade.status.unsupported": "不可用",
+  "trade.status.waiting": "等待成交",
   "trade.status.connecting": "連線中",
   "trade.status.reconnecting": "重連中",
   "trade.status.live": "即時連續",

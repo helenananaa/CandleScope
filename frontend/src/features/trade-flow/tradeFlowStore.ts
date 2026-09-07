@@ -146,7 +146,7 @@ export function createTradeFlowStore({
     if (destroyed) return;
     const records = Object.freeze(working.slice());
     commit({
-      status: "live",
+      status: records.length > 0 ? "live" : "waiting",
       records,
       stats: aggregateStats(records),
       continuity: true,

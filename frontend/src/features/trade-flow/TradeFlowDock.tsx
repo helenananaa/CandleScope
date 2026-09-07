@@ -16,6 +16,7 @@ import type {
 const TRADE_STATUS_KEYS = {
   idle: "trade.status.idle",
   unsupported: "trade.status.unsupported",
+  waiting: "trade.status.waiting",
   connecting: "trade.status.connecting",
   reconnecting: "trade.status.reconnecting",
   live: "trade.status.live",

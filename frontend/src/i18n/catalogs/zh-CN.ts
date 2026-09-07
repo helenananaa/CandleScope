@@ -407,6 +407,7 @@ export const zhCN = {
   "trade.buySell": "买×卖",
   "trade.status.idle": "未启用",
   "trade.status.unsupported": "不可用",
+  "trade.status.waiting": "等待成交",
   "trade.status.connecting": "连接中",
   "trade.status.reconnecting": "重连中",
   "trade.status.live": "实时连续",

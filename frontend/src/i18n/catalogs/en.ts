@@ -409,6 +409,7 @@ export const en = {
   "trade.buySell": "B×S",
   "trade.status.idle": "Off",
   "trade.status.unsupported": "Unavailable",
+  "trade.status.waiting": "Waiting for trades",
   "trade.status.connecting": "Connecting",
   "trade.status.reconnecting": "Reconnecting",
   "trade.status.live": "Live stream",

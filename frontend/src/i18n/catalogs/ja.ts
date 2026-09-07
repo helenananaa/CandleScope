@@ -399,6 +399,7 @@ export const ja = {
   "trade.buySell": "買い×売り",
   "trade.status.idle": "オフ",
   "trade.status.unsupported": "利用不可",
+  "trade.status.waiting": "約定待ち",
   "trade.status.connecting": "接続中",
   "trade.status.reconnecting": "再接続中",
   "trade.status.live": "リアルタイム連続",
