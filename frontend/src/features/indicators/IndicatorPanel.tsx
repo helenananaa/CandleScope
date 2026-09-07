@@ -15,6 +15,7 @@ import {
   useIndicatorCatalogRuntime,
 } from "./useIndicatorCatalogRuntime";
 import { IndicatorNumberInput } from "./IndicatorNumberInput.js";
+import { indicatorParamLabel, indicatorSourceLabel } from "./indicatorParamLabels.js";
 import IndicatorEditor from "./IndicatorEditor";
 import type { ReactNode } from "react";
 import type { CatalogIndicator } from "./useIndicatorCatalogRuntime.js";
@@ -414,7 +415,9 @@ export default function IndicatorPanel({
           }}
         >
           {options.map((option) => (
-            <option key={option} value={option}>{option}</option>
+            <option key={option} value={option}>
+              {isBuiltinIndicator(indicator) && schema.key === "source" ? indicatorSourceLabel(option) : option}
+            </option>
           ))}
         </select>
       );
@@ -983,8 +986,8 @@ plot(ma, "MA", color=line_color)
                               if (schema.length > 0) {
                                 return schema.map((item) => (
                                   <div key={item.key} className="indicator-param-row">
-                                    <label className="indicator-param-label">
-                                      {item.label || item.title || item.key}
+                                    <label className="indicator-param-label" title={item.key}>
+                                      {indicatorParamLabel(item.key, item.label || item.title || item.key, isBuiltinIndicator(ind))}
                                     </label>
                                     {renderParamControl(ind, item)}
                                   </div>
@@ -998,7 +1001,7 @@ plot(ma, "MA", color=line_color)
 
                                 return (
                                   <div key={key} className="indicator-param-row">
-                                    <label className="indicator-param-label">{key}</label>
+                                    <label className="indicator-param-label" title={key}>{indicatorParamLabel(key, key, isBuiltinIndicator(ind))}</label>
                                     <input
                                       className="indicator-param-input"
                                       type={inputType}
