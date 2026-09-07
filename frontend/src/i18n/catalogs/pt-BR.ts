@@ -274,8 +274,8 @@ export const ptBR = {
   "interval.undo": "Desfazer",
   "interval.undoLast": "Desfazer último",
 
-  "search.title": "Buscar símbolos (Ctrl+K)",
-  "search.placeholder": "Buscar símbolos... (Ctrl+K)",
+  "search.title": "Buscar símbolos ({modifier}+K)",
+  "search.placeholder": "Buscar símbolos... ({modifier}+K)",
   "search.close": "Fechar (Esc)",
   "search.exchange": "Exchange",
   "search.quote": "Cotação",

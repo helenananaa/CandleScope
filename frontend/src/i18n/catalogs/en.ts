@@ -272,8 +272,8 @@ export const en = {
   "interval.undo": "Undo",
   "interval.undoLast": "Undo last",
 
-  "search.title": "Search symbols (Ctrl+K)",
-  "search.placeholder": "Search symbols... (Ctrl+K)",
+  "search.title": "Search symbols ({modifier}+K)",
+  "search.placeholder": "Search symbols... ({modifier}+K)",
   "search.close": "Close (Esc)",
   "search.exchange": "Exchange",
   "search.quote": "Quote",

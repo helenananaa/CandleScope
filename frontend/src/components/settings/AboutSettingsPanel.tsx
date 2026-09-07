@@ -1,3 +1,4 @@
+import { shortcutModifier } from "../../shared/shortcutModifier.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import BrandMark from "../brand/BrandMark.js";
@@ -7,7 +8,7 @@ export type AboutSettingsPanelProps = Record<string, never>;
 export default function AboutSettingsPanel(props: AboutSettingsPanelProps) {
     void props;
     useLocale();
-    const modifier = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform) ? "⌘" : "Ctrl";
+    const modifier = shortcutModifier();
     return (
         <>
             <div className="st-group">

@@ -1,3 +1,4 @@
+import { shortcutModifier } from "../../shared/shortcutModifier.js";
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { t, translateMarketType } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -74,7 +75,7 @@ export default function SymbolSearch({
         onMouseEnter={loadSymbolSearchModal}
         onFocus={loadSymbolSearchModal}
         onClick={handleOpen}
-        title={t("search.title")}
+        title={t("search.title", { modifier: shortcutModifier() })}
       >
         <span className="symbol-name" title={currentSymbol}>{currentSymbol}</span>
         {currentMarketType === "futures" && (
@@ -84,7 +85,7 @@ export default function SymbolSearch({
           {currentExchange.charAt(0).toUpperCase() + currentExchange.slice(1)}
         </span>
         <span className="symbol-shortcut-badge">
-          <kbd>Ctrl</kbd><kbd>K</kbd>
+          <kbd>{shortcutModifier()}</kbd><kbd>K</kbd>
         </span>
       </button>
 

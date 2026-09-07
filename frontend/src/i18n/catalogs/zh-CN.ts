@@ -270,8 +270,8 @@ export const zhCN = {
   "interval.undo": "撤销",
   "interval.undoLast": "撤销最近一项",
 
-  "search.title": "搜索交易对 (Ctrl+K)",
-  "search.placeholder": "搜索交易对... (Ctrl+K)",
+  "search.title": "搜索交易对 ({modifier}+K)",
+  "search.placeholder": "搜索交易对... ({modifier}+K)",
   "search.close": "关闭 (Esc)",
   "search.exchange": "交易所",
   "search.quote": "计价",

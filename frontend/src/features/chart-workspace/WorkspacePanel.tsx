@@ -1,3 +1,4 @@
+import { shortcutModifier } from "../../shared/shortcutModifier.js";
 import {
   useEffect,
   useState,
@@ -566,7 +567,7 @@ export default function WorkspacePanel({
                   >
                     <span aria-hidden="true">↶</span>
                     {t("workspace.undo")}
-                    <small>Ctrl + Z</small>
+                    <small>{shortcutModifier()} + Z</small>
                   </button>
                   <button
                     type="button"
@@ -575,7 +576,7 @@ export default function WorkspacePanel({
                   >
                     <span aria-hidden="true">↷</span>
                     {t("workspace.redo")}
-                    <small>Ctrl + Shift + Z</small>
+                    <small>{shortcutModifier()} + Shift + Z</small>
                   </button>
                   <button
                     type="button"

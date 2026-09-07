@@ -1,3 +1,4 @@
+import { shortcutModifier } from "../../shared/shortcutModifier.js";
 import { t, translateMarketType } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { QUOTE_CHIPS } from "./symbolSearchFilter";
@@ -76,7 +77,7 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
               ref={inputRef}
               className="sym-modal-search-input"
               type="text"
-              placeholder={t("search.placeholder")}
+              placeholder={t("search.placeholder", { modifier: shortcutModifier() })}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               spellCheck={false}
