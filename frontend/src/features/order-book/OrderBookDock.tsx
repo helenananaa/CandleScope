@@ -65,6 +65,7 @@ function orderBookStatusDetail(
   status: OrderBookConnectionStatus,
   hostMessage: string | null = null,
 ): string {
+  if (hostMessage?.trim()) return hostMessage;
   if (status === "unsupported" || status === "idle") {
     return hostMessage || t("orderBook.waitingBook");
   }
@@ -312,7 +313,7 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
         </span>
         <span
           className={`ob-status ob-status-${snapshot.status}`}
-          title={orderBookStatusDetail(snapshot.status, view.supportMessage)}
+          title={orderBookStatusDetail(snapshot.status, snapshot.message || snapshot.error || view.supportMessage)}
         >
           <span className="ob-status-dot" aria-hidden="true" />
           {orderBookStatusLabel(snapshot.status)}
@@ -429,7 +430,7 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
           ) : (
             <EmptyState
               status={snapshot.status}
-              message={view.supportMessage}
+              message={snapshot.message || snapshot.error || view.supportMessage}
               onRetry={actions.retry}
             />
           )}
