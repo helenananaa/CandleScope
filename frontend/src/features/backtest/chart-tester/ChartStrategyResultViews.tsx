@@ -16,6 +16,7 @@ import {
   CHART_STRATEGY_TRADE_ROW_HEIGHT,
   chartStrategyMaxDrawdown,
   chartStrategyMetricValue,
+  formatChartStrategyNumber,
   chartStrategyTradeFocusTimeMs,
   chartStrategyVirtualTradeWindow,
 } from "./chartStrategyResultModel.js";
@@ -184,11 +185,11 @@ export function ChartStrategyResultContextBar({
   );
 }
 
-function ResultMetric({ label, value, detail = "" }: { label: string; value: string; detail?: string }) {
+function ResultMetric({ label, value, detail = "", rawValue = value }: { label: string; value: string; detail?: string; rawValue?: string }) {
   return (
     <div className="chart-strategy-result-metric">
       <span>{label}</span>
-      <strong className={signedClass(value)}>{value}</strong>
+      <strong title={rawValue} className={signedClass(rawValue)}>{value}</strong>
       {detail && <small>{detail}</small>}
     </div>
   );
@@ -233,7 +234,8 @@ export function ChartStrategyResultOverview({
       <div className="chart-strategy-result-metrics">
         <ResultMetric
           label={t("chartTester.result.netPnl")}
-          value={`${report.metrics.realized_net_pnl ?? "—"} USDT`}
+          value={`${formatChartStrategyNumber(report.metrics.realized_net_pnl)} USDT`}
+          rawValue={chartStrategyMetricValue(report.metrics.realized_net_pnl)}
           detail={report.report_label}
         />
         <ResultMetric
@@ -248,7 +250,8 @@ export function ChartStrategyResultOverview({
         />
         <ResultMetric
           label={t("chartTester.result.winRate")}
-          value={chartStrategyMetricValue(report.metrics.win_rate)}
+          value={formatChartStrategyNumber(report.metrics.win_rate, "percent")}
+          rawValue={chartStrategyMetricValue(report.metrics.win_rate)}
           detail={t("chartTester.result.runShort", { run: run.run_id.slice(-8) })}
         />
       </div>
@@ -269,7 +272,7 @@ export function ChartStrategyResultOverview({
           </div>
           {directComparison && (
             <div className="chart-strategy-run-comparison-grid">
-              <ResultMetric label={t("chartTester.compare.netPnlDelta")} value={netPnlDelta ?? "—"} />
+              <ResultMetric label={t("chartTester.compare.netPnlDelta")} value={formatChartStrategyNumber(netPnlDelta)} rawValue={netPnlDelta ?? "—"} />
               <ResultMetric label={t("chartTester.compare.drawdownDelta")} value={maxDrawdownDelta ?? "—"} />
               <ResultMetric label={t("chartTester.compare.tradeCountDelta")} value={tradeCountDelta ?? "—"} />
               <ResultMetric
@@ -296,7 +299,7 @@ export function ChartStrategyResultOverview({
         <aside className="chart-strategy-latest-trade">
           <strong>{latest ? t("chartTester.result.latestTrade", {
             side: latest.side ?? "—",
-            price: latest.exit_price ?? latest.entry_price ?? "—",
+            price: formatChartStrategyNumber(latest.exit_price ?? latest.entry_price, "price"),
           }) : t("chartTester.result.zeroTrades")}</strong>
           <span>{latest
             ? t("chartTester.result.latestTradeDetail")
@@ -407,10 +410,10 @@ export function ChartStrategyTradeList({
                 >
                   <span>{tradeId}</span>
                   <span>{trade.side ?? "—"}</span>
-                  <span title={Number.isFinite(entryTime) ? dateTime(entryTime, locale) : "—"}>{trade.entry_price ?? "—"}</span>
-                  <span>{trade.exit_price ?? "—"}</span>
-                  <span className={signedClass(trade.net_pnl ?? "")}>{trade.net_pnl ?? "—"}</span>
-                  <span>{trade.fees ?? "—"}</span>
+                  <span title={`${trade.entry_price ?? "—"} · ${Number.isFinite(entryTime) ? dateTime(entryTime, locale) : "—"}`}>{formatChartStrategyNumber(trade.entry_price, "price")}</span>
+                  <span title={trade.exit_price ?? "—"}>{formatChartStrategyNumber(trade.exit_price, "price")}</span>
+                  <span title={trade.net_pnl ?? "—"} className={signedClass(trade.net_pnl ?? "")}>{formatChartStrategyNumber(trade.net_pnl)}</span>
+                  <span title={trade.fees ?? "—"}>{formatChartStrategyNumber(trade.fees)}</span>
                 </button>
               );
             })}
