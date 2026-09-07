@@ -5,6 +5,8 @@ import type { MessageCatalog } from "../messageCatalog.js";
  * libro de órdenes, tasa de financiación, prueba retrospectiva, reproducción.
  */
 export const es = {
+  "status.klineScope": "Velas",
+  "status.klineScopeDetail": "Solo la conexión de velas del gráfico activo. Consulte el estado del libro y las operaciones en sus paneles.",
   "shell.documentTitle": "CandleScope - Gráficos de código abierto",
   "shell.documentDescription": "CandleScope - software de gráficos de código abierto para gráficos de trading profesionales",
   "replay.documentTitle": "CandleScope Reproducción · REPLAY",

@@ -1,6 +1,8 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhTW = {
+  "status.klineScope": "K 線",
+  "status.klineScopeDetail": "僅表示目前作用中圖表的 K 線連線；盤口與成交狀態請查看各自面板。",
   "shell.documentTitle": "CandleScope - 開源看盤軟體",
   "shell.documentDescription": "CandleScope - 開源看盤軟體，類似 TradingView 的專業級交易圖表",
   "replay.documentTitle": "CandleScope K 線回放 · REPLAY",

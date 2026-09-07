@@ -1,6 +1,8 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
+  "status.klineScope": "Velas",
+  "status.klineScopeDetail": "Apenas a conexão das velas do gráfico ativo. Consulte os painéis do livro de ofertas e das negociações para seus estados.",
   "shell.documentTitle": "CandleScope - Gráficos de código aberto",
   "shell.documentDescription": "CandleScope - software de gráficos de código aberto para negociação profissional",
   "replay.documentTitle": "CandleScope Replay · REPLAY",

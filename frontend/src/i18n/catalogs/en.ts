@@ -1,6 +1,8 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
+  "status.klineScope": "Candles",
+  "status.klineScopeDetail": "Connection for the active chart candles only. Check the order book and trade panels for their own status.",
   "shell.documentTitle": "CandleScope - Open-source charting",
   "shell.documentDescription": "CandleScope - open-source charting software for professional trading charts",
   "replay.documentTitle": "CandleScope Replay · REPLAY",

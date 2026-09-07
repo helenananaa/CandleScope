@@ -1,6 +1,8 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ja = {
+  "status.klineScope": "ローソク足",
+  "status.klineScopeDetail": "アクティブなチャートのローソク足接続のみ。板と約定の状態は各パネルで確認してください。",
   "shell.documentTitle": "CandleScope - オープンソースのチャートソフト",
   "shell.documentDescription": "CandleScope - TradingView のようなプロ向け取引チャートのオープンソースソフト",
   "replay.documentTitle": "CandleScope ローソク足リプレイ · REPLAY",

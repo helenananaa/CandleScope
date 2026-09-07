@@ -65,9 +65,9 @@ function StatusBar({ status, extensions }: StatusBarProps) {
       source="live"
       connectionStatus={connectionStatus}
       left={<>
-        <span>
+        <span title={t("status.klineScopeDetail")}>
           <span className={`status-dot ${connectionStatus}`} />
-          {connectionLabel(status)}
+          {t("status.klineScope")} {connectionLabel(status)}
         </span>
         <span>{tPlural("status.barCount", barCount)}</span>
         {loadingMoreLeft && <span style={{ color: "#3b82f6" }}>{t("status.loadingOlder")}</span>}
@@ -91,7 +91,7 @@ function StatusBar({ status, extensions }: StatusBarProps) {
         <span>{dataSource === "mock"
           ? t("status.demoMode")
           : `${exchangeLabel} ${localizedMarketLabel(marketLabel)}`}</span>
-        <span>{wsLabel}</span>
+        <span title={t("status.klineScopeDetail")}>{t("status.klineScope")} {wsLabel}</span>
         <span>CandleScope v0.2.0</span>
       </>}
     />

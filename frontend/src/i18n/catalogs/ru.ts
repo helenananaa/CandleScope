@@ -1,6 +1,8 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ru = {
+  "status.klineScope": "Свечи",
+  "status.klineScopeDetail": "Только подключение свечей активного графика. Статус стакана и сделок указан на соответствующих панелях.",
   "shell.documentTitle": "CandleScope — графики с открытым исходным кодом",
   "shell.documentDescription": "CandleScope — открытое ПО для профессиональных торговых графиков",
   "replay.documentTitle": "CandleScope Воспроизведение · REPLAY",

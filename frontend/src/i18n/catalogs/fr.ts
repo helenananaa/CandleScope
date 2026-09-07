@@ -1,6 +1,8 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const fr = {
+  "status.klineScope": "Bougies",
+  "status.klineScopeDetail": "Connexion des bougies du graphique actif uniquement. Consultez les panneaux du carnet et des transactions pour leur état.",
   "shell.documentTitle": "CandleScope - Graphiques libres",
   "shell.documentDescription": "CandleScope - logiciel libre de graphiques pour le marché professionnel",
   "replay.documentTitle": "CandleScope Relecture · REPLAY",

@@ -1,6 +1,8 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  "status.klineScope": "캔들",
+  "status.klineScopeDetail": "활성 차트의 캔들 연결 상태입니다. 호가와 체결 상태는 각 패널에서 확인하세요.",
   "shell.documentTitle": "CandleScope - 오픈소스 차트",
   "shell.documentDescription": "CandleScope - TradingView급 전문 거래 차트를 위한 오픈소스 차트 소프트웨어",
   "replay.documentTitle": "CandleScope 리플레이 · REPLAY",

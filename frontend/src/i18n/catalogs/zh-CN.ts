@@ -1,4 +1,6 @@
 export const zhCN = {
+  "status.klineScope": "K 线",
+  "status.klineScopeDetail": "仅表示当前活动图表的 K 线连接；盘口和成交状态请查看各自面板。",
   "shell.documentTitle": "CandleScope - 开源看盘软件",
   "shell.documentDescription": "CandleScope - 开源看盘软件，类似 TradingView 的专业级交易图表",
   "replay.documentTitle": "CandleScope K 线回放 · REPLAY",
