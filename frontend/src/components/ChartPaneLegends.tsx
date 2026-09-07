@@ -161,6 +161,7 @@ export const MainChartLegend = memo(function MainChartLegend({
 
   if (!mainData && indicatorEntries.length === 0) return null;
   const isUp = marketSummary?.isUp ?? true;
+  const signedDiff = mainData ? `${isUp ? "+" : "-"}${formatPriceDiff(mainData.close - mainData.open)}` : "";
   const ariaLabel = mainData && marketSummary
     ? t("legend.mainAria", {
       open: formatPrice(mainData.open),
@@ -168,7 +169,7 @@ export const MainChartLegend = memo(function MainChartLegend({
       low: formatPrice(mainData.low),
       close: formatPrice(mainData.close),
       volume: formatVolume(mainData.volume),
-      diff: formatPriceDiff(mainData.close - mainData.open),
+      diff: signedDiff,
       change: marketSummary.priceChange.toFixed(2),
       amplitude: marketSummary.amplitude,
     })
@@ -189,7 +190,7 @@ export const MainChartLegend = memo(function MainChartLegend({
             <span>
               <span className="chart-legend-key">{t("legend.change")}</span>
               <strong>
-                <span className="chart-main-change-absolute">{isUp ? "+" : "-"}{formatPriceDiff(mainData.close - mainData.open)} / </span>{isUp ? "+" : ""}{marketSummary.priceChange.toFixed(2)}%
+                <span className="chart-main-change-absolute">{signedDiff} / </span>{isUp ? "+" : ""}{marketSummary.priceChange.toFixed(2)}%
               </strong>
             </span>
           )}
