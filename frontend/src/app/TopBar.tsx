@@ -115,6 +115,7 @@ function TopBar({
           className="replay-entry-link backtest-entry-link"
           data-backtest-entry="enabled"
           data-strategy-entry="enabled"
+          title={t("shell.strategyHint")}
           href="/strategy.html"
           target="_blank"
           rel="noreferrer"

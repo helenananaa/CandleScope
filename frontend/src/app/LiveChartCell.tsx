@@ -252,6 +252,7 @@ function LiveChartCell({
       type="button"
       className="chart-strategy-entry-button"
       data-chart-strategy-entry={cell.id}
+      title={t("chartTester.entryHint")}
       data-state={strategyEntryState}
       aria-expanded={strategyPanelOpen}
       aria-controls="chart-strategy-tester-panel"
