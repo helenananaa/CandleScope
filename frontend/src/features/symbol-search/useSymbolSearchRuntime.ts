@@ -1,3 +1,4 @@
+import { listenForSearchContextMenuDismiss } from "./searchContextMenuDismiss.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listenForSearchEscape } from "./searchEscape.js";
 import { markPerf } from "../../runtime/performance/perfMarks";
@@ -210,15 +211,7 @@ export function useSymbolSearchRuntime({
 
   useEffect(() => {
     if (!contextMenu) return undefined;
-    const dismiss = () => setContextMenu(null);
-    window.addEventListener("click", dismiss);
-    window.addEventListener("contextmenu", dismiss);
-    window.addEventListener("scroll", dismiss, true);
-    return () => {
-      window.removeEventListener("click", dismiss);
-      window.removeEventListener("contextmenu", dismiss);
-      window.removeEventListener("scroll", dismiss, true);
-    };
+    return listenForSearchContextMenuDismiss(window, modalRef.current, () => setContextMenu(null));
   }, [contextMenu]);
 
   const selectSymbol = useCallback((entry: SymbolSearchItem) => {

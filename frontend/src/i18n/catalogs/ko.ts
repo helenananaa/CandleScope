@@ -1452,7 +1452,7 @@ export const ko = {
   "replay.hub.revalidate": "기능 카탈로그 재검증",
   "replay.hub.loading": "아카이브 요약 불러오는 중…",
   "replay.hub.emptyTitle": "훈련 아카이브가 아직 없음",
-  "replay.hub.emptyHint": "첫 서버 권위 훈련을 만듦. 기본값은 블라인드 무작위 구간.",
+  "replay.hub.emptyHint": "훈련을 만든 다음 종목을 선택하세요. 시작 시간은 생성 시 확정됩니다.",
   "replay.hub.emptyCreate": "첫 훈련 만들기",
   "replay.hub.cardKicker": "훈련 · {mode}",
   "replay.hub.currentSymbol": "현재 종목",

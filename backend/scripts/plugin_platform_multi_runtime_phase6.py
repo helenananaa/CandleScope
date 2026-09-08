@@ -15,6 +15,7 @@ import sys
 import tempfile
 import uuid
 from pathlib import Path
+from datetime import UTC, datetime
 from typing import Any, Callable, Sequence
 
 
@@ -764,7 +765,7 @@ async def _signed_marketplace_lifecycle(root: Path, registry: Any) -> dict[str, 
         managed_runtime_registry=registry,
     )
     platform.marketplace.import_index(
-        builder.index_bytes(), marketplace_id=MARKETPLACE_ID
+        builder.index_bytes(generated_at=datetime.now(UTC)), marketplace_id=MARKETPLACE_ID
     )
     profiles: list[str] = []
     process_ids: list[int] = []
@@ -919,7 +920,7 @@ async def _real_gate_async(
     )
     return {
         "schemaVersion": REAL_GATE_SCHEMA_VERSION,
-        "generatedAt": "2026-08-03T00:00:00Z",
+        "generatedAt": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "result": "pass",
         "contractSha256": _canonical_sha256(capture_contract()),
         "managedJre": {

@@ -10,10 +10,10 @@ export interface ReplayOrderCtaState {
 }
 
 /**
- * Keep the order CTA visually stable while an unrelated replay command or
- * advisory refresh is in flight. Those transient states still block activation
- * through aria-disabled and the click guard, but only a real order submission
- * or a durable validation failure uses the native disabled appearance.
+ * Keep the order CTA visually stable while an unrelated replay command is in
+ * flight. It still blocks activation through aria-disabled and the click guard.
+ * Advisory quotes are preemptible: submission performs its own fresh checks.
+ * Only a real submission or durable validation failure uses native disabled.
  */
 export function replayOrderCtaState({
   permanentlyUnavailable,

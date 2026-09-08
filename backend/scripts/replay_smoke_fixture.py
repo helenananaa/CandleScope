@@ -1057,7 +1057,10 @@ def main() -> None:
         _disable_fixture_gap_maintenance()
 
     import uvicorn
+    from app.local_data.network_guard import OfflineNetworkGuard
     from app.api.v1 import symbols as symbols_api
+
+    network_guard = OfflineNetworkGuard()
 
     async def _offline_exchange_metadata(_exchange: str = "") -> dict[str, int]:
         """Prevent full-app startup from making public metadata requests."""
@@ -1075,6 +1078,18 @@ def main() -> None:
     @app.on_event("startup")
     async def import_replay_smoke_historical_book() -> None:
         nonlocal hedge_inputs
+        # replay.v3 plans validate instrument identity against the Host catalog.
+        # This isolated, zero-network fixture must supply its finite instrument
+        # set as well as its bars; never fall back to a live metadata request.
+        for market_type, fixture_symbols in (
+            ("spot", FIXTURE_SYMBOLS), ("futures", HEDGE_BROWSER_SYMBOLS),
+        ):
+            symbols_api._symbol_cache[("binance", market_type)] = [
+                {"exchange": "binance", "marketType": market_type,
+                 "symbol": symbol, "baseAsset": symbol.removesuffix("USDT"),
+                 "quoteAsset": "USDT", "status": "TRADING", "active": True}
+                for symbol, _price in fixture_symbols
+            ]
         if not historical_book_sources:
             return
         service = getattr(app.state, "replay_service", None)
@@ -1103,6 +1118,7 @@ def main() -> None:
     async def replay_smoke_fixture_status() -> dict[str, object]:
         return {
             "offline": True,
+            "network_guard": network_guard.snapshot(),
             "source_profile": (
                 "HEDGE_EXACT_ARCHIVE_QA"
                 if args.hedge
@@ -1142,6 +1158,7 @@ def main() -> None:
             return {"available": False, "reason": "REPLAY_DISABLED"}
         return {
             "available": True,
+            "network_guard": network_guard.snapshot(),
             "replay": service.diagnostics(redact_paths=True),
         }
 
@@ -1231,7 +1248,13 @@ def main() -> None:
     )
     server = uvicorn.Server(config)
     server_holder["server"] = server
-    server.run()
+    # Legacy URL overrides do not cover newer CCXT-owned network transports.
+    # The fixture must enforce its offline claim at the process socket boundary.
+    network_guard.install()
+    try:
+        server.run()
+    finally:
+        network_guard.uninstall()
 
 
 if __name__ == "__main__":

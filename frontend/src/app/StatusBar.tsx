@@ -69,7 +69,7 @@ function StatusBar({ status, extensions }: StatusBarProps) {
           <span className={`status-dot ${connectionStatus}`} />
           {t("status.klineScope")} {connectionLabel(status)}
         </span>
-        <span>{tPlural("status.barCount", barCount)}</span>
+        <span data-live-bar-count={barCount}>{tPlural("status.barCount", barCount)}</span>
         {loadingMoreLeft && <span style={{ color: "#3b82f6" }}>{t("status.loadingOlder")}</span>}
         {!hasMoreLeft && !loadingMoreLeft && <span style={{ color: "#94a3b8" }}>{t("status.noMoreHistory")}</span>}
         {dataSource === "mock" && (

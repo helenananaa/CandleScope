@@ -1452,7 +1452,7 @@ export const ru = {
   "replay.hub.revalidate": "Повторно проверить каталог возможностей",
   "replay.hub.loading": "Загрузка сводок архива…",
   "replay.hub.emptyTitle": "Архивов тренировок пока нет",
-  "replay.hub.emptyHint": "Создайте первую серверную авторитетную тренировку; по умолчанию используется слепое случайное окно.",
+  "replay.hub.emptyHint": "Создайте тренировку, затем выберите инструмент. Время начала фиксируется при создании.",
   "replay.hub.emptyCreate": "Создать первую тренировку",
   "replay.hub.cardKicker": "Тренировка · {mode}",
   "replay.hub.currentSymbol": "Текущий инструмент",

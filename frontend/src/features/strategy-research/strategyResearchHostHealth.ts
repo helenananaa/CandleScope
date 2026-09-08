@@ -1,3 +1,4 @@
+import { API_BASE } from "../../services/apiConfig.js";
 import type { ResearchRuntimeMode } from "../research-data/researchDataTypes.js";
 
 export type StrategyResearchNetworkDiagnostics = {
@@ -37,11 +38,15 @@ export function parseStrategyResearchHostHealth(payload: unknown): StrategyResea
   };
 }
 
+export function strategyResearchHealthUrl(apiBase = API_BASE): string {
+  return `${apiBase.replace(/\/api\/v1\/?$/, "")}/health`;
+}
+
 export async function loadStrategyResearchHostHealth(
   signal?: AbortSignal,
 ): Promise<StrategyResearchHostHealth> {
   try {
-    const response = await fetch("/health", signal === undefined ? {} : { signal });
+    const response = await fetch(strategyResearchHealthUrl(), signal === undefined ? {} : { signal });
     if (!response.ok) return { runtimeMode: "LIVE", network: null };
     return parseStrategyResearchHostHealth(await response.json());
   } catch (reason) {

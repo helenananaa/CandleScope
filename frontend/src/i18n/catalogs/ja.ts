@@ -1452,7 +1452,7 @@ export const ja = {
   "replay.hub.revalidate": "能力カタログを再検証",
   "replay.hub.loading": "アーカイブ要約を読み込んでいます…",
   "replay.hub.emptyTitle": "訓練アーカイブはまだありません",
-  "replay.hub.emptyHint": "最初のサーバー権威訓練を作成します。デフォルトはブラインド化されたランダムウィンドウです。",
+  "replay.hub.emptyHint": "トレーニングを作成してから銘柄を選択します。開始時刻は作成時に確定します。",
   "replay.hub.emptyCreate": "最初の訓練を作成",
   "replay.hub.cardKicker": "訓練 · {mode}",
   "replay.hub.currentSymbol": "現在の銘柄",

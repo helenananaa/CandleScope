@@ -1478,7 +1478,7 @@ export const en = {
   "replay.hub.revalidate": "Revalidate capability catalog",
   "replay.hub.loading": "Loading archive summaries…",
   "replay.hub.emptyTitle": "No training archives yet",
-  "replay.hub.emptyHint": "Create the first server-authoritative training; the default uses a blinded random window.",
+  "replay.hub.emptyHint": "Create a training run, then choose a market. Its start time is fixed when you create it.",
   "replay.hub.emptyCreate": "Create first training",
   "replay.hub.cardKicker": "Training · {mode}",
   "replay.hub.currentSymbol": "Current symbol",

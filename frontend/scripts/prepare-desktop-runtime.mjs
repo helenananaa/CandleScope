@@ -28,14 +28,17 @@ if (!sourceRoot.startsWith(`${downloads}${path.sep}`)) throw new Error("Refusing
 await fs.cp(sourceRoot, path.join(staging, "python"), { recursive: true, verbatimSymlinks: true });
 const python = path.join(staging, "python", ...(process.platform === "win32" ? ["python.exe"] : ["bin", "python3"]));
 // Install wheels into a relocatable directory; never copy an editable project venv.
-const requirements = (await fs.readFile(path.join(repo, "backend", "requirements.txt"), "utf8"))
-  .split(/\r?\n/).filter((line) => !line.startsWith("-e ")).join("\n");
+// Desktop ships local replay/archive import, so include its pinned Parquet dependencies.
+const requirements = (await Promise.all(["requirements.txt", "requirements-parquet.txt"]
+  .map((file) => fs.readFile(path.join(repo, "backend", file), "utf8"))))
+  .flatMap((contents) => contents.split(/\r?\n/))
+  .filter((line) => !/^\s*-(?:e|r)\s/.test(line)).join("\n");
 const requirementsPath = path.join(staging, "requirements.txt");
 await fs.writeFile(requirementsPath, requirements);
 const site = path.join(staging, "site-packages");
 run(uv, ["pip", "install", "--python", python, "--target", site, "-r", requirementsPath,
   path.join(repo, "packages", "candlescope-plugin-sdk"), path.join(repo, "packages", "candlescope-backtest-sdk")]);
-run(python, ["-c", "import fastapi, uvicorn, numpy, pandas, orjson, ccxt, exchange_calendars, candlescope_plugin_sdk, candlescope_backtest_sdk"], {
+run(python, ["-c", "import fastapi, uvicorn, numpy, pandas, orjson, ccxt, exchange_calendars, pyarrow.parquet, candlescope_plugin_sdk, candlescope_backtest_sdk"], {
   env: { ...process.env, PYTHONPATH: site, PYTHONNOUSERSITE: "1" },
 });
 const installed = spawnSync(uv, ["pip", "freeze", "--python", python, "--path", site], { encoding: "utf8" });

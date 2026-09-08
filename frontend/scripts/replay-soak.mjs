@@ -705,14 +705,22 @@ export async function waitForValue(cdp, expression, timeoutMs, label) {
   throw new Error(`Timed out waiting for ${label}; last value=${JSON.stringify(value)}; last error=${JSON.stringify(lastError)}`);
 }
 
-async function click(cdp, selector) {
-  const clicked = await evaluate(cdp, `(() => {
-    const element = document.querySelector(${JSON.stringify(selector)});
-    if (!(element instanceof HTMLElement) || element.matches(":disabled")) return false;
-    element.click();
-    return true;
-  })()`, { userGesture: true });
-  if (!clicked) throw new Error(`Cannot click ${selector}`);
+export async function click(cdp, selector, timeoutMs = 5_000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const clicked = await evaluate(cdp, `(() => {
+      const element = document.querySelector(${JSON.stringify(selector)});
+      if (!(element instanceof HTMLElement) || element.matches(":disabled")
+        || element.getAttribute("aria-disabled") === "true") return false;
+      element.click();
+      return true;
+    })()`, { userGesture: true });
+    // Never retry an activation that was dispatched; only wait for the CTA
+    // to become actionable before sending its one click.
+    if (clicked) return;
+    await wait(25);
+  }
+  throw new Error(`Cannot click ${selector}`);
 }
 
 async function clickButtonByText(cdp, text, timeoutMs = 5_000) {
@@ -761,7 +769,7 @@ async function pressKey(cdp, key, { shift = false } = {}) {
 
 async function keyboardActivateButton(
   cdp,
-  { action = null, railView = null, side = null, text: buttonText = null },
+  { action = null, railView = null, side = null, text: buttonText = null, marketSymbol = null, marketExchange = null, marketType = null },
   timeoutMs,
 ) {
   await evaluate(cdp, `(() => {
@@ -774,8 +782,11 @@ async function keyboardActivateButton(
     const active = await evaluate(cdp, `(() => {
       const item = document.activeElement;
       return item instanceof HTMLButtonElement ? {
+        marketSymbol: item.closest(".replay-market-picker-row")?.dataset.marketSymbol || null,
+        marketExchange: item.closest(".replay-market-picker-row")?.dataset.marketExchange || null,
+        marketType: item.closest(".replay-market-picker-row")?.dataset.marketType || null,
         action: item.dataset.replayAction || null,
-        disabled: item.disabled,
+        disabled: item.disabled || item.getAttribute("aria-disabled") === "true",
         railView: item.dataset.railView || null,
         side: item.dataset.side || null,
         text: item.textContent?.trim() || "",
@@ -785,7 +796,10 @@ async function keyboardActivateButton(
       && (action === null || active.action === action)
       && (railView === null || active.railView === railView)
       && (side === null || active.side === side)
-      && (buttonText === null || active.text === buttonText)) {
+      && (buttonText === null || active.text === buttonText)
+      && (marketSymbol === null || active.marketSymbol === marketSymbol)
+      && (marketExchange === null || active.marketExchange === marketExchange)
+      && (marketType === null || active.marketType === marketType)) {
       // Space activates a focused native button on key-up. Unlike Enter, it
       // does not require a text/char CDP event to reach Chromium's default
       // button activation path, so this remains a real trusted keyboard input.
@@ -799,6 +813,27 @@ async function keyboardActivateButton(
 }
 
 export async function configureFormalV2TrainingPlan(cdp, plan, timeoutMs) {
+  // Configure the qualification contract explicitly; product defaults may be
+  // ONE_WAY with approximate account data and must stay user-friendly.
+  await evaluate(cdp, `(() => {
+    const details = document.querySelector('#training-hub-create-advanced');
+    if (details instanceof HTMLDetailsElement && !details.open) details.querySelector('summary')?.click();
+    return true;
+  })()`, { userGesture: true });
+  for (const value of ["HEDGE", "HISTORICAL_EXACT", "BOOK_ASSISTED_REQUIRED"]) {
+    const configured = await evaluate(cdp, `(() => {
+      const value = ${JSON.stringify(value)};
+      const candidates = [...document.querySelectorAll('select')].filter(select =>
+        [...select.options].some(option => option.value === value));
+      if (candidates.length !== 1) return { configured: false, count: candidates.length };
+      const select = candidates[0];
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, value);
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return { configured: true };
+    })()`, { userGesture: true });
+    assert(configured?.configured === true, `formal HEDGE control unavailable: ${value}`, configured);
+    await waitForValue(cdp, `([...document.querySelectorAll('select')].some(select => select.value === ${JSON.stringify(value)}))`, timeoutMs, `HEDGE ${value} selection`);
+  }
   // datetime-local normalizes a zero-seconds value to the shortest valid form.
   const requestedStartValue = new Date(plan.requestedStartMs).toISOString().slice(0, 16);
   const start = await evaluate(cdp, `(() => {
@@ -866,7 +901,7 @@ export async function configureFormalV2TrainingPlan(cdp, plan, timeoutMs) {
     cdp,
     `(() => {
       const button = [...document.querySelectorAll("button")]
-        .find((item) => item.textContent?.trim() === "确认时间并创建 Run");
+        .find((item) => item.textContent?.trim() === "确认时间并创建训练");
       return button instanceof HTMLButtonElement && !button.disabled;
     })()`,
     timeoutMs,
@@ -902,20 +937,20 @@ export async function chooseReplayMarket(cdp, plan, timeoutMs) {
     })()`, { userGesture: true });
     assert(filtered === true, "formal replay.v2 market search control is unavailable");
   }
-  const buttonText = await waitForValue(
+  const market = await waitForValue(
     cdp,
     `(() => {
-      const expected = ${JSON.stringify(plan?.symbol ?? null)};
-      const button = [...document.querySelectorAll("button")].find((item) => {
-        const text = item.textContent?.trim() || "";
-        return !item.disabled && (expected === null ? text.startsWith("选择 ") : text === "选择 " + expected);
-      });
-      return button?.textContent?.trim() || null;
+      const expected = ${JSON.stringify(plan)};
+      const row = [...document.querySelectorAll('.replay-market-picker-row[data-available="true"]')]
+        .find(item => (!expected || (item.dataset.marketSymbol === expected.symbol
+          && item.dataset.marketExchange === expected.exchange && item.dataset.marketType === expected.marketType))
+          && item.querySelector('button:not(:disabled)'));
+      return row ? { symbol: row.dataset.marketSymbol, exchange: row.dataset.marketExchange, type: row.dataset.marketType } : null;
     })()`,
     timeoutMs,
     "Run market picker readiness",
   );
-  return keyboardActivateButton(cdp, { text: buttonText }, timeoutMs);
+  return keyboardActivateButton(cdp, { marketSymbol: market.symbol, marketExchange: market.exchange, marketType: market.type }, timeoutMs);
 }
 
 function accountContinuityProjection(response) {
@@ -970,7 +1005,7 @@ async function readServerAccountProof(backendOrigin, runId) {
 
 async function addAndSelectHedgeSecondaryMarket(cdp, symbol, timeoutMs) {
   const expanded = await evaluate(cdp, `(() => {
-    const input = document.querySelector('input[aria-label="搜索当前 Run 可用商品"]');
+    const input = document.querySelector('input[aria-label="搜索本次训练可用商品"]');
     if (input instanceof HTMLInputElement) return "already-expanded";
     const button = document.querySelector('.replay-watchlist-pane.collapsed .wl-collapse-btn');
     if (!(button instanceof HTMLButtonElement)) return "missing";
@@ -980,12 +1015,12 @@ async function addAndSelectHedgeSecondaryMarket(cdp, symbol, timeoutMs) {
   assert(expanded !== "missing", "HEDGE browser watchlist cannot be expanded");
   await waitForValue(
     cdp,
-    `document.querySelector('input[aria-label="搜索当前 Run 可用商品"]') instanceof HTMLInputElement`,
+    `document.querySelector('input[aria-label="搜索本次训练可用商品"]') instanceof HTMLInputElement`,
     timeoutMs,
     "HEDGE secondary market search readiness",
   );
   const searched = await evaluate(cdp, `(() => {
-    const input = document.querySelector('input[aria-label="搜索当前 Run 可用商品"]');
+    const input = document.querySelector('input[aria-label="搜索本次训练可用商品"]');
     if (!(input instanceof HTMLInputElement)) return false;
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
     if (typeof setter !== "function") return false;
@@ -2153,7 +2188,7 @@ async function replayStatus(cdp) {
       orderCount: Number(status.dataset.replayOrderCount || 0),
       fillCount: Number(status.dataset.replayFillCount || 0),
       revealed: status.dataset.replayRevealed,
-      bars: Number((status.innerText.match(/([0-9]+) (?:display )?bars/) || [])[1] || 0),
+      bars: Number(status.dataset.replayViewerBarCount || 0),
     };
   })()`);
 }
@@ -2194,7 +2229,7 @@ async function waitForReplayStatus(cdp, predicateSource, timeoutMs, label) {
       orderCount: Number(status.dataset.replayOrderCount || 0),
       fillCount: Number(status.dataset.replayFillCount || 0),
       revealed: status.dataset.replayRevealed,
-      bars: Number((status.innerText.match(/([0-9]+) (?:display )?bars/) || [])[1] || 0),
+      bars: Number(status.dataset.replayViewerBarCount || 0),
     };
     return (${predicateSource})(value) ? value : null;
   })()`, timeoutMs, label);
@@ -2525,7 +2560,7 @@ async function trainingActionCycle({ cdp, backendOrigin, sessionId, diagnosticGa
   const side = index % 2 === 0 ? "BUY" : "SELL";
   await waitForValue(cdp, `(() => {
     const button = document.querySelector('[data-replay-action="place-order"][data-side="${side}"]');
-    return button instanceof HTMLButtonElement && !button.disabled;
+    return button instanceof HTMLButtonElement && !button.disabled && button.getAttribute("aria-disabled") !== "true";
   })()`, timeoutMs, `training order side ${side} readiness`);
   const beforeOrder = await waitForAuthoritativeReplayStatus(
     cdp,
@@ -2552,7 +2587,7 @@ async function trainingActionCycle({ cdp, backendOrigin, sessionId, diagnosticGa
       orderCount: Number(statusElement.dataset.replayOrderCount || 0),
       fillCount: Number(statusElement.dataset.replayFillCount || 0),
       revealed: statusElement.dataset.replayRevealed,
-      bars: Number((statusElement.innerText.match(/([0-9]+) (?:display )?bars/) || [])[1] || 0),
+      bars: Number(statusElement.dataset.replayViewerBarCount || 0),
     };
     if (status.orderCount > ${beforeOrder.orderCount}) return { kind: "ordered", status };
     const feedback = document.querySelector('#replay-order-size-feedback[data-tone="error"]');
@@ -3015,9 +3050,8 @@ async function v2AccessibilityAudit(cdp, timeoutMs) {
 
 async function liveSnapshot(cdp) {
   return evaluate(cdp, `(() => {
-    const text = document.body?.innerText || "";
     const interval = document.querySelector(".interval-btn.active")?.textContent?.trim() || "";
-    const bars = Math.max(0, ...[...text.matchAll(/([0-9]+)[ ]+bars/g)].map((match) => Number(match[1])));
+    const bars = Number(document.querySelector("[data-live-bar-count]")?.dataset.liveBarCount || 0);
     return {
       url: location.href,
       interval,
@@ -4027,6 +4061,8 @@ async function main() {
     await waitForHttp(`${backendOrigin}/__replay_smoke__/fixture`, backend, args.timeoutMs);
     await waitForHttp(`${frontendOrigin}/`, vite, args.timeoutMs);
     const fixture = await readJson(`${backendOrigin}/__replay_smoke__/fixture`);
+    assert(fixture.network_guard?.installed === true && fixture.network_guard?.policy === "loopback_only",
+      "replay fixture must enforce loopback-only networking", fixture.network_guard);
     const liveSymbol = fixture.live_window?.symbol;
     assert(
       typeof liveSymbol === "string"
@@ -4075,7 +4111,7 @@ async function main() {
     await waitForValue(replay.cdp, `(() => { const button = [...document.querySelectorAll("button")].find((item) => item.textContent?.trim() === "新建训练"); return button instanceof HTMLButtonElement && !button.disabled; })()`, args.timeoutMs, "Training Hub readiness");
     const opened = await keyboardActivateButton(replay.cdp, { text: "新建训练" }, args.timeoutMs);
     try {
-      await waitForValue(replay.cdp, `(() => { const button = [...document.querySelectorAll("button")].find((item) => item.textContent?.trim() === "确认时间并创建 Run"); return button instanceof HTMLButtonElement && !button.disabled; })()`, args.timeoutMs, "create Run readiness");
+      await waitForValue(replay.cdp, `(() => { const button = [...document.querySelectorAll("button")].find((item) => item.textContent?.trim() === "确认时间并创建训练"); return button instanceof HTMLButtonElement && !button.disabled; })()`, args.timeoutMs, "create Run readiness");
       if (formalTrainingPlan !== null) {
         await configureFormalV2TrainingPlan(
           replay.cdp,
@@ -4103,7 +4139,7 @@ async function main() {
       };
       throw error;
     }
-    const created = await keyboardActivateButton(replay.cdp, { text: "确认时间并创建 Run" }, args.timeoutMs);
+    const created = await keyboardActivateButton(replay.cdp, { text: "确认时间并创建训练" }, args.timeoutMs);
     let selectedMarket;
     try {
       selectedMarket = await chooseReplayMarket(
@@ -4241,6 +4277,18 @@ async function main() {
       runId,
       sessionId,
       timeoutMs: args.timeoutMs,
+    }).catch(async (error) => {
+      await replayCapture.settle();
+      phaseDiagnostics = {
+        phase: "hedge-account-continuity",
+        page: await evaluate(replay.cdp, `({url:location.href, text:document.body.innerText})`).catch(() => null),
+        apiRequests: replayCapture.requests.filter(item => item.url.includes('/api/')).slice(-30),
+        apiResponses: replayCapture.responses.filter(item => item.url.includes('/api/')).slice(-30),
+        responseBodies: replayCapture.responseBodies.slice(-30),
+        consoleErrors: replayCapture.consoleErrors,
+        exceptions: replayCapture.exceptions,
+      };
+      throw error;
     });
     assert(await evaluate(replay.cdp, "window.opener === null"), "primary replay target retained opener");
     const blindInitialDom = await evaluate(replay.cdp, "document.body.innerText");
@@ -4258,7 +4306,19 @@ async function main() {
       blindCalendarDates.length === 0,
       `blind replay DOM rendered a calendar date before reveal: ${JSON.stringify(blindCalendarDates)}`,
     );
-    const accessibility = await v2AccessibilityAudit(replay.cdp, args.timeoutMs);
+    const accessibility = await v2AccessibilityAudit(replay.cdp, args.timeoutMs).catch(async (error) => {
+      await replayCapture.settle();
+      phaseDiagnostics = {
+        phase: "keyboard-order-accessibility",
+        page: await evaluate(replay.cdp, `({url:location.href, text:document.body.innerText,
+          active:document.activeElement?.outerHTML})`).catch(() => null),
+        apiRequests: replayCapture.requests.filter(item => item.url.includes('/api/')).slice(-30),
+        responseBodies: replayCapture.responseBodies.slice(-30),
+        consoleErrors: replayCapture.consoleErrors,
+        exceptions: replayCapture.exceptions,
+      };
+      throw error;
+    });
 
     // Establish the live/replay coexistence proof only after the archive session
     // exists. An offline live target can legitimately probe missing present-day
@@ -4276,7 +4336,7 @@ async function main() {
       await waitForValue(
         live.cdp,
         `document.querySelectorAll("canvas").length > 0
-          && [...document.body.innerText.matchAll(/([0-9]+)[ ]+bars/g)].some((match) => Number(match[1]) > 0)`,
+          && Number(document.querySelector("[data-live-bar-count]")?.dataset.liveBarCount || 0) > 0`,
         args.timeoutMs,
         "live chart fixture bars",
       );
@@ -4765,6 +4825,8 @@ async function main() {
     const finalActor = actorDiagnostics(finalMetrics.backend, sessionId);
     const minimumSourceProgress = Math.max(0, Math.floor(args.durationMs / 60_000) - 3);
     const checks = {
+      backend_loopback_only: finalMetrics.backend?.network_guard?.installed === true
+        && finalMetrics.backend?.network_guard?.policy === "loopback_only",
       real_bar_source_evidence: !useBoundRealProfile || (
         fixture.real_source === true
         && fixture.real_source_evidence?.read_only === true
@@ -4797,7 +4859,7 @@ async function main() {
       )),
       v2_keyboard_accessible: (
         hubKeyboard?.opened?.active?.text === "新建训练"
-        && hubKeyboard?.created?.active?.text === "确认时间并创建 Run"
+        && hubKeyboard?.created?.active?.text === "确认时间并创建训练"
         && accessibility?.keyboardOnly?.paperTab?.active?.railView === "replay-paper"
         && accessibility?.keyboardOnly?.order?.active?.action === "place-order"
         && accessibility?.keyboardOnly?.order?.active?.side === "SELL"

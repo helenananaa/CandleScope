@@ -1362,3 +1362,35 @@ async def test_enabled_flags_without_a_started_training_service_fail_closed(
     response = await _request(_app(), "GET", "/api/v1/replay/runs")
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "REPLAY_TRAINING_UNAVAILABLE"
+
+
+async def test_blind_selection_retry_keeps_frozen_start_after_inner_catalog_race(tmp_path: Path, monkeypatch) -> None:
+    service = await _service(tmp_path / "blind-catalog-race.db")
+    app = _app(service)
+    try:
+        payload = await _payload(service)
+        created = await _create_empty_run(app, service, payload)
+        run_id = str(created.json()["run"]["run_id"])
+        commitment = await service.training.store.get_time_commitment(run_id)
+        original_select = service.select_training_window
+        calls = 0
+
+        async def race_once(config, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                kwargs["expected_catalog_epoch"] = "sha256:" + "f" * 64
+            return await original_select(config, **kwargs)
+
+        monkeypatch.setattr(service, "select_training_window", race_once)
+        stale = await _select_initial_market(app, run_id, payload)
+        assert stale.status_code == 409
+        assert stale.json()["error"]["code"] == "CATALOG_EPOCH_MISMATCH"
+        assert str(commitment["committed_start_ms"]) not in stale.text
+        assert (await service.training.store.get_run(run_id))["state"] == "AWAITING_MARKET"
+        assert await service.training.store.get_time_commitment(run_id) == commitment
+        retried = await _select_initial_market(app, run_id, payload)
+        assert retried.status_code == 201, retried.text
+        assert await service.training.store.get_time_commitment(run_id) == commitment
+    finally:
+        await service.shutdown(step_timeout=1.0)

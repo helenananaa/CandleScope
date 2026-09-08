@@ -12,10 +12,12 @@ export class SidecarStartupError extends Error {
   }
 }
 
-async function waitForHealthy(url, child, timeoutMs, fetchImpl, instanceId) {
+async function waitForHealthy(url, child, timeoutMs, fetchImpl, instanceId, startupError) {
   const startedAt = Date.now();
   let lastError = null;
   while (Date.now() - startedAt < timeoutMs) {
+    const spawnError = startupError();
+    if (spawnError) throw new SidecarStartupError(spawnError.message, { spawnCode: spawnError.code });
     if (child.exitCode !== null || child.signalCode !== null) {
       throw new SidecarStartupError(`Sidecar exited before it became healthy (${child.exitCode})`, {
         exitCode: child.exitCode,
@@ -85,9 +87,13 @@ export class SidecarSupervisor {
       env: { ...process.env, ...this.options.env, CANDLESCOPE_DESKTOP_INSTANCE_ID: instanceId },
       windowsHide: true,
       detached: false,
-      stdio: ["ignore", this.logHandle.fd, this.logHandle.fd],
+      stdio: [this.options.gracefulStdin ? "pipe" : "ignore", this.logHandle.fd, this.logHandle.fd],
     });
     this.child = child;
+    let spawnError = null;
+    child.once("error", (error) => { spawnError = error; });
+    // A child can exit while the parent is sending the shutdown command.
+    child.stdin?.on("error", () => {});
     try {
       this.readyMs = await waitForHealthy(
         this.options.healthUrl,
@@ -95,6 +101,7 @@ export class SidecarSupervisor {
         this.options.healthTimeoutMs,
         this.options.fetchImpl,
         instanceId,
+        () => spawnError,
       );
       return this.diagnostics();
     } catch (error) {
@@ -107,7 +114,6 @@ export class SidecarSupervisor {
     const child = this.child;
     this.child = null;
     if (child && child.exitCode === null) {
-      child.kill("SIGTERM");
       let shutdownTimer;
       let onExit;
       try {
@@ -115,6 +121,8 @@ export class SidecarSupervisor {
           new Promise((resolve) => {
             onExit = resolve;
             child.once("exit", onExit);
+            if (this.options.gracefulStdin && child.stdin?.writable) child.stdin.end("shutdown\n");
+            else child.kill("SIGTERM");
           }),
           new Promise((resolve) => {
             shutdownTimer = setTimeout(resolve, this.options.shutdownTimeoutMs);

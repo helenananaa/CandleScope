@@ -1480,7 +1480,7 @@ export const ptBR = {
   "replay.hub.revalidate": "Revalidar o catálogo de capacidades",
   "replay.hub.loading": "Carregando resumos dos arquivos…",
   "replay.hub.emptyTitle": "Ainda não há arquivos de treino",
-  "replay.hub.emptyHint": "Crie o primeiro treino com autoridade no servidor; o padrão usa uma janela aleatória cega.",
+  "replay.hub.emptyHint": "Crie um treino e depois escolha um ativo. O horário de início fica definido na criação.",
   "replay.hub.emptyCreate": "Criar o primeiro treino",
   "replay.hub.cardKicker": "Treino · {mode}",
   "replay.hub.currentSymbol": "Ativo atual",

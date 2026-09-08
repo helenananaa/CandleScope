@@ -699,7 +699,6 @@ export function ReplayPaperTradingDock({ runtime, viewer }: ReplayRightRailProps
   const capacity = currentCapacityState?.status === "ready"
     ? currentCapacityState.result
     : null;
-  const capacityPending = currentCapacityState?.status === "pending";
   const capacityError = currentCapacityState?.status === "error"
     ? currentCapacityState.error
     : null;
@@ -942,7 +941,6 @@ export function ReplayPaperTradingDock({ runtime, viewer }: ReplayRightRailProps
     if (
       !gate.enabled
       || !commandReady
-      || capacityPending
       || tradeValidationControllerRef.current !== null
     ) return;
     if (!quantity.trim() || (orderType !== "MARKET" && !price.trim())) {
@@ -1114,7 +1112,10 @@ export function ReplayPaperTradingDock({ runtime, viewer }: ReplayRightRailProps
   const buyGate = ctaEnabled("BUY");
   const sellGate = ctaEnabled("SELL");
   const orderSubmitting = tradeValidationSide !== null;
-  const transientOrderBlock = !commandReady || capacityPending;
+  // Submission cancels advisory requests and validates fresh same-cursor
+  // capacity/preview. A background quote must not consume an otherwise valid
+  // pointer or keyboard activation while its response is in flight.
+  const transientOrderBlock = !commandReady;
   const commonPermanentOrderBlock = !commandAvailable
     || quantityExceedsCapacity
     || !quantity.trim()

@@ -60,7 +60,9 @@ def test_million_bar_product_ready_requires_evidence() -> None:
     )
 
 
-def test_dotenv_defaults_do_not_mutate_process_environment() -> None:
+def test_dotenv_defaults_do_not_mutate_process_environment(tmp_path: Path) -> None:
+    dotenv_path = tmp_path / ".env"
+    dotenv_path.write_text(f"BACKTEST_ENABLED=1\n{SCALE_FLAG}=1\n", encoding="utf-8")
     environment = os.environ.copy()
     environment.pop("BACKTEST_ENABLED", None)
     environment.pop(SCALE_FLAG, None)
@@ -68,7 +70,10 @@ def test_dotenv_defaults_do_not_mutate_process_environment() -> None:
 import os
 assert "BACKTEST_ENABLED" not in os.environ
 assert {SCALE_FLAG!r} not in os.environ
-from app.core.config import BACKTEST_SETTINGS
+from unittest.mock import patch
+from dotenv import load_dotenv
+with patch("dotenv.load_dotenv", lambda: load_dotenv({str(dotenv_path)!r})):
+    from app.core.config import BACKTEST_SETTINGS
 assert BACKTEST_SETTINGS.enabled is True
 assert BACKTEST_SETTINGS.python_scale_v1_enabled is True
 assert "BACKTEST_ENABLED" not in os.environ

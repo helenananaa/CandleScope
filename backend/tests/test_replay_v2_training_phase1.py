@@ -529,13 +529,15 @@ async def test_restart_marks_interrupted_preparation_retryable_and_reuses_commit
         await restarted.shutdown(step_timeout=1.0)
 
 
+@pytest.mark.parametrize("time_disclosure_policy", ["NONE", "HIDE_ALL"])
 async def test_create_rejects_catalog_epoch_drift_without_partial_rows(
     tmp_path: Path,
+    time_disclosure_policy: str,
 ) -> None:
     path = tmp_path / "epoch-drift.db"
     service = await _service(path)
     request = replace(
-        await _request(service),
+        await _request(service, time_disclosure_policy=time_disclosure_policy),
         catalog_epoch=f"sha256:{'f' * 64}",
     )
     try:

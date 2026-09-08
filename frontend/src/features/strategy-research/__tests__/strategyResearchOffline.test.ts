@@ -9,7 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ResearchDataDrawer } from "../../research-data/ResearchDataDrawer.js";
 import { StrategyResearchRuntime } from "../StrategyResearchRuntime.js";
 import { parseStrategyResearchLaunch } from "../strategyResearchLaunch.js";
-import { parseStrategyResearchHostHealth } from "../strategyResearchHostHealth.js";
+import { parseStrategyResearchHostHealth, strategyResearchHealthUrl } from "../strategyResearchHostHealth.js";
 import { ChartStrategyRunError } from "../../backtest/chart-tester/chartStrategyRunRequest.js";
 import StrategyResearchApp from "../StrategyResearchApp.js";
 
@@ -57,7 +57,7 @@ test("health payload sets LOCAL_OFFLINE without inventing a page toggle", () => 
   const appSource = readFileSync(path.resolve(here, "../StrategyResearchApp.tsx"), "utf8");
   const healthSource = readFileSync(path.resolve(here, "../strategyResearchHostHealth.ts"), "utf8");
   assert.match(appSource, /loadStrategyResearchHostHealth/);
-  assert.match(healthSource, /fetch\("\/health"/);
+  assert.match(healthSource, /fetch\(strategyResearchHealthUrl\(\)/);
   assert.doesNotMatch(appSource, /runtimeModeToggle|setRuntimeMode\(|page toggle/i);
   const html = renderToStaticMarkup(
     React.createElement(StrategyResearchApp, {
@@ -106,4 +106,11 @@ test("offline live materialize is rejected before a network resolve", () => {
   assert.match(runSource, /CURRENT_CHART_UNBOUND/);
   assert.match(runSource, /trackAbortController/);
   assert.match(runSource, /draftContentRevision/);
+});
+
+
+test("research health targets the backend in native and reverse-proxy deployments", () => {
+  assert.equal(strategyResearchHealthUrl("/api/v1"), "/health");
+  assert.equal(strategyResearchHealthUrl("http://127.0.0.1:18180/api/v1"), "http://127.0.0.1:18180/health");
+  assert.equal(strategyResearchHealthUrl("/candlescope/api/v1"), "/candlescope/health");
 });
