@@ -4407,10 +4407,19 @@ class ReplayService:
             else config_or_blind_mode.blind_mode
         )
         if blind_mode:
+            details: dict[str, object] = {"blind_redacted": True}
+            # The caller supplied an opaque catalog epoch. Its retry signal
+            # reveals no dates, paths, or dataset identity; losing it makes a
+            # transient catalog refresh look like an unsupported frozen start.
+            if (
+                error.code is ReplayErrorCode.DATASET_MISMATCH
+                and error.details.get("reason") == "CATALOG_EPOCH_MISMATCH"
+            ):
+                details["reason"] = "CATALOG_EPOCH_MISMATCH"
             return ReplayDomainError(
                 error.code,
                 "blind replay dataset validation failed",
-                details={"blind_redacted": True},
+                details=details,
             )
         return ReplayDomainError(
             error.code,

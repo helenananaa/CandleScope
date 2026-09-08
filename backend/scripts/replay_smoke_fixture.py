@@ -1057,7 +1057,10 @@ def main() -> None:
         _disable_fixture_gap_maintenance()
 
     import uvicorn
+    from app.local_data.network_guard import OfflineNetworkGuard
     from app.api.v1 import symbols as symbols_api
+
+    network_guard = OfflineNetworkGuard()
 
     async def _offline_exchange_metadata(_exchange: str = "") -> dict[str, int]:
         """Prevent full-app startup from making public metadata requests."""
@@ -1115,6 +1118,7 @@ def main() -> None:
     async def replay_smoke_fixture_status() -> dict[str, object]:
         return {
             "offline": True,
+            "network_guard": network_guard.snapshot(),
             "source_profile": (
                 "HEDGE_EXACT_ARCHIVE_QA"
                 if args.hedge
@@ -1154,6 +1158,7 @@ def main() -> None:
             return {"available": False, "reason": "REPLAY_DISABLED"}
         return {
             "available": True,
+            "network_guard": network_guard.snapshot(),
             "replay": service.diagnostics(redact_paths=True),
         }
 
@@ -1243,7 +1248,13 @@ def main() -> None:
     )
     server = uvicorn.Server(config)
     server_holder["server"] = server
-    server.run()
+    # Legacy URL overrides do not cover newer CCXT-owned network transports.
+    # The fixture must enforce its offline claim at the process socket boundary.
+    network_guard.install()
+    try:
+        server.run()
+    finally:
+        network_guard.uninstall()
 
 
 if __name__ == "__main__":

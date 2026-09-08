@@ -4061,6 +4061,8 @@ async function main() {
     await waitForHttp(`${backendOrigin}/__replay_smoke__/fixture`, backend, args.timeoutMs);
     await waitForHttp(`${frontendOrigin}/`, vite, args.timeoutMs);
     const fixture = await readJson(`${backendOrigin}/__replay_smoke__/fixture`);
+    assert(fixture.network_guard?.installed === true && fixture.network_guard?.policy === "loopback_only",
+      "replay fixture must enforce loopback-only networking", fixture.network_guard);
     const liveSymbol = fixture.live_window?.symbol;
     assert(
       typeof liveSymbol === "string"
@@ -4823,6 +4825,8 @@ async function main() {
     const finalActor = actorDiagnostics(finalMetrics.backend, sessionId);
     const minimumSourceProgress = Math.max(0, Math.floor(args.durationMs / 60_000) - 3);
     const checks = {
+      backend_loopback_only: finalMetrics.backend?.network_guard?.installed === true
+        && finalMetrics.backend?.network_guard?.policy === "loopback_only",
       real_bar_source_evidence: !useBoundRealProfile || (
         fixture.real_source === true
         && fixture.real_source_evidence?.read_only === true
