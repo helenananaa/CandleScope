@@ -976,7 +976,7 @@ async function readServerAccountProof(backendOrigin, runId) {
 
 async function addAndSelectHedgeSecondaryMarket(cdp, symbol, timeoutMs) {
   const expanded = await evaluate(cdp, `(() => {
-    const input = document.querySelector('input[aria-label="搜索当前 Run 可用商品"]');
+    const input = document.querySelector('input[aria-label="搜索本次训练可用商品"]');
     if (input instanceof HTMLInputElement) return "already-expanded";
     const button = document.querySelector('.replay-watchlist-pane.collapsed .wl-collapse-btn');
     if (!(button instanceof HTMLButtonElement)) return "missing";
@@ -986,12 +986,12 @@ async function addAndSelectHedgeSecondaryMarket(cdp, symbol, timeoutMs) {
   assert(expanded !== "missing", "HEDGE browser watchlist cannot be expanded");
   await waitForValue(
     cdp,
-    `document.querySelector('input[aria-label="搜索当前 Run 可用商品"]') instanceof HTMLInputElement`,
+    `document.querySelector('input[aria-label="搜索本次训练可用商品"]') instanceof HTMLInputElement`,
     timeoutMs,
     "HEDGE secondary market search readiness",
   );
   const searched = await evaluate(cdp, `(() => {
-    const input = document.querySelector('input[aria-label="搜索当前 Run 可用商品"]');
+    const input = document.querySelector('input[aria-label="搜索本次训练可用商品"]');
     if (!(input instanceof HTMLInputElement)) return false;
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
     if (typeof setter !== "function") return false;
@@ -2159,7 +2159,7 @@ async function replayStatus(cdp) {
       orderCount: Number(status.dataset.replayOrderCount || 0),
       fillCount: Number(status.dataset.replayFillCount || 0),
       revealed: status.dataset.replayRevealed,
-      bars: Number((status.innerText.match(/([0-9]+) (?:display )?bars/) || [])[1] || 0),
+      bars: Number(status.dataset.replayViewerBarCount || 0),
     };
   })()`);
 }
@@ -2200,7 +2200,7 @@ async function waitForReplayStatus(cdp, predicateSource, timeoutMs, label) {
       orderCount: Number(status.dataset.replayOrderCount || 0),
       fillCount: Number(status.dataset.replayFillCount || 0),
       revealed: status.dataset.replayRevealed,
-      bars: Number((status.innerText.match(/([0-9]+) (?:display )?bars/) || [])[1] || 0),
+      bars: Number(status.dataset.replayViewerBarCount || 0),
     };
     return (${predicateSource})(value) ? value : null;
   })()`, timeoutMs, label);
