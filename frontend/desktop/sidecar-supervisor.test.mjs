@@ -140,3 +140,13 @@ test("an unresponsive private-pipe child is still forcibly reclaimed", async () 
   await exited;
   await assert.rejects(fetch(`http://127.0.0.1:${port}/health`));
 });
+
+
+test("missing executable becomes a startup error instead of an uncaught child error", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "candlescope-no-executable-"));
+  const supervisor = new SidecarSupervisor({command: path.join(root, "missing-python.exe"), args: [], cwd: root,
+    healthUrl: "http://127.0.0.1:9/health", healthTimeoutMs: 500, shutdownTimeoutMs: 500,
+    gracefulStdin: true, logPath: path.join(root, "sidecar.log")});
+  await assert.rejects(supervisor.start(), SidecarStartupError);
+  assert.equal(supervisor.diagnostics().running, false);
+});

@@ -12,10 +12,12 @@ export class SidecarStartupError extends Error {
   }
 }
 
-async function waitForHealthy(url, child, timeoutMs, fetchImpl, instanceId) {
+async function waitForHealthy(url, child, timeoutMs, fetchImpl, instanceId, startupError) {
   const startedAt = Date.now();
   let lastError = null;
   while (Date.now() - startedAt < timeoutMs) {
+    const spawnError = startupError();
+    if (spawnError) throw new SidecarStartupError(spawnError.message, { spawnCode: spawnError.code });
     if (child.exitCode !== null || child.signalCode !== null) {
       throw new SidecarStartupError(`Sidecar exited before it became healthy (${child.exitCode})`, {
         exitCode: child.exitCode,
@@ -88,6 +90,8 @@ export class SidecarSupervisor {
       stdio: [this.options.gracefulStdin ? "pipe" : "ignore", this.logHandle.fd, this.logHandle.fd],
     });
     this.child = child;
+    let spawnError = null;
+    child.once("error", (error) => { spawnError = error; });
     // A child can exit while the parent is sending the shutdown command.
     child.stdin?.on("error", () => {});
     try {
@@ -97,6 +101,7 @@ export class SidecarSupervisor {
         this.options.healthTimeoutMs,
         this.options.fetchImpl,
         instanceId,
+        () => spawnError,
       );
       return this.diagnostics();
     } catch (error) {

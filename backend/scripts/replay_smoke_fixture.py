@@ -1075,6 +1075,18 @@ def main() -> None:
     @app.on_event("startup")
     async def import_replay_smoke_historical_book() -> None:
         nonlocal hedge_inputs
+        # replay.v3 plans validate instrument identity against the Host catalog.
+        # This isolated, zero-network fixture must supply its finite instrument
+        # set as well as its bars; never fall back to a live metadata request.
+        for market_type, fixture_symbols in (
+            ("spot", FIXTURE_SYMBOLS), ("futures", HEDGE_BROWSER_SYMBOLS),
+        ):
+            symbols_api._symbol_cache[("binance", market_type)] = [
+                {"exchange": "binance", "marketType": market_type,
+                 "symbol": symbol, "baseAsset": symbol.removesuffix("USDT"),
+                 "quoteAsset": "USDT", "status": "TRADING", "active": True}
+                for symbol, _price in fixture_symbols
+            ]
         if not historical_book_sources:
             return
         service = getattr(app.state, "replay_service", None)

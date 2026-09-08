@@ -2215,6 +2215,7 @@ if (!gotSingleInstanceLock) {
         sidecarFailed
           ? (chinese ? "本地后端未能启动。请检查 Python 运行环境及后端依赖是否完整。" : "The local backend could not start. Check that the Python runtime and backend dependencies are installed.")
           : (chinese ? "应用初始化失败，请查看启动日志以确定原因。" : "Application initialization failed. Check the startup log for details."),
+        `${chinese ? "原因" : "Reason"}: ${error instanceof Error ? error.message : String(error)}`,
         chinese ? "日志目录：" : "Log directory:",
         logsPath,
         sidecarFailed ? "backend-sidecar.log / desktop-startup-error.log" : "desktop-startup-error.log",
