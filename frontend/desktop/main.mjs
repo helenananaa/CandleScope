@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
+import { resolvePythonCommand } from "./python-runtime.mjs";
 import { isTrustedAppUrl, startDesktopAssetServer } from "./app-origin.mjs";
 
 import { ElectronWindowManager } from "./electron-window-manager.mjs";
@@ -118,7 +119,7 @@ function parseSidecarCommand() {
     return { command: parsed[0], args: parsed.slice(1) };
   }
   return {
-    command: process.env.CANDLESCOPE_PYTHON || "python",
+    command: resolvePythonCommand({ runtimeRoot, packaged: app.isPackaged, override: process.env.CANDLESCOPE_PYTHON }),
     args: [
       "-m",
       "uvicorn",
@@ -138,6 +139,7 @@ function createSupervisor() {
     ...command,
     cwd: backendRoot,
     env: {
+      ...(app.isPackaged ? { PYTHONNOUSERSITE: "1", PYTHONDONTWRITEBYTECODE: "1" } : {}),
       CANDLE_HOST: "127.0.0.1",
       CANDLE_PORT: String(backendPort),
       CANDLE_DATA_DIR: process.env.CANDLE_DATA_DIR || path.join(app.getPath("userData"), "data"),
@@ -146,6 +148,7 @@ function createSupervisor() {
       CANDLESCOPE_DESKTOP_PLUGIN_SESSION: managementSession.sessionToken,
       CANDLESCOPE_DESKTOP_PLUGIN_CSRF: managementSession.csrfToken,
       PYTHONPATH: [
+        path.join(runtimeRoot, "python-runtime", "site-packages"),
         path.join(runtimeRoot, "packages", "candlescope-plugin-sdk", "src"),
         process.env.PYTHONPATH,
       ].filter(Boolean).join(path.delimiter),
