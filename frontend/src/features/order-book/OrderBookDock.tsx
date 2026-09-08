@@ -1,3 +1,4 @@
+import { snapshotDeliveryLabel } from "./orderBookDelivery.js";
 import React, {
   useCallback,
   useLayoutEffect,
@@ -6,7 +7,7 @@ import React, {
   useState,
   useSyncExternalStore,
 } from "react";
-import { t } from "../../i18n/index.js";
+import { t, getDateTimeLocale } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import type {
   FullOutputLimit,
@@ -51,20 +52,12 @@ function orderBookStatusLabel(status: OrderBookConnectionStatus): string {
   return t(ORDER_BOOK_STATUS_KEYS[status]);
 }
 
-function snapshotDeliveryLabel(
-  mode: "partial" | "full",
-  snapshotMode: "live_snapshot" | "polling_snapshot" | null,
-): string {
-  if (mode === "full") return t("orderBook.delivery.strictContinuous");
-  return snapshotMode === "polling_snapshot"
-    ? t("orderBook.delivery.pollingSnapshot")
-    : t("orderBook.delivery.liveSnapshot");
-}
 
 function orderBookStatusDetail(
   status: OrderBookConnectionStatus,
   hostMessage: string | null = null,
 ): string {
+  if (hostMessage?.trim()) return hostMessage;
   if (status === "unsupported" || status === "idle") {
     return hostMessage || t("orderBook.waitingBook");
   }
@@ -283,7 +276,7 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
     ? PARTIAL_PRICE_GROUPINGS
     : FULL_PRICE_GROUPINGS;
   const symbol = view.identity.symbol.replace(/USDT$|USDC$/, "");
-  const deliveryLabel = snapshotDeliveryLabel(view.preferences.mode, view.snapshotMode);
+  const deliveryLabel = snapshotDeliveryLabel(view.preferences.mode, view.snapshotMode, snapshot.book?.source);
 
   return (
     <section
@@ -312,12 +305,20 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
         </span>
         <span
           className={`ob-status ob-status-${snapshot.status}`}
-          title={orderBookStatusDetail(snapshot.status, view.supportMessage)}
+          title={orderBookStatusDetail(snapshot.status, snapshot.message || snapshot.error || view.supportMessage)}
         >
           <span className="ob-status-dot" aria-hidden="true" />
           {orderBookStatusLabel(snapshot.status)}
         </span>
       </header>
+      {snapshot.lastReceivedAtMs !== null && (
+        <div className="ob-last-update">
+          {t("orderBook.lastReceived")} {" "}
+          <time dateTime={new Date(snapshot.lastReceivedAtMs).toISOString()}>
+            {new Date(snapshot.lastReceivedAtMs).toLocaleString(getDateTimeLocale(), { hour12: false })}
+          </time>
+        </div>
+      )}
 
       <>
           <div className="ob-controls">
@@ -429,7 +430,7 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
           ) : (
             <EmptyState
               status={snapshot.status}
-              message={view.supportMessage}
+              message={snapshot.message || snapshot.error || view.supportMessage}
               onRetry={actions.retry}
             />
           )}

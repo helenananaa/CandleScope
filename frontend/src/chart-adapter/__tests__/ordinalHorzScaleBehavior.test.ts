@@ -47,9 +47,9 @@ test("order provides unique numeric keys even when source timestamps repeat", ()
 
   assert.equal(behavior.key(first), 40);
   assert.equal(behavior.key(firstInternal), 40);
-  assert.equal(behavior.cacheKey(firstInternal), 40);
+  assert.equal(behavior.cacheKey(firstInternal), 1_720_000_000);
   assert.equal(behavior.key(secondInternal), 41);
-  assert.equal(behavior.cacheKey(secondInternal), 41);
+  assert.equal(behavior.cacheKey(secondInternal), 1_720_000_000);
   assert.equal(typeof behavior.key(first), "number");
   assert.notEqual(behavior.key(first), behavior.key(second));
 });
@@ -67,7 +67,7 @@ test("preprocessing and conversion validate the ordinal item contract", () => {
   const converter = behavior.createConverterToInternalObj(data);
   const converted = converter(mustBeDefined(data[1]).time);
   assert.equal(behavior.key(converted), 0);
-  assert.equal(behavior.cacheKey(converted), 0);
+  assert.equal(behavior.cacheKey(converted), 100);
   const ordinalInternal = structuralMock<{
     _ordinal_sourceOrdinal: number;
     _ordinal_sourceTime: number;
@@ -168,4 +168,20 @@ test("tick weights follow source-time boundaries while repeated timestamps stay 
     needAlignCoordinate: false,
     weight: point.timeWeight,
   })))), 50);
+});
+
+test("a rebuilt ordinal position cannot reuse the previous source date label", () => {
+  const behavior = createOrdinalHorzScaleBehavior();
+  configureTimeFormatting(behavior);
+  const original = behavior.convertHorzItemToInternal(axisItem(10, Date.UTC(2026, 6, 1) / 1000));
+  const prepended = behavior.convertHorzItemToInternal(axisItem(10, Date.UTC(2026, 5, 1) / 1000));
+  const labels = new Map<number, string>();
+  const label = (item: typeof original) => {
+    const key = behavior.cacheKey(item);
+    if (!labels.has(key)) labels.set(key, behavior.formatHorzItem(item));
+    return labels.get(key);
+  };
+  assert.match(label(original)!, /2026-07-01/);
+  assert.match(label(prepended)!, /2026-06-01/);
+  assert.equal(behavior.key(original), behavior.key(prepended));
 });

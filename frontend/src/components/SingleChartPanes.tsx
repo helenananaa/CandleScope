@@ -1,3 +1,4 @@
+import { readablePaneMinimums, constrainReadablePaneHeights } from "./paneReadableHeight.js";
 /**
  * SingleChartPanes — lightweight-charts v5 native panes path.
  *
@@ -60,6 +61,7 @@ import {
   renderMainSeriesProjectionPatch,
 } from "../chart-adapter/projectionSeriesRenderer";
 import { createViewportController } from "../chart-adapter/viewportController";
+import { ordinalSourceTimesChanged, refreshOrdinalTimeScale } from "../chart-adapter/ordinalTimeScaleRefresh";
 import {
   buildMainSeriesCrosshairValue,
   buildMainSeriesReferenceOptions,
@@ -2127,6 +2129,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       notifyDrawingFrameInvalidation();
     }
   }, [activePaneIds.length, activePaneIdsKey, desiredMainPaneIndex, notifyDrawingFrameInvalidation, seriesReady]);
+  const readableMinimums = useMemo(() => readablePaneMinimums(activePaneIds, collapsedPaneIds, maximizedPaneId), [activePaneIds, collapsedPaneIds, maximizedPaneId]);
   const paneHeightStorageKey = useMemo(
     () => `${paneLayoutScope ? `${paneLayoutScope}:` : ""}${SINGLE_PANE_HEIGHT_KEY_PREFIX}${buildPaneConfigKey(activeSubPanes.map((pane) => pane.id))}`,
     [activeSubPanes, paneLayoutScope],
@@ -2148,6 +2151,11 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         panePointerLayoutRef.current = null;
         return;
       }
+      const readableHeights = constrainReadablePaneHeights(heights, readableMinimums);
+      if (readableHeights) {
+        setPaneHeights(chart, readableHeights);
+        frameLifecycle.schedule(syncOverlays);
+      }
       panePointerLayoutRef.current = buildPanePointerLayout(
         activePaneIds,
         heights,
@@ -2164,6 +2172,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       for (const [index, paneId] of activePaneIds.entries()) {
         for (const element of overlaysById.get(paneId) || []) {
           element.style.top = `${paneTop + 6}px`;
+          element.style.setProperty("--pane-label-max-height", `${Math.max(0, (heights[index] || 0) - 12)}px`);
+          element.dataset.paneCompact = (heights[index] || 0) < 100 ? "true" : "false";
+          element.dataset.paneWidth = wrapper.clientWidth < 600 ? "narrow" : wrapper.clientWidth < 900 ? "medium" : "wide";
         }
         paneTop += heights[index] || 0;
       }
@@ -2234,6 +2245,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       const element = pane.getHTMLElement?.();
       if (element) resizeObserver?.observe(element);
     }
+    const scrollViewport = wrapper.parentElement;
+    scrollViewport?.addEventListener("scroll", syncOverlays);
     wrapper.addEventListener("pointerdown", startPaneResizeTracking, true);
     window.addEventListener("pointerup", stopPaneResizeTracking);
     window.addEventListener("pointercancel", stopPaneResizeTracking);
@@ -2249,13 +2262,14 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       settleFrame = null;
       followLatestResizeFrame = null;
       resizeObserver?.disconnect();
+      scrollViewport?.removeEventListener("scroll", syncOverlays);
       wrapper.removeEventListener("pointerdown", startPaneResizeTracking, true);
       window.removeEventListener("pointerup", stopPaneResizeTracking);
       window.removeEventListener("pointercancel", stopPaneResizeTracking);
       window.removeEventListener("blur", stopPaneResizeTracking);
       window.removeEventListener("resize", syncSize);
     };
-  }, [activePaneIds, activePaneIdsKey, seriesReady, subPaneIdsKey]);
+  }, [activePaneIds, activePaneIdsKey, readableMinimums, seriesReady, subPaneIdsKey]);
 
   const saveCurrentPaneHeights = useCallback((
     chart = chartRef.current,
@@ -4062,6 +4076,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           viewportController: viewportControllerRef.current,
         });
         renderedMainSeriesDataRef.current = renderResult.nextData;
+        if (axisMode === "derived-ordinal" && ordinalSourceTimesChanged(
+          previousDisplayRows, displayRows, effectiveProjectionPatch.fromOutputIndex,
+        )) refreshOrdinalTimeScale(chartRef.current, series);
         renderedMainSeriesGenerationRef.current += 1;
         committedProjectionGenerationRef.current = generation;
         projectionRendered = true;
@@ -4233,6 +4250,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
             viewportController: viewportControllerRef.current,
           });
           renderedMainSeriesDataRef.current = renderResult.nextData;
+          if (axisMode === "derived-ordinal" && ordinalSourceTimesChanged(
+            previousDisplayRows, displayRows, projectionPatch.fromOutputIndex,
+          )) refreshOrdinalTimeScale(chartRef.current, currentSeries);
           renderedMainSeriesGenerationRef.current += 1;
           committedProjectionGenerationRef.current = generation;
           projectionRendered = true;
@@ -5317,7 +5337,15 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   ]);
 
   return (
+    <div className="chart-area chart-pane-scroll-viewport">
+      {usesDerivedAxis && (
+        <details className="synthetic-chart-notice" key={resolvedChartType}>
+          <summary title={syntheticChartNotice.title}>{syntheticChartNotice.title}</summary>
+          <p>{`${syntheticChartNotice.detail} · ${t("workspace.chartNotice")}`}</p>
+        </details>
+      )}
     <div
+      style={{ minHeight: readableMinimums.reduce((sum, height) => sum + height, 0) + 32 + activePaneIds.length }}
       className="chart-area multi-pane-chart"
       data-rendering-suspended={suspended ? "true" : "false"}
       ref={wrapperRef}
@@ -5412,14 +5440,6 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         </div>
       )}
 
-      {usesDerivedAxis && (
-        <div className="synthetic-chart-notice" role="status">
-          <strong>{syntheticChartNotice.title}</strong>
-          <span>
-            {`${syntheticChartNotice.detail} · ${t("workspace.chartNotice")}`}
-          </span>
-        </div>
-      )}
 
       {contextMenu && (
         <div
@@ -5541,6 +5561,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           <span className="loading-text">{t("chart.loadingKlines", { symbol, interval }, locale)}</span>
         </div>
       )}
+    </div>
     </div>
   );
 });

@@ -376,7 +376,7 @@ const DrawingToolbar = memo(function DrawingToolbar({
         disabled={eraserDisabled}
         icon={EraserIcon}
         onClick={handleEraserClick}
-        title={eraserDisabled ? drawingToolTitle : "Eraser"}
+        title={eraserDisabled ? drawingToolTitle : t("drawing.eraser")}
       />
 
       <DrawingVariantToolButton
@@ -423,7 +423,7 @@ const DrawingToolbar = memo(function DrawingToolbar({
         disabled={textDisabled}
         icon={TextIcon}
         onClick={handleTextClick}
-        title={textDisabled ? drawingToolTitle : "Text note"}
+        title={textDisabled ? drawingToolTitle : t("drawing.textNote")}
       />
 
       <DrawingToolButton
@@ -436,7 +436,7 @@ const DrawingToolbar = memo(function DrawingToolbar({
         onContextMenu={handleFibonacciSettingsContextMenu}
         onDoubleClick={handleToggleFibonacciSettings}
         showVariantIndicator
-        title={fibonacciDisabled ? drawingToolTitle : "Fibonacci retracement (right-click or double-click for settings)"}
+        title={fibonacciDisabled ? drawingToolTitle : t("drawing.fibonacciHint")}
       >
         {flyoutOpen === "fib-levels" && (
           <FibLevelsPanel

@@ -20,6 +20,7 @@ export default function LocalIntervalSelector({
 }) {
   useLocale();
   const [custom, setCustom] = useState("90m");
+  const [customEdited, setCustomEdited] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const common = useMemo(() => {
     const values = getCommonLocalIntervals(manifest);
@@ -72,6 +73,7 @@ export default function LocalIntervalSelector({
             value={custom}
             onChange={(event) => {
               setCustom(event.target.value);
+              setCustomEdited(true);
               setFeedback(null);
             }}
             placeholder="90m"
@@ -84,7 +86,7 @@ export default function LocalIntervalSelector({
         className={`local-interval-feedback ${customSupport.supported ? "ok" : "error"}`}
         role={customSupport.supported ? "status" : "alert"}
       >
-        {feedback ?? customSupport.message}
+        {feedback ?? (customEdited ? customSupport.message : "")}
       </span>
     </div>
   );

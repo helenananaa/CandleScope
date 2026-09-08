@@ -1,3 +1,4 @@
+import { getNumberLocale } from "../../../i18n/index.js";
 import type { ExportScope } from "../../export/exportTypes.js";
 import type { BacktestReport } from "../backtestTypes.js";
 
@@ -47,11 +48,31 @@ export function chartStrategyMetricValue(value: unknown, fallback = "—"): stri
   return String(value);
 }
 
+export function chartStrategyWinRate(value: unknown, locale: string): string {
+  const raw = chartStrategyMetricValue(value);
+  if (raw === "—" || raw.endsWith("%")) return raw;
+  const ratio = Number(raw);
+  return Number.isFinite(ratio) && ratio >= 0 && ratio <= 1
+    ? new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 1 }).format(ratio)
+    : "—";
+}
+
 export function chartStrategyMaxDrawdown(report: BacktestReport): string {
   const risk = report.performance?.risk ?? {};
   return chartStrategyMetricValue(
     risk.max_drawdown ?? risk.max_drawdown_percent ?? risk.maximum_drawdown,
   );
+}
+
+export function chartStrategyDrawdownDetailKey(report: BacktestReport) {
+  const risk = report.performance?.risk ?? {};
+  const metric = risk.max_drawdown ?? risk.max_drawdown_percent ?? risk.maximum_drawdown;
+  if (chartStrategyMetricValue(metric) !== "—") return "chartTester.result.drawdownBasis" as const;
+  if (metric === null || metric === undefined) return "chartTester.result.drawdownMissing" as const;
+  if (typeof metric === "object" && metric.reason === "INSUFFICIENT_EQUITY_SAMPLES") {
+    return "chartTester.result.drawdownSamples" as const;
+  }
+  return "chartTester.result.drawdownUnavailable" as const;
 }
 
 export function chartStrategyTradeFocusTimeMs(trade: Record<string, unknown>): number | null {
@@ -61,4 +82,15 @@ export function chartStrategyTradeFocusTimeMs(trade: Record<string, unknown>): n
 
 export function chartStrategyResultIncludedInExportScope(scope: ExportScope): boolean {
   return scope === "page";
+}
+
+export function formatChartStrategyNumber(value: unknown, kind: "amount" | "price" | "percent" = "amount"): string {
+  const raw = chartStrategyMetricValue(value);
+  const number = Number(raw);
+  if (!Number.isFinite(number)) return raw;
+  return new Intl.NumberFormat(getNumberLocale(), kind === "price"
+    ? { maximumSignificantDigits: 8 }
+    : kind === "percent"
+      ? { style: "percent", minimumFractionDigits: 2, maximumFractionDigits: 2 }
+      : { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(number);
 }

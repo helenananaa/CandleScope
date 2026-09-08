@@ -17,6 +17,9 @@ import type { ChartStrategyAttachmentRecord } from "../../chart-workspace/chartW
 import type { ChartContextResolution } from "../backtestApi.js";
 import type { RecentRunCompareV1 } from "../backtestTypes.js";
 import { t } from "../../../i18n/index.js";
+import { StrategyConditionsEditor } from "./StrategyConditionsEditor.js";
+import { StrategyParametersEditor } from "./StrategyParametersEditor.js";
+import { validStrategyRunSettings } from "../../../shared/strategyRunSettings.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import {
   pendingStrategyDraftSave,
@@ -169,6 +172,7 @@ export interface ChartStrategyTesterPanelProps {
   onClose(): void;
   onOpenAdvanced?(): void;
   onOpenBatchStudy?(): void;
+  onOpenWorkspace?(): void;
 }
 
 export default function ChartStrategyTesterPanel({
@@ -199,8 +203,10 @@ export default function ChartStrategyTesterPanel({
   onClose,
   onOpenAdvanced,
   onOpenBatchStudy,
+  onOpenWorkspace,
 }: ChartStrategyTesterPanelProps) {
   const locale = useLocale();
+  const [focusMode, setFocusMode] = useState(false);
   const [height, setHeight] = useState(() => loadChartStrategyPanelPreferences(cellScope).height);
   const [activeTab, setActiveTab] = useState<PanelTab>(() => (
     attachment ? loadChartStrategyPanelPreferences(cellScope).activeTab : "script"
@@ -374,6 +380,10 @@ export default function ChartStrategyTesterPanel({
 
   const run = useCallback(() => {
     if (!activeDraft || !currentAttachment) return;
+    if (!validStrategyRunSettings({ ...currentAttachment, rangeMode: currentAttachment.rangeMode === "VISIBLE" ? "CUSTOM" : currentAttachment.rangeMode })) {
+      setActiveTab("settings");
+      return;
+    }
     const nextIssues = diagnoseChartStrategyDraft(source, { requireSource: true });
     setIssues(nextIssues);
     setRunReady(false);
@@ -512,6 +522,7 @@ export default function ChartStrategyTesterPanel({
       style={panelStyle}
       aria-label={t("chartTester.panelAria")}
       data-chart-strategy-panel
+      data-focus-mode={focusMode ? "true" : "false"}
       onKeyDownCapture={(event) => {
         if (event.key === "Escape") {
           event.preventDefault();
@@ -562,6 +573,13 @@ export default function ChartStrategyTesterPanel({
           ))}
         </div>
         <div className="chart-strategy-head-spacer" />
+        {currentAttachment && onOpenWorkspace && <button type="button" className="chart-strategy-link-button" onClick={() => {
+          if (!activeDraft) return;
+          void draftStore.save({ id: activeDraft.id, displayName: activeDraft.displayName, language: activeDraft.language, source, cursor })
+            .then(onOpenWorkspace).catch(() => setSaveState("ERROR"));
+        }}>{t("ux.openWorkspace")}</button>}
+        <button type="button" className="chart-strategy-link-button" aria-pressed={focusMode}
+          onClick={() => setFocusMode((focused) => !focused)}>{t("chartTester.focusMode")}</button>
         <span className={`chart-strategy-autosave state-${saveState.toLowerCase()}`}>{saveLabel}</span>
         {saveState === "ERROR" && (
           <button type="button" className="chart-strategy-link-button" onClick={retrySave}>
@@ -743,6 +761,7 @@ export default function ChartStrategyTesterPanel({
               </Suspense>
             </section>
             <aside className="chart-strategy-problems" aria-label={t("chartTester.problemsAria")}>
+              <StrategyParametersEditor source={source} onChange={(value) => { setSource(value); setRunReady(false); onSourceDirty(); }} />
               <div className="chart-strategy-problems-head">{t("chartTester.problems")}</div>
               <div className="chart-strategy-problems-body">
                 {runState.status !== "READY" && runState.status !== "DETACHED" && (
@@ -801,7 +820,17 @@ export default function ChartStrategyTesterPanel({
               <h2>{t(runStatusKey(runState.status))}</h2>
               <p>{runState.status === "COMPLETED"
                 ? t("chartTester.result.loading")
+                : runState.status === "NEEDS_DATA" && resolution
+                  ? t("chartTester.status.needsDataDetail", { bars: resolution.materialize.estimated_bars ?? t("chartTester.unknown") })
                 : t("chartTester.overview.pendingDetail")}</p>
+              {runState.status === "NEEDS_DATA" && (
+                <div className="chart-strategy-data-recovery">
+                  <p>{t("chartTester.settings.date")}: {rangeText}</p>
+                  <button type="button" className="chart-strategy-run-button" onClick={onPrepareData} disabled={!pendingDataMatchesSource}>
+                    {t("chartTester.prepareDataRun")}
+                  </button>
+                </div>
+              )}
               {actionableCopy && (
                 <div className="chart-strategy-actionable-error">
                   <strong>{actionableCopy.message}</strong>
@@ -817,7 +846,13 @@ export default function ChartStrategyTesterPanel({
         )}
 
         {activeTab === "settings" && currentAttachment && (
-          <div className="chart-strategy-quick-settings" data-testid="chart-strategy-quick-settings">
+          <div data-testid="chart-strategy-quick-settings">
+            <StrategyConditionsEditor
+              settings={{ ...currentAttachment, rangeMode: currentAttachment.rangeMode === "VISIBLE" ? "CUSTOM" : currentAttachment.rangeMode }}
+              marketType={session.marketType}
+              onChange={(settings) => { const { executionOverrides: _previous, ...base } = currentAttachment; void _previous; onAttachmentChange({ ...base, ...settings }); }}
+            />
+            <details><summary>{t("ux.resolvedConditions")}</summary><div className="chart-strategy-quick-settings">
             <label className="chart-strategy-auto-run-setting">
               <input
                 type="checkbox"
@@ -851,6 +886,7 @@ export default function ChartStrategyTesterPanel({
                 {t("chartTester.settings.batchStudy")}
               </button>
             )}
+            </div></details>
           </div>
         )}
 

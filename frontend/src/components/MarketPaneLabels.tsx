@@ -81,6 +81,7 @@ const MarketPaneLabel = memo(function MarketPaneLabel({
       data-pane-collapsed={collapsed ? "true" : "false"}
       role="group"
       aria-label={ariaLabel}
+      title={ariaLabel}
     >
       <span className="advanced-market-pane-heading">{pane.label}</span>
       {displayPoint && (

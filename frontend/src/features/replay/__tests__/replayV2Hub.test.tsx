@@ -703,6 +703,38 @@ test("hub bootstrap loads only lightweight saves; create capability work starts 
   ]);
 });
 
+test("returning from history preparation refreshes empty BAR capability and preserves draft", async (context) => {
+  let ready = false;
+  let capabilityCalls = 0;
+  const lifecycle = new TrainingHubLifecycle({
+    api: {
+      async listRuns() { return parseTrainingRunListResponse(listResponse([])); },
+      async capabilities() {
+        capabilityCalls += 1;
+        const base = parseReplayCapabilities(enabledCapabilities());
+        return { ...base, sources: { ...base.sources, bar: ready
+          ? base.sources.bar : { enabled: false, reason: "REPLAY_BAR_HISTORY_EMPTY" } } };
+      },
+      async catalog() { return ready ? hedgeCatalog() : { ...hedgeCatalog(), entries: [] }; },
+      async createRun() { return parseTrainingRunMutationResponse(mutationResponse()); },
+    },
+  });
+  context.after(() => lifecycle.dispose());
+  await lifecycle.openCreate();
+  assert.equal(lifecycle.getSnapshot().capabilities?.sources.bar.enabled, false);
+  const draft = lifecycle.getSnapshot().draft;
+  assert.ok(draft);
+  lifecycle.setDraft({ ...draft, name: "归档后继续", indicatorWarmupBars: 300 });
+  lifecycle.closeCreate();
+  ready = true;
+  await lifecycle.openCreate();
+  assert.equal(capabilityCalls, 2);
+  assert.equal(lifecycle.getSnapshot().capabilities?.sources.bar.enabled, true);
+  assert.ok(lifecycle.getSnapshot().catalog?.entries.length);
+  assert.equal(lifecycle.getSnapshot().draft?.name, "归档后继续");
+  assert.equal(lifecycle.getSnapshot().draft?.indicatorWarmupBars, 300);
+});
+
 test("create errors stay visible and reopening refreshes setup context without losing edits", async (context) => {
   let catalogCalls = 0;
   const lifecycle = new TrainingHubLifecycle({
@@ -1189,6 +1221,18 @@ test("hub markup exposes saves, native actions, filters and explicit unavailable
     },
   } satisfies TrainingHubRuntime;
   const html = renderToStaticMarkup(<TrainingHubDialog runtime={runtime} />);
+  assert.doesNotMatch(html, /准备历史数据/);
+  const noCoverage: typeof catalog = { ...catalog, entries: [] };
+  const renderPreparation = (sourceKind: "BAR" | "AGG_TRADE", nextCatalog = noCoverage) =>
+    renderToStaticMarkup(<TrainingHubDialog
+      runtime={{ ...runtime, catalog: nextCatalog, draft: { ...draft, sourceKind } }}
+      onPrepareData={() => {}}
+    />);
+  assert.match(renderPreparation("BAR"), /准备历史数据/);
+  assert.match(renderPreparation("BAR"), /training-presets/);
+  assert.match(renderPreparation("BAR"), /返回后会重新检查覆盖，并保留训练设置/);
+  assert.doesNotMatch(renderPreparation("AGG_TRADE"), /准备历史数据/);
+  assert.doesNotMatch(renderPreparation("BAR", hedgeCatalog()), /准备历史数据/);
   assert.match(html, /role="dialog"/);
   assert.match(html, /训练存档大厅/);
   assert.match(html, /BTC 手动训练/);
@@ -1213,9 +1257,9 @@ test("hub markup exposes saves, native actions, filters and explicit unavailable
   assert.match(html, /HIDE_MINUTE/);
   assert.match(html, /Practice 可审计变更白名单/);
   assert.match(html, /历史盘口.*连续、可 pin/);
-  assert.match(html, /商品在 Run 内选择/);
-  assert.match(html, /创建时不固定商品、交易所、市场类型、基础周期或数据集/);
-  assert.match(html, /原子创建首条 MarketTrack/);
+  assert.match(html, /创建训练后选择商品/);
+  assert.match(html, /创建时确定开始时间，暂不绑定商品、交易所、市场类型、基础周期或数据集/);
+  assert.match(html, /检查通过后才会加入训练/);
   assert.match(html, /缺少可近似项时自动使用清楚标记的 HEDGE_HYBRID/);
   assert.match(html, /HEDGE 会优先绑定完整历史输入/);
   assert.doesNotMatch(html, /DETERMINISTIC_SIMULATION[^<]*disabled|APPROX_PROXY[^<]*disabled/);
@@ -1223,8 +1267,8 @@ test("hub markup exposes saves, native actions, filters and explicit unavailable
   assert.match(html, /指标预热 BAR/);
   assert.match(html, /全部可用（默认，按需加载）/);
   assert.match(html, /像实时行情一样向左按需分页/);
-  assert.match(html, /确认时间并创建 Run/);
-  assert.match(html, /创建确认后 T0 永久不变/);
+  assert.match(html, /确认时间并创建训练/);
+  assert.match(html, /确认创建后，开始时间不可更改/);
   assert.match(html, /不含真实盘口排队/);
   assert.doesNotMatch(html, /1710000000000|dataset_epoch|snapshot_blob/);
 });
@@ -1251,6 +1295,11 @@ test("archive deletion uses an application-owned explicit confirmation dialog", 
 test("hub and picker labels stay user-facing", () => {
   assert.equal(trainingRunStateLabel("AWAITING_MARKET"), "待选商品");
   assert.equal(formatTrainingEquity("10000"), "10,000");
+  assert.equal(formatTrainingEquity("9442.0004446124365"), "9,442.00");
+  assert.equal(formatTrainingEquity("99999999999999999.995"), "100,000,000,000,000,000.00");
+  assert.equal(formatTrainingEquity("-0.001"), "0.00");
+  assert.equal(formatTrainingEquity("-1234.567"), "-1,234.57");
+  assert.equal(formatTrainingEquity("0.123456789", 8), "0.12345679");
   assert.equal(formatReplayUtcDateTime(Date.UTC(2021, 11, 14, 12, 18)), "2021-12-14 12:18 UTC");
 });
 

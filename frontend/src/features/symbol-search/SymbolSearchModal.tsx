@@ -1,3 +1,5 @@
+import { watchlistDisplayName } from "../watchlist/watchlistDisplayName.js";
+import { shortcutModifier } from "../../shared/shortcutModifier.js";
 import { t, translateMarketType } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { QUOTE_CHIPS } from "./symbolSearchFilter";
@@ -76,7 +78,7 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
               ref={inputRef}
               className="sym-modal-search-input"
               type="text"
-              placeholder={t("search.placeholder")}
+              placeholder={t("search.placeholder", { modifier: shortcutModifier() })}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               spellCheck={false}
@@ -231,7 +233,7 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
                                 key={watchlist.id}
                                 className="sym-modal-wl-dot"
                                 style={{ background: watchlist.color || "#3b82f6" }}
-                                title={t("search.inList", { name: watchlist.name })}
+                                title={t("search.inList", { name: watchlistDisplayName(watchlist) })}
                               />
                             ))}
                           </span>
@@ -302,7 +304,7 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
                   disabled={alreadyIn}
                 >
                   <span className="sym-ctx-dot" style={{ background: watchlist.color || "#3b82f6" }} />
-                  <span className="sym-ctx-name">{watchlist.name}</span>
+                  <span className="sym-ctx-name">{watchlistDisplayName(watchlist)}</span>
                   {alreadyIn ? (
                     <span className="sym-ctx-check">✓</span>
                   ) : (

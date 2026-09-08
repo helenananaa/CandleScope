@@ -1,8 +1,9 @@
-import { app, BrowserWindow, ipcMain, screen } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, screen } from "electron";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
+import { resolvePythonCommand } from "./python-runtime.mjs";
 import { isTrustedAppUrl, startDesktopAssetServer } from "./app-origin.mjs";
 
 import { ElectronWindowManager } from "./electron-window-manager.mjs";
@@ -118,7 +119,7 @@ function parseSidecarCommand() {
     return { command: parsed[0], args: parsed.slice(1) };
   }
   return {
-    command: process.env.CANDLESCOPE_PYTHON || "python",
+    command: resolvePythonCommand({ runtimeRoot, packaged: app.isPackaged, override: process.env.CANDLESCOPE_PYTHON }),
     args: [
       "-m",
       "uvicorn",
@@ -138,13 +139,16 @@ function createSupervisor() {
     ...command,
     cwd: backendRoot,
     env: {
+      ...(app.isPackaged ? { PYTHONNOUSERSITE: "1", PYTHONDONTWRITEBYTECODE: "1" } : {}),
       CANDLE_HOST: "127.0.0.1",
       CANDLE_PORT: String(backendPort),
+      CANDLE_DATA_DIR: process.env.CANDLE_DATA_DIR || path.join(app.getPath("userData"), "data"),
       CORS_ORIGINS: new URL(appUrl).origin,
       CANDLESCOPE_PLUGIN_PLATFORM_V2_MANAGEMENT_ORIGINS: new URL(appUrl).origin,
       CANDLESCOPE_DESKTOP_PLUGIN_SESSION: managementSession.sessionToken,
       CANDLESCOPE_DESKTOP_PLUGIN_CSRF: managementSession.csrfToken,
       PYTHONPATH: [
+        path.join(runtimeRoot, "python-runtime", "site-packages"),
         path.join(runtimeRoot, "packages", "candlescope-plugin-sdk", "src"),
         process.env.PYTHONPATH,
       ].filter(Boolean).join(path.delimiter),
@@ -2192,11 +2196,29 @@ if (!gotSingleInstanceLock) {
     window.focus();
   });
   app.whenReady().then(boot).catch(async (error) => {
-    await mkdir(app.getPath("logs"), { recursive: true });
-    await writeFile(
-      path.join(app.getPath("logs"), "desktop-startup-error.log"),
-      `${new Date().toISOString()} ${error?.stack || error}\n`,
-      { flag: "a" },
+    const logsPath = app.getPath("logs");
+    try {
+      await mkdir(logsPath, { recursive: true });
+      await writeFile(
+        path.join(logsPath, "desktop-startup-error.log"),
+        `${new Date().toISOString()} ${error?.stack || error}\n`,
+        { flag: "a" },
+      );
+    } catch (logError) {
+      console.error("Could not save startup diagnostics", logError);
+    }
+    const chinese = app.getLocale().toLowerCase().startsWith("zh");
+    const sidecarFailed = error?.code === "SIDECAR_STARTUP_FAILED";
+    dialog.showErrorBox(
+      chinese ? "CandleScope 启动失败" : "CandleScope could not start",
+      [
+        sidecarFailed
+          ? (chinese ? "本地后端未能启动。请检查 Python 运行环境及后端依赖是否完整。" : "The local backend could not start. Check that the Python runtime and backend dependencies are installed.")
+          : (chinese ? "应用初始化失败，请查看启动日志以确定原因。" : "Application initialization failed. Check the startup log for details."),
+        chinese ? "日志目录：" : "Log directory:",
+        logsPath,
+        sidecarFailed ? "backend-sidecar.log / desktop-startup-error.log" : "desktop-startup-error.log",
+      ].join("\n\n"),
     );
     await supervisor?.stop();
     await assetServer?.close();
@@ -2204,8 +2226,12 @@ if (!gotSingleInstanceLock) {
   });
 }
 
-app.on("before-quit", (event) => {
+app.on("before-quit", () => {
   manager?.approveQuit();
+});
+
+// Close renderer-owned streams before waiting for the backend to shut down.
+app.on("will-quit", (event) => {
   if (shutdownComplete || (!supervisor && !assetServer)) return;
   event.preventDefault();
   shutdownPromise ??= Promise.all([supervisor?.stop(), assetServer?.close()]).finally(() => {

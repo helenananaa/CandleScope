@@ -10,6 +10,7 @@ export type StrategyResearchPage = "strategy" | "local" | "backtest";
 export type StrategyResearchVisualState = "first" | "import" | "chart" | "edit" | "completed";
 
 export type StrategyResearchLaunchIntent =
+  | { kind: "handoff"; page: "strategy"; id: string }
   | { kind: "restore"; page: "strategy" }
   | { kind: "chart"; page: "strategy" }
   | { kind: "imported"; page: "local" | "strategy" }
@@ -37,6 +38,7 @@ export function parseStrategyResearchLaunch(location: {
   const page = strategyResearchPageFromPathname(location.pathname);
   const search = location.search.startsWith("?") ? location.search : `?${location.search}`;
   const params = new URLSearchParams(search);
+  if (params.has("handoff")) return { kind: "handoff", page: "strategy", id: params.get("handoff") ?? "" };
   const deep = parseBacktestResearchEntry(search);
   if (deep.kind === "invalid") {
     return { kind: "invalid", page, message: deep.message };

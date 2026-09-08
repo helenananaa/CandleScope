@@ -117,6 +117,11 @@ export function useOrderBookRuntime({
     : "raw";
 
   useEffect(() => {
+    // Timestamp belongs to this product and mode, not the previous subscription.
+    store.reset();
+  }, [identity, effectiveMode, store]);
+
+  useEffect(() => {
     if (!supported) {
       store.reset("unsupported", message);
       return undefined;

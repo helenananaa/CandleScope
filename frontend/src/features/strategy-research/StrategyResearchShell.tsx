@@ -11,6 +11,7 @@ import type { StrategyResearchVisualState } from "./strategyResearchLaunch.js";
 export function StrategyResearchShell({
   visualState,
   source,
+  sourceLabel,
   libraryEnabled,
   libraryOpen,
   currentChartEnabled,
@@ -31,6 +32,7 @@ export function StrategyResearchShell({
 }: {
   visualState: StrategyResearchVisualState;
   source: ResearchSourceRefV1 | null;
+  sourceLabel?: string;
   libraryEnabled: boolean;
   libraryOpen: boolean;
   currentChartEnabled: boolean;
@@ -49,6 +51,14 @@ export function StrategyResearchShell({
   result: ReactNode;
   extraSurfaces: ReactNode;
 }) {
+  const hasData = source !== null;
+  const statusKeys = {
+    first: "research.source.none",
+    import: "research.source.openLibrary",
+    chart: "strategy.chartSlot",
+    edit: "chartTester.autosave.editing",
+    completed: "chartTester.status.completed",
+  } as const;
   return (
     <div
       className="strategy-research-shell"
@@ -61,10 +71,12 @@ export function StrategyResearchShell({
         topBar={(
           <MarketTopBarFrame
             source="research"
+            offline={runtimeMode === "LOCAL_OFFLINE"}
             brandText={t("strategy.brand")}
             identity={(
               <ResearchDataSourceBar
                 source={source}
+                {...(sourceLabel ? { sourceLabel } : {})}
                 libraryEnabled={libraryEnabled}
                 currentChartEnabled={currentChartEnabled}
                 onOpenLibrary={onOpenLibrary}
@@ -87,19 +99,19 @@ export function StrategyResearchShell({
                 {chart}
               </section>
             )}
-            bottomPanel={(
+            bottomPanel={hasData ? (
               <section className="strategy-research-result-slot" data-testid="strategy-research-result-slot">
                 {result}
               </section>
-            )}
-            rightRail={(
-              <>
-                {analysis}
+            ) : null}
+            rightRail={hasData ? (
+              <aside className="strategy-research-right-rail" aria-label={t("strategy.scriptSlot")}>
                 <div className="strategy-research-script" data-testid="strategy-research-script-slot">
                   {script}
                 </div>
-              </>
-            )}
+                <details className="strategy-research-analysis"><summary>{t("local.ops")}</summary>{analysis}</details>
+              </aside>
+            ) : null}
           />
         )}
         featureSurfaces={(
@@ -110,7 +122,7 @@ export function StrategyResearchShell({
         )}
         statusBar={(
           <footer className="status-bar" data-testid="strategy-research-status">
-            {t("strategy.status", { state: visualState })}
+            {t("strategy.status", { state: t(hasData ? statusKeys[visualState] : "research.source.none") })}
           </footer>
         )}
       />

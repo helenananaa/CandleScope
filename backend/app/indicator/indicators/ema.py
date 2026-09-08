@@ -59,10 +59,13 @@ class EMAIndicator(Indicator):
         self._initialized = True
 
     def update_partial(self, bar: BarData) -> None:
-        if self._ema is None:
-            self._preview["ema"] = None
-            return
         val = self._get_field(bar, self._source)
+        if self._ema is None:
+            self._preview["ema"] = (
+                (self._sum + val) / self._period
+                if self._count + 1 == self._period else None
+            )
+            return
         self._preview["ema"] = self._alpha * val + (1 - self._alpha) * self._ema
 
     def update_closed(self, bar: BarData) -> None:

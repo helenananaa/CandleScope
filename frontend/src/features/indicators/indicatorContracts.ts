@@ -249,6 +249,7 @@ export function parseScriptRuntimeCatalog(
   for (const language of languages) {
     if (language.runtimeId === null) continue;
     const runtime = runtimeById.get(language.runtimeId);
+    if (!runtime && !language.available) continue;
     if (!runtime) {
       throw new IndicatorPayloadError(
         `${path}.languages`,

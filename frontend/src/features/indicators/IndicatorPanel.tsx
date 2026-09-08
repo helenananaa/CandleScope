@@ -14,6 +14,11 @@ import {
   shouldShowIndicatorCatalogLoading,
   useIndicatorCatalogRuntime,
 } from "./useIndicatorCatalogRuntime";
+import { indicatorDisplayName } from "./indicatorDisplayName.js";
+import { ProfileRailIcon } from "../../app/marketRailIcons.js";
+import { IndicatorCategoryIcon } from "./IndicatorCategoryIcon.js";
+import { IndicatorNumberInput } from "./IndicatorNumberInput.js";
+import { indicatorParamLabel, indicatorSourceLabel } from "./indicatorParamLabels.js";
 import IndicatorEditor from "./IndicatorEditor";
 import type { ReactNode } from "react";
 import type { CatalogIndicator } from "./useIndicatorCatalogRuntime.js";
@@ -46,26 +51,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   "Oscillator": "震荡",
   "Volatility": "波动率",
   "Volume": "成交量",
-};
-
-const CATEGORY_ICONS: Record<string, string> = {
-  "趋势": "📈",
-  "震荡": "⚡",
-  "波动": "📊",
-  "成交量": "📦",
-  "contract-data": "⛓️",
-  "custom": "✏️",
-  // English fallbacks (lowercase)
-  "trend": "📈",
-  "momentum": "⚡",
-  "volatility": "📊",
-  "volume": "📦",
-  "oscillator": "⚡",
-  // English fallbacks (capitalized)
-  "Trend": "📈",
-  "Oscillator": "⚡",
-  "Volatility": "📊",
-  "Volume": "📦",
 };
 
 const CATEGORY_GROUP_KEYS: Record<string, string> = {
@@ -358,8 +343,13 @@ export default function IndicatorPanel({
   const getSchemaForIndicator = useCallback((indicator: IndicatorDefinition): UiParamSchema[] => {
     const liveSchema = normalizeParamSchema(paramSchemas[indicator.id]);
     if (liveSchema.length > 0) return liveSchema;
-    return normalizeParamSchema(indicator.paramSchema);
-  }, [paramSchemas]);
+    const savedSchema = normalizeParamSchema(indicator.paramSchema);
+    if (savedSchema.length > 0) return savedSchema;
+    const preset = isBuiltinIndicator(indicator)
+      ? presets.find((item) => item.engineName === indicator.engineName || item.id === indicator.id)
+      : undefined;
+    return normalizeParamSchema(preset?.paramSchema);
+  }, [paramSchemas, presets]);
 
   const handleParamChange = useCallback((
     indicator: IndicatorDefinition,
@@ -408,16 +398,32 @@ export default function IndicatorPanel({
           }}
         >
           {options.map((option) => (
-            <option key={option} value={option}>{option}</option>
+            <option key={option} value={option}>
+              {isBuiltinIndicator(indicator) && schema.key === "source" ? indicatorSourceLabel(option) : option}
+            </option>
           ))}
         </select>
+      );
+    }
+
+    if (type === "int" || type === "float") {
+      return (
+        <IndicatorNumberInput
+          key={`${indicator.id}:${schema.key}:${String(value)}`}
+          value={String(value)}
+          title={common.title}
+          min={schema.min}
+          max={schema.max}
+          step={schema.step ?? (type === "int" ? 1 : 0.1)}
+          onCommit={(next) => handleParamChange(indicator, schema.key, next, true)}
+        />
       );
     }
 
     return (
       <input
         {...common}
-        type={type === "color" ? "color" : type === "int" || type === "float" ? "number" : "text"}
+        type={type === "color" ? "color" : "text"}
         value={renderInputValue(value)}
         onBlur={() => onRecompute?.(true)}
         min={schema.min}
@@ -615,6 +621,7 @@ plot(ma, "MA", color=line_color)
     const q = searchQuery.toLowerCase();
     return (
       p.name.toLowerCase().includes(q) ||
+      indicatorDisplayName(p).toLowerCase().includes(q) ||
       p.id.toLowerCase().includes(q) ||
       (p.description || "").toLowerCase().includes(q) ||
       (p.category || "").toLowerCase().includes(q)
@@ -686,7 +693,7 @@ plot(ma, "MA", color=line_color)
             {/* Header */}
             <div className="indicator-panel-header">
               <h3 className="indicator-panel-title">
-                📊 {t("indicator.title")}
+                <span aria-hidden="true" style={{ display: "flex" }}><ProfileRailIcon /></span> {t("indicator.title")}
                 {computing && <span className="indicator-computing-badge">{t("indicator.computing")}</span>}
                 {realtimeMode === "historical-only" && (
                   <span
@@ -780,7 +787,7 @@ plot(ma, "MA", color=line_color)
                     return (
                       <div key={cat} className="indicator-category-group">
                         <div className="indicator-category-label">
-                          <span>{CATEGORY_ICONS[cat] || "📌"}</span>
+                          <span style={{ display: "flex" }}><IndicatorCategoryIcon category={cat} /></span>
                           <span>{categoryDisplayLabel(cat)}</span>
                         </div>
                         {items.map((preset) => {
@@ -797,7 +804,7 @@ plot(ma, "MA", color=line_color)
                           >
                             <div className="indicator-preset-info">
                               <span className="indicator-preset-name">
-                                {preset.name}
+                                {indicatorDisplayName(preset)}
                                 <IndicatorBadge tone={isBuiltinIndicator(preset) ? "builtin" : "custom"}>
                                   {isBuiltinIndicator(preset) ? t("indicator.builtin") : t("indicator.customBadge")}
                                 </IndicatorBadge>
@@ -859,7 +866,7 @@ plot(ma, "MA", color=line_color)
                               <div className="indicator-preset-info">
                                 <span className="indicator-preset-name">
                                   {study.name}
-                                  <IndicatorBadge tone="neutral">market-data</IndicatorBadge>
+                                  <IndicatorBadge tone="neutral">{t("indicator.marketDataBadge")}</IndicatorBadge>
                                   <IndicatorBadge tone="sub">{t("indicator.subPane")}</IndicatorBadge>
                                   {!study.supported && (
                                     <IndicatorBadge tone="neutral">{t("indicator.unavailable")}</IndicatorBadge>
@@ -926,7 +933,7 @@ plot(ma, "MA", color=line_color)
                             {ind.visible ? "👁" : "👁‍🗨"}
                           </button>
                           <span className="indicator-active-name">
-                            {ind.name}
+                            {indicatorDisplayName(ind)}
                             <IndicatorBadge tone={isBuiltinIndicator(ind) ? "builtin" : "custom"}>
                               {isBuiltinIndicator(ind) ? t("indicator.builtin") : t("indicator.customBadge")}
                             </IndicatorBadge>
@@ -963,8 +970,8 @@ plot(ma, "MA", color=line_color)
                               if (schema.length > 0) {
                                 return schema.map((item) => (
                                   <div key={item.key} className="indicator-param-row">
-                                    <label className="indicator-param-label">
-                                      {item.label || item.title || item.key}
+                                    <label className="indicator-param-label" title={item.key}>
+                                      {indicatorParamLabel(item.key, item.label || item.title || item.key, isBuiltinIndicator(ind))}
                                     </label>
                                     {renderParamControl(ind, item)}
                                   </div>
@@ -978,7 +985,7 @@ plot(ma, "MA", color=line_color)
 
                                 return (
                                   <div key={key} className="indicator-param-row">
-                                    <label className="indicator-param-label">{key}</label>
+                                    <label className="indicator-param-label" title={key}>{indicatorParamLabel(key, key, isBuiltinIndicator(ind))}</label>
                                     <input
                                       className="indicator-param-input"
                                       type={inputType}
@@ -1038,7 +1045,7 @@ plot(ma, "MA", color=line_color)
                               </button>
                               <span className="indicator-active-name">
                                 {study.name}
-                                <IndicatorBadge tone="neutral">market-data</IndicatorBadge>
+                                <IndicatorBadge tone="neutral">{t("indicator.marketDataBadge")}</IndicatorBadge>
                                 <IndicatorBadge tone="sub">{t("indicator.subPane")}</IndicatorBadge>
                                 {statusLabel && (
                                   <IndicatorBadge tone="neutral">{statusLabel}</IndicatorBadge>

@@ -71,11 +71,13 @@ class ATRIndicator(Indicator):
         self._initialized = True
 
     def update_partial(self, bar: BarData) -> None:
-        if self._atr is None or self._prev_close is None:
-            self._preview["atr"] = None
-            return
-
         tr = self._true_range(bar.high, bar.low, self._prev_close)
+        if self._atr is None:
+            self._preview["atr"] = (
+                (self._tr_sum + tr) / self._period
+                if self._count + 1 == self._period else None
+            )
+            return
         self._preview["atr"] = (self._atr * (self._period - 1) + tr) / self._period
 
     def update_closed(self, bar: BarData) -> None:

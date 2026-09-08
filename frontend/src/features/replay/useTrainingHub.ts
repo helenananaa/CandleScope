@@ -246,8 +246,10 @@ export class TrainingHubLifecycle {
     this.publish();
     const token = ++this.requestToken;
     try {
-      const capabilities = this.capabilities
-        ?? await this.api.capabilities(this.abortController.signal);
+      // Local history may have been archived while the workbench was open.
+      // Refresh source readiness together with coverage; an empty-history
+      // capability cached before import must not keep creation disabled.
+      const capabilities = await this.api.capabilities(this.abortController.signal);
       if (!this.accept(token)) return;
       this.capabilities = capabilities;
       const seedDraft = preservedDraft ?? createTrainingRunDraft();

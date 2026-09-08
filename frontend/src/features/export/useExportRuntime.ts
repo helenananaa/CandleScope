@@ -6,6 +6,8 @@ import {
   downloadBlob,
 } from "./exportService";
 import { loadExportOptions, saveExportOptions } from "./exportOptionsStore";
+import { buildExportIndicatorContext } from "./exportContext.js";
+import type { IndicatorDefinition } from "../indicators/indicatorTypes.js";
 import { useExportPreviewRuntime } from "./exportPreviewRuntime";
 import type { MutableRefObject } from "react";
 import type { ChartSurfaceActions } from "../../chart-adapter/useChartSurfaceRuntime.js";
@@ -20,6 +22,7 @@ import type {
 export interface UseExportRuntimeOptions {
   session: ChartSessionRuntime | null | undefined;
   metadata?: ExportMetadata;
+  indicators?: IndicatorDefinition[];
   resolvedTheme: string;
   chartSurfaceActions: ChartSurfaceActions | null | undefined;
   pageExportRef: MutableRefObject<HTMLElement | null>;
@@ -65,6 +68,7 @@ export function sameDrawingExportTarget(
 export function useExportRuntime({
   session,
   metadata: metadataOverride,
+  indicators,
   resolvedTheme,
   chartSurfaceActions,
   pageExportRef,
@@ -85,9 +89,11 @@ export function useExportRuntime({
     ...(sessionView?.symbol === undefined ? {} : { symbol: sessionView.symbol }),
     ...(sessionView?.interval === undefined ? {} : { interval: sessionView.interval }),
     theme: resolvedTheme,
+    indicators: buildExportIndicatorContext(indicators || []),
     ...metadataOverride,
   }), [
     metadataOverride,
+    indicators,
     resolvedTheme,
     sessionView?.exchange,
     sessionView?.interval,

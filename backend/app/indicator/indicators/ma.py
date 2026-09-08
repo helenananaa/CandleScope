@@ -56,11 +56,12 @@ class MAIndicator(Indicator):
         self._initialized = True
 
     def update_partial(self, bar: BarData) -> None:
-        if len(self._window) < self._period:
+        if len(self._window) + 1 < self._period:
             self._preview["ma"] = None
             return
         val = self._get_field(bar, self._source)
-        preview_sum = self._rolling_sum - self._window[0] + val
+        oldest = self._window[0] if len(self._window) == self._period else 0.0
+        preview_sum = self._rolling_sum - oldest + val
         self._preview["ma"] = preview_sum / self._period
 
     def update_closed(self, bar: BarData) -> None:

@@ -21,7 +21,7 @@ export function runStrategyResearchSmoke(root = repoRoot) {
       throw new Error(`missing ${file}`);
     }
   }
-  const topBar = readFileSync(path.join(root, "frontend/src/app/TopBar.tsx"), "utf8");
+  const topBar = readFileSync(path.join(root, "frontend/src/app/TopBar.tsx"), "utf8") + readFileSync(path.join(root, "frontend/src/app/WorkspaceNavigation.tsx"), "utf8");
   if (!topBar.includes('href="/strategy.html"')) {
     throw new Error("TopBar must link /strategy.html");
   }

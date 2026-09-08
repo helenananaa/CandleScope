@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { mkdtemp, readFile } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
@@ -78,4 +80,27 @@ test("an existing healthy listener cannot impersonate the launched child", async
     await supervisor.stop();
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+
+test("a stopped sidecar leaves no shutdown timer keeping the host alive", async () => {
+  const moduleUrl = new URL("./sidecar-supervisor.mjs", import.meta.url).href;
+  const source = `
+    import { spawn } from "node:child_process";
+    import { once } from "node:events";
+    import { SidecarSupervisor } from ${JSON.stringify(moduleUrl)};
+    const child = spawn(process.execPath, ["-e", "process.send('ready');setInterval(()=>{},1000)"], {
+      stdio: ["ignore", "ignore", "ignore", "ipc"],
+    });
+    await once(child, "message");
+    const supervisor = new SidecarSupervisor({ shutdownTimeoutMs: 15000 });
+    supervisor.child = child;
+    await supervisor.stop();
+    if (child.exitCode === null && child.signalCode === null) throw new Error("child still running");
+    console.log("stopped");
+  `;
+  const { stdout } = await promisify(execFile)(process.execPath, ["--input-type=module", "-e", source], {
+    timeout: 2500,
+  });
+  assert.match(stdout, /stopped/);
 });

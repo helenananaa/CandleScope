@@ -76,12 +76,12 @@ class BOLLIndicator(Indicator):
         return mean, mean + self._mult * std, mean - self._mult * std
 
     def update_partial(self, bar: BarData) -> None:
-        if len(self._window) < self._period:
+        if len(self._window) + 1 < self._period:
             self._preview.update({"middle": None, "upper": None, "lower": None})
             return
 
         val = self._get_field(bar, self._source)
-        old_first = self._window[0]
+        old_first = self._window[0] if len(self._window) == self._period else 0.0
         temp_sum = self._rolling_sum - old_first + val
         temp_sq = self._rolling_sq_sum - old_first * old_first + val * val
 

@@ -24,7 +24,7 @@ function ordinal(order: number, sourceTime: number, sourceOrdinal = 0): OrdinalA
   return { order, sourceTime, sourceOrdinal };
 }
 
-test("cross-surface restore preserves logical density instead of sparse brick count", () => {
+test("cross-surface restore bounds sparse synthetic density to available columns", () => {
   const sourceRows = Array.from({ length: 121 }, (_, index) => ({ time: index }));
   const snapshot = buildSurfaceViewportSnapshot({
     axisMode: "time",
@@ -45,10 +45,10 @@ test("cross-surface restore preserves logical density instead of sparse brick co
   });
 
   const restorePlan = mustBeDefined(plan);
-  assert.deepEqual(restorePlan.logicalRange, { from: -113, to: 7 });
+  assert.deepEqual(restorePlan.logicalRange, { from: -1, to: 7 });
   assert.equal(
     mustBeDefined(restorePlan.logicalRange).to - mustBeDefined(restorePlan.logicalRange).from,
-    120,
+    8,
   );
   assert.equal(restorePlan.barSpacing, null);
   assert.equal(restorePlan.sameSurface, false);
@@ -73,7 +73,9 @@ test("surface snapshots preserve future right whitespace through anchor offsets"
   });
 
   assert.equal(mustBeDefined(snapshot).screenOffset, -26);
-  assert.deepEqual(mustBeDefined(plan).logicalRange, { from: -87, to: 33 });
+  const range = mustBeDefined(mustBeDefined(plan).logicalRange);
+  assert.ok(Math.abs((range.to - range.from) - 8) < 1e-9);
+  assert.ok(Math.abs(range.to - 7 - 26 * 8 / 120) < 1e-9);
 });
 
 test("same ordinal surface restores the exact repeated-source brick", () => {
@@ -157,6 +159,7 @@ test("an explicit dataset transition rebinds only the owned outgoing viewport", 
   }), {
     ...snapshot,
     anchorTime: snapshot.anchorSourceTime,
+    transferredFromDatasetKey: "replay-base|viewer:1m",
     datasetKey: "replay-base|viewer:5m",
   });
   assert.equal(transferSurfaceViewportSnapshot(snapshot, {
@@ -322,4 +325,24 @@ test("viewport coverage rejects an anchor inside an internal source gap", () => 
     { time: 0, sourceFromTime: 0, sourceToTime: 10 },
     { time: 20, sourceFromTime: 20, sourceToTime: 30 },
   ], snapshot), false);
+});
+
+
+test("sparse ordinal dataset transfer adapts spacing but exact-surface zoom is retained", () => {
+  const rows = Array.from({ length: 8 }, (_, index) => ({ time: ordinal(index, index * 60) }));
+  const snapshot = mustBeDefined(buildSurfaceViewportSnapshot({
+    axisMode: "derived-ordinal", datasetKey: "fine", displayRows: rows,
+    surfaceConfigKey: "derived-ordinal:renko", logicalRange: { from: -113, to: 7 }, barSpacing: 5,
+  }));
+  const original = mustBeDefined(planSurfaceViewportRestore(rows, snapshot, {
+    axisMode: "derived-ordinal", datasetKey: "fine", surfaceConfigKey: "derived-ordinal:renko",
+  }));
+  assert.deepEqual(original.logicalRange, { from: -113, to: 7 });
+  assert.equal(original.barSpacing, 5);
+  const transfer = transferSurfaceViewportSnapshot(snapshot, { fromDatasetKey: "fine", toDatasetKey: "coarse" });
+  const adapted = mustBeDefined(planSurfaceViewportRestore(rows, transfer, {
+    axisMode: "derived-ordinal", datasetKey: "coarse", surfaceConfigKey: "derived-ordinal:renko",
+  }));
+  assert.deepEqual(adapted.logicalRange, { from: -1, to: 7 });
+  assert.equal(adapted.barSpacing, null);
 });

@@ -145,7 +145,7 @@ test("Phase 11 live launcher is lazy, modal, and has no v1 fallback", () => {
 
   assert.match(app, /lazy\(loadReplayLauncherDialog\)/);
   assert.match(app, /replayLaunchContext !== null/);
-  assert.match(topBar, /onClick=\{onOpenReplayLauncher\}/);
+  assert.match(topBar, /onReplay=\{\(\) => \{ void loadReplayLauncherDialog\(\); onOpenReplayLauncher\(\); \}\}/);
   assert.doesNotMatch(topBar, /REPLAY_PRODUCT_V2_ENABLED|href=\{replayEntry\.href\}|K 线回放 ↗/);
   assert.match(launcher, /presentation="modal"/);
   assert.match(launcher, /window\.open\("about:blank", "_blank"\)/);

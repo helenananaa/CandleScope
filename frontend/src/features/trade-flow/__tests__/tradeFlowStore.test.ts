@@ -102,3 +102,24 @@ test("observational tape accepts opaque non-contiguous local observations withou
   assert.equal(store.getSnapshot().continuityMode, "observational");
   assert.equal(store.getSnapshot().status, "live");
 });
+
+
+test("empty recent handoff waits for the first actual trade instead of claiming live", () => {
+  const callbacks: Array<() => void> = [];
+  const store = createTradeFlowStore({ scheduler: {
+    request(callback) { callbacks.push(callback); return callbacks.length; },
+    cancel() {},
+  } });
+  assert.equal(store.replaceRecent([]), true);
+  callbacks.shift()?.();
+  assert.equal(store.getSnapshot().status, "waiting");
+  assert.equal(store.getSnapshot().records.length, 0);
+  assert.equal(store.appendBatch([]), true);
+  assert.equal(callbacks.length, 0);
+  assert.equal(store.getSnapshot().status, "waiting");
+  assert.equal(store.appendBatch([trade(1)]), true);
+  callbacks.shift()?.();
+  assert.equal(store.getSnapshot().status, "live");
+  assert.equal(store.getSnapshot().records.length, 1);
+  store.destroy();
+});

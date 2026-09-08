@@ -16,7 +16,7 @@ test("default-on release keeps explicit dual-flag rollback", () => {
   assert.equal(resolveStrategyResearchBootstrap({ libraryEnabled: false, page: "local" }), "local-legacy");
   assert.equal(resolveStrategyResearchBootstrap({ libraryEnabled: false, page: "backtest" }), "backtest-legacy");
   assert.equal(resolveStrategyResearchBootstrap({ libraryEnabled: false, page: "strategy" }), "unified");
-  const topBar = readFileSync(path.join(repoRoot, "frontend/src/app/TopBar.tsx"), "utf8");
+  const topBar = readFileSync(path.join(repoRoot, "frontend/src/app/WorkspaceNavigation.tsx"), "utf8");
   assert.match(topBar, /href="\/strategy\.html"/);
   assert.doesNotMatch(topBar, /href="\/backtest\.html"/);
 });

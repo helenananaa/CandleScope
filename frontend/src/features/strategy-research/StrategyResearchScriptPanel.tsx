@@ -10,6 +10,9 @@ import {
 } from "react";
 
 import { t } from "../../i18n/index.js";
+import { StrategyConditionsEditor } from "../backtest/chart-tester/StrategyConditionsEditor.js";
+import { StrategyParametersEditor } from "../backtest/chart-tester/StrategyParametersEditor.js";
+import { DEFAULT_STRATEGY_RUN_SETTINGS, validStrategyRunSettings, type StrategyRunSettings } from "../../shared/strategyRunSettings.js";
 import type { ChartSession } from "../chart-session/chartSessionTypes.js";
 import {
   CHART_STRATEGY_TEMPLATES,
@@ -62,6 +65,8 @@ export function StrategyResearchScriptPanel({
   onRun,
   onConfirmNeedsData,
   onOpenAdvanced,
+  configuration = DEFAULT_STRATEGY_RUN_SETTINGS,
+  onConfigure,
 }: {
   cellScope: string;
   session: ChartSession | null;
@@ -75,12 +80,21 @@ export function StrategyResearchScriptPanel({
   onRun(request: ChartStrategyRunRequest): void;
   onConfirmNeedsData(): void;
   onOpenAdvanced(): void;
+  configuration?: StrategyRunSettings | undefined;
+  onConfigure?(settings: StrategyRunSettings): void;
 }) {
   const draftStore = useMemo(() => getChartStrategyDraftStore(), []);
   const [draft, setDraft] = useState<StrategyDraftRecord | null>(null);
   const [source, setSource] = useState("");
   const [cursor, setCursor] = useState<StrategyDraftCursor | null>(null);
   const [openEditor, setOpenEditor] = useState(false);
+  const [pane, setPane] = useState<"parameters" | "code" | "conditions">("parameters");
+  const [recentDrafts, setRecentDrafts] = useState<StrategyDraftRecord[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void draftStore.recent(20).then((records) => { if (!cancelled) setRecentDrafts(records); });
+    return () => { cancelled = true; };
+  }, [draftId, draftStore]);
   const restoreGenerationRef = useRef(0);
   const restorePromiseRef = useRef<Promise<void> | null>(null);
   const pendingSavePromiseRef = useRef<Promise<StrategyDraftRecord> | null>(null);
@@ -231,6 +245,7 @@ export function StrategyResearchScriptPanel({
 
   const run = useCallback(() => {
     if (draft === null || session === null) return;
+    if (!validStrategyRunSettings(configuration)) { setPane("conditions"); return; }
     onRun({
       cellScope,
       session,
@@ -246,14 +261,13 @@ export function StrategyResearchScriptPanel({
         displayName: draft.displayName,
         language: draft.language,
         parameters: {},
-        rangeMode: "ALL_AVAILABLE",
-        customRange: null,
         fidelityPreference: "FAST",
         quickPresetId: chartStrategyQuickPresetIdForMarket(session.marketType),
         autoRun: false,
+        ...configuration,
       },
     });
-  }, [cellScope, draft, onRun, session, source]);
+  }, [cellScope, configuration, draft, onRun, session, source]);
 
   if (session === null || sourceKind === null) {
     return <p data-testid="strategy-research-script-empty">{t("strategy.scriptSlot")}</p>;
@@ -261,6 +275,13 @@ export function StrategyResearchScriptPanel({
 
   return (
     <section className="strategy-research-script-panel" data-testid="strategy-research-script-panel">
+      <header><strong>{draft?.displayName ?? t("strategy.scriptSlot")}</strong></header>
+      {recentDrafts.length > 0 && <label className="strategy-condition-range">{t("chartTester.recentTitle")}
+        <select value={draftId ?? ""} onChange={(event) => onDraftId(event.target.value || null)}>
+          <option value="">{t("chartTester.autosave.none")}</option>
+          {recentDrafts.map((record) => <option key={record.id} value={record.id}>{record.displayName}</option>)}
+        </select>
+      </label>}
       {barOnly ? (
         <p className="strategy-research-bar-only" data-testid="strategy-research-bar-only">
           {t("chartTester.result.fidelityFast")}
@@ -289,7 +310,12 @@ export function StrategyResearchScriptPanel({
         </div>
       ) : (
         <>
-          {openEditor ? (
+          <div className="research-library-tabs" role="tablist" aria-label={t("strategy.scriptSlot")}>
+            {(["parameters", "code", "conditions"] as const).map((value) => <button type="button" role="tab" key={value} aria-selected={pane === value} onClick={() => setPane(value)}>{t(value === "parameters" ? "ux.parameters" : value === "code" ? "chartTester.tab.script" : "chartTester.tab.settings")}</button>)}
+          </div>
+          {pane === "parameters" && <StrategyParametersEditor source={source} onChange={setSource} />}
+          {pane === "conditions" && onConfigure && <StrategyConditionsEditor settings={configuration} marketType={session.marketType} onChange={onConfigure} />}
+          {openEditor && pane === "code" ? (
             <Suspense fallback={<p>{t("strategy.scriptSlot")}</p>}>
               <StrategyScriptWorkspace
                 source={source}
@@ -307,10 +333,11 @@ export function StrategyResearchScriptPanel({
           <button
             type="button"
             data-testid="strategy-research-run"
-            disabled={runStatus === "RUNNING" || runStatus === "QUEUED" || runStatus === "RESOLVING"}
-            onClick={run}
+            className="research-primary"
+            disabled={!validStrategyRunSettings(configuration) || runStatus === "RUNNING" || runStatus === "QUEUED" || runStatus === "RESOLVING"}
+            onClick={needsData ? onConfirmNeedsData : run}
           >
-            {t("chartTester.run")}
+            {t(needsData ? "chartTester.prepareDataRun" : "chartTester.run")}
           </button>
           <button
             type="button"
@@ -322,15 +349,6 @@ export function StrategyResearchScriptPanel({
           </button>
         </>
       )}
-      {needsData ? (
-        <button
-          type="button"
-          data-testid="strategy-research-confirm-data"
-          onClick={onConfirmNeedsData}
-        >
-          {t("chartTester.prepareDataRun")}
-        </button>
-      ) : null}
     </section>
   );
 }

@@ -24,9 +24,9 @@ import {
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 test("TopBar strategy entry is /strategy.html and not a sibling 策略回测 link", () => {
-  const topBar = readFileSync(path.resolve(here, "../../../app/TopBar.tsx"), "utf8");
+  const topBar = readFileSync(path.resolve(here, "../../../app/TopBar.tsx"), "utf8") + readFileSync(path.resolve(here, "../../../app/WorkspaceNavigation.tsx"), "utf8");
   assert.match(topBar, /href="\/strategy\.html"/);
-  assert.match(topBar, /shell\.strategy/);
+  assert.match(topBar, /ux\.research/);
   assert.doesNotMatch(topBar, /href="\/backtest\.html"/);
   assert.doesNotMatch(topBar, /shell\.backtest/);
 });

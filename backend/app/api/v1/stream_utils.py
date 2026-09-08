@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
 
 from app.core import config
 from app.core.market import VALID_INTERVALS, parse_custom_interval
@@ -15,11 +15,27 @@ def ws_send_timeout() -> float:
     return max(0.1, float(config.WS_SEND_TIMEOUT_SECONDS))
 
 
+def _closed_transport_error(error: RuntimeError) -> bool:
+    # Uvicorn can observe the peer close before Starlette's receive task does.
+    # Checking WebSocket.application_state before sending cannot cover that
+    # race. Normalize only the known terminal send errors, not arbitrary bugs.
+    return str(error) in {
+        "Unexpected ASGI message 'websocket.send', after sending 'websocket.close' "
+        "or response already completed.",
+        'Cannot call "send" once a close message has been sent.',
+    }
+
+
 async def send_json_with_timeout(websocket: WebSocket, data: dict) -> None:
     try:
         await asyncio.wait_for(websocket.send_json(data), timeout=ws_send_timeout())
     except asyncio.TimeoutError:
         ws_runtime_metrics.record_send_timeout("json")
+        raise
+    except RuntimeError as exc:
+        if _closed_transport_error(exc):
+            raise WebSocketDisconnect(code=1006) from exc
+        ws_runtime_metrics.record_send_error("json")
         raise
     except Exception:
         ws_runtime_metrics.record_send_error("json")
@@ -31,6 +47,11 @@ async def send_text_with_timeout(websocket: WebSocket, data: str) -> None:
         await asyncio.wait_for(websocket.send_text(data), timeout=ws_send_timeout())
     except asyncio.TimeoutError:
         ws_runtime_metrics.record_send_timeout("text")
+        raise
+    except RuntimeError as exc:
+        if _closed_transport_error(exc):
+            raise WebSocketDisconnect(code=1006) from exc
+        ws_runtime_metrics.record_send_error("text")
         raise
     except Exception:
         ws_runtime_metrics.record_send_error("text")

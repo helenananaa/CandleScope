@@ -179,3 +179,31 @@ test("ordinary overview exposes directional deltas only for exact compatible Run
   assert.doesNotMatch(incompatible, /chart-strategy-run-comparison-grid/);
   assert.doesNotMatch(incompatible, /新增 2/);
 });
+
+test("drawdown card explains absent reports, insufficient samples and genuine zero", () => {
+  const render = (risk?: Record<string, unknown>) => {
+    const copy = structuredClone(result);
+    if (risk) copy.report.performance = { risk } as NonNullable<typeof copy.report.performance>;
+    return renderToStaticMarkup(<ChartStrategyResultOverview result={copy} stale={false} onOpenTrades={() => undefined} />);
+  };
+  assert.match(render(), /报告未提供该指标/);
+  assert.match(render({ max_drawdown: { value: null, reason: "INSUFFICIENT_EQUITY_SAMPLES" } }), /权益采样不足，无法统计/);
+  assert.match(render({ max_drawdown: { value: null, reason: "UNSUPPORTED" } }), /报告标记该指标不可用/);
+  const zero = render({ max_drawdown: { value: "0", reason: null } });
+  assert.match(zero, /按报告权益采样统计/);
+  assert.match(zero, /title="0"[^>]*>0<\/strong>/);
+});
+
+
+test("integrated overview preserves raw signed values, localized report labels and zero-trade win rates", () => {
+  const copy = structuredClone(result);
+  copy.report.report_label = "APPROXIMATE";
+  copy.report.metrics.realized_net_pnl = "-1234.5678";
+  copy.report.metrics.win_rate = "0.5";
+  const render = () => renderToStaticMarkup(<ChartStrategyResultOverview result={copy} stale={false} onOpenTrades={() => undefined} />);
+  const zero = render();
+  assert.match(zero, /title="-1234.5678" class="negative">-1,234.57 USDT/);
+  assert.doesNotMatch(zero, /APPROXIMATE|>50%<\/strong>/);
+  copy.report.metrics.trade_count = 2;
+  assert.match(render(), />50%<\/strong>/);
+});

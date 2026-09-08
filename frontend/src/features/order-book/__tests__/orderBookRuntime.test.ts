@@ -173,12 +173,18 @@ test("latest-only store coalesces frames and stale status cancels pending books"
   frames.get(1)?.();
   assert.equal(store.getSnapshot().book?.revision, 2);
   assert.equal(notifications, 1);
+  assert.equal(store.getSnapshot().lastReceivedAtMs, parsedBook("partial", 2).receivedAtMs);
 
   store.publishBook(parsedBook("partial", 3));
   store.publishStatus("stale", { message: "silent", clearBook: true });
   assert.equal(store.getSnapshot().status, "stale");
   assert.equal(store.getSnapshot().book, null);
   assert.equal(frames.has(2), false);
+  assert.equal(store.getSnapshot().lastReceivedAtMs, parsedBook("partial", 2).receivedAtMs);
+  store.publishStatus("reconnecting", { clearBook: true });
+  assert.equal(store.getSnapshot().lastReceivedAtMs, parsedBook("partial", 2).receivedAtMs);
+  store.reset();
+  assert.equal(store.getSnapshot().lastReceivedAtMs, null);
 });
 
 test("preference loading clamps height and rejects corrupt enum values", () => {
@@ -314,6 +320,54 @@ test("P4 controller verifies immutable subscription, publishes live, and clears 
   assert.equal(unsubscribe.action, "unsubscribe");
   assert.equal(socket.closed, true);
 });
+
+for (const mode of ["partial", "full"] as const) {
+  test(`${mode} subscription without a first book becomes retryable and recovers on data`, () => {
+    const socket = new FakeSocket();
+    const { store, flush } = flushableStore();
+    const timers = new Map<number, { callback: () => void; delay: number }>();
+    let timerId = 0;
+    const controller = new OrderBookStreamController({
+      url: "ws://example/order-book",
+      identity: { exchange: "binance", marketType: "futures", symbol: "BTCUSDT" },
+      mode, partialDepth: 20, updateIntervalMs: 250,
+      fullOutputLimit: 100, fullPriceGrouping: "auto", staleAfterMs: 1_234, store,
+      socketFactory: () => socket,
+      setTimer: (callback, delay) => {
+        timers.set(++timerId, { callback, delay });
+        return timerId as unknown as ReturnType<typeof setTimeout>;
+      },
+      clearTimer: (handle) => { timers.delete(handle as unknown as number); },
+    });
+    controller.start();
+    socket.open();
+    socket.message({ type: "connected", protocol: mode === "partial" ? "orderbook.v1" : "orderbook.full.v1" });
+    const subscribe = JSON.parse(socket.sent[0] || "{}") as {
+      request_id: string;
+      streams: Array<Record<string, unknown> & { params: Record<string, unknown> }>;
+    };
+    if (mode === "full") {
+      const stream = subscribe.streams[0]!;
+      stream.output_limit = stream.params.output_limit;
+      stream.price_grouping = stream.params.price_grouping;
+      delete stream.params.output_limit;
+      delete stream.params.price_grouping;
+    }
+    socket.message({ type: "subscribed", request_id: subscribe.request_id, streams: subscribe.streams });
+    const entry = [...timers.entries()].find(([, timer]) => timer.delay === 1_234);
+    assert.ok(entry, "first-book watchdog starts when subscription is acknowledged");
+    timers.delete(entry[0]);
+    entry[1].callback();
+    assert.equal(store.getSnapshot().status, "stale");
+    assert.equal(store.getSnapshot().book, null);
+    socket.message({ type: mode === "partial" ? "order_book.snapshot" : "full_order_book.snapshot", state: "live", data: wireRecord(mode, 7) });
+    flush();
+    assert.equal(store.getSnapshot().status, "live");
+    assert.equal(timers.size, mode === "partial" ? 1 : 0);
+    controller.close();
+    assert.equal(timers.size, 0);
+  });
+}
 
 test("P3 controller clears a snapshot when its client freshness watchdog expires", () => {
   const socket = new FakeSocket();

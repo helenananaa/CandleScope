@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 
@@ -18,6 +19,40 @@ from tests.test_manual_history_planner import FakeResolver
 START = 1_700_000_040_000
 STEP = 60_000
 BARS = 5
+
+
+@pytest.mark.parametrize("blocked", [False, True])
+def test_idle_runner_only_probes_storage_when_a_blocked_job_needs_recovery(blocked):
+    async def scenario():
+        probes = []
+        transitions = []
+        targets_reset = []
+        service = None
+
+        def recoverable():
+            service._stop.set()  # Exercise exactly one scheduler iteration.
+            return [SimpleNamespace(job_id="blocked", state=JobState.BLOCKED_STORAGE)] if blocked else []
+
+        def pressure():
+            probes.append(True)
+            return {"level": "normal"}
+
+        repository = SimpleNamespace(
+            list_recoverable_jobs=recoverable,
+            reset_recoverable_targets=targets_reset.append,
+            cas_job_state=lambda job_id, **kwargs: transitions.append((job_id, kwargs)),
+        )
+        service = ManualHistoryService(
+            repository=repository, data_manager=SimpleNamespace(),
+            enabled=True, storage_pressure=pressure,
+        )
+        await service._run_loop()
+        assert len(probes) == int(blocked)
+        assert targets_reset == (["blocked"] if blocked else [])
+        assert len(transitions) == int(blocked)
+        if blocked:
+            assert transitions[0][1]["to_state"] == JobState.QUEUED
+    asyncio.run(scenario())
 
 
 def _row(open_time: int) -> dict:

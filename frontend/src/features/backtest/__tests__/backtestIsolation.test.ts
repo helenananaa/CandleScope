@@ -35,12 +35,12 @@ test("backtest and research entries default on with explicit rollback flags", ()
 });
 
 test("live top bar exposes the enabled backtest entry without coupling to replay state", () => {
-  const topBar = readFileSync(join(featureRoot, "..", "..", "app", "TopBar.tsx"), "utf8");
+  const topBar = readFileSync(join(featureRoot, "..", "..", "app", "TopBar.tsx"), "utf8") + readFileSync(join(featureRoot, "..", "..", "app", "WorkspaceNavigation.tsx"), "utf8");
   assert.match(topBar, /isBacktestEntryEnabled\(\)/);
   assert.match(topBar, /data-backtest-entry="enabled"/);
   assert.match(topBar, /data-strategy-entry="enabled"/);
   assert.match(topBar, /href="\/strategy\.html"/);
-  assert.match(topBar, /t\("shell\.strategy"\)/);
+  assert.match(topBar, /t\("ux\.research"\)/);
   assert.doesNotMatch(topBar, /href="\/backtest\.html"/);
   assert.doesNotMatch(topBar, /t\("shell\.backtest"\)/);
 });

@@ -180,3 +180,14 @@ test("runtime catalog rejects a routed language with an unknown runtime", () => 
     /unknown runtime id missing\.runtime/,
   );
 });
+
+
+test("uninstalled runtime routes remain unavailable without invalidating the catalog", () => {
+  const missing = structuredClone(payload);
+  missing.runtimes = [];
+  for (const language of missing.languages) language.available = false;
+  const catalog = parseScriptRuntimeCatalog(missing);
+  assert.equal(catalog.languages.length, missing.languages.length);
+  assert.equal(resolveAvailableScriptLanguage(catalog, "pyne"), null);
+  assert.equal(resolveAvailableScriptLanguage(catalog, ""), null);
+});

@@ -7,6 +7,7 @@ import type { ChartStrategyResultBundle } from "../backtest/chart-tester/chartSt
 import { chartStrategyQuickPresetIdForMarket } from "../backtest/chart-tester/chartStrategyRunRequest.js";
 import type { ChartSession } from "../chart-session/chartSessionTypes.js";
 import type { ResearchSourceRefV1 } from "../research-data/researchDataTypes.js";
+import type { StrategyRunSettings } from "../../shared/strategyRunSettings.js";
 
 export function strategyResearchAdvancedCellId(source: ResearchSourceRefV1 | null): "imported" | "current" {
   return source?.kind === "IMPORTED_DATASET" ? "imported" : "current";
@@ -17,6 +18,7 @@ export async function createStrategyResearchAdvancedHref(input: {
   session: ChartSession;
   draftId: string;
   result: ChartStrategyResultBundle | null;
+  configuration?: StrategyRunSettings | undefined;
 }): Promise<string> {
   const payload = buildBacktestResearchLaunchContext({
     workspaceId: "strategy-research",
@@ -34,6 +36,7 @@ export async function createStrategyResearchAdvancedHref(input: {
       fidelityPreference: "FAST",
       quickPresetId: chartStrategyQuickPresetIdForMarket(input.session.marketType),
       autoRun: false,
+      ...input.configuration,
     },
     result: input.result,
     resolution: null,

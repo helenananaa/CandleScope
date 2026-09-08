@@ -126,6 +126,20 @@ test("symbol filter combines market, exchange, quote, search, and favorites", ()
   }), [symbols[0]]);
 });
 
+test("pair search accepts common separators without changing identities or filters", () => {
+  const btc = { symbol: "BTC-USDT-SWAP", baseAsset: "BTC", quoteAsset: "USDT", exchange: "okx", marketType: "futures", _key: "okx:futures:BTC-USDT-SWAP" };
+  const spot = { ...btc, symbol: "BTCUSDT", exchange: "binance", marketType: "spot", _key: "binance:spot:BTCUSDT" };
+  const eth = { ...btc, symbol: "ETH-USDT-SWAP", baseAsset: "ETH", _key: "okx:futures:ETH-USDT-SWAP" };
+  const options = { allSymbols: [btc, spot, eth], marketType: "futures", exchangeFilter: new Set(["okx"]), quoteFilter: "USDT", favorites: [] };
+  for (const search of ["BTC/USDT", " btcusdt ", "btc-usdt", "BTC_USDT", "BTC / USDT"]) {
+    assert.deepEqual(filterSymbols({ ...options, search }), [btc]);
+    assert.deepEqual(filterSymbols({ ...options, marketType: "spot", exchangeFilter: new Set(["binance"]), search }), [spot]);
+  }
+  assert.deepEqual(filterSymbols({ ...options, search: "/" }), []);
+  assert.deepEqual(filterSymbols({ ...options, search: "BTC/EUR" }), []);
+  assert.deepEqual(filterSymbols({ ...options, search: "BTC/USDT", quoteFilter: "BTC" }), []);
+});
+
 test("capability catalog exposes unloaded exchanges and exact CCXT market types", () => {
   const exchangeCatalog = {
     aster: { label: "Aster", markets: [] },

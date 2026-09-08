@@ -1,4 +1,6 @@
 import { toCanvas } from "html-to-image";
+import { freezePageCapture } from "./freezePageCapture.js";
+import { buildExportContextLines, wrapExportContext } from "./exportContext.js";
 import { t } from "../../i18n/index.js";
 import {
   assertExportPixelBudget,
@@ -24,6 +26,7 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   quality: 0.92,
   backgroundColor: "auto",
   hideDrawings: false,
+  includeContext: true,
   watermarkEnabled: false,
   watermarkText: "",
   filenamePrefix: "candlescope",
@@ -162,9 +165,17 @@ function finalizeCanvas(
 ): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = sourceCanvas.width;
-  canvas.height = sourceCanvas.height;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error(t("export.canvasFailed"));
+
+  const font = `${12 * options.scale}px Inter, system-ui, -apple-system, sans-serif`;
+  const padding = 12 * options.scale;
+  const lineHeight = 18 * options.scale;
+  ctx.font = font;
+  const contextLines = wrapExportContext(buildExportContextLines(options), Math.max(1, canvas.width - padding * 2), (text) => ctx.measureText(text).width);
+  const headerHeight = contextLines.length ? contextLines.length * lineHeight + padding * 2 : 0;
+  assertExportPixelBudget(canvas.width, sourceCanvas.height + headerHeight, 1);
+  canvas.height = sourceCanvas.height + headerHeight;
 
   const background = resolveBackgroundColor(targetElement, options.backgroundColor, options.format);
   if (background || options.format === "jpeg") {
@@ -172,7 +183,16 @@ function finalizeCanvas(
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
-  ctx.drawImage(sourceCanvas, 0, 0);
+  ctx.drawImage(sourceCanvas, 0, headerHeight);
+  if (headerHeight) {
+    const light = options.metadata?.theme === "light";
+    ctx.fillStyle = light ? "#f8fafc" : "#0f172a";
+    ctx.fillRect(0, 0, canvas.width, headerHeight);
+    ctx.fillStyle = light ? "#1e293b" : "#e2e8f0";
+    ctx.font = font;
+    ctx.textBaseline = "top";
+    contextLines.forEach((line, index) => ctx.fillText(line, padding, padding + index * lineHeight));
+  }
 
   if (options.watermarkEnabled) {
     const watermark = options.watermarkText?.trim() || buildDefaultWatermark(options.metadata);
@@ -306,6 +326,7 @@ function captureCanvasFallback(
 async function captureElementToCanvas(
   targetElement: HTMLElement,
   options: ExportOptions,
+  lifecycle: ExportCaptureLifecycle,
 ): Promise<HTMLCanvasElement> {
   const rect = targetElement.getBoundingClientRect();
   const scale = Number(options.scale) || 1;
@@ -326,8 +347,27 @@ async function captureElementToCanvas(
     }
   }
 
+  // Fix DOM, computed styles and canvas pixels before releasing the drawing
+  // lease. Async DOM rasterization must never read from the live scene.
+  const captureTarget = options.scope === "page"
+    ? freezePageCapture(targetElement, shouldIncludeNode)
+    : targetElement;
+  const snapshotHost = options.scope === "page" ? document.createElement("div") : null;
+
   try {
-    return await toCanvas(targetElement, {
+    if (snapshotHost) {
+      await lifecycle.afterCapture?.();
+      // html-to-image reads computed styles while cloning. A detached tree
+      // loses those styles in Chromium, so mount only the frozen copy offscreen.
+      snapshotHost.style.cssText = `position:fixed;left:-100000px;top:0;width:${rect.width}px;height:${rect.height}px;pointer-events:none;contain:strict`;
+      snapshotHost.setAttribute("aria-hidden", "true");
+      snapshotHost.inert = true;
+      captureTarget.style.width = `${rect.width}px`;
+      captureTarget.style.height = `${rect.height}px`;
+      snapshotHost.appendChild(captureTarget);
+      document.body.appendChild(snapshotHost);
+    }
+    return await toCanvas(captureTarget, {
       ...(backgroundColor === undefined ? {} : { backgroundColor }),
       cacheBust: true,
       filter: shouldIncludeNode,
@@ -344,6 +384,8 @@ async function captureElementToCanvas(
   } catch (error) {
     if (options.scope === "page") throw error;
     return captureCanvasFallback(targetElement, options);
+  } finally {
+    snapshotHost?.remove();
   }
 }
 
@@ -386,6 +428,11 @@ function metadataFrom(value: unknown): ExportMetadata | undefined {
   for (const key of ["exchange", "marketType", "symbol", "interval", "theme"] as const) {
     if (typeof value[key] === "string") metadata[key] = value[key];
   }
+  if (Array.isArray(value.indicators)) {
+    metadata.indicators = value.indicators.filter(isRecord)
+      .filter((indicator) => typeof indicator.label === "string")
+      .map((indicator) => ({ label: indicator.label as string, mainPane: indicator.mainPane === true }));
+  }
   return metadata;
 }
 
@@ -406,6 +453,7 @@ export function normalizeExportOptions(rawOptions: unknown = {}): ExportOptions 
     hideDrawings: typeof raw.hideDrawings === "boolean"
       ? raw.hideDrawings
       : DEFAULT_EXPORT_OPTIONS.hideDrawings,
+    includeContext: typeof raw.includeContext === "boolean" ? raw.includeContext : DEFAULT_EXPORT_OPTIONS.includeContext,
     watermarkEnabled: typeof raw.watermarkEnabled === "boolean"
       ? raw.watermarkEnabled
       : DEFAULT_EXPORT_OPTIONS.watermarkEnabled,
@@ -435,6 +483,7 @@ export function buildExportOptionsKey(rawOptions: unknown = {}): string {
     quality: Number(options.quality) || DEFAULT_EXPORT_OPTIONS.quality,
     backgroundColor: options.backgroundColor || "auto",
     hideDrawings: !!options.hideDrawings,
+    includeContext: options.includeContext,
     watermarkEnabled: !!options.watermarkEnabled,
     watermarkText: options.watermarkText || "",
     filenamePrefix: options.filenamePrefix || "candlescope",
@@ -444,6 +493,7 @@ export function buildExportOptionsKey(rawOptions: unknown = {}): string {
     symbol: metadata.symbol || "",
     interval: metadata.interval || "",
     theme: metadata.theme || "",
+    indicators: metadata.indicators || [],
   });
 }
 
@@ -472,8 +522,8 @@ export async function renderExportImage(
     throw new Error(t("export.chartNotReady"));
   }
 
-  const capturedCanvas = await captureElementToCanvas(targetElement, options);
-  await lifecycle.afterCapture?.();
+  const capturedCanvas = await captureElementToCanvas(targetElement, options, lifecycle);
+  if (options.scope !== "page") await lifecycle.afterCapture?.();
   const scopedCanvas = options.scope === "main-pane"
     ? cropCapturedCanvas(capturedCanvas, snapshot?.mainPane?.captureRect, targetElement)
     : capturedCanvas;

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { listenForSearchEscape } from "./searchEscape.js";
 import { markPerf } from "../../runtime/performance/perfMarks";
 import { useSymbolCatalogRuntime } from "./symbolCatalogRuntime";
 import { useSymbolFavoritesStore } from "./symbolFavoritesStore";
@@ -281,16 +282,15 @@ export function useSymbolSearchRuntime({
     setContextMenu(null);
   }, [contextMenu, onAddToWatchlist]);
 
+  useEffect(() => {
+    if (!open) return undefined;
+    return listenForSearchEscape(document, () => {
+      if (contextMenu) setContextMenu(null);
+      else onClose();
+    });
+  }, [open, contextMenu, onClose]);
+
   const handleKeyDown = useCallback((event: ReactKeyboardEvent) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      if (contextMenu) {
-        setContextMenu(null);
-        return;
-      }
-      onClose();
-      return;
-    }
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setHighlightIndex((prev) => {
@@ -323,7 +323,7 @@ export function useSymbolSearchRuntime({
         selectSymbol(filteredSymbols[highlightIndex]);
       }
     }
-  }, [contextMenu, filteredSymbols, highlightIndex, onClose, scrollTop, selectSymbol]);
+  }, [filteredSymbols, highlightIndex, scrollTop, selectSymbol]);
 
   const handleScroll = useCallback((event: ReactUIEvent<HTMLDivElement>) => {
     setScrollTop(event.currentTarget.scrollTop);

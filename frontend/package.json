@@ -22,7 +22,9 @@
       {
         "from": "../packages/candlescope-backtest-sdk/src",
         "to": "packages/candlescope-backtest-sdk/src",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "../backend",
@@ -38,6 +40,13 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": ".desktop-runtime/runtime",
+        "to": "python-runtime",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {
@@ -45,7 +54,9 @@
       "target": [
         "dir"
       ]
-    }
+    },
+    "beforePack": "scripts/check-desktop-runtime.cjs",
+    "afterPack": "scripts/compile-desktop-python.cjs"
   },
   "overrides": {
     "dompurify": "3.4.13"
@@ -73,7 +84,7 @@
     "check:plugins": "node scripts/check-plugin-platform.mjs",
     "check": "npm run check:architecture && npm run check:plugins && npm run check:i18n && npm run typecheck && npm run lint && npm test && npm run test:desktop && npm run build",
     "desktop:dev": "electron desktop/main.mjs",
-    "desktop:package:dir": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/desktop-phase6-package.ps1",
+    "desktop:package:dir": "node scripts/package-desktop.mjs",
     "desktop:spike": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/desktop-phase6-spike.ps1",
     "desktop:release:phase6": "node scripts/desktop-phase6-release.mjs --create ../output/playwright/multi-chart-phase6/desktop-spike.json --restore ../output/playwright/multi-chart-phase6/desktop-restore.json --packaged ../output/playwright/multi-chart-phase6/desktop-packaged.json --out ../docs/perf-baselines/multi-chart-workspace/phase6-desktop-shell-20260807.json",
     "desktop:spike:phase7": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/desktop-phase7-spike.ps1",
@@ -111,7 +122,8 @@
     "smoke:release": "tsx scripts/smoke.mjs --url http://127.0.0.1:15173/ --chart-type-matrix --export-matrix --drawing-check --overlay-heavy",
     "smoke:drawing:controlled": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/drawing-controlled-cdp-smoke.ps1",
     "check:drawing:rollback-drills:browser": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/drawing-rollback-drills-browser.ps1",
-    "test:drawing": "tsx --test --test-concurrency=4 \"src/features/drawings/**/*.test.{ts,tsx}\""
+    "test:drawing": "tsx --test --test-concurrency=4 \"src/features/drawings/**/*.test.{ts,tsx}\"",
+    "desktop:runtime:prepare": "node scripts/prepare-desktop-runtime.mjs"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",

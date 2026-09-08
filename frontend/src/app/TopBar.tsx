@@ -20,6 +20,8 @@ import { useAdvancedMarketSummary } from "../features/advanced-market-data/useAd
 import { t } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
 import MarketTopBarFrame from "./MarketTopBarFrame.js";
+import { AlertRailIcon, CapabilityRailIcon, ProfileRailIcon } from "./marketRailIcons.js";
+import WorkspaceNavigation from "./WorkspaceNavigation.js";
 
 export interface TopBarSymbolSearchModel extends Omit<SymbolSearchProps, "onSelect"> {
   onSelectSymbol: SymbolSearchProps["onSelect"];
@@ -82,47 +84,35 @@ function TopBar({
     ? "--"
     : `${advancedSummary.basis >= 0 ? "+" : "-"}${formatPrice(Math.abs(advancedSummary.basis))}`;
 
+  const marketMetrics = (
+    <div
+      className={`advanced-market-summary advanced-market-summary-${advancedSummary.connectionStatus}`}
+      aria-label={t("shell.derivativesSummary")}
+    >
+      <div className="advanced-market-chip" data-market-metric="mark-price">
+        <span className="advanced-market-chip-label">{t("shell.mark")}</span>
+        <span className="advanced-market-chip-value">{formatPrice(advancedSummary.markPrice)}</span>
+      </div>
+      <div className="advanced-market-chip" data-market-metric="index-price">
+        <span className="advanced-market-chip-label">{t("shell.index")}</span>
+        <span className="advanced-market-chip-value">{formatPrice(advancedSummary.indexPrice)}</span>
+      </div>
+      <div className="advanced-market-chip" data-market-metric="basis">
+        <span className="advanced-market-chip-label">{t("shell.basis")}</span>
+        <span className="advanced-market-chip-value">{basisText}</span>
+        {advancedSummary.basisBps != null && (
+          <span className="advanced-market-chip-suffix">
+            {advancedSummary.basisBps >= 0 ? "+" : ""}{advancedSummary.basisBps.toFixed(2)} bps
+          </span>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <MarketTopBarFrame
       source="live"
-      navigation={<>
-        {replayEntry.state === "enabled" && (
-        <button
-          className="replay-entry-link"
-          data-replay-entry="enabled"
-          type="button"
-          onPointerEnter={loadReplayLauncherDialog}
-          onMouseEnter={loadReplayLauncherDialog}
-          onFocus={loadReplayLauncherDialog}
-          onClick={onOpenReplayLauncher}
-        >
-          {t("shell.replay")}
-        </button>
-        )}
-        {(replayEntry.state === "checking" || replayEntry.state === "disabled") && (
-        <button
-          className="replay-entry-link replay-entry-disabled"
-          data-replay-entry={replayEntry.state}
-          type="button"
-          disabled
-          title={replayEntry.reason}
-        >
-          {t("shell.replay")}
-        </button>
-        )}
-        {backtestEntryEnabled && (
-        <a
-          className="replay-entry-link backtest-entry-link"
-          data-backtest-entry="enabled"
-          data-strategy-entry="enabled"
-          href="/strategy.html"
-          target="_blank"
-          rel="noreferrer"
-        >
-          {t("shell.strategy")}
-        </a>
-        )}
-      </>}
+      taskNavigation={<WorkspaceNavigation active="live" onReplay={() => { void loadReplayLauncherDialog(); onOpenReplayLauncher(); }} replayDisabled={replayEntry.state !== "enabled"} replayReason={replayEntry.state === "enabled" ? undefined : replayEntry.reason} researchEnabled={backtestEntryEnabled} />}
       identity={<>
         <SymbolSearch
           currentSymbol={currentSymbol}
@@ -137,7 +127,7 @@ function TopBar({
       </>}
       controls={<>
         <button
-        className="settings-btn"
+        className="settings-btn indicator-toggle-btn"
         title={t("shell.settings")}
         aria-label={t("shell.settings")}
         onPointerEnter={loadSettingsModal}
@@ -148,24 +138,18 @@ function TopBar({
           markPerf("lazy.settings.open.start", { trigger: "button" });
           onOpenSettings();
         }}
-        style={{
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          fontSize: "18px",
-          padding: "4px",
-          display: "flex",
-        }}
       >
-        ⚙️
+        <span aria-hidden="true" style={{ display: "flex" }}><CapabilityRailIcon /></span>
         </button>
 
         <button
         className={`indicator-toggle-btn ${indicatorPanelOpen ? "active" : ""}`}
         onClick={onToggleIndicatorPanel}
         title={t("shell.indicators")}
+        aria-label={`${t("shell.indicators")} ${activeIndicatorCount}`}
+        aria-expanded={indicatorPanelOpen}
       >
-        📊
+        <span aria-hidden="true" style={{ display: "flex" }}><ProfileRailIcon /></span>
         {activeIndicatorCount > 0 && (
           <span className="indicator-badge">{activeIndicatorCount}</span>
         )}
@@ -175,8 +159,10 @@ function TopBar({
         className={`indicator-toggle-btn alert-toggle-btn ${alertPanelOpen ? "active" : ""}`}
         onClick={onToggleAlertPanel}
         title={t("shell.alerts")}
+        aria-label={t("shell.alerts")}
+        aria-expanded={alertPanelOpen}
       >
-        🔔
+        <span aria-hidden="true" style={{ display: "flex" }}><AlertRailIcon /></span>
         </button>
         {extensionControls}
       </>}
@@ -191,28 +177,24 @@ function TopBar({
         </div>
       )}
       marketMetrics={advancedMarketData.summaryEnabled && (
-        <div
-          className={`advanced-market-summary advanced-market-summary-${advancedSummary.connectionStatus}`}
-          aria-label={t("shell.derivativesSummary")}
-        >
-          <div className="advanced-market-chip" data-market-metric="mark-price">
-            <span className="advanced-market-chip-label">{t("shell.mark")}</span>
-            <span className="advanced-market-chip-value">{formatPrice(advancedSummary.markPrice)}</span>
-          </div>
-          <div className="advanced-market-chip" data-market-metric="index-price">
-            <span className="advanced-market-chip-label">{t("shell.index")}</span>
-            <span className="advanced-market-chip-value">{formatPrice(advancedSummary.indexPrice)}</span>
-          </div>
-          <div className="advanced-market-chip" data-market-metric="basis">
-            <span className="advanced-market-chip-label">{t("shell.basis")}</span>
-            <span className="advanced-market-chip-value">{basisText}</span>
-            {advancedSummary.basisBps != null && (
-              <span className="advanced-market-chip-suffix">
-                {advancedSummary.basisBps >= 0 ? "+" : ""}{advancedSummary.basisBps.toFixed(2)} bps
-              </span>
-            )}
-          </div>
-        </div>
+        <>
+          <div className="live-market-metrics-inline">{marketMetrics}</div>
+          <details
+            className="live-market-metrics-compact"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.currentTarget.open = false;
+                event.stopPropagation();
+              }
+            }}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
+            }}
+          >
+            <summary>{t("shell.derivativesSummary")}</summary>
+            {marketMetrics}
+          </details>
+        </>
       )}
     />
   );

@@ -16,6 +16,7 @@ import {
 import { manualHistoryText } from "./manualHistoryCopy.js";
 import {
   cancelManualHistoryJob,
+  archiveManualHistoryJob,
   createManualHistoryDownload,
   fetchManualHistoryCapabilities,
   getManualHistoryJob,
@@ -63,6 +64,9 @@ export function ManualHistoryDownloadPanel({
   const [collections, setCollections] = useState<Record<string, unknown>[]>([]);
   const [error, setError] = useState<string>("");
   const [flagEnabled, setFlagEnabled] = useState(Boolean(enabled));
+  const [archiveEnabled, setArchiveEnabled] = useState(false);
+  const [archivingJob, setArchivingJob] = useState("");
+  const [archiveResult, setArchiveResult] = useState<Record<string, string>>({});
   const locale = useLocale();
 
   const startEnabled = flagEnabled && isPlanFirstReady(form) && canStartDownload(plan);
@@ -93,15 +97,14 @@ export function ManualHistoryDownloadPanel({
     : null;
 
   useEffect(() => {
-    if (enabled !== undefined) {
-      setFlagEnabled(Boolean(enabled));
-      return;
-    }
+    if (enabled !== undefined) setFlagEnabled(Boolean(enabled));
     const controller = new AbortController();
     void fetchManualHistoryCapabilities(controller.signal).then((payload) => {
-      setFlagEnabled(payload.enabled === true);
+      if (enabled === undefined) setFlagEnabled(payload.enabled === true);
+      const capability = payload.replay_import as Record<string, unknown> | undefined;
+      setArchiveEnabled(capability?.enabled === true);
     }).catch(() => {
-      setFlagEnabled(false);
+      if (enabled === undefined) setFlagEnabled(false);
     });
     return () => controller.abort();
   }, [enabled]);
@@ -195,6 +198,24 @@ export function ManualHistoryDownloadPanel({
       setJob(nextJob);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }
+
+  async function onArchive(id: string) {
+    if (archivingJob) return;
+    setArchivingJob(id);
+    setArchiveResult((current) => ({ ...current, [id]: "" }));
+    try {
+      const result = await archiveManualHistoryJob(id);
+      setArchiveResult((current) => ({ ...current, [id]: text("archiveSucceeded", {
+        rows: String(result.rows ?? 0),
+      }) }));
+    } catch (reason) {
+      setArchiveResult((current) => ({ ...current, [id]: text("archiveFailed", {
+        reason: reason instanceof Error ? reason.message : String(reason),
+      }) }));
+    } finally {
+      setArchivingJob("");
     }
   }
 
@@ -431,13 +452,33 @@ export function ManualHistoryDownloadPanel({
       ) : null}
       <div data-testid="manual-history-recent-jobs">
         <h4>{text("recentJobs")}</h4>
+        <p>{text("archiveHint")}</p>
+        {!archiveEnabled ? <p>{text("archiveUnavailable")}</p> : null}
         {recentJobs.length === 0 ? <p>{text("none")}</p> : (
           <ul>
-            {recentJobs.map((item) => (
+            {recentJobs.map((item) => {
+              const collection = collections.find((entry) => entry.collection_id === item.collection_id);
+              const targets = Array.isArray(collection?.targets)
+                ? collection.targets as Record<string, unknown>[] : [];
+              const labels = targets.map((target) => `${String(target.symbol)}@${String(target.canonical_interval)}`);
+              const hasMinuteHistory = targets.some((target) => target.canonical_interval === "1m");
+              return (
               <li key={String(item.job_id)}>
                 {String(item.state)} · {String(item.ready_targets ?? 0)}/{String(item.total_targets ?? 0)}
+                {labels.length > 0 ? ` · ${labels.join(", ")}` : ""}
+                {item.state === "SUCCEEDED" && hasMinuteHistory ? (
+                  <button type="button" className="dw-button dw-button-secondary"
+                    disabled={!archiveEnabled || Boolean(archivingJob)}
+                    onClick={() => void onArchive(String(item.job_id))}>
+                    {archivingJob === item.job_id ? text("archiving") : text("archiveAction")}
+                  </button>
+                ) : null}
+                {archiveResult[String(item.job_id)] ? (
+                  <p role="status">{archiveResult[String(item.job_id)]}</p>
+                ) : null}
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>

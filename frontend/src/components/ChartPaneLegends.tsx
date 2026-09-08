@@ -161,6 +161,7 @@ export const MainChartLegend = memo(function MainChartLegend({
 
   if (!mainData && indicatorEntries.length === 0) return null;
   const isUp = marketSummary?.isUp ?? true;
+  const signedDiff = mainData ? `${isUp ? "+" : "-"}${formatPriceDiff(mainData.close - mainData.open)}` : "";
   const ariaLabel = mainData && marketSummary
     ? t("legend.mainAria", {
       open: formatPrice(mainData.open),
@@ -168,31 +169,33 @@ export const MainChartLegend = memo(function MainChartLegend({
       low: formatPrice(mainData.low),
       close: formatPrice(mainData.close),
       volume: formatVolume(mainData.volume),
-      diff: formatPriceDiff(mainData.close - mainData.open),
+      diff: signedDiff,
       change: marketSummary.priceChange.toFixed(2),
       amplitude: marketSummary.amplitude,
     })
     : t("legend.indicatorsAria");
 
+  const fullLabel = [ariaLabel, ...indicatorEntries.map((entry) => `${entry.label} ${formatLegendValue(entry)}`)].join("，");
+
   return (
-    <div className="chart-main-legend pane-overlay-anchor" data-pane-id="main" role="group" aria-label={ariaLabel}>
+    <div className="chart-main-legend pane-overlay-anchor" data-pane-id="main" role="group" aria-label={fullLabel} title={fullLabel} tabIndex={0}>
       {mainData && (
         <span className="chart-main-ohlcv" data-candle-direction={isUp ? "up" : "down"}>
-          <span><span className="chart-legend-key">O</span>{formatPrice(mainData.open)}</span>
-          <span><span className="chart-legend-key">H</span><strong>{formatPrice(mainData.high)}</strong></span>
-          <span><span className="chart-legend-key">L</span><strong>{formatPrice(mainData.low)}</strong></span>
+          <span className="chart-main-range"><span className="chart-legend-key">O</span>{formatPrice(mainData.open)}</span>
+          <span className="chart-main-range"><span className="chart-legend-key">H</span><strong>{formatPrice(mainData.high)}</strong></span>
+          <span className="chart-main-range"><span className="chart-legend-key">L</span><strong>{formatPrice(mainData.low)}</strong></span>
           <span><span className="chart-legend-key">C</span><strong>{formatPrice(mainData.close)}</strong></span>
-          <span><span className="chart-legend-key">Vol</span>{formatVolume(mainData.volume)}</span>
+          <span className="chart-main-secondary"><span className="chart-legend-key">Vol</span>{formatVolume(mainData.volume)}</span>
           {marketSummary && (
             <span>
               <span className="chart-legend-key">{t("legend.change")}</span>
               <strong>
-                {isUp ? "+" : "-"}{formatPriceDiff(mainData.close - mainData.open)} / {isUp ? "+" : ""}{marketSummary.priceChange.toFixed(2)}%
+                <span className="chart-main-change-absolute">{signedDiff} / </span>{isUp ? "+" : ""}{marketSummary.priceChange.toFixed(2)}%
               </strong>
             </span>
           )}
           {marketSummary && (
-            <span><span className="chart-legend-key">{t("legend.amplitude")}</span>{marketSummary.amplitude}%</span>
+            <span className="chart-main-secondary"><span className="chart-legend-key">{t("legend.amplitude")}</span>{marketSummary.amplitude}%</span>
           )}
         </span>
       )}
@@ -235,6 +238,7 @@ const IndicatorPaneLabel = memo(function IndicatorPaneLabel({
       data-pane-id={pane.id}
       role="group"
       aria-label={ariaLabel}
+      title={ariaLabel}
     >
       <span className="chart-pane-label-heading">{pane.label}</span>
       {entries.length > 0 && <LegendValues entries={entries} showLineNames={entries.length > 1} />}

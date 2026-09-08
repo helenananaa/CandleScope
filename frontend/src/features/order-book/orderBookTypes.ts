@@ -61,6 +61,7 @@ export interface OrderBookBook {
 
 export interface OrderBookStoreSnapshot {
   status: OrderBookConnectionStatus;
+  lastReceivedAtMs: number | null;
   book: OrderBookBook | null;
   message: string | null;
   error: string | null;

@@ -554,7 +554,7 @@ async def update_proxy_settings(request: Request, body: ProxyConfig) -> dict:
 
 
 @router.post("/proxy/test")
-async def test_proxy_connection(body: ProxyTestRequest) -> dict:
+async def test_proxy_connection(body: ProxyTestRequest, request: Request) -> dict:
     """Test proxy connectivity by making requests to all registered exchange APIs.
 
     Uses the provided proxy settings (not the current config) to
@@ -653,7 +653,25 @@ async def test_proxy_connection(body: ProxyTestRequest) -> dict:
         "proxy_used": proxy_url or "(direct)",
         "message": message,
         "results": results,
+        "data_engine": _data_engine_status(request),
     }
+
+
+def _data_engine_status(request: Request) -> str:
+    """Report lifecycle readiness independently of exchange reachability."""
+    manager = getattr(request.app.state, "data_manager", None)
+    if manager is None:
+        return "not_initialized"
+    try:
+        snapshot = manager.health_snapshot()
+        if snapshot.get("started") is True:
+            return "ready"
+        if snapshot.get("started") is False:
+            return "not_started"
+        return "unknown"
+    except Exception:
+        logger.exception("Data engine health snapshot failed during connectivity test")
+        return "error"
 
 
 @router.post("/storage/repair")

@@ -8,6 +8,7 @@ export interface ExportMetadata {
   symbol?: string;
   interval?: string;
   theme?: string;
+  indicators?: Array<{ label: string; mainPane: boolean }>;
 }
 
 export interface ExportOptions {
@@ -17,6 +18,7 @@ export interface ExportOptions {
   quality: number;
   backgroundColor: string;
   hideDrawings: boolean;
+  includeContext: boolean;
   watermarkEnabled: boolean;
   watermarkText: string;
   filenamePrefix: string;

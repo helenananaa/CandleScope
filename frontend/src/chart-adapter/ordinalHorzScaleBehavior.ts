@@ -148,7 +148,9 @@ export class OrdinalHorzScaleBehavior implements IHorzScaleBehavior<OrdinalAxisT
     if (!isInternalOrdinalHorzScaleItem(item)) {
       throw new TypeError("Ordinal horizontal scale cache item must be internal");
     }
-    return item._ordinal_order;
+    // Structural rebuilds can assign the same order to a different source bar.
+    // Labels depend on source time, whereas layout identity still uses order.
+    return item._ordinal_sourceTime;
   }
 
   updateFormatter(options: LocalizationOptions<OrdinalAxisTime>): void {

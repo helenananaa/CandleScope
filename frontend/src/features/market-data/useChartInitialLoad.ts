@@ -411,6 +411,9 @@ export function useChartInitialLoad({
     let initialPaintReady = false;
     let tailFresh = false;
     let initialRetryStarted = false;
+    // Retain the latest failed history request for the terminal diagnostic.
+    // A later valid response (even empty) supersedes an earlier transport error.
+    let lastHistoryFailure: unknown = null;
     let stopInitialHistoryRetry: (() => void) | null = null;
     let trackedInitialRepairRange: TimeRangeSec | null = null;
     let ownedPendingInitial: PendingInitialSeries | null = null;
@@ -792,6 +795,7 @@ export function useChartInitialLoad({
           });
           if (controller.signal.aborted || stoppedRetrying) return false;
           if (retryResult) {
+            lastHistoryFailure = null;
             markPerf("chart.initialLoad.retry.success", {
               source: retryResult.source || "unknown",
               bars: retryResult.data?.length || 0,
@@ -800,6 +804,7 @@ export function useChartInitialLoad({
             return !isKlineResultRepairPending(retryResult);
           }
         } catch (retryErr) {
+          if (!controller.signal.aborted && !stoppedRetrying) lastHistoryFailure = retryErr;
           console.warn("Initial history retry failed:", retryErr);
         }
         return false;
@@ -828,9 +833,10 @@ export function useChartInitialLoad({
       safetyTimer = setTimeout(async () => {
         if (controller.signal.aborted) return;
         if (await retryInitialHistory()) return;
+        if (controller.signal.aborted || stoppedRetrying) return;
         if (!initialPaintReady) {
           markPerf("chart.initialLoad.retry.timeout", { exchange: ex, marketType: mt, symbol: sym, interval: intv });
-          setError(new Error(`K-line history unavailable for ${sym}@${intv}`));
+          setError(lastHistoryFailure ?? new Error(`K-line history unavailable for ${sym}@${intv}`));
           setConnectionStatus("disconnected");
           setLoading(false);
         }
@@ -863,8 +869,11 @@ export function useChartInitialLoad({
         bars: result?.data?.length || 0,
       });
       if (!commitHistoryResult(result)) return;
-    } catch {
-      if (!controller.signal.aborted) startInitialHistoryRetry();
+    } catch (historyError) {
+      if (!controller.signal.aborted) {
+        lastHistoryFailure = historyError;
+        startInitialHistoryRetry();
+      }
     }
     if (!ownsInitialResult(undefined)) {
       relinquishInitialOwnership();

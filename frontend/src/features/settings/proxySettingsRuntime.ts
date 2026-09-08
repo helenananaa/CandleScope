@@ -13,6 +13,7 @@ export interface ProxyTestResult extends Record<string, unknown> {
   partial?: boolean;
   message?: string;
   proxy_used?: string;
+  data_engine?: "ready" | "not_initialized" | "not_started" | "error" | "unknown";
   results?: ProxyExchangeTestResult[];
 }
 

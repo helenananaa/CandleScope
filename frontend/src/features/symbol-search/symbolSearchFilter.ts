@@ -184,10 +184,13 @@ export function filterSymbols({
 
   if (search.trim()) {
     const query = search.trim().toUpperCase();
+    const compact = (value: string) => value.toUpperCase().replace(/[\s/_-]+/g, "");
+    const compactQuery = compact(query);
     list = list.filter((symbol) => (
-      symbol.symbol.includes(query)
-      || symbol.baseAsset.includes(query)
-      || symbol.quoteAsset.includes(query)
+      [symbol.symbol, symbol.baseAsset, symbol.quoteAsset].some((value) => (
+        value.toUpperCase().includes(query)
+        || (compactQuery.length > 0 && compact(value).includes(compactQuery))
+      ))
     ));
   }
 
