@@ -866,7 +866,7 @@ export async function configureFormalV2TrainingPlan(cdp, plan, timeoutMs) {
     cdp,
     `(() => {
       const button = [...document.querySelectorAll("button")]
-        .find((item) => item.textContent?.trim() === "确认时间并创建 Run");
+        .find((item) => item.textContent?.trim() === "确认时间并创建训练");
       return button instanceof HTMLButtonElement && !button.disabled;
     })()`,
     timeoutMs,
@@ -4075,7 +4075,7 @@ async function main() {
     await waitForValue(replay.cdp, `(() => { const button = [...document.querySelectorAll("button")].find((item) => item.textContent?.trim() === "新建训练"); return button instanceof HTMLButtonElement && !button.disabled; })()`, args.timeoutMs, "Training Hub readiness");
     const opened = await keyboardActivateButton(replay.cdp, { text: "新建训练" }, args.timeoutMs);
     try {
-      await waitForValue(replay.cdp, `(() => { const button = [...document.querySelectorAll("button")].find((item) => item.textContent?.trim() === "确认时间并创建 Run"); return button instanceof HTMLButtonElement && !button.disabled; })()`, args.timeoutMs, "create Run readiness");
+      await waitForValue(replay.cdp, `(() => { const button = [...document.querySelectorAll("button")].find((item) => item.textContent?.trim() === "确认时间并创建训练"); return button instanceof HTMLButtonElement && !button.disabled; })()`, args.timeoutMs, "create Run readiness");
       if (formalTrainingPlan !== null) {
         await configureFormalV2TrainingPlan(
           replay.cdp,
@@ -4103,7 +4103,7 @@ async function main() {
       };
       throw error;
     }
-    const created = await keyboardActivateButton(replay.cdp, { text: "确认时间并创建 Run" }, args.timeoutMs);
+    const created = await keyboardActivateButton(replay.cdp, { text: "确认时间并创建训练" }, args.timeoutMs);
     let selectedMarket;
     try {
       selectedMarket = await chooseReplayMarket(
@@ -4797,7 +4797,7 @@ async function main() {
       )),
       v2_keyboard_accessible: (
         hubKeyboard?.opened?.active?.text === "新建训练"
-        && hubKeyboard?.created?.active?.text === "确认时间并创建 Run"
+        && hubKeyboard?.created?.active?.text === "确认时间并创建训练"
         && accessibility?.keyboardOnly?.paperTab?.active?.railView === "replay-paper"
         && accessibility?.keyboardOnly?.order?.active?.action === "place-order"
         && accessibility?.keyboardOnly?.order?.active?.side === "SELL"
