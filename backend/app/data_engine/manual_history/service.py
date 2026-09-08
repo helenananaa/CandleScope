@@ -829,20 +829,21 @@ class ManualHistoryService:
             if cancelling:
                 self._finalize_cancellation(cancelling[0].job_id)
                 continue
-            if self._storage_block_reason() is None:
-                blocked = [
-                    job for job in recoverable
-                    if job.state is JobState.BLOCKED_STORAGE
-                ]
-                if blocked:
-                    self.repository.reset_recoverable_targets(blocked[0].job_id)
-                    self.repository.cas_job_state(
-                        blocked[0].job_id,
-                        from_state=JobState.BLOCKED_STORAGE,
-                        to_state=JobState.QUEUED,
-                        stage="storage_recovered",
-                    )
-                    continue
+            blocked = [
+                job for job in recoverable
+                if job.state is JobState.BLOCKED_STORAGE
+            ]
+            # The pressure probe scans SQLite page ownership. Idle polling
+            # needs no scan; run_job still checks pressure before doing work.
+            if blocked and self._storage_block_reason() is None:
+                self.repository.reset_recoverable_targets(blocked[0].job_id)
+                self.repository.cas_job_state(
+                    blocked[0].job_id,
+                    from_state=JobState.BLOCKED_STORAGE,
+                    to_state=JobState.QUEUED,
+                    stage="storage_recovered",
+                )
+                continue
             queued = [job for job in recoverable if job.state is JobState.QUEUED]
             if queued:
                 await self.run_job(queued[0].job_id)
