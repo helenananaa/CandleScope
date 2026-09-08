@@ -1,4 +1,5 @@
 import { watchlistDisplayName } from "./watchlistDisplayName.js";
+import { sortWatchlists, type WatchlistSortColumn, type WatchlistSortDirection } from "./watchlistSort.js";
 import { memo, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { t, translateExchangeName, translateMarketType } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -225,6 +226,21 @@ export default function WatchlistSidebar({
     }
   }, [actions, onWatchlistsChange, watchlists]);
 
+  const [lastSort, setLastSort] = useState<{ column: WatchlistSortColumn; direction: WatchlistSortDirection } | null>(null);
+  const sortBy = (column: WatchlistSortColumn) => {
+    const direction = lastSort?.column === column && lastSort.direction === "asc" ? "desc" : "asc";
+    const snapshot = priceStore?.getSnapshot() ?? {};
+    setWatchlists((groups) => sortWatchlists(groups, column, direction, snapshot, subscriptionTiers));
+    setLastSort({ column, direction });
+  };
+  const sortHeader = (column: WatchlistSortColumn, label: string, className: string) => {
+    const direction = lastSort?.column === column && lastSort.direction === "asc" ? "desc" : "asc";
+    const description = `${label} · ${t(direction === "asc" ? "watchlist.sortAscending" : "watchlist.sortDescending")}`;
+    return <button type="button" className={className} title={description} aria-label={description} onClick={() => sortBy(column)}>
+      {label}<span aria-hidden="true">{lastSort?.column === column ? (lastSort.direction === "asc" ? " ↑" : " ↓") : " ↕"}</span>
+    </button>;
+  };
+
   // When managed by the rail accordion, this panel is only mounted while expanded.
   const managedByActivityBar = typeof onRequestClose === "function";
   const sidebarCollapsed = managedByActivityBar ? false : (layout?.sidebarCollapsed ?? false);
@@ -390,6 +406,7 @@ export default function WatchlistSidebar({
     listId: string,
   ) => {
     e.stopPropagation();
+    setLastSort(null);
     setDragType("symbol");
     setDragSymbol(sym);
     setDragSourceListId(listId);
@@ -638,10 +655,10 @@ export default function WatchlistSidebar({
         {/* ── Column header row (table header) ── */}
         {!sidebarCollapsed && (
           <div className="wl-table-header">
-            <span className="wl-th-name">{t("watchlist.symbol")}</span>
-            <span className="wl-th-price">{t("watchlist.last")}</span>
-            <span className="wl-th-change">{t("watchlist.change")}</span>
-            <span className="wl-th-changepct">{t("watchlist.changePct")}</span>
+            {sortHeader("symbol", t("watchlist.symbol"), "wl-th-name")}
+            {sortHeader("price", t("watchlist.last"), "wl-th-price")}
+            {sortHeader("change", t("watchlist.change"), "wl-th-change")}
+            {sortHeader("changePct", t("watchlist.changePct"), "wl-th-changepct")}
             <span className="wl-th-actions"></span>
           </div>
         )}

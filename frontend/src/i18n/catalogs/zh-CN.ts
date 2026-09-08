@@ -300,6 +300,8 @@ export const zhCN = {
 
   "watchlist.title": "自选",
   "watchlist.newList": "新建列表",
+  "watchlist.sortAscending": "按当前值升序排列各列表（报价更新不自动重排）",
+  "watchlist.sortDescending": "按当前值降序排列各列表（报价更新不自动重排）",
   "watchlist.symbol": "商品",
   "watchlist.last": "最新价",
   "watchlist.change": "涨跌",

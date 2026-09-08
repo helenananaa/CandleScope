@@ -294,6 +294,8 @@ export const fr = {
   "search.unroutable": " (aucun marché public routable)",
   "watchlist.title": "Liste de suivi",
   "watchlist.newList": "Nouvelle liste",
+  "watchlist.sortAscending": "Trier chaque liste par valeurs actuelles croissantes (sans réorganisation automatique)",
+  "watchlist.sortDescending": "Trier chaque liste par valeurs actuelles décroissantes (sans réorganisation automatique)",
   "watchlist.symbol": "Symbole",
   "watchlist.last": "Dernier",
   "watchlist.change": "Variation",

@@ -304,6 +304,8 @@ export const ptBR = {
 
   "watchlist.title": "Lista de observação",
   "watchlist.newList": "Nova lista",
+  "watchlist.sortAscending": "Ordenar cada lista por valores atuais em ordem crescente (sem reordenação automática)",
+  "watchlist.sortDescending": "Ordenar cada lista por valores atuais em ordem decrescente (sem reordenação automática)",
   "watchlist.symbol": "Símbolo",
   "watchlist.last": "Último",
   "watchlist.change": "Variação",

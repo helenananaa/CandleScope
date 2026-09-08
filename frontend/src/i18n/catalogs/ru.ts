@@ -294,6 +294,8 @@ export const ru = {
   "search.unroutable": " (нет маршрутизируемого публичного рынка)",
   "watchlist.title": "Список наблюдения",
   "watchlist.newList": "Новый список",
+  "watchlist.sortAscending": "Сортировать каждый список по текущим значениям по возрастанию (без автосортировки)",
+  "watchlist.sortDescending": "Сортировать каждый список по текущим значениям по убыванию (без автосортировки)",
   "watchlist.symbol": "Инструмент",
   "watchlist.last": "Последняя",
   "watchlist.change": "Изменение",

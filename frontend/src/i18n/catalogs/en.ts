@@ -302,6 +302,8 @@ export const en = {
 
   "watchlist.title": "Watchlist",
   "watchlist.newList": "New list",
+  "watchlist.sortAscending": "Sort each list ascending using current values (no automatic reordering)",
+  "watchlist.sortDescending": "Sort each list descending using current values (no automatic reordering)",
   "watchlist.symbol": "Symbol",
   "watchlist.last": "Last",
   "watchlist.change": "Change",

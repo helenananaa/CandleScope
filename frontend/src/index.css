@@ -448,13 +448,24 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   gap: 2px;
   user-select: none;
 }
-.wl-table-header > span {
+.wl-table-header > span,
+.wl-table-header > button {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
   letter-spacing: 0.03em;
   white-space: nowrap;
 }
+.wl-table-header > button {
+  border: 0;
+  background: transparent;
+  padding-top: 3px;
+  padding-bottom: 3px;
+  padding-right: 0;
+  cursor: pointer;
+}
+.wl-table-header > button:hover { color: var(--text-primary); }
+.wl-table-header > button:focus-visible { outline: 2px solid var(--accent-color, #3b82f6); }
 .wl-th-name {
   flex: 1;
   min-width: 0;

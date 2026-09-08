@@ -294,6 +294,8 @@ export const ja = {
   "search.unroutable": "（ルーティング可能な公開相場なし）",
   "watchlist.title": "ウォッチリスト",
   "watchlist.newList": "新しいリスト",
+  "watchlist.sortAscending": "現在値で各リストを昇順に並べ替え（自動並べ替えなし）",
+  "watchlist.sortDescending": "現在値で各リストを降順に並べ替え（自動並べ替えなし）",
   "watchlist.symbol": "銘柄",
   "watchlist.last": "最新値",
   "watchlist.change": "騰落",

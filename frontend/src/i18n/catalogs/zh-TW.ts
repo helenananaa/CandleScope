@@ -294,6 +294,8 @@ export const zhTW = {
   "search.unroutable": "（無可路由公共行情）",
   "watchlist.title": "自選",
   "watchlist.newList": "新建列表",
+  "watchlist.sortAscending": "依目前值升冪排列各清單（報價更新不自動重排）",
+  "watchlist.sortDescending": "依目前值降冪排列各清單（報價更新不自動重排）",
   "watchlist.symbol": "商品",
   "watchlist.last": "最新價",
   "watchlist.change": "漲跌",

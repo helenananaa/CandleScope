@@ -294,6 +294,8 @@ export const ko = {
   "search.unroutable": " (라우팅 가능한 공개 시장 없음)",
   "watchlist.title": "관심종목",
   "watchlist.newList": "새 목록",
+  "watchlist.sortAscending": "현재 값으로 각 목록 오름차순 정렬 (자동 재정렬 없음)",
+  "watchlist.sortDescending": "현재 값으로 각 목록 내림차순 정렬 (자동 재정렬 없음)",
   "watchlist.symbol": "종목",
   "watchlist.last": "현재가",
   "watchlist.change": "등락",

@@ -300,6 +300,8 @@ export const es = {
   "search.unroutable": " (sin mercado público enrutable)",
   "watchlist.title": "Lista de seguimiento",
   "watchlist.newList": "Nueva lista",
+  "watchlist.sortAscending": "Ordenar cada lista por valores actuales de menor a mayor (sin reordenación automática)",
+  "watchlist.sortDescending": "Ordenar cada lista por valores actuales de mayor a menor (sin reordenación automática)",
   "watchlist.symbol": "Símbolo",
   "watchlist.last": "Último",
   "watchlist.change": "Variación",
