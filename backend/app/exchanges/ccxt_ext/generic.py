@@ -62,6 +62,8 @@ class _OwnedThreadedResolverMixin:
     """Give one-shot CCXT clients a reliable owned session on Windows."""
 
     def open(self) -> None:
+        if getattr(self, "_candlescope_closed", False):
+            raise ccxt.ExchangeNotAvailable("CandleScope exchange is closed")
         if sys.platform != "win32" or self.session is not None or not self.own_session:
             super().open()
             return
@@ -83,6 +85,7 @@ class _OwnedThreadedResolverMixin:
         )
 
     async def close(self, clean_instance_data: bool = True) -> None:
+        self._candlescope_closed = True
         await super().close(clean_instance_data)
 
 

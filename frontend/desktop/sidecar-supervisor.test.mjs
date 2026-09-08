@@ -104,3 +104,39 @@ test("a stopped sidecar leaves no shutdown timer keeping the host alive", async 
   });
   assert.match(stdout, /stopped/);
 });
+
+
+test("private stdin shutdown runs child cleanup before the process exits", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "candlescope-graceful-"));
+  const port = await freePort();
+  const logPath = path.join(root, "sidecar.log");
+  const source = `
+    const http = require('node:http');
+    const s = http.createServer((q,r)=>r.end(JSON.stringify({desktop_instance_id:process.env.CANDLESCOPE_DESKTOP_INSTANCE_ID})));
+    s.listen(${port}, '127.0.0.1');
+    process.stdin.resume();
+    process.stdin.on('end',()=>s.close(()=>console.log('graceful cleanup complete')));
+  `;
+  const supervisor = new SidecarSupervisor({command: process.execPath, args: ["-e", source], cwd: root,
+    gracefulStdin: true, healthUrl: `http://127.0.0.1:${port}/health`, healthTimeoutMs: 5000,
+    shutdownTimeoutMs: 1500, logPath});
+  await supervisor.start();
+  await supervisor.stop();
+  assert.match(await readFile(logPath, "utf8"), /graceful cleanup complete/);
+  await assert.rejects(fetch(`http://127.0.0.1:${port}/health`));
+});
+
+test("an unresponsive private-pipe child is still forcibly reclaimed", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "candlescope-graceful-timeout-"));
+  const port = await freePort();
+  const source = `require('node:http').createServer((q,r)=>r.end(JSON.stringify({desktop_instance_id:process.env.CANDLESCOPE_DESKTOP_INSTANCE_ID}))).listen(${port},'127.0.0.1');`;
+  const supervisor = new SidecarSupervisor({command: process.execPath, args: ["-e", source], cwd: root,
+    gracefulStdin: true, healthUrl: `http://127.0.0.1:${port}/health`, healthTimeoutMs: 5000,
+    shutdownTimeoutMs: 50, logPath: path.join(root, "sidecar.log")});
+  await supervisor.start();
+  const child = supervisor.child;
+  const exited = new Promise(resolve => child.once("exit", resolve));
+  await supervisor.stop();
+  await exited;
+  await assert.rejects(fetch(`http://127.0.0.1:${port}/health`));
+});

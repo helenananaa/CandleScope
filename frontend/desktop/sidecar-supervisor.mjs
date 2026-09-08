@@ -85,9 +85,11 @@ export class SidecarSupervisor {
       env: { ...process.env, ...this.options.env, CANDLESCOPE_DESKTOP_INSTANCE_ID: instanceId },
       windowsHide: true,
       detached: false,
-      stdio: ["ignore", this.logHandle.fd, this.logHandle.fd],
+      stdio: [this.options.gracefulStdin ? "pipe" : "ignore", this.logHandle.fd, this.logHandle.fd],
     });
     this.child = child;
+    // A child can exit while the parent is sending the shutdown command.
+    child.stdin?.on("error", () => {});
     try {
       this.readyMs = await waitForHealthy(
         this.options.healthUrl,
@@ -107,7 +109,6 @@ export class SidecarSupervisor {
     const child = this.child;
     this.child = null;
     if (child && child.exitCode === null) {
-      child.kill("SIGTERM");
       let shutdownTimer;
       let onExit;
       try {
@@ -115,6 +116,8 @@ export class SidecarSupervisor {
           new Promise((resolve) => {
             onExit = resolve;
             child.once("exit", onExit);
+            if (this.options.gracefulStdin && child.stdin?.writable) child.stdin.end("shutdown\n");
+            else child.kill("SIGTERM");
           }),
           new Promise((resolve) => {
             shutdownTimer = setTimeout(resolve, this.options.shutdownTimeoutMs);

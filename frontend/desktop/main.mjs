@@ -122,8 +122,7 @@ function parseSidecarCommand() {
     command: resolvePythonCommand({ runtimeRoot, packaged: app.isPackaged, override: process.env.CANDLESCOPE_PYTHON }),
     args: [
       "-m",
-      "uvicorn",
-      "app.main:app",
+      "app.desktop_sidecar",
       "--host",
       "127.0.0.1",
       "--port",
@@ -137,6 +136,7 @@ function createSupervisor() {
   const command = parseSidecarCommand();
   return new SidecarSupervisor({
     ...command,
+    gracefulStdin: !process.env.CANDLESCOPE_DESKTOP_SIDECAR_COMMAND_JSON,
     cwd: backendRoot,
     env: {
       ...(app.isPackaged ? { PYTHONNOUSERSITE: "1", PYTHONDONTWRITEBYTECODE: "1" } : {}),
