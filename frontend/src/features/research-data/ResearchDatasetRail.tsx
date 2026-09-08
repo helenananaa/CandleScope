@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { t } from "../../i18n/index.js";
 import type { LocalDatasetManifest, LocalImportJob } from "./researchDataApi.js";
@@ -29,8 +29,17 @@ export function ResearchDatasetRail({
   management: ReactNode;
   analysis: ReactNode;
 }) {
+  const [view, setView] = useState<"library" | "import">(datasets.length === 0 ? "import" : "library");
   return (
     <aside className="local-data-rail" aria-label={t("local.libraryAria")} data-testid="research-dataset-rail">
+      <div className="research-library-tabs" role="tablist" aria-label={t("local.libraryAria")}>
+        {(["library", "import"] as const).map((tab) => (
+          <button key={tab} type="button" role="tab" aria-selected={view === tab} onClick={() => setView(tab)}>
+            {t(tab === "library" ? "local.datasets" : "local.import")}
+          </button>
+        ))}
+      </div>
+      <div hidden={view !== "import"} role="tabpanel" aria-label={t("local.import")}>
       <ResearchDataImportForm
         importing={importing}
         importJob={importJob}
@@ -39,7 +48,8 @@ export function ResearchDatasetRail({
         onCancel={onCancelImport}
         onImport={onImport}
       />
-      <section className="local-dataset-library">
+      </div>
+      <section className="local-dataset-library" hidden={view !== "library"} role="tabpanel" aria-label={t("local.datasets")}>
         <header>
           <div>
             <span>{t("local.kicker.library")}</span>
@@ -64,7 +74,7 @@ export function ResearchDatasetRail({
           ))}
         </div>
       </section>
-      {management}
+      <details className="local-management-details"><summary>{t("local.ops")}</summary>{management}</details>
       {analysis}
     </aside>
   );

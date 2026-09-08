@@ -54,6 +54,22 @@ def _context(**overrides: object) -> dict[str, object]:
     return payload
 
 
+def test_execution_overrides_survive_context_round_trip_and_reject_invalid_ranges(tmp_path: Path) -> None:
+    from app.api.v1.backtests import ResearchLaunchContextRequest
+    from pydantic import ValidationError
+    overrides = {"initialBalance": "2000", "equityPercent": "25", "leverage": "2", "feeBps": "7", "slippageBps": "3"}
+    payload = ResearchLaunchContextRequest.model_validate(_context(execution_overrides=overrides))
+    service = _service(tmp_path)
+    try:
+        context = service.create_research_launch_context(payload.model_dump())
+        restored = service.get_research_launch_context(str(context["context_id"]))
+        assert restored["execution_overrides"] == overrides
+        with pytest.raises(ValidationError):
+            ResearchLaunchContextRequest.model_validate(_context(execution_overrides={**overrides, "equityPercent": "101"}))
+    finally:
+        service.shutdown()
+
+
 def test_research_context_is_immutable_and_integrity_checked(tmp_path: Path) -> None:
     service = _service(tmp_path)
     try:

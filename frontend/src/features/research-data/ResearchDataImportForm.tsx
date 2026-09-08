@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { CSV_FIELDS, parseResearchCsvPreview, validCsvColumns, type CsvColumns, type CsvPreview } from "./researchCsvPreview.js";
 
 import { t } from "../../i18n/index.js";
 import type { LocalDatasetManifest, LocalImportJob } from "./researchDataApi.js";
@@ -29,6 +30,10 @@ export function ResearchDataImportForm({
   const [volumeRequired, setVolumeRequired] = useState(false);
   const [asRevision, setAsRevision] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [preview, setPreview] = useState<CsvPreview | null>(null);
+  const [columns, setColumns] = useState<CsvColumns | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const selectionRef = useRef(0);
 
   return (
     <form
@@ -36,9 +41,10 @@ export function ResearchDataImportForm({
       data-testid="research-data-import-form"
       onSubmit={(event) => {
         event.preventDefault();
-        if (file === null) return;
+        if (file === null || !preview || !columns || !validCsvColumns(columns, preview.headers)) return;
         void onImport({
           file,
+          columns,
           name: name.trim() || file.name.replace(/\.csv$/i, ""),
           symbol,
           interval,
@@ -49,6 +55,7 @@ export function ResearchDataImportForm({
         }).then(() => {
           setFile(null);
           setName("");
+          setPreview(null); setColumns(null);
           if (fileInputRef.current !== null) fileInputRef.current.value = "";
         }).catch(() => undefined);
       }}
@@ -66,9 +73,30 @@ export function ResearchDataImportForm({
           ref={fileInputRef}
           type="file"
           accept=".csv,text/csv"
-          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+          onChange={(event) => {
+            const selectedFile = event.target.files?.[0] ?? null;
+            const generation = ++selectionRef.current;
+            setFile(selectedFile); setPreview(null); setColumns(null); setPreviewError(null);
+            if (selectedFile) void selectedFile.slice(0, 65536).text().then((text) => {
+              if (generation !== selectionRef.current) return;
+              const parsed = parseResearchCsvPreview(text); setPreview(parsed); setColumns(parsed.suggested);
+            }).catch((reason: unknown) => { if (generation === selectionRef.current) setPreviewError(String(reason)); });
+          }}
         />
       </label>
+      {previewError && <p role="alert">{previewError}</p>}
+      {preview && columns && <section className="research-csv-preview">
+        <h3>{t("ux.previewCsv")}</h3><p>{t("ux.csvHint")}</p>
+        <div className="local-import-grid">{CSV_FIELDS.map((key) => <label key={key}>{key}
+          <select value={columns[key]} onChange={(event) => setColumns({ ...columns, [key]: event.target.value })}>
+            <option value="">{key === "volume" ? t("local.autoDetect") : "—"}</option>
+            {preview.headers.map((header) => <option key={header} value={header}>{header}</option>)}
+          </select>
+        </label>)}</div>
+        <div className="research-preview-table"><table><thead><tr>{preview.headers.map((header) => <th key={header}>{header}</th>)}</tr></thead>
+          <tbody>{preview.rows.map((row, index) => <tr key={index}>{preview.headers.map((header, column) => <td key={header}>{row[column] ?? ""}</td>)}</tr>)}</tbody></table></div>
+        {!validCsvColumns(columns, preview.headers) && <p role="alert">{t("ux.csvInvalid")}</p>}
+      </section>}
       <label>
         {t("local.datasetName")}
         <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("local.namePh")} />
@@ -117,7 +145,7 @@ export function ResearchDataImportForm({
           {t("local.asRevision", { name: selected.name })}
         </label>
       )}
-      <button type="submit" disabled={file === null || importing}>
+      <button type="submit" disabled={file === null || importing || !preview || !columns || !validCsvColumns(columns, preview.headers)}>
         {importing ? t("local.importing") : t("local.importBtn")}
       </button>
       {importing && (

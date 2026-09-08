@@ -1,5 +1,6 @@
 import { canonicalizeIntervalValue } from "../../utils/intervals.js";
 import { t } from "../../i18n/index.js";
+import { validExecutionOverrides } from "../../shared/strategyRunSettings.js";
 import type { ExchangeId, MarketType, SymbolCode } from "../../utils/symbolKey.js";
 import { loadInitialChartSession } from "../chart-session/chartSessionModel.js";
 import type { ChartSession } from "../chart-session/chartSessionTypes.js";
@@ -301,6 +302,7 @@ function normalizeAttachment(
     ? value.quickPresetId.trim()
     : "";
   const valid = strategyDraftId !== undefined
+    && (value.executionOverrides === undefined || validExecutionOverrides(value.executionOverrides))
     && strategyRevisionId !== undefined
     && displayName.length > 0
     && language !== null
@@ -328,6 +330,7 @@ function normalizeAttachment(
     fidelityPreference,
     quickPresetId,
     autoRun: value.autoRun as boolean,
+    ...(validExecutionOverrides(value.executionOverrides) ? { executionOverrides: { ...value.executionOverrides } } : {}),
   };
 }
 

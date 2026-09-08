@@ -61,7 +61,7 @@ test("imported session is local/spot and never requires the user to type dataset
   assert.equal(session?.exchange, "local");
   assert.equal(session?.marketType, "spot");
   assert.equal(session?.interval, "30m");
-  assert.equal(sessionFromResearchSource({
+  assert.deepEqual(sessionFromResearchSource({
     schemaVersion: "candlescope.research-source/1",
     kind: "CURRENT_CHART",
     workspaceId: "current",
@@ -70,7 +70,7 @@ test("imported session is local/spot and never requires the user to type dataset
     marketType: "spot",
     symbol: "BTCUSDT",
     interval: "1m",
-  }, null, "1m"), null);
+  }, null, "1m"), { exchange: "binance", marketType: "spot", symbol: "BTCUSDT", interval: "1m" });
   assert.equal(sessionFromResearchSource({
     schemaVersion: "candlescope.research-source/1",
     kind: "IMPORTED_DATASET",

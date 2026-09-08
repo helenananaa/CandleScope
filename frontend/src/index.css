@@ -40,6 +40,22 @@
 /* 自定义背景色由 JS 直接注入 style 属性 */
 
 /* ── Reset ────────────────────────────────────────────────── */
+.workspace-navigation { display: flex; align-items: center; gap: 3px; flex: 0 0 auto; }
+.workspace-navigation :is(a, button, span) { display: inline-flex; align-items: center; min-height: 32px; padding: 6px 9px; border: 0; border-radius: 5px; color: var(--text-secondary); background: transparent; text-decoration: none; font: 500 12px/1.4 var(--font-sans); white-space: nowrap; }
+.workspace-navigation [aria-current='page'] { color: var(--accent-blue); background: var(--bg-hover); }
+.workspace-navigation :is(a,button):focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+.workspace-navigation button:disabled, .workspace-navigation [aria-disabled='true'] { opacity: .5; }
+.settings-data-navigation { display: flex; gap: 8px; margin-bottom: 24px; }
+.settings-data-navigation button { border: 1px solid var(--border-color); padding: 9px 16px; border-radius: 6px; color: var(--text-primary); background: var(--bg-secondary); cursor: pointer; }
+.settings-data-navigation button[aria-pressed='true'] { color: var(--accent-blue); border-color: var(--accent-blue); }
+.training-presets { padding: 16px; margin-bottom: 16px; border: 1px solid var(--border-color); border-radius: 10px; }
+.training-presets p { color: var(--text-secondary); font-size: 12px; line-height: 1.6; margin-top: 10px; }
+.training-presets .research-library-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.training-presets button { padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); background: var(--bg-secondary); }
+.training-presets button[aria-pressed='true'] { border-color: var(--accent-blue); color: var(--accent-blue); }
+.training-hub-form-section[hidden], .st-content-body section[hidden] { display: none; }
+@media (max-width: 1450px) { .top-bar:has(.workspace-navigation) .logo-text { display: none; } }
+
 *,
 *::before,
 *::after {
@@ -14445,16 +14461,18 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
-  margin: 28px 0 18px;
+  margin: 16px 0;
 }
 
 .training-hub-stats article {
   position: relative;
   display: grid;
-  gap: 7px;
+  gap: 5px 12px;
+  grid-template-columns: 1fr auto;
+  align-items: center;
   overflow: hidden;
   min-width: 0;
-  padding: 16px 18px;
+  padding: 12px 16px;
   border: 1px solid var(--hub-border);
   border-radius: 14px;
   background: var(--hub-panel);
@@ -14478,7 +14496,7 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 .training-hub-stats article[data-tone="green"] { --hub-stat-glow: rgba(52, 211, 153, .36); }
 .training-hub-stats article[data-tone="cyan"] { --hub-stat-glow: rgba(34, 211, 238, .36); }
 .training-hub-stats span { color: var(--hub-muted); font-size: 12px; font-weight: 650; }
-.training-hub-stats strong { color: var(--hub-text); font: 700 28px/1 "JetBrains Mono", monospace; }
+.training-hub-stats strong { color: var(--hub-text); font: 700 22px/1 var(--font-mono); }
 .training-hub-stats small { color: var(--hub-faint); font-size: 11px; }
 
 .training-hub-toolbar {
@@ -14612,7 +14630,7 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 .training-hub-card-meta > div:first-child dd::before { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 2px; background: linear-gradient(135deg, var(--hub-accent), var(--hub-accent-2)); vertical-align: 1px; content: ""; }
 
 .training-hub-card-message { min-height: 56px; margin: 0 18px; padding: 10px 12px; border: 1px solid var(--hub-note-border); border-radius: 12px; color: var(--hub-muted); background: var(--hub-note-background); font-size: 12px; line-height: 1.5; }
-.training-hub-card-actions { display: flex; gap: 8px; margin-top: auto; padding: 14px 18px 18px; }
+.training-hub-card-actions { display: flex; gap: 8px; margin-top: 0; padding: 14px 18px; }
 .training-hub-card-actions .training-hub-primary-button { flex: 1; justify-content: center; border-radius: 12px; }
 .training-hub-card-actions .training-hub-delete-action { border-color: rgba(248, 113, 113, .35); border-radius: 12px; color: #fecaca; background: transparent; }
 

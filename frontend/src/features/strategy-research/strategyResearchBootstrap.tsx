@@ -8,6 +8,7 @@ import { bindDocumentLocale, hydrateLocale } from "../../i18n/index.js";
 import { readPersistedLocale } from "../settings/chartAppearanceSettings.js";
 import "./strategyResearch.css";
 import "../backtest/research/backtestResearch.css";
+import "../backtest/chart-tester/chartStrategyTester.css";
 import {
   parseStrategyResearchLaunch,
   resolveStrategyResearchBootstrap,

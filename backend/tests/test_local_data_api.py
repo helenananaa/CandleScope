@@ -16,6 +16,23 @@ _TRUSTED_HEADERS = {
 }
 
 
+def test_background_csv_import_honors_explicit_column_mapping(tmp_path: Path, monkeypatch) -> None:
+    client = _client(tmp_path, monkeypatch)
+    response = client.post("/api/v1/local/imports/csv/jobs", params={
+        "name": "Mapped sample", "symbol": "BTCUSDT", "interval": "1m", "timestamp_unit": "ms",
+        "time_column": "日期", "open_column": "开", "high_column": "高", "low_column": "低", "close_column": "收",
+    }, content="日期,开,高,低,收\n1704067200000,1,3,1,2\n1704067260000,2,4,2,3\n".encode("utf-8"), headers={"content-type": "text/csv"})
+    assert response.status_code == 202, response.text
+    for _ in range(100):
+        job = client.get(f"/api/v1/local/imports/jobs/{response.json()['job_id']}").json()
+        if job["status"] in {"completed", "failed", "cancelled"}:
+            break
+        time.sleep(0.01)
+    assert job["status"] == "completed", job
+    assert job["dataset"]["rows"] == 2
+    assert job["dataset"]["volume_available"] is False
+
+
 def _client(tmp_path: Path, monkeypatch) -> TestClient:
     app = FastAPI()
     app.include_router(local_data.router, prefix="/api/v1")

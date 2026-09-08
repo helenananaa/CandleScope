@@ -7,6 +7,7 @@ import {
 
 import BacktestEquityCurve from "../BacktestEquityCurve.js";
 import { t } from "../../../i18n/index.js";
+import { useLocale } from "../../../i18n/useLocale.js";
 import type {
   RecentRunCompareV1,
   TradeExplanationV1,
@@ -20,6 +21,7 @@ import {
   formatChartStrategyNumber,
   chartStrategyTradeFocusTimeMs,
   chartStrategyVirtualTradeWindow,
+  chartStrategyWinRate,
 } from "./chartStrategyResultModel.js";
 
 function dateTime(value: number, locale: string): string {
@@ -210,6 +212,7 @@ export function ChartStrategyResultOverview({
   onOpenAdvanced?: () => void;
 }) {
   const { report, chart, run } = result;
+  const locale = useLocale();
   const trades = report.trades ?? [];
   const latest = trades.at(-1) ?? null;
   const equity = report.performance?.equity_daily ?? chart.equity_curve;
@@ -237,7 +240,7 @@ export function ChartStrategyResultOverview({
           label={t("chartTester.result.netPnl")}
           value={`${formatChartStrategyNumber(report.metrics.realized_net_pnl)} USDT`}
           rawValue={chartStrategyMetricValue(report.metrics.realized_net_pnl)}
-          detail={report.report_label}
+          detail={report.report_label === "APPROXIMATE" ? t("chartTester.result.fidelityFast") : report.report_label}
         />
         <ResultMetric
           label={t("chartTester.result.maxDrawdown")}
@@ -251,7 +254,7 @@ export function ChartStrategyResultOverview({
         />
         <ResultMetric
           label={t("chartTester.result.winRate")}
-          value={formatChartStrategyNumber(report.metrics.win_rate, "percent")}
+          value={Number(report.metrics.trade_count ?? trades.length) === 0 ? "—" : chartStrategyWinRate(report.metrics.win_rate, locale)}
           rawValue={chartStrategyMetricValue(report.metrics.win_rate)}
           detail={t("chartTester.result.runShort", { run: run.run_id.slice(-8) })}
         />

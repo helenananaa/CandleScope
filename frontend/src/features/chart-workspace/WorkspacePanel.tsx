@@ -567,7 +567,7 @@ export default function WorkspacePanel({
                   >
                     <span aria-hidden="true">↶</span>
                     {t("workspace.undo")}
-                    <small>{shortcutModifier()} + Z</small>
+                    <small>{`${shortcutModifier()} + Z`}</small>
                   </button>
                   <button
                     type="button"
@@ -576,7 +576,7 @@ export default function WorkspacePanel({
                   >
                     <span aria-hidden="true">↷</span>
                     {t("workspace.redo")}
-                    <small>{shortcutModifier()} + Shift + Z</small>
+                    <small>{`${shortcutModifier()} + Shift + Z`}</small>
                   </button>
                   <button
                     type="button"

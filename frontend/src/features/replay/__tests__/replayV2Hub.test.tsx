@@ -1229,6 +1229,7 @@ test("hub markup exposes saves, native actions, filters and explicit unavailable
       onPrepareData={() => {}}
     />);
   assert.match(renderPreparation("BAR"), /准备历史数据/);
+  assert.match(renderPreparation("BAR"), /training-presets/);
   assert.match(renderPreparation("BAR"), /返回后会重新检查覆盖，并保留训练设置/);
   assert.doesNotMatch(renderPreparation("AGG_TRADE"), /准备历史数据/);
   assert.doesNotMatch(renderPreparation("BAR", hedgeCatalog()), /准备历史数据/);
@@ -1294,6 +1295,11 @@ test("archive deletion uses an application-owned explicit confirmation dialog", 
 test("hub and picker labels stay user-facing", () => {
   assert.equal(trainingRunStateLabel("AWAITING_MARKET"), "待选商品");
   assert.equal(formatTrainingEquity("10000"), "10,000");
+  assert.equal(formatTrainingEquity("9442.0004446124365"), "9,442.00");
+  assert.equal(formatTrainingEquity("99999999999999999.995"), "100,000,000,000,000,000.00");
+  assert.equal(formatTrainingEquity("-0.001"), "0.00");
+  assert.equal(formatTrainingEquity("-1234.567"), "-1,234.57");
+  assert.equal(formatTrainingEquity("0.123456789", 8), "0.12345679");
   assert.equal(formatReplayUtcDateTime(Date.UTC(2021, 11, 14, 12, 18)), "2021-12-14 12:18 UTC");
 });
 

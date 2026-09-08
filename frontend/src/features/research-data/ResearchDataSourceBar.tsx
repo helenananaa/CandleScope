@@ -9,19 +9,21 @@ export function ResearchDataSourceBar({
   currentChartEnabled = true,
   onOpenLibrary,
   onSelectCurrentChart,
+  sourceLabel,
 }: {
   source: ResearchSourceRefV1 | null;
   libraryEnabled?: boolean;
   currentChartEnabled?: boolean;
   onOpenLibrary(): void;
   onSelectCurrentChart?(): void;
+  sourceLabel?: string;
 }) {
   const label = source === null
     ? t("research.source.none")
     : ordinarySourceLabel(source.kind);
   return (
     <div className="research-data-source-bar" data-testid="research-data-source-bar">
-      <span>{label}</span>
+      <span title={sourceLabel ?? label}>{sourceLabel ?? label}</span>
       {source?.kind !== "CURRENT_CHART" && currentChartEnabled && onSelectCurrentChart ? (
         <button type="button" data-testid="research-source-use-current-chart" onClick={onSelectCurrentChart}>
           {t("strategy.useCurrentChart")}

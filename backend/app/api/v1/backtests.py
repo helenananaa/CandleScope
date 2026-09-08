@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.core.config import getenv as app_getenv
 
 import base64
+from decimal import Decimal
 from typing import Any, Literal
 
 from fastapi import APIRouter, Header, Request
@@ -286,6 +287,21 @@ class ResearchDatasetIdentityPayload(BaseModel):
     snapshot_hash: str = Field(min_length=8, max_length=80)
 
 
+class ResearchExecutionOverrides(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    initialBalance: str = Field(pattern=r"^\d+(?:\.\d+)?$")
+    equityPercent: str = Field(pattern=r"^\d+(?:\.\d+)?$")
+    leverage: str = Field(pattern=r"^\d+(?:\.\d+)?$")
+    feeBps: str = Field(pattern=r"^\d+(?:\.\d+)?$")
+    slippageBps: str = Field(pattern=r"^\d+(?:\.\d+)?$")
+
+    @model_validator(mode="after")
+    def validate_ranges(self) -> "ResearchExecutionOverrides":
+        if Decimal(self.initialBalance) <= 0 or not 0 < Decimal(self.equityPercent) <= 100 or not 1 <= Decimal(self.leverage) <= 125:
+            raise ValueError("Invalid backtest account conditions")
+        return self
+
+
 class ResearchLaunchContextRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     source_workspace_id: str | None = Field(default=None, min_length=1, max_length=160)
@@ -294,6 +310,7 @@ class ResearchLaunchContextRequest(BaseModel):
     strategy_revision_id: str | None = Field(default=None, min_length=1, max_length=128)
     parameters: dict[str, Any] = Field(default_factory=dict)
     quick_preset_id: str = Field(min_length=1, max_length=80)
+    execution_overrides: ResearchExecutionOverrides | None = None
     chart_session: ResearchChartSessionPayload
     range: ResearchRangePayload
     dataset_identity: ResearchDatasetIdentityPayload | None = None
@@ -672,7 +689,10 @@ def create_research_launch_context(
     request: Request, payload: ResearchLaunchContextRequest
 ) -> dict[str, Any]:
     try:
-        return _service(request).create_research_launch_context(payload.model_dump())
+        body = payload.model_dump()
+        if payload.execution_overrides is None:
+            body.pop("execution_overrides", None)
+        return _service(request).create_research_launch_context(body)
     except BacktestError as exc:
         return _error(exc)
 

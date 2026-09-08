@@ -160,6 +160,7 @@ export async function importLocalCsv(input: LocalImportInput): Promise<LocalData
     timestamp_unit: input.timestampUnit,
     volume_required: input.volumeRequired,
     dataset_id: input.datasetId,
+    ...Object.fromEntries(Object.entries(input.columns ?? {}).filter(([, value]) => value).map(([key, value]) => [`${key}_column`, value])),
   });
   const payload = await responseJson(await fetch(url, {
     method: "POST",
@@ -196,6 +197,7 @@ export function createLocalImportJob(
     timestamp_unit: input.timestampUnit,
     volume_required: input.volumeRequired,
     dataset_id: input.datasetId,
+    ...Object.fromEntries(Object.entries(input.columns ?? {}).filter(([, value]) => value).map(([key, value]) => [`${key}_column`, value])),
   });
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();

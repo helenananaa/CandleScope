@@ -25,6 +25,7 @@ import {
   trainingTimeDisclosureLabel,
 } from "../trainingHubLabels.js";
 import ReplayStorageGovernancePanel from "./ReplayStorageGovernancePanel.js";
+import { applyTrainingPreset } from "../trainingPresets.js";
 
 const CREATE_SECTIONS: Array<readonly [string, string, MessageKey]> = [
   ["training-hub-create-start", "1", "replay.hub.sectionStart"],
@@ -103,6 +104,7 @@ function TrainingRunCreatePanel({ runtime, onPrepareData }: TrainingHubDialogPro
   useLocale();
   const { draft, evaluation } = runtime;
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [presetMode, setPresetMode] = useState<"practice" | "challenge" | "custom">("custom");
   const [activeSection, setActiveSection] = useState<string>("training-hub-create-start");
   useEffect(() => {
     if (!runtime.createOpen || draft === null || evaluation === null) return undefined;
@@ -203,6 +205,13 @@ function TrainingRunCreatePanel({ runtime, onPrepareData }: TrainingHubDialogPro
                 </div>
               </section>
             )}
+            <section className="training-presets" aria-label={t("ux.customPreset")}>
+              <div className="research-library-tabs">{(["practice", "challenge", "custom"] as const).map((mode) => <button key={mode} type="button" disabled={busy} aria-pressed={presetMode === mode} onClick={() => {
+                setPresetMode(mode); setAdvancedOpen(mode === "custom");
+                if (mode !== "custom") runtime.actions.setDraft(applyTrainingPreset(draft, mode, runtime.catalog));
+              }}>{t(mode === "practice" ? "ux.practicePreset" : mode === "challenge" ? "ux.challengePreset" : "ux.customPreset")}</button>)}</div>
+              <p>{t("ux.presetHint")}</p>
+            </section>
             <section className="training-hub-form-section" id="training-hub-create-start">
               <header>
                 <div><h3>{t("replay.hub.sectionStart")}</h3><p>{t("replay.hub.startHint")}</p></div>
@@ -333,7 +342,7 @@ function TrainingRunCreatePanel({ runtime, onPrepareData }: TrainingHubDialogPro
               </div>
             </section>
 
-            <section className="training-hub-form-section" id="training-hub-create-rules">
+            <section className="training-hub-form-section" id="training-hub-create-rules" hidden={presetMode !== "custom"}>
               <header>
                 <div><h3>{t("replay.hub.sectionRules")}</h3><p>{t("replay.hub.rulesHint")}</p></div>
                 <span>02</span>
@@ -819,15 +828,22 @@ export default function TrainingHubDialog({
                   ) : (
                     <>
                       <span>{t("replay.hub.equity")}</span>
-                      <strong>
+                      <strong title={card.equity_status === "CURRENT" ? card.equity ?? undefined : undefined}>
                         {card.equity_status === "CURRENT" && card.equity !== null
-                          ? formatTrainingEquity(card.equity)
+                          ? formatTrainingEquity(card.equity, /^(USD|USDT|USDC)$/i.test(card.settlement_asset) ? 2 : 8)
                           : card.equity_status}
                         {card.equity_status === "CURRENT" && <small>{card.settlement_asset}</small>}
                       </strong>
                     </>
                   )}
                 </div>
+                <footer className="training-hub-card-actions">
+                  <button className="training-hub-primary-button" type="button"
+                    disabled={busy || card.resume_action === "UNAVAILABLE"}
+                    onClick={() => runtime.actions.continueRun(card)}>{trainingRunPrimaryActionLabel(card)}</button>
+                  <button className="training-hub-delete-action" type="button" disabled={busy}
+                    onClick={() => setDeleteCandidate(card)}>{t("replay.hub.delete")}</button>
+                </footer>
                 <dl className="training-hub-card-meta">
                   <div><dt>{t("replay.hub.accountSymbol")}</dt><dd>{card.last_symbol ?? t("replay.hub.unselected")}{card.subscribed_track_count > 0 ? t("replay.hub.activeTracks", { count: card.subscribed_track_count }) : ""}</dd></div>
                   <div><dt>{t("replay.hub.sourceKind")}</dt><dd>{trainingSourceKindLabel(card.source_kind)}</dd></div>
@@ -837,24 +853,6 @@ export default function TrainingHubDialog({
                   <div><dt>{t("replay.hub.integrity")}</dt><dd>{trainingIntegrityLabel(card.integrity_mode)}</dd></div>
                 </dl>
                 <p className="training-hub-card-message">{trainingRunStatusMessage(card)}</p>
-                <footer className="training-hub-card-actions">
-                  <button
-                    className="training-hub-primary-button"
-                    type="button"
-                    disabled={busy || card.resume_action === "UNAVAILABLE"}
-                    onClick={() => runtime.actions.continueRun(card)}
-                  >
-                    {trainingRunPrimaryActionLabel(card)}
-                  </button>
-                  <button
-                    className="training-hub-delete-action"
-                    type="button"
-                    disabled={busy}
-                    onClick={() => setDeleteCandidate(card)}
-                  >
-                    {t("replay.hub.delete")}
-                  </button>
-                </footer>
               </article>
             ))}
           </div>
@@ -871,7 +869,7 @@ export default function TrainingHubDialog({
             </button>
           </div>
         )}
-        <TrainingRunCreatePanel runtime={runtime} {...(onPrepareData ? { onPrepareData } : {})} />
+        <TrainingRunCreatePanel key={runtime.createOpen ? "open" : "closed"} runtime={runtime} {...(onPrepareData ? { onPrepareData } : {})} />
         <ReplayStorageGovernancePanel runtime={runtime} />
       </section>
       {deleteCandidate !== null && (

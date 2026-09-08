@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import { t } from "../../i18n/index.js";
 import { ordinarySourceLabel, isCapabilityAvailable } from "./researchDataSourceModel.js";
@@ -17,6 +17,7 @@ export function ResearchDataDrawer(props: {
   capabilities: ResearchCapabilitySummaryV1 | null;
   libraryEnabled?: boolean;
   currentChartEnabled?: boolean;
+  availableKinds?: ResearchSourceKind[];
   library?: ResearchDataLibraryController;
   settings: ChartSettings;
   events: readonly LocalAnalysisEvent[];
@@ -37,6 +38,7 @@ function ResearchDataDrawerBody({
   capabilities,
   libraryEnabled = RESEARCH_DATA_LIBRARY_ENABLED,
   currentChartEnabled = false,
+  availableKinds,
   library,
   settings,
   events,
@@ -53,6 +55,7 @@ function ResearchDataDrawerBody({
   capabilities: ResearchCapabilitySummaryV1 | null;
   libraryEnabled?: boolean;
   currentChartEnabled?: boolean;
+  availableKinds?: ResearchSourceKind[];
   library?: ResearchDataLibraryController;
   settings: ChartSettings;
   events: readonly LocalAnalysisEvent[];
@@ -64,14 +67,24 @@ function ResearchDataDrawerBody({
   onImport?(input: ResearchImportSubmitInput): Promise<unknown>;
   onClose(): void;
 }) {
-  const kinds: ResearchSourceKind[] = ["CURRENT_CHART", "IMPORTED_DATASET", "COMPLETED_RUN"];
+  const kinds: ResearchSourceKind[] = availableKinds ?? ["CURRENT_CHART", "IMPORTED_DATASET", "COMPLETED_RUN"];
+  const drawerRef = useRef<HTMLElement>(null);
+  const closeRef = useRef(onClose);
+  useEffect(() => { closeRef.current = onClose; }, [onClose]);
+  useEffect(() => {
+    const previous = document.activeElement;
+    drawerRef.current?.focus();
+    return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus(); };
+  }, []);
   return (
-    <aside className="research-data-drawer" data-testid="research-data-drawer">
+    <aside className="research-data-drawer" data-testid="research-data-drawer" ref={drawerRef}
+      role="dialog" aria-label={t("research.drawer.title")} tabIndex={-1}
+      onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); closeRef.current(); } }}>
       <header>
         <strong>{t("research.drawer.title")}</strong>
         <button type="button" onClick={onClose}>{t("backtest.close")}</button>
       </header>
-      <div className="research-source-cards">
+      {kinds.length > 1 && <div className="research-source-cards">
         {kinds.map((kind) => {
           const hideImport = kind === "IMPORTED_DATASET" && !libraryEnabled;
           if (hideImport) return null;
@@ -96,7 +109,7 @@ function ResearchDataDrawerBody({
             </button>
           );
         })}
-      </div>
+      </div>}
       {libraryEnabled && library ? (
         <ResearchDatasetRail
           datasets={library.datasets}

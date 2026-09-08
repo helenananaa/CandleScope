@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
 
@@ -43,6 +43,14 @@ export default function StrategyScriptWorkspace({
   onRun,
 }: StrategyScriptWorkspaceProps) {
   const locale = useLocale();
+  const [editorTheme, setEditorTheme] = useState("pyne-dark");
+  useEffect(() => {
+    const update = () => setEditorTheme(document.documentElement.dataset.theme === "light" ? "vs" : "pyne-dark");
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, []);
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof Monaco | null>(null);
   const pyneCleanupRef = useRef<(() => void) | null>(null);
@@ -124,7 +132,7 @@ export default function StrategyScriptWorkspace({
         height="100%"
         language={language === "pine" ? "pine" : "python"}
         value={source}
-        theme="pyne-dark"
+        theme={editorTheme}
         beforeMount={handleBeforeMount}
         onMount={handleMount}
         onChange={(value) => onSourceChange(value ?? "")}
