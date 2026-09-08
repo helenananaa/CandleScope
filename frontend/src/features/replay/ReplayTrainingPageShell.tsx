@@ -4,6 +4,7 @@ import MarketChartWorkspace from "../../app/MarketChartWorkspace.js";
 import MarketPageFrame from "../../app/MarketPageFrame.js";
 import MarketStatusBar from "../../app/MarketStatusBar.js";
 import MarketTopBarFrame from "../../app/MarketTopBarFrame.js";
+import { AlertRailIcon, ProfileRailIcon } from "../../app/marketRailIcons.js";
 import type { ChartSurfaceActions, ChartSurfaceHandle, ChartSurfaceVisibleRange } from "../../chart-adapter/useChartSurfaceRuntime.js";
 import type { RefObject } from "react";
 import type { SurfaceViewportSnapshot } from "../chart-representation/chartRepresentationTypes.js";
@@ -1008,15 +1009,19 @@ export default function ReplayTrainingPageShell({
               disabled={review !== null}
               aria-expanded={indicatorPanelOpen}
               aria-controls="replay-indicator-panel"
+              aria-label={`${t("shell.indicators")} ${review === null ? indicators.status.activeIndicatorCount : "R/O"}`}
               onClick={() => setIndicatorPanelOpen((open) => !open)}
               title={review === null ? t("replay.shell.manageIndicators") : t("replay.shell.reviewBlocksIndicators")}
             >
-              📊
+              <span aria-hidden="true" style={{ display: "flex" }}><ProfileRailIcon /></span>
               <span className="indicator-badge">
                 {review === null ? indicators.status.activeIndicatorCount : "R/O"}
               </span>
             </button>
-            <button className="indicator-toggle-btn alert-toggle-btn" type="button" disabled title={capabilities.ALERTS.state}>🔔</button>
+            <button className="indicator-toggle-btn alert-toggle-btn" type="button" disabled
+              aria-label={t("shell.alerts")} title={capabilities.ALERTS.state}>
+              <span aria-hidden="true" style={{ display: "flex" }}><AlertRailIcon /></span>
+            </button>
           </>}
           quote={last && (
             <div className="price-info"><span className={`current-price ${isUp ? "price-up" : "price-down"}`}>{last.close}</span><span className="price-change">{isUp ? "▲" : "▼"} {t("replay.priceLabel")}</span></div>
