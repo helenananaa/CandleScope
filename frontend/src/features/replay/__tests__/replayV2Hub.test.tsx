@@ -703,6 +703,38 @@ test("hub bootstrap loads only lightweight saves; create capability work starts 
   ]);
 });
 
+test("returning from history preparation refreshes empty BAR capability and preserves draft", async (context) => {
+  let ready = false;
+  let capabilityCalls = 0;
+  const lifecycle = new TrainingHubLifecycle({
+    api: {
+      async listRuns() { return parseTrainingRunListResponse(listResponse([])); },
+      async capabilities() {
+        capabilityCalls += 1;
+        const base = parseReplayCapabilities(enabledCapabilities());
+        return { ...base, sources: { ...base.sources, bar: ready
+          ? base.sources.bar : { enabled: false, reason: "REPLAY_BAR_HISTORY_EMPTY" } } };
+      },
+      async catalog() { return ready ? hedgeCatalog() : { ...hedgeCatalog(), entries: [] }; },
+      async createRun() { return parseTrainingRunMutationResponse(mutationResponse()); },
+    },
+  });
+  context.after(() => lifecycle.dispose());
+  await lifecycle.openCreate();
+  assert.equal(lifecycle.getSnapshot().capabilities?.sources.bar.enabled, false);
+  const draft = lifecycle.getSnapshot().draft;
+  assert.ok(draft);
+  lifecycle.setDraft({ ...draft, name: "归档后继续", indicatorWarmupBars: 300 });
+  lifecycle.closeCreate();
+  ready = true;
+  await lifecycle.openCreate();
+  assert.equal(capabilityCalls, 2);
+  assert.equal(lifecycle.getSnapshot().capabilities?.sources.bar.enabled, true);
+  assert.ok(lifecycle.getSnapshot().catalog?.entries.length);
+  assert.equal(lifecycle.getSnapshot().draft?.name, "归档后继续");
+  assert.equal(lifecycle.getSnapshot().draft?.indicatorWarmupBars, 300);
+});
+
 test("create errors stay visible and reopening refreshes setup context without losing edits", async (context) => {
   let catalogCalls = 0;
   const lifecycle = new TrainingHubLifecycle({

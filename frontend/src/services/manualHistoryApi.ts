@@ -84,6 +84,13 @@ export async function cancelManualHistoryJob(jobId: string, signal?: AbortSignal
   ));
 }
 
+export async function archiveManualHistoryJob(jobId: string): Promise<Record<string, unknown>> {
+  return asRecord(await request(
+    `${API_BASE}/settings/storage/manual-downloads/${encodeURIComponent(jobId)}/replay-archive`,
+    { method: "POST" },
+  ));
+}
+
 export async function listManualHistoryJobs(signal?: AbortSignal): Promise<Record<string, unknown>[]> {
   const payload = asRecord(await request(
     `${API_BASE}/settings/storage/manual-downloads?limit=50`,

@@ -149,10 +149,16 @@ def _build_planner(
 
 
 @router.get("/capabilities")
-async def get_manual_history_capabilities() -> dict[str, Any]:
+async def get_manual_history_capabilities(request: Request) -> dict[str, Any]:
     """Advertise whether the write feature is enabled.  Always read-only."""
 
-    return manual_history_capabilities_payload()
+    from app.replay.manual_history_import import import_unavailable_reason, MAX_IMPORT_ROWS
+
+    payload = manual_history_capabilities_payload()
+    reason = import_unavailable_reason(getattr(request.app.state, "replay_service", None))
+    payload["replay_import"] = {"enabled": reason is None, "reason": reason,
+                                "max_rows": MAX_IMPORT_ROWS, "interval": "1m"}
+    return payload
 
 
 @router.post("/plan")
@@ -277,6 +283,27 @@ async def create_manual_history_download(
         "job": _job_payload(created.job, targets=created.job_targets),
         "reused_existing": created.reused_existing,
     }
+
+
+@router.post("/{job_id}/replay-archive", dependencies=[Depends(_require_write_enabled)])
+def archive_manual_history_download(job_id: str, request: Request) -> dict[str, Any]:
+    # A sync endpoint runs SQLite/Parquet work in FastAPI's worker pool, leaving
+    # the event loop available to live charts and WebSockets.
+    from app.replay.manual_history_import import import_completed_download, ManualReplayImportError
+    from app.replay.history_archive import ReplayHistoryArchiveError
+
+    service = _service(request)
+    if service is None:
+        _reject_write(enabled=True)
+    try:
+        return import_completed_download(service.repository,
+                                         getattr(request.app.state, "replay_service", None), job_id)
+    except ManualHistoryNotFound as exc:
+        raise HTTPException(404, detail={"code": "download_not_found"}) from exc
+    except ManualReplayImportError as exc:
+        raise HTTPException(409, detail={"code": str(exc)}) from exc
+    except (ReplayHistoryArchiveError, OSError) as exc:
+        raise HTTPException(503, detail={"code": "replay_archive_write_failed"}) from exc
 
 
 @router.get("")

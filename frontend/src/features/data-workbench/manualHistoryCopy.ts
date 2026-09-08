@@ -1,6 +1,12 @@
 import { t, type LocaleId, type MessageKey } from "../../i18n/index.js";
 
 const MANUAL_HISTORY_KEYS = {
+  archiveAction: "workbench.manualHistory.archiveAction",
+  archiving: "workbench.manualHistory.archiving",
+  archiveSucceeded: "workbench.manualHistory.archiveSucceeded",
+  archiveFailed: "workbench.manualHistory.archiveFailed",
+  archiveHint: "workbench.manualHistory.archiveHint",
+  archiveUnavailable: "workbench.manualHistory.archiveUnavailable",
   disabled: "workbench.manualHistory.disabled",
   title: "workbench.manualHistory.title",
   hint: "workbench.manualHistory.hint",
