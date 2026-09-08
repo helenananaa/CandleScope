@@ -805,6 +805,27 @@ async function keyboardActivateButton(
 }
 
 export async function configureFormalV2TrainingPlan(cdp, plan, timeoutMs) {
+  // Configure the qualification contract explicitly; product defaults may be
+  // ONE_WAY with approximate account data and must stay user-friendly.
+  await evaluate(cdp, `(() => {
+    const details = document.querySelector('#training-hub-create-advanced');
+    if (details instanceof HTMLDetailsElement && !details.open) details.querySelector('summary')?.click();
+    return true;
+  })()`, { userGesture: true });
+  for (const value of ["HEDGE", "HISTORICAL_EXACT", "BOOK_ASSISTED_REQUIRED"]) {
+    const configured = await evaluate(cdp, `(() => {
+      const value = ${JSON.stringify(value)};
+      const candidates = [...document.querySelectorAll('select')].filter(select =>
+        [...select.options].some(option => option.value === value));
+      if (candidates.length !== 1) return { configured: false, count: candidates.length };
+      const select = candidates[0];
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, value);
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return { configured: true };
+    })()`, { userGesture: true });
+    assert(configured?.configured === true, `formal HEDGE control unavailable: ${value}`, configured);
+    await waitForValue(cdp, `([...document.querySelectorAll('select')].some(select => select.value === ${JSON.stringify(value)}))`, timeoutMs, `HEDGE ${value} selection`);
+  }
   // datetime-local normalizes a zero-seconds value to the shortest valid form.
   const requestedStartValue = new Date(plan.requestedStartMs).toISOString().slice(0, 16);
   const start = await evaluate(cdp, `(() => {
