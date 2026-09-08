@@ -62,6 +62,9 @@ function ReplayMarketPickerRow({
   return (
     <article
       className="replay-market-picker-row"
+      data-market-symbol={entry.identity.symbol}
+      data-market-exchange={entry.identity.exchange}
+      data-market-type={entry.identity.market_type}
       data-available={available ? "true" : "false"}
       data-recommended={recommended ? "true" : "false"}
     >
@@ -84,6 +87,7 @@ function ReplayMarketPickerRow({
       {available ? (
         <button
           className="training-hub-primary-button"
+          aria-label={`${t("replay.picker.select")} ${entry.identity.symbol}`}
           type="button"
           disabled={selecting}
           onClick={onSelect}

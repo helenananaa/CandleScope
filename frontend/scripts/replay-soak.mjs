@@ -761,7 +761,7 @@ async function pressKey(cdp, key, { shift = false } = {}) {
 
 async function keyboardActivateButton(
   cdp,
-  { action = null, railView = null, side = null, text: buttonText = null },
+  { action = null, railView = null, side = null, text: buttonText = null, marketSymbol = null, marketExchange = null, marketType = null },
   timeoutMs,
 ) {
   await evaluate(cdp, `(() => {
@@ -774,6 +774,9 @@ async function keyboardActivateButton(
     const active = await evaluate(cdp, `(() => {
       const item = document.activeElement;
       return item instanceof HTMLButtonElement ? {
+        marketSymbol: item.closest(".replay-market-picker-row")?.dataset.marketSymbol || null,
+        marketExchange: item.closest(".replay-market-picker-row")?.dataset.marketExchange || null,
+        marketType: item.closest(".replay-market-picker-row")?.dataset.marketType || null,
         action: item.dataset.replayAction || null,
         disabled: item.disabled,
         railView: item.dataset.railView || null,
@@ -785,7 +788,10 @@ async function keyboardActivateButton(
       && (action === null || active.action === action)
       && (railView === null || active.railView === railView)
       && (side === null || active.side === side)
-      && (buttonText === null || active.text === buttonText)) {
+      && (buttonText === null || active.text === buttonText)
+      && (marketSymbol === null || active.marketSymbol === marketSymbol)
+      && (marketExchange === null || active.marketExchange === marketExchange)
+      && (marketType === null || active.marketType === marketType)) {
       // Space activates a focused native button on key-up. Unlike Enter, it
       // does not require a text/char CDP event to reach Chromium's default
       // button activation path, so this remains a real trusted keyboard input.
@@ -902,20 +908,20 @@ export async function chooseReplayMarket(cdp, plan, timeoutMs) {
     })()`, { userGesture: true });
     assert(filtered === true, "formal replay.v2 market search control is unavailable");
   }
-  const buttonText = await waitForValue(
+  const market = await waitForValue(
     cdp,
     `(() => {
-      const expected = ${JSON.stringify(plan?.symbol ?? null)};
-      const button = [...document.querySelectorAll("button")].find((item) => {
-        const text = item.textContent?.trim() || "";
-        return !item.disabled && (expected === null ? text.startsWith("选择 ") : text === "选择 " + expected);
-      });
-      return button?.textContent?.trim() || null;
+      const expected = ${JSON.stringify(plan)};
+      const row = [...document.querySelectorAll('.replay-market-picker-row[data-available="true"]')]
+        .find(item => (!expected || (item.dataset.marketSymbol === expected.symbol
+          && item.dataset.marketExchange === expected.exchange && item.dataset.marketType === expected.marketType))
+          && item.querySelector('button:not(:disabled)'));
+      return row ? { symbol: row.dataset.marketSymbol, exchange: row.dataset.marketExchange, type: row.dataset.marketType } : null;
     })()`,
     timeoutMs,
     "Run market picker readiness",
   );
-  return keyboardActivateButton(cdp, { text: buttonText }, timeoutMs);
+  return keyboardActivateButton(cdp, { marketSymbol: market.symbol, marketExchange: market.exchange, marketType: market.type }, timeoutMs);
 }
 
 function accountContinuityProjection(response) {
