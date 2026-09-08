@@ -2223,8 +2223,12 @@ if (!gotSingleInstanceLock) {
   });
 }
 
-app.on("before-quit", (event) => {
+app.on("before-quit", () => {
   manager?.approveQuit();
+});
+
+// Close renderer-owned streams before waiting for the backend to shut down.
+app.on("will-quit", (event) => {
   if (shutdownComplete || (!supervisor && !assetServer)) return;
   event.preventDefault();
   shutdownPromise ??= Promise.all([supervisor?.stop(), assetServer?.close()]).finally(() => {
