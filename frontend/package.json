@@ -55,7 +55,8 @@
         "dir"
       ]
     },
-    "beforePack": "scripts/check-desktop-runtime.cjs"
+    "beforePack": "scripts/check-desktop-runtime.cjs",
+    "afterPack": "scripts/compile-desktop-python.cjs"
   },
   "overrides": {
     "dompurify": "3.4.13"
