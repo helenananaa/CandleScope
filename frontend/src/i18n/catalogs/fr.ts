@@ -1452,7 +1452,7 @@ export const fr = {
   "replay.hub.revalidate": "Revérifier le catalogue de capacités",
   "replay.hub.loading": "Chargement des résumés d’archives…",
   "replay.hub.emptyTitle": "Aucune archive d’entraînement pour le moment",
-  "replay.hub.emptyHint": "Créez le premier entraînement faisant autorité côté serveur ; par défaut, une fenêtre aléatoire aveugle est utilisée.",
+  "replay.hub.emptyHint": "Créez un entraînement, puis choisissez un instrument. Son heure de début est fixée à la création.",
   "replay.hub.emptyCreate": "Créer le premier entraînement",
   "replay.hub.cardKicker": "Entraînement · {mode}",
   "replay.hub.currentSymbol": "Symbole actuel",

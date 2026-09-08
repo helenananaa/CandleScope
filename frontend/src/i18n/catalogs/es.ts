@@ -1458,7 +1458,7 @@ export const es = {
   "replay.hub.revalidate": "Revalidar catálogo de capacidades",
   "replay.hub.loading": "Cargando resúmenes de archivo…",
   "replay.hub.emptyTitle": "Aún no hay archivos de entrenamiento",
-  "replay.hub.emptyHint": "Crea el primer entrenamiento con autoridad en el servidor; el valor predeterminado usa una ventana aleatoria ciega.",
+  "replay.hub.emptyHint": "Crea un entrenamiento y después elige un instrumento. La hora de inicio se fija al crearlo.",
   "replay.hub.emptyCreate": "Crear el primer entrenamiento",
   "replay.hub.cardKicker": "Entrenamiento · {mode}",
   "replay.hub.currentSymbol": "Símbolo actual",

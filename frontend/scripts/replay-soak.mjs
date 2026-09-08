@@ -2579,7 +2579,7 @@ async function trainingActionCycle({ cdp, backendOrigin, sessionId, diagnosticGa
       orderCount: Number(statusElement.dataset.replayOrderCount || 0),
       fillCount: Number(statusElement.dataset.replayFillCount || 0),
       revealed: statusElement.dataset.replayRevealed,
-      bars: Number((statusElement.innerText.match(/([0-9]+) (?:display )?bars/) || [])[1] || 0),
+      bars: Number(statusElement.dataset.replayViewerBarCount || 0),
     };
     if (status.orderCount > ${beforeOrder.orderCount}) return { kind: "ordered", status };
     const feedback = document.querySelector('#replay-order-size-feedback[data-tone="error"]');
@@ -3042,9 +3042,8 @@ async function v2AccessibilityAudit(cdp, timeoutMs) {
 
 async function liveSnapshot(cdp) {
   return evaluate(cdp, `(() => {
-    const text = document.body?.innerText || "";
     const interval = document.querySelector(".interval-btn.active")?.textContent?.trim() || "";
-    const bars = Math.max(0, ...[...text.matchAll(/([0-9]+)[ ]+bars/g)].map((match) => Number(match[1])));
+    const bars = Number(document.querySelector("[data-live-bar-count]")?.dataset.liveBarCount || 0);
     return {
       url: location.href,
       interval,
@@ -4315,7 +4314,7 @@ async function main() {
       await waitForValue(
         live.cdp,
         `document.querySelectorAll("canvas").length > 0
-          && [...document.body.innerText.matchAll(/([0-9]+)[ ]+bars/g)].some((match) => Number(match[1]) > 0)`,
+          && Number(document.querySelector("[data-live-bar-count]")?.dataset.liveBarCount || 0) > 0`,
         args.timeoutMs,
         "live chart fixture bars",
       );

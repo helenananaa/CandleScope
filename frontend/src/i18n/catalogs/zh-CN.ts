@@ -1476,7 +1476,7 @@ export const zhCN = {
   "replay.hub.revalidate": "重新校验能力目录",
   "replay.hub.loading": "正在读取存档摘要…",
   "replay.hub.emptyTitle": "还没有训练存档",
-  "replay.hub.emptyHint": "创建第一条服务端权威训练；默认使用盲化随机窗口。",
+  "replay.hub.emptyHint": "创建训练后选择商品；开始时间会在创建时确定。",
   "replay.hub.emptyCreate": "新建第一条训练",
   "replay.hub.cardKicker": "训练 · {mode}",
   "replay.hub.currentSymbol": "当前商品",

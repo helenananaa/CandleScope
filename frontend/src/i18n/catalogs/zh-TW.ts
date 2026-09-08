@@ -1452,7 +1452,7 @@ export const zhTW = {
   "replay.hub.revalidate": "重新校驗能力目錄",
   "replay.hub.loading": "正在讀取存檔摘要…",
   "replay.hub.emptyTitle": "還沒有訓練存檔",
-  "replay.hub.emptyHint": "建立第一條服務端權威訓練；預設使用盲化隨機視窗。",
+  "replay.hub.emptyHint": "建立訓練後選擇商品；開始時間會在建立時確定。",
   "replay.hub.emptyCreate": "新建第一條訓練",
   "replay.hub.cardKicker": "訓練 · {mode}",
   "replay.hub.currentSymbol": "當前商品",
