@@ -705,14 +705,22 @@ export async function waitForValue(cdp, expression, timeoutMs, label) {
   throw new Error(`Timed out waiting for ${label}; last value=${JSON.stringify(value)}; last error=${JSON.stringify(lastError)}`);
 }
 
-async function click(cdp, selector) {
-  const clicked = await evaluate(cdp, `(() => {
-    const element = document.querySelector(${JSON.stringify(selector)});
-    if (!(element instanceof HTMLElement) || element.matches(":disabled")) return false;
-    element.click();
-    return true;
-  })()`, { userGesture: true });
-  if (!clicked) throw new Error(`Cannot click ${selector}`);
+export async function click(cdp, selector, timeoutMs = 5_000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const clicked = await evaluate(cdp, `(() => {
+      const element = document.querySelector(${JSON.stringify(selector)});
+      if (!(element instanceof HTMLElement) || element.matches(":disabled")
+        || element.getAttribute("aria-disabled") === "true") return false;
+      element.click();
+      return true;
+    })()`, { userGesture: true });
+    // Never retry an activation that was dispatched; only wait for the CTA
+    // to become actionable before sending its one click.
+    if (clicked) return;
+    await wait(25);
+  }
+  throw new Error(`Cannot click ${selector}`);
 }
 
 async function clickButtonByText(cdp, text, timeoutMs = 5_000) {
@@ -778,7 +786,7 @@ async function keyboardActivateButton(
         marketExchange: item.closest(".replay-market-picker-row")?.dataset.marketExchange || null,
         marketType: item.closest(".replay-market-picker-row")?.dataset.marketType || null,
         action: item.dataset.replayAction || null,
-        disabled: item.disabled,
+        disabled: item.disabled || item.getAttribute("aria-disabled") === "true",
         railView: item.dataset.railView || null,
         side: item.dataset.side || null,
         text: item.textContent?.trim() || "",
@@ -2552,7 +2560,7 @@ async function trainingActionCycle({ cdp, backendOrigin, sessionId, diagnosticGa
   const side = index % 2 === 0 ? "BUY" : "SELL";
   await waitForValue(cdp, `(() => {
     const button = document.querySelector('[data-replay-action="place-order"][data-side="${side}"]');
-    return button instanceof HTMLButtonElement && !button.disabled;
+    return button instanceof HTMLButtonElement && !button.disabled && button.getAttribute("aria-disabled") !== "true";
   })()`, timeoutMs, `training order side ${side} readiness`);
   const beforeOrder = await waitForAuthoritativeReplayStatus(
     cdp,

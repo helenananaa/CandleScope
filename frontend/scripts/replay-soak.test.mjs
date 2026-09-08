@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
+import vm from "node:vm";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -11,6 +12,7 @@ import {
   assertReplayNetwork,
   browserSoakFailureEvidence,
   captureTarget,
+  click,
   CdpConnection,
   createV2ArchiveRun,
   createStreamingBoundaryAudit,
@@ -2228,4 +2230,29 @@ test("replay soak fails closed on backend lifecycle and persistence failures", (
     },
   }).passed, false);
   assert.equal(replayBackendHealth({}).passed, false);
+});
+
+
+test("soak waits through aria-disabled without dispatching or retrying an order click", async () => {
+  let reads = 0;
+  let clicks = 0;
+  class Element {
+    matches() { return false; }
+    getAttribute() { return reads < 3 ? "true" : "false"; }
+    click() { assert.ok(reads >= 3); clicks += 1; }
+  }
+  const element = new Element();
+  const cdp = {
+    async send(method, params) {
+      assert.equal(method, "Runtime.evaluate");
+      reads += 1;
+      const value = vm.runInNewContext(params.expression, {
+        HTMLElement: Element, document: { querySelector: () => element },
+      });
+      return { result: { value } };
+    },
+  };
+  await click(cdp, "button", 1000);
+  assert.equal(clicks, 1);
+  assert.equal(reads, 3);
 });
