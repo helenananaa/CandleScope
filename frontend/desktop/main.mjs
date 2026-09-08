@@ -140,6 +140,7 @@ function createSupervisor() {
     env: {
       CANDLE_HOST: "127.0.0.1",
       CANDLE_PORT: String(backendPort),
+      CANDLE_DATA_DIR: process.env.CANDLE_DATA_DIR || path.join(app.getPath("userData"), "data"),
       CORS_ORIGINS: new URL(appUrl).origin,
       CANDLESCOPE_PLUGIN_PLATFORM_V2_MANAGEMENT_ORIGINS: new URL(appUrl).origin,
       CANDLESCOPE_DESKTOP_PLUGIN_SESSION: managementSession.sessionToken,
