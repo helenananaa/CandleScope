@@ -61,6 +61,7 @@ import {
   renderMainSeriesProjectionPatch,
 } from "../chart-adapter/projectionSeriesRenderer";
 import { createViewportController } from "../chart-adapter/viewportController";
+import { ordinalSourceTimesChanged, refreshOrdinalTimeScale } from "../chart-adapter/ordinalTimeScaleRefresh";
 import {
   buildMainSeriesCrosshairValue,
   buildMainSeriesReferenceOptions,
@@ -4075,6 +4076,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           viewportController: viewportControllerRef.current,
         });
         renderedMainSeriesDataRef.current = renderResult.nextData;
+        if (axisMode === "derived-ordinal" && ordinalSourceTimesChanged(
+          previousDisplayRows, displayRows, effectiveProjectionPatch.fromOutputIndex,
+        )) refreshOrdinalTimeScale(chartRef.current, series);
         renderedMainSeriesGenerationRef.current += 1;
         committedProjectionGenerationRef.current = generation;
         projectionRendered = true;
@@ -4246,6 +4250,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
             viewportController: viewportControllerRef.current,
           });
           renderedMainSeriesDataRef.current = renderResult.nextData;
+          if (axisMode === "derived-ordinal" && ordinalSourceTimesChanged(
+            previousDisplayRows, displayRows, projectionPatch.fromOutputIndex,
+          )) refreshOrdinalTimeScale(chartRef.current, currentSeries);
           renderedMainSeriesGenerationRef.current += 1;
           committedProjectionGenerationRef.current = generation;
           projectionRendered = true;
