@@ -1,6 +1,6 @@
 # PR #3 合并后收口验收
 
-状态：进行中。功能、原生构建与回归已完成；正式回放稳定性验收尚在运行，本文不能作为最终放行结论。
+状态：Windows 本地合并收口验收通过。代码与成品基准为 `36faf92ebadf096cbf9941d081ef784e7aa5a09d`；随后提交只补充验收文档与摘要。机器可读记录见 [PR3-closeout-20260908.json](PR3-closeout-20260908.json)。
 
 ## 范围与修复
 
@@ -22,15 +22,17 @@
 |---|---|---|
 | 前端全套、架构、插件架构、i18n、TypeScript、ESLint、生产构建 | 3,651 项前端测试通过；检查和构建通过 | `frontend-complete-check.log` |
 | 桌面单测 | 46 passed | 同上及 `desktop-lifecycle-final-tests.log` |
-| 后端全部用例覆盖 | 已有 4,218 个不同用例通过；新增盲化修复回归通过，最终汇总待更新 | `backend-acceptance-coverage.json`、`backend-case-ledger.json` |
+| 后端全部用例覆盖 | 当前收集的 4,222 个不同用例均有通过结果，无遗漏或未通过项 | `backend-acceptance-current.json`、`backend-case-ledger-current.json` |
 | 百万根 Python 参考运行 | 1,000,000 根完成，测试通过，约 1,662.935 秒 | `backend-full.xml` 中对应测试 |
-| 独立包内 Python | 140 passed，确认从包内加载后端、NumPy 2.2.1、PyArrow 21.0.0 | `bundled-backend-tests.log`、`bundled-import-paths.log` |
+| 独立包内 Python | 基础范围 140 passed；最终盲化修复包关键范围另有 79 passed（重叠不累加），确认从包内加载后端、NumPy 2.2.1、PyArrow 21.0.0 | `bundled-backend-tests.log`、`bundled-import-paths.log`、`final-bundled-critical.xml` |
 | Windows Python / Java / 原生沙箱 | 实际隔离探针与签名插件生命周期通过，无残留进程或监督器 | `windows-plugin-real-gate.json` |
 | 回放 25 轮压力复验 | 25 轮训练操作、25 轮归档生命周期、10,000 投影及盲化检查通过 | `replay-order-preemption.json` |
-| 正式回放稳定性 | 待完成；门槛为至少 60 分钟、100 轮、1,000,000 投影 | `replay-stability-final.json` |
-| 成品源码一致性 | 前一候选 131 个前端/桌面文件、601 个后端文件核对一致；盲化修复后将再次重建核对 | `packaged-source-parity.json`、`packaged-backend-source-parity.json` |
+| 正式回放稳定性 | 3,769,507 ms（62.825 分钟）、100 轮训练操作、100 轮归档生命周期、1,000,000 投影；37/37 检查通过；退出码 0，临时目录与监听端口已清理 | `replay-release-acceptance.json`、同名 `.log` |
+| 成品源码一致性 | 最终包 131 个前端/桌面文件、601 个后端文件均核对一致 | `final-renderer-parity.json`、`final-backend-parity.json` |
 
-后端覆盖统计按用例标识取最新结果：初次全量为 4,208 passed / 3 failed / 2 errors；修复后回归为 4,216 passed / 1 failed（不重复已通过的百万根长基准）；最后的 30 项修复复验全部通过，覆盖所有此前未通过项。汇总不是把重叠测试相加，也不是声称某一次命令直接输出了 4,218 passed。
+后端覆盖统计按用例标识取最新结果：初次全量为 4,208 passed / 3 failed / 2 errors；修复后回归为 4,216 passed / 1 failed（不重复已通过的百万根长基准）；30 项修复复验通过，后续新增盲化修复另通过 85 项底层及 56 项 API 回归。最终按当前收集的 4,222 个用例标识核对最近结果，排除已被参数化用例替代的旧标识。汇总不是把重叠测试相加，也不是声称某一次命令直接输出了 4,222 passed。
+
+正式长测使用干净的代码提交启动。浏览器投影吞吐为 67,381 次/秒，主页面保留堆增长 9,465,076 字节、后半程增长 14,455,180 字节，均低于原有门槛。最后一次运行采样累计恢复 300 次，会话恢复、持久化及关闭失败均为 0。早期第 14 轮下单问题及第 30 轮盲化目录重试问题的失败记录保留；修复后重新跑完整门槛，没有把失败记录改成通过或降低门槛。
 
 ## 原生成品流程
 
@@ -48,8 +50,12 @@
 
 官方 BAR 样本采用 Binance Vision 2026-08 BTCUSDT、ETHUSDT 1m 月度归档，各 44,640 行；官方 CHECKSUM 均匹配，微秒时间戳精确转为毫秒并检查逐分钟连续性。`official-bar-sources.json` 记录来源和摘要。正式验收同时校验这些真实 BAR 样本，但 HEDGE 主交易/恢复场景使用独立的确定性市场、盘口、规则及私有状态模拟夹具。其固定归档保真度标签不表示整场压力运行采用真实市场历史，也不表示真实交易所私有账户历史。
 
-原始日志、截图、数据库与工具运行结果位于本机 QA 工作区 `output/playwright/pr3-closeout/`；不把行情数据库、QA 用户目录、安装包或临时工具提交到 Git。
+原始日志、截图、官方样本数据库、QA 用户目录与工具运行结果已归档到主工作区 `output/playwright/pr3-closeout/`；关键文件 SHA-256 见机器可读记录。不把行情数据库、QA 用户目录、安装包或临时工具提交到 Git。
 
 ## 交付边界
 
 Windows 本地验收成品未做公开发行代码签名。大 chunk 构建警告仍存在；本次验证不等价于所有设备和任意图表规模的性能承诺。Mac 旧验收属于原 PR 的历史记录，不作为这次 Windows 实测的替代证据。
+
+完整成品目录为主工作区 `output/releases/20260908-windows-acceptance/CandleScope Windows x64/`；运行其中 `CandleScope.exe`，无需外置 Python、Node.js 或 uv。`artifact-manifest.json` 记录逐文件摘要，`acceptance.json` 绑定验收代码与原始证据，`SHA256SUMS` 用于校验压缩包。所有文件必须一起保留。
+
+ZIP：`CandleScope-windows-x64-36faf92e.zip`，334,430,162 字节，完整 CRC 检查通过；SHA-256：`89c21b6b78fb57fdfd646d3b85998ead8c872f21776cc56772acb8c4563a9d5d`。逐文件清单覆盖 16,780 个文件。源码内的 JSON 另外记录最终压缩包摘要；包内验收记录不自引用所在压缩包的摘要。
