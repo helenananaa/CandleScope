@@ -108,10 +108,22 @@ export class SidecarSupervisor {
     this.child = null;
     if (child && child.exitCode === null) {
       child.kill("SIGTERM");
-      await Promise.race([
-        new Promise((resolve) => child.once("exit", resolve)),
-        new Promise((resolve) => setTimeout(resolve, this.options.shutdownTimeoutMs)),
-      ]);
+      let shutdownTimer;
+      let onExit;
+      try {
+        await Promise.race([
+          new Promise((resolve) => {
+            onExit = resolve;
+            child.once("exit", onExit);
+          }),
+          new Promise((resolve) => {
+            shutdownTimer = setTimeout(resolve, this.options.shutdownTimeoutMs);
+          }),
+        ]);
+      } finally {
+        clearTimeout(shutdownTimer);
+        child.off("exit", onExit);
+      }
       if (child.exitCode === null) child.kill("SIGKILL");
     }
     if (this.logHandle) await this.logHandle.close();
