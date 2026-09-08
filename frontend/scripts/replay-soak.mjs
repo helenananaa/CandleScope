@@ -4268,6 +4268,18 @@ async function main() {
       runId,
       sessionId,
       timeoutMs: args.timeoutMs,
+    }).catch(async (error) => {
+      await replayCapture.settle();
+      phaseDiagnostics = {
+        phase: "hedge-account-continuity",
+        page: await evaluate(replay.cdp, `({url:location.href, text:document.body.innerText})`).catch(() => null),
+        apiRequests: replayCapture.requests.filter(item => item.url.includes('/api/')).slice(-30),
+        apiResponses: replayCapture.responses.filter(item => item.url.includes('/api/')).slice(-30),
+        responseBodies: replayCapture.responseBodies.slice(-30),
+        consoleErrors: replayCapture.consoleErrors,
+        exceptions: replayCapture.exceptions,
+      };
+      throw error;
     });
     assert(await evaluate(replay.cdp, "window.opener === null"), "primary replay target retained opener");
     const blindInitialDom = await evaluate(replay.cdp, "document.body.innerText");
