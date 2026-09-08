@@ -134,17 +134,25 @@ class MACDIndicator(Indicator):
         return dif, dea, hist
 
     def update_partial(self, bar: BarData) -> None:
-        if self._fast_ema is None or self._slow_ema is None:
+        val = self._get_field(bar, self._source)
+
+        def preview_ema(ema, total, period, alpha):
+            if ema is None:
+                return (total + val) / period if self._count + 1 == period else None
+            return alpha * val + (1 - alpha) * ema
+
+        fast = preview_ema(self._fast_ema, self._fast_sum, self._fast, self._fast_alpha)
+        slow = preview_ema(self._slow_ema, self._slow_sum, self._slow, self._slow_alpha)
+        if fast is None or slow is None:
             self._preview.update({"dif": None, "dea": None, "hist": None})
             return
-
-        val = self._get_field(bar, self._source)
-        fast = self._fast_alpha * val + (1 - self._fast_alpha) * self._fast_ema
-        slow = self._slow_alpha * val + (1 - self._slow_alpha) * self._slow_ema
         dif = fast - slow
 
         if self._signal_ema is not None:
             dea = self._signal_alpha * dif + (1 - self._signal_alpha) * self._signal_ema
+            hist = 2 * (dif - dea)
+        elif self._signal_count + 1 == self._signal:
+            dea = (self._signal_sum + dif) / self._signal
             hist = 2 * (dif - dea)
         else:
             dea = None
