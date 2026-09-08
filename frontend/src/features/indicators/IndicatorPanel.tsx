@@ -15,6 +15,8 @@ import {
   useIndicatorCatalogRuntime,
 } from "./useIndicatorCatalogRuntime";
 import { indicatorDisplayName } from "./indicatorDisplayName.js";
+import { ProfileRailIcon } from "../../app/marketRailIcons.js";
+import { IndicatorCategoryIcon } from "./IndicatorCategoryIcon.js";
 import { IndicatorNumberInput } from "./IndicatorNumberInput.js";
 import { indicatorParamLabel, indicatorSourceLabel } from "./indicatorParamLabels.js";
 import IndicatorEditor from "./IndicatorEditor";
@@ -49,26 +51,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   "Oscillator": "震荡",
   "Volatility": "波动率",
   "Volume": "成交量",
-};
-
-const CATEGORY_ICONS: Record<string, string> = {
-  "趋势": "📈",
-  "震荡": "⚡",
-  "波动": "📊",
-  "成交量": "📦",
-  "contract-data": "⛓️",
-  "custom": "✏️",
-  // English fallbacks (lowercase)
-  "trend": "📈",
-  "momentum": "⚡",
-  "volatility": "📊",
-  "volume": "📦",
-  "oscillator": "⚡",
-  // English fallbacks (capitalized)
-  "Trend": "📈",
-  "Oscillator": "⚡",
-  "Volatility": "📊",
-  "Volume": "📦",
 };
 
 const CATEGORY_GROUP_KEYS: Record<string, string> = {
@@ -711,7 +693,7 @@ plot(ma, "MA", color=line_color)
             {/* Header */}
             <div className="indicator-panel-header">
               <h3 className="indicator-panel-title">
-                📊 {t("indicator.title")}
+                <span aria-hidden="true" style={{ display: "flex" }}><ProfileRailIcon /></span> {t("indicator.title")}
                 {computing && <span className="indicator-computing-badge">{t("indicator.computing")}</span>}
                 {realtimeMode === "historical-only" && (
                   <span
@@ -805,7 +787,7 @@ plot(ma, "MA", color=line_color)
                     return (
                       <div key={cat} className="indicator-category-group">
                         <div className="indicator-category-label">
-                          <span>{CATEGORY_ICONS[cat] || "📌"}</span>
+                          <span style={{ display: "flex" }}><IndicatorCategoryIcon category={cat} /></span>
                           <span>{categoryDisplayLabel(cat)}</span>
                         </div>
                         {items.map((preset) => {
