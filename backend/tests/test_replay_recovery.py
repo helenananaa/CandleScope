@@ -345,16 +345,19 @@ async def test_old_checkpoint_replays_play_command_and_autonomous_source_tail(
         session_id,
         _command("play", CommandType.PLAY, speed["revision"]),
     )
-    for _ in range(100):
-        snapshot = (await service.get_session(session_id))["snapshot"]
-        if snapshot["state"] == SessionState.ENDED.value:
-            break
-        await asyncio.sleep(0)
-    else:
-        raise AssertionError("MAX replay did not reach ENDED")
-    final_hash = str(snapshot["state_hash"])
-    final_source = int(snapshot["cursor"]["source_sequence"])
-    await service.shutdown(step_timeout=1.0)
+    try:
+        # Recovery is the contract here, not how often this polling coroutine
+        # can run before the playback task's next timer/IO completion.
+        async with asyncio.timeout(5):
+            while True:
+                snapshot = (await service.get_session(session_id))["snapshot"]
+                if snapshot["state"] == SessionState.ENDED.value:
+                    break
+                await asyncio.sleep(0.005)
+        final_hash = str(snapshot["state_hash"])
+        final_source = int(snapshot["cursor"]["source_sequence"])
+    finally:
+        await service.shutdown(step_timeout=1.0)
 
     with sqlite3.connect(path) as connection:
         connection.execute(

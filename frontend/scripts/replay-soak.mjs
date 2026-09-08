@@ -4304,7 +4304,19 @@ async function main() {
       blindCalendarDates.length === 0,
       `blind replay DOM rendered a calendar date before reveal: ${JSON.stringify(blindCalendarDates)}`,
     );
-    const accessibility = await v2AccessibilityAudit(replay.cdp, args.timeoutMs);
+    const accessibility = await v2AccessibilityAudit(replay.cdp, args.timeoutMs).catch(async (error) => {
+      await replayCapture.settle();
+      phaseDiagnostics = {
+        phase: "keyboard-order-accessibility",
+        page: await evaluate(replay.cdp, `({url:location.href, text:document.body.innerText,
+          active:document.activeElement?.outerHTML})`).catch(() => null),
+        apiRequests: replayCapture.requests.filter(item => item.url.includes('/api/')).slice(-30),
+        responseBodies: replayCapture.responseBodies.slice(-30),
+        consoleErrors: replayCapture.consoleErrors,
+        exceptions: replayCapture.exceptions,
+      };
+      throw error;
+    });
 
     // Establish the live/replay coexistence proof only after the archive session
     // exists. An offline live target can legitimately probe missing present-day
