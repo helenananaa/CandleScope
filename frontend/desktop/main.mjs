@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, screen } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, screen } from "electron";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -2192,11 +2192,29 @@ if (!gotSingleInstanceLock) {
     window.focus();
   });
   app.whenReady().then(boot).catch(async (error) => {
-    await mkdir(app.getPath("logs"), { recursive: true });
-    await writeFile(
-      path.join(app.getPath("logs"), "desktop-startup-error.log"),
-      `${new Date().toISOString()} ${error?.stack || error}\n`,
-      { flag: "a" },
+    const logsPath = app.getPath("logs");
+    try {
+      await mkdir(logsPath, { recursive: true });
+      await writeFile(
+        path.join(logsPath, "desktop-startup-error.log"),
+        `${new Date().toISOString()} ${error?.stack || error}\n`,
+        { flag: "a" },
+      );
+    } catch (logError) {
+      console.error("Could not save startup diagnostics", logError);
+    }
+    const chinese = app.getLocale().toLowerCase().startsWith("zh");
+    const sidecarFailed = error?.code === "SIDECAR_STARTUP_FAILED";
+    dialog.showErrorBox(
+      chinese ? "CandleScope 启动失败" : "CandleScope could not start",
+      [
+        sidecarFailed
+          ? (chinese ? "本地后端未能启动。请检查 Python 运行环境及后端依赖是否完整。" : "The local backend could not start. Check that the Python runtime and backend dependencies are installed.")
+          : (chinese ? "应用初始化失败，请查看启动日志以确定原因。" : "Application initialization failed. Check the startup log for details."),
+        chinese ? "日志目录：" : "Log directory:",
+        logsPath,
+        sidecarFailed ? "backend-sidecar.log / desktop-startup-error.log" : "desktop-startup-error.log",
+      ].join("\n\n"),
     );
     await supervisor?.stop();
     await assetServer?.close();
