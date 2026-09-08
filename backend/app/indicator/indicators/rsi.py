@@ -87,7 +87,7 @@ class RSIIndicator(Indicator):
         return 100.0 - (100.0 / (1.0 + rs))
 
     def update_partial(self, bar: BarData) -> None:
-        if self._prev_val is None or self._count <= self._period:
+        if self._prev_val is None or self._count < self._period:
             self._preview["rsi"] = None
             return
 
@@ -96,8 +96,14 @@ class RSIIndicator(Indicator):
         gain = max(change, 0.0)
         loss = max(-change, 0.0)
 
-        avg_gain = (self._avg_gain * (self._period - 1) + gain) / self._period
-        avg_loss = (self._avg_loss * (self._period - 1) + loss) / self._period
+        if self._count == self._period:
+            # The forming bar supplies the last change in the initial seed.
+            # Do not advance the confirmed accumulator on repeated ticks.
+            avg_gain = (sum(self._init_gains) + gain) / self._period
+            avg_loss = (sum(self._init_losses) + loss) / self._period
+        else:
+            avg_gain = (self._avg_gain * (self._period - 1) + gain) / self._period
+            avg_loss = (self._avg_loss * (self._period - 1) + loss) / self._period
 
         if avg_loss == 0:
             self._preview["rsi"] = 100.0
