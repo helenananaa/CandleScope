@@ -114,6 +114,16 @@ async def test_review_checkpoint_classifier_ignores_market_only_changes() -> Non
     assert review_module.ReviewRecorder._internal_adapter_command(  # noqa: SLF001
         {"kind": "STATE", "state_kind": "controller_expired"}
     )
+    for prefix in ("v2multi-", "v2part-"):
+        for kind in ("_training_fast_forward_final_state", "_training_fast_forward_empty_account"):
+            assert review_module.ReviewRecorder._internal_adapter_command({
+                "kind": "COMMAND", "command": {"command_id": prefix + "a" * 40, "type": kind},
+            })
+    # Actual user commands and domain events still reach the review recorder.
+    assert not review_module.ReviewRecorder._internal_adapter_command({
+        "kind": "COMMAND", "command": {"command_id": "v2multi-user", "type": "place_order"},
+    })
+    assert not review_module.ReviewRecorder._internal_adapter_command({"kind": "SOURCE_EVENT"})
     assert ReplaySessionActor._review_checkpoint_required(  # noqa: SLF001
         before,
         {

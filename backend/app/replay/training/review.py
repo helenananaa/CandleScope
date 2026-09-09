@@ -785,6 +785,8 @@ class ReviewRecorder:
                 "acquire_controller",
                 "step",
                 "advance_by",
+                "_training_fast_forward_empty_account",
+                "_training_fast_forward_final_state",
                 "_training_execute_historical_book_close",
                 "_training_execute_revealed_reference_close",
             }

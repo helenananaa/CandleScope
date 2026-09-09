@@ -11,6 +11,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from decimal import ROUND_FLOOR, Decimal, InvalidOperation
+from time import perf_counter
 from typing import TYPE_CHECKING, cast
 
 from app.data_engine.interval_policy import (
@@ -4235,6 +4236,7 @@ class TrainingRunService:
         command: ReplayV2Command,
         *,
         include_display_tail: bool = False,
+        timings: dict[str, float] | None = None,
     ) -> dict[str, object]:
         normalized = self._identifier(run_id, field_name="run_id")
         if command.type in {
@@ -4242,7 +4244,10 @@ class TrainingRunService:
             ReplayV2CommandType.SET_DISPLAY_INTERVAL,
             ReplayV2CommandType.RECORD_VIEW_ACTION,
         }:
+            started = perf_counter()
             result = await self._command_serialized(normalized, command)
+            if timings is not None:
+                timings["advance"] = (perf_counter() - started) * 1000
             self._notify_market_tracks(normalized)
             return result
         actor = self._run_actors.setdefault(normalized, TrainingRunActor(normalized))
@@ -4254,14 +4259,23 @@ class TrainingRunService:
             # server-owned loop before waiting for its serialization lock so a
             # high playback rate cannot consume the remaining dataset first.
             actor.signal_ordered_stop()
+        queued = perf_counter()
         async with actor.serialized():
+            started = perf_counter()
+            if timings is not None:
+                timings["queue"] = (started - queued) * 1000
             result = await self._command_serialized(
                 normalized,
                 command,
                 ordered_pause_barrier=ordered_pause_barrier,
             )
+            if timings is not None:
+                timings["advance"] = (perf_counter() - started) * 1000
             if include_display_tail:
+                started = perf_counter()
                 result = await self._with_command_display_tail(command, result)
+                if timings is not None:
+                    timings["display"] = (perf_counter() - started) * 1000
         self._notify_market_tracks(normalized)
         return result
 

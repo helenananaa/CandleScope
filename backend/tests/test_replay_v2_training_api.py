@@ -1027,6 +1027,8 @@ async def test_v2_viewer_and_command_routes_keep_display_outside_domain_state(
             json=command,
         )
         assert changed.status_code == 200
+        assert changed.headers["server-timing"].startswith("replay_advance;dur=")
+        assert float(changed.headers["server-timing"].split("dur=", 1)[1]) >= 0
         assert changed.json()["viewer_state"]["display_interval"] == "1h"
         assert changed.json()["data"]["source_events_consumed"] == 0
         after = (

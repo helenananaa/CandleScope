@@ -9,6 +9,11 @@ from decimal import Decimal
 from enum import Enum
 from typing import Mapping
 
+try:
+    import orjson
+except ImportError:  # Keep the deterministic reference available in minimal installs.
+    orjson = None
+
 from .models import normalize_decimal_string
 
 
@@ -27,7 +32,7 @@ def _is_native_canonical_json(value: object) -> bool:
     while pending:
         candidate = pending.pop()
         candidate_type = type(candidate)
-        if candidate is None or candidate_type in {str, bool, int}:
+        if candidate is None or candidate_type is str or candidate_type is bool or candidate_type is int:
             continue
         if candidate_type is dict:
             for key, child in candidate.items():
@@ -35,7 +40,7 @@ def _is_native_canonical_json(value: object) -> bool:
                     return False
                 pending.append(child)
             continue
-        if candidate_type in {list, tuple}:
+        if candidate_type is list or candidate_type is tuple:
             pending.extend(candidate)
             continue
         return False
@@ -92,6 +97,14 @@ def canonical_json(value: object) -> str:
 
 
 def canonical_json_bytes(value: object) -> bytes:
+    if orjson is not None:
+        normalized = value if _is_native_canonical_json(value) else _canonical_value(value)
+        try:
+            return orjson.dumps(normalized, option=orjson.OPT_SORT_KEYS)
+        except orjson.JSONEncodeError:
+            # Python's canonical contract also permits arbitrary-size integers
+            # and unusual primitive subclasses. Preserve its exact behavior.
+            pass
     return canonical_json(value).encode("utf-8")
 
 

@@ -1140,12 +1140,17 @@ async def command_replay_v2_run(
     request: Request,
     run_id: str,
     payload: ReplayV2CommandPayload,
+    response: Response,
     include_display_tail: bool = Query(default=False),
 ) -> dict[str, object]:
     command = ReplayV2Command.from_dict(payload.model_dump(mode="json"))
     training = _training_service(request)
+    timings: dict[str, float] = {}
     result = await training.command(
-        run_id, command, include_display_tail=include_display_tail
+        run_id, command, include_display_tail=include_display_tail, timings=timings
+    )
+    response.headers["Server-Timing"] = ", ".join(
+        f"replay_{stage};dur={duration:.3f}" for stage, duration in timings.items()
     )
     return training.project_public_command_result(result)
 
