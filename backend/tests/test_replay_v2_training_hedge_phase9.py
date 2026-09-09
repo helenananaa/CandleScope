@@ -682,6 +682,7 @@ async def test_empty_hedge_display_step_batches_marks_without_losing_audit_event
         )
 
         adapter_batch_sizes: list[int | None] = []
+        adapter_event_counts: list[int] = []
         hedge_apply_sizes: list[int] = []
         hedge_finalize_count = 0
         original_advance = service.training._advance_adapter_to
@@ -690,7 +691,9 @@ async def test_empty_hedge_display_step_batches_marks_without_losing_audit_event
 
         async def observed_advance(**kwargs):
             adapter_batch_sizes.append(kwargs.get("final_state_max_events"))
-            return await original_advance(**kwargs)
+            result = await original_advance(**kwargs)
+            adapter_event_counts.append(int(result["cursor"]["source_sequence"]) - int(kwargs["initial_snapshot"]["cursor"]["source_sequence"]))
+            return result
 
         async def observed_apply(*args, **kwargs):
             hedge_apply_sizes.append(len(kwargs["events"]))
@@ -739,7 +742,8 @@ async def test_empty_hedge_display_step_batches_marks_without_losing_audit_event
         if funding_event_offset_bars == 0:
             assert adapter_batch_sizes == [512]
         else:
-            assert adapter_batch_sizes == [None, 512]
+            assert adapter_batch_sizes == [512, 512]
+            assert adapter_event_counts == [1, consumed - 1]
         assert len([size for size in hedge_apply_sizes if size > 0]) <= 5
         assert max(hedge_apply_sizes) >= 50
         assert hedge_finalize_count <= 6

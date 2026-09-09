@@ -343,6 +343,7 @@ export interface ReplayViewerRuntime {
   readonly seriesStore: SeriesWindowStore;
   readonly loading: boolean;
   readonly error: string | null;
+  readonly eventStopMessage?: string | null;
   readonly controlPending: ReplayV2Command | null;
   readonly viewerPending: boolean;
   readonly progress: Readonly<Record<string, ReplayV2Json>> | null;
@@ -415,6 +416,8 @@ export function useReplayViewerRuntime(
   const [marketTracks, setMarketTracks] = useState<ReplayMarketTracksResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [eventStopMessage, setEventStopMessage] = useState<string | null>(null);
+  useEffect(() => { setEventStopMessage(null); }, [viewerState?.run_id]);
   const [controlPending, setControlPending] = useState<ReplayV2Command | null>(null);
   const [viewerPending, setViewerPending] = useState(false);
   const [progress, setProgress] = useState<Readonly<Record<string, ReplayV2Json>> | null>(null);
@@ -917,6 +920,8 @@ export function useReplayViewerRuntime(
     const boundPayload = type === "step_display" || canonicalDisplayBinding
       ? {
           ...payload,
+          ...((type === "advance" || type === "step_display")
+            ? { stop_on_event: payload.stop_on_event ?? true } : {}),
           display_interval: viewer.display_interval,
           viewer_revision: viewer.semantic_view_revision,
         }
@@ -928,12 +933,16 @@ export function useReplayViewerRuntime(
     inlineCommandRef.current = includeDisplayTail;
     const releasePresentation = includeDisplayTail ? runtime.lifecycle.beginPresentationBatch() : null;
     setControlPending(command);
+    setEventStopMessage(null);
     setProgress(null);
     setError(null);
     try {
       recordPerfEvent("replay.control.dispatch", { commandId: command.command_id });
       const result = await defaultReplayV2Api.commandRun(command.run_id, command, undefined, { includeDisplayTail });
       recordPerfEvent("replay.control.response", { commandId: command.command_id, revision: result.revision });
+      if (result.state === "PAUSED" && result.data.event_stop && typeof result.data.event_stop === "object") {
+        setEventStopMessage(t("replay.rt.eventStop"));
+      }
       publishViewerState(result.viewer_state);
       setProgress(progressFromResult(result));
       const cursorAdvance = type === "advance"
@@ -1315,6 +1324,7 @@ export function useReplayViewerRuntime(
     seriesStore,
     loading,
     error,
+    eventStopMessage,
     controlPending,
     viewerPending,
     progress,

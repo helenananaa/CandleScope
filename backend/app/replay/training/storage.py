@@ -5492,6 +5492,56 @@ class TrainingRunStore:
         )
         self._cache_committed_hedge_fingerprint(run_id, committed_fingerprint)
 
+    async def held_mark_guard(
+        self, run_id: str, *, track_id: str, mark: Decimal,
+        current_virtual_time_ms: int, target_actual_time_ms: int,
+    ) -> bool:
+        """Reuse only a successfully checked, unchanged single-track risk state."""
+        checked = self._hedge_risk_fingerprints.get(run_id)
+        if checked is None:
+            return False
+
+        def read(connection: sqlite3.Connection) -> bool:
+            account = connection.execute(
+                "SELECT status FROM replay_training_contract_account WHERE run_id = ?", (run_id,),
+            ).fetchone()
+            if account is None or account["status"] != "ACTIVE":
+                return False
+            if connection.execute(
+                """SELECT 1 FROM replay_training_liquidation_case WHERE run_id = ?
+                   AND state NOT IN ('COMPLETED','BANKRUPT','FAILED_CLOSED','RECOVERED_AFTER_CANCEL') LIMIT 1""",
+                (run_id,),
+            ).fetchone() is not None:
+                return False
+            if self._hedge_risk_fingerprint(connection, run_id=run_id) != checked:
+                return False
+            row = connection.execute(
+                """SELECT projection.*, binding.status AS binding_status, binding.bound_range_end_ms,
+                          track.public_price
+                   FROM replay_hedge_track_public_projection AS projection
+                   JOIN replay_hedge_track_public_binding AS binding USING(run_id, track_id)
+                   JOIN replay_training_market_track AS track USING(run_id, track_id)
+                   WHERE projection.run_id = ? AND projection.track_id = ?""", (run_id, track_id),
+            ).fetchone()
+            if row is None or row["binding_status"] != "ACTIVE" or target_actual_time_ms > int(row["bound_range_end_ms"]):
+                return False
+            if int(row["as_of_virtual_time_ms"]) > current_virtual_time_ms:
+                return False
+            state = json.loads(str(row["state_json"]))
+            material = {
+                "schema_version": "replay.hedge-track-public-projection.v1",
+                "run_id": run_id, "track_id": track_id,
+                "last_event_sequence": int(row["last_event_sequence"]),
+                "as_of_actual_time_ms": int(row["as_of_actual_time_ms"]),
+                "as_of_virtual_time_ms": int(row["as_of_virtual_time_ms"]),
+                "state": state, "input_chain_hash": str(row["input_chain_hash"]),
+            }
+            if canonical_sha256(material) != row["component_hash"]:
+                return False
+            return Decimal(str(state["mark_index"]["mark_price"])) == mark == Decimal(str(row["public_price"]))
+
+        return await self.base_store.run_extension_read(read)
+
     async def finalize_hedge_inputs_and_checkpoint(
         self, run_id: str, *, risk_virtual_time_ms: int,
         events: Sequence[StableMarketEvent],

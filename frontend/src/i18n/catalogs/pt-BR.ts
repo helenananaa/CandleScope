@@ -2921,6 +2921,7 @@ export const ptBR = {
   "replay.rt.summaryLoad": "Falha ao carregar o status do resumo",
   "replay.rt.exchangeBars": "Falha ao reconstruir candles do intervalo da exchange",
   "replay.rt.tracksRefresh": "Falha ao atualizar o estado da trilha de mercado",
+  "replay.rt.eventStop": "Pausado em um evento",
   "replay.rt.control": "Falha no controle do Replay",
   "replay.rt.intervalSwitch": "Falha ao trocar o intervalo de exibição",
   "replay.rt.trackOp": "Falha na operação de MarketTrack",

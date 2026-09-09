@@ -2919,6 +2919,7 @@ export const en = {
   "replay.rt.summaryLoad": "Failed to load summary status",
   "replay.rt.exchangeBars": "Failed to rebuild exchange-interval candles",
   "replay.rt.tracksRefresh": "Failed to refresh market-track state",
+  "replay.rt.eventStop": "Paused at an event",
   "replay.rt.control": "Replay control failed",
   "replay.rt.intervalSwitch": "Failed to switch display interval",
   "replay.rt.trackOp": "MarketTrack operation failed",

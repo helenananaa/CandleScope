@@ -2917,6 +2917,7 @@ export const zhCN = {
   "replay.rt.summaryLoad": "摘要状态加载失败",
   "replay.rt.exchangeBars": "交易所周期 K 线重建失败",
   "replay.rt.tracksRefresh": "市场轨道状态刷新失败",
+  "replay.rt.eventStop": "已在事件发生处暂停",
   "replay.rt.control": "回放控制失败",
   "replay.rt.intervalSwitch": "展示周期切换失败",
   "replay.rt.trackOp": "MarketTrack 操作失败",

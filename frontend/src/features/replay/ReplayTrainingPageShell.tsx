@@ -1105,7 +1105,7 @@ export default function ReplayTrainingPageShell({
           intervalNotice={intervalNotice ?? {
             type: viewer.error ? "error" : "info",
             text: review === null
-              ? viewer.error ?? `ViewerState r${viewer.viewerState?.semantic_view_revision ?? "--"} · ${publicTime}`
+              ? viewer.error ?? viewer.eventStopMessage ?? `ViewerState r${viewer.viewerState?.semantic_view_revision ?? "--"} · ${publicTime}`
               : `Review ViewerState r${String(review.projection.viewer_state.semantic_view_revision ?? "--")} · ${review.events.find((event) => event.event_id === review.selected_event_id)?.public_time.label ?? "--"}`,
           }}
         />

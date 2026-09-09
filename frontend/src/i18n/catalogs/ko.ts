@@ -2879,6 +2879,7 @@ export const ko = {
   "replay.rt.summaryLoad": "요약 상태 불러오기 실패",
   "replay.rt.exchangeBars": "거래소 주기 캔들 재구성 실패",
   "replay.rt.tracksRefresh": "시장 트랙 상태 새로고침 실패",
+  "replay.rt.eventStop": "이벤트 발생 시점에 일시 정지됨",
   "replay.rt.control": "리플레이 제어 실패",
   "replay.rt.intervalSwitch": "표시 주기 전환 실패",
   "replay.rt.trackOp": "MarketTrack 작업 실패",

@@ -21,6 +21,7 @@ from ..errors import ReplayDomainError, ReplayErrorCode
 from ..models import validate_counter, validate_identifier
 from ..sources.trade_reader import ReplayTrade
 from .ledger import LedgerBook, LedgerEntry
+from .interval_index import BarInteractionIndex
 from .models import (
     AGG_TRADE_TOUCH_OR_TAPE_HEDGE_MODEL_VERSION,
     AGG_TRADE_TOUCH_OR_TAPE_MODEL_VERSION,
@@ -1692,6 +1693,17 @@ class ConservativeBarBroker:
     def supports_final_state_batch(self) -> bool:
         return not any(not order.status.terminal for order in self._orders.values())
 
+    def constant_valuation_prefix_length(self, events: Sequence[object]) -> int:
+        """Only collapse a held curve when every retained valuation is equal."""
+        mark = self._position.mark_price
+        if mark is None:
+            return 0
+        expected = Decimal(str(mark))
+        for index, event in enumerate(events):
+            if not isinstance(event, ReplayBar) or Decimal(event.close) != expected:
+                return index
+        return len(events)
+
     def can_apply_source_events_final_state(
         self,
         events: Sequence[object],
@@ -1725,6 +1737,35 @@ class ConservativeBarBroker:
         if not open_orders:
             return len(events)
         first_sequence = self._bar_builder.replay_events_applied + 1
+        if not trade_source:
+            # The cache is owned by this reducer and binds immutable bar objects,
+            # never timestamps alone. Rewind/revision replacement cannot reuse
+            # an index built from different bars at the same timestamps.
+            index = getattr(self, "_interaction_index", None)
+            if index is None or len(events) > len(index.bars) or any(
+                bar is not index.bars[i] for i, bar in enumerate(events)
+            ):
+                index = BarInteractionIndex(events)
+                self._interaction_index = index
+            first_hit = len(events)
+            for order in open_orders:
+                start = max(0, order.accepted_source_sequence - first_sequence + 1)
+                if start >= first_hit:
+                    continue
+                if order.order_type is OrderType.MARKET:
+                    first_hit = start
+                    continue
+                price = order.limit_price if order.order_type is OrderType.LIMIT else order.stop_price
+                assert price is not None
+                below = (
+                    order.side is OrderSide.SELL
+                    if order.order_type is OrderType.STOP_MARKET
+                    else order.side is OrderSide.BUY
+                )
+                first_hit = min(first_hit, index.first_touch(
+                    Decimal(price), below=below, start=start, end=first_hit,
+                ))
+            return first_hit
         for offset, event in enumerate(events):
             source_sequence = first_sequence + offset
             for order in open_orders:

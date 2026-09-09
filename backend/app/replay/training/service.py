@@ -78,6 +78,7 @@ from .account_history import (
     AccountHistoryArchiveManager,
 )
 from .historical_book import HistoricalBookArchiveManager, HistoricalBookProjection
+from .hedge_timeline import IndexedHedgeSnapshot
 from .hedge_inputs import (
     HYBRID_PUBLIC_INPUT_FIDELITY,
     HedgeInputArchiveManager,
@@ -7293,6 +7294,7 @@ class TrainingRunService:
         selected_snapshot: Mapping[str, object],
         tracks: list[Mapping[str, object]],
     ) -> dict[str, object]:
+        event_stop: dict[str, object] | None = {} if self._stop_on_event(command) else None
         ordered = tuple(
             sorted(
                 tracks,
@@ -7688,6 +7690,7 @@ class TrainingRunService:
                         audit_account_at_barrier=False,
                         source_goal=source_goal,
                         stable_order_state=stable_order_state,
+                        event_stop=event_stop,
                     )
                 )
             else:
@@ -7847,6 +7850,7 @@ class TrainingRunService:
                         audit_account_at_barrier=False,
                         source_goal=source_goal,
                         stable_order_state=stable_order_state,
+                        event_stop=event_stop,
                     )
                 )
             except BaseException:
@@ -7911,6 +7915,10 @@ class TrainingRunService:
                     event.to_dict()
                     for event in stable_market_event_order(total_events)
                 ],
+                **({
+                    "event_stop": event_stop or None,
+                    "target_reached": self._cursor_time(final) >= int((control_plan or {}).get("target_virtual_time_ms", self._cursor_time(final))),
+                } if event_stop is not None else {}),
                 **(
                     {
                         "stable_order_truncated": bool(
@@ -8571,6 +8579,7 @@ class TrainingRunService:
         audit_account_at_barrier: bool = True,
         source_goal: _OrderedSourceGoal | None = None,
         stable_order_state: dict[str, bool] | None = None,
+        event_stop: dict[str, object] | None = None,
     ) -> tuple[StableMarketEvent, ...]:
         if source_goal is not None and len(tracks) != 1:
             raise TrainingRunError(
@@ -8676,13 +8685,27 @@ class TrainingRunService:
                     )
                 )
 
+            # These input reads all precede this wave's mutations under the Run lock.
+            hedge_cursor_view = (
+                await self.hedge_inputs._projection_cursors(command.run_id)
+                if isinstance(hedge_runtime_snapshot, IndexedHedgeSnapshot) and not book_required
+                and binding.get("account_data_mode") != AccountDataMode.HISTORICAL_EXACT.value else None
+            )
+            held_prefix_end = await self._held_interval_batch_end(
+                command.run_id, binding=binding, tracks=tracks, snapshot=snapshots[0][1],
+                target_virtual_time_ms=target_virtual_time_ms,
+                runtime_snapshot=hedge_runtime_snapshot, cursor_view=hedge_cursor_view,
+            ) if allow_final_state_batch and source_goal is None else None
             final_state_profile = self._ordered_final_state_batch_profile(
                 binding=binding,
                 tracks=tracks,
                 snapshot=snapshots[0][1],
                 target_virtual_time_ms=target_virtual_time_ms,
                 enabled=allow_final_state_batch and source_goal is None,
+                held_certificate=held_prefix_end is not None,
             )
+            if final_state_profile is None:
+                held_prefix_end = None
             # Read a bounded lookahead so one exact same-timestamp market
             # cohort can cross the adapter in one command.  The prefix below
             # still stops at the first different timestamp, preserving every
@@ -8711,8 +8734,10 @@ class TrainingRunService:
                 try:
                     plan = await self.replay_service.plan_source_chunk(
                         session_id,
-                        target_time_ms=target_virtual_time_ms,
+                        target_time_ms=(target_virtual_time_ms if held_prefix_end is None else held_prefix_end),
                         max_events=source_plan_limit,
+                        screen_interactions=final_state_profile is not None,
+                        preserve_valuation=held_prefix_end is not None,
                     )
                 except (ReplayDomainError, TrainingRunError) as exc:
                     await self._fail_closed_multi_track(
@@ -8833,6 +8858,7 @@ class TrainingRunService:
                     run_id=command.run_id,
                     target_actual_time_ms=target_actual_time_ms,
                     runtime_snapshot=hedge_runtime_snapshot,
+                    cursor_view=hedge_cursor_view,
                 )
                 if hedge_mode
                 else None
@@ -8874,7 +8900,7 @@ class TrainingRunService:
             if (
                 hedge_mode
                 and final_state_profile is not None
-                and final_state_profile[1]
+                and (held_prefix_end is not None or all(self._snapshot_is_flat(snapshot) for _, snapshot in snapshots))
                 and next_times
             ):
                 planned_batch_time = min(next_times)
@@ -8889,7 +8915,27 @@ class TrainingRunService:
                         planned_batch_time,
                     ),
                     runtime_snapshot=hedge_runtime_snapshot,
+                    cursor_view=hedge_cursor_view,
                 )
+                # A known settlement/rule boundary must split the candidate
+                # block, rather than forcing every preceding safe bar through
+                # the slow path. Never batch across the boundary itself.
+                if len(tracks) == 1 and not book_required:
+                    barriers = [self._virtual_event_time_ms(binding, event.event_time_ms)
+                                for event in candidate_hedge_events
+                                if event.source_kind != "PUBLIC" or event.event_kind != "MARK_INDEX"
+                                or event.event_phase != MARK_INDEX_EVENT_PHASE]
+                    if barriers:
+                        boundary = min(barriers)
+                        key = str(tracks[0]["track_id"])
+                        safe_times = tuple(t for t in planned_event_times.get(key, ()) if t < boundary)
+                        if safe_times:
+                            planned_batch_time = safe_times[-1]
+                            next_times = [planned_batch_time]
+                            planned_event_times[key] = safe_times
+                            candidate_hedge_events = tuple(event for event in candidate_hedge_events
+                                if self._virtual_event_time_ms(binding, event.event_time_ms) <= planned_batch_time)
+                            account_after_batch = next_account_virtual is None or next_account_virtual > planned_batch_time
                 hedge_batch_is_safe = (
                     not book_required
                     and account_after_batch
@@ -8991,6 +9037,7 @@ class TrainingRunService:
                     run_id=command.run_id,
                     actual_time_ms=actual_wave_time,
                     runtime_snapshot=hedge_runtime_snapshot,
+                    cursor_view=hedge_cursor_view,
                 )
             pre_account_events = tuple(
                 item
@@ -9170,8 +9217,14 @@ class TrainingRunService:
                         virtual_time_ms=wave_time,
                     )
                 )
-                if market_barrier:
+                stop_at_input = event_stop is not None and any(
+                    getattr(event, "event_kind", "MARK_INDEX") != "MARK_INDEX"
+                    for event in (*pre_hedge_events, *post_hedge_events, *simulation_hedge_events,
+                                  *pre_account_events, *post_account_events)
+                )
+                if market_barrier or (stop_at_input and not market_cohort_incomplete):
                     await advance_market_barrier()
+                    market_barrier = True
                 if not market_cohort_incomplete:
                     wave_events.extend(
                         await self.store.apply_account_history_events(
@@ -9278,7 +9331,7 @@ class TrainingRunService:
                     status_code=409,
                     details={"track_id": failed_track["track_id"]},
                 ) from exc
-            await self._reconcile_liquidations(
+            liquidations = await self._reconcile_liquidations(
                 run_id=command.run_id,
                 client_instance_id=command.client_instance_id,
                 command_id=command.command_id,
@@ -9335,12 +9388,22 @@ class TrainingRunService:
                     # timestamp.  Later input phases must wait for the rest of
                     # that timestamp's market cohort in a subsequent command.
                     return stable_market_event_order(all_events)
+            stop_reason: str | None = "LIQUIDATION" if liquidations else None
+            if event_stop is not None and any(
+                getattr(event, "event_kind", "MARK_INDEX") != "MARK_INDEX"
+                for event in (*pre_hedge_events, *post_hedge_events, *simulation_hedge_events,
+                              *pre_account_events, *post_account_events)
+            ):
+                stop_reason = stop_reason or "ACCOUNT_EVENT"
             after_wave_state: list[tuple[int, int]] = []
             for track in tracks:
                 after_session = await self.replay_service.get_session(
                     self._track_session_id(track)
                 )
                 after_snapshot = self._snapshot(after_session)
+                if event_stop is not None:
+                    before_snapshot = next(before for original, before in snapshots if original["track_id"] == track["track_id"])
+                    stop_reason = stop_reason or self._interaction_reason(before_snapshot, after_snapshot)
                 after_cursor = _stored_mapping(
                     after_snapshot.get("cursor"), field_name="adapter cursor"
                 )
@@ -9379,6 +9442,11 @@ class TrainingRunService:
                     int(job["queue_high_water"]),
                     len(tracks),
                 )
+            if event_stop is not None and stop_reason is not None:
+                event_stop.update(reason=stop_reason, virtual_time_ms=wave_time)
+                if job is not None:
+                    job["status"] = "COMPLETED"
+                return stable_market_event_order(all_events)
             if (
                 cancel_event is not None
                 and cancel_event.is_set()
@@ -9400,6 +9468,7 @@ class TrainingRunService:
         snapshot: Mapping[str, object],
         target_virtual_time_ms: int,
         enabled: bool,
+        held_certificate: bool = False,
     ) -> tuple[int, bool] | None:
         """Choose bounded terminal delivery only for proven ordered BAR paths."""
 
@@ -9432,9 +9501,19 @@ class TrainingRunService:
         trading_dependencies = dependencies.intersection(
             {"OPEN_ORDER", "OPEN_POSITION"}
         )
+        screened_flat_orders = (
+            trading_dependencies == {"OPEN_ORDER"}
+            and len(tracks) == 1
+            and binding.get("position_mode") == "HEDGE"
+            and binding.get("book_mode", "OFF") == "OFF"
+            and binding.get("account_data_mode") != AccountDataMode.HISTORICAL_EXACT.value
+            and self._snapshot_is_flat(snapshot)
+        )
         if (
             str(binding.get("account_model")) == "TOUCH_OR_TAPE_V2"
             and trading_dependencies
+            and not screened_flat_orders
+            and not held_certificate
         ):
             # Contract-account marks and liquidation checks still require the
             # global event barrier while any trading path is active.
@@ -9443,13 +9522,84 @@ class TrainingRunService:
         limit = min(
             (
                 FINAL_STATE_EMPTY_ACCOUNT_INTERACTIVE_BATCH_UNITS
-                if require_empty_account
+                if require_empty_account or screened_flat_orders or held_certificate
                 else ORDERED_PLAYBACK_INTERACTIVE_BATCH_UNITS
             ),
             self.replay_service.settings.event_buffer_size,
             FINAL_STATE_EMPTY_ACCOUNT_CHUNK_EVENTS,
         )
         return max(1, limit), require_empty_account
+
+    async def _held_interval_batch_end(
+        self, run_id: str, *, binding: Mapping[str, object],
+        tracks: tuple[Mapping[str, object], ...], snapshot: Mapping[str, object],
+        target_virtual_time_ms: int, runtime_snapshot, cursor_view=None,
+    ) -> int | None:
+        # Price-varying marks require the original per-event position/margin
+        # ledger. Only a constant authoritative mark preserves that history.
+        if (len(tracks) != 1 or binding.get("source_kind") != "BAR"
+            or binding.get("position_mode") != "HEDGE" or binding.get("book_mode", "OFF") != "OFF"
+            or binding.get("account_data_mode") == AccountDataMode.HISTORICAL_EXACT.value
+            or binding.get("funding_mode") not in {"OFF", "HISTORICAL_EXACT"} or runtime_snapshot is None
+            or self._snapshot_is_flat(snapshot)):
+            return None
+        current = self._cursor_time(snapshot)
+        prefix = await self.hedge_inputs.stable_mark_prefix(
+            run_id=run_id, track_id=str(tracks[0]["track_id"]),
+            target_actual_time_ms=self._actual_event_time_ms(binding, target_virtual_time_ms),
+            runtime_snapshot=runtime_snapshot, cursor_view=cursor_view,
+        )
+        if prefix is None:
+            return None
+        mark, end_actual = prefix
+        end_virtual = self._virtual_event_time_ms(binding, end_actual)
+        base_interval_ms = parse_interval_ms(str(binding["base_interval"]))
+        if base_interval_ms is None or end_virtual - current < 2 * base_interval_ms:
+            return None
+        if not await self.store.held_mark_guard(
+            run_id, track_id=str(tracks[0]["track_id"]), mark=mark,
+            current_virtual_time_ms=current, target_actual_time_ms=end_actual,
+        ):
+            return None
+        return end_virtual
+
+    @staticmethod
+    def _stop_on_event(command: ReplayV2Command) -> bool:
+        value = command.payload.get("stop_on_event", False)
+        if type(value) is not bool:
+            raise TrainingRunError("REPLAY_CONTROL_INVALID", "stop_on_event must be boolean", status_code=422)
+        return value
+
+    @staticmethod
+    def _interaction_reason(before: Mapping[str, object], after: Mapping[str, object]) -> str | None:
+        old = before.get("components", {})
+        new = after.get("components", {})
+        if not isinstance(old, Mapping) or not isinstance(new, Mapping):
+            return None
+        if len(new.get("fills", ())) > len(old.get("fills", ())):
+            return "ORDER_FILLED"
+        def orders(state):
+            return [(order.get("order_id"), order.get("status"), order.get("filled_quantity"))
+                    for order in state.get("orders", ()) if isinstance(order, Mapping)]
+        if orders(old) != orders(new):
+            return "ORDER_CHANGED"
+        if len(new.get("warnings", ())) > len(old.get("warnings", ())):
+            return "WARNING"
+        return None
+
+    @staticmethod
+    def _snapshot_is_flat(snapshot: Mapping[str, object]) -> bool:
+        components = snapshot.get("components")
+        position = components.get("position") if isinstance(components, Mapping) else None
+        if not isinstance(position, Mapping):
+            return False
+        if position.get("position_mode") == "HEDGE":
+            return all(
+                isinstance(position.get(side), Mapping)
+                and position[side].get("quantity") in {"0", 0}
+                for side in ("long", "short")
+            )
+        return position.get("quantity") in {"0", 0}
 
     def _ordered_playback_interactive_batch_limit(
         self,
@@ -11037,6 +11187,10 @@ class TrainingRunService:
                     break
                 v1_type: CommandType | InternalCommandType
                 payload: dict[str, object]
+                interaction_before = (
+                    self._snapshot(await self.replay_service.get_session(session_id))
+                    if self._stop_on_event(command) else None
+                )
                 if plan.get("projection_delivery") == FINAL_STATE_PROJECTION_DELIVERY:
                     v1_type = InternalCommandType.FAST_FORWARD_FINAL_STATE
                     payload = {
@@ -11050,14 +11204,17 @@ class TrainingRunService:
                         ),
                         "snapshot_only": False,
                     }
+                    if interaction_before is not None and not self._snapshot_is_flat(interaction_before):
+                        payload["max_events"] = 1
                 else:
                     chunk = await self.replay_service.plan_source_chunk(
                         session_id,
                         target_time_ms=target_virtual_time_ms,
-                        max_events=_stored_counter(
+                        max_events=1 if interaction_before is not None and not self._snapshot_is_flat(interaction_before) else _stored_counter(
                             job.get("chunk_event_limit"),
                             field_name="chunk_event_limit",
                         ),
+                        screen_interactions=interaction_before is not None,
                     )
                     if cancel.is_set():
                         job["status"] = "CANCELLED"
@@ -11202,6 +11359,13 @@ class TrainingRunService:
                     client_instance_id=command.client_instance_id,
                     command_id=command.command_id,
                 )
+                if self._stop_on_event(command):
+                    reached = self._snapshot(await self.replay_service.get_session(session_id))
+                    reason = self._interaction_reason(interaction_before or {}, reached)
+                    if reason is not None:
+                        job["event_stop"] = {"reason": reason, "virtual_time_ms": acknowledged_time}
+                        job["status"] = "COMPLETED"
+                        break
                 await asyncio.sleep(0)
 
             if (
@@ -11368,6 +11532,9 @@ class TrainingRunService:
                     "consumed": _stored_counter(
                         job.get("consumed"), field_name="consumed"
                     ),
+                    **({"event_stop": job.get("event_stop"),
+                        "target_reached": self._cursor_time(final) >= target_virtual_time_ms}
+                       if self._stop_on_event(command) else {}),
                     "summary_skipped_events": _stored_counter(
                         job.get("summary_skipped_events"),
                         field_name="summary_skipped_events",
@@ -11875,6 +12042,12 @@ class TrainingRunService:
         binding: Mapping[str, object],
         snapshot: Mapping[str, object],
     ) -> tuple[CommandType, dict[str, object], dict[str, object]]:
+        if "stop_on_event" in command.payload and command.type in {
+            ReplayV2CommandType.ADVANCE, ReplayV2CommandType.ADVANCE_BY,
+            ReplayV2CommandType.ADVANCE_TO, ReplayV2CommandType.STEP_DISPLAY,
+        }:
+            self._stop_on_event(command)
+            command = replace(command, payload={k: v for k, v in command.payload.items() if k != "stop_on_event"})
         source_kind = str(binding["source_kind"])
         base_interval = str(binding["base_interval"])
         cursor = snapshot["cursor"]

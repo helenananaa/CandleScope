@@ -346,6 +346,8 @@ class _SourceChunkPlanRequest:
     target_time_ms: int
     max_events: int
     future: asyncio.Future[dict[str, object]]
+    screen_interactions: bool = False
+    preserve_valuation: bool = False
 
 
 @dataclass(slots=True)
@@ -800,6 +802,8 @@ class ReplaySessionActor:
         *,
         target_time_ms: int,
         max_events: int,
+        screen_interactions: bool = False,
+        preserve_valuation: bool = False,
     ) -> dict[str, object]:
         """Plan one bounded immutable-source chunk from inside the mailbox."""
 
@@ -812,6 +816,8 @@ class ReplaySessionActor:
             target_time_ms=target,
             max_events=maximum,
             future=loop.create_future(),
+            screen_interactions=screen_interactions,
+            preserve_valuation=preserve_valuation,
         )
         self._offer_request(request)
         return await request.future
@@ -1470,6 +1476,8 @@ class ReplaySessionActor:
                         self._source_chunk_plan(
                             target_time_ms=request.target_time_ms,
                             max_events=request.max_events,
+                            screen_interactions=request.screen_interactions,
+                            preserve_valuation=request.preserve_valuation,
                         )
                     )
             elif isinstance(request, _SourceGoalScanRequest):
@@ -3242,14 +3250,24 @@ class ReplaySessionActor:
         *,
         target_time_ms: int,
         max_events: int,
+        screen_interactions: bool = False,
+        preserve_valuation: bool = False,
     ) -> dict[str, object]:
         source = self._fork_current_source()
         count = 0
         last_event_time_ms: int | None = None
         event_times_ms: list[int] = []
+        preview: list[object] = []
+        valuation = getattr(self._reducer, "constant_valuation_prefix_length", None)
         while count < max_events and (event := source.peek()) is not None:
             event_time = self._event_time_ms(event)
             if event_time > target_time_ms:
+                break
+            same_value = not preserve_valuation or (
+                callable(valuation) and not inspect.iscoroutinefunction(valuation)
+                and valuation((event,)) == 1
+            )
+            if not same_value and count:
                 break
             if source.next() != event:
                 raise ReplayDomainError(
@@ -3259,7 +3277,34 @@ class ReplaySessionActor:
             count += 1
             last_event_time_ms = event_time
             event_times_ms.append(event_time)
+            if screen_interactions or preserve_valuation:
+                preview.append(event)
+            if not same_value:
+                break
         next_event = source.peek()
+        screened_count = count
+        prefix = getattr(self._reducer, "final_state_safe_prefix_length", None)
+        if (screen_interactions or preserve_valuation) and preview:
+            safe_count = (
+                prefix(tuple(preview))
+                if callable(prefix) and not inspect.iscoroutinefunction(prefix) else 0
+            )
+            if type(safe_count) is not int or not 0 <= safe_count <= count:
+                raise TypeError("invalid interaction-free source prefix")
+            if preserve_valuation:
+                valuation = getattr(self._reducer, "constant_valuation_prefix_length", None)
+                unchanged = (
+                    valuation(tuple(preview))
+                    if callable(valuation) and not inspect.iscoroutinefunction(valuation) else 0
+                )
+                if type(unchanged) is not int or not 0 <= unchanged <= count:
+                    raise TypeError("invalid constant-valuation source prefix")
+                safe_count = min(safe_count, unchanged)
+            # A candidate at the cursor must execute alone, so risk and the
+            # stop policy run before any later source event becomes visible.
+            count = max(1, safe_count)
+            event_times_ms = event_times_ms[:count]
+            last_event_time_ms = event_times_ms[-1]
         return {
             "revision": self._revision,
             "cursor": self._cursor_dict(),
@@ -3267,7 +3312,7 @@ class ReplaySessionActor:
             "last_event_time_ms": last_event_time_ms,
             "event_times_ms": tuple(event_times_ms),
             "has_more_before_target": (
-                next_event is not None
+                count < screened_count or next_event is not None
                 and self._event_time_ms(next_event) <= target_time_ms
             ),
             "max_events": max_events,

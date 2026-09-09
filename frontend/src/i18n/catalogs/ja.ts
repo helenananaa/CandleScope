@@ -2879,6 +2879,7 @@ export const ja = {
   "replay.rt.summaryLoad": "サマリー状態の読み込みに失敗しました",
   "replay.rt.exchangeBars": "取引所時間足のローソク足再構築に失敗しました",
   "replay.rt.tracksRefresh": "市場トラック状態の更新に失敗しました",
+  "replay.rt.eventStop": "イベント発生時点で一時停止しました",
   "replay.rt.control": "リプレイ制御に失敗しました",
   "replay.rt.intervalSwitch": "表示時間足の切り替えに失敗しました",
   "replay.rt.trackOp": "MarketTrack の操作に失敗しました",

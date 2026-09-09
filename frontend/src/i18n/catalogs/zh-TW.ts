@@ -2879,6 +2879,7 @@ export const zhTW = {
   "replay.rt.summaryLoad": "摘要狀態載入失敗",
   "replay.rt.exchangeBars": "交易所週期 K 線重建失敗",
   "replay.rt.tracksRefresh": "市場軌道狀態重新整理失敗",
+  "replay.rt.eventStop": "已在事件發生處暫停",
   "replay.rt.control": "回放控制失敗",
   "replay.rt.intervalSwitch": "展示週期切換失敗",
   "replay.rt.trackOp": "MarketTrack 操作失敗",

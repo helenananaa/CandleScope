@@ -2879,6 +2879,7 @@ export const ru = {
   "replay.rt.summaryLoad": "Не удалось загрузить статус сводки",
   "replay.rt.exchangeBars": "Не удалось перестроить свечи биржевого интервала",
   "replay.rt.tracksRefresh": "Не удалось обновить состояние рыночной дорожки",
+  "replay.rt.eventStop": "Пауза в момент события",
   "replay.rt.control": "Сбой управления воспроизведением",
   "replay.rt.intervalSwitch": "Не удалось переключить интервал отображения",
   "replay.rt.trackOp": "Сбой операции MarketTrack",

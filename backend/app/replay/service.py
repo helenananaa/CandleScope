@@ -1487,6 +1487,8 @@ class ReplayService:
         *,
         target_time_ms: int,
         max_events: int,
+        screen_interactions: bool = False,
+        preserve_valuation: bool = False,
     ) -> dict[str, object]:
         """Return one bounded, read-only source scan plan for training replay."""
 
@@ -1494,6 +1496,8 @@ class ReplayService:
             return await handle.actor.source_chunk_plan(
                 target_time_ms=target_time_ms,
                 max_events=max_events,
+                screen_interactions=screen_interactions,
+                preserve_valuation=preserve_valuation,
             )
 
     async def scan_source_goal(

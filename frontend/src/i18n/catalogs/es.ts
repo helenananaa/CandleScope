@@ -2885,6 +2885,7 @@ export const es = {
   "replay.rt.summaryLoad": "No se pudo cargar el estado del resumen",
   "replay.rt.exchangeBars": "No se pudieron reconstruir las velas del intervalo del exchange",
   "replay.rt.tracksRefresh": "No se pudo actualizar el estado de las pistas de mercado",
+  "replay.rt.eventStop": "Pausado en un evento",
   "replay.rt.control": "Falló el control de reproducción",
   "replay.rt.intervalSwitch": "No se pudo cambiar el intervalo de visualización",
   "replay.rt.trackOp": "Falló la operación de MarketTrack",

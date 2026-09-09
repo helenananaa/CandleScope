@@ -2879,6 +2879,7 @@ export const fr = {
   "replay.rt.summaryLoad": "Échec du chargement de l’état de synthèse",
   "replay.rt.exchangeBars": "Échec de la reconstruction des chandeliers d’intervalle d’exchange",
   "replay.rt.tracksRefresh": "Échec de l’actualisation de l’état des pistes de marché",
+  "replay.rt.eventStop": "Pause au moment d’un événement",
   "replay.rt.control": "Échec du contrôle de relecture",
   "replay.rt.intervalSwitch": "Échec du basculement d’intervalle d’affichage",
   "replay.rt.trackOp": "Échec de l’opération MarketTrack",

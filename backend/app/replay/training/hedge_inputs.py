@@ -23,6 +23,7 @@ from app.replay.storage import ReplaySQLiteStore
 
 from .account import MaintenanceTier, instrument_rule_from_broker_config
 from .errors import TrainingRunError
+from .hedge_timeline import IndexedHedgeSnapshot
 from .hedge_simulation_contract import (
     MODEL_VERSION,
     SIMULATION_MANIFEST_SCHEMA_VERSION,
@@ -1615,6 +1616,7 @@ class HedgeInputArchiveManager:
         ] = {}
         self._checksum_cache: OrderedDict[tuple[str, int, int], str] = OrderedDict()
         self._checksum_cache_lock = threading.RLock()
+        self._indexed_snapshot_cache: OrderedDict[tuple, IndexedHedgeSnapshot] = OrderedDict()
 
     async def start(self) -> None:
         await asyncio.to_thread(self._ensure_dirs)
@@ -2962,7 +2964,7 @@ class HedgeInputArchiveManager:
             bound_ids = tuple(str(row["track_id"]) for row in track_rows)
             if bound_ids != full_track_ids:
                 raise ValueError("every HEDGE FULL track must have one public binding")
-            public_events: list[HedgeInputEvent] = []
+            verified_tracks = []
             for row in track_rows:
                 if (
                     row["status"] != "ACTIVE"
@@ -2978,17 +2980,29 @@ class HedgeInputArchiveManager:
                     path=path,
                     checksum_sha256=str(row["checksum_sha256"]),
                 )
-                public_events.extend(
-                    replace(event, track_id=str(row["track_id"])) for event in events
-                )
-            return (
-                tuple(public_events),
-                await self._cached_verified_events(
-                    source_kind="SIMULATION",
-                    path=simulation_path,
-                    checksum_sha256=str(simulation_row["checksum_sha256"]),
-                ),
+                verified_tracks.append((str(row["track_id"]), events))
+            simulation_events = await self._cached_verified_events(
+                source_kind="SIMULATION", path=simulation_path,
+                checksum_sha256=str(simulation_row["checksum_sha256"]),
             )
+            # Guard every binding/object above even on an index-cache hit.
+            key = (run_id, str(simulation_row["checksum_sha256"]), int(simulation_row["generation"]),
+                   tuple((str(row["track_id"]), str(row["public_archive_id"]),
+                          str(row["public_checksum_sha256"]), int(row["public_generation"])) for row in track_rows))
+            cached = self._indexed_snapshot_cache.get(key)
+            if cached is not None:
+                self._indexed_snapshot_cache.move_to_end(key)
+                return cached
+            indexed = IndexedHedgeSnapshot(
+                tuple(replace(event, track_id=track_id) for track_id, events in verified_tracks for event in events),
+                simulation_events,
+            )
+            event_count = len(indexed[0]) + len(indexed[1])
+            if event_count <= 200_000:
+                self._indexed_snapshot_cache[key] = indexed
+                while len(self._indexed_snapshot_cache) > 4 or sum(len(item[0])+len(item[1]) for item in self._indexed_snapshot_cache.values()) > 200_000:
+                    self._indexed_snapshot_cache.popitem(last=False)
+            return indexed
         except BaseException as exc:
             await self.pause_run(run_id, reason=type(exc).__name__)
             if isinstance(exc, TrainingRunError):
@@ -3042,13 +3056,17 @@ class HedgeInputArchiveManager:
         run_id: str,
         target_actual_time_ms: int,
         runtime_snapshot: HedgeInputRuntimeSnapshot | None = None,
+        cursor_view: tuple[Mapping[str, int], int] | None = None,
     ) -> int | None:
-        public, simulation = (
+        snapshot = (
             await self._runtime_events(run_id)
             if runtime_snapshot is None
             else runtime_snapshot
         )
-        public_cursors, simulation_cursor = await self._projection_cursors(run_id)
+        public, simulation = snapshot
+        public_cursors, simulation_cursor = (await self._projection_cursors(run_id) if cursor_view is None else cursor_view)
+        if isinstance(snapshot, IndexedHedgeSnapshot):
+            return snapshot.next_time(public_cursors, simulation_cursor, target_actual_time_ms)
         candidates = [
             event.event_time_ms
             for event in public
@@ -3070,13 +3088,17 @@ class HedgeInputArchiveManager:
         run_id: str,
         actual_time_ms: int,
         runtime_snapshot: HedgeInputRuntimeSnapshot | None = None,
+        cursor_view: tuple[Mapping[str, int], int] | None = None,
     ) -> tuple[HedgeInputEvent, ...]:
-        public, simulation = (
+        snapshot = (
             await self._runtime_events(run_id)
             if runtime_snapshot is None
             else runtime_snapshot
         )
-        public_cursors, simulation_cursor = await self._projection_cursors(run_id)
+        public, simulation = snapshot
+        public_cursors, simulation_cursor = (await self._projection_cursors(run_id) if cursor_view is None else cursor_view)
+        if isinstance(snapshot, IndexedHedgeSnapshot):
+            return snapshot.events_through(public_cursors, simulation_cursor, actual_time_ms, exact=True)
         return tuple(
             sorted(
                 (
@@ -3108,15 +3130,19 @@ class HedgeInputArchiveManager:
         run_id: str,
         target_actual_time_ms: int,
         runtime_snapshot: HedgeInputRuntimeSnapshot | None = None,
+        cursor_view: tuple[Mapping[str, int], int] | None = None,
     ) -> tuple[HedgeInputEvent, ...]:
         """Return every unconsumed event through one inclusive actual-time bound."""
 
-        public, simulation = (
+        snapshot = (
             await self._runtime_events(run_id)
             if runtime_snapshot is None
             else runtime_snapshot
         )
-        public_cursors, simulation_cursor = await self._projection_cursors(run_id)
+        public, simulation = snapshot
+        public_cursors, simulation_cursor = (await self._projection_cursors(run_id) if cursor_view is None else cursor_view)
+        if isinstance(snapshot, IndexedHedgeSnapshot):
+            return snapshot.events_through(public_cursors, simulation_cursor, target_actual_time_ms)
         return tuple(
             sorted(
                 (
@@ -3141,6 +3167,13 @@ class HedgeInputArchiveManager:
                 ),
             )
         )
+
+    async def stable_mark_prefix(self, *, run_id: str, track_id: str, target_actual_time_ms: int,
+                                 runtime_snapshot: HedgeInputRuntimeSnapshot, cursor_view=None):
+        if not isinstance(runtime_snapshot, IndexedHedgeSnapshot):
+            return None
+        public, simulation = (await self._projection_cursors(run_id) if cursor_view is None else cursor_view)
+        return runtime_snapshot.stable_mark_prefix(public, simulation, track_id, target_actual_time_ms)
 
     async def _projection_cursors(self, run_id: str) -> tuple[dict[str, int], int]:
         def read(connection: sqlite3.Connection) -> tuple[dict[str, int], int]:
