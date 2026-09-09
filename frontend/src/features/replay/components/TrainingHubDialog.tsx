@@ -174,7 +174,6 @@ function TrainingRunCreatePanel({ runtime, onPrepareData }: TrainingHubDialogPro
       >
         <header className="training-hub-create-top">
           <div>
-            <span className="training-hub-kicker">{t("replay.hub.createKicker")}</span>
             <h2 id="training-hub-create-title">{t("replay.hub.createTitle")}</h2>
             <p>{t("replay.hub.createIntro")}</p>
             <nav className="training-hub-create-steps" aria-label={t("replay.hub.createSteps")}>
@@ -699,9 +698,7 @@ export default function TrainingHubDialog({
       <section className="training-hub-shell">
         <header className="training-hub-heading">
           <div className="training-hub-brand">
-            <div className="training-hub-brand-mark" aria-hidden="true">R2</div>
             <div>
-              <span className="training-hub-kicker">{t("replay.hub.kicker")}</span>
               <h1 id="training-hub-title">{t("replay.hub.title")}</h1>
               <p>
                 {launchLabel ?? t("replay.hub.subtitle")}
@@ -725,10 +722,10 @@ export default function TrainingHubDialog({
         </header>
 
         <section className="training-hub-stats" aria-label={t("replay.hub.overview")}>
-          <article data-tone="violet"><span>{t("replay.hub.statsAll")}</span><strong>{loadedRunCount}</strong><small>{t("replay.hub.statsAllHint")}</small></article>
-          <article data-tone="amber"><span>{t("replay.hub.statsResume")}</span><strong>{resumableRunCount}</strong><small>{t("replay.hub.statsResumeHint")}</small></article>
-          <article data-tone="green"><span>{t("replay.hub.statsActive")}</span><strong>{activeRunCount}</strong><small>{t("replay.hub.statsActiveHint")}</small></article>
-          <article data-tone="cyan"><span>{t("replay.hub.statsEnded")}</span><strong>{completedRunCount}</strong><small>{t("replay.hub.statsEndedHint")}</small></article>
+          <article><span>{t("replay.hub.statsAll")}</span><strong>{loadedRunCount}</strong></article>
+          <article><span>{t("replay.hub.statsResume")}</span><strong>{resumableRunCount}</strong></article>
+          <article><span>{t("replay.hub.statsActive")}</span><strong>{activeRunCount}</strong></article>
+          <article><span>{t("replay.hub.statsEnded")}</span><strong>{completedRunCount}</strong></article>
         </section>
 
         <div className="training-hub-toolbar">
@@ -803,7 +800,6 @@ export default function TrainingHubDialog({
           <div className="training-hub-empty"><div className="replay-loading-spinner" />{t("replay.hub.loading")}</div>
         ) : runtime.items.length === 0 ? (
           <div className="training-hub-empty">
-            <div className="training-hub-empty-mark" aria-hidden="true">R2</div>
             <strong>{t("replay.hub.emptyTitle")}</strong>
             <span>{t("replay.hub.emptyHint")}</span>
             <button type="button" onClick={() => void runtime.actions.openCreate()} disabled={busy}>{t("replay.hub.emptyCreate")}</button>
