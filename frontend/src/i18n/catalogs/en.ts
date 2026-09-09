@@ -669,7 +669,7 @@ export const en = {
   "indicator.computing": "Computing...",
   "indicator.historicalOnly": "Closed bars only",
   "indicator.closePanel": "Close indicators sidebar",
-  "indicator.historicalOnlyTitle": "Realtime indicator subscriptions are off; closed-bar values are filled over HTTP.",
+  "indicator.historicalOnlyTitle": "Indicator values are computed for closed bars only.",
   "indicator.degraded": "Partially closed-bar only",
   "indicator.degradedTitle": "At least one indicator lost its realtime subscription; affected series are filled over HTTP.",
   "indicator.library": "Library",

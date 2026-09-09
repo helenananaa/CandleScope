@@ -1140,10 +1140,13 @@ async def command_replay_v2_run(
     request: Request,
     run_id: str,
     payload: ReplayV2CommandPayload,
+    include_display_tail: bool = Query(default=False),
 ) -> dict[str, object]:
     command = ReplayV2Command.from_dict(payload.model_dump(mode="json"))
     training = _training_service(request)
-    result = await training.command(run_id, command)
+    result = await training.command(
+        run_id, command, include_display_tail=include_display_tail
+    )
     return training.project_public_command_result(result)
 
 

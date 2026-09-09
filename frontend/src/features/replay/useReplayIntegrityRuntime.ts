@@ -103,6 +103,7 @@ function replayRunId(viewer: ReplayViewerRuntime): string | null {
 export function useReplayIntegrityRuntime(
   runtime: ReplayRuntime,
   viewer: ReplayViewerRuntime,
+  equityVisible = true,
 ): ReplayIntegrityRuntime {
   const [integrity, setIntegrity] = useState<ReplayIntegrityResponse | null>(null);
   const [rules, setRules] = useState<ReplayRunRulesResponse | null>(null);
@@ -255,6 +256,7 @@ export function useReplayIntegrityRuntime(
     if (
       runId === null
       || clockIsAdvancing
+      || !equityVisible
       || loadedRunRef.current !== runId
     ) return;
     // Rules, integrity and drawings are revisioned evidence, not per-bar
@@ -264,6 +266,7 @@ export function useReplayIntegrityRuntime(
     return () => clearTimeout(timer);
   }, [
     clockIsAdvancing,
+    equityVisible,
     effectiveState,
     globalClock?.generation,
     globalClock?.tick,

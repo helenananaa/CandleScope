@@ -4233,6 +4233,8 @@ class TrainingRunService:
         self,
         run_id: str,
         command: ReplayV2Command,
+        *,
+        include_display_tail: bool = False,
     ) -> dict[str, object]:
         normalized = self._identifier(run_id, field_name="run_id")
         if command.type in {
@@ -4258,8 +4260,49 @@ class TrainingRunService:
                 command,
                 ordered_pause_barrier=ordered_pause_barrier,
             )
+            if include_display_tail:
+                result = await self._with_command_display_tail(command, result)
         self._notify_market_tracks(normalized)
         return result
+
+    async def _with_command_display_tail(
+        self, command: ReplayV2Command, result: dict[str, object]
+    ) -> dict[str, object]:
+        """Attach a bounded, cursor-bound UI tail without changing durable results.
+
+        This runs under the Run barrier. Failure to project an optional view
+        must not turn an already committed command into a reported failure;
+        clients retain the ordinary authoritative projection recovery path.
+        """
+        if not (
+            command.type is ReplayV2CommandType.ADVANCE
+            and command.payload.get("basis") == AdvanceBasis.DISPLAY_BAR.value
+            and command.payload.get("count") == 1
+        ):
+            return result
+        viewer = result.get("viewer_state")
+        cursor = result.get("cursor")
+        if not isinstance(viewer, Mapping) or not isinstance(cursor, Mapping):
+            return result
+        try:
+            session_id = str(result["session_id"])
+            snapshot = await self.replay_service.get_session_state(session_id)
+            if snapshot["revision"] != result["revision"]:
+                return result
+            projection = await self.display_projection(
+                session_id,
+                track_id=str(viewer["selected_track_id"]),
+                revealed_boundary_ms=int(cursor["virtual_time_ms"]),
+                limit=2,
+                data_epoch=str(snapshot["data_epoch"]),
+                display_interval=str(viewer["display_interval"]),
+            )
+        except (TrainingRunError, ReplayDomainError, KeyError, TypeError, ValueError, OSError):
+            return result
+        return {
+            **result,
+            "data": {**dict(result["data"]), "display_tail": projection},
+        }
 
     async def _command_serialized(
         self,

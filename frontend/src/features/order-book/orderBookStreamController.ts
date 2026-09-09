@@ -93,6 +93,19 @@ export class OrderBookStreamController {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private commandTimer: ReturnType<typeof setTimeout> | null = null;
   private staleTimer: ReturnType<typeof setTimeout> | null = null;
+  private displayActive = true;
+  private supportsDisplayVisibility = false;
+
+  setDisplayActive(active: boolean): void {
+    this.displayActive = active;
+    const socket = this.socket;
+    if (!this.supportsDisplayVisibility || this.mode !== "full") return;
+    if (!active) this.clearStaleTimer();
+    if (socket && this.subscribed && this.isOpen(socket)) {
+      socket.send(JSON.stringify({ action: "set_display_active", active }));
+      if (active) this.armStaleWatchdog();
+    }
+  }
   private reconnectDelayMs: number;
   private stopped = true;
   private subscribed = false;
@@ -186,13 +199,15 @@ export class OrderBookStreamController {
     socket.onmessage = (event) => {
       if (this.stopped || this.socket !== socket) return;
       try {
-        const parsed = parseOrderBookSocketMessage(JSON.parse(String(event.data)) as unknown, this.mode);
+        const raw: unknown = JSON.parse(String(event.data));
+        const parsed = parseOrderBookSocketMessage(raw, this.mode);
         if (parsed.kind === "connected") {
           const expectedProtocol = this.mode === "partial" ? PARTIAL_PROTOCOL : FULL_PROTOCOL;
           if (parsed.protocol !== expectedProtocol || this.pendingRequestId !== null || this.subscribed) {
             throw new Error(`Unexpected order-book protocol handshake: ${parsed.protocol}`);
           }
           this.hasConnected = true;
+          this.supportsDisplayVisibility = asObject(raw)?.display_visibility_control === true;
           this.clearCommandTimer();
           this.sendSubscribe(socket);
           return;
@@ -210,6 +225,7 @@ export class OrderBookStreamController {
           this.subscribed = true;
           // A successful subscription does not guarantee that a first book arrives.
           this.armStaleWatchdog();
+          if (this.supportsDisplayVisibility && !this.displayActive) this.clearStaleTimer();
           this.reconnectDelayMs = this.reconnectBaseMs;
           return;
         }
@@ -281,6 +297,7 @@ export class OrderBookStreamController {
     socket.send(JSON.stringify({
       action: "subscribe",
       request_id: requestId,
+      ...(this.supportsDisplayVisibility ? { display_active: this.displayActive } : {}),
       streams: [this.expectedStream()],
     }));
     this.commandTimer = this.setTimer(() => {

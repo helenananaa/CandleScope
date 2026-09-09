@@ -141,8 +141,14 @@ export function useOrderBookRuntime({
       fullPriceGrouping: streamPriceGrouping,
       store,
     });
+    const updateVisibility = () => controller.setDisplayActive(document.visibilityState !== "hidden");
+    updateVisibility();
+    document.addEventListener("visibilitychange", updateVisibility);
     controller.start();
-    return () => controller.close();
+    return () => {
+      document.removeEventListener("visibilitychange", updateVisibility);
+      controller.close();
+    };
   }, [
     enabled,
     identity,

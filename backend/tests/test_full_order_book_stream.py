@@ -74,6 +74,29 @@ def _client(data_manager: object | None = None) -> TestClient:
     return TestClient(app)
 
 
+def test_hidden_display_keeps_source_lease_and_resumes_full_snapshots():
+    dm = _FullOrderBookDataManager()
+    with _client(dm) as client:
+        with client.websocket_connect("/api/v1/stream/full-order-book") as ws:
+            assert ws.receive_json()["display_visibility_control"] is True
+            ws.send_json({"action": "subscribe", "request_id": "hidden",
+                          "display_active": False, "streams": [_stream()]})
+            assert ws.receive_json()["type"] == "subscribed"
+            ws.send_text("ping")
+            assert ws.receive_text() == "pong"  # no initial expensive snapshot
+            assert len(dm._leases) == 1
+            assert dm.release_calls == []
+            ws.send_json({"action": "set_display_active", "active": True})
+            ws.send_text("ping")
+            assert ws.receive_text() == "pong"
+            client.portal.call(lambda: dm.hub.publish(_event(dm.ensure_calls[0][0], update_id=11)))
+            snapshot = ws.receive_json()
+            assert snapshot["type"] == "full_order_book.snapshot"
+            assert snapshot["data"]["data"]["last_update_id"] == 11
+            assert snapshot["data"]["data"]["bids"] == [[100.0, 1.0], [99.0, 2.0]]
+    assert dm.release_calls == dm.ensure_calls
+
+
 def _stream(
     symbol: object = "BTCUSDT",
     *,

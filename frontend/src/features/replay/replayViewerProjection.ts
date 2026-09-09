@@ -456,6 +456,38 @@ export function replaceReplayViewerSeriesFromServer(
   });
 }
 
+/** Apply a server-owned tail only when it overlaps the current latest window.
+ * Missing history, rewinds and interval switches recover through a full view.
+ */
+export function applyReplayViewerServerTail(
+  target: SeriesWindowStore,
+  bars: readonly ReplayDisplayBar[],
+  previousBoundaryMs: number,
+  boundaryMs: number,
+): boolean {
+  const last = target.last();
+  if (!last || target.rightTruncated || boundaryMs < previousBoundaryMs
+    || bars.length === 0 || bars.length > 2) return false;
+  const lastOpenMs = Number(last.time) * 1_000;
+  if (!bars.some((bar) => bar.open_time_ms === lastOpenMs)) return false;
+  let previousOpen = -1;
+  for (const bar of bars) {
+    if (bar.open_time_ms <= previousOpen || bar.open_time_ms > boundaryMs
+      || bar.last_base_open_ms > boundaryMs
+      || (bar.is_closed && bar.close_time_ms > boundaryMs)) return false;
+    previousOpen = bar.open_time_ms;
+  }
+  // Older overlap is immutable. Only the old last bucket can change.
+  const rows = bars.filter((bar) => bar.open_time_ms >= lastOpenMs)
+    .map(replayDisplayBarToKline);
+  target.applyRange(rows, {
+    source: "replay-viewer-server-tail",
+    publicTimeMs: boundaryMs,
+    serverAuthoritative: true,
+  });
+  return true;
+}
+
 function mergeDisplayContextWithProjection(
   contextRows: readonly KlineBar[],
   projectedRows: readonly KlineBar[],

@@ -54,6 +54,7 @@ async def stream_full_order_book(websocket: WebSocket, dm: Any) -> None:
     attachment: Any = None
     tasks: list[asyncio.Task[None]] = []
     send_lock = asyncio.Lock()
+    display_active = True
 
     async def _send_json(payload: dict[str, Any]) -> None:
         async with send_lock:
@@ -98,7 +99,7 @@ async def stream_full_order_book(websocket: WebSocket, dm: Any) -> None:
         return message
 
     async def _subscribe() -> bool:
-        nonlocal attachment
+        nonlocal attachment, display_active
         while True:
             message = await _receive_command()
             if message is None:
@@ -156,6 +157,7 @@ async def stream_full_order_book(websocket: WebSocket, dm: Any) -> None:
                 continue
 
             active.extend(streams)
+            display_active = message.get("display_active") is not False
             requested_by_key = {requested.key: requested for requested in streams}
             await _send_json({
                 "type": "subscribed",
@@ -178,6 +180,8 @@ async def stream_full_order_book(websocket: WebSocket, dm: Any) -> None:
                     output_limit=max(item.output_limit for item in streams),
                 ),
             })
+            if not display_active:
+                return True
             serialized_current = await asyncio.gather(*(
                 serialize_record_async(
                     record,
@@ -205,6 +209,11 @@ async def stream_full_order_book(websocket: WebSocket, dm: Any) -> None:
             record = await attachment.subscription.receive()
             if record is None:
                 return
+            # Keep draining the bounded subscription and retain the source
+            # lease. Hidden views need neither Decimal aggregation nor JSON;
+            # the next visible delivery is a complete authoritative snapshot.
+            if not display_active:
+                continue
             requested = requested_by_key[record.event.key]
             output_limit = requested.output_limit
             live = bool(record.event.data.get("live"))
@@ -228,12 +237,16 @@ async def stream_full_order_book(websocket: WebSocket, dm: Any) -> None:
             })
 
     async def _read_after_subscribe() -> None:
+        nonlocal display_active
         while True:
             message = await _receive_command()
             if message is None:
                 continue
             request_id = message.get("request_id")
             action = str(message.get("action", "")).strip().lower()
+            if action == "set_display_active" and isinstance(message.get("active"), bool):
+                display_active = message["active"]
+                continue
             if action == "unsubscribe":
                 await _send_json({
                     "type": "unsubscribed",
@@ -261,6 +274,7 @@ async def stream_full_order_book(websocket: WebSocket, dm: Any) -> None:
                 for market, intervals in ALLOWED_UPDATE_INTERVALS_BY_MARKET.items()
             },
             "allowed_price_groupings": list(FULL_PRICE_GROUPINGS),
+            "display_visibility_control": True,
             **contract_metadata(output_limit=MAX_OUTPUT_LEVELS),
         })
         if not await _subscribe():

@@ -672,6 +672,7 @@ export class ReplayV2ApiClient {
     runId: string,
     command: ReplayV2Command,
     signal?: AbortSignal,
+    options: { readonly includeDisplayTail?: boolean } = {},
   ): Promise<ReplayV2CommandResult> {
     if (command.run_id !== runId) {
       throw new ReplayV2ApiError(
@@ -685,7 +686,8 @@ export class ReplayV2ApiClient {
         },
       );
     }
-    const path = `/runs/${safeSegment(runId, "run id")}/commands`;
+    const path = `/runs/${safeSegment(runId, "run id")}/commands`
+      + (options.includeDisplayTail ? "?include_display_tail=true" : "");
     const body = JSON.stringify(command);
     let result: ReplayV2CommandResult | null = null;
     for (let attempt = 0; attempt < 2; attempt += 1) {

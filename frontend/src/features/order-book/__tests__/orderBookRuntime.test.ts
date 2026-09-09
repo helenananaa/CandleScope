@@ -247,6 +247,33 @@ function flushableStore(): { store: OrderBookExternalStore; flush(): void } {
   };
 }
 
+test("hidden full-book views pause delivery without closing their source lease", () => {
+  const socket = new FakeSocket();
+  const { store } = flushableStore();
+  const controller = new OrderBookStreamController({
+    url: "ws://example/full-order-book", identity: { exchange: "binance", marketType: "futures", symbol: "BTCUSDT" },
+    mode: "full", partialDepth: 20, updateIntervalMs: 250, fullOutputLimit: 100,
+    fullPriceGrouping: "auto", store, socketFactory: () => socket,
+  });
+  controller.setDisplayActive(false);
+  controller.start();
+  socket.open();
+  socket.message({ type: "connected", protocol: "orderbook.full.v1", display_visibility_control: true });
+  const subscribe = JSON.parse(socket.sent[0]!);
+  assert.equal(subscribe.display_active, false);
+  const acknowledged = structuredClone(subscribe.streams[0]);
+  delete acknowledged.params.output_limit;
+  delete acknowledged.params.price_grouping;
+  acknowledged.output_limit = 100;
+  acknowledged.price_grouping = "auto";
+  socket.message({ type: "subscribed", request_id: subscribe.request_id, streams: [acknowledged] });
+  controller.setDisplayActive(true);
+  assert.deepEqual(JSON.parse(socket.sent.at(-1)!), { action: "set_display_active", active: true });
+  controller.setDisplayActive(false);
+  assert.equal(socket.closed, false);
+  controller.close();
+});
+
 test("P4 controller verifies immutable subscription, publishes live, and clears on stale", () => {
   const socket = new FakeSocket();
   const { store, flush } = flushableStore();

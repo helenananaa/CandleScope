@@ -667,7 +667,7 @@ export const zhCN = {
   "indicator.computing": "计算中...",
   "indicator.historicalOnly": "仅已收盘值",
   "indicator.closePanel": "关闭指标侧栏",
-  "indicator.historicalOnlyTitle": "指标实时订阅已停用；当前通过 HTTP 补齐已收盘 K 线的指标值。",
+  "indicator.historicalOnlyTitle": "当前仅计算已收盘 K 线的指标值。",
   "indicator.degraded": "部分仅已收盘值",
   "indicator.degradedTitle": "至少一个指标的实时订阅不可用；受影响指标通过 HTTP 补齐已收盘值。",
   "indicator.library": "指标库",

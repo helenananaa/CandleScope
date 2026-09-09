@@ -6,6 +6,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { createReplayBuiltinCompute } from "./replayBuiltinCompute.js";
 
 import {
   createActiveIndicatorPersistence,
@@ -425,7 +426,12 @@ export function useReplaySharedIndicatorRuntime(
     seriesStore.seriesKey,
     indicatorRevision,
   ]);
+  const computeBatch = useMemo(() => {
+    void sourceScopeKey;
+    return createReplayBuiltinCompute();
+  }, [sourceScopeKey]);
   const providedBars = useProvidedBarsIndicatorRuntime({
+    computeBatch,
     bars: indicatorBars,
     chartDataMeta,
     datasetKey: sourceScopeKey,

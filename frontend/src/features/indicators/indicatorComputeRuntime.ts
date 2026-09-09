@@ -154,10 +154,11 @@ export function resolveIndicatorComputeDelay({
   chartDataMeta,
   force,
 }: {
-  chartDataMeta?: { status?: unknown } | null;
+  chartDataMeta?: { status?: unknown; source?: unknown } | null;
   force?: boolean;
 }): number {
   if (isProvisionalChartData(chartDataMeta)) return PROVISIONAL_INDICATOR_DELAY_MS;
+  if (chartDataMeta?.source === "replay-indicator-revealed-prefix") return 0;
   return force ? 0 : INDICATOR_DATA_DEBOUNCE_MS;
 }
 
@@ -165,7 +166,9 @@ export function shouldDeferIndicatorCompute(chartDataMeta?: { status?: unknown }
   return isProvisionalChartData(chartDataMeta);
 }
 
-export function resolveSeriesReadyComputeDelay(chartDataMeta?: { status?: unknown } | null): number {
+export function resolveSeriesReadyComputeDelay(chartDataMeta?: { status?: unknown; source?: unknown } | null): number {
+  if (!isProvisionalChartData(chartDataMeta)
+    && chartDataMeta?.source === "replay-indicator-revealed-prefix") return 0;
   return isProvisionalChartData(chartDataMeta)
     ? PROVISIONAL_INDICATOR_DELAY_MS
     : SERIES_READY_COMPUTE_DELAY_MS;

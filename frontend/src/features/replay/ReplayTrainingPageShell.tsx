@@ -220,7 +220,7 @@ export default function ReplayTrainingPageShell({
       current?.snapshot === activeIntervalViewportTransfer ? null : current
     ));
   }, [activeIntervalViewportTransfer, history.viewportTransferUnavailable]);
-  const integrityRuntime = useReplayIntegrityRuntime(runtime, viewer);
+  const integrityRuntime = useReplayIntegrityRuntime(runtime, viewer, integrityOpen);
   const review = integrityRuntime.review;
   useEffect(() => {
     if (review !== null && !trainingResultsOpen) setIntegrityOpen(true);

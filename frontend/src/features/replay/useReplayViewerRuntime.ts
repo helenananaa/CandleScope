@@ -21,9 +21,11 @@ import type {
   ReplayViewerState,
 } from "./replayV2Types.js";
 import { defaultReplayV2Api } from "./replayV2Api.js";
+import { parseReplayDisplayProjection, type ReplayDisplayProjectionResponse } from "./replayDisplayProjection.js";
 import type { ReplayPeriodSummaryStatusResponse } from "./replayPeriodSummary.js";
 import {
   applyReplayViewerSeriesDelta,
+  applyReplayViewerServerTail,
   replayUsesAuthoritativeSourceBucketProjection,
   ReplayViewerSeriesCache,
   replaceReplayViewerSeriesFromServer,
@@ -424,6 +426,14 @@ export function useReplayViewerRuntime(
   const controlRef = useRef(controlPending);
   controlRef.current = controlPending;
   const viewerCommandRef = useRef<string | null>(null);
+  const inlineCommandRef = useRef(false);
+  const inlineTailRef = useRef<{
+    projection: ReplayDisplayProjectionResponse;
+    previousBoundaryMs: number;
+  } | null>(null);
+  const refreshProjectionRef = useRef<(() => void) | null>(null);
+  const streamedTracksRef = useRef<ReplayMarketTracksResponse | null>(null);
+  const tracksRecoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const marketTracksRequestGateRef = useRef<ReplayMarketTracksRequestGate | null>(null);
   if (marketTracksRequestGateRef.current === null) {
     marketTracksRequestGateRef.current = createReplayMarketTracksRequestGate();
@@ -622,6 +632,7 @@ export function useReplayViewerRuntime(
       runId,
       onProjection: (response) => {
         if (!publishViewerState(response.viewer_state)) return;
+        streamedTracksRef.current = response;
         setMarketTracks(response);
       },
       onError: (cause, fatal) => {
@@ -629,14 +640,20 @@ export function useReplayViewerRuntime(
       },
     });
     stream.start();
-    return () => stream.stop();
+    return () => {
+      stream.stop();
+      streamedTracksRef.current = null;
+      if (tracksRecoveryTimerRef.current !== null) clearTimeout(tracksRecoveryTimerRef.current);
+    };
   }, [publishViewerState, viewerState?.run_id]);
 
   useEffect(() => {
     if (requiresSourceBucketProjection) {
       let disposed = false;
+      let projectedBoundaryMs: number | null = null;
       const requestGate = createReplayViewerProjectionRequestGate();
       const refresh = () => {
+        if (disposed || inlineCommandRef.current) return;
         const boundaryMs = runtime.replayStore.getAuthoritySnapshot().virtualTimeMs;
         const activeDataEpoch = dataEpoch;
         const trackId = viewerRef.current?.selected_track_id ?? null;
@@ -655,6 +672,31 @@ export function useReplayViewerRuntime(
           activeDataEpoch,
           boundaryMs,
         ]);
+        const inline = inlineTailRef.current;
+        if (inline !== null) {
+          inlineTailRef.current = null;
+          const tail = inline.projection;
+          if (projectedBoundaryMs === inline.previousBoundaryMs
+            && tail.run_id === viewerRef.current?.run_id
+            && tail.session_id === sessionId && tail.track_id === trackId
+            && tail.data_epoch === activeDataEpoch
+            && tail.display_interval === displayInterval
+            && tail.revealed_boundary_ms === boundaryMs
+            && tail.identity.exchange === sourceExchange
+            && tail.identity.market_type === sourceMarketType
+            && tail.identity.symbol === sourceSymbol
+            && tail.identity.source_kind === "BAR"
+            && baseInterval !== null
+            && intervalsSemanticallyEquivalent(tail.identity.base_interval, baseInterval)
+            && applyReplayViewerServerTail(seriesStore, tail.bars, inline.previousBoundaryMs, boundaryMs)) {
+            requestGate.cancel();
+            projectedBoundaryMs = boundaryMs;
+            viewerSeriesCache.markSynchronized(seriesStore, sourceStore, boundaryMs);
+            setError(null);
+            return;
+          }
+        }
+        if (projectedBoundaryMs === boundaryMs) return;
         const request = requestGate.begin(requestKey);
         if (request === null) return;
         void defaultReplayV2Api.displayProjectionBySession(
@@ -702,6 +744,7 @@ export function useReplayViewerRuntime(
             sourceStore,
             response.revealed_boundary_ms,
           );
+          projectedBoundaryMs = response.revealed_boundary_ms;
           requestGate.commit(requestKey, request);
           setError(null);
         }).catch((cause: unknown) => {
@@ -714,6 +757,7 @@ export function useReplayViewerRuntime(
           requestGate.finish(request);
         });
       };
+      refreshProjectionRef.current = refresh;
       const projectionRequestScheduler = createReplayViewerProjectionRequestScheduler(refresh);
       const unsubscribe = sourceStore.subscribe(() => {
         projectionRequestScheduler.schedule();
@@ -724,6 +768,7 @@ export function useReplayViewerRuntime(
       refresh();
       return () => {
         disposed = true;
+        if (refreshProjectionRef.current === refresh) refreshProjectionRef.current = null;
         unsubscribe();
         projectionRequestScheduler.cancel();
         requestGate.cancel();
@@ -872,11 +917,15 @@ export function useReplayViewerRuntime(
         }
       : payload;
     const command = buildCommand(type, boundPayload, "control");
+    const includeDisplayTail = requiresSourceBucketProjection
+      && type === "advance" && payload.basis === "DISPLAY_BAR" && payload.count === 1;
+    const previousBoundaryMs = runtime.replayStore.getAuthoritySnapshot().virtualTimeMs;
+    inlineCommandRef.current = includeDisplayTail;
     setControlPending(command);
     setProgress(null);
     setError(null);
     try {
-      const result = await defaultReplayV2Api.commandRun(command.run_id, command);
+      const result = await defaultReplayV2Api.commandRun(command.run_id, command, undefined, { includeDisplayTail });
       publishViewerState(result.viewer_state);
       setProgress(progressFromResult(result));
       const cursorAdvance = type === "advance"
@@ -891,10 +940,32 @@ export function useReplayViewerRuntime(
           result.revision,
         );
         if (!converged) runtime.actions.requestResync("v2-cursor-advance-ack-timeout");
-        void refreshMarketTracks(command.run_id).catch((cause: unknown) => {
-          setMarketTracks(null);
-          setError(cause instanceof Error ? cause.message : t("replay.rt.tracksRefresh"));
-        });
+        if (includeDisplayTail && converged && previousBoundaryMs !== null && result.data.display_tail) {
+          try {
+            inlineTailRef.current = {
+              projection: parseReplayDisplayProjection(result.data.display_tail),
+              previousBoundaryMs,
+            };
+          } catch {
+            // A malformed optional tail cannot invalidate the committed command.
+            // Recover the authoritative full projection instead.
+            inlineTailRef.current = null;
+          }
+        }
+        if (tracksRecoveryTimerRef.current !== null) clearTimeout(tracksRecoveryTimerRef.current);
+        tracksRecoveryTimerRef.current = setTimeout(() => {
+          tracksRecoveryTimerRef.current = null;
+          const caughtUp = streamedTracksRef.current?.run_id === command.run_id
+            && streamedTracksRef.current.tracks.some((track) => (
+              track.adapter_session_id === result.session_id
+              && (track.cursor?.revision ?? -1) >= result.revision
+            ));
+          if (caughtUp) return;
+          void refreshMarketTracks(command.run_id).catch((cause: unknown) => {
+            setMarketTracks(null);
+            setError(cause instanceof Error ? cause.message : t("replay.rt.tracksRefresh"));
+          });
+        }, 750);
       } else {
         await refreshMarketTracks(command.run_id);
       }
@@ -909,6 +980,8 @@ export function useReplayViewerRuntime(
       setError(cause instanceof Error ? cause.message : t("replay.rt.control"));
       throw cause;
     } finally {
+      inlineCommandRef.current = false;
+      if (includeDisplayTail) refreshProjectionRef.current?.();
       setControlPending((current) => current?.command_id === command.command_id ? null : current);
     }
   }, [
@@ -918,6 +991,7 @@ export function useReplayViewerRuntime(
     refreshMarketTracks,
     runtime.actions,
     runtime.replayStore,
+    requiresSourceBucketProjection,
   ]);
 
   const setDisplayInterval = useCallback(async (
