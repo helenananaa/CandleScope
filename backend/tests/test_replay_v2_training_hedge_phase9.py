@@ -587,11 +587,13 @@ async def test_manual_hedge_bar_step_keeps_exhaustive_audit_off_hot_path(
         assert liquidation_detection_count == 1
 
         risk_time_ms = int(advanced["cursor"]["virtual_time_ms"])
+        changes_before_reapply = service.store._connection.total_changes
         await service.training.store.finalize_hedge_inputs(
             run_id,
             risk_virtual_time_ms=risk_time_ms,
         )
         assert liquidation_detection_count == 1
+        assert service.store._connection.total_changes == changes_before_reapply
 
         def tamper_current_equity(connection: sqlite3.Connection) -> None:
             connection.execute(

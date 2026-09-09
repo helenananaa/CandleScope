@@ -1802,16 +1802,13 @@ class ReviewRecorder:
                 previous = decoded
         context_kind = str(context.get("kind", ""))
         preliminary_descriptors: list[tuple[str, str]] | None = None
+        preliminary_domain: Mapping[str, object] | None = None
         if len(full_times) > 1 or context_kind == "SOURCE_EVENT":
+            preliminary_domain = self._descriptor_domain(connection, run_id=run_id)
             preliminary_descriptors = self.descriptors(
                 context,
                 previous,
-                {
-                    "domain": self._descriptor_domain(
-                        connection,
-                        run_id=run_id,
-                    )
-                },
+                {"domain": preliminary_domain},
             )
         if len(full_times) > 1 and context_kind not in {"INITIAL", "DIRECT"}:
             # A critical mutation may be observed before the coordinator has
@@ -1830,6 +1827,20 @@ class ReviewRecorder:
             return ()
         if context_kind == "SOURCE_EVENT" and not preliminary_descriptors:
             return ()
+        if (
+            context_kind == "SOURCE_EVENT"
+            and preliminary_descriptors
+            and all(category == "EQUITY" for category, _ in preliminary_descriptors)
+            and preliminary_domain is not None
+        ):
+            prior_minimum = self._minimum_prior_equity(connection, run_id=run_id)
+            if (
+                prior_minimum is not None
+                and Decimal(str(preliminary_domain["equity"])) >= prior_minimum
+            ):
+                # This candidate would be discarded below. Avoid constructing
+                # and hashing a complete account/ledger frame just to discard it.
+                return ()
         projection = self.projection(
             connection,
             run_id=run_id,

@@ -8,6 +8,7 @@ base-bar prefix and never fabricates missing BAR-source intervals.
 from __future__ import annotations
 
 import re
+from hashlib import sha256
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from enum import Enum
@@ -21,7 +22,7 @@ from app.data_engine.interval_policy import (
     parse_monthly_count,
 )
 
-from ..canonical import canonical_sha256
+from ..canonical import _canonical_object_bytes, canonical_json_bytes, canonical_sha256
 from ..dataset import ReplayBar
 from ..errors import ReplayDomainError, ReplayErrorCode
 from ..market_halts import ReplayBarHalt
@@ -571,6 +572,7 @@ class ReplayBarBuilder:
     def reset(self) -> None:
         self._active_bar: ReplayDisplayBar | None = None
         self._closed_bars: list[ReplayDisplayBar] = []
+        self._closed_encoding_cache: dict[int, tuple[ReplayDisplayBar, bytes]] = {}
         self._closed_count = 0
         self._closed_prefix_count = 0
         self._closed_prefix_hash = self._initial_closed_chain_hash()
@@ -586,14 +588,35 @@ class ReplayBarBuilder:
         return False
 
     def snapshot(self) -> dict[str, object]:
+        return self._snapshot_with_encoding()[0]
+
+    def _snapshot_with_encoding(self) -> tuple[dict[str, object], bytes]:
         payload = self._snapshot_payload()
-        payload["state_hash"] = canonical_sha256(
-            {
-                "schema_version": BAR_BUILDER_STATE_HASH_SCHEMA_VERSION,
-                "state": payload,
-            }
+        # A closed ReplayDisplayBar contains only frozen scalar fields. Retain
+        # its validated encoding by identity, bounded by the retained window.
+        previous = getattr(self, "_closed_encoding_cache", {})
+        retained = {}
+        encoded_bars = []
+        for bar, value in zip(self._closed_bars, payload["closed_bars"], strict=True):
+            entry = previous.get(id(bar))
+            encoded = (
+                entry[1] if entry is not None and entry[0] is bar
+                else canonical_json_bytes(value)
+            )
+            retained[id(bar)] = (bar, encoded)
+            encoded_bars.append(encoded)
+        closed_bytes = b"[" + b",".join(encoded_bars) + b"]"
+        encoded_payload = _canonical_object_bytes(payload, encoded_fields={"closed_bars": closed_bytes})
+        payload["state_hash"] = "sha256:" + sha256(
+            _canonical_object_bytes(
+                {"schema_version": BAR_BUILDER_STATE_HASH_SCHEMA_VERSION, "state": payload},
+                encoded_fields={"state": encoded_payload},
+            )
+        ).hexdigest()
+        self._closed_encoding_cache = retained
+        return payload, _canonical_object_bytes(
+            payload, encoded_fields={"closed_bars": closed_bytes}
         )
-        return payload
 
     def restore(self, state: Mapping[str, object]) -> None:
         try:
@@ -608,6 +631,7 @@ class ReplayBarBuilder:
 
         self._active_bar = candidate["active_bar"]
         self._closed_bars = candidate["closed_bars"]
+        self._closed_encoding_cache = {}
         self._closed_count = candidate["closed_count"]
         self._closed_prefix_count = candidate["closed_prefix_count"]
         self._closed_prefix_hash = candidate["closed_prefix_hash"]

@@ -111,3 +111,23 @@ def canonical_json_bytes(value: object) -> bytes:
 def canonical_sha256(value: object) -> str:
     digest = hashlib.sha256(canonical_json_bytes(value)).hexdigest()
     return f"sha256:{digest}"
+
+
+def _canonical_object_bytes(
+    value: Mapping[str, object], *, encoded_fields: Mapping[str, bytes],
+) -> bytes:
+    """Compose owned canonical encodings without walking immutable subtrees.
+
+    Internal snapshot builders must supply encodings of the exact field values,
+    produced by this module. This is not an input-validation or raw-JSON API.
+    """
+    if any(type(key) is not str for key in value):
+        raise TypeError("canonical object requires native string keys")
+    if not encoded_fields.keys() <= value.keys():
+        raise ValueError("encoded field is absent from canonical object")
+    return b"{" + b",".join(
+        canonical_json_bytes(key) + b":" + (
+            encoded_fields[key] if key in encoded_fields else canonical_json_bytes(value[key])
+        )
+        for key in sorted(value)
+    ) + b"}"

@@ -5,11 +5,12 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation, localcontext
+from hashlib import sha256
 from typing import Mapping, Sequence
 
 from ..bars.builder import ReplayBarBuilder, ReplayDisplayBar
 from ..bars.trade_builder import TradeReplayBarBuilder
-from ..canonical import canonical_sha256
+from ..canonical import _canonical_object_bytes, canonical_sha256
 from ..constants import CommandType
 from ..internal_commands import (
     REVEALED_REFERENCE_CLOSE_FIDELITY,
@@ -2267,11 +2268,16 @@ class ConservativeBarBroker:
         return self._has_trading_activity
 
     def snapshot(self) -> dict[str, object]:
+        encoded_builder = None
+        if type(self._bar_builder) is ReplayBarBuilder:
+            builder_state, encoded_builder = self._bar_builder._snapshot_with_encoding()
+        else:
+            builder_state = self._bar_builder.snapshot()
         payload = {
             "schema_version": BROKER_STATE_SCHEMA_VERSION,
             "model_version": self._model_version,
             "config_hash": self._config_hash,
-            "bar_builder": self._bar_builder.snapshot(),
+            "bar_builder": builder_state,
             "orders": [order.to_dict() for order in self.orders],
             "client_order_ids": sorted(self._client_order_ids),
             "fills": [fill.to_dict() for fill in self._fills],
@@ -2289,12 +2295,16 @@ class ConservativeBarBroker:
             "equity_peak": self._equity_peak,
             "max_drawdown": self._max_drawdown,
         }
-        payload["state_hash"] = canonical_sha256(
-            {
-                "schema_version": BROKER_STATE_HASH_SCHEMA_VERSION,
-                "state": payload,
-            }
-        )
+        if encoded_builder is None:
+            payload["state_hash"] = canonical_sha256(
+                {"schema_version": BROKER_STATE_HASH_SCHEMA_VERSION, "state": payload}
+            )
+        else:
+            encoded_payload = _canonical_object_bytes(payload, encoded_fields={"bar_builder": encoded_builder})
+            payload["state_hash"] = "sha256:" + sha256(_canonical_object_bytes(
+                {"schema_version": BROKER_STATE_HASH_SCHEMA_VERSION, "state": payload},
+                encoded_fields={"state": encoded_payload},
+            )).hexdigest()
         return payload
 
     def restore(self, state: Mapping[str, object]) -> None:

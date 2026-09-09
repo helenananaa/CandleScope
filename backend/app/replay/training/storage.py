@@ -2327,6 +2327,17 @@ class TrainingRunStore:
                     ),
                 }
             )
+            position_json = canonical_json(position)
+            account_json = canonical_json(account)
+            public_price = decimal_to_string(mark, field_name="pinned public price")
+            if (
+                position_json == track["position_json"]
+                and account_json == track["account_json"]
+                and public_price == track["public_price"]
+            ):
+                # Validation above still runs. Reapplying an identical overlay
+                # must not dirty a WAL page just to refresh its write timestamp.
+                continue
             connection.execute(
                 """
                 UPDATE replay_training_market_track
@@ -2335,9 +2346,9 @@ class TrainingRunStore:
                 WHERE run_id = ? AND track_id = ?
                 """,
                 (
-                    canonical_json(position),
-                    canonical_json(account),
-                    decimal_to_string(mark, field_name="pinned public price"),
+                    position_json,
+                    account_json,
+                    public_price,
                     now_ms,
                     run_id,
                     track["track_id"],
@@ -5470,44 +5481,89 @@ class TrainingRunStore:
         await self.base_store.run_extension_write(write)
 
     async def finalize_hedge_inputs(
-        self,
-        run_id: str,
-        *,
-        risk_virtual_time_ms: int | None = None,
+        self, run_id: str, *, risk_virtual_time_ms: int | None = None,
     ) -> None:
         cached_fingerprint = self._hedge_risk_fingerprints.get(run_id)
+        committed_fingerprint = await self.base_store.run_extension_write(
+            lambda connection: self._finalize_hedge_inputs_in_transaction(
+                connection, run_id=run_id, risk_virtual_time_ms=risk_virtual_time_ms,
+                cached_fingerprint=cached_fingerprint,
+            )
+        )
+        self._cache_committed_hedge_fingerprint(run_id, committed_fingerprint)
 
-        def write(connection: sqlite3.Connection) -> str | None:
-            run = connection.execute(
+    async def finalize_hedge_inputs_and_checkpoint(
+        self, run_id: str, *, risk_virtual_time_ms: int,
+        events: Sequence[StableMarketEvent],
+    ) -> bool:
+        """Commit one complete risk-safe market wave with its global checkpoint.
+
+        Liquidations keep the original reconciliation boundary: commit risk,
+        return False, and let the caller settle them before recording the wave.
+        """
+        ordered = stable_market_event_order(events)
+        cached_fingerprint = self._hedge_risk_fingerprints.get(run_id)
+
+        def write(connection: sqlite3.Connection) -> tuple[str | None, bool]:
+            fingerprint = self._finalize_hedge_inputs_in_transaction(
+                connection, run_id=run_id, risk_virtual_time_ms=risk_virtual_time_ms,
+                cached_fingerprint=cached_fingerprint,
+            )
+            pending = connection.execute(
                 """
-                SELECT position_mode FROM replay_training_run WHERE run_id = ?
-                """,
-                (run_id,),
+                SELECT 1 FROM replay_training_liquidation_case
+                WHERE run_id = ? AND state NOT IN (
+                    'COMPLETED', 'BANKRUPT', 'FAILED_CLOSED', 'RECOVERED_AFTER_CANCEL'
+                ) LIMIT 1
+                """, (run_id,),
             ).fetchone()
-            if run is None or run["position_mode"] != "HEDGE":
-                return None
-            now_ms = self.base_store._validated_now_ms()
-            self._apply_hedge_mark_projection(
-                connection,
-                run_id=run_id,
-                now_ms=now_ms,
+            if fingerprint is None or pending is not None:
+                return fingerprint, False
+            self._record_global_events_in_transaction(
+                connection, run_id=run_id, ordered=ordered, materialize_portfolio=False,
             )
-            fingerprint = self._hedge_risk_fingerprint(
-                connection,
-                run_id=run_id,
-            )
-            if fingerprint == cached_fingerprint:
-                return fingerprint
-            self._detect_contract_liquidations(
-                connection,
-                run_id=run_id,
-                now_ms=now_ms,
-                trigger_virtual_time_ms=risk_virtual_time_ms,
-                refresh_current_equity=True,
-            )
-            return self._hedge_risk_fingerprint(connection, run_id=run_id)
+            return fingerprint, True
 
-        committed_fingerprint = await self.base_store.run_extension_write(write)
+        fingerprint, checkpointed = await self.base_store.run_extension_write(write)
+        self._cache_committed_hedge_fingerprint(run_id, fingerprint)
+        return checkpointed
+
+    def _finalize_hedge_inputs_in_transaction(
+        self, connection: sqlite3.Connection, *, run_id: str,
+        risk_virtual_time_ms: int | None, cached_fingerprint: str | None,
+    ) -> str | None:
+        run = connection.execute(
+            """
+            SELECT position_mode FROM replay_training_run WHERE run_id = ?
+            """,
+            (run_id,),
+        ).fetchone()
+        if run is None or run["position_mode"] != "HEDGE":
+            return None
+        now_ms = self.base_store._validated_now_ms()
+        self._apply_hedge_mark_projection(
+            connection,
+            run_id=run_id,
+            now_ms=now_ms,
+        )
+        fingerprint = self._hedge_risk_fingerprint(
+            connection,
+            run_id=run_id,
+        )
+        if fingerprint == cached_fingerprint:
+            return fingerprint
+        self._detect_contract_liquidations(
+            connection,
+            run_id=run_id,
+            now_ms=now_ms,
+            trigger_virtual_time_ms=risk_virtual_time_ms,
+            refresh_current_equity=True,
+        )
+        return self._hedge_risk_fingerprint(connection, run_id=run_id)
+
+    def _cache_committed_hedge_fingerprint(
+        self, run_id: str, committed_fingerprint: str | None,
+    ) -> None:
         if committed_fingerprint is None:
             self._hedge_risk_fingerprints.pop(run_id, None)
             return
@@ -12312,41 +12368,57 @@ class TrainingRunStore:
         result_json = canonical_json(result)
 
         def write(connection: sqlite3.Connection) -> None:
-            existing = connection.execute(
-                """
-                SELECT command_json, result_json
-                FROM replay_training_command
-                WHERE run_id = ? AND command_id = ?
-                """,
-                (run_id, command_id),
-            ).fetchone()
-            if existing is not None:
-                if (
-                    str(existing["command_json"]) != command_json
-                    or str(existing["result_json"]) != result_json
-                ):
-                    raise TrainingRunError(
-                        "COMMAND_ID_REUSED",
-                        "command_id conflicts with a stored replay.v3 command",
-                        status_code=409,
-                    )
-                return
-            connection.execute(
-                """
-                INSERT INTO replay_training_command(
-                    run_id, command_id, command_json, result_json, created_at_ms
-                ) VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    run_id,
-                    command_id,
-                    command_json,
-                    result_json,
-                    self.base_store._validated_now_ms(),
-                ),
+            self._save_command_result_in_transaction(
+                connection, run_id=run_id, command_id=command_id,
+                command_json=command_json, result_json=result_json,
+                now_ms=self.base_store._validated_now_ms(),
             )
 
         await self.base_store.run_extension_write(write)
+
+    @staticmethod
+    def _save_command_result_in_transaction(
+        connection: sqlite3.Connection,
+        *,
+        run_id: str,
+        command_id: str,
+        command_json: str,
+        result_json: str,
+        now_ms: int,
+    ) -> None:
+        existing = connection.execute(
+            """
+            SELECT command_json, result_json
+            FROM replay_training_command
+            WHERE run_id = ? AND command_id = ?
+            """,
+            (run_id, command_id),
+        ).fetchone()
+        if existing is not None:
+            if (
+                str(existing["command_json"]) != command_json
+                or str(existing["result_json"]) != result_json
+            ):
+                raise TrainingRunError(
+                    "COMMAND_ID_REUSED",
+                    "command_id conflicts with a stored replay.v3 command",
+                    status_code=409,
+                )
+            return
+        connection.execute(
+            """
+            INSERT INTO replay_training_command(
+                run_id, command_id, command_json, result_json, created_at_ms
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                run_id,
+                command_id,
+                command_json,
+                result_json,
+                now_ms,
+            ),
+        )
 
     async def begin_period_summary_build(
         self,
@@ -13159,7 +13231,7 @@ class TrainingRunStore:
         def write(connection: sqlite3.Connection) -> None:
             row = connection.execute(
                 """
-                SELECT status, result_json
+                SELECT status, result_json, command_json
                 FROM replay_training_advance_intent
                 WHERE run_id = ? AND command_id = ?
                 """,
@@ -13171,6 +13243,19 @@ class TrainingRunStore:
                     "durable advance intent does not exist",
                     status_code=503,
                 )
+            # The terminal intent and its idempotent response become durable
+            # together; a conflict rolls back both writes.
+            if str(row["status"]) == "FAILED":
+                raise TrainingRunError(
+                    "ADVANCE_INTENT_FAILED",
+                    "a failed advance intent cannot publish a terminal result",
+                    status_code=409,
+                )
+            self._save_command_result_in_transaction(
+                connection, run_id=run_id, command_id=command_id,
+                command_json=str(row["command_json"]), result_json=result_json,
+                now_ms=now_ms,
+            )
             if str(row["status"]) in {"COMPLETED", "CANCELLED"}:
                 if (
                     str(row["status"]) != status
@@ -15890,174 +15975,182 @@ class TrainingRunStore:
     ) -> dict[str, object]:
         ordered = stable_market_event_order(events)
 
-        def write(connection: sqlite3.Connection) -> dict[str, object]:
-            tail_row = connection.execute(
-                """
+        return await self.base_store.run_extension_write(
+            lambda connection: self._record_global_events_in_transaction(
+                connection, run_id=run_id, ordered=ordered,
+                materialize_portfolio=materialize_portfolio,
+            )
+        )
+
+    def _record_global_events_in_transaction(
+        self, connection: sqlite3.Connection, *, run_id: str,
+        ordered: Sequence[StableMarketEvent], materialize_portfolio: bool,
+    ) -> dict[str, object]:
+        tail_row = connection.execute(
+            """
+            SELECT global_sequence, actual_event_time_ms, event_phase,
+                   track_id, source_sequence
+            FROM replay_training_global_event
+            WHERE run_id = ?
+            ORDER BY global_sequence DESC
+            LIMIT 1
+            """,
+            (run_id,),
+        ).fetchone()
+        global_sequence = 0 if tail_row is None else int(tail_row["global_sequence"])
+        tail_key = (
+            None
+            if tail_row is None
+            else (
+                int(tail_row["actual_event_time_ms"]),
+                int(tail_row["event_phase"]),
+                str(tail_row["track_id"]),
+                int(tail_row["source_sequence"]),
+            )
+        )
+        now_ms = self.base_store._validated_now_ms()
+        sequence_ranges: dict[str, tuple[int, int]] = {}
+        for event in ordered:
+            current_range = sequence_ranges.get(event.market_track_stable_id)
+            if current_range is None:
+                sequence_ranges[event.market_track_stable_id] = (
+                    event.source_sequence,
+                    event.source_sequence,
+                )
+            else:
+                sequence_ranges[event.market_track_stable_id] = (
+                    min(current_range[0], event.source_sequence),
+                    max(current_range[1], event.source_sequence),
+                )
+        existing_by_identity: dict[
+            tuple[str, int], Mapping[str, object]
+        ] = {}
+        if sequence_ranges:
+            range_clauses: list[str] = []
+            range_parameters: list[object] = [run_id]
+            for track_id, (first_sequence, last_sequence) in sorted(
+                sequence_ranges.items()
+            ):
+                range_clauses.append(
+                    "(track_id = ? AND source_sequence BETWEEN ? AND ?)"
+                )
+                range_parameters.extend(
+                    (track_id, first_sequence, last_sequence)
+                )
+            existing_rows = connection.execute(
+                f"""
                 SELECT global_sequence, actual_event_time_ms, event_phase,
                        track_id, source_sequence
                 FROM replay_training_global_event
-                WHERE run_id = ?
-                ORDER BY global_sequence DESC
-                LIMIT 1
+                WHERE run_id = ? AND ({" OR ".join(range_clauses)})
                 """,
-                (run_id,),
-            ).fetchone()
-            global_sequence = 0 if tail_row is None else int(tail_row["global_sequence"])
-            tail_key = (
-                None
-                if tail_row is None
-                else (
-                    int(tail_row["actual_event_time_ms"]),
-                    int(tail_row["event_phase"]),
-                    str(tail_row["track_id"]),
-                    int(tail_row["source_sequence"]),
+                tuple(range_parameters),
+            ).fetchall()
+            existing_by_identity = {
+                (str(row["track_id"]), int(row["source_sequence"])): row
+                for row in existing_rows
+            }
+        inserted = 0
+        insert_rows: list[tuple[object, ...]] = []
+        for event in ordered:
+            identity = (event.market_track_stable_id, event.source_sequence)
+            exists = existing_by_identity.get(identity)
+            if exists is not None:
+                existing_key = (
+                    int(exists["actual_event_time_ms"]),
+                    int(exists["event_phase"]),
+                    str(exists["track_id"]),
+                    int(exists["source_sequence"]),
                 )
-            )
-            now_ms = self.base_store._validated_now_ms()
-            sequence_ranges: dict[str, tuple[int, int]] = {}
-            for event in ordered:
-                current_range = sequence_ranges.get(event.market_track_stable_id)
-                if current_range is None:
-                    sequence_ranges[event.market_track_stable_id] = (
-                        event.source_sequence,
-                        event.source_sequence,
-                    )
-                else:
-                    sequence_ranges[event.market_track_stable_id] = (
-                        min(current_range[0], event.source_sequence),
-                        max(current_range[1], event.source_sequence),
-                    )
-            existing_by_identity: dict[
-                tuple[str, int], Mapping[str, object]
-            ] = {}
-            if sequence_ranges:
-                range_clauses: list[str] = []
-                range_parameters: list[object] = [run_id]
-                for track_id, (first_sequence, last_sequence) in sorted(
-                    sequence_ranges.items()
-                ):
-                    range_clauses.append(
-                        "(track_id = ? AND source_sequence BETWEEN ? AND ?)"
-                    )
-                    range_parameters.extend(
-                        (track_id, first_sequence, last_sequence)
-                    )
-                existing_rows = connection.execute(
-                    f"""
-                    SELECT global_sequence, actual_event_time_ms, event_phase,
-                           track_id, source_sequence
-                    FROM replay_training_global_event
-                    WHERE run_id = ? AND ({" OR ".join(range_clauses)})
-                    """,
-                    tuple(range_parameters),
-                ).fetchall()
-                existing_by_identity = {
-                    (str(row["track_id"]), int(row["source_sequence"])): row
-                    for row in existing_rows
-                }
-            inserted = 0
-            insert_rows: list[tuple[object, ...]] = []
-            for event in ordered:
-                identity = (event.market_track_stable_id, event.source_sequence)
-                exists = existing_by_identity.get(identity)
-                if exists is not None:
-                    existing_key = (
-                        int(exists["actual_event_time_ms"]),
-                        int(exists["event_phase"]),
-                        str(exists["track_id"]),
-                        int(exists["source_sequence"]),
-                    )
-                    if existing_key != event.ordering_key:
-                        raise TrainingRunError(
-                            "GLOBAL_EVENT_IDENTITY_MISMATCH",
-                            "a durable global event identity changed its ordering key",
-                            status_code=503,
-                            details={
-                                "existing_ordering_key": list(existing_key),
-                                "requested_ordering_key": list(event.ordering_key),
-                            },
-                        )
-                    continue
-                if tail_key is not None and event.ordering_key < tail_key:
+                if existing_key != event.ordering_key:
                     raise TrainingRunError(
-                        "GLOBAL_EVENT_ORDER_VIOLATION",
-                        "global events cannot be appended behind a later durable event",
-                        status_code=409,
+                        "GLOBAL_EVENT_IDENTITY_MISMATCH",
+                        "a durable global event identity changed its ordering key",
+                        status_code=503,
                         details={
-                            "durable_tail_ordering_key": list(tail_key),
+                            "existing_ordering_key": list(existing_key),
                             "requested_ordering_key": list(event.ordering_key),
                         },
                     )
-                global_sequence += 1
-                insert_rows.append(
-                    (
-                        run_id,
-                        global_sequence,
-                        GLOBAL_ORDERING_VERSION,
-                        event.actual_event_time_ms,
-                        event.event_phase,
-                        event.market_track_stable_id,
-                        event.source_sequence,
-                        global_ordering_hash((event,)),
-                        now_ms,
-                    ),
+                continue
+            if tail_key is not None and event.ordering_key < tail_key:
+                raise TrainingRunError(
+                    "GLOBAL_EVENT_ORDER_VIOLATION",
+                    "global events cannot be appended behind a later durable event",
+                    status_code=409,
+                    details={
+                        "durable_tail_ordering_key": list(tail_key),
+                        "requested_ordering_key": list(event.ordering_key),
+                    },
                 )
-                existing_by_identity[identity] = {
-                    "global_sequence": global_sequence,
-                    "actual_event_time_ms": event.actual_event_time_ms,
-                    "event_phase": event.event_phase,
-                    "track_id": event.market_track_stable_id,
-                    "source_sequence": event.source_sequence,
-                }
-                inserted += 1
-                tail_key = event.ordering_key
-            connection.executemany(
-                """
-                INSERT INTO replay_training_global_event(
-                    run_id, global_sequence, ordering_version,
-                    actual_event_time_ms, event_phase, track_id,
-                    source_sequence, ordering_hash, created_at_ms
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                insert_rows,
+            global_sequence += 1
+            insert_rows.append(
+                (
+                    run_id,
+                    global_sequence,
+                    GLOBAL_ORDERING_VERSION,
+                    event.actual_event_time_ms,
+                    event.event_phase,
+                    event.market_track_stable_id,
+                    event.source_sequence,
+                    global_ordering_hash((event,)),
+                    now_ms,
+                ),
             )
-            checkpoint = self._insert_global_checkpoint(
+            existing_by_identity[identity] = {
+                "global_sequence": global_sequence,
+                "actual_event_time_ms": event.actual_event_time_ms,
+                "event_phase": event.event_phase,
+                "track_id": event.market_track_stable_id,
+                "source_sequence": event.source_sequence,
+            }
+            inserted += 1
+            tail_key = event.ordering_key
+        connection.executemany(
+            """
+            INSERT INTO replay_training_global_event(
+                run_id, global_sequence, ordering_version,
+                actual_event_time_ms, event_phase, track_id,
+                source_sequence, ordering_hash, created_at_ms
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            insert_rows,
+        )
+        checkpoint = self._insert_global_checkpoint(
+            connection,
+            run_id=run_id,
+            now_ms=now_ms,
+            materialize_portfolio=materialize_portfolio,
+        )
+        selected = connection.execute(
+            """
+            SELECT track.adapter_session_id
+            FROM replay_training_viewer_state AS viewer
+            JOIN replay_training_market_track AS track
+              ON track.run_id = viewer.run_id
+             AND track.track_id = viewer.selected_track_id
+            WHERE viewer.run_id = ?
+            """,
+            (run_id,),
+        ).fetchone()
+        if inserted and selected is not None:
+            self._append_review_timeline_event(
                 connection,
                 run_id=run_id,
+                session_id=str(selected["adapter_session_id"]),
+                context={
+                    "kind": "SOURCE_EVENT",
+                },
+                state=None,
+                checkpoint=None,
                 now_ms=now_ms,
-                materialize_portfolio=materialize_portfolio,
             )
-            selected = connection.execute(
-                """
-                SELECT track.adapter_session_id
-                FROM replay_training_viewer_state AS viewer
-                JOIN replay_training_market_track AS track
-                  ON track.run_id = viewer.run_id
-                 AND track.track_id = viewer.selected_track_id
-                WHERE viewer.run_id = ?
-                """,
-                (run_id,),
-            ).fetchone()
-            if inserted and selected is not None:
-                self._append_review_timeline_event(
-                    connection,
-                    run_id=run_id,
-                    session_id=str(selected["adapter_session_id"]),
-                    context={
-                        "kind": "SOURCE_EVENT",
-                    },
-                    state=None,
-                    checkpoint=None,
-                    now_ms=now_ms,
-                )
-            return {
-                "ordering_version": GLOBAL_ORDERING_VERSION,
-                "inserted": inserted,
-                "global_sequence": global_sequence,
-                "checkpoint": checkpoint,
-            }
-
-        return await self.base_store.run_extension_write(write)
+        return {
+            "ordering_version": GLOBAL_ORDERING_VERSION,
+            "inserted": inserted,
+            "global_sequence": global_sequence,
+            "checkpoint": checkpoint,
+        }
 
     async def checkpoint_market_tracks(
         self,

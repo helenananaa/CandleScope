@@ -4508,12 +4508,6 @@ class TrainingRunService:
                     summary=None,
                     resuming=True,
                 )
-                await self.store.save_command_result(
-                    run_id=normalized_run,
-                    command_id=command.command_id,
-                    command=command_payload,
-                    result=result,
-                )
                 return result
             raise TrainingRunError(
                 "ADVANCE_INTENT_FAILED",
@@ -4970,12 +4964,6 @@ class TrainingRunService:
                     )
                     else None
                 ),
-            )
-            await self.store.save_command_result(
-                run_id=normalized_run,
-                command_id=command.command_id,
-                command=command_payload,
-                result=result,
             )
             return result
         v1_command = ReplayCommand(
@@ -9166,6 +9154,7 @@ class TrainingRunService:
                 )
             )
 
+            wave_checkpointed = False
             try:
                 wave_events.extend(
                     await self.store.apply_account_history_events(
@@ -9212,10 +9201,28 @@ class TrainingRunService:
                             write_audit=False,
                             risk_virtual_time_ms=wave_time,
                         )
-                    await self.store.finalize_hedge_inputs(
-                        command.run_id,
-                        risk_virtual_time_ms=wave_time,
-                    )
+                    if (
+                        hedge_mode
+                        and market_barrier
+                        and str(binding.get("source_kind")) == "BAR"
+                        and not book_required
+                        and source_goal is None
+                        and not simulation_hedge_events
+                        and str(binding.get("account_data_mode"))
+                        != AccountDataMode.HISTORICAL_EXACT.value
+                    ):
+                        wave_checkpointed = (
+                            await self.store.finalize_hedge_inputs_and_checkpoint(
+                                command.run_id,
+                                risk_virtual_time_ms=wave_time,
+                                events=(*pending_global_events, *wave_events),
+                            )
+                        )
+                    else:
+                        await self.store.finalize_hedge_inputs(
+                            command.run_id,
+                            risk_virtual_time_ms=wave_time,
+                        )
                     wave_events.extend(
                         await self.store.apply_hedge_input_events(
                             command.run_id,
@@ -9225,7 +9232,7 @@ class TrainingRunService:
                     )
                 pending_liquidations = (
                     ()
-                    if market_cohort_incomplete
+                    if market_cohort_incomplete or wave_checkpointed
                     else await self.store.pending_liquidations(command.run_id)
                 )
                 if pending_liquidations and not market_barrier:
@@ -9293,7 +9300,9 @@ class TrainingRunService:
             if market_barrier and (
                 not market_cohort_incomplete or source_goal is not None
             ):
-                if pending_global_events:
+                if wave_checkpointed:
+                    pending_global_events.clear()
+                elif pending_global_events:
                     await self.store.record_global_events(
                         command.run_id,
                         stable_market_event_order(pending_global_events),
