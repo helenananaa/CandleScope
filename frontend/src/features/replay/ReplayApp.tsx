@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { Profiler, useEffect, useMemo, useState } from "react";
+import type { ProfilerOnRenderCallback } from "react";
+import { recordPerfEvent } from "../../runtime/performance/perfMarks.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { useChartSurfaceRuntime } from "../../chart-adapter/useChartSurfaceRuntime.js";
@@ -23,6 +25,10 @@ export { default as ReplayInitialMarketPicker } from "./components/ReplayInitial
 export interface ReplayAppProps {
   entry: ReplayEntry;
 }
+
+const recordReplayCommit: ProfilerOnRenderCallback = (id, phase, actualDuration, baseDuration, startTime, commitTime) => {
+  recordPerfEvent("replay.react.commit", { id, phase, actualDuration, baseDuration, startTime, commitTime });
+};
 
 function ReplayTrainingHubApp() {
   const runtime = useTrainingHub();
@@ -175,13 +181,16 @@ export default function ReplayApp({ entry }: ReplayAppProps) {
   const chartSettingsRuntime = useChartSettingsRuntime();
   if (entry.kind === "configure") return <ReplayTrainingHubApp />;
   if (entry.kind === "run") {
-    return (
+    const workspace = (
       <ReplayTrainingRunApp
         key={entry.runId}
         chartSettingsRuntime={chartSettingsRuntime}
         runId={entry.runId}
       />
     );
+    return import.meta.env?.DEV
+      ? <Profiler id="replay" onRender={recordReplayCommit}>{workspace}</Profiler>
+      : workspace;
   }
   return <ReplayStatusSurface title={t("replay.invalidUrl")} message={entry.message} />;
 }

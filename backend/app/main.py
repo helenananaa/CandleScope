@@ -646,7 +646,8 @@ async def startup_event() -> None:
 
     runtime = getattr(app.state, "data_engine_runtime", None)
     configure_exchange_metadata_foreground_probe(
-        getattr(runtime, "backfill_coordinator", None)
+        (getattr(runtime, "backfill_coordinator", None),
+         getattr(getattr(app.state, "replay_service", None), "training", None))
     )
 
     # 5. Refresh exchange symbols in the background. Product search can serve
@@ -683,18 +684,18 @@ async def _wait_for_catalog_foreground_quiet() -> None:
         await asyncio.sleep(dwell)
     runtime = getattr(app.state, "data_engine_runtime", None)
     coordinator = getattr(runtime, "backfill_coordinator", None)
-    has_foreground_work = getattr(coordinator, "has_foreground_work", None)
-    foreground_idle_seconds = getattr(coordinator, "foreground_idle_seconds", None)
-    if not callable(has_foreground_work):
+    replay = getattr(getattr(app.state, "replay_service", None), "training", None)
+    owners = (coordinator, replay)
+    busy_probes = [getattr(owner, "has_foreground_work", None) for owner in owners]
+    idle_probes = [getattr(owner, "foreground_idle_seconds", None) for owner in owners]
+    busy_probes = [probe for probe in busy_probes if callable(probe)]
+    idle_probes = [probe for probe in idle_probes if callable(probe)]
+    if not busy_probes:
         return
     while True:
         try:
-            busy = bool(has_foreground_work())
-            idle_for = (
-                float(foreground_idle_seconds())
-                if callable(foreground_idle_seconds)
-                else float("inf")
-            )
+            busy = any(probe() for probe in busy_probes)
+            idle_for = min((float(probe()) for probe in idle_probes), default=float("inf"))
         except Exception:
             busy = True
             idle_for = 0.0

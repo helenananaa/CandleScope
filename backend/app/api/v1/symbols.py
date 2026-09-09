@@ -189,13 +189,16 @@ def initialize_exchange_metadata_cache() -> bool:
 
 
 def configure_exchange_metadata_foreground_probe(coordinator: Any | None) -> None:
-    """Bind speculative catalog timers to the runtime foreground owner."""
+    """Bind speculative catalog timers to one or several foreground owners."""
 
     global _foreground_busy_probe, _foreground_idle_probe
-    busy = getattr(coordinator, "has_foreground_work", None)
-    idle = getattr(coordinator, "foreground_idle_seconds", None)
-    _foreground_busy_probe = busy if callable(busy) else None
-    _foreground_idle_probe = idle if callable(idle) else None
+    owners = coordinator if isinstance(coordinator, (list, tuple)) else (coordinator,)
+    busy = [getattr(owner, "has_foreground_work", None) for owner in owners]
+    idle = [getattr(owner, "foreground_idle_seconds", None) for owner in owners]
+    busy = [probe for probe in busy if callable(probe)]
+    idle = [probe for probe in idle if callable(probe)]
+    _foreground_busy_probe = (lambda: any(probe() for probe in busy)) if busy else None
+    _foreground_idle_probe = (lambda: min(float(probe()) for probe in idle)) if idle else None
 
 
 def _catalog_foreground_is_quiet() -> bool:

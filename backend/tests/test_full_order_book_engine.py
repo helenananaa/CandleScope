@@ -24,6 +24,22 @@ IDENTITY = ("binance", "futures", "BTCUSDT", 100)
 SPOT_IDENTITY = ("binance", "spot", "BTCUSDT", 100)
 
 
+def test_level_decimal_memo_preserves_value_identity_and_serialization():
+    import copy
+    from decimal import Decimal
+    level = FullOrderBookLevel(100.1, 0.2)
+    before = dataclasses.asdict(level)
+    original_hash = hash(level)
+    pair = level.decimal_pair()
+    assert pair == (Decimal("100.1"), Decimal("0.2"))
+    assert level.decimal_pair() is pair
+    assert dataclasses.asdict(level) == before == level.to_dict()
+    assert hash(level) == original_hash
+    assert level == FullOrderBookLevel(100.1, 0.2)
+    assert copy.deepcopy(level).decimal_pair() == pair
+    assert dataclasses.replace(level, quantity=0.3).decimal_pair()[1] == Decimal("0.3")
+
+
 def _seed(
     *,
     exchange: str = "binance",

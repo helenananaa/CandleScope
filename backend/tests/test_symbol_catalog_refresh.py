@@ -412,6 +412,24 @@ def test_automatic_catalog_retry_yields_to_foreground(monkeypatch) -> None:
     asyncio.run(run())
 
 
+def test_catalog_quiet_window_includes_replay_controls(monkeypatch) -> None:
+    live = SimpleNamespace(has_foreground_work=lambda: False, foreground_idle_seconds=lambda: 100.0)
+    replay = SimpleNamespace(busy=True, idle=0.0)
+    replay.has_foreground_work = lambda: replay.busy
+    replay.foreground_idle_seconds = lambda: replay.idle
+    monkeypatch.setattr(symbols_api, "SYMBOL_CATALOG_FOREGROUND_DWELL_SECONDS", 1.0)
+    symbols_api.configure_exchange_metadata_foreground_probe((live, replay))
+    try:
+        assert not symbols_api._catalog_foreground_is_quiet()
+        replay.busy = False
+        replay.idle = 0.5
+        assert not symbols_api._catalog_foreground_is_quiet()
+        replay.idle = 2.0
+        assert symbols_api._catalog_foreground_is_quiet()
+    finally:
+        symbols_api.configure_exchange_metadata_foreground_probe(None)
+
+
 def test_failed_empty_refresh_keeps_last_known_good_and_exposes_stale(monkeypatch) -> None:
     adapter = _Adapter()
     _install_registry(monkeypatch, adapter)

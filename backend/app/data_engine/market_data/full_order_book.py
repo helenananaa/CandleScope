@@ -158,10 +158,23 @@ def _event_update_interval(data: Mapping[str, Any], override: int | None) -> int
     return from_event if from_event is not None else from_override  # type: ignore[return-value]
 
 
+class _LevelDecimalCache:
+    # A non-dataclass slot keeps the memo out of asdict, equality and hashes.
+    __slots__ = ("_decimal_pair",)
+
+
 @dataclass(frozen=True, slots=True)
-class FullOrderBookLevel:
+class FullOrderBookLevel(_LevelDecimalCache):
     price: float
     quantity: float
+
+    def decimal_pair(self) -> tuple[Decimal, Decimal]:
+        """Reuse exact display decimals while this immutable level is retained."""
+        pair = getattr(self, "_decimal_pair", None)
+        if pair is None:
+            pair = (Decimal(str(self.price)), Decimal(str(self.quantity)))
+            object.__setattr__(self, "_decimal_pair", pair)
+        return pair
 
     def __post_init__(self) -> None:
         object.__setattr__(

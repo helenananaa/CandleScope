@@ -5,10 +5,12 @@ from __future__ import annotations
 from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_FLOOR
+from itertools import islice
 from typing import Any, Literal, Mapping, Sequence
 
 from app.api.v1.symbols import get_cached_symbol_metadata
 from app.data_engine.market_data.models import MarketStreamKey
+from app.data_engine.market_data.full_order_book import FullOrderBookLevel
 
 
 PriceGrouping = Literal["auto", "raw", "10", "100", "1000"]
@@ -209,8 +211,12 @@ def _level_pairs(
     parsed: list[tuple[Decimal, Decimal]] = []
     assert isinstance(value, SequenceABC)
     bounded_length = length if max_items is None else min(length, max_items)
-    for index in range(bounded_length):
-        raw = value[index]
+    for index, raw in enumerate(islice(value, bounded_length)):
+        if type(raw) is FullOrderBookLevel:
+            # Constructor-validated and immutable; shared revisions keep the
+            # same objects, so do not stringify/reparse unchanged levels.
+            parsed.append(raw.decimal_pair())
+            continue
         if isinstance(raw, (list, tuple)) and len(raw) == 2:
             raw_price, raw_quantity = raw
         elif hasattr(raw, "price") and hasattr(raw, "quantity"):
@@ -225,6 +231,8 @@ def _level_pairs(
         if price is None or quantity is None:
             raise ValueError(f"order-book {side}[{index}] must contain positive values")
         parsed.append((price, quantity))
+    if len(parsed) != bounded_length:
+        raise ValueError(f"order-book {side} ended before its declared length")
     return parsed
 
 
@@ -236,9 +244,10 @@ def _aggregate_side(
 ) -> list[tuple[Decimal, Decimal]]:
     rounding = ROUND_FLOOR if side == "bids" else ROUND_CEILING
     buckets: dict[Decimal, Decimal] = {}
+    zero = Decimal(0)
     for price, quantity in levels:
         bucket = (price / price_step).to_integral_value(rounding=rounding) * price_step
-        buckets[bucket] = buckets.get(bucket, Decimal(0)) + quantity
+        buckets[bucket] = buckets.get(bucket, zero) + quantity
     return sorted(buckets.items(), key=lambda item: item[0], reverse=side == "bids")
 
 

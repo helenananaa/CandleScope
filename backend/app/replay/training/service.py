@@ -30,6 +30,7 @@ from app.replay.constants import (
 )
 from app.replay.broker.models import TOUCH_OR_TAPE_EXECUTION_MODE, decimal_to_string
 from app.replay.canonical import canonical_sha256
+from app.replay.timing import collect_timings
 from app.replay.catalog import ReplaySeriesIdentity
 from app.replay.display_time import SourceBucketTimeMapper
 from app.replay.errors import ReplayDomainError, ReplayErrorCode
@@ -519,6 +520,8 @@ class TrainingRunService:
         self._advance_jobs: dict[tuple[str, str], dict[str, object]] = {}
         self._period_summary_builds: set[str] = set()
         self._run_actors: dict[str, TrainingRunActor] = {}
+        self._foreground_controls = 0
+        self._last_foreground_control: float | None = None
         self._display_source_grid_anchors: dict[tuple[str, str, str, str], int] = {}
         self._native_display_pin_proofs: OrderedDict[
             _NativeDisplayPinProofKey,
@@ -3793,8 +3796,8 @@ class TrainingRunService:
                     status_code=503,
                 )
             try:
-                gap_evidence = await asyncio.to_thread(
-                    scan_gaps,
+                gap_evidence = await self.replay_service.store.run_worker(
+                    "display_pin", scan_gaps,
                     source_revision,
                     str(binding["symbol"]),
                     requested_interval,
@@ -3873,8 +3876,8 @@ class TrainingRunService:
                     )
                 return dict(binding)
             try:
-                bounds = await asyncio.to_thread(
-                    get_bounds,
+                bounds = await self.replay_service.store.run_worker(
+                    "display_pin", get_bounds,
                     str(binding["symbol"]),
                     requested_interval,
                     exchange=str(binding["exchange"]),
@@ -3902,8 +3905,8 @@ class TrainingRunService:
                 if not callable(get_bounds_at_revision):
                     return dict(binding)
                 if callable(get_bounds_at_revision):
-                    exact_bounds = await asyncio.to_thread(
-                        get_bounds_at_revision,
+                    exact_bounds = await self.replay_service.store.run_worker(
+                        "display_pin", get_bounds_at_revision,
                         source_revision,
                         str(binding["symbol"]),
                         requested_interval,
@@ -4036,8 +4039,8 @@ class TrainingRunService:
                     status_code=503,
                 )
             try:
-                pinned_bounds = await asyncio.to_thread(
-                    get_bounds_at_revision,
+                pinned_bounds = await self.replay_service.store.run_worker(
+                    "display_pin", get_bounds_at_revision,
                     pinned_source_revision,
                     str(binding["symbol"]),
                     requested_interval,
@@ -4219,8 +4222,8 @@ class TrainingRunService:
                 "training display projection snapshot is unavailable",
                 status_code=503,
             )
-        return await asyncio.to_thread(
-            build_display_projection,
+        return await self.replay_service.store.run_worker(
+            "display_build", build_display_projection,
             binding=binding,
             persisted=persisted,
             revealed_boundary_ms=revealed_boundary_ms,
@@ -4231,6 +4234,33 @@ class TrainingRunService:
         )
 
     async def command(
+        self,
+        run_id: str,
+        command: ReplayV2Command,
+        *,
+        include_display_tail: bool = False,
+        timings: dict[str, float] | None = None,
+    ) -> dict[str, object]:
+        self._foreground_controls += 1
+        try:
+            return await self._command_with_timings(
+                run_id, command, include_display_tail=include_display_tail, timings=timings
+            )
+        finally:
+            self._foreground_controls -= 1
+            self._last_foreground_control = perf_counter()
+
+    def has_foreground_work(self) -> bool:
+        return self._foreground_controls > 0
+
+    def foreground_idle_seconds(self) -> float:
+        if self.has_foreground_work():
+            return 0.0
+        if self._last_foreground_control is None:
+            return float("inf")
+        return max(0.0, perf_counter() - self._last_foreground_control)
+
+    async def _command_with_timings(
         self,
         run_id: str,
         command: ReplayV2Command,
@@ -4260,22 +4290,23 @@ class TrainingRunService:
             # high playback rate cannot consume the remaining dataset first.
             actor.signal_ordered_stop()
         queued = perf_counter()
-        async with actor.serialized():
-            started = perf_counter()
-            if timings is not None:
-                timings["queue"] = (started - queued) * 1000
-            result = await self._command_serialized(
-                normalized,
-                command,
-                ordered_pause_barrier=ordered_pause_barrier,
-            )
-            if timings is not None:
-                timings["advance"] = (perf_counter() - started) * 1000
-            if include_display_tail:
+        with collect_timings(timings):
+            async with actor.serialized():
                 started = perf_counter()
-                result = await self._with_command_display_tail(command, result)
                 if timings is not None:
-                    timings["display"] = (perf_counter() - started) * 1000
+                    timings["queue"] = (started - queued) * 1000
+                result = await self._command_serialized(
+                    normalized,
+                    command,
+                    ordered_pause_barrier=ordered_pause_barrier,
+                )
+                if timings is not None:
+                    timings["advance"] = (perf_counter() - started) * 1000
+                if include_display_tail:
+                    started = perf_counter()
+                    result = await self._with_command_display_tail(command, result)
+                    if timings is not None:
+                        timings["display"] = (perf_counter() - started) * 1000
         self._notify_market_tracks(normalized)
         return result
 

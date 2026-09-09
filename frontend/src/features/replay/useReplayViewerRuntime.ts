@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
+import { recordPerfEvent } from "../../runtime/performance/perfMarks.js";
 
 import type { WindowDelta, WindowDeltaType } from "../market-data/klineContracts.js";
 import { WINDOW_DELTA_TYPES } from "../market-data/window/windowDeltas.js";
@@ -426,6 +427,8 @@ export function useReplayViewerRuntime(
   const controlRef = useRef(controlPending);
   controlRef.current = controlPending;
   const viewerCommandRef = useRef<string | null>(null);
+  const commandStoreRef = useRef(runtime.store);
+  useLayoutEffect(() => { commandStoreRef.current = runtime.store; }, [runtime.store]);
   const inlineCommandRef = useRef(false);
   const inlineTailRef = useRef<{
     projection: ReplayDisplayProjectionResponse;
@@ -498,6 +501,7 @@ export function useReplayViewerRuntime(
     const current = viewerRef.current;
     if (current !== null
       && next.semantic_view_revision < current.semantic_view_revision) return true;
+    if (current !== null && JSON.stringify(current) === JSON.stringify(next)) return true;
     const targetChanged = current === null
       || current.run_id !== next.run_id
       || !intervalsSemanticallyEquivalent(
@@ -692,6 +696,7 @@ export function useReplayViewerRuntime(
             requestGate.cancel();
             projectedBoundaryMs = boundaryMs;
             viewerSeriesCache.markSynchronized(seriesStore, sourceStore, boundaryMs);
+            recordPerfEvent("replay.viewer.tail", { boundaryMs, bars: seriesStore.barCount });
             setError(null);
             return;
           }
@@ -877,7 +882,7 @@ export function useReplayViewerRuntime(
     prefix: string,
   ): ReplayV2Command => {
     const viewer = viewerRef.current;
-    const store = runtime.store;
+    const store = commandStoreRef.current;
     if (viewer === null || store.virtualTimeMs === null || store.sessionId === null) {
       throw new Error("replay.v3 viewer is not command-ready");
     }
@@ -895,7 +900,7 @@ export function useReplayViewerRuntime(
       type,
       payload,
     };
-  }, [runtime.clientInstanceId, runtime.store]);
+  }, [runtime.clientInstanceId]);
 
   const submitControl = useCallback(async (
     type: ReplayPhase3ControlType,
@@ -921,11 +926,14 @@ export function useReplayViewerRuntime(
       && type === "advance" && payload.basis === "DISPLAY_BAR" && payload.count === 1;
     const previousBoundaryMs = runtime.replayStore.getAuthoritySnapshot().virtualTimeMs;
     inlineCommandRef.current = includeDisplayTail;
+    const releasePresentation = includeDisplayTail ? runtime.lifecycle.beginPresentationBatch() : null;
     setControlPending(command);
     setProgress(null);
     setError(null);
     try {
+      recordPerfEvent("replay.control.dispatch", { commandId: command.command_id });
       const result = await defaultReplayV2Api.commandRun(command.run_id, command, undefined, { includeDisplayTail });
+      recordPerfEvent("replay.control.response", { commandId: command.command_id, revision: result.revision });
       publishViewerState(result.viewer_state);
       setProgress(progressFromResult(result));
       const cursorAdvance = type === "advance"
@@ -940,6 +948,7 @@ export function useReplayViewerRuntime(
           result.revision,
         );
         if (!converged) runtime.actions.requestResync("v2-cursor-advance-ack-timeout");
+        recordPerfEvent("replay.control.authority", { commandId: command.command_id, converged });
         if (includeDisplayTail && converged && previousBoundaryMs !== null && result.data.display_tail) {
           try {
             inlineTailRef.current = {
@@ -980,9 +989,13 @@ export function useReplayViewerRuntime(
       setError(cause instanceof Error ? cause.message : t("replay.rt.control"));
       throw cause;
     } finally {
-      inlineCommandRef.current = false;
-      if (includeDisplayTail) refreshProjectionRef.current?.();
-      setControlPending((current) => current?.command_id === command.command_id ? null : current);
+      try {
+        inlineCommandRef.current = false;
+        if (includeDisplayTail) refreshProjectionRef.current?.();
+      } finally {
+        releasePresentation?.();
+        setControlPending((current) => current?.command_id === command.command_id ? null : current);
+      }
     }
   }, [
     buildCommand,
@@ -992,6 +1005,7 @@ export function useReplayViewerRuntime(
     runtime.actions,
     runtime.replayStore,
     requiresSourceBucketProjection,
+    runtime.lifecycle,
   ]);
 
   const setDisplayInterval = useCallback(async (
@@ -1287,6 +1301,14 @@ export function useReplayViewerRuntime(
     }
   }, [summaryPreparing]);
 
+  const actions = useMemo(() => ({
+    setDisplayInterval, submitControl, cancelAdvance, selectTrack, setSubscriptionTier,
+    addAndSelectTrack, submitTrade, previewOrder, orderCapacity, auditAccount,
+    resyncHistoricalBook, preparePeriodSummaries,
+    reload: () => setReloadRevision((value) => value + 1),
+  }), [setDisplayInterval, submitControl, cancelAdvance, selectTrack, setSubscriptionTier,
+    addAndSelectTrack, submitTrade, previewOrder, orderCapacity, auditAccount,
+    resyncHistoricalBook, preparePeriodSummaries]);
   return {
     viewerState,
     marketTracks,
@@ -1299,20 +1321,6 @@ export function useReplayViewerRuntime(
     periodSummary,
     summaryPreparing,
     summaryError,
-    actions: {
-      setDisplayInterval,
-      submitControl,
-      cancelAdvance,
-      selectTrack,
-      setSubscriptionTier,
-      addAndSelectTrack,
-      submitTrade,
-      previewOrder,
-      orderCapacity,
-      auditAccount,
-      resyncHistoricalBook,
-      preparePeriodSummaries,
-      reload: () => setReloadRevision((value) => value + 1),
-    },
+    actions,
   };
 }

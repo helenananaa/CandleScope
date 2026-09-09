@@ -380,7 +380,7 @@ export interface ReplayRightRailProps {
   readonly formatTime?: (valueMs: number) => string;
 }
 
-export function ReplayPaperTradingDock({ runtime, viewer }: ReplayRightRailProps) {
+export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRailProps, "runtime" | "viewer">) {
   useLocale();
   type SizeMode = "QUANTITY" | "MARGIN" | "NOTIONAL";
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
@@ -1393,7 +1393,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: ReplayRightRailProps
   );
 }
 
-export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: ReplayRightRailProps) {
+export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<ReplayRightRailProps, "runtime" | "viewer" | "formatTime">) {
   useLocale();
   const [activeTab, setActiveTab] = useState<WorkbenchTab>("positions");
   const [orderSelection, setOrderSelection] = useState<Readonly<{

@@ -22,6 +22,31 @@ from app.data_engine.ingestion.models import DataSource
 from app.data_engine.market_data.events import HubRecord, MarketStateEvent
 from app.data_engine.market_data.full_order_book_service import FullOrderBookRateLimited
 from app.data_engine.market_data.models import MarketChannel, MarketStreamKey
+from app.data_engine.market_data.full_order_book import FullOrderBookLevel
+
+
+def test_immutable_level_iterator_matches_wire_pairs_for_all_groupings():
+    class Side(Sequence):
+        def __init__(self, rows):
+            self.rows = rows
+            self.index_reads = 0
+        def __len__(self):
+            return len(self.rows)
+        def __getitem__(self, index):
+            self.index_reads += 1
+            return self.rows[index]
+        def __iter__(self):
+            return iter(self.rows)
+    bids = Side([FullOrderBookLevel(100.1 - i / 10, 0.2) for i in range(30)])
+    asks = Side([FullOrderBookLevel(100.2 + i / 10, 0.3) for i in range(30)])
+    wire = {"bids": [[r.price, r.quantity] for r in bids], "asks": [[r.price, r.quantity] for r in asks]}
+    for grouping in ("raw", "auto", "10", "100", "1000"):
+        for _ in range(2):
+            kwargs = dict(price_grouping=grouping, price_tick_size=Decimal("0.1"), limit=3,
+                          source_levels_canonical=True, omit_incomplete_outer_bucket=True)
+            assert project_order_book_levels({"bids": bids, "asks": asks}, **kwargs) == project_order_book_levels(wire, **kwargs)
+    # Auto grouping may inspect the best level; the full walk is not indexed.
+    assert bids.index_reads <= 2 and asks.index_reads <= 2
 
 
 class _FullOrderBookDataManager:

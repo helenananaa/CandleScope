@@ -323,6 +323,7 @@ export function useReplaySharedIndicatorRuntime(
     cursorMs,
   });
   const indicatorRefreshTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+  const wasPlayingRef = useRef(false);
   useEffect(() => {
     latestIndicatorBoundaryRef.current = {
       revision: seriesRevision,
@@ -330,20 +331,16 @@ export function useReplaySharedIndicatorRuntime(
       cursorMs,
     };
     if (!playing) {
+      wasPlayingRef.current = false;
       if (indicatorRefreshTimerRef.current !== null) {
         globalThis.clearTimeout(indicatorRefreshTimerRef.current);
         indicatorRefreshTimerRef.current = null;
       }
-      indicatorRefreshTimerRef.current = globalThis.setTimeout(() => {
-        indicatorRefreshTimerRef.current = null;
-        const latest = latestIndicatorBoundaryRef.current;
-        setSampledIndicatorBoundary((current) => (
-          current.revision === latest.revision && current.cursorMs === latest.cursorMs
-            ? current
-            : latest
-        ));
-      }, 0);
       return;
+    }
+    if (!wasPlayingRef.current) {
+      wasPlayingRef.current = true;
+      setSampledIndicatorBoundary(latestIndicatorBoundaryRef.current);
     }
     if (indicatorRefreshTimerRef.current !== null) return;
     indicatorRefreshTimerRef.current = globalThis.setTimeout(() => {
@@ -365,13 +362,14 @@ export function useReplaySharedIndicatorRuntime(
   // Paused/review navigation always uses the exact current boundary in the
   // same render. During forward playback a trailing sample may be older, but
   // can never contain data newer than the authoritative replay cursor.
-  const indicatorRevision = playing
+  const usePlaybackSample = playing && wasPlayingRef.current;
+  const indicatorRevision = usePlaybackSample
     ? sampledIndicatorBoundary.revision
     : seriesRevision;
-  const indicatorStructureRevision = playing
+  const indicatorStructureRevision = usePlaybackSample
     ? sampledIndicatorBoundary.structureRevision
     : seriesStructureRevision;
-  const indicatorCursorMs = playing
+  const indicatorCursorMs = usePlaybackSample
     ? sampledIndicatorBoundary.cursorMs
     : cursorMs;
   const indicatorBars = useMemo(() => {

@@ -13,6 +13,7 @@ import IntervalSelector from "../../components/IntervalSelector.js";
 import SingleChartPanes from "../../components/SingleChartPanes.js";
 import IndicatorPanel from "../indicators/IndicatorPanel.js";
 import type { IndicatorHLine, IndicatorMarker } from "../indicators/indicatorTypes.js";
+import type { IndicatorSubPane } from "../indicators/indicatorPaneProjection.js";
 import {
   providedBarsIndicatorSupport,
 } from "../indicators/useProvidedBarsIndicatorRuntime.js";
@@ -757,19 +758,23 @@ export default function ReplayTrainingPageShell({
   const viewerLast = displayedSeriesStore.last();
   const viewerFirst = displayedSeriesStore.first();
   const viewerBarCount = displayedSeriesStore.barCount;
-  const viewerDataMeta = {
+  const viewerVersion = Number(displayedSeriesStore.version);
+  const viewerSeriesKey = displayedSeriesStore.seriesKey;
+  const isReview = review !== null;
+  const viewerDataMeta = useMemo(() => ({
     ...runtime.marketData.view.meta,
-    version: Number(displayedSeriesStore.version),
-    status: review === null
+    version: viewerVersion,
+    status: !isReview
       ? (viewer.loading ? "loading" : "ready")
       : (reviewChartLoading ? "loading" : "ready"),
-    source: review === null ? "replay-viewer-rebuild" : "replay-review-closed-prefix",
-    seriesKey: displayedSeriesStore.seriesKey,
+    source: !isReview ? "replay-viewer-rebuild" : "replay-review-closed-prefix",
+    seriesKey: viewerSeriesKey,
     interval: displayedInterval,
     bars: viewerBarCount,
     firstTime: viewerFirst?.time ?? null,
     lastTime: viewerLast?.time ?? null,
-  };
+  }), [runtime.marketData.view.meta, viewerVersion, isReview, viewer.loading, reviewChartLoading,
+    viewerSeriesKey, displayedInterval, viewerBarCount, viewerFirst?.time, viewerLast?.time]);
   const replayTradeMarkers = useMemo<IndicatorMarker[]>(() => [{
     id: "replay-trade-fills",
     pane: "main",
@@ -827,6 +832,13 @@ export default function ReplayTrainingPageShell({
     ...replayTradeHlines,
   ], [indicators.view.hlines, replayTradeHlines]);
   const last = viewerLast ?? runtime.store.lastPrice;
+  const removeIndicator = indicators.actions.removeIndicator;
+  const removeMarketStudy = indicators.marketStudyActions.remove;
+  const removeSubPane = useCallback((pane: IndicatorSubPane) => {
+    const owner = pane.owner;
+    if (owner?.kind === "indicator") removeIndicator(owner.id);
+    else if (owner?.kind === "trade-flow") removeMarketStudy(owner.id);
+  }, [removeIndicator, removeMarketStudy]);
   const isUp = Number(last?.close ?? 0) >= Number(last?.open ?? 0);
   const chart = active && review === null && liveDrawingError !== null ? (
     <div className="chart-area" data-replay-state="drawing-error">
@@ -925,16 +937,7 @@ export default function ReplayTrainingPageShell({
       indicatorHlines={review === null ? chartHlines : []}
       indicatorBgcolors={review === null ? indicators.view.bgcolors : []}
       indicatorBarcolors={review === null ? indicators.view.barcolors : []}
-      onRemoveSubPane={review === null
-        ? (pane) => {
-            const owner = pane.owner;
-            if (owner?.kind === "indicator") {
-              indicators.actions.removeIndicator(owner.id);
-            } else if (owner?.kind === "trade-flow") {
-              indicators.marketStudyActions.remove(owner.id);
-            }
-          }
-        : null}
+      onRemoveSubPane={review === null ? removeSubPane : null}
       invertScale={priceScale.invert}
       priceScaleMode={priceScale.mode}
     />

@@ -16,11 +16,13 @@ import time
 import uuid
 import zlib
 from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
 from ..canonical import canonical_json, canonical_sha256
 from ..errors import ReplayDomainError, ReplayErrorCode
+from ..timing import record_timing, timed_to_thread
 from .schema import REPLAY_SCHEMA_VERSION, migrate_replay_schema
 
 
@@ -265,6 +267,7 @@ class ReplaySQLiteStore:
             self._connection.close()
             self._closed = True
             raise
+
         self._read_connections: queue.LifoQueue[sqlite3.Connection] = (
             queue.LifoQueue(maxsize=self._read_pool_size)
         )
@@ -288,6 +291,12 @@ class ReplaySQLiteStore:
             self._connection.close()
             self._closed = True
             raise
+
+        # One shared bounded pool per replay database, not per session. Live
+        # market ingestion and its default-executor jobs cannot occupy it.
+        self._worker_executor = ThreadPoolExecutor(
+            max_workers=self._read_pool_size + 1, thread_name_prefix="replay"
+        )
 
     @property
     def degraded_reason(self) -> str | None:
@@ -1090,7 +1099,12 @@ class ReplaySQLiteStore:
             async with self._dataset_gc_lock:
                 if self._closed:
                     return
-                await asyncio.to_thread(self._close_sync)
+                await self.run_worker("sql_close", self._close_sync)
+                await asyncio.to_thread(self._worker_executor.shutdown, wait=True)
+
+    async def run_worker(self, name: str, function, *args, **kwargs):
+        self._ensure_open()
+        return await timed_to_thread(name, function, *args, executor=self._worker_executor, **kwargs)
 
     async def collect_dataset_objects(self) -> dict[str, int]:
         async with self._dataset_gc_lock:
@@ -1173,11 +1187,13 @@ class ReplaySQLiteStore:
             self._connection.close()
 
     async def _write_async(self, operation, *, allow_degraded: bool = False):
+        queued = time.perf_counter()
         async with self._async_lock:
-            return await asyncio.to_thread(self._run_write, operation, allow_degraded)
+            record_timing("sql_serial", queued)
+            return await self.run_worker("sql_write", self._run_write, operation, allow_degraded)
 
     async def _read_async(self, operation):
-        return await asyncio.to_thread(self._run_read, operation)
+        return await self.run_worker("sql_read", self._run_read, operation)
 
     def _run_write(self, operation, allow_degraded: bool = False):
         with self._thread_lock:
@@ -1195,7 +1211,9 @@ class ReplaySQLiteStore:
                 try:
                     self._connection.execute("BEGIN IMMEDIATE")
                     result = operation(self._connection)
+                    committed = time.perf_counter()
                     self._connection.commit()
+                    record_timing("sql_commit", committed)
                     self._metrics["transactions"] += 1
                     return result
                 except sqlite3.OperationalError as exc:

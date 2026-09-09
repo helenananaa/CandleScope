@@ -2818,7 +2818,7 @@ class HedgeInputArchiveManager:
             if checksum is not None:
                 self._checksum_cache.move_to_end(key)
         if checksum is None:
-            checksum = await asyncio.to_thread(_digest_file, path)
+            checksum = await self.store.run_worker("hedge_digest", _digest_file, path)
             verified_stat = path.stat()
             if (
                 verified_stat.st_mtime_ns != stat.st_mtime_ns
@@ -2869,7 +2869,7 @@ class HedgeInputArchiveManager:
         reader = (
             _read_public_events if source_kind == "PUBLIC" else _read_simulation_events
         )
-        events = await asyncio.to_thread(reader, path)
+        events = await self.store.run_worker("hedge_events", reader, path)
         if len(self._verified_event_cache) >= 64:
             self._verified_event_cache.pop(next(iter(self._verified_event_cache)))
         self._verified_event_cache[key] = events

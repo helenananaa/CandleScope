@@ -46,6 +46,24 @@ test("builtin rounding preserves Python ties-to-even", () => {
   assert.equal(roundBuiltinValue(0.005859375), 0.00585938);
 });
 
+test("incremental outputs reuse immutable prefixes without mutating earlier results", () => {
+  const state = new ReplayBuiltinState({ mode: "builtin", name: "VOL", ohlcv: fixture.bars });
+  state.advance(fixture.bars.slice(0, 10));
+  const before = state.points("VOL");
+  const expected = structuredClone(before);
+  state.advance(fixture.bars.slice(0, 11));
+  const after = state.points("VOL");
+  assert.equal(after.length, 11);
+  assert.strictEqual(after[0], before[0]);
+  assert.ok(Object.isFrozen(after[0]));
+  assert.deepEqual(before, expected);
+  const revised = fixture.bars.slice(0, 11).map(bar => ({ ...bar }));
+  revised[10]!.volume = 999;
+  state.advance(revised);
+  assert.equal(state.points("VOL").at(-1)?.value, 999);
+  assert.equal(after.at(-1)?.value, 11);
+});
+
 test("validated tail calculations avoid HTTP; a history correction reseeds", async () => {
   let calls = 0;
   const compute = createReplayBuiltinCompute(async ({ jobs }) => {

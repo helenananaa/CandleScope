@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { recordPerfEvent } from "../../runtime/performance/perfMarks.js";
 import type { MarketDataRuntimeContract } from "../market-data/marketDataRuntimeContract.js";
 import { defaultReplayApi, ReplayApiError } from "./replayApi.js";
 import type { ReplayApiClient } from "./replayApi.js";
@@ -268,6 +269,20 @@ export class ReplayRuntimeLifecycle {
     finish(restored: boolean): void;
   } | null = null;
   private snapshot: ReplayRuntimeSnapshot;
+  private presentationBatchDepth = 0;
+  private presentationDeferred = false;
+
+  /** Batch ordinary paused control updates; authority remains synchronous. */
+  beginPresentationBatch(): () => void {
+    this.presentationBatchDepth += 1;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.presentationBatchDepth = Math.max(0, this.presentationBatchDepth - 1);
+      if (this.presentationBatchDepth === 0 && this.presentationDeferred) this.publish();
+    };
+  }
 
   constructor({
     entry,
@@ -1100,7 +1115,14 @@ export class ReplayRuntimeLifecycle {
 
   private publish(): void {
     this.storePublishScheduler.cancel();
-    this.snapshot = this.buildSnapshot();
+    const next = this.buildSnapshot();
+    if (this.presentationBatchDepth > 0 && canDeferReplayPresentation(this.snapshot, next)) {
+      this.presentationDeferred = true;
+      return;
+    }
+    this.presentationDeferred = false;
+    this.snapshot = next;
+    recordPerfEvent("replay.runtime.publish", { revision: this.snapshot.store.revision });
     for (const listener of this.listeners) listener();
   }
 
@@ -1295,21 +1317,38 @@ export function useReplayRuntime(
     () => buildReplayMarketDataRuntime(snapshot, lifecycle),
     [lifecycle, snapshot],
   );
+  const actions = useMemo(() => ({
+    retry: () => lifecycle.restart(),
+    requestResync: (reason?: string) => lifecycle.requestResync(reason),
+    submitCommand: (type: ReplayCommandType, payload?: Readonly<Record<string, ReplayJson>>) => lifecycle.submitCommand(type, payload),
+    retryPendingCommandRecovery: () => lifecycle.retryPendingCommandRecovery(),
+    acquireController: (takeover = false) => lifecycle.submitCommand("acquire_controller", { takeover }),
+    loadReport: () => lifecycle.loadReport(),
+    refreshJournal: () => lifecycle.refreshJournal(),
+  }), [lifecycle]);
   return useMemo(() => ({
     ...snapshot,
     lifecycle,
     replayStore: lifecycle.store,
     marketData,
-    actions: {
-      retry: () => lifecycle.restart(),
-      requestResync: (reason?: string) => lifecycle.requestResync(reason),
-      submitCommand: (type: ReplayCommandType, payload?: Readonly<Record<string, ReplayJson>>) => (
-        lifecycle.submitCommand(type, payload)
-      ),
-      retryPendingCommandRecovery: () => lifecycle.retryPendingCommandRecovery(),
-      acquireController: (takeover = false) => lifecycle.submitCommand("acquire_controller", { takeover }),
-      loadReport: () => lifecycle.loadReport(),
-      refreshJournal: () => lifecycle.refreshJournal(),
-    },
-  }), [lifecycle, marketData, snapshot]);
+    actions,
+  }), [actions, lifecycle, marketData, snapshot]);
+}
+
+export function canDeferReplayPresentation(previous: ReplayRuntimeSnapshot, next: ReplayRuntimeSnapshot): boolean {
+  const before = previous.store, after = next.store;
+  return previous.phase === "ACTIVE" && next.phase === "ACTIVE"
+    && previous.error === next.error && previous.commandError === next.commandError
+    && before.state === "PAUSED" && after.state === "PAUSED"
+    && before.generation === after.generation && before.sessionId === after.sessionId
+    && before.dataEpoch === after.dataEpoch && before.revealed === after.revealed
+    && before.statusReason === after.statusReason && before.warnings.length === after.warnings.length
+    && before.controllerClientId === after.controllerClientId
+    && before.connectionState === "connected" && after.connectionState === "connected"
+    && before.error === after.error
+    && before.virtualTimeMs !== null && after.virtualTimeMs !== null
+    && after.virtualTimeMs >= before.virtualTimeMs && after.sourceSequence >= before.sourceSequence
+    && after.revision >= before.revision && before.fills.length === after.fills.length
+    && before.account?.equity === after.account?.equity
+    && JSON.stringify(before.orders) === JSON.stringify(after.orders);
 }

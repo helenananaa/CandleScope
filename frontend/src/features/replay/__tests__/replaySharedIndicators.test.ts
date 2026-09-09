@@ -438,8 +438,9 @@ test("playing replay coalesces indicator boundaries and paused replay stays exac
   assert.equal(REPLAY_INDICATOR_PLAYING_REFRESH_MS, 500);
   assert.match(adapter, /const playing = runtime\.store\.state === "PLAYING"/);
   assert.match(adapter, /globalThis\.setTimeout\([\s\S]*REPLAY_INDICATOR_PLAYING_REFRESH_MS/);
-  assert.match(adapter, /const indicatorRevision = playing[\s\S]*: seriesRevision/);
-  assert.match(adapter, /const indicatorCursorMs = playing[\s\S]*: cursorMs/);
+  assert.match(adapter, /const usePlaybackSample = playing && wasPlayingRef\.current/);
+  assert.match(adapter, /const indicatorRevision = usePlaybackSample[\s\S]*: seriesRevision/);
+  assert.match(adapter, /const indicatorCursorMs = usePlaybackSample[\s\S]*: cursorMs/);
   assert.match(adapter, /selectRevealedIndicatorBars\(seriesStore\.snapshot\(\), indicatorCursorMs\)/);
   assert.match(adapter, /visibleThroughSeconds: indicatorCursorMs === null/);
 });

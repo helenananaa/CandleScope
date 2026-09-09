@@ -1,6 +1,7 @@
 import { computeIndicatorBatch } from "../../services/indicatorApi.js";
+import { recordPerfEvent } from "../../runtime/performance/perfMarks.js";
 import type { IndicatorComputeBatchExecutor } from "../indicators/indicatorComputeController.js";
-import type { IndicatorComputeRequest, IndicatorOhlcvBar, IndicatorPayloadEnvelope, IndicatorValuePoint } from "../indicators/indicatorTypes.js";
+import type { IndicatorColorPoint, IndicatorComputeRequest, IndicatorOhlcvBar, IndicatorPayloadEnvelope, IndicatorValuePoint } from "../indicators/indicatorTypes.js";
 
 type State = { count: number; fastSum: number; slowSum: number; signalSum: number;
   fast: number | null; slow: number | null; signal: number | null; signalCount: number };
@@ -13,6 +14,19 @@ const field = (bar: IndicatorOhlcvBar, source: string): number => {
   return Number(bar[source as "open" | "high" | "low" | "close"]);
 };
 const outputKey = (title: string) => ({ DIF: 0, DEA: 1, "MACD Hist": 2, VOL: 0 })[title];
+function sameBar(a: IndicatorOhlcvBar, b: IndicatorOhlcvBar): boolean {
+  return a.time === b.time && a.open === b.open && a.high === b.high
+    && a.low === b.low && a.close === b.close && a.volume === b.volume && a.is_closed === b.is_closed;
+}
+function prefixLength(points: readonly { time: number }[], before: number): number {
+  let low = 0, high = points.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (points[middle]!.time < before) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
 const floatBits = new DataView(new ArrayBuffer(8));
 /** Python's round(float, 8), including ties-to-even on the exact binary value. */
 export function roundBuiltinValue(value: number): number {
@@ -38,6 +52,8 @@ export class ReplayBuiltinState {
   private rows: IndicatorOhlcvBar[] = [];
   private states: State[] = [initial()];
   private values: (number | null)[][] = [];
+  private outputs: IndicatorValuePoint[][] = [[], [], []];
+  private outputColors: IndicatorColorPoint[][] = [[], [], []];
   constructor(private readonly request: IndicatorComputeRequest) {}
 
   static supports(request: IndicatorComputeRequest): boolean {
@@ -57,10 +73,13 @@ export class ReplayBuiltinState {
     if (rows.length < this.rows.length) return false;
     const stable = Math.max(0, this.rows.length - 1);
     for (let i = 0; i < stable; i++) {
-      if (JSON.stringify(rows[i]) !== JSON.stringify(this.rows[i])) return false;
+      if (!sameBar(rows[i]!, this.rows[i]!)) return false;
     }
-    this.values = this.values.slice(0, stable);
-    this.states = this.states.slice(0, stable + 1);
+    this.values.length = stable;
+    this.states.length = stable + 1;
+    this.rows.length = stable;
+    const replaceFrom = rows[stable]?.time ?? Infinity;
+    for (const points of [...this.outputs, ...this.outputColors]) points.length = prefixLength(points, replaceFrom);
     const p = this.request.params ?? {};
     const fast = Number(p.fast ?? 12), slow = Number(p.slow ?? 26), signal = Number(p.signal ?? 9);
     for (let i = stable; i < rows.length; i++) {
@@ -86,15 +105,26 @@ export class ReplayBuiltinState {
         this.values.push([dif, dea, hist]);
       }
       this.states.push(s);
+      this.rows.push({ ...bar });
+      this.values.at(-1)!.forEach((value, output) => {
+        if (value === null) return;
+        this.outputs[output]!.push(Object.freeze({ time: bar.time, value: roundBuiltinValue(value) }));
+        if (this.request.name === "VOL" || output === 2) {
+          const up = this.request.name === "VOL" ? bar.close >= bar.open : value >= 0;
+          const color = String(this.request.name === "VOL"
+            ? (up ? p.up_color ?? "#22c55e" : p.down_color ?? "#ef4444")
+            : (up ? p.hist_up_color ?? "#22c55e" : p.hist_down_color ?? "#ef4444"));
+          this.outputColors[output]!.push(Object.freeze({ time: bar.time, color }));
+        }
+      });
     }
-    this.rows = rows.map(bar => ({ ...bar }));
     return true;
   }
 
   points(title: string): IndicatorValuePoint[] {
     const key = outputKey(title);
     if (key === undefined) return [];
-    return this.values.flatMap((values, i) => values[key] == null ? [] : [{ time: this.rows[i]!.time, value: roundBuiltinValue(values[key]!) }]);
+    return this.outputs[key]!.slice();
   }
 
   matches(payload: IndicatorPayloadEnvelope): boolean {
@@ -113,21 +143,18 @@ export class ReplayBuiltinState {
   }
 
   project(template: IndicatorPayloadEnvelope): IndicatorPayloadEnvelope {
-    const p = this.request.params ?? {};
-    const byTime = new Map(this.rows.map((row, index) => [row.time, { row, values: this.values[index]! }]));
-    const colors = (title: string) => this.points(title).map(point => {
-      const { row, values } = byTime.get(point.time)!;
-      const up = title === "VOL" ? row.close >= row.open : values[2]! >= 0;
-      return { time: point.time, color: String(title === "VOL"
-        ? (up ? p.up_color ?? "#22c55e" : p.down_color ?? "#ef4444")
-        : (up ? p.hist_up_color ?? "#22c55e" : p.hist_down_color ?? "#ef4444")) };
-    });
+    const pointsByTitle = new Map<string, IndicatorValuePoint[]>();
+    const points = (title: string) => {
+      if (!pointsByTitle.has(title)) pointsByTitle.set(title, this.points(title));
+      return pointsByTitle.get(title)!;
+    };
+    const colors = (title: string) => this.outputColors[outputKey(title) ?? 0]!.slice();
     return {
       ...template,
       lines: template.lines.map(line => { const title = line.name ?? line.title ?? ""; return {
-        ...line, data: this.points(title), ...(["VOL", "MACD Hist"].includes(title) ? { colorData: colors(title) } : {}),
+        ...line, data: points(title), ...(["VOL", "MACD Hist"].includes(title) ? { colorData: colors(title) } : {}),
       }; }),
-      series: template.series.map(series => ({ ...series, data: this.points(series.style.title),
+      series: template.series.map(series => ({ ...series, data: points(series.style.title),
         style: { ...series.style, ...(["VOL", "MACD Hist"].includes(series.style.title) ? { colorData: colors(series.style.title) } : {}) },
       })),
     };
@@ -144,10 +171,12 @@ export function createReplayBuiltinCompute(remote: IndicatorComputeBatchExecutor
       request.exchange, request.marketType, request.symbol, request.interval, request.name, request.params,
     ]);
     for (const job of jobs) {
+      const started = performance.now();
       const key = keyFor(job.request);
       const entry = cache.get(key);
       if (ReplayBuiltinState.supports(job.request) && entry && entry.state.advance(job.request.ohlcv)) {
         results.push({ clientId: job.clientId, jobKey: job.jobKey, payload: entry.state.project(entry.template) });
+        recordPerfEvent("replay.indicator.local", { indicatorId: job.clientId, bars: job.request.ohlcv.length, durationMs: performance.now() - started });
       } else pending.push(job);
     }
     if (pending.length) {

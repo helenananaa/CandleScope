@@ -14,6 +14,7 @@ from types import MappingProxyType
 from typing import Awaitable, Callable, Protocol, Sequence
 
 from .canonical import canonical_sha256
+from .timing import RequestTiming, current_timing, use_timing
 from .checkpoints import CheckpointCodec, CheckpointError, CheckpointRing
 from .clock import CLOCK_SCHEMA_VERSION, ClockSnapshot, VirtualClock
 from .commands import CommandHistory, CommandResult, ParsedCommand, parse_command
@@ -293,6 +294,7 @@ class _CommandRequest:
     command: ReplayCommand
     future: asyncio.Future[CommandResult]
     enqueued_wall: float
+    timing: RequestTiming | None = None
 
 
 @dataclass(slots=True)
@@ -668,6 +670,7 @@ class ReplaySessionActor:
             command=command,
             future=loop.create_future(),
             enqueued_wall=self._read_wall(),
+            timing=current_timing.get(),
         )
         self._metrics["commands_submitted"] = (
             int(self._metrics["commands_submitted"] or 0) + 1
@@ -1429,7 +1432,10 @@ class ReplaySessionActor:
     async def _handle_request(self, request: _ActorRequest) -> None:
         try:
             if isinstance(request, _CommandRequest):
-                await self._handle_command_request(request)
+                if request.timing is not None:
+                    request.timing.add("actor_queue", (self._read_wall() - request.enqueued_wall) * 1000)
+                with use_timing(request.timing):
+                    await self._handle_command_request(request)
             elif isinstance(request, _HeartbeatRequest):
                 self._handle_heartbeat_request(request)
             elif isinstance(request, _SnapshotRequest):

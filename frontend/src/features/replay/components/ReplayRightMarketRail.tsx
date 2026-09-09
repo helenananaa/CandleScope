@@ -194,15 +194,12 @@ function ReplayRightMarketRail({
             <ReplayPaperTradingDock
               runtime={runtime}
               viewer={viewer}
-              indicatorStatus={indicators.status}
-              formatTime={formatTime}
             />
           )}
           {viewId === REPLAY_RAIL_VIEW_IDS.account && (
             <ReplayTradingWorkbench
               runtime={runtime}
               viewer={viewer}
-              indicatorStatus={indicators.status}
               formatTime={formatTime}
             />
           )}

@@ -15,6 +15,7 @@ import type { ReplayStreamControllerOptions } from "../replayStreamController.js
 import {
   buildReplayMarketDataRuntime,
   createReplayRuntimeStorePublishScheduler,
+  canDeferReplayPresentation,
   ReplayLifecycleEffectGuard,
   ReplayRuntimeLifecycle,
 } from "../useReplayRuntime.js";
@@ -444,6 +445,43 @@ test("disabled capability fails closed before session validation or socket const
   assert.equal(lifecycle.getSnapshot().error?.code, "REPLAY_DISABLED");
   assert.equal(sessionCalls, 0);
   assert.equal(harness.options.length, 0);
+});
+
+test("control presentation batches preserve immediate authority and flush on disconnect", async (context) => {
+  const harness = streamHarness();
+  const session = (revision = 0) => parseReplaySessionResponse(replaySessionResponse({
+    revision, sequence: revision, sourceSequence: revision,
+    controllerClientId: "browser-0001", virtualTimeMs: BASE_TIME_MS + 59_999 + revision * 60_000,
+  }));
+  const lifecycle = new ReplayRuntimeLifecycle({
+    entry: { kind: "session", sessionId: "session-0001" }, clientInstanceId: "browser-0001",
+    api: { async capabilities() { return parseReplayCapabilities(enabledCapabilities()); }, async getSession() { return session(); } },
+    streamFactory: (options) => harness.factory(options),
+  });
+  context.after(() => lifecycle.dispose());
+  lifecycle.start();
+  await settle();
+  const callbacks = harness.options[0]!;
+  callbacks.onGeneration?.({ generation: 1, reason: "initial", resetAuthoritativeState: true });
+  callbacks.onSnapshot?.(session().snapshot, 1);
+  const before = lifecycle.getSnapshot();
+  const release = lifecycle.beginPresentationBatch();
+  callbacks.onSnapshot?.(session(1).snapshot, 1);
+  assert.equal(lifecycle.store.getAuthoritySnapshot().revision, 1);
+  assert.strictEqual(lifecycle.getSnapshot(), before);
+  release();
+  assert.equal(lifecycle.getSnapshot().store.revision, 1);
+  const published = lifecycle.getSnapshot();
+  release();
+  assert.strictEqual(lifecycle.getSnapshot(), published);
+  const next = { ...published, store: { ...published.store, revision: 2 } };
+  assert.equal(canDeferReplayPresentation(published, next), true);
+  assert.equal(canDeferReplayPresentation(published, { ...next, store: { ...next.store, virtualTimeMs: BASE_TIME_MS } }), false);
+  assert.equal(canDeferReplayPresentation(published, { ...next, store: { ...next.store, controllerClientId: "other" } }), false);
+  const end = lifecycle.beginPresentationBatch();
+  callbacks.onState?.("reconnecting", 1);
+  assert.equal(lifecycle.getSnapshot().store.connectionState, "reconnecting");
+  end();
 });
 
 test("the session runtime rejects the v2 hub route instead of exposing a v1 configuration state", async (context) => {
