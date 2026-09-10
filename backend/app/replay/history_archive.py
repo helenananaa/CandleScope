@@ -13,6 +13,7 @@ import json
 import math
 import os
 import re
+import sqlite3
 import threading
 import time
 import uuid
@@ -1312,6 +1313,17 @@ class ReplayHistoryArchiveWriter:
             else:
                 os.replace(temporary, destination)
             relative_path = destination.relative_to(self.root).as_posix()
+            # Derive account-independent ranges while import already owns the
+            # validated rows. Old objects are upgraded once when first used.
+            from .shared_market_index import MarketObject, build as build_market_index
+            from .errors import ReplayDomainError
+            try:
+                try:
+                    MarketObject(destination, object_sha256)
+                except (ValueError, OSError, sqlite3.DatabaseError, zlib.error):
+                    build_market_index(destination, object_sha256, interval, identity, rows)
+            except (ValueError, OSError, sqlite3.DatabaseError, ReplayDomainError):
+                pass  # Optional derived data; the immutable object remains valid.
             return ReplayHistoryObject(
                 object_sha256=object_sha256,
                 relative_path=relative_path,
@@ -2112,6 +2124,64 @@ class ReplayHistoryRepository:
             limit=limit,
             order=order,
         )
+
+    def shared_market_at_revision(
+        self, source_revision, symbol, interval, *, start_ms, end_ms,
+        exchange=None, market_type=None, offset_ms=0,
+    ):
+        if is_monthly_interval(interval):
+            return None
+        from .shared_market_index import MarketRange, build, open_object
+        from .errors import ReplayDomainError
+        import zlib
+        manifest = self._manifest(symbol, interval, exchange=exchange,
+                                  market_type=market_type, source_revision=source_revision)
+        parts = []
+        for item in manifest.objects:
+            if item.last_open_ms < start_ms or item.first_open_ms >= end_ms:
+                continue
+            path = self._object_path(item)
+            try:
+                obj = open_object(path, item.object_sha256)
+            except (ValueError, OSError, sqlite3.DatabaseError, zlib.error):
+                rows = self._read_object(manifest, item, start_ms=item.first_open_ms,
+                                         end_ms=item.last_open_ms)
+                try:
+                    ready = build(path, item.object_sha256, interval, manifest.identity, rows)
+                except (ReplayDomainError, OSError, sqlite3.DatabaseError):
+                    return None
+                if ready is None:
+                    return None
+                obj = open_object(path, item.object_sha256)
+            first, last = obj.bound(start_ms), obj.bound(end_ms)
+            if first < last:
+                parts.append((obj, first, last))
+        self._backfill_shared_market(manifest, end_ms)
+        return MarketRange(parts, offset_ms) if parts else None
+
+    def _backfill_shared_market(self, manifest, next_time):
+        from .shared_market_index import BackgroundIndexBuilder
+        with self._lock:
+            seen = getattr(self, "_shared_backfill_seen", set())
+            if manifest.catalog_epoch in seen:
+                return
+            seen.add(manifest.catalog_epoch)
+            self._shared_backfill_seen = seen
+            worker = getattr(self, "_shared_backfill", None)
+            if worker is None:
+                worker = self._shared_backfill = BackgroundIndexBuilder()
+        # Upcoming local objects first. Do not download remote history merely
+        # to build an optional cache in the background.
+        objects = sorted(manifest.objects, key=lambda item: (item.last_open_ms < next_time, item.first_open_ms))
+        worker.submit([(self.root/item.relative_path, item.object_sha256) for item in objects])
+
+    def close_shared_market_backfill(self, timeout=1.0):
+        with self._lock:
+            worker = getattr(self, "_shared_backfill", None)
+            self._shared_backfill = None
+            self._shared_backfill_seen = set()
+        if worker is not None:
+            worker.close(timeout)
 
     def query_aggregated_bars_at_revision(
         self,

@@ -24,3 +24,13 @@ leaderboard or requirement to prevent a user from editing their own local data.
   browser updates separately.
 - Prepared display queries must preserve revision binding, source bucket grids
   and revealed boundaries. Use the original history path on cache misses.
+- Market range indexes belong to immutable history objects and are shared across
+  training runs. Keep positions, orders and account valuations out of them.
+  Opening an indexed run must not precompute future per-minute account states.
+- Shared interval commands and checkpoint anchors are versioned separately from
+  legacy per-event chains. Verify financial outcomes, event boundaries, useful
+  review and recovery; do not reintroduce a full scan to reproduce legacy hash
+  bytes for the new representation.
+- Measure one-time data indexing, opening, the first large step and deferred
+  curve reads separately. Backfill only already-local objects in a cancellable
+  background lane; filesystem inventory must not delay the foreground query.

@@ -234,7 +234,7 @@ async def test_indexed_flat_account_with_waiting_order(tmp_path, monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_indexed_jump_failure_rolls_back_all_durable_state(tmp_path, monkeypatch):
+async def test_indexed_jump_failure_rolls_back_all_durable_state(tmp_path, monkeypatch, shared=False):
     original_writer = TrainingRunStore._sync_indexed_trajectory
     original_command = ReplayService.command
     checked = 0
@@ -274,16 +274,18 @@ async def test_indexed_jump_failure_rolls_back_all_durable_state(tmp_path, monke
 
     async def command(self, session_id, value, *args, **kwargs):
         nonlocal checked
-        if value.type is not InternalCommandType.INDEXED_INTERVAL:
+        if value.type not in {InternalCommandType.INDEXED_INTERVAL, InternalCommandType.SHARED_INDEXED_INTERVAL}:
             return await original_command(self, session_id, value, *args, **kwargs)
         before = await self.store.run_extension_read(capture)
         state = await self.get_session_state(session_id)
+        anchor = self._sessions[session_id].actor._shared_source_anchor
         with pytest.raises(ReplayDomainError):
             await original_command(self, session_id, value, *args, **kwargs)
         assert await self.store.run_extension_read(capture) == before
         after = await self.get_session_state(session_id)
         assert after["cursor"] == state["cursor"]
         assert after["state_hash"] == state["state_hash"]
+        assert self._sessions[session_id].actor._shared_source_anchor == anchor
         checked += 1
         raise VerifiedRollback()
 
@@ -291,7 +293,7 @@ async def test_indexed_jump_failure_rolls_back_all_durable_state(tmp_path, monke
     monkeypatch.setattr(ReplayService, "command", command)
     with pytest.raises(VerifiedRollback):
         await run_case(
-            tmp_path, monkeypatch, False, 0, True, "LONG", "CROSS", True, indexed=True
+            tmp_path, monkeypatch, False, 0, True, "LONG", "CROSS", True, indexed=True, shared=shared
         )
     assert checked == 1
 

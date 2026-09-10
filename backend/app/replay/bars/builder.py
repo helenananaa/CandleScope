@@ -570,6 +570,7 @@ class ReplayBarBuilder:
         return rebuilt
 
     def reset(self) -> None:
+        self._prepared_closed_hashes = None
         self._active_bar: ReplayDisplayBar | None = None
         self._closed_bars: list[ReplayDisplayBar] = []
         self._closed_encoding_cache: dict[int, tuple[ReplayDisplayBar, bytes]] = {}
@@ -644,6 +645,7 @@ class ReplayBarBuilder:
             ) from exc
 
         self._active_bar = candidate["active_bar"]
+        self._prepared_closed_hashes = None
         self._closed_bars = candidate["closed_bars"]
         self._closed_encoding_cache = {}
         self._closed_count = candidate["closed_count"]
@@ -840,6 +842,21 @@ class ReplayBarBuilder:
                 },
             )
 
+        if (
+            getattr(bar, "_normalized_values_validated", False)
+            and bar.source != AGG_TRADE_SYNTHETIC_SOURCE
+        ):
+            # Repository ingestion already normalized and checked these frozen
+            # values. Time alignment, ordering and warmup checks above still
+            # apply to this builder. Synthetic policy remains on the full path.
+            return {
+                "open": bar.open, "high": bar.high, "low": bar.low,
+                "close": bar.close, "volume": bar.volume,
+                "quote_volume": bar.quote_volume, "trades": bar.trades,
+                "taker_buy_base": bar.taker_buy_base,
+                "taker_buy_quote": bar.taker_buy_quote, "synthetic": False,
+            }
+
         try:
             normalized_open = _normalized_decimal(bar.open, "open", positive=True)
             normalized_high = _normalized_decimal(bar.high, "high", positive=True)
@@ -971,20 +988,27 @@ class ReplayBarBuilder:
 
     def _append_closed(self, bar: ReplayDisplayBar) -> None:
         ordinal = self._closed_count + 1
+        previous_hash = self._closed_chain_hash
         self._closed_chain_hash = self._next_closed_chain_hash(
             self._closed_chain_hash,
             ordinal,
             bar,
         )
         self._closed_count = ordinal
+        prepared_hashes = getattr(self, "_prepared_closed_hashes", None)
+        if prepared_hashes is not None:
+            prepared_hashes[ordinal] = (previous_hash, self._closed_chain_hash)
         self._closed_bars.append(bar)
         if len(self._closed_bars) > self._max_closed_bars:
             evicted = self._closed_bars.pop(0)
             prefix_ordinal = self._closed_prefix_count + 1
-            self._closed_prefix_hash = self._next_closed_chain_hash(
-                self._closed_prefix_hash,
-                prefix_ordinal,
-                evicted,
+            known = None if prepared_hashes is None else prepared_hashes.pop(prefix_ordinal, None)
+            # Preparation already calculated this exact prefix when the bar
+            # entered the window. Restored/initial retained bars use the normal
+            # calculation until the bounded cache covers their ordinals.
+            self._closed_prefix_hash = (
+                known[1] if known is not None and known[0] == self._closed_prefix_hash
+                else self._next_closed_chain_hash(self._closed_prefix_hash, prefix_ordinal, evicted)
             )
             self._closed_prefix_count = prefix_ordinal
 

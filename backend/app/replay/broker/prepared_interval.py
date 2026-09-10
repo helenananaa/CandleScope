@@ -22,6 +22,7 @@ STRIDE = 128
 def freeze_builder(builder):
     result = copy(builder)
     result._closed_bars = list(builder._closed_bars)
+    result._prepared_closed_hashes = None
     return result
 
 
@@ -118,6 +119,7 @@ class PreparedBarInterval:
         self.builder_key = self.configuration(builder)
         self.builders = {0: freeze_builder(builder)}
         current = freeze_builder(builder)
+        current._prepared_closed_hashes = {}
         self.bars = []
         self.chains = [chain_hash]
         stopped_on_error = False
@@ -126,7 +128,7 @@ class PreparedBarInterval:
                 event = source.next()
                 if event is None:
                     break
-                current.apply_bar(event)
+                current.apply_bars_final_state((event,))
             except (ReplayDomainError, ValueError, OSError):
                 # An invalid future row must not prevent advancing a valid
                 # earlier prefix. Its ordinary execution path reports it when
@@ -146,7 +148,8 @@ class PreparedBarInterval:
         self.closes = PriceRangeIndex(
             [(Decimal(bar.close), Decimal(bar.close)) for bar in self.bars]
         )
-        display_bars = [prefix[time] for time in sorted(prefix)] + self.bars
+        self.display_prefix = [prefix[time] for time in sorted(prefix)]
+        display_bars = self.display_prefix + self.bars
         self.display = PreparedDisplay(
             display_bars, builder._base_interval_ms, revision
         )
@@ -168,6 +171,7 @@ class PreparedBarInterval:
         return (
             self.configuration(builder) == self.builder_key
             and 0 <= offset <= len(self.bars)
+            and (offset < len(self.bars) or self.terminal)
             and self.chains[offset] == chain_hash
         )
 
@@ -249,8 +253,7 @@ class PreparedBarInterval:
     def builder_at(self, end):
         checkpoint = end // STRIDE * STRIDE
         builder = freeze_builder(self.builders[checkpoint])
-        for bar in self.bars[checkpoint:end]:
-            builder.apply_bar(bar)
+        builder.apply_bars_final_state(self.bars[checkpoint:end])
         return builder
 
     def apply(self, broker, start, end):

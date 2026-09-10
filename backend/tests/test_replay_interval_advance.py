@@ -74,6 +74,7 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
     mark_prices=None,
     liquidation=False,
     previous_checkpoint=False,
+    shared=False,
 ):
     forward = 260
     prices = ["100"] * 1260
@@ -266,6 +267,10 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
             assert len(batches) <= 3
             assert any(x and x > 1 for x in batches)
         final = await service.get_session_state(session)
+        if shared and consumed >= 128:
+            assert await service.store.run_extension_read(
+                lambda c: c.execute("SELECT COUNT(*) FROM replay_command_log WHERE session_id=? AND command_json LIKE '%_training_shared_indexed_interval%'", (session,)).fetchone()[0]
+            ) > 0
         assert final["cursor"] == result["cursor"]
         if result["data"]["event_stop"]:
             assert (
@@ -378,7 +383,8 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
             assert (await reference.get_session(session))["snapshot"]["components"] == (
                 await service.get_session(session)
             )["snapshot"]["components"]
-            assert state["state_hash"] == final["state_hash"]
+            if not shared:
+                assert state["state_hash"] == final["state_hash"]
 
             async def ledger(instance):
                 return await instance.store.run_extension_read(
@@ -413,7 +419,7 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
                 optimized_samples = await samples(service)
                 assert all(
                     reference_samples[sequence][:3] == value[:3]
-                    and (value[3].startswith("interval-state:")
+                    and (shared or value[3].startswith("interval-state:")
                          or reference_samples[sequence][3] == value[3])
                     for sequence, value in optimized_samples.items()
                 )
@@ -454,6 +460,9 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
 
                     assert await all_samples(service) == await all_samples(reference)
                     actual_review, expected_review = await critical_review(service), await critical_review(reference)
+                    if shared:
+                        actual_review = [row[:4]+row[5:] for row in actual_review]
+                        expected_review = [row[:4]+row[5:] for row in expected_review]
                     if indexed:
                         assert all(row in expected_review for row in actual_review)
                     else:

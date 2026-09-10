@@ -1893,6 +1893,7 @@ class ReplayService:
                 InternalCommandType.FAST_FORWARD_FINAL_STATE,
                 InternalCommandType.RECORDED_INTERVAL,
                 InternalCommandType.INDEXED_INTERVAL,
+                InternalCommandType.SHARED_INDEXED_INTERVAL,
                 InternalCommandType.STEP_DEFER_TERMINAL,
                 InternalCommandType.FINALIZE_DEFERRED_TERMINAL,
             }
@@ -2400,6 +2401,9 @@ class ReplayService:
             async with self._lifecycle_lock:
                 self._sessions.clear()
                 self._session_generation += 1
+            close_indexes = getattr(self._repository, "close_shared_market_backfill", None)
+            if callable(close_indexes):
+                await asyncio.to_thread(close_indexes, min(step_timeout, 1.0))
             try:
                 await self.store.close()
             except Exception as exc:
@@ -3075,6 +3079,10 @@ class ReplayService:
             retained_checkpoints=retained_checkpoints,
             mutation_hook=self._persist_mutation,
             recovery_target=recovery_target,
+            prepared_cache_path=str(
+                self.store.path.parent / (self.store.path.name + ".prepared")
+                / (canonical_sha256({"session_id": session_id}).split(":")[-1] + ".zlib")
+            ),
         )
 
     def _bar_source(
@@ -3118,7 +3126,7 @@ class ReplayService:
                 expected_count=expected_count,
             )
 
-        return PagedBarReplaySource(
+        source = PagedBarReplaySource(
             actor_dataset,
             terminal_open_ms=terminal_open_ms,
             terminal_kind=terminal_kind,
@@ -3128,6 +3136,17 @@ class ReplayService:
             page_loader=load_page,
             verified_halts=verified_halts,
         )
+        shared_query = getattr(self._repository, "shared_market_at_revision", None)
+        if callable(shared_query):
+            def shared_factory(start_ms, end_ms):
+                return shared_query(
+                    source_revision, actual_dataset.identity.symbol, actual_dataset.interval,
+                    start_ms=start_ms-timeline_delta_ms, end_ms=end_ms-timeline_delta_ms,
+                    exchange=actual_dataset.identity.exchange,
+                    market_type=actual_dataset.identity.market_type, offset_ms=timeline_delta_ms,
+                )
+            source._archive.shared_factory = shared_factory
+        return source
 
     @staticmethod
     def _actor_bar_halts(
@@ -3246,13 +3265,7 @@ class ReplayService:
                 expected_open_ms=expected_open_ms,
                 now_ms=self._now_ms(),
             )
-            rows.append(
-                replace(
-                    row,
-                    open_time_ms=row.open_time_ms + timeline_delta_ms,
-                    close_time_ms=row.close_time_ms + timeline_delta_ms,
-                )
-            )
+            rows.append(row.with_time_offset(timeline_delta_ms))
         return tuple(rows)
 
     async def _persist_mutation(self, mutation: ActorMutation) -> None:

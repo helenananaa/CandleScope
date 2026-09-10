@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Mapping
 from dataclasses import fields, is_dataclass
 
@@ -54,29 +52,9 @@ def next_source_chain_hash(
         "source_sequence": source_sequence,
         "event": source_event_payload(event),
     }
-    if _is_json_primitive_tree(material):
-        encoded = json.dumps(
-            material,
-            ensure_ascii=False,
-            allow_nan=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-        return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+    # The shared encoder already preserves the canonical primitive contract,
+    # including the fallback for large integers and non-native values.
     return canonical_sha256(material)
-
-
-def _is_json_primitive_tree(value: object) -> bool:
-    if value is None or isinstance(value, (str, bool, int)):
-        return True
-    if isinstance(value, Mapping):
-        return all(
-            isinstance(key, str) and _is_json_primitive_tree(child)
-            for key, child in value.items()
-        )
-    if isinstance(value, (list, tuple)):
-        return all(_is_json_primitive_tree(child) for child in value)
-    return False
 
 
 __all__ = [

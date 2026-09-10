@@ -52,6 +52,7 @@ from .sources.base import ReplayMarketSource, SourceCursor
 
 ACTOR_STATE_HASH_SCHEMA_VERSION = "replay-actor-state-hash.v1"
 ACTOR_CHECKPOINT_STATE_SCHEMA_VERSION = "replay-actor-checkpoint-state.v3"
+SHARED_ACTOR_CHECKPOINT_STATE_SCHEMA_VERSION = "replay-actor-checkpoint-state.v4"
 LEGACY_ACTOR_CHECKPOINT_STATE_SCHEMA_VERSION = "replay-actor-checkpoint-state.v2"
 MIN_TASK_EXIT_GRACE_SECONDS = 0.05
 MAX_JOURNAL_ENTRIES = 4_096
@@ -211,6 +212,7 @@ class _ActorRollback:
     final_state_anchor_source_sequence: int | None
     final_state_anchor_bar_open_ms: int | None
     terminal_deferred: bool
+    shared_source_anchor: Mapping[str, object] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -467,6 +469,7 @@ class ReplaySessionActor:
         checkpoint_hook: Callable[[bytes], Awaitable[None]] | None = None,
         mutation_hook: Callable[[ActorMutation], Awaitable[None]] | None = None,
         recovery_target: ActorRecoveryTarget | None = None,
+        prepared_cache_path: str | None = None,
     ) -> None:
         self.session_id = validate_identifier(session_id, field_name="session_id")
         if not isinstance(config, ReplaySessionConfig):
@@ -509,6 +512,7 @@ class ReplaySessionActor:
         self._flush_hook = flush_hook
         self._checkpoint_hook = checkpoint_hook
         self._mutation_hook = mutation_hook
+        self._prepared_cache_path = prepared_cache_path
         if recovery_target is not None and restore_checkpoint is None:
             raise ValueError("recovery_target requires restore_checkpoint")
         self._recovery_target = recovery_target
@@ -567,6 +571,7 @@ class ReplaySessionActor:
         self._domain_command_position = 0
         self._command_log_offset = 0
         self._event_chain_hash = self._initial_chain_hash()
+        self._shared_source_anchor = None
         self._status_reason = "initializing"
         self._revealed = False
         self._journal_entries: list[dict[str, object]] = []
@@ -2115,16 +2120,20 @@ class ReplaySessionActor:
                     "reference_semantics": "ORDERED_SOURCE_EVENT_REDUCER_V1",
                 },
             )
-        if command_type is InternalCommandType.INDEXED_INTERVAL:
+        if command_type in {InternalCommandType.INDEXED_INTERVAL, InternalCommandType.SHARED_INDEXED_INTERVAL}:
             self._require_state(SessionState.PAUSED, command_type)
             index = getattr(self, "_prepared_bar_interval", None)
+            shared = command_type is InternalCommandType.SHARED_INDEXED_INTERVAL
+            if index is not None and bool(getattr(index, "shared", False)) != shared:
+                index = None
+                self._prepared_bar_interval = None
             target = int(parsed.values["target_virtual_time_ms"])
             if index is None or not index.compatible(self._source, self._reducer._bar_builder, self._event_chain_hash):
                 # Recovery may replay a committed command from an older valid
                 # checkpoint. Rebuild the derived index from its frozen source.
-                await self._prepare_indexed_source(target)
+                await self._prepare_indexed_source(target, shared=shared)
                 index = getattr(self, "_prepared_bar_interval", None)
-                if index is None or not index.compatible(self._source, self._reducer._bar_builder, self._event_chain_hash):
+                if index is None or bool(getattr(index, "shared", False)) != shared or not index.compatible(self._source, self._reducer._bar_builder, self._event_chain_hash):
                     raise ReplayDomainError(ReplayErrorCode.INVALID_STATE_TRANSITION, "indexed interval is not prepared")
             start = self._source.cursor().source_sequence - index.start
             end = index.end_for_time(target)
@@ -2137,6 +2146,14 @@ class ReplaySessionActor:
             )
             self._clock.advance_to(target)
             self._event_chain_hash = index.chains[end]
+            if shared:
+                self._shared_source_anchor = {
+                    "schema": "shared-source-anchor.v1",
+                    "source_sequence": self._source.cursor().source_sequence,
+                    "last_event_time_ms": self._source.cursor().last_event_time_ms,
+                    "event_chain_hash": self._event_chain_hash,
+                    "snapshot_ref_hash": self._snapshot_ref_hash,
+                }
             self._revision += end-start
             self._invalidate_component_state()
             components = self._component_state()
@@ -2154,7 +2171,7 @@ class ReplaySessionActor:
             return self._command_result(command.command_id, {
                 "consumed": end-start, "target_reached": True,
                 "target_virtual_time_ms": target, "snapshot_published": True,
-                "reference_semantics": "INDEXED_BAR_INTERVAL_V1",
+                "reference_semantics": "SHARED_MARKET_INTERVAL_V1" if shared else "INDEXED_BAR_INTERVAL_V1",
             })
         if command_type in {InternalCommandType.FAST_FORWARD_FINAL_STATE, InternalCommandType.RECORDED_INTERVAL}:
             self._require_state(SessionState.PAUSED, command_type)
@@ -3370,10 +3387,10 @@ class ReplaySessionActor:
             if (index + 1) % COMMAND_EVENT_LOOP_YIELD_INTERVAL == 0:
                 await asyncio.sleep(0)
 
-    async def _prepare_indexed_source(self, target):
+    async def _prepare_indexed_source(self, target, *, shared=True):
         from .broker.execution import ConservativeBarBroker
         from .bars.builder import ReplayBarBuilder
-        from .broker.prepared_interval import PreparedBarInterval
+        from .broker.prepared_cache import prepare
 
         if (
             type(self._reducer) is not ConservativeBarBroker
@@ -3387,13 +3404,19 @@ class ReplaySessionActor:
             self._source, self._reducer._bar_builder, self._event_chain_hash
         )
         if prepared_now:
-            index = await asyncio.to_thread(
-                PreparedBarInterval,
-                self._source.fork(),
-                self._reducer._bar_builder,
-                self._event_chain_hash,
-                self._next_chain_hash,
-            )
+            index = None
+            if shared and callable(getattr(self._source, "shared_market_range", None)):
+                from .broker.shared_prepared import SharedPreparedInterval
+                try:
+                    index = await asyncio.to_thread(SharedPreparedInterval, self._source.fork(),
+                                                    self._reducer, self._event_chain_hash)
+                except ValueError:
+                    pass
+            if index is None:
+                index = await asyncio.to_thread(
+                    prepare, self._source.fork(), self._reducer,
+                    self._event_chain_hash, self._next_chain_hash, self._prepared_cache_path,
+                )
             self._prepared_bar_interval = index
         await asyncio.to_thread(index.prepare_valuation, self._reducer)
         start = self._source.cursor().source_sequence - index.start
@@ -3891,6 +3914,7 @@ class ReplaySessionActor:
             ),
             final_state_anchor_bar_open_ms=self._final_state_anchor_bar_open_ms,
             terminal_deferred=self._terminal_deferred,
+            shared_source_anchor=self._shared_source_anchor,
         )
 
     def _begin_candidate(
@@ -3952,6 +3976,7 @@ class ReplaySessionActor:
         self._domain_command_position = rollback.domain_command_position
         self._command_log_offset = rollback.command_log_offset
         self._event_chain_hash = rollback.event_chain_hash
+        self._shared_source_anchor = rollback.shared_source_anchor
         self._revealed = rollback.revealed
         self._journal_entries = [dict(entry) for entry in rollback.journal_entries]
         self._final_state_anchor_source_sequence = (
@@ -4290,7 +4315,8 @@ class ReplaySessionActor:
         cursor = self._cursor()
         source_cursor = self._source.cursor()
         return {
-            "schema_version": ACTOR_CHECKPOINT_STATE_SCHEMA_VERSION,
+            "schema_version": SHARED_ACTOR_CHECKPOINT_STATE_SCHEMA_VERSION if self._shared_source_anchor else ACTOR_CHECKPOINT_STATE_SCHEMA_VERSION,
+            **({"shared_source_anchor": dict(self._shared_source_anchor)} if self._shared_source_anchor else {}),
             "core_version": REPLAY_CORE_VERSION,
             "execution_version": self._execution_version,
             "data_epoch": self._data_epoch,
@@ -4354,6 +4380,8 @@ class ReplaySessionActor:
             if schema_version == LEGACY_ACTOR_CHECKPOINT_STATE_SCHEMA_VERSION
             else {*required, "terminal_deferred"}
             if schema_version == ACTOR_CHECKPOINT_STATE_SCHEMA_VERSION
+            else {*required, "terminal_deferred", "shared_source_anchor"}
+            if schema_version == SHARED_ACTOR_CHECKPOINT_STATE_SCHEMA_VERSION
             else None
         )
         if expected_fields is None or payload_fields != expected_fields:
@@ -4429,6 +4457,7 @@ class ReplaySessionActor:
             source, chain = self._source_at_sequence(
                 source_sequence,
                 expected_chain=expected_chain,
+                shared_anchor=payload.get("shared_source_anchor"),
             )
         else:
             source = source_override
@@ -4543,6 +4572,7 @@ class ReplaySessionActor:
         self._source = source
         self._terminal_deferred = terminal_deferred
         self._event_chain_hash = expected_chain
+        self._shared_source_anchor = payload.get("shared_source_anchor")
         self._clock = VirtualClock(
             initial_time_ms=virtual_time,
             speed=payload["clock_speed"],  # type: ignore[arg-type]
@@ -4582,6 +4612,7 @@ class ReplaySessionActor:
             payload.get("schema_version")
             in {
                 ACTOR_CHECKPOINT_STATE_SCHEMA_VERSION,
+                SHARED_ACTOR_CHECKPOINT_STATE_SCHEMA_VERSION,
                 LEGACY_ACTOR_CHECKPOINT_STATE_SCHEMA_VERSION,
             }
             and payload.get("core_version") == REPLAY_CORE_VERSION
@@ -5047,11 +5078,24 @@ class ReplaySessionActor:
         source_sequence: int,
         *,
         expected_chain: str | None,
+        shared_anchor: Mapping[str, object] | None = None,
     ) -> tuple[ReplayMarketSource, str]:
         source = self._new_source()
         chain = self._initial_chain_hash()
         previous_time = self._initial_virtual_time_ms
-        for sequence in range(1, source_sequence + 1):
+        first_sequence = 0
+        if shared_anchor is not None:
+            if (set(shared_anchor) != {"schema", "source_sequence", "last_event_time_ms", "event_chain_hash", "snapshot_ref_hash"}
+                    or shared_anchor["schema"] != "shared-source-anchor.v1"
+                    or shared_anchor["snapshot_ref_hash"] != self._snapshot_ref_hash):
+                raise ValueError("shared source anchor identity is invalid")
+            first_sequence = validate_counter(shared_anchor["source_sequence"], field_name="shared source sequence")
+            if not 0 < first_sequence <= source_sequence:
+                raise ValueError("shared source anchor exceeds checkpoint cursor")
+            chain = self._require_digest(shared_anchor["event_chain_hash"], "shared event chain")
+            source = source.fork_at_sequence(first_sequence, last_event_time_ms=shared_anchor["last_event_time_ms"])
+            previous_time = source.cursor().last_event_time_ms
+        for sequence in range(first_sequence + 1, source_sequence + 1):
             event = source.next()
             if event is None:
                 raise ReplayDomainError(

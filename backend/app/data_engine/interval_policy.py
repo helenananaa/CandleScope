@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
+from functools import lru_cache
 from typing import Any, Mapping, Optional, Sequence
 
 from app.data_engine.market_data.kline_metrics import serialize_kline_enhancements
@@ -221,6 +222,14 @@ def parse_interval_spec(value: str) -> IntervalSpec | None:
     ``7d != 1w`` and ``30d != 1M`` even though their nominal widths match.
     """
     requested = str(value or "").strip()
+    return _parse_interval_spec(requested)
+
+
+@lru_cache(maxsize=512)
+def _parse_interval_spec(requested: str) -> IntervalSpec | None:
+    # IntervalSpec is frozen. Repeated base-bar validation and bucket queries
+    # can share it without reparsing the same interval hundreds of thousands
+    # of times. Normalize outside the cache to retain the public input contract.
     match = _INTERVAL_RE.fullmatch(requested)
     if match is None:
         return None

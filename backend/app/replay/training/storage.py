@@ -24762,7 +24762,7 @@ class TrainingRunStore:
 
     def _sync_session_trajectory(self, *args):
         try:
-            if args[2].get("type") == InternalCommandType.INDEXED_INTERVAL.value:
+            if args[2].get("type") in {InternalCommandType.INDEXED_INTERVAL.value, InternalCommandType.SHARED_INDEXED_INTERVAL.value}:
                 return self._sync_indexed_trajectory(*args)
             return self._sync_recorded_trajectory(*args)
         finally:
@@ -24821,7 +24821,7 @@ class TrainingRunStore:
                 "SELECT 1 FROM replay_prepared_curve WHERE curve_id=?", (curve_id,)
             ).fetchone():
                 return curve_id
-            data = {
+            data = index.curve_basis() if getattr(index, "shared", False) else {
                 "schema": "prepared-curve.v1",
                 "start": index.start,
                 "times": index.times,
@@ -25612,6 +25612,7 @@ class TrainingRunStore:
                 "_training_fast_forward_final_state",
                 InternalCommandType.RECORDED_INTERVAL.value,
                 InternalCommandType.INDEXED_INTERVAL.value,
+                InternalCommandType.SHARED_INDEXED_INTERVAL.value,
             }
         )
         if component_projection_changed and not coordinated_hedge_mutation:
@@ -26216,7 +26217,10 @@ class TrainingRunStore:
                 if stored is None:
                     raise ValueError("indexed curve basis is missing")
                 basis = json.loads(stored["data_json"])
-                if basis.get("schema") != "prepared-curve.v1":
+                if basis.get("schema") == "shared-curve.v1":
+                    from ..broker.shared_prepared import restore_curve
+                    basis = restore_curve(basis)
+                elif basis.get("schema") != "prepared-curve.v1":
                     raise ValueError("indexed curve basis version is unsupported")
                 expanded = {}
                 for offset in range(rows["start"], rows["end"]):

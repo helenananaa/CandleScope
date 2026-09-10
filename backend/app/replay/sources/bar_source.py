@@ -284,6 +284,27 @@ class PagedBarReplaySource:
     def snapshot_ref(self) -> Mapping[str, object]:
         return self._snapshot_ref
 
+    def shared_market_range(self, limit=100_000):
+        factory = getattr(self._archive, "shared_factory", None)
+        count = min(limit, self._archive.total_rows-self._index)
+        if factory is None or count <= 0:
+            return None
+        first = self._archive.open_at_index(self._index)
+        last = self._archive.open_at_index(self._index+count-1)
+        result = factory(first, last+self._archive.interval_ms)
+        if result is None or result.count != count or result.base_ms != self._archive.interval_ms:
+            return None
+        for segment in self._archive._segments:
+            a = max(self._index, segment.start_index)
+            b = min(self._index+count, segment.end_index)
+            if a >= b:
+                continue
+            summary = result.summary(a-self._index, b-self._index)[0]
+            if (not summary[12] or summary[10] != self._archive.open_at_index(a)
+                    or summary[11] != self._archive.open_at_index(b-1)):
+                return None
+        return result, self._index+count == self._archive.total_rows
+
     def fork(self) -> PagedBarReplaySource:
         return self._from_archive(self._archive, self._snapshot_ref, self._index)
 

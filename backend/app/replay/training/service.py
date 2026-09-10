@@ -9812,7 +9812,8 @@ class TrainingRunService:
                     command_id=part_id,
                     client_instance_id=command.client_instance_id,
                     expected_revision=int(snapshot["revision"]),
-                    type=InternalCommandType.INDEXED_INTERVAL,
+                    type=(InternalCommandType.SHARED_INDEXED_INTERVAL if getattr(index, "shared", False)
+                          else InternalCommandType.INDEXED_INTERVAL),
                     payload={
                         "target_virtual_time_ms": end_time,
                         "max_events": end - start,

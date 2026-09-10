@@ -29,6 +29,7 @@ MAX_RANDOM_SEED = (1 << 64) - 1
 
 _IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _DECIMAL_PATTERN = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$")
+_CANONICAL_DECIMAL_PATTERN = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]*[1-9])?")
 _SHA256_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 _EnumT = TypeVar("_EnumT", bound=Enum)
 
@@ -61,6 +62,12 @@ def validate_timestamp_ms(value: object, *, field_name: str) -> int:
 
 
 def normalize_decimal_string(value: object, *, field_name: str) -> str:
+    # Frozen market data and account projections predominantly already use
+    # this exact finite plain-decimal spelling. Avoid constructing/formatting
+    # a Decimal just to return the same string. Other accepted spellings keep
+    # the original normalization path (including Unicode decimal digits).
+    if type(value) is str and _CANONICAL_DECIMAL_PATTERN.fullmatch(value):
+        return "0" if value == "-0" else value
     if not isinstance(value, str):
         raise TypeError(f"{field_name} must be a Decimal string")
     if not _DECIMAL_PATTERN.fullmatch(value):

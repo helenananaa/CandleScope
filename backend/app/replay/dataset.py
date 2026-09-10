@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import math
 import threading
 from dataclasses import dataclass, fields, is_dataclass, replace
 from decimal import Decimal
@@ -38,7 +39,15 @@ def _decimal_value(
 ) -> str:
     if isinstance(value, bool) or value is None:
         raise ValueError(f"{field_name} must be a finite Decimal-compatible value")
-    if isinstance(value, (float, Decimal)):
+    if type(value) is float:
+        if not math.isfinite(value):
+            raise ValueError(f"{field_name} must be finite")
+        raw = str(value)
+        # str(float) is already the original decimal input. Only exponent
+        # spellings require Decimal formatting before plain-string validation.
+        if "e" in raw or "E" in raw:
+            raw = format(Decimal(raw), "f")
+    elif isinstance(value, (float, Decimal)):
         decimal_input = Decimal(str(value))
         if not decimal_input.is_finite():
             raise ValueError(f"{field_name} must be finite")
@@ -46,10 +55,9 @@ def _decimal_value(
     else:
         raw = str(value)
     normalized = normalize_decimal_string(raw, field_name=field_name)
-    decimal_value = Decimal(normalized)
-    if positive and decimal_value <= 0:
+    if positive and (normalized == "0" or normalized.startswith("-")):
         raise ValueError(f"{field_name} must be positive")
-    if not positive and decimal_value < 0:
+    if not positive and normalized.startswith("-"):
         raise ValueError(f"{field_name} cannot be negative")
     return normalized
 
@@ -60,8 +68,18 @@ def _optional_decimal(value: object, *, field_name: str) -> str | None:
     return _decimal_value(value, field_name=field_name)
 
 
+class _ValidatedBarValues:
+    """Transient numeric-validation receipt, excluded from wire/hash fields.
+
+    New construction and dataclasses.replace do not inherit this slot, so an
+    edited row must be validated again. The repository validator owns it.
+    """
+
+    __slots__ = ("_normalized_values_validated",)
+
+
 @dataclass(frozen=True, slots=True)
-class ReplayBar:
+class ReplayBar(_ValidatedBarValues):
     open_time_ms: int
     close_time_ms: int
     open: str
@@ -74,6 +92,17 @@ class ReplayBar:
     taker_buy_base: str | None
     taker_buy_quote: str | None
     source: str
+
+    def with_time_offset(self, offset_ms: int) -> ReplayBar:
+        if type(offset_ms) is int and offset_ms == 0:
+            return self
+        shifted = replace(
+            self, open_time_ms=self.open_time_ms + offset_ms,
+            close_time_ms=self.close_time_ms + offset_ms,
+        )
+        if getattr(self, "_normalized_values_validated", False):
+            object.__setattr__(shifted, "_normalized_values_validated", True)
+        return shifted
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -828,7 +857,7 @@ def validate_replay_repository_bar(
             ReplayErrorCode.DATASET_INCOMPLETE,
             "BAR source identifier is invalid",
         ) from exc
-    return ReplayBar(
+    result = ReplayBar(
         open_time_ms=open_time_ms,
         close_time_ms=close_time_ms,
         open=open_value,
@@ -842,6 +871,8 @@ def validate_replay_repository_bar(
         taker_buy_quote=taker_buy_quote,
         source=source_value,
     )
+    object.__setattr__(result, "_normalized_values_validated", True)
+    return result
 
 
 class BarDatasetPool:
