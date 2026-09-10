@@ -34,3 +34,9 @@ leaderboard or requirement to prevent a user from editing their own local data.
 - Measure one-time data indexing, opening, the first large step and deferred
   curve reads separately. Backfill only already-local objects in a cancellable
   background lane; filesystem inventory must not delay the foreground query.
+- Curve reads select a global bucket window across deferred intervals and cached
+  samples before valuation. Reuse matching sequence/revision samples and count
+  actual distinct buckets for AUTO; event counts are not coarse bucket counts.
+- Run deferred curve planning and valuation outside both the event loop and the
+  writer transaction. Verify writer availability during preparation. Each curve
+  resolution is independently requested; reading EVENT need not populate others.

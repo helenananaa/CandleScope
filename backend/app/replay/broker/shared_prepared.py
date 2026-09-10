@@ -10,7 +10,7 @@ from decimal import Decimal, localcontext
 
 from ..canonical import canonical_sha256
 from ..dataset import ReplayBar
-from .models import decimal_to_string
+from .models import LedgerAccount, decimal_to_string
 from .prepared_interval import PreparedBarInterval, freeze_builder
 from .prepared_display import PreparedDisplay
 
@@ -76,10 +76,7 @@ class AccountRanges:
         ]
         scale = min([summary[5]] + [v.as_tuple().exponent for v in operands])
         adjusted = max([summary[6]] + [v.adjusted() for v in operands])
-        exact = (
-            2 * (adjusted - scale + 1) + 4 <= 60
-            and sum(bool(q) for q in quantities) <= 1
-        )
+        exact = 2 * (adjusted - scale + 1) + 4 <= 60
         if not exact:
             from .prepared_interval import EquityRanges
 
@@ -192,18 +189,17 @@ class SharedPreparedInterval(PreparedBarInterval):
             if "long" in position
             else [position]
         )
-        account = broker._account_from(broker._ledger, broker._position)
         basis = {
             "legs": [[leg["quantity"], leg["entry_price"] or "0"] for leg in legs],
-            "cash": account.cash_balance,
+            "cash": broker._ledger.account_total(LedgerAccount.CASH),
         }
         key = canonical_sha256(
             {
-                "schema": "shared-valuation.v1",
+                "schema": "shared-valuation.v2",
                 "basis": basis,
                 "model": broker._model_version,
                 "config": broker._config_hash,
-                "ledger": broker._ledger.snapshot(),
+                "ledger_tail": broker._ledger.tail_hash,
             }
         )
         if self.valuation is not None and self.valuation["key"] == key:
@@ -212,7 +208,7 @@ class SharedPreparedInterval(PreparedBarInterval):
             "key": key,
             "basis": basis,
             "ranges": AccountRanges(self, basis),
-            "ledger_hash": broker._ledger.snapshot()["tail_hash"],
+            "ledger_hash": broker._ledger.tail_hash,
         }
         return self.valuation
 

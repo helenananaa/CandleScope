@@ -9,6 +9,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, getcontext, localcontext
 from functools import lru_cache
+from heapq import heapify, heappop, heappush
 from typing import cast
 
 from app.replay.canonical import canonical_json, canonical_sha256
@@ -155,6 +156,7 @@ _EQUITY_RESOLUTIONS: tuple[tuple[str, int, int], ...] = (
     ("15M", 900_000, 2_048),
     ("1H", 3_600_000, 2_048),
 )
+_EQUITY_BUCKET_MS = {name: bucket_ms for name, bucket_ms, _ in _EQUITY_RESOLUTIONS}
 
 
 @lru_cache(maxsize=128)
@@ -11143,28 +11145,70 @@ class TrainingRunStore:
                 status_code=422,
             )
 
-        def read(connection: sqlite3.Connection) -> dict[str, object] | None:
-            self._materialize_interval_curves(connection, run_id=run_id)
+        def load(connection: sqlite3.Connection) -> dict[str, object] | None:
             run = connection.execute(
                 "SELECT run_id FROM replay_training_run WHERE run_id = ?",
                 (run_id,),
             ).fetchone()
             if run is None:
                 return None
+            pending = self._load_pending_interval_curves(connection, run_id=run_id)
+            cached = {}
+            for row in connection.execute(
+                "SELECT resolution, bucket_id, source_sequence, revision "
+                "FROM replay_equity_sample WHERE run_id=?", (run_id,)
+            ):
+                cached[(str(row[0]), int(row[1]))] = (int(row[2]), int(row[3]))
+            return {
+                "pending": pending,
+                "origins": self._interval_curve_origins(connection, pending),
+                "cached": cached,
+            }
+
+        loaded = await self.base_store.run_extension_read(load)
+        if loaded is None:
+            raise TrainingRunError(
+                "TRAINING_RUN_NOT_FOUND",
+                "training run does not exist",
+                status_code=404,
+            )
+        def prepare():
+            bases = {}
             selected = resolution
             if selected == "AUTO":
                 selected = "1H"
                 for candidate in ("EVENT", "1M", "15M", "1H"):
-                    count = connection.execute(
-                        """
-                        SELECT COUNT(*) FROM replay_equity_sample
-                        WHERE run_id = ? AND resolution = ?
-                        """,
-                        (run_id, candidate),
-                    ).fetchone()[0]
-                    if int(count) <= limit:
+                    plan = self._plan_interval_curve_samples(
+                        loaded["pending"], loaded["cached"],
+                        resolution=candidate, limit=limit + 1, bases=bases,
+                    )
+                    if len(plan) <= limit:
                         selected = candidate
                         break
+            rows, completed = self._expand_pending_interval_curves(
+                loaded["pending"], loaded["origins"], run_id=run_id,
+                resolution=selected, limit=limit, cached=loaded["cached"], bases=bases,
+            )
+            return selected, rows, completed
+
+        selected, prepared_rows, materialized_ids = await self.base_store.run_worker(
+            "equity_curve_prepare", prepare
+        )
+
+        def write(connection: sqlite3.Connection) -> dict[str, object] | None:
+            run = connection.execute(
+                "SELECT run_id FROM replay_training_run WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+            if run is None:
+                return None
+            self._persist_interval_curve_samples(
+                connection,
+                run_id=run_id,
+                rows=prepared_rows,
+                materialized_ids=materialized_ids,
+                resolution=selected,
+            )
             rows = connection.execute(
                 """
                 SELECT * FROM replay_equity_sample
@@ -11208,7 +11252,12 @@ class TrainingRunStore:
                 "limits": {item[0]: item[2] for item in _EQUITY_RESOLUTIONS},
             }
 
-        result = await self.base_store.run_extension_write(read)
+        operation = (
+            self.base_store.run_extension_write
+            if prepared_rows or materialized_ids
+            else self.base_store.run_extension_read
+        )
+        result = await operation(write)
         if result is None:
             raise TrainingRunError(
                 "TRAINING_RUN_NOT_FOUND",
@@ -26096,7 +26145,7 @@ class TrainingRunStore:
     @classmethod
     def _upsert_equity_samples(
         cls,
-        connection: sqlite3.Connection,
+        connection: sqlite3.Connection | None,
         *,
         run_id: str,
         session_id: str,
@@ -26107,6 +26156,8 @@ class TrainingRunStore:
         now_ms: int,
         retain: bool = True,
         pending_samples: dict | None = None,
+        resolutions: Sequence[str] | None = None,
+        origin: Mapping[str, object] | None = None,
     ) -> None:
         cursor = state.get("cursor")
         account = component_state.get("account")
@@ -26127,17 +26178,37 @@ class TrainingRunStore:
         source_sequence = validate_v2_counter(
             state["source_sequence"], field_name="source_sequence"
         )
-        public_time = cls._public_time(
-            connection,
-            session_id=session_id,
-            policy=policy,
-            revealed=revealed,
-            public_time_ms=public_ms,
-            sequence=source_sequence,
-        )
+        if origin is not None:
+            actual_origin = int(origin["actual_replay_start_ms"])
+            public_origin = (
+                actual_origin
+                if policy == "NONE"
+                else cls._required_synthetic_origin(origin["synthetic_origin_ms"])
+            )
+            public_time = cls._project_public_time(
+                actual_origin_ms=actual_origin,
+                public_origin_ms=public_origin,
+                policy=policy,
+                revealed=revealed,
+                public_time_ms=public_ms,
+                sequence=source_sequence,
+            )
+        else:
+            public_time = cls._public_time(
+                connection,
+                session_id=session_id,
+                policy=policy,
+                revealed=revealed,
+                public_time_ms=public_ms,
+                sequence=source_sequence,
+            )
         public_time_json = canonical_json(public_time)
         revision = validate_v2_counter(state["revision"], field_name="revision")
-        for resolution, bucket_ms, limit in _EQUITY_RESOLUTIONS:
+        items = _EQUITY_RESOLUTIONS
+        if resolutions is not None:
+            wanted = set(resolutions)
+            items = tuple(item for item in _EQUITY_RESOLUTIONS if item[0] in wanted)
+        for resolution, bucket_ms, limit in items:
             bucket_id = source_sequence if bucket_ms == 0 else public_ms // bucket_ms
             values = (
                 run_id,
@@ -26198,79 +26269,228 @@ class TrainingRunStore:
             rows,
         )
 
-    @classmethod
-    def _materialize_interval_curves(cls, connection, *, run_id):
-        # These rows are a derived read cache. They are filled only when the
-        # curve is requested, without changing the training run or its clock.
-        pending = connection.execute(
+    @staticmethod
+    def _load_pending_interval_curves(connection, *, run_id):
+        pending = []
+        for row in connection.execute(
             "SELECT command_id, samples_json FROM replay_interval_curve "
             "WHERE run_id=? AND materialized=0 ORDER BY end_sequence, command_id",
             (run_id,),
-        ).fetchall()
-        for interval in pending:
-            rows = json.loads(interval["samples_json"])
-            if isinstance(rows, dict) and rows.get("schema") == "indexed-curve.v1":
+        ).fetchall():
+            payload = json.loads(row["samples_json"])
+            stored = None
+            if isinstance(payload, dict) and payload.get("schema") == "indexed-curve.v1":
                 stored = connection.execute(
                     "SELECT data_json FROM replay_prepared_curve WHERE curve_id=? AND run_id=?",
-                    (rows["curve_id"], run_id),
+                    (payload["curve_id"], run_id),
                 ).fetchone()
+            pending.append(
+                {
+                    "command_id": str(row["command_id"]),
+                    "samples_json": str(row["samples_json"]),
+                    "curve_json": None if stored is None else str(stored["data_json"]),
+                }
+            )
+        return pending
+
+    @classmethod
+    def _interval_curve_origins(cls, connection, pending):
+        sessions = set()
+        for item in pending:
+            payload = json.loads(item["samples_json"])
+            if isinstance(payload, dict) and payload.get("schema") == "indexed-curve.v1":
+                sessions.add(str(payload["session_id"]))
+        origins = {}
+        for session_id in sessions:
+            dataset = connection.execute(
+                """
+                SELECT actual_replay_start_ms, synthetic_origin_ms
+                FROM replay_dataset_ref WHERE session_id = ?
+                """,
+                (session_id,),
+            ).fetchone()
+            if dataset is None:
+                raise TrainingRunError(
+                    "TRAINING_RUN_STORAGE_DEGRADED",
+                    "training dataset time binding is missing",
+                    status_code=503,
+                )
+            origins[session_id] = {
+                "actual_replay_start_ms": int(dataset["actual_replay_start_ms"]),
+                "synthetic_origin_ms": dataset["synthetic_origin_ms"],
+            }
+        return origins
+
+    @staticmethod
+    def _curve_sample_offsets(times, start, end, *, bucket_ms, limit):
+        if start >= end or limit <= 0:
+            return []
+        if bucket_ms == 0:
+            return list(range(max(start, end - limit), end))
+        selected = []
+        index = end - 1
+        while index >= start and len(selected) < limit:
+            bucket = int(times[index]) // bucket_ms
+            selected.append(index)
+            low, high = start, index
+            while low < high:
+                mid = (low + high) // 2
+                if int(times[mid]) // bucket_ms < bucket:
+                    low = mid + 1
+                else:
+                    high = mid
+            index = low - 1
+        selected.reverse()
+        return selected
+
+    @classmethod
+    def _plan_interval_curve_samples(
+        cls, pending, cached, *, resolution, limit, bases
+    ):
+        # Plan bucket endpoints before evaluating account values. Cached and
+        # deferred samples compete in the same global window, including shared
+        # buckets at interval boundaries. Keep the newest sequence/revision.
+        chosen = {
+            bucket: (version, None)
+            for (name, bucket), version in cached.items()
+            if name == resolution
+        }
+        chosen = dict(sorted(chosen.items(), reverse=True)[:limit])
+        buckets = list(chosen)
+        heapify(buckets)
+        bucket_ms = _EQUITY_BUCKET_MS[resolution]
+
+        def offer(bucket, version, sample):
+            old = chosen.get(bucket)
+            if old is not None and old[0] >= version:
+                return
+            if len(chosen) >= limit and bucket < buckets[0]:
+                return
+            if old is None:
+                heappush(buckets, bucket)
+            chosen[bucket] = (version, sample)
+            if len(chosen) > limit:
+                del chosen[heappop(buckets)]
+
+        for interval in reversed(pending):
+            payload = json.loads(interval["samples_json"])
+            if isinstance(payload, dict) and payload.get("schema") == "indexed-curve.v1":
+                stored = interval.get("curve_json")
                 if stored is None:
                     raise ValueError("indexed curve basis is missing")
-                basis = json.loads(stored["data_json"])
-                if basis.get("schema") == "shared-curve.v1":
-                    from ..broker.shared_prepared import restore_curve
-                    basis = restore_curve(basis)
-                elif basis.get("schema") != "prepared-curve.v1":
-                    raise ValueError("indexed curve basis version is unsupported")
-                expanded = {}
-                for offset in range(rows["start"], rows["end"]):
-                    equity, cash, pnl = basis["samples"][offset]
-                    cls._upsert_equity_samples(
-                        connection,
-                        run_id=run_id,
-                        session_id=rows["session_id"],
-                        policy=rows["policy"],
-                        revealed=rows["revealed"],
-                        state={
-                            "cursor": {"virtual_time_ms": basis["times"][offset]},
-                            "source_sequence": basis["start"] + offset + 1,
-                            "revision": rows["revision_base"]
-                            + offset
-                            - rows["start"]
-                            + 1,
-                            "state_hash": "interval-state:"
-                            + basis["chains"][offset + 1],
-                        },
-                        component_state={
-                            "account": {
-                                "equity": equity,
-                                "cash_balance": cash,
-                                "unrealized_pnl": pnl,
-                            },
-                            "ledger": {"tail_hash": basis["ledger_hash"]},
-                        },
-                        now_ms=rows["created_at_ms"],
-                        retain=False,
-                        pending_samples=expanded,
-                    )
-                rows = list(expanded.values())
-                # JSON-backed ordinary rows are lists; expanded rows are owned
-                # tuples passed directly to SQLite below.
-                rows = [list(row) for row in rows]
-            if not isinstance(rows, list) or any(
-                not isinstance(row, list) or len(row) != 13 or row[0] != run_id
-                for row in rows
+                key = payload.get("curve_id", stored)
+                basis = bases.get(key)
+                if basis is None:
+                    basis = json.loads(stored)
+                    if basis.get("schema") == "shared-curve.v1":
+                        from ..broker.shared_prepared import restore_curve
+                        basis = restore_curve(basis)
+                    elif basis.get("schema") != "prepared-curve.v1":
+                        raise ValueError("indexed curve basis version is unsupported")
+                    bases[key] = basis
+                start, end = int(payload["start"]), int(payload["end"])
+                if start >= end:
+                    continue
+                last_bucket = (
+                    basis["start"] + end if bucket_ms == 0
+                    else int(basis["times"][end - 1]) // bucket_ms
+                )
+                if len(chosen) >= limit and last_bucket < buckets[0]:
+                    continue
+                offsets = cls._curve_sample_offsets(
+                    basis["times"], start, end, bucket_ms=bucket_ms, limit=limit
+                )
+                for offset in offsets:
+                    sequence = basis["start"] + offset + 1
+                    bucket = sequence if bucket_ms == 0 else int(basis["times"][offset]) // bucket_ms
+                    version = (sequence, payload["revision_base"] + offset - start + 1)
+                    offer(bucket, version, (payload, basis, offset))
+            else:
+                if not isinstance(payload, list) or any(
+                    not isinstance(row, list) or len(row) != 13 for row in payload
+                ):
+                    raise ValueError("interval curve record is malformed")
+                for row in payload:
+                    if row[1] == resolution:
+                        offer(int(row[2]), (int(row[3]), int(row[4])), row)
+        return chosen
+
+    @classmethod
+    def _expand_pending_interval_curves(
+        cls, pending, origins, *, run_id, resolution, limit, cached=None, bases=None
+    ):
+        cached = {} if cached is None else cached
+        bases = {} if bases is None else bases
+        plan = cls._plan_interval_curve_samples(
+            pending, cached, resolution=resolution, limit=limit, bases=bases
+        )
+        expanded = {}
+        for bucket, (version, sample) in plan.items():
+            if sample is None:
+                continue
+            if isinstance(sample, list):
+                if sample[0] != run_id:
+                    raise ValueError("interval curve record is malformed")
+                expanded[(run_id, resolution, bucket)] = sample
+                continue
+            payload, basis, offset = sample
+            equity, cash, pnl = basis["samples"][offset]
+            cls._upsert_equity_samples(
+                None, run_id=run_id, session_id=payload["session_id"],
+                policy=payload["policy"], revealed=payload["revealed"],
+                state={
+                    "cursor": {"virtual_time_ms": basis["times"][offset]},
+                    "source_sequence": version[0], "revision": version[1],
+                    "state_hash": "interval-state:" + basis["chains"][offset + 1],
+                },
+                component_state={
+                    "account": {"equity": equity, "cash_balance": cash, "unrealized_pnl": pnl},
+                    "ledger": {"tail_hash": basis["ledger_hash"]},
+                },
+                now_ms=payload["created_at_ms"], retain=False,
+                pending_samples=expanded, resolutions=(resolution,),
+                origin=origins[str(payload["session_id"])],
+            )
+        # Fully covered legacy records can retire. Indexed records remain the
+        # reconstructible authority for other resolutions and larger windows;
+        # persisted sample versions prevent repeated account evaluation.
+        completed = []
+        available = dict(cached)
+        for row in expanded.values():
+            available[(row[1], row[2])] = (row[3], row[4])
+        for interval in pending:
+            payload = json.loads(interval["samples_json"])
+            if isinstance(payload, list) and all(
+                row[0] == run_id
+                and available.get((row[1], row[2]), (-1, -1)) >= (row[3], row[4])
+                for row in payload
             ):
-                raise ValueError("interval curve record is malformed")
+                completed.append(interval["command_id"])
+        return list(expanded.values()), completed
+
+    @classmethod
+    def _persist_interval_curve_samples(
+        cls, connection, *, run_id, rows, materialized_ids, resolution
+    ):
+        if rows:
             cls._write_equity_samples(connection, rows, historical=True)
+        for command_id in materialized_ids:
             connection.execute(
                 "UPDATE replay_interval_curve SET materialized=1 WHERE run_id=? AND command_id=?",
-                (run_id, interval["command_id"]),
+                (run_id, command_id),
             )
-        if pending:
-            for resolution, _bucket_ms, limit in _EQUITY_RESOLUTIONS:
+        if rows:
+            if materialized_ids:
+                for name, _bucket_ms, keep in _EQUITY_RESOLUTIONS:
+                    cls._prune_equity_resolution(
+                        connection, run_id=run_id, resolution=name, limit=keep
+                    )
+            else:
+                keep = next(
+                    item[2] for item in _EQUITY_RESOLUTIONS if item[0] == resolution
+                )
                 cls._prune_equity_resolution(
-                    connection, run_id=run_id, resolution=resolution, limit=limit
+                    connection, run_id=run_id, resolution=resolution, limit=keep
                 )
 
     @staticmethod

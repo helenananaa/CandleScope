@@ -121,6 +121,69 @@ def test_equity_range_preserves_ordered_drawdown():
         )
 
 
+def test_legacy_prepare_valuation_does_not_rescan_ledger_per_bar(monkeypatch):
+    fast = make_broker()
+    fast.place_order(request(client_order_id="open"), command_id="open")
+    fast.apply_bar(bar(0, 100))
+    bars = [bar(i, str(100 + (i * 7) % 31)) for i in range(1, 514)]
+
+    class Source:
+        i = 0
+
+        def cursor(self):
+            return SimpleNamespace(source_sequence=self.i + 1)
+
+        def next(self):
+            if self.exhausted():
+                return None
+            result = bars[self.i]
+            self.i += 1
+            return result
+
+        def exhausted(self):
+            return self.i == len(bars)
+
+    index = PreparedBarInterval(
+        Source(),
+        fast._bar_builder,
+        "sha256:" + "0" * 64,
+        ReplaySessionActor._next_chain_hash,
+    )
+    account_from_calls = []
+    original_account_from = fast._account_from
+
+    def counting_account_from(ledger, position):
+        account_from_calls.append(1)
+        return original_account_from(ledger, position)
+
+    monkeypatch.setattr(fast, "_account_from", counting_account_from)
+    snapshots = {"count": 0}
+    original_snapshot = fast._ledger.snapshot
+
+    def counting_snapshot():
+        snapshots["count"] += 1
+        return original_snapshot()
+
+    monkeypatch.setattr(fast._ledger, "snapshot", counting_snapshot)
+    index.prepare_valuation(fast)
+    assert len(account_from_calls) < len(index.bars)
+    assert snapshots["count"] == 0
+    cached = index.prepare_valuation(fast)
+    assert cached is index.valuation
+    assert snapshots["count"] == 0
+
+
+def test_indexed_interval_keeps_book_funding_and_liquidation_guards():
+    import inspect
+
+    from app.replay.training.service import TrainingRunService
+
+    source = inspect.getsource(TrainingRunService._try_indexed_interval)
+    assert 'binding.get("book_mode", "OFF") != "OFF"' in source
+    assert "AccountDataMode.HISTORICAL_EXACT.value" in source
+    assert 'binding.get("funding_mode") not in {"OFF", "HISTORICAL_EXACT"}' in source
+
+
 def test_prepared_jump_matches_sequential_broker_without_reducing_skipped_bars(
     monkeypatch,
 ):

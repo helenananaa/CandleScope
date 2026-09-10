@@ -448,6 +448,10 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
                         )
 
                     async def all_samples(owner):
+                        # Each resolution is now a separately requested cache;
+                        # populate each before comparing complete derived history.
+                        for resolution in ("EVENT", "1M", "15M", "1H"):
+                            await owner.training.equity(run, resolution=resolution, limit=5000)
                         return await owner.store.run_extension_read(
                             lambda c: [
                                 tuple(row)

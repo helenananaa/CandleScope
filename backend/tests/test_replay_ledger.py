@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from decimal import Decimal
+from decimal import Decimal, localcontext
 
 import pytest
 
@@ -10,7 +10,13 @@ from app.replay.broker.execution import (
     apply_position_fill,
 )
 from app.replay.broker.ledger import LedgerBook
-from app.replay.broker.models import OrderSide, Position
+from app.replay.broker.models import (
+    LedgerAccount,
+    LedgerKind,
+    OrderSide,
+    Position,
+    decimal_to_string,
+)
 from app.replay.canonical import canonical_sha256
 from app.replay.errors import ReplayDomainError, ReplayErrorCode
 from tests.fixtures.replay.broker_fakes import CONFIG, bar, make_broker, request
@@ -91,3 +97,74 @@ def test_late_checkpoint_validation_failure_is_atomic_and_fail_closed() -> None:
         broker.restore(tampered)
     assert rejected.value.code is ReplayErrorCode.DATASET_MISMATCH
     assert broker.snapshot() == before
+
+
+def _scanned_account_total(ledger: LedgerBook, account: LedgerAccount) -> str:
+    with localcontext() as context:
+        context.prec = 60
+        total = sum(
+            (
+                Decimal(entry.amount)
+                for entry in ledger.entries
+                if entry.account is account
+            ),
+            Decimal(0),
+        )
+    return decimal_to_string(total, field_name="ledger account total")
+
+
+def test_incremental_account_totals_match_full_scan_after_post_clone_and_restore() -> None:
+    broker = make_broker()
+    ledger = broker._ledger
+    for index in range(40):
+        ledger.post(
+            kind=LedgerKind.FEE,
+            source_sequence=index + 1,
+            event_time_ms=index + 1,
+            postings=(
+                (LedgerAccount.CASH, "-0.25"),
+                (LedgerAccount.FEE_EXPENSE, "0.25"),
+            ),
+        )
+        ledger.post(
+            kind=LedgerKind.REALIZED_PNL,
+            source_sequence=index + 1,
+            event_time_ms=index + 1,
+            postings=(
+                (LedgerAccount.CASH, "1.5"),
+                (LedgerAccount.REALIZED_PNL, "-1.5"),
+            ),
+        )
+    for account in LedgerAccount:
+        assert ledger.account_total(account) == _scanned_account_total(ledger, account)
+
+    cloned = ledger.clone()
+    for account in LedgerAccount:
+        assert cloned.account_total(account) == ledger.account_total(account)
+    cloned.post(
+        kind=LedgerKind.FEE,
+        source_sequence=100,
+        event_time_ms=100,
+        postings=(
+            (LedgerAccount.CASH, "-3"),
+            (LedgerAccount.FEE_EXPENSE, "3"),
+        ),
+    )
+    assert cloned.account_total(LedgerAccount.CASH) != ledger.account_total(
+        LedgerAccount.CASH
+    )
+    assert cloned.account_total(LedgerAccount.CASH) == _scanned_account_total(
+        cloned, LedgerAccount.CASH
+    )
+    assert ledger.account_total(LedgerAccount.CASH) == _scanned_account_total(
+        ledger, LedgerAccount.CASH
+    )
+
+    snapshot = ledger.snapshot()
+    restored = make_broker()._ledger
+    restored.restore(snapshot)
+    for account in LedgerAccount:
+        assert restored.account_total(account) == ledger.account_total(account)
+        assert restored.account_total(account) == _scanned_account_total(
+            restored, account
+        )

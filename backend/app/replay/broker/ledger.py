@@ -137,6 +137,7 @@ class LedgerBook:
         self._next_transaction = 1
         self._next_entry = 1
         self._tail_hash = self._initial_hash()
+        self._totals: dict[LedgerAccount, Decimal] = {}
         self.post(
             kind=LedgerKind.INITIAL_CAPITAL,
             source_sequence=0,
@@ -164,6 +165,7 @@ class LedgerBook:
         clone._next_transaction = self._next_transaction
         clone._next_entry = self._next_entry
         clone._tail_hash = self._tail_hash
+        clone._totals = dict(self._totals)
         return clone
 
     def post(
@@ -224,22 +226,31 @@ class LedgerBook:
             )
             self._entries.append(entry)
             entries.append(entry)
+            self._add_total(account, amount)
             self._next_entry += 1
         self._next_transaction += 1
         return tuple(entries)
 
     def account_total(self, account: LedgerAccount) -> str:
+        total = self._totals.get(account, Decimal(0))
+        return decimal_to_string(total, field_name="ledger account total")
+
+    def _add_total(self, account: LedgerAccount, amount: str) -> None:
         with localcontext() as context:
             context.prec = 60
-            total = sum(
-                (
-                    Decimal(entry.amount)
-                    for entry in self._entries
-                    if entry.account is account
-                ),
-                Decimal(0),
+            self._totals[account] = self._totals.get(account, Decimal(0)) + Decimal(
+                amount
             )
-        return decimal_to_string(total, field_name="ledger account total")
+
+    def _rebuild_totals(self) -> None:
+        totals: dict[LedgerAccount, Decimal] = {}
+        with localcontext() as context:
+            context.prec = 60
+            for entry in self._entries:
+                totals[entry.account] = totals.get(entry.account, Decimal(0)) + Decimal(
+                    entry.amount
+                )
+        self._totals = totals
 
     def snapshot(self) -> dict[str, object]:
         payload = {
@@ -335,6 +346,7 @@ class LedgerBook:
         self._next_entry = next_entry
         self._next_transaction = next_transaction
         self._tail_hash = expected_hash
+        self._rebuild_totals()
 
     @staticmethod
     def assert_entries_balanced(entries: Iterable[LedgerEntry]) -> None:

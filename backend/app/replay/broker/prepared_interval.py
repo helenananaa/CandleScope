@@ -12,7 +12,7 @@ from ..canonical import canonical_sha256
 from ..errors import ReplayDomainError
 from .execution import mark_position
 from .interval_index import BarInteractionIndex, PriceRangeIndex
-from .models import OrderType, OrderSide, decimal_to_string
+from .models import LedgerAccount, OrderType, OrderSide, decimal_to_string
 from .prepared_display import PreparedDisplay
 from ..dataset import ReplayBar
 
@@ -208,16 +208,27 @@ class PreparedBarInterval:
         return end
 
     def prepare_valuation(self, broker):
+        from .shared_prepared import account_sample
+
         position = broker._position.to_dict()
         for leg in (position, position.get("long", {}), position.get("short", {})):
             for field in ("mark_price", "notional", "unrealized_pnl"):
                 leg.pop(field, None)
+        legs = (
+            [position[side] for side in ("long", "short")]
+            if "long" in position
+            else [position]
+        )
+        basis = {
+            "legs": [[leg["quantity"], leg.get("entry_price") or "0"] for leg in legs],
+            "cash": broker._ledger.account_total(LedgerAccount.CASH),
+        }
         key = canonical_sha256(
             {
-                "algorithm": "prepared-valuation.v1",
+                "algorithm": "prepared-valuation.v2",
                 "execution_model": broker._model_version,
-                "position": position,
-                "ledger": broker._ledger.snapshot(),
+                "basis": basis,
+                "ledger_tail": broker._ledger.tail_hash,
                 "config": broker._config_hash,
             }
         )
@@ -229,24 +240,15 @@ class PreparedBarInterval:
             else Decimal(position["quantity"]) == 0
         )
         if flat:
-            account = broker._account_from(broker._ledger, broker._position)
-            samples = [
-                (account.equity, account.cash_balance, account.unrealized_pnl)
-            ] * len(self.bars)
+            sample = account_sample(basis, "0")
+            samples = [sample] * len(self.bars)
         else:
-            samples = []
-            for bar in self.bars:
-                account = broker._account_from(
-                    broker._ledger, mark_position(broker._position, bar.close)
-                )
-                samples.append(
-                    (account.equity, account.cash_balance, account.unrealized_pnl)
-                )
+            samples = [account_sample(basis, bar.close) for bar in self.bars]
         self.valuation = {
             "key": key,
             "samples": samples,
             "ranges": EquityRanges([Decimal(row[0]) for row in samples]),
-            "ledger_hash": broker._ledger.snapshot()["tail_hash"],
+            "ledger_hash": broker._ledger.tail_hash,
         }
         return self.valuation
 

@@ -10,6 +10,7 @@ from app.replay.broker.shared_prepared import SharedPreparedInterval, account_sa
 from app.replay.bars.builder import ReplayBarBuilder
 from app.replay.catalog import ReplaySeriesIdentity
 from app.replay.dataset import ReplayBar
+from app.replay.broker.models import LedgerAccount, LedgerKind
 from tests.fixtures.replay.broker_fakes import make_broker, request
 
 
@@ -295,6 +296,216 @@ def test_optional_index_write_failure_keeps_archive_usable(tmp_path, monkeypatch
         )
         == 10
     )
+
+
+def test_ordinary_dual_leg_uses_market_summary_not_per_bar(tmp_path, monkeypatch):
+    from app.replay.broker.shared_prepared import AccountRanges
+    from app.replay.broker.prepared_interval import EquityRanges
+
+    _, view = market(tmp_path, 10_000)
+    cases = (
+        {"legs": [["1", "100"], ["-1", "100"]], "cash": "10000"},
+        {"legs": [["2", "100"], ["-0.5", "102"]], "cash": "10000"},
+    )
+    for basis in cases:
+        expected = EquityRanges(
+            [Decimal(account_sample(basis, view.row(i)[5])[0]) for i in range(10_000)]
+        ).query(0, 10_000)
+        calls = []
+        original = view.row
+
+        def row(i, captured=calls, inner=original):
+            captured.append(i)
+            return inner(i)
+
+        monkeypatch.setattr(view, "row", row)
+        result = AccountRanges(SimpleNamespace(market=view), basis).query(0, 10_000)
+        assert result == expected
+        assert len(calls) < 10_000
+        monkeypatch.setattr(view, "row", original)
+
+
+def test_prepare_valuation_cache_key_skips_full_ledger_snapshot(tmp_path, monkeypatch):
+    obj, full = market(tmp_path, 513)
+    broker = make_broker()
+    broker._bar_builder = ReplayBarBuilder(
+        base_interval="1m",
+        display_interval="1m",
+        replay_start_ms=0,
+        warmup_bars=(),
+        max_closed_bars=32,
+    )
+    broker.place_order(request(client_order_id="open"), command_id="open")
+    broker.apply_bar(ReplayBar(*full.row(0)))
+    view = MarketRange([(obj, 1, full.count)])
+
+    class Source:
+        _index = 1
+        _archive = SimpleNamespace(
+            shared_factory=lambda a, b: MarketRange(
+                [(obj, obj.bound(a), obj.bound(b))]
+            ),
+            open_at_index=lambda i: i * 60000,
+        )
+
+        def cursor(self):
+            return SimpleNamespace(source_sequence=1)
+
+        def snapshot_ref(self):
+            return {"source_revision": "revision"}
+
+        def shared_market_range(self):
+            return view, True
+
+    index = SharedPreparedInterval(Source(), broker, "sha256:" + "0" * 64)
+    snapshots = {"count": 0}
+    original_snapshot = broker._ledger.snapshot
+
+    def counting_snapshot():
+        snapshots["count"] += 1
+        return original_snapshot()
+
+    monkeypatch.setattr(broker._ledger, "snapshot", counting_snapshot)
+    first = index.prepare_valuation(broker)
+    second = index.prepare_valuation(broker)
+    assert second is first
+    assert snapshots["count"] == 0
+    broker._ledger.post(
+        kind=LedgerKind.FEE,
+        source_sequence=2,
+        event_time_ms=2,
+        postings=(
+            (LedgerAccount.CASH, "-1"),
+            (LedgerAccount.FEE_EXPENSE, "1"),
+        ),
+    )
+    third = index.prepare_valuation(broker)
+    assert third is not first
+    assert snapshots["count"] == 0
+
+
+def test_index_node_and_block_fetches_reuse_thread_connection(tmp_path, monkeypatch):
+    from app.replay import shared_market_index as module
+
+    obj, _ = market(tmp_path, 2049)
+    obj._reset_connection()
+    obj._blocks.clear()
+    obj._nodes.clear()
+    connects = []
+    original = module.sqlite3.connect
+
+    def counting(*args, **kwargs):
+        connects.append(args)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(module.sqlite3, "connect", counting)
+    first_node = obj._fetch("nodes", 1)
+    first_block = obj._fetch("blocks", 0)
+    for _ in range(40):
+        assert obj._fetch("nodes", 1) == first_node
+        assert obj._fetch("blocks", 0) == first_block
+    assert len(connects) == 1
+    assert len(connects) < 80
+
+
+def test_rebuild_does_not_keep_foreign_thread_on_replaced_index(tmp_path):
+    import threading
+    from app.replay import shared_market_index as module
+
+    obj, _ = market(tmp_path, 256)
+    original = obj._fetch("blocks", 0)
+    started = threading.Event()
+    release = threading.Event()
+    seen = {}
+
+    def hold():
+        try:
+            obj._fetch("blocks", 0)
+            started.set()
+            assert release.wait(5)
+            seen["blocks"] = obj._fetch("blocks", 0)
+        except Exception as exc:
+            seen["error"] = exc
+
+    thread = threading.Thread(target=hold)
+    thread.start()
+    assert started.wait(5)
+    rows = []
+    rng = random.Random(1001)
+    for i in range(256):
+        close = str(rng.randrange(200, 250))
+        rows.append(
+            {
+                "open_time": i * 60000,
+                "close_time": (i + 1) * 60000 - 1,
+                "open": close,
+                "high": str(int(close) + 2),
+                "low": str(int(close) - 2),
+                "close": close,
+                "volume": "0.1",
+                "source": "fixture",
+            }
+        )
+    build(
+        obj.source_path,
+        obj.object_hash,
+        "1m",
+        ReplaySeriesIdentity("binance", "futures", "BTCUSDT"),
+        rows,
+    )
+    release.set()
+    thread.join(5)
+    assert not thread.is_alive()
+    assert "error" not in seen
+    assert seen["blocks"] != original
+    assert open_object(obj.source_path, obj.object_hash)._fetch("blocks", 0) == seen["blocks"]
+
+
+def test_index_connection_cache_evicts_idle_handles(tmp_path, monkeypatch):
+    from app.replay import shared_market_index as module
+
+    monkeypatch.setattr(module, "_MAX_INDEX_CONNECTIONS", 2)
+    objects = []
+    for i in range(3):
+        folder = tmp_path / str(i)
+        folder.mkdir()
+        obj, _ = market(folder, 256)
+        obj._fetch("nodes", 1)
+        objects.append(obj)
+        if i == 0:
+            first_wrapper = module._thread_index_connections()[str(obj.path)]
+    cache = module._thread_index_connections()
+    assert len(cache) == 2
+    assert str(objects[0].path) not in cache
+    assert first_wrapper.retired
+    assert first_wrapper.connection is None
+    objects[0]._fetch("nodes", 1)
+    assert str(objects[0].path) in cache
+    assert len(cache) == 2
+
+
+def test_index_connections_do_not_outlive_owner_thread(tmp_path):
+    import gc
+    import os
+    import threading
+    from app.replay import shared_market_index as module
+
+    obj, _ = market(tmp_path, 256)
+    obj._reset_connection()
+    gc.collect()
+    key = str(obj.path)
+
+    def use():
+        obj._fetch("nodes", 1)
+
+    thread = threading.Thread(target=use)
+    thread.start()
+    thread.join()
+    gc.collect()
+    assert list(module._path_state(key).connections) == []
+    temporary = obj.path.with_name(obj.path.name + ".swap")
+    os.replace(obj.path, temporary)
+    os.replace(temporary, obj.path)
 
 
 def test_high_precision_account_uses_exact_scalar_fallback(tmp_path, monkeypatch):

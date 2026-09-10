@@ -15,7 +15,9 @@ import os
 from pathlib import Path
 import sqlite3
 import threading
+import time
 from uuid import uuid4
+import weakref
 import zlib
 
 VERSION = "shared-market.v1"
@@ -36,6 +38,119 @@ FIELDS = (
 )
 _readers = OrderedDict()
 _lock = threading.RLock()
+_thread_state = threading.local()
+_MAX_INDEX_CONNECTIONS = 128
+_index_state = {}
+_index_state_lock = threading.Lock()
+
+
+class _PathState:
+    __slots__ = ("generation", "lock", "connections")
+
+    def __init__(self):
+        self.generation = 0
+        self.lock = threading.RLock()
+        self.connections = weakref.WeakSet()
+
+
+class _IndexConnection:
+    __slots__ = ("connection", "generation", "uses", "lock", "retired", "__weakref__")
+
+    def __init__(self, connection, generation):
+        self.connection = connection
+        self.generation = generation
+        self.uses = 0
+        self.lock = threading.Lock()
+        self.retired = False
+
+    def checkout(self, generation):
+        with self.lock:
+            if self.retired or self.generation != generation or self.connection is None:
+                return None
+            try:
+                self.connection.total_changes
+            except sqlite3.ProgrammingError:
+                self.retired = True
+                return None
+            self.uses += 1
+            return self.connection
+
+    def checkin(self):
+        with self.lock:
+            self.uses -= 1
+            if self.retired and self.uses <= 0:
+                self._close_unlocked()
+
+    def retire(self):
+        with self.lock:
+            self.retired = True
+            if self.uses <= 0:
+                self._close_unlocked()
+                return True
+            return False
+
+    def _close_unlocked(self):
+        connection = self.connection
+        self.connection = None
+        if connection is None:
+            return
+        try:
+            connection.close()
+        except sqlite3.Error:
+            pass
+
+    def __del__(self):
+        try:
+            self.retire()
+        except Exception:
+            pass
+
+
+def _path_state(path):
+    key = str(path)
+    with _index_state_lock:
+        state = _index_state.get(key)
+        if state is None:
+            state = _PathState()
+            _index_state[key] = state
+        return state
+
+
+def _thread_index_connections():
+    cache = getattr(_thread_state, "connections", None)
+    if cache is None:
+        cache = OrderedDict()
+        _thread_state.connections = cache
+    return cache
+
+
+def _close_index_connections(path):
+    key = str(path)
+    state = _path_state(key)
+    with state.lock:
+        state.generation += 1
+        wrappers = list(state.connections)
+        state.connections = weakref.WeakSet()
+        cache = getattr(_thread_state, "connections", None)
+        if cache is not None:
+            cache.pop(key, None)
+        for wrapper in wrappers:
+            wrapper.retire()
+
+
+def _replace_index(temporary, target):
+    state = _path_state(target)
+    with state.lock:
+        _close_index_connections(target)
+        deadline = time.monotonic() + 1.0
+        while True:
+            try:
+                os.replace(temporary, target)
+                return
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.01)
 
 
 def pack(value):
@@ -242,7 +357,7 @@ def build(source_path, object_hash, interval, identity, raw_rows, *, stop=None):
             connection.commit()
         if stop is not None and stop.is_set():
             return None
-        os.replace(temporary, target)
+        _replace_index(temporary, target)
         with _lock:
             _readers.pop(str(target), None)
         return target
@@ -263,6 +378,7 @@ class MarketObject:
             or m["source_size"] != stat.st_size
             or m["source_mtime"] != stat.st_mtime_ns
         ):
+            self._reset_connection()
             raise ValueError("shared market index does not match its frozen source")
         self.object_hash = object_hash
         self.base_ms = m["base_ms"]
@@ -273,15 +389,66 @@ class MarketObject:
         self._nodes = {}
         self._lock = threading.RLock()
 
+    def _connection(self):
+        key = str(self.path)
+        cache = _thread_index_connections()
+        state = _path_state(key)
+        wrapper = cache.get(key)
+        if wrapper is not None:
+            connection = wrapper.checkout(state.generation)
+            if connection is not None:
+                cache.move_to_end(key)
+                return wrapper, connection
+            cache.pop(key, None)
+            wrapper.retire()
+        with state.lock:
+            wrapper = cache.get(key)
+            if wrapper is not None:
+                connection = wrapper.checkout(state.generation)
+                if connection is not None:
+                    cache.move_to_end(key)
+                    return wrapper, connection
+                cache.pop(key, None)
+                wrapper.retire()
+            # Idle handles must be closable from the rebuild thread before Windows replace.
+            connection = sqlite3.connect(
+                self.path.as_uri() + "?mode=ro",
+                uri=True,
+                check_same_thread=False,
+            )
+            wrapper = _IndexConnection(connection, state.generation)
+            cache.pop(key, None)
+            cache[key] = wrapper
+            state.connections.add(wrapper)
+            while len(cache) > _MAX_INDEX_CONNECTIONS:
+                _, old = cache.popitem(last=False)
+                old.retire()
+            checked = wrapper.checkout(state.generation)
+            if checked is None:
+                cache.pop(key, None)
+                wrapper.retire()
+                raise sqlite3.ProgrammingError("shared market index connection closed")
+            return wrapper, checked
+
+    def _reset_connection(self):
+        key = str(self.path)
+        cache = _thread_index_connections()
+        wrapper = cache.pop(key, None)
+        if wrapper is not None:
+            wrapper.retire()
+
     def _fetch(self, table, key):
-        with closing(sqlite3.connect(self.path.as_uri() + "?mode=ro", uri=True)) as c:
-            row = c.execute(
+        wrapper, connection = self._connection()
+        try:
+            row = connection.execute(
                 "SELECT value FROM " + table + ("" if key is None else " WHERE id=?"),
                 () if key is None else (key,),
             ).fetchone()
-            if row is None:
-                raise ValueError("shared market index entry is missing")
-            return row[0]
+        finally:
+            wrapper.checkin()
+        if row is None:
+            raise ValueError("shared market index entry is missing")
+        return row[0]
 
     def block(self, number):
         with self._lock:
@@ -317,6 +484,7 @@ class MarketObject:
         try:
             return unpack(self._fetch(table, key))
         except (sqlite3.DatabaseError, OSError, ValueError, zlib.error):
+            self._reset_connection()
             repair_object(self.source_path, self.object_hash)
             self._blocks.clear()
             self._nodes.clear()
