@@ -4183,7 +4183,7 @@ class TrainingRunService:
             data_epoch=data_epoch,
             expected_history_epoch=history_epoch,
             display_interval=display_interval,
-            repository=self.replay_service.history_repository,
+            repository=self.replay_service.prepared_history_repository(normalized_session, data_epoch),
         )
 
     async def display_projection(
@@ -4231,7 +4231,7 @@ class TrainingRunService:
             limit=limit,
             data_epoch=data_epoch,
             display_interval=display_interval,
-            repository=self.replay_service.history_repository,
+            repository=self.replay_service.prepared_history_repository(normalized_session, data_epoch),
         )
 
     async def command(
@@ -8686,11 +8686,17 @@ class TrainingRunService:
                 )
 
             if allow_final_state_batch and source_goal is None and not pending_global_events:
-                recorded = await self._try_recorded_interval(
+                recorded = await self._try_indexed_interval(
                     command=command, binding=binding, tracks=tracks,
                     snapshot=snapshots[0][1], target=target_virtual_time_ms,
                     runtime_snapshot=hedge_runtime_snapshot,
                 )
+                if recorded is None:
+                    recorded = await self._try_recorded_interval(
+                        command=command, binding=binding, tracks=tracks,
+                        snapshot=snapshots[0][1], target=target_virtual_time_ms,
+                        runtime_snapshot=hedge_runtime_snapshot,
+                    )
                 if recorded is not None:
                     recorded_events, recorded_time = recorded
                     all_events.extend(recorded_events)
@@ -9566,6 +9572,262 @@ class TrainingRunService:
             FINAL_STATE_EMPTY_ACCOUNT_CHUNK_EVENTS,
         )
         return max(1, limit), require_empty_account
+
+    async def prepare_indexed_run(self, run_id):
+        run_id = self._identifier(run_id, field_name="run_id")
+        binding = await self.store.run_binding(run_id)
+        tracks = tuple(await self.store.get_market_track_heads(run_id))
+        result = {
+            "protocol": REPLAY_V2_PROTOCOL,
+            "run_id": run_id,
+            "status": "SKIPPED",
+            "prepared_events": 0,
+        }
+        if (
+            binding.get("source_kind") != "BAR"
+            or binding.get("position_mode") != "HEDGE"
+            or len(tracks) != 1
+            or binding.get("book_mode", "OFF") != "OFF"
+            or binding.get("account_data_mode")
+            == AccountDataMode.HISTORICAL_EXACT.value
+        ):
+            return result
+        session_id = self._track_session_id(tracks[0])
+        snapshot = self._snapshot(await self.replay_service.get_session(session_id))
+        if snapshot.get("state") != "PAUSED":
+            return result
+        prepared = await self.replay_service.plan_source_chunk(
+            session_id,
+            target_time_ms=self._cursor_time(snapshot),
+            max_events=100_000,
+            indexed=True,
+        )
+        if not prepared:
+            return result
+        await self.store.prepare_indexed_curve(run_id, prepared["index"])
+        inputs = await self.hedge_inputs.runtime_snapshot(run_id)
+        if isinstance(inputs, IndexedHedgeSnapshot):
+            for lane in inputs.lanes:
+                _ = lane.price_index, lane.barrier_indices
+        return {**result, "status": "READY", "prepared_events": prepared["prepared_events"]}
+
+    async def _try_indexed_interval(
+        self, *, command, binding, tracks, snapshot, target, runtime_snapshot
+    ):
+        from bisect import bisect_left, bisect_right
+
+        if (
+            len(tracks) != 1
+            or binding.get("source_kind") != "BAR"
+            or binding.get("position_mode") != "HEDGE"
+            or binding.get("book_mode", "OFF") != "OFF"
+            or binding.get("account_data_mode")
+            == AccountDataMode.HISTORICAL_EXACT.value
+            or binding.get("funding_mode") not in {"OFF", "HISTORICAL_EXACT"}
+            or snapshot.get("state") != "PAUSED"
+            or not isinstance(runtime_snapshot, IndexedHedgeSnapshot)
+            or str(tracks[0]["track_id"]) != "track-1"
+        ):
+            return None
+        base_ms = parse_interval_ms(str(binding["base_interval"]))
+        if base_ms is None or target - self._cursor_time(snapshot) < 64 * base_ms:
+            return None
+        if (
+            self._ordered_final_state_batch_profile(
+                binding=binding,
+                tracks=tracks,
+                snapshot=snapshot,
+                target_virtual_time_ms=target,
+                enabled=True,
+                held_certificate=not self._snapshot_is_flat(snapshot),
+            )
+            is None
+        ):
+            return None
+        public, simulation = await self.hedge_inputs._projection_cursors(command.run_id)
+        actual_target = self._actual_event_time_ms(binding, target)
+        lane = None
+        for current in runtime_snapshot.lanes:
+            start = bisect_right(current.sequences, current.cursor(public, simulation))
+            if current.source_kind != "PUBLIC" or current.track_id != "track-1":
+                barrier = start
+            else:
+                lane = current
+                at = bisect_left(current.barrier_indices, start)
+                barrier = (
+                    current.barrier_indices[at]
+                    if at < len(current.barrier_indices)
+                    else len(current.events)
+                )
+            if barrier < len(current.events):
+                actual_target = min(actual_target, current.times[barrier] - 1)
+        if lane is None:
+            return None
+        target = min(target, self._virtual_event_time_ms(binding, actual_target))
+        if target - self._cursor_time(snapshot) < 64 * base_ms:
+            return None
+        session_id = self._track_session_id(tracks[0])
+        source = await self.replay_service.plan_source_chunk(
+            session_id, target_time_ms=target, max_events=100_000, indexed=True
+        )
+        if not source or source["end"] - source["start"] < 64:
+            return None
+        index, start, end = source["index"], source["start"], source["end"]
+        end_time = index.times[end - 1]
+        a = bisect_right(lane.sequences, public.get("track-1", 0))
+        b = bisect_right(lane.times, self._actual_event_time_ms(binding, end_time))
+        first, last = (lane.events[a], lane.events[b - 1]) if b > a else (None, None)
+        mark = Decimal(str(snapshot["components"]["position"]["long"]["mark_price"]))
+        bounds = lane.price_index.range_bounds(start=a, end=b) if b > a else None
+        if bounds is not None and not self._snapshot_is_flat(snapshot):
+            long = (
+                Decimal(str(snapshot["components"]["position"]["long"]["quantity"]))
+                != 0
+            )
+            worst = bounds[0] if long else bounds[1]
+            if await self.store.indexed_review_minimum(command.run_id, worst):
+                worst_at = lane.price_index.first_touch(
+                    worst, below=long, start=a, end=b
+                )
+                worst_end = (
+                    bisect_left(
+                        index.times,
+                        self._virtual_event_time_ms(binding, lane.times[worst_at]),
+                    )
+                    + 1
+                )
+                if start < worst_end < end and (
+                    worst_at + 1 == len(lane.times)
+                    or lane.times[worst_at + 1]
+                    > self._actual_event_time_ms(binding, index.times[worst_end - 1])
+                ):
+                    if worst_end - start < 64:
+                        return None
+                    end = worst_end
+                    end_time = index.times[end - 1]
+                    b = bisect_right(
+                        lane.times, self._actual_event_time_ms(binding, end_time)
+                    )
+                    first, last = lane.events[a], lane.events[b - 1]
+                    bounds = lane.price_index.range_bounds(start=a, end=b)
+        low, high = (
+            (mark, mark)
+            if bounds is None
+            else (min(mark, bounds[0]), max(mark, bounds[1]))
+        )
+        fingerprint = await self.store.recorded_interval_certificate(
+            command.run_id,
+            low=low,
+            high=high,
+            target_actual_time_ms=self._actual_event_time_ms(binding, end_time),
+            allow_empty=True,
+        )
+        if fingerprint is None and self._snapshot_is_flat(snapshot):
+            await self.store.finalize_hedge_inputs(
+                command.run_id, risk_virtual_time_ms=self._cursor_time(snapshot)
+            )
+            fingerprint = await self.store.recorded_interval_certificate(
+                command.run_id,
+                low=low,
+                high=high,
+                target_actual_time_ms=self._actual_event_time_ms(binding, end_time),
+                allow_empty=True,
+            )
+        if fingerprint is None:
+            baseline = await self.store.recorded_interval_certificate(
+                command.run_id, low=mark, high=mark, allow_empty=True
+            )
+            if baseline is None:
+                return None
+            left, right = start, end
+            while left + 1 < right:
+                middle = (left + right) // 2
+                mark_end = bisect_right(
+                    lane.times,
+                    self._actual_event_time_ms(binding, index.times[middle - 1]),
+                )
+                bounds = (
+                    lane.price_index.range_bounds(start=a, end=mark_end)
+                    if mark_end > a
+                    else None
+                )
+                lower, upper = (
+                    (mark, mark)
+                    if bounds is None
+                    else (min(mark, bounds[0]), max(mark, bounds[1]))
+                )
+                certificate = await self.store.recorded_interval_certificate(
+                    command.run_id,
+                    low=lower,
+                    high=upper,
+                    target_actual_time_ms=self._actual_event_time_ms(
+                        binding, index.times[middle - 1]
+                    ),
+                    allow_empty=True,
+                )
+                if certificate is None:
+                    right = middle
+                else:
+                    left = middle
+            end = left
+            if end - start < 64:
+                return None
+            fingerprint = baseline
+            end_time = index.times[end - 1]
+            b = bisect_right(lane.times, self._actual_event_time_ms(binding, end_time))
+            first, last = (
+                (lane.events[a], lane.events[b - 1]) if b > a else (None, None)
+            )
+        curve_id = await self.store.prepare_indexed_curve(command.run_id, index)
+        try:
+            await self.replay_service.heartbeat(session_id, command.client_instance_id)
+        except ReplayDomainError as exc:
+            if exc.code is ReplayErrorCode.CONTROLLER_CONFLICT:
+                return None
+            raise
+        part_id = self._multi_command_id(
+            command.command_id, "track-1", "indexed", int(snapshot["revision"])
+        )
+        plan = {
+            "command_id": part_id,
+            "run_id": command.run_id,
+            "track_id": "track-1",
+            "fingerprint": fingerprint,
+            "first_mark": first,
+            "last_mark": last,
+            "actual_delta": self._actual_event_time_ms(binding, end_time) - end_time,
+            "curve_id": curve_id,
+            "start": start,
+            "end": end,
+            "policy": binding["time_disclosure_policy"],
+        }
+        if session_id in self.store._recorded_interval_plans:
+            raise RuntimeError("indexed interval plan already active")
+        self.store._recorded_interval_plans[session_id] = plan
+        try:
+            await self.replay_service.command(
+                session_id,
+                ReplayCommand(
+                    protocol=REPLAY_PROTOCOL,
+                    command_id=part_id,
+                    client_instance_id=command.client_instance_id,
+                    expected_revision=int(snapshot["revision"]),
+                    type=InternalCommandType.INDEXED_INTERVAL,
+                    payload={
+                        "target_virtual_time_ms": end_time,
+                        "max_events": end - start,
+                        "require_empty_account": False,
+                        "snapshot_only": False,
+                    },
+                ),
+                _training_internal=True,
+            )
+            self.store._cache_committed_hedge_fingerprint(
+                command.run_id, plan["fingerprint_after"]
+            )
+            return plan["stable"], end_time
+        finally:
+            self.store._recorded_interval_plans.pop(session_id, None)
 
     async def _try_recorded_interval(
         self, *, command, binding, tracks, snapshot, target, runtime_snapshot

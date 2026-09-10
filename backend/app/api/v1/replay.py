@@ -1388,6 +1388,11 @@ async def get_replay_v2_run(request: Request, run_id: str) -> dict[str, object]:
     return await _training_service(request).get_run(run_id)
 
 
+@router.post("/runs/{run_id}/prepare-index", dependencies=[Depends(enforce_replay_request_limit)])
+async def prepare_replay_v2_index(request: Request, run_id: str) -> dict[str, object]:
+    return await _training_service(request).prepare_indexed_run(run_id)
+
+
 @router.delete(
     "/runs/{run_id}",
     dependencies=[Depends(_training_service), Depends(enforce_replay_request_limit)],

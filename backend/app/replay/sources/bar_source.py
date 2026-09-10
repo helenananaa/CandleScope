@@ -287,6 +287,9 @@ class PagedBarReplaySource:
     def fork(self) -> PagedBarReplaySource:
         return self._from_archive(self._archive, self._snapshot_ref, self._index)
 
+    def prefix_for_index(self, count: int):
+        return self._from_archive(self._archive, self._snapshot_ref, max(0, self._index-count))
+
     def fork_at_sequence(
         self,
         source_sequence: int,
@@ -388,6 +391,11 @@ class BarReplaySource:
         forked._warmup_rows = self._warmup_rows
         forked._rows = self._rows
         forked._index = self._index
+        return forked
+
+    def prefix_for_index(self, count: int):
+        forked = self.fork()
+        forked._index = max(0, self._index-count)
         return forked
 
     def fork_at_sequence(

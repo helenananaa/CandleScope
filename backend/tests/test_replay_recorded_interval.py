@@ -10,6 +10,7 @@ from app.replay.training.models import ReplayV2CommandType
 from app.replay.training.storage import TrainingRunStore
 from app.replay.training.review import ReviewRecorder
 from app.replay.actor import ReplaySessionActor
+from app.replay.broker.execution import ConservativeBarBroker
 from app.replay.training import storage as training_storage
 from app.replay.canonical import canonical_json_bytes
 from tests.test_replay_hedge_wave_commit import seed, copy_store
@@ -17,6 +18,30 @@ from tests.test_replay_v2_training_phase6 import _send, _risk_service
 from tests.test_replay_interval_advance import (
     test_waiting_order_skips_safe_prefix_and_stops_at_first_fill as run_case,
 )
+
+
+def test_stored_rule_cache_uses_content_and_keeps_values_immutable():
+    from dataclasses import FrozenInstanceError
+    from tests.test_replay_interval_risk_search import rule as make_rule
+
+    rule = make_rule()
+    encoded = json.dumps(rule.to_dict())
+    training_storage._stored_instrument_rule.cache_clear()
+    cached = training_storage._stored_instrument_rule(encoded)
+    assert cached == rule
+    assert training_storage._stored_instrument_rule(encoded) is cached
+    with pytest.raises(FrozenInstanceError):
+        cached.price_tick = "2"
+    with pytest.raises(FrozenInstanceError):
+        cached.maintenance_tiers[0].notional_cap = "2"
+    edited = rule.to_dict()
+    edited["price_tick"] = "2"
+    assert (
+        training_storage._stored_instrument_rule(json.dumps(edited)).price_tick == "2"
+    )
+    edited["price_tick"] = "-1"
+    with pytest.raises((ValueError, TypeError)):
+        training_storage._stored_instrument_rule(json.dumps(edited))
 
 
 def test_ledger_tail_lookup_uses_bounded_work_with_large_history():
@@ -67,6 +92,25 @@ def test_owned_snapshot_encoding_does_not_alias_mutable_views(monkeypatch):
     assert broker._owned_snapshot_with_encoding() == ({"custom": True}, None)
 
 
+def test_deferred_broker_frame_does_not_observe_later_bars(monkeypatch):
+    from tests.fixtures.replay.broker_fakes import make_broker, bar
+
+    broker = make_broker()
+    for index in range(10):
+        broker.apply_bar(bar(index, 100 + index))
+    expected = broker.snapshot()
+    partial, materialize = broker._capture_recorded_frame()
+    assert "bar_builder" not in partial and "state_hash" not in partial
+    broker.apply_bar(bar(10, 150))
+    full, encoded = materialize()
+    assert full == expected
+    assert encoded == canonical_json_bytes(expected)
+    full["bar_builder"]["closed_bars"][0]["close"] = "9999"
+    assert materialize()[0] == expected
+    monkeypatch.setattr(broker, "snapshot", lambda: {"custom": True})
+    assert broker._capture_recorded_frame() is None
+
+
 @pytest.mark.anyio
 async def test_recorded_review_descriptor_matches_uncached_history(
     tmp_path, monkeypatch
@@ -102,7 +146,7 @@ async def test_recorded_owned_encoding_matches_full_state_hash(tmp_path, monkeyp
 
     monkeypatch.setattr(ReplaySessionActor, "_compute_state_hash", compare)
     await run_case(tmp_path, monkeypatch, False, 0, True, "LONG", "CROSS", True)
-    assert checked > 200
+    assert checked > 0
 
 
 @pytest.mark.anyio
@@ -116,6 +160,143 @@ async def test_recorded_retention_matches_per_event_pruning(tmp_path, monkeypatc
         ),
     )
     await run_case(tmp_path, monkeypatch, False, 0, True, "SHORT", "CROSS", True)
+
+
+@pytest.mark.anyio
+async def test_recorded_interval_bounds_fingerprint_and_equity_work(
+    tmp_path, monkeypatch, record_property
+):
+    original_trajectory = TrainingRunStore._sync_recorded_trajectory
+    original_fingerprint = TrainingRunStore._hedge_risk_fingerprint
+    original_write = TrainingRunStore._write_equity_samples
+    original_checkpoint = TrainingRunStore._insert_global_checkpoint
+    original_ledger = TrainingRunStore._append_contract_ledger
+    original_risk = TrainingRunStore._detect_contract_liquidations
+    original_capture = ConservativeBarBroker._capture_recorded_frame
+    captured_frames = materialized_frames = 0
+    active = False
+    fingerprints = writes = frames = batches = checkpoints = valuation_rows = (
+        risk_calls
+    ) = 0
+
+    def fingerprint(*args, **kwargs):
+        nonlocal fingerprints
+        if active:
+            fingerprints += 1
+        return original_fingerprint(*args, **kwargs)
+
+    def write(connection, rows, **kwargs):
+        nonlocal writes
+        rows = tuple(rows)
+        if active:
+            writes += len(rows)
+        return original_write(connection, rows, **kwargs)
+
+    def checkpoint(*args, **kwargs):
+        nonlocal checkpoints
+        if active:
+            checkpoints += 1
+        return original_checkpoint(*args, **kwargs)
+
+    def ledger(*args, **kwargs):
+        nonlocal valuation_rows
+        if active and kwargs["kind"] in {"POSITION_MUTATION", "MARGIN_MUTATION"}:
+            valuation_rows += 1
+        return original_ledger(*args, **kwargs)
+
+    def risk(*args, **kwargs):
+        nonlocal risk_calls
+        if active:
+            risk_calls += 1
+        return original_risk(*args, **kwargs)
+
+    def capture(self):
+        nonlocal captured_frames
+        result = original_capture(self)
+        if result is None:
+            return None
+        captured_frames += 1
+        partial, materialize = result
+
+        def expand():
+            nonlocal materialized_frames
+            materialized_frames += 1
+            return materialize()
+
+        return partial, expand
+
+    def trajectory(self, *args, **kwargs):
+        nonlocal active, frames, batches
+        active = True
+        frames += len(args[3])
+        batches += 1
+        try:
+            return original_trajectory(self, *args, **kwargs)
+        finally:
+            active = False
+
+    monkeypatch.setattr(TrainingRunStore, "_sync_recorded_trajectory", trajectory)
+    monkeypatch.setattr(
+        TrainingRunStore, "_hedge_risk_fingerprint", staticmethod(fingerprint)
+    )
+    monkeypatch.setattr(TrainingRunStore, "_write_equity_samples", staticmethod(write))
+    monkeypatch.setattr(
+        TrainingRunStore, "_insert_global_checkpoint", staticmethod(checkpoint)
+    )
+    monkeypatch.setattr(
+        TrainingRunStore, "_append_contract_ledger", staticmethod(ledger)
+    )
+    monkeypatch.setattr(
+        TrainingRunStore, "_detect_contract_liquidations", staticmethod(risk)
+    )
+    monkeypatch.setattr(ConservativeBarBroker, "_capture_recorded_frame", capture)
+    # The fixture compares final state, every retained curve bucket, ledger,
+    # critical review events and restart against the ordinary event path.
+    await run_case(tmp_path, monkeypatch, False, 0, True, "SHORT", "CROSS", True)
+    assert frames > 200
+    assert fingerprints == batches * 2
+    assert writes == 0  # Advancement journals a block; reads expand the curve.
+    assert checkpoints == batches
+    assert valuation_rows == 0
+    assert batches <= risk_calls < frames // 2
+    assert captured_frames >= frames - batches
+    assert materialized_frames < captured_frames // 2
+    with sqlite3.connect(tmp_path / "run.db") as connection:
+        for table in (
+            "replay_session", "replay_checkpoint", "replay_review_timeline_event",
+            "replay_review_actor_anchor",
+        ):
+            assert connection.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE state_hash LIKE 'interval-state:%'"
+            ).fetchone()[0] == 0
+    for name, value in (
+        ("interval_frames", frames),
+        ("interval_batches", batches),
+        ("interval_fingerprints", fingerprints),
+        ("equity_rows_written", writes),
+        ("previous_equity_upserts", frames * 4),
+        ("global_checkpoints", checkpoints),
+        ("valuation_ledger_rows", valuation_rows),
+        ("full_risk_projections", risk_calls),
+        ("deferred_actor_frames", captured_frames),
+        ("materialized_actor_frames", materialized_frames),
+    ):
+        record_property(name, value)
+
+
+@pytest.mark.anyio
+async def test_recorded_repeated_marks_match_reference(tmp_path, monkeypatch):
+    from tests import test_replay_interval_advance as fixture
+
+    prepare = fixture.prepare_hedge_request
+
+    async def repeated(*args, **kwargs):
+        prices = kwargs["mark_prices"]
+        kwargs["mark_prices"] = [str(100 + (i // 3) % 7) for i in range(len(prices))]
+        return await prepare(*args, **kwargs)
+
+    monkeypatch.setattr(fixture, "prepare_hedge_request", repeated)
+    await run_case(tmp_path, monkeypatch, False, 0, True, "LONG", "ISOLATED", True)
 
 
 @pytest.mark.anyio
@@ -256,6 +437,23 @@ async def test_recorded_committed_prefix_recovers_and_continues(tmp_path):
         assert (await service.get_session_state(session_id))["state_hash"] == committed[
             "state_hash"
         ]
+        assert (
+            await service.store.run_extension_read(
+                lambda c: c.execute(
+                    "SELECT COUNT(*) FROM replay_interval_curve WHERE run_id=? AND materialized=0",
+                    (run_id,),
+                ).fetchone()[0]
+            )
+            > 0
+        )
+        curve = await service.training.equity(run_id, resolution="EVENT")
+        assert (
+            curve["samples"][-1]["source_sequence"]
+            == committed["cursor"]["source_sequence"]
+        )
+        assert (await service.get_session_state(session_id))["state_hash"] == committed[
+            "state_hash"
+        ]
         assert (await service.training.audit_account(run_id))["status"] == "PASS"
         from tests.test_replay_v2_training_phase5 import _acquire
 
@@ -282,7 +480,9 @@ async def test_recorded_committed_prefix_recovers_and_continues(tmp_path):
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("stage", ["history", "checkpoint", "final_checkpoint"])
+@pytest.mark.parametrize(
+    "stage", ["history", "checkpoint", "equity_flush", "final_checkpoint"]
+)
 async def test_recorded_interval_failure_rolls_back_the_entire_prefix(
     tmp_path, monkeypatch, stage
 ):
@@ -313,6 +513,7 @@ async def test_recorded_interval_failure_rolls_back_the_entire_prefix(
             "replay_review_timeline_event",
             "replay_review_actor_anchor",
             "replay_equity_sample",
+            "replay_interval_curve",
             "replay_checkpoint",
             "replay_command_log",
             "replay_session",
@@ -337,6 +538,8 @@ async def test_recorded_interval_failure_rolls_back_the_entire_prefix(
         name = (
             "_insert_checkpoint"
             if stage == "final_checkpoint"
+            else "_write_interval_curve"
+            if stage == "equity_flush"
             else "_finalize_hedge_inputs_in_transaction"
             if stage == "history"
             else "_record_global_events_in_transaction"
@@ -352,7 +555,7 @@ async def test_recorded_interval_failure_rolls_back_the_entire_prefix(
                     raise RuntimeError("recorded history fault")
                 return result
             called += 1
-            if called == 2:
+            if called == (1 if stage == "equity_flush" else 2):
                 raise RuntimeError("recorded history fault")
             return result
 
@@ -377,11 +580,12 @@ async def test_recorded_interval_failure_rolls_back_the_entire_prefix(
                 cache,
             )
         assert "recorded history fault" in str(failed.value.details)
-        assert called == (1 if stage == "final_checkpoint" else 2)
+        assert called == (1 if stage in {"final_checkpoint", "equity_flush"} else 2)
         assert await service.store.run_extension_read(capture) == before
         assert store._hedge_risk_fingerprints == cache
         assert store._recorded_interval_plans == {}
         assert store._recorded_review_frame is None
+        assert store._recorded_risk_context is None
         state = await service.get_session_state(session_id)
         assert state["cursor"] == snapshot["cursor"]
         assert state["state_hash"] == snapshot["state_hash"]

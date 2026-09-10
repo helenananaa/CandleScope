@@ -647,6 +647,12 @@ async def test_empty_hedge_display_step_batches_marks_without_losing_audit_event
         now_ms=1_710_000_000_000 + 700 * 60_000,
         event_buffer_size=512,
     )
+    # Exercise the legacy fallback's batching contract. Indexed advancement has
+    # its own financial/reference, barrier, recovery and work-bound tests.
+    async def no_index(**kwargs):
+        return None
+
+    monkeypatch.setattr(service.training, "_try_indexed_interval", no_index)
     try:
         catalog = await service.catalog(
             warmup_bars=2,

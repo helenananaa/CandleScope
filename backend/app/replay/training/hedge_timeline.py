@@ -33,6 +33,11 @@ class InputLane:
     mark_run_ends: tuple[int, ...]
 
     @cached_property
+    def barrier_indices(self):
+        return tuple(i for i, event in enumerate(self.events)
+                     if self.source_kind != "PUBLIC" or event.event_kind != "MARK_INDEX" or event.event_phase != 30)
+
+    @cached_property
     def price_index(self) -> PriceRangeIndex:
         # A non-price event is an unconditional boundary. Build lazily so the
         # constant-mark lane does not pay for an unused general envelope tree.

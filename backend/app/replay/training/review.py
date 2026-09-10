@@ -1879,6 +1879,14 @@ class ReviewRecorder:
                 # This candidate would be discarded below. Avoid constructing
                 # and hashing a complete account/ledger frame just to discard it.
                 return ()
+        materialize_risk = getattr(self.owner, "_materialize_recorded_risk", None)
+        if callable(materialize_risk):
+            materialize_risk(connection, run_id=run_id)
+        materialize_actor = getattr(self.owner, "_materialize_recorded_actor_frame", None)
+        if callable(materialize_actor):
+            materialized_hash = materialize_actor(connection, run_id=run_id)
+            if materialized_hash is not None:
+                state_hash = materialized_hash
         projection = self.projection(
             connection,
             run_id=run_id,

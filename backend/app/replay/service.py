@@ -1489,6 +1489,7 @@ class ReplayService:
         max_events: int,
         screen_interactions: bool = False,
         preserve_valuation: bool = False,
+        indexed: bool = False,
     ) -> dict[str, object]:
         """Return one bounded, read-only source scan plan for training replay."""
 
@@ -1498,7 +1499,16 @@ class ReplayService:
                 max_events=max_events,
                 screen_interactions=screen_interactions,
                 preserve_valuation=preserve_valuation,
+                indexed=indexed,
             )
+
+    def prepared_history_repository(self, session_id: str, data_epoch: str):
+        from .broker.prepared_display import PreparedDisplayRepository
+        handle = self._sessions.get(session_id)
+        index = None if handle is None else getattr(handle.actor, "_prepared_bar_interval", None)
+        if index is None or index.display.revision is None or handle.actor._data_epoch != data_epoch:
+            return self.history_repository
+        return PreparedDisplayRepository(self.history_repository, index.display)
 
     async def scan_source_goal(
         self,
@@ -1882,6 +1892,7 @@ class ReplayService:
                 InternalCommandType.FAST_FORWARD_EMPTY_ACCOUNT,
                 InternalCommandType.FAST_FORWARD_FINAL_STATE,
                 InternalCommandType.RECORDED_INTERVAL,
+                InternalCommandType.INDEXED_INTERVAL,
                 InternalCommandType.STEP_DEFER_TERMINAL,
                 InternalCommandType.FINALIZE_DEFERRED_TERMINAL,
             }

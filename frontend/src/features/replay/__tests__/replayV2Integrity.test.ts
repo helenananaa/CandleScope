@@ -337,7 +337,8 @@ test("equity parser and polyline remain bounded and Decimal-backed", () => {
         cash_balance: "10000",
         unrealized_pnl: "125.5",
         ledger_tail_hash: `sha256:${"f".repeat(64)}`,
-        state_hash: `sha256:${"1".repeat(64)}`,
+        state_hash: null,
+        source_event_hash: `sha256:${"1".repeat(64)}`,
       },
     ],
   });
@@ -345,6 +346,14 @@ test("equity parser and polyline remain bounded and Decimal-backed", () => {
   const points = buildEquityPolyline(response.samples, 320, 96);
   assert.match(points, /^0,96 /);
   assert.match(points, /320,0$/);
+  assert.equal(response.samples[1]?.state_hash, null);
+  assert.equal(response.samples[1]?.source_event_hash, `sha256:${"1".repeat(64)}`);
+  const missingReference = { ...response.samples[1] };
+  delete missingReference.source_event_hash;
+  assert.throws(
+    () => parseReplayEquityResponse({ ...response, samples: [missingReference] }),
+    /requires a source reference/,
+  );
 });
 
 

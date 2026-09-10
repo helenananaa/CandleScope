@@ -14,6 +14,20 @@ import type {
   ReplayV2Command,
 } from "../replayV2Types.js";
 
+test("opening a run prepares its index without issuing an advance command", async () => {
+  const requests: Array<{ path: string; method: string | undefined }> = [];
+  const client = new ReplayV2ApiClient({
+    fetcher: (async (path, init) => {
+      requests.push({ path: String(path), method: init?.method });
+      return new Response(JSON.stringify({ protocol: "replay.v3", run_id: "run-1", status: "READY", prepared_events: 10080 }));
+    }) as typeof fetch,
+  });
+  await client.prepareIndex("run-1");
+  assert.equal(requests.length, 1);
+  assert.match(requests[0]!.path, /\/runs\/run-1\/prepare-index$/);
+  assert.equal(requests[0]!.method, "POST");
+});
+
 
 function viewerState() {
   return {

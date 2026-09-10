@@ -8,6 +8,7 @@ import sqlite3
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, getcontext, localcontext
+from functools import lru_cache
 from typing import cast
 
 from app.replay.canonical import canonical_json, canonical_sha256
@@ -154,6 +155,13 @@ _EQUITY_RESOLUTIONS: tuple[tuple[str, int, int], ...] = (
     ("15M", 900_000, 2_048),
     ("1H", 3_600_000, 2_048),
 )
+
+
+@lru_cache(maxsize=128)
+def _stored_instrument_rule(rule_json: str) -> InstrumentRule:
+    # Rules and their tier objects are frozen. Cache by the complete stored
+    # value, so any revision or edit is parsed and validated independently.
+    return InstrumentRule.from_mapping(json.loads(rule_json))
 
 
 def _direct_liquidation_tick(
@@ -1819,7 +1827,7 @@ class TrainingRunStore:
         ).fetchone()
         if rule_row is None:
             raise TypeError("exact account instrument rule is missing")
-        rule = InstrumentRule.from_mapping(json.loads(str(rule_row["rule_json"])))
+        rule = _stored_instrument_rule(str(rule_row["rule_json"]))
         try:
             position = json.loads(str(track["position_json"]))
             account = json.loads(str(track["account_json"]))
@@ -2383,7 +2391,7 @@ class TrainingRunStore:
             ).fetchone()
             if rule_row is None:
                 raise TypeError("HEDGE pinned instrument rule is missing")
-            rule = InstrumentRule.from_mapping(json.loads(str(rule_row["rule_json"])))
+            rule = _stored_instrument_rule(str(rule_row["rule_json"]))
             total_unrealized = Decimal(0)
             total_initial = Decimal(0)
             for leg_name, side in (("long", "LONG"), ("short", "SHORT")):
@@ -3388,7 +3396,7 @@ class TrainingRunStore:
         ).fetchone()
         if rule_row is None:
             raise TypeError("HEDGE funding effective instrument rule is missing")
-        rule = InstrumentRule.from_mapping(json.loads(str(rule_row["rule_json"])))
+        rule = _stored_instrument_rule(str(rule_row["rule_json"]))
         mark = Decimal(str(event.payload["mark_price"]))
         rate = Decimal(str(event.payload["funding_rate"]))
         overlay_delta = Decimal(0)
@@ -5768,8 +5776,12 @@ class TrainingRunStore:
         return fingerprint, True
 
     def _finalize_hedge_inputs_in_transaction(
-        self, connection: sqlite3.Connection, *, run_id: str,
-        risk_virtual_time_ms: int | None, cached_fingerprint: str | None,
+        self,
+        connection: sqlite3.Connection,
+        *,
+        run_id: str,
+        risk_virtual_time_ms: int | None,
+        cached_fingerprint: str | None,
     ) -> str | None:
         run = connection.execute(
             """
@@ -5785,6 +5797,36 @@ class TrainingRunStore:
             run_id=run_id,
             now_ms=now_ms,
         )
+        interval = getattr(self, "_recorded_risk_context", None)
+        if (
+            interval is not None
+            and interval["connection"] is connection
+            and interval["run_id"] == run_id
+        ):
+            # The transaction checked the complete state on entry. Its only
+            # permitted input is MARK_INDEX; broker interactions are rejected
+            # before the market frame is synchronized. Update equity at each
+            # mark; detailed risk state is needed only at a checkpoint or a
+            # critical review event inside this proven interaction-free range.
+            marked = connection.execute(
+                "SELECT public_price, account_json FROM replay_training_market_track "
+                "WHERE run_id=? AND track_id=?",
+                (run_id, interval["track_id"]),
+            ).fetchone()
+            mark = marked["public_price"]
+            if mark != interval["mark"]:
+                equity = interval["base_equity"] + (
+                    Decimal(json.loads(marked["account_json"])["equity"])
+                    - interval["initial_equity"]
+                )
+                connection.execute(
+                    "UPDATE replay_training_run SET current_equity=?, updated_at_ms=? WHERE run_id=?",
+                    (decimal_to_string(equity, field_name="equity"), now_ms, run_id),
+                )
+                interval["dirty"] = True
+                interval["virtual_time_ms"] = risk_virtual_time_ms
+                interval["mark"] = mark
+            return cached_fingerprint
         fingerprint = self._hedge_risk_fingerprint(
             connection,
             run_id=run_id,
@@ -5814,6 +5856,31 @@ class TrainingRunStore:
         ):
             oldest_run_id = next(iter(self._hedge_risk_fingerprints))
             self._hedge_risk_fingerprints.pop(oldest_run_id, None)
+
+    def _materialize_recorded_risk(self, connection, *, run_id):
+        interval = getattr(self, "_recorded_risk_context", None)
+        if (
+            interval is None
+            or interval["connection"] is not connection
+            or interval["run_id"] != run_id
+            or not interval["dirty"]
+        ):
+            return
+        self._detect_contract_liquidations(
+            connection,
+            run_id=run_id,
+            now_ms=self.base_store._validated_now_ms(),
+            trigger_virtual_time_ms=interval["virtual_time_ms"],
+            refresh_current_equity=True,
+            record_valuation_history=False,
+        )
+        if connection.execute(
+            "SELECT 1 FROM replay_training_liquidation_case WHERE run_id=? "
+            "AND state NOT IN ('COMPLETED','BANKRUPT','FAILED_CLOSED','RECOVERED_AFTER_CANCEL') LIMIT 1",
+            (run_id,),
+        ).fetchone():
+            raise ValueError("recorded interval violated its risk envelope")
+        interval["dirty"] = False
 
     @staticmethod
     def _hedge_risk_fingerprint(
@@ -5926,7 +5993,7 @@ class TrainingRunStore:
         position = json.loads(str(track["position_json"]))
         if not isinstance(position, dict):
             raise TypeError("exact funding position is invalid")
-        rule = InstrumentRule.from_mapping(json.loads(str(rule_row["rule_json"])))
+        rule = _stored_instrument_rule(str(rule_row["rule_json"]))
         quantity = Decimal(str(position.get("quantity", "0")))
         mark = Decimal(str(event.payload["mark_price"]))
         rate = Decimal(str(event.payload["funding_rate"]))
@@ -8512,7 +8579,8 @@ class TrainingRunStore:
                 SELECT COUNT(*) FROM (
                     SELECT DISTINCT leg.case_id, leg.track_id
                     FROM replay_training_liquidation_leg AS leg
-                    WHERE leg.run_id = ?
+                    JOIN replay_training_run AS run USING(run_id)
+                    WHERE leg.run_id = ? AND run.book_mode = 'BOOK_ASSISTED_REQUIRED'
                 )
                 """,
                 (run_id,),
@@ -8582,7 +8650,9 @@ class TrainingRunStore:
                   ON order_row.run_id = step.run_id
                  AND order_row.case_id = step.case_id
                  AND order_row.step_sequence = step.step_sequence
+                JOIN replay_training_run AS run ON run.run_id = step.run_id
                 WHERE step.run_id = ?
+                  AND run.book_mode = 'BOOK_ASSISTED_REQUIRED'
                   AND step.step_type IN ('PARTIAL_LIQUIDATION', 'FULL_LIQUIDATION')
                 """,
                 (run_id,),
@@ -11074,6 +11144,7 @@ class TrainingRunStore:
             )
 
         def read(connection: sqlite3.Connection) -> dict[str, object] | None:
+            self._materialize_interval_curves(connection, run_id=run_id)
             run = connection.execute(
                 "SELECT run_id FROM replay_training_run WHERE run_id = ?",
                 (run_id,),
@@ -11111,7 +11182,20 @@ class TrainingRunStore:
                     "cash_balance": str(row["cash_balance"]),
                     "unrealized_pnl": str(row["unrealized_pnl"]),
                     "ledger_tail_hash": str(row["ledger_tail_hash"]),
-                    "state_hash": str(row["state_hash"]),
+                    "state_hash": (
+                        None
+                        if str(row["state_hash"]).startswith("interval-state:")
+                        else str(row["state_hash"])
+                    ),
+                    **(
+                        {
+                            "source_event_hash": str(row["state_hash"])[
+                                len("interval-state:") :
+                            ]
+                        }
+                        if str(row["state_hash"]).startswith("interval-state:")
+                        else {}
+                    ),
                 }
                 for row in reversed(rows)
             ]
@@ -11124,7 +11208,7 @@ class TrainingRunStore:
                 "limits": {item[0]: item[2] for item in _EQUITY_RESOLUTIONS},
             }
 
-        result = await self.base_store.run_extension_read(read)
+        result = await self.base_store.run_extension_write(read)
         if result is None:
             raise TrainingRunError(
                 "TRAINING_RUN_NOT_FOUND",
@@ -16222,8 +16306,13 @@ class TrainingRunStore:
         )
 
     def _record_global_events_in_transaction(
-        self, connection: sqlite3.Connection, *, run_id: str,
-        ordered: Sequence[StableMarketEvent], materialize_portfolio: bool,
+        self,
+        connection: sqlite3.Connection,
+        *,
+        run_id: str,
+        ordered: Sequence[StableMarketEvent],
+        materialize_portfolio: bool,
+        checkpoint_boundary: bool = True,
     ) -> dict[str, object]:
         tail_row = connection.execute(
             """
@@ -16261,9 +16350,7 @@ class TrainingRunStore:
                     min(current_range[0], event.source_sequence),
                     max(current_range[1], event.source_sequence),
                 )
-        existing_by_identity: dict[
-            tuple[str, int], Mapping[str, object]
-        ] = {}
+        existing_by_identity: dict[tuple[str, int], Mapping[str, object]] = {}
         if sequence_ranges:
             range_clauses: list[str] = []
             range_parameters: list[object] = [run_id]
@@ -16273,9 +16360,7 @@ class TrainingRunStore:
                 range_clauses.append(
                     "(track_id = ? AND source_sequence BETWEEN ? AND ?)"
                 )
-                range_parameters.extend(
-                    (track_id, first_sequence, last_sequence)
-                )
+                range_parameters.extend((track_id, first_sequence, last_sequence))
             existing_rows = connection.execute(
                 f"""
                 SELECT global_sequence, actual_event_time_ms, event_phase,
@@ -16355,11 +16440,17 @@ class TrainingRunStore:
             """,
             insert_rows,
         )
-        checkpoint = self._insert_global_checkpoint(
-            connection,
-            run_id=run_id,
-            now_ms=now_ms,
-            materialize_portfolio=materialize_portfolio,
+        if checkpoint_boundary:
+            self._materialize_recorded_risk(connection, run_id=run_id)
+        checkpoint = (
+            self._insert_global_checkpoint(
+                connection,
+                run_id=run_id,
+                now_ms=now_ms,
+                materialize_portfolio=materialize_portfolio,
+            )
+            if checkpoint_boundary
+            else None
         )
         selected = connection.execute(
             """
@@ -19994,6 +20085,11 @@ class TrainingRunStore:
                 """,
                 (parent_run_id, parent_track_id),
             ).fetchall()
+            connection.execute(
+                "INSERT INTO replay_hedge_mark_span SELECT ?, ?, first_sequence,last_sequence,first_previous_hash,last_event_hash,archive_id "
+                "FROM replay_hedge_mark_span WHERE run_id=? AND track_id=? AND last_sequence<=?",
+                (child_run_id, child_track_id, parent_run_id, parent_track_id, projection["last_event_sequence"]),
+            )
             for event_row in track_events:
                 payload = json.loads(str(event_row["payload_json"]))
                 event_hash = canonical_sha256(
@@ -22134,7 +22230,7 @@ class TrainingRunStore:
         ).fetchone()
         if rule_row is None:
             raise TypeError("versioned instrument rule is missing")
-        rule = InstrumentRule.from_mapping(json.loads(str(rule_row["rule_json"])))
+        rule = _stored_instrument_rule(str(rule_row["rule_json"]))
         rule_revision = int(rule_row["revision"])
         raw_orders = component_state.get("orders")
         previous_orders = (
@@ -22795,6 +22891,7 @@ class TrainingRunStore:
         now_ms: int,
         trigger_virtual_time_ms: int | None = None,
         refresh_current_equity: bool = False,
+        record_valuation_history: bool = True,
     ) -> None:
         account = connection.execute(
             """
@@ -22878,7 +22975,7 @@ class TrainingRunStore:
             ).fetchone()
             if rule_row is None:
                 raise TypeError("liquidation instrument rule is missing")
-            rule = InstrumentRule.from_mapping(json.loads(str(rule_row["rule_json"])))
+            rule = _stored_instrument_rule(str(rule_row["rule_json"]))
             for position_side, leg in legs:
                 maintenance = rule.maintenance_margin(
                     abs(Decimal(str(leg.get("notional", "0")))),
@@ -22922,7 +23019,7 @@ class TrainingRunStore:
         )
         ledger_append_state = (
             cls._contract_ledger_append_state(connection, run_id=run_id)
-            if str(account["position_mode"]) == "HEDGE"
+            if record_valuation_history and str(account["position_mode"]) == "HEDGE"
             else None
         )
         for (
@@ -23171,9 +23268,13 @@ class TrainingRunStore:
                     now_ms,
                 ),
             )
-            if raw_position_side is not None and (
-                prior_component is None
-                or str(prior_component["component_hash"]) != component_hash
+            if (
+                record_valuation_history
+                and raw_position_side is not None
+                and (
+                    prior_component is None
+                    or str(prior_component["component_hash"]) != component_hash
+                )
             ):
                 next_component_revision = (
                     1
@@ -23266,9 +23367,13 @@ class TrainingRunStore:
                     now_ms,
                 ),
             )
-            if raw_position_side is not None and (
-                prior_bucket is None
-                or str(prior_bucket["component_hash"]) != bucket_hash
+            if (
+                record_valuation_history
+                and raw_position_side is not None
+                and (
+                    prior_bucket is None
+                    or str(prior_bucket["component_hash"]) != bucket_hash
+                )
             ):
                 next_bucket_revision = (
                     1
@@ -23379,10 +23484,14 @@ class TrainingRunStore:
                         now_ms,
                     ),
                 )
-                if raw_position_side is not None and (
-                    prior_isolated_bucket is None
-                    or str(prior_isolated_bucket["component_hash"])
-                    != isolated_bucket_hash
+                if (
+                    record_valuation_history
+                    and raw_position_side is not None
+                    and (
+                        prior_isolated_bucket is None
+                        or str(prior_isolated_bucket["component_hash"])
+                        != isolated_bucket_hash
+                    )
                 ):
                     next_isolated_revision = (
                         1
@@ -23495,9 +23604,13 @@ class TrainingRunStore:
                     now_ms,
                 ),
             )
-            if str(account["position_mode"]) == "HEDGE" and (
-                prior_cross_bucket is None
-                or str(prior_cross_bucket["component_hash"]) != cross_bucket_hash
+            if (
+                record_valuation_history
+                and str(account["position_mode"]) == "HEDGE"
+                and (
+                    prior_cross_bucket is None
+                    or str(prior_cross_bucket["component_hash"]) != cross_bucket_hash
+                )
             ):
                 next_cross_revision = (
                     1
@@ -24512,6 +24625,7 @@ class TrainingRunStore:
         low: Decimal,
         high: Decimal,
         target_actual_time_ms: int | None = None,
+        allow_empty: bool = False,
     ):
         """Conservative single-leg, single-tier envelope; no history is skipped."""
         checked = self._hedge_risk_fingerprints.get(run_id)
@@ -24583,6 +24697,8 @@ class TrainingRunStore:
                 for name, leg in legs
                 if isinstance(leg, dict) and Decimal(leg["quantity"]) != 0
             ]
+            if position.get("position_mode") == "HEDGE" and not legs and allow_empty:
+                return checked
             if position.get("position_mode") != "HEDGE" or len(legs) != 1:
                 return None
             row = connection.execute(
@@ -24646,9 +24762,228 @@ class TrainingRunStore:
 
     def _sync_session_trajectory(self, *args):
         try:
+            if args[2].get("type") == InternalCommandType.INDEXED_INTERVAL.value:
+                return self._sync_indexed_trajectory(*args)
             return self._sync_recorded_trajectory(*args)
         finally:
             self._recorded_review_frame = None
+            self._recorded_risk_context = None
+
+    async def indexed_review_minimum(self, run_id, mark):
+        def read(connection):
+            prior = self._review._minimum_prior_equity(connection, run_id=run_id)
+            row = connection.execute(
+                "SELECT t.position_json,t.account_json,r.initial_equity,a.overlay_cash FROM replay_training_market_track t "
+                "JOIN replay_training_run r USING(run_id) JOIN replay_training_contract_account a USING(run_id) "
+                "WHERE t.run_id=? AND t.track_id='track-1'",
+                (run_id,),
+            ).fetchone()
+            position = json.loads(row["position_json"])
+            rule_row = connection.execute(
+                "SELECT rule_json FROM replay_training_instrument_rule WHERE run_id=? AND track_id='track-1' ORDER BY revision DESC LIMIT 1",
+                (run_id,),
+            ).fetchone()
+            rule = _stored_instrument_rule(rule_row["rule_json"])
+            pnl = Decimal(0)
+            for side in ("long", "short"):
+                leg = position[side]
+                quantity = abs(Decimal(leg["quantity"]))
+                if quantity:
+                    entry = Decimal(leg["entry_price"])
+                    pnl += (
+                        ((mark - entry) if side == "long" else (entry - mark))
+                        * quantity
+                        * Decimal(rule.contract_size)
+                    )
+            initial, overlay = (
+                Decimal(row["initial_equity"]),
+                Decimal(row["overlay_cash"]),
+            )
+            cash = Decimal(json.loads(row["account_json"])["cash_balance"])
+            equity = (initial + overlay) + (cash + pnl + overlay - initial)
+            return prior is None or equity < prior
+
+        return await self.base_store.run_extension_read(read)
+
+    async def prepare_indexed_curve(self, run_id, index):
+        value = index.valuation
+        curve_id = canonical_sha256(
+            {
+                "run": run_id,
+                "value": value["key"],
+                "source": index.chains[-1],
+                "start": index.start,
+            }
+        )
+
+        def write(connection):
+            if connection.execute(
+                "SELECT 1 FROM replay_prepared_curve WHERE curve_id=?", (curve_id,)
+            ).fetchone():
+                return curve_id
+            data = {
+                "schema": "prepared-curve.v1",
+                "start": index.start,
+                "times": index.times,
+                "chains": index.chains,
+                "samples": value["samples"],
+                "ledger_hash": value["ledger_hash"],
+            }
+            connection.execute(
+                "INSERT INTO replay_prepared_curve VALUES (?, ?, ?)",
+                (curve_id, run_id, canonical_json(data)),
+            )
+            return curve_id
+
+        return await self.base_store.run_extension_write(write)
+
+    def _sync_indexed_trajectory(
+        self,
+        connection,
+        session_id,
+        command,
+        frames,
+        final_state,
+        final_components,
+        previous_components,
+        now_ms,
+    ):
+        plan = self._recorded_interval_plans.get(session_id)
+        if plan is None or plan["command_id"] != command["command_id"]:
+            raise ValueError("indexed interval lacks its coordinator plan")
+        run_id = plan["run_id"]
+        if (
+            self._hedge_risk_fingerprint(connection, run_id=run_id)
+            != plan["fingerprint"]
+        ):
+            raise ValueError("indexed interval risk state changed")
+        for key in ("orders", "fills", "ledger", "closed_trades", "warnings"):
+            if final_components.get(key) != previous_components.get(key):
+                raise ValueError("indexed interval contained an interaction")
+        pending_samples = {}
+        self._sync_session_summary(
+            connection,
+            session_id,
+            final_state,
+            final_components,
+            previous_components,
+            now_ms,
+            recorded_history=True,
+            equity_samples=pending_samples,
+        )
+        indexed = frames[0]["indexed"]
+        low, high = indexed["index"].closes.range_bounds(
+            start=indexed["start"], end=indexed["end"]
+        )
+        self._sync_trade_results_projection(
+            connection,
+            run_id=run_id,
+            track_id=plan["track_id"],
+            component_state=final_components,
+            revealed_event_low=low,
+            revealed_event_high=high,
+            now_ms=now_ms,
+        )
+        first, last = plan["first_mark"], plan["last_mark"]
+        stable = []
+        if first is not None:
+            projection = connection.execute(
+                "SELECT last_event_sequence,input_chain_hash FROM replay_hedge_track_public_projection WHERE run_id=? AND track_id=?",
+                (run_id, plan["track_id"]),
+            ).fetchone()
+            if (
+                projection["last_event_sequence"] + 1 != first.event_sequence
+                or projection["input_chain_hash"] != first.previous_hash
+            ):
+                raise ValueError("indexed mark span no longer follows its cursor")
+            connection.execute(
+                "INSERT INTO replay_hedge_mark_span VALUES (?,?,?,?,?,?,?)",
+                (
+                    run_id,
+                    plan["track_id"],
+                    first.event_sequence,
+                    last.event_sequence,
+                    first.previous_hash,
+                    last.event_hash,
+                    first.source_id,
+                ),
+            )
+            # The archive-indexed span accounts for the intervening MARKs. The
+            # ordinary terminal-mark writer still owns the resulting projection.
+            connection.execute(
+                "UPDATE replay_hedge_track_public_projection SET last_event_sequence=?,input_chain_hash=? WHERE run_id=? AND track_id=?",
+                (last.event_sequence - 1, last.previous_hash, run_id, plan["track_id"]),
+            )
+            stable.extend(
+                self._apply_hedge_public_mark_batch(
+                    connection,
+                    run_id=run_id,
+                    events=(last,),
+                    virtual_times_ms=(last.event_time_ms - plan["actual_delta"],),
+                    track_id=plan["track_id"],
+                    now_ms=now_ms,
+                )
+            )
+        self._apply_hedge_mark_projection(connection, run_id=run_id, now_ms=now_ms)
+        self._detect_contract_liquidations(
+            connection,
+            run_id=run_id,
+            now_ms=now_ms,
+            trigger_virtual_time_ms=final_state["cursor"]["virtual_time_ms"],
+            refresh_current_equity=True,
+            record_valuation_history=False,
+        )
+        if connection.execute(
+            "SELECT 1 FROM replay_training_liquidation_case WHERE run_id=? AND state NOT IN ('COMPLETED','BANKRUPT','FAILED_CLOSED','RECOVERED_AFTER_CANCEL') LIMIT 1",
+            (run_id,),
+        ).fetchone():
+            raise ValueError("indexed interval violated its risk envelope")
+        stable.append(
+            StableMarketEvent(
+                actual_event_time_ms=final_state["cursor"]["virtual_time_ms"]
+                + plan["actual_delta"],
+                event_phase=20,
+                market_track_stable_id=plan["track_id"],
+                source_sequence=final_state["source_sequence"],
+            )
+        )
+        ordered = stable_market_event_order(stable)
+        mutation_id = connection.execute(
+            "SELECT mutation_id FROM replay_mutation_log WHERE session_id=? AND command_id=? AND kind='command' ORDER BY mutation_id DESC LIMIT 1",
+            (session_id, command["command_id"]),
+        ).fetchone()[0]
+        self._recorded_review_frame = {
+            "connection": connection,
+            "session_id": session_id,
+            "frame": frames[0],
+            "mutation_id": mutation_id,
+            "plan": plan,
+        }
+        self._record_global_events_in_transaction(
+            connection, run_id=run_id, ordered=ordered, materialize_portfolio=False
+        )
+        curve = {
+            "schema": "indexed-curve.v1",
+            "curve_id": plan["curve_id"],
+            "start": plan["start"],
+            "end": plan["end"],
+            "session_id": session_id,
+            "revision_base": final_state["revision"] - (plan["end"] - plan["start"]),
+            "policy": plan["policy"],
+            "revealed": final_state["revealed"],
+        }
+        curve["created_at_ms"] = now_ms
+        connection.execute(
+            "INSERT INTO replay_interval_curve(run_id,command_id,end_sequence,samples_json) VALUES(?,?,?,?)",
+            (
+                run_id,
+                command["command_id"],
+                final_state["source_sequence"],
+                canonical_json(curve),
+            ),
+        )
+        plan["stable"] = tuple(ordered)
+        plan["fingerprint_after"] = self._hedge_risk_fingerprint(connection, run_id=run_id)
 
     def _recorded_review_checkpoint(self, connection, session_id, now_ms):
         context = getattr(self, "_recorded_review_frame", None)
@@ -24659,8 +24994,34 @@ class TrainingRunStore:
         ):
             return None
         if "encoded" not in context:
+            self._materialize_recorded_actor_frame(
+                connection, run_id=context["plan"]["run_id"]
+            )
             frame = context["frame"]
-            encoded = CheckpointCodec().encode(frame["checkpoint_state"])
+            state = frame["state"]
+            cursor = frame["checkpoint_cursor"]
+            components = {
+                key: value
+                for key, value in frame["components"].items()
+                if key != "journal"
+            }
+            payload = {
+                **frame["checkpoint_base"],
+                "component_state": components,
+                "state_hash": state["state_hash"],
+                "virtual_time_ms": state["cursor"]["virtual_time_ms"],
+                "source_sequence": state["source_sequence"],
+                "revision": state["revision"],
+                "event_sequence": state["event_sequence"],
+                "event_chain_hash": frame["event_chain_hash"],
+                "source_cursor": {
+                    "source_sequence": cursor.source_sequence,
+                    "last_event_time_ms": cursor.last_event_time_ms,
+                    "last_base_bar_open_ms": cursor.last_base_bar_open_ms,
+                    "at_end": cursor.at_end,
+                },
+            }
+            encoded = CheckpointCodec().encode(payload)
             self.base_store._insert_checkpoint(
                 connection,
                 session_id=session_id,
@@ -24672,6 +25033,32 @@ class TrainingRunStore:
             )
             context["encoded"] = encoded
         return context["encoded"]
+
+    def _materialize_recorded_actor_frame(self, connection, *, run_id):
+        context = getattr(self, "_recorded_review_frame", None)
+        if (
+            context is None
+            or context["connection"] is not connection
+            or context["plan"]["run_id"] != run_id
+        ):
+            return None
+        frame = context["frame"]
+        materialize = frame.get("materialize_components")
+        if materialize is not None:
+            components, state_hash = materialize()
+            frame["components"] = {
+                **components,
+                "journal": frame["components"]["journal"],
+            }
+            frame["state"]["state_hash"] = state_hash
+            frame["materialize_components"] = None
+            self.base_store._update_session(
+                connection,
+                context["session_id"],
+                frame["state"],
+                now_ms=self.base_store._validated_now_ms(),
+            )
+        return frame["state"]["state_hash"]
 
     def _sync_recorded_trajectory(
         self,
@@ -24701,6 +25088,34 @@ class TrainingRunStore:
         if len(frames) != len(times) or len(frames) > 32:
             raise ValueError("recorded interval history length differs from preflight")
         inputs = list(plan["inputs"])
+        if any(
+            event.source_kind != "PUBLIC"
+            or event.event_kind != "MARK_INDEX"
+            or event.event_phase != 30
+            or event.track_id != plan["track_id"]
+            for event, _virtual in inputs
+        ):
+            raise ValueError("recorded interval contains a non-mark input")
+        account_basis = connection.execute(
+            "SELECT run.initial_equity, account.overlay_cash FROM replay_training_run AS run "
+            "JOIN replay_training_contract_account AS account USING(run_id) WHERE run_id=?",
+            (run_id,),
+        ).fetchone()
+        initial_equity = Decimal(account_basis["initial_equity"])
+        self._recorded_risk_context = {
+            "connection": connection,
+            "run_id": run_id,
+            "track_id": plan["track_id"],
+            "initial_equity": initial_equity,
+            "base_equity": initial_equity + Decimal(account_basis["overlay_cash"]),
+            "dirty": False,
+            "mark": connection.execute(
+                "SELECT public_price FROM replay_training_market_track "
+                "WHERE run_id=? AND track_id=?",
+                (run_id, plan["track_id"]),
+            ).fetchone()[0],
+        }
+        equity_samples = {}
         input_index = 0
         fingerprint = plan["fingerprint"]
         pending = []
@@ -24779,6 +25194,7 @@ class TrainingRunStore:
                 prior,
                 now_ms,
                 recorded_history=True,
+                equity_samples=equity_samples,
             )
             # Internal adapter steps publish review only at the global market
             # checkpoint below, after applying the pinned mark and risk phase.
@@ -24818,7 +25234,11 @@ class TrainingRunStore:
                 raise ValueError("recorded interval violated its risk envelope")
             ordered = stable_market_event_order(pending)
             self._record_global_events_in_transaction(
-                connection, run_id=run_id, ordered=ordered, materialize_portfolio=False
+                connection,
+                run_id=run_id,
+                ordered=ordered,
+                materialize_portfolio=False,
+                checkpoint_boundary=index == len(frames) - 1,
             )
             stable.extend(ordered)
             pending.clear()
@@ -24834,11 +25254,20 @@ class TrainingRunStore:
             connection, session_id, final_state, now_ms=now_ms
         )
         # Published to the coordinator only after the enclosing commit succeeds.
+        self._write_interval_curve(
+            connection,
+            run_id=run_id,
+            command_id=command["command_id"],
+            end_sequence=final_state["source_sequence"],
+            rows=equity_samples.values(),
+        )
         for resolution, _bucket_ms, limit in _EQUITY_RESOLUTIONS:
             self._prune_equity_resolution(
                 connection, run_id=run_id, resolution=resolution, limit=limit
             )
-        plan["fingerprint_after"] = fingerprint
+        plan["fingerprint_after"] = self._hedge_risk_fingerprint(
+            connection, run_id=run_id
+        )
         plan["stable"] = tuple(stable)
 
     def _sync_session_summary(
@@ -24850,6 +25279,7 @@ class TrainingRunStore:
         previous_component_state: Mapping[str, object] | None,
         now_ms: int,
         recorded_history: bool = False,
+        equity_samples: dict | None = None,
     ) -> None:
         cursor = state.get("cursor")
         if not isinstance(cursor, Mapping):
@@ -25060,9 +25490,7 @@ class TrainingRunStore:
             else None
         )
         component_hash = component_state.get("state_hash")
-        if isinstance(previous_component_hash, str) and isinstance(
-            component_hash, str
-        ):
+        if isinstance(previous_component_hash, str) and isinstance(component_hash, str):
             component_projection_changed = previous_component_hash != component_hash
         else:
             projection_component_keys = (
@@ -25183,6 +25611,7 @@ class TrainingRunStore:
                 InternalCommandType.EXECUTE_REVEALED_REFERENCE_CLOSE.value,
                 "_training_fast_forward_final_state",
                 InternalCommandType.RECORDED_INTERVAL.value,
+                InternalCommandType.INDEXED_INTERVAL.value,
             }
         )
         if component_projection_changed and not coordinated_hedge_mutation:
@@ -25226,6 +25655,7 @@ class TrainingRunStore:
                 component_state=component_state,
                 now_ms=now_ms,
                 retain=not recorded_history,
+                pending_samples=equity_samples,
             )
 
     def _sync_session_mutation(
@@ -25675,6 +26105,7 @@ class TrainingRunStore:
         component_state: Mapping[str, object],
         now_ms: int,
         retain: bool = True,
+        pending_samples: dict | None = None,
     ) -> None:
         cursor = state.get("cursor")
         account = component_state.get("account")
@@ -25703,46 +26134,147 @@ class TrainingRunStore:
             public_time_ms=public_ms,
             sequence=source_sequence,
         )
+        public_time_json = canonical_json(public_time)
+        revision = validate_v2_counter(state["revision"], field_name="revision")
         for resolution, bucket_ms, limit in _EQUITY_RESOLUTIONS:
             bucket_id = source_sequence if bucket_ms == 0 else public_ms // bucket_ms
-            connection.execute(
-                """
-                INSERT INTO replay_equity_sample(
-                    run_id, resolution, bucket_id, source_sequence, revision,
-                    public_time_json, equity, cash_balance, unrealized_pnl,
-                    ledger_tail_hash, state_hash, created_at_ms, updated_at_ms
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(run_id, resolution, bucket_id) DO UPDATE SET
-                    source_sequence = excluded.source_sequence,
-                    revision = excluded.revision,
-                    public_time_json = excluded.public_time_json,
-                    equity = excluded.equity,
-                    cash_balance = excluded.cash_balance,
-                    unrealized_pnl = excluded.unrealized_pnl,
-                    ledger_tail_hash = excluded.ledger_tail_hash,
-                    state_hash = excluded.state_hash,
-                    updated_at_ms = excluded.updated_at_ms
-                """,
-                (
-                    run_id,
-                    resolution,
-                    bucket_id,
-                    source_sequence,
-                    validate_v2_counter(state["revision"], field_name="revision"),
-                    canonical_json(public_time),
-                    account["equity"],
-                    account["cash_balance"],
-                    account["unrealized_pnl"],
-                    ledger_hash,
-                    state["state_hash"],
-                    now_ms,
-                    now_ms,
-                ),
+            values = (
+                run_id,
+                resolution,
+                bucket_id,
+                source_sequence,
+                revision,
+                public_time_json,
+                account["equity"],
+                account["cash_balance"],
+                account["unrealized_pnl"],
+                ledger_hash,
+                state["state_hash"],
+                now_ms,
+                now_ms,
             )
+            if pending_samples is None:
+                cls._write_equity_samples(connection, (values,))
+            else:
+                key = (run_id, resolution, bucket_id)
+                previous = pending_samples.get(key)
+                if previous is not None:
+                    # An upsert keeps the first insertion timestamp.
+                    values = (*values[:11], previous[11], values[12])
+                pending_samples[key] = values
             if retain:
                 cls._prune_equity_resolution(
                     connection, run_id=run_id, resolution=resolution, limit=limit
                 )
+
+    @staticmethod
+    def _write_equity_samples(connection, rows, *, historical=False):
+        condition = (
+            " WHERE (excluded.source_sequence, excluded.revision) >= "
+            "(replay_equity_sample.source_sequence, replay_equity_sample.revision)"
+            if historical
+            else ""
+        )
+        connection.executemany(
+            """
+            INSERT INTO replay_equity_sample(
+                run_id, resolution, bucket_id, source_sequence, revision,
+                public_time_json, equity, cash_balance, unrealized_pnl,
+                ledger_tail_hash, state_hash, created_at_ms, updated_at_ms
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(run_id, resolution, bucket_id) DO UPDATE SET
+                source_sequence = excluded.source_sequence,
+                revision = excluded.revision,
+                public_time_json = excluded.public_time_json,
+                equity = excluded.equity,
+                cash_balance = excluded.cash_balance,
+                unrealized_pnl = excluded.unrealized_pnl,
+                ledger_tail_hash = excluded.ledger_tail_hash,
+                state_hash = excluded.state_hash,
+                updated_at_ms = excluded.updated_at_ms
+            """
+            + condition,
+            rows,
+        )
+
+    @classmethod
+    def _materialize_interval_curves(cls, connection, *, run_id):
+        # These rows are a derived read cache. They are filled only when the
+        # curve is requested, without changing the training run or its clock.
+        pending = connection.execute(
+            "SELECT command_id, samples_json FROM replay_interval_curve "
+            "WHERE run_id=? AND materialized=0 ORDER BY end_sequence, command_id",
+            (run_id,),
+        ).fetchall()
+        for interval in pending:
+            rows = json.loads(interval["samples_json"])
+            if isinstance(rows, dict) and rows.get("schema") == "indexed-curve.v1":
+                stored = connection.execute(
+                    "SELECT data_json FROM replay_prepared_curve WHERE curve_id=? AND run_id=?",
+                    (rows["curve_id"], run_id),
+                ).fetchone()
+                if stored is None:
+                    raise ValueError("indexed curve basis is missing")
+                basis = json.loads(stored["data_json"])
+                if basis.get("schema") != "prepared-curve.v1":
+                    raise ValueError("indexed curve basis version is unsupported")
+                expanded = {}
+                for offset in range(rows["start"], rows["end"]):
+                    equity, cash, pnl = basis["samples"][offset]
+                    cls._upsert_equity_samples(
+                        connection,
+                        run_id=run_id,
+                        session_id=rows["session_id"],
+                        policy=rows["policy"],
+                        revealed=rows["revealed"],
+                        state={
+                            "cursor": {"virtual_time_ms": basis["times"][offset]},
+                            "source_sequence": basis["start"] + offset + 1,
+                            "revision": rows["revision_base"]
+                            + offset
+                            - rows["start"]
+                            + 1,
+                            "state_hash": "interval-state:"
+                            + basis["chains"][offset + 1],
+                        },
+                        component_state={
+                            "account": {
+                                "equity": equity,
+                                "cash_balance": cash,
+                                "unrealized_pnl": pnl,
+                            },
+                            "ledger": {"tail_hash": basis["ledger_hash"]},
+                        },
+                        now_ms=rows["created_at_ms"],
+                        retain=False,
+                        pending_samples=expanded,
+                    )
+                rows = list(expanded.values())
+                # JSON-backed ordinary rows are lists; expanded rows are owned
+                # tuples passed directly to SQLite below.
+                rows = [list(row) for row in rows]
+            if not isinstance(rows, list) or any(
+                not isinstance(row, list) or len(row) != 13 or row[0] != run_id
+                for row in rows
+            ):
+                raise ValueError("interval curve record is malformed")
+            cls._write_equity_samples(connection, rows, historical=True)
+            connection.execute(
+                "UPDATE replay_interval_curve SET materialized=1 WHERE run_id=? AND command_id=?",
+                (run_id, interval["command_id"]),
+            )
+        if pending:
+            for resolution, _bucket_ms, limit in _EQUITY_RESOLUTIONS:
+                cls._prune_equity_resolution(
+                    connection, run_id=run_id, resolution=resolution, limit=limit
+                )
+
+    @staticmethod
+    def _write_interval_curve(connection, *, run_id, command_id, end_sequence, rows):
+        connection.execute(
+            "INSERT INTO replay_interval_curve(run_id, command_id, end_sequence, samples_json) VALUES (?, ?, ?, ?)",
+            (run_id, command_id, end_sequence, canonical_json(list(rows))),
+        )
 
     @staticmethod
     def _prune_equity_resolution(connection, *, run_id, resolution, limit):

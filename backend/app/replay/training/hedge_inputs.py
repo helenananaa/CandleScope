@@ -3203,6 +3203,31 @@ class HedgeInputArchiveManager:
     async def audit_run(self, run_id: str) -> dict[str, object]:
         """Independently rebuild the pinned input proof, cursors, and receipts."""
 
+        spans = await self.store.run_extension_read(lambda connection: [dict(row) for row in connection.execute(
+            "SELECT * FROM replay_hedge_mark_span WHERE run_id=? ORDER BY track_id,first_sequence", (run_id,)
+        )])
+
+        def covered_marks(events, track_id, last_sequence):
+            by_sequence = {event.event_sequence: event for event in events}
+            covered = set()
+            for span in spans:
+                if span["track_id"] != track_id:
+                    continue
+                if not 0 < span["first_sequence"] <= span["last_sequence"] <= last_sequence:
+                    raise ValueError("indexed mark span exceeds its applied cursor")
+                first = by_sequence.get(span["first_sequence"])
+                last = by_sequence.get(span["last_sequence"])
+                if (first is None or last is None or first.previous_hash != span["first_previous_hash"]
+                        or last.event_hash != span["last_event_hash"] or first.source_id != span["archive_id"]):
+                    raise ValueError("indexed mark span does not match its frozen archive")
+                for sequence in range(span["first_sequence"], span["last_sequence"]+1):
+                    event = by_sequence.get(sequence)
+                    if (event is None or event.event_kind != "MARK_INDEX" or event.event_phase != 30
+                            or sequence in covered):
+                        raise ValueError("indexed mark span crosses a non-mark event or overlaps")
+                    covered.add(sequence)
+            return covered
+
         initial_binding = await self.store.run_extension_read(
             lambda connection: connection.execute(
                 "SELECT 1 FROM replay_hedge_input_binding WHERE run_id = ?",
@@ -3382,8 +3407,9 @@ class HedgeInputArchiveManager:
                         <= int(projection_row["last_event_sequence"])
                     ]
                     actual_applied = applied_rows.get(source_kind, [])
-                    if [event.event_sequence for event in expected_applied] != [
-                        int(row["event_sequence"]) for row in actual_applied
+                    covered = covered_marks(source_events, "track-1", int(projection_row["last_event_sequence"])) if source_kind == "PUBLIC" else set()
+                    if [event.event_sequence for event in expected_applied if event.event_sequence not in covered] != [
+                        int(row["event_sequence"]) for row in actual_applied if int(row["event_sequence"]) not in covered
                     ]:
                         difference(
                             f"applied.{source_kind}.sequences",
@@ -3615,8 +3641,9 @@ class HedgeInputArchiveManager:
                     <= int(projection_row["last_event_sequence"])
                 ]
                 receipts = track_applied.get(track_id, [])
-                if [event.event_sequence for event in expected_events] != [
-                    int(row["event_sequence"]) for row in receipts
+                covered = covered_marks(events, track_id, int(projection_row["last_event_sequence"]))
+                if [event.event_sequence for event in expected_events if event.event_sequence not in covered] != [
+                    int(row["event_sequence"]) for row in receipts if int(row["event_sequence"]) not in covered
                 ]:
                     difference(
                         f"track_applied.{track_id}.sequences",

@@ -446,6 +446,18 @@ export class ReplayV2ApiClient {
     );
   }
 
+  prepareIndex(runId: string, signal?: AbortSignal): Promise<void> {
+    return this.request(`/runs/${safeSegment(runId, "run id")}/prepare-index`, (value) => {
+      if (typeof value !== "object" || value === null) throw new TypeError("invalid replay index response");
+      const result = value as Record<string, unknown>;
+      if (result.protocol !== "replay.v3" || result.run_id !== runId
+          || !["READY", "SKIPPED"].includes(String(result.status))
+          || !Number.isSafeInteger(result.prepared_events) || Number(result.prepared_events) < 0) {
+        throw new TypeError("invalid replay index response");
+      }
+    }, { method: "POST", ...(signal ? { signal } : {}) });
+  }
+
   getRun(runId: string, signal?: AbortSignal): Promise<TrainingRunCardResponse> {
     return this.request(
       `/runs/${safeSegment(runId, "run id")}`,

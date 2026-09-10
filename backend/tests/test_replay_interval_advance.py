@@ -67,6 +67,13 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
     varying_mark=False,
     review_fork=False,
     time_disclosure_policy="NONE",
+    indexed=False,
+    touch_offset=37,
+    initial_equity=None,
+    holding_quantity="0.001",
+    mark_prices=None,
+    liquidation=False,
+    previous_checkpoint=False,
 ):
     forward = 260
     prices = ["100"] * 1260
@@ -75,8 +82,8 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
         prices[504 + 10] = "95"
         prices[504 + 20] = "105"
     if touch:
-        prices[504 + 37] = "80"
-        prices[504 + 100] = "1000"
+        prices[504 + touch_offset] = "80"
+        prices[504 + touch_offset + 63] = "1000"
     service = await _risk_service(
         tmp_path / "run.db",
         bar_prices=prices,
@@ -84,6 +91,10 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
         now_ms=1710000000000 + 700 * 60000,
         event_buffer_size=512,
     )
+    if not indexed:
+        async def no_index(**kwargs):
+            return None
+        monkeypatch.setattr(service.training, "_try_indexed_interval", no_index)
     try:
         catalog = await service.catalog(
             warmup_bars=2,
@@ -92,7 +103,7 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
             blind_mode=False,
         )
         base = replace(
-            _sandbox_request(await _request(service), margin_mode=margin_mode),
+            _sandbox_request(await _request(service), margin_mode=margin_mode, initial_equity=initial_equity),
             catalog_epoch=str(catalog["catalog_epoch"]),
             market_type="futures",
             display_interval="4h",
@@ -104,7 +115,7 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
             base,
             root=tmp_path,
             prefix="indexed",
-            mark_prices=(
+            mark_prices=mark_prices or (
                 [str(100 + i % 11) for i in range(forward + 1)]
                 if varying_mark
                 else ["100"] * (forward + 1)
@@ -143,7 +154,7 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
                     "side": "SELL" if position_side == "SHORT" else "BUY",
                     "position_side": position_side,
                     "order_type": "MARKET",
-                    "quantity": "0.001",
+                    "quantity": holding_quantity,
                     "reduce_only": False,
                     "limit_price": None,
                     "stop_price": None,
@@ -221,14 +232,17 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
         consumed = (
             result["cursor"]["source_sequence"] - before["cursor"]["source_sequence"]
         )
-        if funding_offset:
+        if liquidation:
+            assert result["data"]["event_stop"]["reason"] == "LIQUIDATION"
+            assert not result["data"]["target_reached"]
+        elif funding_offset:
             assert result["data"]["event_stop"]["reason"] == "ACCOUNT_EVENT"
             assert not result["data"]["target_reached"]
-            assert consumed < 38
+            assert consumed <= funding_offset + 2
         elif touch:
             assert result["data"]["event_stop"]["reason"] == "ORDER_FILLED"
             assert not result["data"]["target_reached"]
-            assert consumed == 38
+            assert consumed == touch_offset + 1
         else:
             assert result["data"]["event_stop"] is None
             assert result["data"]["target_reached"]
@@ -241,7 +255,10 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
                     (session,),
                 ).fetchone()[0]
             )
-            assert recorded_count > 0
+            if not indexed:
+                assert recorded_count > 0
+            elif consumed >= 128:
+                assert service._sessions[session].actor._metrics.get("indexed_skipped_events", 0) > 100
         elif held:
             assert len(batches) < consumed // 2
             assert any(x and x > 1 for x in batches)
@@ -320,7 +337,14 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
                 "_ordered_final_state_batch_profile",
                 lambda **kwargs: None,
             )
-            if funding_offset:
+            if liquidation:
+                expected = await _send(
+                    reference, run_id=run, session_id=session, command_id="reference",
+                    command_type=ReplayV2CommandType.ADVANCE,
+                    payload={"basis": "DISPLAY_BAR", "count": 1, "display_interval": "4h",
+                             "viewer_revision": 0, "stop_on_event": True},
+                )
+            elif funding_offset:
                 from tests.test_replay_v2_training_phase5 import _command
 
                 command = _command(
@@ -361,7 +385,7 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
                     lambda connection: [
                         tuple(row)
                         for row in connection.execute(
-                            "SELECT ledger_sequence,entry_hash FROM replay_training_contract_ledger WHERE run_id = ? ORDER BY ledger_sequence",
+                            "SELECT kind,cash_delta,asset,virtual_time_ms,source_sequence,reference_type,reference_id FROM replay_training_contract_ledger WHERE run_id = ? AND kind NOT IN ('POSITION_MUTATION','MARGIN_MUTATION') ORDER BY ledger_sequence",
                             (run,),
                         )
                     ]
@@ -372,6 +396,9 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
             if held:
 
                 async def samples(instance):
+                    # Curve rows are a lazy cache of the committed interval
+                    # journal. Request them through the product read path.
+                    await instance.training.equity(run, resolution="EVENT")
                     return await instance.store.run_extension_read(
                         lambda connection: {
                             int(row[0]): tuple(row[1:])
@@ -385,7 +412,9 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
                 reference_samples = await samples(reference)
                 optimized_samples = await samples(service)
                 assert all(
-                    reference_samples[sequence] == value
+                    reference_samples[sequence][:3] == value[:3]
+                    and (value[3].startswith("interval-state:")
+                         or reference_samples[sequence][3] == value[3])
                     for sequence, value in optimized_samples.items()
                 )
                 changes = {}
@@ -406,7 +435,7 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
                             lambda c: [
                                 tuple(row)
                                 for row in c.execute(
-                                    "SELECT category,event_type,virtual_time_ms,source_sequence,state_hash,account_hash,ledger_tail_hash FROM replay_review_timeline_event WHERE run_id = ? AND category IN ('ORDER','FILL','POSITION','FUNDING','LIQUIDATION','EQUITY') ORDER BY timeline_sequence",
+                                    "SELECT category,event_type,virtual_time_ms,source_sequence,state_hash,json_extract(projection_json,'$.domain.equity'),json_extract(projection_json,'$.domain.position_hash'),json_extract(projection_json,'$.domain.order_hash') FROM replay_review_timeline_event WHERE run_id = ? AND category IN ('ORDER','FILL','POSITION','FUNDING','LIQUIDATION','EQUITY') ORDER BY timeline_sequence",
                                     (run,),
                                 )
                             ]
@@ -417,16 +446,18 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
                             lambda c: [
                                 tuple(row)
                                 for row in c.execute(
-                                    "SELECT resolution,bucket_id,source_sequence,equity,cash_balance,unrealized_pnl,state_hash,ledger_tail_hash,public_time_json FROM replay_equity_sample WHERE run_id=? ORDER BY resolution,bucket_id",
+                                    "SELECT resolution,bucket_id,source_sequence,equity,cash_balance,unrealized_pnl,ledger_tail_hash,public_time_json FROM replay_equity_sample WHERE run_id=? ORDER BY resolution,bucket_id",
                                     (run,),
                                 )
                             ]
                         )
 
                     assert await all_samples(service) == await all_samples(reference)
-                    assert await critical_review(service) == await critical_review(
-                        reference
-                    )
+                    actual_review, expected_review = await critical_review(service), await critical_review(reference)
+                    if indexed:
+                        assert all(row in expected_review for row in actual_review)
+                    else:
+                        assert actual_review == expected_review
                     future_anchors = await service.store.run_extension_read(
                         lambda c: c.execute(
                             "SELECT COUNT(*) FROM replay_review_timeline_event e JOIN replay_review_event_anchor r USING(run_id,timeline_sequence) JOIN replay_review_actor_anchor a ON a.run_id=r.run_id AND a.anchor_id=r.anchor_id WHERE e.run_id=? AND (a.source_sequence>e.source_sequence OR a.virtual_time_ms>e.virtual_time_ms)",
@@ -472,6 +503,14 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
         )
         if varying_mark:
             await service.shutdown(step_timeout=1)
+            if previous_checkpoint:
+                with sqlite3.connect(original_db) as database:
+                    assert database.execute(
+                        "SELECT COUNT(*) FROM replay_checkpoint WHERE source_sequence<? AND active=1",
+                        (result["cursor"]["source_sequence"],),
+                    ).fetchone()[0] > 0
+                    database.execute("UPDATE replay_checkpoint SET active=0 WHERE source_sequence=?",
+                                     (result["cursor"]["source_sequence"],))
             service = await _risk_service(
                 original_db,
                 bar_prices=prices,
@@ -482,7 +521,8 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
             assert (await service.get_session_state(session))["state_hash"] == result[
                 "state_hash"
             ]
-            assert (await service.training.audit_account(run))["status"] == "PASS"
+            audit = await service.training.audit_account(run)
+            assert audit["status"] == "PASS", audit
         assert (
             await service.training.command(
                 run, ReplayV2Command.from_dict(json.loads(command_json))

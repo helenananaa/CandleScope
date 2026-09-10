@@ -18,6 +18,7 @@ class InternalCommandType(str, Enum):
     FAST_FORWARD_EMPTY_ACCOUNT = "_training_fast_forward_empty_account"
     FAST_FORWARD_FINAL_STATE = "_training_fast_forward_final_state"
     RECORDED_INTERVAL = "_training_recorded_interval"
+    INDEXED_INTERVAL = "_training_indexed_interval"
     STEP_DEFER_TERMINAL = "_training_step_defer_terminal"
     FINALIZE_DEFERRED_TERMINAL = "_training_finalize_deferred_terminal"
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from copy import copy
 from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation, localcontext
 from hashlib import sha256
@@ -2318,6 +2319,34 @@ class ConservativeBarBroker:
         ):
             return self.snapshot(), None
         return self._snapshot_with_encoding()
+
+    def _capture_recorded_frame(self):
+        """Capture a private frame without encoding the retained bar history.
+
+        The actor calls this only inside a screened interval. Immutable broker
+        values survive subsequent reducer commits; the builder's mutable list
+        needs its own shallow copy. Full serialization remains available for
+        an actual review anchor before the enclosing command commits.
+        """
+        if (
+            type(self._bar_builder) is not ReplayBarBuilder
+            or getattr(self.snapshot, "__func__", None)
+            is not ConservativeBarBroker.snapshot
+        ):
+            return None
+        frozen = copy(self)
+        frozen._bar_builder = copy(self._bar_builder)
+        frozen._bar_builder._closed_bars = list(self._bar_builder._closed_bars)
+        components = {
+            "orders": [order.to_dict() for order in self.orders],
+            "fills": [fill.to_dict() for fill in self._fills],
+            "closed_trades": [trade.to_dict() for trade in self._closed_trades],
+            "warnings": [warning.to_dict() for warning in self._warnings],
+            "ledger": self._ledger.snapshot(),
+            "position": self._position.to_dict(),
+            "account": self._account.to_dict(),
+        }
+        return components, frozen._owned_snapshot_with_encoding
 
     def _snapshot_with_encoding(self):
         encoded_builder = None

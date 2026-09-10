@@ -143,7 +143,10 @@ async def test_training_schema_is_separate_from_internal_adapter_schema(
     assert "replay_training_track" not in tables
 
 
-@pytest.mark.parametrize("obsolete_version", range(1, TRAINING_SCHEMA_VERSION))
+@pytest.mark.parametrize(
+    "obsolete_version",
+    [version for version in range(1, TRAINING_SCHEMA_VERSION) if version not in {19, 20}],
+)
 def test_obsolete_training_schema_requires_a_fresh_database(
     obsolete_version: int,
 ) -> None:

@@ -7,7 +7,7 @@ import sqlite3
 from app.replay.canonical import canonical_sha256
 
 
-TRAINING_SCHEMA_VERSION = 19
+TRAINING_SCHEMA_VERSION = 21
 TRAINING_SCHEMA_ID = "replay.training.v2"
 TIME_COMMITMENT_SCHEMA_VERSION = "replay.time-commitment.v1"
 START_SELECTION_SCHEMA_VERSION = "replay.start-selection.v1"
@@ -2505,6 +2505,39 @@ def selection_preparation_hash(
     )
 
 
+TRAINING_SCHEMA_V20_INTERVAL_CURVES = """
+CREATE TABLE IF NOT EXISTS replay_interval_curve (
+    run_id TEXT NOT NULL REFERENCES replay_training_run(run_id) ON DELETE CASCADE,
+    command_id TEXT NOT NULL,
+    end_sequence INTEGER NOT NULL,
+    samples_json TEXT NOT NULL,
+    materialized INTEGER NOT NULL DEFAULT 0 CHECK (materialized IN (0, 1)),
+    PRIMARY KEY (run_id, command_id)
+);
+CREATE INDEX IF NOT EXISTS idx_replay_interval_curve_pending
+ON replay_interval_curve(run_id, materialized, end_sequence);
+"""
+
+
+TRAINING_SCHEMA_V21_INDEXED_INTERVALS = """
+CREATE TABLE IF NOT EXISTS replay_prepared_curve (
+    curve_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES replay_training_run(run_id) ON DELETE CASCADE,
+    data_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS replay_hedge_mark_span (
+    run_id TEXT NOT NULL REFERENCES replay_training_run(run_id) ON DELETE CASCADE,
+    track_id TEXT NOT NULL,
+    first_sequence INTEGER NOT NULL,
+    last_sequence INTEGER NOT NULL,
+    first_previous_hash TEXT NOT NULL,
+    last_event_hash TEXT NOT NULL,
+    archive_id TEXT NOT NULL,
+    PRIMARY KEY(run_id, track_id, first_sequence)
+);
+"""
+
+
 def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> None:
     """Create v2-owned tables without changing the adapter schema row."""
 
@@ -2522,6 +2555,14 @@ def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> N
     ).fetchone()
     current = 0 if row is None else int(row[0])
     if current == TRAINING_SCHEMA_VERSION:
+        return
+    if current in {19, 20}:
+        _execute_script(connection, TRAINING_SCHEMA_V20_INTERVAL_CURVES)
+        _execute_script(connection, TRAINING_SCHEMA_V21_INDEXED_INTERVALS)
+        connection.execute(
+            "UPDATE replay_training_schema_version SET version=?, applied_at_ms=? WHERE singleton=1",
+            (TRAINING_SCHEMA_VERSION, now_ms),
+        )
         return
     if current != 0:
         raise RuntimeError(
@@ -2553,6 +2594,8 @@ def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> N
         TRAINING_SCHEMA_V17_HEDGE_LIQUIDATION,
         TRAINING_SCHEMA_V18_HISTORICAL_L2_LIQUIDATION,
         TRAINING_SCHEMA_V19_HEDGE_TRACK_INPUTS,
+        TRAINING_SCHEMA_V20_INTERVAL_CURVES,
+        TRAINING_SCHEMA_V21_INDEXED_INTERVALS,
     ):
         _execute_script(connection, script)
     connection.execute(

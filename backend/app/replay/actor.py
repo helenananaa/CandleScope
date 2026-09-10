@@ -350,6 +350,7 @@ class _SourceChunkPlanRequest:
     future: asyncio.Future[dict[str, object]]
     screen_interactions: bool = False
     preserve_valuation: bool = False
+    indexed: bool = False
 
 
 @dataclass(slots=True)
@@ -807,6 +808,7 @@ class ReplaySessionActor:
         max_events: int,
         screen_interactions: bool = False,
         preserve_valuation: bool = False,
+        indexed: bool = False,
     ) -> dict[str, object]:
         """Plan one bounded immutable-source chunk from inside the mailbox."""
 
@@ -821,6 +823,7 @@ class ReplaySessionActor:
             future=loop.create_future(),
             screen_interactions=screen_interactions,
             preserve_valuation=preserve_valuation,
+            indexed=indexed,
         )
         self._offer_request(request)
         return await request.future
@@ -1474,6 +1477,11 @@ class ReplaySessionActor:
             elif isinstance(request, _PeriodSummaryJumpRequest):
                 await self._handle_period_summary_jump(request)
             elif isinstance(request, _SourceChunkPlanRequest):
+                if request.indexed:
+                    result = await self._prepare_indexed_source(request.target_time_ms)
+                    if not request.future.done():
+                        request.future.set_result(result)
+                    return
                 if not request.future.done():
                     request.future.set_result(
                         self._source_chunk_plan(
@@ -2107,6 +2115,47 @@ class ReplaySessionActor:
                     "reference_semantics": "ORDERED_SOURCE_EVENT_REDUCER_V1",
                 },
             )
+        if command_type is InternalCommandType.INDEXED_INTERVAL:
+            self._require_state(SessionState.PAUSED, command_type)
+            index = getattr(self, "_prepared_bar_interval", None)
+            target = int(parsed.values["target_virtual_time_ms"])
+            if index is None or not index.compatible(self._source, self._reducer._bar_builder, self._event_chain_hash):
+                # Recovery may replay a committed command from an older valid
+                # checkpoint. Rebuild the derived index from its frozen source.
+                await self._prepare_indexed_source(target)
+                index = getattr(self, "_prepared_bar_interval", None)
+                if index is None or not index.compatible(self._source, self._reducer._bar_builder, self._event_chain_hash):
+                    raise ReplayDomainError(ReplayErrorCode.INVALID_STATE_TRANSITION, "indexed interval is not prepared")
+            start = self._source.cursor().source_sequence - index.start
+            end = index.end_for_time(target)
+            if end <= start or end-start != parsed.values["max_events"] or index.safe_end(self._reducer, start, end) != end:
+                raise ReplayDomainError(ReplayErrorCode.INVALID_STATE_TRANSITION, "indexed interval no longer matches its safe range")
+            self._ensure_final_state_transport_anchor()
+            index.apply(self._reducer, start, end)
+            self._source = self._source.fork_at_sequence(
+                index.start+end, last_event_time_ms=index.times[end-1]
+            )
+            self._clock.advance_to(target)
+            self._event_chain_hash = index.chains[end]
+            self._revision += end-start
+            self._invalidate_component_state()
+            components = self._component_state()
+            state_hash = self._compute_state_hash()
+            self._pending_history_frames = [{
+                "indexed": {"index": index, "start": start, "end": end},
+                "state": self._durable_state(component_state=components, state_hash=state_hash),
+                "components": {**components, "journal": [dict(e) for e in self._journal_entries]},
+                "checkpoint_base": self._checkpoint_payload(component_state={}, state_hash=state_hash),
+                "checkpoint_cursor": self._source.cursor(),
+                "event_chain_hash": self._event_chain_hash,
+            }]
+            self._metrics["indexed_skipped_events"] = int(self._metrics.get("indexed_skipped_events", 0)) + end-start
+            self._emit_final_state_projection("indexed_interval_complete", mandatory=True)
+            return self._command_result(command.command_id, {
+                "consumed": end-start, "target_reached": True,
+                "target_virtual_time_ms": target, "snapshot_published": True,
+                "reference_semantics": "INDEXED_BAR_INTERVAL_V1",
+            })
         if command_type in {InternalCommandType.FAST_FORWARD_FINAL_STATE, InternalCommandType.RECORDED_INTERVAL}:
             self._require_state(SessionState.PAUSED, command_type)
             target = int(parsed.values["target_virtual_time_ms"])
@@ -2216,23 +2265,76 @@ class ReplaySessionActor:
                         use_batch = bool(preflight_result)
             batch_reducer_events = 0
             if command_type is InternalCommandType.RECORDED_INTERVAL:
-                preview = self._preview_final_state_batch(target_time_ms=target, max_events=maximum)
-                if not preview or len(preview) > 32 or not callable(safe_prefix) or safe_prefix(preview) != len(preview):
-                    raise ReplayDomainError(ReplayErrorCode.INVALID_STATE_TRANSITION,
-                                            "recorded interval is not interaction-free")
+                preview = self._preview_final_state_batch(
+                    target_time_ms=target, max_events=maximum
+                )
+                if (
+                    not preview
+                    or len(preview) > 32
+                    or not callable(safe_prefix)
+                    or safe_prefix(preview) != len(preview)
+                ):
+                    raise ReplayDomainError(
+                        ReplayErrorCode.INVALID_STATE_TRANSITION,
+                        "recorded interval is not interaction-free",
+                    )
                 self._pending_history_frames = []
-                for source_event in preview:
+                checkpoint_base = self._checkpoint_payload(
+                    component_state={}, state_hash=self._compute_state_hash()
+                )
+                capture = getattr(self._reducer, "_capture_recorded_frame", None)
+                for frame_index, _source_event in enumerate(preview):
                     if consumed:
                         self._revision += 1
-                    await self._apply_source_event_candidate(publish=False, materialize_state=False)
-                    components = self._component_state()
-                    frame_hash = self._compute_state_hash()
-                    self._pending_history_frames.append({
-                        "state": self._durable_state(component_state=components, state_hash=frame_hash),
-                        "components": {**components, "journal": [dict(e) for e in self._journal_entries]},
-                        "source_event": self._event_payload(source_event),
-                        "checkpoint_state": self._checkpoint_payload(component_state=components, state_hash=frame_hash),
-                    })
+                    await self._apply_source_event_candidate(
+                        publish=False, materialize_state=False
+                    )
+                    captured = (
+                        capture()
+                        if callable(capture) and frame_index < len(preview) - 1
+                        else None
+                    )
+                    materialize = None
+                    if captured is None:
+                        components = self._component_state()
+                        frame_hash = self._compute_state_hash()
+                    else:
+                        components, full_snapshot = captured
+                        material = self._state_hash_material({})
+
+                        def materialize(snapshot=full_snapshot, base=material):
+                            full, encoded = snapshot()
+                            value = {**base, "components": full}
+                            digest = (
+                                "sha256:"
+                                + sha256(
+                                    _canonical_object_bytes(
+                                        value, encoded_fields={"components": encoded}
+                                    )
+                                ).hexdigest()
+                                if encoded is not None
+                                else canonical_sha256(value)
+                            )
+                            return full, digest
+
+                        # This transaction-local reference is not a full state
+                        # hash. Public curve reads expose it separately.
+                        frame_hash = "interval-state:" + self._event_chain_hash
+                    self._pending_history_frames.append(
+                        {
+                            "state": self._durable_state(
+                                component_state=components, state_hash=frame_hash
+                            ),
+                            "components": {
+                                **components,
+                                "journal": [dict(e) for e in self._journal_entries],
+                            },
+                            "checkpoint_base": checkpoint_base,
+                            "checkpoint_cursor": self._source.cursor(),
+                            "event_chain_hash": self._event_chain_hash,
+                            "materialize_components": materialize,
+                        }
+                    )
                     consumed += 1
                     await asyncio.sleep(0)
             elif use_batch:
@@ -3267,6 +3369,42 @@ class ReplaySessionActor:
             )
             if (index + 1) % COMMAND_EVENT_LOOP_YIELD_INTERVAL == 0:
                 await asyncio.sleep(0)
+
+    async def _prepare_indexed_source(self, target):
+        from .broker.execution import ConservativeBarBroker
+        from .bars.builder import ReplayBarBuilder
+        from .broker.prepared_interval import PreparedBarInterval
+
+        if (
+            type(self._reducer) is not ConservativeBarBroker
+            or type(self._reducer._bar_builder) is not ReplayBarBuilder
+            or self._state is not SessionState.PAUSED
+            or not callable(getattr(self._source, "fork_at_sequence", None))
+        ):
+            return {}
+        index = getattr(self, "_prepared_bar_interval", None)
+        prepared_now = index is None or not index.compatible(
+            self._source, self._reducer._bar_builder, self._event_chain_hash
+        )
+        if prepared_now:
+            index = await asyncio.to_thread(
+                PreparedBarInterval,
+                self._source.fork(),
+                self._reducer._bar_builder,
+                self._event_chain_hash,
+                self._next_chain_hash,
+            )
+            self._prepared_bar_interval = index
+        await asyncio.to_thread(index.prepare_valuation, self._reducer)
+        start = self._source.cursor().source_sequence - index.start
+        end = index.safe_end(self._reducer, start, index.end_for_time(target))
+        return {
+            "index": index,
+            "start": start,
+            "end": end,
+            "prepared_now": prepared_now,
+            "prepared_events": len(index.bars),
+        }
 
     def _source_chunk_plan(
         self,
@@ -4529,7 +4667,29 @@ class ReplaySessionActor:
             if component_state is None
             else dict(component_state)
         )
-        material = {
+        material = self._state_hash_material(components, cursor=cursor)
+        if component_state is None and self._component_state_encoding_cache is not None:
+            state_hash = (
+                "sha256:"
+                + sha256(
+                    _canonical_object_bytes(
+                        material,
+                        encoded_fields={
+                            "components": self._component_state_encoding_cache
+                        },
+                    )
+                ).hexdigest()
+            )
+        else:
+            state_hash = canonical_sha256(material)
+        if component_state is None:
+            self._state_hash_cache_key = cache_key
+            self._state_hash_cache = state_hash
+        return state_hash
+
+    def _state_hash_material(self, components, *, cursor=None):
+        cursor = self._cursor() if cursor is None else cursor
+        return {
             "schema_version": ACTOR_STATE_HASH_SCHEMA_VERSION,
             "core_version": REPLAY_CORE_VERSION,
             "execution_version": self._execution_version,
@@ -4552,24 +4712,6 @@ class ReplaySessionActor:
             },
             "components": components,
         }
-        if component_state is None and self._component_state_encoding_cache is not None:
-            state_hash = (
-                "sha256:"
-                + sha256(
-                    _canonical_object_bytes(
-                        material,
-                        encoded_fields={
-                            "components": self._component_state_encoding_cache
-                        },
-                    )
-                ).hexdigest()
-            )
-        else:
-            state_hash = canonical_sha256(material)
-        if component_state is None:
-            self._state_hash_cache_key = cache_key
-            self._state_hash_cache = state_hash
-        return state_hash
 
     def _command_result(
         self,
