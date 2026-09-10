@@ -1096,8 +1096,42 @@ class ReviewRecorder:
             minimum = equity if minimum is None else min(minimum, equity)
         return minimum
 
-    @staticmethod
     def _descriptor_domain(
+        self, connection: sqlite3.Connection, *, run_id: str
+    ) -> dict[str, object]:
+        context = getattr(self.owner, "_recorded_review_frame", None)
+        if (
+            context is None
+            or context["connection"] is not connection
+            or context["plan"]["run_id"] != run_id
+        ):
+            return self._uncached_descriptor_domain(connection, run_id=run_id)
+        # Within a certified interval there are no fills, funding, rule or
+        # quantity changes. Only mark valuation and audit-only ledger rows vary.
+        # The transaction excludes concurrent writers, so seed exact counts
+        # once and advance them by newly appended ledger sequence numbers.
+        plan = context["plan"]
+        row = connection.execute(
+            """SELECT current_equity,
+                      COALESCE((SELECT ledger_sequence FROM replay_training_contract_ledger
+                                WHERE run_id = ? ORDER BY ledger_sequence DESC LIMIT 1), 0) AS tail
+               FROM replay_training_run WHERE run_id = ?""",
+            (run_id, run_id),
+        ).fetchone()
+        seed = plan.get("review_descriptor_seed")
+        if seed is None:
+            domain = self._uncached_descriptor_domain(connection, run_id=run_id)
+            plan["review_descriptor_seed"] = (domain, int(row["tail"]))
+            return domain
+        domain, tail = seed
+        return {
+            **domain,
+            "equity": str(row["current_equity"]),
+            "ledger_count": int(domain["ledger_count"]) + int(row["tail"]) - tail,
+        }
+
+    @staticmethod
+    def _uncached_descriptor_domain(
         connection: sqlite3.Connection,
         *,
         run_id: str,
@@ -1510,6 +1544,10 @@ class ReviewRecorder:
         ).fetchone()
         if track is None:
             raise TypeError("review anchor track is missing")
+        if checkpoint is None:
+            provider = getattr(self.owner, "_recorded_review_checkpoint", None)
+            if callable(provider):
+                checkpoint = provider(connection, session_id, now_ms)
         if checkpoint is None:
             checkpoint_row = connection.execute(
                 """

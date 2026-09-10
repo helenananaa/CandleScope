@@ -851,7 +851,7 @@ def parse_command(command: ReplayCommand) -> ParsedCommand:
             command_type,
             {"count": count, "tail_events": tail_events},
         )
-    if command_type is InternalCommandType.FAST_FORWARD_FINAL_STATE:
+    if command_type in {InternalCommandType.FAST_FORWARD_FINAL_STATE, InternalCommandType.RECORDED_INTERVAL}:
         _exact_keys(
             payload,
             {

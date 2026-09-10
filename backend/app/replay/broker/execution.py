@@ -2309,6 +2309,17 @@ class ConservativeBarBroker:
         return self._has_trading_activity
 
     def snapshot(self) -> dict[str, object]:
+        return self._snapshot_with_encoding()[0]
+
+    def _owned_snapshot_with_encoding(self):
+        if (
+            getattr(self.snapshot, "__func__", None)
+            is not ConservativeBarBroker.snapshot
+        ):
+            return self.snapshot(), None
+        return self._snapshot_with_encoding()
+
+    def _snapshot_with_encoding(self):
         encoded_builder = None
         if type(self._bar_builder) is ReplayBarBuilder:
             builder_state, encoded_builder = self._bar_builder._snapshot_with_encoding()
@@ -2341,12 +2352,30 @@ class ConservativeBarBroker:
                 {"schema_version": BROKER_STATE_HASH_SCHEMA_VERSION, "state": payload}
             )
         else:
-            encoded_payload = _canonical_object_bytes(payload, encoded_fields={"bar_builder": encoded_builder})
-            payload["state_hash"] = "sha256:" + sha256(_canonical_object_bytes(
-                {"schema_version": BROKER_STATE_HASH_SCHEMA_VERSION, "state": payload},
-                encoded_fields={"state": encoded_payload},
-            )).hexdigest()
-        return payload
+            encoded_payload = _canonical_object_bytes(
+                payload, encoded_fields={"bar_builder": encoded_builder}
+            )
+            payload["state_hash"] = (
+                "sha256:"
+                + sha256(
+                    _canonical_object_bytes(
+                        {
+                            "schema_version": BROKER_STATE_HASH_SCHEMA_VERSION,
+                            "state": payload,
+                        },
+                        encoded_fields={"state": encoded_payload},
+                    )
+                ).hexdigest()
+            )
+        encoded = (
+            None
+            if encoded_builder is None
+            else _canonical_object_bytes(
+                payload,
+                encoded_fields={"bar_builder": encoded_builder},
+            )
+        )
+        return payload, encoded
 
     def restore(self, state: Mapping[str, object]) -> None:
         old_builder = self._bar_builder.snapshot()

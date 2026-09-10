@@ -1881,6 +1881,7 @@ class ReplayService:
                 InternalCommandType.REVEAL_HISTORY_AUTHORIZED,
                 InternalCommandType.FAST_FORWARD_EMPTY_ACCOUNT,
                 InternalCommandType.FAST_FORWARD_FINAL_STATE,
+                InternalCommandType.RECORDED_INTERVAL,
                 InternalCommandType.STEP_DEFER_TERMINAL,
                 InternalCommandType.FINALIZE_DEFERRED_TERMINAL,
             }
@@ -3264,6 +3265,7 @@ class ReplayService:
                 source_events=mutation.source_events,
                 component_state=mutation.component_state,
                 previous_component_state=mutation.previous_component_state,
+                history_frames=mutation.history_frames,
             )
             return
         if mutation.kind == "source_event":

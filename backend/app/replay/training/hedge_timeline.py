@@ -5,8 +5,11 @@ from __future__ import annotations
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, replace
 from decimal import Decimal
+from functools import cached_property
 from types import MappingProxyType
 from typing import Any, Mapping
+
+from ..broker.interval_index import PriceRangeIndex
 
 
 def event_key(event):
@@ -28,6 +31,21 @@ class InputLane:
     mark_sequences: tuple[int, ...]
     marks: tuple[Decimal, ...]
     mark_run_ends: tuple[int, ...]
+
+    @cached_property
+    def price_index(self) -> PriceRangeIndex:
+        # A non-price event is an unconditional boundary. Build lazily so the
+        # constant-mark lane does not pay for an unused general envelope tree.
+        return PriceRangeIndex(
+            tuple(
+                (Decimal(str(e.payload["mark_price"])),) * 2
+                if self.source_kind == "PUBLIC"
+                and e.event_kind == "MARK_INDEX"
+                and e.event_phase == 30
+                else (Decimal("-Infinity"), Decimal("Infinity"))
+                for e in self.events
+            )
+        )
 
     @classmethod
     def build(cls, kind, track_id, values):
@@ -153,4 +171,44 @@ class IndexedHedgeSnapshot(tuple):
                 i = candidate.mark_run_ends[i]
             if i < len(candidate.events):
                 end = min(end, candidate.times[i] - 1)
+        return mark, end
+
+    def mark_envelope_prefix(self, public, simulation, track_id, target, *, low, high):
+        """Bound a caller-certified envelope by the first price or input event.
+
+        This is a screen, not a risk certificate: its caller must establish
+        account safety for every price inside the supplied inclusive envelope.
+        """
+        lane = next(
+            (
+                item
+                for item in self.lanes
+                if item.source_kind == "PUBLIC" and item.track_id == track_id
+            ),
+            None,
+        )
+        if lane is None:
+            return None
+        cursor = lane.cursor(public, simulation)
+        mark_index = bisect_right(lane.mark_sequences, cursor) - 1
+        if mark_index < 0 or cursor > lane.sequences[-1]:
+            return None
+        mark = lane.marks[mark_index]
+        if not low <= mark <= high:
+            return None
+        end = target
+        for candidate in self.lanes:
+            start = bisect_right(
+                candidate.sequences, candidate.cursor(public, simulation)
+            )
+            stop = bisect_right(candidate.times, target)
+            if start >= stop:
+                continue
+            first = (
+                candidate.price_index.first_outside(low, high, start=start, end=stop)
+                if candidate is lane
+                else start
+            )
+            if first < stop:
+                end = min(end, candidate.times[first] - 1)
         return mark, end

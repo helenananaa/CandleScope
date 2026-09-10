@@ -600,19 +600,33 @@ class ReplayBarBuilder:
         for bar, value in zip(self._closed_bars, payload["closed_bars"], strict=True):
             entry = previous.get(id(bar))
             encoded = (
-                entry[1] if entry is not None and entry[0] is bar
+                entry[1]
+                if entry is not None and entry[0] is bar
                 else canonical_json_bytes(value)
             )
-            retained[id(bar)] = (bar, encoded)
+            owned_value = (
+                entry[2]
+                if entry is not None and entry[0] is bar and len(entry) > 2
+                else dict(value)
+            )
+            retained[id(bar)] = (bar, encoded, owned_value)
             encoded_bars.append(encoded)
         closed_bytes = b"[" + b",".join(encoded_bars) + b"]"
-        encoded_payload = _canonical_object_bytes(payload, encoded_fields={"closed_bars": closed_bytes})
-        payload["state_hash"] = "sha256:" + sha256(
-            _canonical_object_bytes(
-                {"schema_version": BAR_BUILDER_STATE_HASH_SCHEMA_VERSION, "state": payload},
-                encoded_fields={"state": encoded_payload},
-            )
-        ).hexdigest()
+        encoded_payload = _canonical_object_bytes(
+            payload, encoded_fields={"closed_bars": closed_bytes}
+        )
+        payload["state_hash"] = (
+            "sha256:"
+            + sha256(
+                _canonical_object_bytes(
+                    {
+                        "schema_version": BAR_BUILDER_STATE_HASH_SCHEMA_VERSION,
+                        "state": payload,
+                    },
+                    encoded_fields={"state": encoded_payload},
+                )
+            ).hexdigest()
+        )
         self._closed_encoding_cache = retained
         return payload, _canonical_object_bytes(
             payload, encoded_fields={"closed_bars": closed_bytes}
@@ -1117,6 +1131,15 @@ class ReplayBarBuilder:
         )
 
     def _snapshot_payload(self) -> dict[str, object]:
+        previous = getattr(self, "_closed_encoding_cache", {})
+        closed_values = []
+        for bar in self._closed_bars:
+            cached = previous.get(id(bar))
+            closed_values.append(
+                dict(cached[2])
+                if cached is not None and cached[0] is bar and len(cached) > 2
+                else bar.to_dict()
+            )
         return {
             "schema_version": BAR_BUILDER_STATE_SCHEMA_VERSION,
             "base_interval": self._base_interval,
@@ -1134,7 +1157,7 @@ class ReplayBarBuilder:
             "active_bar": (
                 None if self._active_bar is None else self._active_bar.to_dict()
             ),
-            "closed_bars": [bar.to_dict() for bar in self._closed_bars],
+            "closed_bars": closed_values,
             "closed_count": self._closed_count,
             "closed_prefix_count": self._closed_prefix_count,
             "closed_prefix_hash": self._closed_prefix_hash,

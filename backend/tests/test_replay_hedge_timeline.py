@@ -28,6 +28,39 @@ def event(
     )
 
 
+def test_varying_mark_envelope_stops_before_price_and_input_boundaries():
+    public = (
+        event(1, 0),
+        event(2, 10, price="105"),
+        event(3, 20, price="95"),
+        event(4, 30, price="120"),
+        event(5, 40, kind="FUNDING"),
+    )
+    snapshot = IndexedHedgeSnapshot(public, ())
+    kwargs = dict(low=Decimal("90"), high=Decimal("110"))
+    assert snapshot.mark_envelope_prefix(
+        {"track-1": 1}, 0, "track-1", 100, **kwargs
+    ) == (Decimal("100"), 29)
+    assert snapshot.mark_envelope_prefix(
+        {"track-1": 1}, 0, "track-1", 25, **kwargs
+    ) == (Decimal("100"), 25)
+    assert (
+        snapshot.mark_envelope_prefix({"track-1": 4}, 0, "track-1", 100, **kwargs)
+        is None
+    )
+    assert snapshot.mark_envelope_prefix(
+        {"track-1": 1}, 0, "track-1", 100, low=Decimal("90"), high=Decimal("120")
+    ) == (Decimal("100"), 39)
+    simulation = (event(1, 15, kind="SIMULATION", source="SIMULATION"),)
+    with_simulation = IndexedHedgeSnapshot(public, simulation)
+    assert with_simulation.mark_envelope_prefix(
+        {"track-1": 1}, 0, "track-1", 100, **kwargs
+    ) == (Decimal("100"), 14)
+    assert with_simulation.mark_envelope_prefix(
+        {"track-1": 1}, 1, "track-1", 100, **kwargs
+    ) == (Decimal("100"), 29)
+
+
 @pytest.mark.anyio
 async def test_indexed_queries_match_reference_with_rewinds_and_equal_timestamps():
     public = tuple(

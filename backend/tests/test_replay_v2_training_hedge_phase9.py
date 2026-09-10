@@ -686,8 +686,8 @@ async def test_empty_hedge_display_step_batches_marks_without_losing_audit_event
         hedge_apply_sizes: list[int] = []
         hedge_finalize_count = 0
         original_advance = service.training._advance_adapter_to
-        original_apply = service.training.store.apply_hedge_input_events
-        original_finalize = service.training.store.finalize_hedge_inputs
+        original_apply = service.training.store._hedge_input_write_operation
+        original_finalize = service.training.store._finalize_hedge_inputs_in_transaction
 
         async def observed_advance(**kwargs):
             adapter_batch_sizes.append(kwargs.get("final_state_max_events"))
@@ -695,24 +695,24 @@ async def test_empty_hedge_display_step_batches_marks_without_losing_audit_event
             adapter_event_counts.append(int(result["cursor"]["source_sequence"]) - int(kwargs["initial_snapshot"]["cursor"]["source_sequence"]))
             return result
 
-        async def observed_apply(*args, **kwargs):
+        def observed_apply(*args, **kwargs):
             hedge_apply_sizes.append(len(kwargs["events"]))
-            return await original_apply(*args, **kwargs)
+            return original_apply(*args, **kwargs)
 
-        async def observed_finalize(*args, **kwargs):
+        def observed_finalize(*args, **kwargs):
             nonlocal hedge_finalize_count
             hedge_finalize_count += 1
-            return await original_finalize(*args, **kwargs)
+            return original_finalize(*args, **kwargs)
 
         monkeypatch.setattr(service.training, "_advance_adapter_to", observed_advance)
         monkeypatch.setattr(
             service.training.store,
-            "apply_hedge_input_events",
+            "_hedge_input_write_operation",
             observed_apply,
         )
         monkeypatch.setattr(
             service.training.store,
-            "finalize_hedge_inputs",
+            "_finalize_hedge_inputs_in_transaction",
             observed_finalize,
         )
         monkeypatch.setattr(

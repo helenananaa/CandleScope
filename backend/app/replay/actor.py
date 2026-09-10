@@ -10,10 +10,11 @@ import time
 from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass
+from hashlib import sha256
 from types import MappingProxyType
 from typing import Awaitable, Callable, Protocol, Sequence
 
-from .canonical import canonical_sha256
+from .canonical import canonical_sha256, _canonical_object_bytes
 from .timing import RequestTiming, current_timing, use_timing
 from .checkpoints import CheckpointCodec, CheckpointError, CheckpointRing
 from .clock import CLOCK_SCHEMA_VERSION, ClockSnapshot, VirtualClock
@@ -163,6 +164,7 @@ class ActorMutation:
     command: ReplayCommand | None = None
     result: CommandResult | None = None
     error: ReplayDomainError | None = None
+    history_frames: tuple[Mapping[str, object], ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -523,6 +525,7 @@ class ReplaySessionActor:
         # hashes/checkpoints for one actor state can safely reuse the same
         # materialization until a reducer mutation explicitly invalidates it.
         self._component_state_cache: dict[str, object] | None = None
+        self._component_state_encoding_cache: bytes | None = None
         self._component_state_revision = 0
         self._state_hash_cache_key: tuple[object, ...] | None = None
         self._state_hash_cache: str | None = None
@@ -2104,7 +2107,7 @@ class ReplaySessionActor:
                     "reference_semantics": "ORDERED_SOURCE_EVENT_REDUCER_V1",
                 },
             )
-        if command_type is InternalCommandType.FAST_FORWARD_FINAL_STATE:
+        if command_type in {InternalCommandType.FAST_FORWARD_FINAL_STATE, InternalCommandType.RECORDED_INTERVAL}:
             self._require_state(SessionState.PAUSED, command_type)
             target = int(parsed.values["target_virtual_time_ms"])
             if target < self._clock.virtual_time_ms:
@@ -2212,7 +2215,27 @@ class ReplaySessionActor:
                             preflight_result = await preflight_result
                         use_batch = bool(preflight_result)
             batch_reducer_events = 0
-            if use_batch:
+            if command_type is InternalCommandType.RECORDED_INTERVAL:
+                preview = self._preview_final_state_batch(target_time_ms=target, max_events=maximum)
+                if not preview or len(preview) > 32 or not callable(safe_prefix) or safe_prefix(preview) != len(preview):
+                    raise ReplayDomainError(ReplayErrorCode.INVALID_STATE_TRANSITION,
+                                            "recorded interval is not interaction-free")
+                self._pending_history_frames = []
+                for source_event in preview:
+                    if consumed:
+                        self._revision += 1
+                    await self._apply_source_event_candidate(publish=False, materialize_state=False)
+                    components = self._component_state()
+                    frame_hash = self._compute_state_hash()
+                    self._pending_history_frames.append({
+                        "state": self._durable_state(component_state=components, state_hash=frame_hash),
+                        "components": {**components, "journal": [dict(e) for e in self._journal_entries]},
+                        "source_event": self._event_payload(source_event),
+                        "checkpoint_state": self._checkpoint_payload(component_state=components, state_hash=frame_hash),
+                    })
+                    consumed += 1
+                    await asyncio.sleep(0)
+            elif use_batch:
                 consumed = await self._apply_final_state_batch(
                     target_time_ms=target,
                     max_events=batch_limit,
@@ -3742,6 +3765,7 @@ class ReplaySessionActor:
         if capture_source_events is None:
             capture_source_events = self._mutation_hook is not None
         self._pending_events = []
+        self._pending_history_frames = []
         self._pending_source_events = [] if capture_source_events else None
 
     def _restore_rollback(
@@ -3750,6 +3774,7 @@ class ReplaySessionActor:
         *,
         force_paused: bool,
     ) -> None:
+        self._pending_history_frames = []
         self._pending_events = None
         self._pending_source_events = None
         snapshot_ref = rollback.source.snapshot_ref()
@@ -3874,10 +3899,12 @@ class ReplaySessionActor:
                 command=command,
                 result=result,
                 error=error,
+                history_frames=tuple(getattr(self, "_pending_history_frames", ()) or ()),
             )
             await self._mutation_hook(mutation)
         for event, mandatory in pending_events:
             self._publish_event(event, mandatory=mandatory)
+        self._pending_history_frames = []
         self._pending_events = None
         self._pending_source_events = None
 
@@ -4428,6 +4455,7 @@ class ReplaySessionActor:
 
     def _invalidate_component_state(self) -> None:
         self._component_state_cache = None
+        self._component_state_encoding_cache = None
         self._component_state_revision += 1
         self._state_hash_cache_key = None
         self._state_hash_cache = None
@@ -4435,7 +4463,15 @@ class ReplaySessionActor:
     def _component_state(self) -> dict[str, object]:
         cached = self._component_state_cache
         if cached is None:
-            cached = dict(self._reducer.snapshot())
+            provider = getattr(self._reducer, "_owned_snapshot_with_encoding", None)
+            if callable(provider):
+                snapshot, encoded = provider()
+                if encoded is not None and not isinstance(encoded, bytes):
+                    raise TypeError("owned snapshot encoding must be bytes")
+                cached = dict(snapshot)
+                self._component_state_encoding_cache = encoded
+            else:
+                cached = dict(self._reducer.snapshot())
             self._component_state_cache = cached
             self._metrics["component_snapshot_materializations"] = (
                 int(self._metrics["component_snapshot_materializations"] or 0) + 1
@@ -4493,31 +4529,43 @@ class ReplaySessionActor:
             if component_state is None
             else dict(component_state)
         )
-        state_hash = canonical_sha256(
-            {
-                "schema_version": ACTOR_STATE_HASH_SCHEMA_VERSION,
-                "core_version": REPLAY_CORE_VERSION,
-                "execution_version": self._execution_version,
-                "data_epoch": self._data_epoch,
-                "snapshot_ref_hash": self._snapshot_ref_hash,
-                "session_config_hash": self._session_config_hash,
-                "cursor": {
-                    "virtual_time_ms": cursor.virtual_time_ms,
-                    "source_sequence": cursor.source_sequence,
-                    "last_base_bar_open_ms": cursor.last_base_bar_open_ms,
-                    "last_trade_time_ms": cursor.last_trade_time_ms,
-                    "last_agg_trade_id": cursor.last_agg_trade_id,
-                    "at_end": cursor.at_end,
-                },
-                "event_chain_hash": self._event_chain_hash,
-                "domain_command_position": self._domain_command_position,
-                "blind_audit": {
-                    "blind_mode": self.config.blind_mode,
-                    "revealed": self._revealed,
-                },
-                "components": components,
-            }
-        )
+        material = {
+            "schema_version": ACTOR_STATE_HASH_SCHEMA_VERSION,
+            "core_version": REPLAY_CORE_VERSION,
+            "execution_version": self._execution_version,
+            "data_epoch": self._data_epoch,
+            "snapshot_ref_hash": self._snapshot_ref_hash,
+            "session_config_hash": self._session_config_hash,
+            "cursor": {
+                "virtual_time_ms": cursor.virtual_time_ms,
+                "source_sequence": cursor.source_sequence,
+                "last_base_bar_open_ms": cursor.last_base_bar_open_ms,
+                "last_trade_time_ms": cursor.last_trade_time_ms,
+                "last_agg_trade_id": cursor.last_agg_trade_id,
+                "at_end": cursor.at_end,
+            },
+            "event_chain_hash": self._event_chain_hash,
+            "domain_command_position": self._domain_command_position,
+            "blind_audit": {
+                "blind_mode": self.config.blind_mode,
+                "revealed": self._revealed,
+            },
+            "components": components,
+        }
+        if component_state is None and self._component_state_encoding_cache is not None:
+            state_hash = (
+                "sha256:"
+                + sha256(
+                    _canonical_object_bytes(
+                        material,
+                        encoded_fields={
+                            "components": self._component_state_encoding_cache
+                        },
+                    )
+                ).hexdigest()
+            )
+        else:
+            state_hash = canonical_sha256(material)
         if component_state is None:
             self._state_hash_cache_key = cache_key
             self._state_hash_cache = state_hash

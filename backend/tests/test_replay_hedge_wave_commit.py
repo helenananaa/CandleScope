@@ -16,11 +16,14 @@ from tests.test_replay_v2_training_phase6 import _risk_service, _sandbox_request
 pytestmark = pytest.mark.anyio
 
 
-async def seed(path: Path):
+async def seed(path: Path, *, initial_equity: str | None = None, quantity: str = "0.1"):
     service = await _risk_service(path)
     request = await prepare_hedge_request(
         service,
-        replace(_sandbox_request(await _request(service)), market_type="futures"),
+        replace(
+            _sandbox_request(await _request(service), initial_equity=initial_equity),
+            market_type="futures",
+        ),
         root=path.parent,
         prefix="wave",
         mark_prices=["104", "103", "102", "105"] + ["104"] * 9,
@@ -46,7 +49,7 @@ async def seed(path: Path):
             "side": "BUY",
             "position_side": "LONG",
             "order_type": "MARKET",
-            "quantity": "0.1",
+            "quantity": quantity,
             "reduce_only": False,
             "limit_price": None,
             "stop_price": None,
@@ -90,6 +93,13 @@ async def test_merged_wave_matches_reference_and_reduces_transactions(
         service = await _risk_service(database)
         try:
             store = service.training.store
+
+            async def no_recorded_interval(**kwargs):
+                return None
+
+            monkeypatch.setattr(
+                service.training, "_try_recorded_interval", no_recorded_interval
+            )
             if mode == "reference":
 
                 async def reference(run_id, *, risk_virtual_time_ms, events):
@@ -100,6 +110,30 @@ async def test_merged_wave_matches_reference_and_reduces_transactions(
 
                 monkeypatch.setattr(
                     store, "finalize_hedge_inputs_and_checkpoint", reference
+                )
+
+                async def separate_inputs(
+                    run_id,
+                    *,
+                    risk_virtual_time_ms,
+                    input_events,
+                    events,
+                    event_virtual_times_ms=None,
+                    checkpoint_market_wave=True,
+                ):
+                    applied = await store.apply_hedge_input_events(
+                        run_id,
+                        events=input_events,
+                        virtual_time_ms=risk_virtual_time_ms,
+                        event_virtual_times_ms=event_virtual_times_ms,
+                    )
+                    await store.finalize_hedge_inputs(
+                        run_id, risk_virtual_time_ms=risk_virtual_time_ms
+                    )
+                    return applied, False
+
+                monkeypatch.setattr(
+                    store, "apply_hedge_inputs_and_checkpoint", separate_inputs
                 )
             await _acquire(
                 service,
@@ -149,7 +183,8 @@ async def test_merged_wave_matches_reference_and_reduces_transactions(
         finally:
             await recovered.shutdown(step_timeout=1)
     assert results[0][:4] == results[1][:4]
-    assert results[0][4] - results[1][4] == 4
+    # Four market checkpoints and two intervening public-mark phases fold.
+    assert results[0][4] - results[1][4] == 6
 
 
 async def test_failed_global_checkpoint_rolls_back_risk_and_does_not_cache(
@@ -191,6 +226,77 @@ async def test_failed_global_checkpoint_rolls_back_risk_and_does_not_cache(
         assert await store.finalize_hedge_inputs_and_checkpoint(
             run_id, risk_virtual_time_ms=0, events=()
         )
+    finally:
+        await service.shutdown(step_timeout=1)
+
+
+@pytest.mark.parametrize("market_barrier", [True, False])
+async def test_combined_input_failure_rolls_back_public_cursor_and_risk(
+    tmp_path, monkeypatch, market_barrier
+):
+    service, run_id, _ = await seed(tmp_path / "input-rollback.db")
+    try:
+        store = service.training.store
+        snapshot = await service.training.hedge_inputs.runtime_snapshot(run_id)
+        public, _ = await service.training.hedge_inputs._projection_cursors(run_id)
+        event = next(
+            e
+            for e in snapshot[0]
+            if e.event_sequence > public[e.track_id] and e.event_kind == "MARK_INDEX"
+        )
+        binding = await store.run_binding(run_id)
+        virtual = service.training._virtual_event_time_ms(binding, event.event_time_ms)
+        tables = (
+            "replay_hedge_track_public_projection",
+            "replay_hedge_track_public_applied_event",
+            "replay_training_contract_ledger",
+            "replay_training_position_leg",
+            "replay_training_margin_bucket",
+            "replay_training_market_track",
+            "replay_training_global_checkpoint",
+            "replay_training_global_event",
+        )
+
+        def capture(connection):
+            return {
+                table: tuple(
+                    tuple(row)
+                    for row in connection.execute(
+                        f"SELECT * FROM {table} WHERE run_id = ? ORDER BY rowid",
+                        (run_id,),
+                    )
+                )
+                for table in tables
+            }
+
+        before = await service.store.run_extension_read(capture)
+        cache = dict(store._hedge_risk_fingerprints)
+
+        def fail(*args, **kwargs):
+            raise RuntimeError("combined checkpoint fault")
+
+        if market_barrier:
+            monkeypatch.setattr(store, "_record_global_events_in_transaction", fail)
+        else:
+            original_risk = store._finalize_hedge_inputs_in_transaction
+
+            def fail_after_risk(*args, **kwargs):
+                original_risk(*args, **kwargs)
+                raise RuntimeError("combined checkpoint fault")
+
+            monkeypatch.setattr(
+                store, "_finalize_hedge_inputs_in_transaction", fail_after_risk
+            )
+        with pytest.raises(RuntimeError, match="combined checkpoint fault"):
+            await store.apply_hedge_inputs_and_checkpoint(
+                run_id,
+                risk_virtual_time_ms=virtual,
+                input_events=(event,),
+                events=(),
+                checkpoint_market_wave=market_barrier,
+            )
+        assert await service.store.run_extension_read(capture) == before
+        assert store._hedge_risk_fingerprints == cache
     finally:
         await service.shutdown(step_timeout=1)
 

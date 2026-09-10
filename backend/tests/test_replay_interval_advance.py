@@ -64,6 +64,9 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
     held,
     position_side="LONG",
     margin_mode="CROSS",
+    varying_mark=False,
+    review_fork=False,
+    time_disclosure_policy="NONE",
 ):
     forward = 260
     prices = ["100"] * 1260
@@ -94,13 +97,18 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
             market_type="futures",
             display_interval="4h",
             forward_cache_ms=forward * 60000,
+            time_disclosure_policy=time_disclosure_policy,
         )
         request = await prepare_hedge_request(
             service,
             base,
             root=tmp_path,
             prefix="indexed",
-            mark_prices=["100"] * (forward + 1),
+            mark_prices=(
+                [str(100 + i % 11) for i in range(forward + 1)]
+                if varying_mark
+                else ["100"] * (forward + 1)
+            ),
             book_mode="OFF",
             funding_event_offset_bars=funding_offset,
         )
@@ -225,7 +233,16 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
             assert result["data"]["event_stop"] is None
             assert result["data"]["target_reached"]
             assert consumed >= 200
-        if held:
+        if varying_mark:
+            assert len(batches) < consumed // 2
+            recorded_count = await service.store.run_extension_read(
+                lambda c: c.execute(
+                    "SELECT COUNT(*) FROM replay_command_log WHERE session_id = ? AND command_json LIKE '%_training_recorded_interval%'",
+                    (session,),
+                ).fetchone()[0]
+            )
+            assert recorded_count > 0
+        elif held:
             assert len(batches) < consumed // 2
             assert any(x and x > 1 for x in batches)
         else:
@@ -245,6 +262,12 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
                 Decimal(bar["high"]) < Decimal("1000")
                 for bar in revealed["closed_bars"]
             )
+        if varying_mark:
+            from app.replay.training import storage as training_storage
+
+            monkeypatch.setattr(
+                training_storage, "_direct_liquidation_tick", lambda **kwargs: None
+            )
         reference = await _risk_service(
             reference_path,
             bar_prices=prices,
@@ -253,6 +276,45 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
             event_buffer_size=512,
         )
         try:
+            if varying_mark:
+                reference_store = reference.training.store
+
+                async def separate_mark_inputs(
+                    run_id,
+                    *,
+                    risk_virtual_time_ms,
+                    input_events,
+                    events,
+                    event_virtual_times_ms=None,
+                    checkpoint_market_wave=True,
+                ):
+                    applied = await reference_store.apply_hedge_input_events(
+                        run_id,
+                        events=input_events,
+                        virtual_time_ms=risk_virtual_time_ms,
+                        event_virtual_times_ms=event_virtual_times_ms,
+                    )
+                    if checkpoint_market_wave:
+                        checkpointed = (
+                            await reference_store.finalize_hedge_inputs_and_checkpoint(
+                                run_id,
+                                risk_virtual_time_ms=risk_virtual_time_ms,
+                                events=(*events, *applied),
+                            )
+                        )
+                    else:
+                        await reference_store.finalize_hedge_inputs(
+                            run_id,
+                            risk_virtual_time_ms=risk_virtual_time_ms,
+                        )
+                        checkpointed = False
+                    return applied, checkpointed
+
+                monkeypatch.setattr(
+                    reference_store,
+                    "apply_hedge_inputs_and_checkpoint",
+                    separate_mark_inputs,
+                )
             monkeypatch.setattr(
                 reference.training,
                 "_ordered_final_state_batch_profile",
@@ -337,17 +399,90 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
                     and optimized_samples[sequence][:3] == value
                     for sequence, value in changes.items()
                 )
+                if varying_mark:
+
+                    async def critical_review(owner):
+                        return await owner.store.run_extension_read(
+                            lambda c: [
+                                tuple(row)
+                                for row in c.execute(
+                                    "SELECT category,event_type,virtual_time_ms,source_sequence,state_hash,account_hash,ledger_tail_hash FROM replay_review_timeline_event WHERE run_id = ? AND category IN ('ORDER','FILL','POSITION','FUNDING','LIQUIDATION','EQUITY') ORDER BY timeline_sequence",
+                                    (run,),
+                                )
+                            ]
+                        )
+
+                    async def all_samples(owner):
+                        return await owner.store.run_extension_read(
+                            lambda c: [
+                                tuple(row)
+                                for row in c.execute(
+                                    "SELECT resolution,bucket_id,source_sequence,equity,cash_balance,unrealized_pnl,state_hash,ledger_tail_hash,public_time_json FROM replay_equity_sample WHERE run_id=? ORDER BY resolution,bucket_id",
+                                    (run,),
+                                )
+                            ]
+                        )
+
+                    assert await all_samples(service) == await all_samples(reference)
+                    assert await critical_review(service) == await critical_review(
+                        reference
+                    )
+                    future_anchors = await service.store.run_extension_read(
+                        lambda c: c.execute(
+                            "SELECT COUNT(*) FROM replay_review_timeline_event e JOIN replay_review_event_anchor r USING(run_id,timeline_sequence) JOIN replay_review_actor_anchor a ON a.run_id=r.run_id AND a.anchor_id=r.anchor_id WHERE e.run_id=? AND (a.source_sequence>e.source_sequence OR a.virtual_time_ms>e.virtual_time_ms)",
+                            (run,),
+                        ).fetchone()[0]
+                    )
+                    assert future_anchors == 0
 
         finally:
             await reference.shutdown(step_timeout=1)
         from app.replay.training.commands import ReplayV2Command
 
+        if review_fork:
+            event = await service.store.run_extension_read(
+                lambda c: dict(
+                    c.execute(
+                        "SELECT event_id,virtual_time_ms,source_sequence FROM replay_review_timeline_event WHERE run_id=? AND category='EQUITY' AND source_sequence>? AND source_sequence<? ORDER BY timeline_sequence LIMIT 1",
+                        (
+                            run,
+                            before["cursor"]["source_sequence"],
+                            result["cursor"]["source_sequence"],
+                        ),
+                    ).fetchone()
+                )
+            )
+            review = await service.training.start_review(
+                run, event_id=event["event_id"]
+            )
+            assert review["selected_event_id"] == event["event_id"]
+            forked = await service.training.fork_run(run, event_id=event["event_id"])
+            assert forked["account_audit"]["status"] == "PASS"
+            assert {
+                track["cursor"]["virtual_time_ms"] for track in forked["tracks"]
+            } == {event["virtual_time_ms"]}
+            assert (await service.get_session_state(session))["cursor"] == result[
+                "cursor"
+            ]
         command_json = await service.store.run_extension_read(
             lambda connection: connection.execute(
                 "SELECT command_json FROM replay_training_command WHERE run_id = ? AND command_id = 'advance'",
                 (run,),
             ).fetchone()[0]
         )
+        if varying_mark:
+            await service.shutdown(step_timeout=1)
+            service = await _risk_service(
+                original_db,
+                bar_prices=prices,
+                leading_bars=500,
+                now_ms=1710000000000 + 700 * 60000,
+                event_buffer_size=512,
+            )
+            assert (await service.get_session_state(session))["state_hash"] == result[
+                "state_hash"
+            ]
+            assert (await service.training.audit_account(run))["status"] == "PASS"
         assert (
             await service.training.command(
                 run, ReplayV2Command.from_dict(json.loads(command_json))
@@ -512,4 +647,22 @@ async def test_static_risk_certificate_preserves_short_and_isolated_accounts(
 ):
     await test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
         tmp_path, monkeypatch, False, 0, True, side, margin
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "side,margin",
+    [
+        ("LONG", "CROSS"),
+        ("SHORT", "CROSS"),
+        ("LONG", "ISOLATED"),
+        ("SHORT", "ISOLATED"),
+    ],
+)
+async def test_varying_marks_preserve_reference_ledger_and_curve(
+    tmp_path, monkeypatch, side, margin
+):
+    await test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
+        tmp_path, monkeypatch, False, 0, True, side, margin, True
     )

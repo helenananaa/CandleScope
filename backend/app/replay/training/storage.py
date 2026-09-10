@@ -7,10 +7,11 @@ import json
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation, localcontext
+from decimal import Decimal, InvalidOperation, getcontext, localcontext
 from typing import cast
 
 from app.replay.canonical import canonical_json, canonical_sha256
+from app.replay.checkpoints import CheckpointCodec
 from app.replay.archive_pins import persisted_bar_archive_reference
 from app.replay.broker.models import decimal_to_string
 from app.replay.internal_commands import (
@@ -155,6 +156,123 @@ _EQUITY_RESOLUTIONS: tuple[tuple[str, int, int], ...] = (
 )
 
 
+def _direct_liquidation_tick(
+    *, mark_price: Decimal, scope_equity: Decimal, other_maintenance: Decimal,
+    contract_quantity: Decimal, position_side: str, rule: InstrumentRule,
+    current_grid: Decimal, bankruptcy_price: Decimal, breached: Callable[[Decimal], bool],
+) -> Decimal | None:
+    """Certify a candidate and its adjacent tick; otherwise keep the old search.
+
+    Rounded maintenance is a staircase. In particular, a tiny LONG position
+    does not necessarily have a monotone breach predicate on the price grid.
+    Never replace the reference search unless monotonicity is established.
+    """
+    tick = Decimal(rule.price_tick)
+    quote = Decimal(rule.quote_step)
+    quantity_tick = contract_quantity * tick
+    if position_side == "LONG" and quantity_tick < quote and any(
+        Decimal(t.maintenance_rate) > 0 for t in rule.maintenance_tiers
+    ):
+        return None
+    # Require exact arithmetic on the entire reference search grid. Otherwise
+    # finite Decimal precision can itself introduce steps in candidate equity.
+    bound = max(current_grid, bankruptcy_price, mark_price, tick)
+    price_exponent = min(tick.as_tuple().exponent, mark_price.as_tuple().exponent)
+    product_exponent = price_exponent + contract_quantity.as_tuple().exponent
+    lowest_exponent = min(product_exponent, scope_equity.as_tuple().exponent,
+                          other_maintenance.as_tuple().exponent, quote.as_tuple().exponent)
+    largest_adjusted = max(bound.adjusted() + contract_quantity.adjusted() + 2,
+                           scope_equity.adjusted(), other_maintenance.adjusted()) + 2
+    if largest_adjusted - lowest_exponent + 1 > getcontext().prec:
+        return None
+    tiers = rule.maintenance_tiers
+    rates = tuple(Decimal(t.maintenance_rate) for t in tiers)
+    deductions = tuple(Decimal(t.maintenance_deduction) for t in tiers)
+    for tier, rate, deduction in zip(tiers, rates, deductions):
+        cap = Decimal(tier.notional_cap)
+        smallest = min(product_exponent, cap.as_tuple().exponent) + rate.as_tuple().exponent
+        smallest = min(smallest, deduction.as_tuple().exponent)
+        largest = max(largest_adjusted, cap.adjusted()) + rate.adjusted() + 2
+        if max(largest, deduction.adjusted()) - smallest + 1 > min(60, getcontext().prec):
+            return None
+    # Continuous piecewise raw maintenance gives a nondecreasing rounded
+    # function; discontinuous versioned rules keep the reference behavior.
+    for i in range(1, len(tiers)):
+        cap = Decimal(tiers[i - 1].notional_cap)
+        if cap * rates[i - 1] - deductions[i - 1] != cap * rates[i] - deductions[i]:
+            return None
+    if position_side == "LONG" and (
+        round_to_step(quantity_tick * max(rates), quote, upward=True) > quantity_tick
+    ):
+        return None
+    direction = Decimal(1) if position_side == "LONG" else Decimal(-1)
+    # Roots are proposals only. All acceptance decisions below use the exact
+    # original predicate, including its arithmetic and upward money rounding.
+    capital = scope_equity - direction * contract_quantity * mark_price - other_maintenance
+    proposals = []
+    lower_cap = Decimal(0)
+    for i, (rate, deduction) in enumerate(zip(rates, deductions)):
+        raw = (-capital - deduction) / (contract_quantity * (direction - rate))
+        notional = raw * contract_quantity
+        if notional >= lower_cap and (i == len(tiers) - 1 or notional <= Decimal(tiers[i].notional_cap)):
+            proposals.append(raw)
+        lower_cap = Decimal(tiers[i].notional_cap)
+    if any(deductions) or not any(rates):
+        proposals.append(-capital / (direction * contract_quantity))
+    for raw in proposals:
+        if not raw.is_finite() or raw < 0:
+            continue
+        center = round_to_step(raw, tick, upward=position_side == "SHORT")
+        # Rounding can shift the actual boundary by more than a tick. Such a
+        # case deliberately falls back rather than scanning an unbounded band.
+        for candidate in (center, center - tick, center + tick):
+            if candidate < 0:
+                continue
+            if position_side == "LONG":
+                if candidate >= current_grid:
+                    continue
+                if breached(candidate) and not breached(candidate + tick):
+                    return candidate
+            else:
+                if candidate <= current_grid or candidate > bankruptcy_price:
+                    continue
+                if breached(candidate) and not breached(candidate - tick):
+                    return candidate
+        # Small positions can move by many price ticks when maintenance is
+        # rounded by one money unit. Certify a bracket, then run the same
+        # integer search inside it; never treat the continuous root as final.
+        radius = round_to_step(
+            quote / (contract_quantity * (Decimal(1) - max(rates))),
+            tick, upward=True,
+        ) + tick
+        if position_side == "LONG":
+            lower = max(Decimal(0), center - radius)
+            upper = min(current_grid, center + radius)
+            if lower >= upper or not breached(lower) or breached(upper):
+                continue
+            hit, safe = int(lower / tick), int(upper / tick)
+            while safe - hit > 1:
+                middle = (hit + safe) // 2
+                if breached(Decimal(middle) * tick):
+                    hit = middle
+                else:
+                    safe = middle
+            return Decimal(hit) * tick
+        lower = max(current_grid, center - radius)
+        upper = min(bankruptcy_price, center + radius)
+        if lower >= upper or breached(lower) or not breached(upper):
+            continue
+        safe, hit = int(lower / tick), int(upper / tick)
+        while hit - safe > 1:
+            middle = (hit + safe) // 2
+            if breached(Decimal(middle) * tick):
+                hit = middle
+            else:
+                safe = middle
+        return Decimal(hit) * tick
+    return None
+
+
 def _project_liquidation_price_pair(
     *,
     mark_price: Decimal,
@@ -203,19 +321,28 @@ def _project_liquidation_price_pair(
     current_grid = round_to_step(mark_price, tick, upward=upward)
     if breached(current_grid):
         liquidation_price = current_grid
-    elif position_side == "LONG":
-        if not breached(Decimal(0)):
-            liquidation_price = Decimal(0)
-        else:
-            breached_units = 0
-            safe_units = int(current_grid / tick)
-            while safe_units - breached_units > 1:
-                candidate_units = (breached_units + safe_units) // 2
-                if breached(Decimal(candidate_units) * tick):
-                    breached_units = candidate_units
-                else:
-                    safe_units = candidate_units
-            liquidation_price = Decimal(breached_units) * tick
+        return liquidation_price, bankruptcy_price
+    if position_side == "LONG" and not breached(Decimal(0)):
+        return Decimal(0), bankruptcy_price
+    direct = _direct_liquidation_tick(
+        mark_price=mark_price, scope_equity=scope_equity,
+        other_maintenance=other_maintenance, contract_quantity=contract_quantity,
+        position_side=position_side, rule=rule, current_grid=current_grid,
+        bankruptcy_price=bankruptcy_price,
+        breached=breached,
+    )
+    if direct is not None:
+        return direct, bankruptcy_price
+    if position_side == "LONG":
+        breached_units = 0
+        safe_units = int(current_grid / tick)
+        while safe_units - breached_units > 1:
+            candidate_units = (breached_units + safe_units) // 2
+            if breached(Decimal(candidate_units) * tick):
+                breached_units = candidate_units
+            else:
+                safe_units = candidate_units
+        liquidation_price = Decimal(breached_units) * tick
     else:
         safe_units = int(current_grid / tick)
         breached_units = max(safe_units, int(bankruptcy_price / tick))
@@ -611,6 +738,8 @@ class TrainingRunStore:
 
         await self.base_store.run_extension_write(migrate)
         self.base_store.register_session_summary_writer(self._sync_session_summary)
+        self._recorded_interval_plans: dict[str, dict[str, object]] = {}
+        self.base_store.register_session_trajectory_writer(self._sync_session_trajectory)
         self.base_store.register_session_mutation_writer(self._sync_session_mutation)
         self.base_store.register_session_review_writer(self._sync_review_event)
 
@@ -2365,9 +2494,22 @@ class TrainingRunStore:
     ) -> tuple[StableMarketEvent, ...]:
         """Apply one ordered HEDGE input phase with durable idempotency."""
 
+        if not events:
+            return ()
+        write = self._hedge_input_write_operation(
+            run_id, events=events, virtual_time_ms=virtual_time_ms,
+            event_virtual_times_ms=event_virtual_times_ms,
+        )
+        return await self.base_store.run_extension_write(write)
+
+    def _hedge_input_write_operation(
+        self, run_id: str, *, events: Sequence[HedgeInputEvent],
+        virtual_time_ms: int, event_virtual_times_ms: Sequence[int] | None = None,
+    ) -> Callable[[sqlite3.Connection], tuple[StableMarketEvent, ...]]:
+
         materialized = tuple(events)
         if not materialized:
-            return ()
+            return lambda connection: ()
         applied_virtual_times = (
             (virtual_time_ms,) * len(materialized)
             if event_virtual_times_ms is None
@@ -2902,7 +3044,7 @@ class TrainingRunStore:
                     )
             return stable_market_event_order(stable)
 
-        return await self.base_store.run_extension_write(write)
+        return write
 
     @staticmethod
     def _apply_hedge_public_mark_batch(
@@ -5555,28 +5697,75 @@ class TrainingRunStore:
         cached_fingerprint = self._hedge_risk_fingerprints.get(run_id)
 
         def write(connection: sqlite3.Connection) -> tuple[str | None, bool]:
-            fingerprint = self._finalize_hedge_inputs_in_transaction(
+            return self._checkpoint_hedge_wave_in_transaction(
                 connection, run_id=run_id, risk_virtual_time_ms=risk_virtual_time_ms,
-                cached_fingerprint=cached_fingerprint,
+                ordered=ordered, cached_fingerprint=cached_fingerprint,
             )
-            pending = connection.execute(
-                """
-                SELECT 1 FROM replay_training_liquidation_case
-                WHERE run_id = ? AND state NOT IN (
-                    'COMPLETED', 'BANKRUPT', 'FAILED_CLOSED', 'RECOVERED_AFTER_CANCEL'
-                ) LIMIT 1
-                """, (run_id,),
-            ).fetchone()
-            if fingerprint is None or pending is not None:
-                return fingerprint, False
-            self._record_global_events_in_transaction(
-                connection, run_id=run_id, ordered=ordered, materialize_portfolio=False,
-            )
-            return fingerprint, True
 
         fingerprint, checkpointed = await self.base_store.run_extension_write(write)
         self._cache_committed_hedge_fingerprint(run_id, fingerprint)
         return checkpointed
+
+    async def apply_hedge_inputs_and_checkpoint(
+        self, run_id: str, *, risk_virtual_time_ms: int,
+        input_events: Sequence[HedgeInputEvent],
+        events: Sequence[StableMarketEvent],
+        event_virtual_times_ms: Sequence[int] | None = None,
+        checkpoint_market_wave: bool = True,
+    ) -> tuple[tuple[StableMarketEvent, ...], bool]:
+        """Commit mark inputs, exact risk history and the wave in one transaction."""
+        if not input_events or any(
+            event.source_kind != "PUBLIC" or event.event_kind != "MARK_INDEX"
+            or event.event_phase != 30 for event in input_events
+        ):
+            raise ValueError("combined market wave requires public mark inputs")
+        input_write = self._hedge_input_write_operation(
+            run_id, events=input_events, virtual_time_ms=risk_virtual_time_ms,
+            event_virtual_times_ms=event_virtual_times_ms,
+        )
+        market_events = tuple(events)
+        cached_fingerprint = self._hedge_risk_fingerprints.get(run_id)
+
+        def write(connection):
+            applied = input_write(connection)
+            if not checkpoint_market_wave:
+                fingerprint = self._finalize_hedge_inputs_in_transaction(
+                    connection, run_id=run_id, risk_virtual_time_ms=risk_virtual_time_ms,
+                    cached_fingerprint=cached_fingerprint,
+                )
+                return applied, fingerprint, False
+            fingerprint, checkpointed = self._checkpoint_hedge_wave_in_transaction(
+                connection, run_id=run_id, risk_virtual_time_ms=risk_virtual_time_ms,
+                ordered=stable_market_event_order((*market_events, *applied)),
+                cached_fingerprint=cached_fingerprint,
+            )
+            return applied, fingerprint, checkpointed
+
+        applied, fingerprint, checkpointed = await self.base_store.run_extension_write(write)
+        self._cache_committed_hedge_fingerprint(run_id, fingerprint)
+        return applied, checkpointed
+
+    def _checkpoint_hedge_wave_in_transaction(
+        self, connection: sqlite3.Connection, *, run_id: str,
+        risk_virtual_time_ms: int, ordered: Sequence[StableMarketEvent],
+        cached_fingerprint: str | None,
+    ) -> tuple[str | None, bool]:
+        fingerprint = self._finalize_hedge_inputs_in_transaction(
+            connection, run_id=run_id, risk_virtual_time_ms=risk_virtual_time_ms,
+            cached_fingerprint=cached_fingerprint,
+        )
+        pending = connection.execute(
+            """SELECT 1 FROM replay_training_liquidation_case
+               WHERE run_id = ? AND state NOT IN (
+                   'COMPLETED', 'BANKRUPT', 'FAILED_CLOSED', 'RECOVERED_AFTER_CANCEL'
+               ) LIMIT 1""", (run_id,),
+        ).fetchone()
+        if fingerprint is None or pending is not None:
+            return fingerprint, False
+        self._record_global_events_in_transaction(
+            connection, run_id=run_id, ordered=ordered, materialize_portfolio=False,
+        )
+        return fingerprint, True
 
     def _finalize_hedge_inputs_in_transaction(
         self, connection: sqlite3.Connection, *, run_id: str,
@@ -20868,12 +21057,12 @@ class TrainingRunStore:
         row = connection.execute(
             """
             SELECT account.ledger_tail_hash,
-                   COALESCE(MAX(ledger.ledger_sequence), 0) + 1 AS next_sequence
+                   COALESCE((SELECT ledger.ledger_sequence
+                             FROM replay_training_contract_ledger AS ledger
+                             WHERE ledger.run_id = account.run_id
+                             ORDER BY ledger.ledger_sequence DESC LIMIT 1), 0) + 1 AS next_sequence
             FROM replay_training_contract_account AS account
-            LEFT JOIN replay_training_contract_ledger AS ledger
-              ON ledger.run_id = account.run_id
             WHERE account.run_id = ?
-            GROUP BY account.ledger_tail_hash
             """,
             (run_id,),
         ).fetchone()
@@ -24316,6 +24505,342 @@ class TrainingRunStore:
             ),
         )
 
+    async def recorded_interval_certificate(
+        self,
+        run_id: str,
+        *,
+        low: Decimal,
+        high: Decimal,
+        target_actual_time_ms: int | None = None,
+    ):
+        """Conservative single-leg, single-tier envelope; no history is skipped."""
+        checked = self._hedge_risk_fingerprints.get(run_id)
+        if (
+            checked is None
+            or not low.is_finite()
+            or not high.is_finite()
+            or not 0 < low <= high
+        ):
+            return None
+
+        def read(connection):
+            if self._hedge_risk_fingerprint(connection, run_id=run_id) != checked:
+                return None
+            account = connection.execute(
+                "SELECT * FROM replay_training_contract_account WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+            tracks = connection.execute(
+                "SELECT * FROM replay_training_market_track WHERE run_id = ? AND subscription_tier = 'FULL'",
+                (run_id,),
+            ).fetchall()
+            if account is None or account["status"] != "ACTIVE" or len(tracks) != 1:
+                return None
+            if connection.execute(
+                "SELECT 1 FROM replay_training_liquidation_case WHERE run_id = ? AND state NOT IN ('COMPLETED','BANKRUPT','FAILED_CLOSED','RECOVERED_AFTER_CANCEL') LIMIT 1",
+                (run_id,),
+            ).fetchone():
+                return None
+            track = tracks[0]
+            projection = connection.execute(
+                """SELECT p.*, b.status AS binding_status, b.bound_range_end_ms
+                   FROM replay_hedge_track_public_projection p
+                   JOIN replay_hedge_track_public_binding b USING(run_id,track_id)
+                   WHERE p.run_id=? AND p.track_id=?""",
+                (run_id, track["track_id"]),
+            ).fetchone()
+            if projection is None or projection["binding_status"] != "ACTIVE":
+                return None
+            if target_actual_time_ms is not None and target_actual_time_ms > int(
+                projection["bound_range_end_ms"]
+            ):
+                return None
+            projected = json.loads(projection["state_json"])
+            material = {
+                "schema_version": "replay.hedge-track-public-projection.v1",
+                "run_id": run_id,
+                "track_id": track["track_id"],
+                "last_event_sequence": int(projection["last_event_sequence"]),
+                "as_of_actual_time_ms": int(projection["as_of_actual_time_ms"]),
+                "as_of_virtual_time_ms": int(projection["as_of_virtual_time_ms"]),
+                "state": projected,
+                "input_chain_hash": projection["input_chain_hash"],
+            }
+            if canonical_sha256(material) != projection["component_hash"] or int(
+                projection["as_of_virtual_time_ms"]
+            ) > int(track["virtual_time_ms"]):
+                return None
+            if Decimal(projected["mark_index"]["mark_price"]) != Decimal(
+                track["public_price"]
+            ):
+                return None
+            price_low = min(low, Decimal(track["public_price"]))
+            price_high = max(high, Decimal(track["public_price"]))
+            position = json.loads(track["position_json"])
+            legs = [(name, position.get(name)) for name in ("long", "short")]
+            legs = [
+                (name, leg)
+                for name, leg in legs
+                if isinstance(leg, dict) and Decimal(leg["quantity"]) != 0
+            ]
+            if position.get("position_mode") != "HEDGE" or len(legs) != 1:
+                return None
+            row = connection.execute(
+                "SELECT rule_json,rule_hash,effective_virtual_time_ms FROM replay_training_instrument_rule WHERE run_id = ? AND track_id = ? ORDER BY revision DESC LIMIT 1",
+                (run_id, track["track_id"]),
+            ).fetchone()
+            rule = InstrumentRule.from_mapping(json.loads(row["rule_json"]))
+            if row["rule_hash"] != rule.rule_hash or int(
+                row["effective_virtual_time_ms"]
+            ) > int(track["virtual_time_ms"]):
+                return None
+            side, leg = legs[0]
+            quantity = abs(Decimal(leg["quantity"])) * Decimal(rule.contract_size)
+            if (
+                rule.active_maintenance_tier(
+                    price_low * quantity, extend_last_tier=True
+                )[0]
+                != rule.active_maintenance_tier(
+                    price_high * quantity, extend_last_tier=True
+                )[0]
+            ):
+                return None
+            entry = Decimal(leg["entry_price"])
+            worst = price_low if side == "long" else price_high
+            pnl = (worst - entry) * quantity * (1 if side == "long" else -1)
+            if account["margin_mode"] == "CROSS":
+                checked_equity = connection.execute(
+                    "SELECT current_equity FROM replay_training_run WHERE run_id=?",
+                    (run_id,),
+                ).fetchone()[0]
+                cash = Decimal(checked_equity) - Decimal(leg["unrealized_pnl"])
+            else:
+                cash = Decimal(
+                    json.loads(account["isolated_margin_json"]).get(
+                        isolated_margin_key(track["track_id"], side.upper()), "0"
+                    )
+                )
+            quote = Decimal(rule.quote_step)
+            if (
+                max(abs(cash), abs(pnl), price_high * quantity).adjusted()
+                - quote.as_tuple().exponent
+                > getcontext().prec - 4
+            ):
+                return None
+            maintenance = rule.maintenance_margin(
+                price_high * quantity, extend_last_tier=True
+            )
+            if account["margin_mode"] == "CROSS":
+                maintenance += sum(
+                    (Decimal(str(order.get("reserved_margin", "0")))
+                     for order in json.loads(track["open_orders_json"])
+                     if order.get("status") in {"OPEN", "PARTIALLY_FILLED"}
+                     and order.get("reduce_only") is not True),
+                    Decimal(0),
+                )
+            if cash + pnl <= maintenance + quote * 2:
+                return None
+            return checked
+
+        return await self.base_store.run_extension_read(read)
+
+    def _sync_session_trajectory(self, *args):
+        try:
+            return self._sync_recorded_trajectory(*args)
+        finally:
+            self._recorded_review_frame = None
+
+    def _recorded_review_checkpoint(self, connection, session_id, now_ms):
+        context = getattr(self, "_recorded_review_frame", None)
+        if (
+            context is None
+            or context["connection"] is not connection
+            or context["session_id"] != session_id
+        ):
+            return None
+        if "encoded" not in context:
+            frame = context["frame"]
+            encoded = CheckpointCodec().encode(frame["checkpoint_state"])
+            self.base_store._insert_checkpoint(
+                connection,
+                session_id=session_id,
+                state=frame["state"],
+                payload=encoded,
+                initial=False,
+                mutation_id=context["mutation_id"],
+                now_ms=now_ms,
+            )
+            context["encoded"] = encoded
+        return context["encoded"]
+
+    def _sync_recorded_trajectory(
+        self,
+        connection,
+        session_id,
+        command,
+        frames,
+        final_state,
+        final_components,
+        previous_components,
+        now_ms,
+    ):
+        plan = self._recorded_interval_plans.get(session_id)
+        if (
+            plan is None
+            or command.get("command_id") != plan["command_id"]
+            or command.get("type") != InternalCommandType.RECORDED_INTERVAL.value
+        ):
+            raise ValueError("recorded interval lacks its coordinator plan")
+        run_id = str(plan["run_id"])
+        if (
+            self._hedge_risk_fingerprint(connection, run_id=run_id)
+            != plan["fingerprint"]
+        ):
+            raise ValueError("recorded interval risk state changed after preflight")
+        times = plan["times"]
+        if len(frames) != len(times) or len(frames) > 32:
+            raise ValueError("recorded interval history length differs from preflight")
+        inputs = list(plan["inputs"])
+        input_index = 0
+        fingerprint = plan["fingerprint"]
+        pending = []
+        stable = []
+        prior = previous_components
+        risk_equity = connection.execute(
+            "SELECT current_equity FROM replay_training_run WHERE run_id=?", (run_id,)
+        ).fetchone()[0]
+        mutation_id = connection.execute(
+            "SELECT mutation_id FROM replay_mutation_log WHERE session_id = ? AND command_id = ? AND kind = 'command' ORDER BY mutation_id DESC LIMIT 1",
+            (session_id, command["command_id"]),
+        ).fetchone()[0]
+
+        def apply_inputs_at(virtual):
+            nonlocal input_index, fingerprint, risk_equity
+            group = []
+            while input_index < len(inputs) and inputs[input_index][1] == virtual:
+                group.append(inputs[input_index][0])
+                input_index += 1
+            applied = self._hedge_input_write_operation(
+                run_id, events=group, virtual_time_ms=virtual
+            )(connection)
+            pending.extend(applied)
+            fingerprint = self._finalize_hedge_inputs_in_transaction(
+                connection,
+                run_id=run_id,
+                risk_virtual_time_ms=virtual,
+                cached_fingerprint=fingerprint,
+            )
+            risk_equity = connection.execute(
+                "SELECT current_equity FROM replay_training_run WHERE run_id=?",
+                (run_id,),
+            ).fetchone()[0]
+            if connection.execute(
+                "SELECT 1 FROM replay_training_liquidation_case WHERE run_id = ? AND state NOT IN ('COMPLETED','BANKRUPT','FAILED_CLOSED','RECOVERED_AFTER_CANCEL') LIMIT 1",
+                (run_id,),
+            ).fetchone():
+                raise ValueError("recorded interval violated its risk envelope")
+
+        for index, frame in enumerate(frames):
+            state, components = frame["state"], frame["components"]
+            virtual = int(state["cursor"]["virtual_time_ms"])
+            sequence = int(state["source_sequence"])
+            if (
+                virtual != times[index]
+                or sequence != int(plan["start_sequence"]) + index + 1
+            ):
+                raise ValueError("recorded interval cursor differs from preflight")
+            while input_index < len(inputs) and inputs[input_index][1] < virtual:
+                apply_inputs_at(inputs[input_index][1])
+            self._recorded_review_frame = {
+                "connection": connection,
+                "session_id": session_id,
+                "frame": frame,
+                "mutation_id": mutation_id,
+                "plan": plan,
+            }
+            self.base_store._update_session(
+                connection, session_id, state, now_ms=now_ms
+            )
+            for key in (
+                "orders",
+                "fills",
+                "ledger",
+                "closed_trades",
+                "warnings",
+                "journal",
+            ):
+                if components.get(key) != previous_components.get(key):
+                    raise ValueError("recorded interval contains a broker interaction")
+            self._sync_session_summary(
+                connection,
+                session_id,
+                state,
+                components,
+                prior,
+                now_ms,
+                recorded_history=True,
+            )
+            # Internal adapter steps publish review only at the global market
+            # checkpoint below, after applying the pinned mark and risk phase.
+            pending.append(
+                StableMarketEvent(
+                    actual_event_time_ms=virtual + int(plan["actual_delta"]),
+                    event_phase=20,
+                    market_track_stable_id=str(plan["track_id"]),
+                    source_sequence=sequence,
+                )
+            )
+            # Broker samples above retain the raw market valuation. Risk uses
+            # the last checked pinned valuation until a public mark changes.
+            # Restoring that exact value lets the existing fingerprint skip a
+            # duplicate risk pass; any other changed risk input still misses.
+            connection.execute(
+                "UPDATE replay_training_run SET current_equity=? WHERE run_id=?",
+                (risk_equity, run_id),
+            )
+            if input_index < len(inputs) and inputs[input_index][1] == virtual:
+                apply_inputs_at(virtual)
+            else:
+                fingerprint = self._finalize_hedge_inputs_in_transaction(
+                    connection,
+                    run_id=run_id,
+                    risk_virtual_time_ms=virtual,
+                    cached_fingerprint=fingerprint,
+                )
+                risk_equity = connection.execute(
+                    "SELECT current_equity FROM replay_training_run WHERE run_id=?",
+                    (run_id,),
+                ).fetchone()[0]
+            if connection.execute(
+                "SELECT 1 FROM replay_training_liquidation_case WHERE run_id = ? AND state NOT IN ('COMPLETED','BANKRUPT','FAILED_CLOSED','RECOVERED_AFTER_CANCEL') LIMIT 1",
+                (run_id,),
+            ).fetchone():
+                raise ValueError("recorded interval violated its risk envelope")
+            ordered = stable_market_event_order(pending)
+            self._record_global_events_in_transaction(
+                connection, run_id=run_id, ordered=ordered, materialize_portfolio=False
+            )
+            stable.extend(ordered)
+            pending.clear()
+            prior = components
+        if (
+            input_index != len(inputs)
+            or frames[-1]["state"]["state_hash"] != final_state["state_hash"]
+        ):
+            raise ValueError(
+                "recorded interval terminal history does not match checkpoint"
+            )
+        self.base_store._update_session(
+            connection, session_id, final_state, now_ms=now_ms
+        )
+        # Published to the coordinator only after the enclosing commit succeeds.
+        for resolution, _bucket_ms, limit in _EQUITY_RESOLUTIONS:
+            self._prune_equity_resolution(
+                connection, run_id=run_id, resolution=resolution, limit=limit
+            )
+        plan["fingerprint_after"] = fingerprint
+        plan["stable"] = tuple(stable)
+
     def _sync_session_summary(
         self,
         connection: sqlite3.Connection,
@@ -24324,6 +24849,7 @@ class TrainingRunStore:
         component_state: Mapping[str, object],
         previous_component_state: Mapping[str, object] | None,
         now_ms: int,
+        recorded_history: bool = False,
     ) -> None:
         cursor = state.get("cursor")
         if not isinstance(cursor, Mapping):
@@ -24553,7 +25079,7 @@ class TrainingRunStore:
                 previous_component_state.get(key) != component_state.get(key)
                 for key in projection_component_keys
             )
-        if component_projection_changed:
+        if component_projection_changed and not recorded_history:
             self._sync_contract_components(
                 connection,
                 run_id=run_id,
@@ -24656,6 +25182,7 @@ class TrainingRunStore:
                 InternalCommandType.EXECUTE_HISTORICAL_BOOK_CLOSE.value,
                 InternalCommandType.EXECUTE_REVEALED_REFERENCE_CLOSE.value,
                 "_training_fast_forward_final_state",
+                InternalCommandType.RECORDED_INTERVAL.value,
             }
         )
         if component_projection_changed and not coordinated_hedge_mutation:
@@ -24698,6 +25225,7 @@ class TrainingRunStore:
                 state=state,
                 component_state=component_state,
                 now_ms=now_ms,
+                retain=not recorded_history,
             )
 
     def _sync_session_mutation(
@@ -25146,6 +25674,7 @@ class TrainingRunStore:
         state: Mapping[str, object],
         component_state: Mapping[str, object],
         now_ms: int,
+        retain: bool = True,
     ) -> None:
         cursor = state.get("cursor")
         account = component_state.get("account")
@@ -25210,18 +25739,21 @@ class TrainingRunStore:
                     now_ms,
                 ),
             )
-            connection.execute(
-                """
-                DELETE FROM replay_equity_sample
-                WHERE rowid IN (
-                    SELECT rowid FROM replay_equity_sample
-                    WHERE run_id = ? AND resolution = ?
-                    ORDER BY bucket_id DESC
-                    LIMIT -1 OFFSET ?
+            if retain:
+                cls._prune_equity_resolution(
+                    connection, run_id=run_id, resolution=resolution, limit=limit
                 )
-                """,
-                (run_id, resolution, limit),
-            )
+
+    @staticmethod
+    def _prune_equity_resolution(connection, *, run_id, resolution, limit):
+        connection.execute(
+            """DELETE FROM replay_equity_sample WHERE rowid IN (
+                   SELECT rowid FROM replay_equity_sample
+                   WHERE run_id = ? AND resolution = ?
+                   ORDER BY bucket_id DESC LIMIT -1 OFFSET ?
+               )""",
+            (run_id, resolution, limit),
+        )
 
 
 __all__ = ["TrainingRunStore"]

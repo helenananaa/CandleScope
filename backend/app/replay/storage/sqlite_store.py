@@ -208,6 +208,7 @@ class ReplaySQLiteStore:
         self._closed = False
         self._degraded_reason: str | None = None
         self._session_summary_writer: SessionSummaryWriter | None = None
+        self._session_trajectory_writer = None
         self._session_mutation_writer: SessionMutationWriter | None = None
         self._session_review_writer: SessionReviewWriter | None = None
         self._metrics = {
@@ -461,6 +462,7 @@ class ReplaySQLiteStore:
         source_events: Sequence[Mapping[str, object]] = (),
         component_state: Mapping[str, object] | None = None,
         previous_component_state: Mapping[str, object] | None = None,
+        history_frames: Sequence[Mapping[str, object]] = (),
     ) -> StoredCommand:
         command_payload = dict(command)
         fingerprint = canonical_sha256(command_payload)
@@ -534,7 +536,7 @@ class ReplaySQLiteStore:
                     state_hash=str(state["state_hash"]),
                     now_ms=now,
                 )
-            if checkpoint is not None:
+            if checkpoint is not None and not history_frames:
                 self._insert_checkpoint(
                     connection,
                     session_id=session_id,
@@ -562,28 +564,58 @@ class ReplaySQLiteStore:
                 component_state or {},
                 now_ms=now,
             )
-            self._write_session_summary(
-                connection,
-                session_id,
-                state,
-                component_state or {},
-                previous_component_state=previous_component_state,
-                now_ms=now,
-            )
-            self._write_session_review(
-                connection,
-                session_id,
-                {
-                    "kind": "COMMAND",
-                    "accepted": accepted,
-                    "command": command_payload,
-                    "result": result,
-                },
-                state,
-                component_state or {},
-                None if checkpoint is None else bytes(checkpoint),
-                now_ms=now,
-            )
+            if history_frames:
+                if (
+                    not accepted
+                    or self._session_trajectory_writer is None
+                    or len(history_frames) > 32
+                ):
+                    raise ValueError(
+                        "recorded history requires its transactional projection writer"
+                    )
+                self._session_trajectory_writer(
+                    connection,
+                    session_id,
+                    command_payload,
+                    history_frames,
+                    state,
+                    component_state or {},
+                    previous_component_state,
+                    now,
+                )
+                self._insert_checkpoint(
+                    connection,
+                    session_id=session_id,
+                    state=state,
+                    payload=bytes(checkpoint),
+                    initial=False,
+                    mutation_id=mutation_id,
+                    now_ms=now,
+                )
+            else:
+                self._write_session_summary(
+                    connection,
+                    session_id,
+                    state,
+                    component_state or {},
+                    previous_component_state=previous_component_state,
+                    now_ms=now,
+                )
+            if not history_frames:
+                self._write_session_review(
+                    connection,
+                    session_id,
+                    {
+                        "kind": "COMMAND",
+                        "accepted": accepted,
+                        "command": command_payload,
+                        "result": result,
+                    },
+                    state,
+                    component_state or {},
+                    None if checkpoint is None else bytes(checkpoint),
+                    now_ms=now,
+                )
             row = self._load_command_row(connection, session_id, command_id)
             assert row is not None
             return row
@@ -1133,6 +1165,11 @@ class ReplaySQLiteStore:
         if self._session_summary_writer is not None and self._session_summary_writer != writer:
             raise RuntimeError("replay session summary writer is already registered")
         self._session_summary_writer = writer
+
+    def register_session_trajectory_writer(self, writer) -> None:
+        if self._session_trajectory_writer is not None and self._session_trajectory_writer != writer:
+            raise RuntimeError("replay trajectory writer is already registered")
+        self._session_trajectory_writer = writer
 
     def register_session_mutation_writer(self, writer: SessionMutationWriter) -> None:
         """Register one additive command projection in the v1 transaction."""

@@ -8685,6 +8685,28 @@ class TrainingRunService:
                     )
                 )
 
+            if allow_final_state_batch and source_goal is None and not pending_global_events:
+                recorded = await self._try_recorded_interval(
+                    command=command, binding=binding, tracks=tracks,
+                    snapshot=snapshots[0][1], target=target_virtual_time_ms,
+                    runtime_snapshot=hedge_runtime_snapshot,
+                )
+                if recorded is not None:
+                    recorded_events, recorded_time = recorded
+                    all_events.extend(recorded_events)
+                    if (job is not None or stable_order_state is not None) and len(all_events) > STABLE_ORDER_RESPONSE_EVENTS:
+                        del all_events[:-STABLE_ORDER_RESPONSE_EVENTS]
+                        if job is not None:
+                            job["stable_order_truncated"] = True
+                        if stable_order_state is not None:
+                            stable_order_state["truncated"] = True
+                    if job is not None:
+                        job["consumed"] += len(recorded_events)
+                        job["chunks"] += 1
+                        job["current_virtual_time_ms"] = recorded_time
+                    await asyncio.sleep(0)
+                    continue
+
             # These input reads all precede this wave's mutations under the Run lock.
             hedge_cursor_view = (
                 await self.hedge_inputs._projection_cursors(command.run_id)
@@ -9226,6 +9248,19 @@ class TrainingRunService:
                     await advance_market_barrier()
                     market_barrier = True
                 if not market_cohort_incomplete:
+                    supports_combined_hedge_wave = (
+                        hedge_mode
+                        and str(binding.get("source_kind")) == "BAR"
+                        and not book_required and source_goal is None
+                        and not simulation_hedge_events
+                        and str(binding.get("account_data_mode"))
+                        != AccountDataMode.HISTORICAL_EXACT.value
+                    )
+                    checkpoint_hedge_wave = supports_combined_hedge_wave and market_barrier
+                    combined_mark_wave = supports_combined_hedge_wave and bool(post_hedge_events) and all(
+                        event.source_kind == "PUBLIC" and event.event_kind == "MARK_INDEX"
+                        and event.event_phase == 30 for event in post_hedge_events
+                    )
                     wave_events.extend(
                         await self.store.apply_account_history_events(
                             command.run_id,
@@ -9233,18 +9268,29 @@ class TrainingRunService:
                             virtual_time_ms=wave_time,
                         )
                     )
-                    wave_events.extend(
-                        await self.store.apply_hedge_input_events(
+                    if combined_mark_wave:
+                        applied_marks, wave_checkpointed = await self.store.apply_hedge_inputs_and_checkpoint(
                             command.run_id,
-                            events=post_hedge_events,
-                            virtual_time_ms=wave_time,
+                            input_events=post_hedge_events,
+                            events=(*pending_global_events, *wave_events),
+                            risk_virtual_time_ms=wave_time,
+                            checkpoint_market_wave=checkpoint_hedge_wave,
                             event_virtual_times_ms=(
                                 batched_hedge_virtual_times
                                 if hedge_batch_wave_time == wave_time
                                 else None
                             ),
                         )
-                    )
+                        wave_events.extend(applied_marks)
+                    else:
+                        wave_events.extend(
+                            await self.store.apply_hedge_input_events(
+                                command.run_id, events=post_hedge_events,
+                                virtual_time_ms=wave_time,
+                                event_virtual_times_ms=(batched_hedge_virtual_times
+                                    if hedge_batch_wave_time == wave_time else None),
+                            )
+                        )
                     if (
                         str(binding.get("account_data_mode"))
                         == AccountDataMode.HISTORICAL_EXACT.value
@@ -9254,16 +9300,7 @@ class TrainingRunService:
                             write_audit=False,
                             risk_virtual_time_ms=wave_time,
                         )
-                    if (
-                        hedge_mode
-                        and market_barrier
-                        and str(binding.get("source_kind")) == "BAR"
-                        and not book_required
-                        and source_goal is None
-                        and not simulation_hedge_events
-                        and str(binding.get("account_data_mode"))
-                        != AccountDataMode.HISTORICAL_EXACT.value
-                    ):
+                    if checkpoint_hedge_wave and not combined_mark_wave:
                         wave_checkpointed = (
                             await self.store.finalize_hedge_inputs_and_checkpoint(
                                 command.run_id,
@@ -9271,7 +9308,7 @@ class TrainingRunService:
                                 events=(*pending_global_events, *wave_events),
                             )
                         )
-                    else:
+                    elif not combined_mark_wave:
                         await self.store.finalize_hedge_inputs(
                             command.run_id,
                             risk_virtual_time_ms=wave_time,
@@ -9529,6 +9566,148 @@ class TrainingRunService:
             FINAL_STATE_EMPTY_ACCOUNT_CHUNK_EVENTS,
         )
         return max(1, limit), require_empty_account
+
+    async def _try_recorded_interval(
+        self, *, command, binding, tracks, snapshot, target, runtime_snapshot
+    ):
+        if (
+            len(tracks) != 1
+            or binding.get("source_kind") != "BAR"
+            or binding.get("position_mode") != "HEDGE"
+            or binding.get("book_mode", "OFF") != "OFF"
+            or binding.get("account_data_mode")
+            == AccountDataMode.HISTORICAL_EXACT.value
+            or binding.get("funding_mode") not in {"OFF", "HISTORICAL_EXACT"}
+            or snapshot.get("state") != "PAUSED"
+            or self._snapshot_is_flat(snapshot)
+            or not isinstance(runtime_snapshot, IndexedHedgeSnapshot)
+        ):
+            return None
+        if (
+            self._ordered_final_state_batch_profile(
+                binding=binding,
+                tracks=tracks,
+                snapshot=snapshot,
+                target_virtual_time_ms=target,
+                enabled=True,
+                held_certificate=True,
+            )
+            is None
+        ):
+            return None
+        track = tracks[0]
+        session_id = self._track_session_id(track)
+        maximum = min(32, self.replay_service.settings.event_buffer_size)
+        if maximum < 2:
+            return None
+        source = await self.replay_service.plan_source_chunk(
+            session_id,
+            target_time_ms=target,
+            max_events=maximum + 1,
+            screen_interactions=True,
+        )
+        # Leave the last previewed event to the ordinary path, including source
+        # exhaustion. A recorded block never hides terminal broker behavior.
+        times = list(source["event_times_ms"][:-1])
+        if len(times) < 2:
+            return None
+        public, simulation = await self.hedge_inputs._projection_cursors(command.run_id)
+        inputs = runtime_snapshot.events_through(
+            public, simulation, self._actual_event_time_ms(binding, times[-1])
+        )
+        barriers = [
+            self._virtual_event_time_ms(binding, e.event_time_ms)
+            for e in inputs
+            if e.source_kind != "PUBLIC"
+            or e.event_kind != "MARK_INDEX"
+            or e.event_phase != 30
+            or e.track_id != track["track_id"]
+        ]
+        if barriers:
+            times = [time for time in times if time < min(barriers)]
+        if len(times) < 2:
+            return None
+        target_time = times[-1]
+        constant = runtime_snapshot.stable_mark_prefix(
+            public,
+            simulation,
+            str(track["track_id"]),
+            self._actual_event_time_ms(binding, target_time),
+        )
+        if constant is not None and constant[1] >= self._actual_event_time_ms(
+            binding, target_time
+        ):
+            return None
+        inputs = tuple(
+            (e, self._virtual_event_time_ms(binding, e.event_time_ms))
+            for e in inputs
+            if self._virtual_event_time_ms(binding, e.event_time_ms) <= target_time
+        )
+        if len(inputs) > 256:
+            return None
+        position = snapshot["components"]["position"]
+        prices = [Decimal(str(position["long"]["mark_price"]))]
+        prices.extend(Decimal(str(event.payload["mark_price"])) for event, _ in inputs)
+        fingerprint = await self.store.recorded_interval_certificate(
+            command.run_id,
+            low=min(prices),
+            high=max(prices),
+            target_actual_time_ms=self._actual_event_time_ms(binding, target_time),
+        )
+        if fingerprint is None:
+            return None
+        try:
+            await self.replay_service.heartbeat(session_id, command.client_instance_id)
+        except ReplayDomainError as exc:
+            if exc.code is ReplayErrorCode.CONTROLLER_CONFLICT:
+                return None
+            raise
+        part_id = self._multi_command_id(
+            command.command_id,
+            str(track["track_id"]),
+            "recorded",
+            int(snapshot["revision"]),
+        )
+        plan = {
+            "command_id": part_id,
+            "run_id": command.run_id,
+            "track_id": track["track_id"],
+            "times": tuple(times),
+            "inputs": inputs,
+            "fingerprint": fingerprint,
+            "start_sequence": snapshot["cursor"]["source_sequence"],
+            "actual_delta": self._actual_event_time_ms(binding, target_time)
+            - target_time,
+        }
+        if session_id in self.store._recorded_interval_plans:
+            raise RuntimeError("recorded interval plan already active")
+        self.store._recorded_interval_plans[session_id] = plan
+        try:
+            await self.replay_service.command(
+                session_id,
+                ReplayCommand(
+                    protocol=REPLAY_PROTOCOL,
+                    command_id=part_id,
+                    client_instance_id=command.client_instance_id,
+                    expected_revision=int(snapshot["revision"]),
+                    type=InternalCommandType.RECORDED_INTERVAL,
+                    payload={
+                        "target_virtual_time_ms": target_time,
+                        "max_events": len(times),
+                        "require_empty_account": False,
+                        "snapshot_only": False,
+                    },
+                ),
+                _training_internal=True,
+            )
+            if "stable" not in plan:
+                raise RuntimeError("recorded interval did not commit its history")
+            self.store._cache_committed_hedge_fingerprint(
+                command.run_id, plan["fingerprint_after"]
+            )
+            return plan["stable"], target_time
+        finally:
+            self.store._recorded_interval_plans.pop(session_id, None)
 
     async def _held_interval_batch_end(
         self, run_id: str, *, binding: Mapping[str, object],
