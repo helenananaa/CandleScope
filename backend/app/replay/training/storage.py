@@ -678,6 +678,8 @@ def _encode_account_record_cursor(
 class TrainingRunStore:
     """Own v2 metadata while reusing the internal adapter transaction owner."""
 
+    _curve_body_loads = 0
+
     def __init__(self, base_store: ReplaySQLiteStore) -> None:
         self.base_store = base_store
         self._review = ReviewRecorder(self)
@@ -10655,6 +10657,9 @@ class TrainingRunStore:
                             "actual_session_ids": session_ids,
                         },
                     )
+                # Funding receipts reference position legs without an ON DELETE
+                # cascade. Remove owned receipts before deleting those legs.
+                connection.execute("DELETE FROM replay_training_hedge_funding_settlement WHERE run_id=?", (run_id,))
                 deleted = connection.execute(
                     "DELETE FROM replay_training_run WHERE run_id = ?",
                     (run_id,),
@@ -11152,17 +11157,40 @@ class TrainingRunStore:
             ).fetchone()
             if run is None:
                 return None
-            pending = self._load_pending_interval_curves(connection, run_id=run_id)
             cached = {}
             for row in connection.execute(
                 "SELECT resolution, bucket_id, source_sequence, revision "
                 "FROM replay_equity_sample WHERE run_id=?", (run_id,)
             ):
                 cached[(str(row[0]), int(row[1]))] = (int(row[2]), int(row[3]))
+            window = sorted((bucket for name, bucket in cached if name == resolution), reverse=True)
+            cutoff = window[limit - 1] if len(window) >= limit else None
+            pending = self._load_pending_interval_curves(
+                connection, run_id=run_id, resolution=resolution, cutoff=cutoff
+            )
+            bases = {}
+            selected = resolution
+            if selected == "AUTO":
+                selected = "1H"
+                for candidate in ("EVENT", "1M", "15M", "1H"):
+                    size = self._attach_needed_curve_bodies(
+                        connection, pending, run_id=run_id, cached=cached,
+                        resolution=candidate, limit=limit + 1, bases=bases,
+                    )
+                    if size <= limit:
+                        selected = candidate
+                        break
+            else:
+                self._attach_needed_curve_bodies(
+                    connection, pending, run_id=run_id, cached=cached,
+                    resolution=selected, limit=limit, bases=bases,
+                )
             return {
                 "pending": pending,
                 "origins": self._interval_curve_origins(connection, pending),
                 "cached": cached,
+                "selected": selected,
+                "bases": bases,
             }
 
         loaded = await self.base_store.run_extension_read(load)
@@ -11173,18 +11201,8 @@ class TrainingRunStore:
                 status_code=404,
             )
         def prepare():
-            bases = {}
-            selected = resolution
-            if selected == "AUTO":
-                selected = "1H"
-                for candidate in ("EVENT", "1M", "15M", "1H"):
-                    plan = self._plan_interval_curve_samples(
-                        loaded["pending"], loaded["cached"],
-                        resolution=candidate, limit=limit + 1, bases=bases,
-                    )
-                    if len(plan) <= limit:
-                        selected = candidate
-                        break
+            bases = loaded["bases"]
+            selected = loaded.get("selected", resolution)
             rows, completed = self._expand_pending_interval_curves(
                 loaded["pending"], loaded["origins"], run_id=run_id,
                 resolution=selected, limit=limit, cached=loaded["cached"], bases=bases,
@@ -24860,7 +24878,7 @@ class TrainingRunStore:
             {
                 "run": run_id,
                 "value": value["key"],
-                "source": index.chains[-1],
+                "source": index.chains[-1] if getattr(index, "shared", False) else index.curve_market_key(),
                 "start": index.start,
             }
         )
@@ -24870,14 +24888,7 @@ class TrainingRunStore:
                 "SELECT 1 FROM replay_prepared_curve WHERE curve_id=?", (curve_id,)
             ).fetchone():
                 return curve_id
-            data = index.curve_basis() if getattr(index, "shared", False) else {
-                "schema": "prepared-curve.v1",
-                "start": index.start,
-                "times": index.times,
-                "chains": index.chains,
-                "samples": value["samples"],
-                "ledger_hash": value["ledger_hash"],
-            }
+            data = index.curve_basis()
             connection.execute(
                 "INSERT INTO replay_prepared_curve VALUES (?, ?, ?)",
                 (curve_id, run_id, canonical_json(data)),
@@ -25022,13 +25033,28 @@ class TrainingRunStore:
             "revealed": final_state["revealed"],
         }
         curve["created_at_ms"] = now_ms
+        indexed = frames[0]["indexed"]
+        index = indexed["index"]
+        start = int(plan["start"])
+        end = int(plan["end"])
+        start_time_ms = int(index.times[start]) if end > start else None
+        end_time_ms = int(index.times[end - 1]) if end > start else None
+        start_sequence = int(index.start) + start + 1
         connection.execute(
-            "INSERT INTO replay_interval_curve(run_id,command_id,end_sequence,samples_json) VALUES(?,?,?,?)",
+            """
+            INSERT INTO replay_interval_curve(
+                run_id, command_id, end_sequence, samples_json,
+                start_sequence, start_time_ms, end_time_ms
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
             (
                 run_id,
                 command["command_id"],
                 final_state["source_sequence"],
                 canonical_json(curve),
+                start_sequence,
+                start_time_ms,
+                end_time_ms,
             ),
         )
         plan["stable"] = tuple(ordered)
@@ -26270,28 +26296,111 @@ class TrainingRunStore:
         )
 
     @staticmethod
-    def _load_pending_interval_curves(connection, *, run_id):
+    def _load_pending_interval_curves(connection, *, run_id, resolution=None, cutoff=None):
         pending = []
+        predicate = ""
+        parameters = [run_id]
+        if cutoff is not None:
+            if resolution == "EVENT":
+                predicate = " AND (end_sequence >= ? OR start_sequence IS NULL)"
+                parameters.append(cutoff)
+            elif resolution in _EQUITY_BUCKET_MS:
+                predicate = " AND (end_time_ms >= ? OR end_time_ms IS NULL)"
+                parameters.append(cutoff * _EQUITY_BUCKET_MS[resolution])
         for row in connection.execute(
-            "SELECT command_id, samples_json FROM replay_interval_curve "
-            "WHERE run_id=? AND materialized=0 ORDER BY end_sequence, command_id",
-            (run_id,),
+            """
+            SELECT command_id, samples_json, end_sequence,
+                   start_sequence, start_time_ms, end_time_ms
+            FROM replay_interval_curve
+            WHERE run_id=? AND materialized=0
+            """ + predicate + " ORDER BY end_sequence, command_id",
+            parameters,
         ).fetchall():
-            payload = json.loads(row["samples_json"])
-            stored = None
-            if isinstance(payload, dict) and payload.get("schema") == "indexed-curve.v1":
-                stored = connection.execute(
-                    "SELECT data_json FROM replay_prepared_curve WHERE curve_id=? AND run_id=?",
-                    (payload["curve_id"], run_id),
-                ).fetchone()
             pending.append(
                 {
                     "command_id": str(row["command_id"]),
                     "samples_json": str(row["samples_json"]),
-                    "curve_json": None if stored is None else str(stored["data_json"]),
+                    "curve_json": None,
+                    "end_sequence": int(row["end_sequence"]),
+                    "start_sequence": (
+                        None
+                        if row["start_sequence"] is None
+                        else int(row["start_sequence"])
+                    ),
+                    "start_time_ms": (
+                        None
+                        if row["start_time_ms"] is None
+                        else int(row["start_time_ms"])
+                    ),
+                    "end_time_ms": (
+                        None if row["end_time_ms"] is None else int(row["end_time_ms"])
+                    ),
                 }
             )
         return pending
+
+    @staticmethod
+    def _interval_bound_window(interval, payload, *, bucket_ms):
+        start_seq = interval.get("start_sequence")
+        end_seq = interval.get("end_sequence")
+        start_time = interval.get("start_time_ms")
+        end_time = interval.get("end_time_ms")
+        start = int(payload["start"])
+        end = int(payload["end"])
+        revision_base = int(payload.get("revision_base", 0))
+        last_version = (
+            int(end_seq) if end_seq is not None else 0,
+            revision_base + max(0, end - start),
+        )
+        if bucket_ms == 0:
+            if start_seq is None or end_seq is None:
+                return None, None, last_version
+            return int(end_seq), int(start_seq), last_version
+        if start_time is None or end_time is None:
+            return None, None, last_version
+        return (
+            int(end_time) // bucket_ms,
+            int(start_time) // bucket_ms,
+            last_version,
+        )
+
+    @classmethod
+    def _attach_needed_curve_bodies(
+        cls, connection, pending, *, run_id, cached, resolution, limit, bases=None
+    ):
+        chosen = {bucket: (version, None) for (name, bucket), version in cached.items()
+                  if name == resolution}
+        chosen = dict(sorted(chosen.items(), reverse=True)[:limit])
+        bases = {} if bases is None else bases
+        bodies = {}
+        for interval in reversed(pending):
+            payload = json.loads(interval["samples_json"])
+            if isinstance(payload, dict) and payload.get("schema") == "indexed-curve.v1":
+                last, _, _ = cls._interval_bound_window(
+                    interval, payload, bucket_ms=_EQUITY_BUCKET_MS[resolution]
+                )
+                if last is not None and len(chosen) >= limit and last < min(chosen):
+                    # Do not assume an older interval with unknown bounds is
+                    # outside the window. Inspect its metadata independently.
+                    continue
+                curve_id = str(payload["curve_id"])
+                if interval.get("curve_json") is None:
+                    if curve_id not in bodies:
+                        row = connection.execute(
+                            "SELECT data_json FROM replay_prepared_curve WHERE run_id=? AND curve_id=?",
+                            (run_id, curve_id),
+                        ).fetchone()
+                        if row is None:
+                            raise ValueError("indexed curve basis is missing")
+                        bodies[curve_id] = str(row[0])
+                        cls._curve_body_loads += 1
+                    interval["curve_json"] = bodies[curve_id]
+            versions = {(resolution, bucket): value[0] for bucket, value in chosen.items()}
+            chosen = cls._plan_interval_curve_samples(
+                [interval], versions, resolution=resolution, limit=limit, bases=bases
+            )
+
+        return len(chosen)
 
     @classmethod
     def _interval_curve_origins(cls, connection, pending):
@@ -26375,7 +26484,15 @@ class TrainingRunStore:
         for interval in reversed(pending):
             payload = json.loads(interval["samples_json"])
             if isinstance(payload, dict) and payload.get("schema") == "indexed-curve.v1":
+                start, end = int(payload["start"]), int(payload["end"])
+                if start >= end:
+                    continue
+                last_bucket, _first_bucket, _version = cls._interval_bound_window(
+                    interval, payload, bucket_ms=bucket_ms
+                )
                 stored = interval.get("curve_json")
+                if last_bucket is not None and len(chosen) >= limit and last_bucket < buckets[0]:
+                    continue
                 if stored is None:
                     raise ValueError("indexed curve basis is missing")
                 key = payload.get("curve_id", stored)
@@ -26385,16 +26502,17 @@ class TrainingRunStore:
                     if basis.get("schema") == "shared-curve.v1":
                         from ..broker.shared_prepared import restore_curve
                         basis = restore_curve(basis)
+                    elif basis.get("schema") == "prepared-curve.v2":
+                        from ..broker.shared_prepared import restore_legacy_curve
+                        basis = restore_legacy_curve(basis)
                     elif basis.get("schema") != "prepared-curve.v1":
                         raise ValueError("indexed curve basis version is unsupported")
                     bases[key] = basis
-                start, end = int(payload["start"]), int(payload["end"])
-                if start >= end:
-                    continue
-                last_bucket = (
-                    basis["start"] + end if bucket_ms == 0
-                    else int(basis["times"][end - 1]) // bucket_ms
-                )
+                if last_bucket is None:
+                    last_bucket = (
+                        basis["start"] + end if bucket_ms == 0
+                        else int(basis["times"][end - 1]) // bucket_ms
+                    )
                 if len(chosen) >= limit and last_bucket < buckets[0]:
                     continue
                 offsets = cls._curve_sample_offsets(
@@ -26424,6 +26542,17 @@ class TrainingRunStore:
         plan = cls._plan_interval_curve_samples(
             pending, cached, resolution=resolution, limit=limit, bases=bases
         )
+        grouped = {}
+        for _version, sample in plan.values():
+            if sample is None or isinstance(sample, list):
+                continue
+            _payload, basis, offset = sample
+            grouped.setdefault(id(basis), (basis, []))[1].append(offset)
+        if grouped:
+            from ..broker.shared_prepared import prefetch_account_samples
+
+            for basis, offsets in grouped.values():
+                prefetch_account_samples(basis, offsets)
         expanded = {}
         for bucket, (version, sample) in plan.items():
             if sample is None:
@@ -26494,10 +26623,33 @@ class TrainingRunStore:
                 )
 
     @staticmethod
-    def _write_interval_curve(connection, *, run_id, command_id, end_sequence, rows):
+    def _write_interval_curve(
+        connection,
+        *,
+        run_id,
+        command_id,
+        end_sequence,
+        rows,
+        start_sequence=None,
+        start_time_ms=None,
+        end_time_ms=None,
+    ):
         connection.execute(
-            "INSERT INTO replay_interval_curve(run_id, command_id, end_sequence, samples_json) VALUES (?, ?, ?, ?)",
-            (run_id, command_id, end_sequence, canonical_json(list(rows))),
+            """
+            INSERT INTO replay_interval_curve(
+                run_id, command_id, end_sequence, samples_json,
+                start_sequence, start_time_ms, end_time_ms
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run_id,
+                command_id,
+                end_sequence,
+                canonical_json(list(rows)),
+                start_sequence,
+                start_time_ms,
+                end_time_ms,
+            ),
         )
 
     @staticmethod

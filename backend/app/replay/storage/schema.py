@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import sqlite3
 
+from .checkpoint_delta import SCHEMA as CHECKPOINT_DELTA_SCHEMA
 
-REPLAY_SCHEMA_VERSION = 4
+
+REPLAY_SCHEMA_VERSION = 5
 
 
 SCHEMA_CURRENT = """
@@ -149,6 +151,10 @@ CREATE TABLE IF NOT EXISTS replay_report (
 """
 
 
+
+SCHEMA_CURRENT += CHECKPOINT_DELTA_SCHEMA
+
+
 def migrate_replay_schema(connection: sqlite3.Connection, *, now_ms: int) -> None:
     """Create the current schema on a fresh DB and reject every legacy shape."""
 
@@ -206,6 +212,13 @@ def migrate_replay_schema(connection: sqlite3.Connection, *, now_ms: int) -> Non
         raise RuntimeError(
             f"replay schema {current} is newer than supported {REPLAY_SCHEMA_VERSION}"
         )
+    if current == 4:
+        for statement in CHECKPOINT_DELTA_SCHEMA.split(";"):
+            if statement.strip():
+                connection.execute(statement)
+        connection.execute("UPDATE replay_schema_version SET version=?, applied_at_ms=? WHERE singleton=1",
+                           (REPLAY_SCHEMA_VERSION, now_ms))
+        return
     if current == REPLAY_SCHEMA_VERSION:
         return
     raise RuntimeError(

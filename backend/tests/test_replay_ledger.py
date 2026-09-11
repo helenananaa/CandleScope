@@ -159,12 +159,77 @@ def test_incremental_account_totals_match_full_scan_after_post_clone_and_restore
     assert ledger.account_total(LedgerAccount.CASH) == _scanned_account_total(
         ledger, LedgerAccount.CASH
     )
+    assert cloned._verified_through == len(cloned.entries)
+    assert ledger._verified_through == len(ledger.entries)
+
 
     snapshot = ledger.snapshot()
     restored = make_broker()._ledger
+    visits_before = LedgerBook.balance_sort_visits
     restored.restore(snapshot)
+    assert LedgerBook.balance_sort_visits == visits_before + len(restored.entries)
+    assert restored._verified_through == len(restored.entries)
     for account in LedgerAccount:
         assert restored.account_total(account) == ledger.account_total(account)
         assert restored.account_total(account) == _scanned_account_total(
             restored, account
         )
+
+
+def test_assert_entries_balanced_counts_the_sorted_entries() -> None:
+    broker = make_broker()
+    entries = broker.ledger_entries
+    before = LedgerBook.balance_sort_visits
+    LedgerBook.assert_entries_balanced(entries)
+    assert LedgerBook.balance_sort_visits == before + len(entries)
+
+
+def test_clone_post_rolls_back_entries_totals_and_watermark_together() -> None:
+    broker = make_broker()
+    ledger = broker._ledger
+    watermark = ledger._verified_through
+    entry_count = len(ledger.entries)
+    cash = ledger.account_total(LedgerAccount.CASH)
+    cloned = ledger.clone()
+    cloned.post(
+        kind=LedgerKind.FEE,
+        source_sequence=1,
+        event_time_ms=1,
+        postings=(
+            (LedgerAccount.CASH, "-2"),
+            (LedgerAccount.FEE_EXPENSE, "2"),
+        ),
+    )
+    assert cloned._verified_through == watermark + 2
+    assert len(cloned.entries) == entry_count + 2
+    assert cloned.account_total(LedgerAccount.CASH) != cash
+    assert ledger._verified_through == watermark
+    assert len(ledger.entries) == entry_count
+    assert ledger.account_total(LedgerAccount.CASH) == cash
+    assert cloned.account_total(LedgerAccount.CASH) == _scanned_account_total(
+        cloned, LedgerAccount.CASH
+    )
+
+
+def test_failed_ledger_restore_does_not_change_totals_or_entries() -> None:
+    broker = make_broker()
+    ledger = broker._ledger
+    before_entries = len(ledger.entries)
+    cash = ledger.account_total(LedgerAccount.CASH)
+    cloned = ledger.clone()
+    cloned.post(
+        kind=LedgerKind.FEE,
+        source_sequence=1,
+        event_time_ms=1,
+        postings=(
+            (LedgerAccount.CASH, "-1"),
+            (LedgerAccount.FEE_EXPENSE, "1"),
+        ),
+    )
+    payload = cloned.snapshot()
+    payload["tail_hash"] = "sha256:" + "0" * 64
+    payload["state_hash"] = canonical_sha256({key: value for key, value in payload.items() if key != "state_hash"})
+    with pytest.raises(ReplayDomainError):
+        ledger.restore(payload)
+    assert len(ledger.entries) == before_entries
+    assert ledger.account_total(LedgerAccount.CASH) == cash

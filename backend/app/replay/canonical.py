@@ -15,6 +15,7 @@ except ImportError:  # Keep the deterministic reference available in minimal ins
     orjson = None
 
 from .models import normalize_decimal_string
+from .immutable_json import FrozenDict, FrozenList
 
 
 def _is_native_canonical_json(value: object) -> bool:
@@ -32,6 +33,8 @@ def _is_native_canonical_json(value: object) -> bool:
     while pending:
         candidate = pending.pop()
         candidate_type = type(candidate)
+        if candidate_type in (FrozenDict, FrozenList):
+            continue
         if candidate is None or candidate_type is str or candidate_type is bool or candidate_type is int:
             continue
         if candidate_type is dict:
@@ -96,16 +99,20 @@ def canonical_json(value: object) -> str:
     )
 
 
-def canonical_json_bytes(value: object) -> bytes:
+def _canonical_json_encoding(value: object) -> tuple[bytes, bool]:
     if orjson is not None:
         normalized = value if _is_native_canonical_json(value) else _canonical_value(value)
         try:
-            return orjson.dumps(normalized, option=orjson.OPT_SORT_KEYS)
+            return orjson.dumps(normalized, option=orjson.OPT_SORT_KEYS), True
         except orjson.JSONEncodeError:
             # Python's canonical contract also permits arbitrary-size integers
             # and unusual primitive subclasses. Preserve its exact behavior.
             pass
-    return canonical_json(value).encode("utf-8")
+    return canonical_json(value).encode("utf-8"), False
+
+
+def canonical_json_bytes(value: object) -> bytes:
+    return _canonical_json_encoding(value)[0]
 
 
 def canonical_sha256(value: object) -> str:
@@ -113,21 +120,34 @@ def canonical_sha256(value: object) -> str:
     return f"sha256:{digest}"
 
 
-def _canonical_object_bytes(
-    value: Mapping[str, object], *, encoded_fields: Mapping[str, bytes],
-) -> bytes:
-    """Compose owned canonical encodings without walking immutable subtrees.
-
-    Internal snapshot builders must supply encodings of the exact field values,
-    produced by this module. This is not an input-validation or raw-JSON API.
-    """
+def _canonical_object_parts(value: Mapping[str, object], *, encoded_fields):
+    """Internal canonical fragments, retaining immutable encoded subtrees."""
     if any(type(key) is not str for key in value):
         raise TypeError("canonical object requires native string keys")
     if not encoded_fields.keys() <= value.keys():
         raise ValueError("encoded field is absent from canonical object")
-    return b"{" + b",".join(
-        canonical_json_bytes(key) + b":" + (
-            encoded_fields[key] if key in encoded_fields else canonical_json_bytes(value[key])
-        )
-        for key in sorted(value)
-    ) + b"}"
+    yield b"{"
+    for index, key in enumerate(sorted(value)):
+        if index:
+            yield b","
+        yield canonical_json_bytes(key)
+        yield b":"
+        encoded = encoded_fields.get(key)
+        if encoded is None:
+            yield canonical_json_bytes(value[key])
+        elif isinstance(encoded, tuple):
+            yield from encoded
+        else:
+            yield encoded
+    yield b"}"
+
+
+def _canonical_object_bytes(value: Mapping[str, object], *, encoded_fields) -> bytes:
+    return b"".join(_canonical_object_parts(value, encoded_fields=encoded_fields))
+
+
+def _canonical_object_sha256(value: Mapping[str, object], *, encoded_fields) -> str:
+    digest = hashlib.sha256()
+    for part in _canonical_object_parts(value, encoded_fields=encoded_fields):
+        digest.update(part)
+    return "sha256:" + digest.hexdigest()

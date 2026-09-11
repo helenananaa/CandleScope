@@ -281,6 +281,8 @@ ADAPTER_STORAGE_CONTRACT: dict[str, object] = {
         "replay_command_log",
         "replay_source_event",
         "replay_checkpoint",
+        "replay_checkpoint_base",
+        "replay_checkpoint_delta_ref",
         "replay_mutation_log",
         "replay_order",
         "replay_fill",

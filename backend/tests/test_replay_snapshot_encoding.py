@@ -73,3 +73,31 @@ def test_broker_nested_hash_keeps_reference_contract(v2):
     assert broker.snapshot() == original
     broker.restore(original)
     assert broker.snapshot() == original
+
+
+def test_mark_only_snapshot_reuses_fill_and_ledger_encodings():
+    from tests.fixtures.replay.broker_fakes import bar, make_broker, request
+
+    broker = make_broker()
+    broker.place_order(request(client_order_id="entry"), command_id="cmd-entry")
+    broker.apply_bar(bar(0, 100))
+    broker.snapshot()
+    fills = broker._snapshot_component_encodes["fills"]
+    ledger = broker._snapshot_component_encodes["ledger"]
+    encoded_entries = broker._ledger.entry_encodes
+    broker.apply_bar(bar(1, 101))
+    after = broker.snapshot()
+    assert broker._snapshot_component_encodes["fills"] == fills
+    assert broker._snapshot_component_encodes["ledger"] == ledger
+    assert broker._ledger.entry_encodes == encoded_entries
+    restored = make_broker()
+    restored.restore(after)
+    assert restored.account.cash_balance == broker.account.cash_balance
+    assert restored.position.to_dict() == broker.position.to_dict()
+    assert restored.fills == broker.fills
+    assert restored._ledger.tail_hash == broker._ledger.tail_hash
+    broker.close_position(command_id="cmd-close")
+    broker.apply_bar(bar(2, 102))
+    broker.snapshot()
+    assert broker._snapshot_component_encodes["fills"] == fills + 1
+    assert broker._snapshot_component_encodes["ledger"] == ledger + 1

@@ -343,7 +343,7 @@ class ReplaySQLiteStore:
         except BaseException:
             self._release_pending_dataset_object(expected_object_id)
             raise
-        checkpoint_bytes = bytes(initial_checkpoint)
+        checkpoint_bytes = initial_checkpoint
 
         def write(connection: sqlite3.Connection) -> None:
             state = self._normalize_session_state(session_state)
@@ -541,7 +541,7 @@ class ReplaySQLiteStore:
                     connection,
                     session_id=session_id,
                     state=state,
-                    payload=bytes(checkpoint),
+                    payload=checkpoint,
                     initial=False,
                     mutation_id=mutation_id,
                     now_ms=now,
@@ -587,7 +587,7 @@ class ReplaySQLiteStore:
                     connection,
                     session_id=session_id,
                     state=state,
-                    payload=bytes(checkpoint),
+                    payload=checkpoint,
                     initial=False,
                     mutation_id=mutation_id,
                     now_ms=now,
@@ -729,7 +729,7 @@ class ReplaySQLiteStore:
                     connection,
                     session_id=session_id,
                     state=state,
-                    payload=bytes(checkpoint),
+                    payload=checkpoint,
                     initial=False,
                     mutation_id=mutation_id,
                     now_ms=now,
@@ -802,7 +802,7 @@ class ReplaySQLiteStore:
                 connection,
                 session_id=session_id,
                 state=state,
-                payload=bytes(checkpoint),
+                payload=checkpoint,
                 initial=False,
                 mutation_id=mutation_id,
                 now_ms=now,
@@ -956,8 +956,10 @@ class ReplaySQLiteStore:
             ).fetchall()
             valid: list[StoredCheckpoint] = []
             for row in rows:
-                payload = bytes(row["payload"])
-                if _blob_sha256(payload) != row["payload_sha256"]:
+                from .checkpoint_delta import resolve
+                try:
+                    payload = resolve(connection, row)
+                except (ValueError, KeyError, TypeError, IndexError, zlib.error):
                     self._metrics["corrupt_checkpoints_skipped"] += 1
                     continue
                 valid.append(
@@ -1421,6 +1423,8 @@ class ReplaySQLiteStore:
         mutation_id: int,
         now_ms: int,
     ) -> int:
+        from .checkpoint_delta import compact, collect
+        stored_payload, base_id = compact(connection, session_id, payload)
         cursor = connection.execute(
             """
             INSERT INTO replay_checkpoint(
@@ -1436,13 +1440,15 @@ class ReplaySQLiteStore:
                 state["command_log_offset"],
                 state["event_sequence"],
                 state["state_hash"],
-                payload,
+                stored_payload,
                 _blob_sha256(payload),
                 int(initial),
                 now_ms,
             ),
         )
         checkpoint_id = int(cursor.lastrowid)
+        if base_id is not None:
+            connection.execute("INSERT INTO replay_checkpoint_delta_ref VALUES (?,?)", (checkpoint_id, base_id))
         connection.execute(
             "UPDATE replay_checkpoint SET active = 1 WHERE checkpoint_id = ?",
             (checkpoint_id,),
@@ -1458,6 +1464,7 @@ class ReplaySQLiteStore:
             """,
             (session_id, session_id, self._max_recent_checkpoints),
         )
+        collect(connection, session_id)
         self._metrics["checkpoints_written"] += 1
         return checkpoint_id
 

@@ -7,7 +7,7 @@ import sqlite3
 from app.replay.canonical import canonical_sha256
 
 
-TRAINING_SCHEMA_VERSION = 21
+TRAINING_SCHEMA_VERSION = 22
 TRAINING_SCHEMA_ID = "replay.training.v2"
 TIME_COMMITMENT_SCHEMA_VERSION = "replay.time-commitment.v1"
 START_SELECTION_SCHEMA_VERSION = "replay.start-selection.v1"
@@ -2518,6 +2518,23 @@ CREATE INDEX IF NOT EXISTS idx_replay_interval_curve_pending
 ON replay_interval_curve(run_id, materialized, end_sequence);
 """
 
+def _ensure_interval_curve_bounds(connection: sqlite3.Connection) -> None:
+    columns = {
+        str(row[1])
+        for row in connection.execute("PRAGMA table_info(replay_interval_curve)")
+    }
+    if not columns:
+        return
+    for name in ("start_sequence", "start_time_ms", "end_time_ms"):
+        if name not in columns:
+            connection.execute(
+                f"ALTER TABLE replay_interval_curve ADD COLUMN {name} INTEGER"
+            )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_replay_interval_curve_time "
+        "ON replay_interval_curve(run_id, materialized, end_time_ms, end_sequence)"
+    )
+
 
 TRAINING_SCHEMA_V21_INDEXED_INTERVALS = """
 CREATE TABLE IF NOT EXISTS replay_prepared_curve (
@@ -2556,9 +2573,11 @@ def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> N
     current = 0 if row is None else int(row[0])
     if current == TRAINING_SCHEMA_VERSION:
         return
-    if current in {19, 20}:
-        _execute_script(connection, TRAINING_SCHEMA_V20_INTERVAL_CURVES)
-        _execute_script(connection, TRAINING_SCHEMA_V21_INDEXED_INTERVALS)
+    if current in {19, 20, 21}:
+        if current in {19, 20}:
+            _execute_script(connection, TRAINING_SCHEMA_V20_INTERVAL_CURVES)
+            _execute_script(connection, TRAINING_SCHEMA_V21_INDEXED_INTERVALS)
+        _ensure_interval_curve_bounds(connection)
         connection.execute(
             "UPDATE replay_training_schema_version SET version=?, applied_at_ms=? WHERE singleton=1",
             (TRAINING_SCHEMA_VERSION, now_ms),
@@ -2598,6 +2617,7 @@ def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> N
         TRAINING_SCHEMA_V21_INDEXED_INTERVALS,
     ):
         _execute_script(connection, script)
+    _ensure_interval_curve_bounds(connection)
     connection.execute(
         """
         INSERT INTO replay_training_schema_version(singleton, version, applied_at_ms)

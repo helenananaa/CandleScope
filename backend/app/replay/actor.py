@@ -14,7 +14,7 @@ from hashlib import sha256
 from types import MappingProxyType
 from typing import Awaitable, Callable, Protocol, Sequence
 
-from .canonical import canonical_sha256, _canonical_object_bytes
+from .canonical import _canonical_object_sha256, canonical_sha256, _canonical_object_bytes
 from .timing import RequestTiming, current_timing, use_timing
 from .checkpoints import CheckpointCodec, CheckpointError, CheckpointRing
 from .clock import CLOCK_SCHEMA_VERSION, ClockSnapshot, VirtualClock
@@ -4650,6 +4650,12 @@ class ReplaySessionActor:
     def _has_active_trading_path(self) -> bool:
         """Revalidate path dependencies inside the single-writer boundary."""
 
+        provider = getattr(self._reducer, "has_active_trading_path", None)
+        if callable(provider):
+            active = provider()
+            if type(active) is not bool:
+                raise TypeError("active trading state must be boolean")
+            return active
         state = self._component_state()
         terminal = {"FILLED", "CANCELED", "REJECTED", "EXPIRED"}
         orders = state.get("orders")
@@ -4700,16 +4706,8 @@ class ReplaySessionActor:
         )
         material = self._state_hash_material(components, cursor=cursor)
         if component_state is None and self._component_state_encoding_cache is not None:
-            state_hash = (
-                "sha256:"
-                + sha256(
-                    _canonical_object_bytes(
-                        material,
-                        encoded_fields={
-                            "components": self._component_state_encoding_cache
-                        },
-                    )
-                ).hexdigest()
+            state_hash = _canonical_object_sha256(
+                material, encoded_fields={"components": self._component_state_encoding_cache}
             )
         else:
             state_hash = canonical_sha256(material)

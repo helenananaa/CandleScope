@@ -113,6 +113,8 @@ class LedgerEntry:
 
 
 class LedgerBook:
+    balance_sort_visits = 0
+
     def __init__(
         self,
         *,
@@ -138,6 +140,10 @@ class LedgerBook:
         self._next_entry = 1
         self._tail_hash = self._initial_hash()
         self._totals: dict[LedgerAccount, Decimal] = {}
+        self._verified_through = 0
+        self.historical_balance_visits = 0
+        self.posting_balance_visits = 0
+        self.entry_encodes = 0
         self.post(
             kind=LedgerKind.INITIAL_CAPITAL,
             source_sequence=0,
@@ -166,6 +172,10 @@ class LedgerBook:
         clone._next_entry = self._next_entry
         clone._tail_hash = self._tail_hash
         clone._totals = dict(self._totals)
+        clone._verified_through = self._verified_through
+        clone.historical_balance_visits = self.historical_balance_visits
+        clone.posting_balance_visits = self.posting_balance_visits
+        clone.entry_encodes = self.entry_encodes
         return clone
 
     def post(
@@ -187,6 +197,7 @@ class LedgerBook:
         )
         if len(normalized) < 2:
             raise ValueError("ledger transaction requires at least two postings")
+        self.posting_balance_visits += len(normalized)
         with localcontext() as context:
             context.prec = 60
             posting_total = sum(
@@ -229,6 +240,7 @@ class LedgerBook:
             self._add_total(account, amount)
             self._next_entry += 1
         self._next_transaction += 1
+        self._verified_through = len(self._entries)
         return tuple(entries)
 
     def account_total(self, account: LedgerAccount) -> str:
@@ -263,6 +275,7 @@ class LedgerBook:
             "tail_hash": self._tail_hash,
             "entries": [entry.to_dict() for entry in self._entries],
         }
+        self.entry_encodes += len(self._entries)
         payload["state_hash"] = canonical_sha256(payload)
         return payload
 
@@ -346,13 +359,31 @@ class LedgerBook:
         self._next_entry = next_entry
         self._next_transaction = next_transaction
         self._tail_hash = expected_hash
+        self._verified_through = len(entries)
         self._rebuild_totals()
+
+    def assert_current_postings(self) -> None:
+        """Balance only entries posted after the last verified watermark."""
+
+        suffix = self._entries[self._verified_through :]
+        if not suffix:
+            return
+        self.posting_balance_visits += len(suffix)
+        self.assert_entries_balanced(suffix)
+        self._verified_through = len(self._entries)
+
+    def audit(self) -> None:
+        """Re-check the complete immutable history. Used on load and restore."""
+
+        self.assert_entries_balanced(self._entries)
+        self._verified_through = len(self._entries)
 
     @staticmethod
     def assert_entries_balanced(entries: Iterable[LedgerEntry]) -> None:
         ordered = sorted(
             entries, key=lambda entry: (entry.transaction_id, entry.entry_id)
         )
+        LedgerBook.balance_sort_visits += len(ordered)
         for _, transaction in groupby(ordered, key=lambda entry: entry.transaction_id):
             postings = tuple(transaction)
             if len(postings) < 2:

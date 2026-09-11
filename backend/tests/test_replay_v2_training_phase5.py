@@ -121,6 +121,8 @@ def _multi_trade_sources(
     symbols: tuple[str, ...],
     *,
     coalesce_trade_timestamps: bool = False,
+    symbol_time_offset_ms: int = 0,
+    constant_prices: bool = False,
 ) -> tuple[FakeKlinesRepo, ParquetRawAggTradeArchive]:
     repository = replay_repository()
     archive = ParquetRawAggTradeArchive(
@@ -136,7 +138,7 @@ def _multi_trade_sources(
         trades: list[dict[str, object]] = []
         for minute in range(-2, TRADE_REPLAY_MINUTES + 2):
             open_ms = TRADE_REPLAY_START_MS + minute * INTERVAL_MS
-            price = price_base + minute
+            price = price_base if constant_prices else price_base + minute
             active = minute >= 0
             bars.append(
                 {
@@ -157,7 +159,7 @@ def _multi_trade_sources(
         repository.add_rows(identity, "1m", bars)
         first_agg_trade_id = (symbol_index + 1) * 100_000
         for minute in range(TRADE_REPLAY_MINUTES):
-            price = price_base + minute
+            price = price_base if constant_prices else price_base + minute
             for within in range(2):
                 index = minute * 2 + within
                 timestamp = (
@@ -165,6 +167,7 @@ def _multi_trade_sources(
                     + minute * INTERVAL_MS
                     + 1_000
                     + (0 if coalesce_trade_timestamps else within)
+                    + symbol_index * symbol_time_offset_ms
                 )
                 trades.append(
                     {
@@ -207,8 +210,10 @@ async def _trade_service(
     *,
     archive_root: Path,
     symbols: tuple[str, ...],
+    symbol_time_offset_ms: int = 0,
+    constant_prices: bool = False,
 ) -> ReplayService:
-    repository, archive = _multi_trade_sources(archive_root, symbols)
+    repository, archive = _multi_trade_sources(archive_root, symbols, symbol_time_offset_ms=symbol_time_offset_ms, constant_prices=constant_prices)
     service = ReplayService(
         settings=replay_settings(path),
         store=ReplaySQLiteStore(path, now_ms=lambda: TRADE_NOW_MS),

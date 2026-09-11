@@ -657,9 +657,13 @@ class MarketRange:
             value["offset_ms"],
         )
 
+    row_visits = 0
+    block_loads = 0
+
     def row(self, index):
         if not 0 <= index < self.count:
             raise IndexError(index)
+        MarketRange.row_visits += 1
         part = bisect_right(self.ends, index)
         obj, first, _ = self.parts[part]
         before = 0 if part == 0 else self.ends[part - 1]
@@ -667,6 +671,27 @@ class MarketRange:
         if self.offset_ms:
             row = [row[0] + self.offset_ms, row[1] + self.offset_ms, *row[2:]]
         return row
+
+    def closes_at(self, offsets):
+        """Read selected closes by 256-row blocks instead of a full-history walk."""
+
+        result = []
+        loaded = {}
+        for index in offsets:
+            if not 0 <= index < self.count:
+                raise IndexError(index)
+            part = bisect_right(self.ends, index)
+            obj, first, _ = self.parts[part]
+            before = 0 if part == 0 else self.ends[part - 1]
+            local = first + index - before
+            block_id = local // BLOCK
+            key = (id(obj), block_id)
+            if key not in loaded:
+                loaded[key] = obj.block(block_id)
+                MarketRange.block_loads += 1
+            row = loaded[key][local % BLOCK]
+            result.append(row[5])
+        return result
 
     def summary(self, start, end):
         if not 0 <= start <= end <= self.count:

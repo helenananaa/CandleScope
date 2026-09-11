@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import zlib
 from collections import deque
 from dataclasses import dataclass
 from typing import Callable, Mapping
 
-from .canonical import canonical_json_bytes, canonical_sha256
+from .canonical import canonical_json_bytes, canonical_sha256, _is_native_canonical_json, _canonical_object_sha256, _canonical_object_bytes
+from .immutable_json import freeze
 from .errors import ReplayDomainError, ReplayErrorCode
 from .models import validate_counter, validate_timestamp_ms
 
@@ -31,6 +31,29 @@ class CheckpointError(ValueError):
     pass
 
 
+class _OwnedCheckpoint(bytes):
+    """Transient immutable receipt for bytes just produced by this codec."""
+
+    def __new__(cls, raw, payload, schema, raw_size):
+        instance = bytes.__new__(cls, raw)
+        object.__setattr__(instance, "payload", freeze(payload))
+        object.__setattr__(instance, "schema", schema)
+        object.__setattr__(instance, "raw_size", raw_size)
+        return instance
+
+    def __setattr__(self, name, value):
+        raise TypeError("checkpoint receipt is immutable")
+
+    def __delattr__(self, name):
+        raise TypeError("checkpoint receipt is immutable")
+
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        return self
+
+
 def _strict_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     result: dict[str, object] = {}
     for key, value in pairs:
@@ -50,32 +73,26 @@ class CheckpointCodec:
         if not isinstance(payload, Mapping):
             raise TypeError("checkpoint payload must be an object")
         normalized_payload = dict(payload)
+        owned = _is_native_canonical_json(normalized_payload)
+        if owned:
+            normalized_payload = freeze(normalized_payload)
         payload_bytes = canonical_json_bytes(normalized_payload)
-        schema_bytes = canonical_json_bytes(self.schema_version)
-        checksum_material = (
-            b'{"payload":'
-            + payload_bytes
-            + b',"schema_version":'
-            + schema_bytes
-            + b"}"
-        )
-        checksum = f"sha256:{hashlib.sha256(checksum_material).hexdigest()}"
-        encoded = (
-            b'{"checksum":'
-            + canonical_json_bytes(checksum)
-            + b',"payload":'
-            + payload_bytes
-            + b',"schema_version":'
-            + schema_bytes
-            + b"}"
+        material = {"payload": normalized_payload, "schema_version": self.schema_version}
+        checksum = _canonical_object_sha256(material, encoded_fields={"payload": payload_bytes})
+        encoded = _canonical_object_bytes(
+            {"checksum": checksum, **material}, encoded_fields={"payload": payload_bytes}
         )
         if len(encoded) > CHECKPOINT_MAX_RAW_BYTES:
             raise CheckpointError("checkpoint exceeds the raw byte budget")
         if len(encoded) < CHECKPOINT_COMPRESSION_MIN_BYTES:
-            return encoded
-        compressed = zlib.compress(encoded, level=CHECKPOINT_ZLIB_LEVEL)
-        framed = CHECKPOINT_ZLIB_MAGIC + compressed
-        return framed if len(framed) < len(encoded) else encoded
+            wire = encoded
+        else:
+            compressed = zlib.compress(encoded, level=CHECKPOINT_ZLIB_LEVEL)
+            framed = CHECKPOINT_ZLIB_MAGIC + compressed
+            wire = framed if len(framed) < len(encoded) else encoded
+        if owned:
+            return _OwnedCheckpoint(wire, normalized_payload, self.schema_version, len(encoded))
+        return wire
 
     def decode(self, encoded: bytes) -> dict[str, object]:
         if not isinstance(encoded, bytes) or not encoded:

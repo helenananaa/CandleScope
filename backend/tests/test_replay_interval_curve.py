@@ -16,7 +16,7 @@ from tests.test_replay_v2_training_phase6 import _risk_service
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("old_version", [19, 20])
+@pytest.mark.parametrize("old_version", [19, 20, 21])
 async def test_schema_upgrade_preserves_existing_session(tmp_path, old_version):
     path = tmp_path / "old.db"
     service, run_id, session_id = await seed(path)
@@ -25,8 +25,9 @@ async def test_schema_upgrade_preserves_existing_session(tmp_path, old_version):
     with sqlite3.connect(path) as connection:
         if old_version == 19:
             connection.execute("DROP TABLE replay_interval_curve")
-        connection.execute("DROP TABLE replay_prepared_curve")
-        connection.execute("DROP TABLE replay_hedge_mark_span")
+        if old_version < 21:
+            connection.execute("DROP TABLE replay_prepared_curve")
+            connection.execute("DROP TABLE replay_hedge_mark_span")
         connection.execute(
             "UPDATE replay_training_schema_version SET version=?", (old_version,)
         )
@@ -89,9 +90,10 @@ async def test_lazy_curve_merge_is_atomic_and_does_not_replace_newer_values(
                     )
                 ],
                 [
-                    tuple(row)
+                    int(row["materialized"])
                     for row in c.execute(
-                        "SELECT * FROM replay_interval_curve WHERE run_id=?", (run_id,)
+                        "SELECT materialized FROM replay_interval_curve WHERE run_id=?",
+                        (run_id,),
                     )
                 ],
             )
@@ -117,7 +119,7 @@ async def test_lazy_curve_merge_is_atomic_and_does_not_replace_newer_values(
         assert samples[9]["equity"] == "1200"
         assert samples[10]["equity"] == expected[6]
         cached = await service.store.run_extension_read(capture)
-        assert cached[1][0][-1] == 1
+        assert cached[1][0] == 1
         assert (await service.training.equity(run_id, resolution="EVENT")) == result
         assert await service.store.run_extension_read(capture) == cached
         after = await service.get_session_state(session_id)
@@ -401,4 +403,110 @@ async def test_curve_preparation_leaves_event_loop_and_writer_available(tmp_path
     finally:
         release.set()
         await query
+        await service.shutdown(step_timeout=1)
+
+
+@pytest.mark.anyio
+async def test_bounded_hourly_read_does_not_load_every_pending_curve_body(tmp_path):
+    service, run_id, session_id = await seed(tmp_path / "bounds.db")
+    try:
+        intervals, chunk = 12, 600
+        count = intervals * chunk
+        index_dir = tmp_path / "bounds-index"
+        index_dir.mkdir()
+        obj, base = market(index_dir, count)
+        view = MarketRange(base.parts, offset_ms=START_MS)
+        account = {"legs": [["1", "100"]], "cash": "10000"}
+        bases = []
+        for part in range(intervals):
+            start = part * chunk
+            end = start + chunk
+            curve_id = f"curve-{part}"
+            basis = {
+                "schema": "shared-curve.v1",
+                "market": view.descriptor(),
+                "reference": view.reference(),
+                "start": 0,
+                "seed": "sha256:" + "0" * 64,
+                "account": account,
+                "ledger_hash": "sha256:" + "1" * 64,
+            }
+            payload = {
+                "schema": "indexed-curve.v1",
+                "curve_id": curve_id,
+                "start": start,
+                "end": end,
+                "session_id": session_id,
+                "revision_base": start,
+                "policy": "NONE",
+                "revealed": True,
+                "created_at_ms": 0,
+            }
+            bases.append((curve_id, basis, payload, start, end))
+
+        def insert(connection):
+            connection.execute("DELETE FROM replay_equity_sample WHERE run_id=?", (run_id,))
+            for curve_id, basis, payload, start, end in bases:
+                connection.execute(
+                    "INSERT INTO replay_prepared_curve VALUES (?, ?, ?)",
+                    (curve_id, run_id, canonical_json(basis)),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO replay_interval_curve(
+                        run_id, command_id, end_sequence, samples_json,
+                        start_sequence, start_time_ms, end_time_ms
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        run_id,
+                        curve_id,
+                        end,
+                        canonical_json(payload),
+                        start + 1,
+                        int(view.row(start)[1]),
+                        int(view.row(end - 1)[1]),
+                    ),
+                )
+
+        await service.store.run_extension_write(insert)
+        before = TrainingRunStore._curve_body_loads
+        limit = 8
+        hourly = await service.training.equity(run_id, resolution="1H", limit=limit)
+        loaded = TrainingRunStore._curve_body_loads - before
+        assert hourly["resolution"] == "1H"
+        assert len(hourly["samples"]) <= limit
+        assert loaded < intervals
+        assert loaded >= 1
+        restored = restore_curve(bases[-1][1])
+        for sample in hourly["samples"]:
+            offset = int(sample["source_sequence"]) - restored["start"] - 1
+            expected = account_sample(account, view.row(offset)[5])
+            assert sample["equity"] == expected[0]
+            assert sample["cash_balance"] == expected[1]
+            assert sample["unrealized_pnl"] == expected[2]
+    finally:
+        await service.shutdown(step_timeout=1)
+
+@pytest.mark.anyio
+async def test_auto_sparse_interval_counts_only_occupied_buckets(tmp_path):
+    service, run_id, session_id = await seed(tmp_path / "sparse.db")
+    try:
+        times = [START_MS + i * 60000 for i in range(15)] + [START_MS + (360 + i) * 60000 for i in range(15)]
+        basis = {"schema": "prepared-curve.v1", "start": 0, "times": times,
+                 "samples": [["10000", "10000", "0"]] * 30,
+                 "chains": ["sha256:" + "0" * 64] * 31, "ledger_hash": "sha256:" + "1" * 64}
+        payload = {"schema": "indexed-curve.v1", "curve_id": "sparse", "start": 0, "end": 30,
+                   "revision_base": 0, "session_id": session_id, "policy": "NONE", "revealed": True, "created_at_ms": 0}
+        def insert(c):
+            c.execute("DELETE FROM replay_equity_sample WHERE run_id=?", (run_id,))
+            c.execute("INSERT INTO replay_prepared_curve VALUES (?,?,?)", ("sparse", run_id, canonical_json(basis)))
+            c.execute("INSERT INTO replay_interval_curve(run_id, command_id, end_sequence, samples_json, start_sequence, start_time_ms, end_time_ms) VALUES (?,?,?,?,?,?,?)",
+                      (run_id, "sparse", 30, canonical_json(payload), 1, times[0], times[-1]))
+        await service.store.run_extension_write(insert)
+        result = await service.training.equity(run_id, resolution="AUTO", limit=20)
+        assert result["resolution"] == "15M"
+        assert [row["source_sequence"] for row in result["samples"]] == [15, 30]
+        assert await service.training.equity(run_id, resolution="15M", limit=20) == result
+    finally:
         await service.shutdown(step_timeout=1)

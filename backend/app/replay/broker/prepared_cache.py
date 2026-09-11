@@ -21,9 +21,10 @@ from ..dataset import ReplayBar
 from ..errors import ReplayDomainError
 from .interval_index import BarInteractionIndex, PriceRangeIndex
 from .prepared_display import PreparedDisplay
-from .prepared_interval import EquityRanges, PreparedBarInterval, STRIDE
+from .prepared_interval import PreparedBarInterval, _BarListMarket, _PreparedChains
+from .shared_prepared import AccountRanges
 
-VERSION = "prepared-market-cache.v3"
+VERSION = "prepared-market-cache.v5"
 MAGIC = (VERSION + "\n").encode("ascii")
 STATE_FIELDS = (
     "_closed_count",
@@ -93,14 +94,17 @@ def save(path, index, binding):
             "terminal": index.terminal,
             "bars": list(map(_BAR_ROW, index.bars)),
             "prefix": list(map(_BAR_ROW, index.display_prefix)),
-            "chains": index.chains,
+            "chain_seed": index._chain_seed,
+            "chain_mode": "legacy" if index._next_hash is not None else "range",
             "pool": pool,
             "checkpoints": checkpoints,
             "revision": index.display.revision,
             "valuation": None
             if index.valuation is None
             else {
-                key: index.valuation[key] for key in ("key", "samples", "ledger_hash")
+                key: index.valuation[key]
+                for key in ("key", "basis", "ledger_hash")
+                if key in index.valuation
             },
         }
         # These are owned, validated scalar arrays, not an arbitrary object
@@ -139,7 +143,13 @@ def load(path, source, builder, chain_hash, binding):
         index = object.__new__(PreparedBarInterval)
         index.start = value["start"]
         index.terminal = value["terminal"]
-        index.chains = value["chains"]
+        from ..source_chain import next_source_chain_hash
+        index._chain_seed = value["chain_seed"]
+        mode = value["chain_mode"]
+        if mode not in {"legacy", "range"}:
+            return None
+        index._next_hash = next_source_chain_hash if mode == "legacy" else None
+        index.chains = _PreparedChains(index)
         index.builder_key = PreparedBarInterval.configuration(builder)
         index.bars = [ReplayBar(*row) for row in value["bars"]]
         if (
@@ -164,7 +174,7 @@ def load(path, source, builder, chain_hash, binding):
                 None if active is None else ReplayDisplayBar(*active)
             )
             index.builders[offset] = candidate
-        if sorted(index.builders) != list(range(0, len(index.bars) + 1, STRIDE)):
+        if 0 not in index.builders:
             return None
         # Bind to the actual restored builder, including its retained window,
         # partial bucket and chain. This is one bounded check, not N snapshots.
@@ -182,14 +192,18 @@ def load(path, source, builder, chain_hash, binding):
             builder._base_interval_ms,
             value["revision"],
         )
+        index.market = _BarListMarket(index.bars, builder._base_interval_ms)
         index.valuation = value["valuation"]
         if index.valuation is not None:
-            samples = [tuple(row) for row in index.valuation["samples"]]
-            if len(samples) != len(index.bars):
+            basis = index.valuation.get("basis")
+            if not isinstance(basis, dict):
                 return None
-            index.valuation["samples"] = samples
-            index.valuation["ranges"] = EquityRanges(
-                [Decimal(row[0]) for row in samples]
+            index.valuation["ranges"] = AccountRanges(index, basis)
+            bars = index.bars
+            from .shared_prepared import LazySequence, account_sample
+
+            index.valuation["samples"] = LazySequence(
+                len(bars), lambda i: account_sample(basis, bars[i].close)
             )
         index.loaded_from_cache = True
         return index

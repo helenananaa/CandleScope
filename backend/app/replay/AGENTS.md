@@ -34,9 +34,53 @@ leaderboard or requirement to prevent a user from editing their own local data.
 - Measure one-time data indexing, opening, the first large step and deferred
   curve reads separately. Backfill only already-local objects in a cancellable
   background lane; filesystem inventory must not delay the foreground query.
+- Ordinary bar and trade apply must not re-sort or re-balance the immutable
+  ledger history. Check the new posting at post time, keep running totals and a
+  verified-through watermark on the same object that clone/commit/rollback
+  copies, and leave full chain-and-balance audit for load, restore, and explicit
+  checks.
+- Snapshot encodings of orders, fills, closed trades, warnings, and the ledger
+  are reused until that component mutates. A mark-only price update must not
+  re-serialize prior fills or ledger entries.
+- Committed broker collections use copy-on-write. Never modify their shared
+  order maps or history lists in place. Internal snapshot components are readonly
+  JSON trees; public broker snapshots remain detached. Open-order indexes follow
+  map identity only because every order mutation replaces the committed map.
+- Compose/hash canonical snapshots from immutable byte fragments rather than
+  repeatedly concatenating whole histories. Preserve exact canonical bytes and
+  arbitrary-size integers with or without the optional native JSON encoder.
 - Curve reads select a global bucket window across deferred intervals and cached
-  samples before valuation. Reuse matching sequence/revision samples and count
-  actual distinct buckets for AUTO; event counts are not coarse bucket counts.
+  samples before valuation. Persist interval start/end sequence and time so
+  planning can stop at the store entry without loading every pending curve body.
+  Reuse matching sequence/revision samples and count actual distinct buckets for
+  AUTO; event counts are not coarse bucket counts.
 - Run deferred curve planning and valuation outside both the event loop and the
   writer transaction. Verify writer availability during preparation. Each curve
   resolution is independently requested; reading EVENT need not populate others.
+- Actor and review exports remain self-contained v1 checkpoint bytes. SQLite
+  may store a versioned delta referring directly to a retained full base. Base
+  publication, reference insertion and pruning share the checkpoint transaction.
+  Never prune referenced bases or create delta-to-delta recovery chains. Include
+  full-base bytes when measuring storage savings; encoding is still history-sized.
+- Fresh codec output may carry an immutable, in-process logical receipt to avoid
+  decoding it again during delta construction. Imported/disk bytes still undergo
+  normal verification. Base reuse must match exact bytes, survive rollback/id
+  reuse, and be bounded by raw JSON size rather than compressed size.
+- Legacy BAR preparation reads market rows once and defers builder and account
+  work until advance or query. Old per-event chain bytes stay on an explicit
+  compatibility path; new archives use range hashes.
+- Multi-track and tape execution use the production global-time/account-event
+  coordinator, not event-count batching of independent brokers. Reuse immutable
+  book data/validation only: every new close command must still execute.
+- Tape batching follows the existing optimization switch. Flat ONE_WAY accounts
+  may screen resting orders up to the first interaction. Held ONE_WAY positions
+  may batch a locally checked constant-valuation prefix only without funding,
+  historical-account or book dependencies. Price changes/interactions still run
+  individually through the global risk/event barrier. Unequal grids retain exact
+  event timestamps, source counts, equal-time cohorts and deferred terminals.
+- Curve interval bounds can exclude old ranges but cannot prove every bucket
+  is occupied. Count actual endpoints across gaps when selecting AUTO or deciding
+  which curve bodies are necessary.
+- Large curve reads evaluate account values at selected offsets with chunked
+  market-block reads. Do not walk every source bar, and do not drop range
+  extrema by arbitrary sampling.

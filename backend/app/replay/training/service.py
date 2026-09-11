@@ -8724,16 +8724,26 @@ class TrainingRunService:
                 target_virtual_time_ms=target_virtual_time_ms,
                 runtime_snapshot=hedge_runtime_snapshot, cursor_view=hedge_cursor_view,
             ) if allow_final_state_batch and source_goal is None else None
+            constant_tape = (
+                allow_final_state_batch and source_goal is None
+                and binding.get("source_kind") == "AGG_TRADE"
+                and binding.get("position_mode") == "ONE_WAY"
+                and binding.get("funding_mode") == "OFF"
+                and not book_required
+                and binding.get("account_data_mode") != AccountDataMode.HISTORICAL_EXACT.value
+                and any(not self._snapshot_is_flat(snapshot) for _, snapshot in snapshots)
+            )
             final_state_profile = self._ordered_final_state_batch_profile(
                 binding=binding,
                 tracks=tracks,
                 snapshot=snapshots[0][1],
                 target_virtual_time_ms=target_virtual_time_ms,
                 enabled=allow_final_state_batch and source_goal is None,
-                held_certificate=held_prefix_end is not None,
+                held_certificate=held_prefix_end is not None or constant_tape,
             )
             if final_state_profile is None:
                 held_prefix_end = None
+                constant_tape = False
             # Read a bounded lookahead so one exact same-timestamp market
             # cohort can cross the adapter in one command.  The prefix below
             # still stops at the first different timestamp, preserving every
@@ -8765,7 +8775,7 @@ class TrainingRunService:
                         target_time_ms=(target_virtual_time_ms if held_prefix_end is None else held_prefix_end),
                         max_events=source_plan_limit,
                         screen_interactions=final_state_profile is not None,
-                        preserve_valuation=held_prefix_end is not None,
+                        preserve_valuation=held_prefix_end is not None or constant_tape,
                     )
                 except (ReplayDomainError, TrainingRunError) as exc:
                     await self._fail_closed_multi_track(
@@ -8851,18 +8861,30 @@ class TrainingRunService:
                 final_state_profile = None
 
             if final_state_profile is not None and len(tracks) > 1:
-                planned_batches = tuple(
-                    planned_event_times.get(str(track["track_id"]), ())
-                    for track, _snapshot in snapshots
+                planned_batches = tuple(planned_event_times.get(str(track["track_id"]), ())
+                                        for track, _snapshot in snapshots)
+                aligned = bool(planned_batches and planned_batches[0]) and all(
+                    batch == planned_batches[0] for batch in planned_batches[1:]
                 )
-                if (
-                    not planned_batches
-                    or not planned_batches[0]
-                    or any(batch != planned_batches[0] for batch in planned_batches[1:])
-                ):
-                    # A multi-track terminal projection is exact only when
-                    # every adapter consumes the same ordered BAR timestamps.
-                    shrink_final_state_plan_to_first_event()
+                if not aligned:
+                    # Only independent, flat accounts may coalesce unequal source
+                    # grids. The coordinator still owns the global clock, events,
+                    # cancellation and atomic checkpoint barrier.
+                    independent_flat = (
+                        not hedge_mode and not book_required
+                        and binding.get("funding_mode") == "OFF"
+                        and binding.get("account_data_mode") != AccountDataMode.HISTORICAL_EXACT.value
+                        and (constant_tape or all(self._snapshot_is_flat(snapshot) for _, snapshot in snapshots))
+                    )
+                    ends = [batch[-1] for batch in planned_batches if batch]
+                    if independent_flat and ends:
+                        boundary = min(ends)
+                        next_times[:] = [boundary]
+                        for track, _snapshot in snapshots:
+                            key = str(track["track_id"])
+                            planned_event_times[key] = tuple(t for t in planned_event_times.get(key, ()) if t <= boundary)
+                    else:
+                        shrink_final_state_plan_to_first_event()
             if len(times) != 1:
                 raise TrainingRunError(
                     "GLOBAL_CLOCK_DIVERGED",
@@ -9106,18 +9128,12 @@ class TrainingRunService:
                     )
                     track_key = str(barrier_track["track_id"])
                     planned_times = planned_event_times.get(track_key, ())
-                    planned_times_reach_wave = bool(planned_times) and (
-                        planned_times[-1] == wave_time
-                        if final_state_profile is not None
-                        else planned_times[0] == wave_time
-                    )
-                    event_times = (
-                        planned_times
-                        if planned_times_reach_wave
-                        else ()
-                    )
+                    if final_state_profile is not None:
+                        event_times = tuple(t for t in planned_times if t <= wave_time)
+                    else:
+                        event_times = planned_times if planned_times and planned_times[0] == wave_time else ()
                     adapter_source_boundary = (
-                        None
+                        before_sequence + len(event_times)
                         if final_state_profile is not None
                         else planned_source_boundaries[track_key]
                         if event_times
@@ -9513,11 +9529,11 @@ class TrainingRunService:
         enabled: bool,
         held_certificate: bool = False,
     ) -> tuple[int, bool] | None:
-        """Choose bounded terminal delivery only for proven ordered BAR paths."""
+        """Choose bounded terminal delivery for ordered BAR and flat tape paths."""
 
         if (
             not enabled
-            or str(binding.get("source_kind")) != "BAR"
+            or str(binding.get("source_kind")) not in {"BAR", "AGG_TRADE"}
             or not tracks
             or self._cursor_time(snapshot) >= target_virtual_time_ms
         ):
@@ -9544,14 +9560,20 @@ class TrainingRunService:
         trading_dependencies = dependencies.intersection(
             {"OPEN_ORDER", "OPEN_POSITION"}
         )
+        tape = str(binding.get("source_kind")) == "AGG_TRADE"
         screened_flat_orders = (
             trading_dependencies == {"OPEN_ORDER"}
-            and len(tracks) == 1
-            and binding.get("position_mode") == "HEDGE"
+            and ((tape and binding.get("position_mode") == "ONE_WAY")
+                 or (not tape and len(tracks) == 1 and binding.get("position_mode") == "HEDGE"))
             and binding.get("book_mode", "OFF") == "OFF"
             and binding.get("account_data_mode") != AccountDataMode.HISTORICAL_EXACT.value
             and self._snapshot_is_flat(snapshot)
         )
+        if tape and (
+            (trading_dependencies and not screened_flat_orders and not held_certificate)
+            or not self.replay_service.settings.replay_fast_forward_optimization_enabled
+        ):
+            return None
         if (
             str(binding.get("account_model")) == "TOUCH_OR_TAPE_V2"
             and trading_dependencies
@@ -10332,6 +10354,7 @@ class TrainingRunService:
                 )
             terminal_final_state = (
                 final_state_max_events is not None and cursor.get("at_end") is True
+                and not defer_source_terminal
             )
             if current > target_virtual_time_ms and not terminal_final_state:
                 raise TrainingRunError(
@@ -10371,7 +10394,10 @@ class TrainingRunService:
             )
             count = _stored_counter(plan["event_count"], field_name="event_count")
             if count > 0:
-                if final_state_max_events is None:
+                terminal_tail = defer_source_terminal and not plan.get("has_more_before_target", True)
+                if final_state_max_events is not None and terminal_tail and count > 1:
+                    count -= 1
+                if final_state_max_events is None or (terminal_tail and count == 1):
                     v1_type: CommandType | InternalCommandType = (
                         InternalCommandType.STEP_DEFER_TERMINAL
                         if defer_source_terminal

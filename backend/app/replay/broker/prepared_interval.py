@@ -1,7 +1,8 @@
 """Prepared immutable BAR states and associative account range summaries.
 
-Preparation scans once. A jump evaluates a logarithmic range query and replays
-at most STRIDE-1 builder bars, never the account reducer for the skipped span.
+Preparation indexes market summaries once and defers account samples. Legacy
+builder/hash reconstruction retains exact per-event semantics; its first large
+jump may scan the span. Native shared indexes use the separate bounded path.
 """
 
 from bisect import bisect_right
@@ -17,6 +18,109 @@ from .prepared_display import PreparedDisplay
 from ..dataset import ReplayBar
 
 STRIDE = 128
+
+
+class _BarListMarket:
+    def __init__(self, bars, base_ms):
+        self.bars = bars
+        self.base_ms = base_ms
+        self.count = len(bars)
+        from ..shared_market_index import summarize, merge
+        self.block_size = 256
+        blocks = (self.count + self.block_size - 1) // self.block_size
+        self.tree_size = 1 << max(0, (blocks - 1).bit_length())
+        self.tree = [None] * (2 * self.tree_size)
+        for block in range(blocks):
+            start = block * self.block_size
+            self.tree[self.tree_size + block] = summarize(
+                [self.row(i) for i in range(start, min(start + self.block_size, self.count))], base_ms
+            )
+        for i in range(self.tree_size - 1, 0, -1):
+            self.tree[i] = merge(self.tree[2 * i], self.tree[2 * i + 1], base_ms)
+
+    def row(self, index):
+        bar = self.bars[index]
+        return (
+            bar.open_time_ms,
+            bar.close_time_ms,
+            bar.open,
+            bar.high,
+            bar.low,
+            bar.close,
+            bar.volume,
+            bar.quote_volume,
+            bar.trades,
+            bar.taker_buy_base,
+            bar.taker_buy_quote,
+            getattr(bar, "source", "prepared"),
+        )
+
+    def summary(self, start, end):
+        from ..shared_market_index import summarize, merge
+        if not 0 <= start <= end <= self.count:
+            raise IndexError("market summary bounds")
+        if start == end:
+            return None
+        width = self.block_size
+        left_end = min(end, ((start + width - 1) // width) * width)
+        result = summarize([self.row(i) for i in range(start, left_end)], self.base_ms) if left_end > start else None
+        right_start = max(left_end, (end // width) * width)
+        left, right = left_end // width + self.tree_size, right_start // width + self.tree_size
+        lhs, rhs = None, None
+        while left < right:
+            if left & 1:
+                lhs = merge(lhs, self.tree[left], self.base_ms)
+                left += 1
+            if right & 1:
+                right -= 1
+                rhs = merge(self.tree[right], rhs, self.base_ms)
+            left //= 2
+            right //= 2
+        result = merge(result, merge(lhs, rhs, self.base_ms), self.base_ms)
+        tail = summarize([self.row(i) for i in range(right_start, end)], self.base_ms) if right_start < end else None
+        return merge(result, tail, self.base_ms)
+
+
+class _PreparedChains:
+    def __init__(self, interval):
+        self.interval = interval
+        self._cache = {0: interval._chain_seed}
+
+    def __len__(self):
+        return len(self.interval.bars) + 1
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return [self[item] for item in range(*index.indices(len(self)))]
+        if index < 0:
+            index += len(self)
+        if index in self._cache:
+            return self._cache[index]
+        hasher = self.interval._next_hash
+        if hasher is None:
+            seed = self.interval._chain_seed
+            value = canonical_sha256(
+                {
+                    "schema": "prepared-source-range.v1",
+                    "previous": seed,
+                    "start_sequence": self.interval.start,
+                    "end": index,
+                }
+            )
+            self._cache[index] = value
+            return value
+        last = len(self._cache) - 1
+        value = self._cache[last]
+        for step in range(last + 1, index + 1):
+            value = hasher(
+                value, self.interval.bars[step - 1], self.interval.start + step
+            )
+            self._cache[step] = value
+        return value
+
+    def __iter__(self):
+        for index in range(len(self)):
+            yield self[index]
 
 
 def freeze_builder(builder):
@@ -118,17 +222,15 @@ class PreparedBarInterval:
                 pass
         self.builder_key = self.configuration(builder)
         self.builders = {0: freeze_builder(builder)}
-        current = freeze_builder(builder)
-        current._prepared_closed_hashes = {}
         self.bars = []
-        self.chains = [chain_hash]
+        self._chain_seed = chain_hash
+        self._next_hash = next_hash
         stopped_on_error = False
         while len(self.bars) < limit:
             try:
                 event = source.next()
                 if event is None:
                     break
-                current.apply_bars_final_state((event,))
             except (ReplayDomainError, ValueError, OSError):
                 # An invalid future row must not prevent advancing a valid
                 # earlier prefix. Its ordinary execution path reports it when
@@ -136,14 +238,11 @@ class PreparedBarInterval:
                 stopped_on_error = True
                 break
             self.bars.append(event)
-            self.chains.append(
-                next_hash(self.chains[-1], event, self.start + len(self.bars))
-            )
-            if len(self.bars) % STRIDE == 0:
-                self.builders[len(self.bars)] = freeze_builder(current)
         # The terminal event stays on the ordinary execution path.
         self.terminal = not stopped_on_error and source.exhausted()
         self.times = tuple(bar.close_time_ms for bar in self.bars)
+        self.chains = _PreparedChains(self)
+        self.market = _BarListMarket(self.bars, builder._base_interval_ms)
         self.interactions = BarInteractionIndex(self.bars)
         self.closes = PriceRangeIndex(
             [(Decimal(bar.close), Decimal(bar.close)) for bar in self.bars]
@@ -208,7 +307,7 @@ class PreparedBarInterval:
         return end
 
     def prepare_valuation(self, broker):
-        from .shared_prepared import account_sample
+        from .shared_prepared import AccountRanges, LazySequence, account_sample
 
         position = broker._position.to_dict()
         for leg in (position, position.get("long", {}), position.get("short", {})):
@@ -234,28 +333,56 @@ class PreparedBarInterval:
         )
         if self.valuation is not None and self.valuation["key"] == key:
             return self.valuation
-        flat = (
-            all(Decimal(position[side]["quantity"]) == 0 for side in ("long", "short"))
-            if position.get("position_mode") == "HEDGE"
-            else Decimal(position["quantity"]) == 0
-        )
-        if flat:
-            sample = account_sample(basis, "0")
-            samples = [sample] * len(self.bars)
-        else:
-            samples = [account_sample(basis, bar.close) for bar in self.bars]
+        bars = self.bars
         self.valuation = {
             "key": key,
-            "samples": samples,
-            "ranges": EquityRanges([Decimal(row[0]) for row in samples]),
+            "basis": basis,
+            "ranges": AccountRanges(self, basis),
             "ledger_hash": broker._ledger.tail_hash,
+            "samples": LazySequence(
+                len(bars), lambda index: account_sample(basis, bars[index].close)
+            ),
         }
         return self.valuation
 
+    def curve_market_key(self):
+        cached = getattr(self, "_curve_market_key", None)
+        if cached is None:
+            from ..source_chain import source_event_payload
+            self._curve_bars = [source_event_payload(bar) for bar in self.bars]
+            self._curve_market_key = canonical_sha256({"bars": self._curve_bars, "seed": self._chain_seed, "start": self.start})
+        return self._curve_market_key
+
+    def curve_basis(self):
+        self.curve_market_key()
+        return {"schema": "prepared-curve.v2", "start": self.start,
+                "bars": self._curve_bars, "seed": self._chain_seed,
+                "chain_mode": "legacy" if self._next_hash is not None else "range",
+                "account": self.valuation["basis"], "ledger_hash": self.valuation["ledger_hash"]}
+
+    def materialize_legacy_chains(self):
+        """Compatibility path for archives that must explain old per-event hashes."""
+
+        hasher = self._next_hash
+        if hasher is None:
+            raise ValueError("legacy chain materialization requires the original hasher")
+        chains = [self._chain_seed]
+        for index, event in enumerate(self.bars, start=1):
+            chains.append(hasher(chains[-1], event, self.start + index))
+        self.chains = chains
+        return chains
+
     def builder_at(self, end):
-        checkpoint = end // STRIDE * STRIDE
+        checkpoint = max((offset for offset in self.builders if offset <= end), default=0)
         builder = freeze_builder(self.builders[checkpoint])
-        builder.apply_bars_final_state(self.bars[checkpoint:end])
+        aligned = end // STRIDE * STRIDE
+        if aligned > checkpoint:
+            builder.apply_bars_final_state(self.bars[checkpoint:aligned])
+            self.builders[aligned] = freeze_builder(builder)
+            checkpoint = aligned
+            builder = freeze_builder(self.builders[aligned])
+        if end > checkpoint:
+            builder.apply_bars_final_state(self.bars[checkpoint:end])
         return builder
 
     def apply(self, broker, start, end):

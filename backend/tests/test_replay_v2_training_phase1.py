@@ -145,7 +145,7 @@ async def test_training_schema_is_separate_from_internal_adapter_schema(
 
 @pytest.mark.parametrize(
     "obsolete_version",
-    [version for version in range(1, TRAINING_SCHEMA_VERSION) if version not in {19, 20}],
+    [version for version in range(1, TRAINING_SCHEMA_VERSION) if version not in {19, 20, 21}],
 )
 def test_obsolete_training_schema_requires_a_fresh_database(
     obsolete_version: int,

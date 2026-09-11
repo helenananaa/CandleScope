@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..storage.checkpoint_delta import resolve as resolve_checkpoint
+
 import hashlib
 import json
 import math
@@ -425,7 +427,7 @@ class ReviewRecorder:
         for row in rows:
             checkpoint = connection.execute(
                 """
-                SELECT payload, source_sequence, event_sequence, state_hash
+                SELECT *
                 FROM replay_checkpoint
                 WHERE session_id = ? AND active = 1
                 ORDER BY checkpoint_id DESC LIMIT 1
@@ -455,7 +457,7 @@ class ReviewRecorder:
                     "event_sequence": int(checkpoint["event_sequence"]),
                     "state_hash": str(checkpoint["state_hash"]),
                 },
-                checkpoint=bytes(checkpoint["payload"]),
+                checkpoint=resolve_checkpoint(connection, checkpoint),
                 now_ms=now_ms,
             )
 
@@ -1574,7 +1576,8 @@ class ReviewRecorder:
                         status_code=409,
                     )
                 return str(existing["anchor_id"])
-            payload = bytes(checkpoint_row["payload"])
+            from ..storage.checkpoint_delta import resolve
+            payload = resolve(connection, checkpoint_row)
         else:
             payload = bytes(checkpoint)
             checkpoint_row = connection.execute(

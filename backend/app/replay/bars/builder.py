@@ -477,6 +477,8 @@ class ReplayBarBuilder:
             raise RuntimeError("a revealed replay bar must produce a projection update")
         return update
 
+    final_state_bar_visits = 0
+
     def apply_bars_final_state(self, bars: Sequence[ReplayBar]) -> None:
         """Apply a projection-free BAR block with exact snapshot equivalence.
 
@@ -490,6 +492,7 @@ class ReplayBarBuilder:
 
         if not bars:
             return
+        ReplayBarBuilder.final_state_bar_visits += len(bars)
         if self._base_interval != self._display_interval or self._active_bar is not None:
             for bar in bars:
                 self.apply_bar(bar)

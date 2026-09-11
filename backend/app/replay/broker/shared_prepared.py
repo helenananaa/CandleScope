@@ -32,7 +32,12 @@ class LazySequence(Sequence):
         return self.getter(index)
 
 
+account_sample_visits = 0
+
+
 def account_sample(basis, close):
+    global account_sample_visits
+    account_sample_visits += 1
     with localcontext() as context:
         context.prec = 60
         price = Decimal(close)
@@ -48,6 +53,20 @@ def account_sample(basis, close):
             decimal_to_string(value, field_name="equity")
             for value in (cash + pnl, cash, pnl)
         )
+
+
+def prefetch_account_samples(basis, offsets):
+    """Evaluate selected offsets with chunked market reads."""
+
+    market = basis.get("market_view")
+    if market is None:
+        return
+    unique = sorted({int(offset) for offset in offsets})
+    closes = market.closes_at(unique)
+    cache = basis.setdefault("_sample_cache", {})
+    for offset, close in zip(unique, closes):
+        if offset not in cache:
+            cache[offset] = account_sample(basis["account"], close)
 
 
 class AccountRanges:
@@ -247,6 +266,19 @@ class SharedPreparedInterval(PreparedBarInterval):
         return builder
 
 
+def restore_legacy_curve(basis):
+    from types import SimpleNamespace
+    from ..source_chain import next_source_chain_hash
+    from .prepared_interval import _PreparedChains
+    bars = [ReplayBar(**row) for row in basis["bars"]]
+    if basis["chain_mode"] not in {"legacy", "range"}:
+        raise ValueError("unknown legacy curve chain mode")
+    owner = SimpleNamespace(bars=bars, start=basis["start"], _chain_seed=basis["seed"],
+                            _next_hash=next_source_chain_hash if basis["chain_mode"] == "legacy" else None)
+    return {**basis, "samples": LazySequence(len(bars), lambda i: account_sample(basis["account"], bars[i].close)),
+            "times": [bar.close_time_ms for bar in bars], "chains": _PreparedChains(owner)}
+
+
 def restore_curve(basis):
     from ..shared_market_index import MarketRange
 
@@ -263,11 +295,22 @@ def restore_curve(basis):
             }
         )
 
-    return {
+    cache = {}
+
+    def sample_at(index):
+        cached = cache.get(index)
+        if cached is not None:
+            return cached
+        value = account_sample(basis["account"], market.row(index)[5])
+        cache[index] = value
+        return value
+
+    restored = {
         **basis,
-        "samples": LazySequence(
-            market.count, lambda i: account_sample(basis["account"], market.row(i)[5])
-        ),
+        "market_view": market,
+        "_sample_cache": cache,
+        "samples": LazySequence(market.count, sample_at),
         "times": LazySequence(market.count, lambda i: market.row(i)[1]),
         "chains": LazySequence(market.count + 1, chain),
     }
+    return restored

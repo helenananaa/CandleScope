@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import json
+
 from collections import Counter
 from copy import copy
 from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation, localcontext
-from hashlib import sha256
 from typing import Mapping, Sequence
 
 from ..bars.builder import ReplayBarBuilder, ReplayDisplayBar
 from ..bars.trade_builder import TradeReplayBarBuilder
-from ..canonical import _canonical_object_bytes, canonical_sha256
+from .. import canonical as _canonical
+from ..immutable_json import freeze
+from ..canonical import _canonical_object_bytes, _canonical_object_parts, _canonical_object_sha256, canonical_json_bytes, canonical_sha256
 from ..constants import CommandType
 from ..internal_commands import (
     REVEALED_REFERENCE_CLOSE_FIDELITY,
@@ -364,11 +367,15 @@ class ConservativeBarBroker:
 
     @property
     def open_orders(self) -> tuple[ReplayOrder, ...]:
-        return tuple(
-            order
-            for order in self.orders
-            if order.status in {OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED}
-        )
+        cached = getattr(self, "_open_order_cache", None)
+        if cached is None or cached[0] is not self._orders:
+            opened = tuple(sorted(
+                (order for order in self._orders.values()
+                 if order.status in {OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED}),
+                key=lambda order: order.ordinal,
+            ))
+            self._open_order_cache = (self._orders, opened)
+        return self._open_order_cache[1]
 
     @property
     def fills(self) -> tuple[ReplayFill, ...]:
@@ -658,21 +665,26 @@ class ConservativeBarBroker:
                 ReplayErrorCode.ORDER_REJECTED,
                 "historical book close quantity exceeds the selected position leg",
             )
-        prices = [Decimal(str(level["price"])) for level in levels]
-        if len(prices) != len(set(prices)) or any(price <= 0 for price in prices):
-            raise ReplayDomainError(
-                ReplayErrorCode.ORDER_REJECTED,
-                "historical book close prices must be unique and positive",
-            )
-        if normalized_side is OrderSide.SELL:
-            ordered = all(left > right for left, right in zip(prices, prices[1:]))
+        depth_key = (normalized_side, tuple((str(level["price"]), str(level["quantity"])) for level in levels))
+        if getattr(self, "_validated_book_depth", None) != depth_key:
+            prices = [Decimal(str(level["price"])) for level in levels]
+            if len(prices) != len(set(prices)) or any(price <= 0 for price in prices):
+                raise ReplayDomainError(
+                    ReplayErrorCode.ORDER_REJECTED,
+                    "historical book close prices must be unique and positive",
+                )
+            if normalized_side is OrderSide.SELL:
+                ordered = all(left > right for left, right in zip(prices, prices[1:]))
+            else:
+                ordered = all(left < right for left, right in zip(prices, prices[1:]))
+            if not ordered and len(prices) > 1:
+                raise ReplayDomainError(
+                    ReplayErrorCode.ORDER_REJECTED,
+                    "historical book close prices are not ordered by adverse depth",
+                )
+            self._validated_book_depth = depth_key
         else:
-            ordered = all(left < right for left, right in zip(prices, prices[1:]))
-        if not ordered and len(prices) > 1:
-            raise ReplayDomainError(
-                ReplayErrorCode.ORDER_REJECTED,
-                "historical book close prices are not ordered by adverse depth",
-            )
+            self.historical_book_reuses = getattr(self, "historical_book_reuses", 0) + 1
         mark_before = target.mark_price
         checkpoint = self.snapshot()
         try:
@@ -1569,7 +1581,7 @@ class ConservativeBarBroker:
                         order,
                         status_reason="TAPE_TRIGGERED",
                     )
-                    working.orders[order.order_id] = triggered_order
+                    self._set_working_order(working, order.order_id, triggered_order)
                     working.changed_orders.append(triggered_order)
                 continue
             fill_count = len(working.new_fills)
@@ -1668,7 +1680,7 @@ class ConservativeBarBroker:
             if isinstance(self._position, PositionBook)
             else self._position.quantity == "0"
         )
-        if position_is_flat:
+        if position_is_flat or self.constant_valuation_prefix_length(events) == len(events):
             if final_mark is None:
                 return {}
             self._position = mark_position(self._position, final_mark)
@@ -1692,7 +1704,13 @@ class ConservativeBarBroker:
         return {}
 
     def supports_final_state_batch(self) -> bool:
-        return not any(not order.status.terminal for order in self._orders.values())
+        return not self.open_orders
+
+    def has_active_trading_path(self) -> bool:
+        return bool(self.open_orders) or (
+            not self._position.is_flat if isinstance(self._position, PositionBook)
+            else self._position.quantity != "0"
+        )
 
     def constant_valuation_prefix_length(self, events: Sequence[object]) -> int:
         """Only collapse a held curve when every retained valuation is equal."""
@@ -1701,7 +1719,8 @@ class ConservativeBarBroker:
             return 0
         expected = Decimal(str(mark))
         for index, event in enumerate(events):
-            if not isinstance(event, ReplayBar) or Decimal(event.close) != expected:
+            price = event.close if isinstance(event, ReplayBar) else event.price if isinstance(event, ReplayTrade) else None
+            if price is None or Decimal(price) != expected:
                 return index
         return len(events)
 
@@ -2200,7 +2219,7 @@ class ConservativeBarBroker:
                     model_version=self._model_version,
                     position_side=position_side,
                 )
-                working.orders[order.order_id] = order
+                self._set_working_order(working, order.order_id, order)
                 working.changed_orders.append(order)
                 session_close_client_ids.append(order.client_order_id)
                 self._fill_working(
@@ -2304,6 +2323,21 @@ class ConservativeBarBroker:
         self._ended = False
         self._equity_peak = self.config.initial_equity
         self._max_drawdown = "0"
+        self._snapshot_component_versions = {
+            "orders": 0,
+            "fills": 0,
+            "closed_trades": 0,
+            "warnings": 0,
+            "ledger": 0,
+        }
+        self._snapshot_component_cache: dict[str, tuple[int, object, bytes, bool]] = {}
+        self._snapshot_component_encodes = {
+            "orders": 0,
+            "fills": 0,
+            "closed_trades": 0,
+            "warnings": 0,
+            "ledger": 0,
+        }
         self._assert_invariants()
 
     def has_trading_state(self) -> bool:
@@ -2318,7 +2352,48 @@ class ConservativeBarBroker:
             is not ConservativeBarBroker.snapshot
         ):
             return self.snapshot(), None
-        return self._snapshot_with_encoding()
+        state, encoded = self._snapshot_with_encoding(detached=False)
+        return freeze(state), encoded
+
+    def _bump_snapshot_component(self, name: str) -> None:
+        versions = getattr(self, "_snapshot_component_versions", None)
+        if versions is None:
+            return
+        versions[name] = versions.get(name, 0) + 1
+
+    def _snapshot_component(self, name: str, builder):
+        versions = getattr(self, "_snapshot_component_versions", None)
+        cache = getattr(self, "_snapshot_component_cache", None)
+        encodes = getattr(self, "_snapshot_component_encodes", None)
+        if versions is None or cache is None:
+            value = builder()
+            return value, canonical_json_bytes(value)
+        version = versions["orders" if name == "client_order_ids" else name]
+        cached = cache.get(name)
+        if cached is not None and cached[0] == version:
+            return cached[1], cached[2]
+        value = builder()
+        encoded, native = _canonical._canonical_json_encoding(value)
+        value = freeze(value)
+        cache[name] = (version, value, encoded, native)
+        if encodes is not None:
+            encodes[name] = encodes.get(name, 0) + 1
+        return value, encoded
+
+    def _copy_snapshot_component(self, value: object, encoded: bytes | None = None, name: str | None = None) -> object:
+        if encoded is not None:
+            cached = self._snapshot_component_cache.get(name) if name is not None else None
+            if cached is not None and len(cached) > 3 and cached[3] and _canonical.orjson is not None:
+                # Only native-encoded trees are decoded natively: oversized ints
+                # take the exact stdlib path instead of becoming binary floats.
+                return _canonical.orjson.loads(encoded)
+            return json.loads(encoded)
+        # Public snapshots must not expose mutable aliases into cached encodings.
+        if isinstance(value, list):
+            return [self._copy_snapshot_component(item) for item in value]
+        if isinstance(value, dict):
+            return {key: self._copy_snapshot_component(item) for key, item in value.items()}
+        return value
 
     def _capture_recorded_frame(self):
         """Capture a private frame without encoding the retained bar history.
@@ -2337,34 +2412,76 @@ class ConservativeBarBroker:
         frozen = copy(self)
         frozen._bar_builder = copy(self._bar_builder)
         frozen._bar_builder._closed_bars = list(self._bar_builder._closed_bars)
+        frozen._snapshot_component_versions = dict(
+            getattr(self, "_snapshot_component_versions", {})
+        )
+        frozen._snapshot_component_cache = dict(
+            getattr(self, "_snapshot_component_cache", {})
+        )
+        frozen._snapshot_component_encodes = dict(
+            getattr(self, "_snapshot_component_encodes", {})
+        )
+        orders, _ = self._snapshot_component(
+            "orders", lambda: [order.to_dict() for order in self.orders]
+        )
+        fills, _ = self._snapshot_component(
+            "fills", lambda: [fill.to_dict() for fill in self._fills]
+        )
+        closed_trades, _ = self._snapshot_component(
+            "closed_trades",
+            lambda: [trade.to_dict() for trade in self._closed_trades],
+        )
+        warnings, _ = self._snapshot_component(
+            "warnings",
+            lambda: [warning.to_dict() for warning in self._warnings],
+        )
+        ledger, _ = self._snapshot_component("ledger", self._ledger.snapshot)
         components = {
-            "orders": [order.to_dict() for order in self.orders],
-            "fills": [fill.to_dict() for fill in self._fills],
-            "closed_trades": [trade.to_dict() for trade in self._closed_trades],
-            "warnings": [warning.to_dict() for warning in self._warnings],
-            "ledger": self._ledger.snapshot(),
+            "orders": orders,
+            "fills": fills,
+            "closed_trades": closed_trades,
+            "warnings": warnings,
+            "ledger": ledger,
             "position": self._position.to_dict(),
             "account": self._account.to_dict(),
         }
-        return components, frozen._owned_snapshot_with_encoding
+        return freeze(components), frozen._owned_snapshot_with_encoding
 
-    def _snapshot_with_encoding(self):
+    def _snapshot_with_encoding(self, *, detached=True):
         encoded_builder = None
         if type(self._bar_builder) is ReplayBarBuilder:
             builder_state, encoded_builder = self._bar_builder._snapshot_with_encoding()
         else:
             builder_state = self._bar_builder.snapshot()
+        orders, orders_encoded = self._snapshot_component(
+            "orders", lambda: [order.to_dict() for order in self.orders]
+        )
+        fills, fills_encoded = self._snapshot_component(
+            "fills", lambda: [fill.to_dict() for fill in self._fills]
+        )
+        closed_trades, closed_encoded = self._snapshot_component(
+            "closed_trades",
+            lambda: [trade.to_dict() for trade in self._closed_trades],
+        )
+        warnings, warnings_encoded = self._snapshot_component(
+            "warnings",
+            lambda: [warning.to_dict() for warning in self._warnings],
+        )
+        ledger, ledger_encoded = self._snapshot_component(
+            "ledger", self._ledger.snapshot
+        )
+        client_ids, client_ids_encoded = self._snapshot_component("client_order_ids", lambda: sorted(self._client_order_ids))
         payload = {
             "schema_version": BROKER_STATE_SCHEMA_VERSION,
             "model_version": self._model_version,
             "config_hash": self._config_hash,
             "bar_builder": builder_state,
-            "orders": [order.to_dict() for order in self.orders],
-            "client_order_ids": sorted(self._client_order_ids),
-            "fills": [fill.to_dict() for fill in self._fills],
-            "closed_trades": [trade.to_dict() for trade in self._closed_trades],
-            "warnings": [warning.to_dict() for warning in self._warnings],
-            "ledger": self._ledger.snapshot(),
+            "orders": self._copy_snapshot_component(orders, orders_encoded, "orders") if detached else orders,
+            "client_order_ids": list(client_ids) if detached else client_ids,
+            "fills": self._copy_snapshot_component(fills, fills_encoded, "fills") if detached else fills,
+            "closed_trades": self._copy_snapshot_component(closed_trades, closed_encoded, "closed_trades") if detached else closed_trades,
+            "warnings": self._copy_snapshot_component(warnings, warnings_encoded, "warnings") if detached else warnings,
+            "ledger": self._copy_snapshot_component(ledger, ledger_encoded, "ledger") if detached else ledger,
             "position": self._position.to_dict(),
             "account": self._account.to_dict(),
             "next_order": self._next_order,
@@ -2376,34 +2493,22 @@ class ConservativeBarBroker:
             "equity_peak": self._equity_peak,
             "max_drawdown": self._max_drawdown,
         }
-        if encoded_builder is None:
-            payload["state_hash"] = canonical_sha256(
-                {"schema_version": BROKER_STATE_HASH_SCHEMA_VERSION, "state": payload}
-            )
-        else:
-            encoded_payload = _canonical_object_bytes(
-                payload, encoded_fields={"bar_builder": encoded_builder}
-            )
-            payload["state_hash"] = (
-                "sha256:"
-                + sha256(
-                    _canonical_object_bytes(
-                        {
-                            "schema_version": BROKER_STATE_HASH_SCHEMA_VERSION,
-                            "state": payload,
-                        },
-                        encoded_fields={"state": encoded_payload},
-                    )
-                ).hexdigest()
-            )
-        encoded = (
-            None
-            if encoded_builder is None
-            else _canonical_object_bytes(
-                payload,
-                encoded_fields={"bar_builder": encoded_builder},
-            )
+        encoded_fields = {
+            "client_order_ids": client_ids_encoded,
+            "orders": orders_encoded,
+            "fills": fills_encoded,
+            "closed_trades": closed_encoded,
+            "warnings": warnings_encoded,
+            "ledger": ledger_encoded,
+        }
+        if encoded_builder is not None:
+            encoded_fields["bar_builder"] = encoded_builder
+        payload_parts = tuple(_canonical_object_parts(payload, encoded_fields=encoded_fields))
+        payload["state_hash"] = _canonical_object_sha256(
+            {"schema_version": BROKER_STATE_HASH_SCHEMA_VERSION, "state": payload},
+            encoded_fields={"state": payload_parts},
         )
+        encoded = _canonical_object_bytes(payload, encoded_fields=encoded_fields)
         return payload, encoded
 
     def restore(self, state: Mapping[str, object]) -> None:
@@ -2729,15 +2834,20 @@ class ConservativeBarBroker:
         self._ended = ended
         self._equity_peak = equity_peak
         self._max_drawdown = max_drawdown
+        self._snapshot_component_cache = {}
+        versions = getattr(self, "_snapshot_component_versions", None)
+        if versions is not None:
+            for name in versions:
+                versions[name] += 1
 
     def _working_state(self) -> _WorkingState:
         return _WorkingState(
-            orders=dict(self._orders),
+            orders=self._orders,
             ledger=None,
             position=self._position,
-            fills=list(self._fills),
-            closed_trades=list(self._closed_trades),
-            warnings=list(self._warnings),
+            fills=self._fills,
+            closed_trades=self._closed_trades,
+            warnings=self._warnings,
             next_fill=self._next_fill,
             next_trade=self._next_trade,
             next_warning=self._next_warning,
@@ -2745,6 +2855,18 @@ class ConservativeBarBroker:
             new_fills=[],
             new_warnings=[],
         )
+
+    def _set_working_order(self, working, order_id, order):
+        if working.orders is self._orders:
+            working.orders = dict(working.orders)
+        working.orders[order_id] = order
+
+    def _append_working_history(self, working, name, value):
+        history = getattr(working, name)
+        if history is getattr(self, "_" + name):
+            history = list(history)
+            setattr(working, name, history)
+        history.append(value)
 
     def _commit_working(
         self,
@@ -2755,6 +2877,19 @@ class ConservativeBarBroker:
         ledger = working.ledger or self._ledger
         candidate_account = account or self._account_from(ledger, working.position)
         self._assert_candidate_invariants(working, ledger, candidate_account)
+        if working.changed_orders or len(working.orders) != len(self._orders):
+            self._bump_snapshot_component("orders")
+        if working.new_fills or len(working.fills) != len(self._fills):
+            self._bump_snapshot_component("fills")
+        if len(working.closed_trades) != len(self._closed_trades):
+            self._bump_snapshot_component("closed_trades")
+        if working.new_warnings or len(working.warnings) != len(self._warnings):
+            self._bump_snapshot_component("warnings")
+        if (
+            working.ledger is not None
+            and working.ledger.tail_hash != self._ledger.tail_hash
+        ):
+            self._bump_snapshot_component("ledger")
         self._orders = working.orders
         if working.ledger is not None:
             self._ledger = working.ledger
@@ -2978,9 +3113,9 @@ class ConservativeBarBroker:
             status_reason=status_reason,
             status_history=order.status_history + (status,),
         )
-        working.orders[order.order_id] = updated_order
+        self._set_working_order(working, order.order_id, updated_order)
         working.changed_orders.append(updated_order)
-        working.fills.append(fill)
+        self._append_working_history(working, "fills", fill)
         working.new_fills.append(fill)
         working.next_fill += 1
         if Decimal(position_result.closed_quantity) > 0:
@@ -2997,7 +3132,7 @@ class ConservativeBarBroker:
                 source_sequence=source_sequence,
                 position_side=order.position_side,
             )
-            working.closed_trades.append(trade)
+            self._append_working_history(working, "closed_trades", trade)
             working.next_trade += 1
         working.position = candidate_position
         return True
@@ -3033,7 +3168,7 @@ class ConservativeBarBroker:
             status_reason=reason,
             status_history=order.status_history + (status,),
         )
-        working.orders[order.order_id] = updated
+        self._set_working_order(working, order.order_id, updated)
         working.changed_orders.append(updated)
         return updated
 
@@ -3361,7 +3496,7 @@ class ConservativeBarBroker:
             order_ids=order_ids,
             message=message,
         )
-        working.warnings.append(warning)
+        self._append_working_history(working, "warnings", warning)
         working.new_warnings.append(warning)
         working.next_warning += 1
 
@@ -3400,7 +3535,7 @@ class ConservativeBarBroker:
         ledger: LedgerBook,
         account: Account,
     ) -> None:
-        LedgerBook.assert_entries_balanced(ledger.entries)
+        ledger.assert_current_postings()
         if len(working.fills) > self.config.limits.max_fills:
             raise AssertionError("fill capacity invariant failed")
         if len(working.warnings) > self.config.limits.max_warnings:
@@ -3412,7 +3547,7 @@ class ConservativeBarBroker:
             reserved_orders = sum(
                 (
                     Decimal(order.reserved_margin)
-                    for order in working.orders.values()
+                    for order in (self.open_orders if working.orders is self._orders else working.orders.values())
                     if order.status in {OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED}
                 ),
                 Decimal(0),
@@ -3425,12 +3560,12 @@ class ConservativeBarBroker:
         if self.config.position_mode is PositionMode.HEDGE:
             if not isinstance(working.position, PositionBook):
                 raise AssertionError("HEDGE broker lost its position book")
-            if any(order.position_side is None for order in working.orders.values()):
+            if working.orders is not self._orders and any(order.position_side is None for order in working.orders.values()):
                 raise AssertionError("HEDGE order lacks position_side")
         else:
             if not isinstance(working.position, Position):
                 raise AssertionError("ONE_WAY broker gained a position book")
-            if any(
+            if working.orders is not self._orders and any(
                 order.position_side is not None for order in working.orders.values()
             ):
                 raise AssertionError("ONE_WAY order retained position_side")
@@ -3449,10 +3584,11 @@ class ConservativeBarBroker:
     def _assert_invariants(self) -> None:
         working = self._working_state()
         self._assert_candidate_invariants(working, self._ledger, self._account)
-        if set(self._client_order_ids) != {
-            order.client_order_id for order in self._orders.values()
-        }:
-            raise AssertionError("client order id index drifted")
+        verified = getattr(self, "_verified_order_index", None)
+        if verified is None or verified[0] is not self._orders or verified[1] is not self._client_order_ids:
+            if self._client_order_ids != {order.client_order_id for order in self._orders.values()}:
+                raise AssertionError("client order id index drifted")
+            self._verified_order_index = (self._orders, self._client_order_ids)
 
     def _record_equity(self, account: Account) -> None:
         with localcontext() as context:

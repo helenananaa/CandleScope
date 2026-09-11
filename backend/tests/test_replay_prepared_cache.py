@@ -141,4 +141,4 @@ def test_position_change_reuses_market_but_recomputes_valuation(tmp_path):
     loaded = prepare(path, broker, bars)
     assert loaded.loaded_from_cache
     assert loaded.valuation["key"] != original.valuation["key"]
-    assert loaded.valuation["samples"] != original.valuation["samples"]
+    assert loaded.valuation["basis"] != original.valuation["basis"]
