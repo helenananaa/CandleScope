@@ -1,5 +1,5 @@
 import { API_BASE } from "../../services/apiConfig.js";
-import { sharedControlRead } from "../../services/sharedControlRead.js";
+import { sharedControlRead, invalidateSharedControlRead } from "../../services/sharedControlRead.js";
 import {
   parsePluginCatalog,
   parsePluginLiveConfirmationPreview,
@@ -164,9 +164,19 @@ async function responseJson(response: Response): Promise<unknown> {
   return payload;
 }
 
+const PLUGIN_CATALOG_READ_KEY = "control:plugin-catalog";
+const PLUGIN_UI_SNAPSHOT_READ_KEY = "control:plugin-ui-snapshot";
+const PLUGIN_LIVE_STATUS_READ_KEY = "control:plugin-live-status";
+
+export function invalidatePluginControlReads(): void {
+  invalidateSharedControlRead(PLUGIN_CATALOG_READ_KEY);
+  invalidateSharedControlRead(PLUGIN_UI_SNAPSHOT_READ_KEY);
+  invalidateSharedControlRead(PLUGIN_LIVE_STATUS_READ_KEY);
+}
+
 export async function fetchPluginCatalog(signal?: AbortSignal): Promise<PluginCatalog> {
   const url = `${publicPluginBase()}/catalog`;
-  return sharedControlRead("control:plugin-catalog", 5_000, async () => {
+  return sharedControlRead(PLUGIN_CATALOG_READ_KEY, 5_000, async () => {
     const response = await fetch(url);
     return parsePluginCatalog(await responseJson(response));
   }, signal);
@@ -184,7 +194,7 @@ export async function fetchPluginMarketplaceCatalog(
 
 export async function fetchPluginUiSnapshot(signal?: AbortSignal): Promise<PluginUiSnapshot> {
   const url = `${publicPluginBase()}/ui/snapshot`;
-  return sharedControlRead("control:plugin-ui-snapshot", 1_000, async () => {
+  return sharedControlRead(PLUGIN_UI_SNAPSHOT_READ_KEY, 1_000, async () => {
     const response = await fetch(url);
     return parsePluginUiSnapshot(await responseJson(response));
   }, signal);
@@ -194,7 +204,7 @@ export async function fetchPluginLiveControlStatus(
   signal?: AbortSignal,
 ): Promise<PluginLiveControlStatus> {
   const url = `${publicPluginBase()}/live/control/status`;
-  return sharedControlRead("control:plugin-live-status", 1_000, async () => {
+  return sharedControlRead(PLUGIN_LIVE_STATUS_READ_KEY, 1_000, async () => {
     const response = await fetch(url);
     return parsePluginLiveControlStatus(await responseJson(response));
   }, signal);
@@ -310,7 +320,9 @@ async function managementRequest(
     credentials: "omit",
     ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
   });
-  return responseJson(response);
+  const payload = await responseJson(response);
+  if (method !== "GET") invalidatePluginControlReads();
+  return payload;
 }
 
 async function backgroundManagementRequest(
@@ -504,6 +516,7 @@ export async function installPluginBundle(file: File): Promise<void> {
     body: file,
   });
   await responseJson(response);
+  invalidatePluginControlReads();
 }
 
 async function pluginBundleUploadIdentity(file: File): Promise<string> {
