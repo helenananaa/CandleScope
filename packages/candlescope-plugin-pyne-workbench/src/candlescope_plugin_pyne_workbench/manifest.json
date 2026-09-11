@@ -177,6 +177,38 @@
                 }
               }
             }
+          },
+          "th": {
+            "title": "รัน Pyne บนชาร์ตปัจจุบัน",
+            "schema": {
+              "properties": {
+                "source": {
+                  "title": "ซอร์ส Pyne"
+                },
+                "paramsJson": {
+                  "title": "JSON พารามิเตอร์"
+                },
+                "lookbackBars": {
+                  "title": "จำนวนแท่งย้อนหลัง"
+                }
+              }
+            }
+          },
+          "nl": {
+            "title": "Pyne uitvoeren op de huidige grafiek",
+            "schema": {
+              "properties": {
+                "source": {
+                  "title": "Pyne-broncode"
+                },
+                "paramsJson": {
+                  "title": "Parameter-JSON"
+                },
+                "lookbackBars": {
+                  "title": "Lookback-kaarsen"
+                }
+              }
+            }
           }
         },
         "requiresUserAction": true,
@@ -390,6 +422,50 @@
                 },
                 "retentionBars": {
                   "title": "保留 K 線數"
+                }
+              }
+            }
+          },
+          "th": {
+            "title": "เริ่มเซสชัน Pyne แบบเพิ่มทีละแท่ง",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "รหัสเซสชัน"
+                },
+                "source": {
+                  "title": "ซอร์ส Pyne"
+                },
+                "paramsJson": {
+                  "title": "JSON พารามิเตอร์"
+                },
+                "lookbackBars": {
+                  "title": "จำนวนแท่งย้อนหลัง"
+                },
+                "retentionBars": {
+                  "title": "จำนวนแท่งที่เก็บไว้"
+                }
+              }
+            }
+          },
+          "nl": {
+            "title": "Incrementele Pyne-sessie starten",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "Sessie-ID"
+                },
+                "source": {
+                  "title": "Pyne-broncode"
+                },
+                "paramsJson": {
+                  "title": "Parameter-JSON"
+                },
+                "lookbackBars": {
+                  "title": "Lookback-kaarsen"
+                },
+                "retentionBars": {
+                  "title": "Bewaarde kaarsen"
                 }
               }
             }
@@ -692,6 +768,68 @@
                 }
               }
             }
+          },
+          "th": {
+            "title": "ส่งแท่งไปยังเซสชัน Pyne",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "รหัสเซสชัน"
+                },
+                "time": {
+                  "title": "เวลา"
+                },
+                "open": {
+                  "title": "ราคาเปิด"
+                },
+                "high": {
+                  "title": "สูงสุด"
+                },
+                "low": {
+                  "title": "ต่ำสุด"
+                },
+                "close": {
+                  "title": "ราคาปิด"
+                },
+                "volume": {
+                  "title": "ปริมาณ"
+                },
+                "preview": {
+                  "title": "ดูตัวอย่างเท่านั้น"
+                }
+              }
+            }
+          },
+          "nl": {
+            "title": "Kaars naar Pyne-sessie sturen",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "Sessie-ID"
+                },
+                "time": {
+                  "title": "Tijd"
+                },
+                "open": {
+                  "title": "Open"
+                },
+                "high": {
+                  "title": "Hoog"
+                },
+                "low": {
+                  "title": "Laag"
+                },
+                "close": {
+                  "title": "Slot"
+                },
+                "volume": {
+                  "title": "Volume"
+                },
+                "preview": {
+                  "title": "Alleen voorvertoning"
+                }
+              }
+            }
           }
         },
         "requiresUserAction": true,
@@ -829,6 +967,26 @@
                 }
               }
             }
+          },
+          "th": {
+            "title": "สร้างสแนปชอตเซสชัน Pyne",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "รหัสเซสชัน"
+                }
+              }
+            }
+          },
+          "nl": {
+            "title": "Snapshot van Pyne-sessie maken",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "Sessie-ID"
+                }
+              }
+            }
           }
         },
         "requiresUserAction": true,
@@ -937,6 +1095,26 @@
                 }
               }
             }
+          },
+          "th": {
+            "title": "ปิดเซสชัน Pyne",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "รหัสเซสชัน"
+                }
+              }
+            }
+          },
+          "nl": {
+            "title": "Pyne-sessie sluiten",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "Sessie-ID"
+                }
+              }
+            }
           }
         },
         "requiresUserAction": true,
@@ -989,6 +1167,12 @@
           },
           "zh-TW": {
             "title": "Pyne 回測策略提供器"
+          },
+          "th": {
+            "title": "ผู้ให้บริการกลยุทธ์แบ็กเทสต์ Pyne"
+          },
+          "nl": {
+            "title": "Pyne-backteststrategieprovider"
           }
         },
         "inputModes": [
@@ -1039,6 +1223,12 @@
           },
           "zh-TW": {
             "title": "Pyne 工作台"
+          },
+          "th": {
+            "title": "โต๊ะงาน Pyne"
+          },
+          "nl": {
+            "title": "Pyne-werkbank"
           }
         },
         "slot": "sidePanel",
@@ -1076,6 +1266,12 @@
           },
           "zh-TW": {
             "title": "Pyne 輸出"
+          },
+          "th": {
+            "title": "เอาต์พุต Pyne"
+          },
+          "nl": {
+            "title": "Pyne-uitvoer"
           }
         },
         "target": "main-chart",

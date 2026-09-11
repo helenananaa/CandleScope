@@ -6,16 +6,22 @@ chrome. It is app-wide infrastructure, not a business feature.
 ## Public Contract
 
 - Default locale is `zh-CN`. Supported locales are `zh-CN`, `en`, `es`, `fr`,
-  `ja`, `ko`, `pt-BR`, `ru`, and `zh-TW`.
-- Bare `pt` is not an alias of `pt-BR`. Locale matching still walks BCP 47
-  parents, so `pt-BR` and case variants such as `pt-br` resolve to Brazilian
-  Portuguese, but `pt` and `pt-PT` fall back to the product default. This is a
+  `ja`, `ko`, `pt-BR`, `ru`, `zh-TW`, `th`, `nl`, `uk`, `hi`, `ar`, `he`, `ms`,
+  `cs`, `ro`, `hu`, `sv`, `pt-PT`, `zh-HK`, `zh-MO`, and `zh-Hant`.
+- Bare `pt` is not an alias of `pt-BR` or `pt-PT`. Locale matching still walks
+  BCP 47 parents, so `pt-BR` and case variants such as `pt-br` resolve to
+  Brazilian Portuguese, and `pt-PT` / `pt-pt` resolve to the dedicated European
+  Portuguese catalog. Bare `pt` falls back to the product default. This is a
   product decision: CLDR treats `pt` as Brazil, but CandleScope must not mix
-  European Portuguese with Brazilian Portuguese unless a dedicated `pt-PT`
-  catalog is registered.
-- Traditional Chinese uses the native label 繁體中文 and the alias
-  `zh-Hant-TW` only. `zh-HK`, `zh-MO`, and bare `zh-Hant` are not mapped to
-  `zh-TW`.
+  European Portuguese with Brazilian Portuguese.
+- Traditional Chinese (`zh-TW`) keeps the native label 繁體中文 and the alias
+  `zh-Hant-TW` only. `zh-HK`, `zh-MO`, and bare `zh-Hant` are first-class
+  catalogs and are not mapped to `zh-TW`. `zh-Hant-TW` still resolves to
+  `zh-TW` via that alias before the parent `zh-Hant` catalog is considered.
+- `ar` and `he` set `document.documentElement.dir` to `rtl`. Other locales stay
+  `ltr`. First-party plugins currently ship owned copy for `th` and `nl` in
+  addition to the previous set; other new Host languages fall back to plugin
+  English defaults.
 - `registry.ts` is the single registration point for catalogs, native labels,
   aliases and optional date/number format locales. `LocaleId`, the settings
   options, locale normalization and catalog checks are derived from it.

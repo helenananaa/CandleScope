@@ -20,6 +20,22 @@ test("first-party plugins ship Japanese manifest copy for owned surfaces", () =>
   const scannerById = Object.fromEntries(scanner.contributions.map((item) => [item.id, item]));
   const workbenchById = Object.fromEntries(workbench.contributions.map((item) => [item.id, item]));
   assert.equal(scannerById.scan.configuration.localizations.ja.title, "許可済み市場をスキャン");
+  assert.equal(scannerById.scan.configuration.localizations.th.title, "สแกนตลาดที่ได้รับอนุญาต");
+  assert.equal(scannerById.scan.configuration.localizations.nl.title, "Geautoriseerde markten scannen");
+  assert.equal(
+    scannerById.results.configuration.localizations.th.emptyState,
+    "เรียกใช้เครื่องสแกนแล้วผลลัพธ์จะแสดงที่นี่",
+  );
+  assert.equal(
+    scannerById.results.configuration.localizations.nl.emptyState,
+    "Voer de scanner uit om resultaten te tonen",
+  );
+  assert.equal(workbenchById.run.configuration.localizations.th.title, "รัน Pyne บนชาร์ตปัจจุบัน");
+  assert.equal(workbenchById.run.configuration.localizations.nl.title, "Pyne uitvoeren op de huidige grafiek");
+  assert.equal(workbenchById["workbench-view"].configuration.localizations.th.title, "โต๊ะงาน Pyne");
+  assert.equal(workbenchById["workbench-view"].configuration.localizations.nl.title, "Pyne-werkbank");
+  assert.equal(scannerById.scan.configuration.localizations.uk, undefined);
+  assert.equal(Object.keys(scannerById.scan.configuration.localizations).length <= 16, true);
   assert.deepEqual(
     scannerById.settings.configuration.localizations.ja.schema.properties.interval.enumLabels,
     ["1分", "5分", "1時間"],
@@ -81,6 +97,18 @@ test("Pyne sandbox follows locale lifecycle updates and falls back to its own En
     ["pt-PT", "en", "Pyne Workbench"],
     ["ru", "ru", "Верстак Pyne"],
     ["ru-RU", "ru", "Верстак Pyne"],
+    ["th", "th", "โต๊ะงาน Pyne"],
+    ["th-TH", "th", "โต๊ะงาน Pyne"],
+    ["nl", "nl", "Pyne-werkbank"],
+    ["nl-NL", "nl", "Pyne-werkbank"],
+    ["nl-BE", "nl", "Pyne-werkbank"],
+    ["uk", "en", "Pyne Workbench"],
+    ["hi", "en", "Pyne Workbench"],
+    ["ar", "en", "Pyne Workbench"],
+    ["he", "en", "Pyne Workbench"],
+    ["zh-HK", "en", "Pyne Workbench"],
+    ["zh-MO", "en", "Pyne Workbench"],
+    ["zh-Hant", "en", "Pyne Workbench"],
   ]) {
     channel.onmessage({ data: {
       protocol: "candlescope.ui-bridge/1", type: "host.lifecycle",

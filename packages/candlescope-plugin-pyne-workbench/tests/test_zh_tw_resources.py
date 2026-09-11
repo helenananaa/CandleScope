@@ -19,3 +19,24 @@ def test_manifest_and_sandbox_ship_zh_tw_copy() -> None:
     assert '"zh-TW": {' in javascript
     assert "等待 CandleScope 連線" in javascript
     assert "已連線 · 命令從外掛面板執行" in javascript
+    assert titles["run"]
+    th_titles = {
+        item["id"]: item["configuration"]["localizations"]["th"]["title"]
+        for item in manifest["contributions"]
+    }
+    nl_titles = {
+        item["id"]: item["configuration"]["localizations"]["nl"]["title"]
+        for item in manifest["contributions"]
+    }
+    assert th_titles["run"] == "รัน Pyne บนชาร์ตปัจจุบัน"
+    assert th_titles["workbench-view"] == "โต๊ะงาน Pyne"
+    assert nl_titles["run"] == "Pyne uitvoeren op de huidige grafiek"
+    assert nl_titles["workbench-view"] == "Pyne-werkbank"
+    assert "th: {" in javascript
+    assert "โต๊ะงาน Pyne" in javascript
+    assert "nl: {" in javascript
+    assert "Pyne-werkbank" in javascript
+    for item in manifest["contributions"]:
+        locales = item["configuration"]["localizations"]
+        assert "uk" not in locales
+        assert len(locales) <= 16
