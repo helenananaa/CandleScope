@@ -20,6 +20,37 @@ function renderInEnglish(element: React.ReactNode): string {
   }
 }
 
+test("drawing tool tips follow the six added interface languages", () => {
+  const previousLocale = getLocale();
+  try {
+    for (const [locale, eraser, text] of [
+      ["de", "Radierer", "Textnotiz"],
+      ["it", "Gomma", "Nota di testo"],
+      ["id", "Penghapus", "Catatan teks"],
+      ["tr", "Silgi", "Metin notu"],
+      ["vi", "Tẩy", "Ghi chú văn bản"],
+      ["pl", "Gumka", "Notatka tekstowa"],
+    ] as const) {
+      setLocale(locale);
+      const html = renderToStaticMarkup(
+        <DrawingToolbar
+          activeTool="cursor-crosshair"
+          penColor="#f59e0b"
+          penSize={2}
+          onClearAll={() => {}}
+          onToggleDrawingsHidden={() => {}}
+          onPositionSizeChange={() => {}}
+        />,
+      );
+      assert.ok(buttonTag(html, 'data-drawing-tool="eraser"').includes(`title="${eraser}"`));
+      assert.ok(buttonTag(html, 'data-drawing-tool="text"').includes(`title="${text}"`));
+      assert.doesNotMatch(buttonTag(html, 'data-drawing-tool="fibonacci"'), /right-click|double-click/);
+    }
+  } finally {
+    setLocale(previousLocale);
+  }
+});
+
 test("engine wait disables drawing tools without hiding chart, cursor, or export controls", () => {
   const html = renderInEnglish(
     <DrawingToolbar

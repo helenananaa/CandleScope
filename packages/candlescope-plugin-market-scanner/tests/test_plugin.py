@@ -246,3 +246,146 @@ def test_plugin_owned_validation_error_follows_zh_tw_locale() -> None:
     )
     with pytest.raises(PlatformContractError, match="只接受空參數"):
         plugin.invoke(tw_request)
+
+
+NEW_HOST_LOCALES = ("de", "it", "id", "tr", "vi", "pl")
+
+NEW_HOST_REGIONAL = {
+    "de": "de-DE",
+    "it": "it-IT",
+    "id": "id-ID",
+    "tr": "tr-TR",
+    "vi": "vi-VN",
+    "pl": "pl-PL",
+}
+
+SCANNER_PHASE_MESSAGES = {
+    "de": "Die Phase des Markt-Scanners ist ungültig",
+    "it": "La fase dello scanner di mercato non è valida",
+    "id": "Fase pemindai pasar tidak valid",
+    "tr": "Piyasa tarayıcısının aşaması geçersiz",
+    "vi": "Giai đoạn của bộ quét thị trường không hợp lệ",
+    "pl": "Faza skanera rynku jest nieprawidłowa",
+}
+
+SCANNER_EMPTY_SCAN_MESSAGES = {
+    "de": "Der Markt-Scanner akzeptiert nur einen Scan-Befehl ohne Parameter",
+    "it": "Lo scanner di mercato accetta solo un comando di scansione senza parametri",
+    "id": "Pemindai pasar hanya menerima perintah pindai tanpa parameter",
+    "tr": "Piyasa tarayıcısı yalnızca parametresiz bir tarama komutunu kabul eder",
+    "vi": "Bộ quét thị trường chỉ chấp nhận lệnh quét không có tham số",
+    "pl": "Skaner rynku akceptuje tylko polecenie skanowania bez parametrów",
+}
+
+SCANNER_CAPABILITY_MESSAGES = {
+    "de": "Fähigkeit market.bars.read nicht verfügbar",
+    "it": "Capacità market.bars.read non disponibile",
+    "id": "Kemampuan market.bars.read tidak tersedia",
+    "tr": "market.bars.read yeteneği kullanılamıyor",
+    "vi": "Năng lực market.bars.read không khả dụng",
+    "pl": "Zdolność market.bars.read jest niedostępna",
+}
+
+SCANNER_SCAN_TITLES = {
+    "de": "Autorisierte Märkte scannen",
+    "it": "Scansiona i mercati autorizzati",
+    "id": "Pindai pasar yang diizinkan",
+    "tr": "Yetkili piyasaları tara",
+    "vi": "Quét các thị trường được ủy quyền",
+    "pl": "Skanuj autoryzowane rynki",
+}
+
+SCANNER_INTERVAL_LABELS = {
+    "de": ["1 Minute", "5 Minuten", "1 Stunde"],
+    "it": ["1 minuto", "5 minuti", "1 ora"],
+    "id": ["1 menit", "5 menit", "1 jam"],
+    "tr": ["1 dakika", "5 dakika", "1 saat"],
+    "vi": ["1 phút", "5 phút", "1 giờ"],
+    "pl": ["1 minuta", "5 minut", "1 godzina"],
+}
+
+
+def test_contract_localizations_cover_every_manifest_locale() -> None:
+    manifest = market_scanner_manifest()
+    declared = {
+        locale
+        for contribution in manifest.contributions
+        for locale in contribution.localizations
+    }
+    assert declared == set(_CONTRACT_LOCALIZATIONS)
+    for locale in NEW_HOST_LOCALES:
+        assert locale in declared
+
+
+@pytest.mark.parametrize("locale", NEW_HOST_LOCALES)
+def test_new_host_locales_own_contribution_copy_and_resolve_errors(locale: str) -> None:
+    manifest = market_scanner_manifest()
+    localized = [item for item in manifest.contributions if item.localizations]
+    assert localized
+    chinese_keys = None
+    for item in localized:
+        assert locale in item.localizations, item.id
+        copy = item.localizations[locale]
+        assert copy["title"]
+        chinese = item.localizations["zh-CN"]
+        if chinese_keys is None:
+            chinese_keys = set(chinese)
+        if "fields" in chinese:
+            assert set(copy["fields"]) == set(chinese["fields"])
+            assert all(copy["fields"].values())
+        if "emptyState" in chinese:
+            assert copy["emptyState"]
+            assert copy["emptyState"] != item.configuration["emptyState"]
+        if "schema" in chinese:
+            assert set(copy["schema"]["properties"]) == set(chinese["schema"]["properties"])
+    scan = next(item for item in manifest.contributions if item.id == "scan")
+    assert scan.localizations[locale]["title"] == SCANNER_SCAN_TITLES[locale]
+    settings = next(item for item in manifest.contributions if item.id == "settings")
+    interval = settings.localizations[locale]["schema"]["properties"]["interval"]
+    assert interval["enumLabels"] == SCANNER_INTERVAL_LABELS[locale]
+    assert len(interval["enumLabels"]) == len(
+        settings.configuration["schema"]["properties"]["interval"]["enum"]
+    )
+
+    phase = PlatformContractError("invalid_request", "market scanner phase is invalid", "phase")
+    assert _localized_contract_error(phase, locale).message == SCANNER_PHASE_MESSAGES[locale]
+    regional = _localized_contract_error(phase, NEW_HOST_REGIONAL[locale])
+    assert regional.message == SCANNER_PHASE_MESSAGES[locale]
+    assert (regional.code, regional.path) == (phase.code, phase.path)
+    mixed = NEW_HOST_REGIONAL[locale]
+    mixed = mixed[: mixed.index("-")].upper() + mixed[mixed.index("-") :]
+    assert _localized_contract_error(phase, mixed).message == SCANNER_PHASE_MESSAGES[locale]
+    capability = PlatformContractError(
+        "unavailable", "market.bars.read capability is unavailable"
+    )
+    assert _localized_contract_error(capability, locale).message == SCANNER_CAPABILITY_MESSAGES[
+        locale
+    ]
+
+    plugin = MarketScannerPlugin()
+    with pytest.raises(PlatformContractError, match=SCANNER_EMPTY_SCAN_MESSAGES[locale]):
+        plugin.invoke(
+            InvokeRequest(
+                contribution_id="scan",
+                input={"unexpected": True},
+                request_context=_context(NEW_HOST_REGIONAL[locale]),
+            )
+        )
+
+
+@pytest.mark.parametrize("locale", NEW_HOST_LOCALES)
+def test_scan_preserves_new_host_invocation_locale_on_host_calls(locale: str) -> None:
+    plugin = MarketScannerPlugin()
+    manifest = plugin.manifest()
+    permissions = tuple(
+        CapabilityGrant(handle=f"cap-{index}", permission_id=permission.id)
+        for index, permission in enumerate(manifest.permissions.required)
+    )
+    plugin.activate(
+        ActivationRequest(instance_id=f"test-{locale}", generation=1, capabilities=permissions)
+    )
+    outcome = plugin.invoke(
+        InvokeRequest(contribution_id="scan", input={}, request_context=_context(locale))
+    )
+    assert isinstance(outcome, HostCallInvocation)
+    assert outcome.call.request_context.locale == locale

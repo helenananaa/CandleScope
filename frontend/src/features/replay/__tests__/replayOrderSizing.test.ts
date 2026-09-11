@@ -50,6 +50,43 @@ test("rebases against lower equity and leverage without changing reduce-only cap
   }), 0.5);
 });
 
+test("known finite next equity at or below zero invalidates stale opening capacity", () => {
+  assert.equal(rebaseReplayMaxQuantity({
+    ...BASE_INPUT,
+    nextAvailableEquity: 0,
+  }), null);
+  assert.equal(rebaseReplayMaxQuantity({
+    ...BASE_INPUT,
+    nextAvailableEquity: -10,
+  }), null);
+});
+
+test("unknown previous equity still invalidates when next equity is known non-positive", () => {
+  assert.equal(rebaseReplayMaxQuantity({
+    ...BASE_INPUT,
+    previousAvailableEquity: null,
+    nextAvailableEquity: 0,
+  }), null);
+  assert.equal(rebaseReplayMaxQuantity({
+    ...BASE_INPUT,
+    previousAvailableEquity: Number.NaN,
+    nextAvailableEquity: -10,
+  }), null);
+});
+
+test("reduce-only keeps closing capacity when next equity is zero or negative", () => {
+  assert.equal(rebaseReplayMaxQuantity({
+    ...BASE_INPUT,
+    nextAvailableEquity: 0,
+    reduceOnly: true,
+  }), 0.5);
+  assert.equal(rebaseReplayMaxQuantity({
+    ...BASE_INPUT,
+    nextAvailableEquity: -10,
+    reduceOnly: true,
+  }), 0.5);
+});
+
 test("previews the only non-reversing side once a position is open", () => {
   assert.equal(replayOrderPreviewSide(0, "BUY"), "BUY");
   assert.equal(replayOrderPreviewSide(0, "SELL"), "SELL");
@@ -106,4 +143,22 @@ test("an oversized rejected draft cannot destroy independent slider capacity", (
   const corrected = replayOrderSizingAvailability(authoritativeCapacity, "0.001");
   assert.equal(corrected.sliderDisabled, false);
   assert.equal(corrected.quantityExceedsCapacity, false);
+});
+
+test("a known zero capacity flags a positive draft without enabling the slider", () => {
+  const positiveDraft = replayOrderSizingAvailability("0", "0.001");
+  assert.equal(positiveDraft.sliderDisabled, true);
+  assert.equal(positiveDraft.quantityExceedsCapacity, true);
+
+  const zeroDraft = replayOrderSizingAvailability("0", "0");
+  assert.equal(zeroDraft.sliderDisabled, true);
+  assert.equal(zeroDraft.quantityExceedsCapacity, false);
+});
+
+test("unknown or invalid maximum does not flag excess capacity", () => {
+  for (const maxQuantity of [null, "", "   ", "not-a-number", "-1"]) {
+    const availability = replayOrderSizingAvailability(maxQuantity, "0.001");
+    assert.equal(availability.sliderDisabled, true);
+    assert.equal(availability.quantityExceedsCapacity, false);
+  }
 });

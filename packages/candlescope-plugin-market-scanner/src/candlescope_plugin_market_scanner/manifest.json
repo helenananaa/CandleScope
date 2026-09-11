@@ -53,6 +53,24 @@
           },
           "zh-TW": {
             "title": "掃描已授權市場"
+          },
+          "de": {
+            "title": "Autorisierte Märkte scannen"
+          },
+          "it": {
+            "title": "Scansiona i mercati autorizzati"
+          },
+          "id": {
+            "title": "Pindai pasar yang diizinkan"
+          },
+          "tr": {
+            "title": "Yetkili piyasaları tara"
+          },
+          "vi": {
+            "title": "Quét các thị trường được ủy quyền"
+          },
+          "pl": {
+            "title": "Skanuj autoryzowane rynki"
           }
         },
         "requiresUserAction": true,
@@ -290,6 +308,168 @@
                 }
               }
             }
+          },
+          "de": {
+            "title": "Einstellungen des Markt-Scanners",
+            "schema": {
+              "properties": {
+                "quoteAsset": {
+                  "title": "Notierungswährung"
+                },
+                "symbolsLimit": {
+                  "title": "Anzahl der zu scannenden Symbole"
+                },
+                "interval": {
+                  "title": "Intervall",
+                  "enumLabels": [
+                    "1 Minute",
+                    "5 Minuten",
+                    "1 Stunde"
+                  ]
+                },
+                "lookbackBars": {
+                  "title": "Lookback-Kerzen"
+                },
+                "minimumMovePct": {
+                  "title": "Minimale prozentuale Veränderung"
+                }
+              }
+            }
+          },
+          "it": {
+            "title": "Impostazioni dello scanner di mercato",
+            "schema": {
+              "properties": {
+                "quoteAsset": {
+                  "title": "Asset di quotazione"
+                },
+                "symbolsLimit": {
+                  "title": "Numero di simboli da scansionare"
+                },
+                "interval": {
+                  "title": "Intervallo",
+                  "enumLabels": [
+                    "1 minuto",
+                    "5 minuti",
+                    "1 ora"
+                  ]
+                },
+                "lookbackBars": {
+                  "title": "Barre di lookback"
+                },
+                "minimumMovePct": {
+                  "title": "Variazione percentuale minima"
+                }
+              }
+            }
+          },
+          "id": {
+            "title": "Pengaturan pemindai pasar",
+            "schema": {
+              "properties": {
+                "quoteAsset": {
+                  "title": "Aset kuotasi"
+                },
+                "symbolsLimit": {
+                  "title": "Jumlah simbol yang dipindai"
+                },
+                "interval": {
+                  "title": "Interval",
+                  "enumLabels": [
+                    "1 menit",
+                    "5 menit",
+                    "1 jam"
+                  ]
+                },
+                "lookbackBars": {
+                  "title": "Jumlah candle lookback"
+                },
+                "minimumMovePct": {
+                  "title": "Perubahan persentase minimum"
+                }
+              }
+            }
+          },
+          "tr": {
+            "title": "Piyasa tarayıcısı ayarları",
+            "schema": {
+              "properties": {
+                "quoteAsset": {
+                  "title": "Kote varlık"
+                },
+                "symbolsLimit": {
+                  "title": "Taranacak sembol sayısı"
+                },
+                "interval": {
+                  "title": "Aralık",
+                  "enumLabels": [
+                    "1 dakika",
+                    "5 dakika",
+                    "1 saat"
+                  ]
+                },
+                "lookbackBars": {
+                  "title": "Geriye bakış mum sayısı"
+                },
+                "minimumMovePct": {
+                  "title": "Minimum yüzde değişim"
+                }
+              }
+            }
+          },
+          "vi": {
+            "title": "Cài đặt bộ quét thị trường",
+            "schema": {
+              "properties": {
+                "quoteAsset": {
+                  "title": "Tài sản định giá"
+                },
+                "symbolsLimit": {
+                  "title": "Số mã cần quét"
+                },
+                "interval": {
+                  "title": "Khung thời gian",
+                  "enumLabels": [
+                    "1 phút",
+                    "5 phút",
+                    "1 giờ"
+                  ]
+                },
+                "lookbackBars": {
+                  "title": "Số nến nhìn lại"
+                },
+                "minimumMovePct": {
+                  "title": "Biến động phần trăm tối thiểu"
+                }
+              }
+            }
+          },
+          "pl": {
+            "title": "Ustawienia skanera rynku",
+            "schema": {
+              "properties": {
+                "quoteAsset": {
+                  "title": "Aktywo kwotowane"
+                },
+                "symbolsLimit": {
+                  "title": "Liczba symboli do skanowania"
+                },
+                "interval": {
+                  "title": "Interwał",
+                  "enumLabels": [
+                    "1 minuta",
+                    "5 minut",
+                    "1 godzina"
+                  ]
+                },
+                "lookbackBars": {
+                  "title": "Świece wstecz"
+                },
+                "minimumMovePct": {
+                  "title": "Minimalna zmiana procentowa"
+                }
+              }
+            }
           }
         },
         "schema": {
@@ -429,6 +609,66 @@
               "time": "收盤時間"
             },
             "emptyState": "執行掃描器後將在此顯示結果"
+          },
+          "de": {
+            "title": "Ergebnisse des Markt-Scanners",
+            "fields": {
+              "symbol": "Symbol",
+              "changePct": "Veränderung",
+              "close": "Schluss",
+              "time": "Schlusszeit"
+            },
+            "emptyState": "Führen Sie den Scanner aus, um Ergebnisse anzuzeigen"
+          },
+          "it": {
+            "title": "Risultati dello scanner di mercato",
+            "fields": {
+              "symbol": "Simbolo",
+              "changePct": "Variazione",
+              "close": "Chiusura",
+              "time": "Ora di chiusura"
+            },
+            "emptyState": "Esegui lo scanner per visualizzare i risultati qui"
+          },
+          "id": {
+            "title": "Hasil pemindai pasar",
+            "fields": {
+              "symbol": "Simbol",
+              "changePct": "Perubahan",
+              "close": "Penutupan",
+              "time": "Waktu penutupan"
+            },
+            "emptyState": "Jalankan pemindai untuk menampilkan hasil di sini"
+          },
+          "tr": {
+            "title": "Piyasa tarayıcısı sonuçları",
+            "fields": {
+              "symbol": "Sembol",
+              "changePct": "Değişim",
+              "close": "Kapanış",
+              "time": "Kapanış saati"
+            },
+            "emptyState": "Sonuçları burada görmek için tarayıcıyı çalıştırın"
+          },
+          "vi": {
+            "title": "Kết quả bộ quét thị trường",
+            "fields": {
+              "symbol": "Mã",
+              "changePct": "Biến động",
+              "close": "Giá đóng",
+              "time": "Thời điểm đóng"
+            },
+            "emptyState": "Chạy bộ quét để hiển thị kết quả tại đây"
+          },
+          "pl": {
+            "title": "Wyniki skanera rynku",
+            "fields": {
+              "symbol": "Symbol",
+              "changePct": "Zmiana",
+              "close": "Zamknięcie",
+              "time": "Czas zamknięcia"
+            },
+            "emptyState": "Uruchom skaner, aby wyświetlić wyniki"
           }
         },
         "slot": "sidePanel",
@@ -537,6 +777,54 @@
               "interval": "週期"
             },
             "emptyState": "掃描器空閒"
+          },
+          "de": {
+            "title": "Zusammenfassung des Markt-Scanners",
+            "fields": {
+              "scannedSymbols": "Gescannt",
+              "interval": "Intervall"
+            },
+            "emptyState": "Scanner im Leerlauf"
+          },
+          "it": {
+            "title": "Riepilogo dello scanner di mercato",
+            "fields": {
+              "scannedSymbols": "Scansionati",
+              "interval": "Intervallo"
+            },
+            "emptyState": "Scanner inattivo"
+          },
+          "id": {
+            "title": "Ringkasan pemindai pasar",
+            "fields": {
+              "scannedSymbols": "Dipindai",
+              "interval": "Interval"
+            },
+            "emptyState": "Pemindai menganggur"
+          },
+          "tr": {
+            "title": "Piyasa tarayıcısı özeti",
+            "fields": {
+              "scannedSymbols": "Taranan",
+              "interval": "Aralık"
+            },
+            "emptyState": "Tarayıcı boşta"
+          },
+          "vi": {
+            "title": "Tóm tắt bộ quét thị trường",
+            "fields": {
+              "scannedSymbols": "Đã quét",
+              "interval": "Khung thời gian"
+            },
+            "emptyState": "Bộ quét đang rảnh"
+          },
+          "pl": {
+            "title": "Podsumowanie skanera rynku",
+            "fields": {
+              "scannedSymbols": "Zeskanowane",
+              "interval": "Interwał"
+            },
+            "emptyState": "Skaner bezczynny"
           }
         },
         "slot": "statusArea",
@@ -592,6 +880,24 @@
           },
           "zh-TW": {
             "title": "市場掃描訊號"
+          },
+          "de": {
+            "title": "Signale des Markt-Scanners"
+          },
+          "it": {
+            "title": "Segnali dello scanner di mercato"
+          },
+          "id": {
+            "title": "Sinyal pemindai pasar"
+          },
+          "tr": {
+            "title": "Piyasa tarayıcısı sinyalleri"
+          },
+          "vi": {
+            "title": "Tín hiệu bộ quét thị trường"
+          },
+          "pl": {
+            "title": "Sygnały skanera rynku"
           }
         },
         "target": "main-chart",

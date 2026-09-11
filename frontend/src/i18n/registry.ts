@@ -1,3 +1,9 @@
+import { de } from "./catalogs/de.js";
+import { it } from "./catalogs/it.js";
+import { id } from "./catalogs/id.js";
+import { tr } from "./catalogs/tr.js";
+import { vi } from "./catalogs/vi.js";
+import { pl } from "./catalogs/pl.js";
 import { en } from "./catalogs/en.js";
 import { es } from "./catalogs/es.js";
 import { fr } from "./catalogs/fr.js";
@@ -82,6 +88,48 @@ export const LOCALE_REGISTRY = {
     numberLocale: "zh-TW",
     direction: "ltr",
     messages: zhTW,
+  },
+  de: {
+    nativeLabel: "Deutsch",
+    dateTimeLocale: "de-DE",
+    numberLocale: "de-DE",
+    direction: "ltr",
+    messages: de,
+  },
+  it: {
+    nativeLabel: "Italiano",
+    dateTimeLocale: "it-IT",
+    numberLocale: "it-IT",
+    direction: "ltr",
+    messages: it,
+  },
+  id: {
+    nativeLabel: "Bahasa Indonesia",
+    dateTimeLocale: "id-ID",
+    numberLocale: "id-ID",
+    direction: "ltr",
+    messages: id,
+  },
+  tr: {
+    nativeLabel: "Türkçe",
+    dateTimeLocale: "tr-TR",
+    numberLocale: "tr-TR",
+    direction: "ltr",
+    messages: tr,
+  },
+  vi: {
+    nativeLabel: "Tiếng Việt",
+    dateTimeLocale: "vi-VN",
+    numberLocale: "vi-VN",
+    direction: "ltr",
+    messages: vi,
+  },
+  pl: {
+    nativeLabel: "Polski",
+    dateTimeLocale: "pl-PL",
+    numberLocale: "pl-PL",
+    direction: "ltr",
+    messages: pl,
   },
 } as const satisfies Readonly<Record<string, LocaleDefinition>>;
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { resetSharedControlReadsForTests, sharedControlRead } from "../../../services/sharedControlRead.js";
 import {
   downloadPluginUserFile,
   fetchLiveAuditExport,
@@ -203,7 +204,17 @@ test("user-selected file APIs send bytes only through the guarded Host gateway",
       "report.json",
     );
     assert.equal((await downloadPluginUserFile("candlescope.integration-gateway", downloadId)).size, 13);
+    resetSharedControlReadsForTests();
+    const cacheKeys = ["control:plugin-catalog", "control:plugin-ui-snapshot", "control:plugin-live-status"];
+    for (const key of [...cacheKeys, "control:exchanges"]) {
+      await sharedControlRead(key, 60_000, async () => "before mutation");
+    }
     await setPaperKillSwitch(true);
+    for (const key of cacheKeys) {
+      assert.equal(await sharedControlRead(key, 60_000, async () => "after mutation"), "after mutation");
+    }
+    assert.equal(await sharedControlRead("control:exchanges", 60_000, async () => "unexpected reload"), "before mutation");
+    resetSharedControlReadsForTests();
     assert.equal((await setLiveControlMode("armed", "operator-arm", false)).mode, "armed");
     assert.equal((await killLiveControl("operator-kill")).mode, "killed");
     assert.equal(

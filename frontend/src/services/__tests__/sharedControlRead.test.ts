@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  invalidateSharedControlRead,
   resetSharedControlReadsForTests,
   sharedControlRead,
   sharedControlReadCountForTests,
@@ -45,3 +46,23 @@ test("failed and overflow entries are removed within the hard bound", async () =
   }
   assert.equal(sharedControlReadCountForTests(), 32);
 });
+
+for (const outcome of ["resolve", "reject"] as const) {
+  test(`invalidated ${outcome} cannot replace or evict a newer cached read`, async () => {
+    resetSharedControlReadsForTests();
+    let resolve!: (value: string) => void;
+    let reject!: (reason: Error) => void;
+    const pending = new Promise<string>((done, fail) => { resolve = done; reject = fail; });
+    const oldRead = sharedControlRead("plugin", 60_000, () => pending);
+    const oldResult = oldRead.catch(() => "rejected");
+    await sharedControlRead("unrelated", 60_000, async () => "retained");
+    invalidateSharedControlRead("plugin");
+    assert.equal(await sharedControlRead("plugin", 60_000, async () => "fresh"), "fresh");
+    if (outcome === "resolve") resolve("old");
+    else reject(new Error("old request failed"));
+    await oldResult;
+    assert.equal(await sharedControlRead("plugin", 60_000, async () => "unexpected reload"), "fresh");
+    assert.equal(await sharedControlRead("unrelated", 60_000, async () => "unexpected reload"), "retained");
+    assert.equal(sharedControlReadCountForTests(), 2);
+  });
+}
