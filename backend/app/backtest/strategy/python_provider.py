@@ -154,6 +154,9 @@ class PythonHostProvider:
         except PythonRunnerError as exc:
             raise StrategyProviderError(exc.code, str(exc)) from exc
 
+    def abort(self) -> None:
+        self.runner.close()
+
     def close(self) -> str:
         try:
             self.runner.call("close")

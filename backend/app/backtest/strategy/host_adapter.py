@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import queue
-import threading
 from typing import Any
+
+from .serial_worker import SerialWorker
 
 from .protocol import (
     ObservationFrame,
@@ -23,6 +23,18 @@ class StrategyHostAdapter:
     ) -> None:
         self.session = session
         self.step_timeout_s = step_timeout_s
+        self._worker: SerialWorker | None = None
+        self._closed = False
+
+    def close(self) -> None:
+        self._closed = True
+        if self._worker is not None:
+            self._worker.close()
+
+    def __del__(self) -> None:
+        worker = getattr(self, "_worker", None)
+        if worker is not None:
+            worker.close(wait=False)
 
     def start(self, input_plan: dict[str, Any]) -> dict[str, Any]:
         described = self.session.describe()
@@ -65,31 +77,25 @@ class StrategyHostAdapter:
             trade=trade,
             features=features or {},
         )
-        completed: queue.Queue[tuple[bool, Any]] = queue.Queue(maxsize=1)
+        if self._closed:
+            raise StrategyProviderError("PROVIDER_TIMEOUT", "adapter is closed")
+        if self._worker is None:
+            self._worker = SerialWorker(f"strategy-step-{self.session.run_id}")
 
-        def invoke() -> None:
-            try:
-                if phase == "WARMUP":
-                    self.session.warmup(frame)
-                    completed.put((True, None))
-                else:
-                    completed.put((True, self.session.step(frame)))
-            except BaseException as exc:
-                completed.put((False, exc))
+        def invoke() -> Any:
+            if phase == "WARMUP":
+                self.session.warmup(frame)
+                return None
+            return self.session.step(frame)
 
-        thread = threading.Thread(
-            target=invoke,
-            name=f"strategy-step-{self.session.run_id}-{sequence}",
-            daemon=True,
-        )
-        thread.start()
         try:
-            ok, value = completed.get(timeout=self.step_timeout_s)
-        except queue.Empty:
+            output = self._worker.call(invoke, self.step_timeout_s)
+        except TimeoutError:
+            self._closed = True
+            abort = getattr(self.session.provider, "abort", None)
+            if callable(abort):
+                abort()
             raise StrategyProviderError("PROVIDER_TIMEOUT", "provider step exceeded budget")
-        if not ok:
-            raise value
-        output = value
         return None if output is None else output.to_wire()
 
     def reject_host_write(self, attempt: str) -> None:

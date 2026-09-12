@@ -2604,6 +2604,7 @@ class BacktestService:
                 expected_generation=expected_generation,
             )
         session: StrategyProviderSession | None = None
+        adapter: StrategyHostAdapter | None = None
         deadline = time.monotonic() + self.settings.max_run_seconds
         try:
             session = StrategyProviderSession(provider, run_id=run_id)  # type: ignore[arg-type]
@@ -2846,6 +2847,9 @@ class BacktestService:
         except BaseException:
             self._close_failed_session(session)
             raise
+        finally:
+            if adapter is not None:
+                adapter.close()
         return self._persist_completed_run(
             run_id,
             result=result,
@@ -2920,6 +2924,7 @@ class BacktestService:
                 expected_generation=expected_generation,
             )
         session: StrategyProviderSession | None = None
+        adapter: StrategyHostAdapter | None = None
         deadline = time.monotonic() + self.settings.max_run_seconds
         try:
             session = StrategyProviderSession(provider, run_id=run_id)  # type: ignore[arg-type]
@@ -3119,6 +3124,9 @@ class BacktestService:
         except BaseException:
             self._close_failed_session(session)
             raise
+        finally:
+            if adapter is not None:
+                adapter.close()
         return self._persist_completed_run(
             run_id,
             result=result,
@@ -3214,6 +3222,7 @@ class BacktestService:
                 expected_generation=expected_generation,
             )
         session: StrategyProviderSession | None = None
+        adapter: StrategyHostAdapter | None = None
         deadline = time.monotonic() + self.settings.max_run_seconds
         try:
             session = StrategyProviderSession(provider, run_id=run_id)  # type: ignore[arg-type]
@@ -3464,6 +3473,9 @@ class BacktestService:
         except BaseException:
             self._close_failed_session(session)
             raise
+        finally:
+            if adapter is not None:
+                adapter.close()
         report_label = (
             "TRADE_SEQUENCE"
             if record["fidelity_mode"] == "TRADE_TAPE"

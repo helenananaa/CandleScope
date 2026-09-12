@@ -9,9 +9,11 @@ class Strategy:
 
     def warmup(self, observation: Observation) -> None:
         self.closes.append(observation.bar.close)
+        del self.closes[:-max(self.fast, self.slow)]
 
     def step(self, observation: Observation) -> TargetPosition:
         self.closes.append(observation.bar.close)
+        del self.closes[:-max(self.fast, self.slow)]
         fast = sum(map(float, self.closes[-self.fast :])) / self.fast
         slow = sum(map(float, self.closes[-self.slow :])) / self.slow
         return TargetPosition(quantity="1" if fast > slow else "-1")
@@ -23,7 +25,9 @@ class Strategy:
         return {"closes": list(self.closes)}
 
     def restore(self, payload: dict) -> None:
-        self.closes = [str(value) for value in payload["closes"]]
+        # Accept the previous full-history snapshot while retaining only what
+        # the next decision needs. Parameters come from prepare().
+        self.closes = [str(value) for value in payload["closes"][-max(self.fast, self.slow):]]
 
     def close(self) -> None:
         return None
