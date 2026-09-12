@@ -64,6 +64,7 @@ def measure(count, name, root, output, v2=False):
     try:
         completed=service.execute_bar_run(created['run_id'],events=events,provider=provider,now_ms=3)
         result['execution_seconds']=time.perf_counter()-start
+        result['execution_lane']=completed.get('execution_lane', 'REFERENCE')
         read_start=time.perf_counter()
         report=service.get_report(created['run_id'])
         result['report_read_seconds']=time.perf_counter()-read_start
@@ -76,7 +77,7 @@ def measure(count, name, root, output, v2=False):
         for owner,attr,original in reversed(originals):
             setattr(owner,attr,original)
         service.shutdown()
-    result.update(timings_seconds=dict(timings),calls=dict(calls),processed_bars=calls['script_step'])
+    result.update(timings_seconds=dict(timings),calls=dict(calls),processed_bars=count if result.get('state')=='COMPLETED' else calls.get('script_step'),timing_scope='parent only; child stages excluded for colocated lane')
     output.write_text(json.dumps(result,indent=2),encoding='utf-8')
     print(json.dumps(result),flush=True)
 

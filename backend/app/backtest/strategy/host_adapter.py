@@ -20,11 +20,13 @@ class StrategyHostAdapter:
         session: StrategyProviderSession,
         *,
         step_timeout_s: float = 2.0,
+        inline: bool = False,
     ) -> None:
         self.session = session
         self.step_timeout_s = step_timeout_s
         self._worker: SerialWorker | None = None
         self._closed = False
+        self._inline = inline
 
     def close(self) -> None:
         self._closed = True
@@ -79,7 +81,7 @@ class StrategyHostAdapter:
         )
         if self._closed:
             raise StrategyProviderError("PROVIDER_TIMEOUT", "adapter is closed")
-        if self._worker is None:
+        if self._worker is None and not self._inline:
             self._worker = SerialWorker(f"strategy-step-{self.session.run_id}")
 
         def invoke() -> Any:
@@ -89,7 +91,13 @@ class StrategyHostAdapter:
             return self.session.step(frame)
 
         try:
-            output = self._worker.call(invoke, self.step_timeout_s)
+            if self._inline:
+                # Only used inside a supervised whole-run worker. The parent
+                # enforces provider deadlines by terminating that process.
+                output = invoke()
+            else:
+                assert self._worker is not None
+                output = self._worker.call(invoke, self.step_timeout_s)
         except TimeoutError:
             self._closed = True
             abort = getattr(self.session.provider, "abort", None)

@@ -2592,6 +2592,14 @@ class BacktestService:
             raise BacktestError(
                 "FIDELITY_UNSUPPORTED", "execute_bar_run only supports BAR_APPROX"
             )
+        if not getattr(self, "_colocated_worker", False) and self._fault_injector is None and isinstance(events, tuple):
+            from .colocated import provider_spec, execute
+            spec = provider_spec(provider)
+            if spec is not None:
+                return execute(self, run_id, spec, events, {
+                    "now_ms": now_ms, "warmup_events": warmup_events,
+                    "snapshot_evidence": snapshot_evidence,
+                })
         stamp = now_ms or _now_ms()
         warmup_events = self._resolve_warmup(record, warmup_events)
         expected_generation = int(record["generation"])
@@ -2611,6 +2619,7 @@ class BacktestService:
             adapter = StrategyHostAdapter(
                 session,
                 step_timeout_s=self.settings.provider_step_timeout_ms / 1000,
+                inline=getattr(self, "_colocated_worker", False),
             )
             try:
                 config = json.loads(str(record["config_json"]))
@@ -2731,7 +2740,7 @@ class BacktestService:
                 )
                 return planner.plan(
                     wire,
-                    context=_planning_context(kernel, event),
+                    context=(None if planner.config is None else _planning_context(kernel, event)),
                 )
 
             streamed_last: MarketEvent | None = None
@@ -2931,6 +2940,7 @@ class BacktestService:
             adapter = StrategyHostAdapter(
                 session,
                 step_timeout_s=self.settings.provider_step_timeout_ms / 1000,
+                inline=getattr(self, "_colocated_worker", False),
             )
             try:
                 config = json.loads(str(record["config_json"]))
@@ -3229,6 +3239,7 @@ class BacktestService:
             adapter = StrategyHostAdapter(
                 session,
                 step_timeout_s=self.settings.provider_step_timeout_ms / 1000,
+                inline=getattr(self, "_colocated_worker", False),
             )
             try:
                 config = json.loads(str(record["config_json"]))
@@ -3313,7 +3324,7 @@ class BacktestService:
                 )
                 return planner.plan(
                     wire,
-                    context=_planning_context(kernel, event),
+                    context=(None if planner.config is None else _planning_context(kernel, event)),
                 )
 
             kernel = TradeSimulationKernel(
@@ -4963,7 +4974,8 @@ def _planning_context(kernel: Any, event: MarketEvent) -> PlanningContext:
         kernel, "min_notional", None
     )
     contract_multiplier = getattr(account, "multiplier", None) or Decimal("1")
-    active_orders = sum(order.status in {"OPEN", "PARTIAL"} for order in kernel.orders)
+    active_orders = (len(kernel._live_orders()) if isinstance(kernel, SimulationKernel)
+                     else sum(order.status in {"OPEN", "PARTIAL"} for order in kernel.orders))
     cumulative_fees = getattr(account, "cumulative_fees", None)
     if cumulative_fees is None:
         cumulative_fees = getattr(kernel, "fee_total", Decimal("0"))

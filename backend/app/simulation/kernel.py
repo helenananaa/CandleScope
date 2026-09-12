@@ -100,6 +100,19 @@ class SimulationKernel:
     paused: bool = False
     fee_total: Decimal = Decimal("0")
     orders: list[SimulatedOrder] = field(default_factory=list)
+    _active_orders: dict[str, SimulatedOrder] = field(default_factory=dict, init=False, repr=False)
+    _active_list_id: int = field(default=0, init=False, repr=False)
+    _active_count: int = field(default=-1, init=False, repr=False)
+
+    def _live_orders(self):
+        # The public list remains the authoritative history. Restore/list replacement
+        # rebuilds this derived index once; normal enqueue/close updates it in place.
+        if id(self.orders) != self._active_list_id or len(self.orders) != self._active_count:
+            self._active_orders = {order.order_id: order for order in self.orders
+                                   if order.status in {"OPEN", "PARTIAL"}}
+            self._active_list_id, self._active_count = id(self.orders), len(self.orders)
+        return self._active_orders.values()
+
     fills: list[SimulatedFill] = field(default_factory=list)
     decisions: list[dict] = field(default_factory=list)
     rejected: list[dict] = field(default_factory=list)
@@ -162,7 +175,7 @@ class SimulationKernel:
         pending = sum(
             (
                 order.qty if order.side == "BUY" else -order.qty
-                for order in self.orders
+                for order in self._live_orders()
                 if order.type == "MARKET" and order.status in {"OPEN", "PARTIAL"}
             ),
             Decimal("0"),
@@ -179,7 +192,7 @@ class SimulationKernel:
             )
         same_side_pending = sum(
             (
-                candidate.qty for candidate in self.orders
+                candidate.qty for candidate in self._live_orders()
                 if candidate.status in {"OPEN", "PARTIAL"}
                 and not candidate.reduce_only
                 and candidate.side == order.side
@@ -535,7 +548,7 @@ class SimulationKernel:
         self.equity_curve.append(point)
 
     def finalize_orders(self) -> None:
-        for order in self.orders:
+        for order in list(self._live_orders()):
             if order.status in {"OPEN", "PARTIAL"}:
                 if (
                     self.execution_model_revision == EXECUTION_REALISM_V2
@@ -653,6 +666,7 @@ class SimulationKernel:
             self._enqueue(intent, current_sequence=current_sequence)
 
     def _enqueue(self, intent: Mapping[str, object], *, current_sequence: int) -> None:
+        self._live_orders()
         current_price = (
             None
             if self._last_event is None
@@ -704,6 +718,8 @@ class SimulationKernel:
             reduce_only=bool(intent.get("reduce_only") or False),
         )
         self.orders.append(order)
+        self._active_orders[order.order_id] = order
+        self._active_count = len(self.orders)
         self._order_tif[order.order_id] = str(intent.get("tif") or "GTC").upper()
         self._lifecycle(order, "NEW")
         if isinstance(self.account, LinearPerpetualAccountV2):
@@ -725,6 +741,8 @@ class SimulationKernel:
                 )
             except MarketDatasetError as exc:
                 self.orders.pop()
+                self._active_orders.pop(order.order_id, None)
+                self._active_count = len(self.orders)
                 self._order_tif.pop(order.order_id, None)
                 rejected = {
                     "accepted": False,
@@ -753,7 +771,7 @@ class SimulationKernel:
         bar = event.payload
         open_orders = [
             order
-            for order in self.orders
+            for order in self._live_orders()
             if order.status in {"OPEN", "PARTIAL"}
             and order.eligible_after_sequence <= event.sequence
         ]
@@ -855,6 +873,7 @@ class SimulationKernel:
         reason: str,
         capacity: Decimal | None = None,
     ) -> Decimal:
+        self._live_orders()
         fill_qty = order.qty if capacity is None else min(order.qty, capacity)
         if fill_qty <= 0:
             return Decimal("0")
@@ -881,6 +900,8 @@ class SimulationKernel:
             order.status = "FILLED" if order.qty <= 0 else "PARTIAL"
         else:
             order.status = "FILLED"
+        if order.status == "FILLED":
+            self._active_orders.pop(order.order_id, None)
         order.fill_price = price
         order.fill_sequence = sequence
         fee_bps = (
@@ -933,7 +954,7 @@ class SimulationKernel:
             self._fill_source_events.append(self._last_event)
             self._lifecycle(order, order.status, fill_qty=fill_qty)
         if order.oco_group is not None and order.status == "FILLED":
-            for sibling in self.orders:
+            for sibling in list(self._live_orders()):
                 if (
                     sibling.order_id != order.order_id
                     and sibling.oco_group == order.oco_group
@@ -969,6 +990,8 @@ class SimulationKernel:
         reason: str | None = None,
         fill_qty: Decimal | None = None,
     ) -> None:
+        if order.status not in {"OPEN", "PARTIAL"}:
+            self._active_orders.pop(order.order_id, None)
         if self.execution_model_revision != EXECUTION_REALISM_V2:
             return
         self._order_events.append(
