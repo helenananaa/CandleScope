@@ -54,6 +54,7 @@ def test_shared_ranges_match_linear_summaries_and_touches(tmp_path):
         assert view.summary(a, b) == summarize(
             [view.row(i) for i in range(a, b)], 60000
         )
+        assert view.summary(a, b, prices_only=True)[1:] == view.summary(a, b)[1:]
         price = Decimal(rng.randrange(85, 125))
         below = rng.choice([True, False])
         expected = (
@@ -70,6 +71,55 @@ def test_whole_block_query_does_not_read_rows(tmp_path, monkeypatch):
     obj, view = market(tmp_path, 4096)
     monkeypatch.setattr(obj, "block", lambda *_: pytest.fail("full range scanned rows"))
     assert view.summary(0, 4096)[0][9] == 4096
+
+
+@pytest.mark.parametrize("count", [4096, 3001])
+def test_prepared_small_tree_does_not_issue_per_node_queries(tmp_path, monkeypatch, count):
+    obj, view = market(tmp_path, count)
+    view.prepare_nodes()
+    assert 1 in obj._nodes and len(obj._nodes) <= obj.metadata["size"]*2-1
+    original = obj._fetch
+    def fetch(table,key):
+        assert table != "nodes", "warm range repeated a node SELECT"
+        return original(table,key)
+    monkeypatch.setattr(obj,"_fetch",fetch)
+    for start,end in ((256,768),(1024,2048),(1280,2816)):
+        assert view.summary(start,end) == summarize([view.row(i) for i in range(start,end)],60000)
+
+
+def test_range_time_directory_preserves_slices_gaps_offsets_without_midpoint_reads(tmp_path, monkeypatch):
+    from bisect import bisect_left, bisect_right
+    obj, _ = market(tmp_path, 4096)
+    view = MarketRange([(obj, 50, 1300), (obj, 1800, 4000)], offset_ms=1234)
+    opens = [view.row(i)[0] for i in range(view.count)]
+    original = obj.block
+    calls = []
+    def block(number):
+        calls.append(number)
+        return original(number)
+    monkeypatch.setattr(obj, "block", block)
+    for raw in (0, 49, 50, 800, 1299, 1300, 1500, 1800, 2900, 3999, 4000, 5000):
+        for shift in (-1, 0, 1):
+            at = raw*60000+1234+shift
+            for right in (False, True):
+                expected = (bisect_right if right else bisect_left)(opens, at)
+                calls.clear()
+                assert view.bound(at, right=right) == expected
+                assert set(calls).issubset({min(max(0, raw//256), 15)}) or raw>=4096
+
+
+def test_shared_end_uses_actual_calendar_closes_and_preserves_terminal_exclusion():
+    from bisect import bisect_right
+    day = 86400000
+    opens = [0, 28*day, 59*day]
+    closes = [28*day-1, 59*day-1, 89*day-1]
+    prepared = object.__new__(SharedPreparedInterval)
+    prepared.market = SimpleNamespace(count=3,
+        bound=lambda at,right=False:bisect_right(opens,at), row=lambda i:(opens[i],closes[i]))
+    for terminal in (False, True):
+        prepared.terminal = terminal
+        for target in (-1, 0, 27*day, 28*day-1, 28*day, 59*day-1, 90*day):
+            assert prepared.end_for_time(target) == min(bisect_right(closes,target),3-int(terminal))
 
 
 @pytest.mark.parametrize("side", ["BUY", "SELL"])
@@ -568,3 +618,32 @@ def test_shared_source_checks_each_verified_contiguous_segment(tmp_path):
     assert source.shared_market_range()[0] is view
     source._archive._segments = [SimpleNamespace(start_index=0, end_index=512)]
     assert source.shared_market_range() is None
+
+
+def test_prepared_source_peek_reuses_verified_rows_without_raw_page(tmp_path):
+    from app.replay.sources.bar_source import PagedBarReplaySource, _PagedBarArchive, _IndexedBarSegment
+
+    _, view = market(tmp_path, 512)
+    archive = object.__new__(_PagedBarArchive)
+    archive.total_rows, archive.interval_ms = 512, 60000
+    archive.initial_rows = tuple(ReplayBar(*view.row(i)) for i in range(2))
+    archive._segments = (_IndexedBarSegment(0, 511*60000, 0, 512),)
+    archive._segment_start_indexes = (0,)
+    archive._shared_ranges, archive._shared_cached_row = (), None
+    archive.shared_factory = lambda a,b:view
+    archive.page_loader = lambda *args:pytest.fail("prepared peek loaded a raw page")
+    source = object.__new__(PagedBarReplaySource)
+    source._archive, source._index = archive, 0
+    assert source.shared_market_range()[1] is True
+    source._index = 510
+    expected = ReplayBar(*view.row(510))
+    assert source.peek() == expected
+    assert source.next() is archive._shared_cached_row[1]
+    assert source.peek() == ReplayBar(*view.row(511))
+    assert source.next() is not None
+    assert source.peek() is None
+    # The exact reader still checks the committed schedule, not just count.
+    archive._shared_cached_row = None
+    archive.open_at_index = lambda i:i*60000+1
+    with pytest.raises(Exception, match="committed schedule"):
+        archive.row_at(510)

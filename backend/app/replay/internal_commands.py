@@ -20,6 +20,7 @@ class InternalCommandType(str, Enum):
     RECORDED_INTERVAL = "_training_recorded_interval"
     INDEXED_INTERVAL = "_training_indexed_interval"
     SHARED_INDEXED_INTERVAL = "_training_shared_indexed_interval"
+    MULTI_SHARED_INDEXED_INTERVAL = "_training_multi_shared_indexed_interval_v1"
     STEP_DEFER_TERMINAL = "_training_step_defer_terminal"
     FINALIZE_DEFERRED_TERMINAL = "_training_finalize_deferred_terminal"
 

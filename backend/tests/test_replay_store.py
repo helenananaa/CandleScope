@@ -15,6 +15,64 @@ from app.replay.storage import REPLAY_SCHEMA_VERSION, ReplaySQLiteStore
 pytestmark = pytest.mark.anyio
 
 
+def test_dataset_object_cache_reuses_verified_bytes_and_revalidates_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.replay.storage import sqlite_store
+
+    objects = sqlite_store._DatasetObjectStore(tmp_path / "objects")
+    payload = b"immutable market snapshot" * 200
+    identity = objects.put(payload)
+    decode = sqlite_store.zlib.decompress
+    calls = []
+
+    def counted(value):
+        calls.append(len(value))
+        return decode(value)
+
+    monkeypatch.setattr(sqlite_store.zlib, "decompress", counted)
+    first = objects.get(identity)
+    assert first == payload
+    assert objects.get(identity) is first
+    assert len(calls) == 1
+    objects._path(identity).write_bytes(b"corrupt snapshot")
+    with pytest.raises(RuntimeError, match="unavailable"):
+        objects.get(identity)
+    assert len(calls) == 2
+    objects._path(identity).write_bytes(sqlite_store.zlib.compress(b"other content"))
+    with pytest.raises(RuntimeError, match="checksum changed"):
+        objects.get(identity)
+    objects._path(identity).write_bytes(sqlite_store.zlib.compress(payload))
+    assert objects.get(identity) == payload
+    assert identity in objects._cache
+    objects._path(identity).unlink()
+    with pytest.raises(RuntimeError, match="unavailable"):
+        objects.get(identity)
+
+
+def test_dataset_object_cache_bounds_and_collection(tmp_path: Path) -> None:
+    from app.replay.storage.sqlite_store import _DatasetObjectStore
+
+    objects = _DatasetObjectStore(tmp_path / "objects")
+    objects._cache_limit = 12
+    identities = [objects.put(bytes([index]) * 8) for index in range(3)]
+    for identity in identities:
+        objects.get(identity)
+    assert list(objects._cache) == identities[-1:]
+    assert objects._cache_bytes == 8
+    oversized = objects.put(b"x" * 13)
+    assert objects.get(oversized) == b"x" * 13
+    assert oversized not in objects._cache
+    objects.collect({oversized})
+    assert not objects._cache
+    assert objects._cache_bytes == 0
+    objects._cache_limit = 1000
+    for index in range(20):
+        objects.get(objects.put(bytes([index])))
+    assert len(objects._cache) == 16
+    assert objects._cache_bytes == 16
+
+
 def _state(
     *,
     source_sequence: int = 0,

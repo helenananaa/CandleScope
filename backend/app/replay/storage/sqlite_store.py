@@ -15,6 +15,7 @@ import threading
 import time
 import uuid
 import zlib
+from collections import OrderedDict
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -82,6 +83,10 @@ class _DatasetObjectStore:
     def __init__(self, root: Path) -> None:
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
+        self._cache = OrderedDict()
+        self._cache_bytes = 0
+        self._cache_limit = 128 * 1024 * 1024
+        self._cache_lock = threading.Lock()
 
     def put(self, payload: bytes) -> str:
         object_id = _blob_sha256(payload)
@@ -107,11 +112,33 @@ class _DatasetObjectStore:
     def get(self, object_id: str) -> bytes:
         path = self._path(object_id)
         try:
+            stat = path.stat()
+        except OSError as exc:
+            raise RuntimeError("replay dataset object is unavailable") from exc
+        signature = (stat.st_size, stat.st_mtime_ns, stat.st_ino)
+        with self._cache_lock:
+            cached = self._cache.get(object_id)
+            if cached is not None and cached[0] == signature:
+                self._cache.move_to_end(object_id)
+                return cached[1]
+            if cached is not None:
+                self._cache_bytes -= len(self._cache.pop(object_id)[1])
+        try:
             payload = zlib.decompress(path.read_bytes())
         except (OSError, zlib.error) as exc:
             raise RuntimeError("replay dataset object is unavailable") from exc
         if _blob_sha256(payload) != object_id:
             raise RuntimeError("replay dataset object checksum changed")
+        if len(payload) <= self._cache_limit:
+            with self._cache_lock:
+                old = self._cache.pop(object_id, None)
+                if old is not None:
+                    self._cache_bytes -= len(old[1])
+                self._cache[object_id] = (signature, payload)
+                self._cache_bytes += len(payload)
+                while self._cache_bytes > self._cache_limit or len(self._cache) > 16:
+                    _, evicted = self._cache.popitem(last=False)
+                    self._cache_bytes -= len(evicted[1])
         return payload
 
     def collect(self, referenced: set[str]) -> dict[str, int]:
@@ -128,6 +155,10 @@ class _DatasetObjectStore:
                 continue
             removed += 1
             removed_bytes += size
+            with self._cache_lock:
+                cached = self._cache.pop(f"sha256:{token}", None)
+                if cached is not None:
+                    self._cache_bytes -= len(cached[1])
         return {"objects_removed": removed, "bytes_removed": removed_bytes}
 
     def _path(self, object_id: str) -> Path:
@@ -447,7 +478,20 @@ class ReplaySQLiteStore:
             await self.collect_dataset_objects()
         return deleted
 
-    async def commit_command(
+    async def commit_command(self, **kwargs) -> StoredCommand:
+        return await self._write_async(self._command_writer(**kwargs))
+
+    async def commit_command_group(self, commands, *, before, after):
+        """Publish a complete coordinator-owned group in one writer transaction."""
+        writers = [self._command_writer(**command) for command in commands]
+        def write(connection):
+            before(connection)
+            results = [writer(connection) for writer in writers]
+            after(connection)
+            return results
+        return await self._write_async(write)
+
+    def _command_writer(
         self,
         *,
         session_id: str,
@@ -463,7 +507,7 @@ class ReplaySQLiteStore:
         component_state: Mapping[str, object] | None = None,
         previous_component_state: Mapping[str, object] | None = None,
         history_frames: Sequence[Mapping[str, object]] = (),
-    ) -> StoredCommand:
+    ):
         command_payload = dict(command)
         fingerprint = canonical_sha256(command_payload)
         command_id = str(command_payload.get("command_id", ""))
@@ -620,7 +664,7 @@ class ReplaySQLiteStore:
             assert row is not None
             return row
 
-        return await self._write_async(write)
+        return write
 
     async def commit_source_event(
         self,

@@ -3068,7 +3068,7 @@ class TrainingRunStore:
         track_id: str,
         now_ms: int,
     ) -> tuple[StableMarketEvent, ...]:
-        """Apply one contiguous primary-track MARK batch without per-event queries."""
+        """Apply a contiguous MARK batch; only track-1 owns v1 compatibility rows."""
 
         projection = connection.execute(
             """
@@ -3244,34 +3244,35 @@ class TrainingRunStore:
                     track_id,
                 ),
             )
-            compatibility_payload = {
-                "schema_version": "replay.hedge-input-projection.v1",
-                "source_kind": "PUBLIC",
-                "last_event_sequence": final_event.event_sequence,
-                "as_of_actual_time_ms": final_event.event_time_ms,
-                "as_of_virtual_time_ms": final_virtual_time_ms,
-                "state": state,
-                "input_chain_hash": final_event.event_hash,
-            }
-            connection.execute(
-                """
-                UPDATE replay_hedge_input_projection
-                SET last_event_sequence = ?, as_of_actual_time_ms = ?,
-                    as_of_virtual_time_ms = ?, state_json = ?,
-                    input_chain_hash = ?, component_hash = ?, updated_at_ms = ?
-                WHERE run_id = ? AND source_kind = 'PUBLIC'
-                """,
-                (
-                    final_event.event_sequence,
-                    final_event.event_time_ms,
-                    final_virtual_time_ms,
-                    canonical_json(state),
-                    final_event.event_hash,
-                    canonical_sha256(compatibility_payload),
-                    now_ms,
-                    run_id,
-                ),
-            )
+            if track_id == "track-1":
+                compatibility_payload = {
+                    "schema_version": "replay.hedge-input-projection.v1",
+                    "source_kind": "PUBLIC",
+                    "last_event_sequence": final_event.event_sequence,
+                    "as_of_actual_time_ms": final_event.event_time_ms,
+                    "as_of_virtual_time_ms": final_virtual_time_ms,
+                    "state": state,
+                    "input_chain_hash": final_event.event_hash,
+                }
+                connection.execute(
+                    """
+                    UPDATE replay_hedge_input_projection
+                    SET last_event_sequence = ?, as_of_actual_time_ms = ?,
+                        as_of_virtual_time_ms = ?, state_json = ?,
+                        input_chain_hash = ?, component_hash = ?, updated_at_ms = ?
+                    WHERE run_id = ? AND source_kind = 'PUBLIC'
+                    """,
+                    (
+                        final_event.event_sequence,
+                        final_event.event_time_ms,
+                        final_virtual_time_ms,
+                        canonical_json(state),
+                        final_event.event_hash,
+                        canonical_sha256(compatibility_payload),
+                        now_ms,
+                        run_id,
+                    ),
+                )
         connection.executemany(
             """
             INSERT INTO replay_hedge_track_public_applied_event(
@@ -3293,7 +3294,7 @@ class TrainingRunStore:
                 applied_payload_hash, created_at_ms
             ) VALUES (?, 'PUBLIC', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            compatibility_applied_rows,
+            compatibility_applied_rows if track_id == "track-1" else (),
         )
         return stable_market_event_order(stable)
 
@@ -13451,7 +13452,12 @@ class TrainingRunStore:
             )
         return self._advance_intent_from_row(row)
 
-    async def begin_advance_intent(
+    async def begin_advance_intent(self, **kwargs) -> dict[str, object]:
+        return self._advance_intent_from_row(
+            await self.base_store.run_extension_write(self._advance_intent_writer(**kwargs))
+        )
+
+    def _advance_intent_writer(
         self,
         *,
         run_id: str,
@@ -13462,7 +13468,7 @@ class TrainingRunStore:
         target_virtual_time_ms: int,
         plan: Mapping[str, object],
         summary: ReplayPeriodSummary | None,
-    ) -> dict[str, object]:
+    ) -> Callable[[sqlite3.Connection], sqlite3.Row]:
         command_json = canonical_json(command)
         command_hash = canonical_sha256(command)
         cursor_json = canonical_json(initial_cursor)
@@ -13522,9 +13528,7 @@ class TrainingRunStore:
             assert created is not None
             return created
 
-        return self._advance_intent_from_row(
-            await self.base_store.run_extension_write(write)
-        )
+        return write
 
     async def update_advance_intent_cursor(
         self,
@@ -16531,6 +16535,11 @@ class TrainingRunStore:
             (run_id,),
         ).fetchone()
         if inserted and selected is not None:
+            if checkpoint_boundary:
+                from .multi_interval_store import record_portfolio_point
+                record_portfolio_point(self, connection, run_id=run_id,
+                    session_id=str(selected['adapter_session_id']),
+                    actual_time_ms=ordered[-1].actual_event_time_ms,sequence=global_sequence)
             self._append_review_timeline_event(
                 connection,
                 run_id=run_id,
@@ -16566,6 +16575,17 @@ class TrainingRunStore:
         return await self.base_store.run_extension_write(write)
 
     async def set_actor_segment_refs(self, run_id: str, *, active: bool) -> None:
+        if active:
+            def already_active(connection: sqlite3.Connection) -> bool:
+                self._assert_run_segments_ready(connection, run_id=run_id, operation="actor activation")
+                return connection.execute(
+                    "SELECT 1 FROM replay_data_segment_ref WHERE run_id=? AND owner_kind='ACTOR' "
+                    "AND (active != 1 OR released_at_ms IS NOT NULL) LIMIT 1", (run_id,)
+                ).fetchone() is None
+            # Most controls use already-pinned immutable segments. Keep the
+            # readiness check, but don't acquire the writer for a no-op UPDATE.
+            if await self.base_store.run_extension_read(already_active):
+                return
         now_ms = self.base_store._validated_now_ms()
 
         def write(connection: sqlite3.Connection) -> None:
@@ -24829,6 +24849,9 @@ class TrainingRunStore:
 
     def _sync_session_trajectory(self, *args):
         try:
+            if args[2].get("type") == InternalCommandType.MULTI_SHARED_INDEXED_INTERVAL.value:
+                from .multi_interval_store import stage_track
+                return stage_track(self, *args)
             if args[2].get("type") in {InternalCommandType.INDEXED_INTERVAL.value, InternalCommandType.SHARED_INDEXED_INTERVAL.value}:
                 return self._sync_indexed_trajectory(*args)
             return self._sync_recorded_trajectory(*args)
@@ -25688,6 +25711,7 @@ class TrainingRunStore:
                 InternalCommandType.RECORDED_INTERVAL.value,
                 InternalCommandType.INDEXED_INTERVAL.value,
                 InternalCommandType.SHARED_INDEXED_INTERVAL.value,
+                InternalCommandType.MULTI_SHARED_INDEXED_INTERVAL.value,
             }
         )
         if component_projection_changed and not coordinated_hedge_mutation:

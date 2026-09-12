@@ -503,7 +503,10 @@ class TrainingRunService:
                 replay_service.settings.replay_account_history_max_archive_bytes
             ),
         )
-        self.hedge_inputs = HedgeInputArchiveManager(replay_service.store)
+        self.hedge_inputs = HedgeInputArchiveManager(
+            replay_service.store,
+            indexed_event_limit=(800_000 if replay_service.settings.replay_multi_bar_interval_enabled else 200_000),
+        )
         self.storage_governance = ReplayStorageGovernance(
             replay_service.store,
             settings=replay_service.settings,
@@ -531,7 +534,7 @@ class TrainingRunService:
         self._market_track_plans: OrderedDict[str, _MarketTrackPlan] = OrderedDict()
         self._market_track_subscribers: dict[
             str,
-            set[asyncio.Queue[None]],
+            set[asyncio.Queue[Mapping[str, object] | None]],
         ] = {}
 
     def _remember_native_display_pin_proof(
@@ -1596,7 +1599,7 @@ class TrainingRunService:
         run_id: str,
         *,
         live: bool = False,
-    ) -> tuple[dict[str, object], asyncio.Queue[None]]:
+    ) -> tuple[dict[str, object], asyncio.Queue[Mapping[str, object] | None]]:
         """Atomically attach a coalescing Run projection subscriber.
 
         Registration happens before the requested initial read. A concurrent
@@ -1605,7 +1608,7 @@ class TrainingRunService:
         """
 
         normalized = self._identifier(run_id, field_name="run_id")
-        queue: asyncio.Queue[None] = asyncio.Queue(maxsize=1)
+        queue: asyncio.Queue[Mapping[str, object] | None] = asyncio.Queue(maxsize=1)
         subscribers = self._market_track_subscribers.setdefault(normalized, set())
         subscribers.add(queue)
         try:
@@ -1622,7 +1625,7 @@ class TrainingRunService:
     def unsubscribe_market_tracks(
         self,
         run_id: str,
-        queue: asyncio.Queue[None],
+        queue: asyncio.Queue[Mapping[str, object] | None],
     ) -> None:
         subscribers = self._market_track_subscribers.get(run_id)
         if subscribers is None:
@@ -1631,11 +1634,16 @@ class TrainingRunService:
         if not subscribers:
             self._market_track_subscribers.pop(run_id, None)
 
-    def _notify_market_tracks(self, run_id: str) -> None:
+    def _notify_market_tracks(self, run_id: str, projection: Mapping[str, object] | None = None) -> None:
+        # A command may already have built this committed live projection for
+        # its acknowledgement. Detach it once for stream consumers; callers
+        # remain free to mutate their returned response.
+        from copy import deepcopy
+        queued_projection = deepcopy(projection) if projection is not None else None
         for queue in tuple(self._market_track_subscribers.get(run_id, ())):
             if queue.full():
-                continue
-            queue.put_nowait(None)
+                queue.get_nowait()
+            queue.put_nowait(queued_projection)
 
     async def preview_order(
         self,
@@ -2535,8 +2543,9 @@ class TrainingRunService:
                 "selected market track has no frozen adapter session",
                 status_code=409,
             )
-        selected_session = await self.replay_service.get_session(selected_session_id)
-        selected_snapshot = self._snapshot(selected_session)
+        selected_snapshot = await self.replay_service.get_session_state(
+            selected_session_id, include_config=True
+        )
         selected_config = _stored_mapping(
             selected_snapshot.get("config"),
             field_name="selected adapter config",
@@ -4308,7 +4317,9 @@ class TrainingRunService:
                     result = await self._with_command_display_tail(command, result)
                     if timings is not None:
                         timings["display"] = (perf_counter() - started) * 1000
-        self._notify_market_tracks(normalized)
+        response_data = result.get("data")
+        live_projection = response_data.get("market_tracks") if isinstance(response_data, Mapping) else None
+        self._notify_market_tracks(normalized, live_projection if isinstance(live_projection, Mapping) else None)
         return result
 
     async def _with_command_display_tail(
@@ -4345,10 +4356,17 @@ class TrainingRunService:
             )
         except (TrainingRunError, ReplayDomainError, KeyError, TypeError, ValueError, OSError):
             return result
-        return {
-            **result,
-            "data": {**dict(result["data"]), "display_tail": projection},
-        }
+        data = {**dict(result["data"]), "display_tail": projection}
+        if (getattr(getattr(self.replay_service, "settings", None), "replay_multi_bar_interval_enabled", False)
+                and data.get("full_track_count", 0) > 1):
+            try:
+                tracks = await self.get_live_market_tracks(str(result["run_id"]))
+                selected = next(track for track in tracks["tracks"] if track["adapter_session_id"] == session_id)
+                if selected["cursor"]["revision"] == result["revision"]:
+                    data["market_tracks"] = tracks
+            except (TrainingRunError, ReplayDomainError, KeyError, TypeError, ValueError, OSError, StopIteration):
+                pass
+        return {**result, "data": data}
 
     async def _command_serialized(
         self,
@@ -4459,6 +4477,9 @@ class TrainingRunService:
                     durable_intent.get("plan"),
                     field_name="durable advance plan",
                 )
+                if stored_plan.get('schema') == 'multi-bar-advance-intent.v1':
+                    from .multi_interval_advance import resume_advance
+                    return await resume_advance(self,command=command,binding=binding,intent=durable_intent)
                 stored_mode = str(
                     stored_plan.get(
                         "mode",
@@ -4833,22 +4854,25 @@ class TrainingRunService:
             ReplayV2CommandType.ADVANCE_TO,
             ReplayV2CommandType.END,
         }:
-            result = await self._execute_multi_track_control(
-                command=command,
-                binding=binding,
-                selected_snapshot=snapshot,
-                tracks=(
-                    all_tracks
-                    if command.type is ReplayV2CommandType.END
-                    else full_tracks
-                ),
-            )
-            await self.store.save_command_result(
-                run_id=normalized_run,
-                command_id=command.command_id,
-                command=command_payload,
-                result=result,
-            )
+            used_intervals = getattr(self.store, '_multi_interval_commands', set())
+            key = (normalized_run, command.command_id)
+            try:
+                result = await self._execute_multi_track_control(
+                    command=command, binding=binding, selected_snapshot=snapshot,
+                    tracks=(all_tracks if command.type is ReplayV2CommandType.END else full_tracks),
+                )
+                # The first group created its durable parent intent in the
+                # same transaction; finish it with the external response.
+                used_intervals = getattr(self.store, '_multi_interval_commands', set())
+                if key in used_intervals:
+                    await self.store.finish_advance_intent(run_id=normalized_run,
+                        command_id=command.command_id, result=result,
+                        cancelled=bool(result.get('data',{}).get('cancelled',False)))
+                else:
+                    await self.store.save_command_result(run_id=normalized_run,
+                        command_id=command.command_id, command=command_payload, result=result)
+            finally:
+                getattr(self.store, '_multi_interval_commands', set()).discard(key)
             return result
         v1_type, v1_payload, plan = await self._translate_control(
             command=command,
@@ -7778,7 +7802,8 @@ class TrainingRunService:
                 ReplayV2CommandType.ADVANCE_TO,
             } or (
                 command.type is ReplayV2CommandType.ADVANCE
-                and plan.get("basis") == AdvanceBasis.VIRTUAL_TIME.value
+                and (plan.get("basis") == AdvanceBasis.VIRTUAL_TIME.value
+                     or (binding.get('source_kind') == 'BAR' and plan.get('basis') == AdvanceBasis.DISPLAY_BAR.value))
             )
             if cancelable_scan:
                 decision = self._plan_fast_forward(
@@ -7874,6 +7899,11 @@ class TrainingRunService:
         final = self._snapshot(selected)
         viewer = await self.store.get_viewer_state(command.run_id)
         if fast_forward_plan is not None:
+            if (command.run_id, command.command_id) in getattr(self.store, '_multi_interval_commands', set()):
+                fast_forward_plan = {**dict(fast_forward_plan),
+                    'executed_path':'MULTI_BAR_INTERVAL_V1',
+                    'financial_reference_equivalence':True,
+                    'legacy_hash_byte_equivalence':False}
             equivalence = fast_forward_plan.get("equivalence")
             if isinstance(equivalence, Mapping):
                 fast_forward_plan["equivalence"] = {
@@ -8648,10 +8678,29 @@ class TrainingRunService:
             times: set[int] = set()
             next_times: list[int] = []
             market_sequences: list[int] = []
-            for track in tracks:
+            compact_multi = (
+                allow_final_state_batch and source_goal is None and not pending_global_events
+                and self.replay_service.settings.replay_multi_bar_interval_enabled
+                and hedge_mode and binding.get("source_kind") == "BAR"
+                and binding.get("book_mode", "OFF") == "OFF"
+                and binding.get("account_data_mode") != AccountDataMode.HISTORICAL_EXACT.value
+                and 2 <= len(tracks) <= 8 and isinstance(hedge_runtime_snapshot, IndexedHedgeSnapshot)
+            )
+            compact_states = []
+            if compact_multi:
+                compact_states = await asyncio.gather(*(
+                    self.replay_service.get_session_state(self._track_session_id(track)) for track in tracks
+                ), return_exceptions=True)
+                for state in compact_states:
+                    if isinstance(state, BaseException):
+                        raise state
+            for track_index, track in enumerate(tracks):
                 session_id = self._track_session_id(track)
-                session = await self.replay_service.get_session(session_id)
-                snapshot = self._snapshot(session)
+                if compact_multi:
+                    snapshot = compact_states[track_index]
+                else:
+                    session = await self.replay_service.get_session(session_id)
+                    snapshot = self._snapshot(session)
                 if source_goal is not None and not source_start_verified:
                     snapshot_cursor = _stored_mapping(
                         snapshot.get("cursor"), field_name="adapter cursor"
@@ -8686,11 +8735,20 @@ class TrainingRunService:
                 )
 
             if allow_final_state_batch and source_goal is None and not pending_global_events:
-                recorded = await self._try_indexed_interval(
+                from .multi_interval_advance import try_advance
+                recorded = await try_advance(
+                    self, command=command, binding=binding, tracks=tracks,
+                    snapshots=snapshots, target=target_virtual_time_ms,
+                    runtime_snapshot=hedge_runtime_snapshot,
+                    cancel_event=cancel_event,
+                )
+                completed_multi_interval = recorded is not None
+                if recorded is None:
+                    recorded = await self._try_indexed_interval(
                     command=command, binding=binding, tracks=tracks,
                     snapshot=snapshots[0][1], target=target_virtual_time_ms,
                     runtime_snapshot=hedge_runtime_snapshot,
-                )
+                    )
                 if recorded is None:
                     recorded = await self._try_recorded_interval(
                         command=command, binding=binding, tracks=tracks,
@@ -8711,7 +8769,30 @@ class TrainingRunService:
                         job["chunks"] += 1
                         job["current_virtual_time_ms"] = recorded_time
                     await asyncio.sleep(0)
+                    if completed_multi_interval and recorded_time >= target_virtual_time_ms:
+                        # The shared planner already proved and committed all
+                        # market/public-input events through this target. Do
+                        # not repeat eight full snapshots and source/account
+                        # preflights merely to rediscover that same boundary.
+                        if cancel_event is not None and cancel_event.is_set():
+                            return await cancel_at_committed_barrier()
+                        if job is not None:
+                            job["status"] = "COMPLETED"
+                            job["current_virtual_time_ms"] = recorded_time
+                        if audit_account_at_barrier:
+                            await self.audit_account(command.run_id)
+                        return stable_market_event_order(all_events)
                     continue
+
+            if compact_multi:
+                detailed = []
+                for track, authority in snapshots:
+                    snapshot = self._snapshot(await self.replay_service.get_session(self._track_session_id(track)))
+                    if (self._cursor_time(snapshot) != self._cursor_time(authority)
+                            or snapshot["cursor"]["source_sequence"] != authority["cursor"]["source_sequence"]):
+                        raise TrainingRunError("GLOBAL_CLOCK_DIVERGED", "source changed during interval preflight", status_code=409)
+                    detailed.append((track, snapshot))
+                snapshots = detailed
 
             # These input reads all precede this wave's mutations under the Run lock.
             hedge_cursor_view = (
@@ -9596,6 +9677,12 @@ class TrainingRunService:
         return max(1, limit), require_empty_account
 
     async def prepare_indexed_run(self, run_id):
+        normalized = self._identifier(run_id, field_name="run_id")
+        actor = self._run_actors.setdefault(normalized, TrainingRunActor(normalized))
+        async with actor.serialized():
+            return await self._prepare_indexed_run_serialized(normalized)
+
+    async def _prepare_indexed_run_serialized(self, run_id):
         run_id = self._identifier(run_id, field_name="run_id")
         binding = await self.store.run_binding(run_id)
         tracks = tuple(await self.store.get_market_track_heads(run_id))
@@ -9608,12 +9695,42 @@ class TrainingRunService:
         if (
             binding.get("source_kind") != "BAR"
             or binding.get("position_mode") != "HEDGE"
-            or len(tracks) != 1
+            or (len(tracks) != 1 and not (
+                self.replay_service.settings.replay_multi_bar_interval_enabled
+                and 2 <= len(tracks) <= 8
+            ))
             or binding.get("book_mode", "OFF") != "OFF"
             or binding.get("account_data_mode")
             == AccountDataMode.HISTORICAL_EXACT.value
         ):
             return result
+        if len(tracks) > 1:
+            count = 0
+            for track in tracks:
+                sid = self._track_session_id(track)
+                snapshot = self._snapshot(await self.replay_service.get_session(sid))
+                if snapshot.get("state") != "PAUSED":
+                    return result
+                prepared = await self.replay_service.plan_source_chunk(
+                    sid, target_time_ms=self._cursor_time(snapshot), max_events=100_000, indexed=True
+                )
+                if not prepared or not getattr(prepared["index"], "shared", False):
+                    return result
+                count += prepared["prepared_events"]
+            inputs = await self.hedge_inputs.runtime_snapshot(run_id)
+            if isinstance(inputs, IndexedHedgeSnapshot):
+                for lane in inputs.lanes:
+                    _ = lane.price_index, lane.barrier_indices
+                await asyncio.to_thread(lambda: inputs.portfolio_prices)
+            fingerprint = await self.replay_service.store.run_extension_read(
+                lambda connection:self.store._hedge_risk_fingerprint(connection,run_id=run_id))
+            if self.store._hedge_risk_fingerprints.get(run_id) != fingerprint:
+                audit = await self.audit_account(run_id)
+                if audit['status'] != 'PASS':
+                    raise TrainingRunError('TRAINING_ACCOUNT_AUDIT_FAILED',
+                        'account validation failed during interval preparation',status_code=409)
+                self.store._cache_committed_hedge_fingerprint(run_id,fingerprint)
+            return {**result, "status": "READY", "prepared_events": count}
         session_id = self._track_session_id(tracks[0])
         snapshot = self._snapshot(await self.replay_service.get_session(session_id))
         if snapshot.get("state") != "PAUSED":

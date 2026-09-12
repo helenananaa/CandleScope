@@ -1602,7 +1602,11 @@ def _projection(
 class HedgeInputArchiveManager:
     """Own immutable HEDGE input objects and fail closed on every drift."""
 
-    def __init__(self, store: ReplaySQLiteStore, *, root: Path | None = None) -> None:
+    def __init__(self, store: ReplaySQLiteStore, *, root: Path | None = None,
+                 indexed_event_limit: int = 200_000) -> None:
+        if type(indexed_event_limit) is not int or not 1 <= indexed_event_limit <= 800_000:
+            raise ValueError("HEDGE indexed event budget is outside 1..800000")
+        self._indexed_event_limit = indexed_event_limit
         self.store = store
         self.root = (
             root
@@ -2998,9 +3002,9 @@ class HedgeInputArchiveManager:
                 simulation_events,
             )
             event_count = len(indexed[0]) + len(indexed[1])
-            if event_count <= 200_000:
+            if event_count <= self._indexed_event_limit:
                 self._indexed_snapshot_cache[key] = indexed
-                while len(self._indexed_snapshot_cache) > 4 or sum(len(item[0])+len(item[1]) for item in self._indexed_snapshot_cache.values()) > 200_000:
+                while len(self._indexed_snapshot_cache) > 4 or sum(len(item[0])+len(item[1]) for item in self._indexed_snapshot_cache.values()) > self._indexed_event_limit:
                     self._indexed_snapshot_cache.popitem(last=False)
             return indexed
         except BaseException as exc:

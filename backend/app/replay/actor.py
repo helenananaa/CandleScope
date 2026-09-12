@@ -15,7 +15,8 @@ from types import MappingProxyType
 from typing import Awaitable, Callable, Protocol, Sequence
 
 from .canonical import _canonical_object_sha256, canonical_sha256, _canonical_object_bytes
-from .timing import RequestTiming, current_timing, use_timing
+from .timing import RequestTiming, current_timing, use_timing, timed_to_thread, record_timing
+from .multi_commit import MutationGroup
 from .checkpoints import CheckpointCodec, CheckpointError, CheckpointRing
 from .clock import CLOCK_SCHEMA_VERSION, ClockSnapshot, VirtualClock
 from .commands import CommandHistory, CommandResult, ParsedCommand, parse_command
@@ -299,6 +300,7 @@ class _CommandRequest:
     future: asyncio.Future[CommandResult]
     enqueued_wall: float
     timing: RequestTiming | None = None
+    group: MutationGroup | None = None
 
 
 @dataclass(slots=True)
@@ -666,7 +668,7 @@ class ReplaySessionActor:
             await self._task
             raise self._startup_error
 
-    async def submit(self, command: ReplayCommand) -> CommandResult:
+    async def submit(self, command: ReplayCommand, *, _group: MutationGroup | None = None) -> CommandResult:
         if not isinstance(command, ReplayCommand):
             raise TypeError("command must be ReplayCommand")
         self._ensure_accepting()
@@ -682,6 +684,7 @@ class ReplaySessionActor:
             future=loop.create_future(),
             enqueued_wall=self._read_wall(),
             timing=current_timing.get(),
+            group=_group,
         )
         self._metrics["commands_submitted"] = (
             int(self._metrics["commands_submitted"] or 0) + 1
@@ -1789,6 +1792,7 @@ class ReplaySessionActor:
 
     async def _handle_command_request(self, request: _CommandRequest) -> None:
         command = request.command
+        rollback: _ActorRollback | None = None
         try:
             try:
                 replayed = self._command_history.replay(command)
@@ -1821,7 +1825,7 @@ class ReplaySessionActor:
                             "state_hash": self._compute_state_hash(),
                         },
                     )
-                result = await self._execute_command(command, parsed)
+                result = await self._execute_command(command, parsed, _group=request.group)
             except ReplayDomainError as exc:
                 terminal_actor_error = self._state is SessionState.ERROR
                 if rollback is not None:
@@ -1870,12 +1874,16 @@ class ReplaySessionActor:
             # and durable row instead of hashing the same retained bar window
             # again through two explicit component-state call sites.
             state_hash = result.state_hash
+            encoding_started = time.perf_counter()
             checkpoint = self._checkpoint_codec.encode(
                 self._checkpoint_payload(
                     component_state=component_state,
                     state_hash=state_hash,
-                )
+                ),
+                **({"compress_small": True} if command.type is InternalCommandType.MULTI_SHARED_INDEXED_INTERVAL else {}),
             )
+            if command.type is InternalCommandType.MULTI_SHARED_INDEXED_INTERVAL:
+                record_timing("multi_checkpoint_encode", encoding_started)
             try:
                 await self._commit_mutation(
                     kind="command",
@@ -1919,8 +1927,15 @@ class ReplaySessionActor:
                 request.future.cancel()
             raise
         except BaseException as exc:
-            if not request.future.done():
-                request.future.set_exception(exc)
+            try:
+                if (command.type is InternalCommandType.MULTI_SHARED_INDEXED_INTERVAL
+                        and rollback is not None and self._pending_events is not None):
+                    self._restore_rollback(rollback, force_paused=False)
+            finally:
+                # A failed rollback must not strand the coordinator and all
+                # other actors at their commit barrier.
+                if not request.future.done():
+                    request.future.set_exception(exc)
             raise
         finally:
             elapsed_ms = max(0.0, (self._read_wall() - request.enqueued_wall) * 1_000)
@@ -1932,6 +1947,7 @@ class ReplaySessionActor:
         self,
         command: ReplayCommand,
         parsed: ParsedCommand,
+        *, _group: MutationGroup | None = None,
     ) -> CommandResult:
         command_type = parsed.type
         if self._state is SessionState.ENDED and command_type not in {
@@ -2120,10 +2136,10 @@ class ReplaySessionActor:
                     "reference_semantics": "ORDERED_SOURCE_EVENT_REDUCER_V1",
                 },
             )
-        if command_type in {InternalCommandType.INDEXED_INTERVAL, InternalCommandType.SHARED_INDEXED_INTERVAL}:
+        if command_type in {InternalCommandType.INDEXED_INTERVAL, InternalCommandType.SHARED_INDEXED_INTERVAL, InternalCommandType.MULTI_SHARED_INDEXED_INTERVAL}:
             self._require_state(SessionState.PAUSED, command_type)
             index = getattr(self, "_prepared_bar_interval", None)
-            shared = command_type is InternalCommandType.SHARED_INDEXED_INTERVAL
+            shared = command_type in {InternalCommandType.SHARED_INDEXED_INTERVAL, InternalCommandType.MULTI_SHARED_INDEXED_INTERVAL}
             if index is not None and bool(getattr(index, "shared", False)) != shared:
                 index = None
                 self._prepared_bar_interval = None
@@ -2140,7 +2156,22 @@ class ReplaySessionActor:
             if end <= start or end-start != parsed.values["max_events"] or index.safe_end(self._reducer, start, end) != end:
                 raise ReplayDomainError(ReplayErrorCode.INVALID_STATE_TRANSITION, "indexed interval no longer matches its safe range")
             self._ensure_final_state_transport_anchor()
-            index.apply(self._reducer, start, end)
+            if command_type is InternalCommandType.MULTI_SHARED_INDEXED_INTERVAL:
+                # v1 multi-interval checkpoints carry the immutable source
+                # anchor plus a small transport tail. Full revealed chart
+                # history remains available through the shared history query.
+                # This explicit capacity is persisted and restored with the
+                # builder; it is not a loss of immutable historical market data.
+                def apply_multi():
+                    builder = index.builder_at(end, tail_limit=parsed.values["transport_tail_bars"])
+                    index.apply(self._reducer, start, end, builder=builder)
+                group = _group
+                if group is not None and group.batched_builders and group.commands.get(self.session_id) == command:
+                    await group.prepare(self.session_id, apply_multi)
+                else:
+                    await timed_to_thread("multi_builder", apply_multi)
+            else:
+                index.apply(self._reducer, start, end)
             self._source = self._source.fork_at_sequence(
                 index.start+end, last_event_time_ms=index.times[end-1]
             )
@@ -2171,7 +2202,7 @@ class ReplaySessionActor:
             return self._command_result(command.command_id, {
                 "consumed": end-start, "target_reached": True,
                 "target_virtual_time_ms": target, "snapshot_published": True,
-                "reference_semantics": "SHARED_MARKET_INTERVAL_V1" if shared else "INDEXED_BAR_INTERVAL_V1",
+                "reference_semantics": ("MULTI_SHARED_MARKET_INTERVAL_V1" if command_type is InternalCommandType.MULTI_SHARED_INDEXED_INTERVAL else "SHARED_MARKET_INTERVAL_V1") if shared else "INDEXED_BAR_INTERVAL_V1",
             })
         if command_type in {InternalCommandType.FAST_FORWARD_FINAL_STATE, InternalCommandType.RECORDED_INTERVAL}:
             self._require_state(SessionState.PAUSED, command_type)
@@ -3404,8 +3435,9 @@ class ReplaySessionActor:
             self._source, self._reducer._bar_builder, self._event_chain_hash
         )
         if prepared_now:
-            index = None
-            if shared and callable(getattr(self._source, "shared_market_range", None)):
+            rebase = getattr(index, "rebased", None) if shared else None
+            index = rebase(self._source, self._reducer, self._event_chain_hash) if callable(rebase) else None
+            if index is None and shared and callable(getattr(self._source, "shared_market_range", None)):
                 from .broker.shared_prepared import SharedPreparedInterval
                 try:
                     index = await asyncio.to_thread(SharedPreparedInterval, self._source.fork(),
@@ -3418,7 +3450,12 @@ class ReplaySessionActor:
                     self._event_chain_hash, self._next_chain_hash, self._prepared_cache_path,
                 )
             self._prepared_bar_interval = index
-        await asyncio.to_thread(index.prepare_valuation, self._reducer)
+        if getattr(index, "shared", False):
+            # Shared valuation only binds a few position legs and ledger totals;
+            # price scans stay lazy. Avoid a worker handoff for this tiny update.
+            index.prepare_valuation(self._reducer)
+        else:
+            await asyncio.to_thread(index.prepare_valuation, self._reducer)
         start = self._source.cursor().source_sequence - index.start
         end = index.safe_end(self._reducer, start, index.end_for_time(target))
         return {
@@ -3955,6 +3992,14 @@ class ReplaySessionActor:
                 "rollback source changed its isolated cursor",
             )
         self._invalidate_component_state()
+        builder = getattr(self._reducer, '_bar_builder', None)
+        prior_builder = rollback.component_state.get('bar_builder')
+        if builder is not None and isinstance(prior_builder, Mapping):
+            # A versioned multi interval may have selected a compact transport
+            # tail. Restore the prior declared capacity before strict decoding.
+            prior_capacity = prior_builder.get('max_closed_bars')
+            if type(prior_capacity) is int and prior_capacity > 0:
+                builder._max_closed_bars = prior_capacity
         self._reducer.restore(rollback.component_state)
         self._source = rollback.source
         should_play = (

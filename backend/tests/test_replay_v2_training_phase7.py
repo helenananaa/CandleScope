@@ -849,6 +849,9 @@ async def test_gc_claim_blocks_new_actor_pin_until_rehydration(
         restored = await manager.rehydrate(segment_id)
         assert restored["health"] == "READY"
         await service.training.store.set_actor_segment_refs(run_id, active=True)
+        transactions = service.store._metrics["transactions"]
+        await service.training.store.set_actor_segment_refs(run_id, active=True)
+        assert service.store._metrics["transactions"] == transactions
     finally:
         await service.shutdown(step_timeout=1.0)
 

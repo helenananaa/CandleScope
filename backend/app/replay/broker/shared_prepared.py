@@ -4,8 +4,8 @@ No future per-minute account snapshots or chained builder states are prepared.
 Range references are explicitly versioned by the internal shared command.
 """
 
-from bisect import bisect_left
 from collections.abc import Sequence
+from copy import copy
 from decimal import Decimal, localcontext
 
 from ..canonical import canonical_sha256
@@ -79,7 +79,7 @@ class AccountRanges:
         if not any(Decimal(q) for q, _ in self.basis["legs"]):
             cash = Decimal(self.basis["cash"])
             return cash, cash, Decimal(0)
-        summary = self.index.market.summary(start, end)
+        summary = self.index.market.summary(start, end, prices_only=True)
         if summary is None:
             return None
         basis = self.basis
@@ -118,7 +118,7 @@ class CloseRanges:
         self.market = market
 
     def range_bounds(self, *, start, end):
-        value = self.market.summary(start, end)
+        value = self.market.summary(start, end, prices_only=True)
         return None if value is None else (value[1], value[2])
 
 
@@ -136,13 +136,21 @@ class SharedDisplay(PreparedDisplay):
         self.opens = LazySequence(market.count, lambda i: market.row(i)[0])
 
     def range(self, start, end):
-        a, b = bisect_left(self.opens, start), bisect_left(self.opens, end)
+        a, b = self.market.bound(start), self.market.bound(end)
         value = self.market.summary(a, b)
         return None if value is None else value[0]
 
 
 class SharedPreparedInterval(PreparedBarInterval):
     shared = True
+
+    def end_for_time(self, target):
+        end = self.market.bound(target, right=True)
+        # The latest opened candle may still be forming. Inspect its actual
+        # close, preserving calendar intervals rather than assuming fixed ms.
+        if end and self.market.row(end-1)[1] > target:
+            end -= 1
+        return max(0, min(end, self.market.count-int(self.terminal)))
 
     def __init__(self, source, broker, chain_hash):
         builder = broker._bar_builder
@@ -152,6 +160,9 @@ class SharedPreparedInterval(PreparedBarInterval):
         if result is None:
             raise ValueError("shared market range is unavailable")
         self.market, self.terminal = result
+        self.source_archive = getattr(source, "_archive", None)
+        self.source_reference = source.snapshot_ref()
+        self.market.prepare_nodes()
         self.start = source.cursor().source_sequence
         self.builder_key = self.configuration(builder)
         self.origin = freeze_builder(builder)
@@ -170,6 +181,11 @@ class SharedPreparedInterval(PreparedBarInterval):
         display_first = source._archive.open_at_index(first)
         if builder._closed_bars:
             display_first = min(display_first, builder._closed_bars[0].open_time_ms)
+        # The source's positional cursor can start at the replay boundary.
+        # Include immutable history before that boundary for small UI tails;
+        # otherwise the first daily/weekly acknowledgement falls back to a
+        # large raw-bar reconstruction despite a prepared market index.
+        display_first = max(0, min(display_first, self.market.row(0)[0] - 20_160 * self.market.base_ms))
         display_market = factory(
             display_first, self.market.row(self.market.count - 1)[1] + 1
         )
@@ -200,6 +216,36 @@ class SharedPreparedInterval(PreparedBarInterval):
             and self.seed == chain_hash
             and self.configuration(builder) == self.builder_key
         )
+
+    def rebased(self, source, broker, chain_hash):
+        """Rebind the command seed/origin, reusing only immutable market data.
+
+        A terminal-covering suffix has exactly the same range reference as a
+        cold factory query. Limited non-terminal windows must prepare normally.
+        """
+        offset = source.cursor().source_sequence-self.start
+        current_key = self.configuration(broker._bar_builder)
+        if (not self.terminal or not 0 <= offset < self.market.count
+                or self.source_archive is None or getattr(source, "_archive", None) is not self.source_archive
+                or source.snapshot_ref() != self.source_reference
+                or self.builder_key[:2]+self.builder_key[3:] != current_key[:2]+current_key[3:]
+                or self.chains[offset] != chain_hash):
+            return None
+        result = copy(self)
+        result.market = self.market.slice(offset, self.market.count)
+        result.start = source.cursor().source_sequence
+        result.builder_key = current_key
+        result.origin = freeze_builder(broker._bar_builder)
+        result.seed = chain_hash
+        result.reference = result.market.reference()
+        result.bars = LazySequence(result.market.count, result._bar)
+        result.times = LazySequence(result.market.count, lambda i: result.market.row(i)[1])
+        result.chains = LazySequence(result.market.count+1, result._chain)
+        result.interactions = InteractionRanges(result.market)
+        result.closes = CloseRanges(result.market)
+        result.valuation = None
+        result.prepare_valuation(broker)
+        return result
 
     def prepare_valuation(self, broker):
         position = broker._position.to_dict()
@@ -242,9 +288,14 @@ class SharedPreparedInterval(PreparedBarInterval):
             "ledger_hash": self.valuation["ledger_hash"],
         }
 
-    def builder_at(self, end):
+    def builder_at(self, end, *, tail_limit=None):
         builder = freeze_builder(self.origin)
-        skipped = max(0, end - builder._max_closed_bars)
+        retained = builder._max_closed_bars if tail_limit is None else min(builder._max_closed_bars, tail_limit)
+        if tail_limit is not None:
+            # Persist the explicit transport-tail capacity so v1 restore checks
+            # remain strict. Historical queries use the immutable source anchor.
+            builder._max_closed_bars = retained
+        skipped = max(0, end - retained)
         if skipped:
             prefix = canonical_sha256(
                 {
@@ -262,6 +313,17 @@ class SharedPreparedInterval(PreparedBarInterval):
             builder._active_bar = None
             builder._replay_events_applied += skipped
             builder._last_base_open_ms = self.market.row(skipped - 1)[0]
+        elif len(builder._closed_bars) > retained:
+            # A short first interval may start with a much larger warmup tail.
+            # Trim that already-closed prefix before append's one-row eviction;
+            # otherwise the declared compact capacity and checkpoint disagree.
+            remove = len(builder._closed_bars) - retained
+            for bar in builder._closed_bars[:remove]:
+                ordinal = builder._closed_prefix_count + 1
+                builder._closed_prefix_hash = builder._next_closed_chain_hash(
+                    builder._closed_prefix_hash, ordinal, bar)
+                builder._closed_prefix_count = ordinal
+            builder._closed_bars = builder._closed_bars[remove:]
         builder.apply_bars_final_state(self.bars[skipped:end])
         return builder
 

@@ -478,6 +478,12 @@ test("control presentation batches preserve immediate authority and flush on dis
   assert.equal(canDeferReplayPresentation(published, next), true);
   assert.equal(canDeferReplayPresentation(published, { ...next, store: { ...next.store, virtualTimeMs: BASE_TIME_MS } }), false);
   assert.equal(canDeferReplayPresentation(published, { ...next, store: { ...next.store, controllerClientId: "other" } }), false);
+  assert.ok(next.store.account);
+  const repriced = { ...next, store: { ...next.store, account: { ...next.store.account, equity: "9999" } } };
+  assert.equal(canDeferReplayPresentation(published, repriced), false);
+  assert.equal(canDeferReplayPresentation(published, repriced, true), true);
+  assert.equal(canDeferReplayPresentation(published, { ...repriced, store: { ...repriced.store, connectionState: "reconnecting" as const } }, true), false);
+  assert.equal(canDeferReplayPresentation(published, { ...repriced, store: { ...repriced.store, virtualTimeMs: BASE_TIME_MS } }, true), false);
   const end = lifecycle.beginPresentationBatch();
   callbacks.onState?.("reconnecting", 1);
   assert.equal(lifecycle.getSnapshot().store.connectionState, "reconnecting");

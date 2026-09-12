@@ -8,6 +8,51 @@ import pytest
 from app.api.v1 import stream_replay_training
 
 
+@pytest.mark.anyio
+async def test_committed_live_projection_is_detached_coalesced_and_not_rebuilt(
+    monkeypatch,
+):
+    from app.replay.training.service import TrainingRunService
+    from types import SimpleNamespace
+
+    queue = asyncio.Queue(maxsize=1)
+    owner = SimpleNamespace(_market_track_subscribers={"run-1": {queue}})
+    initial = {"protocol": "replay.v3", "run_id": "run-1", "tracks": [{"revision": 1}]}
+    update = {"protocol": "replay.v3", "run_id": "run-1", "tracks": [{"revision": 2}]}
+    TrainingRunService._notify_market_tracks(owner, "run-1")
+    TrainingRunService._notify_market_tracks(owner, "run-1", update)
+    update["tracks"][0]["revision"] = 999
+    delivered = asyncio.Event()
+    messages = []
+
+    class Socket:
+        async def send_json(self, message):
+            messages.append(message)
+            delivered.set()
+
+    class Training:
+        async def get_live_market_tracks(self, run):
+            pytest.fail("acknowledged projection was recomputed")
+
+    monkeypatch.setattr(stream_replay_training, "_COALESCE_SECONDS", 0)
+    sender = asyncio.create_task(
+        stream_replay_training._send_market_tracks(
+            Socket(), Training(), "run-1", queue, initial=initial
+        )
+    )
+    try:
+        await asyncio.wait_for(delivered.wait(), 1)
+    finally:
+        sender.cancel()
+        await asyncio.gather(sender, return_exceptions=True)
+    assert messages[0]["operations"] == [
+        {"op": "SET", "path": ["tracks", 0, "revision"], "value": 2}
+    ]
+    TrainingRunService._notify_market_tracks(owner, "run-1", update)
+    TrainingRunService._notify_market_tracks(owner, "run-1")
+    assert queue.get_nowait() is None  # a later mutation invalidates the offered view
+
+
 def _apply_patch(projection: object, operations: list[dict[str, object]]) -> object:
     current = deepcopy(projection)
     for operation in operations:

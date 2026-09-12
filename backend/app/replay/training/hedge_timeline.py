@@ -118,6 +118,11 @@ class IndexedHedgeSnapshot(tuple):
         ) + (InputLane.build("SIMULATION", None, result[1]),)
         return result
 
+    @cached_property
+    def portfolio_prices(self):
+        from .portfolio_prices import PortfolioPrices
+        return PortfolioPrices.from_lanes(self.lanes)
+
     def events_through(self, public, simulation, target, *, exact=False):
         return tuple(
             sorted(

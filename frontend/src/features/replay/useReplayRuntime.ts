@@ -270,16 +270,19 @@ export class ReplayRuntimeLifecycle {
   } | null = null;
   private snapshot: ReplayRuntimeSnapshot;
   private presentationBatchDepth = 0;
+  private coordinatedPresentationDepth = 0;
   private presentationDeferred = false;
 
   /** Batch ordinary paused control updates; authority remains synchronous. */
-  beginPresentationBatch(): () => void {
+  beginPresentationBatch(options: { allowEquityChanges?: boolean } = {}): () => void {
     this.presentationBatchDepth += 1;
+    if (options.allowEquityChanges) this.coordinatedPresentationDepth += 1;
     let released = false;
     return () => {
       if (released) return;
       released = true;
       this.presentationBatchDepth = Math.max(0, this.presentationBatchDepth - 1);
+      if (options.allowEquityChanges) this.coordinatedPresentationDepth = Math.max(0, this.coordinatedPresentationDepth - 1);
       if (this.presentationBatchDepth === 0 && this.presentationDeferred) this.publish();
     };
   }
@@ -1116,7 +1119,7 @@ export class ReplayRuntimeLifecycle {
   private publish(): void {
     this.storePublishScheduler.cancel();
     const next = this.buildSnapshot();
-    if (this.presentationBatchDepth > 0 && canDeferReplayPresentation(this.snapshot, next)) {
+    if (this.presentationBatchDepth > 0 && canDeferReplayPresentation(this.snapshot, next, this.coordinatedPresentationDepth > 0)) {
       this.presentationDeferred = true;
       return;
     }
@@ -1335,7 +1338,7 @@ export function useReplayRuntime(
   }), [actions, lifecycle, marketData, snapshot]);
 }
 
-export function canDeferReplayPresentation(previous: ReplayRuntimeSnapshot, next: ReplayRuntimeSnapshot): boolean {
+export function canDeferReplayPresentation(previous: ReplayRuntimeSnapshot, next: ReplayRuntimeSnapshot, allowEquityChanges = false): boolean {
   const before = previous.store, after = next.store;
   return previous.phase === "ACTIVE" && next.phase === "ACTIVE"
     && previous.error === next.error && previous.commandError === next.commandError
@@ -1349,6 +1352,6 @@ export function canDeferReplayPresentation(previous: ReplayRuntimeSnapshot, next
     && before.virtualTimeMs !== null && after.virtualTimeMs !== null
     && after.virtualTimeMs >= before.virtualTimeMs && after.sourceSequence >= before.sourceSequence
     && after.revision >= before.revision && before.fills.length === after.fills.length
-    && before.account?.equity === after.account?.equity
+    && (allowEquityChanges || before.account?.equity === after.account?.equity)
     && JSON.stringify(before.orders) === JSON.stringify(after.orders);
 }

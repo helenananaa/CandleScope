@@ -7,7 +7,7 @@ import sqlite3
 from app.replay.canonical import canonical_sha256
 
 
-TRAINING_SCHEMA_VERSION = 22
+TRAINING_SCHEMA_VERSION = 23
 TRAINING_SCHEMA_ID = "replay.training.v2"
 TIME_COMMITMENT_SCHEMA_VERSION = "replay.time-commitment.v1"
 START_SELECTION_SCHEMA_VERSION = "replay.start-selection.v1"
@@ -2555,6 +2555,21 @@ CREATE TABLE IF NOT EXISTS replay_hedge_mark_span (
 """
 
 
+TRAINING_SCHEMA_V23_MULTI_INTERVALS = """
+CREATE TABLE IF NOT EXISTS replay_multi_bar_interval (
+    run_id TEXT NOT NULL REFERENCES replay_training_run(run_id) ON DELETE CASCADE,
+    command_id TEXT NOT NULL,
+    start_time_ms INTEGER NOT NULL,
+    end_time_ms INTEGER NOT NULL,
+    summary_json TEXT NOT NULL,
+    basis_json TEXT NOT NULL,
+    PRIMARY KEY(run_id, command_id)
+);
+CREATE INDEX IF NOT EXISTS replay_multi_bar_interval_time
+ON replay_multi_bar_interval(run_id,end_time_ms,start_time_ms);
+"""
+
+
 def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> None:
     """Create v2-owned tables without changing the adapter schema row."""
 
@@ -2573,11 +2588,12 @@ def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> N
     current = 0 if row is None else int(row[0])
     if current == TRAINING_SCHEMA_VERSION:
         return
-    if current in {19, 20, 21}:
+    if current in {19, 20, 21, 22}:
         if current in {19, 20}:
             _execute_script(connection, TRAINING_SCHEMA_V20_INTERVAL_CURVES)
             _execute_script(connection, TRAINING_SCHEMA_V21_INDEXED_INTERVALS)
         _ensure_interval_curve_bounds(connection)
+        _execute_script(connection, TRAINING_SCHEMA_V23_MULTI_INTERVALS)
         connection.execute(
             "UPDATE replay_training_schema_version SET version=?, applied_at_ms=? WHERE singleton=1",
             (TRAINING_SCHEMA_VERSION, now_ms),
@@ -2615,6 +2631,7 @@ def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> N
         TRAINING_SCHEMA_V19_HEDGE_TRACK_INPUTS,
         TRAINING_SCHEMA_V20_INTERVAL_CURVES,
         TRAINING_SCHEMA_V21_INDEXED_INTERVALS,
+        TRAINING_SCHEMA_V23_MULTI_INTERVALS,
     ):
         _execute_script(connection, script)
     _ensure_interval_curve_bounds(connection)

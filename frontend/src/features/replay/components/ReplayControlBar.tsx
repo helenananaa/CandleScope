@@ -109,9 +109,20 @@ export default function ReplayControlBar({ runtime, viewer, publicTimeLabel }: R
   const disabled = pending !== null || phase3Pending !== null
     || store.connectionState !== "connected" || !ownsController
     || viewer.viewerState === null || viewer.viewerPending;
+  const displayAdvanceId = config?.source_kind === "bar"
+    && viewer.controlPending?.type === "advance"
+    && viewer.controlPending.payload.basis === "DISPLAY_BAR"
+    ? viewer.controlPending.command_id : null;
+  const [displayCancelReady, setDisplayCancelReady] = useState<string | null>(null);
+  useEffect(() => {
+    if (displayAdvanceId === null) return;
+    const timer = setTimeout(() => setDisplayCancelReady(displayAdvanceId), 250);
+    return () => clearTimeout(timer);
+  }, [displayAdvanceId]);
   const cancelableAdvancePending = replayAdvanceIsCancelable(
     viewer.controlPending,
-  );
+    config?.source_kind === "bar",
+  ) && (displayAdvanceId === null || displayCancelReady === displayAdvanceId);
   const phase3Ratio = viewer.progress?.ratio_ppm;
   const visiblePlan = fastForwardPlan(viewer.progress?.plan);
   const advanceProgress = typeof phase3Ratio === "number" && Number.isSafeInteger(phase3Ratio)

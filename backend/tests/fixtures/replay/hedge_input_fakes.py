@@ -185,6 +185,7 @@ async def import_hedge_track_public_inputs(
     prefix: str,
     symbol: str,
     mark_prices: list[str] | None = None,
+    include_book: bool = True,
 ) -> dict[str, object]:
     """Import exact L2 plus its content-bound public HEDGE archive for one track."""
 
@@ -199,20 +200,15 @@ async def import_hedge_track_public_inputs(
     marks = mark_prices or ["200"] * ((end - start) // interval_ms + 1)
     if len(marks) != (end - start) // interval_ms + 1:
         raise ValueError("track mark_prices does not cover the requested range")
-    book_path = build_book_archive(
-        root / f"{prefix}-{symbol.lower()}-book.sqlite3",
-        exchange=request.exchange,
-        market_type=request.market_type,
-        symbol=symbol,
-        range_start_ms=start,
-        range_end_ms=end + interval_ms,
-        interval_ms=interval_ms,
-        mid_prices=marks,
-    )
-    book = await training.historical_books.import_archive(
-        book_path,
-        trusted_origin="TEST_CAPTURE",
-    )
+    book = None
+    if include_book:
+        book_path = build_book_archive(
+            root / f"{prefix}-{symbol.lower()}-book.sqlite3",
+            exchange=request.exchange, market_type=request.market_type, symbol=symbol,
+            range_start_ms=start, range_end_ms=end + interval_ms,
+            interval_ms=interval_ms, mid_prices=marks,
+        )
+        book = await training.historical_books.import_archive(book_path, trusted_origin="TEST_CAPTURE")
     rule = {
         "rule_version": "BINANCE_USDM_LINEAR_V1",
         "price_tick": "0.1",
@@ -284,7 +280,7 @@ async def import_hedge_track_public_inputs(
         max_mark_gap_ms=interval_ms,
         source_identity="TEST_PINNED_PUBLIC_CAPTURE",
         capture_receipt=f"receipt:{prefix}:{symbol}",
-        historical_l2_ref={
+        historical_l2_ref=None if book is None else {
             "archive_id": book["archive_id"],
             "dataset_epoch": book["dataset_epoch"],
             "checksum_sha256": book["checksum_sha256"],

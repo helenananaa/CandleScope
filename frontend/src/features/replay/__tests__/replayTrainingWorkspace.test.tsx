@@ -136,7 +136,7 @@ test("Phase 13 workspace projects ViewerState and exposes capability-driven adva
   assert.match(viewerRuntime, /type === "advance"/);
   assert.match(viewerRuntime, /export function replayAdvanceIsCancelable/);
   assert.match(viewerRuntime, /command\.payload\.basis === "VIRTUAL_TIME"/);
-  assert.match(viewerRuntime, /if \(!replayAdvanceIsCancelable\(active\)\) return/);
+  assert.match(viewerRuntime, /if \(!replayAdvanceIsCancelable\(active, allowBarDisplayCancellation\)\) return/);
   assert.match(controls, /const cancelableAdvancePending = replayAdvanceIsCancelable/);
   assert.match(viewerRuntime, /payload\.basis === "DISPLAY_BAR"/);
   assert.match(

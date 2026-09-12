@@ -1367,11 +1367,14 @@ class ReplayService:
         async with self._lease_handle(session_id) as handle:
             return await self._session_payload(handle)
 
-    async def get_session_state(self, session_id: str) -> dict[str, object]:
+    async def get_session_state(self, session_id: str, *, include_config: bool = False) -> dict[str, object]:
         """Return cursor/state authority without serializing component history."""
 
         async with self._lease_handle(session_id) as handle:
-            return (await handle.actor.snapshot()).to_dict()
+            state = (await handle.actor.snapshot()).to_dict()
+            if include_config:
+                state["config"] = handle.config.to_dict()
+            return state
 
     async def preview_order(
         self,
@@ -1894,6 +1897,7 @@ class ReplayService:
                 InternalCommandType.RECORDED_INTERVAL,
                 InternalCommandType.INDEXED_INTERVAL,
                 InternalCommandType.SHARED_INDEXED_INTERVAL,
+                InternalCommandType.MULTI_SHARED_INDEXED_INTERVAL,
                 InternalCommandType.STEP_DEFER_TERMINAL,
                 InternalCommandType.FINALIZE_DEFERRED_TERMINAL,
             }
@@ -1905,7 +1909,13 @@ class ReplayService:
             )
         async with self._lease_handle(session_id) as handle:
             try:
-                existing = await self.store.get_command(session_id, command.command_id)
+                group = getattr(self, "_multi_mutation_groups", {}).get(session_id)
+                if group is not None and group.commands.get(session_id) == command:
+                    # Read all group idempotency records in one worker call.
+                    # The writer still checks uniqueness and candidate revisions.
+                    existing = group.command_records[session_id]
+                else:
+                    existing = await self.store.get_command(session_id, command.command_id)
                 if existing is not None:
                     result = self._replay_stored_command(existing, command)
                 else:
@@ -1913,7 +1923,10 @@ class ReplayService:
                     # derived report write put persistence in sticky degraded
                     # mode.  Only genuinely new mutations require availability.
                     self._ensure_available(blind_mode=handle.config.blind_mode)
-                    result = await handle.actor.submit(command)
+                    if group is not None and group.commands.get(session_id) == command:
+                        result = await handle.actor.submit(command, _group=group)
+                    else:
+                        result = await handle.actor.submit(command)
                 self._metrics["commands"] = int(self._metrics["commands"] or 0) + 1
                 payload = self._command_result_payload(result)
                 if command.type in {
@@ -3269,6 +3282,10 @@ class ReplayService:
         return tuple(rows)
 
     async def _persist_mutation(self, mutation: ActorMutation) -> None:
+        group = getattr(self, "_multi_mutation_groups", {}).get(mutation.session_id)
+        if group is not None and group.matches(mutation):
+            await group.stage(mutation)
+            return
         if mutation.command is not None:
             result = (
                 None

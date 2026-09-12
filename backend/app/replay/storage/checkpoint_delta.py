@@ -17,6 +17,7 @@ from ..immutable_json import freeze
 MAGIC = b"CSRP-SQL-DELTA-V1\x00"
 BASE_INTERVAL = 16
 MIN_BYTES = 8192
+BASE_CACHE_MAX_ENTRIES = 8
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS replay_checkpoint_base (
@@ -66,7 +67,7 @@ def _remember_base(payload, value):
     with _base_lock:
         _base_cache[key] = (payload, value)
         _base_cache.move_to_end(key)
-        while len(_base_cache) > 4:
+        while len(_base_cache) > BASE_CACHE_MAX_ENTRIES:
             _base_cache.popitem(last=False)
 
 

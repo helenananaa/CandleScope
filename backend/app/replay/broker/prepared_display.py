@@ -93,8 +93,11 @@ class PreparedDisplay:
         begin = max(
             kw["actual_start_ms"], mapper.actual_bucket_open(ordinal - kw["limit"] - 2)
         )
-        if begin - delta < self.opens[0] or end - delta > self.opens[-1] + self.base_ms:
+        clipped_prefix = begin - delta < self.opens[0]
+        if end - delta > self.opens[-1] + self.base_ms:
             return None
+        if clipped_prefix:
+            begin = self.opens[0] + delta
         first_ordinal = mapper.actual_bucket_ordinal(
             mapper.actual_containing_bucket_open(begin)
         )
@@ -155,6 +158,8 @@ class PreparedDisplay:
                     "synthetic": False,
                 }
             )
+        if clipped_prefix and len(rows) < kw['limit']:
+            return None
         return {
             "bars": rows[-(kw["limit"] + 1) :],
             "has_more": begin > kw["actual_start_ms"] or len(rows) > kw["limit"],

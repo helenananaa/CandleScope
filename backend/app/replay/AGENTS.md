@@ -84,3 +84,11 @@ leaderboard or requirement to prevent a user from editing their own local data.
 - Large curve reads evaluate account values at selected offsets with chunked
   market-block reads. Do not walk every source bar, and do not drop range
   extrema by arbitrary sampling.
+- Multi-market BAR intervals use a portfolio envelope and one SQLite commit for
+  all actor candidates. Removing single-track guards is not a portfolio proof.
+  No actor may publish before that shared commit; cancellation drains it before
+  releasing leases. Track-1 alone owns legacy HEDGE compatibility rows.
+- Portfolio extrema must follow the reference global time/cohort order. A sum
+  of independently timed market extrema is only a conservative risk bound, not
+  a historical portfolio peak or drawdown. Multi-interval enablement stays off
+  until financial, recovery and browser performance qualification all pass.

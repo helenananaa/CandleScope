@@ -851,7 +851,15 @@ def parse_command(command: ReplayCommand) -> ParsedCommand:
             command_type,
             {"count": count, "tail_events": tail_events},
         )
-    if command_type in {InternalCommandType.FAST_FORWARD_FINAL_STATE, InternalCommandType.RECORDED_INTERVAL, InternalCommandType.INDEXED_INTERVAL, InternalCommandType.SHARED_INDEXED_INTERVAL}:
+    if command_type in {InternalCommandType.FAST_FORWARD_FINAL_STATE, InternalCommandType.RECORDED_INTERVAL, InternalCommandType.INDEXED_INTERVAL, InternalCommandType.SHARED_INDEXED_INTERVAL, InternalCommandType.MULTI_SHARED_INDEXED_INTERVAL}:
+        multi_tail = {}
+        if command_type is InternalCommandType.MULTI_SHARED_INDEXED_INTERVAL:
+            # Older v1 commands implicitly used 64. Persist new capacities so
+            # replaying an old log from a retained checkpoint stays exact.
+            multi_tail["transport_tail_bars"] = _positive_bounded_int(
+                payload.get("transport_tail_bars", 64),
+                field_name="transport_tail_bars", upper_bound=64,
+            )
         _exact_keys(
             payload,
             {
@@ -859,7 +867,7 @@ def parse_command(command: ReplayCommand) -> ParsedCommand:
                 "max_events",
                 "require_empty_account",
                 "snapshot_only",
-            },
+            } | ({"transport_tail_bars"} if multi_tail and "transport_tail_bars" in payload else set()),
         )
         try:
             target_virtual_time_ms = validate_timestamp_ms(
@@ -895,6 +903,7 @@ def parse_command(command: ReplayCommand) -> ParsedCommand:
                 "max_events": max_events,
                 "require_empty_account": require_empty_account,
                 "snapshot_only": snapshot_only,
+                **multi_tail,
             },
         )
     if command_type is CommandType.END_SESSION:

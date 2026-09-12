@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { recordPerfEvent } from "../../runtime/performance/perfMarks.js";
 
@@ -22,6 +22,7 @@ import type {
   ReplayViewerState,
 } from "./replayV2Types.js";
 import { defaultReplayV2Api } from "./replayV2Api.js";
+import { parseReplayMarketTracksResponse } from "./replayV2Types.js";
 import { parseReplayDisplayProjection, type ReplayDisplayProjectionResponse } from "./replayDisplayProjection.js";
 import type { ReplayPeriodSummaryStatusResponse } from "./replayPeriodSummary.js";
 import {
@@ -33,6 +34,7 @@ import {
 } from "./replayViewerProjection.js";
 import type { ReplayRuntime } from "./useReplayRuntime.js";
 import { ReplayTrainingRunStream } from "./replayTrainingRunStream.js";
+import { marketTrackProjectionIsOlder } from "./marketTrackProjectionOrder.js";
 
 
 export type ReplayPhase3ControlType = Extract<ReplayV2CommandType,
@@ -65,12 +67,14 @@ export type ReplayPhase5TradeType = Extract<ReplayV2CommandType,
 
 export function replayAdvanceIsCancelable(
   command: ReplayV2Command | null,
+  allowBarDisplay = false,
 ): boolean {
   return command?.type === "advance_by"
     || command?.type === "advance_to"
     || (
       command?.type === "advance"
-      && command.payload.basis === "VIRTUAL_TIME"
+      && (command.payload.basis === "VIRTUAL_TIME"
+        || (allowBarDisplay && command.payload.basis === "DISPLAY_BAR"))
     );
 }
 
@@ -413,7 +417,12 @@ export function useReplayViewerRuntime(
 ): ReplayViewerRuntime {
   const onSelectedSessionChange = options.onSelectedSessionChange;
   const [viewerState, setViewerState] = useState<ReplayViewerState | null>(null);
-  const [marketTracks, setMarketTracks] = useState<ReplayMarketTracksResponse | null>(null);
+  const [marketTracks, setMarketTracks] = useReducer(
+    (current: ReplayMarketTracksResponse | null, next: ReplayMarketTracksResponse | null) =>
+      current !== null && next !== null && marketTrackProjectionIsOlder(next, current) ? current : next,
+    null,
+  );
+  const allowBarDisplayCancellation = marketTracks?.tracks.some((track) => track.source_kind === "BAR") ?? false;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [eventStopMessage, setEventStopMessage] = useState<string | null>(null);
@@ -439,6 +448,8 @@ export function useReplayViewerRuntime(
   } | null>(null);
   const refreshProjectionRef = useRef<(() => void) | null>(null);
   const streamedTracksRef = useRef<ReplayMarketTracksResponse | null>(null);
+  const coordinatedPresentationRef = useRef(false);
+  const bufferedMarketTracksRef = useRef<ReplayMarketTracksResponse | null>(null);
   const tracksRecoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const marketTracksRequestGateRef = useRef<ReplayMarketTracksRequestGate | null>(null);
   if (marketTracksRequestGateRef.current === null) {
@@ -640,7 +651,8 @@ export function useReplayViewerRuntime(
       onProjection: (response) => {
         if (!publishViewerState(response.viewer_state)) return;
         streamedTracksRef.current = response;
-        setMarketTracks(response);
+        if (coordinatedPresentationRef.current) bufferedMarketTracksRef.current = response;
+        else setMarketTracks(response);
       },
       onError: (cause, fatal) => {
         if (fatal) setError(cause.message);
@@ -853,7 +865,7 @@ export function useReplayViewerRuntime(
 
   useEffect(() => {
     const active = controlPending;
-    if (!replayAdvanceIsCancelable(active)) return;
+    if (!replayAdvanceIsCancelable(active, allowBarDisplayCancellation)) return;
     if (active === null) return;
     const abort = new AbortController();
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -872,12 +884,13 @@ export function useReplayViewerRuntime(
       }
       if (!abort.signal.aborted) timer = setTimeout(() => { void poll(); }, 100);
     };
-    timer = setTimeout(() => { void poll(); }, 100);
+    timer = setTimeout(() => { void poll(); },
+      allowBarDisplayCancellation && active.type === "advance" && active.payload.basis === "DISPLAY_BAR" ? 250 : 100);
     return () => {
       abort.abort();
       if (timer !== null) clearTimeout(timer);
     };
-  }, [controlPending]);
+  }, [controlPending, allowBarDisplayCancellation]);
 
   const buildCommand = useCallback((
     type: ReplayV2CommandType,
@@ -931,7 +944,13 @@ export function useReplayViewerRuntime(
       && type === "advance" && payload.basis === "DISPLAY_BAR" && payload.count === 1;
     const previousBoundaryMs = runtime.replayStore.getAuthoritySnapshot().virtualTimeMs;
     inlineCommandRef.current = includeDisplayTail;
-    const releasePresentation = includeDisplayTail ? runtime.lifecycle.beginPresentationBatch() : null;
+    const coordinated = includeDisplayTail && (streamedTracksRef.current?.tracks.filter(
+      (track) => track.source_kind === "BAR" && track.subscription_tier === "FULL",
+    ).length ?? 0) > 1;
+    coordinatedPresentationRef.current = coordinated;
+    bufferedMarketTracksRef.current = null;
+    const releasePresentation = includeDisplayTail ? runtime.lifecycle.beginPresentationBatch({ allowEquityChanges: coordinated }) : null;
+    let completed = false;
     setControlPending(command);
     setEventStopMessage(null);
     setProgress(null);
@@ -940,6 +959,18 @@ export function useReplayViewerRuntime(
       recordPerfEvent("replay.control.dispatch", { commandId: command.command_id });
       const result = await defaultReplayV2Api.commandRun(command.run_id, command, undefined, { includeDisplayTail });
       recordPerfEvent("replay.control.response", { commandId: command.command_id, revision: result.revision });
+      if (coordinated && result.data.market_tracks) {
+        try {
+          const projection = parseReplayMarketTracksResponse(result.data.market_tracks);
+          if (projection.run_id === command.run_id && projection.tracks.some((track) =>
+            track.adapter_session_id === result.session_id && track.cursor?.revision === result.revision)) {
+            bufferedMarketTracksRef.current = projection;
+          }
+        } catch {
+          // Optional UI metadata cannot turn a committed command into a failure.
+          // The authoritative run stream and existing recovery timer converge it.
+        }
+      }
       if (result.state === "PAUSED" && result.data.event_stop && typeof result.data.event_stop === "object") {
         setEventStopMessage(t("replay.rt.eventStop"));
       }
@@ -987,6 +1018,7 @@ export function useReplayViewerRuntime(
       } else {
         await refreshMarketTracks(command.run_id);
       }
+      completed = true;
       return result;
     } catch (cause) {
       // The command acknowledgement has its own bounded deadline.  Do not
@@ -1002,6 +1034,9 @@ export function useReplayViewerRuntime(
         inlineCommandRef.current = false;
         if (includeDisplayTail) refreshProjectionRef.current?.();
       } finally {
+        coordinatedPresentationRef.current = false;
+        if (completed && bufferedMarketTracksRef.current?.run_id === viewerRef.current?.run_id) setMarketTracks(bufferedMarketTracksRef.current);
+        bufferedMarketTracksRef.current = null;
         releasePresentation?.();
         setControlPending((current) => current?.command_id === command.command_id ? null : current);
       }
@@ -1064,7 +1099,7 @@ export function useReplayViewerRuntime(
 
   const cancelAdvance = useCallback(async (): Promise<ReplayV2CommandResult> => {
     const active = controlRef.current;
-    if (!replayAdvanceIsCancelable(active)) {
+    if (!replayAdvanceIsCancelable(active, allowBarDisplayCancellation)) {
       throw new Error("no cancelable advance is active");
     }
     if (active === null) throw new Error("no cancelable advance is active");
@@ -1076,7 +1111,7 @@ export function useReplayViewerRuntime(
     const result = await defaultReplayV2Api.commandRun(command.run_id, command);
     setProgress(progressFromResult(result));
     return result;
-  }, [buildCommand]);
+  }, [buildCommand, allowBarDisplayCancellation]);
 
   const submitTrackCommand = useCallback(async (
     type: Extract<ReplayV2CommandType,

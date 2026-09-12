@@ -227,6 +227,40 @@ def summarize(rows, base_ms):
     return result
 
 
+def merge_prices(a, b, _base_ms):
+    if a is None:
+        return b
+    if b is None:
+        return a
+    with localcontext() as context:
+        context.prec = 1000
+        down = max(a[3], b[3], (a[2], b[1]), key=lambda p: p[0] - p[1])
+        up = max(a[4], b[4], (a[1], b[2]), key=lambda p: p[1] - p[0])
+        return (None, min(a[1], b[1]), max(a[2], b[2]), down, up,
+                min(a[5], b[5]), max(a[6], b[6]))
+
+
+def summarize_prices(rows, _base_ms):
+    """Only close-price extrema/pairs; valuation does not need OHLCV sums."""
+    if not rows:
+        return None
+    low = high = Decimal(rows[0][5])
+    down = up = (low, low)
+    scale, adjusted = low.as_tuple().exponent, low.adjusted()
+    with localcontext() as context:
+        context.prec = 1000
+        for row in rows[1:]:
+            close = Decimal(row[5])
+            if high - close > down[0] - down[1]:
+                down = (high, close)
+            if close - low > up[1] - up[0]:
+                up = (low, close)
+            low, high = min(low, close), max(high, close)
+            scale = min(scale, close.as_tuple().exponent)
+            adjusted = max(adjusted, close.adjusted())
+    return None, low, high, down, up, scale, adjusted
+
+
 def encode_summary(value):
     if value is None:
         return None
@@ -480,6 +514,35 @@ class MarketObject:
                 self._nodes[number] = decode_summary(self._value("nodes", number))
             return self._nodes[number]
 
+    def prepare_nodes(self):
+        """Warm a bounded immutable summary tree in one SQLite read."""
+        if self.metadata["size"] * 2 - 1 > 4095:
+            return
+        # Padded empty leaves/subtrees are intentionally absent on disk.
+        expected = set()
+        first = self.metadata["size"]
+        last = first + len(self.firsts)
+        while first:
+            expected.update(range(first, last))
+            first, last = first//2, (last+1)//2
+        with self._lock:
+            if len(self._nodes) == len(expected):
+                return
+            try:
+                wrapper, connection = self._connection()
+                try:
+                    rows = connection.execute("SELECT id,value FROM nodes").fetchall()
+                finally:
+                    wrapper.checkin()
+                values = {int(key): decode_summary(unpack(value)) for key, value in rows}
+                if set(values) != expected:
+                    return
+            except (sqlite3.DatabaseError, OSError, ValueError, TypeError, IndexError, zlib.error):
+                # Optional warming must retain the existing per-node repair
+                # path for missing/corrupt derived data.
+                return
+            self._nodes.update(values)
+
     def _value(self, table, key):
         try:
             return unpack(self._fetch(table, key))
@@ -490,7 +553,28 @@ class MarketObject:
             self._nodes.clear()
             return unpack(self._fetch(table, key))
 
-    def summary(self, start, end):
+    def summary(self, start, end, *, prices_only=False):
+        # Valuation and trade-result projection query the same immutable range
+        # during a coordinated commit. Cache the bounded market-only result,
+        # never account state or a mutable run-specific price view.
+        key = (start, end, prices_only)
+        with self._lock:
+            cache = getattr(self, "_summaries", None)
+            if cache is None:
+                cache = self._summaries = OrderedDict()
+            if key in cache:
+                cache.move_to_end(key)
+                return cache[key]
+        result = self._summary_uncached(start, end, prices_only=prices_only)
+        with self._lock:
+            cache[key] = result
+            if len(cache) > 128:
+                cache.popitem(last=False)
+        return result
+
+    def _summary_uncached(self, start, end, *, prices_only=False):
+        summarize_range = summarize_prices if prices_only else summarize
+        merge_range = merge_prices if prices_only else merge
         if not 0 <= start <= end <= self.count:
             raise ValueError("shared market range is outside the object")
         if start == end:
@@ -500,13 +584,13 @@ class MarketObject:
         if start // BLOCK == (end - 1) // BLOCK:
             if start % BLOCK == 0 and (end - start == BLOCK or end == self.count):
                 return self.node(self.metadata["size"] + start // BLOCK)
-            return summarize(
+            return summarize_range(
                 self.block(start // BLOCK)[start % BLOCK : (end - 1) % BLOCK + 1],
                 self.base_ms,
             )
         result = tail = None
         if start % BLOCK:
-            result = summarize(
+            result = summarize_range(
                 self.block(start // BLOCK)[start % BLOCK :], self.base_ms
             )
             start = (start // BLOCK + 1) * BLOCK
@@ -514,7 +598,7 @@ class MarketObject:
             tail = (
                 self.node(self.metadata["size"] + end // BLOCK)
                 if end == self.count
-                else summarize(self.block(end // BLOCK)[: end % BLOCK], self.base_ms)
+                else summarize_range(self.block(end // BLOCK)[: end % BLOCK], self.base_ms)
             )
             end = end // BLOCK * BLOCK
         left, right = (
@@ -524,14 +608,14 @@ class MarketObject:
         after = None
         while left < right:
             if left & 1:
-                result = merge(result, self.node(left), self.base_ms)
+                result = merge_range(result, self.node(left), self.base_ms)
                 left += 1
             if right & 1:
                 right -= 1
-                after = merge(self.node(right), after, self.base_ms)
+                after = merge_range(self.node(right), after, self.base_ms)
             left //= 2
             right //= 2
-        return merge(merge(result, after, self.base_ms), tail, self.base_ms)
+        return merge_range(merge_range(result, after, self.base_ms), tail, self.base_ms)
 
 
 def open_object(path, object_hash):
@@ -636,6 +720,36 @@ class MarketRange:
             ],
         }
 
+    def bound(self, time, right=False):
+        """Locate an open-time boundary through each object's time directory.
+
+        Do not bisect row() on a lazy range: that loads unrelated price blocks
+        at every midpoint and evicts the very tail the caller is about to use.
+        """
+        actual = time - self.offset_ms
+        before = 0
+        for obj, first, last in self.parts:
+            index = obj.bound(actual, right=right)
+            if index < last:
+                return before + max(0, index-first)
+            before += last-first
+        return self.count
+
+    def prepare_nodes(self):
+        for obj, _, _ in self.parts:
+            obj.prepare_nodes()
+
+    def slice(self, start, end):
+        if not 0 <= start <= end <= self.count:
+            raise ValueError("shared market slice is outside its view")
+        parts, before = [], 0
+        for (obj, first, _), after in zip(self.parts, self.ends):
+            a, b = max(start, before), min(end, after)
+            if a < b:
+                parts.append((obj, first+a-before, first+b-before))
+            before = after
+        return MarketRange(parts, self.offset_ms)
+
     def reference(self):
         return {
             "version": VERSION,
@@ -693,20 +807,20 @@ class MarketRange:
             result.append(row[5])
         return result
 
-    def summary(self, start, end):
+    def summary(self, start, end, *, prices_only=False):
         if not 0 <= start <= end <= self.count:
             raise ValueError("shared market range is outside its view")
         result, before = None, 0
         for (obj, first, _), after in zip(self.parts, self.ends):
             a, b = max(start, before), min(end, after)
             if a < b:
-                result = merge(
+                result = (merge_prices if prices_only else merge)(
                     result,
-                    obj.summary(first + a - before, first + b - before),
+                    obj.summary(first + a - before, first + b - before, prices_only=prices_only),
                     self.base_ms,
                 )
             before = after
-        if result is not None and self.offset_ms:
+        if result is not None and self.offset_ms and not prices_only:
             display = list(result[0])
             display[10] += self.offset_ms
             display[11] += self.offset_ms

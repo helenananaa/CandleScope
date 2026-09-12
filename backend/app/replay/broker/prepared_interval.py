@@ -385,7 +385,7 @@ class PreparedBarInterval:
             builder.apply_bars_final_state(self.bars[checkpoint:end])
         return builder
 
-    def apply(self, broker, start, end):
+    def apply(self, broker, start, end, *, builder=None):
         valuation = self.prepare_valuation(broker)
         peak, trough, drawdown = valuation["ranges"].query(start, end)
         with localcontext() as context:
@@ -401,7 +401,7 @@ class PreparedBarInterval:
             broker._equity_peak = decimal_to_string(
                 max(Decimal(broker._equity_peak), peak), field_name="equity peak"
             )
-        broker._bar_builder = self.builder_at(end)
+        broker._bar_builder = self.builder_at(end) if builder is None else builder
         broker._position = mark_position(broker._position, self.bars[end - 1].close)
         broker._account = broker._account_from(broker._ledger, broker._position)
         broker._assert_invariants()

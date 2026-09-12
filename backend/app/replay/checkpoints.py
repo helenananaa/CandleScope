@@ -69,7 +69,9 @@ class CheckpointCodec:
             raise ValueError("checkpoint schema_version must be non-empty")
         self.schema_version = schema_version
 
-    def encode(self, payload: Mapping[str, object]) -> bytes:
+    def encode(self, payload: Mapping[str, object], *, compress_small: bool = False) -> bytes:
+        if not isinstance(compress_small, bool):
+            raise TypeError("compress_small must be a boolean")
         if not isinstance(payload, Mapping):
             raise TypeError("checkpoint payload must be an object")
         normalized_payload = dict(payload)
@@ -84,7 +86,7 @@ class CheckpointCodec:
         )
         if len(encoded) > CHECKPOINT_MAX_RAW_BYTES:
             raise CheckpointError("checkpoint exceeds the raw byte budget")
-        if len(encoded) < CHECKPOINT_COMPRESSION_MIN_BYTES:
+        if len(encoded) < CHECKPOINT_COMPRESSION_MIN_BYTES and not compress_small:
             wire = encoded
         else:
             compressed = zlib.compress(encoded, level=CHECKPOINT_ZLIB_LEVEL)

@@ -47,6 +47,8 @@ test("Phase 16 polls and exposes cancellation only for guaranteed cancelable adv
   assert.equal(replayAdvanceIsCancelable(null), false);
   assert.equal(replayAdvanceIsCancelable(command("advance", "BASE_BAR")), false);
   assert.equal(replayAdvanceIsCancelable(command("advance", "DISPLAY_BAR")), false);
+  assert.equal(replayAdvanceIsCancelable(command("advance", "DISPLAY_BAR"), true), true);
+  assert.equal(replayAdvanceIsCancelable(command("advance", "SOURCE_EVENT"), true), false);
   assert.equal(replayAdvanceIsCancelable(command("advance", "SOURCE_EVENT")), false);
   assert.equal(replayAdvanceIsCancelable(command("advance", "VIRTUAL_TIME")), true);
   assert.equal(replayAdvanceIsCancelable(command("advance_by", "legacy")), true);

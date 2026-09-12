@@ -128,6 +128,8 @@ class _PagedBarArchive:
                     "initial BAR cache does not follow the committed schedule",
                 )
         self._pages: dict[int, tuple[ReplayBar, ...]] = {}
+        self._shared_ranges: tuple = ()
+        self._shared_cached_row: tuple[int, ReplayBar] | None = None
 
     def open_at_index(self, index: int) -> int:
         if index < 0 or index >= self.total_rows:
@@ -161,6 +163,21 @@ class _PagedBarArchive:
             return None
         if index < len(self.initial_rows):
             return self.initial_rows[index]
+        cached = self._shared_cached_row
+        if cached is not None and cached[0] == index:
+            return cached[1]
+        for first, last, market in reversed(self._shared_ranges):
+            if first <= index < last:
+                row = ReplayBar(*market.row(index-first))
+                expected = self.open_at_index(index)
+                if row.open_time_ms != expected or row.close_time_ms != expected+self.interval_ms-1:
+                    raise ReplayDomainError(ReplayErrorCode.DATASET_MISMATCH,
+                                            "shared BAR row escaped its committed schedule")
+                # The same immutable validated rows feed SharedPreparedInterval.
+                # Reuse one row for peek/next without loading a whole raw page.
+                object.__setattr__(row, "_normalized_values_validated", True)
+                self._shared_cached_row = (index, row)
+                return row
         page_start, expected_count = self._page_span(index)
         page = self._pages.get(page_start)
         if page is None:
@@ -303,6 +320,8 @@ class PagedBarReplaySource:
             if (not summary[12] or summary[10] != self._archive.open_at_index(a)
                     or summary[11] != self._archive.open_at_index(b-1)):
                 return None
+        ranges = getattr(self._archive, "_shared_ranges", ())
+        self._archive._shared_ranges = (*ranges, (self._index, self._index+count, result))[-4:]
         return result, self._index+count == self._archive.total_rows
 
     def fork(self) -> PagedBarReplaySource:

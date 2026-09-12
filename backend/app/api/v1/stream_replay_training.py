@@ -123,7 +123,7 @@ async def stream_replay_training_run(
 ) -> None:
     """Send a gap-free initial projection followed by coalesced updates."""
 
-    queue: asyncio.Queue[None] | None = None
+    queue: asyncio.Queue[Mapping[str, object] | None] | None = None
     try:
         initial, queue = await training.subscribe_market_tracks(
             run_id,
@@ -197,15 +197,21 @@ async def _send_market_tracks(
     previous = None if initial is None else dict(initial)
     sequence = 0
     while True:
-        await queue.get()
+        committed_projection = await queue.get()
         await asyncio.sleep(_COALESCE_SECONDS)
         while not queue.empty():
-            queue.get_nowait()
-        projection = await (
-            training.get_live_market_tracks(run_id)
-            if initial is not None
-            else training.get_market_tracks(run_id)
-        )
+            committed_projection = queue.get_nowait()
+        if (initial is not None and isinstance(committed_projection, Mapping)
+                and committed_projection.get("run_id") == run_id):
+            projection = committed_projection
+        else:
+            # Legacy subscribers still request the complete audit projection;
+            # the optional command payload is deliberately live/bounded only.
+            projection = await (
+                training.get_live_market_tracks(run_id)
+                if initial is not None
+                else training.get_market_tracks(run_id)
+            )
         if previous is None:
             await send_json_with_timeout(websocket, projection)
             continue
