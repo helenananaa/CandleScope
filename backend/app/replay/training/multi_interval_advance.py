@@ -14,8 +14,9 @@ from ..multi_commit import commit_actor_commands
 from ..timing import record_timing
 from .hedge_timeline import IndexedHedgeSnapshot
 from .multi_interval import safe_envelope
-from .multi_interval_store import finish_group, risk_context
+from .multi_interval_store import finish_group, risk_context, prepare_group
 from .errors import TrainingRunError
+from .phase_projection import PhaseSummary
 
 
 async def resume_advance(owner, *, command, binding, intent):
@@ -145,6 +146,7 @@ async def try_advance(
     runtime_snapshot,
     cancel_event=None,
     command_target=None,
+    completion=None,
 ):
     service, store = owner.replay_service, owner.store
     planning_started = perf_counter()
@@ -308,106 +310,145 @@ async def try_advance(
     record_timing("multi_portfolio_summary", summary_started)
     if cancel_event is not None and cancel_event.is_set():
         return (), start_time
+    split_time = None
     minimum_time = summary["trough_time_ms"]
     if minimum_time is not None and start_time < minimum_time < target:
         prior = await store.base_store.run_extension_read(
-            lambda connection: store._review._minimum_prior_equity(
-                connection, run_id=command.run_id
-            )
+            lambda connection: store._review._minimum_prior_equity(connection, run_id=command.run_id)
         )
         if prior is None or Decimal(summary["trough"]) < prior:
-            # Publish a real recoverable anchor at the portfolio minimum, not
-            # an endpoint checkpoint masquerading as an earlier account state.
-            # The same envelope proves every prefix safe. Keep the captured
-            # revisions and source plans; only truncate their requested range.
-            # The final writer still validates the account and all revisions.
-            target = minimum_time
-            prefix_started = perf_counter()
-            summary = await asyncio.to_thread(summarize)
-            record_timing("multi_portfolio_summary", prefix_started)
-            if cancel_event is not None and cancel_event.is_set():
-                return (), start_time
-    commands, basis_tracks = [], []
-    for plan in plans:
-        index = plan["index"]
-        plan["end"] = index.end_for_time(target)
-        if plan["end"] - plan["start"] < 1:
-            return None
-        lane, a = lanes[plan["track_id"]]
-        b = bisect_right(lane.times, target + delta)
-        plan["first_mark"] = lane.events[a] if b > a else None
-        plan["last_mark"] = lane.events[b - 1] if b > a else None
-        part = owner._multi_command_id(
-            command.command_id,
-            plan["track_id"],
-            "multi-indexed",
-            int(plan["snapshot"]["revision"]),
-        )
-        plan["command_id"] = part
-        commands.append(
-            (
-                plan["session_id"],
-                ReplayCommand(
-                    protocol=REPLAY_PROTOCOL,
-                    command_id=part,
-                    client_instance_id=command.client_instance_id,
-                    expected_revision=int(plan["snapshot"]["revision"]),
-                    type=InternalCommandType.MULTI_SHARED_INDEXED_INTERVAL,
-                    payload={
-                        "target_virtual_time_ms": target,
-                        "max_events": plan["end"] - plan["start"],
-                        "require_empty_account": False,
-                        "snapshot_only": False,
-                        "transport_tail_bars": 16,
-                    },
-                ),
+            split_time = minimum_time
+    # Each phase remains a real command/checkpoint. Their publication shares
+    # one commit; no reader can observe only the prefix.
+    original_plans = plans
+
+    def make_phase(phase_start, phase_end):
+        initial_prices = {}
+        phase_lanes = {}
+        phase_plans = []
+        for plan in original_plans:
+            lane, original_a = lanes[plan["track_id"]]
+            a = bisect_right(lane.times, phase_start + delta)
+            initial_prices[plan["track_id"]] = (
+                context["prices"][plan["track_id"]] if a <= original_a
+                else Decimal(lane.events[a-1].payload["mark_price"])
             )
+            phase_lanes[plan["track_id"]] = (lane, a)
+            phase_plan = dict(plan)
+            phase_plan["start"] = plan["index"].end_for_time(phase_start)
+            phase_plan["snapshot"] = dict(plan["snapshot"], revision=(
+                int(plan["snapshot"]["revision"]) + phase_plan["start"] - plan["start"]
+            ))
+            phase_plans.append(phase_plan)
+        phase_summary = runtime_snapshot.portfolio_prices.summary(
+            cash=context["cash"], legs=context["legs"], initial_prices=initial_prices,
+            start=phase_start + delta, end=phase_end + delta, delta=delta,
         )
-        archive = context["archives"][plan["track_id"]]
-        basis_tracks.append(
-            dict(
-                track_id=plan["track_id"],
-                market=index.market.descriptor(),
-                start=plan["start"],
-                end=plan["end"],
-                public_path=archive["local_path"],
-                public_checksum=archive["public_checksum_sha256"],
-                mark_start=a,
-                mark_end=b,
-                initial_mark=str(context["prices"][plan["track_id"]]),
+        return build_group(phase_start, phase_end, phase_summary, phase_plans, phase_lanes, initial_prices)
+
+    def build_group(start_time, target, summary, plans, lanes, initial_prices):
+        commands, basis_tracks = [], []
+        for plan in plans:
+            index = plan["index"]
+            plan["end"] = index.end_for_time(target)
+            if plan["end"] - plan["start"] < 1:
+                return None
+            lane, a = lanes[plan["track_id"]]
+            b = bisect_right(lane.times, target + delta)
+            plan["first_mark"] = lane.events[a] if b > a else None
+            plan["last_mark"] = lane.events[b - 1] if b > a else None
+            part = owner._multi_command_id(
+                command.command_id,
+                plan["track_id"],
+                "multi-indexed",
+                int(plan["snapshot"]["revision"]),
             )
-        )
-    group = dict(
-        run_id=command.run_id,
-        command_id=command.command_id + ":multi:" + str(start_time),
-        start_time=start_time,
-        target=target,
-        actual_delta=delta,
-        tracks=plans,
-        summary=summary,
-        selected_session_id=binding["adapter_session_id"],
-        policy=binding["time_disclosure_policy"],
-        parent_command=command,
-        requested_target=command_target,
-        basis=dict(
-            schema="multi-bar-interval.v1",
-            start_time_ms=start_time,
-            end_time_ms=target,
-            cash=str(context["cash"]),
-            actual_delta=delta,
-            tracks=basis_tracks,
-            legs=[
-                dict(
-                    track_id=leg.track_id,
-                    side=leg.side,
-                    quantity=str(leg.quantity),
-                    entry=str(leg.entry),
-                    rule=leg.rule.to_dict(),
+            plan["command_id"] = part
+            commands.append(
+                (
+                    plan["session_id"],
+                    ReplayCommand(
+                        protocol=REPLAY_PROTOCOL,
+                        command_id=part,
+                        client_instance_id=command.client_instance_id,
+                        expected_revision=int(plan["snapshot"]["revision"]),
+                        type=InternalCommandType.MULTI_SHARED_INDEXED_INTERVAL,
+                        payload={
+                            "target_virtual_time_ms": target,
+                            "max_events": plan["end"] - plan["start"],
+                            "require_empty_account": False,
+                            "snapshot_only": False,
+                            "transport_tail_bars": 16,
+                        },
+                    ),
                 )
-                for leg in context["legs"]
-            ],
-        ),
-    )
+            )
+            archive = context["archives"][plan["track_id"]]
+            basis_tracks.append(
+                dict(
+                    track_id=plan["track_id"],
+                    market=index.market.descriptor(),
+                    start=plan["start"],
+                    end=plan["end"],
+                    public_path=archive["local_path"],
+                    public_checksum=archive["public_checksum_sha256"],
+                    mark_start=a,
+                    mark_end=b,
+                    initial_mark=str(initial_prices[plan["track_id"]]),
+                )
+            )
+        group = dict(
+            run_id=command.run_id,
+            command_id=command.command_id + ":multi:" + str(start_time),
+            start_time=start_time,
+            target=target,
+            actual_delta=delta,
+            tracks=plans,
+            summary=summary,
+            selected_session_id=binding["adapter_session_id"],
+            policy=binding["time_disclosure_policy"],
+            parent_command=command,
+            requested_target=command_target,
+            basis=dict(
+                schema="multi-bar-interval.v1",
+                start_time_ms=start_time,
+                end_time_ms=target,
+                cash=str(context["cash"]),
+                actual_delta=delta,
+                tracks=basis_tracks,
+                legs=[
+                    dict(
+                        track_id=leg.track_id,
+                        side=leg.side,
+                        quantity=str(leg.quantity),
+                        entry=str(leg.entry),
+                        rule=leg.rule.to_dict(),
+                    )
+                    for leg in context["legs"]
+                ],
+            ),
+        )
+        group["commands"] = commands
+        return group
+
+    if split_time is not None and all(
+        p["start"] < p["index"].end_for_time(split_time) < p["index"].end_for_time(target)
+        for p in plans
+    ):
+        groups = await asyncio.to_thread(lambda: [make_phase(start_time, split_time), make_phase(split_time, target)])
+    else:
+        # Unequal grids may not contain a BAR on both sides of the minimum.
+        # Retain the original single-prefix fallback in that case.
+        if split_time is not None:
+            target = split_time
+            summary = await asyncio.to_thread(summarize)
+        groups = [build_group(start_time, target, summary, plans, lanes, context["prices"])]
+    if any(part is None for part in groups):
+        return None
+    group = groups[-1]
+    plans = groups[0]["tracks"]
+    if cancel_event is not None and cancel_event.is_set():
+        return (), start_time
     registry = getattr(store, "_multi_interval_plans", None)
     if registry is None:
         registry = store._multi_interval_plans = {}
@@ -446,18 +487,46 @@ async def try_advance(
         if intent["status"] != "RUNNING":
             raise ValueError("multi interval intent is no longer running")
 
+    def phase_callbacks(phase, ordinal):
+        def prepare(connection):
+            if ordinal == 0:
+                before(connection)
+            phase["projection_summary"] = PhaseSummary.load(connection, command.run_id)
+            for plan in phase["tracks"]:
+                plan["projection_summary"] = phase["projection_summary"]
+            registry.update({p["session_id"]: p for p in phase["tracks"]})
+
+        def finish(connection):
+            finish_group(store, connection, phase)
+            if ordinal == len(groups)-1:
+                phase["stable"] = tuple(e for part in groups for e in part["stable"])
+                if completion is not None and target >= command_target:
+                    result = completion(phase)
+                    store._finish_advance_intent_in_transaction(
+                        connection, run_id=command.run_id, command_id=command.command_id,
+                        result=result, cancelled=bool(result["data"]["cancelled"]),
+                    )
+                    phase["completed_result"] = result
+        return dict(commands=phase["commands"], before=prepare, after=finish,
+                    prepare_candidates=lambda mutations: prepare_group(phase, mutations))
+
+    phases = [phase_callbacks(phase, i) for i, phase in enumerate(groups)]
     try:
         commit_started = perf_counter()
-        await commit_actor_commands(
-            service,
-            commands,
-            before=before,
-            after=lambda connection: finish_group(store, connection, group),
-        )
+        if len(phases) == 1:
+            await commit_actor_commands(service, **phases[0])
+        else:
+            from ..multi_phase_commit import commit_actor_phases
+            await commit_actor_phases(service, phases)
         record_timing("multi_commit", commit_started)
         store._cache_committed_hedge_fingerprint(
             command.run_id, group["fingerprint_after"]
         )
+        if "completed_result" in group:
+            completed = getattr(store, "_multi_completed_results", None)
+            if completed is None:
+                completed = store._multi_completed_results = {}
+            completed[(command.run_id, command.command_id)] = group["completed_result"]
         if not hasattr(store, "_multi_interval_commands"):
             store._multi_interval_commands = set()
         store._multi_interval_commands.add((command.run_id, command.command_id))

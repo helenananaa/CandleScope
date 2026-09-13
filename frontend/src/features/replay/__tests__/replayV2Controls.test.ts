@@ -26,6 +26,8 @@ test("opening a run prepares its index without issuing an advance command", asyn
   assert.equal(requests.length, 1);
   assert.match(requests[0]!.path, /\/runs\/run-1\/prepare-index$/);
   assert.equal(requests[0]!.method, "POST");
+  await client.prepareIndex("run-1", undefined, "browser-1");
+  assert.match(requests[1]!.path, /prepare-index\?client_instance_id=browser-1$/);
 });
 
 

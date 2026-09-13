@@ -1,6 +1,14 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhTW = {
+  "replay.portfolio.title": "帳戶組合權益",
+  "replay.portfolio.load": "載入 / 更新組合曲線",
+  "replay.portfolio.hint": "每小時末取樣，回撤按完整行情計算。推進後請更新；僅涵蓋已記錄的組合區間。",
+  "replay.portfolio.drawdown": "區間最大回撤",
+  "replay.portfolio.empty": "尚無組合區間記錄",
+  "replay.portfolio.export": "匯出全部已記錄組合曲線",
+  "replay.portfolio.coverage": "涵蓋 {hours} 小時 · {count} 個取樣點",
+
   "status.klineScope": "K 線",
   "status.klineScopeDetail": "僅表示目前作用中圖表的 K 線連線；盤口與成交狀態請查看各自面板。",
   "chartTester.focusMode": "專注研究",

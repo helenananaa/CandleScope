@@ -10,6 +10,7 @@ import math
 import re
 import sqlite3
 from collections.abc import Mapping
+from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING
 
@@ -24,6 +25,30 @@ from .schema import REVIEW_TIMELINE_SCHEMA_VERSION, RUN_RULES_SCHEMA_VERSION
 
 if TYPE_CHECKING:
     from .storage import TrainingRunStore
+
+
+@dataclass
+class _AnchorBatch:
+    """Append-local metadata and budget; never survives a transaction failure."""
+
+    tracks: dict[str, sqlite3.Row]
+    used_bytes: int
+
+    @classmethod
+    def load(cls, connection: sqlite3.Connection, run_id: str) -> "_AnchorBatch":
+        tracks = connection.execute(
+            "SELECT track_id, adapter_session_id, dataset_epoch, virtual_time_ms, "
+            "subscription_tier FROM replay_training_market_track "
+            "WHERE run_id=? AND adapter_session_id IS NOT NULL "
+            "ORDER BY stable_ordinal, track_id",
+            (run_id,),
+        ).fetchall()
+        used = connection.execute(
+            "SELECT COALESCE(SUM(CASE WHEN stored_bytes > 0 THEN stored_bytes "
+            "ELSE length(payload) END), 0) FROM replay_review_actor_anchor WHERE run_id=?",
+            (run_id,),
+        ).fetchone()[0]
+        return cls({row["adapter_session_id"]: row for row in tracks}, int(used))
 
 
 REVIEW_VIEWPORT_LIMIT = 2_048
@@ -1535,15 +1560,20 @@ class ReviewRecorder:
         checkpoint: bytes | None,
         state: Mapping[str, object] | None,
         now_ms: int,
+        batch: _AnchorBatch | None = None,
     ) -> str:
-        track = connection.execute(
-            """
+        track = (
+            batch.tracks.get(session_id)
+            if batch is not None
+            else connection.execute(
+                """
             SELECT track.track_id, track.dataset_epoch, track.virtual_time_ms
             FROM replay_training_market_track AS track
             WHERE track.run_id = ? AND track.adapter_session_id = ?
             """,
-            (run_id, session_id),
-        ).fetchone()
+                (run_id, session_id),
+            ).fetchone()
+        )
         if track is None:
             raise TypeError("review anchor track is missing")
         if checkpoint is None:
@@ -1619,15 +1649,19 @@ class ReviewRecorder:
         ):
             return anchor_id
         encoded = encode_anchor_payload(payload)
-        used = int(
-            connection.execute(
-                "SELECT COALESCE(SUM("
-                "CASE WHEN stored_bytes > 0 THEN stored_bytes "
-                "ELSE length(payload) END"
-                "), 0) "
-                "FROM replay_review_actor_anchor WHERE run_id = ?",
-                (run_id,),
-            ).fetchone()[0]
+        used = (
+            batch.used_bytes
+            if batch is not None
+            else int(
+                connection.execute(
+                    "SELECT COALESCE(SUM("
+                    "CASE WHEN stored_bytes > 0 THEN stored_bytes "
+                    "ELSE length(payload) END"
+                    "), 0) "
+                    "FROM replay_review_actor_anchor WHERE run_id = ?",
+                    (run_id,),
+                ).fetchone()[0]
+            )
         )
         if used + encoded.stored_bytes > REVIEW_ANCHOR_BYTES_LIMIT:
             raise TrainingRunError(
@@ -1677,6 +1711,8 @@ class ReviewRecorder:
                 now_ms,
             ),
         )
+        if batch is not None:
+            batch.used_bytes += encoded.stored_bytes
         return anchor_id
 
     @classmethod
@@ -1969,6 +2005,7 @@ class ReviewRecorder:
                     "event_dropped": False,
                 },
             )
+        anchor_batch = _AnchorBatch.load(connection, run_id)
         primary_anchor = self.anchor(
             connection,
             run_id=run_id,
@@ -1976,27 +2013,15 @@ class ReviewRecorder:
             checkpoint=checkpoint,
             state=state,
             now_ms=now_ms,
+            batch=anchor_batch,
         )
-        primary_track = connection.execute(
-            """
-            SELECT track_id FROM replay_training_market_track
-            WHERE run_id = ? AND adapter_session_id = ?
-            """,
-            (run_id, session_id),
-        ).fetchone()
+        primary_track = anchor_batch.tracks.get(session_id)
         if primary_track is None:
             raise TypeError("review primary track is missing")
         anchors = {str(primary_track["track_id"]): primary_anchor}
-        for track in connection.execute(
-            """
-            SELECT track_id, adapter_session_id
-            FROM replay_training_market_track
-            WHERE run_id = ? AND adapter_session_id IS NOT NULL
-              AND subscription_tier = 'FULL'
-            ORDER BY stable_ordinal, track_id
-            """,
-            (run_id,),
-        ).fetchall():
+        for track in anchor_batch.tracks.values():
+            if track["subscription_tier"] != "FULL":
+                continue
             track_id = str(track["track_id"])
             if track_id not in anchors:
                 anchors[track_id] = self.anchor(
@@ -2006,6 +2031,7 @@ class ReviewRecorder:
                     checkpoint=None,
                     state=None,
                     now_ms=now_ms,
+                    batch=anchor_batch,
                 )
         anchor_set_hash = canonical_sha256(
             [
@@ -2026,6 +2052,8 @@ class ReviewRecorder:
         if command_id is None and isinstance(command, Mapping):
             command_id = command.get("command_id")
         created: list[str] = []
+        projection_hash = canonical_sha256(projection)
+        public_time_json = canonical_json(public_time)
         for category, event_type in descriptors:
             tail = connection.execute(
                 """
@@ -2061,7 +2089,7 @@ class ReviewRecorder:
                     "semantic_view_revision"
                 ],
                 "public_time": public_time,
-                "projection_hash": canonical_sha256(projection),
+                "projection_hash": projection_hash,
                 "anchor_set_hash": anchor_set_hash,
                 "previous_event_hash": previous_hash,
             }
@@ -2093,7 +2121,7 @@ class ReviewRecorder:
                     projection["account_hash"],
                     material["ledger_tail_hash"],
                     material["viewer_revision"],
-                    canonical_json(public_time),
+                    public_time_json,
                     projection_json,
                     anchor_set_hash,
                     previous_hash,
@@ -2101,15 +2129,17 @@ class ReviewRecorder:
                     now_ms,
                 ),
             )
-            for track_id, anchor_id in sorted(anchors.items()):
-                connection.execute(
-                    """
+            connection.executemany(
+                """
                     INSERT INTO replay_review_event_anchor(
                         run_id, timeline_sequence, track_id, anchor_id
                     ) VALUES (?, ?, ?, ?)
                     """,
-                    (run_id, sequence, track_id, anchor_id),
-                )
+                [
+                    (run_id, sequence, track_id, anchor_id)
+                    for track_id, anchor_id in sorted(anchors.items())
+                ],
+            )
             created.append(event_id)
         return tuple(created)
 

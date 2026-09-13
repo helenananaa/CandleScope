@@ -141,7 +141,7 @@ function ReplayTrainingRunApp({
     const controller = new AbortController();
     void defaultReplayV2Api.getRun(runId, controller.signal).then(async ({ run: loaded }) => {
       if (loaded.adapter_session_id !== null && loaded.state === "PAUSED") {
-        await defaultReplayV2Api.prepareIndex(runId, controller.signal);
+        await defaultReplayV2Api.prepareIndex(runId, controller.signal, getReplayControllerClientInstanceId(runId));
       }
       if (controller.signal.aborted) return;
       setRun(loaded);
@@ -165,7 +165,7 @@ function ReplayTrainingRunApp({
   if (run.state === "AWAITING_MARKET" || run.resume_action === "SELECT_MARKET") {
     return <ReplayInitialMarketPicker run={run} onInitialized={(initialized) => {
       setRun(null);
-      void defaultReplayV2Api.prepareIndex(runId).then(() => setRun(initialized)).catch((reason: unknown) => {
+      void defaultReplayV2Api.prepareIndex(runId, undefined, getReplayControllerClientInstanceId(runId)).then(() => setRun(initialized)).catch((reason: unknown) => {
         setError(reason instanceof Error ? reason.message : t("replay.runLoadFailed"));
       });
     }} />;

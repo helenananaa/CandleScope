@@ -237,6 +237,7 @@ class ReplaySQLiteStore:
         self._pending_dataset_objects: dict[str, int] = {}
         self._dataset_gc_lock = asyncio.Lock()
         self._closed = False
+        self._idle_checkpoint = None
         self._degraded_reason: str | None = None
         self._session_summary_writer: SessionSummaryWriter | None = None
         self._session_trajectory_writer = None
@@ -489,6 +490,19 @@ class ReplaySQLiteStore:
             results = [writer(connection) for writer in writers]
             after(connection)
             return results
+        return await self._write_async(write)
+
+    async def commit_command_phases(self, phases):
+        prepared = [([self._command_writer(**row) for row in rows], before, after)
+                    for rows, before, after in phases]
+
+        def write(connection):
+            for writers, before, after in prepared:
+                before(connection)
+                for writer in writers:
+                    writer(connection)
+                after(connection)
+
         return await self._write_async(write)
 
     def _command_writer(
@@ -1173,12 +1187,21 @@ class ReplaySQLiteStore:
         )
 
     async def close(self) -> None:
+        if self._idle_checkpoint is not None:
+            await self._idle_checkpoint.close()
         async with self._async_lock:
             async with self._dataset_gc_lock:
                 if self._closed:
                     return
                 await self.run_worker("sql_close", self._close_sync)
                 await asyncio.to_thread(self._worker_executor.shutdown, wait=True)
+
+    async def enable_idle_checkpoints(self):
+        if self._idle_checkpoint is None:
+            from .idle_checkpoint import IdleCheckpoint
+            controller = IdleCheckpoint(self)
+            if await controller.enable():
+                self._idle_checkpoint = controller
 
     async def run_worker(self, name: str, function, *args, **kwargs):
         self._ensure_open()
@@ -1273,7 +1296,12 @@ class ReplaySQLiteStore:
         queued = time.perf_counter()
         async with self._async_lock:
             record_timing("sql_serial", queued)
-            return await self.run_worker("sql_write", self._run_write, operation, allow_degraded)
+            if self._idle_checkpoint is not None:
+                self._idle_checkpoint.cancel_timer()
+            result = await self.run_worker("sql_write", self._run_write, operation, allow_degraded)
+            if self._idle_checkpoint is not None:
+                self._idle_checkpoint.committed()
+            return result
 
     async def _read_async(self, operation):
         return await self.run_worker("sql_read", self._run_read, operation)
@@ -1298,6 +1326,8 @@ class ReplaySQLiteStore:
                     self._connection.commit()
                     record_timing("sql_commit", committed)
                     self._metrics["transactions"] += 1
+                    if self._idle_checkpoint is not None and self._idle_checkpoint.enabled:
+                        self._idle_checkpoint.observe_size()
                     return result
                 except sqlite3.OperationalError as exc:
                     self._connection.rollback()

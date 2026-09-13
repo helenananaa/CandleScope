@@ -446,8 +446,9 @@ export class ReplayV2ApiClient {
     );
   }
 
-  prepareIndex(runId: string, signal?: AbortSignal): Promise<void> {
-    return this.request(`/runs/${safeSegment(runId, "run id")}/prepare-index`, (value) => {
+  prepareIndex(runId: string, signal?: AbortSignal, clientInstanceId?: string): Promise<void> {
+    const query = clientInstanceId === undefined ? "" : `?${new URLSearchParams({ client_instance_id: clientInstanceId })}`;
+    return this.request(`/runs/${safeSegment(runId, "run id")}/prepare-index${query}`, (value) => {
       if (typeof value !== "object" || value === null) throw new TypeError("invalid replay index response");
       const result = value as Record<string, unknown>;
       if (result.protocol !== "replay.v3" || result.run_id !== runId
@@ -456,6 +457,20 @@ export class ReplayV2ApiClient {
         throw new TypeError("invalid replay index response");
       }
     }, { method: "POST", ...(signal ? { signal } : {}) });
+  }
+
+  async portfolioEquityRun(runId: string, signal?: AbortSignal) {
+    const { parsePortfolioCurve } = await import("./portfolioCurve.js");
+    return this.request(`/runs/${safeSegment(runId, "run id")}/portfolio-equity`, (value) => {
+      const result = parsePortfolioCurve(value);
+      if (result.run_id !== runId) throw new TypeError("portfolio run changed");
+      return result;
+    },
+      { ...(signal ? { signal } : {}) });
+  }
+
+  portfolioExportUrl(runId: string): string {
+    return `${this.basePath}/runs/${safeSegment(runId, "run id")}/portfolio-equity/export`;
   }
 
   getRun(runId: string, signal?: AbortSignal): Promise<TrainingRunCardResponse> {

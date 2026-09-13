@@ -1791,6 +1791,10 @@ class ReplaySessionActor:
         }
 
     async def _handle_command_request(self, request: _CommandRequest) -> None:
+        if getattr(request.group, "phases", None):
+            from .multi_actor_batch import handle_batch
+            await handle_batch(self, request)
+            return
         command = request.command
         rollback: _ActorRollback | None = None
         try:
@@ -1833,6 +1837,13 @@ class ReplaySessionActor:
                     if terminal_actor_error:
                         self._state = SessionState.ERROR
                         self._pause_clock()
+                if request.group is not None:
+                    # A rejected group candidate aborts the complete group.
+                    # It must not persist an independent rejection or turn an
+                    # optimistic controller/version conflict into a disk error.
+                    if not request.future.done():
+                        request.future.set_exception(exc)
+                    return
                 if capacity_reserved:
                     self._command_log_offset += 1
                     try:
@@ -1903,6 +1914,10 @@ class ReplaySessionActor:
             except Exception as exc:
                 assert rollback is not None
                 self._restore_rollback(rollback, force_paused=True)
+                if request.group is not None and isinstance(exc, ReplayDomainError):
+                    if not request.future.done():
+                        request.future.set_exception(exc)
+                    return
                 degraded = self._enter_persistence_degraded(exc)
                 if not request.future.done():
                     request.future.set_exception(degraded)
@@ -2198,7 +2213,18 @@ class ReplaySessionActor:
                 "event_chain_hash": self._event_chain_hash,
             }]
             self._metrics["indexed_skipped_events"] = int(self._metrics.get("indexed_skipped_events", 0)) + end-start
-            self._emit_final_state_projection("indexed_interval_complete", mandatory=True)
+            if command_type is InternalCommandType.MULTI_SHARED_INDEXED_INTERVAL and not self._subscribers:
+                # Nobody consumes this actor's chart tail. Keep a sequenced
+                # resync marker instead of encoding invisible Decimal columns.
+                # A later subscriber must load the complete current snapshot;
+                # financial events and review/checkpoint history stay intact.
+                self._status_reason = "indexed_interval_complete"
+                self._emit(ReplayEventType.RESYNC_REQUIRED,
+                           {"reset": True, "reason": "unobserved_indexed_interval"}, mandatory=True)
+                self._final_state_anchor_source_sequence = None
+                self._final_state_anchor_bar_open_ms = None
+            else:
+                self._emit_final_state_projection("indexed_interval_complete", mandatory=True)
             return self._command_result(command.command_id, {
                 "consumed": end-start, "target_reached": True,
                 "target_virtual_time_ms": target, "snapshot_published": True,

@@ -1,6 +1,14 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ru = {
+  "replay.portfolio.title": "Стоимость портфеля",
+  "replay.portfolio.load": "Загрузить / обновить кривую",
+  "replay.portfolio.hint": "Показаны значения на конец часа; просадка рассчитана по всем ценам. Обновляйте после продвижения. Только записанные интервалы.",
+  "replay.portfolio.drawdown": "Максимальная просадка интервала",
+  "replay.portfolio.empty": "Интервалы портфеля ещё не записаны",
+  "replay.portfolio.export": "Экспорт всех записанных интервалов портфеля",
+  "replay.portfolio.coverage": "Охват: {hours} ч · {count} точек",
+
   "status.klineScope": "Свечи",
   "status.klineScopeDetail": "Только подключение свечей активного графика. Статус стакана и сделок указан на соответствующих панелях.",
   "chartTester.focusMode": "Режим исследования",

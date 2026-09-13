@@ -1,8 +1,10 @@
 """Immutable market-only integer prices; never caches future account states."""
 
 from bisect import bisect_right
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal, localcontext
+
+import numpy as np
 
 from .multi_interval import ordered_equity_summary
 
@@ -15,6 +17,7 @@ class PortfolioPrices:
     packed: tuple | None
     exponent: int
     largest: int
+    market_arrays: tuple | None = field(default=None, compare=False, repr=False)
 
     @classmethod
     def build(cls, events):
@@ -35,8 +38,92 @@ class PortfolioPrices:
                 packed = tuple(
                     (e[0], ordinals[e[2]], int(e[4].scaleb(-exponent))) for e in events
                 )
+        arrays = None
+        if packed:
+            ordinals_array = np.fromiter((p[1] for p in packed), dtype=np.int64)
+            prices_array = np.fromiter((p[2] for p in packed), dtype=np.int64)
+            changes = prices_array.copy()
+            offsets = tuple(
+                np.flatnonzero(ordinals_array == i) for i in range(len(tracks))
+            )
+            for indices in offsets:
+                changes[indices[1:]] -= prices_array[indices[:-1]]
+            cohorts = np.fromiter(
+                (
+                    i
+                    for i, p in enumerate(packed)
+                    if i + 1 == len(packed) or p[0] != packed[i + 1][0]
+                ),
+                dtype=np.int64,
+            )
+            for array in (ordinals_array, prices_array, changes, cohorts, *offsets):
+                array.flags.writeable = False
+            arrays = (
+                ordinals_array,
+                prices_array,
+                changes,
+                cohorts,
+                offsets,
+                max(abs(p[2]) for p in packed),
+            )
         return cls(
-            events, tuple(e[0] for e in events), tracks, packed, exponent, largest
+            events,
+            tuple(e[0] for e in events),
+            tracks,
+            packed,
+            exponent,
+            largest,
+            arrays,
+        )
+
+    def _batch_summary(
+        self, a, b, initial, weights, previous, multiplier, exponent, delta
+    ):
+        """Value only the requested range; shared arrays contain market data only."""
+        if self.market_arrays is None or b - a < 256:
+            return None
+        ordinals, prices, changes, cohorts, offsets, largest = self.market_arrays
+        scaled_weights = [w * multiplier for w in weights]
+        # Bound every partial cohort, cumulative delta and drawdown with Python
+        # integers before using int64. Large bases retain arbitrary-size integers.
+        limit = (1 << 63) - 1
+        bound = abs(initial) + sum(
+            abs(w) * (largest * multiplier + abs(p))
+            for w, p in zip(weights, previous, strict=True)
+        )
+        if bound > limit // 2 or any(abs(w) > limit for w in scaled_weights):
+            return None
+        moves = changes[a:b] * np.asarray(scaled_weights, dtype=np.int64)[ordinals[a:b]]
+        for track, indices in enumerate(offsets):
+            at = int(indices.searchsorted(a))
+            if at < len(indices) and int(indices[at]) < b:
+                i = int(indices[at])
+                moves[i - a] = weights[track] * (
+                    int(prices[i]) * multiplier - previous[track]
+                )
+        values = moves.cumsum()
+        values += initial
+        ends = cohorts[cohorts.searchsorted(a) : cohorts.searchsorted(b)]
+        values = values[ends - a]
+        peaks = np.maximum.accumulate(np.maximum(values, initial))
+        minimum = int(values.argmin())
+        trough = min(initial, int(values[minimum]))
+
+        def convert(value):
+            return str(Decimal(int(value)).scaleb(exponent))
+
+        return dict(
+            schema="portfolio-interval-summary.v1",
+            first=convert(initial),
+            last=convert(values[-1]),
+            peak=convert(peaks[-1]),
+            trough=convert(trough),
+            max_drawdown=convert((peaks - values).max()),
+            trough_time_ms=(
+                self.times[int(ends[minimum])] - delta if trough < initial else None
+            ),
+            events=b - a,
+            integer_path=True,
         )
 
     @classmethod
@@ -108,6 +195,18 @@ class PortfolioPrices:
                 int(initial_prices[t].scaleb(-price_exponent)) for t in self.tracks
             ]
             price_multiplier = 10 ** (self.exponent - price_exponent)
+            batch = self._batch_summary(
+                a,
+                b,
+                current,
+                integer_weights,
+                previous,
+                price_multiplier,
+                value_exponent,
+                delta,
+            )
+            if batch is not None:
+                return batch
             first = peak = trough = current
             drawdown, trough_time = 0, None
             packed = self.packed

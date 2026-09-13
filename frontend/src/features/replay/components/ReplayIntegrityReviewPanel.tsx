@@ -8,6 +8,7 @@ import { replayOwnsController } from "../replayUiModel.js";
 import type { ReplayRuntime } from "../useReplayRuntime.js";
 import type { ReplayIntegrityRuntime } from "../useReplayIntegrityRuntime.js";
 import ReplayLiquidationTimeline from "./ReplayLiquidationTimeline.js";
+import ReplayPortfolioCurve from "./ReplayPortfolioCurve.js";
 
 export interface ReplayIntegrityReviewPanelProps {
   readonly runtime: ReplayRuntime;
@@ -167,6 +168,7 @@ export default function ReplayIntegrityReviewPanel({
                 <polyline points={equityPoints} fill="none" vectorEffect="non-scaling-stroke" />
               </svg>
               <p>{t("replay.integrity.equityHint")}</p>
+              <ReplayPortfolioCurve runId={integrityRuntime.runId} />
             </section>
 
             <section aria-labelledby="replay-policy-title">

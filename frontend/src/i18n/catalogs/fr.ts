@@ -1,6 +1,14 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const fr = {
+  "replay.portfolio.title": "Valeur du portefeuille",
+  "replay.portfolio.load": "Charger / actualiser la courbe",
+  "replay.portfolio.hint": "Échantillons de fin d’heure ; le drawdown utilise tous les prix. Actualisez après chaque avancée. Intervalles enregistrés uniquement.",
+  "replay.portfolio.drawdown": "Drawdown maximal de l’intervalle",
+  "replay.portfolio.empty": "Aucun intervalle de portefeuille enregistré",
+  "replay.portfolio.export": "Exporter tous les intervalles du portefeuille enregistrés",
+  "replay.portfolio.coverage": "Couverture : {hours} heures · {count} échantillons",
+
   "status.klineScope": "Bougies",
   "status.klineScopeDetail": "Connexion des bougies du graphique actif uniquement. Consultez les panneaux du carnet et des transactions pour leur état.",
   "chartTester.focusMode": "Mode recherche",

@@ -11874,6 +11874,11 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 .replay-integrity-grid > section, .replay-integrity-audit, .replay-integrity-report, .replay-review, .replay-run-rules, .replay-review-budget { padding: 10px; border: 1px solid var(--border-color); border-radius: 7px; background: var(--bg-secondary); }
 .replay-equity-chart { width: 100%; height: 112px; border-bottom: 1px solid #334155; }
 .replay-equity-chart polyline { stroke: #22c55e; stroke-width: 2; }
+.replay-portfolio-curve { margin-top: 12px; }
+.replay-portfolio-curve > summary { cursor: pointer; font-weight: 600; }
+.replay-portfolio-curve > p { margin: 8px 0; line-height: 1.5; }
+.replay-portfolio-curve > svg { display: block; }
+.replay-portfolio-curve > a { display: inline-flex; margin-top: 8px; }
 .replay-capital-controls { display: grid; grid-template-columns: 120px minmax(180px, 1fr) auto; gap: 8px; align-items: end; }
 .replay-capital-controls label { display: grid; gap: 4px; }
 .replay-capital-controls input, .replay-review select, .replay-review input, .replay-run-rules input, .replay-run-rules select { min-width: 0; padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); background: var(--bg-primary); }

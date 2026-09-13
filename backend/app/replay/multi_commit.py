@@ -49,7 +49,7 @@ class MutationGroup:
         await asyncio.shield(self.committed)
 
 
-async def commit_actor_commands(service, commands, *, before, after):
+async def commit_actor_commands(service, commands, *, before, after, prepare_candidates=None):
     """No actor publishes or acknowledges until all durable candidates commit.
 
     Cancellation drains the transaction and actor publications first. A pre-commit
@@ -115,6 +115,8 @@ async def commit_actor_commands(service, commands, *, before, after):
                     RuntimeError("actor completed without a group candidate"),
                 )
             record_timing("multi_candidates", candidates_started)
+            if prepare_candidates is not None:
+                await timed_to_thread("multi_encode_records", prepare_candidates, group.mutations)
             rows = []
             for session, _command in commands:
                 m = group.mutations[session]

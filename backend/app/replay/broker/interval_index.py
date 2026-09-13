@@ -27,6 +27,10 @@ class PriceRangeIndex:
         for i in range(size - 1, 0, -1):
             self.low[i] = min(self.low[2 * i], self.low[2 * i + 1])
             self.high[i] = max(self.high[2 * i], self.high[2 * i + 1])
+        # No query mutates the tree. Tuples of Decimal scalars can leave the
+        # cyclic-GC graph, unlike million-entry mutable lists.
+        self.low = tuple(self.low)
+        self.high = tuple(self.high)
 
     def _validate_span(self, start: int, end: int) -> None:
         if not 0 <= start <= end <= self.length:

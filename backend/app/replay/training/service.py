@@ -4864,7 +4864,9 @@ class TrainingRunService:
                 # The first group created its durable parent intent in the
                 # same transaction; finish it with the external response.
                 used_intervals = getattr(self.store, '_multi_interval_commands', set())
-                if key in used_intervals:
+                if key in getattr(self.store, "_multi_completed_results", {}):
+                    pass  # Result and terminal intent were committed with the actors.
+                elif key in used_intervals:
                     await self.store.finish_advance_intent(run_id=normalized_run,
                         command_id=command.command_id, result=result,
                         cancelled=bool(result.get('data',{}).get('cancelled',False)))
@@ -4873,6 +4875,7 @@ class TrainingRunService:
                         command_id=command.command_id, command=command_payload, result=result)
             finally:
                 getattr(self.store, '_multi_interval_commands', set()).discard(key)
+                getattr(self.store, "_multi_completed_results", {}).pop(key, None)
             return result
         v1_type, v1_payload, plan = await self._translate_control(
             command=command,
@@ -7860,6 +7863,19 @@ class TrainingRunService:
                     "stable_order_truncated": False,
                 }
                 self._advance_jobs[advance_key] = advance_job
+            terminal_result_factory = None
+            if (advance_job is not None and source_goal is None
+                    and self.replay_service.settings.replay_multi_bar_interval_enabled
+                    and not self._requires_barrier_account_audit(binding)):
+                prepared_viewer = (await self.store.get_viewer_state(command.run_id)).to_dict()
+                def terminal_result_factory(final, events, progress):
+                    return self._multi_control_result(
+                        command=command, selected_session_id=selected_session_id, final=final,
+                        viewer=prepared_viewer, fast_forward_plan=fast_forward_plan,
+                        control_plan=control_plan, advance_job=progress, source_goal=None,
+                        ordered=ordered, total_events=events, event_stop=event_stop,
+                        stable_order_state=stable_order_state, executed_multi=True,
+                    )
             try:
                 total_events = list(
                     await self._advance_full_tracks_to(
@@ -7876,6 +7892,7 @@ class TrainingRunService:
                         source_goal=source_goal,
                         stable_order_state=stable_order_state,
                         event_stop=event_stop,
+                        terminal_result_factory=terminal_result_factory,
                     )
                 )
             except BaseException:
@@ -7893,13 +7910,30 @@ class TrainingRunService:
                     advance_key,
                     None,
                 )
+        completed = getattr(self.store, "_multi_completed_results", {}).get((command.run_id, command.command_id))
+        if completed is not None:
+            if advance_job is not None:
+                advance_job["plan"] = dict(completed["data"]["plan"])
+                advance_job["status"] = completed["data"]["progress"]["status"]
+            return completed
         if self._requires_barrier_account_audit(binding):
             await self.audit_account(command.run_id)
         selected = await self.replay_service.get_session(selected_session_id)
         final = self._snapshot(selected)
         viewer = await self.store.get_viewer_state(command.run_id)
+        return self._multi_control_result(
+            command=command, selected_session_id=selected_session_id, final=final,
+            viewer=viewer.to_dict(), fast_forward_plan=fast_forward_plan, control_plan=control_plan,
+            advance_job=advance_job, source_goal=source_goal, ordered=ordered,
+            total_events=total_events, event_stop=event_stop, stable_order_state=stable_order_state,
+            executed_multi=(command.run_id, command.command_id) in getattr(self.store, "_multi_interval_commands", set()),
+        )
+
+    def _multi_control_result(self, *, command, selected_session_id, final, viewer,
+                              fast_forward_plan, control_plan, advance_job, source_goal,
+                              ordered, total_events, event_stop, stable_order_state, executed_multi):
         if fast_forward_plan is not None:
-            if (command.run_id, command.command_id) in getattr(self.store, '_multi_interval_commands', set()):
+            if executed_multi:
                 fast_forward_plan = {**dict(fast_forward_plan),
                     'executed_path':'MULTI_BAR_INTERVAL_V1',
                     'financial_reference_equivalence':True,
@@ -7925,7 +7959,7 @@ class TrainingRunService:
             command=command,
             session_id=selected_session_id,
             snapshot=final,
-            viewer=viewer.to_dict(),
+            viewer=viewer,
             data={
                 "consumed": (
                     final["cursor"]["source_sequence"]
@@ -8610,6 +8644,7 @@ class TrainingRunService:
         source_goal: _OrderedSourceGoal | None = None,
         stable_order_state: dict[str, bool] | None = None,
         event_stop: dict[str, object] | None = None,
+        terminal_result_factory=None,
     ) -> tuple[StableMarketEvent, ...]:
         if source_goal is not None and len(tracks) != 1:
             raise TrainingRunError(
@@ -8736,11 +8771,31 @@ class TrainingRunService:
 
             if allow_final_state_batch and source_goal is None and not pending_global_events:
                 from .multi_interval_advance import try_advance
+                completion = None
+                if terminal_result_factory is not None and job is not None:
+                    prior_events, prior_job = tuple(all_events), dict(job)
+                    def completion(group):
+                        events = [*prior_events, *group["stable"]]
+                        progress = dict(prior_job)
+                        if len(events) > STABLE_ORDER_RESPONSE_EVENTS:
+                            events = events[-STABLE_ORDER_RESPONSE_EVENTS:]
+                            progress["stable_order_truncated"] = True
+                        progress.update(
+                            consumed=progress["consumed"] + len(group["stable"]),
+                            chunks=progress["chunks"] + 1,
+                            current_virtual_time_ms=group["target"], cancelable=False,
+                            status="CANCELLED" if cancel_event is not None and cancel_event.is_set() else "COMPLETED",
+                        )
+                        state = next(p["state"] for p in group["tracks"]
+                                     if p["session_id"] == group["selected_session_id"])
+                        final = {**state, "sequence": state["event_sequence"]}
+                        return terminal_result_factory(final, events, progress)
                 recorded = await try_advance(
                     self, command=command, binding=binding, tracks=tracks,
                     snapshots=snapshots, target=target_virtual_time_ms,
                     runtime_snapshot=hedge_runtime_snapshot,
                     cancel_event=cancel_event,
+                    completion=completion,
                 )
                 completed_multi_interval = recorded is not None
                 if recorded is None:
@@ -8774,6 +8829,12 @@ class TrainingRunService:
                         # market/public-input events through this target. Do
                         # not repeat eight full snapshots and source/account
                         # preflights merely to rediscover that same boundary.
+                        durable_result = getattr(self.store, "_multi_completed_results", {}).get((command.run_id, command.command_id))
+                        if durable_result is not None:
+                            if job is not None:
+                                job["status"] = durable_result["data"]["progress"]["status"]
+                                job["cancelable"] = False
+                            return stable_market_event_order(all_events)
                         if cancel_event is not None and cancel_event.is_set():
                             return await cancel_at_committed_barrier()
                         if job is not None:
@@ -9191,9 +9252,32 @@ class TrainingRunService:
             )
             failed_track: Mapping[str, object] = tracks[0]
             market_cohort_incomplete = False
+            atomic_market_wave = False
 
             async def advance_market_barrier() -> None:
-                nonlocal failed_track, market_cohort_incomplete
+                nonlocal failed_track, market_cohort_incomplete, atomic_market_wave, wave_checkpointed
+                if (
+                    allow_final_state_batch and source_goal is None
+                    and self.replay_service.settings.replay_multi_bar_interval_enabled
+                    and hedge_mode and binding.get("source_kind") == "BAR"
+                    and not book_required and 2 <= len(tracks) <= 8
+                    and binding.get("account_data_mode") != AccountDataMode.HISTORICAL_EXACT.value
+                    and isinstance(hedge_runtime_snapshot, IndexedHedgeSnapshot)
+                    and wave_time == target_virtual_time_ms and not wave_events
+                    and all(e.event_phase == 30 for e in pending_global_events)
+                    and not account_events and not hedge_events
+                ):
+                    from .terminal_cohort import try_commit
+                    terminal = await try_commit(
+                        self, command=command, binding=binding, snapshots=snapshots,
+                        planned_times=planned_event_times, target=wave_time,
+                        pending_events=tuple(pending_global_events),
+                    )
+                    if terminal is not None:
+                        events, wave_checkpointed = terminal
+                        wave_events.extend(events)
+                        atomic_market_wave = True
+                        return
                 for barrier_track, before in snapshots:
                     failed_track = barrier_track
                     before_cursor = before.get("cursor")
@@ -9350,7 +9434,7 @@ class TrainingRunService:
                 if market_barrier or (stop_at_input and not market_cohort_incomplete):
                     await advance_market_barrier()
                     market_barrier = True
-                if not market_cohort_incomplete:
+                if not market_cohort_incomplete and not atomic_market_wave:
                     supports_combined_hedge_wave = (
                         hedge_mode
                         and str(binding.get("source_kind")) == "BAR"
@@ -9676,11 +9760,17 @@ class TrainingRunService:
         )
         return max(1, limit), require_empty_account
 
-    async def prepare_indexed_run(self, run_id):
+    async def prepare_indexed_run(self, run_id, *, client_instance_id=None):
         normalized = self._identifier(run_id, field_name="run_id")
+        client = None if client_instance_id is None else self._identifier(client_instance_id, field_name="client_instance_id")
         actor = self._run_actors.setdefault(normalized, TrainingRunActor(normalized))
         async with actor.serialized():
-            return await self._prepare_indexed_run_serialized(normalized)
+            result = await self._prepare_indexed_run_serialized(normalized)
+            if (client is not None and result["status"] == "READY"
+                    and self.replay_service.settings.replay_multi_bar_interval_enabled):
+                from .controller_preparation import prepare_controllers
+                result["controller_ready"] = await prepare_controllers(self, normalized, client)
+            return result
 
     async def _prepare_indexed_run_serialized(self, run_id):
         run_id = self._identifier(run_id, field_name="run_id")
@@ -9716,12 +9806,27 @@ class TrainingRunService:
                 )
                 if not prepared or not getattr(prepared["index"], "shared", False):
                     return result
+                await asyncio.to_thread(prepared["index"].prepare_transport_tail, 16)
                 count += prepared["prepared_events"]
             inputs = await self.hedge_inputs.runtime_snapshot(run_id)
             if isinstance(inputs, IndexedHedgeSnapshot):
                 for lane in inputs.lanes:
                     _ = lane.price_index, lane.barrier_indices
                 await asyncio.to_thread(lambda: inputs.portfolio_prices)
+                from .public_price_blocks import prepare_price_blocks
+                public_rows = await self.store.base_store.run_extension_read(
+                    lambda connection: connection.execute(
+                        "SELECT b.track_id,b.public_checksum_sha256,a.local_path FROM replay_hedge_track_public_binding b JOIN replay_hedge_public_archive a ON a.archive_id=b.public_archive_id WHERE b.run_id=?", (run_id,)
+                    ).fetchall())
+                public_lanes = {lane.track_id: lane for lane in inputs.lanes if lane.source_kind == "PUBLIC"}
+                def prepare_blocks():
+                    for row in public_rows:
+                        if row["track_id"] in public_lanes:
+                            path = (self.hedge_inputs.root / row["local_path"]).resolve()
+                            if not path.is_relative_to(self.hedge_inputs.root):
+                                raise ValueError("public price input escaped its owner")
+                            prepare_price_blocks(path, row["public_checksum_sha256"], public_lanes[row["track_id"]].events)
+                await asyncio.to_thread(prepare_blocks)
             fingerprint = await self.replay_service.store.run_extension_read(
                 lambda connection:self.store._hedge_risk_fingerprint(connection,run_id=run_id))
             if self.store._hedge_risk_fingerprints.get(run_id) != fingerprint:
@@ -10632,6 +10737,7 @@ class TrainingRunService:
                 await self.replay_service.heartbeat(
                     session_id,
                     client_instance_id,
+                    _renew_group=False,
                 )
                 return snapshot
             except ReplayDomainError as exc:

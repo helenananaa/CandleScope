@@ -1,6 +1,14 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
+  "replay.portfolio.title": "Portfolio equity",
+  "replay.portfolio.load": "Load / refresh portfolio curve",
+  "replay.portfolio.hint": "Hour-end samples; drawdown uses the full price path. Refresh after advancing. Covers recorded portfolio intervals only.",
+  "replay.portfolio.drawdown": "Interval maximum drawdown",
+  "replay.portfolio.empty": "No portfolio intervals recorded yet",
+  "replay.portfolio.export": "Export all recorded portfolio intervals",
+  "replay.portfolio.coverage": "Coverage: {hours} hours · {count} samples",
+
   "status.klineScope": "Candles",
   "status.klineScopeDetail": "Connection for the active chart candles only. Check the order book and trade panels for their own status.",
   "chartTester.focusMode": "Focus on research",

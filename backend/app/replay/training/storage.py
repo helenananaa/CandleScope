@@ -32,6 +32,7 @@ from app.replay.storage.sqlite_store import ReplaySQLiteStore
 from app.data_engine.interval_policy import parse_interval_ms
 
 from .errors import TrainingRunError
+from .phase_projection import PhaseSummary, load_track_rules
 from .account_history import (
     ACCOUNT_AUDIT_SCHEMA_VERSION,
     AccountHistoryEvent,
@@ -2324,21 +2325,23 @@ class TrainingRunStore:
             """,
             (run_id,),
         ).fetchall()
+        projections = {
+            row["track_id"]: row
+            for row in connection.execute(
+                """
+                SELECT projection.*
+                FROM replay_hedge_track_public_binding AS binding
+                JOIN replay_hedge_track_public_projection AS projection
+                  ON projection.run_id=binding.run_id AND projection.track_id=binding.track_id
+                WHERE binding.run_id=? AND binding.status='ACTIVE'
+                """,
+                (run_id,),
+            ).fetchall()
+        }
+        rules = load_track_rules(connection, run_id, effective=True)
         for track in tracks:
             try:
-                projection = connection.execute(
-                    """
-                    SELECT projection.*
-                    FROM replay_hedge_track_public_binding AS track_binding
-                    JOIN replay_hedge_track_public_projection AS projection
-                      ON projection.run_id = track_binding.run_id
-                     AND projection.track_id = track_binding.track_id
-                    WHERE track_binding.run_id = ?
-                      AND track_binding.track_id = ?
-                      AND track_binding.status = 'ACTIVE'
-                    """,
-                    (run_id, track["track_id"]),
-                ).fetchone()
+                projection = projections.get(track["track_id"])
                 if projection is None:
                     raise ValueError("track public projection is missing")
                 state = json.loads(str(projection["state_json"]))
@@ -2384,15 +2387,7 @@ class TrainingRunStore:
                 or not isinstance(orders, list)
             ):
                 raise TypeError("HEDGE track projection is invalid")
-            rule_row = connection.execute(
-                """
-                SELECT revision, rule_json FROM replay_training_instrument_rule
-                WHERE run_id = ? AND track_id = ?
-                  AND effective_virtual_time_ms <= COALESCE(?, 0)
-                ORDER BY effective_virtual_time_ms DESC, revision DESC LIMIT 1
-                """,
-                (run_id, track["track_id"], track["virtual_time_ms"]),
-            ).fetchone()
+            rule_row = rules.get(track["track_id"])
             if rule_row is None:
                 raise TypeError("HEDGE pinned instrument rule is missing")
             rule = _stored_instrument_rule(str(rule_row["rule_json"]))
@@ -13618,59 +13613,60 @@ class TrainingRunStore:
         result: Mapping[str, object],
         cancelled: bool,
     ) -> None:
+        await self.base_store.run_extension_write(lambda connection:
+            self._finish_advance_intent_in_transaction(connection, run_id=run_id,
+                command_id=command_id, result=result, cancelled=cancelled))
+
+    def _finish_advance_intent_in_transaction(self, connection, *, run_id, command_id, result, cancelled):
         result_json = canonical_json(result)
         now_ms = self.base_store._validated_now_ms()
         status = "CANCELLED" if cancelled else "COMPLETED"
-
-        def write(connection: sqlite3.Connection) -> None:
-            row = connection.execute(
-                """
-                SELECT status, result_json, command_json
-                FROM replay_training_advance_intent
-                WHERE run_id = ? AND command_id = ?
-                """,
-                (run_id, command_id),
-            ).fetchone()
-            if row is None:
+        row = connection.execute(
+            """
+            SELECT status, result_json, command_json
+            FROM replay_training_advance_intent
+            WHERE run_id = ? AND command_id = ?
+            """,
+            (run_id, command_id),
+        ).fetchone()
+        if row is None:
+            raise TrainingRunError(
+                "ADVANCE_INTENT_NOT_FOUND",
+                "durable advance intent does not exist",
+                status_code=503,
+            )
+        # The terminal intent and its idempotent response become durable
+        # together; a conflict rolls back both writes.
+        if str(row["status"]) == "FAILED":
+            raise TrainingRunError(
+                "ADVANCE_INTENT_FAILED",
+                "a failed advance intent cannot publish a terminal result",
+                status_code=409,
+            )
+        self._save_command_result_in_transaction(
+            connection, run_id=run_id, command_id=command_id,
+            command_json=str(row["command_json"]), result_json=result_json,
+            now_ms=now_ms,
+        )
+        if str(row["status"]) in {"COMPLETED", "CANCELLED"}:
+            if (
+                str(row["status"]) != status
+                or str(row["result_json"]) != result_json
+            ):
                 raise TrainingRunError(
-                    "ADVANCE_INTENT_NOT_FOUND",
-                    "durable advance intent does not exist",
-                    status_code=503,
-                )
-            # The terminal intent and its idempotent response become durable
-            # together; a conflict rolls back both writes.
-            if str(row["status"]) == "FAILED":
-                raise TrainingRunError(
-                    "ADVANCE_INTENT_FAILED",
-                    "a failed advance intent cannot publish a terminal result",
+                    "COMMAND_ID_REUSED",
+                    "durable advance result conflicts with its prior result",
                     status_code=409,
                 )
-            self._save_command_result_in_transaction(
-                connection, run_id=run_id, command_id=command_id,
-                command_json=str(row["command_json"]), result_json=result_json,
-                now_ms=now_ms,
-            )
-            if str(row["status"]) in {"COMPLETED", "CANCELLED"}:
-                if (
-                    str(row["status"]) != status
-                    or str(row["result_json"]) != result_json
-                ):
-                    raise TrainingRunError(
-                        "COMMAND_ID_REUSED",
-                        "durable advance result conflicts with its prior result",
-                        status_code=409,
-                    )
-                return
-            connection.execute(
-                """
-                UPDATE replay_training_advance_intent
-                SET status = ?, result_json = ?, updated_at_ms = ?
-                WHERE run_id = ? AND command_id = ? AND status = 'RUNNING'
-                """,
-                (status, result_json, now_ms, run_id, command_id),
-            )
-
-        await self.base_store.run_extension_write(write)
+            return
+        connection.execute(
+            """
+            UPDATE replay_training_advance_intent
+            SET status = ?, result_json = ?, updated_at_ms = ?
+            WHERE run_id = ? AND command_id = ? AND status = 'RUNNING'
+            """,
+            (status, result_json, now_ms, run_id, command_id),
+        )
 
     @staticmethod
     def _advance_intent_from_row(row: sqlite3.Row) -> dict[str, object]:
@@ -23028,6 +23024,7 @@ class TrainingRunStore:
             ]
         ] = []
         total_maintenance = Decimal(0)
+        rules = load_track_rules(connection, run_id, effective=False)
         for track in tracks:
             track_account = json.loads(str(track["account_json"]))
             position = json.loads(str(track["position_json"]))
@@ -23053,13 +23050,7 @@ class TrainingRunStore:
                 )
             if not legs:
                 continue
-            rule_row = connection.execute(
-                """
-                SELECT revision, rule_json FROM replay_training_instrument_rule
-                WHERE run_id = ? AND track_id = ? ORDER BY revision DESC LIMIT 1
-                """,
-                (run_id, track["track_id"]),
-            ).fetchone()
+            rule_row = rules.get(track["track_id"])
             if rule_row is None:
                 raise TypeError("liquidation instrument rule is missing")
             rule = _stored_instrument_rule(str(rule_row["rule_json"]))
@@ -25378,12 +25369,17 @@ class TrainingRunStore:
         now_ms: int,
         recorded_history: bool = False,
         equity_samples: dict | None = None,
+        phase_summary: PhaseSummary | None = None,
+        revealed_price_bounds: tuple[Decimal, Decimal] | None = None,
     ) -> None:
         cursor = state.get("cursor")
         if not isinstance(cursor, Mapping):
             return
-        track = connection.execute(
-            """
+        track = (
+            phase_summary.tracks[session_id]
+            if phase_summary is not None
+            else connection.execute(
+                """
             SELECT t.*, viewer.selected_track_id, r.time_disclosure_policy,
                    r.position_mode,
                    COALESCE(integrity.revealed, 0) AS revealed
@@ -25393,17 +25389,22 @@ class TrainingRunStore:
             LEFT JOIN replay_training_integrity AS integrity USING(run_id)
             WHERE t.adapter_session_id = ?
             """,
-            (session_id,),
-        ).fetchone()
+                (session_id,),
+            ).fetchone()
+        )
         if track is None:
             return
-        history_guard = connection.execute(
-            """
+        history_guard = (
+            phase_summary.account_history
+            if phase_summary is not None
+            else connection.execute(
+                """
             SELECT account_data_mode, status, degraded_reason
             FROM replay_training_account_history WHERE run_id = ?
             """,
-            (track["run_id"],),
-        ).fetchone()
+                (track["run_id"],),
+            ).fetchone()
+        )
         if (
             history_guard is not None
             and history_guard["account_data_mode"] == "HISTORICAL_EXACT"
@@ -25575,13 +25576,17 @@ class TrainingRunStore:
         track_id = str(track["track_id"])
         revealed_event_low: Decimal | None = None
         revealed_event_high: Decimal | None = None
-        latest_mutation = connection.execute(
-            """
+        latest_mutation = (
+            None
+            if phase_summary is not None
+            else connection.execute(
+                """
             SELECT kind, source_sequence, payload_json FROM replay_mutation_log
             WHERE session_id = ? ORDER BY mutation_id DESC LIMIT 1
             """,
-            (session_id,),
-        ).fetchone()
+                (session_id,),
+            ).fetchone()
+        )
         previous_component_hash = (
             previous_component_state.get("state_hash")
             if previous_component_state is not None
@@ -25651,7 +25656,9 @@ class TrainingRunStore:
                     or revealed_event_high < revealed_event_low
                 ):
                     raise TypeError("revealed source event price range is invalid")
-        if component_projection_changed:
+        if revealed_price_bounds is not None:
+            revealed_event_low, revealed_event_high = revealed_price_bounds
+        if component_projection_changed or revealed_price_bounds is not None:
             self._sync_trade_results_projection(
                 connection,
                 run_id=run_id,
@@ -25661,13 +25668,17 @@ class TrainingRunStore:
                 revealed_event_high=revealed_event_high,
                 now_ms=now_ms,
             )
-        account_history = connection.execute(
-            """
+        account_history = (
+            phase_summary.account_history
+            if phase_summary is not None
+            else connection.execute(
+                """
             SELECT account_data_mode, status
             FROM replay_training_account_history WHERE run_id = ?
             """,
-            (run_id,),
-        ).fetchone()
+                (run_id,),
+            ).fetchone()
+        )
         exact_account = (
             account_history is not None
             and account_history["account_data_mode"] == "HISTORICAL_EXACT"
@@ -25679,7 +25690,11 @@ class TrainingRunStore:
                 track_id=track_id,
                 now_ms=now_ms,
             )
-        mutation_command_type: object | None = None
+        mutation_command_type: object | None = (
+            InternalCommandType.MULTI_SHARED_INDEXED_INTERVAL.value
+            if phase_summary is not None
+            else None
+        )
         if latest_mutation is not None and latest_mutation["kind"] == "command":
             try:
                 mutation_payload = json.loads(str(latest_mutation["payload_json"]))
@@ -25726,13 +25741,17 @@ class TrainingRunStore:
                     run_id=run_id,
                     now_ms=now_ms,
                 )
-        account_model = connection.execute(
-            """
+        account_model = (
+            None
+            if phase_summary is not None
+            else connection.execute(
+                """
             SELECT account_model FROM replay_training_contract_account
             WHERE run_id = ?
             """,
-            (run_id,),
-        ).fetchone()
+                (run_id,),
+            ).fetchone()
+        )
         if (
             account_model is not None
             and str(account_model["account_model"]) == CONTRACT_ACCOUNT_MODEL
@@ -25743,6 +25762,9 @@ class TrainingRunStore:
                 now_ms=now_ms,
                 summary_revision=int(state["revision"]),
             )
+
+        if phase_summary is not None:
+            phase_summary.last_revision = int(state["revision"])
 
         if selected:
             self._upsert_equity_samples(

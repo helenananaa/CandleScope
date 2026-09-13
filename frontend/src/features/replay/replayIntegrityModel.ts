@@ -1393,7 +1393,7 @@ function graphNumber(value: number): string {
 }
 
 export function buildEquityPolyline(
-  samples: readonly ReplayEquitySample[],
+  samples: readonly Pick<ReplayEquitySample, "equity">[],
   width: number,
   height: number,
 ): string {

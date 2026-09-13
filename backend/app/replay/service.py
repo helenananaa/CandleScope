@@ -303,6 +303,8 @@ class ReplayService:
 
         if self.training is not None:
             await self.training.start()
+        if self.settings.replay_multi_bar_interval_enabled:
+            await self.store.enable_idle_checkpoints()
         records = await self.store.load_recoverable_sessions()
         for index, record in enumerate(records):
             if len(self._sessions) >= self.settings.max_active_sessions:
@@ -2152,9 +2154,30 @@ class ReplayService:
                 actor.request_unsubscribe(subscription.token)
             raise
 
-    async def heartbeat(self, session_id: str, client_instance_id: str) -> None:
+    async def heartbeat(self, session_id: str, client_instance_id: str, *, _renew_group=True) -> None:
         async with self._lease_handle(session_id) as handle:
             await handle.actor.heartbeat(client_instance_id)
+        group = getattr(self.training, "_prepared_controller_groups", {}).get(session_id)
+        if _renew_group and group is not None and group[0] == client_instance_id:
+            for sid in group[1]:
+                if sid == session_id:
+                    continue
+                # Never load or acquire a removed/released/foreign adapter as
+                # a side effect of a websocket heartbeat.
+                async with self._lifecycle_lock:
+                    self._ensure_accepting()
+                    member = self._sessions.get(sid)
+                    if (member is None or member.evicting or sid in self._pending_session_deletions
+                            or member.actor._controller_client_id != client_instance_id):
+                        continue
+                    self._activate_handle_lease_locked(member)
+                try:
+                    await member.actor.heartbeat(client_instance_id)
+                except ReplayDomainError as exc:
+                    if exc.code is not ReplayErrorCode.CONTROLLER_CONFLICT:
+                        raise
+                finally:
+                    self._release_handle_lease(member)
 
     async def release_session_to_hub(self, session_id: str) -> None:
         """Pause, checkpoint and evict one adapter before the Hub becomes visible."""

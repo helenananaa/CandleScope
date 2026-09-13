@@ -6,10 +6,36 @@ from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from functools import cached_property
-from types import MappingProxyType
 from typing import Any, Mapping
 
 from ..broker.interval_index import PriceRangeIndex
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class OwnedMarkPayload(Mapping[str, str]):
+    """Two owned immutable scalars, reusable without a second event graph."""
+
+    mark_price: str
+    index_price: str
+
+    def __post_init__(self):
+        if not isinstance(self.mark_price, str) or not isinstance(
+            self.index_price, str
+        ):
+            raise TypeError("mark payload values must be decimal strings")
+
+    def __getitem__(self, key):
+        if key == "mark_price":
+            return self.mark_price
+        if key == "index_price":
+            return self.index_price
+        raise KeyError(key)
+
+    def __iter__(self):
+        return iter(("mark_price", "index_price"))
+
+    def __len__(self):
+        return 2
 
 
 def event_key(event):
@@ -34,8 +60,13 @@ class InputLane:
 
     @cached_property
     def barrier_indices(self):
-        return tuple(i for i, event in enumerate(self.events)
-                     if self.source_kind != "PUBLIC" or event.event_kind != "MARK_INDEX" or event.event_phase != 30)
+        return tuple(
+            i
+            for i, event in enumerate(self.events)
+            if self.source_kind != "PUBLIC"
+            or event.event_kind != "MARK_INDEX"
+            or event.event_phase != 30
+        )
 
     @cached_property
     def price_index(self) -> PriceRangeIndex:
@@ -104,8 +135,14 @@ class IndexedHedgeSnapshot(tuple):
         # MARK_INDEX payloads are schema-validated scalar objects. Own and
         # freeze them so caller mutation cannot invalidate the price-run index.
         owned_public = tuple(
-            replace(event, payload=MappingProxyType(dict(event.payload)))
+            replace(
+                event,
+                payload=OwnedMarkPayload(
+                    event.payload["mark_price"], event.payload["index_price"]
+                ),
+            )
             if event.event_kind == "MARK_INDEX"
+            and not isinstance(event.payload, OwnedMarkPayload)
             else event
             for event in public
         )
@@ -121,6 +158,7 @@ class IndexedHedgeSnapshot(tuple):
     @cached_property
     def portfolio_prices(self):
         from .portfolio_prices import PortfolioPrices
+
         return PortfolioPrices.from_lanes(self.lanes)
 
     def events_through(self, public, simulation, target, *, exact=False):

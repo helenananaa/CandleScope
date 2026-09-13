@@ -1,6 +1,14 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
+  "replay.portfolio.title": "Patrimônio da carteira",
+  "replay.portfolio.load": "Carregar / atualizar curva",
+  "replay.portfolio.hint": "Amostras no fim de cada hora; o drawdown usa todos os preços. Atualize após avançar. Apenas intervalos registrados.",
+  "replay.portfolio.drawdown": "Drawdown máximo do intervalo",
+  "replay.portfolio.empty": "Nenhum intervalo de carteira registrado",
+  "replay.portfolio.export": "Exportar todos os intervalos de carteira registrados",
+  "replay.portfolio.coverage": "Cobertura: {hours} horas · {count} amostras",
+
   "status.klineScope": "Velas",
   "status.klineScopeDetail": "Apenas a conexão das velas do gráfico ativo. Consulte os painéis do livro de ofertas e das negociações para seus estados.",
   "chartTester.focusMode": "Modo de pesquisa",

@@ -236,6 +236,7 @@ class SharedPreparedInterval(PreparedBarInterval):
         result.start = source.cursor().source_sequence
         result.builder_key = current_key
         result.origin = freeze_builder(broker._bar_builder)
+        result._transport_origins = {}
         result.seed = chain_hash
         result.reference = result.market.reference()
         result.bars = LazySequence(result.market.count, result._bar)
@@ -288,8 +289,17 @@ class SharedPreparedInterval(PreparedBarInterval):
             "ledger_hash": self.valuation["ledger_hash"],
         }
 
+    def prepare_transport_tail(self, tail_limit=16):
+        """Cache only a compact copy of already revealed market bars."""
+        origins = getattr(self, "_transport_origins", None)
+        if origins is None:
+            origins = self._transport_origins = {}
+        if tail_limit not in origins:
+            origins[tail_limit] = self.builder_at(0, tail_limit=tail_limit)
+
     def builder_at(self, end, *, tail_limit=None):
-        builder = freeze_builder(self.origin)
+        origin = getattr(self, "_transport_origins", {}).get(tail_limit, self.origin)
+        builder = freeze_builder(origin)
         retained = builder._max_closed_bars if tail_limit is None else min(builder._max_closed_bars, tail_limit)
         if tail_limit is not None:
             # Persist the explicit transport-tail capacity so v1 restore checks
@@ -324,6 +334,7 @@ class SharedPreparedInterval(PreparedBarInterval):
                     builder._closed_prefix_hash, ordinal, bar)
                 builder._closed_prefix_count = ordinal
             builder._closed_bars = builder._closed_bars[remove:]
+            builder._closed_encoding_cache = {}
         builder.apply_bars_final_state(self.bars[skipped:end])
         return builder
 

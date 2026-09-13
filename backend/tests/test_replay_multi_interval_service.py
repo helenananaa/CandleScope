@@ -702,7 +702,7 @@ async def test_long_warmup_short_multi_interval_checkpoint_recovers(
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("phase", ["after_group", "before_ack"])
+@pytest.mark.parametrize("phase", ["after_group", "before_ack", "batched_before_ack", "terminal_group"])
 async def test_crash_after_group_commit_recovers_before_external_ack(
     tmp_path, monkeypatch, phase
 ):
@@ -725,9 +725,24 @@ from tests.fixtures.replay.shared_market_fakes import install_shared_market
 from app.replay.training.models import ReplayV2CommandType as C
 async def main():
  root=Path(sys.argv[2]);patch=pytest.MonkeyPatch();install_shared_market(patch,root/'market')
- service,run,session,send=await make_multi(root/'run',horizon=100)
- async def crash(**kwargs):os._exit(93)
- if sys.argv[3]=='before_ack':service.training.store.finish_advance_intent=crash
+ batched=sys.argv[3]=='batched_before_ack'
+ service,run,session,send=await make_multi(root/'run',horizon=100,marks=(["100"]*5+["80"]+["110"]*95) if batched else None)
+ if sys.argv[3] in ('before_ack','batched_before_ack'):
+  method='commit_command_phases' if batched else 'commit_command_group'
+  original_commit=getattr(service.store,method)
+  async def crash_final(*args,**kwargs):
+   result=await original_commit(*args,**kwargs)
+   terminal=await service.store.run_extension_read(lambda c:c.execute("SELECT 1 FROM replay_training_advance_intent WHERE command_id='crash-advance' AND status='COMPLETED'").fetchone())
+   if terminal:os._exit(93)
+   return result
+  setattr(service.store,method,crash_final)
+ elif sys.argv[3]=='terminal_group':
+  from app.replay.training import terminal_cohort
+  original=terminal_cohort.commit_actor_commands
+  async def crash_terminal(*args,**kwargs):
+   await original(*args,**kwargs)
+   os._exit(93)
+  terminal_cohort.commit_actor_commands=crash_terminal
  else:
   from app.replay.training import multi_interval_advance
   original=multi_interval_advance.commit_actor_commands
@@ -736,7 +751,12 @@ async def main():
    os._exit(93)
   multi_interval_advance.commit_actor_commands=crash_group
  at=(await service.get_session_state(session))['cursor']['virtual_time_ms']
- await send('crash-advance',C.ADVANCE_TO,dict(virtual_time_ms=at+90*60000,stop_on_event=False))
+ target=at+90*60000
+ if sys.argv[3]=='terminal_group':
+  await service.training.prepare_indexed_run(run)
+  plan=await service.plan_source_chunk(session,target_time_ms=10**13,max_events=1,indexed=True)
+  target=plan['index'].times[-1]
+ await send('crash-advance',C.ADVANCE_TO,dict(virtual_time_ms=target,stop_on_event=False))
 asyncio.run(main())
 """,
         encoding="utf-8",
@@ -767,11 +787,11 @@ asyncio.run(main())
             snapshot = (await service.get_session(track["adapter_session_id"]))[
                 "snapshot"
             ]
-            assert 2 < snapshot["cursor"]["source_sequence"] <= 92
-            if phase == "before_ack":
+            assert 2 < snapshot["cursor"]["source_sequence"] <= (100 if phase == "terminal_group" else 92)
+            if phase in {"before_ack", "batched_before_ack"}:
                 assert snapshot["cursor"]["source_sequence"] == 92
         result = await service.training.command(command.run_id, command)
-        assert result["cursor"]["source_sequence"] == 92
+        assert result["cursor"]["source_sequence"] == (100 if phase == "terminal_group" else 92)
         assert (await service.training.audit_account(command.run_id))[
             "status"
         ] == "PASS"

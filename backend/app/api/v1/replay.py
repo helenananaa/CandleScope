@@ -6,7 +6,7 @@ from typing import Awaitable, Callable, Literal
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -1257,6 +1257,25 @@ async def replay_v2_training_equity(
     )
 
 
+@router.get("/runs/{run_id}/portfolio-equity", dependencies=[Depends(enforce_replay_request_limit)])
+async def replay_portfolio_equity(request: Request, run_id: str, limit: int = Query(default=1000, ge=1, le=5000)):
+    from app.replay.training.portfolio_history import capture, curve
+    owner = _training_service(request)
+    snapshot = await capture(owner, run_id)
+    return await owner.store.base_store.run_worker("portfolio_curve", curve, snapshot,
+        input_root=owner.hedge_inputs.root, limit=limit)
+
+
+@router.get("/runs/{run_id}/portfolio-equity/export", dependencies=[Depends(enforce_replay_request_limit)])
+async def export_replay_portfolio_equity(request: Request, run_id: str):
+    from app.replay.training.portfolio_history import capture, export_chunks
+    owner = _training_service(request)
+    snapshot = await capture(owner, run_id)
+    return StreamingResponse(export_chunks(snapshot, input_root=owner.hedge_inputs.root),
+        media_type="application/x-ndjson",
+        headers={"Content-Disposition": 'attachment; filename="portfolio-curve.ndjson"'})
+
+
 @router.get("/runs/{run_id}/rules")
 async def replay_v2_training_rules(
     request: Request,
@@ -1389,8 +1408,10 @@ async def get_replay_v2_run(request: Request, run_id: str) -> dict[str, object]:
 
 
 @router.post("/runs/{run_id}/prepare-index", dependencies=[Depends(enforce_replay_request_limit)])
-async def prepare_replay_v2_index(request: Request, run_id: str) -> dict[str, object]:
-    return await _training_service(request).prepare_indexed_run(run_id)
+async def prepare_replay_v2_index(request: Request, run_id: str, client_instance_id: str | None = None) -> dict[str, object]:
+    if client_instance_id is None:
+        return await _training_service(request).prepare_indexed_run(run_id)
+    return await _training_service(request).prepare_indexed_run(run_id, client_instance_id=client_instance_id)
 
 
 @router.delete(

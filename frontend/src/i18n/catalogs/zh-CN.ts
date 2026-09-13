@@ -1,4 +1,12 @@
 export const zhCN = {
+  "replay.portfolio.title": "账户组合权益",
+  "replay.portfolio.load": "加载 / 刷新组合曲线",
+  "replay.portfolio.hint": "小时末采样，回撤按完整行情计算。推进后请刷新；仅覆盖已记录的组合区间。",
+  "replay.portfolio.drawdown": "区间最大回撤",
+  "replay.portfolio.empty": "暂无组合区间记录",
+  "replay.portfolio.export": "导出全部已记录组合曲线",
+  "replay.portfolio.coverage": "覆盖 {hours} 小时 · {count} 个采样点",
+
   "status.klineScope": "K 线",
   "status.klineScopeDetail": "仅表示当前活动图表的 K 线连接；盘口和成交状态请查看各自面板。",
   "chartTester.focusMode": "专注研究",

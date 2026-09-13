@@ -1,6 +1,14 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  "replay.portfolio.title": "포트폴리오 자산",
+  "replay.portfolio.load": "곡선 불러오기 / 새로고침",
+  "replay.portfolio.hint": "시간별 마지막 값을 표시하며 낙폭은 전체 가격 경로로 계산합니다. 진행 후 새로고침하세요. 기록된 구간만 포함합니다.",
+  "replay.portfolio.drawdown": "구간 최대 낙폭",
+  "replay.portfolio.empty": "기록된 포트폴리오 구간이 없습니다",
+  "replay.portfolio.export": "기록된 모든 포트폴리오 구간 내보내기",
+  "replay.portfolio.coverage": "범위: {hours}시간 · {count}개 표본",
+
   "status.klineScope": "캔들",
   "status.klineScopeDetail": "활성 차트의 캔들 연결 상태입니다. 호가와 체결 상태는 각 패널에서 확인하세요.",
   "chartTester.focusMode": "연구에 집중",

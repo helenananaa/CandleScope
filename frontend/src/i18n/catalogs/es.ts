@@ -5,6 +5,14 @@ import type { MessageCatalog } from "../messageCatalog.js";
  * libro de órdenes, tasa de financiación, prueba retrospectiva, reproducción.
  */
 export const es = {
+  "replay.portfolio.title": "Patrimonio de la cartera",
+  "replay.portfolio.load": "Cargar / actualizar curva",
+  "replay.portfolio.hint": "Muestras al cierre de cada hora; la caída máxima usa todos los precios. Actualice tras avanzar. Solo cubre intervalos registrados.",
+  "replay.portfolio.drawdown": "Caída máxima del intervalo",
+  "replay.portfolio.empty": "Todavía no hay intervalos registrados",
+  "replay.portfolio.export": "Exportar todos los intervalos de cartera registrados",
+  "replay.portfolio.coverage": "Cobertura: {hours} horas · {count} muestras",
+
   "status.klineScope": "Velas",
   "status.klineScopeDetail": "Solo la conexión de velas del gráfico activo. Consulte el estado del libro y las operaciones en sus paneles.",
   "chartTester.focusMode": "Modo investigación",

@@ -12,7 +12,7 @@ import threading
 import uuid
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
@@ -23,7 +23,7 @@ from app.replay.storage import ReplaySQLiteStore
 
 from .account import MaintenanceTier, instrument_rule_from_broker_config
 from .errors import TrainingRunError
-from .hedge_timeline import IndexedHedgeSnapshot
+from .hedge_timeline import IndexedHedgeSnapshot, OwnedMarkPayload
 from .hedge_simulation_contract import (
     MODEL_VERSION,
     SIMULATION_MANIFEST_SCHEMA_VERSION,
@@ -1466,9 +1466,22 @@ def build_hedge_simulation_manifest(
     }
 
 
-def _read_public_events(path: Path) -> tuple[HedgeInputEvent, ...]:
+def _read_public_events(path: Path, *, track_id=None) -> tuple[HedgeInputEvent, ...]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     descriptor = validate_hedge_public_history(payload, source_path=path)
+    return _public_events_from_payload(payload, descriptor, track_id=track_id)
+
+
+def _read_verified_public_events(path: Path):
+    raw = path.read_text(encoding="utf-8")
+    payload = json.loads(raw)
+    if raw != canonical_json(payload):
+        raise ValueError("public archive must use canonical JSON")
+    descriptor = validate_hedge_public_history(payload, source_path=path)
+    return descriptor, _public_events_from_payload(payload, descriptor)
+
+
+def _public_events_from_payload(payload, descriptor, *, track_id=None):
     raw_events = payload["events"]
     assert isinstance(raw_events, list)
     return tuple(
@@ -1482,7 +1495,9 @@ def _read_public_events(path: Path) -> tuple[HedgeInputEvent, ...]:
             component_sequence=int(event["component_sequence"]),
             previous_hash=str(event["previous_hash"]),
             event_hash=str(event["event_hash"]),
-            payload=dict(event["payload"]),
+            payload=(OwnedMarkPayload(event["payload"]["mark_price"], event["payload"]["index_price"])
+                     if event["event_kind"] == "MARK_INDEX" else dict(event["payload"])),
+            track_id=track_id,
         )
         for event in raw_events
     )
@@ -1616,7 +1631,7 @@ class HedgeInputArchiveManager:
         self._lock = asyncio.Lock()
         self._hybrid_provision_lock = asyncio.Lock()
         self._verified_event_cache: dict[
-            tuple[str, str, str], tuple[HedgeInputEvent, ...]
+            tuple[str, str, str, str | None], tuple[HedgeInputEvent, ...]
         ] = {}
         self._checksum_cache: OrderedDict[tuple[str, int, int], str] = OrderedDict()
         self._checksum_cache_lock = threading.RLock()
@@ -2865,17 +2880,19 @@ class HedgeInputArchiveManager:
         source_kind: str,
         path: Path,
         checksum_sha256: str,
+        track_id: str | None = None,
     ) -> tuple[HedgeInputEvent, ...]:
         """Reuse parsed immutable events after the runtime checksum guard passes."""
 
-        key = (source_kind, str(path), checksum_sha256)
+        key = (source_kind, str(path), checksum_sha256, track_id)
         cached = self._verified_event_cache.get(key)
         if cached is not None:
             return cached
         reader = (
             _read_public_events if source_kind == "PUBLIC" else _read_simulation_events
         )
-        events = await self.store.run_worker("hedge_events", reader, path)
+        events = await self.store.run_worker("hedge_events", reader, path,
+            **({"track_id": track_id} if source_kind == "PUBLIC" else {}))
         if len(self._verified_event_cache) >= 64:
             self._verified_event_cache.pop(next(iter(self._verified_event_cache)))
         self._verified_event_cache[key] = events
@@ -2983,6 +3000,7 @@ class HedgeInputArchiveManager:
                     source_kind="PUBLIC",
                     path=path,
                     checksum_sha256=str(row["checksum_sha256"]),
+                    track_id=str(row["track_id"]),
                 )
                 verified_tracks.append((str(row["track_id"]), events))
             simulation_events = await self._cached_verified_events(
@@ -2998,7 +3016,7 @@ class HedgeInputArchiveManager:
                 self._indexed_snapshot_cache.move_to_end(key)
                 return cached
             indexed = IndexedHedgeSnapshot(
-                tuple(replace(event, track_id=track_id) for track_id, events in verified_tracks for event in events),
+                tuple(event for _, events in verified_tracks for event in events),
                 simulation_events,
             )
             event_count = len(indexed[0]) + len(indexed[1])

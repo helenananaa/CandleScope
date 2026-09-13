@@ -85,6 +85,36 @@ def record_portfolio_point(
     )
 
 
+def portfolio_price_rows(path, checksum, first, last):
+    import sqlite3
+    import zlib
+    from .hedge_inputs import _read_verified_public_events
+    from .public_price_blocks import read_price_blocks, prepare_price_blocks
+
+    try:
+        return read_price_blocks(path, checksum, first, last)
+    except (sqlite3.Error, OSError, ValueError, TypeError, zlib.error):
+        descriptor, archived = _read_verified_public_events(path)
+        if descriptor.checksum_sha256 != checksum:
+            raise ValueError("portfolio input revision changed")
+        if not 0 <= first <= last <= len(archived):
+            raise ValueError("portfolio input range changed")
+        try:
+            prepare_price_blocks(path, checksum, archived, force=True)
+        except (sqlite3.Error, OSError):
+            pass  # A read-only owner can still use the verified legacy input.
+        return [
+            (
+                e.event_time_ms,
+                e.event_phase,
+                e.event_kind,
+                e.event_sequence,
+                e.payload.get("mark_price"),
+            )
+            for e in archived[first:last]
+        ]
+
+
 def reconstruct_portfolio_interval(basis, *, input_root, limit=5000, bucket_ms=60000):
     """Reconstruct requested committed portfolio points from pinned inputs.
 
@@ -92,7 +122,6 @@ def reconstruct_portfolio_interval(basis, *, input_root, limit=5000, bucket_ms=6
     It never stores or prepares future per-minute account snapshots.
     """
     from pathlib import Path
-    from .hedge_inputs import verify_hedge_public_history, _read_public_events
 
     if (
         type(limit) is not int
@@ -128,18 +157,14 @@ def reconstruct_portfolio_interval(basis, *, input_root, limit=5000, bucket_ms=6
         path = (root / track["public_path"]).resolve()
         if not path.is_relative_to(root):
             raise ValueError("portfolio input reference escaped its owner")
-        descriptor = verify_hedge_public_history(path)
-        if descriptor.checksum_sha256 != track["public_checksum"]:
-            raise ValueError("portfolio input revision changed")
-        source = _read_public_events(path)
         first, last = track["mark_start"], track["mark_end"]
-        if not 0 <= first <= last <= len(source):
-            raise ValueError("portfolio input range changed")
+        source = portfolio_price_rows(path, track["public_checksum"], first, last)
         prices[track["track_id"]] = Decimal(track["initial_mark"])
-        for event in source[first:last]:
-            timestamp = event.event_time_ms - basis["actual_delta"]
+        for event_time, phase, kind, sequence, price in source:
+            timestamp = event_time - basis["actual_delta"]
             if (
-                event.event_kind != "MARK_INDEX"
+                kind != "MARK_INDEX"
+                or phase != 30
                 or not basis["start_time_ms"] < timestamp <= basis["end_time_ms"]
             ):
                 raise ValueError(
@@ -148,10 +173,10 @@ def reconstruct_portfolio_interval(basis, *, input_root, limit=5000, bucket_ms=6
             events.append(
                 (
                     timestamp,
-                    event.event_phase,
+                    phase,
                     track["track_id"],
-                    event.event_sequence,
-                    Decimal(event.payload["mark_price"]),
+                    sequence,
+                    Decimal(price),
                 )
             )
     legs = [
@@ -274,15 +299,38 @@ async def risk_context(store, run_id, tracks, *, all_tracks=None):
     return await store.base_store.run_extension_read(read)
 
 
+def prepare_group(group, mutations):
+    """Encode immutable candidate records before acquiring the SQLite writer."""
+    for plan in group["tracks"]:
+        indexed = mutations[plan["session_id"]].history_frames[0]["indexed"]
+        plan.update(index=indexed["index"], start=indexed["start"], end=indexed["end"])
+        plan["price_bounds"] = plan["index"].closes.range_bounds(start=plan["start"], end=plan["end"])
+    group["summary_json"] = canonical_json(group["summary"])
+    group["basis_json"] = canonical_json(group["basis"])
+    selected = next(p for p in group["tracks"] if p["session_id"] == group["selected_session_id"])
+    basis = selected["index"].curve_basis()
+    group["curve_record"] = (canonical_sha256({"run": group["run_id"], "basis": basis}), canonical_json(basis))
+
+
 def stage_track(
     store, connection, session_id, command, frames, state, components, previous, now
 ):
     plan = store._multi_interval_plans[session_id]
     if command["command_id"] != plan["command_id"]:
         raise ValueError("multi interval candidate identity mismatch")
+    # A second unpublished phase may rebase its market view after the prefix.
+    # Persist the exact index used by that actor, including its curve seed.
+    frame_index = frames[0]["indexed"]
+    plan.update(index=frame_index["index"], start=frame_index["start"], end=frame_index["end"])
     for key in ("orders", "fills", "ledger", "closed_trades", "warnings"):
         if components.get(key) != previous.get(key):
             raise ValueError("multi interval contained a trading interaction")
+    index = plan["index"]
+    bounds = (
+        plan["price_bounds"]
+        if "price_bounds" in plan
+        else index.closes.range_bounds(start=plan["start"], end=plan["end"])
+    )
     store._sync_session_summary(
         connection,
         session_id,
@@ -292,17 +340,8 @@ def stage_track(
         now,
         recorded_history=True,
         equity_samples={},
-    )
-    index = plan["index"]
-    low, high = index.closes.range_bounds(start=plan["start"], end=plan["end"])
-    store._sync_trade_results_projection(
-        connection,
-        run_id=plan["run_id"],
-        track_id=plan["track_id"],
-        component_state=components,
-        revealed_event_low=low,
-        revealed_event_high=high,
-        now_ms=now,
+        phase_summary=plan["projection_summary"],
+        revealed_price_bounds=bounds,
     )
     plan["state"], plan["frame"] = state, frames[0]
 
@@ -372,6 +411,13 @@ def finish_group(store, connection, group):
         (run_id,),
     ).fetchone():
         raise ValueError("multi interval violated the portfolio envelope")
+    # Risk projection above has refreshed equity from the aligned pinned marks.
+    # Retain the legacy last-staged actor's summary revision without valuing
+    # eight partially updated portfolios on the way to this phase boundary.
+    connection.execute(
+        "UPDATE replay_training_run SET summary_revision=? WHERE run_id=?",
+        (group["projection_summary"].last_revision, run_id),
+    )
     # Stable events and their review anchors become visible with every actor.
     ordered = stable_market_event_order(stable)
     store._record_global_events_in_transaction(
@@ -384,8 +430,8 @@ def finish_group(store, connection, group):
             group["command_id"],
             group["start_time"],
             group["target"],
-            canonical_json(group["summary"]),
-            canonical_json(group["basis"]),
+            group["summary_json"],
+            group["basis_json"],
         ),
     )
     # Preserve the existing selected-adapter equity API independently from the
@@ -396,11 +442,10 @@ def finish_group(store, connection, group):
         if plan["session_id"] == group["selected_session_id"]
     )
     index, state = plan["index"], plan["state"]
-    basis = index.curve_basis()
-    curve_id = canonical_sha256({"run": run_id, "basis": basis})
+    curve_id, curve_json = group["curve_record"]
     connection.execute(
         "INSERT OR IGNORE INTO replay_prepared_curve VALUES (?,?,?)",
-        (curve_id, run_id, canonical_json(basis)),
+        (curve_id, run_id, curve_json),
     )
     curve = dict(
         schema="indexed-curve.v1",

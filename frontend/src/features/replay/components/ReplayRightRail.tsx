@@ -266,15 +266,28 @@ function finiteNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+const decimalFormatters = new Map<string, Intl.NumberFormat>();
+
 function formatDecimal(value: unknown, maximumFractionDigits = 8): string {
   if (value === null || value === undefined || value === "") return "--";
   const parsed = finiteNumber(value);
   if (parsed === null) return String(value);
-  return new Intl.NumberFormat(getNumberLocale(), {
-    maximumFractionDigits,
-    minimumFractionDigits: 0,
-    useGrouping: true,
-  }).format(parsed);
+  const locale = getNumberLocale();
+  const key = `${locale}:${maximumFractionDigits}`;
+  let formatter = decimalFormatters.get(key);
+  if (formatter === undefined) {
+    formatter = new Intl.NumberFormat(locale, {
+      maximumFractionDigits,
+      minimumFractionDigits: 0,
+      useGrouping: true,
+    });
+    if (decimalFormatters.size >= 32) {
+      const oldest = decimalFormatters.keys().next().value;
+      if (oldest !== undefined) decimalFormatters.delete(oldest);
+    }
+    decimalFormatters.set(key, formatter);
+  }
+  return formatter.format(parsed);
 }
 
 function decimalPlaces(step: string): number {

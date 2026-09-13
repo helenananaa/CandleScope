@@ -92,3 +92,17 @@ leaderboard or requirement to prevent a user from editing their own local data.
   of independently timed market extrema is only a conservative risk bound, not
   a historical portfolio peak or drawdown. Multi-interval enablement stays off
   until financial, recovery and browser performance qualification all pass.
+- Multi-interval projection inputs are scoped to one SQL phase and reloaded at
+  the next phase. Refresh shared equity after all tracks receive their pinned
+  marks; retain the lowpoint and endpoint review frames separately. Pass the
+  interval price bounds into the trade projection once. Review anchor budget
+  accounting is append-local so rollback cannot retain a stale cached budget.
+- Vectorized portfolio valuation may share readonly market-price deltas, never
+  account-value arrays. Bind each range's first mark to the supplied account
+  basis, observe only complete equal-time cohorts, and prove signed-integer
+  intermediate and drawdown bounds before batching; retain the exact fallback.
+- A prepared advance's final single-BAR cohort may share one durable actor/risk
+  checkpoint. Preserve ordinary STEP execution and publish only after commit.
+  Previously settled marks may join that checkpoint; new account/input phases,
+  unequal next BAR times, and incomplete cohorts keep the ordered fallback.
+  The command boundary is independent of a rebased market index's last row.

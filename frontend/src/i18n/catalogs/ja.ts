@@ -1,6 +1,14 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ja = {
+  "replay.portfolio.title": "ポートフォリオ資産",
+  "replay.portfolio.load": "組合せ曲線を読込 / 更新",
+  "replay.portfolio.hint": "各時間末の値を表示し、ドローダウンは全価格経路から計算します。進行後に更新してください。記録済み区間のみ対象です。",
+  "replay.portfolio.drawdown": "区間最大ドローダウン",
+  "replay.portfolio.empty": "記録済みのポートフォリオ区間はありません",
+  "replay.portfolio.export": "記録済みの全ポートフォリオ区間を出力",
+  "replay.portfolio.coverage": "対象: {hours} 時間 · {count} サンプル",
+
   "status.klineScope": "ローソク足",
   "status.klineScopeDetail": "アクティブなチャートのローソク足接続のみ。板と約定の状態は各パネルで確認してください。",
   "chartTester.focusMode": "研究に集中",
