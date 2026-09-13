@@ -318,6 +318,7 @@ class ChartPyneStrategyProvider:
         self._decision_trace_dropped = 0
         self._decision_trace_ordinal = 0
         self._decision_time_counts: dict[int, int] = {}
+        self._last_decision_time: int | None = None
 
     def describe(self) -> ProviderCapabilities:
         return ProviderCapabilities(
@@ -341,6 +342,7 @@ class ChartPyneStrategyProvider:
         self._decision_trace_dropped = 0
         self._decision_trace_ordinal = 0
         self._decision_time_counts = {}
+        self._last_decision_time = None
 
     @staticmethod
     def _decimal(value: object, field: str) -> Decimal:
@@ -357,11 +359,13 @@ class ChartPyneStrategyProvider:
         return number
 
     def _observe(self, frame: ObservationFrame) -> None:
+        self._observe_bar(frame.bar or {}, frame.sequence)
+
+    def _observe_bar(self, bar: Mapping[str, Any], sequence: int) -> None:
         if self._program is None:
             raise StrategyProviderError(
                 "PROVIDER_PROTOCOL_VIOLATION", "provider is not prepared"
             )
-        bar = frame.bar or {}
         row = {
             name: self._decimal(bar.get(name), name)
             for name in ("open", "high", "low", "close")
@@ -401,7 +405,7 @@ class ChartPyneStrategyProvider:
             history.append(value)
             if len(history) > 2:
                 history.pop(0)
-        self._last_sequence = frame.sequence
+        self._last_sequence = sequence
 
     def _value(self, operand: Operand) -> Decimal | None:
         if operand.constant is not None:
@@ -496,6 +500,12 @@ class ChartPyneStrategyProvider:
         self._decision_trace_ordinal += 1
         time_count = self._decision_time_counts.get(frame.event_time_ms, 0) + 1
         self._decision_time_counts[frame.event_time_ms] = time_count
+        self._last_decision_time = frame.event_time_ms
+        # Once the prefix is sealed, later rows can never be admitted. Keep
+        # ordinals and omission counts without building discarded JSON evidence.
+        if self._decision_trace_dropped or len(self._decision_trace) >= MAX_TRADE_EXPLANATION_TRACE_ROWS:
+            self._decision_trace_dropped += 1
+            return
         digest = canonical_hash(
             {
                 "runId": frame.run_id,
@@ -548,30 +558,42 @@ class ChartPyneStrategyProvider:
 
     def step(self, frame: ObservationFrame) -> StrategyOutput | None:
         self._observe(frame)
+        return self._finish_step(frame, self._evaluate())
+
+    def _evaluate(self) -> list[tuple[Branch, bool]]:
         assert self._program is not None
         evaluated: list[tuple[Branch, bool]] = []
-        branch: Branch | None = None
         for candidate in self._program.branches:
             matched = self._matches(candidate.condition)
             evaluated.append((candidate, matched))
             if matched:
-                branch = candidate
                 break
-        if branch is None:
+        return evaluated
+
+    def _decision_payload(self, frame, evaluated):
+        if not evaluated or not evaluated[-1][1]:
             return None
+        branch = evaluated[-1][0]
         self._last_target = branch.target
         reason_code = f"chart_pyne_line_{branch.line}"
         self._record_decision_trace(frame, evaluated, branch, reason_code)
-        payload = {
+        return {
             "targetExposure": str(branch.target),
             "reasonCode": reason_code,
             "grammarRevision": CHART_PYNE_GRAMMAR,
         }
+
+    def _finish_step(
+        self, frame: ObservationFrame, evaluated: list[tuple[Branch, bool]], *, state_hash=None
+    ) -> StrategyOutput | None:
+        payload = self._decision_payload(frame, evaluated)
+        if payload is None:
+            return None
         return StrategyOutput(
             sequence=frame.sequence,
             kind="TARGET_POSITION",
             payload=payload,
-            state_hash=self._state_hash(),
+            state_hash=self._state_hash() if state_hash is None else state_hash(),
             output_hash=canonical_hash(payload),
         )
 
@@ -597,8 +619,13 @@ class ChartPyneStrategyProvider:
             }
         )
 
-    def snapshot(self) -> dict[str, Any]:
+    def snapshot(self, *, compact: bool = False) -> dict[str, Any]:
+        counts = self._decision_time_counts
+        if compact:
+            counts = ({} if self._last_decision_time is None else
+                      {self._last_decision_time: counts[self._last_decision_time]})
         return {
+            **({"checkpointStateRevision": "chart-pyne-checkpoint/2"} if compact else {}),
             "source": self._source,
             "bars": [
                 {key: str(value) for key, value in row.items()} for row in self._bars
@@ -615,7 +642,7 @@ class ChartPyneStrategyProvider:
             "tradeExplanationDropped": self._decision_trace_dropped,
             "decisionTraceOrdinal": self._decision_trace_ordinal,
             "decisionTimeCounts": {
-                str(key): value for key, value in self._decision_time_counts.items()
+                str(key): value for key, value in counts.items()
             },
         }
 
@@ -658,6 +685,7 @@ class ChartPyneStrategyProvider:
             int(key): int(value)
             for key, value in dict(payload.get("decisionTimeCounts") or {}).items()
         }
+        self._last_decision_time = max(self._decision_time_counts, default=None)
 
     def close(self) -> str:
         return self._state_hash()

@@ -171,6 +171,18 @@ class StrategyProviderSession:
             "hash": canonical_hash(payload),
         }
 
+    def snapshot_encoded(self, *, snapshotter=None) -> tuple[dict[str, Any], str]:
+        """Capture once; share strict provider bytes with checkpoint encoding."""
+        payload = self.provider.snapshot() if snapshotter is None else snapshotter()
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        return {
+            "generation": self.generation,
+            "lastSequence": self.last_sequence,
+            "watermarkMs": self.watermark_ms,
+            "provider": payload,
+            "hash": "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest(),
+        }, encoded
+
     def restore(self, payload: dict[str, Any]) -> None:
         try:
             self.generation = int(payload["generation"])
@@ -191,19 +203,22 @@ class StrategyProviderSession:
         return digest
 
     def _accept_frame(self, frame: ObservationFrame) -> None:
+        self._accept_clock(frame.run_id, frame.sequence, frame.event_time_ms, frame.watermark_ms)
+
+    def _accept_clock(self, run_id, sequence, event_time_ms, watermark_ms) -> None:
         self._ensure_open()
         if not self.prepared:
             raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "prepare first")
-        if frame.run_id != self.run_id:
+        if run_id != self.run_id:
             raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "runId mismatch")
-        if frame.watermark_ms < self.watermark_ms:
+        if watermark_ms < self.watermark_ms:
             raise StrategyProviderError("LOOKAHEAD_VIOLATION", "watermark moved backwards")
-        if frame.event_time_ms > frame.watermark_ms:
+        if event_time_ms > watermark_ms:
             raise StrategyProviderError("LOOKAHEAD_VIOLATION", "event after watermark")
-        if frame.sequence <= self.last_sequence:
+        if sequence <= self.last_sequence:
             raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "sequence must increase")
-        self.last_sequence = frame.sequence
-        self.watermark_ms = frame.watermark_ms
+        self.last_sequence = sequence
+        self.watermark_ms = watermark_ms
 
     def _ensure_open(self) -> None:
         if self.closed:

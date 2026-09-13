@@ -7,6 +7,7 @@ import os
 import threading
 import sys
 import time
+import json
 from pathlib import Path
 from dataclasses import fields, replace
 
@@ -37,12 +38,26 @@ class _GuardedProvider:
         self.deadline = deadline
         self.step_timeout = step_timeout
         self.call_timeout = call_timeout
+        self._description = None
+
+    def describe(self):
+        # This wrapper only owns the built-in and SDK providers constructed
+        # below. Their per-session capabilities are read-only host metadata.
+        if self._description is None:
+            self.deadline.value = time.monotonic() + 5.0
+            try:
+                self._description = self.provider.describe()
+            finally:
+                self.deadline.value = 0.0
+        return self._description
 
     def __getattr__(self, name):
         method = getattr(self.provider, name)
         if not callable(method):
             return method
         def invoke(*args, **kwargs):
+            if name in {"prepare", "restore"}:
+                self._description = None
             timeout = (min(self.step_timeout, self.call_timeout) if name in {"step", "warmup"}
                        else self.call_timeout if name == "on_execution_report" else 5.0)
             self.deadline.value = time.monotonic() + timeout
@@ -50,6 +65,9 @@ class _GuardedProvider:
                 return method(*args, **kwargs)
             finally:
                 self.deadline.value = 0.0
+        # Provider method identities are fixed for these owned adapters; user
+        # Python strategy methods are still dispatched dynamically by the runner.
+        setattr(self, name, invoke)
         return invoke
 
 
@@ -77,11 +95,18 @@ def _worker(connection, settings, run_id, spec, events, options, call_deadline, 
             sys.path.insert(0, str(SDK_SRC))
             # Relative file access has always been rooted in the immutable bundle.
             os.chdir(spec["bundle"])
-            provider = PythonHostProvider.__new__(PythonHostProvider)
-            provider.bundle_dir = spec["bundle"]
-            provider.entrypoint = spec["entrypoint"]
-            provider.parameters = spec["parameters"]
-            provider.runner = LocalPythonRunner(bound_transcript=spec["bound_transcript"])
+            record = service.get_run(run_id)
+            config = json.loads(str(record["config_json"]))
+            if config.get("python_execution_protocol") == "MARKET_BATCH_V1":
+                from .strategy.python_market_batch import PythonMarketBatchProvider
+                provider = PythonMarketBatchProvider(spec["bundle"], events, entrypoint=spec["entrypoint"],
+                    warmup_events=service._resolve_warmup(record, options.get("warmup_events")))
+            else:
+                provider = PythonHostProvider.__new__(PythonHostProvider)
+                provider.bundle_dir = spec["bundle"]
+                provider.entrypoint = spec["entrypoint"]
+                provider.parameters = spec["parameters"]
+                provider.runner = LocalPythonRunner(bound_transcript=spec["bound_transcript"])
         else:
             revision = spec["revision"]
             provider = (ChartPyneStrategyProvider() if revision == CHART_PYNE_REVISION
@@ -109,6 +134,7 @@ def _worker(connection, settings, run_id, spec, events, options, call_deadline, 
 
 def execute(service, run_id, spec, events, options):
     from .worker_stdio import SpawnWriter
+    from .spawn_events import pack_events
     from .strategy.python_runner import MAX_STDERR_BYTES
 
     context = multiprocessing.get_context("spawn")
@@ -123,7 +149,7 @@ def execute(service, run_id, spec, events, options):
     overflow = threading.Event()
     reader = None
     process = context.Process(target=_worker, args=(
-        child, settings, run_id, spec, events, options, deadline, SpawnWriter(write_fd),
+        child, settings, run_id, spec, pack_events(events), options, deadline, SpawnWriter(write_fd),
     ), name=f"backtest-run-{run_id}", daemon=True)
     generation = int(service.get_run(run_id)["generation"])
     overall_deadline = time.monotonic() + service.settings.max_run_seconds

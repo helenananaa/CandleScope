@@ -47,7 +47,7 @@ LABELS = {
 
 
 def build_report(
-    run: Mapping[str, Any], result: Mapping[str, Any] | None = None
+    run: Mapping[str, Any], result: Mapping[str, Any] | None = None, *, _owned_seal: bool = False
 ) -> dict[str, Any]:
     fidelity = str(run.get("fidelity_mode") or "BAR_APPROX")
     source_kind = str(run.get("source_event_kind") or "BAR")
@@ -56,12 +56,15 @@ def build_report(
         config = json.loads(str(run.get("config_json") or "{}"))
     except (TypeError, ValueError, json.JSONDecodeError):
         config = {}
-    fills = [copy.deepcopy(dict(item)) for item in payload.get("fills") or []]
-    orders = [copy.deepcopy(dict(item)) for item in payload.get("orders") or []]
-    rejected_orders = [
-        copy.deepcopy(dict(item)) for item in payload.get("rejected") or []
-    ]
     explanation_enabled = bool(payload.get("trade_explanation_enabled"))
+    # Enrichment already creates detached nested trees for every returned row.
+    def copy_row(item):
+        return dict(item) if explanation_enabled else copy.deepcopy(dict(item))
+    fills = [copy_row(item) for item in payload.get("fills") or []]
+    orders = [copy_row(item) for item in payload.get("orders") or []]
+    rejected_orders = [
+        copy_row(item) for item in payload.get("rejected") or []
+    ]
     if explanation_enabled:
         raw_trace = payload.get("trade_explanation_trace")
         trace_rows = (
@@ -106,6 +109,8 @@ def build_report(
         "source_event_kind": source_kind,
         "report_label": label,
         "identity": {
+            **({"python_execution_protocol": config["python_execution_protocol"]}
+               if config.get("python_execution_protocol") else {}),
             "strategy_revision_id": run.get("strategy_revision_id"),
             "dataset_id": run.get("dataset_id"),
             "data_epoch": run.get("data_epoch"),
@@ -291,26 +296,42 @@ def build_report(
             "profit_guarantee": False,
             "open_positions_excluded_from_trade_metrics": True,
         }
+    if _owned_seal:
+        # These branches borrow caller state; constructed/enriched rows above
+        # already own their trees. Preserve public detachment without copying
+        # the entire newly built report a second time.
+        borrowed = ("data_quality", "fill_model", "account", "ledger", "equity_curve",
+                    "contract_coverage", "order_events")
+        detached = copy.deepcopy({key: report[key] for key in borrowed if key in report})
+        report.update(detached)
+        report["hashes"]["report"] = _report_digest(report)
+        return report
     return seal_report(report)
 
 
 def seal_report(report: Mapping[str, Any]) -> dict[str, Any]:
     sealed = copy.deepcopy(dict(report))
     hashes = dict(sealed.get("hashes") or {})
-    hashes["report"] = None
     sealed["hashes"] = hashes
-    hash_payload = copy.deepcopy(sealed)
+    hashes["report"] = _report_digest(sealed)
+    return sealed
+
+
+def _report_digest(report: Mapping[str, Any]) -> str:
+    hash_payload = dict(report)
+    hashes = dict(hash_payload.get("hashes") or {})
+    hashes["report"] = None
+    hash_payload["hashes"] = hashes
     # A report hash is a reproducibility hash: rerunning the same immutable
     # inputs must produce it even though the control-plane run id is different.
     # The export manifest binds the concrete run id to this stable result hash.
     hash_payload.pop("runId", None)
-    hashes["report"] = "sha256:" + sha256_hex(hash_payload)
-    return sealed
+    return "sha256:" + sha256_hex(hash_payload)
 
 
 def verify_report_hash(report: Mapping[str, Any]) -> bool:
     expected = str((report.get("hashes") or {}).get("report") or "")
-    return bool(expected) and seal_report(report)["hashes"]["report"] == expected
+    return bool(expected) and _report_digest(report) == expected
 
 
 def export_bundle(

@@ -1,0 +1,32 @@
+{
+  "scope": "Local pre-commit source validation; not deployment qualification",
+  "python": "3.12.7",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "checks": [
+    {
+      "lane": "backend",
+      "tests": 320,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 97.806,
+      "receipt": "output/commit-validation-20260913/backend-tests.xml",
+      "receipt_sha256": "4582cc60bffca1475966b786c8b15c76b59c0c7ccb90df9af966fcadccb1785c"
+    },
+    {
+      "lane": "sdk",
+      "tests": 48,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 20.054,
+      "receipt": "output/commit-validation-20260913/sdk-tests.xml",
+      "receipt_sha256": "2e4ead8cabd4219492ffae628bde5667c150e0f599f7ae6efd9256021bcad904"
+    }
+  ],
+  "native_module_sha256": "9f736bc40dc4b82a26efb0312a854519174358854c454ab7658dc0031cd2f615",
+  "native_binary_committed": false,
+  "database_schema": 9,
+  "specialized_bar_default_enabled": false,
+  "benchmark_summary": "policy-pairs-summary.json"
+}

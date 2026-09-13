@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from typing import Any
+import hashlib
+from app.core.config import getenv
+from .qualified_json import try_bar_input_bytes
 
 from .serial_worker import SerialWorker
 
@@ -8,6 +11,7 @@ from .protocol import (
     ObservationFrame,
     StrategyProviderError,
     StrategyProviderSession,
+    StrategyOutput,
     canonical_hash,
 )
 
@@ -27,6 +31,7 @@ class StrategyHostAdapter:
         self._worker: SerialWorker | None = None
         self._closed = False
         self._inline = inline
+        self._objects = inline and getenv("BACKTEST_DIRECT_OBJECTS_ENABLED", "1").strip() == "1"
 
     def close(self) -> None:
         self._closed = True
@@ -56,9 +61,13 @@ class StrategyHostAdapter:
         bar: dict[str, Any] | None,
         features: dict[str, Any] | None = None,
         trade: dict[str, Any] | None = None,
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, Any] | StrategyOutput | None:
         if event_time_ms > watermark_ms:
             raise StrategyProviderError("LOOKAHEAD_VIOLATION", "host refused future bar")
+        encoded = try_bar_input_bytes(sequence, watermark_ms, bar, trade, features)
+        input_hash = ("sha256:" + hashlib.sha256(encoded).hexdigest() if encoded is not None
+                      else canonical_hash({"sequence": sequence, "watermark": watermark_ms,
+                                           "bar": bar, "trade": trade, "features": features}))
         frame = ObservationFrame(
             run_id=self.session.run_id,
             sequence=sequence,
@@ -66,15 +75,7 @@ class StrategyHostAdapter:
             watermark_ms=watermark_ms,
             phase=phase,
             market=market,
-            input_hash=canonical_hash(
-                {
-                    "sequence": sequence,
-                    "watermark": watermark_ms,
-                    "bar": bar,
-                    "trade": trade,
-                    "features": features,
-                }
-            ),
+            input_hash=input_hash,
             bar=bar,
             trade=trade,
             features=features or {},
@@ -104,7 +105,7 @@ class StrategyHostAdapter:
             if callable(abort):
                 abort()
             raise StrategyProviderError("PROVIDER_TIMEOUT", "provider step exceeded budget")
-        return None if output is None else output.to_wire()
+        return output if self._objects or output is None else output.to_wire()
 
     def reject_host_write(self, attempt: str) -> None:
         raise StrategyProviderError(

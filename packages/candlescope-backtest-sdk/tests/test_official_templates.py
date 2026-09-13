@@ -145,7 +145,7 @@ def test_official_templates_install_and_run_from_fresh_offline_temp(tmp_path: Pa
         "import importlib.util, json, sys\n"
         "from pathlib import Path\n"
         "sys.path.insert(0, %r)\n"
-        "from candlescope_backtest_sdk import Observation, StrategyContext, Bar, encode_output\n"
+        "from candlescope_backtest_sdk import Observation, StrategyContext, Bar, encode_output, MarketBatch\n"
         "root = Path(%r)\n"
         "catalog = json.loads((root / 'catalog.json').read_text(encoding='utf-8'))\n"
         "for name in catalog['templates']:\n"
@@ -164,6 +164,9 @@ def test_official_templates_install_and_run_from_fresh_offline_temp(tmp_path: Pa
         "        encode_output(1, output)\n"
         "    strategy.restore(strategy.snapshot())\n"
         "print('offline-templates-ok', len(catalog['templates']))\n"
+        "columns = {'sequence': [1], 'event_time_ms': [60], **{k: ['1.00'] for k in ('open', 'high', 'low', 'close', 'volume')}}\n"
+        "assert MarketBatch.from_columns(columns).close == ('1.00',)\n"
+        "print('offline-market-batch-ok')\n"
         % (str(site), str(work))
     )
     env = dict(__import__("os").environ)
@@ -179,3 +182,4 @@ def test_official_templates_install_and_run_from_fresh_offline_temp(tmp_path: Pa
     if result.returncode != 0:
         raise AssertionError(result.stderr or result.stdout)
     assert "offline-templates-ok 8" in result.stdout
+    assert "offline-market-batch-ok" in result.stdout

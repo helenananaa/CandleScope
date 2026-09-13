@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+import hashlib
+import json
+
+from dataclasses import asdict, dataclass, field, fields
 from decimal import Decimal, InvalidOperation
 from collections.abc import Iterable
 from typing import Callable, Mapping
@@ -70,6 +73,21 @@ class SimulationResult:
     equity_curve: list[dict] = field(default_factory=list)
 
 
+_FLAT_RECORD_FIELDS = {kind: tuple(item.name for item in fields(kind))
+                       for kind in (SimulatedOrder, SimulatedFill)}
+_ATOMIC_RECORD_TYPES = frozenset((str, int, bool, type(None), Decimal))
+
+
+def _flat_record(record):
+    names = _FLAT_RECORD_FIELDS.get(type(record))
+    if names is not None:
+        result = {name: getattr(record, name) for name in names}
+        if all(type(value) in _ATOMIC_RECORD_TYPES for value in result.values()):
+            return result
+    # Custom rows, subclasses and mutable values retain recursive detachment.
+    return asdict(record)
+
+
 StrategyFn = Callable[[tuple[MarketEvent, ...], MarketEvent], list[dict]]
 
 
@@ -134,6 +152,10 @@ class SimulationKernel:
     frozen_intents: list[dict] = field(default_factory=list)
     _decision_chain_hash: str = "sha256:GENESIS"
     _decision_count: int = 0
+    _record_encoder: Callable = field(default=asdict, init=False, repr=False, compare=False)
+    _native_empty_hash: Callable | None = field(default=None, init=False, repr=False, compare=False)
+    _specialized_bar: bool = field(default=False, init=False, repr=False, compare=False)
+    _checkpoint_history: object = field(default=None, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if self.execution_model_revision == EXECUTION_REALISM_V2:
@@ -205,7 +227,7 @@ class SimulationKernel:
             return max(Decimal("0"), max(after, Decimal("0")) - max(prior, Decimal("0")))
         return max(Decimal("0"), max(-after, Decimal("0")) - max(-prior, Decimal("0")))
 
-    def snapshot(self) -> dict:
+    def snapshot(self, *, history_encoder=None) -> dict:
         return {
             "scale_stream_decisions": self.scale_stream_decisions,
             **(
@@ -271,8 +293,10 @@ class SimulationKernel:
             "ambiguity_count": self.ambiguity_count,
             "paused": self.paused,
             "fee_total": str(self.fee_total),
-            "orders": [asdict(order) for order in self.orders],
-            "fills": [asdict(fill) for fill in self.fills],
+            "orders": ([self._record_encoder(order) for order in self.orders]
+                       if history_encoder is None else history_encoder("orders", self.orders)),
+            "fills": ([self._record_encoder(fill) for fill in self.fills]
+                      if history_encoder is None else history_encoder("fills", self.fills)),
             "decisions": list(self.decisions),
             "rejected": list(self.rejected),
             "equity_curve": list(self.equity_curve),
@@ -422,6 +446,52 @@ class SimulationKernel:
         finalize: bool = False,
         checkpoint_callback: Callable[[MarketEvent], None] | None = None,
     ) -> SimulationResult:
+        loop = (self._run_plain_bars if self._specialized_bar
+                and type(self) is SimulationKernel and type(self.account) is ContractAccount
+                and self.funding_rate == 0 and warmup_events == 0 else self._run_events)
+        loop(events, strategy, warmup_events=warmup_events,
+                         finalize=finalize, checkpoint_callback=checkpoint_callback)
+        return self.result()
+
+    def _run_plain_bars(self, events, strategy, *, warmup_events, finalize, checkpoint_callback):
+        # Host-owned BAR runs select this lane once. Matching, accounting,
+        # decisions and control/checkpoint callbacks retain their original order.
+        from itertools import chain
+        iterator = iter(events)
+        accept, match = self._accept_event, self._match
+        record, enqueue, equity = self._record_decision, self._enqueue_many, self._record_equity
+        account = self.account
+        for event in iterator:
+            if self.paused:
+                break
+            if event.role != "BARS" or self.account is not account or self.funding_rate != 0:
+                self._run_events(chain((event,), iterator), strategy, warmup_events=0,
+                                 finalize=finalize, checkpoint_callback=checkpoint_callback)
+                return
+            if not accept(event):
+                continue
+            self._market_event_count += 1
+            account.mark = _bar_decimal(event, "close")
+            match(event)
+            intents = strategy((event,), event)
+            record(intents, event)
+            enqueue(intents, current_sequence=event.sequence)
+            equity(event)
+            if checkpoint_callback is not None:
+                checkpoint_callback(event)
+        self._append_terminal_curve_point()
+        if finalize:
+            self.finalize_orders()
+
+    def _run_events(
+        self,
+        events: Iterable[MarketEvent],
+        strategy: StrategyFn,
+        *,
+        warmup_events: int = 0,
+        finalize: bool = False,
+        checkpoint_callback: Callable[[MarketEvent], None] | None = None,
+    ) -> None:
         for event in events:
             if self.paused:
                 break
@@ -456,59 +526,82 @@ class SimulationKernel:
             intents = strategy((market_event,), market_event)
             if self._market_event_count <= warmup_events:
                 intents = []
-            decision = _decision_record(
-                intents,
-                sequence=market_event.sequence,
-                watermark_ms=market_event.event_time_ms,
-            )
-            if (
-                self.execution_model_revision == EXECUTION_REALISM_V2
-                or self.scale_stream_decisions
-            ):
-                self._decision_chain_hash = "sha256:" + sha256_hex(
-                    {"previous": self._decision_chain_hash, "decision": decision}
-                )
-                self._decision_count += 1
-            else:
-                self.decisions.append(decision)
-            if self.execution_model_revision == EXECUTION_REALISM_V2 and intents:
-                self.frozen_intents.append(
-                    {
-                        "sequence": market_event.sequence,
-                        "intents": [dict(intent) for intent in intents],
-                    }
-                )
+            self._record_decision(intents, market_event)
             self._enqueue_many(intents, current_sequence=market_event.sequence)
-            curve_point = {
-                "sequence": market_event.sequence,
-                "event_time_ms": market_event.event_time_ms,
-                "equity": str(self.account.equity()),
-                "position_qty": str(self.account.position_qty),
-            }
-            if isinstance(self.account, LinearPerpetualAccountV2):
-                curve_point.update(
-                    {
-                        "wallet_balance": str(self.account.quote_balance),
-                        "available_balance": str(self.account.available_balance()),
-                    }
-                )
-            if self.equity_curve_mode == "UTC_DAILY_CLOSE_V1":
-                self._record_equity_point(curve_point)
-            elif self.scale_stream_decisions or self.execution_model_revision == EXECUTION_REALISM_V2:
-                if (
-                    self._market_event_count == 1
-                    or self.equity_curve_event_interval <= 1
-                    or self._market_event_count % self.equity_curve_event_interval == 0
-                ):
-                    self.equity_curve.append(curve_point)
-            else:
-                self.equity_curve.append(curve_point)
+            self._record_equity(market_event)
             if checkpoint_callback is not None:
                 checkpoint_callback(event)
         self._append_terminal_curve_point()
         if finalize:
             self.finalize_orders()
-        return self.result()
+
+    def _record_decision(self, intents, market_event):
+        if ((self.execution_model_revision == EXECUTION_REALISM_V2 or self.scale_stream_decisions)
+                and type(intents) is list and not intents
+                and type(market_event.sequence) is int and type(market_event.event_time_ms) is int
+                and type(self._decision_chain_hash) is str):
+            digest = (self._native_empty_hash(self._decision_chain_hash, market_event.sequence,
+                      market_event.event_time_ms, hashlib.sha256) if self._native_empty_hash is not None else None)
+            self._decision_chain_hash = digest if digest is not None else _empty_decision_hash(
+                self._decision_chain_hash, market_event.sequence, market_event.event_time_ms)
+            self._decision_count += 1
+            return
+        decision = _decision_record(
+            intents,
+            sequence=market_event.sequence,
+            watermark_ms=market_event.event_time_ms,
+        )
+        if (
+            self.execution_model_revision == EXECUTION_REALISM_V2
+            or self.scale_stream_decisions
+        ):
+            self._decision_chain_hash = "sha256:" + sha256_hex(
+                {"previous": self._decision_chain_hash, "decision": decision}
+            )
+            self._decision_count += 1
+        else:
+            self.decisions.append(decision)
+        if self.execution_model_revision == EXECUTION_REALISM_V2 and intents:
+            self.frozen_intents.append(
+                {
+                    "sequence": market_event.sequence,
+                    "intents": [dict(intent) for intent in intents],
+                }
+            )
+
+    def _record_equity(self, market_event):
+        # Do not build valuations/strings for samples that the selected policy
+        # discards. Account/risk updates still execute for every source event.
+        if (self.equity_curve_mode != "UTC_DAILY_CLOSE_V1"
+                and (self.scale_stream_decisions or self.execution_model_revision == EXECUTION_REALISM_V2)
+                and self._market_event_count != 1
+                and self.equity_curve_event_interval > 1
+                and self._market_event_count % self.equity_curve_event_interval != 0):
+            return
+        curve_point = {
+            "sequence": market_event.sequence,
+            "event_time_ms": market_event.event_time_ms,
+            "equity": str(self.account.equity()),
+            "position_qty": str(self.account.position_qty),
+        }
+        if isinstance(self.account, LinearPerpetualAccountV2):
+            curve_point.update(
+                {
+                    "wallet_balance": str(self.account.quote_balance),
+                    "available_balance": str(self.account.available_balance()),
+                }
+            )
+        if self.equity_curve_mode == "UTC_DAILY_CLOSE_V1":
+            self._record_equity_point(curve_point)
+        elif self.scale_stream_decisions or self.execution_model_revision == EXECUTION_REALISM_V2:
+            if (
+                self._market_event_count == 1
+                or self.equity_curve_event_interval <= 1
+                or self._market_event_count % self.equity_curve_event_interval == 0
+            ):
+                self.equity_curve.append(curve_point)
+        else:
+            self.equity_curve.append(curve_point)
 
     def _append_terminal_curve_point(self) -> None:
         if (
@@ -564,12 +657,11 @@ class SimulationKernel:
                 if isinstance(self.account, LinearPerpetualAccountV2):
                     self.account.release_order_margin(order.order_id)
 
-    def result(self) -> SimulationResult:
-        fills = [asdict(fill) for fill in self.fills]
+    def _financial_result(self):
+        fills = [self._record_encoder(fill) for fill in self.fills]
         if self.execution_model_revision == EXECUTION_REALISM_V2:
             for fill, event in zip(fills, self._fill_source_events, strict=True):
                 fill.update(source_event_trace(event, source_kind="BAR"))
-        orders = [_wire_order(order) for order in self.orders]
         account = self.account.snapshot()
         account["equity"] = str(self.account.equity())
         account["initial_balance"] = str(self.initial_balance)
@@ -589,6 +681,11 @@ class SimulationKernel:
         if self.execution_model_revision == EXECUTION_REALISM_V2:
             ledger["order_events"] = list(self._order_events)
             ledger["decision_count"] = self._decision_count
+        return fills, ledger
+
+    def result(self) -> SimulationResult:
+        fills, ledger = self._financial_result()
+        orders = [_wire_order(order) for order in self.orders]
         return SimulationResult(
             decision_hash=(
                 self._decision_chain_hash
@@ -642,6 +739,8 @@ class SimulationKernel:
         *,
         current_sequence: int,
     ) -> None:
+        if not intents:
+            return
         normalized = [dict(intent) for intent in intents]
         limits = [
             item
@@ -767,24 +866,27 @@ class SimulationKernel:
         self._lifecycle(order, "OPEN")
         self._next_order_id += 1
 
-    def _match(self, event: MarketEvent) -> None:
+    def _match(self, event: MarketEvent, *, _prices=None) -> None:
         bar = event.payload
+        active = self._live_orders()
+        if not active:
+            return
         open_orders = [
             order
-            for order in self._live_orders()
+            for order in active
             if order.status in {"OPEN", "PARTIAL"}
             and order.eligible_after_sequence <= event.sequence
         ]
         if not open_orders:
             return
         remaining_capacity = (
-            Decimal(str(bar.get("volume") or "0")) * self.participation_rate
+            (Decimal(str(bar.get("volume") or "0")) if _prices is None else _prices("volume")) * self.participation_rate
             if self.execution_model_revision == EXECUTION_REALISM_V2
             else None
         )
-        high = Decimal(str(bar["high"]))
-        low = Decimal(str(bar["low"]))
-        open_ = Decimal(str(bar["open"]))
+        high = Decimal(str(bar["high"])) if _prices is None else _prices("high")
+        low = Decimal(str(bar["low"])) if _prices is None else _prices("low")
+        open_ = Decimal(str(bar["open"])) if _prices is None else _prices("open")
         stop_hits = [
             order
             for order in open_orders
@@ -974,7 +1076,7 @@ class SimulationKernel:
             self.execution_reporter(
                 {
                     "accepted": True,
-                    "fill": {**asdict(fill), "side": order.side},
+                    "fill": {**self._record_encoder(fill), "side": order.side},
                     "order_id": order.order_id,
                 }
             )
@@ -1271,3 +1373,15 @@ def _adverse_stop_fill_price(
     base = max(open_price, stop) if order.side == "BUY" else min(open_price, stop)
     slip = base * slippage_bps / Decimal("10000")
     return base + slip if order.side == "BUY" else base - slip
+
+
+def _empty_decision_hash(previous: str, sequence: int, watermark_ms: int) -> str:
+    """Exact sorted stdlib JSON for a plain empty-intent decision.
+
+    Only the two integers and prior hash vary. The prior string still uses the
+    standard encoder, including Unicode/escape behavior after legacy restores.
+    """
+    payload = (b'{"decision":{"intents":[],"sequence":' + str(sequence).encode("ascii")
+               + b',"watermark_ms":' + str(watermark_ms).encode("ascii")
+               + b'},"previous":' + json.encoder.encode_basestring_ascii(previous).encode("utf-8") + b'}')
+    return "sha256:" + hashlib.sha256(payload).hexdigest()

@@ -354,6 +354,7 @@ class BacktestSettings:
     max_report_bytes: int
     worker_memory_mb: int
     max_run_seconds: int
+    max_report_storage_bytes: int = 268_435_456
 
     @property
     def bar_effective(self) -> bool:
@@ -420,13 +421,23 @@ def load_backtest_settings(
 
     values = {}
     for name in _BACKTEST_BUDGETS:
+        if name == "BACKTEST_CHECKPOINT_EVENT_INTERVAL":
+            value = int(environment.get(name, str(_BACKTEST_BUDGETS[name])))
+            if value < 1:
+                raise ValueError("BACKTEST_CHECKPOINT_EVENT_INTERVAL must be positive; use per-run NONE policy to disable")
+            values[name] = value
+            continue
         hard = (
             bar_row_hard_ceiling(environment)
             if name == "BACKTEST_MAX_BAR_ROWS"
             else None
         )
         values[name] = _bounded_backtest_int(environment, name, hard_ceiling=hard)
+    storage_bytes = int(environment.get("BACKTEST_MAX_REPORT_STORAGE_BYTES", "268435456"))
+    if storage_bytes < values["BACKTEST_MAX_REPORT_BYTES"]:
+        raise ValueError("BACKTEST_MAX_REPORT_STORAGE_BYTES must cover one report part")
     return BacktestSettings(
+        max_report_storage_bytes=storage_bytes,
         enabled=_strict_replay_bool(environment, "BACKTEST_ENABLED", "1"),
         bar_enabled=_strict_replay_bool(environment, "BACKTEST_BAR_ENABLED", "1"),
         chart_context_enabled=_strict_replay_bool(

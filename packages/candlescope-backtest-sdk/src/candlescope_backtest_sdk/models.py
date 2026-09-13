@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any, Mapping
 
 from .contract import (
@@ -31,6 +32,20 @@ def _require_mapping(value: Mapping[str, Any], allowed: frozenset[str], label: s
 
 def _decimal_string(value: Any, label: str) -> str:
     text = str(value).strip()
+    # Cache small common values (quantities, zeroes, volumes); long/exponential
+    # values still use the unrestricted reference path. This is not an input cap.
+    if (type(text) is str and len(text) <= 6 and type(label) is str and len(label) <= 64
+            and "e" not in text.lower()):
+        return _short_decimal_string(text, label)
+    return _normalize_decimal_text(text, label)
+
+
+@lru_cache(maxsize=4096)
+def _short_decimal_string(text: str, label: str) -> str:
+    return _normalize_decimal_text(text, label)
+
+
+def _normalize_decimal_text(text: str, label: str) -> str:
     if not text or text.lower() in {"nan", "inf", "+inf", "-inf", "infinity", "-infinity"}:
         raise PythonStrategyContractError(
             "NON_FINITE_NUMBER",
@@ -287,6 +302,10 @@ class OrderIntent:
             payload["clientTag"] = self.client_tag
         return payload
 
+
+# Host optimization ABI for the standard output field-to-payload mapping.
+# Change this when the standard to_payload semantics change.
+NATIVE_OUTPUT_LAYOUT = 1
 
 AuthorOutput = Signal | TargetPosition | OrderIntent
 
