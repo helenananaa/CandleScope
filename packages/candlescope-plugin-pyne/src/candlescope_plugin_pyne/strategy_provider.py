@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Protocol
 
+from .runtime import EXPECTED_PYNE_VERSION, PLUGIN_VERSION, RUNTIME_ID
 from .strategy_types import (
     CONTRIBUTION_KIND,
     ProviderCapabilities,
@@ -23,10 +24,6 @@ class ObservationFrame(Protocol):
     watermark_ms: int
     sequence: int
     bar: Mapping[str, Any] | None
-
-EXPECTED_PYNE_VERSION = "0.3.0rc2"
-PLUGIN_VERSION = "0.3.0.dev0"
-RUNTIME_ID = "candlescope.pyne"
 
 ADAPTER_VERSION = "candlescope.pyne-strategy/1"
 SMA_CROSS_MARKER = "candlescope.strategy-example:sma_cross"
@@ -205,11 +202,13 @@ class PyneStrategyProvider:
         execute = getattr(pyne_runtime, "execute_pyne_script", None)
         if settings_type is None or execute is None:
             return None
+        from .host_policy import host_settings
+
         result = execute(
             script=self._source,
             ohlcv=bars,
             params=dict(self._params),
-            settings=settings_type.from_env(),
+            settings=host_settings(security_mode="safe"),
             executor_mode="inline",
         )
         output = getattr(result, "output", None)

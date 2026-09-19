@@ -1,18 +1,8 @@
 from __future__ import annotations
 
-import sys
-import types
-
-if "pyne_runtime" not in sys.modules:
-    _stub = types.ModuleType("pyne_runtime")
-    _stub.__version__ = "0.3.0rc2"
-    _stub.REQUEST_SECURITY_API = "request.security"
-    _stub.REQUEST_SECURITY_LOWER_TF_API = "request.security.lower"
-    _stub.PYNE_OUTPUT_SCHEMA_VERSION = 2
-    sys.modules["pyne_runtime"] = _stub
-
 from candlescope_plugin_sdk.platform_v2 import PluginManifest
 from candlescope_plugin_sdk.platform_v2.json_codec import loads_strict
+
 from candlescope_plugin_pyne_workbench import pyne_workbench_manifest
 from candlescope_plugin_pyne_workbench.strategy_entrypoint import (
     CONTRIBUTION_ID,
@@ -42,11 +32,7 @@ def test_manifest_bytes_use_legal_activation_events() -> None:
 
     raw = files("candlescope_plugin_pyne_workbench").joinpath("manifest.json").read_bytes()
     parsed = PluginManifest.from_wire(loads_strict(raw))
-    events = {
-        event
-        for entry in parsed.backend_entrypoints
-        for event in entry.activation_events
-    }
+    events = {event for entry in parsed.backend_entrypoints for event in entry.activation_events}
     assert "onBacktestRun" not in events
     assert events <= {
         "onCommand",

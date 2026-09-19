@@ -32,7 +32,7 @@ def test_package_metadata_pins_only_public_runtime_contracts() -> None:
     assert project["requires-python"] == ">=3.11,<3.14"
     assert project["dependencies"] == [
         "candlescope-plugin-sdk==0.2.0",
-        "pyne-runtime==0.3.0rc2",
+        "pyne-runtime==0.4.0",
     ]
     assert project["scripts"]["candlescope-pyne-runtime"].endswith(":main")
 
@@ -77,13 +77,13 @@ def test_candidate_lock_is_local_and_does_not_rewrite_the_published_lock() -> No
     )
 
     assert candidate["releaseStatus"] == "local-candidate"
-    assert candidate["plugin"]["version"] == "0.3.0.dev0"
+    assert candidate["plugin"]["version"] == "0.3.0.dev1"
     pyne = candidate["wheels"]["pyne-runtime"]
     assert pyne == {
-        "version": "0.3.0rc2",
-        "source": "local-candidate-build",
-        "artifactFilename": "pyne_runtime-0.3.0rc2-py3-none-any.whl",
-        "sourceCommit": "49a6449dd8ebe135aa62d8ea6f808814f5c022f0",
-        "sha256": "sha256:f89c898c25418188344238e156bfc4cffcb07c00bd07736ceaf1d064378b2740",
+        "version": "0.4.0",
+        "source": "github-release",
+        "artifactFilename": "pyne_runtime-0.4.0-py3-none-any.whl",
+        "releaseUrl": "https://github.com/helenananaa/pyne-runtime/releases/download/v0.4.0/"
+        "pyne_runtime-0.4.0-py3-none-any.whl",
+        "sha256": "sha256:8cd1759ab0e3f77fd635e0e0f38d29a2da28913bb8165888e89788213b32a6c7",
     }
-    assert "releaseUrl" not in pyne

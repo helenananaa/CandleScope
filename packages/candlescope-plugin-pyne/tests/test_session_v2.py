@@ -91,6 +91,28 @@ def test_v2_session_disconnect_and_reconnect_preserve_committed_state() -> None:
     assert service.close_session("chart:one") is True
 
 
+def test_preview_isolation_and_restart_reseed_match_committed_continuation() -> None:
+    service = PyneSessionService()
+    service.open_session("chart:upgrade", source=INCREMENTAL_SCRIPT, context=_context())
+    assert service.seed_session("chart:upgrade", _bars()[:2]).ok
+    before = service.snapshot_session("chart:upgrade").to_wire()
+    assert service.process_bar("chart:upgrade", _bars()[2], preview=True).ok
+    assert service.snapshot_session("chart:upgrade").to_wire() == before
+    continued = service.process_bar("chart:upgrade", _bars()[2], preview=False)
+    assert continued.ok
+
+    # A replacement plugin has no persisted runtime state: rebuild from the host
+    # bars instead of attempting to carry old computation semantics forward.
+    replacement = PyneSessionService()
+    opened = replacement.open_session(
+        "chart:upgrade", source=INCREMENTAL_SCRIPT, context=_context()
+    )
+    assert opened["resumed"] is False
+    rebuilt = replacement.seed_session("chart:upgrade", _bars())
+    assert rebuilt.ok
+    assert rebuilt.output.to_wire() == service.snapshot_session("chart:upgrade").output.to_wire()
+
+
 def test_v2_session_rejects_batch_source_and_identity_rebinding() -> None:
     service = PyneSessionService()
     with pytest.raises(ValueError, match="require an incremental script"):

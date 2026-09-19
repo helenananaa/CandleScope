@@ -3,7 +3,7 @@
   "plugin": {
     "id": "candlescope.pyne-workbench",
     "name": "Pyne Workbench",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "publisher": "candlescope",
     "license": "GPL-3.0-only",
     "engines": {

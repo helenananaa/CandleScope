@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "candlescope-plugin-pyne-workbench"
-version = "0.1.0"
+version = "0.1.1"
 description = "Independent Plugin Platform v2 workbench for Pyne Runtime."
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
@@ -12,8 +12,8 @@ license = "GPL-3.0-only"
 authors = [{ name = "CandleScope contributors" }]
 dependencies = [
   "candlescope-plugin-sdk==0.2.0",
-  "candlescope-plugin-pyne>=0.3.0.dev0,<0.4.0",
-  "pyne-runtime>=0.3.0.dev0,<0.4.0",
+  "candlescope-plugin-pyne>=0.3.0.dev1,<0.4.0",
+  "pyne-runtime==0.4.0",
 ]
 
 [project.optional-dependencies]

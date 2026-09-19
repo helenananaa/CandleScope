@@ -34,8 +34,8 @@ from candlescope_plugin_sdk import (
 RUNTIME_ID = "candlescope.pyne"
 PLUGIN_NAME = "Pyne Runtime"
 PLUGIN_PACKAGE = "candlescope-plugin-pyne"
-PLUGIN_VERSION = "0.3.0.dev0"
-EXPECTED_PYNE_VERSION = "0.3.0rc2"
+PLUGIN_VERSION = "0.3.0.dev1"
+EXPECTED_PYNE_VERSION = "0.4.0"
 UNKNOWN_SOURCE_VERSION = "0.0.0+unknown"
 
 _SECURITY_MODE_KEYS = ("securityMode", "security_mode")
@@ -145,8 +145,10 @@ def _requested_security_mode(options: Mapping[str, Any]) -> str | None:
 
 
 def _settings_for(context: Any, options: Mapping[str, Any]) -> Any:
+    from .host_policy import host_settings
+
     security_mode = _requested_security_mode(options)
-    settings = pyne_runtime.PyneSettings.from_env()
+    settings = host_settings(security_mode=security_mode)
     prefix = context.exchange.strip().upper()
     return replace(
         settings,

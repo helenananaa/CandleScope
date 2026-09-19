@@ -3,7 +3,7 @@
 from .plugin import PyneWorkbenchPlugin, pyne_workbench_manifest
 from .render_adapter import AdaptedRender, adapt_pyne_output
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "AdaptedRender",

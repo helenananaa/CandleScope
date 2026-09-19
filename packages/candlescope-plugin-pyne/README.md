@@ -7,18 +7,36 @@ virtual environment through `candlescope.script-runtime/1`.
 
 ## Source candidate compatibility
 
-- Plugin: `candlescope-plugin-pyne==0.3.0.dev0`
+- Plugin: `candlescope-plugin-pyne==0.3.0.dev1`
 - SDK: `candlescope-plugin-sdk==0.2.0`
-- Engine: `pyne-runtime==0.3.0rc2`
+- Engine: `pyne-runtime==0.4.0`
 - Python: `>=3.11,<3.14`
 - Runtime ID: `candlescope.pyne`
 
-The unpublished engine candidate is pinned by
-`release/release-lock.candidate.json`; it contains no public URL and cannot be
-mistaken for a released artifact. The immutable `release/release-lock.json`
-continues to describe the published `0.2.0` bridge and `0.2.0rc1` engine. A
-version mismatch fails during packaging, installation probes, or descriptor
-startup instead of being silently adapted.
+The unpublished bridge candidate is pinned by `release/release-lock.candidate.json`
+to the official Pyne 0.4.0 wheel and its verified SHA-256. The immutable
+`release/release-lock.json` continues to describe the previously published 0.2.0
+bridge and 0.2.0rc1 engine. Version or artifact mismatches fail closed.
+
+## Host policy and upgrading from 0.3
+
+The bridge selects `safe` imports, inline execution inside the managed plugin
+process, a 5-second cooperative deadline, 50,000 input bars, 20 series, 1,000,000
+output points, 10,000 retained bars and 50,000 replay-recorded bars by default.
+Collection, drawing and state budgets are explicit in `host_policy.py`.
+`PYNE_*` environment values override these host defaults (including explicitly
+selected `none`/`unlimited` budgets); request `securityMode` overrides the import
+mode only, never the budgets. Direct strategy-provider execution explicitly uses
+`safe`. Pyne standalone defaults remain unchanged. `safe` is a language policy,
+not an OS sandbox. The surrounding host owns hard process termination; an inline
+runtime cannot promise a hard timeout.
+
+Pyne 0.4 uses computation semantics 5. Restart the plugin and reseed sessions from
+authoritative OHLCV when upgrading; never relabel or restore older Pyne state
+snapshots. The adapter's reconnect snapshots are current in-process result views,
+not portable checkpoints. Its strategy provider records bars and recalculates on
+restore. Intrabar-dependent state requires the original event history to reproduce;
+OHLCV alone does not reconstruct preview visitation.
 
 ## Published development bundle
 
@@ -95,18 +113,19 @@ New-Item -ItemType Directory -Force $wheelhouse | Out-Null
 python -m build --wheel --outdir $wheelhouse .
 python -m build --wheel --outdir $wheelhouse ..\candlescope-plugin-sdk
 Invoke-WebRequest `
-  -Uri 'https://github.com/helenananaa/pyne-runtime/releases/download/v0.2.0rc1/pyne_runtime-0.2.0rc1-py3-none-any.whl' `
-  -OutFile "$wheelhouse\pyne_runtime-0.2.0rc1-py3-none-any.whl"
+  -Uri 'https://github.com/helenananaa/pyne-runtime/releases/download/v0.4.0/pyne_runtime-0.4.0-py3-none-any.whl' `
+  -OutFile "$wheelhouse\pyne_runtime-0.4.0-py3-none-any.whl"
 python -m pip download --only-binary=:all: --no-deps `
   --dest $wheelhouse numpy==2.3.3
 
-$bridge = (Get-ChildItem "$wheelhouse\candlescope_plugin_pyne-0.2.0-*.whl").FullName
+$bridge = (Get-ChildItem "$wheelhouse\candlescope_plugin_pyne-0.3.0.dev1-*.whl").FullName
 $sdk = (Get-ChildItem "$wheelhouse\candlescope_plugin_sdk-0.2.0-*.whl").FullName
-$pyne = (Get-ChildItem "$wheelhouse\pyne_runtime-0.2.0rc1-*.whl").FullName
+$pyne = (Get-ChildItem "$wheelhouse\pyne_runtime-0.4.0-*.whl").FullName
 $numpy = (Get-ChildItem "$wheelhouse\numpy-2.3.3-*.whl").FullName
 python scripts\build_bundle.py `
+  --lock release\release-lock.candidate.json `
   --wheel $bridge --wheel $sdk --wheel $pyne --wheel $numpy `
-  --output C:\release\candlescope-pyne\candlescope-pyne-0.2.0.cspkg `
+  --output C:\release\candlescope-pyne\candlescope-pyne-0.3.0.dev1.cspkg `
   --json
 ```
 

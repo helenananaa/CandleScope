@@ -1,19 +1,9 @@
 from __future__ import annotations
 
 import ast
-import sys
-import types
 from pathlib import Path
 
 import pytest
-
-if "pyne_runtime" not in sys.modules:
-    _stub = types.ModuleType("pyne_runtime")
-    _stub.__version__ = "0.3.0rc2"
-    _stub.REQUEST_SECURITY_API = "request.security"
-    _stub.REQUEST_SECURITY_LOWER_TF_API = "request.security.lower"
-    sys.modules["pyne_runtime"] = _stub
-
 from candlescope_plugin_sdk.strategy_provider_v1.models import ObservationFrame
 from candlescope_plugin_sdk.strategy_provider_v1.session import (
     StrategyProviderError,
@@ -22,7 +12,6 @@ from candlescope_plugin_sdk.strategy_provider_v1.session import (
 )
 
 from candlescope_plugin_pyne import SMA_CROSS_SOURCE, PyneStrategyProvider, source_hash
-
 
 SOURCE_ROOT = Path(__file__).parents[1] / "src" / "candlescope_plugin_pyne"
 

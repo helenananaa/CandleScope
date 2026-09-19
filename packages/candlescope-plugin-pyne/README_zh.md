@@ -6,16 +6,28 @@
 
 ## 源码候选兼容性锁
 
-- 插件：`candlescope-plugin-pyne==0.3.0.dev0`
+- 插件：`candlescope-plugin-pyne==0.3.0.dev1`
 - SDK：`candlescope-plugin-sdk==0.2.0`
-- 引擎：`pyne-runtime==0.3.0rc2`
+- 引擎：`pyne-runtime==0.4.0`
 - Python：`>=3.11,<3.14`
 - Runtime ID：`candlescope.pyne`
 
-未发布引擎候选由 `release/release-lock.candidate.json` 固定；该锁没有公开 URL，不能
-冒充已发布 artifact。`release/release-lock.json` 保持不变，继续描述已发布的 `0.2.0`
-桥和 `0.2.0rc1` 引擎。版本、wheel 内容、descriptor 或确定性 probe 任一不匹配都会
-fail closed，不再靠手工同步适配层。
+未发布的适配器候选由 `release/release-lock.candidate.json` 固定到官方 Pyne 0.4.0
+wheel 和已验证 SHA-256。`release/release-lock.json` 保留已发布 0.2.0 桥与 0.2.0rc1
+引擎的历史记录；版本或内容不匹配会拒绝安装。
+
+## 宿主策略与升级
+
+适配器默认使用 safe 导入策略、插件进程内 inline 执行、5 秒协作式期限、50,000 根
+输入、20 条输出序列、1,000,000 个输出点、10,000 根保留历史及 50,000 根回放记录。
+集合、绘图和状态预算在 `host_policy.py` 中明确指定。`PYNE_*` 环境配置可显式覆盖
+默认值，包括 none/unlimited；请求 securityMode 只覆盖导入模式。直接策略执行固定
+使用 safe。独立 Pyne 的默认值不变。safe 不是操作系统沙箱，硬终止仍由外围宿主负责。
+
+0.4.0 的计算语义版本为 5。升级时重启插件，从权威 OHLCV 重新 seed；不能修改旧快照
+版本冒充兼容。适配器重连快照是进程内结果视图，不是可移植计算状态。策略 provider
+恢复时重放保存的 bars。依赖盘中 preview 的状态需要原始事件历史，只有 OHLCV 无法
+还原其访问顺序。
 
 ## 已发布开发包
 
@@ -88,19 +100,20 @@ New-Item -ItemType Directory -Force $wheelhouse | Out-Null
 python -m build --wheel --outdir $wheelhouse .
 python -m build --wheel --outdir $wheelhouse ..\candlescope-plugin-sdk
 Invoke-WebRequest `
-  -Uri 'https://github.com/helenananaa/pyne-runtime/releases/download/v0.2.0rc1/pyne_runtime-0.2.0rc1-py3-none-any.whl' `
-  -OutFile "$wheelhouse\pyne_runtime-0.2.0rc1-py3-none-any.whl"
+  -Uri 'https://github.com/helenananaa/pyne-runtime/releases/download/v0.4.0/pyne_runtime-0.4.0-py3-none-any.whl' `
+  -OutFile "$wheelhouse\pyne_runtime-0.4.0-py3-none-any.whl"
 python -m pip download --only-binary=:all: --no-deps `
   --dest $wheelhouse numpy==2.3.3
 
-$bridge = (Get-ChildItem "$wheelhouse\candlescope_plugin_pyne-0.2.0-*.whl").FullName
+$bridge = (Get-ChildItem "$wheelhouse\candlescope_plugin_pyne-0.3.0.dev1-*.whl").FullName
 $sdk = (Get-ChildItem "$wheelhouse\candlescope_plugin_sdk-0.2.0-*.whl").FullName
-$pyne = (Get-ChildItem "$wheelhouse\pyne_runtime-0.2.0rc1-*.whl").FullName
+$pyne = (Get-ChildItem "$wheelhouse\pyne_runtime-0.4.0-*.whl").FullName
 $numpy = (Get-ChildItem "$wheelhouse\numpy-2.3.3-*.whl").FullName
 
 python scripts\build_bundle.py `
+  --lock release\release-lock.candidate.json `
   --wheel $bridge --wheel $sdk --wheel $pyne --wheel $numpy `
-  --output C:\release\candlescope-pyne\candlescope-pyne-0.2.0.cspkg `
+  --output C:\release\candlescope-pyne\candlescope-pyne-0.3.0.dev1.cspkg `
   --json
 ```
 

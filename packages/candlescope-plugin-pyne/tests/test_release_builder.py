@@ -83,9 +83,9 @@ def _wheelhouse(tmp_path: Path) -> tuple[Path, ...]:
 def _candidate_wheelhouse(tmp_path: Path) -> tuple[Path, ...]:
     tmp_path.mkdir(parents=True, exist_ok=True)
     return (
-        _fake_wheel(tmp_path, "candlescope-plugin-pyne", "0.3.0.dev0"),
+        _fake_wheel(tmp_path, "candlescope-plugin-pyne", "0.3.0.dev1"),
         _fake_wheel(tmp_path, "candlescope-plugin-sdk", "0.2.0"),
-        _fake_wheel(tmp_path, "pyne-runtime", "0.3.0rc2"),
+        _fake_wheel(tmp_path, "pyne-runtime", "0.4.0"),
         _fake_wheel(tmp_path, "numpy", "2.3.3"),
     )
 
@@ -147,15 +147,15 @@ def test_builder_accepts_the_explicit_local_candidate_lock(tmp_path: Path) -> No
 
     bundle = build_locked_bundle(
         wheels,
-        tmp_path / "candlescope-pyne-0.3.0.dev0.cspkg",
+        tmp_path / "candlescope-pyne-0.3.0.dev1.cspkg",
         lock_path=lock_path,
     )
 
-    assert bundle.manifest.version == "0.3.0.dev0"
+    assert bundle.manifest.version == "0.3.0.dev1"
     assert [wheel.version for wheel in bundle.manifest.wheels] == [
-        "0.3.0.dev0",
+        "0.3.0.dev1",
         "0.2.0",
-        "0.3.0rc2",
+        "0.4.0",
         "2.3.3",
     ]
 
