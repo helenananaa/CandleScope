@@ -1,6 +1,13 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhHant = {
+  "replay.portfolio.title": "投資組合權益",
+  "replay.portfolio.load": "載入 / 重新整理組合曲線",
+  "replay.portfolio.hint": "每小時結束時取樣，回撤按完整行情計算。推進後請重新整理；僅涵蓋已記錄的組合區間。",
+  "replay.portfolio.drawdown": "區間最大回撤",
+  "replay.portfolio.empty": "尚未記錄投資組合區間",
+  "replay.portfolio.export": "匯出所有已記錄的組合區間",
+  "replay.portfolio.coverage": "涵蓋：{hours} 小時 · {count} 個樣本",
   "status.klineScope": "K 線",
   "status.klineScopeDetail": "僅表示當前活動圖表的 K 線連線；盤口與成交狀態請查看各自面板。",
   "chartTester.focusMode": "專注研究",

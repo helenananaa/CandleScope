@@ -1,6 +1,14 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const tr = {
+  "replay.portfolio.title": "Portföy özkaynağı",
+  "replay.portfolio.load": "Portföy eğrisini yükle / yenile",
+  "replay.portfolio.hint": "Saat sonu örnekleri; düşüş tüm fiyat yolunu kullanır. İlerledikten sonra yenileyin. Yalnızca kaydedilmiş portföy aralıkları.",
+  "replay.portfolio.drawdown": "Aralıktaki en büyük düşüş",
+  "replay.portfolio.empty": "Henüz kaydedilmiş portföy aralığı yok",
+  "replay.portfolio.export": "Kaydedilmiş tüm portföy aralıklarını dışa aktar",
+  "replay.portfolio.coverage": "Kapsam: {hours} saat · {count} örnek",
+  "replay.rt.eventStop": "Bir olayda duraklatıldı",
   "status.klineScope": "Candles",
   "status.klineScopeDetail": "Connection for the active chart candles only. Check the order book and trade panels for their own status.",
   "chartTester.focusMode": "Focus on research",

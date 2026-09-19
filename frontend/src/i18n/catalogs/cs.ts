@@ -1,6 +1,13 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const cs = {
+  "replay.portfolio.title": "Vlastní kapitál portfolia",
+  "replay.portfolio.load": "Načíst / obnovit křivku portfolia",
+  "replay.portfolio.hint": "Vzorky na konci hodiny; propad používá celý průběh cen. Po posunu obnovte. Pouze zaznamenané intervaly portfolia.",
+  "replay.portfolio.drawdown": "Maximální propad v intervalu",
+  "replay.portfolio.empty": "Zatím nejsou zaznamenány intervaly portfolia",
+  "replay.portfolio.export": "Exportovat všechny zaznamenané intervaly portfolia",
+  "replay.portfolio.coverage": "Pokrytí: {hours} hodin · {count} vzorků",
   "status.klineScope": "Svíčky",
   "status.klineScopeDetail": "Připojení pouze ke svíčkám aktivního grafu. Stav knihy objednávek a obchodů najdete na příslušných panelech.",
   "chartTester.focusMode": "Zaměřit se na výzkum",

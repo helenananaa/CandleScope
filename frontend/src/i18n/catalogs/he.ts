@@ -1,6 +1,13 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const he = {
+  "replay.portfolio.title": "הון התיק",
+  "replay.portfolio.load": "טעינה / רענון של עקומת התיק",
+  "replay.portfolio.hint": "דגימות בסוף שעה; הירידה מחושבת לפי כל מסלול המחירים. יש לרענן לאחר התקדמות. רק מרווחי תיק שנרשמו.",
+  "replay.portfolio.drawdown": "ירידה מרבית במרווח",
+  "replay.portfolio.empty": "טרם נרשמו מרווחי תיק",
+  "replay.portfolio.export": "ייצוא כל מרווחי התיק שנרשמו",
+  "replay.portfolio.coverage": "כיסוי: {hours} שעות · {count} דגימות",
   "status.klineScope": "נרות",
   "status.klineScopeDetail": "חיבור לנרות של הגרף הפעיל בלבד. בדקו את סטטוס ספר הפקודות ולוחות העסקאות בנפרד.",
   "chartTester.focusMode": "מיקוד במחקר",

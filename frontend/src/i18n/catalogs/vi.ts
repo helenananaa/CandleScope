@@ -1,6 +1,14 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const vi = {
+  "replay.portfolio.title": "Vốn chủ sở hữu danh mục",
+  "replay.portfolio.load": "Tải / làm mới đường vốn danh mục",
+  "replay.portfolio.hint": "Mẫu cuối giờ; mức sụt giảm dùng toàn bộ diễn biến giá. Làm mới sau khi tiến tiếp. Chỉ gồm các khoảng danh mục đã ghi.",
+  "replay.portfolio.drawdown": "Mức sụt giảm tối đa trong khoảng",
+  "replay.portfolio.empty": "Chưa ghi khoảng danh mục nào",
+  "replay.portfolio.export": "Xuất tất cả khoảng danh mục đã ghi",
+  "replay.portfolio.coverage": "Phạm vi: {hours} giờ · {count} mẫu",
+  "replay.rt.eventStop": "Tạm dừng tại sự kiện",
   "status.klineScope": "Candles",
   "status.klineScopeDetail": "Connection for the active chart candles only. Check the order book and trade panels for their own status.",
   "chartTester.focusMode": "Focus on research",

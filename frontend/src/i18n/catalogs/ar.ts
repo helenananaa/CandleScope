@@ -1,6 +1,13 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ar = {
+  "replay.portfolio.title": "حقوق ملكية المحفظة",
+  "replay.portfolio.load": "تحميل / تحديث منحنى المحفظة",
+  "replay.portfolio.hint": "عينات نهاية الساعة؛ يُحسب التراجع من مسار الأسعار الكامل. حدّث بعد التقدم. يشمل فترات المحفظة المسجلة فقط.",
+  "replay.portfolio.drawdown": "أقصى تراجع خلال الفترة",
+  "replay.portfolio.empty": "لم تُسجل فترات للمحفظة بعد",
+  "replay.portfolio.export": "تصدير جميع فترات المحفظة المسجلة",
+  "replay.portfolio.coverage": "التغطية: {hours} ساعة · {count} عينة",
   "status.klineScope": "شموع",
   "status.klineScopeDetail": "اتصال شموع الرسم النشط فقط. راجع لوحتي دفتر الأوامر والصفقات لحالتيهما.",
   "chartTester.focusMode": "التركيز على البحث",

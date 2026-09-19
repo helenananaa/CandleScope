@@ -1,6 +1,14 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const pl = {
+  "replay.portfolio.title": "Kapitał portfela",
+  "replay.portfolio.load": "Wczytaj / odśwież krzywą portfela",
+  "replay.portfolio.hint": "Próbki z końca godziny; obsunięcie obejmuje cały przebieg cen. Odśwież po przejściu dalej. Tylko zapisane przedziały portfela.",
+  "replay.portfolio.drawdown": "Maksymalne obsunięcie w przedziale",
+  "replay.portfolio.empty": "Nie zapisano jeszcze przedziałów portfela",
+  "replay.portfolio.export": "Eksportuj wszystkie zapisane przedziały portfela",
+  "replay.portfolio.coverage": "Zakres: {hours} godzin · {count} próbek",
+  "replay.rt.eventStop": "Wstrzymano przy zdarzeniu",
   "status.klineScope": "Candles",
   "status.klineScopeDetail": "Connection for the active chart candles only. Check the order book and trade panels for their own status.",
   "chartTester.focusMode": "Focus on research",

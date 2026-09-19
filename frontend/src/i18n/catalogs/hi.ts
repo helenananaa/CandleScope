@@ -1,6 +1,13 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const hi = {
+  "replay.portfolio.title": "पोर्टफोलियो इक्विटी",
+  "replay.portfolio.load": "पोर्टफोलियो वक्र लोड / रीफ़्रेश करें",
+  "replay.portfolio.hint": "घंटे के अंत के नमूने; गिरावट में पूरा मूल्य पथ शामिल है। आगे बढ़ने के बाद रीफ़्रेश करें। केवल दर्ज पोर्टफोलियो अंतराल।",
+  "replay.portfolio.drawdown": "अंतराल में अधिकतम गिरावट",
+  "replay.portfolio.empty": "अभी कोई पोर्टफोलियो अंतराल दर्ज नहीं है",
+  "replay.portfolio.export": "सभी दर्ज पोर्टफोलियो अंतराल निर्यात करें",
+  "replay.portfolio.coverage": "कवरेज: {hours} घंटे · {count} नमूने",
   "status.klineScope": "कैंडल",
   "status.klineScopeDetail": "केवल सक्रिय चार्ट की कैंडल कनेक्शन। ऑर्डर बुक और ट्रेड पैनल की स्थिति वहीं देखें।",
   "chartTester.focusMode": "रिसर्च पर ध्यान दें",

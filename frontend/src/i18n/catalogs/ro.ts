@@ -1,6 +1,13 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ro = {
+  "replay.portfolio.title": "Capitalul portofoliului",
+  "replay.portfolio.load": "Încarcă / actualizează curba portofoliului",
+  "replay.portfolio.hint": "Eșantioane la sfârșitul orei; scăderea folosește întregul traseu al prețurilor. Actualizați după avansare. Doar intervalele înregistrate.",
+  "replay.portfolio.drawdown": "Scăderea maximă în interval",
+  "replay.portfolio.empty": "Nu există încă intervale de portofoliu înregistrate",
+  "replay.portfolio.export": "Exportă toate intervalele de portofoliu înregistrate",
+  "replay.portfolio.coverage": "Acoperire: {hours} ore · {count} eșantioane",
   "status.klineScope": "Lumânări",
   "status.klineScopeDetail": "Doar conexiunea lumânărilor graficului activ. Verificați cartea de ordine și panourile de tranzacții pentru starea lor.",
   "chartTester.focusMode": "Mod cercetare",

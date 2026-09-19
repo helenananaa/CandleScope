@@ -1,6 +1,14 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const id = {
+  "replay.portfolio.title": "Ekuitas portofolio",
+  "replay.portfolio.load": "Muat / perbarui kurva portofolio",
+  "replay.portfolio.hint": "Sampel akhir jam; penurunan menggunakan seluruh jalur harga. Perbarui setelah maju. Hanya interval portofolio yang tercatat.",
+  "replay.portfolio.drawdown": "Penurunan maksimum interval",
+  "replay.portfolio.empty": "Belum ada interval portofolio tercatat",
+  "replay.portfolio.export": "Ekspor semua interval portofolio tercatat",
+  "replay.portfolio.coverage": "Cakupan: {hours} jam · {count} sampel",
+  "replay.rt.eventStop": "Dijeda pada peristiwa",
   "status.klineScope": "Candles",
   "status.klineScopeDetail": "Connection for the active chart candles only. Check the order book and trade panels for their own status.",
   "chartTester.focusMode": "Focus on research",

@@ -1,6 +1,13 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const sv = {
+  "replay.portfolio.title": "Portföljens eget kapital",
+  "replay.portfolio.load": "Läs in / uppdatera portföljkurvan",
+  "replay.portfolio.hint": "Stickprov vid timslut; nedgången använder hela prisförloppet. Uppdatera efter framsteg. Endast registrerade portföljintervall.",
+  "replay.portfolio.drawdown": "Största nedgång under intervallet",
+  "replay.portfolio.empty": "Inga portföljintervall har registrerats ännu",
+  "replay.portfolio.export": "Exportera alla registrerade portföljintervall",
+  "replay.portfolio.coverage": "Täckning: {hours} timmar · {count} stickprov",
   "status.klineScope": "Ljus",
   "status.klineScopeDetail": "Anslutning endast för det aktiva diagrammets ljus. Kontrollera status för orderbok och transaktioner i respektive paneler.",
   "chartTester.focusMode": "Fokusera på research",

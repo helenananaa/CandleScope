@@ -199,7 +199,7 @@ test("Pyne sandbox follows locale lifecycle updates and falls back to its own En
   connect({
     source: parent,
     ports: [channel],
-    data: { protocol: "candlescope.ui-bridge/1", type: "host.connect", sequence: 1, payload: payload("nl") },
+    data: { protocol: "candlescope.ui-bridge/1", type: "host.connect", sequence: 1, payload: payload("uk") },
   });
   assert.equal(document.documentElement.lang, "en");
   assert.equal(title.textContent, "Pyne Workbench");

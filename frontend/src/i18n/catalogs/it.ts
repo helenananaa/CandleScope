@@ -1,6 +1,14 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const it = {
+  "replay.portfolio.title": "Patrimonio del portafoglio",
+  "replay.portfolio.load": "Carica / aggiorna la curva del portafoglio",
+  "replay.portfolio.hint": "Campioni di fine ora; il drawdown usa l’intero percorso dei prezzi. Aggiornare dopo l’avanzamento. Solo intervalli registrati.",
+  "replay.portfolio.drawdown": "Drawdown massimo dell’intervallo",
+  "replay.portfolio.empty": "Nessun intervallo del portafoglio registrato",
+  "replay.portfolio.export": "Esporta tutti gli intervalli del portafoglio registrati",
+  "replay.portfolio.coverage": "Copertura: {hours} ore · {count} campioni",
+  "replay.rt.eventStop": "In pausa a un evento",
   "status.klineScope": "Candles",
   "status.klineScopeDetail": "Connection for the active chart candles only. Check the order book and trade panels for their own status.",
   "chartTester.focusMode": "Focus on research",

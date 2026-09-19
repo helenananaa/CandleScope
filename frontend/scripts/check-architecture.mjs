@@ -929,6 +929,8 @@ export function runArchitectureCheck({
   for (const absPath of sourceFiles) {
     const filePath = toProjectPath(absPath, projectDirectory);
     const fileKind = sourceFileKind(absPath);
+    // Shared backend/frontend parity data, read by the replay regression test.
+    if (filePath === "src/features/replay/__tests__/fixtures/builtin-parity.json") continue;
     if (fileKind !== "typescript") {
       addViolation({
         rule: RULES.sourceTypescriptOnly,

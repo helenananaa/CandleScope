@@ -1,6 +1,13 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ms = {
+  "replay.portfolio.title": "Ekuiti portfolio",
+  "replay.portfolio.load": "Muat / segar semula lengkung portfolio",
+  "replay.portfolio.hint": "Sampel akhir jam; susut nilai menggunakan seluruh laluan harga. Segar semula selepas maju. Hanya selang portfolio yang direkodkan.",
+  "replay.portfolio.drawdown": "Susut nilai maksimum selang",
+  "replay.portfolio.empty": "Belum ada selang portfolio direkodkan",
+  "replay.portfolio.export": "Eksport semua selang portfolio yang direkodkan",
+  "replay.portfolio.coverage": "Liputan: {hours} jam · {count} sampel",
   "status.klineScope": "Lilin",
   "status.klineScopeDetail": "Sambungan untuk lilin carta aktif sahaja. Semak status buku pesanan dan panel dagangan pada panel masing-masing.",
   "chartTester.focusMode": "Fokus pada penyelidikan",

@@ -1,6 +1,13 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptPT = {
+  "replay.portfolio.title": "Capital próprio da carteira",
+  "replay.portfolio.load": "Carregar / atualizar a curva da carteira",
+  "replay.portfolio.hint": "Amostras no fim de cada hora; a perda máxima usa todo o percurso dos preços. Atualize após avançar. Apenas intervalos registados.",
+  "replay.portfolio.drawdown": "Perda máxima no intervalo",
+  "replay.portfolio.empty": "Ainda não há intervalos da carteira registados",
+  "replay.portfolio.export": "Exportar todos os intervalos da carteira registados",
+  "replay.portfolio.coverage": "Cobertura: {hours} horas · {count} amostras",
   "status.klineScope": "Velas",
   "status.klineScopeDetail": "Ligação apenas das velas do gráfico activo. Consulte o estado do livro de ordens e do painel de negócios nos respectivos painéis.",
   "chartTester.focusMode": "Concentrar na investigação",

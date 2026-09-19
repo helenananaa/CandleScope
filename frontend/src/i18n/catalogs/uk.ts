@@ -1,6 +1,13 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const uk = {
+  "replay.portfolio.title": "Власний капітал портфеля",
+  "replay.portfolio.load": "Завантажити / оновити криву портфеля",
+  "replay.portfolio.hint": "Зразки наприкінці години; просадка враховує весь рух цін. Оновлюйте після просування. Лише записані інтервали портфеля.",
+  "replay.portfolio.drawdown": "Максимальна просадка за інтервал",
+  "replay.portfolio.empty": "Інтервали портфеля ще не записано",
+  "replay.portfolio.export": "Експортувати всі записані інтервали портфеля",
+  "replay.portfolio.coverage": "Покриття: {hours} год · {count} зразків",
   "status.klineScope": "Свічки",
   "status.klineScopeDetail": "Підключення лише свічок активного графіка. Статус книги ордерів і стрічки угод дивіться на відповідних панелях.",
   "chartTester.focusMode": "Режим дослідження",

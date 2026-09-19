@@ -1,6 +1,14 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const de = {
+  "replay.portfolio.title": "Portfolio-Eigenkapital",
+  "replay.portfolio.load": "Portfoliokurve laden / aktualisieren",
+  "replay.portfolio.hint": "Stundenendwerte; der Drawdown berücksichtigt den gesamten Kursverlauf. Nach dem Fortschreiten aktualisieren. Nur aufgezeichnete Portfoliointervalle.",
+  "replay.portfolio.drawdown": "Maximaler Drawdown im Intervall",
+  "replay.portfolio.empty": "Noch keine Portfoliointervalle aufgezeichnet",
+  "replay.portfolio.export": "Alle aufgezeichneten Portfoliointervalle exportieren",
+  "replay.portfolio.coverage": "Abdeckung: {hours} Stunden · {count} Messpunkte",
+  "replay.rt.eventStop": "Bei einem Ereignis pausiert",
   "status.klineScope": "Candles",
   "status.klineScopeDetail": "Connection for the active chart candles only. Check the order book and trade panels for their own status.",
   "chartTester.focusMode": "Focus on research",

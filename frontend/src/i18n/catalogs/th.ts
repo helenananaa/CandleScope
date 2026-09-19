@@ -1,6 +1,13 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const th = {
+  "replay.portfolio.title": "มูลค่าสุทธิของพอร์ต",
+  "replay.portfolio.load": "โหลด / รีเฟรชเส้นมูลค่าพอร์ต",
+  "replay.portfolio.hint": "สุ่มตัวอย่างเมื่อสิ้นชั่วโมง การลดลงคำนวณจากเส้นทางราคาทั้งหมด รีเฟรชหลังเดินหน้า ครอบคลุมเฉพาะช่วงพอร์ตที่บันทึกไว้",
+  "replay.portfolio.drawdown": "การลดลงสูงสุดในช่วง",
+  "replay.portfolio.empty": "ยังไม่มีช่วงพอร์ตที่บันทึกไว้",
+  "replay.portfolio.export": "ส่งออกช่วงพอร์ตที่บันทึกไว้ทั้งหมด",
+  "replay.portfolio.coverage": "ครอบคลุม: {hours} ชั่วโมง · {count} ตัวอย่าง",
   "status.klineScope": "แท่งเทียน",
   "status.klineScopeDetail": "สถานะการเชื่อมต่อของแท่งเทียนบนกราฟที่ใช้งานอยู่เท่านั้น ตรวจสอบสมุดคำสั่งและแผงเทรดเพื่อดูสถานะของแต่ละส่วน",
   "chartTester.focusMode": "โฟกัสงานวิจัย",

@@ -1,6 +1,13 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const nl = {
+  "replay.portfolio.title": "Portefeuillevermogen",
+  "replay.portfolio.load": "Portefeuillecurve laden / vernieuwen",
+  "replay.portfolio.hint": "Uur-eindmonsters; de terugval gebruikt het volledige prijsverloop. Vernieuw na het vooruitgaan. Alleen vastgelegde portefeuille-intervallen.",
+  "replay.portfolio.drawdown": "Maximale terugval in het interval",
+  "replay.portfolio.empty": "Nog geen portefeuille-intervallen vastgelegd",
+  "replay.portfolio.export": "Alle vastgelegde portefeuille-intervallen exporteren",
+  "replay.portfolio.coverage": "Dekking: {hours} uur · {count} monsters",
   "status.klineScope": "Kaarsen",
   "status.klineScopeDetail": "Alleen de verbinding voor de kaarsen van de actieve grafiek. Controleer de panelen voor orderboek en transacties voor hun eigen status.",
   "chartTester.focusMode": "Focus op onderzoek",
