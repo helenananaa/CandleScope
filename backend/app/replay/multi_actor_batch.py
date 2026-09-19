@@ -12,6 +12,9 @@ async def handle_batch(actor, request):
     try:
         rollback = actor._capture_rollback()
         history = actor._command_history
+        if actor._durable_command_lookup is not None:
+            while history._records and len(history._records) + len(request.group.phases) > history._max_records:
+                history._records.pop(next(iter(history._records)))
         if len(history._records) + len(request.group.phases) > history._max_records:
             raise ReplayDomainError(ReplayErrorCode.SCAN_LIMIT_EXCEEDED, "batch exceeds command history capacity")
         for phase in request.group.phases:
@@ -22,7 +25,16 @@ async def handle_batch(actor, request):
             previous = actor._component_state()
             previous_journal = list(actor._journal_entries)
             actor._begin_candidate(capture_source_events=False)
+            projection_sequence = actor._sequence
             result = await actor._execute_command(command, parse_command(command), _group=phase)
+            if getattr(request.group, "terminal_only", False):
+                # Candidate-only market projections have no public sequence.
+                # Source/event-chain positions remain exact in each checkpoint.
+                actor._sequence = projection_sequence
+                actor._pending_events.clear()
+                if phase is request.group.phases[-1]:
+                    actor._emit_reset_snapshot("tape_cohort_batch_complete", mandatory=True)
+                result = actor._command_result(command.command_id, result.data)
             actor._command_log_offset += 1
             components = actor._component_state()
             checkpoint = actor._checkpoint_codec.encode(
@@ -47,8 +59,10 @@ async def handle_batch(actor, request):
             actor._pending_history_frames = []
         # The last barrier is released only after all phases have committed.
         committed = True
-        for command, result, checkpoint, events in staged:
+        for index, (command, result, checkpoint, events) in enumerate(staged):
             actor._command_history.record_success(command, result)
+            if getattr(request.group, "terminal_only", False) and index < len(staged)-1:
+                continue
             for event, mandatory in events:
                 actor._publish_event(event, mandatory=mandatory)
         actor._metrics["commands_accepted"] += len(staged)

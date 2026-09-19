@@ -715,9 +715,10 @@ async def test_multi_market_funding_settles_once_per_track_at_global_boundary(
         async def observed_heartbeat(
             session_id: str,
             client_instance_id: str,
+            **kwargs,
         ) -> None:
             heartbeat_sessions.append(session_id)
-            await original_heartbeat(session_id, client_instance_id)
+            await original_heartbeat(session_id, client_instance_id, **kwargs)
 
         monkeypatch.setattr(service, "heartbeat", observed_heartbeat)
         assert service.training is not None

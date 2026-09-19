@@ -4477,7 +4477,11 @@ class TrainingRunService:
                     durable_intent.get("plan"),
                     field_name="durable advance plan",
                 )
-                if stored_plan.get('schema') == 'multi-bar-advance-intent.v1':
+                if stored_plan.get('schema') in {'multi-bar-advance-intent.v1', 'tape-cohort-advance.v1'}:
+                    if stored_plan.get('schema') == 'tape-cohort-advance.v1':
+                        if not hasattr(self.store, '_tape_intent_runs'):
+                            self.store._tape_intent_runs = set()
+                        self.store._tape_intent_runs.add(normalized_run)
                     from .multi_interval_advance import resume_advance
                     return await resume_advance(self,command=command,binding=binding,intent=durable_intent)
                 stored_mode = str(
@@ -4832,8 +4836,22 @@ class TrainingRunService:
             binding.get("account_data_mode") == AccountDataMode.HISTORICAL_EXACT.value
         )
         hedge_input_clock = binding.get("position_mode") == "HEDGE"
+        tape_interval_clock = (
+            self.replay_service.settings.replay_fast_forward_optimization_enabled
+            and binding.get("source_kind") == "AGG_TRADE"
+            and binding.get("position_mode") == "ONE_WAY"
+            and binding.get("book_mode", "OFF") == "OFF"
+            and binding.get("funding_mode") == "OFF"
+            and not exact_account_clock
+            and (command.type in {ReplayV2CommandType.ADVANCE_TO, ReplayV2CommandType.ADVANCE_BY}
+                 or (command.type is ReplayV2CommandType.ADVANCE
+                     and command.payload.get("basis") in {"DISPLAY_BAR", "VIRTUAL_TIME"}))
+            and not any(o["status"] in {"OPEN", "PARTIALLY_FILLED"}
+                        for o in snapshot["components"]["orders"])
+        )
         multi_track_command = (
             len(full_tracks) > 1
+            or tape_interval_clock
             or (contract_clock and command.type in contract_ordered_types)
             or (exact_account_clock and command.type in exact_account_ordered_types)
             or (hedge_input_clock and command.type in exact_account_ordered_types)
@@ -7806,7 +7824,7 @@ class TrainingRunService:
             } or (
                 command.type is ReplayV2CommandType.ADVANCE
                 and (plan.get("basis") == AdvanceBasis.VIRTUAL_TIME.value
-                     or (binding.get('source_kind') == 'BAR' and plan.get('basis') == AdvanceBasis.DISPLAY_BAR.value))
+                     or plan.get('basis') == AdvanceBasis.DISPLAY_BAR.value)
             )
             if cancelable_scan:
                 decision = self._plan_fast_forward(
@@ -7935,7 +7953,9 @@ class TrainingRunService:
         if fast_forward_plan is not None:
             if executed_multi:
                 fast_forward_plan = {**dict(fast_forward_plan),
-                    'executed_path':'MULTI_BAR_INTERVAL_V1',
+                    'executed_path': ('MULTI_TAPE_COHORT_V1'
+                        if fast_forward_plan.get('source_kind') == 'AGG_TRADE'
+                        else 'MULTI_BAR_INTERVAL_V1'),
                     'financial_reference_equivalence':True,
                     'legacy_hash_byte_equivalence':False}
             equivalence = fast_forward_plan.get("equivalence")
@@ -8702,7 +8722,8 @@ class TrainingRunService:
             else max(10_000, (source_goal.planned_count + 1) * 4)
         )
         source_start_verified = False
-        for _wave_index in range(wave_budget):
+        from .tape_phases import coordinator_waves
+        for _wave_index in coordinator_waves(self.store, command, binding, job, wave_budget):
             if (
                 cancel_event is not None
                 and cancel_event.is_set()
@@ -8798,6 +8819,12 @@ class TrainingRunService:
                     completion=completion,
                 )
                 completed_multi_interval = recorded is not None
+                if recorded is None:
+                    from .tape_phases import try_advance as try_tape_phases
+                    recorded = await try_tape_phases(
+                        self, command=command, binding=binding, tracks=tracks,
+                        snapshots=snapshots, target=target_virtual_time_ms,
+                    )
                 if recorded is None:
                     recorded = await self._try_indexed_interval(
                     command=command, binding=binding, tracks=tracks,

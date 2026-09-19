@@ -15,6 +15,8 @@ def record_portfolio_point(
     store, connection, *, run_id, session_id, actual_time_ms, sequence
 ):
     """Keep exact fallback/financial boundary observations between intervals."""
+    if run_id in getattr(store, "_tape_interval_active", ()):
+        return
     if any(
         plan["run_id"] == run_id
         for plan in getattr(store, "_multi_interval_plans", {}).values()
@@ -130,6 +132,9 @@ def reconstruct_portfolio_interval(basis, *, input_root, limit=5000, bucket_ms=6
         or bucket_ms < 0
     ):
         raise ValueError("invalid portfolio interval query")
+    if basis.get("schema") == "multi-tape-interval.v1":
+        from .tape_interval import reconstruct
+        return reconstruct(basis, limit=limit, bucket_ms=bucket_ms)
     if basis.get("schema") == "portfolio-point.v1":
         equity, at = basis["equity"], basis["time_ms"]
         return {

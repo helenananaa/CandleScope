@@ -119,6 +119,7 @@ def ordered_equity_summary(
     initial_prices: Mapping[str, Decimal],
     events: Sequence[tuple[int, int, str, int, Decimal]],
     sample_times: set[int] | None = None,
+    _partition_after: tuple[int, int] | None = None,
 ) -> dict[str, object]:
     """Exact extrema/drawdown over (time, phase, track, sequence, price).
 
@@ -205,6 +206,7 @@ def ordered_equity_summary(
         drawdown = current - current
         trough_time = None
         points = [] if sample_times is not None else None
+        observations = [] if _partition_after is not None else None
         for offset, (timestamp, _phase, track, _sequence, price) in enumerate(ordered):
             prices[track] = price
             if exact_integer:
@@ -217,6 +219,8 @@ def ordered_equity_summary(
             # its portfolio. Intermediate per-track prices are not observations.
             if offset + 1 < len(ordered) and ordered[offset + 1][0] == timestamp:
                 continue
+            if observations is not None:
+                observations.append((timestamp, current, offset + 1))
             peak = max(peak, current)
             if current < trough:
                 trough, trough_time = current, timestamp
@@ -234,6 +238,36 @@ def ordered_equity_summary(
             "events": len(ordered),
             "integer_path": exact_integer,
         }
+        if observations is not None:
+            after, fallback = _partition_after
+            pivot = (trough_time if trough_time is not None
+                     and after < trough_time < ordered[-1][0] else fallback)
+            partitions = []
+            initial, previous_count = first, 0
+            for selected in (
+                [o for o in observations if o[0] <= pivot],
+                [o for o in observations if o[0] > pivot],
+            ):
+                local_peak = local_trough = initial
+                local_drawdown = initial - initial
+                local_trough_time = None
+                for timestamp, value, _ in selected:
+                    local_peak = max(local_peak, value)
+                    if value < local_trough:
+                        local_trough, local_trough_time = value, timestamp
+                    local_drawdown = max(local_drawdown, local_peak - value)
+                final = selected[-1][1] if selected else initial
+                end_count = selected[-1][2] if selected else previous_count
+                partitions.append(dict(
+                    schema=result["schema"], first=convert(initial), last=convert(final),
+                    peak=convert(local_peak), trough=convert(local_trough),
+                    max_drawdown=convert(local_drawdown), trough_time_ms=local_trough_time,
+                    events=end_count - previous_count, integer_path=exact_integer,
+                ))
+                initial, previous_count = final, end_count
+            result["ordered_events"] = ordered
+            result["partitions"] = partitions
+            result["partition_time_ms"] = pivot
         if points is not None:
             result["points"] = points
         return result

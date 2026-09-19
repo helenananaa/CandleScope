@@ -78,6 +78,68 @@ leaderboard or requirement to prevent a user from editing their own local data.
   historical-account or book dependencies. Price changes/interactions still run
   individually through the global risk/event barrier. Unequal grids retain exact
   event timestamps, source counts, equal-time cohorts and deferred terminals.
+- Exact tape phases may share one commit for up to 16 complete global cohorts
+  across 2-8 ONE_WAY tracks without resting orders, funding, historical-account
+  or book dependencies. Execute each cohort's reducers, account/risk and review
+  writes in order; roll back the whole unpublished batch at a liquidation
+  interaction and retry the scalar coordinator. Publish one contiguous terminal
+  snapshot per actor after commit, and drain cancellation before releasing actors.
+  Persist the parent intent and complete-track recovery bookmarks in that same
+  transaction, including subsequent scalar fallback cohorts.
+  Renew scan windows only for progressing durable tape jobs. Incomplete fallback
+  cohorts are not recovery bookmarks: reject a mismatched fingerprint instead of
+  resuming partial account state. Clock-only terminal checkpoints also bookmark
+  the parent before its reply is saved.
+  Plan at most 512 events per track. Before batching dense or mixed-price
+  same-millisecond trades, screen the full price envelope against the current
+  shared account, isolated balances and maintenance tiers under the writer lock.
+  Failed bounds retain scalar risk handling; never infer safety from the final
+  price. Candidate source processing can omit disposable public projections,
+  and same-time, order-free trades may use candle/ordered-price summaries after
+  this envelope proof. Preserve each source-chain event and every existing
+  complete-cohort account/review anchor. Bound summary arithmetic to an exact
+  Decimal domain; unusual precision retains the original final-state reducer.
+  Price high/low alone cannot preserve drawdown: keep ordered maximum fall/rise
+  and combine them with the preceding account peak. Cross-time summary jumps
+  require a separate review/curve reconstruction contract.
+- Actor command memory is a bounded cache only when durable command lookup and
+  mutation persistence are both installed. Recheck evicted IDs inside the actor
+  queue against SQLite; preserve successful replies, rejected replies and ID
+  conflicts across eviction and restart. Standalone actors retain fail-closed
+  capacity semantics.
+- Tape interval jumps (approved 2026-09-19) supersede the per-cohort persistence
+  requirement above for safe ONE_WAY ranges on 1-8 tracks. Plan at most 8192
+  trades per track, screen the shared account under the writer lock, and halve
+  unsafe ranges by complete timestamp cohorts before exact interaction fallback.
+  Persist two complete-cohort anchors (portfolio trough when internal, otherwise
+  midpoint, then endpoint), immutable revealed prices and account curve bases in
+  the same transaction as every actor and the parent recovery bookmark.
+  `multi-tape-interval.v1` reconstructs portfolio observations in global cohort
+  order; `tape-curve.v1` values only requested selected-adapter samples. Preserve
+  clock-only observations with repeated source sequences and fixed real phase
+  revisions, so later account commands at the same sequence override history.
+  Bind loaded curve time/sequence bounds to committed interval metadata. Forward
+  each track's full interval price bounds to trade MAE/MFE projection. Prepare
+  summaries outside the writer/event loop; do not cache account state globally.
+  Legacy ADVANCE_BY actor/source checkpoints keep their existing v1 source chain
+  in this compatibility path: measure the remaining linear decode/hash cost and
+  do not claim constant-time advancement or a shared persistent tape range index.
+- Tape preparation may retain a command-local immutable trade tuple and bounded
+  page cursor forks. Reuse only with matching reader, public time/identity mapping,
+  starting source cursor, actor revision and target. Derive prefix positions from
+  validated page spans; never skip an unvalidated page or split a timestamp cohort.
+  Ordinary sources retain preflight/consume fallback. Candidate source replacement
+  stays inside atomic rollback, and terminal events retain exact handling.
+  Portfolio phase summaries may reuse one set of complete-cohort equity values;
+  preserve phase-local initial equity, peak, trough and drawdown. Never put those
+  account-bound values in a shared market cache.
+- Prepare tape global-event hashes and large interval/curve encodings in the
+  candidate worker before acquiring the SQLite writer. Bind prepared values to
+  the exact event tuple or interval plus run/command identity. The writer retains
+  live risk, cursor, ordering and equity checks, and all rows still commit together.
+  Preparation failure in either phase must roll back every unpublished actor.
+  The singleton global-event encoder must retain canonical v1 bytes and keep
+  the general iterable/non-native fallback; its small cache holds identifiers only.
 - Curve interval bounds can exclude old ranges but cannot prove every bucket
   is occupied. Count actual endpoints across gaps when selecting AUTO or deciding
   which curve bodies are necessary.

@@ -115,6 +115,7 @@ export interface ReplayEquitySample {
   readonly ledger_tail_hash: `sha256:${string}`;
   readonly state_hash: `sha256:${string}` | null;
   readonly source_event_hash?: `sha256:${string}`;
+  readonly interval_reference?: { readonly basis_hash: `sha256:${string}`; readonly offset: number };
 }
 
 export interface ReplayEquityResponse {
@@ -934,14 +935,20 @@ export function parseReplayEquityResponse(value: unknown): ReplayEquityResponse 
   const samples = source.samples.map((item, index): ReplayEquitySample => {
     const field = `equity.samples[${index}]`;
     const hasSourceHash = typeof item === "object" && item !== null && "source_event_hash" in item;
+    const hasInterval = typeof item === "object" && item !== null && "interval_reference" in item;
     const sample = exactObject(item, field, [
       "source_sequence", "revision", "public_time", "equity", "cash_balance",
       "unrealized_pnl", "ledger_tail_hash", "state_hash",
       ...(hasSourceHash ? ["source_event_hash"] : []),
+      ...(hasInterval ? ["interval_reference"] : []),
     ]);
-    if (sample.state_hash === null && !hasSourceHash) {
+    if (sample.state_hash === null && !hasSourceHash && !hasInterval) {
       throw new TypeError(`${field} requires a source reference when its state is not materialized`);
     }
+    if (hasInterval && (hasSourceHash || sample.state_hash !== null)) {
+      throw new TypeError(`${field} has conflicting interval references`);
+    }
+    const reference = hasInterval ? exactObject(sample.interval_reference, `${field}.interval_reference`, ["basis_hash", "offset"]) : null;
     return {
       source_sequence: counter(sample.source_sequence, `${field}.source_sequence`),
       revision: counter(sample.revision, `${field}.revision`),
@@ -952,6 +959,10 @@ export function parseReplayEquityResponse(value: unknown): ReplayEquityResponse 
       ledger_tail_hash: digest(sample.ledger_tail_hash, `${field}.ledger_tail_hash`),
       state_hash: sample.state_hash === null ? null : digest(sample.state_hash, `${field}.state_hash`),
       ...(hasSourceHash ? { source_event_hash: digest(sample.source_event_hash, `${field}.source_event_hash`) } : {}),
+      ...(reference ? { interval_reference: {
+        basis_hash: digest(reference.basis_hash, `${field}.interval_reference.basis_hash`),
+        offset: counter(reference.offset, `${field}.interval_reference.offset`),
+      } } : {}),
     };
   });
   if (samples.length > parsedLimits[resolution]) throw new TypeError("equity.samples exceeds its declared bound");

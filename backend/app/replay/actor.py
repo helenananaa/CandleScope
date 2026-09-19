@@ -355,6 +355,7 @@ class _SourceChunkPlanRequest:
     screen_interactions: bool = False
     preserve_valuation: bool = False
     indexed: bool = False
+    prepare_tape: bool = False
 
 
 @dataclass(slots=True)
@@ -472,6 +473,7 @@ class ReplaySessionActor:
         mutation_hook: Callable[[ActorMutation], Awaitable[None]] | None = None,
         recovery_target: ActorRecoveryTarget | None = None,
         prepared_cache_path: str | None = None,
+        durable_command_lookup: Callable[[ReplayCommand], Awaitable[CommandResult | None]] | None = None,
     ) -> None:
         self.session_id = validate_identifier(session_id, field_name="session_id")
         if not isinstance(config, ReplaySessionConfig):
@@ -514,6 +516,9 @@ class ReplaySessionActor:
         self._flush_hook = flush_hook
         self._checkpoint_hook = checkpoint_hook
         self._mutation_hook = mutation_hook
+        self._durable_command_lookup = durable_command_lookup
+        if durable_command_lookup is not None and mutation_hook is None:
+            raise ValueError("durable command lookup requires durable mutations")
         self._prepared_cache_path = prepared_cache_path
         if recovery_target is not None and restore_checkpoint is None:
             raise ValueError("recovery_target requires restore_checkpoint")
@@ -817,6 +822,7 @@ class ReplaySessionActor:
         screen_interactions: bool = False,
         preserve_valuation: bool = False,
         indexed: bool = False,
+        prepare_tape: bool = False,
     ) -> dict[str, object]:
         """Plan one bounded immutable-source chunk from inside the mailbox."""
 
@@ -832,6 +838,7 @@ class ReplaySessionActor:
             screen_interactions=screen_interactions,
             preserve_valuation=preserve_valuation,
             indexed=indexed,
+            prepare_tape=prepare_tape,
         )
         self._offer_request(request)
         return await request.future
@@ -1497,6 +1504,7 @@ class ReplaySessionActor:
                             max_events=request.max_events,
                             screen_interactions=request.screen_interactions,
                             preserve_valuation=request.preserve_valuation,
+                            prepare_tape=request.prepare_tape,
                         )
                     )
             elif isinstance(request, _SourceGoalScanRequest):
@@ -1800,6 +1808,12 @@ class ReplaySessionActor:
         try:
             try:
                 replayed = self._command_history.replay(command)
+                if replayed is None and self._durable_command_lookup is not None and request.group is None:
+                    # Lookup inside the serialized actor as well: a request may
+                    # have queued before an earlier command committed/evicted.
+                    # Coordinator groups already loaded all IDs together and
+                    # recheck uniqueness at their atomic writer barrier.
+                    replayed = await self._durable_command_lookup(command)
             except ReplayDomainError as exc:
                 self._metrics["commands_rejected"] = (
                     int(self._metrics["commands_rejected"] or 0) + 1
@@ -1814,6 +1828,8 @@ class ReplaySessionActor:
             capacity_reserved = False
             rollback: _ActorRollback | None = None
             try:
+                if self._durable_command_lookup is not None:
+                    self._command_history.reserve_cached_record()
                 self._command_history.ensure_capacity()
                 capacity_reserved = True
                 rollback = self._capture_rollback()
@@ -2477,21 +2493,34 @@ class ReplaySessionActor:
                     ReplayErrorCode.INVALID_STATE_TRANSITION,
                     "advance target exceeds timestamp range",
                 )
-            expected_count = await self._preflight_advance_target(target)
+            prepared = getattr(_group, "prepared_tape", {}).get(self.session_id)
+            if prepared is not None:
+                prepared.validate(self, target)
+                expected_count = len(prepared.trades)
+                if expected_count > self._max_atomic_command_source_events:
+                    self._reject_command_resource_limit(requested=expected_count, operation="advance_by")
+            else:
+                expected_count = await self._preflight_advance_target(target)
             self._revision += 1
-            consumed = await self._advance_to(
-                target,
-                publish=True,
-                checkpoint=False,
-                max_events=expected_count,
-            )
+            deferred = bool(getattr(_group, "defer_tape_projections", False))
+            if getattr(_group, "tape_summary", False):
+                from .trade_summary import advance
+
+                consumed = await advance(self, target, expected_count, prepared=prepared)
+            else:
+                consumed = await self._advance_to(
+                    target,
+                    publish=not deferred,
+                    checkpoint=False,
+                    max_events=expected_count,
+                )
             if consumed != expected_count:
                 raise ReplayDomainError(
                     ReplayErrorCode.DATASET_MISMATCH,
                     "replay source changed after advance preflight",
                     details={"expected": expected_count, "actual": consumed},
                 )
-            if self._state is not SessionState.ENDED:
+            if self._state is not SessionState.ENDED and not deferred:
                 self._emit_status("advance_complete", mandatory=True)
             return self._command_result(
                 command.command_id,
@@ -3499,11 +3528,18 @@ class ReplaySessionActor:
         max_events: int,
         screen_interactions: bool = False,
         preserve_valuation: bool = False,
+        prepare_tape: bool = False,
     ) -> dict[str, object]:
+        if prepare_tape and not screen_interactions and not preserve_valuation:
+            from .sources.prepared_tape import plan
+            prepared = plan(self, target_time_ms, max_events)
+            if prepared is not None:
+                return prepared
         source = self._fork_current_source()
         count = 0
         last_event_time_ms: int | None = None
         event_times_ms: list[int] = []
+        event_prices: list[object] = []
         preview: list[object] = []
         valuation = getattr(self._reducer, "constant_valuation_prefix_length", None)
         while count < max_events and (event := source.peek()) is not None:
@@ -3524,6 +3560,7 @@ class ReplaySessionActor:
             count += 1
             last_event_time_ms = event_time
             event_times_ms.append(event_time)
+            event_prices.append(event.get('price') if isinstance(event, Mapping) else getattr(event, 'price', None))
             if screen_interactions or preserve_valuation:
                 preview.append(event)
             if not same_value:
@@ -3558,6 +3595,7 @@ class ReplaySessionActor:
             "event_count": count,
             "last_event_time_ms": last_event_time_ms,
             "event_times_ms": tuple(event_times_ms),
+            "event_prices": tuple(event_prices[:count]),
             "has_more_before_target": (
                 count < screened_count or next_event is not None
                 and self._event_time_ms(next_event) <= target_time_ms

@@ -1495,6 +1495,7 @@ class ReplayService:
         screen_interactions: bool = False,
         preserve_valuation: bool = False,
         indexed: bool = False,
+        prepare_tape: bool = False,
     ) -> dict[str, object]:
         """Return one bounded, read-only source scan plan for training replay."""
 
@@ -1505,6 +1506,7 @@ class ReplayService:
                 screen_interactions=screen_interactions,
                 preserve_valuation=preserve_valuation,
                 indexed=indexed,
+                prepare_tape=prepare_tape,
             )
 
     def prepared_history_repository(self, session_id: str, data_epoch: str):
@@ -3099,6 +3101,10 @@ class ReplayService:
                     blind_mode=config.blind_mode,
                 )
 
+        async def durable_command_lookup(command):
+            stored = await self.store.get_command(session_id, command.command_id)
+            return None if stored is None else self._replay_stored_command(stored, command)
+
         return ReplaySessionActor(
             session_id=session_id,
             config=config,
@@ -3114,6 +3120,7 @@ class ReplayService:
             restore_checkpoint=restore_checkpoint,
             retained_checkpoints=retained_checkpoints,
             mutation_hook=self._persist_mutation,
+            durable_command_lookup=durable_command_lookup,
             recovery_target=recovery_target,
             prepared_cache_path=str(
                 self.store.path.parent / (self.store.path.name + ".prepared")

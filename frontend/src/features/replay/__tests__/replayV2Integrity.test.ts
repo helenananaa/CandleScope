@@ -354,6 +354,18 @@ test("equity parser and polyline remain bounded and Decimal-backed", () => {
     () => parseReplayEquityResponse({ ...response, samples: [missingReference] }),
     /requires a source reference/,
   );
+  const intervalSample = { ...missingReference, interval_reference: {
+    basis_hash: `sha256:${"2".repeat(64)}`, offset: 17,
+  } };
+  const interval = parseReplayEquityResponse({ ...response, samples: [intervalSample] });
+  assert.deepEqual(interval.samples[0]?.interval_reference, intervalSample.interval_reference);
+  assert.equal(interval.samples[0]?.source_event_hash, undefined);
+  assert.throws(() => parseReplayEquityResponse({ ...response, samples: [{
+    ...intervalSample, source_event_hash: `sha256:${"3".repeat(64)}`,
+  }] }), /conflicting interval references/);
+  assert.throws(() => parseReplayEquityResponse({ ...response, samples: [{
+    ...intervalSample, interval_reference: { ...intervalSample.interval_reference, offset: -1 },
+  }] }));
 });
 
 

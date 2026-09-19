@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+from functools import lru_cache
 from collections.abc import Iterable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import AsyncIterator
 
-from app.replay.canonical import canonical_sha256
+from app.replay.canonical import canonical_json_bytes, canonical_sha256
 from app.replay.models import validate_identifier, validate_timestamp_ms
 
 from .models import AdvanceBasis, coerce_enum, validate_v2_counter
@@ -16,6 +18,7 @@ from .models import AdvanceBasis, coerce_enum, validate_v2_counter
 
 GLOBAL_ORDERING_VERSION = "replay.global-order.v1"
 MARKET_EVENT_PHASE = 20
+_SINGLE_EVENT_SUFFIX = b'}],"schema_version":' + canonical_json_bytes(GLOBAL_ORDERING_VERSION) + b"}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +92,22 @@ def stable_market_event_order(
 
 
 def global_ordering_hash(events: Sequence[StableMarketEvent]) -> str:
+    if type(events) in (tuple, list) and len(events) == 1 and type(events[0]) is StableMarketEvent:
+        event = events[0]
+        if (type(event.actual_event_time_ms) is int
+                and type(event.event_phase) is int
+                and type(event.source_sequence) is int
+                and type(event.market_track_stable_id) is str):
+            # Exact v1 JSON, with only validated native integer fields varying.
+            # The general encoder remains the reference for other input types.
+            material = (
+                b'{"events":[{"actual_event_time_ms":'
+                + str(event.actual_event_time_ms).encode("ascii")
+                + _single_event_middle(event.market_track_stable_id, event.event_phase)
+                + str(event.source_sequence).encode("ascii")
+                + _SINGLE_EVENT_SUFFIX
+            )
+            return "sha256:" + hashlib.sha256(material).hexdigest()
     ordered = stable_market_event_order(events)
     return canonical_sha256(
         {
@@ -96,6 +115,29 @@ def global_ordering_hash(events: Sequence[StableMarketEvent]) -> str:
             "events": [event.to_dict() for event in ordered],
         }
     )
+
+
+@lru_cache(maxsize=64)
+def _single_event_middle(track_id: str, phase: int) -> bytes:
+    return (b',"event_phase":' + str(phase).encode("ascii")
+            + b',"market_track_stable_id":' + canonical_json_bytes(track_id)
+            + b',"source_sequence":')
+
+
+@dataclass(frozen=True)
+class PreparedGlobalEventHashes:
+    """Command-local hashes bound to the exact immutable event tuple."""
+
+    events: tuple[StableMarketEvent, ...]
+    values: tuple[str, ...]
+
+    @classmethod
+    def prepare(cls, events):
+        return cls(events, tuple(global_ordering_hash((event,)) for event in events))
+
+    def validate(self, events):
+        if self.events is not events or len(self.values) != len(events):
+            raise ValueError("prepared global hashes lost their event basis")
 
 
 class TrainingRunActor:

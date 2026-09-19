@@ -145,7 +145,14 @@ def export_intervals(snapshot, *, input_root):
 
     yield encode(
         dict(
-            schema="replay.portfolio-curve-export.v1",
+            schema=(
+                "replay.portfolio-curve-export.v2"
+                if any(
+                    json.loads(row[4]).get("schema") == "multi-tape-interval.v1"
+                    for row in rows
+                )
+                else "replay.portfolio-curve-export.v1"
+            ),
             run_id=snapshot["run_id"],
             scope="RECORDED_PORTFOLIO_INTERVALS",
             complete_training_history=False,
@@ -161,6 +168,43 @@ def export_intervals(snapshot, *, input_root):
         basis = json.loads(row[4])
         summary = json.loads(row[3])
         summary.pop("trough_time_ms", None)
+        if basis["schema"] == "multi-tape-interval.v1":
+            yield encode(
+                dict(
+                    kind="tape_interval",
+                    index=index,
+                    start_ms=row[1] - origin,
+                    end_ms=row[2] - origin,
+                    cash=basis["cash"],
+                    legs=[
+                        dict(
+                            track_id=leg["track_id"],
+                            side=leg["side"],
+                            quantity=leg["quantity"],
+                            entry=leg["entry"],
+                            contract_size=leg["rule"]["contract_size"],
+                        )
+                        for leg in basis["legs"]
+                    ],
+                    initial_prices=basis["initial_prices"],
+                    summary=summary,
+                )
+            )
+            for at, phase, tid, sequence, price in basis["events"]:
+                if not row[1] < at <= row[2]:
+                    raise ValueError("tape export crossed its committed range")
+                yield encode(
+                    dict(
+                        kind="trade_mark",
+                        interval=index,
+                        offset_ms=at - origin,
+                        event_phase=phase,
+                        track_id=tid,
+                        sequence=sequence,
+                        price=price,
+                    )
+                )
+            continue
         if basis["schema"] == "portfolio-point.v1":
             yield encode(
                 dict(

@@ -88,7 +88,7 @@ async def resume_advance(owner, *, command, binding, intent):
     )
     key = (command.run_id, command.command_id)
     owner._advance_jobs[key] = job
-    event_stop = {} if command.payload.get("stop_on_event", True) else None
+    event_stop = {} if owner._stop_on_event(command) else None
     try:
         if snapshot["cursor"]["virtual_time_ms"] < target:
             await owner._advance_full_tracks_to(

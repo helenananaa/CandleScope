@@ -105,7 +105,10 @@ def test_deferred_broker_frame_does_not_observe_later_bars(monkeypatch):
     full, encoded = materialize()
     assert full == expected
     assert encoded == canonical_json_bytes(expected)
-    full["bar_builder"]["closed_bars"][0]["close"] = "9999"
+    with pytest.raises(TypeError, match="read-only"):
+        full["bar_builder"]["closed_bars"][0]["close"] = "9999"
+    detached = broker.snapshot()
+    detached["bar_builder"]["closed_bars"][0]["close"] = "9999"
     assert materialize()[0] == expected
     monkeypatch.setattr(broker, "snapshot", lambda: {"custom": True})
     assert broker._capture_recorded_frame() is None

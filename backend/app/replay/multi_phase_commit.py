@@ -6,16 +6,25 @@ from .multi_commit import MutationGroup
 from .timing import timed_to_thread
 
 
-async def commit_actor_phases(service, phases):
-    if len(phases) != 2:
+async def commit_actor_phases(service, phases, *, tape=False):
+    if (not tape and len(phases) != 2) or (tape and not 2 <= len(phases) <= 16):
         raise ValueError("an atomic interval pair requires two phases")
     groups = [MutationGroup(phase["commands"]) for phase in phases]
-    if not all(group.batched_builders for group in groups):
+    if tape:
+        from .constants import CommandType
+        if any(c.type is not CommandType.ADVANCE_BY for g in groups for c in g.commands.values()):
+            raise ValueError("tape phases require exact duration commands")
+    elif not all(group.batched_builders for group in groups):
         raise ValueError("only shared BAR interval commands can form an atomic pair")
     root = groups[0]
     if any(set(group.commands) != set(root.commands) for group in groups):
         raise ValueError("batch phases must contain the same actors")
     root.phases = groups
+    root.terminal_only = tape
+    for group, phase in zip(groups, phases, strict=True):
+        group.defer_tape_projections = tape
+        group.tape_summary = tape and bool(phase.get("tape_summary"))
+        group.prepared_tape = phase.get("prepared_tape", {}) if group.tape_summary else {}
     registry = getattr(service, "_multi_mutation_groups", None)
     if registry is None:
         registry = service._multi_mutation_groups = {}
@@ -45,9 +54,10 @@ async def commit_actor_phases(service, phases):
 
         try:
             for ordinal, (group, phase) in enumerate(zip(groups, phases, strict=True)):
-                await barrier(group.builders_ready)
-                await timed_to_thread("multi_builder_batch", lambda: [group.builders[sid]() for sid in group.commands])
-                group.builders_completed.set_result(None)
+                if group.batched_builders:
+                    await barrier(group.builders_ready)
+                    await timed_to_thread("multi_builder_batch", lambda: [group.builders[sid]() for sid in group.commands])
+                    group.builders_completed.set_result(None)
                 await barrier(group.ready)
                 if phase.get("prepare_candidates") is not None:
                     await timed_to_thread("multi_encode_records", phase["prepare_candidates"], group.mutations)

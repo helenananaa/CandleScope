@@ -17,6 +17,8 @@ except ImportError:  # Keep the deterministic reference available in minimal ins
 from .models import normalize_decimal_string
 from .immutable_json import FrozenDict, FrozenList
 
+_CANONICAL_LEAF_TYPES = frozenset((str, int, bool, type(None), FrozenDict, FrozenList))
+
 
 def _is_native_canonical_json(value: object) -> bool:
     """Return whether ``json.dumps`` can encode the value without coercion.
@@ -24,8 +26,9 @@ def _is_native_canonical_json(value: object) -> bool:
     Replay snapshots are overwhelmingly composed of exact JSON primitives.
     Rebuilding those large trees merely to prove that fact made every nested
     state hash walk the retained candle window twice and allocate another full
-    object graph.  Keep the strict fallback for Decimal, Enum, dataclass,
-    generic Mapping, floats, and malformed keys, but let already-canonical
+    object graph. Inspect scalar children in place: only nested containers or
+    non-native values need another stack entry. Keep the strict fallback for
+    Decimal, Enum, dataclass, generic Mapping, floats, and malformed keys, but let already-canonical
     dict/list/tuple trees go directly to the deterministic JSON encoder.
     """
 
@@ -33,18 +36,19 @@ def _is_native_canonical_json(value: object) -> bool:
     while pending:
         candidate = pending.pop()
         candidate_type = type(candidate)
-        if candidate_type in (FrozenDict, FrozenList):
-            continue
-        if candidate is None or candidate_type is str or candidate_type is bool or candidate_type is int:
+        if candidate_type in _CANONICAL_LEAF_TYPES:
             continue
         if candidate_type is dict:
             for key, child in candidate.items():
                 if type(key) is not str:
                     return False
-                pending.append(child)
+                if type(child) not in _CANONICAL_LEAF_TYPES:
+                    pending.append(child)
             continue
         if candidate_type is list or candidate_type is tuple:
-            pending.extend(candidate)
+            for child in candidate:
+                if type(child) not in _CANONICAL_LEAF_TYPES:
+                    pending.append(child)
             continue
         return False
     return True

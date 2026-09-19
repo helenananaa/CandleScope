@@ -11231,6 +11231,7 @@ class TrainingRunStore:
                 """,
                 (run_id, selected, limit),
             ).fetchall()
+            from .tape_interval import sample_reference
             samples = [
                 {
                     "source_sequence": int(row["source_sequence"]),
@@ -11240,20 +11241,7 @@ class TrainingRunStore:
                     "cash_balance": str(row["cash_balance"]),
                     "unrealized_pnl": str(row["unrealized_pnl"]),
                     "ledger_tail_hash": str(row["ledger_tail_hash"]),
-                    "state_hash": (
-                        None
-                        if str(row["state_hash"]).startswith("interval-state:")
-                        else str(row["state_hash"])
-                    ),
-                    **(
-                        {
-                            "source_event_hash": str(row["state_hash"])[
-                                len("interval-state:") :
-                            ]
-                        }
-                        if str(row["state_hash"]).startswith("interval-state:")
-                        else {}
-                    ),
+                    **sample_reference(str(row["state_hash"])),
                 }
                 for row in reversed(rows)
             ]
@@ -16380,7 +16368,10 @@ class TrainingRunStore:
         ordered: Sequence[StableMarketEvent],
         materialize_portfolio: bool,
         checkpoint_boundary: bool = True,
+        prepared_hashes=None,
     ) -> dict[str, object]:
+        if prepared_hashes is not None:
+            prepared_hashes.validate(ordered)
         tail_row = connection.execute(
             """
             SELECT global_sequence, actual_event_time_ms, event_phase,
@@ -16443,7 +16434,7 @@ class TrainingRunStore:
             }
         inserted = 0
         insert_rows: list[tuple[object, ...]] = []
-        for event in ordered:
+        for event_index, event in enumerate(ordered):
             identity = (event.market_track_stable_id, event.source_sequence)
             exists = existing_by_identity.get(identity)
             if exists is not None:
@@ -16484,7 +16475,8 @@ class TrainingRunStore:
                     event.event_phase,
                     event.market_track_stable_id,
                     event.source_sequence,
-                    global_ordering_hash((event,)),
+                    (global_ordering_hash((event,)) if prepared_hashes is None
+                     else prepared_hashes.values[event_index]),
                     now_ms,
                 ),
             )
@@ -16547,6 +16539,9 @@ class TrainingRunStore:
                 checkpoint=None,
                 now_ms=now_ms,
             )
+        if run_id in getattr(self, "_tape_intent_runs", ()):
+            from .tape_phases import update_intent
+            update_intent(self, connection, run_id)
         return {
             "ordering_version": GLOBAL_ORDERING_VERSION,
             "inserted": inserted,
@@ -16561,12 +16556,16 @@ class TrainingRunStore:
         materialize_portfolio: bool = True,
     ) -> dict[str, object]:
         def write(connection: sqlite3.Connection) -> dict[str, object]:
-            return self._insert_global_checkpoint(
+            result = self._insert_global_checkpoint(
                 connection,
                 run_id=run_id,
                 now_ms=self.base_store._validated_now_ms(),
                 materialize_portfolio=materialize_portfolio,
             )
+            if run_id in getattr(self, "_tape_intent_runs", ()):
+                from .tape_phases import update_intent
+                update_intent(self, connection, run_id)
+            return result
 
         return await self.base_store.run_extension_write(write)
 
@@ -25372,6 +25371,8 @@ class TrainingRunStore:
         phase_summary: PhaseSummary | None = None,
         revealed_price_bounds: tuple[Decimal, Decimal] | None = None,
     ) -> None:
+        if revealed_price_bounds is None:
+            revealed_price_bounds = getattr(self, "_tape_interval_bounds", {}).get(session_id)
         cursor = state.get("cursor")
         if not isinstance(cursor, Mapping):
             return
@@ -26551,9 +26552,19 @@ class TrainingRunStore:
                     elif basis.get("schema") == "prepared-curve.v2":
                         from ..broker.shared_prepared import restore_legacy_curve
                         basis = restore_legacy_curve(basis)
+                    elif basis.get("schema") == "tape-curve.v1":
+                        from .tape_interval import restore_curve
+                        basis = restore_curve(basis)
                     elif basis.get("schema") != "prepared-curve.v1":
                         raise ValueError("indexed curve basis version is unsupported")
                     bases[key] = basis
+                if basis.get("schema") == "tape-curve.v1" and (
+                    basis["times"][0] < interval["start_time_ms"]
+                    or basis["times"][-1] > interval["end_time_ms"]
+                    or basis["sequences"][0] < interval["start_sequence"]
+                    or basis["sequences"][-1] != interval["end_sequence"]
+                ):
+                    raise ValueError("tape curve escaped its committed interval")
                 if last_bucket is None:
                     last_bucket = (
                         basis["start"] + end if bucket_ms == 0
@@ -26562,12 +26573,13 @@ class TrainingRunStore:
                 if len(chosen) >= limit and last_bucket < buckets[0]:
                     continue
                 offsets = cls._curve_sample_offsets(
-                    basis["times"], start, end, bucket_ms=bucket_ms, limit=limit
+                    basis["sequences"] if bucket_ms == 0 and "sequences" in basis else basis["times"],
+                    start, end, bucket_ms=1 if bucket_ms == 0 and "sequences" in basis else bucket_ms, limit=limit
                 )
                 for offset in offsets:
-                    sequence = basis["start"] + offset + 1
+                    sequence = basis["sequences"][offset] if "sequences" in basis else basis["start"] + offset + 1
                     bucket = sequence if bucket_ms == 0 else int(basis["times"][offset]) // bucket_ms
-                    version = (sequence, payload["revision_base"] + offset - start + 1)
+                    version = (sequence, payload.get("fixed_revision", payload["revision_base"] + offset - start + 1))
                     offer(bucket, version, (payload, basis, offset))
             else:
                 if not isinstance(payload, list) or any(
@@ -26616,7 +26628,7 @@ class TrainingRunStore:
                 state={
                     "cursor": {"virtual_time_ms": basis["times"][offset]},
                     "source_sequence": version[0], "revision": version[1],
-                    "state_hash": "interval-state:" + basis["chains"][offset + 1],
+                    "state_hash": ("tape-interval-state:" if basis.get("schema") == "tape-curve.v1" else "interval-state:") + basis["chains"][offset + 1],
                 },
                 component_state={
                     "account": {"equity": equity, "cash_balance": cash, "unrealized_pnl": pnl},

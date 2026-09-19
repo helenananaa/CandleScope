@@ -986,7 +986,7 @@ class _HistoryRecord:
 
 
 class CommandHistory:
-    """Bounded fail-closed command ID history; entries are never evicted."""
+    """Bounded command history; eviction requires an external durable authority."""
 
     def __init__(self, *, max_records: int) -> None:
         if (
@@ -1028,6 +1028,11 @@ class CommandHistory:
                 "command idempotency history capacity exceeded",
                 details={"max_records": self._max_records},
             )
+
+    def reserve_cached_record(self) -> None:
+        """Make room only after the actor consulted its durable replay authority."""
+        if len(self._records) >= self._max_records:
+            self._records.pop(next(iter(self._records)))
 
     def record_success(self, command: ReplayCommand, result: CommandResult) -> None:
         self._record(command, result=result, failure=None)
