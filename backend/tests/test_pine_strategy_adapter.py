@@ -43,6 +43,13 @@ def test_unsupported_pine_strategy_is_rejected() -> None:
         provider.prepare({"source": "strategy('x', calc_on_every_tick=true)"})
 
 
+def test_modified_pine_example_cannot_execute_hardcoded_threshold() -> None:
+    source = PINE_LONG_FLAT_SOURCE.replace("100", "200")
+    assert "native-pine-strategy-provider-not-integrated" in analyze_pine_strategy(source)
+    with pytest.raises(StrategyProviderError, match="native-pine-strategy-provider-not-integrated"):
+        PineStrategyProvider().prepare({"source": source})
+
+
 def test_supported_subset_is_deterministic_and_not_tv_equivalent() -> None:
     first = StrategyProviderSession(PineStrategyProvider(), run_id="bt_pine")
     second = StrategyProviderSession(PineStrategyProvider(), run_id="bt_pine")

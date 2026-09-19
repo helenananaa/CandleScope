@@ -6,6 +6,7 @@ from app.indicator.series_reference import identity_kwargs
 
 import asyncio
 import time
+import uuid
 from typing import Any
 
 from app.core import config
@@ -822,6 +823,12 @@ def _script_runtime_request(
     *,
     transport: str,
 ) -> IndicatorRuntimeRequest:
+    pine_options = {}
+    if str(meta.get("language") or "pyne") == "pine" and transport.startswith("websocket."):
+        # Identity belongs to this subscription, not source text shared by users.
+        if not meta.get("pineRuntimeSessionId"):
+            meta["pineRuntimeSessionId"] = uuid.uuid4().hex
+        pine_options["pineSessionId"] = meta["pineRuntimeSessionId"]
     return IndicatorRuntimeRequest(
         language=str(meta.get("language") or "pyne"),
         source=str(meta.get("script") or ""),
@@ -832,6 +839,7 @@ def _script_runtime_request(
         bars=tuple(bars),
         params=(dict(meta["params"]) if isinstance(meta.get("params"), dict) else {}),
         options={
+            **pine_options,
             **(
                 {"securityMode": meta.get("securityMode")}
                 if meta.get("securityMode") is not None

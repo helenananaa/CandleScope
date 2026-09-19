@@ -41,6 +41,8 @@ def analyze_pine_strategy(source: str) -> list[str]:
         rejected.append("pyramiding>0")
     if "strategy(" in lowered and "strategy.entry" not in lowered and "strategy.close" not in lowered:
         rejected.append("strategy-without-entry-or-close")
+    if source.replace("\r\n", "\n").strip() != PINE_LONG_FLAT_SOURCE.strip():
+        rejected.append("native-pine-strategy-provider-not-integrated")
     return rejected
 
 
@@ -64,7 +66,7 @@ class PineStrategyProvider:
                 "PROVIDER_PROTOCOL_VIOLATION",
                 "unsupported Pine strategy semantics: " + ", ".join(rejected),
             )
-        if PINE_EXAMPLE_MARKER not in source and "strategy.entry" not in source:
+        if source.replace("\r\n", "\n").strip() != PINE_LONG_FLAT_SOURCE.strip():
             raise StrategyProviderError(
                 "FIDELITY_UNSUPPORTED",
                 "source is outside pine.strategy.backtest.v1",

@@ -1,10 +1,4 @@
-"""Public-protocol bridge from CandleScope requests to Pine Compat Runtime.
-
-The bridge intentionally targets the public ``pine-compat-runtime==0.2.0``
-Release.  That release is a closed-bar batch engine: protocol v1 does not
-advertise forming-bar or incremental execution and the bridge rejects those
-inputs instead of approximating their semantics.
-"""
+"""CandleScope bridge for the pinned Pine Compat Runtime 0.3 candidate."""
 
 from __future__ import annotations
 
@@ -15,6 +9,8 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
+
+from .sessions import PineSessions
 
 from candlescope_plugin_sdk import (
     FEATURE_BATCH_EXECUTION_V1,
@@ -41,10 +37,10 @@ from candlescope_plugin_sdk import (
 RUNTIME_ID = "candlescope.pine-compat"
 PLUGIN_NAME = "Pine Compatibility Runtime"
 PLUGIN_PACKAGE = "candlescope-plugin-pine-compat"
-PLUGIN_VERSION = "0.2.0"
+PLUGIN_VERSION = "0.3.0.dev1"
 ENGINE_PACKAGE = "pine-compat-runtime"
 ENGINE_MODULE = "pine_compat"
-EXPECTED_ENGINE_VERSION = "0.2.0"
+EXPECTED_ENGINE_VERSION = "0.3.0rc1"
 UNKNOWN_SOURCE_VERSION = "0.0.0+unknown"
 
 PINE_ANALYSIS_SCHEMA_VERSION = 5
@@ -169,6 +165,8 @@ def _engine_contract() -> tuple[Any, str]:
         "ANALYSIS_SCHEMA_VERSION": PINE_ANALYSIS_SCHEMA_VERSION,
         "RUNTIME_SCHEMA_VERSION": PINE_RUNTIME_SCHEMA_VERSION,
         "RENDER_METADATA_VERSION": PINE_RENDER_METADATA_VERSION,
+        "REALTIME_SESSION_SCHEMA_VERSION": 1,
+        "RUNTIME_CHANGES_SCHEMA_VERSION": 3,
     }
     drift = [
         f"{name}={getattr(engine, name, None)!r} (expected {value})"
@@ -177,10 +175,10 @@ def _engine_contract() -> tuple[Any, str]:
     ]
     if drift:
         raise RuntimeError("pine-compat-runtime schema mismatch: " + ", ".join(drift))
-    if not callable(getattr(engine, "analyze_script", None)) or not callable(
-        getattr(engine, "run_script", None)
-    ):
-        raise RuntimeError("pine-compat-runtime is missing its public batch API")
+    if any(not callable(getattr(engine, name, None)) for name in (
+        "analyze_script", "run_script", "create_realtime_session",
+    )):
+        raise RuntimeError("pine-compat-runtime is missing its public execution API")
     return engine, version
 
 
@@ -231,9 +229,11 @@ def _descriptor() -> RuntimeDescriptor:
             "renderMetadataVersion": PINE_RENDER_METADATA_VERSION,
             "executorBoundary": "sidecar-inline",
             "sourceSnapshot": False,
-            "closedBarsOnly": True,
-            "formingBar": False,
-            "incremental": False,
+            "closedBarsOnly": False,
+            "formingBar": True,
+            "incremental": True,
+            "sessionTransport": "executeBatch-full-snapshot",
+            "sessionCapacity": 8,
             "historyPlanning": "host-range-warmup",
             "hostCapabilities": {"chartContext": chart_context},
             "renderCoverage": [
@@ -365,6 +365,8 @@ def _analyze_native(source: str, context: Any) -> tuple[dict[str, Any], tuple[Di
     if not isinstance(raw, Mapping):
         raise BridgeError("PINE_ANALYSIS_OUTPUT_INVALID", "Pine analysis must return an object.")
     analysis = dict(raw)
+    if analysis.get("executable") and callable(getattr(engine, "compile_script", None)):
+        analysis["hostRequirements"] = engine.compile_script(source).host_requirements()
     if analysis.get("schemaVersion") != PINE_ANALYSIS_SCHEMA_VERSION:
         raise BridgeError(
             "PINE_SCHEMA_MISMATCH",
@@ -416,7 +418,7 @@ def _analyze_native(source: str, context: Any) -> tuple[dict[str, Any], tuple[Di
                 severity="error",
                 message=f"CandleScope Pine protocol v1 does not host: {', '.join(features)}",
                 hint=(
-                    "Protocol v1 supports closed-bar indicator batches only; "
+                    "The adapter supports indicator batches and realtime sessions; "
                     "context requests, strategies, imports, and native objects stay disabled."
                 ),
                 span=_span(blocked[0].get("span")),
@@ -446,11 +448,11 @@ def _normalize_bars(request: ExecuteBatchRequest) -> tuple[list[dict[str, float 
     host_times: list[int] = []
     previous_runtime_time: int | None = None
     for index, bar in enumerate(request.bars):
-        if not bar.is_closed:
+        if not bar.is_closed and index != len(request.bars) - 1:
             raise BridgeError(
                 "PINE_CLOSED_BARS_REQUIRED",
-                f"Pine protocol v1 received a forming bar at index {index}.",
-                hint="Wait for BAR_CLOSED or use a future realtime protocol revision.",
+                f"Only the final Pine bar may be forming (index {index}).",
+                hint="Supply confirmed history followed by at most one forming bar.",
             )
         timestamp = bar.time
         if timestamp <= 0:
@@ -1266,7 +1268,13 @@ def _normalize_output(
 
 
 class PineCompatRuntimePlugin(BaseRuntimePlugin):
-    """Expose the independently released Pine engine through protocol v1."""
+    """Expose the independently built Pine engine through protocol v1."""
+
+    def __init__(self) -> None:
+        self._sessions = PineSessions()
+
+    def shutdown(self) -> None:
+        self._sessions.clear()
 
     def describe(self) -> RuntimeDescriptor:
         return _descriptor()
@@ -1310,9 +1318,10 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                 "languageVersionOrigin": analysis.get("languageVersionOrigin"),
                 "dialect": analysis.get("dialect"),
                 "scriptMode": analysis.get("scriptMode"),
-                "closedBarsOnly": True,
-                "formingBar": False,
-                "incremental": False,
+                "closedBarsOnly": False,
+                "formingBar": True,
+                "incremental": True,
+                "hostRequirements": analysis.get("hostRequirements"),
                 "hostBindings": bindings,
                 "compatibility": dict(analysis.get("compatibility") or {}),
             },
@@ -1333,7 +1342,21 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                 options["chart_symbol"] = bindings["chartSymbol"]
             if bindings["chartTimeframe"] is not None:
                 options["chart_timeframe"] = bindings["chartTimeframe"]
-            raw = engine.run_script(request.source, runtime_bars, **options)
+            session_id = request.options.get("pineSessionId")
+            if session_id is not None and (
+                not isinstance(session_id, str) or not session_id or len(session_id) > 128
+            ):
+                raise BridgeError("PINE_INVALID_INPUT", "pineSessionId must be 1-128 characters")
+            forming = bool(request.bars and not request.bars[-1].is_closed)
+            execution_meta = {"executionMode": "historical-batch", "incremental": False,
+                              "formingBar": False, "sessionRetained": False}
+            if session_id or forming:
+                raw, execution_meta = self._sessions.execute(
+                    engine, request.source, runtime_bars, options,
+                    session_id=session_id, forming=forming,
+                )
+            else:
+                raw = engine.run_script(request.source, runtime_bars, **options)
             render_hints = request.options.get("renderHints")
             if not isinstance(render_hints, Mapping):
                 render_hints = None
@@ -1346,6 +1369,8 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                 render_hints=render_hints,
                 host_bindings=bindings,
             )
+            meta.update(execution_meta)
+            meta["closedBarsOnly"] = False
             return ExecuteBatchResult(
                 ok=True,
                 output=output,
@@ -1354,8 +1379,10 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                 meta=meta,
             )
         except BridgeError as exc:
+            self._sessions.entries.pop(str(request.options.get("pineSessionId")), None)
             return ExecuteBatchResult(ok=False, diagnostics=(exc.diagnostic(),))
         except (ProtocolError, TypeError, ValueError) as exc:
+            self._sessions.entries.pop(str(request.options.get("pineSessionId")), None)
             return ExecuteBatchResult(
                 ok=False,
                 diagnostics=(
@@ -1370,6 +1397,7 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                 ),
             )
         except Exception as exc:
+            self._sessions.entries.pop(str(request.options.get("pineSessionId")), None)
             return ExecuteBatchResult(
                 ok=False,
                 diagnostics=(

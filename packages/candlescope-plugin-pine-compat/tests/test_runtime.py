@@ -68,6 +68,11 @@ class FakeEngine:
     ANALYSIS_SCHEMA_VERSION = 5
     RUNTIME_SCHEMA_VERSION = 8
     RENDER_METADATA_VERSION = 1
+    REALTIME_SESSION_SCHEMA_VERSION = 1
+    RUNTIME_CHANGES_SCHEMA_VERSION = 3
+
+    def create_realtime_session(self, *args, **kwargs):
+        raise AssertionError("fake batch engine must not receive session work")
 
     def __init__(self, analysis: dict[str, Any], output: dict[str, Any]) -> None:
         self.analysis = analysis
@@ -103,7 +108,7 @@ def _bars(*, closed: bool = True) -> tuple[Bar, ...]:
 
 def _install_fake(monkeypatch: pytest.MonkeyPatch, engine: FakeEngine) -> None:
     monkeypatch.setattr(runtime_module, "_load_engine", lambda: engine)
-    monkeypatch.setattr(runtime_module, "_engine_version", lambda: "0.2.0")
+    monkeypatch.setattr(runtime_module, "_engine_version", lambda: "0.3.0rc1")
 
 
 def test_descriptor_advertises_pine_without_source_snapshot(
@@ -117,8 +122,8 @@ def test_descriptor_advertises_pine_without_source_snapshot(
     assert descriptor.id == "candlescope.pine-compat"
     assert descriptor.languages[0].id == "pine"
     assert descriptor.meta["sourceSnapshot"] is False
-    assert descriptor.meta["closedBarsOnly"] is True
-    assert descriptor.meta["formingBar"] is False
+    assert descriptor.meta["closedBarsOnly"] is False
+    assert descriptor.meta["formingBar"] is True
     assert descriptor.meta["ui"]["languages"]["pine"]["monacoLanguage"] == "pine"
 
 

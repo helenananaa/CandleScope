@@ -30,7 +30,7 @@ def test_package_metadata_pins_only_public_runtime_contracts() -> None:
     assert project["version"] == candlescope_plugin_pine_compat.__version__
     assert project["dependencies"] == [
         "candlescope-plugin-sdk==0.2.0",
-        "pine-compat-runtime==0.2.0",
+        "pine-compat-runtime==0.3.0rc1",
     ]
 
 

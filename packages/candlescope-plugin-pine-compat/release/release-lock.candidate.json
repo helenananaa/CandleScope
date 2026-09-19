@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "releaseStatus": "local-candidate",
+  "plugin": {
+    "id": "candlescope.pine-compat",
+    "package": "candlescope-plugin-pine-compat",
+    "version": "0.3.0.dev1"
+  },
+  "python": {
+    "requires": ">=3.11,<3.14",
+    "module": "candlescope_plugin_pine_compat"
+  },
+  "wheels": {
+    "candlescope-plugin-pine-compat": {
+      "version": "0.3.0.dev1",
+      "source": "local-candidate-build",
+      "artifactFilename": "candlescope_plugin_pine_compat-0.3.0.dev1-py3-none-any.whl",
+      "sha256": "sha256:004a6b5f66d494680c53c0341d8c153cfe35cd074f1660a8e1ba8ed3e0940dbc",
+      "size": 17702
+    },
+    "candlescope-plugin-sdk": {
+      "version": "0.2.0",
+      "source": "local-candidate-build",
+      "artifactFilename": "candlescope_plugin_sdk-0.2.0-py3-none-any.whl",
+      "sha256": "sha256:9667dc198b1d6c65b9d6b0d43d6e32a6f969efe6f3ad0d3a0adec4f773d26d51",
+      "size": 108589
+    },
+    "pine-compat-runtime": {
+      "version": "0.3.0rc1",
+      "source": "local-candidate-build",
+      "artifactFilename": "pine_compat_runtime-0.3.0rc1-cp310-abi3-win_amd64.whl",
+      "sha256": "sha256:da4523dabf08f39211c38ba8b8b6ff9e48f22f0e618058cb9df9ba307a4fa621",
+      "size": 3486735,
+      "sourceCommit": "a481b4644c142badcf9e1bc5430bc3a5f7f2a733"
+    }
+  },
+  "probe": {
+    "source": "//@version=5\nindicator(\"CSPKG Pine Probe\", overlay=false)\nplot(close * 2, \"Close x2\", color=color.green)\n",
+    "context": {
+      "exchange": "binance",
+      "marketType": "spot",
+      "symbol": "BTCUSDT",
+      "interval": "1m"
+    },
+    "bars": [
+      {
+        "time": 1700000000,
+        "open": 100,
+        "high": 102,
+        "low": 99,
+        "close": 101,
+        "volume": 10,
+        "isClosed": true
+      },
+      {
+        "time": 1700000060,
+        "open": 101,
+        "high": 103,
+        "low": 100,
+        "close": 102,
+        "volume": 11,
+        "isClosed": true
+      }
+    ],
+    "params": {},
+    "options": {},
+    "analysisSha256": "sha256:432056ce2875728be5acc37e651393670d68f622bfbf38b4494e3ed13aba890c",
+    "executionSha256": "sha256:554323f93aef95f8acf196c9b84b11b7f011c40ec759c3d558b1e25b71dd5901"
+  }
+}

@@ -72,12 +72,10 @@ def load_release_lock(path: Path = DEFAULT_LOCK_PATH) -> dict[str, Any]:
     probe = lock.get("probe")
     if not all(isinstance(item, dict) for item in (plugin, python, wheels, probe)):
         raise ReleaseLockError("release lock sections are invalid")
-    if plugin != {
-        "id": "candlescope.pine-compat",
-        "package": "candlescope-plugin-pine-compat",
-        "version": "0.2.0",
-    }:
-        raise ReleaseLockError("release lock plugin identity is not the Phase 8 contract")
+    if (plugin.get("id") != "candlescope.pine-compat"
+        or plugin.get("package") != "candlescope-plugin-pine-compat"
+        or plugin.get("version") not in {"0.2.0", "0.3.0.dev1"}):
+        raise ReleaseLockError("release lock plugin identity is unsupported")
     assert isinstance(wheels, dict)
     if tuple(wheels) != EXPECTED_WHEEL_ORDER:
         raise ReleaseLockError(
@@ -87,6 +85,10 @@ def load_release_lock(path: Path = DEFAULT_LOCK_PATH) -> dict[str, Any]:
         if not isinstance(expected, dict) or not isinstance(expected.get("version"), str):
             raise ReleaseLockError(f"release lock wheel {package!r} is invalid")
     engine = wheels["pine-compat-runtime"]
+    expected_engine = "0.2.0" if plugin["version"] == "0.2.0" else "0.3.0rc1"
+    if (engine["version"] != expected_engine
+        or wheels["candlescope-plugin-pine-compat"]["version"] != plugin["version"]):
+        raise ReleaseLockError("release lock bridge and engine versions disagree")
     if not isinstance(engine.get("sha256"), str) or not _SHA256.fullmatch(engine["sha256"]):
         raise ReleaseLockError("release lock Pine engine wheel requires a SHA-256")
     for key in ("analysisSha256", "executionSha256"):
@@ -153,6 +155,10 @@ def collect_locked_wheels(
         raise ReleaseLockError(
             "pine-compat-runtime wheel SHA-256 does not match the pinned GitHub Release asset"
         )
+    for package in EXPECTED_WHEEL_ORDER:
+        pinned = locked[package].get("sha256")
+        if pinned is not None and records[package].sha256 != pinned:
+            raise ReleaseLockError(f"{package} wheel SHA-256 does not match the release lock")
     return tuple(records[package] for package in EXPECTED_WHEEL_ORDER)
 
 
@@ -216,10 +222,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--lock", type=Path, default=DEFAULT_LOCK_PATH)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     try:
-        bundle = build_locked_bundle(args.wheel, args.output, force=args.force)
+        bundle = build_locked_bundle(args.wheel, args.output, lock_path=args.lock, force=args.force)
     except (PluginBundleError, ReleaseLockError) as exc:
         payload = {
             "ok": False,

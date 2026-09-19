@@ -79,6 +79,25 @@ def test_builder_rejects_same_version_unpinned_engine_wheel(tmp_path: Path) -> N
         collect_locked_wheels(_wheelhouse(tmp_path), load_release_lock())
 
 
+def test_candidate_lock_rejects_mixed_bridge_engine_versions(tmp_path: Path) -> None:
+    lock = json.loads(DEFAULT_LOCK_PATH.read_text(encoding="utf-8"))
+    lock["plugin"]["version"] = "0.3.0.dev1"
+    lock["wheels"]["candlescope-plugin-pine-compat"]["version"] = "0.3.0.dev1"
+    path = tmp_path / "candidate.json"
+    path.write_text(json.dumps(lock), encoding="utf-8")
+    with pytest.raises(ReleaseLockError, match="versions disagree"):
+        load_release_lock(path)
+
+
+def test_builder_checks_bridge_hash_when_pinned(tmp_path: Path) -> None:
+    wheels = _wheelhouse(tmp_path)
+    lock = load_release_lock()
+    lock["wheels"]["pine-compat-runtime"]["sha256"] = inspect_wheel(wheels[2]).sha256
+    lock["wheels"]["candlescope-plugin-pine-compat"]["sha256"] = "sha256:" + "0" * 64
+    with pytest.raises(ReleaseLockError, match="candlescope-plugin-pine-compat wheel SHA"):
+        collect_locked_wheels(wheels, lock)
+
+
 def test_builder_generates_three_wheel_phase8_bundle(tmp_path: Path) -> None:
     wheels = _wheelhouse(tmp_path / "wheels")
     lock = json.loads(DEFAULT_LOCK_PATH.read_text(encoding="utf-8"))
