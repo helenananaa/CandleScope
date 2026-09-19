@@ -882,7 +882,7 @@ test("plugin-owned localizations are validated and resolved by the Host locale",
   assert.equal(buildPluginRegistries(parsed, normalizeLocale("pt-br")).commandPalette[0]?.title, "Escanear");
   assert.equal(buildPluginRegistries(parsed, normalizeLocale("PT-BR")).sidePanel[0]?.title, "Resultados");
   assert.equal(buildPluginRegistries(parsed, normalizeLocale("pt")).commandPalette[0]?.title, "扫描");
-  assert.equal(buildPluginRegistries(parsed, normalizeLocale("pt-PT")).sidePanel[0]?.title, "结果");
+  assert.equal(buildPluginRegistries(parsed, normalizeLocale("pt-PT")).sidePanel[0]?.title, "Results");
 
   const unknownField = structuredClone(value);
   const viewLocalization = (unknownField.plugins[0]!.contributions[1] as unknown as {

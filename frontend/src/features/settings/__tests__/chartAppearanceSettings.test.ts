@@ -51,7 +51,11 @@ test("settings normalization defaults locale to zh-CN and accepts English aliase
   assert.equal(normalizeSettings({ locale: "pt-br" }).locale, "pt-BR");
   assert.equal(normalizeSettings({ locale: "PT-BR" }).locale, "pt-BR");
   assert.equal(normalizeSettings({ locale: "pt" }).locale, "zh-CN");
-  assert.equal(normalizeSettings({ locale: "pt-PT" }).locale, "zh-CN");
+  assert.equal(normalizeSettings({ locale: "pt-PT" }).locale, "pt-PT");
+  assert.equal(normalizeSettings({ locale: "th" }).locale, "th");
+  assert.equal(normalizeSettings({ locale: "nl-NL" }).locale, "nl");
+  assert.equal(normalizeSettings({ locale: "ar" }).locale, "ar");
+  assert.equal(normalizeSettings({ locale: "zh-Hant" }).locale, "zh-Hant");
   assert.equal(normalizeSettings({ locale: "ru" }).locale, "ru");
   assert.equal(normalizeSettings({ locale: "ru-RU" }).locale, "ru");
 });
@@ -66,7 +70,10 @@ test("settings persist and restore zh-TW across storage events and old settings"
   }));
   assert.equal(incoming?.locale, "zh-TW");
   assert.equal(normalizeSettings({ theme: "light" }).locale, "zh-CN");
-  assert.equal(normalizeSettings({ locale: "zh-HK" }).locale, "zh-CN");
+  assert.equal(normalizeSettings({ locale: "zh-HK" }).locale, "zh-HK");
+  assert.equal(normalizeSettings({ locale: "zh-MO" }).locale, "zh-MO");
+  assert.equal(normalizeSettings({ locale: "zh-Hant" }).locale, "zh-Hant");
+  assert.equal(normalizeSettings({ locale: "zh-Hant-TW" }).locale, "zh-TW");
 });
 
 test("settings storage changes synchronize the complete settings snapshot across windows", () => {
@@ -109,7 +116,11 @@ test("settings storage changes synchronize the complete settings snapshot across
   assert.equal(ptIncoming?.locale, "pt-BR");
   assert.equal(
     settingsFromStorageChange("candlescope-settings", JSON.stringify({ locale: "pt-PT" }))?.locale,
-    "zh-CN",
+    "pt-PT",
+  );
+  assert.equal(
+    settingsFromStorageChange("candlescope-settings", JSON.stringify({ locale: "th-TH" }))?.locale,
+    "th",
   );
 });
 

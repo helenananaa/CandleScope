@@ -145,6 +145,10 @@ def test_sandbox_ui_owns_zh_cn_english_and_japanese_copy() -> None:
     assert "Bàn làm việc Pyne" in javascript
     assert "pl: {" in javascript
     assert "Warsztat Pyne" in javascript
+    assert "th: {" in javascript
+    assert "โต๊ะงาน Pyne" in javascript
+    assert "nl: {" in javascript
+    assert "Pyne-werkbank" in javascript
     assert "等待 CandleScope 連線" in javascript
     assert "applyLocale(payload.locale)" in javascript
     assert 'setStatus("statusRejected")' in javascript
@@ -242,6 +246,8 @@ def test_runtime_contract_errors_cover_every_manifest_locale() -> None:
         "tr": "Pyne oturumu etkin değil",
         "vi": "Phiên Pyne không hoạt động",
         "pl": "Sesja Pyne nie jest aktywna",
+        "th": "เซสชัน Pyne ยังไม่ทำงาน",
+        "nl": "De Pyne-sessie is niet actief",
     }
     for locale, message in expected.items():
         translated = _localized_contract_error(error, locale)
@@ -258,6 +264,10 @@ def test_runtime_contract_errors_cover_every_manifest_locale() -> None:
     assert _localized_contract_error(error, "tr-TR").message == expected["tr"]
     assert _localized_contract_error(error, "vi-VN").message == expected["vi"]
     assert _localized_contract_error(error, "pl-PL").message == expected["pl"]
+    assert _localized_contract_error(error, "th-TH").message == expected["th"]
+    assert _localized_contract_error(error, "nl-NL").message == expected["nl"]
+    assert _localized_contract_error(error, "uk") is error
+    assert _localized_contract_error(error, "pt-PT") is error
 
 
 def test_manifest_owns_japanese_command_and_schema_copy() -> None:
@@ -319,8 +329,18 @@ def test_manifest_owns_korean_contribution_copy() -> None:
 def test_manifest_owns_zh_tw_contribution_copy() -> None:
     manifest = pyne_workbench_manifest()
     run = next(item for item in manifest.contributions if item.id == "run")
-    assert run.localizations["zh-TW"]["title"] == "在當前圖表執行 Pyne"
     view = next(item for item in manifest.contributions if item.id == "workbench-view")
+    assert run.localizations["zh-TW"]["title"] == "在當前圖表執行 Pyne"
+    assert run.localizations["th"]["title"] == "รัน Pyne บนชาร์ตปัจจุบัน"
+    assert run.localizations["nl"]["title"] == "Pyne uitvoeren op de huidige grafiek"
+    assert view.localizations["th"]["title"] == "โต๊ะงาน Pyne"
+    assert view.localizations["nl"]["title"] == "Pyne-werkbank"
+    localized = [item for item in manifest.contributions if item.localizations]
+    for item in localized:
+        assert "th" in item.localizations, item.id
+        assert "nl" in item.localizations, item.id
+        assert "uk" not in item.localizations, item.id
+        assert len(item.localizations) <= 16
     assert view.localizations["zh-TW"]["title"] == "Pyne 工作台"
 
 

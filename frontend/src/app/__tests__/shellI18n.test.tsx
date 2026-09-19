@@ -272,6 +272,21 @@ test("appearance panel exposes a language picker that lists both locales", () =>
   assert.match(html, /한국어/);
   assert.match(html, /Português \(Brasil\)/);
   assert.match(html, /Русский/);
+  assert.match(html, /ไทย/);
+  assert.match(html, /Nederlands/);
+  assert.match(html, /Українська/);
+  assert.match(html, /हिन्दी/);
+  assert.match(html, /العربية/);
+  assert.match(html, /עברית/);
+  assert.match(html, /Bahasa Melayu/);
+  assert.match(html, /Čeština/);
+  assert.match(html, /Română/);
+  assert.match(html, /Magyar/);
+  assert.match(html, /Svenska/);
+  assert.match(html, /Português \(Portugal\)/);
+  assert.match(html, /繁體中文（香港）/);
+  assert.match(html, /繁體中文（澳門）/);
+  assert.match(html, /繁體中文（通用）/);
 
   const en = withLocale("en", () => renderToStaticMarkup(
     <ChartAppearancePanel

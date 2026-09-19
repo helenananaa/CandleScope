@@ -183,6 +183,22 @@ _CONTRACT_LOCALIZATIONS = {
         "market scanner phase is invalid": "Faza skanera rynku jest nieprawidłowa",
         "capabilityUnavailable": "Zdolność {permission} jest niedostępna",
     },
+    "th": {
+        "market scanner accepts only an empty scan command": "เครื่องสแกนตลาดรับได้เฉพาะคำสั่งสแกนที่ไม่มีพารามิเตอร์",
+        "market scanner completion token is stale": "โทเค็นเสร็จสิ้นของเครื่องสแกนตลาดหมดอายุแล้ว",
+        "Host returned invalid scanner settings": "Host ส่งคืนการตั้งค่าเครื่องสแกนที่ไม่ถูกต้อง",
+        "Host returned an invalid symbol page": "Host ส่งคืนหน้ารายการสัญลักษณ์ที่ไม่ถูกต้อง",
+        "market scanner phase is invalid": "เฟสของเครื่องสแกนตลาดไม่ถูกต้อง",
+        "capabilityUnavailable": "ความสามารถ {permission} ไม่พร้อมใช้งาน",
+    },
+    "nl": {
+        "market scanner accepts only an empty scan command": "De marktscanner accepteert alleen een scancommando zonder parameters",
+        "market scanner completion token is stale": "Het voltooiingstoken van de marktscanner is verlopen",
+        "Host returned invalid scanner settings": "De host gaf ongeldige scannerinstellingen terug",
+        "Host returned an invalid symbol page": "De host gaf een ongeldige symbolenpagina terug",
+        "market scanner phase is invalid": "De fase van de marktscanner is ongeldig",
+        "capabilityUnavailable": "Capaciteit {permission} is niet beschikbaar",
+    },
 }
 
 

@@ -67,10 +67,10 @@ test("pt-BR is recognized from BCP 47 case variants and is not aliased from bare
   assert.equal(normalizeLocale("pt-BR-u-nu-latn"), "pt-BR");
   assert.equal(normalizeLocale(" pt-BR "), "pt-BR");
   assert.equal(normalizeLocale("pt"), DEFAULT_LOCALE);
-  assert.equal(normalizeLocale("pt-PT"), DEFAULT_LOCALE);
+  assert.equal(normalizeLocale("pt-PT"), "pt-PT");
   assert.equal(isLocaleId("pt-BR"), true);
   assert.equal(isLocaleId("pt"), false);
-  assert.equal(isLocaleId("pt-PT"), false);
+  assert.equal(isLocaleId("pt-PT"), true);
   assert.ok(LOCALE_OPTIONS.some((option) => (
     option.id === "pt-BR" && option.nativeLabel === "Português (Brasil)"
   )));
@@ -930,7 +930,9 @@ test("hydrateLocale writes pt-BR document lang and ltr direction for case varian
     assert.equal(documentElement.dir, "ltr");
     assert.equal(hydrateLocale("PT-BR"), "pt-BR");
     assert.equal(documentElement.lang, "pt-BR");
-    assert.equal(setLocale("pt-PT"), DEFAULT_LOCALE);
+    assert.equal(setLocale("pt-PT"), "pt-PT");
+    assert.equal(documentElement.lang, "pt-PT");
+    assert.equal(setLocale("pt"), DEFAULT_LOCALE);
     assert.equal(documentElement.lang, DEFAULT_LOCALE);
   } finally {
     setLocale(previous);
@@ -997,9 +999,12 @@ test("normalizeLocale accepts zh-TW tags and does not map zh-HK, zh-MO, or bare 
   assert.equal(normalizeLocale("zh-tw"), "zh-TW");
   assert.equal(normalizeLocale("zh-Hant-TW"), "zh-TW");
   assert.equal(normalizeLocale("zh-TW-u-nu-latn"), "zh-TW");
-  assert.equal(normalizeLocale("zh-HK"), DEFAULT_LOCALE);
-  assert.equal(normalizeLocale("zh-MO"), DEFAULT_LOCALE);
-  assert.equal(normalizeLocale("zh-Hant"), DEFAULT_LOCALE);
+  assert.equal(normalizeLocale("zh-HK"), "zh-HK");
+  assert.equal(normalizeLocale("zh-MO"), "zh-MO");
+  assert.equal(normalizeLocale("zh-Hant"), "zh-Hant");
+  assert.equal(isLocaleId("zh-HK"), true);
+  assert.equal(isLocaleId("zh-MO"), true);
+  assert.equal(isLocaleId("zh-Hant"), true);
   assert.equal(normalizeLocale("zh"), "zh-CN");
   assert.equal(normalizeLocale("zh-Hans"), "zh-CN");
   assert.equal(normalizeLocale("not a locale!!!"), DEFAULT_LOCALE);
@@ -1137,3 +1142,142 @@ test("bindDocumentLocale writes zh-TW lang, ltr direction, title, meta, and CSS 
     }
   }
 });
+
+const NEW_HOST_LOCALES = [
+  "th", "nl", "uk", "hi", "ar", "he", "ms", "cs", "ro", "hu", "sv",
+  "pt-PT", "zh-HK", "zh-MO", "zh-Hant",
+] as const;
+
+const NEW_LOCALE_LABELS: Record<(typeof NEW_HOST_LOCALES)[number], string> = {
+  th: "ไทย",
+  nl: "Nederlands",
+  uk: "Українська",
+  hi: "हिन्दी",
+  ar: "العربية",
+  he: "עברית",
+  ms: "Bahasa Melayu",
+  cs: "Čeština",
+  ro: "Română",
+  hu: "Magyar",
+  sv: "Svenska",
+  "pt-PT": "Português (Portugal)",
+  "zh-HK": "繁體中文（香港）",
+  "zh-MO": "繁體中文（澳門）",
+  "zh-Hant": "繁體中文（通用）",
+};
+
+const PLURAL_FAMILIES = [
+  "status.barCount",
+  "status.exchangeLimitationCount",
+  "workbench.intervalCount",
+  "pane.flow.missing",
+  "pane.flow.gaps",
+] as const;
+
+test("new host locales register, keep product splits, and ship complete catalogs", () => {
+  for (const id of NEW_HOST_LOCALES) {
+    assert.equal(isLocaleId(id), true, id);
+    assert.equal(normalizeLocale(id), id, id);
+    assert.equal(LOCALES.includes(id), true, id);
+    const option = LOCALE_OPTIONS.find((entry) => entry.id === id);
+    assert.equal(option?.nativeLabel, NEW_LOCALE_LABELS[id], id);
+    const definition = localeDefinition(id);
+    const messages = definition.messages as Readonly<Record<string, string | undefined>>;
+    assert.equal(definition.nativeLabel, NEW_LOCALE_LABELS[id], id);
+    assert.equal(definition.direction ?? "ltr", id === "ar" || id === "he" ? "rtl" : "ltr", id);
+    for (const key of messageKeys()) {
+      const value = messages[key];
+      assert.equal(typeof value, "string", `${id}:${key}`);
+      assert.ok(value && value.trim(), `${id}:${key}`);
+    }
+    const categories = new Intl.PluralRules(id).resolvedOptions().pluralCategories;
+    for (const family of PLURAL_FAMILIES) {
+      for (const category of categories) {
+        if (category === "other") {
+          assert.equal(typeof messages[family], "string", `${id}:${family}`);
+          continue;
+        }
+        const pluralKey = `${family}.${category}`;
+        assert.equal(typeof messages[pluralKey], "string", `${id}:${pluralKey}`);
+      }
+    }
+  }
+
+  assert.equal(normalizeLocale("th-TH"), "th");
+  assert.equal(normalizeLocale("nl-BE"), "nl");
+  assert.equal(normalizeLocale("uk-UA"), "uk");
+  assert.equal(normalizeLocale("hi-IN"), "hi");
+  assert.equal(normalizeLocale("ar-SA"), "ar");
+  assert.equal(normalizeLocale("he-IL"), "he");
+  assert.equal(normalizeLocale("ms-MY"), "ms");
+  assert.equal(normalizeLocale("cs-CZ"), "cs");
+  assert.equal(normalizeLocale("ro-RO"), "ro");
+  assert.equal(normalizeLocale("hu-HU"), "hu");
+  assert.equal(normalizeLocale("sv-SE"), "sv");
+  assert.equal(normalizeLocale("pt-pt"), "pt-PT");
+  assert.equal(normalizeLocale("zh-hk"), "zh-HK");
+  assert.equal(normalizeLocale("zh-mo"), "zh-MO");
+  assert.equal(normalizeLocale("ZH-HANT"), "zh-Hant");
+  assert.equal(normalizeLocale("pt"), DEFAULT_LOCALE);
+  assert.equal(normalizeLocale("pt-BR"), "pt-BR");
+  assert.notEqual(normalizeLocale("pt-PT"), "pt-BR");
+  assert.equal(normalizeLocale("zh-Hant-TW"), "zh-TW");
+  assert.notEqual(normalizeLocale("zh-HK"), "zh-TW");
+  assert.notEqual(normalizeLocale("zh-MO"), "zh-TW");
+  assert.notEqual(normalizeLocale("zh-Hant"), "zh-TW");
+});
+
+test("new host locale chrome is translated and ar/he write rtl", () => {
+  const chromeKeys = [
+    "shell.replay",
+    "orderBook.title",
+    "settings.language.title",
+    "plugin.title",
+    "status.connectedTo",
+  ] as const;
+  const previous = getLocale();
+  const previousDocument = (globalThis as { document?: unknown }).document;
+  const documentElement: { lang?: string; dir?: string } = {};
+  (globalThis as { document: { documentElement: { lang?: string; dir?: string } } }).document = {
+    documentElement,
+  };
+  try {
+    for (const id of NEW_HOST_LOCALES) {
+      assert.equal(hydrateLocale(id), id);
+      assert.equal(documentElement.lang, id);
+      assert.equal(documentElement.dir, id === "ar" || id === "he" ? "rtl" : "ltr", id);
+      for (const key of chromeKeys) {
+        const value = key === "status.connectedTo"
+          ? t(key, { exchange: "Binance" })
+          : t(key);
+        assert.notEqual(value, en[key], `${id}:${key}`);
+        const sameHanLemma = (id === "zh-HK" || id === "zh-MO") && key === "plugin.title";
+        if (!sameHanLemma) assert.notEqual(value, zhCN[key], `${id}:${key}`);
+        assert.doesNotMatch(value, /\{exchange\}/);
+      }
+      assert.match(tPlural("status.barCount", 2), /2/);
+      assert.doesNotMatch(tPlural("status.barCount", 2), /\{count\}/);
+    }
+    assert.equal(hydrateLocale("zh-Hant-TW"), "zh-TW");
+    assert.equal(documentElement.lang, "zh-TW");
+    assert.equal(documentElement.dir, "ltr");
+  } finally {
+    setLocale(previous);
+    if (previousDocument === undefined) {
+      delete (globalThis as { document?: unknown }).document;
+    } else {
+      (globalThis as { document: unknown }).document = previousDocument;
+    }
+  }
+
+  assert.match(t("shell.replay", {}, "th"), /\p{Script=Thai}/u);
+  assert.match(t("shell.replay", {}, "uk"), /\p{Script=Cyrillic}/u);
+  assert.match(t("shell.replay", {}, "hi"), /\p{Script=Devanagari}/u);
+  assert.match(t("shell.replay", {}, "ar"), /\p{Script=Arabic}/u);
+  assert.match(t("shell.replay", {}, "he"), /\p{Script=Hebrew}/u);
+  assert.match(t("plugin.title", {}, "zh-HK"), /插件|軟件|掃描/);
+  assert.notEqual(t("plugin.title", {}, "zh-HK"), t("plugin.title", {}, "zh-TW"));
+  assert.notEqual(t("shell.replay", {}, "pt-PT"), t("shell.replay", {}, "pt-BR"));
+  assert.notEqual(t("shell.replay", {}, "nl"), t("shell.replay", {}, "en"));
+});
+

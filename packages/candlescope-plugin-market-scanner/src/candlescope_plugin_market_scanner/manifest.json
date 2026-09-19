@@ -71,6 +71,12 @@
           },
           "pl": {
             "title": "Skanuj autoryzowane rynki"
+          },
+          "th": {
+            "title": "สแกนตลาดที่ได้รับอนุญาต"
+          },
+          "nl": {
+            "title": "Geautoriseerde markten scannen"
           }
         },
         "requiresUserAction": true,
@@ -470,6 +476,60 @@
                 }
               }
             }
+          },
+          "th": {
+            "title": "การตั้งค่าเครื่องสแกนตลาด",
+            "schema": {
+              "properties": {
+                "quoteAsset": {
+                  "title": "สินทรัพย์อ้างอิง"
+                },
+                "symbolsLimit": {
+                  "title": "จำนวนสัญลักษณ์ที่จะสแกน"
+                },
+                "interval": {
+                  "title": "ช่วงเวลา",
+                  "enumLabels": [
+                    "1 นาที",
+                    "5 นาที",
+                    "1 ชั่วโมง"
+                  ]
+                },
+                "lookbackBars": {
+                  "title": "จำนวนแท่งย้อนหลัง"
+                },
+                "minimumMovePct": {
+                  "title": "เปอร์เซ็นต์การเคลื่อนไหวขั้นต่ำ"
+                }
+              }
+            }
+          },
+          "nl": {
+            "title": "Instellingen marktscanner",
+            "schema": {
+              "properties": {
+                "quoteAsset": {
+                  "title": "Quote-asset"
+                },
+                "symbolsLimit": {
+                  "title": "Aantal te scannen symbolen"
+                },
+                "interval": {
+                  "title": "Interval",
+                  "enumLabels": [
+                    "1 minuut",
+                    "5 minuten",
+                    "1 uur"
+                  ]
+                },
+                "lookbackBars": {
+                  "title": "Lookback-kaarsen"
+                },
+                "minimumMovePct": {
+                  "title": "Minimale beweging (%)"
+                }
+              }
+            }
           }
         },
         "schema": {
@@ -669,6 +729,26 @@
               "time": "Czas zamknięcia"
             },
             "emptyState": "Uruchom skaner, aby wyświetlić wyniki"
+          },
+          "th": {
+            "title": "ผลลัพธ์เครื่องสแกนตลาด",
+            "fields": {
+              "symbol": "สัญลักษณ์",
+              "changePct": "เปลี่ยนแปลง",
+              "close": "ราคาปิด",
+              "time": "เวลาปิด"
+            },
+            "emptyState": "เรียกใช้เครื่องสแกนแล้วผลลัพธ์จะแสดงที่นี่"
+          },
+          "nl": {
+            "title": "Resultaten marktscanner",
+            "fields": {
+              "symbol": "Symbool",
+              "changePct": "Verandering",
+              "close": "Slot",
+              "time": "Sluitingstijd"
+            },
+            "emptyState": "Voer de scanner uit om resultaten te tonen"
           }
         },
         "slot": "sidePanel",
@@ -825,6 +905,22 @@
               "interval": "Interwał"
             },
             "emptyState": "Skaner bezczynny"
+          },
+          "th": {
+            "title": "สรุปเครื่องสแกนตลาด",
+            "fields": {
+              "scannedSymbols": "สแกนแล้ว",
+              "interval": "ช่วงเวลา"
+            },
+            "emptyState": "เครื่องสแกนว่าง"
+          },
+          "nl": {
+            "title": "Samenvatting marktscanner",
+            "fields": {
+              "scannedSymbols": "Gescand",
+              "interval": "Interval"
+            },
+            "emptyState": "Scanner inactief"
           }
         },
         "slot": "statusArea",
@@ -898,6 +994,12 @@
           },
           "pl": {
             "title": "Sygnały skanera rynku"
+          },
+          "th": {
+            "title": "สัญญาณเครื่องสแกนตลาด"
+          },
+          "nl": {
+            "title": "Signalen marktscanner"
           }
         },
         "target": "main-chart",

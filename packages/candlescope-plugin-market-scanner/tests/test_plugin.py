@@ -45,6 +45,12 @@ def test_plugin_error_localizations_accept_additional_languages_and_preserve_fal
     )
     assert _localized_contract_error(error, "pt") is error
     assert _localized_contract_error(error, "pt-PT") is error
+    assert _localized_contract_error(error, "uk") is error
+    assert _localized_contract_error(error, "ar") is error
+    assert _localized_contract_error(error, "th").message == "เฟสของเครื่องสแกนตลาดไม่ถูกต้อง"
+    assert _localized_contract_error(error, "th-TH").message == "เฟสของเครื่องสแกนตลาดไม่ถูกต้อง"
+    assert _localized_contract_error(error, "nl").message == "De fase van de marktscanner is ongeldig"
+    assert _localized_contract_error(error, "nl-NL").message == "De fase van de marktscanner is ongeldig"
     capability_pt = PlatformContractError(
         "unavailable", "market.bars.read capability is unavailable"
     )
@@ -119,6 +125,16 @@ def test_packaged_manifest_owns_entrypoint_and_localized_enum_labels() -> None:
     tw_interval = settings.localizations["zh-TW"]["schema"]["properties"]["interval"]
     assert tw_interval["enumLabels"] == ["1 分鐘", "5 分鐘", "1 小時"]
     assert settings.localizations["zh-TW"]["title"] == "市場掃描器設定"
+    th_interval = settings.localizations["th"]["schema"]["properties"]["interval"]
+    assert th_interval["enumLabels"] == ["1 นาที", "5 นาที", "1 ชั่วโมง"]
+    assert settings.localizations["th"]["title"] == "การตั้งค่าเครื่องสแกนตลาด"
+    assert results.localizations["th"]["fields"]["symbol"] == "สัญลักษณ์"
+    nl_interval = settings.localizations["nl"]["schema"]["properties"]["interval"]
+    assert nl_interval["enumLabels"] == ["1 minuut", "5 minuten", "1 uur"]
+    assert settings.localizations["nl"]["title"] == "Instellingen marktscanner"
+    assert results.localizations["nl"]["emptyState"] == "Voer de scanner uit om resultaten te tonen"
+    assert "uk" not in scan.localizations
+    assert len(scan.localizations) <= 16
 
 
 def test_spanish_contract_errors_follow_parent_locale() -> None:
