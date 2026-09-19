@@ -1,0 +1,34 @@
+{
+  "kind": "actual-spawned-worker-stage-timers",
+  "child_elapsed_seconds": 2.7563437999997404,
+  "inclusive_seconds": {
+    "checkpoint_provider_snapshot_encode": 0.010169899967877427,
+    "history_encode_and_budget": 0.03770620001523639,
+    "dual_snapshot_including_history": 0.04063809997023782,
+    "checkpoint_json_compose": 0.08153719997790176,
+    "checkpoint_hash": 0.005330200001480989,
+    "checkpoint_database_publish": 0.24367079997682595,
+    "dual_checkpoints": 0.39364510000814334,
+    "trade_funding": 0.023766400139720645,
+    "trade_match_including_fills": 0.9607933007609972,
+    "strategy_observe_including_provider": 0.014190200039593037,
+    "dual_kernels_including_callbacks": 0.9858547000003455,
+    "cost_sensitivity": 1.2746370999993815,
+    "report_and_persist": 0.027570600002945866
+  },
+  "calls": {
+    "checkpoint_provider_snapshot_encode": 102,
+    "history_encode_and_budget": 816,
+    "dual_snapshot_including_history": 102,
+    "checkpoint_json_compose": 102,
+    "checkpoint_hash": 102,
+    "checkpoint_database_publish": 102,
+    "dual_checkpoints": 102,
+    "trade_funding": 100000,
+    "trade_match_including_fills": 499206,
+    "strategy_observe_including_provider": 999,
+    "dual_kernels_including_callbacks": 1,
+    "cost_sensitivity": 1,
+    "report_and_persist": 1
+  }
+}

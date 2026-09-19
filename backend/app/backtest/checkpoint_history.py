@@ -1,26 +1,36 @@
-"""Durable, directly addressed history chunks for host-owned BAR kernels.
+"""Durable, directly addressed history chunks for host-owned simulation kernels.
 
-Only terminal order prefixes and frozen fills are sealed. Active orders and
-all other state remain in each checkpoint. No preceding checkpoint is needed.
+Terminal order prefixes and frozen fills are sealed; optional trade V2 also
+seals owned append-only decision/event streams. Active orders and mutable state
+remain in each checkpoint. No preceding checkpoint is needed.
 """
 import json
+
+from app.core.config import getenv
 
 from .errors import BacktestError
 from .identity import canonical_json, sha256_hex
 
 ENCODING = "BAR_HISTORY_CHUNKS_V1"
+TRADE_ENCODING = "TRADE_HISTORY_CHUNKS_V1"
+EXTENDED_TRADE_ENCODING = "TRADE_HISTORY_CHUNKS_V2"
 CHUNK_SIZE = 256
 
 
 class HistoryEncoder:
-    def __init__(self, encode_record):
+    def __init__(self, encode_record, *, extended=False):
         self.encode_record = encode_record
+        self.extended = extended
         self.streams = {}
         self.pending = {}
         self.logical_extra = 0
+        # Candidate stays opt-in until long-run service timing is stable.
+        self.reuse_encoding = getenv("BACKTEST_REUSE_HISTORY_JSON_ENABLED", "0").strip() == "1"
+        self.fragments = {}
 
     def begin(self):
         self.logical_extra = 0
+        self.fragments.clear()
 
     def __call__(self, name, rows):
         stream = self.streams.get(name)
@@ -39,19 +49,49 @@ class HistoryEncoder:
             stream[1] += CHUNK_SIZE
         tail = [self.encode_record(row) for row in rows[stream[1]:]]
         manifest = {"chunks": list(stream[2]), "tail": tail}
-        full_size = stream[3] + len(canonical_json(tail).encode("utf-8")) + bool(stream[1] and tail)
-        self.logical_extra += full_size - len(canonical_json(manifest).encode("utf-8"))
+        tail_json = canonical_json(tail)
+        if self.reuse_encoding:
+            manifest_json = '{"chunks":' + canonical_json(manifest["chunks"]) + ',"tail":' + tail_json + '}'
+            self.fragments[id(manifest)] = (manifest, manifest_json)
+        else:
+            manifest_json = canonical_json(manifest)
+        full_size = stream[3] + len(tail_json.encode("utf-8")) + bool(stream[1] and tail)
+        self.logical_extra += full_size - len(manifest_json.encode("utf-8"))
         return manifest
+
+
+def history_engine(payload):
+    engine = payload["engine"]
+    return engine["execution"] if payload.get("checkpointMode") == "DUAL_CLOCK" else engine
+
+
+def history_locations(payload):
+    encoding, mode = payload["historyEncoding"], payload.get("checkpointMode")
+    if (encoding, mode) not in {
+        (ENCODING, "BAR"), (TRADE_ENCODING, "TRADE_TAPE"), (TRADE_ENCODING, "DUAL_CLOCK"),
+        (EXTENDED_TRADE_ENCODING, "TRADE_TAPE"), (EXTENDED_TRADE_ENCODING, "DUAL_CLOCK"),
+    }:
+        raise ValueError("unsupported checkpoint history encoding")
+    engine = history_engine(payload)
+    names = ["orders", "fills"]
+    if encoding == EXTENDED_TRADE_ENCODING:
+        names.append("decisions")
+        if "execution_model_revision" in engine:
+            names.extend(("order_events", "fill_source_events", "frozen_intents"))
+    locations = [(engine, name) for name in names]
+    if encoding == EXTENDED_TRADE_ENCODING and mode == "DUAL_CLOCK":
+        locations.append((payload["engine"], "decisions"))
+        if "execution_model_revision" in engine:
+            locations.append((payload["engine"], "frozen_intents"))
+    return locations
 
 
 def referenced_chunks(payload):
     if "historyEncoding" not in payload:
         return set()
-    if payload["historyEncoding"] != ENCODING or payload.get("checkpointMode") != "BAR":
-        raise ValueError("unsupported checkpoint history encoding")
     references = set()
-    for name in ("orders", "fills"):
-        manifest = payload["engine"][name]
+    for owner, name in history_locations(payload):
+        manifest = owner[name]
         if (type(manifest) is not dict or set(manifest) != {"chunks", "tail"}
                 or type(manifest["chunks"]) is not list or type(manifest["tail"]) is not list):
             raise ValueError("invalid checkpoint history manifest")
@@ -60,6 +100,20 @@ def referenced_chunks(payload):
                 raise ValueError("invalid checkpoint chunk address")
             references.add(digest)
     return references
+
+
+def trade_history_encoder():
+    from dataclasses import asdict
+    from app.core.config import getenv
+
+    from app.simulation.kernel import _flat_record
+    record_encoder = (_flat_record if getenv("BACKTEST_FLAT_TRADE_RECORDS_ENABLED", "1").strip() == "1"
+                      else asdict)
+
+    def encode(row):
+        return dict(row) if type(row) is dict else record_encoder(row)
+
+    return HistoryEncoder(encode, extended=getenv("BACKTEST_EXTENDED_TRADE_HISTORY_ENABLED", "1").strip() == "1")
 
 
 def expand_checkpoint(row, connection):
@@ -83,9 +137,9 @@ def expand_checkpoint(row, connection):
             if type(chunk) is not list or len(chunk) != CHUNK_SIZE or any(type(item) is not dict for item in chunk):
                 raise ValueError("invalid checkpoint history chunk")
             chunks[digest] = chunk
-        for name in ("orders", "fills"):
-            manifest = payload["engine"][name]
-            payload["engine"][name] = [item for digest in manifest["chunks"] for item in chunks[digest]] + manifest["tail"]
+        for owner, name in history_locations(payload):
+            manifest = owner[name]
+            owner[name] = [item for digest in manifest["chunks"] for item in chunks[digest]] + manifest["tail"]
         del payload["historyEncoding"]
         raw = canonical_json(payload)
         return {**row, "payload_json": raw, "state_hash": "sha256:" + sha256_hex(raw)}

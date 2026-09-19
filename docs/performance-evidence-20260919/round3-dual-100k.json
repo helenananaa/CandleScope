@@ -1,0 +1,70 @@
+{
+  "samples": [
+    {
+      "pair": 0,
+      "enabled": 0,
+      "seconds": 16.054325000000972,
+      "events": 100000,
+      "prints_per_bar": 10,
+      "fills": 2219,
+      "fill_hash": "82afc8d88a40c8759eb5970851998219c13f00a066188b4415f959302c93c31b",
+      "lane": "COLOCATED_DUAL_CLOCK_V1"
+    },
+    {
+      "pair": 0,
+      "enabled": 1,
+      "seconds": 8.192832099997759,
+      "events": 100000,
+      "prints_per_bar": 10,
+      "fills": 2219,
+      "fill_hash": "82afc8d88a40c8759eb5970851998219c13f00a066188b4415f959302c93c31b",
+      "lane": "COLOCATED_DUAL_CLOCK_V1"
+    },
+    {
+      "pair": 1,
+      "enabled": 1,
+      "seconds": 7.5507342999990215,
+      "events": 100000,
+      "prints_per_bar": 10,
+      "fills": 2219,
+      "fill_hash": "82afc8d88a40c8759eb5970851998219c13f00a066188b4415f959302c93c31b",
+      "lane": "COLOCATED_DUAL_CLOCK_V1"
+    },
+    {
+      "pair": 1,
+      "enabled": 0,
+      "seconds": 11.322890399998869,
+      "events": 100000,
+      "prints_per_bar": 10,
+      "fills": 2219,
+      "fill_hash": "82afc8d88a40c8759eb5970851998219c13f00a066188b4415f959302c93c31b",
+      "lane": "COLOCATED_DUAL_CLOCK_V1"
+    },
+    {
+      "pair": 2,
+      "enabled": 0,
+      "seconds": 14.275282700000389,
+      "events": 100000,
+      "prints_per_bar": 10,
+      "fills": 2219,
+      "fill_hash": "82afc8d88a40c8759eb5970851998219c13f00a066188b4415f959302c93c31b",
+      "lane": "COLOCATED_DUAL_CLOCK_V1"
+    },
+    {
+      "pair": 2,
+      "enabled": 1,
+      "seconds": 7.981198900000891,
+      "events": 100000,
+      "prints_per_bar": 10,
+      "fills": 2219,
+      "fill_hash": "82afc8d88a40c8759eb5970851998219c13f00a066188b4415f959302c93c31b",
+      "lane": "COLOCATED_DUAL_CLOCK_V1"
+    }
+  ],
+  "full_result_and_report_equal": true,
+  "scope": "synthetic aggregate prints; service incl worker/checkpoints/report; excludes import, HTTP, browser",
+  "varied_flags": [
+    "BACKTEST_INCREMENTAL_SMA_HASH_ENABLED",
+    "BACKTEST_EXTENDED_TRADE_HISTORY_ENABLED"
+  ]
+}

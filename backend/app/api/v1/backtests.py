@@ -37,6 +37,7 @@ class RunCreateRequest(BaseModel):
     start_time_ms: int
     end_time_ms: int
     warmup_bars: int = 0
+    cost_sensitivity_mode: Literal["FULL", "SKIP"] | None = None
     checkpoint_policy: Literal["INTERVAL", "FINAL_ONLY", "NONE"] | None = None
     checkpoint_interval: int | None = Field(default=None, ge=1, strict=True)
     symbol: str | None = Field(default=None, max_length=80)

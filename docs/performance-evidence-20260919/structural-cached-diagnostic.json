@@ -1,0 +1,76 @@
+{
+  "samples": [
+    {
+      "workload": "held_resting",
+      "events": 100000,
+      "parameters": {},
+      "freeze_seconds": 1.4541333999986819,
+      "read_project_seconds": 2.3081695999972,
+      "execute_seconds": 4.492008500001248,
+      "total_seconds": 8.270131799999945,
+      "fills": 1,
+      "open_orders": 2,
+      "ending_position": "1",
+      "result_hash": "857f683e342eb02ab7538c1a61e1abf236ae0d8c12308eebe3a62b252bf87b50"
+    },
+    {
+      "workload": "parameter_1",
+      "events": 100000,
+      "parameters": {
+        "fast": 2,
+        "slow": 6
+      },
+      "freeze_seconds": 1.5696394000005967,
+      "read_project_seconds": 0.42289489999893703,
+      "execute_seconds": 3.920853999999963,
+      "total_seconds": 5.927630700000009,
+      "fills": 219,
+      "open_orders": 0,
+      "ending_position": "1",
+      "result_hash": "bb0af0690006b81c985075758aebe584a22b2170a8c503b9ae7b16461a3a2855"
+    },
+    {
+      "workload": "parameter_2",
+      "events": 100000,
+      "parameters": {
+        "fast": 3,
+        "slow": 7
+      },
+      "freeze_seconds": 1.5541907999977411,
+      "read_project_seconds": 0.5298939999993308,
+      "execute_seconds": 3.960212000001775,
+      "total_seconds": 6.058561100002407,
+      "fills": 219,
+      "open_orders": 0,
+      "ending_position": "1",
+      "result_hash": "d60324d83ca0456ed16acfc345d9b8b74a0afdad5c4bcd6dad11c591bd16d8b8"
+    },
+    {
+      "workload": "parameter_3",
+      "events": 100000,
+      "parameters": {
+        "fast": 4,
+        "slow": 8
+      },
+      "freeze_seconds": 1.593244700001378,
+      "read_project_seconds": 0.43555239999841433,
+      "execute_seconds": 3.8495752999988326,
+      "total_seconds": 5.89356670000052,
+      "fills": 219,
+      "open_orders": 0,
+      "ending_position": "1",
+      "result_hash": "b4b8b066951e1b983fff69fe739c3174258e8d3fbc9d73c7b94db14dcff07215"
+    }
+  ],
+  "cache": true,
+  "cache_stats": {
+    "hits": 3,
+    "misses": 1,
+    "waits": 0,
+    "bytes": 8949799,
+    "entries": 1
+  },
+  "import_seconds": 1.843721999997797,
+  "stage_timers": true,
+  "scope": "synthetic market data with real Parquet fixture; full supervised service; import excluded from each run"
+}

@@ -1,0 +1,63 @@
+         14442966 function calls (13401240 primitive calls) in 12.438 seconds
+
+   Ordered by: cumulative time
+   List reduced from 432 to 55 due to restriction <55>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.012    0.012   12.627   12.627 colocated.py:75(_worker)
+        1    0.046    0.046   12.456   12.456 service.py:2967(execute_dual_clock_run)
+   1432/5    0.151    0.000   11.528    2.306 strategy_worker_profile.py:32(timed)
+        1    0.481    0.481    7.228    7.228 dual_clock_kernel.py:143(run)
+        1    0.000    0.000    3.437    3.437 service.py:4430(_build_cost_sensitivity)
+   100000    0.039    0.000    3.425    0.000 service.py:3133(checkpoint_after)
+        1    0.007    0.007    3.381    3.381 cost_sensitivity.py:19(build_cost_sensitivity_matrix)
+        1    0.359    0.359    3.371    3.371 cost_sensitivity.py:344(_run_dual_scenarios)
+      102    0.008    0.000    3.368    0.033 service.py:4509(_save_dual_clock_checkpoint)
+   300000    1.233    0.000    2.024    0.000 trade_bar_builder.py:49(push)
+    60038    0.038    0.000    1.934    0.000 dataclasses.py:1308(asdict)
+794631/60038    0.748    0.000    1.866    0.000 dataclasses.py:1332(_asdict_inner)
+      102    0.001    0.000    1.718    0.017 dual_clock_kernel.py:89(snapshot)
+      816    0.060    0.000    1.689    0.002 checkpoint_history.py:35(__call__)
+      102    0.018    0.000    1.602    0.016 trade_kernel.py:184(snapshot)
+    38822    0.074    0.000    1.340    0.000 __init__.py:183(dumps)
+   103659    0.067    0.000    1.323    0.000 checkpoint_history.py:109(encode)
+    38822    0.043    0.000    1.248    0.000 encoder.py:183(encode)
+     9999    0.071    0.000    1.229    0.000 service.py:3091(strategy)
+    20259    1.179    0.000    1.179    0.000 encoder.py:205(iterencode)
+      154    0.003    0.000    1.051    0.007 repository.py:18(wrapped)
+   113314    0.289    0.000    1.030    0.000 trade_kernel.py:772(_match)
+457781/185950    0.506    0.000    0.930    0.000 copy.py:118(deepcopy)
+        5    0.028    0.006    0.888    0.178 trade_kernel.py:563(_financial_result)
+      102    0.046    0.000    0.883    0.009 repository.py:568(save_checkpoint)
+    13166    0.009    0.000    0.829    0.000 identity.py:10(canonical_json)
+        2    0.347    0.173    0.826    0.413 trades.py:17(assert_trade_stream)
+        1    0.001    0.001    0.805    0.805 service.py:4743(_persist_completed_run)
+        1    0.063    0.063    0.735    0.735 trade_bar_builder.py:153(derive_complete_trade_bars)
+     9999    0.058    0.000    0.663    0.000 host_adapter.py:53(observe)
+        1    0.003    0.003    0.625    0.625 reports.py:49(build_report)
+  3094892    0.569    0.000    0.569    0.000 {method 'get' of 'dict' objects}
+    14543    0.042    0.000    0.563    0.000 colocated.py:59(invoke)
+    13314    0.118    0.000    0.547    0.000 trade_kernel.py:848(_fill)
+    13337    0.021    0.000    0.495    0.000 snapshot.py:13(sha256_hex)
+    18875    0.041    0.000    0.485    0.000 trade_kernel.py:623(_enqueue_many)
+15451/4440    0.080    0.000    0.480    0.000 copy.py:217(_deepcopy_dict)
+      102    0.004    0.000    0.456    0.004 checkpoint_codec.py:35(checkpoint_json)
+      306    0.031    0.000    0.449    0.001 checkpoint_codec.py:64(_object_fragments)
+    11095    0.161    0.000    0.436    0.000 trade_kernel.py:652(_enqueue)
+20680/17824    0.040    0.000    0.429    0.000 {method 'join' of 'str' objects}
+      102    0.011    0.000    0.426    0.004 checkpoint_history.py:146(publish_chunks)
+    13337    0.008    0.000    0.417    0.000 snapshot.py:9(canonical_json)
+      107    0.399    0.004    0.399    0.004 {method 'commit' of 'sqlite3.Connection' objects}
+      310    0.001    0.000    0.397    0.001 __init__.py:299(loads)
+      310    0.002    0.000    0.395    0.001 decoder.py:332(decode)
+     9999    0.007    0.000    0.393    0.000 host_adapter.py:88(invoke)
+   399996    0.274    0.000    0.390    0.000 trades.py:8(trade_sort_key)
+      310    0.389    0.001    0.389    0.001 decoder.py:343(raw_decode)
+     9994    0.012    0.000    0.386    0.000 protocol.py:143(step)
+     6018    0.020    0.000    0.385    0.000 checkpoint_codec.py:65(<genexpr>)
+     9994    0.054    0.000    0.318    0.000 builtin.py:128(step)
+     9999    0.136    0.000    0.300    0.000 service.py:5172(_planning_context)
+1039117/1019116    0.268    0.000    0.280    0.000 {built-in method builtins.getattr}
+        7    0.010    0.001    0.273    0.039 copy.py:191(_deepcopy_list)
+
+

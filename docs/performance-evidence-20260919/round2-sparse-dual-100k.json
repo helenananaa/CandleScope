@@ -1,0 +1,70 @@
+{
+  "samples": [
+    {
+      "pair": 0,
+      "enabled": 0,
+      "seconds": 4.939038900000014,
+      "events": 100000,
+      "prints_per_bar": 100,
+      "fills": 219,
+      "fill_hash": "cd162956defec17c1933248521fd5c2a638bd207a1d7ec29551727fc978e3586",
+      "lane": "COLOCATED_DUAL_CLOCK_V1"
+    },
+    {
+      "pair": 0,
+      "enabled": 1,
+      "seconds": 3.155026300002646,
+      "events": 100000,
+      "prints_per_bar": 100,
+      "fills": 219,
+      "fill_hash": "cd162956defec17c1933248521fd5c2a638bd207a1d7ec29551727fc978e3586",
+      "lane": "COLOCATED_DUAL_CLOCK_V1"
+    },
+    {
+      "pair": 1,
+      "enabled": 1,
+      "seconds": 3.105339699999604,
+      "events": 100000,
+      "prints_per_bar": 100,
+      "fills": 219,
+      "fill_hash": "cd162956defec17c1933248521fd5c2a638bd207a1d7ec29551727fc978e3586",
+      "lane": "COLOCATED_DUAL_CLOCK_V1"
+    },
+    {
+      "pair": 1,
+      "enabled": 0,
+      "seconds": 5.49140289999923,
+      "events": 100000,
+      "prints_per_bar": 100,
+      "fills": 219,
+      "fill_hash": "cd162956defec17c1933248521fd5c2a638bd207a1d7ec29551727fc978e3586",
+      "lane": "COLOCATED_DUAL_CLOCK_V1"
+    },
+    {
+      "pair": 2,
+      "enabled": 0,
+      "seconds": 5.393197299999883,
+      "events": 100000,
+      "prints_per_bar": 100,
+      "fills": 219,
+      "fill_hash": "cd162956defec17c1933248521fd5c2a638bd207a1d7ec29551727fc978e3586",
+      "lane": "COLOCATED_DUAL_CLOCK_V1"
+    },
+    {
+      "pair": 2,
+      "enabled": 1,
+      "seconds": 3.977837099999306,
+      "events": 100000,
+      "prints_per_bar": 100,
+      "fills": 219,
+      "fill_hash": "cd162956defec17c1933248521fd5c2a638bd207a1d7ec29551727fc978e3586",
+      "lane": "COLOCATED_DUAL_CLOCK_V1"
+    }
+  ],
+  "full_result_and_report_equal": true,
+  "scope": "synthetic aggregate prints; service incl worker/checkpoints/report; excludes import, HTTP, browser",
+  "varied_flags": [
+    "BACKTEST_FUSED_DUAL_SENSITIVITY_ENABLED",
+    "BACKTEST_LAZY_DUAL_CURVE_ENABLED"
+  ]
+}

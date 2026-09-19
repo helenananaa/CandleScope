@@ -1120,7 +1120,7 @@ class BacktestService:
         run_id = f"bt_{uuid.uuid4().hex}"
         stored_payload = dict(payload)
         normalized_execution = json.loads(identity.execution_json)
-        for name in ("checkpoint_policy", "checkpoint_interval"):
+        for name in ("checkpoint_policy", "checkpoint_interval", "cost_sensitivity_mode"):
             if name in normalized_execution:
                 stored_payload[name] = normalized_execution[name]
         stored_payload["strategy_source"] = normalized_execution.get("strategy_source")
@@ -2869,7 +2869,7 @@ class BacktestService:
                 checkpoint_callback=checkpoint_after,
             )
             cost_sensitivity = (
-                build_cost_sensitivity_matrix(kernel, events, result)
+                self._build_cost_sensitivity(config, kernel, events, result)
                 if materialized
                 else None
             )
@@ -2984,6 +2984,14 @@ class BacktestService:
                 "FIDELITY_UNSUPPORTED",
                 "execute_dual_clock_run only supports AGG_TRADE_EXECUTION",
             )
+        if not getattr(self, "_colocated_worker", False) and self._fault_injector is None and isinstance(events, tuple):
+            from .colocated import provider_spec, execute
+            spec = provider_spec(provider, fidelity="AGG_TRADE_EXECUTION")
+            if spec is not None:
+                return execute(self, run_id, spec, events, {
+                    "now_ms": now_ms, "warmup_events": warmup_events,
+                    "snapshot_evidence": snapshot_evidence,
+                })
         stamp = now_ms or _now_ms()
         warmup_events = self._resolve_warmup(record, warmup_events)
         expected_generation = int(record["generation"])
@@ -3080,9 +3088,18 @@ class BacktestService:
                     event_bytes=event_bytes,
                 )
 
+            reuse_chart_bars = (
+                checkpoint is None
+                and app_getenv("BACKTEST_REUSE_DUAL_CHART_BARS_ENABLED", "0").strip() == "1"
+                and all(event.role == "TRADES" for event in events)
+            )
+            collected_chart_bars = []
+
             def strategy(
                 _visible: tuple[MarketEvent, ...], bar: MarketEvent
             ) -> list[dict]:
+                if reuse_chart_bars:
+                    collected_chart_bars.append(_trade_chart_bar(bar))
                 if bar.sequence % 256 == 1:
                     self._assert_execution_control(
                         run_id,
@@ -3115,23 +3132,27 @@ class BacktestService:
                 event for event in events if event.sequence > resume_sequence
             )
 
+            interval = (
+                int(config.get("checkpoint_interval") or self.settings.checkpoint_event_interval)
+                if config.get("checkpoint_policy", "INTERVAL") == "INTERVAL" else 0
+            )
             last_order_count = len(kernel.execution.orders)
             last_fill_count = len(kernel.execution.fills)
 
             def checkpoint_after(event: MarketEvent) -> None:
                 nonlocal last_order_count, last_fill_count
-                order_count = len(kernel.execution.orders)
-                fill_count = len(kernel.execution.fills)
                 fault_point = None
-                if event.role == "FUNDING":
-                    fault_point = "after_funding"
-                elif fill_count > last_fill_count and any(
-                    order.status == "PARTIAL" for order in kernel.execution.orders
-                ):
-                    fault_point = "after_partial_fill"
-                elif order_count > last_order_count:
-                    fault_point = "after_order"
-                interval = self.settings.checkpoint_event_interval
+                if self._fault_injector is not None:
+                    order_count = len(kernel.execution.orders)
+                    fill_count = len(kernel.execution.fills)
+                    if event.role == "FUNDING":
+                        fault_point = "after_funding"
+                    elif fill_count > last_fill_count and any(
+                        order.status == "PARTIAL" for order in kernel.execution._working_orders()
+                    ):
+                        fault_point = "after_partial_fill"
+                    elif order_count > last_order_count:
+                        fault_point = "after_order"
                 periodic = (
                     interval > 0
                     and kernel.execution_event_count > 0
@@ -3146,8 +3167,9 @@ class BacktestService:
                         planner=planner,
                         event_bytes=event_bytes,
                     )
-                last_order_count = order_count
-                last_fill_count = fill_count
+                if self._fault_injector is not None:
+                    last_order_count = order_count
+                    last_fill_count = fill_count
                 if fault_point is not None:
                     self._maybe_inject_fault(
                         fault_point, run_id=run_id, sequence=event.sequence
@@ -3160,7 +3182,7 @@ class BacktestService:
                 finalize=True,
                 checkpoint_callback=checkpoint_after,
             )
-            cost_sensitivity = build_cost_sensitivity_matrix(kernel, events, result)
+            cost_sensitivity = self._build_cost_sensitivity(config, kernel, events, result)
             metrics_market_context = _metrics_market_context(
                 config, events, result.fills
             )
@@ -3179,6 +3201,7 @@ class BacktestService:
                 session=session,
                 planner=planner,
                 event_bytes=event_bytes,
+                final=True,
             )
             self._maybe_inject_fault(
                 "before_report_seal", run_id=run_id, sequence=final_sequence
@@ -3208,19 +3231,10 @@ class BacktestService:
             stamp=stamp,
             expected_generation=expected_generation,
             chart_interval=str(config["signal_interval"]),
-            chart_bars=[
-                {
-                    "time": int(bar.payload["open_time_ms"]) // 1000,
-                    "open": float(bar.payload["open"]),
-                    "high": float(bar.payload["high"]),
-                    "low": float(bar.payload["low"]),
-                    "close": float(bar.payload["close"]),
-                    "volume": float(bar.payload["volume"]),
-                }
-                for bar in derive_complete_trade_bars(
-                    events, str(config["signal_interval"])
-                )
-            ],
+            chart_bars=(collected_chart_bars if reuse_chart_bars else [
+                _trade_chart_bar(bar)
+                for bar in derive_complete_trade_bars(events, str(config["signal_interval"]))
+            ]),
             result_overrides={
                 "report_label": "AGGREGATED_TRADE_SEQUENCE",
                 "strategy_metadata": strategy_metadata,
@@ -3465,24 +3479,29 @@ class BacktestService:
             remaining_events = tuple(
                 event for event in events if event.sequence > resume_sequence
             )
+            interval = (
+                int(config.get("checkpoint_interval") or self.settings.checkpoint_event_interval)
+                if config.get("checkpoint_policy", "INTERVAL") == "INTERVAL" else 0
+            )
             last_order_count = len(kernel.orders)
-            partial_seen = sum(order.status == "PARTIAL" for order in kernel.orders)
+            partial_seen = (sum(order.status == "PARTIAL" for order in kernel._working_orders())
+                            if self._fault_injector is not None else 0)
 
             def checkpoint_after(event: MarketEvent) -> None:
                 nonlocal last_order_count, partial_seen
-                order_count = len(kernel.orders)
-                partial_count = sum(
-                    order.status == "PARTIAL" for order in kernel.orders
-                )
-                interval = self.settings.checkpoint_event_interval
                 periodic = interval > 0 and observed > 0 and observed % interval == 0
                 fault_point = None
-                if event.role == "FUNDING":
-                    fault_point = "after_funding"
-                elif partial_count > partial_seen:
-                    fault_point = "after_partial_fill"
-                elif order_count > last_order_count:
-                    fault_point = "after_order"
+                if self._fault_injector is not None:
+                    order_count = len(kernel.orders)
+                    partial_count = sum(
+                        order.status == "PARTIAL" for order in kernel._working_orders()
+                    )
+                    if event.role == "FUNDING":
+                        fault_point = "after_funding"
+                    elif partial_count > partial_seen:
+                        fault_point = "after_partial_fill"
+                    elif order_count > last_order_count:
+                        fault_point = "after_order"
                 if periodic or (self._fault_injector is not None and fault_point):
                     self._save_trade_checkpoint(
                         record,
@@ -3494,8 +3513,9 @@ class BacktestService:
                         planner=planner,
                         event_bytes=event_bytes,
                     )
-                last_order_count = order_count
-                partial_seen = partial_count
+                if self._fault_injector is not None:
+                    last_order_count = order_count
+                    partial_seen = partial_count
                 if fault_point is not None:
                     self._maybe_inject_fault(
                         fault_point, run_id=run_id, sequence=event.sequence
@@ -3508,7 +3528,7 @@ class BacktestService:
                 finalize=True,
                 checkpoint_callback=checkpoint_after,
             )
-            cost_sensitivity = build_cost_sensitivity_matrix(kernel, events, result)
+            cost_sensitivity = self._build_cost_sensitivity(config, kernel, events, result)
             metrics_market_context = _metrics_market_context(
                 config, events, result.fills
             )
@@ -3529,6 +3549,7 @@ class BacktestService:
                 session=session,
                 planner=planner,
                 event_bytes=event_bytes,
+                final=True,
             )
             self._maybe_inject_fault(
                 "before_report_seal", run_id=run_id, sequence=final_sequence
@@ -4269,8 +4290,8 @@ class BacktestService:
         if payload.get("checkpoint_policy") is not None or payload.get("checkpoint_interval") is not None:
             policy = payload.get("checkpoint_policy") or "INTERVAL"
             interval = payload.get("checkpoint_interval")
-            if fidelity != "BAR_APPROX" or type(policy) is not str or policy not in {"INTERVAL", "FINAL_ONLY", "NONE"}:
-                raise BacktestError("SCHEMA_UNKNOWN_FIELD", "checkpoint policy requires BAR and INTERVAL, FINAL_ONLY or NONE")
+            if type(policy) is not str or policy not in {"INTERVAL", "FINAL_ONLY", "NONE"}:
+                raise BacktestError("SCHEMA_UNKNOWN_FIELD", "checkpoint policy requires INTERVAL, FINAL_ONLY or NONE")
             if interval is not None and (type(interval) is not int or interval < 1 or policy != "INTERVAL"):
                 raise BacktestError("SCHEMA_UNKNOWN_FIELD", "checkpoint_interval requires positive integer and INTERVAL policy")
             execution_config["checkpoint_policy"] = policy
@@ -4278,6 +4299,11 @@ class BacktestService:
                 execution_config["checkpoint_interval"] = (
                     interval if interval is not None else self.settings.checkpoint_event_interval
                 )
+        if payload.get("cost_sensitivity_mode") is not None:
+            mode = payload["cost_sensitivity_mode"]
+            if type(mode) is not str or mode not in {"FULL", "SKIP"}:
+                raise BacktestError("SCHEMA_UNKNOWN_FIELD", "cost_sensitivity_mode requires FULL or SKIP")
+            execution_config["cost_sensitivity_mode"] = mode
         for chart_field in ("symbol", "interval", "chart_range_mode"):
             if payload.get(chart_field) is not None:
                 execution_config[chart_field] = str(payload[chart_field])
@@ -4401,6 +4427,12 @@ class BacktestService:
 
         return report
 
+    @staticmethod
+    def _build_cost_sensitivity(config, kernel, events, result):
+        if config.get("cost_sensitivity_mode", "FULL") == "SKIP":
+            return {"status": "SKIPPED_BY_REQUEST", "scenarios": []}
+        return build_cost_sensitivity_matrix(kernel, events, result)
+
     def _save_bar_checkpoint(
         self,
         record: Mapping[str, object],
@@ -4444,7 +4476,7 @@ class BacktestService:
         }
         if history is not None:
             payload["historyEncoding"] = ENCODING
-        payload_json = checkpoint_json(payload, provider_json)
+        payload_json = checkpoint_json(payload, provider_json, history=history)
         logical_size = len(payload_json.encode("utf-8"))
         if history is not None:
             logical_size += history.logical_extra - len(canonical_json("historyEncoding") + ":" + canonical_json(ENCODING) + ",")
@@ -4483,9 +4515,21 @@ class BacktestService:
         session: StrategyProviderSession,
         planner: PyneHostPlanner,
         event_bytes: int,
+        final: bool = False,
     ) -> None:
+        policy = json.loads(str(record["config_json"])).get("checkpoint_policy", "INTERVAL")
+        if policy == "NONE" or (policy == "FINAL_ONLY" and not final):
+            return
         provider, provider_json, provider_size = checkpoint_session(session)
         self._assert_provider_state_budget(provider, encoded_size=provider_size)
+        from .checkpoint_history import trade_history_encoder, TRADE_ENCODING, EXTENDED_TRADE_ENCODING
+        history = None
+        if app_getenv("BACKTEST_TRADE_INCREMENTAL_CHECKPOINT_ENABLED", "1").strip() == "1":
+            if kernel.execution._checkpoint_history is None:
+                kernel.execution._checkpoint_history = trade_history_encoder()
+            history = kernel.execution._checkpoint_history
+            history.begin()
+        ENCODING = EXTENDED_TRADE_ENCODING if history is not None and history.extended else TRADE_ENCODING
         payload = {
             "schemaVersion": "candlescope.backtest-checkpoint/2",
             "checkpointMode": "DUAL_CLOCK",
@@ -4495,15 +4539,20 @@ class BacktestService:
             "inputIdentity": self._checkpoint_input_identity(record),
             "sequence": int(sequence),
             "observed": kernel.builder.signal_count,
-            "engine": kernel.snapshot(),
+            "engine": kernel.snapshot(history_encoder=history),
             "provider": provider,
             "providerSnapshotCapable": bool(
                 session.describe()["capabilities"]["snapshotRestore"]
             ),
             "planner": planner.snapshot(),
         }
-        payload_json = checkpoint_json(payload, provider_json)
-        if event_bytes + len(payload_json.encode("utf-8")) > (
+        if history is not None:
+            payload["historyEncoding"] = ENCODING
+        payload_json = checkpoint_json(payload, provider_json, history=history)
+        logical_size = len(payload_json.encode("utf-8"))
+        if history is not None:
+            logical_size += history.logical_extra - len(canonical_json("historyEncoding") + ":" + canonical_json(ENCODING) + ",")
+        if event_bytes + logical_size > (
             self.settings.worker_memory_mb * 1024 * 1024
         ):
             raise BacktestError(
@@ -4518,6 +4567,7 @@ class BacktestService:
                 "payload_json": payload_json,
                 "state_hash": "sha256:" + sha256_hex(payload_json),
                 "created_at_ms": _now_ms(),
+                "history_chunks": dict(history.pending) if history is not None else None,
             }
         )
         if not saved:
@@ -4525,6 +4575,8 @@ class BacktestService:
                 "IDENTITY_MUTATION",
                 "stale worker generation cannot publish a checkpoint",
             )
+        if history is not None:
+            history.pending.clear()
 
     def _save_trade_checkpoint(
         self,
@@ -4537,9 +4589,21 @@ class BacktestService:
         session: StrategyProviderSession,
         planner: PyneHostPlanner,
         event_bytes: int,
+        final: bool = False,
     ) -> None:
+        policy = json.loads(str(record["config_json"])).get("checkpoint_policy", "INTERVAL")
+        if policy == "NONE" or (policy == "FINAL_ONLY" and not final):
+            return
         provider, provider_json, provider_size = checkpoint_session(session)
         self._assert_provider_state_budget(provider, encoded_size=provider_size)
+        from .checkpoint_history import trade_history_encoder, TRADE_ENCODING, EXTENDED_TRADE_ENCODING
+        history = None
+        if app_getenv("BACKTEST_TRADE_INCREMENTAL_CHECKPOINT_ENABLED", "1").strip() == "1":
+            if kernel._checkpoint_history is None:
+                kernel._checkpoint_history = trade_history_encoder()
+            history = kernel._checkpoint_history
+            history.begin()
+        ENCODING = EXTENDED_TRADE_ENCODING if history is not None and history.extended else TRADE_ENCODING
         payload = {
             "schemaVersion": "candlescope.backtest-checkpoint/2",
             "checkpointMode": "TRADE_TAPE",
@@ -4550,15 +4614,20 @@ class BacktestService:
             "sequence": int(sequence),
             "observed": int(observed),
             "aggregateState": dict(aggregate_state),
-            "engine": kernel.snapshot(),
+            "engine": kernel.snapshot(history_encoder=history),
             "provider": provider,
             "providerSnapshotCapable": bool(
                 session.describe()["capabilities"]["snapshotRestore"]
             ),
             "planner": planner.snapshot(),
         }
-        payload_json = checkpoint_json(payload, provider_json)
-        if event_bytes + len(payload_json.encode("utf-8")) > (
+        if history is not None:
+            payload["historyEncoding"] = ENCODING
+        payload_json = checkpoint_json(payload, provider_json, history=history)
+        logical_size = len(payload_json.encode("utf-8"))
+        if history is not None:
+            logical_size += history.logical_extra - len(canonical_json("historyEncoding") + ":" + canonical_json(ENCODING) + ",")
+        if event_bytes + logical_size > (
             self.settings.worker_memory_mb * 1024 * 1024
         ):
             raise BacktestError(
@@ -4573,6 +4642,7 @@ class BacktestService:
                 "payload_json": payload_json,
                 "state_hash": "sha256:" + sha256_hex(payload_json),
                 "created_at_ms": _now_ms(),
+                "history_chunks": dict(history.pending) if history is not None else None,
             }
         )
         if not saved:
@@ -4580,6 +4650,8 @@ class BacktestService:
                 "IDENTITY_MUTATION",
                 "stale worker generation cannot publish a checkpoint",
             )
+        if history is not None:
+            history.pending.clear()
 
     @staticmethod
     def _checkpoint_input_identity(record: Mapping[str, object]) -> dict[str, object]:
@@ -5112,7 +5184,8 @@ def _planning_context(kernel: Any, event: MarketEvent) -> PlanningContext:
     )
     contract_multiplier = getattr(account, "multiplier", None) or Decimal("1")
     active_orders = (len(kernel._live_orders()) if isinstance(kernel, SimulationKernel)
-                     else sum(order.status in {"OPEN", "PARTIAL"} for order in kernel.orders))
+                     else sum(order.status in {"OPEN", "PARTIAL"} for order in
+                              (kernel._working_orders() if isinstance(kernel, TradeSimulationKernel) else kernel.orders)))
     cumulative_fees = getattr(account, "cumulative_fees", None)
     if cumulative_fees is None:
         cumulative_fees = getattr(kernel, "fee_total", Decimal("0"))
@@ -5213,3 +5286,14 @@ def _decimal_or_none(value: object) -> Decimal | None:
     except (InvalidOperation, ValueError, TypeError):
         return None
     return result if result.is_finite() else None
+
+
+def _trade_chart_bar(bar: MarketEvent) -> dict[str, object]:
+    return {
+        "time": int(bar.payload["open_time_ms"]) // 1000,
+        "open": float(bar.payload["open"]),
+        "high": float(bar.payload["high"]),
+        "low": float(bar.payload["low"]),
+        "close": float(bar.payload["close"]),
+        "volume": float(bar.payload["volume"]),
+    }

@@ -48,6 +48,19 @@ def build_cost_sensitivity_matrix(
         ]
         replays.append(_clone_kernel(kernel, _bar_sensitivity=True, participation_rate=base_rate / Decimal("2")))
         fused = iter(_run_bar_scenarios(replays, events, by_sequence))
+    fused_dual = None
+    if (type(kernel) is DualClockSimulationKernel
+            and getenv("BACKTEST_FUSED_DUAL_SENSITIVITY_ENABLED", "1").strip() == "1"):
+        replays = [
+            _clone_kernel(kernel, taker_fee_bps=kernel.taker_fee_bps * multiplier,
+                          maker_fee_bps=kernel.maker_fee_bps * multiplier,
+                          slippage_bps=kernel.slippage_bps * multiplier)
+            for multiplier in (Decimal("1.25"), Decimal("1.5"))
+        ]
+        replays.append(_clone_kernel(kernel, latency_ms=kernel.latency_ms + 100,
+                                     latency_events=kernel.latency_events + 1))
+        replays.append(_clone_kernel(kernel, participation_rate=base_rate / Decimal("2")))
+        fused_dual = iter(_run_dual_scenarios(replays, events, by_sequence))
     scenarios: list[dict[str, object]] = [
         _scenario_wire(
             "BASELINE",
@@ -71,7 +84,8 @@ def build_cost_sensitivity_matrix(
             maker_fee_bps=getattr(kernel, "maker_fee_bps") * multiplier,
             slippage_bps=getattr(kernel, "slippage_bps") * multiplier,
         )
-        result = next(fused) if fused is not None else _run_scenario(replay, events, strategy)
+        result = (next(fused_dual) if fused_dual is not None else
+                  next(fused) if fused is not None else _run_scenario(replay, events, strategy))
         scenarios.append(
             _scenario_wire(
                 name,
@@ -108,7 +122,7 @@ def build_cost_sensitivity_matrix(
             latency_ms=getattr(kernel, "latency_ms") + 100,
             latency_events=getattr(kernel, "latency_events") + 1,
         )
-        result = _run_scenario(replay, events, strategy)
+        result = next(fused_dual) if fused_dual is not None else _run_scenario(replay, events, strategy)
         scenarios.append(
             _scenario_wire(
                 "LATENCY_PLUS_ONE_TIER",
@@ -124,7 +138,8 @@ def build_cost_sensitivity_matrix(
         )
     lower_rate = base_rate / Decimal("2")
     replay = _clone_kernel(kernel, _bar_sensitivity=fast_bar, participation_rate=lower_rate)
-    result = next(fused) if fused is not None else _run_scenario(replay, events, strategy)
+    result = (next(fused_dual) if fused_dual is not None else
+                  next(fused) if fused is not None else _run_scenario(replay, events, strategy))
     scenarios.append(
         _scenario_wire(
             "PARTICIPATION_DOWN_ONE_TIER",
@@ -324,3 +339,67 @@ def _run_scenario(kernel, events, strategy):
     if isinstance(kernel, _BarSensitivityKernel):
         return kernel.run_sensitivity(events, strategy)
     return kernel.run(events, strategy, warmup_events=0, finalize=True)
+
+
+def _run_dual_scenarios(replays, events, by_sequence):
+    """Owned sensitivity clones share validation/bar construction, never accounts.
+
+    Only fill/ledger evidence is consumed by the matrix. No provider callbacks,
+    decisions, resumable checkpoints or equity curves are produced here.
+    """
+    from app.market_dataset.trades import assert_trade_stream
+
+    clock = replays[0]
+    trades = tuple(e for e in events if e.role == "TRADES")
+    if len(trades) > clock.max_events:
+        raise MarketDatasetError("trade event budget exceeded", code="BUDGET_EXCEEDED")
+    if trades and assert_trade_stream(trades) != "AGG_TRADE":
+        raise MarketDatasetError("dual-clock execution requires AGG_TRADE", code="FIDELITY_MISLABEL")
+    executions = [r.execution for r in replays]
+    account_v2 = isinstance(executions[0].account, LinearPerpetualAccountV2)
+    prune_idle = getenv("BACKTEST_PRUNED_DUAL_SENSITIVITY_ENABLED", "1").strip() == "1"
+    funding = clock.funding_rate != 0 and clock.funding_interval_ms > 0
+    if account_v2:
+        funding = funding and clock.funding_mode == "FIXED_SCENARIO"
+    previous = None
+    count = 0
+    for trade in events:
+        if trade.role in {"INSTRUMENT_RULES", "MARK_INDEX", "FUNDING"}:
+            for execution in executions:
+                execution._last_event = trade
+                execution.account.apply(trade)
+            continue
+        if trade.role != "TRADES":
+            raise MarketDatasetError("dual-clock kernel received unsupported role", code="FIDELITY_MISLABEL")
+        source_sequence = int(trade.payload.get("source_sequence") or trade.sequence)
+        if previous is not None and source_sequence != previous + 1:
+            raise MarketDatasetError("aggregate trade id gap rejected", code="DATA_GAP_REJECTED")
+        completed = clock.builder.push(trade)
+        for bar in completed:
+            intents = by_sequence.get(bar.sequence)
+            if intents:
+                for execution in executions:
+                    execution._enqueue_many(intents, current_sequence=trade.sequence - 1)
+        price = None if account_v2 else Decimal(str(trade.payload["price"]))
+        for execution in executions:
+            execution._last_event = trade
+            if account_v2:
+                execution.account.validate_ready()
+            else:
+                execution.account.mark = price
+            if funding or not prune_idle:
+                execution._apply_funding(trade)
+            # Owned clones have no external order mutations or restore path.
+            # The builder above validates price/quantity even when no order is active.
+            if execution._active_orders or not prune_idle:
+                execution._match(trade)
+        previous = source_sequence
+        count += 1
+    results = []
+    for execution in executions:
+        execution.finalize_orders()
+        fills, ledger = execution._financial_result()
+        ledger["signal_event_count"] = clock.builder.signal_count
+        ledger["execution_event_count"] = count
+        results.append(_SensitivityResult(fills, ledger, sha256_hex(fills), sha256_hex(ledger)))
+    return results

@@ -1,4 +1,4 @@
-"""Supervised whole-run BAR worker for built-ins and trusted Python only."""
+"""Supervised whole-run BAR/dual-clock worker for built-ins and trusted Python only."""
 
 from __future__ import annotations
 
@@ -17,8 +17,9 @@ from .strategy.isolated import IsolatedStrategyProvider
 from .strategy.python_provider import PythonHostProvider
 
 
-def provider_spec(provider):
-    if getenv("BACKTEST_COLOCATED_BAR_ENABLED", "1").strip() != "1":
+def provider_spec(provider, *, fidelity="BAR_APPROX"):
+    flag = "BACKTEST_COLOCATED_DUAL_CLOCK_ENABLED" if fidelity == "AGG_TRADE_EXECUTION" else "BACKTEST_COLOCATED_BAR_ENABLED"
+    if getenv(flag, "1").strip() != "1":
         return None
     if type(provider) is IsolatedStrategyProvider and provider._process is None and not provider._terminated:
         return {"kind": "builtin", "revision": provider._revision_id,
@@ -115,8 +116,10 @@ def _worker(connection, settings, run_id, spec, events, options, call_deadline, 
         guarded = _GuardedProvider(provider, call_deadline, settings.provider_step_timeout_ms / 1000,
                                    spec["call_timeout"])
         call_deadline.value = 0.0
-        completed = service.execute_bar_run(run_id, events=events, provider=guarded, **options)
-        completed["execution_lane"] = "COLOCATED_BAR_V1"
+        dual = service.get_run(run_id)["fidelity_mode"] == "AGG_TRADE_EXECUTION"
+        execute_run = service.execute_dual_clock_run if dual else service.execute_bar_run
+        completed = execute_run(run_id, events=events, provider=guarded, **options)
+        completed["execution_lane"] = "COLOCATED_DUAL_CLOCK_V1" if dual else "COLOCATED_BAR_V1"
         completed["worker_python"] = sys.executable
         connection.send(("ok", completed))
     except BaseException as exc:

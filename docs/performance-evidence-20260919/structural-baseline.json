@@ -1,0 +1,68 @@
+{
+  "samples": [
+    {
+      "workload": "held_resting",
+      "events": 100000,
+      "parameters": {},
+      "freeze_seconds": 1.5833358000018052,
+      "read_project_seconds": 1.7910320999981195,
+      "execute_seconds": 3.9034751999970467,
+      "total_seconds": 7.291772900000069,
+      "fills": 1,
+      "open_orders": 2,
+      "ending_position": "1",
+      "result_hash": "857f683e342eb02ab7538c1a61e1abf236ae0d8c12308eebe3a62b252bf87b50"
+    },
+    {
+      "workload": "parameter_1",
+      "events": 100000,
+      "parameters": {
+        "fast": 2,
+        "slow": 6
+      },
+      "freeze_seconds": 1.567020100002992,
+      "read_project_seconds": 1.896856299998035,
+      "execute_seconds": 3.916417600001296,
+      "total_seconds": 7.38562119999915,
+      "fills": 219,
+      "open_orders": 0,
+      "ending_position": "1",
+      "result_hash": "bb0af0690006b81c985075758aebe584a22b2170a8c503b9ae7b16461a3a2855"
+    },
+    {
+      "workload": "parameter_2",
+      "events": 100000,
+      "parameters": {
+        "fast": 3,
+        "slow": 7
+      },
+      "freeze_seconds": 1.715562500001397,
+      "read_project_seconds": 1.9109048000027542,
+      "execute_seconds": 3.555638400001044,
+      "total_seconds": 7.1973622999976214,
+      "fills": 219,
+      "open_orders": 0,
+      "ending_position": "1",
+      "result_hash": "d60324d83ca0456ed16acfc345d9b8b74a0afdad5c4bcd6dad11c591bd16d8b8"
+    },
+    {
+      "workload": "parameter_3",
+      "events": 100000,
+      "parameters": {
+        "fast": 4,
+        "slow": 8
+      },
+      "freeze_seconds": 1.483791900001961,
+      "read_project_seconds": 1.8077616000009584,
+      "execute_seconds": 3.50382990000071,
+      "total_seconds": 6.810478899998998,
+      "fills": 219,
+      "open_orders": 0,
+      "ending_position": "1",
+      "result_hash": "b4b8b066951e1b983fff69fe739c3174258e8d3fbc9d73c7b94db14dcff07215"
+    }
+  ],
+  "import_seconds": 1.830579100002069,
+  "stage_timers": true,
+  "scope": "synthetic market data with real Parquet fixture; full supervised service; import excluded from each run"
+}

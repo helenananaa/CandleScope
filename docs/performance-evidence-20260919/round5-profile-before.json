@@ -1,0 +1,16 @@
+{
+  "kind": "actual-spawned-worker-profile-not-latency-benchmark",
+  "child_elapsed_seconds": 8.58333760000096,
+  "inclusive_seconds": {
+    "dual_checkpoints": 2.281431099996553,
+    "dual_kernels_including_callbacks": 4.574714900001709,
+    "cost_sensitivity": 2.8248387000021467,
+    "report_and_persist": 0.5654565000004368
+  },
+  "calls": {
+    "dual_checkpoints": 102,
+    "dual_kernels_including_callbacks": 1,
+    "cost_sensitivity": 1,
+    "report_and_persist": 1
+  }
+}

@@ -25,13 +25,22 @@ def _measure_worker(args, *, profiling):
     output = Path(os.environ["STRATEGY_AUDIT_PROFILE"]).resolve()
     timings, counts, originals = defaultdict(float), defaultdict(int), []
 
+    checkpoint_depth = [0]
+
     def wrap(owner, attribute, label):
         original = getattr(owner, attribute)
         def timed(*values, **kwargs):
+            if label == "checkpoint_hash" and not checkpoint_depth[0]:
+                return original(*values, **kwargs)
+            in_checkpoint = label in {"dual_checkpoints", "checkpoints"}
+            if in_checkpoint:
+                checkpoint_depth[0] += 1
             started = perf_counter()
             try:
                 return original(*values, **kwargs)
             finally:
+                if in_checkpoint:
+                    checkpoint_depth[0] -= 1
                 timings[label] += perf_counter() - started
                 counts[label] += 1
                 if label == "checkpoints" and os.environ.get("STRATEGY_AUDIT_FLUSH_CHECKPOINTS") == "1":
@@ -47,6 +56,8 @@ def _measure_worker(args, *, profiling):
 
     for owner, attribute, label in (
         (module.SimulationKernel, "run", "kernels_including_callbacks"),
+        (module.DualClockSimulationKernel, "run", "dual_kernels_including_callbacks"),
+        (module.BacktestService, "_save_dual_clock_checkpoint", "dual_checkpoints"),
         (module, "build_cost_sensitivity_matrix", "cost_sensitivity"),
         (module.BacktestService, "_save_bar_checkpoint", "checkpoints"),
         (module.BacktestService, "_persist_completed_run", "report_and_persist"),
@@ -55,6 +66,23 @@ def _measure_worker(args, *, profiling):
     ):
         if hasattr(owner, attribute):
             wrap(owner, attribute, label)
+    for owner, attribute, label in (
+        (module.TradeSimulationKernel, "_match", "trade_match_including_fills"),
+        (module.TradeSimulationKernel, "_apply_funding", "trade_funding"),
+        (module.StrategyHostAdapter, "observe", "strategy_observe_including_provider"),
+    ):
+        wrap(owner, attribute, label)
+    from app.backtest.checkpoint_history import HistoryEncoder
+    from app.backtest.repository import BacktestRepository
+    for owner, attribute, label in (
+        (module, "checkpoint_session", "checkpoint_provider_snapshot_encode"),
+        (module, "checkpoint_json", "checkpoint_json_compose"),
+        (module, "sha256_hex", "checkpoint_hash"),
+        (module.DualClockSimulationKernel, "snapshot", "dual_snapshot_including_history"),
+        (HistoryEncoder, "__call__", "history_encode_and_budget"),
+        (BacktestRepository, "save_checkpoint", "checkpoint_database_publish"),
+    ):
+        wrap(owner, attribute, label)
     from app.simulation import cost_sensitivity
     if hasattr(cost_sensitivity, "_BarSensitivityKernel"):
         wrap(cost_sensitivity._BarSensitivityKernel, "run_sensitivity", "cost_kernel_loops")
