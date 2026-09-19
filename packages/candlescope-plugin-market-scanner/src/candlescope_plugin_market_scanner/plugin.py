@@ -97,6 +97,92 @@ _CONTRACT_LOCALIZATIONS = {
         "market scanner phase is invalid": "市場掃描器階段無效",
         "capabilityUnavailable": "{permission} 能力不可用",
     },
+    "de": {
+        "market scanner accepts only an empty scan command": (
+            "Der Markt-Scanner akzeptiert nur einen Scan-Befehl ohne Parameter"
+        ),
+        "market scanner completion token is stale": (
+            "Das Abschluss-Token des Markt-Scanners ist abgelaufen"
+        ),
+        "Host returned invalid scanner settings": (
+            "Der Host hat ungültige Scanner-Einstellungen zurückgegeben"
+        ),
+        "Host returned an invalid symbol page": (
+            "Der Host hat eine ungültige Symbolseite zurückgegeben"
+        ),
+        "market scanner phase is invalid": "Die Phase des Markt-Scanners ist ungültig",
+        "capabilityUnavailable": "Fähigkeit {permission} nicht verfügbar",
+    },
+    "it": {
+        "market scanner accepts only an empty scan command": (
+            "Lo scanner di mercato accetta solo un comando di scansione senza parametri"
+        ),
+        "market scanner completion token is stale": (
+            "Il token di completamento dello scanner di mercato è scaduto"
+        ),
+        "Host returned invalid scanner settings": (
+            "L'Host ha restituito impostazioni dello scanner non valide"
+        ),
+        "Host returned an invalid symbol page": (
+            "L'Host ha restituito una pagina di simboli non valida"
+        ),
+        "market scanner phase is invalid": "La fase dello scanner di mercato non è valida",
+        "capabilityUnavailable": "Capacità {permission} non disponibile",
+    },
+    "id": {
+        "market scanner accepts only an empty scan command": (
+            "Pemindai pasar hanya menerima perintah pindai tanpa parameter"
+        ),
+        "market scanner completion token is stale": (
+            "Token penyelesaian pemindai pasar sudah kedaluwarsa"
+        ),
+        "Host returned invalid scanner settings": (
+            "Host mengembalikan pengaturan pemindai yang tidak valid"
+        ),
+        "Host returned an invalid symbol page": (
+            "Host mengembalikan halaman simbol yang tidak valid"
+        ),
+        "market scanner phase is invalid": "Fase pemindai pasar tidak valid",
+        "capabilityUnavailable": "Kemampuan {permission} tidak tersedia",
+    },
+    "tr": {
+        "market scanner accepts only an empty scan command": (
+            "Piyasa tarayıcısı yalnızca parametresiz bir tarama komutunu kabul eder"
+        ),
+        "market scanner completion token is stale": (
+            "Piyasa tarayıcısının tamamlanma jetonunun süresi doldu"
+        ),
+        "Host returned invalid scanner settings": "Host geçersiz tarayıcı ayarları döndürdü",
+        "Host returned an invalid symbol page": "Host geçersiz bir sembol sayfası döndürdü",
+        "market scanner phase is invalid": "Piyasa tarayıcısının aşaması geçersiz",
+        "capabilityUnavailable": "{permission} yeteneği kullanılamıyor",
+    },
+    "vi": {
+        "market scanner accepts only an empty scan command": (
+            "Bộ quét thị trường chỉ chấp nhận lệnh quét không có tham số"
+        ),
+        "market scanner completion token is stale": (
+            "Token hoàn tất của bộ quét thị trường đã hết hạn"
+        ),
+        "Host returned invalid scanner settings": "Host trả về cài đặt bộ quét không hợp lệ",
+        "Host returned an invalid symbol page": "Host trả về trang mã không hợp lệ",
+        "market scanner phase is invalid": "Giai đoạn của bộ quét thị trường không hợp lệ",
+        "capabilityUnavailable": "Năng lực {permission} không khả dụng",
+    },
+    "pl": {
+        "market scanner accepts only an empty scan command": (
+            "Skaner rynku akceptuje tylko polecenie skanowania bez parametrów"
+        ),
+        "market scanner completion token is stale": "Token zakończenia skanera rynku wygasł",
+        "Host returned invalid scanner settings": (
+            "Host zwrócił nieprawidłowe ustawienia skanera"
+        ),
+        "Host returned an invalid symbol page": (
+            "Host zwrócił nieprawidłową stronę symboli"
+        ),
+        "market scanner phase is invalid": "Faza skanera rynku jest nieprawidłowa",
+        "capabilityUnavailable": "Zdolność {permission} jest niedostępna",
+    },
 }
 
 

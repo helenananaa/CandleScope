@@ -8,8 +8,9 @@ It can only read Host-brokered public symbol and bar data inside the scopes in
 published as bounded chart markers. It has no account, credential, arbitrary
 filesystem, subprocess, or live-trading permission.
 
-The manifest owns its English defaults and `zh-CN` contribution localizations,
-including localized enum labels. Invocation locale is delivered through
+The manifest owns its English defaults and contribution localizations for
+`zh-CN`, `es`, `fr`, `ja`, `ko`, `pt-BR`, `ru`, `zh-TW`, `de`, `it`, `id`,
+`tr`, `vi`, and `pl`, including localized enum labels. Invocation locale is delivered through
 `requestContext.locale`; validation failures produced by this package follow
 that locale.
 

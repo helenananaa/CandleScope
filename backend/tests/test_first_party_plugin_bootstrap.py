@@ -471,6 +471,44 @@ def test_default_routes_fail_closed_when_a_first_party_release_is_missing(
         )
 
 
+def test_ensure_skips_when_no_official_bundle_matches_the_host(
+    tmp_path: Path,
+) -> None:
+    payload = b"windows-only bundle"
+    release = OfficialPluginRelease(
+        runtime_id="candlescope.pyne",
+        package="candlescope-plugin-pyne",
+        version="0.2.0",
+        filename="candlescope-pyne-test.cspkg",
+        url="https://github.com/helenananaa/CandleScope/releases/download/test/test.cspkg",
+        sha256=f"sha256:{hashlib.sha256(payload).hexdigest()}",
+        size=len(payload),
+        system="NotThisHost",
+        machine="AMD64",
+        implementation="CPython",
+        python_version="3.12",
+    )
+    lock = _write_lock(tmp_path / "releases.json", release)
+
+    result = ensure_first_party_plugins_from_environment(
+        host_name="CandleScope",
+        host_version="0.3.0",
+        environ=_single_pyne_environment(tmp_path),
+        release_lock_path=lock,
+        opener=lambda *_args, **_kwargs: pytest.fail(
+            "unsupported host must not download"
+        ),
+        installer_factory=lambda **_kwargs: pytest.fail(
+            "unsupported host must not install"
+        ),
+    )
+
+    assert result.status == "skipped"
+    assert result.reason == "unsupported-host-platform"
+    assert [item.runtime_id for item in result.plugins] == ["candlescope.pyne"]
+    assert result.to_wire()["reason"] == "unsupported-host-platform"
+
+
 def test_bootstrap_can_be_disabled_without_reading_release_state(
     tmp_path: Path,
 ) -> None:

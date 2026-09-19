@@ -40,12 +40,16 @@ export function replayOrderSizingAvailability(
   maxQuantity: string | null,
   draftQuantity: string,
 ): ReplayOrderSizingAvailability {
-  const maximum = maxQuantity === null ? Number.NaN : Number(maxQuantity);
+  // Number("") is 0; blank/whitespace maxima are unknown, not a zero cap.
+  const maximum = maxQuantity === null || maxQuantity.trim() === ""
+    ? Number.NaN
+    : Number(maxQuantity);
   const quantity = Number(draftQuantity);
   const validMaximum = Number.isFinite(maximum) && maximum > 0;
+  const knownCapacity = Number.isFinite(maximum) && maximum >= 0;
   return {
     sliderDisabled: !validMaximum,
-    quantityExceedsCapacity: validMaximum
+    quantityExceedsCapacity: knownCapacity
       && Number.isFinite(quantity)
       && quantity > maximum,
   };
@@ -92,6 +96,15 @@ export function rebaseReplayMaxQuantity({
 }: ReplayMaxQuantityRebaseInput): number | null {
   if (!positiveFinite(previousMaxQuantity)) return null;
   if (reduceOnly) return previousMaxQuantity;
+  // Known zero/negative equity cannot fund a new opening size, even if the
+  // previous equity snapshot is missing and cannot be used as a ratio.
+  if (
+    nextAvailableEquity !== null
+    && Number.isFinite(nextAvailableEquity)
+    && nextAvailableEquity <= 0
+  ) {
+    return null;
+  }
 
   let rebased = previousMaxQuantity;
   if (positiveFinite(previousReferencePrice) && positiveFinite(nextReferencePrice)) {

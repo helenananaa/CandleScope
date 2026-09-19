@@ -16,6 +16,13 @@ The incremental commands expose open/seed, preview or commit one bar, snapshot,
 and close. Sessions are process-local, capped at 16, expire after 15 idle
 minutes, and use Pyne's own rolling retention and snapshot-capable engine.
 
+The manifest, contract errors, and sandbox UI own translations for `zh-CN`,
+`es`, `fr`, `ja`, `ko`, `pt-BR`, `ru`, `zh-TW`, `de`, `it`, `id`, `tr`, `vi`,
+and `pl`, with English defaults. Regional tags resolve through their parent
+language. Localization resources can be checked without loading the native
+engine using `tests/test_additional_locale_resources.py` and the host's
+`frontend/scripts/plugin-locale.test.mjs`; execution tests still require Pyne.
+
 ## Honest rendering boundary
 
 Lines, drawing lines/polylines, boxes, labels, markers, and horizontal levels

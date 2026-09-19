@@ -177,6 +177,102 @@
                 }
               }
             }
+          },
+          "de": {
+            "title": "Pyne auf dem aktuellen Chart ausführen",
+            "schema": {
+              "properties": {
+                "source": {
+                  "title": "Pyne-Quellcode"
+                },
+                "paramsJson": {
+                  "title": "Parameter-JSON"
+                },
+                "lookbackBars": {
+                  "title": "Lookback-Kerzen"
+                }
+              }
+            }
+          },
+          "it": {
+            "title": "Esegui Pyne sul grafico attuale",
+            "schema": {
+              "properties": {
+                "source": {
+                  "title": "Codice sorgente Pyne"
+                },
+                "paramsJson": {
+                  "title": "JSON dei parametri"
+                },
+                "lookbackBars": {
+                  "title": "Barre di lookback"
+                }
+              }
+            }
+          },
+          "id": {
+            "title": "Jalankan Pyne pada grafik saat ini",
+            "schema": {
+              "properties": {
+                "source": {
+                  "title": "Kode sumber Pyne"
+                },
+                "paramsJson": {
+                  "title": "JSON parameter"
+                },
+                "lookbackBars": {
+                  "title": "Jumlah candle lookback"
+                }
+              }
+            }
+          },
+          "tr": {
+            "title": "Geçerli grafikte Pyne çalıştır",
+            "schema": {
+              "properties": {
+                "source": {
+                  "title": "Pyne kaynak kodu"
+                },
+                "paramsJson": {
+                  "title": "Parametre JSON"
+                },
+                "lookbackBars": {
+                  "title": "Geriye bakış mum sayısı"
+                }
+              }
+            }
+          },
+          "vi": {
+            "title": "Chạy Pyne trên biểu đồ hiện tại",
+            "schema": {
+              "properties": {
+                "source": {
+                  "title": "Mã nguồn Pyne"
+                },
+                "paramsJson": {
+                  "title": "JSON tham số"
+                },
+                "lookbackBars": {
+                  "title": "Số nến nhìn lại"
+                }
+              }
+            }
+          },
+          "pl": {
+            "title": "Uruchom Pyne na bieżącym wykresie",
+            "schema": {
+              "properties": {
+                "source": {
+                  "title": "Kod źródłowy Pyne"
+                },
+                "paramsJson": {
+                  "title": "JSON parametrów"
+                },
+                "lookbackBars": {
+                  "title": "Świece wstecz"
+                }
+              }
+            }
           }
         },
         "requiresUserAction": true,
@@ -390,6 +486,138 @@
                 },
                 "retentionBars": {
                   "title": "保留 K 線數"
+                }
+              }
+            }
+          },
+          "de": {
+            "title": "Inkrementelle Pyne-Sitzung starten",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "Sitzungs-ID"
+                },
+                "source": {
+                  "title": "Pyne-Quellcode"
+                },
+                "paramsJson": {
+                  "title": "Parameter-JSON"
+                },
+                "lookbackBars": {
+                  "title": "Lookback-Kerzen"
+                },
+                "retentionBars": {
+                  "title": "Behaltene Kerzen"
+                }
+              }
+            }
+          },
+          "it": {
+            "title": "Avvia sessione incrementale di Pyne",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "ID sessione"
+                },
+                "source": {
+                  "title": "Codice sorgente Pyne"
+                },
+                "paramsJson": {
+                  "title": "JSON dei parametri"
+                },
+                "lookbackBars": {
+                  "title": "Barre di lookback"
+                },
+                "retentionBars": {
+                  "title": "Barre conservate"
+                }
+              }
+            }
+          },
+          "id": {
+            "title": "Mulai sesi Pyne inkremental",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "ID sesi"
+                },
+                "source": {
+                  "title": "Kode sumber Pyne"
+                },
+                "paramsJson": {
+                  "title": "JSON parameter"
+                },
+                "lookbackBars": {
+                  "title": "Jumlah candle lookback"
+                },
+                "retentionBars": {
+                  "title": "Jumlah candle yang dipertahankan"
+                }
+              }
+            }
+          },
+          "tr": {
+            "title": "Artımlı Pyne oturumu başlat",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "Oturum kimliği"
+                },
+                "source": {
+                  "title": "Pyne kaynak kodu"
+                },
+                "paramsJson": {
+                  "title": "Parametre JSON"
+                },
+                "lookbackBars": {
+                  "title": "Geriye bakış mum sayısı"
+                },
+                "retentionBars": {
+                  "title": "Saklanan mum sayısı"
+                }
+              }
+            }
+          },
+          "vi": {
+            "title": "Bắt đầu phiên Pyne tăng dần",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "ID phiên"
+                },
+                "source": {
+                  "title": "Mã nguồn Pyne"
+                },
+                "paramsJson": {
+                  "title": "JSON tham số"
+                },
+                "lookbackBars": {
+                  "title": "Số nến nhìn lại"
+                },
+                "retentionBars": {
+                  "title": "Số nến giữ lại"
+                }
+              }
+            }
+          },
+          "pl": {
+            "title": "Rozpocznij przyrostową sesję Pyne",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "ID sesji"
+                },
+                "source": {
+                  "title": "Kod źródłowy Pyne"
+                },
+                "paramsJson": {
+                  "title": "JSON parametrów"
+                },
+                "lookbackBars": {
+                  "title": "Świece wstecz"
+                },
+                "retentionBars": {
+                  "title": "Zachowywane świece"
                 }
               }
             }
@@ -692,6 +920,192 @@
                 }
               }
             }
+          },
+          "de": {
+            "title": "Kerze an die Pyne-Sitzung senden",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "Sitzungs-ID"
+                },
+                "time": {
+                  "title": "Zeit"
+                },
+                "open": {
+                  "title": "Eröffnung"
+                },
+                "high": {
+                  "title": "Hoch"
+                },
+                "low": {
+                  "title": "Tief"
+                },
+                "close": {
+                  "title": "Schluss"
+                },
+                "volume": {
+                  "title": "Volumen"
+                },
+                "preview": {
+                  "title": "Nur Vorschau"
+                }
+              }
+            }
+          },
+          "it": {
+            "title": "Invia candela alla sessione Pyne",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "ID sessione"
+                },
+                "time": {
+                  "title": "Ora"
+                },
+                "open": {
+                  "title": "Apertura"
+                },
+                "high": {
+                  "title": "Massimo"
+                },
+                "low": {
+                  "title": "Minimo"
+                },
+                "close": {
+                  "title": "Chiusura"
+                },
+                "volume": {
+                  "title": "Volume"
+                },
+                "preview": {
+                  "title": "Solo anteprima"
+                }
+              }
+            }
+          },
+          "id": {
+            "title": "Kirim candle ke sesi Pyne",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "ID sesi"
+                },
+                "time": {
+                  "title": "Waktu"
+                },
+                "open": {
+                  "title": "Pembukaan"
+                },
+                "high": {
+                  "title": "Tertinggi"
+                },
+                "low": {
+                  "title": "Terendah"
+                },
+                "close": {
+                  "title": "Penutupan"
+                },
+                "volume": {
+                  "title": "Volume"
+                },
+                "preview": {
+                  "title": "Pratinjau saja"
+                }
+              }
+            }
+          },
+          "tr": {
+            "title": "Pyne oturumuna mum gönder",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "Oturum kimliği"
+                },
+                "time": {
+                  "title": "Zaman"
+                },
+                "open": {
+                  "title": "Açılış"
+                },
+                "high": {
+                  "title": "Yüksek"
+                },
+                "low": {
+                  "title": "Düşük"
+                },
+                "close": {
+                  "title": "Kapanış"
+                },
+                "volume": {
+                  "title": "Hacim"
+                },
+                "preview": {
+                  "title": "Yalnızca önizleme"
+                }
+              }
+            }
+          },
+          "vi": {
+            "title": "Đẩy nến vào phiên Pyne",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "ID phiên"
+                },
+                "time": {
+                  "title": "Thời gian"
+                },
+                "open": {
+                  "title": "Giá mở"
+                },
+                "high": {
+                  "title": "Giá cao"
+                },
+                "low": {
+                  "title": "Giá thấp"
+                },
+                "close": {
+                  "title": "Giá đóng"
+                },
+                "volume": {
+                  "title": "Khối lượng"
+                },
+                "preview": {
+                  "title": "Chỉ xem trước"
+                }
+              }
+            }
+          },
+          "pl": {
+            "title": "Wyślij świecę do sesji Pyne",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "ID sesji"
+                },
+                "time": {
+                  "title": "Czas"
+                },
+                "open": {
+                  "title": "Otwarcie"
+                },
+                "high": {
+                  "title": "Maksimum"
+                },
+                "low": {
+                  "title": "Minimum"
+                },
+                "close": {
+                  "title": "Zamknięcie"
+                },
+                "volume": {
+                  "title": "Wolumen"
+                },
+                "preview": {
+                  "title": "Tylko podgląd"
+                }
+              }
+            }
           }
         },
         "requiresUserAction": true,
@@ -829,6 +1243,66 @@
                 }
               }
             }
+          },
+          "de": {
+            "title": "Momentaufnahme der Pyne-Sitzung erstellen",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "Sitzungs-ID"
+                }
+              }
+            }
+          },
+          "it": {
+            "title": "Crea istantanea della sessione Pyne",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "ID sessione"
+                }
+              }
+            }
+          },
+          "id": {
+            "title": "Buat snapshot sesi Pyne",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "ID sesi"
+                }
+              }
+            }
+          },
+          "tr": {
+            "title": "Pyne oturumunun anlık görüntüsünü al",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "Oturum kimliği"
+                }
+              }
+            }
+          },
+          "vi": {
+            "title": "Tạo ảnh chụp phiên Pyne",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "ID phiên"
+                }
+              }
+            }
+          },
+          "pl": {
+            "title": "Utwórz migawkę sesji Pyne",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "ID sesji"
+                }
+              }
+            }
           }
         },
         "requiresUserAction": true,
@@ -937,6 +1411,66 @@
                 }
               }
             }
+          },
+          "de": {
+            "title": "Pyne-Sitzung schließen",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "Sitzungs-ID"
+                }
+              }
+            }
+          },
+          "it": {
+            "title": "Chiudi sessione Pyne",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "ID sessione"
+                }
+              }
+            }
+          },
+          "id": {
+            "title": "Tutup sesi Pyne",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "ID sesi"
+                }
+              }
+            }
+          },
+          "tr": {
+            "title": "Pyne oturumunu kapat",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "Oturum kimliği"
+                }
+              }
+            }
+          },
+          "vi": {
+            "title": "Đóng phiên Pyne",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "ID phiên"
+                }
+              }
+            }
+          },
+          "pl": {
+            "title": "Zamknij sesję Pyne",
+            "schema": {
+              "properties": {
+                "sessionId": {
+                  "title": "ID sesji"
+                }
+              }
+            }
           }
         },
         "requiresUserAction": true,
@@ -989,6 +1523,24 @@
           },
           "zh-TW": {
             "title": "Pyne 回測策略提供器"
+          },
+          "de": {
+            "title": "Pyne-Backtest-Strategieanbieter"
+          },
+          "it": {
+            "title": "Fornitore di strategia backtest Pyne"
+          },
+          "id": {
+            "title": "Penyedia strategi backtest Pyne"
+          },
+          "tr": {
+            "title": "Pyne backtest strateji sağlayıcısı"
+          },
+          "vi": {
+            "title": "Nhà cung cấp chiến lược backtest Pyne"
+          },
+          "pl": {
+            "title": "Dostawca strategii backtestu Pyne"
           }
         },
         "inputModes": [
@@ -1039,6 +1591,24 @@
           },
           "zh-TW": {
             "title": "Pyne 工作台"
+          },
+          "de": {
+            "title": "Pyne-Werkbank"
+          },
+          "it": {
+            "title": "Banco di lavoro Pyne"
+          },
+          "id": {
+            "title": "Meja kerja Pyne"
+          },
+          "tr": {
+            "title": "Pyne çalışma tezgâhı"
+          },
+          "vi": {
+            "title": "Bàn làm việc Pyne"
+          },
+          "pl": {
+            "title": "Warsztat Pyne"
           }
         },
         "slot": "sidePanel",
@@ -1076,6 +1646,24 @@
           },
           "zh-TW": {
             "title": "Pyne 輸出"
+          },
+          "de": {
+            "title": "Pyne-Ausgabe"
+          },
+          "it": {
+            "title": "Uscita Pyne"
+          },
+          "id": {
+            "title": "Keluaran Pyne"
+          },
+          "tr": {
+            "title": "Pyne çıktısı"
+          },
+          "vi": {
+            "title": "Đầu ra Pyne"
+          },
+          "pl": {
+            "title": "Wyjście Pyne"
           }
         },
         "target": "main-chart",

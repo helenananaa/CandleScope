@@ -30,7 +30,7 @@ from app.indicator.runtime_service import (
     IndicatorRuntimeService,
     build_indicator_runtime_service_from_environment,
 )
-from app.plugin_runtime.errors import PluginTransportError
+from app.plugin_runtime.errors import PluginRequestError, PluginTransportError
 
 
 def _descriptor(
@@ -528,6 +528,47 @@ async def test_public_catalog_is_descriptor_and_route_driven() -> None:
     assert "source" not in str(catalog)
     assert "command" not in str(catalog)
     assert "pid" not in str(catalog)
+
+
+@pytest.mark.anyio
+async def test_unregistered_sidecar_does_not_block_startup() -> None:
+    missing = PluginRequestError(
+        code="PLUGIN_NOT_FOUND",
+        message="runtime 'pyne.runtime' is not registered",
+        runtime_id="pyne.runtime",
+    )
+    service = IndicatorRuntimeService(
+        _routes("sidecar"),
+        host=_Host(descriptor_error=missing, error=missing),
+    )
+
+    await service.start()
+    catalog = service.compatibility_source_catalog()
+
+    assert catalog["languages"] == [
+        {
+            "id": "pyne",
+            "name": "pyne",
+            "extensions": [],
+            "aliases": [],
+            "runtimeId": "pyne.runtime",
+            "routeMode": "sidecar",
+            "available": False,
+            "features": [],
+        }
+    ]
+    assert catalog["runtimes"] == []
+
+    async def legacy() -> dict[str, Any]:
+        raise AssertionError("unregistered sidecar must not invoke legacy")
+
+    payload = await service.execute(
+        _request(),
+        legacy=legacy,
+        adapt_sidecar=lambda result: {"ok": result.ok},
+    )
+    assert payload["ok"] is False
+    assert payload["code"] == "INDICATOR_RUNTIME_UNAVAILABLE"
 
 
 @pytest.mark.anyio

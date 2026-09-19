@@ -6,7 +6,7 @@ chrome. It is app-wide infrastructure, not a business feature.
 ## Public Contract
 
 - Default locale is `zh-CN`. Supported locales are `zh-CN`, `en`, `es`, `fr`,
-  `ja`, `ko`, `pt-BR`, `ru`, and `zh-TW`.
+  `ja`, `ko`, `pt-BR`, `ru`, `zh-TW`, `de`, `it`, `id`, `tr`, `vi`, and `pl`.
 - Bare `pt` is not an alias of `pt-BR`. Locale matching still walks BCP 47
   parents, so `pt-BR` and case variants such as `pt-br` resolve to Brazilian
   Portuguese, but `pt` and `pt-PT` fall back to the product default. This is a

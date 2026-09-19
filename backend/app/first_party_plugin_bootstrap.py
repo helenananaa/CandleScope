@@ -341,19 +341,31 @@ def _registry_path(environ: Mapping[str, str]) -> Path:
     return default_runtime_registry_path(environ)
 
 
-def _assert_platform(release: OfficialPluginRelease) -> None:
-    actual = {
+def _host_platform() -> dict[str, str]:
+    return {
         "system": platform.system(),
         "machine": platform.machine(),
         "implementation": platform.python_implementation(),
         "pythonVersion": f"{sys.version_info.major}.{sys.version_info.minor}",
     }
-    expected = {
+
+
+def _release_platform(release: OfficialPluginRelease) -> dict[str, str]:
+    return {
         "system": release.system,
         "machine": release.machine,
         "implementation": release.implementation,
         "pythonVersion": release.python_version,
     }
+
+
+def _platform_matches(release: OfficialPluginRelease) -> bool:
+    return _host_platform() == _release_platform(release)
+
+
+def _assert_platform(release: OfficialPluginRelease) -> None:
+    actual = _host_platform()
+    expected = _release_platform(release)
     if actual != expected:
         raise FirstPartyPluginBootstrapError(
             "the pinned official plugin bundle does not support this host platform",
@@ -518,8 +530,23 @@ def ensure_first_party_plugins_from_environment(
         return FirstPartyPluginBootstrapResult(
             status="skipped", reason="no-official-runtime-route"
         )
-    for release in selected:
-        _assert_platform(release)
+    supported = [release for release in selected if _platform_matches(release)]
+    if not supported:
+        return FirstPartyPluginBootstrapResult(
+            status="skipped",
+            reason="unsupported-host-platform",
+            plugins=tuple(
+                FirstPartyPluginBootstrapItemResult(
+                    status="skipped",
+                    runtime_id=release.runtime_id,
+                    version=release.version,
+                    bundle_sha256=release.sha256,
+                    reason="unsupported-host-platform",
+                )
+                for release in selected
+            ),
+        )
+    selected = supported
 
     registry_path = _registry_path(env)
     installer = installer_factory(

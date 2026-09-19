@@ -22,7 +22,7 @@ from candlescope_plugin_sdk import (
     RuntimeDescriptor,
 )
 
-from app.plugin_runtime.errors import PluginHostError
+from app.plugin_runtime.errors import PluginHostError, PluginRequestError
 
 from .runtime_routes import (
     ROUTE_MODE_LEGACY,
@@ -38,6 +38,8 @@ from .runtime_routes import (
 MAX_RECENT_ROUTE_RESULTS = 64
 DEFAULT_MAX_PENDING_SHADOW_TASKS = 64
 INDICATOR_RUNTIME_CATALOG_SCHEMA_VERSION = 1
+UNREGISTERED_SIDECAR_CODES = frozenset({"PLUGIN_NOT_FOUND"})
+
 
 logger = logging.getLogger(__name__)
 
@@ -268,7 +270,18 @@ class IndicatorRuntimeService:
                 try:
                     descriptor = descriptors.get(route.runtime_id)
                     if descriptor is None:
-                        descriptor = await self.host.descriptor(route.runtime_id)
+                        try:
+                            descriptor = await self.host.descriptor(route.runtime_id)
+                        except PluginRequestError as exc:
+                            if exc.code not in UNREGISTERED_SIDECAR_CODES:
+                                raise
+                            logger.warning(
+                                "Indicator sidecar %s is not registered; "
+                                "script language %s stays unavailable",
+                                route.runtime_id,
+                                route.language,
+                            )
+                            continue
                     language_ids = {item.id for item in descriptor.languages}
                     if route.language not in language_ids:
                         failures[route.language] = IndicatorRuntimeFailure(

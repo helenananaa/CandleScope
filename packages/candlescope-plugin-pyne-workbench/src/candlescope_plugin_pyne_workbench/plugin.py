@@ -198,6 +198,146 @@ _CONTRACT_LOCALIZATIONS = {
         "capabilityUnavailable": "{permission} 功能不可用",
         "boundedString": "{key} 必須是長度受限的字串",
     },
+    "de": {
+        "Pyne workbench contribution is not invokable": (
+            "Der Beitrag der Pyne-Werkbank kann nicht aufgerufen werden"
+        ),
+        "Pyne session is not active": "Die Pyne-Sitzung ist nicht aktiv",
+        "preview must be a boolean": "preview muss ein boolescher Wert sein",
+        "workbench completion token is stale": (
+            "Das Abschluss-Token der Werkbank ist abgelaufen"
+        ),
+        "workbench phase is invalid": "Die Phase der Werkbank ist ungültig",
+        "lookbackBars must be from 2 to 5000": "lookbackBars muss zwischen 2 und 5000 liegen",
+        "paramsJson must be bounded JSON text": (
+            "paramsJson muss ein längenbeschränkter JSON-Text sein"
+        ),
+        "paramsJson is invalid JSON": "paramsJson ist kein gültiges JSON",
+        "paramsJson must contain an object": "paramsJson muss ein Objekt enthalten",
+        "bar fields are invalid": "Die Kerzenfelder sind ungültig",
+        "Host returned no market bars": "Der Host hat keine Marktkerzen zurückgegeben",
+        "Host bars are not all final": "Nicht alle Host-Kerzen sind abgeschlossen",
+        "Host returned invalid bars": "Der Host hat ungültige Kerzen zurückgegeben",
+        "capabilityUnavailable": "Fähigkeit {permission} nicht verfügbar",
+        "boundedString": "{key} muss eine längenbeschränkte Zeichenkette sein",
+    },
+    "it": {
+        "Pyne workbench contribution is not invokable": (
+            "Il contributo del banco di lavoro Pyne non è invocabile"
+        ),
+        "Pyne session is not active": "La sessione Pyne non è attiva",
+        "preview must be a boolean": "preview deve essere un booleano",
+        "workbench completion token is stale": (
+            "Il token di completamento del banco di lavoro è scaduto"
+        ),
+        "workbench phase is invalid": "La fase del banco di lavoro non è valida",
+        "lookbackBars must be from 2 to 5000": (
+            "lookbackBars deve essere compreso tra 2 e 5000"
+        ),
+        "paramsJson must be bounded JSON text": (
+            "paramsJson deve essere un testo JSON di lunghezza limitata"
+        ),
+        "paramsJson is invalid JSON": "paramsJson non è un JSON valido",
+        "paramsJson must contain an object": "paramsJson deve contenere un oggetto",
+        "bar fields are invalid": "I campi della candela non sono validi",
+        "Host returned no market bars": "L'Host non ha restituito candele di mercato",
+        "Host bars are not all final": "Non tutte le candele dell'Host sono chiuse",
+        "Host returned invalid bars": "L'Host ha restituito candele non valide",
+        "capabilityUnavailable": "La capacità {permission} non è disponibile",
+        "boundedString": "{key} deve essere una stringa di lunghezza limitata",
+    },
+    "id": {
+        "Pyne workbench contribution is not invokable": (
+            "Kontribusi meja kerja Pyne tidak dapat dipanggil"
+        ),
+        "Pyne session is not active": "Sesi Pyne tidak aktif",
+        "preview must be a boolean": "preview harus berupa boolean",
+        "workbench completion token is stale": (
+            "Token penyelesaian meja kerja sudah kedaluwarsa"
+        ),
+        "workbench phase is invalid": "Fase meja kerja tidak valid",
+        "lookbackBars must be from 2 to 5000": "lookbackBars harus antara 2 dan 5000",
+        "paramsJson must be bounded JSON text": (
+            "paramsJson harus berupa teks JSON dengan panjang terbatas"
+        ),
+        "paramsJson is invalid JSON": "paramsJson bukan JSON yang valid",
+        "paramsJson must contain an object": "paramsJson harus berisi objek",
+        "bar fields are invalid": "Kolom candle tidak valid",
+        "Host returned no market bars": "Host tidak mengembalikan candle pasar",
+        "Host bars are not all final": "Tidak semua candle Host sudah final",
+        "Host returned invalid bars": "Host mengembalikan candle yang tidak valid",
+        "capabilityUnavailable": "Kemampuan {permission} tidak tersedia",
+        "boundedString": "{key} harus berupa string dengan panjang terbatas",
+    },
+    "tr": {
+        "Pyne workbench contribution is not invokable": (
+            "Pyne çalışma tezgâhı katkısı çağrılamaz"
+        ),
+        "Pyne session is not active": "Pyne oturumu etkin değil",
+        "preview must be a boolean": "preview bir boole değer olmalıdır",
+        "workbench completion token is stale": (
+            "Çalışma tezgâhının tamamlanma jetonunun süresi doldu"
+        ),
+        "workbench phase is invalid": "Çalışma tezgâhı aşaması geçersiz",
+        "lookbackBars must be from 2 to 5000": "lookbackBars 2 ile 5000 arasında olmalıdır",
+        "paramsJson must be bounded JSON text": (
+            "paramsJson uzunluğu sınırlı bir JSON metni olmalıdır"
+        ),
+        "paramsJson is invalid JSON": "paramsJson geçerli bir JSON değil",
+        "paramsJson must contain an object": "paramsJson bir nesne içermelidir",
+        "bar fields are invalid": "Mum alanları geçersiz",
+        "Host returned no market bars": "Host piyasa mumu döndürmedi",
+        "Host bars are not all final": "Host mumlarının tümü kapanmış değil",
+        "Host returned invalid bars": "Host geçersiz mumlar döndürdü",
+        "capabilityUnavailable": "{permission} yeteneği kullanılamıyor",
+        "boundedString": "{key} uzunluğu sınırlı bir dize olmalıdır",
+    },
+    "vi": {
+        "Pyne workbench contribution is not invokable": (
+            "Đóng góp bàn làm việc Pyne không thể gọi"
+        ),
+        "Pyne session is not active": "Phiên Pyne không hoạt động",
+        "preview must be a boolean": "preview phải là giá trị boolean",
+        "workbench completion token is stale": (
+            "Token hoàn tất của bàn làm việc đã hết hạn"
+        ),
+        "workbench phase is invalid": "Giai đoạn bàn làm việc không hợp lệ",
+        "lookbackBars must be from 2 to 5000": "lookbackBars phải từ 2 đến 5000",
+        "paramsJson must be bounded JSON text": (
+            "paramsJson phải là văn bản JSON có độ dài giới hạn"
+        ),
+        "paramsJson is invalid JSON": "paramsJson không phải JSON hợp lệ",
+        "paramsJson must contain an object": "paramsJson phải chứa một đối tượng",
+        "bar fields are invalid": "Các trường nến không hợp lệ",
+        "Host returned no market bars": "Host không trả về nến thị trường",
+        "Host bars are not all final": "Không phải tất cả nến của Host đã đóng",
+        "Host returned invalid bars": "Host trả về nến không hợp lệ",
+        "capabilityUnavailable": "Năng lực {permission} không khả dụng",
+        "boundedString": "{key} phải là chuỗi có độ dài giới hạn",
+    },
+    "pl": {
+        "Pyne workbench contribution is not invokable": (
+            "Wkład warsztatu Pyne nie może zostać wywołany"
+        ),
+        "Pyne session is not active": "Sesja Pyne nie jest aktywna",
+        "preview must be a boolean": "preview musi być wartością logiczną",
+        "workbench completion token is stale": "Token zakończenia warsztatu wygasł",
+        "workbench phase is invalid": "Faza warsztatu jest nieprawidłowa",
+        "lookbackBars must be from 2 to 5000": (
+            "lookbackBars musi być z zakresu od 2 do 5000"
+        ),
+        "paramsJson must be bounded JSON text": (
+            "paramsJson musi być tekstem JSON o ograniczonej długości"
+        ),
+        "paramsJson is invalid JSON": "paramsJson nie jest prawidłowym JSON",
+        "paramsJson must contain an object": "paramsJson musi zawierać obiekt",
+        "bar fields are invalid": "Pola świecy są nieprawidłowe",
+        "Host returned no market bars": "Host nie zwrócił świec rynkowych",
+        "Host bars are not all final": "Nie wszystkie świece Host są zamknięte",
+        "Host returned invalid bars": "Host zwrócił nieprawidłowe świece",
+        "capabilityUnavailable": "Zdolność {permission} jest niedostępna",
+        "boundedString": "{key} musi być łańcuchem o ograniczonej długości",
+    },
 }
 
 

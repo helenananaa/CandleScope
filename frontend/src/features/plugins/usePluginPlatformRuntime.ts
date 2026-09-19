@@ -6,6 +6,7 @@ import {
   fetchPluginMarketplaceCatalog,
   fetchPluginMarketplaceStatus,
   fetchPluginUiSnapshot,
+  invalidatePluginControlReads,
   downloadPluginUserFile,
   invokePluginCommand,
   PluginPlatformApiError,
@@ -188,6 +189,7 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity): Plugin
   const snapshotRefreshSequenceRef = useRef(0);
   const marketplaceRefreshSequenceRef = useRef(0);
   const liveRefreshSequenceRef = useRef(0);
+  const coordinatedSnapshotRefreshRef = useRef<object | null>(null);
   if (markerSourceRef.current === null) markerSourceRef.current = new PluginMarkerSource();
   if (chartLayerSourceRef.current === null) {
     chartLayerSourceRef.current = new PluginChartLayerSource();
@@ -213,17 +215,25 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity): Plugin
     const snapshotSequence = includeSnapshot
       ? ++snapshotRefreshSequenceRef.current
       : null;
+    const coordinatedMarker = includeSnapshot ? {} : null;
+    if (coordinatedMarker !== null) {
+      coordinatedSnapshotRefreshRef.current = coordinatedMarker;
+    }
     try {
-      const [nextCatalog, initialSnapshot] = await Promise.all([
+      let [nextCatalog, nextSnapshot] = await Promise.all([
         fetchPluginCatalog(signal),
         includeSnapshot ? fetchPluginUiSnapshot(signal) : Promise.resolve(null),
       ]);
-      let nextSnapshot = initialSnapshot;
       if (
         nextSnapshot !== null
         && nextSnapshot.registryRevision !== nextCatalog.platform.registryRevision
       ) {
-        nextSnapshot = await fetchPluginUiSnapshot(signal);
+        if (signal?.aborted || sequence !== catalogRefreshSequenceRef.current) return;
+        invalidatePluginControlReads();
+        [nextCatalog, nextSnapshot] = await Promise.all([
+          fetchPluginCatalog(signal),
+          fetchPluginUiSnapshot(signal),
+        ]);
       }
       if (
         nextSnapshot !== null
@@ -263,6 +273,12 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity): Plugin
       throw caught;
     } finally {
       if (
+        coordinatedMarker !== null
+        && coordinatedSnapshotRefreshRef.current === coordinatedMarker
+      ) {
+        coordinatedSnapshotRefreshRef.current = null;
+      }
+      if (
         includeSnapshot
         && !signal?.aborted
         && sequence === catalogRefreshSequenceRef.current
@@ -273,6 +289,7 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity): Plugin
   const refreshUiSnapshotState = useCallback(async (
     signal?: AbortSignal,
   ): Promise<void> => {
+    if (coordinatedSnapshotRefreshRef.current !== null) return;
     const expectedRevision = catalogRef.current?.platform.registryRevision;
     if (expectedRevision === undefined) return;
     const sequence = ++snapshotRefreshSequenceRef.current;
@@ -543,6 +560,8 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity): Plugin
   ) => {
     try {
       const status = await setLiveControlMode(mode, reason, acknowledgeKill);
+      invalidatePluginControlReads();
+      liveRefreshSequenceRef.current += 1;
       setLiveControl(status);
       setNoticeState({
         kind: "message",
@@ -562,6 +581,8 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity): Plugin
   const killLive = useCallback(async (reason: string) => {
     try {
       const status = await killLiveControl(reason);
+      invalidatePluginControlReads();
+      liveRefreshSequenceRef.current += 1;
       setLiveControl(status);
       setNoticeState({ kind: "message", key: "plugin.notice.liveKilled" });
     } catch (caught) {
@@ -577,6 +598,8 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity): Plugin
   ) => {
     try {
       const status = await revokeLiveAuthority(scopeType, subject, reason);
+      invalidatePluginControlReads();
+      liveRefreshSequenceRef.current += 1;
       setLiveControl(status);
       setNoticeState({
         kind: "message",
