@@ -88,7 +88,10 @@ can be recovered from `before-cleanup.bundle` under a new local branch name.
 - Locale catalog completeness, TypeScript checks and production build passed.
   Use the canonical `E:/Disk0Merged/H/program/CandleScope/frontend` directory for
   Vite builds: the `H:` alias can mix logical and physical HTML entry paths.
-- Final frontend verification is recorded in the archive logs.
+- Final `npm run check` passed with exit code 0: architecture, plugin checks,
+  locale completeness, both TypeScript projects, full ESLint, all 3704 frontend
+  tests, all 46 desktop tests and the production build. Final log:
+  `frontend-final-check.log` in the archive root.
 
 Test groups overlap and should not be summed into a unique test count. Existing
 FastAPI deprecation and large-bundle warnings remain. No new browser performance,
