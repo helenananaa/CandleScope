@@ -259,7 +259,15 @@ test("hidden full-book views pause delivery without closing their source lease",
   controller.start();
   socket.open();
   socket.message({ type: "connected", protocol: "orderbook.full.v1", display_visibility_control: true });
-  const subscribe = JSON.parse(socket.sent[0]!);
+  const subscribe = JSON.parse(socket.sent[0]!) as {
+    display_active: boolean;
+    request_id: string;
+    streams: [{
+      params: { output_limit?: number; price_grouping?: string };
+      output_limit?: number;
+      price_grouping?: string;
+    }];
+  };
   assert.equal(subscribe.display_active, false);
   const acknowledged = structuredClone(subscribe.streams[0]);
   delete acknowledged.params.output_limit;
