@@ -65,12 +65,22 @@ export interface IndicatorDefinition {
 
 interface IndicatorParameterBase {
   label?: string;
+  title?: string;
+  tooltip?: string;
+  group?: string;
+  inline?: string;
   type?: string;
   default?: unknown;
+  current?: unknown;
   min?: number;
   max?: number;
+  minval?: number;
+  maxval?: number;
   step?: number;
   options?: string[];
+  confirm?: boolean;
+  active?: boolean;
+  display?: string;
 }
 
 export type IndicatorParameterSchema =

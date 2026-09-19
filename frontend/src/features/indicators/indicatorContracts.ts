@@ -745,17 +745,36 @@ export function parseIndicatorParameterSchemas(
     if (!key && !name)
       throw new IndicatorPayloadError(itemPath, "expected key or name");
     const label = optionalIndicatorString(record.label, `${itemPath}.label`);
+    const title = optionalIndicatorString(record.title, `${itemPath}.title`);
+    const tooltip = optionalIndicatorString(record.tooltip, `${itemPath}.tooltip`);
+    const group = optionalIndicatorString(record.group, `${itemPath}.group`);
+    const inline = optionalIndicatorString(record.inline, `${itemPath}.inline`);
+    const display = optionalIndicatorString(record.display, `${itemPath}.display`);
     const type = optionalIndicatorString(record.type, `${itemPath}.type`);
     const min = optionalIndicatorFiniteNumber(record.min, `${itemPath}.min`);
     const max = optionalIndicatorFiniteNumber(record.max, `${itemPath}.max`);
+    const minval = optionalIndicatorFiniteNumber(record.minval, `${itemPath}.minval`);
+    const maxval = optionalIndicatorFiniteNumber(record.maxval, `${itemPath}.maxval`);
     const step = optionalIndicatorFiniteNumber(record.step, `${itemPath}.step`);
+    const confirm = optionalIndicatorBoolean(record.confirm, `${itemPath}.confirm`);
+    const active = optionalIndicatorBoolean(record.active, `${itemPath}.active`);
     const fields = {
       ...(label === undefined ? {} : { label }),
+      ...(title === undefined ? {} : { title }),
+      ...(tooltip === undefined ? {} : { tooltip }),
+      ...(group === undefined ? {} : { group }),
+      ...(inline === undefined ? {} : { inline }),
+      ...(display === undefined ? {} : { display }),
       ...(type === undefined ? {} : { type }),
       ...(record.default === undefined ? {} : { default: record.default }),
+      ...(record.current === undefined ? {} : { current: record.current }),
       ...(min === undefined ? {} : { min }),
       ...(max === undefined ? {} : { max }),
+      ...(minval === undefined ? {} : { minval }),
+      ...(maxval === undefined ? {} : { maxval }),
       ...(step === undefined ? {} : { step }),
+      ...(confirm === undefined ? {} : { confirm }),
+      ...(active === undefined ? {} : { active }),
       ...(record.options !== undefined
         ? {
             options: indicatorStringArray(

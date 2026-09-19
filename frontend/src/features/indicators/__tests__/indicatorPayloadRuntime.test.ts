@@ -70,6 +70,42 @@ test("parameter schemas omit absent optional fields", () => {
   }
 });
 
+test("parameter schemas preserve Pyne input UI metadata", () => {
+  const schemas = parseIndicatorParameterSchemas([{
+    key: "Theme",
+    type: "enum",
+    title: "Theme",
+    tooltip: "Chart theme",
+    group: "Display",
+    inline: "appearance",
+    default: "dark",
+    current: "light",
+    options: ["dark", "light"],
+    minval: 1,
+    maxval: 5,
+    confirm: true,
+    active: false,
+    display: "none",
+  }]);
+
+  assert.deepEqual(schemas, [{
+    key: "Theme",
+    type: "enum",
+    title: "Theme",
+    tooltip: "Chart theme",
+    group: "Display",
+    inline: "appearance",
+    default: "dark",
+    current: "light",
+    options: ["dark", "light"],
+    minval: 1,
+    maxval: 5,
+    confirm: true,
+    active: false,
+    display: "none",
+  }]);
+});
+
 test("indicator payload parser preserves terminal availability metadata", () => {
   const parsed = parseIndicatorPayloadEnvelope({
     ok: false,

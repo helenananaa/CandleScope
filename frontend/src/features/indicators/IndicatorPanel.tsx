@@ -237,7 +237,7 @@ function getParamValue(params: IndicatorParams, schema: UiParamSchema): unknown 
   if (params && Object.prototype.hasOwnProperty.call(params, schema.key)) {
     return params[schema.key];
   }
-  return schema.default ?? "";
+  return schema.current ?? schema.default ?? "";
 }
 
 function parseParamValue(rawValue: string | boolean, type: string): unknown {
@@ -370,6 +370,7 @@ export default function IndicatorPanel({
     const common = {
       className: "indicator-param-input",
       title: schema.tooltip || "",
+      disabled: schema.active === false,
     };
 
     if (type === "bool") {
@@ -406,16 +407,30 @@ export default function IndicatorPanel({
       );
     }
 
-    if (type === "int" || type === "float") {
+    if (type === "int" || type === "float" || type === "price") {
       return (
         <IndicatorNumberInput
           key={`${indicator.id}:${schema.key}:${String(value)}`}
           value={String(value)}
           title={common.title}
-          min={schema.min}
-          max={schema.max}
+          disabled={common.disabled}
+          min={schema.min ?? schema.minval}
+          max={schema.max ?? schema.maxval}
           step={schema.step ?? (type === "int" ? 1 : 0.1)}
           onCommit={(next) => handleParamChange(indicator, schema.key, next, true)}
+        />
+      );
+    }
+
+    if (type === "text_area") {
+      return (
+        <textarea
+          {...common}
+          value={renderInputValue(value)}
+          onBlur={() => onRecompute?.(true)}
+          onChange={(e) => {
+            handleParamChange(indicator, schema.key, e.target.value);
+          }}
         />
       );
     }
@@ -426,9 +441,11 @@ export default function IndicatorPanel({
         type={type === "color" ? "color" : "text"}
         value={renderInputValue(value)}
         onBlur={() => onRecompute?.(true)}
-        min={schema.min}
-        max={schema.max}
-        step={schema.step ?? (type === "float" ? 0.1 : type === "int" ? 1 : undefined)}
+        min={schema.min ?? schema.minval}
+        max={schema.max ?? schema.maxval}
+        step={schema.step ?? (
+          type === "float" || type === "price" ? 0.1 : type === "int" ? 1 : undefined
+        )}
         onChange={(e) => {
           handleParamChange(indicator, schema.key, parseParamValue(e.target.value, type));
         }}

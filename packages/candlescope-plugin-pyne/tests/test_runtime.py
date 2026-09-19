@@ -240,6 +240,46 @@ def test_execute_injects_exact_chart_context_and_uses_inline_engine(
     assert "isClosed" not in captured["ohlcv"][0]
 
 
+def test_execute_preserves_host_configured_symbol_semantics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+    configured = runtime_module.pyne_runtime.PyneSettings(
+        syminfo={
+            "currency": "USD",
+            "basecurrency": "BTC",
+            "mintick": 0.01,
+            "pointvalue": 2.0,
+            "timezone": "America/New_York",
+            "volumetype": "base",
+        }
+    )
+
+    monkeypatch.setattr(
+        runtime_module.pyne_runtime.PyneSettings,
+        "from_env",
+        staticmethod(lambda: configured),
+    )
+
+    def fake_execute(**kwargs: Any) -> SimpleNamespace:
+        captured.update(kwargs)
+        return SimpleNamespace(ok=True, lines=[], output={}, meta={})
+
+    monkeypatch.setattr(runtime_module.pyne_runtime, "execute_pyne_script", fake_execute)
+
+    result = PyneRuntimePlugin().execute_batch(_execute_request())
+
+    assert result.ok is True
+    symbol = captured["settings"].syminfo
+    assert symbol.tickerid == "BINANCE:BTCUSDT"
+    assert symbol.currency == "USD"
+    assert symbol.basecurrency == "BTC"
+    assert symbol.mintick == 0.01
+    assert symbol.pointvalue == 2.0
+    assert symbol.timezone == "America/New_York"
+    assert symbol.volumetype == "base"
+
+
 def test_runtime_failure_is_returned_as_a_structured_diagnostic() -> None:
     result = PyneRuntimePlugin().execute_batch(_execute_request(source="raise ValueError('x')"))
 

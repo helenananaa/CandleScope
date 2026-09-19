@@ -149,6 +149,7 @@ def _settings_for(context: Any, options: Mapping[str, Any]) -> Any:
 
     security_mode = _requested_security_mode(options)
     settings = host_settings(security_mode=security_mode)
+    configured_symbol = settings.syminfo
     prefix = context.exchange.strip().upper()
     return replace(
         settings,
@@ -159,6 +160,12 @@ def _settings_for(context: Any, options: Mapping[str, Any]) -> Any:
             "tickerid": f"{prefix}:{context.symbol}",
             "prefix": prefix,
             "type": context.market_type,
+            "currency": configured_symbol.currency,
+            "basecurrency": configured_symbol.basecurrency,
+            "mintick": configured_symbol.mintick,
+            "pointvalue": configured_symbol.pointvalue,
+            "timezone": configured_symbol.timezone,
+            "volumetype": configured_symbol.volumetype,
         },
         timeframe=context.interval,
     )

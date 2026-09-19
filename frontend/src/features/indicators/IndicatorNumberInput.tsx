@@ -1,11 +1,12 @@
 import { useId, useState } from "react";
 
-export function IndicatorNumberInput({ value, min, max, step, title, onCommit }: {
+export function IndicatorNumberInput({ value, min, max, step, title, disabled, onCommit }: {
   value: string | number;
   min?: number | undefined;
   max?: number | undefined;
   step: number;
   title: string;
+  disabled?: boolean;
   onCommit(value: number): void;
 }) {
   const errorId = useId();
@@ -24,6 +25,7 @@ export function IndicatorNumberInput({ value, min, max, step, title, onCommit }:
         className="indicator-param-input"
         title={title}
         type="number"
+        disabled={disabled}
         required
         defaultValue={value}
         min={min}
