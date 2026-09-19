@@ -1,0 +1,260 @@
+{
+  "samples": [
+    {
+      "pair": 0,
+      "enabled": 0,
+      "seconds": 28.150709200002893,
+      "jobs": [
+        {
+          "index": 0,
+          "freeze_seconds": 1.3900055999984033,
+          "prepare_seconds": 1.6305667000015092,
+          "execute_seconds": 4.081643499997881,
+          "fills": 1
+        },
+        {
+          "index": 1,
+          "freeze_seconds": 1.4233873000011954,
+          "prepare_seconds": 1.5783269999992626,
+          "execute_seconds": 4.011061500001233,
+          "fills": 219
+        },
+        {
+          "index": 2,
+          "freeze_seconds": 1.394891899999493,
+          "prepare_seconds": 1.6544785000005504,
+          "execute_seconds": 3.9153161000031105,
+          "fills": 219
+        },
+        {
+          "index": 3,
+          "freeze_seconds": 1.4081259000013233,
+          "prepare_seconds": 1.6489087000009022,
+          "execute_seconds": 4.013010100003157,
+          "fills": 219
+        }
+      ],
+      "cache": {
+        "hits": 0,
+        "misses": 0,
+        "waits": 0,
+        "bytes": 0,
+        "entries": 0
+      }
+    },
+    {
+      "pair": 0,
+      "enabled": 1,
+      "seconds": 25.072752899999614,
+      "jobs": [
+        {
+          "index": 0,
+          "freeze_seconds": 1.5552564000026905,
+          "prepare_seconds": 2.475709199999983,
+          "execute_seconds": 4.399806099998386,
+          "fills": 1
+        },
+        {
+          "index": 1,
+          "freeze_seconds": 1.457246900001337,
+          "prepare_seconds": 0.40515310000046156,
+          "execute_seconds": 4.091679100001784,
+          "fills": 219
+        },
+        {
+          "index": 2,
+          "freeze_seconds": 1.3593829000019468,
+          "prepare_seconds": 0.2934706999985792,
+          "execute_seconds": 3.691799899999751,
+          "fills": 219
+        },
+        {
+          "index": 3,
+          "freeze_seconds": 1.3441347999978461,
+          "prepare_seconds": 0.3505554999974265,
+          "execute_seconds": 3.6475341000004846,
+          "fills": 219
+        }
+      ],
+      "cache": {
+        "hits": 3,
+        "misses": 1,
+        "waits": 0,
+        "bytes": 8949799,
+        "entries": 1
+      }
+    },
+    {
+      "pair": 1,
+      "enabled": 1,
+      "seconds": 23.151608500000293,
+      "jobs": [
+        {
+          "index": 0,
+          "freeze_seconds": 1.3597823999989487,
+          "prepare_seconds": 1.9727534000012383,
+          "execute_seconds": 3.7378133999991405,
+          "fills": 1
+        },
+        {
+          "index": 1,
+          "freeze_seconds": 1.3329831999981252,
+          "prepare_seconds": 0.3047564999978931,
+          "execute_seconds": 3.7123993999994127,
+          "fills": 219
+        },
+        {
+          "index": 2,
+          "freeze_seconds": 1.3524944999990112,
+          "prepare_seconds": 0.34218959999998333,
+          "execute_seconds": 3.667408699999214,
+          "fills": 219
+        },
+        {
+          "index": 3,
+          "freeze_seconds": 1.3633599999993748,
+          "prepare_seconds": 0.3518952000013087,
+          "execute_seconds": 3.652535799999896,
+          "fills": 219
+        }
+      ],
+      "cache": {
+        "hits": 3,
+        "misses": 1,
+        "waits": 0,
+        "bytes": 8949799,
+        "entries": 1
+      }
+    },
+    {
+      "pair": 1,
+      "enabled": 0,
+      "seconds": 26.381734999999026,
+      "jobs": [
+        {
+          "index": 0,
+          "freeze_seconds": 1.3237515000000712,
+          "prepare_seconds": 1.5329375000001164,
+          "execute_seconds": 3.835027100001753,
+          "fills": 1
+        },
+        {
+          "index": 1,
+          "freeze_seconds": 1.3061590999968757,
+          "prepare_seconds": 1.6120502000012493,
+          "execute_seconds": 3.706480900000315,
+          "fills": 219
+        },
+        {
+          "index": 2,
+          "freeze_seconds": 1.2976635999984865,
+          "prepare_seconds": 1.6496120000010706,
+          "execute_seconds": 3.643469599999662,
+          "fills": 219
+        },
+        {
+          "index": 3,
+          "freeze_seconds": 1.291002000001754,
+          "prepare_seconds": 1.5877325000001292,
+          "execute_seconds": 3.5948920999981056,
+          "fills": 219
+        }
+      ],
+      "cache": {
+        "hits": 0,
+        "misses": 0,
+        "waits": 0,
+        "bytes": 0,
+        "entries": 0
+      }
+    },
+    {
+      "pair": 2,
+      "enabled": 0,
+      "seconds": 27.488658999998734,
+      "jobs": [
+        {
+          "index": 0,
+          "freeze_seconds": 1.3635385000015958,
+          "prepare_seconds": 1.5277860000023793,
+          "execute_seconds": 3.7108230000012554,
+          "fills": 1
+        },
+        {
+          "index": 1,
+          "freeze_seconds": 1.4131211999992956,
+          "prepare_seconds": 1.5098178000007465,
+          "execute_seconds": 3.7676357999989705,
+          "fills": 219
+        },
+        {
+          "index": 2,
+          "freeze_seconds": 1.4477457000029972,
+          "prepare_seconds": 1.649693400002434,
+          "execute_seconds": 3.919043199999578,
+          "fills": 219
+        },
+        {
+          "index": 3,
+          "freeze_seconds": 1.4396054999997432,
+          "prepare_seconds": 1.5521832999984326,
+          "execute_seconds": 4.1867124999989755,
+          "fills": 219
+        }
+      ],
+      "cache": {
+        "hits": 0,
+        "misses": 0,
+        "waits": 0,
+        "bytes": 0,
+        "entries": 0
+      }
+    },
+    {
+      "pair": 2,
+      "enabled": 1,
+      "seconds": 23.374982799999998,
+      "jobs": [
+        {
+          "index": 0,
+          "freeze_seconds": 1.5883663999993587,
+          "prepare_seconds": 2.1085926000014297,
+          "execute_seconds": 3.884444799998164,
+          "fills": 1
+        },
+        {
+          "index": 1,
+          "freeze_seconds": 1.4158194999981788,
+          "prepare_seconds": 0.4284560000014608,
+          "execute_seconds": 3.8133884000017133,
+          "fills": 219
+        },
+        {
+          "index": 2,
+          "freeze_seconds": 1.3618968000009772,
+          "prepare_seconds": 0.35452950000035344,
+          "execute_seconds": 3.418073499997263,
+          "fills": 219
+        },
+        {
+          "index": 3,
+          "freeze_seconds": 1.2460675000002084,
+          "prepare_seconds": 0.2934569000026386,
+          "execute_seconds": 3.4609184000000823,
+          "fills": 219
+        }
+      ],
+      "cache": {
+        "hits": 3,
+        "misses": 1,
+        "waits": 0,
+        "bytes": 8949799,
+        "entries": 1
+      }
+    }
+  ],
+  "full_result_report_chart_equal": true,
+  "events": 100000,
+  "parameter_trials": 3,
+  "scope": "synthetic real-Parquet fixture; batch includes cold held+resting task then parameter trials; freeze/checks retained"
+}

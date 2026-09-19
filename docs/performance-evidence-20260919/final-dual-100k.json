@@ -1,0 +1,66 @@
+{
+  "samples": [
+    {
+      "pair": 0,
+      "enabled": 0,
+      "seconds": 35.447082700000465,
+      "events": 100000,
+      "prints_per_bar": 10,
+      "fills": 2219,
+      "fill_hash": "82afc8d88a40c8759eb5970851998219c13f00a066188b4415f959302c93c31b",
+      "lane": "REFERENCE"
+    },
+    {
+      "pair": 0,
+      "enabled": 1,
+      "seconds": 14.36485470000116,
+      "events": 100000,
+      "prints_per_bar": 10,
+      "fills": 2219,
+      "fill_hash": "82afc8d88a40c8759eb5970851998219c13f00a066188b4415f959302c93c31b",
+      "lane": "COLOCATED_DUAL_CLOCK_V1"
+    },
+    {
+      "pair": 1,
+      "enabled": 1,
+      "seconds": 15.86291060000076,
+      "events": 100000,
+      "prints_per_bar": 10,
+      "fills": 2219,
+      "fill_hash": "82afc8d88a40c8759eb5970851998219c13f00a066188b4415f959302c93c31b",
+      "lane": "COLOCATED_DUAL_CLOCK_V1"
+    },
+    {
+      "pair": 1,
+      "enabled": 0,
+      "seconds": 34.14511349999884,
+      "events": 100000,
+      "prints_per_bar": 10,
+      "fills": 2219,
+      "fill_hash": "82afc8d88a40c8759eb5970851998219c13f00a066188b4415f959302c93c31b",
+      "lane": "REFERENCE"
+    },
+    {
+      "pair": 2,
+      "enabled": 0,
+      "seconds": 35.03447790000064,
+      "events": 100000,
+      "prints_per_bar": 10,
+      "fills": 2219,
+      "fill_hash": "82afc8d88a40c8759eb5970851998219c13f00a066188b4415f959302c93c31b",
+      "lane": "REFERENCE"
+    },
+    {
+      "pair": 2,
+      "enabled": 1,
+      "seconds": 13.751403799997206,
+      "events": 100000,
+      "prints_per_bar": 10,
+      "fills": 2219,
+      "fill_hash": "82afc8d88a40c8759eb5970851998219c13f00a066188b4415f959302c93c31b",
+      "lane": "COLOCATED_DUAL_CLOCK_V1"
+    }
+  ],
+  "full_result_and_report_equal": true,
+  "scope": "synthetic aggregate prints; service incl worker/checkpoints/report; excludes import, HTTP, browser"
+}

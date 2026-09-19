@@ -1,0 +1,45 @@
+{
+  "base_commit": "172ae4ddc7deb76bafb3fa3f6827a02b9d74c888",
+  "state": "uncommitted rounds 1 through 9; round7 and round9 disabled by default",
+  "python": "3.12.7",
+  "tests": {
+    "tests": "349",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "time": "61.312"
+  },
+  "test_environment": {
+    "BACKTEST_REUSE_DUAL_CHART_BARS_ENABLED": "1"
+  },
+  "source_sha256": {
+    "backend/app/backtest/checkpoint_history.py": "0deb62e99b0e65f0c816b405b7f3c6575f3335bc3b9fe5074d7d0f0099755e5a",
+    "backend/app/backtest/colocated.py": "63b7d1bf6ff49644b5e8b4f893c5f35212eaf17a101dccc312213036fc01ec83",
+    "backend/app/backtest/service.py": "043d131284714018987e22fdfbe67ee2d7745f82d3a963f9111bcd69d45f2de3",
+    "backend/app/simulation/cost_sensitivity.py": "1350802388a61c291f68f8dfbe36f7c58f3aee351bb6293c3066bc37edeef923",
+    "backend/app/simulation/trade_kernel.py": "dc42594d61131ab9b2360b3c6310120b46acc25eb4f40777aa2c4ba3665939ca",
+    "backend/app/simulation/dual_clock_kernel.py": "46c8a139955ceeec0f7da164f5e66ea6ebb9143e094e2d8bd5516648a2ca239f",
+    "backend/scripts/benchmark_trade_strategy.py": "f71de5751743123acb77ad7a276440a8451a5e70c87b30b7dd2a2864fceb9157",
+    "backend/scripts/profile_trade_strategy.py": "cae63e027a5966010ce947d4ac585b2b88e5d7d5f12df7c402f0e15e0a752008",
+    "backend/scripts/strategy_worker_profile.py": "cab584403d923b8d22b932140a04557d33ed59b423ff63fd3903d9b8080d9172",
+    "backend/tests/test_trade_strategy_performance.py": "b3c039b12a3206cfd5b1e123823d6a919feb5386bc82290beda0b4f2f7c84287",
+    "backend/tests/test_dual_sensitivity_performance.py": "a0ca0ddf1a218b5aa27d98ee49d99fd56556b3ef6136238e776d3e2df30fbc7d",
+    "backend/app/backtest/strategy/builtin.py": "fbdbaf84604828d061ab048163303a4f6c89d2b86904eeee9086043991cc9257",
+    "backend/tests/test_trade_history_round3.py": "c7da53b492f82fea988310fb99bed25aefe760b5acd6306a61e116fec3a9b9d2",
+    "backend/app/api/v1/backtests.py": "bc1a08551b4baa69f1ca6c53ad9102c6c1848dd2fb5915b21f0bbd5d2e9df691",
+    "backend/tests/test_trade_research_options.py": "5fb86f9eac43d57d76aa970744c0a9d4885dca988a2d95fdfdee8a0e53c74465",
+    "backend/scripts/benchmark_trade_research_options.py": "6d3407d1118ff1b938e272bdeceb04d712c661dcefc0b9d4737a9d612f9cf395",
+    "backend/tests/test_idle_sensitivity_performance.py": "32c9febc49505442a842ccfabd73f53ac7de25cb3afb43a752e1f28e07b9e537",
+    "backend/tests/test_direct_dual_result.py": "390b4bf464012b793cd8fe3a64baa33a0b6a38305ee059da447340bdff3c8c73",
+    "backend/app/backtest/checkpoint_codec.py": "11085625790f26583c24d933025b2cfd5658b7f991226c750d9c50f4d5b096da",
+    "backend/tests/test_checkpoint_json_reuse.py": "96857221150350c0385627067508cbbac5da01d3f756cd9037da8ae77acf909a",
+    "backend/tests/test_flat_trade_records.py": "41f597f7217dbf4ffa805ebbf9abeca68479be22449e96501f0266f5b139ec78",
+    "backend/app/simulation/kernel.py": "ccece49a7a393e03a6f7e488a21bdbe57bc8590ce0484835d97b79e4f68ea31c",
+    "backend/tests/test_reused_dual_chart_bars.py": "21202597b6f5e6572554174e54bd8ac69df14f51371b85204ba01c8f23d7a0c5"
+  },
+  "checks": [
+    "ruff passed",
+    "git diff --check passed"
+  ],
+  "scope": "synthetic service validation; long-range timing not stable, candidate disabled; not deployed"
+}

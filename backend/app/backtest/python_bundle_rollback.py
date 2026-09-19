@@ -1,4 +1,4 @@
-"""Schema v6/v7 rollback. Fails closed before dropping authoritative rows."""
+"""Schema v6/v7/v8/v9 rollback. Fails closed before dropping authoritative rows."""
 
 from __future__ import annotations
 
@@ -8,18 +8,19 @@ from pathlib import Path
 
 def rollback_python_bundles(database: Path) -> dict[str, object]:
     connection = sqlite3.connect(database)
+    connection.row_factory = sqlite3.Row
     try:
         version = int(
             connection.execute(
                 "SELECT schema_version FROM backtest_schema_meta LIMIT 1"
             ).fetchone()[0]
         )
-        if version not in {6, 7}:
+        if version not in {6, 7, 8, 9}:
             raise RuntimeError(
-                "python bundle rollback requires exact schema version 6 or 7"
+                "python bundle rollback requires exact schema version 6, 7, 8 or 9"
             )
         context_count = 0
-        if version == 7:
+        if version >= 7:
             context_count = int(
                 connection.execute(
                     "SELECT COUNT(*) FROM backtest_research_launch_contexts"
@@ -39,7 +40,13 @@ def rollback_python_bundles(database: Path) -> dict[str, object]:
                 "python bundle rollback is fail-closed while bundle rows exist"
             )
         connection.execute("BEGIN IMMEDIATE")
-        if version == 7:
+        if version == 9:
+            from .report_storage import materialize_reports
+            materialize_reports(connection)
+        if version >= 8:
+            from .checkpoint_history import materialize_histories
+            materialize_histories(connection)
+        if version >= 7:
             connection.execute(
                 "DROP INDEX IF EXISTS idx_backtest_research_context_created"
             )
@@ -55,7 +62,7 @@ def rollback_python_bundles(database: Path) -> dict[str, object]:
             "schemaVersion": 5,
             "droppedBundles": True,
             "bundleRows": 0,
-            "droppedResearchContexts": version == 7,
+            "droppedResearchContexts": version >= 7,
             "researchContextRows": context_count,
         }
     except BaseException:

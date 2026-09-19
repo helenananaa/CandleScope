@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
-from decimal import Decimal
+from decimal import Decimal, getcontext
 from typing import Any
+
+from app.core.config import getenv
 
 from .protocol import (
     ObservationFrame,
@@ -69,6 +72,14 @@ class BuiltinSmaCrossProvider:
         self._slow = 5
         self._closes: list[Decimal] = []
         self._prepared = False
+        self._incremental_hash = (
+            type(self) is BuiltinSmaCrossProvider
+            and getenv("BACKTEST_INCREMENTAL_SMA_HASH_ENABLED", "1").strip() == "1"
+        )
+        self._hashed_closes = None
+        self._hashed_count = 0
+        self._hash_capitals = None
+        self._history_digest = None
 
     def describe(self) -> ProviderCapabilities:
         return ProviderCapabilities(
@@ -107,6 +118,7 @@ class BuiltinSmaCrossProvider:
         self._fast = fast
         self._slow = slow
         self._closes = []
+        self._hashed_closes = None
         self._prepared = True
 
     def warmup(self, frame: ObservationFrame) -> StrategyOutput | None:
@@ -134,11 +146,31 @@ class BuiltinSmaCrossProvider:
             sequence=frame.sequence,
             kind="TARGET_POSITION",
             payload=payload,
-            state_hash=canonical_hash([str(value) for value in self._closes]),
+            state_hash=self._state_hash(),
             output_hash=canonical_hash(
                 {"sequence": frame.sequence, "kind": "TARGET_POSITION", "payload": payload}
             ),
         )
+
+    def _state_hash(self) -> str:
+        if not self._incremental_hash:
+            return canonical_hash([str(value) for value in self._closes])
+        capitals = getcontext().capitals
+        if (self._hashed_closes is not self._closes
+                or len(self._closes) < self._hashed_count
+                or capitals != self._hash_capitals):
+            self._hashed_closes = self._closes
+            self._hashed_count = 0
+            self._hash_capitals = capitals
+            self._history_digest = hashlib.sha256(b"[")
+        for value in self._closes[self._hashed_count:]:
+            if self._hashed_count:
+                self._history_digest.update(b",")
+            self._history_digest.update(json.dumps(str(value), allow_nan=False).encode("utf-8"))
+            self._hashed_count += 1
+        digest = self._history_digest.copy()
+        digest.update(b"]")
+        return "sha256:" + digest.hexdigest()
 
     def on_execution_report(self, report: dict[str, Any]) -> None:
         if "accepted" not in report:
@@ -158,6 +190,7 @@ class BuiltinSmaCrossProvider:
         self._fast = int(payload["fast"])
         self._slow = int(payload["slow"])
         self._closes = [Decimal(str(value)) for value in payload["closes"]]
+        self._hashed_closes = None
         self._prepared = True
 
     def close(self) -> str:

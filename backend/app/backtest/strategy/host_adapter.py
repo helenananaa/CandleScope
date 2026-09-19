@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-import queue
-import threading
 from typing import Any
+import hashlib
+from app.core.config import getenv
+from .qualified_json import try_bar_input_bytes
+
+from .serial_worker import SerialWorker
 
 from .protocol import (
     ObservationFrame,
     StrategyProviderError,
     StrategyProviderSession,
+    StrategyOutput,
     canonical_hash,
 )
 
@@ -20,9 +24,24 @@ class StrategyHostAdapter:
         session: StrategyProviderSession,
         *,
         step_timeout_s: float = 2.0,
+        inline: bool = False,
     ) -> None:
         self.session = session
         self.step_timeout_s = step_timeout_s
+        self._worker: SerialWorker | None = None
+        self._closed = False
+        self._inline = inline
+        self._objects = inline and getenv("BACKTEST_DIRECT_OBJECTS_ENABLED", "1").strip() == "1"
+
+    def close(self) -> None:
+        self._closed = True
+        if self._worker is not None:
+            self._worker.close()
+
+    def __del__(self) -> None:
+        worker = getattr(self, "_worker", None)
+        if worker is not None:
+            worker.close(wait=False)
 
     def start(self, input_plan: dict[str, Any]) -> dict[str, Any]:
         described = self.session.describe()
@@ -42,9 +61,13 @@ class StrategyHostAdapter:
         bar: dict[str, Any] | None,
         features: dict[str, Any] | None = None,
         trade: dict[str, Any] | None = None,
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, Any] | StrategyOutput | None:
         if event_time_ms > watermark_ms:
             raise StrategyProviderError("LOOKAHEAD_VIOLATION", "host refused future bar")
+        encoded = try_bar_input_bytes(sequence, watermark_ms, bar, trade, features)
+        input_hash = ("sha256:" + hashlib.sha256(encoded).hexdigest() if encoded is not None
+                      else canonical_hash({"sequence": sequence, "watermark": watermark_ms,
+                                           "bar": bar, "trade": trade, "features": features}))
         frame = ObservationFrame(
             run_id=self.session.run_id,
             sequence=sequence,
@@ -52,45 +75,37 @@ class StrategyHostAdapter:
             watermark_ms=watermark_ms,
             phase=phase,
             market=market,
-            input_hash=canonical_hash(
-                {
-                    "sequence": sequence,
-                    "watermark": watermark_ms,
-                    "bar": bar,
-                    "trade": trade,
-                    "features": features,
-                }
-            ),
+            input_hash=input_hash,
             bar=bar,
             trade=trade,
             features=features or {},
         )
-        completed: queue.Queue[tuple[bool, Any]] = queue.Queue(maxsize=1)
+        if self._closed:
+            raise StrategyProviderError("PROVIDER_TIMEOUT", "adapter is closed")
+        if self._worker is None and not self._inline:
+            self._worker = SerialWorker(f"strategy-step-{self.session.run_id}")
 
-        def invoke() -> None:
-            try:
-                if phase == "WARMUP":
-                    self.session.warmup(frame)
-                    completed.put((True, None))
-                else:
-                    completed.put((True, self.session.step(frame)))
-            except BaseException as exc:
-                completed.put((False, exc))
+        def invoke() -> Any:
+            if phase == "WARMUP":
+                self.session.warmup(frame)
+                return None
+            return self.session.step(frame)
 
-        thread = threading.Thread(
-            target=invoke,
-            name=f"strategy-step-{self.session.run_id}-{sequence}",
-            daemon=True,
-        )
-        thread.start()
         try:
-            ok, value = completed.get(timeout=self.step_timeout_s)
-        except queue.Empty:
+            if self._inline:
+                # Only used inside a supervised whole-run worker. The parent
+                # enforces provider deadlines by terminating that process.
+                output = invoke()
+            else:
+                assert self._worker is not None
+                output = self._worker.call(invoke, self.step_timeout_s)
+        except TimeoutError:
+            self._closed = True
+            abort = getattr(self.session.provider, "abort", None)
+            if callable(abort):
+                abort()
             raise StrategyProviderError("PROVIDER_TIMEOUT", "provider step exceeded budget")
-        if not ok:
-            raise value
-        output = value
-        return None if output is None else output.to_wire()
+        return output if self._objects or output is None else output.to_wire()
 
     def reject_host_write(self, attempt: str) -> None:
         raise StrategyProviderError(

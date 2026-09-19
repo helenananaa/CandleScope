@@ -1,0 +1,28 @@
+{
+  "kind": "actual-spawned-worker-stage-timers",
+  "child_elapsed_seconds": 2.2586663000001863,
+  "inclusive_seconds": {
+    "checkpoint_provider_snapshot_encode": 0.013315899985173019,
+    "history_encode_and_budget": 0.3497806000195851,
+    "dual_snapshot_including_history": 0.3540265000119689,
+    "checkpoint_json_compose": 0.2012903000213555,
+    "checkpoint_hash": 0.01180159997966257,
+    "checkpoint_database_publish": 0.3860393999966618,
+    "dual_checkpoints": 0.9900713000060932,
+    "dual_kernels_including_callbacks": 1.4631155999995826,
+    "cost_sensitivity": 0.3712635000010778,
+    "report_and_persist": 0.03183739999803947
+  },
+  "calls": {
+    "checkpoint_provider_snapshot_encode": 102,
+    "history_encode_and_budget": 816,
+    "dual_snapshot_including_history": 102,
+    "checkpoint_json_compose": 102,
+    "checkpoint_hash": 102,
+    "checkpoint_database_publish": 102,
+    "dual_checkpoints": 102,
+    "dual_kernels_including_callbacks": 1,
+    "cost_sensitivity": 1,
+    "report_and_persist": 1
+  }
+}

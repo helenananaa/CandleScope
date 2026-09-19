@@ -1,0 +1,261 @@
+{
+  "samples": [
+    {
+      "pair": 0,
+      "enabled": 0,
+      "seconds": 36.48510890000034,
+      "jobs": [
+        {
+          "index": 0,
+          "freeze_seconds": 2.2392257999963476,
+          "prepare_seconds": 3.0730005000004894,
+          "execute_seconds": 5.625269599993771,
+          "fills": 1
+        },
+        {
+          "index": 1,
+          "freeze_seconds": 1.8576739999989513,
+          "prepare_seconds": 0.5177760000005946,
+          "execute_seconds": 5.0410597999944,
+          "fills": 219
+        },
+        {
+          "index": 2,
+          "freeze_seconds": 1.741481199998816,
+          "prepare_seconds": 0.36840099999972153,
+          "execute_seconds": 5.272349499995471,
+          "fills": 219
+        },
+        {
+          "index": 3,
+          "freeze_seconds": 2.156517499999609,
+          "prepare_seconds": 0.5948959999950603,
+          "execute_seconds": 7.995939599997655,
+          "fills": 219
+        }
+      ],
+      "cache": {
+        "hits": 3,
+        "misses": 1,
+        "waits": 0,
+        "bytes": 8949799,
+        "entries": 1
+      }
+    },
+    {
+      "pair": 0,
+      "enabled": 1,
+      "seconds": 43.484944600000745,
+      "jobs": [
+        {
+          "index": 0,
+          "freeze_seconds": 4.062021399993682,
+          "prepare_seconds": 5.501146900001913,
+          "execute_seconds": 7.2300906000018585,
+          "fills": 1
+        },
+        {
+          "index": 1,
+          "freeze_seconds": 2.264545000005455,
+          "prepare_seconds": 0.5073922999945353,
+          "execute_seconds": 5.685853900002257,
+          "fills": 219
+        },
+        {
+          "index": 2,
+          "freeze_seconds": 1.815945099995588,
+          "prepare_seconds": 0.4896098000026541,
+          "execute_seconds": 6.129570400000375,
+          "fills": 219
+        },
+        {
+          "index": 3,
+          "freeze_seconds": 3.424317400000291,
+          "prepare_seconds": 0.7598504000052344,
+          "execute_seconds": 5.612990599998739,
+          "fills": 219
+        }
+      ],
+      "cache": {
+        "hits": 3,
+        "misses": 1,
+        "waits": 0,
+        "bytes": 8949799,
+        "entries": 1
+      }
+    },
+    {
+      "pair": 1,
+      "enabled": 1,
+      "seconds": 33.236471500000334,
+      "jobs": [
+        {
+          "index": 0,
+          "freeze_seconds": 1.7467008999956306,
+          "prepare_seconds": 2.56486859999859,
+          "execute_seconds": 5.245947999996133,
+          "fills": 1
+        },
+        {
+          "index": 1,
+          "freeze_seconds": 1.9612882000001264,
+          "prepare_seconds": 0.4043900999968173,
+          "execute_seconds": 5.915935899996839,
+          "fills": 219
+        },
+        {
+          "index": 2,
+          "freeze_seconds": 1.7729274000012083,
+          "prepare_seconds": 0.5499292000022251,
+          "execute_seconds": 5.497636899999634,
+          "fills": 219
+        },
+        {
+          "index": 3,
+          "freeze_seconds": 1.7859979999993811,
+          "prepare_seconds": 0.4904753000009805,
+          "execute_seconds": 5.2988747999988846,
+          "fills": 219
+        }
+      ],
+      "cache": {
+        "hits": 3,
+        "misses": 1,
+        "waits": 0,
+        "bytes": 8949799,
+        "entries": 1
+      }
+    },
+    {
+      "pair": 1,
+      "enabled": 0,
+      "seconds": 37.85049869999784,
+      "jobs": [
+        {
+          "index": 0,
+          "freeze_seconds": 1.696554100002686,
+          "prepare_seconds": 2.8524141000016243,
+          "execute_seconds": 5.2636111000028905,
+          "fills": 1
+        },
+        {
+          "index": 1,
+          "freeze_seconds": 1.769631399998616,
+          "prepare_seconds": 0.47700800000166055,
+          "execute_seconds": 4.994954599998891,
+          "fills": 219
+        },
+        {
+          "index": 2,
+          "freeze_seconds": 1.7426737999994657,
+          "prepare_seconds": 0.5272123999966425,
+          "execute_seconds": 7.035630899998068,
+          "fills": 219
+        },
+        {
+          "index": 3,
+          "freeze_seconds": 3.671365100002731,
+          "prepare_seconds": 0.9190043000053265,
+          "execute_seconds": 6.898910900003102,
+          "fills": 219
+        }
+      ],
+      "cache": {
+        "hits": 3,
+        "misses": 1,
+        "waits": 0,
+        "bytes": 8949799,
+        "entries": 1
+      }
+    },
+    {
+      "pair": 2,
+      "enabled": 0,
+      "seconds": 46.31173139999737,
+      "jobs": [
+        {
+          "index": 0,
+          "freeze_seconds": 3.912091699996381,
+          "prepare_seconds": 5.06247330000042,
+          "execute_seconds": 6.200172900003963,
+          "fills": 1
+        },
+        {
+          "index": 1,
+          "freeze_seconds": 3.7146334999997634,
+          "prepare_seconds": 0.7683403999981238,
+          "execute_seconds": 6.040965899999719,
+          "fills": 219
+        },
+        {
+          "index": 2,
+          "freeze_seconds": 3.05955140000151,
+          "prepare_seconds": 0.8127026000001933,
+          "execute_seconds": 6.299143399999593,
+          "fills": 219
+        },
+        {
+          "index": 3,
+          "freeze_seconds": 3.429102200003399,
+          "prepare_seconds": 0.7593013000005158,
+          "execute_seconds": 6.251266999999643,
+          "fills": 219
+        }
+      ],
+      "cache": {
+        "hits": 3,
+        "misses": 1,
+        "waits": 0,
+        "bytes": 8949799,
+        "entries": 1
+      }
+    },
+    {
+      "pair": 2,
+      "enabled": 1,
+      "seconds": 36.3600895999989,
+      "jobs": [
+        {
+          "index": 0,
+          "freeze_seconds": 3.0496624000006705,
+          "prepare_seconds": 4.869060400000308,
+          "execute_seconds": 5.261572299998079,
+          "fills": 1
+        },
+        {
+          "index": 1,
+          "freeze_seconds": 1.7347403999956441,
+          "prepare_seconds": 0.5498821000001044,
+          "execute_seconds": 5.3337774999963585,
+          "fills": 219
+        },
+        {
+          "index": 2,
+          "freeze_seconds": 1.6697956999996677,
+          "prepare_seconds": 0.4903437999964808,
+          "execute_seconds": 5.361600999996881,
+          "fills": 219
+        },
+        {
+          "index": 3,
+          "freeze_seconds": 1.6984991999997874,
+          "prepare_seconds": 0.498256400001992,
+          "execute_seconds": 5.8414795999997295,
+          "fills": 219
+        }
+      ],
+      "cache": {
+        "hits": 3,
+        "misses": 1,
+        "waits": 0,
+        "bytes": 8949799,
+        "entries": 1
+      }
+    }
+  ],
+  "full_result_report_chart_equal": true,
+  "events": 100000,
+  "parameter_trials": 3,
+  "flag": "BACKTEST_TRADE_RESTING_FILTER_ENABLED",
+  "scope": "synthetic real-Parquet fixture; batch includes cold held+resting task then parameter trials; freeze/checks retained"
+}

@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.core.config import getenv as app_getenv
 
 from pathlib import Path
+from functools import lru_cache
 from typing import Any, Mapping
 
 from app.backtest.strategy.protocol import (
@@ -46,6 +47,11 @@ def _author_observation(frame: ObservationFrame) -> dict[str, Any]:
     }
 
 
+@lru_cache(maxsize=256)
+def _target_state_hash(quantity: str) -> str:
+    return canonical_hash({"quantity": quantity, "targetExposure": quantity})
+
+
 def _to_host_output(sequence: int, payload: Mapping[str, Any] | None) -> StrategyOutput | None:
     if not payload:
         return None
@@ -55,12 +61,17 @@ def _to_host_output(sequence: int, payload: Mapping[str, Any] | None) -> Strateg
         body["targetExposure"] = body["quantity"]
     if kind == "ORDER_INTENT" and "qty" not in body and "quantity" in body:
         body["qty"] = body["quantity"]
+    quantity = body.get("quantity")
+    state_hash = (_target_state_hash(quantity)
+                  if kind == "TARGET_POSITION" and type(quantity) is str and len(quantity) <= 128
+                  and body.keys() == {"quantity", "targetExposure"} and body["targetExposure"] == quantity
+                  else canonical_hash(body))
     return StrategyOutput(
         sequence=sequence,
         kind=kind,
         payload=body,
-        state_hash=canonical_hash(body),
-        output_hash=str(payload.get("outputHash") or canonical_hash(body)),
+        state_hash=state_hash,
+        output_hash=str(payload.get("outputHash") or state_hash),
     )
 
 
@@ -123,6 +134,10 @@ class PythonHostProvider:
 
     def warmup(self, frame: ObservationFrame) -> StrategyOutput | None:
         try:
+            direct = getattr(self.runner, "observe_frame", None)
+            if direct is not None:
+                direct(frame, warmup=True)
+                return None
             self.runner.call("warmup", {"observation": _author_observation(frame)})
         except PythonRunnerError as exc:
             raise StrategyProviderError(exc.code, str(exc)) from exc
@@ -130,6 +145,9 @@ class PythonHostProvider:
 
     def step(self, frame: ObservationFrame) -> StrategyOutput | None:
         try:
+            direct = getattr(self.runner, "observe_frame", None)
+            if direct is not None:
+                return direct(frame)
             payload = self.runner.call("step", {"observation": _author_observation(frame)})
         except PythonRunnerError as exc:
             raise StrategyProviderError(exc.code, str(exc)) from exc
@@ -137,7 +155,11 @@ class PythonHostProvider:
 
     def on_execution_report(self, report: dict[str, Any]) -> None:
         try:
-            self.runner.call("on_execution_report", {"report": report})
+            from .local_python import LocalPythonRunner
+            if type(self.runner) is LocalPythonRunner:
+                self.runner.on_execution_report(report)
+            else:
+                self.runner.call("on_execution_report", {"report": report})
         except PythonRunnerError as exc:
             raise StrategyProviderError(exc.code, str(exc)) from exc
 
@@ -153,6 +175,9 @@ class PythonHostProvider:
             self.runner.call("restore", {"payload": payload})
         except PythonRunnerError as exc:
             raise StrategyProviderError(exc.code, str(exc)) from exc
+
+    def abort(self) -> None:
+        self.runner.close()
 
     def close(self) -> str:
         try:

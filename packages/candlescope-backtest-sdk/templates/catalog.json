@@ -1,5 +1,6 @@
 {
   "schemaVersion": "candlescope.python-official-templates/1",
+  "marketBatchTemplates": [{"directory": "sma_cross_batch", "executionProtocol": "MARKET_BATCH_V1", "fidelity": ["BAR_APPROX"]}],
   "signalClock": "BAR_CLOSE",
   "fidelity": ["BAR_APPROX", "AGG_TRADE_EXECUTION"],
   "notClaimed": [

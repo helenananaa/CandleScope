@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass, field
 from decimal import Decimal
 from typing import Any, Callable, Mapping
 
+from app.core.config import getenv
 from app.market_dataset.snapshot import MarketDatasetError, MarketEvent, sha256_hex
 from app.market_dataset.trades import assert_trade_stream
 from app.simulation.contract_accounting import ContractAccount
@@ -18,6 +19,7 @@ from app.simulation.kernel import (
     SimulatedOrder,
     SimulationResult,
     _decision_record,
+    _flat_record,
     _fill_action,
     reject_intent,
 )
@@ -95,7 +97,27 @@ class TradeSimulationKernel:
     _decision_chain_hash: str = "sha256:GENESIS"
     _decision_count: int = 0
 
+    _active_orders: dict[str, SimulatedOrder] = field(default_factory=dict, repr=False)
+    _indexed_order_count: int = field(default=0, init=False, repr=False)
+    _indexed_order_list_id: int = field(default=0, init=False, repr=False)
+    _checkpoint_history: Any = field(default=None, repr=False)
+    _record_encoder: Callable = field(default=asdict, init=False, repr=False, compare=False)
+    _active_index_enabled: bool = field(default_factory=lambda: getenv("BACKTEST_TRADE_ACTIVE_INDEX_ENABLED", "1").strip() == "1", repr=False)
+    _resting_filter_enabled: bool = field(default_factory=lambda: getenv("BACKTEST_TRADE_RESTING_FILTER_ENABLED", "1").strip() == "1", repr=False)
+
+    def _working_orders(self):
+        if not self._active_index_enabled:
+            return self.orders
+        # Support restored/prepopulated histories without scanning on every print.
+        if self._indexed_order_list_id != id(self.orders) or self._indexed_order_count != len(self.orders):
+            self._active_orders = {o.order_id: o for o in self.orders if o.status in {"OPEN", "PARTIAL"}}
+            self._indexed_order_count = len(self.orders)
+            self._indexed_order_list_id = id(self.orders)
+        return self._active_orders.values()
+
     def __post_init__(self) -> None:
+        if getenv("BACKTEST_FLAT_TRADE_RECORDS_ENABLED", "1").strip() == "1":
+            self._record_encoder = _flat_record
         if self.execution_model_revision == EXECUTION_REALISM_V2:
             if (
                 self.participation_rate is None
@@ -134,7 +156,7 @@ class TradeSimulationKernel:
         pending = sum(
             (
                 order.qty if order.side == "BUY" else -order.qty
-                for order in self.orders
+                for order in self._working_orders()
                 if order.type == "MARKET" and order.status in {"OPEN", "PARTIAL"}
             ),
             Decimal("0"),
@@ -151,7 +173,7 @@ class TradeSimulationKernel:
             )
         same_side_pending = sum(
             (
-                candidate.qty for candidate in self.orders
+                candidate.qty for candidate in self._working_orders()
                 if candidate.status in {"OPEN", "PARTIAL"}
                 and not candidate.reduce_only
                 and candidate.side == order.side
@@ -164,7 +186,8 @@ class TradeSimulationKernel:
             return max(Decimal("0"), max(after, Decimal("0")) - max(prior, Decimal("0")))
         return max(Decimal("0"), max(-after, Decimal("0")) - max(-prior, Decimal("0")))
 
-    def snapshot(self) -> dict[str, Any]:
+    def snapshot(self, *, history_encoder=None) -> dict[str, Any]:
+        extended = history_encoder is not None and getattr(history_encoder, "extended", False)
         return {
             **(
                 {
@@ -175,8 +198,8 @@ class TradeSimulationKernel:
                     "order_end_policy": self.order_end_policy,
                     "order_tif": dict(self._order_tif),
                     "order_eligible_time_ms": dict(self._order_eligible_time_ms),
-                    "order_events": list(self._order_events),
-                    "fill_source_events": [
+                    "order_events": history_encoder("order_events", self._order_events) if extended else list(self._order_events),
+                    "fill_source_events": history_encoder("fill_source_events", self._fill_source_events) if extended else [
                         {
                             "sequence": event.sequence,
                             "event_time_ms": event.event_time_ms,
@@ -185,7 +208,7 @@ class TradeSimulationKernel:
                         }
                         for event in self._fill_source_events
                     ],
-                    "frozen_intents": list(self.frozen_intents),
+                    "frozen_intents": history_encoder("frozen_intents", self.frozen_intents) if extended else list(self.frozen_intents),
                     "decision_chain_hash": self._decision_chain_hash,
                     "decision_count": self._decision_count,
                     "equity_curve_event_interval": self.equity_curve_event_interval,
@@ -223,9 +246,9 @@ class TradeSimulationKernel:
             "fee_total": str(self.fee_total),
             "equity_curve": list(self.equity_curve),
             "account": self.account.snapshot(),
-            "orders": [asdict(order) for order in self.orders],
-            "fills": [asdict(fill) for fill in self.fills],
-            "decisions": list(self.decisions),
+            "orders": history_encoder("orders", self.orders) if history_encoder is not None else [self._record_encoder(order) for order in self.orders],
+            "fills": history_encoder("fills", self.fills) if history_encoder is not None else [self._record_encoder(fill) for fill in self.fills],
+            "decisions": history_encoder("decisions", self.decisions) if extended else list(self.decisions),
             "rejected": list(self.rejected),
             "last_event": (
                 None
@@ -307,6 +330,10 @@ class TradeSimulationKernel:
             )
             for item in payload["orders"]  # type: ignore[union-attr]
         ]
+        self._active_orders = {o.order_id: o for o in self.orders if o.status in {"OPEN", "PARTIAL"}}
+        self._indexed_order_count = len(self.orders)
+        self._indexed_order_list_id = id(self.orders)
+        self._checkpoint_history = None
         self.fills = [
             SimulatedFill(
                 order_id=str(item["order_id"]),
@@ -444,27 +471,34 @@ class TradeSimulationKernel:
                     }
                 )
             self._enqueue_many(intents, current_sequence=market_event.sequence)
-            curve_point = {
-                "sequence": market_event.sequence,
-                "event_time_ms": market_event.event_time_ms,
-                "equity": str(self.account.equity()),
-                "position_qty": str(self.account.position_qty),
-            }
-            if isinstance(self.account, LinearPerpetualAccountV2):
-                curve_point.update(
-                    {
-                        "wallet_balance": str(self.account.quote_balance),
-                        "available_balance": str(self.account.available_balance()),
-                    }
-                )
-            if self.equity_curve_mode == "UTC_DAILY_CLOSE_V1":
-                self._record_equity_point(curve_point)
-            elif (
-                self.execution_model_revision != EXECUTION_REALISM_V2
+            sample_curve = (
+                self.equity_curve_mode == "UTC_DAILY_CLOSE_V1"
+                or self.execution_model_revision != EXECUTION_REALISM_V2
                 or self._market_event_count == 1
                 or self._market_event_count % self.equity_curve_event_interval == 0
-            ):
-                self.equity_curve.append(curve_point)
+            )
+            if sample_curve:
+                curve_point = {
+                    "sequence": market_event.sequence,
+                    "event_time_ms": market_event.event_time_ms,
+                    "equity": str(self.account.equity()),
+                    "position_qty": str(self.account.position_qty),
+                }
+                if isinstance(self.account, LinearPerpetualAccountV2):
+                    curve_point.update(
+                        {
+                            "wallet_balance": str(self.account.quote_balance),
+                            "available_balance": str(self.account.available_balance()),
+                        }
+                    )
+                if self.equity_curve_mode == "UTC_DAILY_CLOSE_V1":
+                    self._record_equity_point(curve_point)
+                elif (
+                    self.execution_model_revision != EXECUTION_REALISM_V2
+                    or self._market_event_count == 1
+                    or self._market_event_count % self.equity_curve_event_interval == 0
+                ):
+                    self.equity_curve.append(curve_point)
             if (
                 self.checkpoint_event_interval
                 and self._market_event_count % self.checkpoint_event_interval == 0
@@ -531,17 +565,11 @@ class TradeSimulationKernel:
                 if isinstance(self.account, LinearPerpetualAccountV2):
                     self.account.release_order_margin(order.order_id)
 
-    def result(self) -> SimulationResult:
-        fills = [asdict(fill) for fill in self.fills]
+    def _financial_result(self):
+        fills = [self._record_encoder(fill) for fill in self.fills]
         if self.execution_model_revision == EXECUTION_REALISM_V2:
             for fill, event in zip(fills, self._fill_source_events, strict=True):
                 fill.update(source_event_trace(event, source_kind=self.source_kind))
-        label = (
-            "TRADE_SEQUENCE"
-            if self.source_kind == "RAW_TRADE"
-            else "AGGREGATED_TRADE_SEQUENCE"
-        )
-        fidelity = "TRADE_TAPE" if self.source_kind == "RAW_TRADE" else "AGG_TRADE_TAPE"
         account = self.account.snapshot()
         account["equity"] = str(self.account.equity())
         account["initial_balance"] = str(self.initial_balance)
@@ -562,6 +590,16 @@ class TradeSimulationKernel:
         if self.execution_model_revision == EXECUTION_REALISM_V2:
             ledger["order_events"] = list(self._order_events)
             ledger["decision_count"] = self._decision_count
+        return fills, ledger
+
+    def result(self) -> SimulationResult:
+        fills, ledger = self._financial_result()
+        label = (
+            "TRADE_SEQUENCE"
+            if self.source_kind == "RAW_TRADE"
+            else "AGGREGATED_TRADE_SEQUENCE"
+        )
+        fidelity = "TRADE_TAPE" if self.source_kind == "RAW_TRADE" else "AGG_TRADE_TAPE"
         return SimulationResult(
             decision_hash=(
                 self._decision_chain_hash
@@ -677,7 +715,10 @@ class TradeSimulationKernel:
             ),
             reduce_only=bool(intent.get("reduce_only") or False),
         )
+        self._working_orders()
         self.orders.append(order)
+        self._active_orders[order.order_id] = order
+        self._indexed_order_count = len(self.orders)
         self._order_tif[order.order_id] = str(intent.get("tif") or "GTC").upper()
         self._order_eligible_time_ms[order.order_id] = (
             0 if self._last_event is None else self._last_event.event_time_ms
@@ -706,6 +747,8 @@ class TradeSimulationKernel:
                 )
             except MarketDatasetError as exc:
                 self.orders.pop()
+                self._active_orders.pop(order.order_id, None)
+                self._indexed_order_count = len(self.orders)
                 self._order_tif.pop(order.order_id, None)
                 self._order_eligible_time_ms.pop(order.order_id, None)
                 rejected = {
@@ -734,9 +777,26 @@ class TradeSimulationKernel:
     def _match(self, event: MarketEvent) -> None:
         price = Decimal(str(event.payload["price"]))
         qty = Decimal(str(event.payload["qty"]))
+        working = self._working_orders()
+        if self._resting_filter_enabled:
+            if not working:
+                return
+            # Non-crossing plain limits cannot change on this print. IOC must
+            # still reach the eligibility/expiry path, even without a fill.
+            # STOP_LIMIT is deliberately retained: activation is observable.
+            candidates = [order for order in working
+                       if order.type != "LIMIT"
+                       or _print_crosses_limit(order, price)
+                       or self._order_tif.get(order.order_id) == "IOC"]
+            if not candidates:
+                return
+            # An external fill callback may amend a later order in this print.
+            # Only discard individual orders when no such callback exists.
+            if self.execution_reporter is None:
+                working = candidates
         open_orders = [
             order
-            for order in self.orders
+            for order in working
             if order.status in {"OPEN", "PARTIAL"}
             and order.eligible_after_sequence <= event.sequence
             and self._order_eligible_time_ms.get(order.order_id, 0)
@@ -894,8 +954,10 @@ class TradeSimulationKernel:
             assert self._last_event is not None
             self._fill_source_events.append(self._last_event)
             self._lifecycle(order, order.status, fill_qty=fill_qty)
+        if order.status not in {"OPEN", "PARTIAL"}:
+            self._active_orders.pop(order.order_id, None)
         if order.oco_group is not None and order.status == "FILLED":
-            for sibling in self.orders:
+            for sibling in tuple(self._working_orders()):
                 if (
                     sibling.order_id != order.order_id
                     and sibling.oco_group == order.oco_group
@@ -915,7 +977,7 @@ class TradeSimulationKernel:
             self.execution_reporter(
                 {
                     "accepted": True,
-                    "fill": {**asdict(fill), "side": order.side},
+                    "fill": {**self._record_encoder(fill), "side": order.side},
                     "order_id": order.order_id,
                 }
             )
@@ -928,6 +990,8 @@ class TradeSimulationKernel:
         reason: str | None = None,
         fill_qty: Decimal | None = None,
     ) -> None:
+        if order.status not in {"OPEN", "PARTIAL"}:
+            self._active_orders.pop(order.order_id, None)
         if self.execution_model_revision != EXECUTION_REALISM_V2:
             return
         self._order_events.append(

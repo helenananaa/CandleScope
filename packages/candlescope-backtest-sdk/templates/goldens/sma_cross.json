@@ -1,7 +1,7 @@
 {
-  "bundle_hash": "sha256:72100bb1dcb1658ad0d4a9ef27359e146eca07343ee6294b45535b2184ecedc4",
+  "bundle_hash": "sha256:5cec6c68adb24300fe6e8fc8856b2c63ec01af9c145d87c248c75efc2cd2f973",
   "decision_hash": "05d9e7de117d4d7da380c4cae70cdd0bfb999bc7ad0eff909dbf780d8d5fd3b1",
-  "report_hash": "sha256:f69ef9cc289780fe6adf0378106ba61caae7c83a44cdb4ecfae3f40b029e97df",
+  "report_hash": "sha256:03f1b183d7c5c95c9d9942c42fc59e9186a017905d6c921984210b8a4abc123d",
   "state": "COMPLETED",
   "template": "sma_cross"
 }

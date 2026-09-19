@@ -1,0 +1,48 @@
+{
+  "samples": [
+    {
+      "pair": 0,
+      "research": false,
+      "seconds": 4.563370399999258,
+      "events": 100000,
+      "fills": 2219
+    },
+    {
+      "pair": 0,
+      "research": true,
+      "seconds": 2.183725400002004,
+      "events": 100000,
+      "fills": 2219
+    },
+    {
+      "pair": 1,
+      "research": true,
+      "seconds": 2.2641091000004963,
+      "events": 100000,
+      "fills": 2219
+    },
+    {
+      "pair": 1,
+      "research": false,
+      "seconds": 4.636836600002425,
+      "events": 100000,
+      "fills": 2219
+    },
+    {
+      "pair": 2,
+      "research": false,
+      "seconds": 4.98613209999894,
+      "events": 100000,
+      "fills": 2219
+    },
+    {
+      "pair": 2,
+      "research": true,
+      "seconds": 2.4624513999988267,
+      "events": 100000,
+      "fills": 2219
+    }
+  ],
+  "primary_results_equal": true,
+  "scope": "synthetic dual-clock service; SKIP + FINAL_ONLY versus defaults; reports intentionally differ"
+}

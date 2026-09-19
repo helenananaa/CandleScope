@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from app.backtest.identity import sha256_hex
+from .serial_worker import SerialWorker
 
 SDK_SRC = (
     Path(__file__).resolve().parents[4]
@@ -106,6 +107,7 @@ class IsolatedPythonRunner:
         self._sandbox_profile: str | None = None
         self._sandbox_root: tempfile.TemporaryDirectory | None = None
         self._runtime = _real_python()
+        self._io_worker: SerialWorker | None = None
 
     def start(self) -> None:
         if self._process is not None:
@@ -196,6 +198,7 @@ class IsolatedPythonRunner:
                 target=drain_stderr, name="python-runner-stderr", daemon=True
             )
             self._stderr_thread.start()
+            self._io_worker = SerialWorker("python-runner-io")
             self.call("ping", _timeout_s=DEFAULT_STARTUP_TIMEOUT_S)
         except Exception as exc:
             self.close()
@@ -235,29 +238,28 @@ class IsolatedPythonRunner:
         wire = json.dumps(request) + "\n"
         if len(wire.encode("utf-8")) > MAX_MESSAGE_BYTES:
             raise PythonRunnerError("MESSAGE_TOO_LARGE", "request JSON exceeded budget")
-        box: list[str | None] = []
-        io_errors: list[OSError] = []
+        def exchange() -> str:
+            process.stdin.write(wire)
+            process.stdin.flush()
+            return process.stdout.readline(MAX_MESSAGE_BYTES + 1)
 
-        def _read() -> None:
-            try:
-                process.stdin.write(wire)
-                process.stdin.flush()
-                box.append(process.stdout.readline(MAX_MESSAGE_BYTES + 1))
-            except OSError as exc:
-                io_errors.append(exc)
-
-        reader = threading.Thread(target=_read, name="python-runner-read", daemon=True)
-        reader.start()
-        reader.join(self.step_timeout_s if _timeout_s is None else _timeout_s)
+        if self._io_worker is None:
+            self._io_worker = SerialWorker("python-runner-io")
+        try:
+            line = self._io_worker.call(
+                exchange, self.step_timeout_s if _timeout_s is None else _timeout_s
+            )
+        except TimeoutError:
+            self.close()
+            raise PythonRunnerError(
+                "PROVIDER_TIMEOUT", f"{method} exceeded its call budget"
+            ) from None
+        except (OSError, ValueError) as exc:
+            self.close()
+            raise PythonRunnerError("PROVIDER_EOF", "worker pipe closed") from exc
         if self._stderr_overflow.is_set():
             self.close()
             raise PythonRunnerError("STDERR_TOO_LARGE", "worker stderr exceeded budget")
-        if reader.is_alive():
-            self.close()
-            raise PythonRunnerError(
-                "PROVIDER_TIMEOUT", f"{method} exceeded {self.step_timeout_s}s"
-            )
-        line = box[0] if box else ""
         if not line:
             self.close()
             raise PythonRunnerError("PROVIDER_EOF", "worker closed stdout")
@@ -301,6 +303,9 @@ class IsolatedPythonRunner:
         if self._stderr_thread is not None:
             self._stderr_thread.join(timeout=2)
             self._stderr_thread = None
+        if self._io_worker is not None:
+            self._io_worker.close()
+            self._io_worker = None
         for stream in (process.stdin, process.stdout, process.stderr):
             if stream is not None:
                 try:

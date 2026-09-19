@@ -1,0 +1,79 @@
+{
+  "samples": [
+    {
+      "pair": 0,
+      "workload": "held_resting",
+      "enabled": 0,
+      "seconds": 5.014721999999892
+    },
+    {
+      "pair": 0,
+      "workload": "held_resting",
+      "enabled": 1,
+      "seconds": 4.7563879000008455
+    },
+    {
+      "pair": 0,
+      "workload": "sma",
+      "enabled": 0,
+      "seconds": 6.034908599998744
+    },
+    {
+      "pair": 0,
+      "workload": "sma",
+      "enabled": 1,
+      "seconds": 5.5375342999977875
+    },
+    {
+      "pair": 1,
+      "workload": "held_resting",
+      "enabled": 1,
+      "seconds": 4.481167300000379
+    },
+    {
+      "pair": 1,
+      "workload": "held_resting",
+      "enabled": 0,
+      "seconds": 5.0204845999978716
+    },
+    {
+      "pair": 1,
+      "workload": "sma",
+      "enabled": 1,
+      "seconds": 4.967219500002102
+    },
+    {
+      "pair": 1,
+      "workload": "sma",
+      "enabled": 0,
+      "seconds": 5.226268300000811
+    },
+    {
+      "pair": 2,
+      "workload": "held_resting",
+      "enabled": 0,
+      "seconds": 4.792712700000266
+    },
+    {
+      "pair": 2,
+      "workload": "held_resting",
+      "enabled": 1,
+      "seconds": 4.506785300000047
+    },
+    {
+      "pair": 2,
+      "workload": "sma",
+      "enabled": 0,
+      "seconds": 4.919037599996955
+    },
+    {
+      "pair": 2,
+      "workload": "sma",
+      "enabled": 1,
+      "seconds": 5.891649700002745
+    }
+  ],
+  "events": 100000,
+  "full_result_report_chart_equal": true,
+  "scope": "synthetic prepared tape; supervised service execution; archive preparation excluded"
+}

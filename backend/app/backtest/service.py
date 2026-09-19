@@ -57,6 +57,7 @@ from app.simulation.execution_realism import (
 from app.simulation.cost_sensitivity import build_cost_sensitivity_matrix
 
 from .errors import BacktestError
+from .checkpoint_codec import checkpoint_session, checkpoint_json
 from .identity import canonical_json, config_hash, parse_parameters, sha256_hex
 from .models import (
     ENGINE_VERSION,
@@ -1119,6 +1120,9 @@ class BacktestService:
         run_id = f"bt_{uuid.uuid4().hex}"
         stored_payload = dict(payload)
         normalized_execution = json.loads(identity.execution_json)
+        for name in ("checkpoint_policy", "checkpoint_interval", "cost_sensitivity_mode"):
+            if name in normalized_execution:
+                stored_payload[name] = normalized_execution[name]
         stored_payload["strategy_source"] = normalized_execution.get("strategy_source")
         if normalized_execution.get("strategy_execution_revision"):
             stored_payload["strategy_execution_revision"] = normalized_execution[
@@ -2592,6 +2596,19 @@ class BacktestService:
             raise BacktestError(
                 "FIDELITY_UNSUPPORTED", "execute_bar_run only supports BAR_APPROX"
             )
+        if not getattr(self, "_colocated_worker", False) and self._fault_injector is None and isinstance(events, tuple):
+            from .colocated import provider_spec, execute
+            spec = provider_spec(provider)
+            if spec is not None:
+                return execute(self, run_id, spec, events, {
+                    "now_ms": now_ms, "warmup_events": warmup_events,
+                    "snapshot_evidence": snapshot_evidence,
+                })
+        if (not getattr(self, "_colocated_worker", False)
+                and json.loads(str(record["config_json"])).get("python_execution_protocol") == "MARKET_BATCH_V1"):
+            error = BacktestError("FIDELITY_UNSUPPORTED", "MARKET_BATCH_V1 requires the supervised whole-run worker")
+            self.fail_queued_run(run_id, error, now_ms=now_ms)
+            raise error
         stamp = now_ms or _now_ms()
         warmup_events = self._resolve_warmup(record, warmup_events)
         expected_generation = int(record["generation"])
@@ -2604,12 +2621,14 @@ class BacktestService:
                 expected_generation=expected_generation,
             )
         session: StrategyProviderSession | None = None
+        adapter: StrategyHostAdapter | None = None
         deadline = time.monotonic() + self.settings.max_run_seconds
         try:
             session = StrategyProviderSession(provider, run_id=run_id)  # type: ignore[arg-type]
             adapter = StrategyHostAdapter(
                 session,
                 step_timeout_s=self.settings.provider_step_timeout_ms / 1000,
+                inline=getattr(self, "_colocated_worker", False),
             )
             try:
                 config = json.loads(str(record["config_json"]))
@@ -2670,6 +2689,18 @@ class BacktestService:
                 **_execution_kernel_kwargs(config),
                 execution_reporter=self._execution_reporter(session),
             )
+            host_hotpath = app_getenv("BACKTEST_HOST_HOTPATH_ENABLED", "1").strip() == "1"
+            # Kept opt-in until full-run evidence establishes a stable benefit.
+            kernel._specialized_bar = app_getenv("BACKTEST_SPECIALIZED_BAR_ENABLED", "0").strip() == "1"
+            if host_hotpath:
+                from app.simulation.kernel import _flat_record
+                kernel._record_encoder = _flat_record
+                try:
+                    from .strategy import _native_rows
+                    if getattr(_native_rows, "ROW_PROTOCOL_ABI", None) == 1:
+                        kernel._native_empty_hash = getattr(_native_rows, "empty_decision_hash", None)
+                except ImportError:
+                    pass
             if self.settings.python_scale_v1_enabled:
                 if kernel.equity_curve_event_interval < 10_000:
                     kernel.equity_curve_event_interval = 10_000
@@ -2702,6 +2733,28 @@ class BacktestService:
                     event_bytes=event_bytes,
                 )
 
+            input_modes = feature_names = None
+            chart_batch = None
+            python_batch = None
+            generic_bar = None
+            if getattr(self, "_colocated_worker", False):
+                from .strategy.python_market_batch import PythonMarketBatchProvider
+                if type(getattr(provider, "provider", None)) is PythonMarketBatchProvider:
+                    python_batch = provider.provider
+                    python_batch.full_outputs = planner.config is not None
+                # Owned built-in/SDK capabilities are fixed after prepare/restore.
+                input_modes = tuple(provider.describe().input_modes)
+                feature_names = _declared_feature_names(provider) or ()
+                from .strategy.generic_bar import build_generic_bar
+                generic_bar = build_generic_bar(provider, session, adapter,
+                    {"venue": "local", "symbol": str(record["dataset_id"])}, feature_names)
+                from .strategy.chart_batch import build_chart_batch
+                # The V2 account remaps source clocks to market-only sequences;
+                # the current batch queue is indexed by original source events.
+                if kernel.account_model != "LINEAR_PERP_ONE_WAY_V2":
+                    chart_batch = build_chart_batch(provider, session, events, resume_sequence, observed, warmup_events,
+                                                    legacy_plan_only=planner.config is None)
+
             def strategy(
                 visible: tuple[MarketEvent, ...], event: MarketEvent
             ) -> list[dict]:
@@ -2712,13 +2765,30 @@ class BacktestService:
                         deadline=deadline,
                         expected_generation=expected_generation,
                     )
-                self._maybe_inject_fault(
-                    "before_decision", run_id=run_id, sequence=event.sequence
-                )
+                if not host_hotpath or self._fault_injector is not None:
+                    self._maybe_inject_fault(
+                        "before_decision", run_id=run_id, sequence=event.sequence
+                    )
                 phase = "WARMUP" if observed < warmup_events else "EVALUATION"
                 observed += 1
+                if generic_bar is not None:
+                    wire = generic_bar.observe(event, phase)
+                    return planner.plan(wire, context=(None if planner.config is None else _planning_context(kernel, event)))
+                if python_batch is not None:
+                    from .strategy.protocol import ObservationFrame
+                    frame = ObservationFrame(run_id, event.sequence, event.event_time_ms,
+                                             event.event_time_ms, phase, {}, "")
+                    session._accept_frame(frame)
+                    wire = provider.step(frame)
+                    return planner.plan(wire, context=(None if planner.config is None else _planning_context(kernel, event)))
+                if chart_batch is not None:
+                    wire = chart_batch.observe(event, phase)
+                    return planner.plan(
+                        wire,
+                        context=(None if planner.config is None else _planning_context(kernel, event)),
+                    )
                 bar = dict(event.payload)
-                self._assert_frame_inputs(provider, bar=bar, trade=None)
+                self._assert_frame_inputs(provider, bar=bar, trade=None, _modes=input_modes)
                 wire = adapter.observe(
                     sequence=event.sequence,
                     event_time_ms=event.event_time_ms,
@@ -2726,11 +2796,11 @@ class BacktestService:
                     phase=phase,
                     market={"venue": "local", "symbol": str(record["dataset_id"])},
                     bar=bar,
-                    features=self._observation_features(provider, bar=bar, trade=None),
+                    features=self._observation_features(provider, bar=bar, trade=None, _names=feature_names),
                 )
                 return planner.plan(
                     wire,
-                    context=_planning_context(kernel, event),
+                    context=(None if planner.config is None else _planning_context(kernel, event)),
                 )
 
             streamed_last: MarketEvent | None = None
@@ -2758,11 +2828,13 @@ class BacktestService:
 
             def checkpoint_after(event: MarketEvent) -> None:
                 nonlocal last_order_count, last_fill_count
-                interval = self.settings.checkpoint_event_interval
+                interval = int(config.get("checkpoint_interval") or self.settings.checkpoint_event_interval)
                 order_count = len(kernel.orders)
                 fill_count = len(kernel.fills)
                 fault_point = None
-                if event.role == "FUNDING":
+                if host_hotpath and self._fault_injector is None:
+                    pass
+                elif event.role == "FUNDING":
                     fault_point = "after_funding"
                 elif fill_count > last_fill_count and any(
                     order.status == "PARTIAL" for order in kernel.orders
@@ -2797,7 +2869,7 @@ class BacktestService:
                 checkpoint_callback=checkpoint_after,
             )
             cost_sensitivity = (
-                build_cost_sensitivity_matrix(kernel, events, result)
+                self._build_cost_sensitivity(config, kernel, events, result)
                 if materialized
                 else None
             )
@@ -2823,6 +2895,7 @@ class BacktestService:
             self._save_bar_checkpoint(
                 record,
                 sequence=final_sequence,
+                final=True,
                 observed=observed,
                 kernel=kernel,
                 session=session,
@@ -2846,6 +2919,9 @@ class BacktestService:
         except BaseException:
             self._close_failed_session(session)
             raise
+        finally:
+            if adapter is not None:
+                adapter.close()
         return self._persist_completed_run(
             run_id,
             result=result,
@@ -2908,6 +2984,14 @@ class BacktestService:
                 "FIDELITY_UNSUPPORTED",
                 "execute_dual_clock_run only supports AGG_TRADE_EXECUTION",
             )
+        if not getattr(self, "_colocated_worker", False) and self._fault_injector is None and isinstance(events, tuple):
+            from .colocated import provider_spec, execute
+            spec = provider_spec(provider, fidelity="AGG_TRADE_EXECUTION")
+            if spec is not None:
+                return execute(self, run_id, spec, events, {
+                    "now_ms": now_ms, "warmup_events": warmup_events,
+                    "snapshot_evidence": snapshot_evidence,
+                })
         stamp = now_ms or _now_ms()
         warmup_events = self._resolve_warmup(record, warmup_events)
         expected_generation = int(record["generation"])
@@ -2920,12 +3004,14 @@ class BacktestService:
                 expected_generation=expected_generation,
             )
         session: StrategyProviderSession | None = None
+        adapter: StrategyHostAdapter | None = None
         deadline = time.monotonic() + self.settings.max_run_seconds
         try:
             session = StrategyProviderSession(provider, run_id=run_id)  # type: ignore[arg-type]
             adapter = StrategyHostAdapter(
                 session,
                 step_timeout_s=self.settings.provider_step_timeout_ms / 1000,
+                inline=getattr(self, "_colocated_worker", False),
             )
             try:
                 config = json.loads(str(record["config_json"]))
@@ -3002,9 +3088,18 @@ class BacktestService:
                     event_bytes=event_bytes,
                 )
 
+            reuse_chart_bars = (
+                checkpoint is None
+                and app_getenv("BACKTEST_REUSE_DUAL_CHART_BARS_ENABLED", "0").strip() == "1"
+                and all(event.role == "TRADES" for event in events)
+            )
+            collected_chart_bars = []
+
             def strategy(
                 _visible: tuple[MarketEvent, ...], bar: MarketEvent
             ) -> list[dict]:
+                if reuse_chart_bars:
+                    collected_chart_bars.append(_trade_chart_bar(bar))
                 if bar.sequence % 256 == 1:
                     self._assert_execution_control(
                         run_id,
@@ -3037,23 +3132,27 @@ class BacktestService:
                 event for event in events if event.sequence > resume_sequence
             )
 
+            interval = (
+                int(config.get("checkpoint_interval") or self.settings.checkpoint_event_interval)
+                if config.get("checkpoint_policy", "INTERVAL") == "INTERVAL" else 0
+            )
             last_order_count = len(kernel.execution.orders)
             last_fill_count = len(kernel.execution.fills)
 
             def checkpoint_after(event: MarketEvent) -> None:
                 nonlocal last_order_count, last_fill_count
-                order_count = len(kernel.execution.orders)
-                fill_count = len(kernel.execution.fills)
                 fault_point = None
-                if event.role == "FUNDING":
-                    fault_point = "after_funding"
-                elif fill_count > last_fill_count and any(
-                    order.status == "PARTIAL" for order in kernel.execution.orders
-                ):
-                    fault_point = "after_partial_fill"
-                elif order_count > last_order_count:
-                    fault_point = "after_order"
-                interval = self.settings.checkpoint_event_interval
+                if self._fault_injector is not None:
+                    order_count = len(kernel.execution.orders)
+                    fill_count = len(kernel.execution.fills)
+                    if event.role == "FUNDING":
+                        fault_point = "after_funding"
+                    elif fill_count > last_fill_count and any(
+                        order.status == "PARTIAL" for order in kernel.execution._working_orders()
+                    ):
+                        fault_point = "after_partial_fill"
+                    elif order_count > last_order_count:
+                        fault_point = "after_order"
                 periodic = (
                     interval > 0
                     and kernel.execution_event_count > 0
@@ -3068,8 +3167,9 @@ class BacktestService:
                         planner=planner,
                         event_bytes=event_bytes,
                     )
-                last_order_count = order_count
-                last_fill_count = fill_count
+                if self._fault_injector is not None:
+                    last_order_count = order_count
+                    last_fill_count = fill_count
                 if fault_point is not None:
                     self._maybe_inject_fault(
                         fault_point, run_id=run_id, sequence=event.sequence
@@ -3082,7 +3182,7 @@ class BacktestService:
                 finalize=True,
                 checkpoint_callback=checkpoint_after,
             )
-            cost_sensitivity = build_cost_sensitivity_matrix(kernel, events, result)
+            cost_sensitivity = self._build_cost_sensitivity(config, kernel, events, result)
             metrics_market_context = _metrics_market_context(
                 config, events, result.fills
             )
@@ -3101,6 +3201,7 @@ class BacktestService:
                 session=session,
                 planner=planner,
                 event_bytes=event_bytes,
+                final=True,
             )
             self._maybe_inject_fault(
                 "before_report_seal", run_id=run_id, sequence=final_sequence
@@ -3119,6 +3220,9 @@ class BacktestService:
         except BaseException:
             self._close_failed_session(session)
             raise
+        finally:
+            if adapter is not None:
+                adapter.close()
         return self._persist_completed_run(
             run_id,
             result=result,
@@ -3127,19 +3231,10 @@ class BacktestService:
             stamp=stamp,
             expected_generation=expected_generation,
             chart_interval=str(config["signal_interval"]),
-            chart_bars=[
-                {
-                    "time": int(bar.payload["open_time_ms"]) // 1000,
-                    "open": float(bar.payload["open"]),
-                    "high": float(bar.payload["high"]),
-                    "low": float(bar.payload["low"]),
-                    "close": float(bar.payload["close"]),
-                    "volume": float(bar.payload["volume"]),
-                }
-                for bar in derive_complete_trade_bars(
-                    events, str(config["signal_interval"])
-                )
-            ],
+            chart_bars=(collected_chart_bars if reuse_chart_bars else [
+                _trade_chart_bar(bar)
+                for bar in derive_complete_trade_bars(events, str(config["signal_interval"]))
+            ]),
             result_overrides={
                 "report_label": "AGGREGATED_TRADE_SEQUENCE",
                 "strategy_metadata": strategy_metadata,
@@ -3214,12 +3309,14 @@ class BacktestService:
                 expected_generation=expected_generation,
             )
         session: StrategyProviderSession | None = None
+        adapter: StrategyHostAdapter | None = None
         deadline = time.monotonic() + self.settings.max_run_seconds
         try:
             session = StrategyProviderSession(provider, run_id=run_id)  # type: ignore[arg-type]
             adapter = StrategyHostAdapter(
                 session,
                 step_timeout_s=self.settings.provider_step_timeout_ms / 1000,
+                inline=getattr(self, "_colocated_worker", False),
             )
             try:
                 config = json.loads(str(record["config_json"]))
@@ -3304,7 +3401,7 @@ class BacktestService:
                 )
                 return planner.plan(
                     wire,
-                    context=_planning_context(kernel, event),
+                    context=(None if planner.config is None else _planning_context(kernel, event)),
                 )
 
             kernel = TradeSimulationKernel(
@@ -3382,24 +3479,29 @@ class BacktestService:
             remaining_events = tuple(
                 event for event in events if event.sequence > resume_sequence
             )
+            interval = (
+                int(config.get("checkpoint_interval") or self.settings.checkpoint_event_interval)
+                if config.get("checkpoint_policy", "INTERVAL") == "INTERVAL" else 0
+            )
             last_order_count = len(kernel.orders)
-            partial_seen = sum(order.status == "PARTIAL" for order in kernel.orders)
+            partial_seen = (sum(order.status == "PARTIAL" for order in kernel._working_orders())
+                            if self._fault_injector is not None else 0)
 
             def checkpoint_after(event: MarketEvent) -> None:
                 nonlocal last_order_count, partial_seen
-                order_count = len(kernel.orders)
-                partial_count = sum(
-                    order.status == "PARTIAL" for order in kernel.orders
-                )
-                interval = self.settings.checkpoint_event_interval
                 periodic = interval > 0 and observed > 0 and observed % interval == 0
                 fault_point = None
-                if event.role == "FUNDING":
-                    fault_point = "after_funding"
-                elif partial_count > partial_seen:
-                    fault_point = "after_partial_fill"
-                elif order_count > last_order_count:
-                    fault_point = "after_order"
+                if self._fault_injector is not None:
+                    order_count = len(kernel.orders)
+                    partial_count = sum(
+                        order.status == "PARTIAL" for order in kernel._working_orders()
+                    )
+                    if event.role == "FUNDING":
+                        fault_point = "after_funding"
+                    elif partial_count > partial_seen:
+                        fault_point = "after_partial_fill"
+                    elif order_count > last_order_count:
+                        fault_point = "after_order"
                 if periodic or (self._fault_injector is not None and fault_point):
                     self._save_trade_checkpoint(
                         record,
@@ -3411,8 +3513,9 @@ class BacktestService:
                         planner=planner,
                         event_bytes=event_bytes,
                     )
-                last_order_count = order_count
-                partial_seen = partial_count
+                if self._fault_injector is not None:
+                    last_order_count = order_count
+                    partial_seen = partial_count
                 if fault_point is not None:
                     self._maybe_inject_fault(
                         fault_point, run_id=run_id, sequence=event.sequence
@@ -3425,7 +3528,7 @@ class BacktestService:
                 finalize=True,
                 checkpoint_callback=checkpoint_after,
             )
-            cost_sensitivity = build_cost_sensitivity_matrix(kernel, events, result)
+            cost_sensitivity = self._build_cost_sensitivity(config, kernel, events, result)
             metrics_market_context = _metrics_market_context(
                 config, events, result.fills
             )
@@ -3446,6 +3549,7 @@ class BacktestService:
                 session=session,
                 planner=planner,
                 event_bytes=event_bytes,
+                final=True,
             )
             self._maybe_inject_fault(
                 "before_report_seal", run_id=run_id, sequence=final_sequence
@@ -3464,6 +3568,9 @@ class BacktestService:
         except BaseException:
             self._close_failed_session(session)
             raise
+        finally:
+            if adapter is not None:
+                adapter.close()
         report_label = (
             "TRADE_SEQUENCE"
             if record["fidelity_mode"] == "TRADE_TAPE"
@@ -3513,6 +3620,14 @@ class BacktestService:
         if stored is None:
             raise BacktestError("IDENTITY_MUTATION", "backtest report is not ready")
         return json.loads(str(stored["report_json"]))
+
+    def get_report_view(self, run_id: str, *, section=None, offset=0, limit=100):
+        self.get_run(run_id)
+        value = self.repository.get_report_view(run_id, view="summary" if section is None else "page",
+                                                section=section, offset=offset, limit=limit)
+        if value is None:
+            raise BacktestError("IDENTITY_MUTATION", "backtest report is not ready")
+        return value
 
     def get_study(self, study_id: str) -> dict[str, object]:
         record = self.repository.get_study(study_id)
@@ -4172,6 +4287,23 @@ class BacktestService:
             "exchange": str(payload.get("exchange") or "binance"),
             "market_type": str(payload.get("market_type") or "usdm"),
         }
+        if payload.get("checkpoint_policy") is not None or payload.get("checkpoint_interval") is not None:
+            policy = payload.get("checkpoint_policy") or "INTERVAL"
+            interval = payload.get("checkpoint_interval")
+            if type(policy) is not str or policy not in {"INTERVAL", "FINAL_ONLY", "NONE"}:
+                raise BacktestError("SCHEMA_UNKNOWN_FIELD", "checkpoint policy requires INTERVAL, FINAL_ONLY or NONE")
+            if interval is not None and (type(interval) is not int or interval < 1 or policy != "INTERVAL"):
+                raise BacktestError("SCHEMA_UNKNOWN_FIELD", "checkpoint_interval requires positive integer and INTERVAL policy")
+            execution_config["checkpoint_policy"] = policy
+            if policy == "INTERVAL":
+                execution_config["checkpoint_interval"] = (
+                    interval if interval is not None else self.settings.checkpoint_event_interval
+                )
+        if payload.get("cost_sensitivity_mode") is not None:
+            mode = payload["cost_sensitivity_mode"]
+            if type(mode) is not str or mode not in {"FULL", "SKIP"}:
+                raise BacktestError("SCHEMA_UNKNOWN_FIELD", "cost_sensitivity_mode requires FULL or SKIP")
+            execution_config["cost_sensitivity_mode"] = mode
         for chart_field in ("symbol", "interval", "chart_range_mode"):
             if payload.get(chart_field) is not None:
                 execution_config[chart_field] = str(payload[chart_field])
@@ -4197,6 +4329,30 @@ class BacktestService:
         persisted_execution = self.repository.get_strategy_revision(
             str(payload["strategy_revision_id"])
         )
+        python_protocol = payload.get("python_execution_protocol")
+        if python_protocol is not None:
+            from .strategy.python_market_batch import EXECUTION_PROTOCOL, certified_source
+            if (python_protocol != EXECUTION_PROTOCOL or fidelity != "BAR_APPROX"
+                    or account_model != "LINEAR_PERP_ONE_WAY_V1"
+                    or output_mode != "TARGET_POSITION"
+                    or payload.get("python_runtime_mode") != "TRUSTED_LOCAL"
+                    or not payload.get("python_trusted_confirmed")
+                    or persisted_execution is None or persisted_execution["base_revision_id"] != "python-source-v1"):
+                raise BacktestError("FIDELITY_UNSUPPORTED", "MARKET_BATCH_V1 requires certified trusted Python with a BAR/V1 account")
+            bundle_identity = json.loads(str(persisted_execution["source_text"]))
+            bundle = self.repository.get_strategy_bundle(str(bundle_identity["bundle_id"]))
+            if bundle is None:
+                raise BacktestError("SCHEMA_UNKNOWN_FIELD", "market batch revision is missing its frozen bundle")
+            try:
+                certified_source(Path(str(bundle["store_path"])), str(bundle_identity.get("entrypoint") or "strategy:Strategy"))
+            except (StrategyProviderError, OSError) as exc:
+                raise BacktestError("FIDELITY_UNSUPPORTED", str(exc)) from exc
+            batch_parameters = json.loads(parameters_json)
+            if set(batch_parameters) != {"fast", "slow"} or any(
+                type(value) is not int or not 2 <= value <= 512 for value in batch_parameters.values()
+            ):
+                raise BacktestError("SCHEMA_UNKNOWN_FIELD", "MARKET_BATCH_V1 SMA periods must be integers in 2..512")
+            execution_config["python_execution_protocol"] = python_protocol
         if persisted_execution is not None:
             execution_config["strategy_execution_revision"] = str(
                 persisted_execution["base_revision_id"]
@@ -4271,6 +4427,12 @@ class BacktestService:
 
         return report
 
+    @staticmethod
+    def _build_cost_sensitivity(config, kernel, events, result):
+        if config.get("cost_sensitivity_mode", "FULL") == "SKIP":
+            return {"status": "SKIPPED_BY_REQUEST", "scenarios": []}
+        return build_cost_sensitivity_matrix(kernel, events, result)
+
     def _save_bar_checkpoint(
         self,
         record: Mapping[str, object],
@@ -4281,9 +4443,21 @@ class BacktestService:
         session: StrategyProviderSession,
         planner: PyneHostPlanner,
         event_bytes: int,
+        final: bool = False,
     ) -> None:
-        provider = session.snapshot()
-        self._assert_provider_state_budget(provider)
+        policy = json.loads(str(record["config_json"])).get("checkpoint_policy", "INTERVAL")
+        if policy == "NONE" or (policy == "FINAL_ONLY" and not final):
+            return
+        provider, provider_json, provider_size = checkpoint_session(session)
+        self._assert_provider_state_budget(provider, encoded_size=provider_size)
+        history = None
+        if (type(kernel) is SimulationKernel
+                and app_getenv("BACKTEST_INCREMENTAL_CHECKPOINT_ENABLED", "1").strip() == "1"):
+            from .checkpoint_history import HistoryEncoder, ENCODING
+            if kernel._checkpoint_history is None:
+                kernel._checkpoint_history = HistoryEncoder(kernel._record_encoder)
+            history = kernel._checkpoint_history
+            history.begin()
         payload = {
             "schemaVersion": "candlescope.backtest-checkpoint/2",
             "checkpointMode": "BAR",
@@ -4293,15 +4467,20 @@ class BacktestService:
             "inputIdentity": self._checkpoint_input_identity(record),
             "sequence": int(sequence),
             "observed": int(observed),
-            "engine": kernel.snapshot(),
+            "engine": kernel.snapshot(history_encoder=history),
             "provider": provider,
             "providerSnapshotCapable": bool(
                 session.describe()["capabilities"]["snapshotRestore"]
             ),
             "planner": planner.snapshot(),
         }
-        payload_json = canonical_json(payload)
-        if event_bytes + len(payload_json.encode("utf-8")) > (
+        if history is not None:
+            payload["historyEncoding"] = ENCODING
+        payload_json = checkpoint_json(payload, provider_json, history=history)
+        logical_size = len(payload_json.encode("utf-8"))
+        if history is not None:
+            logical_size += history.logical_extra - len(canonical_json("historyEncoding") + ":" + canonical_json(ENCODING) + ",")
+        if event_bytes + logical_size > (
             self.settings.worker_memory_mb * 1024 * 1024
         ):
             raise BacktestError(
@@ -4314,8 +4493,9 @@ class BacktestService:
                 "sequence": int(sequence),
                 "generation": int(record["generation"]),
                 "payload_json": payload_json,
-                "state_hash": "sha256:" + sha256_hex(payload),
+                "state_hash": "sha256:" + sha256_hex(payload_json),
                 "created_at_ms": _now_ms(),
+                "history_chunks": dict(history.pending) if history is not None else None,
             }
         )
         if not saved:
@@ -4323,6 +4503,8 @@ class BacktestService:
                 "IDENTITY_MUTATION",
                 "stale worker generation cannot publish a checkpoint",
             )
+        if history is not None:
+            history.pending.clear()
 
     def _save_dual_clock_checkpoint(
         self,
@@ -4333,9 +4515,21 @@ class BacktestService:
         session: StrategyProviderSession,
         planner: PyneHostPlanner,
         event_bytes: int,
+        final: bool = False,
     ) -> None:
-        provider = session.snapshot()
-        self._assert_provider_state_budget(provider)
+        policy = json.loads(str(record["config_json"])).get("checkpoint_policy", "INTERVAL")
+        if policy == "NONE" or (policy == "FINAL_ONLY" and not final):
+            return
+        provider, provider_json, provider_size = checkpoint_session(session)
+        self._assert_provider_state_budget(provider, encoded_size=provider_size)
+        from .checkpoint_history import trade_history_encoder, TRADE_ENCODING, EXTENDED_TRADE_ENCODING
+        history = None
+        if app_getenv("BACKTEST_TRADE_INCREMENTAL_CHECKPOINT_ENABLED", "1").strip() == "1":
+            if kernel.execution._checkpoint_history is None:
+                kernel.execution._checkpoint_history = trade_history_encoder()
+            history = kernel.execution._checkpoint_history
+            history.begin()
+        ENCODING = EXTENDED_TRADE_ENCODING if history is not None and history.extended else TRADE_ENCODING
         payload = {
             "schemaVersion": "candlescope.backtest-checkpoint/2",
             "checkpointMode": "DUAL_CLOCK",
@@ -4345,15 +4539,20 @@ class BacktestService:
             "inputIdentity": self._checkpoint_input_identity(record),
             "sequence": int(sequence),
             "observed": kernel.builder.signal_count,
-            "engine": kernel.snapshot(),
+            "engine": kernel.snapshot(history_encoder=history),
             "provider": provider,
             "providerSnapshotCapable": bool(
                 session.describe()["capabilities"]["snapshotRestore"]
             ),
             "planner": planner.snapshot(),
         }
-        payload_json = canonical_json(payload)
-        if event_bytes + len(payload_json.encode("utf-8")) > (
+        if history is not None:
+            payload["historyEncoding"] = ENCODING
+        payload_json = checkpoint_json(payload, provider_json, history=history)
+        logical_size = len(payload_json.encode("utf-8"))
+        if history is not None:
+            logical_size += history.logical_extra - len(canonical_json("historyEncoding") + ":" + canonical_json(ENCODING) + ",")
+        if event_bytes + logical_size > (
             self.settings.worker_memory_mb * 1024 * 1024
         ):
             raise BacktestError(
@@ -4366,8 +4565,9 @@ class BacktestService:
                 "sequence": int(sequence),
                 "generation": int(record["generation"]),
                 "payload_json": payload_json,
-                "state_hash": "sha256:" + sha256_hex(payload),
+                "state_hash": "sha256:" + sha256_hex(payload_json),
                 "created_at_ms": _now_ms(),
+                "history_chunks": dict(history.pending) if history is not None else None,
             }
         )
         if not saved:
@@ -4375,6 +4575,8 @@ class BacktestService:
                 "IDENTITY_MUTATION",
                 "stale worker generation cannot publish a checkpoint",
             )
+        if history is not None:
+            history.pending.clear()
 
     def _save_trade_checkpoint(
         self,
@@ -4387,9 +4589,21 @@ class BacktestService:
         session: StrategyProviderSession,
         planner: PyneHostPlanner,
         event_bytes: int,
+        final: bool = False,
     ) -> None:
-        provider = session.snapshot()
-        self._assert_provider_state_budget(provider)
+        policy = json.loads(str(record["config_json"])).get("checkpoint_policy", "INTERVAL")
+        if policy == "NONE" or (policy == "FINAL_ONLY" and not final):
+            return
+        provider, provider_json, provider_size = checkpoint_session(session)
+        self._assert_provider_state_budget(provider, encoded_size=provider_size)
+        from .checkpoint_history import trade_history_encoder, TRADE_ENCODING, EXTENDED_TRADE_ENCODING
+        history = None
+        if app_getenv("BACKTEST_TRADE_INCREMENTAL_CHECKPOINT_ENABLED", "1").strip() == "1":
+            if kernel._checkpoint_history is None:
+                kernel._checkpoint_history = trade_history_encoder()
+            history = kernel._checkpoint_history
+            history.begin()
+        ENCODING = EXTENDED_TRADE_ENCODING if history is not None and history.extended else TRADE_ENCODING
         payload = {
             "schemaVersion": "candlescope.backtest-checkpoint/2",
             "checkpointMode": "TRADE_TAPE",
@@ -4400,15 +4614,20 @@ class BacktestService:
             "sequence": int(sequence),
             "observed": int(observed),
             "aggregateState": dict(aggregate_state),
-            "engine": kernel.snapshot(),
+            "engine": kernel.snapshot(history_encoder=history),
             "provider": provider,
             "providerSnapshotCapable": bool(
                 session.describe()["capabilities"]["snapshotRestore"]
             ),
             "planner": planner.snapshot(),
         }
-        payload_json = canonical_json(payload)
-        if event_bytes + len(payload_json.encode("utf-8")) > (
+        if history is not None:
+            payload["historyEncoding"] = ENCODING
+        payload_json = checkpoint_json(payload, provider_json, history=history)
+        logical_size = len(payload_json.encode("utf-8"))
+        if history is not None:
+            logical_size += history.logical_extra - len(canonical_json("historyEncoding") + ":" + canonical_json(ENCODING) + ",")
+        if event_bytes + logical_size > (
             self.settings.worker_memory_mb * 1024 * 1024
         ):
             raise BacktestError(
@@ -4421,8 +4640,9 @@ class BacktestService:
                 "sequence": int(sequence),
                 "generation": int(record["generation"]),
                 "payload_json": payload_json,
-                "state_hash": "sha256:" + sha256_hex(payload),
+                "state_hash": "sha256:" + sha256_hex(payload_json),
                 "created_at_ms": _now_ms(),
+                "history_chunks": dict(history.pending) if history is not None else None,
             }
         )
         if not saved:
@@ -4430,6 +4650,8 @@ class BacktestService:
                 "IDENTITY_MUTATION",
                 "stale worker generation cannot publish a checkpoint",
             )
+        if history is not None:
+            history.pending.clear()
 
     @staticmethod
     def _checkpoint_input_identity(record: Mapping[str, object]) -> dict[str, object]:
@@ -4451,6 +4673,8 @@ class BacktestService:
             "executionModelRevision": config.get("execution_model_revision"),
             "fillPolicy": config.get("fill_policy"),
             "strategyExecutionRevision": config.get("strategy_execution_revision"),
+            **({"pythonExecutionProtocol": config["python_execution_protocol"]}
+               if config.get("python_execution_protocol") else {}),
         }
 
     def _maybe_inject_fault(self, point: str, *, run_id: str, sequence: int) -> None:
@@ -4461,8 +4685,8 @@ class BacktestService:
             {"runId": run_id, "sequence": int(sequence), "schema": "BACKTEST_FAULT_V1"},
         )
 
-    def _assert_provider_state_budget(self, snapshot: Mapping[str, object]) -> None:
-        provider_bytes = len(
+    def _assert_provider_state_budget(self, snapshot: Mapping[str, object], *, encoded_size: int | None = None) -> None:
+        provider_bytes = encoded_size if encoded_size is not None else len(
             canonical_json(snapshot.get("provider") or {}).encode("utf-8")
         )
         if provider_bytes > self.settings.max_provider_state_bytes:
@@ -4624,13 +4848,16 @@ class BacktestService:
 
             report_record = dict(completing)
             report_record["state"] = RunState.COMPLETED.value
-            report = build_report(report_record, result_payload)
+            report = build_report(report_record, result_payload,
+                                  _owned_seal=app_getenv("BACKTEST_OWNED_REPORT_ENABLED", "1").strip() == "1")
             report_json = canonical_json(report)
+            report_chunks = None
             if len(report_json.encode("utf-8")) > self.settings.max_report_bytes:
-                raise BacktestError(
-                    "BUDGET_EXCEEDED",
-                    "backtest report exceeds frozen byte ceiling",
-                )
+                if app_getenv("BACKTEST_CHUNKED_REPORT_ENABLED", "1").strip() != "1":
+                    raise BacktestError("BUDGET_EXCEEDED", "backtest report exceeds frozen byte ceiling")
+                from .report_storage import encode_storage
+                report_json, report_chunks = encode_storage(report,
+                    part_limit=self.settings.max_report_bytes, total_limit=self.settings.max_report_storage_bytes)
             report_hash = str(report["hashes"]["report"])
             result_payload["report_hash"] = report_hash
             audit_details = {
@@ -4647,6 +4874,7 @@ class BacktestService:
                 expected_generation=expected_generation,
                 report_schema=str(report["schemaVersion"]),
                 report_json=report_json,
+                report_chunks=report_chunks,
                 report_hash=report_hash,
                 generated_at_ms=stamp,
                 audit_action="complete",
@@ -4811,11 +5039,14 @@ class BacktestService:
         *,
         bar: Mapping[str, object] | None,
         trade: Mapping[str, object] | None,
+        _modes: tuple[str, ...] | None = None,
     ) -> None:
-        describe = getattr(provider, "describe", None)
-        if not callable(describe):
-            return
-        modes = tuple(getattr(describe(), "input_modes", ()) or ())
+        modes = _modes
+        if modes is None:
+            describe = getattr(provider, "describe", None)
+            if not callable(describe):
+                return
+            modes = tuple(getattr(describe(), "input_modes", ()) or ())
         if "BAR_CLOSE" in modes and bar is None:
             raise StrategyProviderError(
                 "PROVIDER_PROTOCOL_VIOLATION", "BAR_CLOSE requires a bar"
@@ -4836,6 +5067,7 @@ class BacktestService:
         *,
         bar: Mapping[str, object] | None,
         trade: Mapping[str, object] | None,
+        _names: tuple[str, ...] | None = None,
     ) -> dict[str, str]:
         source: dict[str, object] = {}
         if bar is not None:
@@ -4848,7 +5080,7 @@ class BacktestService:
                 source.setdefault("price", trade["price"])
             if trade.get("qty") is not None:
                 source.setdefault("volume", trade["qty"])
-        names = _declared_feature_names(provider)
+        names = _declared_feature_names(provider) if _names is None else _names
         if names:
             missing = [name for name in names if name not in source]
             if missing:
@@ -4951,7 +5183,9 @@ def _planning_context(kernel: Any, event: MarketEvent) -> PlanningContext:
         kernel, "min_notional", None
     )
     contract_multiplier = getattr(account, "multiplier", None) or Decimal("1")
-    active_orders = sum(order.status in {"OPEN", "PARTIAL"} for order in kernel.orders)
+    active_orders = (len(kernel._live_orders()) if isinstance(kernel, SimulationKernel)
+                     else sum(order.status in {"OPEN", "PARTIAL"} for order in
+                              (kernel._working_orders() if isinstance(kernel, TradeSimulationKernel) else kernel.orders)))
     cumulative_fees = getattr(account, "cumulative_fees", None)
     if cumulative_fees is None:
         cumulative_fees = getattr(kernel, "fee_total", Decimal("0"))
@@ -5011,9 +5245,22 @@ def _config_optional_decimal(config: Mapping[str, object], name: str) -> Decimal
 def _event_wire_bytes(events: tuple[MarketEvent, ...]) -> int:
     """Count exact canonical list bytes without materializing a second event corpus."""
     total = 2
+    counter = None
+    if app_getenv("BACKTEST_GENERIC_BAR_ENABLED", "1").strip() == "1":
+        try:
+            from .strategy import _native_rows
+            if getattr(_native_rows, "ROW_PROTOCOL_ABI", None) == 1:
+                counter = _native_rows.event_wire_size
+        except ImportError:
+            pass
     for index, event in enumerate(events):
         if index:
             total += 1
+        if counter is not None:
+            size = counter(event.payload, event.sequence, event.event_time_ms, event.role)
+            if size is not None:
+                total += size
+                continue
         total += len(
             canonical_json(
                 {
@@ -5039,3 +5286,14 @@ def _decimal_or_none(value: object) -> Decimal | None:
     except (InvalidOperation, ValueError, TypeError):
         return None
     return result if result.is_finite() else None
+
+
+def _trade_chart_bar(bar: MarketEvent) -> dict[str, object]:
+    return {
+        "time": int(bar.payload["open_time_ms"]) // 1000,
+        "open": float(bar.payload["open"]),
+        "high": float(bar.payload["high"]),
+        "low": float(bar.payload["low"]),
+        "close": float(bar.payload["close"]),
+        "volume": float(bar.payload["volume"]),
+    }

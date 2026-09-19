@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from dataclasses import dataclass
 from typing import Any, Mapping
 
-from app.market_dataset.snapshot import MarketEvent, sha256_hex
+from app.market_dataset.snapshot import MarketEvent, MarketDatasetError, sha256_hex
+from app.core.config import getenv
 
 from .dual_clock_kernel import DualClockSimulationKernel
 from .execution_realism import EXECUTION_REALISM_V2
-from .kernel import SimulationKernel, SimulationResult
+from .kernel import SimulationKernel, SimulationResult, _bar_decimal
+from .linear_perp_account_v2 import LinearPerpetualAccountV2
 from .trade_kernel import TradeSimulationKernel
 
 
@@ -17,6 +20,7 @@ def build_cost_sensitivity_matrix(
     kernel: SimulationKernel | TradeSimulationKernel | DualClockSimulationKernel,
     events: tuple[MarketEvent, ...],
     primary: SimulationResult,
+    *, fast_bar: bool = True,
 ) -> dict[str, object]:
     """Replay immutable accepted decision intents without invoking the Provider."""
 
@@ -32,6 +36,31 @@ def build_cost_sensitivity_matrix(
         return [dict(intent) for intent in by_sequence.get(event.sequence, [])]
 
     base_rate = Decimal(str(getattr(kernel, "participation_rate")))
+    fused = None
+    if (fast_bar and type(kernel) is SimulationKernel
+            and getenv("BACKTEST_FUSED_BAR_SENSITIVITY_ENABLED", "1").strip() == "1"):
+        replays = [
+            _clone_kernel(kernel, _bar_sensitivity=True,
+                          taker_fee_bps=kernel.taker_fee_bps * multiplier,
+                          maker_fee_bps=kernel.maker_fee_bps * multiplier,
+                          slippage_bps=kernel.slippage_bps * multiplier)
+            for multiplier in (Decimal("1.25"), Decimal("1.5"))
+        ]
+        replays.append(_clone_kernel(kernel, _bar_sensitivity=True, participation_rate=base_rate / Decimal("2")))
+        fused = iter(_run_bar_scenarios(replays, events, by_sequence))
+    fused_dual = None
+    if (type(kernel) is DualClockSimulationKernel
+            and getenv("BACKTEST_FUSED_DUAL_SENSITIVITY_ENABLED", "1").strip() == "1"):
+        replays = [
+            _clone_kernel(kernel, taker_fee_bps=kernel.taker_fee_bps * multiplier,
+                          maker_fee_bps=kernel.maker_fee_bps * multiplier,
+                          slippage_bps=kernel.slippage_bps * multiplier)
+            for multiplier in (Decimal("1.25"), Decimal("1.5"))
+        ]
+        replays.append(_clone_kernel(kernel, latency_ms=kernel.latency_ms + 100,
+                                     latency_events=kernel.latency_events + 1))
+        replays.append(_clone_kernel(kernel, participation_rate=base_rate / Decimal("2")))
+        fused_dual = iter(_run_dual_scenarios(replays, events, by_sequence))
     scenarios: list[dict[str, object]] = [
         _scenario_wire(
             "BASELINE",
@@ -50,12 +79,13 @@ def build_cost_sensitivity_matrix(
         ("COSTS_PLUS_50_PERCENT", Decimal("1.5")),
     ):
         replay = _clone_kernel(
-            kernel,
+            kernel, _bar_sensitivity=fast_bar,
             taker_fee_bps=getattr(kernel, "taker_fee_bps") * multiplier,
             maker_fee_bps=getattr(kernel, "maker_fee_bps") * multiplier,
             slippage_bps=getattr(kernel, "slippage_bps") * multiplier,
         )
-        result = replay.run(events, strategy, warmup_events=0, finalize=True)
+        result = (next(fused_dual) if fused_dual is not None else
+                  next(fused) if fused is not None else _run_scenario(replay, events, strategy))
         scenarios.append(
             _scenario_wire(
                 name,
@@ -88,11 +118,11 @@ def build_cost_sensitivity_matrix(
         )
     else:
         replay = _clone_kernel(
-            kernel,
+            kernel, _bar_sensitivity=fast_bar,
             latency_ms=getattr(kernel, "latency_ms") + 100,
             latency_events=getattr(kernel, "latency_events") + 1,
         )
-        result = replay.run(events, strategy, warmup_events=0, finalize=True)
+        result = next(fused_dual) if fused_dual is not None else _run_scenario(replay, events, strategy)
         scenarios.append(
             _scenario_wire(
                 "LATENCY_PLUS_ONE_TIER",
@@ -107,8 +137,9 @@ def build_cost_sensitivity_matrix(
             )
         )
     lower_rate = base_rate / Decimal("2")
-    replay = _clone_kernel(kernel, participation_rate=lower_rate)
-    result = replay.run(events, strategy, warmup_events=0, finalize=True)
+    replay = _clone_kernel(kernel, _bar_sensitivity=fast_bar, participation_rate=lower_rate)
+    result = (next(fused_dual) if fused_dual is not None else
+                  next(fused) if fused is not None else _run_scenario(replay, events, strategy))
     scenarios.append(
         _scenario_wire(
             "PARTICIPATION_DOWN_ONE_TIER",
@@ -133,7 +164,7 @@ def build_cost_sensitivity_matrix(
 
 
 def _scenario_wire(
-    name: str, assumptions: Mapping[str, object], result: SimulationResult
+    name: str, assumptions: Mapping[str, object], result: SimulationResult | _SensitivityResult
 ) -> dict[str, object]:
     account = dict(result.ledger.get("account") or {})
     wire = {
@@ -154,7 +185,7 @@ def _scenario_wire(
     return {**wire, "scenario_hash": "sha256:" + sha256_hex(wire)}
 
 
-def _clone_kernel(kernel: Any, **overrides: object) -> Any:
+def _clone_kernel(kernel: Any, *, _bar_sensitivity=False, **overrides: object) -> Any:
     common = {
         "account_model": kernel.account_model,
         "funding_mode": kernel.funding_mode,
@@ -188,7 +219,8 @@ def _clone_kernel(kernel: Any, **overrides: object) -> Any:
             checkpoint_event_interval=0,
             **common,
         )
-    return SimulationKernel(
+    kind = _BarSensitivityKernel if _bar_sensitivity and type(kernel) is SimulationKernel else SimulationKernel
+    return kind(
         price_tick=kernel.price_tick,
         qty_step=kernel.qty_step,
         min_notional=kernel.min_notional,
@@ -197,3 +229,177 @@ def _clone_kernel(kernel: Any, **overrides: object) -> Any:
         bar_path_scenario=kernel.bar_path_scenario,
         **common,
     )
+
+
+@dataclass(frozen=True)
+class _SensitivityResult:
+    fills: list
+    ledger: dict
+    fill_hash: str
+    ledger_hash: str
+
+
+class _BarSensitivityKernel(SimulationKernel):
+    """Same execution/account engine, only the evidence consumed by the matrix."""
+    def run(self, *args, **kwargs):
+        raise TypeError("use run_sensitivity; this kernel does not produce a full run report")
+
+    def snapshot(self):
+        raise TypeError("sensitivity-only execution has no resumable checkpoint")
+
+    def _record_decision(self, intents, market_event):
+        self._decision_count += 1
+
+    def _record_equity(self, market_event):
+        pass
+
+    def _append_terminal_curve_point(self):
+        pass
+
+    def run_sensitivity(self, events, strategy):
+        self._run_events(events, strategy, finalize=True)
+        return self.sensitivity_result()
+
+    def sensitivity_result(self):
+        fills, ledger = self._financial_result()
+        return _SensitivityResult(fills, ledger, sha256_hex(fills), sha256_hex(ledger))
+
+
+class _SharedBarPrices:
+    """Lazy immutable Decimal inputs; capacity and accounting stay per scenario."""
+    def __init__(self, event):
+        self.payload = event.payload
+        self.values = {}
+
+    def __call__(self, name):
+        if name not in self.values:
+            raw = self.payload.get(name) or "0" if name == "volume" else self.payload[name]
+            self.values[name] = Decimal(str(raw))
+        return self.values[name]
+
+
+def _run_bar_scenarios(replays, events, by_sequence):
+    """Advance owned independent accounts on one shared source clock.
+
+    These clones have identical gap/account policies, no provider or external
+    callbacks, and only consume frozen intents. Financial operations continue
+    to use the reference funding, matching, enqueue and finalization methods.
+    """
+    clock = replays[0]
+    account_v2 = isinstance(clock.account, LinearPerpetualAccountV2)
+    funding = clock.funding_rate != 0 and clock.funding_interval_ms > 0
+    if account_v2:
+        funding = funding and clock.funding_mode == "FIXED_SCENARIO"
+    for event in events:
+        if clock.paused:
+            break
+        ambiguity_before = clock.ambiguity_count
+        accepted = clock._accept_event(event)
+        gap_ambiguity = clock.ambiguity_count - ambiguity_before
+        for replay in replays[1:]:
+            replay._last_event = clock._last_event
+            replay.paused = clock.paused
+            replay.ambiguity_count += gap_ambiguity
+        if not accepted:
+            continue
+        if event.role in {"INSTRUMENT_RULES", "MARK_INDEX", "FUNDING"}:
+            for replay in replays:
+                replay.account.apply(event)
+            continue
+        if event.role != "BARS":
+            raise MarketDatasetError("BAR kernel received unsupported role", code="FIDELITY_MISLABEL")
+        count = clock._market_event_count + 1
+        market_event = (MarketEvent(count, event.event_time_ms, event.role, event.payload)
+                        if account_v2 else event)
+        close = None if account_v2 else _bar_decimal(event, "close")
+        intents = by_sequence.get(market_event.sequence)
+        prices = None
+        for replay in replays:
+            replay._market_event_count = count
+            if account_v2:
+                replay.account.validate_ready()
+            else:
+                replay.account.mark = close
+            if funding:
+                replay._apply_funding(market_event)
+            # No code outside these owned clones can mutate the order index.
+            if replay._active_orders:
+                if prices is None:
+                    prices = _SharedBarPrices(market_event)
+                replay._match(market_event, _prices=prices)
+            replay._decision_count += 1
+            if intents:
+                replay._enqueue_many(intents, current_sequence=market_event.sequence)
+    for replay in replays:
+        replay.finalize_orders()
+    return [replay.sensitivity_result() for replay in replays]
+
+
+def _run_scenario(kernel, events, strategy):
+    if isinstance(kernel, _BarSensitivityKernel):
+        return kernel.run_sensitivity(events, strategy)
+    return kernel.run(events, strategy, warmup_events=0, finalize=True)
+
+
+def _run_dual_scenarios(replays, events, by_sequence):
+    """Owned sensitivity clones share validation/bar construction, never accounts.
+
+    Only fill/ledger evidence is consumed by the matrix. No provider callbacks,
+    decisions, resumable checkpoints or equity curves are produced here.
+    """
+    from app.market_dataset.trades import assert_trade_stream
+
+    clock = replays[0]
+    trades = tuple(e for e in events if e.role == "TRADES")
+    if len(trades) > clock.max_events:
+        raise MarketDatasetError("trade event budget exceeded", code="BUDGET_EXCEEDED")
+    if trades and assert_trade_stream(trades) != "AGG_TRADE":
+        raise MarketDatasetError("dual-clock execution requires AGG_TRADE", code="FIDELITY_MISLABEL")
+    executions = [r.execution for r in replays]
+    account_v2 = isinstance(executions[0].account, LinearPerpetualAccountV2)
+    prune_idle = getenv("BACKTEST_PRUNED_DUAL_SENSITIVITY_ENABLED", "1").strip() == "1"
+    funding = clock.funding_rate != 0 and clock.funding_interval_ms > 0
+    if account_v2:
+        funding = funding and clock.funding_mode == "FIXED_SCENARIO"
+    previous = None
+    count = 0
+    for trade in events:
+        if trade.role in {"INSTRUMENT_RULES", "MARK_INDEX", "FUNDING"}:
+            for execution in executions:
+                execution._last_event = trade
+                execution.account.apply(trade)
+            continue
+        if trade.role != "TRADES":
+            raise MarketDatasetError("dual-clock kernel received unsupported role", code="FIDELITY_MISLABEL")
+        source_sequence = int(trade.payload.get("source_sequence") or trade.sequence)
+        if previous is not None and source_sequence != previous + 1:
+            raise MarketDatasetError("aggregate trade id gap rejected", code="DATA_GAP_REJECTED")
+        completed = clock.builder.push(trade)
+        for bar in completed:
+            intents = by_sequence.get(bar.sequence)
+            if intents:
+                for execution in executions:
+                    execution._enqueue_many(intents, current_sequence=trade.sequence - 1)
+        price = None if account_v2 else Decimal(str(trade.payload["price"]))
+        for execution in executions:
+            execution._last_event = trade
+            if account_v2:
+                execution.account.validate_ready()
+            else:
+                execution.account.mark = price
+            if funding or not prune_idle:
+                execution._apply_funding(trade)
+            # Owned clones have no external order mutations or restore path.
+            # The builder above validates price/quantity even when no order is active.
+            if execution._active_orders or not prune_idle:
+                execution._match(trade)
+        previous = source_sequence
+        count += 1
+    results = []
+    for execution in executions:
+        execution.finalize_orders()
+        fills, ledger = execution._financial_result()
+        ledger["signal_event_count"] = clock.builder.signal_count
+        ledger["execution_event_count"] = count
+        results.append(_SensitivityResult(fills, ledger, sha256_hex(fills), sha256_hex(ledger)))
+    return results

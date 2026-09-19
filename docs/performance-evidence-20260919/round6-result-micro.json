@@ -1,0 +1,48 @@
+{
+  "samples": [
+    {
+      "pair": 0,
+      "enabled": 0,
+      "seconds": 2.5333712000028754,
+      "iterations": 10,
+      "fills": 5603
+    },
+    {
+      "pair": 0,
+      "enabled": 1,
+      "seconds": 1.7942796999996062,
+      "iterations": 10,
+      "fills": 5603
+    },
+    {
+      "pair": 1,
+      "enabled": 1,
+      "seconds": 1.80926289999843,
+      "iterations": 10,
+      "fills": 5603
+    },
+    {
+      "pair": 1,
+      "enabled": 0,
+      "seconds": 2.6141917999993893,
+      "iterations": 10,
+      "fills": 5603
+    },
+    {
+      "pair": 2,
+      "enabled": 0,
+      "seconds": 2.5259170000026643,
+      "iterations": 10,
+      "fills": 5603
+    },
+    {
+      "pair": 2,
+      "enabled": 1,
+      "seconds": 1.6893330999992031,
+      "iterations": 10,
+      "fills": 5603
+    }
+  ],
+  "full_result_equal": true,
+  "scope": "result construction only; mixed orders on 10000 synthetic prints; not service latency"
+}

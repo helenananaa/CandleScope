@@ -414,9 +414,10 @@ def verify_explanation(payload: Mapping[str, object]) -> bool:
             char not in "0123456789abcdef" for char in expected
         ):
             return False
-        candidate = copy.deepcopy(dict(payload))
+        candidate = dict(payload)
         candidate.pop("evidenceHash", None)
-        if jcs_sha256(candidate) != expected:
+        encoded = jcs_dumps(candidate).encode("utf-8")
+        if hashlib.sha256(encoded).hexdigest() != expected:
             return False
         if payload.get("action") not in {"ENTER", "EXIT", "REVERSE", "REJECT"}:
             return False
@@ -428,7 +429,7 @@ def verify_explanation(payload: Mapping[str, object]) -> bool:
             "decisionTraceOrdinal",
             nullable=True,
         )
-        return len(jcs_dumps(candidate).encode("utf-8")) <= MAX_PAYLOAD_BYTES
+        return len(encoded) <= MAX_PAYLOAD_BYTES
     except (TradeExplanationError, UnicodeError, ValueError, TypeError):
         return False
 
@@ -438,7 +439,8 @@ def bind_trade_id(
 ) -> dict[str, object] | None:
     if not isinstance(payload, Mapping) or not verify_explanation(payload):
         return None
-    bound = copy.deepcopy(dict(payload))
+    # _seal owns the sole deep copy; tradeId is a top-level replacement.
+    bound = dict(payload)
     bound["tradeId"] = trade_id
     return _seal(bound)
 

@@ -1,0 +1,32 @@
+{
+  "base_commit": "172ae4ddc7deb76bafb3fa3f6827a02b9d74c888",
+  "state": "uncommitted round 1, round 2 and round 3 candidate",
+  "python": "3.12.7",
+  "tests": {
+    "tests": "268",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "time": "59.180"
+  },
+  "source_sha256": {
+    "backend/app/backtest/checkpoint_history.py": "ed4c2a70069fc091bd6ebfdfffb4dce07a8e061547474d5fe0cadfb6498dc0ef",
+    "backend/app/backtest/colocated.py": "63b7d1bf6ff49644b5e8b4f893c5f35212eaf17a101dccc312213036fc01ec83",
+    "backend/app/backtest/service.py": "c7177fb13d31869a5083ff9ef153aa424c8bb75724e8bf3d24d2d653904c5de1",
+    "backend/app/simulation/cost_sensitivity.py": "3c67d5f04d0d483af3640135ed8c3b26da99aa9da42ae13d70d0386ab1fcfc40",
+    "backend/app/simulation/trade_kernel.py": "9a47078ad1afe2a8c88124a39db260482dd0d2350d904feb7771d35266155f80",
+    "backend/app/simulation/dual_clock_kernel.py": "a516da0ce0513c606ca061ec60d59a97dd2f93cae301defa01b4b32b5620a84f",
+    "backend/scripts/benchmark_trade_strategy.py": "0c5b4a57b97bac038c21ac7f6852502d78fa32c5ea2a7db2056839b2a0739524",
+    "backend/scripts/profile_trade_strategy.py": "cae63e027a5966010ce947d4ac585b2b88e5d7d5f12df7c402f0e15e0a752008",
+    "backend/scripts/strategy_worker_profile.py": "905e54c267ba1346a4fc0e1b02811ff219dcee5a97659f75bafb3689911ef075",
+    "backend/tests/test_trade_strategy_performance.py": "b3c039b12a3206cfd5b1e123823d6a919feb5386bc82290beda0b4f2f7c84287",
+    "backend/tests/test_dual_sensitivity_performance.py": "a0ca0ddf1a218b5aa27d98ee49d99fd56556b3ef6136238e776d3e2df30fbc7d",
+    "backend/app/backtest/strategy/builtin.py": "fbdbaf84604828d061ab048163303a4f6c89d2b86904eeee9086043991cc9257",
+    "backend/tests/test_trade_history_round3.py": "c7da53b492f82fea988310fb99bed25aefe760b5acd6306a61e116fec3a9b9d2"
+  },
+  "checks": [
+    "ruff passed",
+    "git diff --check passed"
+  ],
+  "scope": "synthetic service qualification only; no browser or production deployment"
+}

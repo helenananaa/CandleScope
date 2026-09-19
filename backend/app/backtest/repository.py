@@ -261,14 +261,13 @@ class BacktestRepository:
     def get_reports_for_compare(
         self, left_run_id: str, right_run_id: str
     ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-        rows = self.connection.execute(
-            "SELECT run_id, report_json FROM backtest_reports WHERE run_id IN (?, ?)",
-            (left_run_id, right_run_id),
-        ).fetchall()
-        found = {
-            str(row["run_id"]): json.loads(str(row["report_json"])) for row in rows
-        }
-        return found.get(left_run_id), found.get(right_run_id)
+        self.connection.execute("SAVEPOINT report_compare")
+        try:
+            rows = [self.get_report(run_id) for run_id in {left_run_id, right_run_id}]
+            found = {str(row["run_id"]): json.loads(str(row["report_json"])) for row in rows if row is not None}
+            return found.get(left_run_id), found.get(right_run_id)
+        finally:
+            self.connection.execute("RELEASE report_compare")
 
     @_locked
     def delete_review_bridge(self, bridge_id: str) -> None:
@@ -583,6 +582,14 @@ class BacktestRepository:
             ):
                 connection.rollback()
                 return False
+            from .checkpoint_history import publish_chunks
+            newest = connection.execute(
+                "SELECT MAX(sequence) FROM backtest_checkpoints WHERE run_id=?", (payload["run_id"],)
+            ).fetchone()[0]
+            if newest is not None and int(newest) > int(payload["sequence"]):
+                connection.rollback()
+                return False
+            publish_chunks(connection, payload)
             connection.execute(
                 """
                 INSERT INTO backtest_checkpoints(
@@ -610,17 +617,26 @@ class BacktestRepository:
 
     @_locked
     def latest_checkpoint(self, run_id: str) -> dict[str, Any] | None:
-        row = self.connection.execute(
-            """
-            SELECT * FROM backtest_checkpoints
-            WHERE run_id = ? ORDER BY sequence DESC LIMIT 1
-            """,
-            (run_id,),
-        ).fetchone()
-        return dict(row) if row is not None else None
+        connection = self.connection
+        connection.execute("SAVEPOINT checkpoint_read")
+        try:
+            row = connection.execute(
+                """
+                SELECT * FROM backtest_checkpoints
+                WHERE run_id = ? ORDER BY sequence DESC LIMIT 1
+                """,
+                (run_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            from .checkpoint_history import expand_checkpoint
+            return expand_checkpoint(dict(row), connection)
+        finally:
+            connection.execute("RELEASE checkpoint_read")
 
     @_locked
     def delete_checkpoints(self, run_id: str) -> None:
+        self.connection.execute("DELETE FROM backtest_checkpoint_chunks WHERE run_id = ?", (run_id,))
         self.connection.execute(
             "DELETE FROM backtest_checkpoints WHERE run_id = ?",
             (run_id,),
@@ -1146,6 +1162,8 @@ class BacktestRepository:
             """,
             (run_id, report_schema, report_json, report_hash, generated_at_ms),
         )
+        # This compatibility writer receives a complete inline report.
+        self.connection.execute("DELETE FROM backtest_report_parts WHERE run_id=?", (run_id,))
         self.connection.commit()
 
     @_locked
@@ -1164,6 +1182,7 @@ class BacktestRepository:
         updated_at_ms: int,
         signal_trace_rows: list[dict[str, Any]] | None = None,
         chart_cache: dict[str, Any] | None = None,
+        report_chunks: dict[str, str] | None = None,
     ) -> None:
         """Atomically persist the immutable report, completion audit, and state."""
         connection = self.connection
@@ -1197,6 +1216,8 @@ class BacktestRepository:
                     )
                 ).hexdigest()
             )
+            from .report_storage import publish_parts
+            publish_parts(connection, run_id, report_chunks)
             connection.execute(
                 """
                 INSERT INTO backtest_reports(
@@ -1273,6 +1294,7 @@ class BacktestRepository:
                 "DELETE FROM backtest_checkpoints WHERE run_id = ?",
                 (run_id,),
             )
+            connection.execute("DELETE FROM backtest_checkpoint_chunks WHERE run_id = ?", (run_id,))
             connection.commit()
         except Exception:
             connection.rollback()
@@ -1280,11 +1302,20 @@ class BacktestRepository:
 
     @_locked
     def get_report(self, run_id: str) -> dict[str, Any] | None:
-        row = self.connection.execute(
-            "SELECT * FROM backtest_reports WHERE run_id = ?",
-            (run_id,),
-        ).fetchone()
-        return dict(row) if row is not None else None
+        return self.get_report_view(run_id, view="full")
+
+    @_locked
+    def get_report_view(self, run_id: str, *, view="summary", section=None, offset=0, limit=100):
+        connection = self.connection
+        connection.execute("SAVEPOINT report_read")
+        try:
+            row = connection.execute("SELECT * FROM backtest_reports WHERE run_id=?", (run_id,)).fetchone()
+            if row is None:
+                return None
+            from .report_storage import read_report
+            return read_report(dict(row), connection, view=view, section=section, offset=offset, limit=limit)
+        finally:
+            connection.execute("RELEASE report_read")
 
     @_locked
     def get_chart_cache(self, run_id: str) -> dict[str, Any] | None:

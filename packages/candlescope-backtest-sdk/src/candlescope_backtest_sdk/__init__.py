@@ -22,7 +22,12 @@ from .models import (
 )
 
 __version__ = "0.1.0"
+from .batch import MarketBatch, MARKET_BATCH_PROTOCOL, MARKET_BATCH_RECEIPT, market_batch_hashes
 __all__ = [
+    "MarketBatch",
+    "market_batch_hashes",
+    "MARKET_BATCH_PROTOCOL",
+    "MARKET_BATCH_RECEIPT",
     "AUTHOR_CONTRACT",
     "BUNDLE_SCHEMA",
     "PROVIDER_PROTOCOL",

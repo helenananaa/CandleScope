@@ -11,7 +11,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Mapping
 
-from app.core.config import BacktestSettings
+from app.core.config import BacktestSettings, getenv
 from app.data_engine.storage.raw_trade_archive import (
     ParquetRawAggTradeArchive,
     RawAggTradeCursor,
@@ -606,6 +606,10 @@ class BacktestWorker:
                 max_scan_rows=settings.max_trade_events,
             )
         )
+        from .trade_snapshot_cache import TradeSnapshotCache
+        self._trade_snapshots = TradeSnapshotCache(
+            min(64 * 1024 * 1024, settings.worker_memory_mb * 1024 * 1024 // 8)
+        )
         self._stop = threading.Event()
         self._threads: list[threading.Thread] = []
         self._lease_ms = max(30_000, self.settings.provider_step_timeout_ms * 10)
@@ -629,6 +633,15 @@ class BacktestWorker:
         for thread in self._threads:
             thread.join(timeout=5)
         self._threads = []
+        self._trade_snapshots.close()
+
+    def _load_trade_events(self, dataset):
+        def load():
+            return _read_trade_events(self.trade_archive, dataset, max_events=self.settings.max_trade_events)
+        if getenv("BACKTEST_TRADE_SNAPSHOT_CACHE_ENABLED", "1").strip() != "1":
+            return load()
+        return self._trade_snapshots.read(self.trade_archive, dataset,
+            max_events=self.settings.max_trade_events, loader=load)
 
     def _run(self, slot: int, owner: str) -> None:
         service = BacktestService.start(
@@ -855,11 +868,7 @@ class BacktestWorker:
                     record,
                     contract_bundle_hash=contract_bundle_hash,
                 )
-                events = _read_trade_events(
-                    self.trade_archive,
-                    dataset,
-                    max_events=self.settings.max_trade_events,
-                )
+                events = self._load_trade_events(dataset)
                 if (
                     contract_snapshot is not None
                     and str(config.get("account_model")) == "LINEAR_PERP_ONE_WAY_V2"

@@ -8,7 +8,7 @@ import base64
 from decimal import Decimal
 from typing import Any, Literal
 
-from fastapi import APIRouter, Header, Request
+from fastapi import APIRouter, Header, Request, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -37,6 +37,9 @@ class RunCreateRequest(BaseModel):
     start_time_ms: int
     end_time_ms: int
     warmup_bars: int = 0
+    cost_sensitivity_mode: Literal["FULL", "SKIP"] | None = None
+    checkpoint_policy: Literal["INTERVAL", "FINAL_ONLY", "NONE"] | None = None
+    checkpoint_interval: int | None = Field(default=None, ge=1, strict=True)
     symbol: str | None = Field(default=None, max_length=80)
     interval: str | None = Field(default=None, max_length=16)
     signal_clock: str | None = Field(default=None, max_length=40)
@@ -98,6 +101,7 @@ class RunCreateRequest(BaseModel):
     contract_data_mode: str = Field(default="LEGACY_FIXED_V1", max_length=40)
     study_id: str | None = None
     python_runtime_mode: str | None = Field(default=None, max_length=32)
+    python_execution_protocol: str | None = Field(default=None, max_length=32)
     python_trusted_confirmed: bool = False
 
     @model_validator(mode="after")
@@ -745,6 +749,23 @@ def resume_run(request: Request, run_id: str) -> dict[str, Any]:
 def get_report(request: Request, run_id: str) -> dict[str, Any]:
     try:
         return _service(request).get_report(run_id)
+    except BacktestError as exc:
+        return _error(exc)
+
+
+@router.get("/runs/{run_id}/report/summary")
+def get_report_summary(request: Request, run_id: str) -> dict[str, Any]:
+    try:
+        return _service(request).get_report_view(run_id)
+    except BacktestError as exc:
+        return _error(exc)
+
+
+@router.get("/runs/{run_id}/report/details")
+def get_report_details(request: Request, run_id: str, section: str = "fills",
+                       offset: int = Query(default=0, ge=0), limit: int = Query(default=100, ge=1, le=500)) -> dict[str, Any]:
+    try:
+        return _service(request).get_report_view(run_id, section=section, offset=offset, limit=limit)
     except BacktestError as exc:
         return _error(exc)
 

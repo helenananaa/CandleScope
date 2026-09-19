@@ -2,9 +2,21 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 9
 
 SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS backtest_report_parts (
+    run_id TEXT NOT NULL,
+    part_hash TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    PRIMARY KEY (run_id, part_hash)
+);
+CREATE TABLE IF NOT EXISTS backtest_checkpoint_chunks (
+    run_id TEXT NOT NULL,
+    chunk_hash TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    PRIMARY KEY (run_id, chunk_hash)
+);
 CREATE TABLE IF NOT EXISTS backtest_schema_meta (
     schema_version INTEGER NOT NULL,
     migrated_at_ms INTEGER NOT NULL

@@ -1,0 +1,34 @@
+{
+  "base_commit": "172ae4ddc7deb76bafb3fa3f6827a02b9d74c888",
+  "state": "uncommitted local candidate",
+  "python": "3.12.7",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "tests": [
+    {
+      "file": "regression.xml",
+      "tests": "190",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "58.717"
+    },
+    {
+      "file": "policy-report-regression.xml",
+      "tests": "26",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "0.476"
+    }
+  ],
+  "source_sha256": {
+    "backend/app/backtest/checkpoint_history.py": "94bdd9240fdc78e999d2b58e89203f7052817ceb9343d5a5119ed54247cb6cb4",
+    "backend/app/backtest/colocated.py": "63b7d1bf6ff49644b5e8b4f893c5f35212eaf17a101dccc312213036fc01ec83",
+    "backend/app/backtest/service.py": "6dc182004b4ce119d4bc5a5ab2c72a3ec6e4f8661bd8983efe93cd9d0ae177f1",
+    "backend/app/simulation/dual_clock_kernel.py": "9275b7b09609cd2cf2f4f5328285b20fd54715bfa3d8a030246c87d34fd79b69",
+    "backend/app/simulation/trade_kernel.py": "3727b9da20c63f52daab08653b7affcdde91e71007dae717501b549f7662234c",
+    "backend/scripts/benchmark_trade_strategy.py": "a5c311d6752f21f4fa61a1da6980c28a27288b4f6cfdf4512fbb6211605c5ea4",
+    "backend/tests/test_trade_strategy_performance.py": "9cbdee41fe7bb3d0f86c4d1219f6de0b46b6f01a3df029ec020cb950fab22e86"
+  },
+  "qualification": "synthetic service benchmark; no production deployment or browser validation"
+}

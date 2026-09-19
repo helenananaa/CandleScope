@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import multiprocessing
+from copy import deepcopy
 from multiprocessing.process import BaseProcess
 from typing import Any
 
@@ -23,11 +24,18 @@ class IsolatedStrategyProvider:
         self._process: BaseProcess | None = None
         self._connection: Any = None
         self._identity: dict[str, Any] = {}
+        self._capabilities: ProviderCapabilities | None = None
+        self._terminated = False
 
     def describe(self) -> ProviderCapabilities:
-        return self._call("describe", timeout_s=5.0)
+        if self._terminated:
+            raise StrategyProviderError("PROVIDER_CRASH_UNRECOVERABLE", "provider is closed")
+        if self._capabilities is None:
+            self._capabilities = self._call("describe", timeout_s=5.0)
+        return deepcopy(self._capabilities)
 
     def prepare(self, context: dict[str, Any]) -> None:
+        self._capabilities = None
         self._call("prepare", dict(context), timeout_s=5.0)
         identity = self._call("identity", timeout_s=5.0)
         self._identity = dict(identity or {})
@@ -45,13 +53,19 @@ class IsolatedStrategyProvider:
         return self._call("snapshot", timeout_s=5.0)
 
     def restore(self, payload: dict[str, Any]) -> None:
+        self._capabilities = None
         self._call("restore", dict(payload), timeout_s=5.0)
 
     def close(self) -> str:
+        if self._terminated:
+            return ""
         try:
             return str(self._call("close", timeout_s=5.0))
         finally:
             self._terminate()
+
+    def abort(self) -> None:
+        self._terminate()
 
     def identity(self) -> dict[str, Any]:
         return dict(self._identity)
@@ -60,6 +74,8 @@ class IsolatedStrategyProvider:
         return dict(self._call("report_metadata", timeout_s=5.0) or {})
 
     def _ensure_started(self) -> None:
+        if self._terminated:
+            raise StrategyProviderError("PROVIDER_CRASH_UNRECOVERABLE", "provider is closed")
         if self._process is not None:
             if self._process.is_alive():
                 return
@@ -82,15 +98,16 @@ class IsolatedStrategyProvider:
 
     def _call(self, operation: str, payload: object = None, *, timeout_s: float) -> Any:
         self._ensure_started()
+        connection = self._connection
         try:
-            self._connection.send((operation, payload))
-            if not self._connection.poll(timeout_s):
+            connection.send((operation, payload))
+            if not connection.poll(timeout_s):
                 self._terminate()
                 raise StrategyProviderError(
                     "PROVIDER_TIMEOUT",
                     f"provider {operation} exceeded {timeout_s:.3f}s",
                 )
-            status, result = self._connection.recv()
+            status, result = connection.recv()
         except (BrokenPipeError, EOFError, OSError) as exc:
             self._terminate()
             raise StrategyProviderError(
@@ -103,6 +120,8 @@ class IsolatedStrategyProvider:
         raise StrategyProviderError(str(code), str(message))
 
     def _terminate(self) -> None:
+        self._terminated = True
+        self._capabilities = None
         connection, process = self._connection, self._process
         self._connection = None
         self._process = None

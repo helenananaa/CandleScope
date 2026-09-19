@@ -1,0 +1,28 @@
+{
+  "kind": "actual-spawned-worker-profile-not-latency-benchmark",
+  "child_elapsed_seconds": 12.644860100001097,
+  "inclusive_seconds": {
+    "checkpoint_provider_snapshot_encode": 0.24066790000506444,
+    "history_encode_and_budget": 1.6920421000140777,
+    "dual_snapshot_including_history": 1.718774700009817,
+    "checkpoint_json_compose": 0.4657435999761219,
+    "checkpoint_hash": 0.01969170000302256,
+    "checkpoint_database_publish": 0.8867546999827027,
+    "dual_checkpoints": 3.4411700000200653,
+    "dual_kernels_including_callbacks": 7.230187000001024,
+    "cost_sensitivity": 3.4372260000018287,
+    "report_and_persist": 0.8049153000029037
+  },
+  "calls": {
+    "checkpoint_provider_snapshot_encode": 102,
+    "history_encode_and_budget": 816,
+    "dual_snapshot_including_history": 102,
+    "checkpoint_json_compose": 102,
+    "checkpoint_hash": 102,
+    "checkpoint_database_publish": 102,
+    "dual_checkpoints": 102,
+    "dual_kernels_including_callbacks": 1,
+    "cost_sensitivity": 1,
+    "report_and_persist": 1
+  }
+}
