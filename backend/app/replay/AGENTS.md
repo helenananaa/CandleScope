@@ -90,8 +90,10 @@ leaderboard or requirement to prevent a user from editing their own local data.
   releasing leases. Track-1 alone owns legacy HEDGE compatibility rows.
 - Portfolio extrema must follow the reference global time/cohort order. A sum
   of independently timed market extrema is only a conservative risk bound, not
-  a historical portfolio peak or drawdown. Multi-interval enablement stays off
-  until financial, recovery and browser performance qualification all pass.
+  a historical portfolio peak or drawdown. Multi-interval acceleration defaults
+  on by explicit user direction (2026-09-13); retain the explicit off switch and
+  exact eligibility/risk fallbacks. Default enablement does not establish browser
+  performance qualification; report those measurements separately.
 - Multi-interval projection inputs are scoped to one SQL phase and reloaded at
   the next phase. Refresh shared equity after all tracks receive their pinned
   marks; retain the lowpoint and endpoint review frames separately. Pass the

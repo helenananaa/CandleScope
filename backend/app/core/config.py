@@ -104,7 +104,7 @@ class ReplaySettings:
     replay_segment_auto_gc_enabled: bool = False
     replay_segment_max_archive_bytes: int = 1_099_511_627_776
     replay_fast_forward_optimization_enabled: bool = False
-    replay_multi_bar_interval_enabled: bool = False
+    replay_multi_bar_interval_enabled: bool = True
     replay_historical_book_enabled: bool = False
     replay_historical_book_max_archive_bytes: int = 1_099_511_627_776
     replay_account_history_enabled: bool = False
@@ -302,7 +302,7 @@ def load_replay_settings(
             environment, "REPLAY_FAST_FORWARD_OPTIMIZATION_ENABLED", "0"
         ),
         replay_multi_bar_interval_enabled=_strict_replay_bool(
-            environment, "REPLAY_MULTI_BAR_INTERVAL_ENABLED", "0"
+            environment, "REPLAY_MULTI_BAR_INTERVAL_ENABLED", "1"
         ),
         replay_historical_book_enabled=_strict_replay_bool(
             environment, "REPLAY_HISTORICAL_BOOK_ENABLED", "1"
