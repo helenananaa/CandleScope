@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const de = {
+  ...nativeEnglish,
   "replay.portfolio.title": "Portfolio-Eigenkapital",
   "replay.portfolio.load": "Portfoliokurve laden / aktualisieren",
   "replay.portfolio.hint": "Stundenendwerte; der Drawdown berücksichtigt den gesamten Kursverlauf. Nach dem Fortschreiten aktualisieren. Nur aufgezeichnete Portfoliointervalle.",

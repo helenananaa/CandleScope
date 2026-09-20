@@ -138,6 +138,7 @@ class SimulationKernel:
     equity_curve_event_interval: int = 1
     equity_curve_mode: str | None = None
     scale_stream_decisions: bool = False
+    order_policy: Callable[[SimulatedOrder, MarketEvent], bool] | None = field(default=None, repr=False)
     execution_reporter: Callable[[dict], None] | None = field(
         default=None,
         repr=False,
@@ -877,6 +878,8 @@ class SimulationKernel:
             if order.status in {"OPEN", "PARTIAL"}
             and order.eligible_after_sequence <= event.sequence
         ]
+        if self.order_policy is not None:
+            open_orders = [order for order in open_orders if self.order_policy(order, event)]
         if not open_orders:
             return
         remaining_capacity = (
@@ -904,6 +907,8 @@ class SimulationKernel:
             self.ambiguity_count += 1
             for order in stop_hits:
                 if order.oco_group == group and order.status in {"OPEN", "PARTIAL"}:
+                    if self.order_policy is not None and not self.order_policy(order, event):
+                        continue
                     used = self._fill(
                         order,
                         event.sequence,
@@ -914,6 +919,8 @@ class SimulationKernel:
                     if remaining_capacity is not None:
                         remaining_capacity -= used
         for order in open_orders:
+            if self.order_policy is not None and not self.order_policy(order, event):
+                continue
             if order.status not in {"OPEN", "PARTIAL"}:
                 continue
             if remaining_capacity is not None and remaining_capacity <= 0:

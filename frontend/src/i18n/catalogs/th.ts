@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const th = {
+  ...nativeEnglish,
   "replay.portfolio.title": "มูลค่าสุทธิของพอร์ต",
   "replay.portfolio.load": "โหลด / รีเฟรชเส้นมูลค่าพอร์ต",
   "replay.portfolio.hint": "สุ่มตัวอย่างเมื่อสิ้นชั่วโมง การลดลงคำนวณจากเส้นทางราคาทั้งหมด รีเฟรชหลังเดินหน้า ครอบคลุมเฉพาะช่วงพอร์ตที่บันทึกไว้",

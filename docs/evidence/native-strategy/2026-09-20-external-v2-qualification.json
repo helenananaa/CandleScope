@@ -1,0 +1,333 @@
+{
+  "tests": {
+    "typecheck": "passed",
+    "i18n": "30 locales, 4306 keys passed",
+    "frontend_backtest": 134,
+    "backend_native_replay_external_simulation": 52,
+    "lint": "passed",
+    "installed_engine_interface": 11,
+    "pine_rust_lib": 1839,
+    "actual_install_new_integration": 14,
+    "build": "passed with existing chunk-size warning",
+    "fixed_failures": [
+      "Pine canonical positional exit arguments",
+      "OCO partial fills reduce sibling quantity",
+      "Invalid file upload disables Run"
+    ]
+  },
+  "installation": {
+    "wheels": {
+      "candlescope_plugin_pine_compat-0.3.0.dev1-py3-none-any.whl": "26e60dfc354b67f437807651649713ce7cc87a42a7d741353954e7a099dee81e",
+      "candlescope_plugin_pyne-0.3.0.dev1-py3-none-any.whl": "c3afa1a0c24fa8f7118e3d973b3f00aa57f0e7f307792d118cb8714ea2ea5aa0",
+      "candlescope_plugin_sdk-0.2.0-py3-none-any.whl": "19740297dbb9b35d44f6e4d07b154d34cfb7962085dca5da073981b370a1b06c",
+      "numpy-2.2.6-cp312-cp312-win_amd64.whl": "c1f9540be57940698ed329904db803cf7a402f3fc200bfe599334c9bd84a40b2",
+      "pine_compat_runtime-0.3.0rc1-cp310-abi3-win_amd64.whl": "e2bc3b51c2a246a724d1f482a182b067a0ada4f36763fd78dc5cb9cc1d4bf0e1",
+      "pyne_runtime-0.4.0-py3-none-any.whl": "f200c575ad00e36c8e8290f503675c8f8b962f535b05c9887ee1709f132a00fc"
+    },
+    "identities": {
+      "candlescope.pine-compat": {
+        "protocol": "candlescope.native-strategy/1",
+        "adapter": "pine-native/1",
+        "plugin": {
+          "package": "candlescope-plugin-pine-compat",
+          "version": "0.3.0.dev1",
+          "code_sha256": "08849acd7ce351bf60ac00b3ecd240cdac2766368301b452ca45f45daa5dfdfc"
+        },
+        "engine": {
+          "package": "pine-compat-runtime",
+          "version": "0.3.0rc1",
+          "code_sha256": "f27342bf3620e129c2c90978c78bc5b4e1a2686a7f4acc5136835bc3b59a1650"
+        },
+        "transport": {
+          "package": "candlescope-plugin-sdk",
+          "version": "0.2.0",
+          "code_sha256": "81d26bd296dc86c19b425e1ff06ee7dc8fc4a95887da6baff5f54fae16d375dd"
+        }
+      },
+      "candlescope.pine-compat.external": {
+        "protocol": "candlescope.native-strategy/1",
+        "adapter": "pine-external/1",
+        "plugin": {
+          "package": "candlescope-plugin-pine-compat",
+          "version": "0.3.0.dev1",
+          "code_sha256": "08849acd7ce351bf60ac00b3ecd240cdac2766368301b452ca45f45daa5dfdfc"
+        },
+        "engine": {
+          "package": "pine-compat-runtime",
+          "version": "0.3.0rc1",
+          "code_sha256": "f27342bf3620e129c2c90978c78bc5b4e1a2686a7f4acc5136835bc3b59a1650"
+        },
+        "transport": {
+          "package": "candlescope-plugin-sdk",
+          "version": "0.2.0",
+          "code_sha256": "81d26bd296dc86c19b425e1ff06ee7dc8fc4a95887da6baff5f54fae16d375dd"
+        }
+      },
+      "candlescope.pyne": {
+        "protocol": "candlescope.native-strategy/1",
+        "adapter": "pyne-native/1",
+        "plugin": {
+          "package": "candlescope-plugin-pyne",
+          "version": "0.3.0.dev1",
+          "code_sha256": "46eb3ef4b5dd5986c5661635de77db1270ca3f85ff31c63f65336f8ebce11cc1"
+        },
+        "engine": {
+          "package": "pyne-runtime",
+          "version": "0.4.0",
+          "code_sha256": "b1301d39fd3b0e5c8da6b9fb207b0a4bfc0a93ee5312e8a02f8ddd9c73350676"
+        },
+        "transport": {
+          "package": "candlescope-plugin-sdk",
+          "version": "0.2.0",
+          "code_sha256": "81d26bd296dc86c19b425e1ff06ee7dc8fc4a95887da6baff5f54fae16d375dd"
+        }
+      },
+      "candlescope.pyne.external": {
+        "protocol": "candlescope.native-strategy/1",
+        "adapter": "pyne-external/1",
+        "plugin": {
+          "package": "candlescope-plugin-pyne",
+          "version": "0.3.0.dev1",
+          "code_sha256": "46eb3ef4b5dd5986c5661635de77db1270ca3f85ff31c63f65336f8ebce11cc1"
+        },
+        "engine": {
+          "package": "pyne-runtime",
+          "version": "0.4.0",
+          "code_sha256": "b1301d39fd3b0e5c8da6b9fb207b0a4bfc0a93ee5312e8a02f8ddd9c73350676"
+        },
+        "transport": {
+          "package": "candlescope-plugin-sdk",
+          "version": "0.2.0",
+          "code_sha256": "81d26bd296dc86c19b425e1ff06ee7dc8fc4a95887da6baff5f54fae16d375dd"
+        }
+      }
+    },
+    "installation": "C:\\Users\\MECHREVO\\AppData\\Local\\CandleScope\\plugins\\native-installs\\bb1ab0ffd833514f020a8415d034cb2f393cda6ed337e2471736f4ded53c2ef4"
+  },
+  "source": {
+    "pyne_worktree": "E:/projects/pyne-external-broker",
+    "status": "Uncommitted local changes; original engine worktrees preserved",
+    "branch": "codex/external-broker-v1",
+    "pine_worktree": "E:/projects/pine-external-broker"
+  },
+  "scope": "External orders profile V2 and bar-close decisions with subsequent print/book matching",
+  "browser": {
+    "malformed_upload_disables_run": true,
+    "bars": 10,
+    "prints": 40,
+    "screenshots": [
+      "output/playwright/native-strategy/pine-book-v2.png",
+      "output/playwright/native-strategy/pyne-book-v2.png",
+      "output/playwright/native-strategy/pyne-trade-v2.png"
+    ],
+    "runs": [
+      {
+        "account_authority": "candlescope",
+        "fill_model": "TRADE_NEXT_PRINT_CONSERVATIVE_V1",
+        "fidelity": "AGG_TRADE_TAPE",
+        "state": "COMPLETED",
+        "host_identity": {
+          "code_sha256": "dcee97a6f70f0d67f0838ffbe6f80bad44f613ab298381fc574a6f449ed82541",
+          "contract": "external-broker/1",
+          "host_model": "BAR_CLOSE_MULTI_FIDELITY_V2"
+        },
+        "bars": 10,
+        "language": "pyne",
+        "fills": [
+          {
+            "action": "OPEN_LONG",
+            "event_time_ms": 1700000100000,
+            "fee": "0.000",
+            "order_id": "ord-1",
+            "position_after": "4.0",
+            "position_before": "0",
+            "price": "11.0",
+            "qty": "4.0",
+            "reason": "PRINT_THROUGH",
+            "sequence": 5,
+            "side": "BUY",
+            "time": 1700000100.0
+          },
+          {
+            "action": "REDUCE_LONG",
+            "event_time_ms": 1700000340000,
+            "fee": "0E-7",
+            "order_id": "ord-3",
+            "position_after": "2.00",
+            "position_before": "4.0",
+            "price": "4.9995",
+            "qty": "2.00",
+            "reason": "STOP_PRINT",
+            "sequence": 21,
+            "side": "SELL",
+            "time": 1700000340.0
+          }
+        ],
+        "identity": {
+          "adapter": "pyne-external/1",
+          "engine": {
+            "code_sha256": "b1301d39fd3b0e5c8da6b9fb207b0a4bfc0a93ee5312e8a02f8ddd9c73350676",
+            "package": "pyne-runtime",
+            "version": "0.4.0"
+          },
+          "plugin": {
+            "code_sha256": "46eb3ef4b5dd5986c5661635de77db1270ca3f85ff31c63f65336f8ebce11cc1",
+            "package": "candlescope-plugin-pyne",
+            "version": "0.3.0.dev1"
+          },
+          "protocol": "candlescope.native-strategy/1",
+          "transport": {
+            "code_sha256": "81d26bd296dc86c19b425e1ff06ee7dc8fc4a95887da6baff5f54fae16d375dd",
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.0"
+          }
+        },
+        "report_hash": "sha256:8dac7d011ef8573f338a1fae6aabff6ff89b8bfd11fbbc1cc820f92e52d8157d",
+        "input_hash": "sha256:4effb8510648cc11574b4706b96a7ea625163ebe2d2e308b157c55da073190cb",
+        "run_id": "native_abd3f49107ce46b0bbc4c8a885e7548b"
+      },
+      {
+        "account_authority": "candlescope",
+        "fill_model": "BOOK_ASSISTED_CONSERVATIVE_V1",
+        "fidelity": "BOOK_ASSISTED",
+        "state": "COMPLETED",
+        "host_identity": {
+          "code_sha256": "dcee97a6f70f0d67f0838ffbe6f80bad44f613ab298381fc574a6f449ed82541",
+          "contract": "external-broker/1",
+          "host_model": "BAR_CLOSE_MULTI_FIDELITY_V2"
+        },
+        "bars": 10,
+        "language": "pyne",
+        "fills": [
+          {
+            "action": "OPEN_LONG",
+            "event_time_ms": 1700000100000,
+            "fee": "0.00",
+            "order_id": "ord-1",
+            "position_after": "4.0",
+            "position_before": "0",
+            "price": "11.0",
+            "qty": "4.0",
+            "reason": "BOOK_CONSERVATIVE_LIMIT",
+            "sequence": 10,
+            "side": "BUY",
+            "time": 1700000100.0
+          },
+          {
+            "action": "REDUCE_LONG",
+            "event_time_ms": 1700000340000,
+            "fee": "0E-8",
+            "order_id": "ord-3",
+            "position_after": "2.00",
+            "position_before": "4.0",
+            "price": "4.89951",
+            "qty": "2.00",
+            "reason": "BOOK_ASSISTED_PRINT",
+            "sequence": 42,
+            "side": "SELL",
+            "time": 1700000340.0
+          }
+        ],
+        "identity": {
+          "adapter": "pyne-external/1",
+          "engine": {
+            "code_sha256": "b1301d39fd3b0e5c8da6b9fb207b0a4bfc0a93ee5312e8a02f8ddd9c73350676",
+            "package": "pyne-runtime",
+            "version": "0.4.0"
+          },
+          "plugin": {
+            "code_sha256": "46eb3ef4b5dd5986c5661635de77db1270ca3f85ff31c63f65336f8ebce11cc1",
+            "package": "candlescope-plugin-pyne",
+            "version": "0.3.0.dev1"
+          },
+          "protocol": "candlescope.native-strategy/1",
+          "transport": {
+            "code_sha256": "81d26bd296dc86c19b425e1ff06ee7dc8fc4a95887da6baff5f54fae16d375dd",
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.0"
+          }
+        },
+        "report_hash": "sha256:74a3ac359bb8f960f585f8f70322759241a837c73780077fe3ea0c205021faeb",
+        "input_hash": "sha256:7f77e68d9d8239b7fc590ef0c29b8bfcd03a35dfc745d139bb41d3a05e82dc9c",
+        "run_id": "native_ebc997bf3209444cb5296f8d535d2f6f"
+      },
+      {
+        "account_authority": "candlescope",
+        "fill_model": "BOOK_ASSISTED_CONSERVATIVE_V1",
+        "fidelity": "BOOK_ASSISTED",
+        "state": "COMPLETED",
+        "host_identity": {
+          "code_sha256": "dcee97a6f70f0d67f0838ffbe6f80bad44f613ab298381fc574a6f449ed82541",
+          "contract": "external-broker/1",
+          "host_model": "BAR_CLOSE_MULTI_FIDELITY_V2"
+        },
+        "bars": 10,
+        "language": "pine",
+        "fills": [
+          {
+            "action": "OPEN_LONG",
+            "event_time_ms": 1700000100000,
+            "fee": "0.00",
+            "order_id": "ord-1",
+            "position_after": "4.0",
+            "position_before": "0",
+            "price": "11.0",
+            "qty": "4.0",
+            "reason": "BOOK_CONSERVATIVE_LIMIT",
+            "sequence": 10,
+            "side": "BUY",
+            "time": 1700000100.0
+          },
+          {
+            "action": "REDUCE_LONG",
+            "event_time_ms": 1700000340000,
+            "fee": "0E-8",
+            "order_id": "ord-3",
+            "position_after": "2.00",
+            "position_before": "4.0",
+            "price": "4.89951",
+            "qty": "2.00",
+            "reason": "BOOK_ASSISTED_PRINT",
+            "sequence": 42,
+            "side": "SELL",
+            "time": 1700000340.0
+          }
+        ],
+        "identity": {
+          "adapter": "pine-external/1",
+          "engine": {
+            "code_sha256": "f27342bf3620e129c2c90978c78bc5b4e1a2686a7f4acc5136835bc3b59a1650",
+            "package": "pine-compat-runtime",
+            "version": "0.3.0rc1"
+          },
+          "plugin": {
+            "code_sha256": "08849acd7ce351bf60ac00b3ecd240cdac2766368301b452ca45f45daa5dfdfc",
+            "package": "candlescope-plugin-pine-compat",
+            "version": "0.3.0.dev1"
+          },
+          "protocol": "candlescope.native-strategy/1",
+          "transport": {
+            "code_sha256": "81d26bd296dc86c19b425e1ff06ee7dc8fc4a95887da6baff5f54fae16d375dd",
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.0"
+          }
+        },
+        "report_hash": "sha256:6943327d0b4476bd5dea84c018f03109f74db1b3ab058f453d0091f47a91c64b",
+        "input_hash": "sha256:b4b71e1fc17f807b4d12a8f22f4f43e50c401f975ad42e266ed280ffe20daa66",
+        "run_id": "native_f49b43d995ab441ebd282986d4812523"
+      }
+    ],
+    "console_errors": 0,
+    "book_updates": 40,
+    "aggregate_trade_label_verified": true
+  },
+  "limits": [
+    "Single net position, one pending entry, no pyramiding",
+    "Bar-close script decisions; no fill-triggered or tick-triggered script recalculation",
+    "Book assisted uses visible best bid/ask and prints; no queue-exact model",
+    "Frozen small fixture qualification; no production archive performance or queue calibration claim",
+    "Native replay remains historical-prefix rebuild",
+    "Local installation; no public release or desktop installer"
+  ],
+  "date": "2026-09-20"
+}

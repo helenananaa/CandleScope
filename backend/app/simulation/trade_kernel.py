@@ -81,6 +81,7 @@ class TradeSimulationKernel:
     equity_curve: list[dict] = field(default_factory=list)
     equity_curve_event_interval: int = 1
     equity_curve_mode: str | None = None
+    order_policy: Callable[[SimulatedOrder, MarketEvent], bool] | None = field(default=None, repr=False)
     execution_reporter: Callable[[dict], None] | None = field(
         default=None,
         repr=False,
@@ -802,12 +803,17 @@ class TradeSimulationKernel:
             and self._order_eligible_time_ms.get(order.order_id, 0)
             <= event.event_time_ms
         ]
+        if self.order_policy is not None:
+            for order in open_orders:
+                self.order_policy(order, event)
         remaining = (
             qty * self.participation_rate
             if self.execution_model_revision == EXECUTION_REALISM_V2
             else qty
         )
         for order in open_orders:
+            if self.order_policy is not None and not self.order_policy(order, event):
+                continue
             if remaining <= 0:
                 break
             if order.status not in {"OPEN", "PARTIAL"}:
@@ -901,7 +907,7 @@ class TradeSimulationKernel:
             self.maker_fee_bps
             if maker or (
                 order.type in {"LIMIT", "STOP_LIMIT"}
-                and reason != "PRINT_THROUGH"
+                and reason not in {"PRINT_THROUGH", "DEPTH_WALK"}
             )
             else self.taker_fee_bps
         )

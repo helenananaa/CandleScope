@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const id = {
+  ...nativeEnglish,
   "replay.portfolio.title": "Ekuitas portofolio",
   "replay.portfolio.load": "Muat / perbarui kurva portofolio",
   "replay.portfolio.hint": "Sampel akhir jam; penurunan menggunakan seluruh jalur harga. Perbarui setelah maju. Hanya interval portofolio yang tercatat.",

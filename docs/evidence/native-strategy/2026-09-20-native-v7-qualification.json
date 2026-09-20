@@ -1,0 +1,366 @@
+{
+  "schema": "candlescope.native-strategy.qualification/1",
+  "date": "2026-09-20",
+  "stage": "native-v7",
+  "delivery": "local installed bundle activated; source uncommitted; no public release or desktop package",
+  "active_registry": "C:\\Users\\MECHREVO\\AppData\\Local\\CandleScope\\plugins\\native-strategy-registry.json",
+  "active_bundle": "a9ac8222a004bb793a23df3114d2f4744eb9ae0490fceeeb8a42913d1b7d0bf7",
+  "previous_bundle": "dbbe8c5eab1747fb24baf779627185a857bf35801ebc296855c0b49d2f3a272e",
+  "installation": {
+    "wheels": {
+      "candlescope_plugin_pine_compat-0.3.0.dev1-py3-none-any.whl": "90ad73463e44c9f8eab99d36e9957b1e51d53baefe8e69febe20fefbcd4d1e18",
+      "candlescope_plugin_pyne-0.3.0.dev1-py3-none-any.whl": "50d5f072874b18e3c8f71f103d1e22135dc2434db5d0b70f5ebaa0fa7379286e",
+      "candlescope_plugin_sdk-0.2.0-py3-none-any.whl": "461fa6078c18cb258d56c56b3d4d1781378add904f207d5de5b2c3370efac6fc",
+      "numpy-2.2.6-cp312-cp312-win_amd64.whl": "c1f9540be57940698ed329904db803cf7a402f3fc200bfe599334c9bd84a40b2",
+      "pine_compat_runtime-0.3.0rc1-cp310-abi3-win_amd64.whl": "a1a757345ecd0f7a4f7723f00f82612eaa652915bc16c2013319dacbc4c1f876",
+      "pyne_runtime-0.4.0-py3-none-any.whl": "468e7641d95f516ae02725cac9e54f01c71697b411473982f7dba8dd40e8f1c9"
+    },
+    "identities": {
+      "candlescope.pine-compat": {
+        "protocol": "candlescope.native-strategy/1",
+        "adapter": "pine-native/2",
+        "plugin": {
+          "package": "candlescope-plugin-pine-compat",
+          "version": "0.3.0.dev1",
+          "code_sha256": "a8c8da9f743e7d29a5802781182e9791238417d584367b2e3bf7a43921b7c2c0"
+        },
+        "engine": {
+          "package": "pine-compat-runtime",
+          "version": "0.3.0rc1",
+          "code_sha256": "ae46704ffcce989b4e9f192932314314051919951c53bb723d548969bee37a64"
+        },
+        "transport": {
+          "package": "candlescope-plugin-sdk",
+          "version": "0.2.0",
+          "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6"
+        },
+        "historical_session": "fixed-history/1"
+      },
+      "candlescope.pine-compat.external": {
+        "protocol": "candlescope.native-strategy/1",
+        "adapter": "pine-external/5",
+        "plugin": {
+          "package": "candlescope-plugin-pine-compat",
+          "version": "0.3.0.dev1",
+          "code_sha256": "a8c8da9f743e7d29a5802781182e9791238417d584367b2e3bf7a43921b7c2c0"
+        },
+        "engine": {
+          "package": "pine-compat-runtime",
+          "version": "0.3.0rc1",
+          "code_sha256": "ae46704ffcce989b4e9f192932314314051919951c53bb723d548969bee37a64"
+        },
+        "transport": {
+          "package": "candlescope-plugin-sdk",
+          "version": "0.2.0",
+          "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6"
+        }
+      },
+      "candlescope.pyne": {
+        "protocol": "candlescope.native-strategy/1",
+        "adapter": "pyne-native/1",
+        "plugin": {
+          "package": "candlescope-plugin-pyne",
+          "version": "0.3.0.dev1",
+          "code_sha256": "c3eb16dfa97b51a6897a54626a7e25ed776e310def0ff0f30da4d4a2ce5d9f87"
+        },
+        "engine": {
+          "package": "pyne-runtime",
+          "version": "0.4.0",
+          "code_sha256": "a2a7daffb910595daa123d647c7e48603c0615ffb6810bc57b492fd71797d641"
+        },
+        "transport": {
+          "package": "candlescope-plugin-sdk",
+          "version": "0.2.0",
+          "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6"
+        },
+        "historical_session": "fixed-history/1"
+      },
+      "candlescope.pyne.external": {
+        "protocol": "candlescope.native-strategy/1",
+        "adapter": "pyne-external/4",
+        "plugin": {
+          "package": "candlescope-plugin-pyne",
+          "version": "0.3.0.dev1",
+          "code_sha256": "c3eb16dfa97b51a6897a54626a7e25ed776e310def0ff0f30da4d4a2ce5d9f87"
+        },
+        "engine": {
+          "package": "pyne-runtime",
+          "version": "0.4.0",
+          "code_sha256": "a2a7daffb910595daa123d647c7e48603c0615ffb6810bc57b492fd71797d641"
+        },
+        "transport": {
+          "package": "candlescope-plugin-sdk",
+          "version": "0.2.0",
+          "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6"
+        }
+      }
+    },
+    "installation": "C:\\Users\\MECHREVO\\AppData\\Local\\CandleScope\\plugins\\native-installs\\a9ac8222a004bb793a23df3114d2f4744eb9ae0490fceeeb8a42913d1b7d0bf7"
+  },
+  "host_runtime_identity": {
+    "contract": "external-broker/1",
+    "host_model": "DEPTH_QUEUE_PERSISTENT_EVALUATOR_V7",
+    "code_sha256": "fe913eaea18499826f6ee3d21f8cef7975958db6063581432b0ccfb485b85b0e"
+  },
+  "capabilities": [
+    "full L2 depth walk and explicitly assumed pessimistic FIFO",
+    "single authoritative host ledger with per-level fill feedback",
+    "six native drawing object families",
+    "one bounded isolated evaluator process per host run",
+    "archive-backed BAR and aggregate-trade feedback benchmarks"
+  ],
+  "tests": {
+    "backend-final": {
+      "passed": 171,
+      "log": "output/native-v7/backend-final.log"
+    },
+    "active-install-tests": {
+      "passed": 24,
+      "log": "output/native-v7/active-install-tests.log"
+    },
+    "new-tests": {
+      "passed": 37,
+      "log": "output/native-v7/new-tests.log"
+    },
+    "frontend": {
+      "passed": 143,
+      "log": "output/native-v7/frontend-tests.log"
+    }
+  },
+  "installed_worker_cleanup": "timeout reaped both Windows venv launcher and underlying interpreter; output/native-v7/installed-worker-cleanup.log",
+  "frontend_checks": {
+    "typecheck": "passed",
+    "i18n": "passed: 30 locales",
+    "eslint_native": "passed",
+    "production_build": "passed; existing large chunk warning"
+  },
+  "performance": {
+    "source": {
+      "date": "2026-06-01",
+      "exchange": "binance",
+      "first_agg_trade_id": 3307171206,
+      "first_trade_time_ms": 1780272000093,
+      "last_agg_trade_id": 3308814747,
+      "last_trade_time_ms": 1780358399294,
+      "market_type": "futures",
+      "row_count": 1643542,
+      "schema_version": "binance-public-agg-trade.v1",
+      "source_checksum_sha256": "53f34f927278bb7fbe6cb9ea3eed8a2ce239c53f51da800a577aa687f511d838",
+      "source_file": "BTCUSDT-aggTrades-2026-06-01.zip",
+      "source_url": "https://data.binance.vision/data/futures/um/daily/aggTrades/BTCUSDT/BTCUSDT-aggTrades-2026-06-01.zip",
+      "symbol": "BTCUSDT"
+    },
+    "parquet_objects_verified": 17,
+    "archive_seconds": 0.3588912999985041,
+    "scope": "archive verification, fixed input, real external plugin IPC, kernel/account/report; excludes UI paint and production DB scheduling",
+    "runs": [
+      {
+        "language": "pine",
+        "mode": "BAR_APPROX",
+        "bars": 60,
+        "events": 0,
+        "persistent_worker": false,
+        "fill_recalculation": false,
+        "admission_seconds": 1.3000026228837669e-06,
+        "input_hash": "sha256:fdf39d9650a26d5c1f6a452a58956be8835ab4960fca7d37a93eaebf35bfd8ca",
+        "execution_seconds": 26.046205800004827,
+        "status": "passed",
+        "encoding_seconds": 0.0007483000008505769,
+        "report_bytes": 25735,
+        "fills": 1,
+        "report_hash": "sha256:f1abd10abccb7586be5469760a158042942807d7460468afb82b5af799cd8e0b"
+      },
+      {
+        "language": "pine",
+        "mode": "BAR_APPROX",
+        "bars": 60,
+        "events": 0,
+        "persistent_worker": true,
+        "fill_recalculation": false,
+        "admission_seconds": 1.3000026228837669e-06,
+        "input_hash": "sha256:fdf39d9650a26d5c1f6a452a58956be8835ab4960fca7d37a93eaebf35bfd8ca",
+        "execution_seconds": 0.46557580000080634,
+        "status": "passed",
+        "encoding_seconds": 0.0007837000011932105,
+        "report_bytes": 25735,
+        "fills": 1,
+        "report_hash": "sha256:f1abd10abccb7586be5469760a158042942807d7460468afb82b5af799cd8e0b"
+      },
+      {
+        "language": "pine",
+        "mode": "BAR_APPROX",
+        "bars": 1440,
+        "events": 0,
+        "persistent_worker": true,
+        "fill_recalculation": false,
+        "admission_seconds": 2.6999987312592566e-06,
+        "input_hash": "sha256:8b968e3d08deb6a0cd5594e10624d5246eebbc0bdc034b6b5a9411464dbfc58f",
+        "execution_seconds": 31.557855699997162,
+        "status": "passed",
+        "encoding_seconds": 0.018475899996701628,
+        "report_bytes": 551906,
+        "fills": 23,
+        "report_hash": "sha256:8c5bfe57c1cfda5859edf08e3d90b2df362e0ee504e8ec32fb4fbb63984ed7fa"
+      },
+      {
+        "language": "pine",
+        "mode": "TRADE_TAPE",
+        "bars": 120,
+        "events": 106420,
+        "persistent_worker": true,
+        "fill_recalculation": false,
+        "admission_seconds": 1.6506325999944238,
+        "input_hash": "sha256:415df4ed828eb7adf2cc658888549d031d3b168aae3443829fb7baa9eded4a9d",
+        "execution_seconds": 2.874403399997391,
+        "status": "passed",
+        "encoding_seconds": 0.38126509999710834,
+        "report_bytes": 16170217,
+        "fills": 2,
+        "report_hash": "sha256:c8844ef40676028b5dbbc7b751266e14998119bd1277ec3d82af5d3e084a3aea"
+      },
+      {
+        "language": "pine",
+        "mode": "TRADE_TAPE",
+        "bars": 120,
+        "events": 106420,
+        "persistent_worker": true,
+        "fill_recalculation": true,
+        "admission_seconds": 1.363973999999871,
+        "input_hash": "sha256:a9a55b93c5ad1afcada992a9bbf199597d6ba37e4194dd7d282566839285abe7",
+        "execution_seconds": 3.241507000006095,
+        "status": "passed",
+        "encoding_seconds": 0.399921500000346,
+        "report_bytes": 16102961,
+        "fills": 4,
+        "report_hash": "sha256:27d067ca124bae6595a4d5ca0af0e19ee6ed73f3ce72b225a7564d633e35118a"
+      },
+      {
+        "language": "pyne",
+        "mode": "BAR_APPROX",
+        "bars": 60,
+        "events": 0,
+        "persistent_worker": false,
+        "fill_recalculation": false,
+        "admission_seconds": 7.500006176996976e-06,
+        "input_hash": "sha256:380e8affbd9866e2a0a23913bddb593dec06a6998e36ecc7eb12921c392c6fb2",
+        "execution_seconds": 65.10224439999729,
+        "status": "passed",
+        "encoding_seconds": 0.002186400000937283,
+        "report_bytes": 28640,
+        "fills": 1,
+        "report_hash": "sha256:93e15bc901406f00678a91cfa19ef755c5262c53fe5d93963461bcfb5ebd4eb9"
+      },
+      {
+        "language": "pyne",
+        "mode": "BAR_APPROX",
+        "bars": 60,
+        "events": 0,
+        "persistent_worker": true,
+        "fill_recalculation": false,
+        "admission_seconds": 2.2000021999701858e-06,
+        "input_hash": "sha256:380e8affbd9866e2a0a23913bddb593dec06a6998e36ecc7eb12921c392c6fb2",
+        "execution_seconds": 1.3427461000028416,
+        "status": "passed",
+        "encoding_seconds": 0.0012949000010848977,
+        "report_bytes": 28640,
+        "fills": 1,
+        "report_hash": "sha256:93e15bc901406f00678a91cfa19ef755c5262c53fe5d93963461bcfb5ebd4eb9"
+      },
+      {
+        "language": "pyne",
+        "mode": "BAR_APPROX",
+        "bars": 1440,
+        "events": 0,
+        "persistent_worker": true,
+        "fill_recalculation": false,
+        "admission_seconds": 3.3999967854470015e-06,
+        "input_hash": "sha256:0593df6bbaf82e05c33bb2b5233b60ff2f833974efc65a2c5394172c07854590",
+        "status": "failed",
+        "execution_seconds": 120.06591159999516,
+        "error": "NATIVE_TIMEOUT: host matching exceeded deadline"
+      },
+      {
+        "language": "pyne",
+        "mode": "TRADE_TAPE",
+        "bars": 120,
+        "events": 106420,
+        "persistent_worker": true,
+        "fill_recalculation": false,
+        "admission_seconds": 1.5636421000017435,
+        "input_hash": "sha256:ebfc8fa804faac2387d3796cb39ee0e7ecb08de8bf9ebfa29fe4644321d39ea7",
+        "execution_seconds": 4.358925299995462,
+        "status": "passed",
+        "encoding_seconds": 0.374802099999215,
+        "report_bytes": 16175884,
+        "fills": 2,
+        "report_hash": "sha256:d1d9c4ae58341b42a7ad3770ff6a4ed326669178d72de867d802a4fbcf3b1a61"
+      },
+      {
+        "language": "pyne",
+        "mode": "TRADE_TAPE",
+        "bars": 120,
+        "events": 106420,
+        "persistent_worker": true,
+        "fill_recalculation": true,
+        "admission_seconds": 1.2234156000049552,
+        "input_hash": "sha256:85d8abfefff8572e1d1fd611719f90ef9b13739d73887ceb7dee6458fa2f279a",
+        "execution_seconds": 4.914082499999495,
+        "status": "passed",
+        "encoding_seconds": 0.41893809999601217,
+        "report_bytes": 16108477,
+        "fills": 4,
+        "report_hash": "sha256:f36b5745ec56663a295406063e90d06e0e26546cacaaf5596d41e390f7d8505e"
+      }
+    ]
+  },
+  "performance_status": "partial: Pyne full-day BAR exceeded the unchanged 120-second deadline during concurrent regressions",
+  "performance_conditions": "single sample per workload; concurrent regression activity, no isolated throughput or UI claim",
+  "browser": {
+    "status": "not_verified",
+    "reason": "automatic approval rejected local server and browser launch; returned blocked by policy without further detail"
+  },
+  "limitations": [
+    "L2 queue is an explicit approximation, not exchange order priority or real-depth archive calibration",
+    "fonts, labels, curves and table placement are not original-platform pixel parity",
+    "plotcandle/plotbar, plotshape/plotchar/plotarrow, background and gradient series outputs not fully rendered",
+    "prefix reconstruction remains; Pyne 1440-bar run timed out under concurrent load; measured callback workload has four fills, not high-frequency fill stress",
+    "performance excludes production DB scheduling and browser paint",
+    "browser visual acceptance remains unverified"
+  ],
+  "source_sha256": {
+    "backend/app/backtest/external.py": "cfd9162008f6d66ba807d6b5ffddebe4ca9acd8caeb5b8845cc0f8d3dac19c53",
+    "backend/app/backtest/external_feedback.py": "b0bb865a8cf120325635c96408c2b5a626ce29f144853c3ff8f6e7fe524e9ae5",
+    "backend/app/backtest/external_market.py": "df5b1025404b008da40c21f04a252878aa74bbe707278ac506fd146b480ac0d2",
+    "backend/app/backtest/external_orders.py": "16bb30fb27a7b9cbdb0f38448b0e51b521acbbc8ec1a436d59d3460ea481f700",
+    "backend/app/backtest/native_session.py": "550bf8b47d5c7c73fc86654868b53be882969dad08386421b9ccf2806b4a596e",
+    "backend/app/backtest/native.py": "450cf9b4b74ba775f33d49941588683a325b41dce1fba25d7d839987d5444260",
+    "backend/app/api/v1/native_backtests.py": "b1d92c66c21ab0dabc238dd4c8736d231c71ae03544084729f52e964b0454385",
+    "backend/app/simulation/book_kernel.py": "c5a66a4c814c3d536252eea94e08c4aed63714f9a93d164a93bf61a2b99d093d",
+    "backend/app/simulation/contract_accounting.py": "2f82655b0f707673928418ff98cd3fa2dae1ee100b9081af05fa7bb9483d3fe0",
+    "backend/app/simulation/cost_sensitivity.py": "0d6cad015c5b94e11ee94744a0c5667d7855cfbea773a13ded77e937bfc49d8b",
+    "backend/app/simulation/depth_kernel.py": "94cf9a9037584a64cd31fba0173b4532f8e6d0a78cf1b00d9ae6d5426b2ac5a3",
+    "backend/app/simulation/dual_clock_kernel.py": "d89088a43a283fba074232f6d0893371349d45267edde93e5374e16bc00d4dd4",
+    "backend/app/simulation/execution_realism.py": "aa00342bbb6db165e123de39aa936340173abbb33aaf9605c2686a89a4c087fa",
+    "backend/app/simulation/kernel.py": "f0ec38a20a3327d8e77f34047e525a628bf7785313e0ae796e127fbf1cb9caf0",
+    "backend/app/simulation/linear_perp_account_v2.py": "8e8f7735b03ca550e815b1d6ef9c32cfbfb26905416220fc75d6e7bb33b4c4e7",
+    "backend/app/simulation/portfolio.py": "52604998c3b6ca72110c581df8dc4bdd76e4f0fc10ee0bd3a4a0ffcef018ab84",
+    "backend/app/simulation/trade_bar_builder.py": "f2caf9691faab0f166820dd6bc9bee22e13d4fc693830b5b4205a26512dbe0a8",
+    "backend/app/simulation/trade_kernel.py": "7f7bb6c760c8980a7ac7465d710de9e647ad9801cb9ec5523344f6313f7f8226",
+    "backend/app/simulation/__init__.py": "0c800dfef85c9070eee853b0fdd17ce2a64b7a639d50c7dd24b414295fc2a139",
+    "frontend/src/features/backtest/native/NativeAdvancedInputs.tsx": "645632cb7d4fe7fb52166dfcb3cda39e69c4610f81dc4e3d45b06e018e5caed2",
+    "frontend/src/features/backtest/native/nativeBacktest.test.tsx": "04cd13203537bc59bf954fe7ed60abab451d76991fe11530bcb69a35a286ba29",
+    "frontend/src/features/backtest/native/nativeBacktestApi.ts": "9f6df505a042035399bc0992aefc1252a5ca992caa4b9162cfb7d3a1d6b4c16c",
+    "frontend/src/features/backtest/native/nativeDrawingModel.ts": "bb7c38e4405d3126bae685e279b00a970477d8e3f8cffa7c491c18a895868ea0",
+    "frontend/src/features/backtest/native/nativeDrawings.test.tsx": "4fe0a573189ac9cdf40f5e254ea712188329868426b8e548547d4f1b6ca9847c",
+    "frontend/src/features/backtest/native/NativeDrawingScene.tsx": "a2e7e273ec1bb22c2170636cb26daa5a0d8fa489f4c121d3229eb00e777bbe77",
+    "frontend/src/features/backtest/native/nativeInputs.test.ts": "b2ef9d15947c2a8505fbca995fd90298db422d428ed0827ff3b880ced10a12a7",
+    "frontend/src/features/backtest/native/nativeInputs.ts": "d0fdda5d55d72faae66f8096359c5848b78e9c73ea39e2bc1f87c16f4c25e29d",
+    "frontend/src/features/backtest/native/NativeReplayControls.tsx": "36c838cb424a1212e57fb508b9e23ad7372d0fe9536e9fee29928d817ffe5d78",
+    "frontend/src/features/backtest/native/nativeStrategy.css": "e1c153e30c517053d10515ba681b99561d9ad5fad97e9cc4168bf38e8fde30ac",
+    "frontend/src/features/backtest/native/NativeStrategyPanel.tsx": "f62e991b945fbd98a96e53c1da1b8245677f8b5dbcd0aeb84db25ac8341dabac",
+    "frontend/src/features/backtest/native/NativeStrategyReport.tsx": "707207bad5e3f3ce99236a9956b8c7ccc459c187198026450173dd09b01e6167",
+    "frontend/src/features/backtest/native/fixtures/pine-drawings.json": "78716ddef953b9f144447226dd8353be38e2f768c7a63cbdf4f80220c7d0d792",
+    "frontend/src/features/backtest/native/fixtures/pyne-drawings.json": "02f8cc836b9b69bea04281556776372a8613a2eb45bb1d95a37b9b6d64c92184",
+    "backend/scripts/benchmark_native_v7.py": "e9d8fd6b8c517ebe58e406bb20c730076e4f552fa898f168c48b67f203a18af5"
+  }
+}

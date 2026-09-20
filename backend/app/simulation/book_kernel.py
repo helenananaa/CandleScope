@@ -10,7 +10,7 @@ from app.market_dataset.snapshot import MarketDatasetError, MarketEvent
 from app.market_dataset.trades import assert_trade_stream
 from app.market_dataset.snapshot import sha256_hex
 from app.simulation.kernel import SimulationResult
-from app.simulation.trade_kernel import TradeSimulationKernel, _print_crosses_limit
+from app.simulation.trade_kernel import TradeSimulationKernel, _print_crosses_limit, _print_triggers_stop
 
 BOOK_FILL_POLICY = "BOOK_ASSISTED_CONSERVATIVE_V1"
 StrategyFn = Callable[[tuple[MarketEvent, ...], MarketEvent], list[dict]]
@@ -134,15 +134,26 @@ class BookAssistedKernel(TradeSimulationKernel):
             if order.status in {"OPEN", "PARTIAL"}
             and order.eligible_after_sequence <= event.sequence
         ]
+        if self.order_policy is not None:
+            for order in open_orders:
+                self.order_policy(order, event)
         for order in open_orders:
+            if self.order_policy is not None and not self.order_policy(order, event):
+                continue
             if remaining <= 0:
                 break
-            if order.type == "MARKET":
+            if order.status not in {"OPEN", "PARTIAL"}:
+                continue
+            if order.type in {"STOP", "STOP_LIMIT"} and _print_triggers_stop(order, print_price):
+                order.activated = True
+            if order.type == "MARKET" or (order.type == "STOP" and order.activated):
                 price = ask if order.side == "BUY" else bid
+                slip = price * self.slippage_bps / Decimal("10000")
+                price = price + slip if order.side == "BUY" else price - slip
                 fill_qty = min(order.qty, remaining)
                 self._fill(order, event.sequence, price, fill_qty, "BOOK_ASSISTED_PRINT")
                 remaining -= fill_qty
-            elif order.type == "LIMIT" and order.limit_price is not None:
+            elif (order.type == "LIMIT" or (order.type == "STOP_LIMIT" and order.activated)) and order.limit_price is not None:
                 opposite = ask if order.side == "BUY" else bid
                 crossed = (
                     opposite <= order.limit_price

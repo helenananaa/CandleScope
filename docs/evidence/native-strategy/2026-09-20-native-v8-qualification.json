@@ -1,0 +1,511 @@
+{
+  "schema": "candlescope.native-strategy.qualification/1",
+  "date": "2026-09-20",
+  "stage": "native-v8",
+  "delivery": "local installed candidate, uncommitted source; no public release or desktop package",
+  "active_registry": "C:\\Users\\MECHREVO\\AppData\\Local\\CandleScope\\plugins\\native-strategy-registry.json",
+  "active_bundle": "e4b09a68d69960e14c71c695c9fcd59d12a87de70efc09a10fe32a9b8b5bba1d",
+  "previous_bundle": "a9ac8222a004bb793a23df3114d2f4744eb9ae0490fceeeb8a42913d1b7d0bf7",
+  "installation": {
+    "wheels": {
+      "candlescope_plugin_pine_compat-0.3.0.dev1-py3-none-any.whl": "90ad73463e44c9f8eab99d36e9957b1e51d53baefe8e69febe20fefbcd4d1e18",
+      "candlescope_plugin_pyne-0.3.0.dev1-py3-none-any.whl": "50d5f072874b18e3c8f71f103d1e22135dc2434db5d0b70f5ebaa0fa7379286e",
+      "candlescope_plugin_sdk-0.2.0-py3-none-any.whl": "461fa6078c18cb258d56c56b3d4d1781378add904f207d5de5b2c3370efac6fc",
+      "numpy-2.2.6-cp312-cp312-win_amd64.whl": "c1f9540be57940698ed329904db803cf7a402f3fc200bfe599334c9bd84a40b2",
+      "pine_compat_runtime-0.3.0rc1-cp310-abi3-win_amd64.whl": "a1a757345ecd0f7a4f7723f00f82612eaa652915bc16c2013319dacbc4c1f876",
+      "pyne_runtime-0.4.0-py3-none-any.whl": "51caec630c66b797efc0300dad0a9b253bc0fd60ca90a63d25bf0fda885ca9e3"
+    },
+    "identities": {
+      "candlescope.pine-compat": {
+        "protocol": "candlescope.native-strategy/1",
+        "adapter": "pine-native/2",
+        "plugin": {
+          "package": "candlescope-plugin-pine-compat",
+          "version": "0.3.0.dev1",
+          "code_sha256": "a8c8da9f743e7d29a5802781182e9791238417d584367b2e3bf7a43921b7c2c0"
+        },
+        "engine": {
+          "package": "pine-compat-runtime",
+          "version": "0.3.0rc1",
+          "code_sha256": "ae46704ffcce989b4e9f192932314314051919951c53bb723d548969bee37a64"
+        },
+        "transport": {
+          "package": "candlescope-plugin-sdk",
+          "version": "0.2.0",
+          "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6"
+        },
+        "historical_session": "fixed-history/1"
+      },
+      "candlescope.pine-compat.external": {
+        "protocol": "candlescope.native-strategy/1",
+        "adapter": "pine-external/5",
+        "plugin": {
+          "package": "candlescope-plugin-pine-compat",
+          "version": "0.3.0.dev1",
+          "code_sha256": "a8c8da9f743e7d29a5802781182e9791238417d584367b2e3bf7a43921b7c2c0"
+        },
+        "engine": {
+          "package": "pine-compat-runtime",
+          "version": "0.3.0rc1",
+          "code_sha256": "ae46704ffcce989b4e9f192932314314051919951c53bb723d548969bee37a64"
+        },
+        "transport": {
+          "package": "candlescope-plugin-sdk",
+          "version": "0.2.0",
+          "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6"
+        }
+      },
+      "candlescope.pyne": {
+        "protocol": "candlescope.native-strategy/1",
+        "adapter": "pyne-native/1",
+        "plugin": {
+          "package": "candlescope-plugin-pyne",
+          "version": "0.3.0.dev1",
+          "code_sha256": "c3eb16dfa97b51a6897a54626a7e25ed776e310def0ff0f30da4d4a2ce5d9f87"
+        },
+        "engine": {
+          "package": "pyne-runtime",
+          "version": "0.4.0",
+          "code_sha256": "92d002bd47242c1709f0554010a26dba8154530f2de1ed176e3d730688315912"
+        },
+        "transport": {
+          "package": "candlescope-plugin-sdk",
+          "version": "0.2.0",
+          "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6"
+        },
+        "historical_session": "fixed-history/1"
+      },
+      "candlescope.pyne.external": {
+        "protocol": "candlescope.native-strategy/1",
+        "adapter": "pyne-external/4",
+        "plugin": {
+          "package": "candlescope-plugin-pyne",
+          "version": "0.3.0.dev1",
+          "code_sha256": "c3eb16dfa97b51a6897a54626a7e25ed776e310def0ff0f30da4d4a2ce5d9f87"
+        },
+        "engine": {
+          "package": "pyne-runtime",
+          "version": "0.4.0",
+          "code_sha256": "92d002bd47242c1709f0554010a26dba8154530f2de1ed176e3d730688315912"
+        },
+        "transport": {
+          "package": "candlescope-plugin-sdk",
+          "version": "0.2.0",
+          "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6"
+        }
+      }
+    },
+    "installation": "C:\\Users\\MECHREVO\\AppData\\Local\\CandleScope\\plugins\\native-installs\\e4b09a68d69960e14c71c695c9fcd59d12a87de70efc09a10fe32a9b8b5bba1d"
+  },
+  "tests": {
+    "core-full": {
+      "passed": 1252,
+      "log": "output/native-v8/core-full.log"
+    },
+    "installed-tests": {
+      "passed": 47,
+      "log": "output/native-v8/installed-tests.log"
+    },
+    "active-install-tests": {
+      "passed": 24,
+      "log": "output/native-v8/active-install-tests.log"
+    },
+    "frontend": {
+      "passed": 149,
+      "log": "output/native-v8/frontend-final.log"
+    }
+  },
+  "frontend_checks": {
+    "typecheck": "passed",
+    "eslint": "passed",
+    "i18n": "passed, 30 locales",
+    "production_build": "passed, large chunk advisory"
+  },
+  "capabilities": [
+    "runtime candles and Pine OHLC bars",
+    "characters/shapes/arrows",
+    "background/bar colors including Pine numeric RGBA",
+    "horizontal lines, ordinary fills and Pine vertical gradients",
+    "ordinary Python callback dispatch without reflection",
+    "scalar bar copy fast path with nested-data isolation"
+  ],
+  "browser": {
+    "status": "passed for component preview and isolated full application",
+    "scope": "five fixture bars, final installed engines, private backend database, loopback services; not production or desktop package",
+    "screenshot": "output/playwright/native-v8/report.png",
+    "html": "output/playwright/native-v8/report.html",
+    "source_check": {
+      "before": "B5E66A9810E3604784D7CA71A6F79FE0EA2427F00F8DBF985898B91BDEA2FF3F",
+      "after": "B5E66A9810E3604784D7CA71A6F79FE0EA2427F00F8DBF985898B91BDEA2FF3F",
+      "equal": true
+    },
+    "preview_console": "favicon.ico 404 only; no page script errors",
+    "application_checks": [
+      "Pine native run and report graphics, step and seek to 5/5",
+      "Pyne native run and report graphics; one closed trade, entry 11 exit 13 qty 1 profit 2",
+      "Pyne step, save snapshot at 1/5, seek to 5/5, restore to 1/5 paused",
+      "Host execution mode presents BAR_APPROX, TRADE_TAPE, BOOK_ASSISTED, BOOK_DEPTH choices"
+    ],
+    "application_artifacts": [
+      "output/playwright/native-v8/app-pine.yml",
+      "output/playwright/native-v8/app-pine-replay.yml",
+      "output/playwright/native-v8/app-pyne.png",
+      "output/playwright/native-v8/app-pyne.yml",
+      "output/playwright/native-v8/app-pyne-replay.yml",
+      "output/playwright/native-v8/app-pyne-restored.yml",
+      "output/playwright/native-v8/app-host-mode.yml"
+    ],
+    "services": "owned preview and application services and browsers closed",
+    "limits": "fixture-sized browser acceptance; host mode selector inspected, matching qualified by installed backend tests"
+  },
+  "performance": {
+    "archive": {
+      "date": "2026-06-01",
+      "exchange": "binance",
+      "first_agg_trade_id": 3307171206,
+      "first_trade_time_ms": 1780272000093,
+      "last_agg_trade_id": 3308814747,
+      "last_trade_time_ms": 1780358399294,
+      "market_type": "futures",
+      "row_count": 1643542,
+      "schema_version": "binance-public-agg-trade.v1",
+      "source_checksum_sha256": "53f34f927278bb7fbe6cb9ea3eed8a2ce239c53f51da800a577aa687f511d838",
+      "source_file": "BTCUSDT-aggTrades-2026-06-01.zip",
+      "source_url": "https://data.binance.vision/data/futures/um/daily/aggTrades/BTCUSDT/BTCUSDT-aggTrades-2026-06-01.zip",
+      "symbol": "BTCUSDT"
+    },
+    "verified_objects": 17,
+    "bars": 1440,
+    "runs": [
+      {
+        "label": "candidate-1",
+        "identity": {
+          "protocol": "candlescope.native-strategy/1",
+          "adapter": "pyne-external/4",
+          "plugin": {
+            "package": "candlescope-plugin-pyne",
+            "version": "0.3.0.dev1",
+            "code_sha256": "c3eb16dfa97b51a6897a54626a7e25ed776e310def0ff0f30da4d4a2ce5d9f87"
+          },
+          "engine": {
+            "package": "pyne-runtime",
+            "version": "0.4.0",
+            "code_sha256": "92d002bd47242c1709f0554010a26dba8154530f2de1ed176e3d730688315912"
+          },
+          "transport": {
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.0",
+            "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6"
+          }
+        },
+        "input_hash": "sha256:b3ad0c31f2b1962611552e7831b86f23a804bb0f48689b606ddbe601fc73399a",
+        "bundle": "e4b09a68d69960e14c71c695c9fcd59d12a87de70efc09a10fe32a9b8b5bba1d",
+        "execution_seconds": 73.54864539999835,
+        "status": "passed",
+        "encoding_seconds": 0.008769799998844974,
+        "report_bytes": 623811,
+        "fills": 23,
+        "semantic_report_hash": "sha256:4c1e1b67f92e392328bb2397a4874be599c139d12d3e77e91a417ef6a61aae86",
+        "host_cpu_seconds": 14.203125,
+        "sampled_worker_cpu_seconds": 61.578125
+      },
+      {
+        "label": "candidate-2",
+        "identity": {
+          "protocol": "candlescope.native-strategy/1",
+          "adapter": "pyne-external/4",
+          "plugin": {
+            "package": "candlescope-plugin-pyne",
+            "version": "0.3.0.dev1",
+            "code_sha256": "c3eb16dfa97b51a6897a54626a7e25ed776e310def0ff0f30da4d4a2ce5d9f87"
+          },
+          "engine": {
+            "package": "pyne-runtime",
+            "version": "0.4.0",
+            "code_sha256": "92d002bd47242c1709f0554010a26dba8154530f2de1ed176e3d730688315912"
+          },
+          "transport": {
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.0",
+            "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6"
+          }
+        },
+        "input_hash": "sha256:b3ad0c31f2b1962611552e7831b86f23a804bb0f48689b606ddbe601fc73399a",
+        "bundle": "e4b09a68d69960e14c71c695c9fcd59d12a87de70efc09a10fe32a9b8b5bba1d",
+        "execution_seconds": 65.48194949999743,
+        "status": "passed",
+        "encoding_seconds": 0.00817300000198884,
+        "report_bytes": 623811,
+        "fills": 23,
+        "semantic_report_hash": "sha256:4c1e1b67f92e392328bb2397a4874be599c139d12d3e77e91a417ef6a61aae86",
+        "host_cpu_seconds": 13.8125,
+        "sampled_worker_cpu_seconds": 54.265625
+      }
+    ],
+    "scope": "sequential installed evaluators, full host BAR matching and JSON report encoding; excludes production scheduling and UI",
+    "comparison": "complete report except runtime identity; engine code hashes must differ",
+    "all_passed_and_equal": true
+  },
+  "semantic_parity": {
+    "archive": {
+      "date": "2026-06-01",
+      "exchange": "binance",
+      "first_agg_trade_id": 3307171206,
+      "first_trade_time_ms": 1780272000093,
+      "last_agg_trade_id": 3308814747,
+      "last_trade_time_ms": 1780358399294,
+      "market_type": "futures",
+      "row_count": 1643542,
+      "schema_version": "binance-public-agg-trade.v1",
+      "source_checksum_sha256": "53f34f927278bb7fbe6cb9ea3eed8a2ce239c53f51da800a577aa687f511d838",
+      "source_file": "BTCUSDT-aggTrades-2026-06-01.zip",
+      "source_url": "https://data.binance.vision/data/futures/um/daily/aggTrades/BTCUSDT/BTCUSDT-aggTrades-2026-06-01.zip",
+      "symbol": "BTCUSDT"
+    },
+    "verified_objects": 17,
+    "bars": 720,
+    "runs": [
+      {
+        "label": "baseline",
+        "identity": {
+          "protocol": "candlescope.native-strategy/1",
+          "adapter": "pyne-external/4",
+          "plugin": {
+            "package": "candlescope-plugin-pyne",
+            "version": "0.3.0.dev1",
+            "code_sha256": "c3eb16dfa97b51a6897a54626a7e25ed776e310def0ff0f30da4d4a2ce5d9f87"
+          },
+          "engine": {
+            "package": "pyne-runtime",
+            "version": "0.4.0",
+            "code_sha256": "a2a7daffb910595daa123d647c7e48603c0615ffb6810bc57b492fd71797d641"
+          },
+          "transport": {
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.0",
+            "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6"
+          }
+        },
+        "input_hash": "sha256:97c3dc9d869c55dd02a4dc64dc87bebfd4f61f0af916a14bc4cd8b418963e7a4",
+        "bundle": "a9ac8222a004bb793a23df3114d2f4744eb9ae0490fceeeb8a42913d1b7d0bf7",
+        "execution_seconds": 26.140128999999433,
+        "status": "passed",
+        "encoding_seconds": 0.004723400001239497,
+        "report_bytes": 312511,
+        "fills": 11,
+        "semantic_report_hash": "sha256:e365e2834a51a04f88180be415febcc1dd362a3ee8bbdc0b11713380bbd190b7",
+        "host_cpu_seconds": 4.609375,
+        "sampled_worker_cpu_seconds": 22.234375
+      },
+      {
+        "label": "candidate-1",
+        "identity": {
+          "protocol": "candlescope.native-strategy/1",
+          "adapter": "pyne-external/4",
+          "plugin": {
+            "package": "candlescope-plugin-pyne",
+            "version": "0.3.0.dev1",
+            "code_sha256": "c3eb16dfa97b51a6897a54626a7e25ed776e310def0ff0f30da4d4a2ce5d9f87"
+          },
+          "engine": {
+            "package": "pyne-runtime",
+            "version": "0.4.0",
+            "code_sha256": "92d002bd47242c1709f0554010a26dba8154530f2de1ed176e3d730688315912"
+          },
+          "transport": {
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.0",
+            "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6"
+          }
+        },
+        "input_hash": "sha256:6880093c676d981a9e6ebbe1da2e6ea8596aab4e12ee543c99748e9b51e6404f",
+        "bundle": "e4b09a68d69960e14c71c695c9fcd59d12a87de70efc09a10fe32a9b8b5bba1d",
+        "execution_seconds": 19.094328200000746,
+        "status": "passed",
+        "encoding_seconds": 0.006059399995137937,
+        "report_bytes": 312511,
+        "fills": 11,
+        "semantic_report_hash": "sha256:e365e2834a51a04f88180be415febcc1dd362a3ee8bbdc0b11713380bbd190b7",
+        "host_cpu_seconds": 4.625,
+        "sampled_worker_cpu_seconds": 15.359375
+      },
+      {
+        "label": "candidate-2",
+        "identity": {
+          "protocol": "candlescope.native-strategy/1",
+          "adapter": "pyne-external/4",
+          "plugin": {
+            "package": "candlescope-plugin-pyne",
+            "version": "0.3.0.dev1",
+            "code_sha256": "c3eb16dfa97b51a6897a54626a7e25ed776e310def0ff0f30da4d4a2ce5d9f87"
+          },
+          "engine": {
+            "package": "pyne-runtime",
+            "version": "0.4.0",
+            "code_sha256": "92d002bd47242c1709f0554010a26dba8154530f2de1ed176e3d730688315912"
+          },
+          "transport": {
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.0",
+            "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6"
+          }
+        },
+        "input_hash": "sha256:6880093c676d981a9e6ebbe1da2e6ea8596aab4e12ee543c99748e9b51e6404f",
+        "bundle": "e4b09a68d69960e14c71c695c9fcd59d12a87de70efc09a10fe32a9b8b5bba1d",
+        "execution_seconds": 20.023214200002258,
+        "status": "passed",
+        "encoding_seconds": 0.005693999999493826,
+        "report_bytes": 312511,
+        "fills": 11,
+        "semantic_report_hash": "sha256:e365e2834a51a04f88180be415febcc1dd362a3ee8bbdc0b11713380bbd190b7",
+        "host_cpu_seconds": 4.4375,
+        "sampled_worker_cpu_seconds": 16.296875
+      }
+    ],
+    "scope": "sequential installed evaluators, full host BAR matching and JSON report encoding; excludes production scheduling and UI",
+    "comparison": "complete report except runtime identity; engine code hashes must differ",
+    "all_passed_and_equal": true
+  },
+  "superseded_arity_only_candidate": {
+    "archive": {
+      "date": "2026-06-01",
+      "exchange": "binance",
+      "first_agg_trade_id": 3307171206,
+      "first_trade_time_ms": 1780272000093,
+      "last_agg_trade_id": 3308814747,
+      "last_trade_time_ms": 1780358399294,
+      "market_type": "futures",
+      "row_count": 1643542,
+      "schema_version": "binance-public-agg-trade.v1",
+      "source_checksum_sha256": "53f34f927278bb7fbe6cb9ea3eed8a2ce239c53f51da800a577aa687f511d838",
+      "source_file": "BTCUSDT-aggTrades-2026-06-01.zip",
+      "source_url": "https://data.binance.vision/data/futures/um/daily/aggTrades/BTCUSDT/BTCUSDT-aggTrades-2026-06-01.zip",
+      "symbol": "BTCUSDT"
+    },
+    "verified_objects": 17,
+    "bars": 1440,
+    "runs": [
+      {
+        "label": "baseline",
+        "identity": {
+          "protocol": "candlescope.native-strategy/1",
+          "adapter": "pyne-external/4",
+          "plugin": {
+            "package": "candlescope-plugin-pyne",
+            "version": "0.3.0.dev1",
+            "code_sha256": "c3eb16dfa97b51a6897a54626a7e25ed776e310def0ff0f30da4d4a2ce5d9f87"
+          },
+          "engine": {
+            "package": "pyne-runtime",
+            "version": "0.4.0",
+            "code_sha256": "a2a7daffb910595daa123d647c7e48603c0615ffb6810bc57b492fd71797d641"
+          },
+          "transport": {
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.0",
+            "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6"
+          }
+        },
+        "input_hash": "sha256:0593df6bbaf82e05c33bb2b5233b60ff2f833974efc65a2c5394172c07854590",
+        "bundle": "a9ac8222a004bb793a23df3114d2f4744eb9ae0490fceeeb8a42913d1b7d0bf7",
+        "status": "failed",
+        "execution_seconds": 120.09133280000242,
+        "error": "NATIVE_TIMEOUT: host matching exceeded deadline"
+      },
+      {
+        "label": "candidate-1",
+        "identity": {
+          "protocol": "candlescope.native-strategy/1",
+          "adapter": "pyne-external/4",
+          "plugin": {
+            "package": "candlescope-plugin-pyne",
+            "version": "0.3.0.dev1",
+            "code_sha256": "c3eb16dfa97b51a6897a54626a7e25ed776e310def0ff0f30da4d4a2ce5d9f87"
+          },
+          "engine": {
+            "package": "pyne-runtime",
+            "version": "0.4.0",
+            "code_sha256": "e87491a95af9a68f9bf2bd353925e26c6b5ccba5c4ca9bb159cd05147b0ede50"
+          },
+          "transport": {
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.0",
+            "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6"
+          }
+        },
+        "input_hash": "sha256:9c498e0c725b8381b7e0a9b4d5b97bbc10c032f51a422f98c1040b1b957c4109",
+        "bundle": "f0a98ed3c78753d2efcd78b852b794095f53cc4d755d2cb6545a8c83df17f4a9",
+        "status": "failed",
+        "execution_seconds": 120.16181900000083,
+        "error": "NATIVE_TIMEOUT: native session exceeded host deadline"
+      },
+      {
+        "label": "candidate-2",
+        "identity": {
+          "protocol": "candlescope.native-strategy/1",
+          "adapter": "pyne-external/4",
+          "plugin": {
+            "package": "candlescope-plugin-pyne",
+            "version": "0.3.0.dev1",
+            "code_sha256": "c3eb16dfa97b51a6897a54626a7e25ed776e310def0ff0f30da4d4a2ce5d9f87"
+          },
+          "engine": {
+            "package": "pyne-runtime",
+            "version": "0.4.0",
+            "code_sha256": "e87491a95af9a68f9bf2bd353925e26c6b5ccba5c4ca9bb159cd05147b0ede50"
+          },
+          "transport": {
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.0",
+            "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6"
+          }
+        },
+        "input_hash": "sha256:9c498e0c725b8381b7e0a9b4d5b97bbc10c032f51a422f98c1040b1b957c4109",
+        "bundle": "f0a98ed3c78753d2efcd78b852b794095f53cc4d755d2cb6545a8c83df17f4a9",
+        "status": "failed",
+        "execution_seconds": 120.07458320000296,
+        "error": "NATIVE_TIMEOUT: native session exceeded host deadline"
+      }
+    ],
+    "scope": "sequential installed evaluators, full host BAR matching and JSON report encoding; excludes production scheduling and UI",
+    "comparison": "complete report except runtime identity; engine code hashes must differ",
+    "all_passed_and_equal": false
+  },
+  "limits": [
+    "historical-prefix reconstruction remains and can exceed fixed deadlines at larger sizes or under CPU contention",
+    "report rendering approximates shape/typography/curve/table layout and uses one fill slice per bar",
+    "Pyne runtime does not expose plotbar; no claim of Pine/Pyne feature identity",
+    "OKX public 5000-level archive downloaded and audited but not admissible as full continuous L2; L2 order priority remains assumed"
+  ],
+  "okx_archive_audit": "docs/evidence/native-strategy/2026-09-20-okx-depth-archive-audit.json",
+  "source_sha256": {
+    "frontend/src/features/backtest/native/NativeAdvancedInputs.tsx": "645632cb7d4fe7fb52166dfcb3cda39e69c4610f81dc4e3d45b06e018e5caed2",
+    "frontend/src/features/backtest/native/nativeBacktest.test.tsx": "04cd13203537bc59bf954fe7ed60abab451d76991fe11530bcb69a35a286ba29",
+    "frontend/src/features/backtest/native/nativeBacktestApi.ts": "9f6df505a042035399bc0992aefc1252a5ca992caa4b9162cfb7d3a1d6b4c16c",
+    "frontend/src/features/backtest/native/nativeDrawingModel.ts": "d2f0d5b1f76fca25a7dae002e7a378e4b13b94ae137554b363140fdc00e66bf5",
+    "frontend/src/features/backtest/native/nativeDrawings.test.tsx": "4fe0a573189ac9cdf40f5e254ea712188329868426b8e548547d4f1b6ca9847c",
+    "frontend/src/features/backtest/native/NativeDrawingScene.tsx": "a2e7e273ec1bb22c2170636cb26daa5a0d8fa489f4c121d3229eb00e777bbe77",
+    "frontend/src/features/backtest/native/nativeInputs.test.ts": "b2ef9d15947c2a8505fbca995fd90298db422d428ed0827ff3b880ced10a12a7",
+    "frontend/src/features/backtest/native/nativeInputs.ts": "d0fdda5d55d72faae66f8096359c5848b78e9c73ea39e2bc1f87c16f4c25e29d",
+    "frontend/src/features/backtest/native/NativeReplayControls.tsx": "36c838cb424a1212e57fb508b9e23ad7372d0fe9536e9fee29928d817ffe5d78",
+    "frontend/src/features/backtest/native/nativeSeries.test.tsx": "bed6e6fc9a6f6469e15c6a1c49a7802e16332cb1bb3e8734ba27f2e462f19f7e",
+    "frontend/src/features/backtest/native/nativeSeriesModel.ts": "57c7388405e4835f7767532622c95b567f31c98c4b3437e291ab6d16dbb38ae3",
+    "frontend/src/features/backtest/native/NativeSeriesScene.tsx": "ee8734b75840d561c58279004bb93c4a864b18186fb9617f9120eb3e5a1ed5ee",
+    "frontend/src/features/backtest/native/nativeStrategy.css": "e1c153e30c517053d10515ba681b99561d9ad5fad97e9cc4168bf38e8fde30ac",
+    "frontend/src/features/backtest/native/NativeStrategyPanel.tsx": "f62e991b945fbd98a96e53c1da1b8245677f8b5dbcd0aeb84db25ac8341dabac",
+    "frontend/src/features/backtest/native/NativeStrategyReport.tsx": "34f7dc9caae163a0177b91d7ac82dd761b9dfb2f3020c554fc6a5c61cf5f7c97",
+    "frontend/src/features/backtest/native/fixtures/pine-drawings.json": "78716ddef953b9f144447226dd8353be38e2f768c7a63cbdf4f80220c7d0d792",
+    "frontend/src/features/backtest/native/fixtures/pine-series.json": "d8b21c554f4920a2612403fb1fb7fedbf1539e58e7d162ec177fbe97ee4e56f8",
+    "frontend/src/features/backtest/native/fixtures/pyne-drawings.json": "02f8cc836b9b69bea04281556776372a8613a2eb45bb1d95a37b9b6d64c92184",
+    "frontend/src/features/backtest/native/fixtures/pyne-series.json": "9825a1a82747977c48b2bde8cd7d2011ecb290810ad1b8d0afb912ed553e6243",
+    "backend/scripts/benchmark_native_v8.py": "458e5525368de51fd2fdb1059fd5529ef31e991b88b08dd55ca27032bd9b6dec",
+    "backend/scripts/audit_okx_depth_archive.py": "d8d79006a61e35076e4198ed08d939c05881a83c11ec7ecf17f0cd03b90c6556",
+    "frontend/scripts/native-v8-preview.tsx": "ef4b9d27699eca93d09818833caa9372da7dff44d7d7e19b3576c277bcb6048d"
+  },
+  "pyne_source_sha256": {
+    "src/pyne_runtime/incremental/session.py": "2364bff96d8addca5a332efae3421e9f7b5e8de74bd940fcc45ba198721f3b25",
+    "src/pyne_runtime/incremental/context.py": "1bd7a2e5132d378f25c27c4430710313e89c8a6dc5d33ddaa41203382b716c27",
+    "src/pyne_runtime/incremental/bar.py": "a68ac7ae56c7865c9b5b55f417736d433a45069be3dfcb344deaa00d96794176",
+    "tests/test_callback_arity_fastpath.py": "d7a5f8e7935549a6b4eebd3611a8e582ec5894293071878e2d1c06e75defea60"
+  }
+}

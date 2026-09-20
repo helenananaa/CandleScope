@@ -60,6 +60,8 @@ import { MarketDataWorkspaceProvider } from "../market-data/MarketDataWorkspaceP
 
 const BacktestResearchApp = lazy(() => import("../backtest/research/BacktestResearchApp.js"));
 const StrategyResearchLiveChart = lazy(() => import("./StrategyResearchLiveChart.js"));
+const NativeStrategyPanel = lazy(() => import("../backtest/native/NativeStrategyPanel.js"));
+const NativeStrategyReport = lazy(() => import("../backtest/native/NativeStrategyReport.js").then((module) => ({ default: module.NativeStrategyReport })));
 const StrategyRunHistory = lazy(() => import("./StrategyRunHistory.js"));
 import {
   strategyResearchDeepLinkSearch,
@@ -119,6 +121,8 @@ export default function StrategyResearchApp({
   libraryEnabled?: boolean;
 }) {
   const locale = useLocale();
+  const [nativeMode, setNativeMode] = useState(!["advanced", "deep-link", "handoff"].includes(intent.kind));
+  const [nativeRun, setNativeRun] = useState<import("../backtest/native/nativeBacktestApi.js").NativeRun | null>(null);
   const pageExportRef = useRef<HTMLDivElement | null>(null);
   const { settings, setSettings, resolvedTheme } = useChartSettingsRuntime();
   const library = useResearchDataLibrary();
@@ -394,6 +398,18 @@ export default function StrategyResearchApp({
 
   const script = (
     <div data-strategy-draft={scriptDraft ?? ""}>
+      <nav className="native-mode-switch" aria-label={t("native.mode")}>
+        <button aria-pressed={nativeMode} onClick={() => setNativeMode(true)}>{t("native.fullStrategies")}</button>
+        <button aria-pressed={!nativeMode} onClick={() => setNativeMode(false)}>{t("native.hostMode")}</button>
+      </nav>
+      {nativeMode ? researchRun.session ? <Suspense fallback={<p>{t("native.loading")}</p>}>
+        <NativeStrategyPanel session={researchRun.session} cellScope="strategy-research-native" onClose={() => setNativeMode(false)}
+          key={`${chartUiScope}:${researchRun.session.exchange}:${researchRun.session.marketType}:${researchRun.session.symbol}:${researchRun.session.interval}`} externalReport onRunChange={setNativeRun}
+          dataset={importedManifest ? { datasetId: importedManifest.dataset_id, dataEpoch: importedManifest.data_epoch } : undefined}
+          onLocateTrade={(timeMs) => setFocusedAnalysis((current) => ({ scope: chartUiScope, value: {
+            requestId: (current.scope === chartUiScope ? current.value?.requestId ?? 0 : 0) + 1, time: Math.floor(timeMs / 1000),
+          } }))} />
+      </Suspense> : <p>{t("research.source.none")}</p> :
       <StrategyResearchScriptPanel
         cellScope="strategy-research"
         session={researchRun.session}
@@ -409,10 +425,17 @@ export default function StrategyResearchApp({
         onOpenAdvanced={openAdvanced}
         configuration={state.script.configuration}
         onConfigure={(configuration) => dispatch({ type: "script/configure", configuration })}
-      />
+      />}
     </div>
   );
-  const result = (
+  const result = nativeMode ? researchRun.session && nativeRun?.result ? <Suspense fallback={<p>{t("native.loading")}</p>}>
+    <div className="native-strategy-report">
+      <details><summary>{t("native.source")}</summary><pre>{nativeRun.config?.source}</pre></details>
+      <NativeStrategyReport key={nativeRun.run_id} run={nativeRun} onLocate={(timeMs) => setFocusedAnalysis((current) => ({ scope: chartUiScope, value: {
+        requestId: (current.scope === chartUiScope ? current.value?.requestId ?? 0 : 0) + 1, time: Math.floor(timeMs / 1000),
+      } }))} />
+    </div>
+  </Suspense> : null : (
     <StrategyResearchResultPanel
       key={researchRun.result?.run.run_id ?? "pending"}
       result={researchRun.result}
@@ -621,7 +644,7 @@ export default function StrategyResearchApp({
       chart={
         source?.kind === "CURRENT_CHART"
           ? hostReady && runtime.runtimeMode === "LIVE" && researchRun.session
-            ? <MarketDataWorkspaceProvider><Suspense fallback={<p>{t("research.loading")}</p>}><StrategyResearchLiveChart session={researchRun.session} result={researchRun.result} focusRequest={focusRequest} /></Suspense></MarketDataWorkspaceProvider>
+            ? <MarketDataWorkspaceProvider><Suspense fallback={<p>{t("research.loading")}</p>}><StrategyResearchLiveChart session={researchRun.session} result={nativeMode ? null : researchRun.result} focusRequest={focusRequest} /></Suspense></MarketDataWorkspaceProvider>
             : <StrategyResearchCurrentChart />
           : (
             <StrategyResearchFirstOpen

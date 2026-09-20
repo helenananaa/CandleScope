@@ -3,7 +3,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import ChartStrategyTesterPanel from "../ChartStrategyTesterPanel.js";
+import { CandleScopeStrategyTesterPanel as ChartStrategyTesterPanel } from "../ChartStrategyTesterPanel.js";
 import {
   loadChartStrategyPanelPreferences,
   saveChartStrategyPanelPreferences,

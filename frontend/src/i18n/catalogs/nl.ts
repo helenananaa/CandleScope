@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const nl = {
+  ...nativeEnglish,
   "replay.portfolio.title": "Portefeuillevermogen",
   "replay.portfolio.load": "Portefeuillecurve laden / vernieuwen",
   "replay.portfolio.hint": "Uur-eindmonsters; de terugval gebruikt het volledige prijsverloop. Vernieuw na het vooruitgaan. Alleen vastgelegde portefeuille-intervallen.",

@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const uk = {
+  ...nativeEnglish,
   "replay.portfolio.title": "Власний капітал портфеля",
   "replay.portfolio.load": "Завантажити / оновити криву портфеля",
   "replay.portfolio.hint": "Зразки наприкінці години; просадка враховує весь рух цін. Оновлюйте після просування. Лише записані інтервали портфеля.",

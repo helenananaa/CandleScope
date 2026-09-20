@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ja = {
+  ...nativeEnglish,
   "replay.portfolio.title": "ポートフォリオ資産",
   "replay.portfolio.load": "組合せ曲線を読込 / 更新",
   "replay.portfolio.hint": "各時間末の値を表示し、ドローダウンは全価格経路から計算します。進行後に更新してください。記録済み区間のみ対象です。",

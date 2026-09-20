@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const hu = {
+  ...nativeEnglish,
   "replay.portfolio.title": "Portfólió saját tőkéje",
   "replay.portfolio.load": "Portfóliógörbe betöltése / frissítése",
   "replay.portfolio.hint": "Óra végi minták; a visszaesés a teljes árfolyampályát használja. Előrelépés után frissítsen. Csak a rögzített portfóliószakaszok.",

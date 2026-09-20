@@ -24,6 +24,9 @@ from app.backtest.service import BacktestService
 
 
 router = APIRouter(prefix="/backtests", tags=["backtests"])
+from .native_backtests import router as native_router, external_router
+router.include_router(native_router)
+router.include_router(external_router)
 
 
 class RunCreateRequest(BaseModel):

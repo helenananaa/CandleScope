@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ru = {
+  ...nativeEnglish,
   "replay.portfolio.title": "Стоимость портфеля",
   "replay.portfolio.load": "Загрузить / обновить кривую",
   "replay.portfolio.hint": "Показаны значения на конец часа; просадка рассчитана по всем ценам. Обновляйте после продвижения. Только записанные интервалы.",

@@ -1,0 +1,525 @@
+{
+  "execution_mode": "NATIVE",
+  "account_authority": "pyne-runtime",
+  "fill_model": "pyne-native-standard-ohlcv",
+  "raw_output": {
+    "meta": {
+      "title": "Series",
+      "overlay": true,
+      "script_type": "strategy"
+    },
+    "lines": [
+      {
+        "id": "plot_1",
+        "title": "Close",
+        "color": "#2196f3",
+        "linewidth": 2,
+        "style": "solid",
+        "pane": "main",
+        "data": [
+          {
+            "time": 1700000040,
+            "value": 11.0
+          },
+          {
+            "time": 1700000100,
+            "value": 12.0
+          },
+          {
+            "time": 1700000160,
+            "value": 13.0
+          },
+          {
+            "time": 1700000220,
+            "value": 14.0
+          },
+          {
+            "time": 1700000280,
+            "value": 15.0
+          }
+        ]
+      },
+      {
+        "id": "plot_2",
+        "title": "Open",
+        "color": "#ef5350",
+        "linewidth": 2,
+        "style": "solid",
+        "pane": "main",
+        "data": [
+          {
+            "time": 1700000040,
+            "value": 10.0
+          },
+          {
+            "time": 1700000100,
+            "value": 11.0
+          },
+          {
+            "time": 1700000160,
+            "value": 12.0
+          },
+          {
+            "time": 1700000220,
+            "value": 13.0
+          },
+          {
+            "time": 1700000280,
+            "value": 14.0
+          }
+        ]
+      }
+    ],
+    "candles": [
+      {
+        "title": "Candles",
+        "pane": "main",
+        "data": [
+          {
+            "time": 1700000040,
+            "open": 10.0,
+            "high": 12.0,
+            "low": 9.0,
+            "close": 11.0,
+            "color": "#ef5350"
+          },
+          {
+            "time": 1700000100,
+            "open": 11.0,
+            "high": 13.0,
+            "low": 10.0,
+            "close": 12.0,
+            "color": "#ef5350"
+          },
+          {
+            "time": 1700000160,
+            "open": 12.0,
+            "high": 14.0,
+            "low": 11.0,
+            "close": 13.0,
+            "color": "#ef5350"
+          },
+          {
+            "time": 1700000220,
+            "open": 13.0,
+            "high": 15.0,
+            "low": 12.0,
+            "close": 14.0,
+            "color": "#ef5350"
+          },
+          {
+            "time": 1700000280,
+            "open": 14.0,
+            "high": 16.0,
+            "low": 13.0,
+            "close": 15.0,
+            "color": "#ef5350"
+          }
+        ]
+      }
+    ],
+    "hlines": [
+      {
+        "price": 12.0,
+        "title": "Mid",
+        "color": "#787b86",
+        "linestyle": "dashed",
+        "linewidth": 1,
+        "pane": "main"
+      }
+    ],
+    "fills": [
+      {
+        "plot1_id": "plot_1",
+        "plot2_id": "plot_2",
+        "color": "rgba(33,150,243,0.3)",
+        "title": "",
+        "pane": "main"
+      }
+    ],
+    "markers": [
+      {
+        "shape": "char",
+        "color": "#f59e0b",
+        "text": "X",
+        "position": "above",
+        "size": "normal",
+        "pane": "main",
+        "data": [
+          {
+            "time": 1700000040,
+            "shape": "char",
+            "color": "#f59e0b",
+            "text": "X",
+            "position": "above",
+            "size": "normal",
+            "pane": "main",
+            "char": "X"
+          },
+          {
+            "time": 1700000100,
+            "shape": "char",
+            "color": "#f59e0b",
+            "text": "X",
+            "position": "above",
+            "size": "normal",
+            "pane": "main",
+            "char": "X"
+          },
+          {
+            "time": 1700000160,
+            "shape": "char",
+            "color": "#f59e0b",
+            "text": "X",
+            "position": "above",
+            "size": "normal",
+            "pane": "main",
+            "char": "X"
+          },
+          {
+            "time": 1700000220,
+            "shape": "char",
+            "color": "#f59e0b",
+            "text": "X",
+            "position": "above",
+            "size": "normal",
+            "pane": "main",
+            "char": "X"
+          },
+          {
+            "time": 1700000280,
+            "shape": "char",
+            "color": "#f59e0b",
+            "text": "X",
+            "position": "above",
+            "size": "normal",
+            "pane": "main",
+            "char": "X"
+          }
+        ],
+        "title": "Chars",
+        "char": "X"
+      },
+      {
+        "shape": "triangle_up",
+        "color": "#f59e0b",
+        "text": "UP",
+        "position": "below",
+        "size": "normal",
+        "pane": "main",
+        "data": [
+          {
+            "time": 1700000040,
+            "shape": "triangle_up",
+            "color": "#f59e0b",
+            "text": "UP",
+            "position": "below",
+            "size": "normal",
+            "pane": "main"
+          },
+          {
+            "time": 1700000100,
+            "shape": "triangle_up",
+            "color": "#f59e0b",
+            "text": "UP",
+            "position": "below",
+            "size": "normal",
+            "pane": "main"
+          },
+          {
+            "time": 1700000160,
+            "shape": "triangle_up",
+            "color": "#f59e0b",
+            "text": "UP",
+            "position": "below",
+            "size": "normal",
+            "pane": "main"
+          },
+          {
+            "time": 1700000220,
+            "shape": "triangle_up",
+            "color": "#f59e0b",
+            "text": "UP",
+            "position": "below",
+            "size": "normal",
+            "pane": "main"
+          },
+          {
+            "time": 1700000280,
+            "shape": "triangle_up",
+            "color": "#f59e0b",
+            "text": "UP",
+            "position": "below",
+            "size": "normal",
+            "pane": "main"
+          }
+        ],
+        "title": "Shapes"
+      },
+      {
+        "shape": "arrow",
+        "color_up": "#26a69a",
+        "color_down": "#ef5350",
+        "text": "",
+        "position": "auto",
+        "size": "normal",
+        "pane": "main",
+        "minheight": 5,
+        "maxheight": 30,
+        "data": [
+          {
+            "time": 1700000040,
+            "shape": "arrow_up",
+            "color": "#26a69a",
+            "text": "",
+            "position": "below",
+            "size": "normal",
+            "pane": "main",
+            "direction": "up",
+            "value": 1.0,
+            "height": 30
+          },
+          {
+            "time": 1700000100,
+            "shape": "arrow_up",
+            "color": "#26a69a",
+            "text": "",
+            "position": "below",
+            "size": "normal",
+            "pane": "main",
+            "direction": "up",
+            "value": 1.0,
+            "height": 30
+          },
+          {
+            "time": 1700000160,
+            "shape": "arrow_up",
+            "color": "#26a69a",
+            "text": "",
+            "position": "below",
+            "size": "normal",
+            "pane": "main",
+            "direction": "up",
+            "value": 1.0,
+            "height": 30
+          },
+          {
+            "time": 1700000220,
+            "shape": "arrow_up",
+            "color": "#26a69a",
+            "text": "",
+            "position": "below",
+            "size": "normal",
+            "pane": "main",
+            "direction": "up",
+            "value": 1.0,
+            "height": 30
+          },
+          {
+            "time": 1700000280,
+            "shape": "arrow_up",
+            "color": "#26a69a",
+            "text": "",
+            "position": "below",
+            "size": "normal",
+            "pane": "main",
+            "direction": "up",
+            "value": 1.0,
+            "height": 30
+          }
+        ],
+        "title": "Arrows"
+      }
+    ],
+    "bgcolors": [
+      {
+        "color": "rgba(38,166,154,0.15)",
+        "pane": "main",
+        "title": "",
+        "regions": [
+          {
+            "time": 1700000040
+          },
+          {
+            "time": 1700000100
+          },
+          {
+            "time": 1700000160
+          },
+          {
+            "time": 1700000220
+          },
+          {
+            "time": 1700000280
+          }
+        ]
+      }
+    ],
+    "barcolors": [
+      {
+        "data": [
+          {
+            "time": 1700000040,
+            "color": "#26a69a"
+          },
+          {
+            "time": 1700000100,
+            "color": "#26a69a"
+          },
+          {
+            "time": 1700000160,
+            "color": "#26a69a"
+          },
+          {
+            "time": 1700000220,
+            "color": "#26a69a"
+          },
+          {
+            "time": 1700000280,
+            "color": "#26a69a"
+          }
+        ]
+      }
+    ]
+  },
+  "trades": [],
+  "orders": [],
+  "equity": [
+    {
+      "time": 1700000040,
+      "value": 0.0
+    },
+    {
+      "time": 1700000100,
+      "value": 0.0
+    },
+    {
+      "time": 1700000160,
+      "value": 0.0
+    },
+    {
+      "time": 1700000220,
+      "value": 0.0
+    },
+    {
+      "time": 1700000280,
+      "value": 0.0
+    }
+  ],
+  "position": null,
+  "graphics": [
+    {
+      "name": "Close",
+      "color": "#2196f3",
+      "type": "line",
+      "pane": "main",
+      "lineWidth": 2,
+      "lineStyle": 0,
+      "data": [
+        {
+          "time": 1700000040,
+          "value": 11.0
+        },
+        {
+          "time": 1700000100,
+          "value": 12.0
+        },
+        {
+          "time": 1700000160,
+          "value": 13.0
+        },
+        {
+          "time": 1700000220,
+          "value": 14.0
+        },
+        {
+          "time": 1700000280,
+          "value": 15.0
+        }
+      ],
+      "id": "plot_1"
+    },
+    {
+      "name": "Open",
+      "color": "#ef5350",
+      "type": "line",
+      "pane": "main",
+      "lineWidth": 2,
+      "lineStyle": 0,
+      "data": [
+        {
+          "time": 1700000040,
+          "value": 10.0
+        },
+        {
+          "time": 1700000100,
+          "value": 11.0
+        },
+        {
+          "time": 1700000160,
+          "value": 12.0
+        },
+        {
+          "time": 1700000220,
+          "value": 13.0
+        },
+        {
+          "time": 1700000280,
+          "value": 14.0
+        }
+      ],
+      "id": "plot_2"
+    }
+  ],
+  "parameter_schema": [],
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "PYNE_EMPTY_NATIVE_REPORT",
+      "message": "Pyne 0.4.0 emitted no strategy report for this no-order run; equity is its unmodified native series."
+    }
+  ],
+  "bars": [
+    {
+      "time": 1700000040,
+      "open": 10,
+      "high": 12,
+      "low": 9,
+      "close": 11,
+      "volume": 100
+    },
+    {
+      "time": 1700000100,
+      "open": 11,
+      "high": 13,
+      "low": 10,
+      "close": 12,
+      "volume": 100
+    },
+    {
+      "time": 1700000160,
+      "open": 12,
+      "high": 14,
+      "low": 11,
+      "close": 13,
+      "volume": 100
+    },
+    {
+      "time": 1700000220,
+      "open": 13,
+      "high": 15,
+      "low": 12,
+      "close": 14,
+      "volume": 100
+    },
+    {
+      "time": 1700000280,
+      "open": 14,
+      "high": 16,
+      "low": 13,
+      "close": 15,
+      "volume": 100
+    }
+  ],
+  "report_hash": "fixture"
+}

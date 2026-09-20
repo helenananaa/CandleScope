@@ -1,0 +1,683 @@
+{
+  "schema": "candlescope.okx-archive-audit/1",
+  "source": "https://www.okx.com/zh-hans/historical-data",
+  "audited_at_utc": "2026-09-20T13:43:17.562786+00:00",
+  "transport": "Official public HTTPS; curl --resolve after local DNS failure; TLS verification enabled; no credentials",
+  "orderbook": {
+    "file": "BTC-USDT-L2orderbook-5000lv-2026-06-01.tar.gz",
+    "bytes": 59434482,
+    "sha256": "49735652f978b84f5c0db7c1e4d9e0cfb783c055dc2d3987c6abd693c140f794",
+    "actions": {
+      "snapshot": 96,
+      "update": 86304
+    },
+    "field_counts": {
+      "instId": 86400,
+      "action": 86400,
+      "ts": 86400,
+      "asks": 86400,
+      "bids": 86400
+    },
+    "first_utc": "2026-06-01T00:00:00.004000+00:00",
+    "last_utc": "2026-06-01T23:59:59.001000+00:00",
+    "snapshots": [
+      {
+        "time_ms": 1780272000004,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780272900000,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780273800000,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780274700000,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780275600000,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780276500003,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780277400003,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780278300003,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780279200003,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780280100008,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780281000008,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780281900008,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780282800008,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780283700000,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780284600000,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780285500000,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780286400000,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780287300001,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780288200001,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780289100001,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780290000001,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780290900008,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780291800008,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780292700008,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780293600008,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780294500006,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780295400006,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780296300006,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780297200006,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780298100005,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780299000005,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780299900005,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780300800005,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780301700006,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780302600006,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780303500006,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780304400006,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780305300002,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780306200002,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780307100002,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780308000002,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780308900008,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780309800008,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780310700008,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780311600008,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780312500002,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780313400002,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780314300002,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780315200003,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780316100001,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780317000001,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780317900001,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780318800001,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780319700003,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780320600003,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780321500003,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780322400003,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780323300007,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780324200007,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780325100007,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780326000007,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780326900001,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780327800001,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780328700001,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780329600001,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780330500002,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780331400002,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780332300002,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780333200002,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780334100005,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780335000005,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780335900005,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780336800005,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780337700002,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780338600002,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780339500002,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780340400002,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780341300009,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780342200009,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780343100009,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780344000009,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780344900005,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780345800005,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780346700005,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780347600005,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780348500008,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780349400008,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780350300008,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780351200008,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780352100009,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780353000009,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780353900009,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780354800009,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780355700001,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780356600001,
+        "bids": 5000,
+        "asks": 5000
+      },
+      {
+        "time_ms": 1780357500001,
+        "bids": 5000,
+        "asks": 5000
+      }
+    ],
+    "interval_ms_counts": {
+      "870": 1,
+      "900": 2,
+      "920": 2,
+      "940": 2,
+      "950": 1,
+      "960": 2,
+      "970": 1,
+      "990": 1,
+      "992": 1,
+      "993": 1,
+      "994": 1,
+      "996": 1,
+      "997": 2,
+      "998": 2,
+      "1000": 86355,
+      "1001": 7,
+      "1004": 2,
+      "1005": 1,
+      "1006": 1,
+      "1007": 1,
+      "1009": 1,
+      "1033": 1,
+      "1043": 1,
+      "1047": 1,
+      "1054": 1,
+      "1058": 1,
+      "1063": 1,
+      "1072": 1,
+      "1074": 1,
+      "1095": 1,
+      "1099": 1,
+      "1132": 1
+    },
+    "timestamp_regressions": 0
+  },
+  "trades": [
+    {
+      "file": "BTC-USDT-trades-2026-06-01.zip",
+      "bytes": 3828556,
+      "sha256": "08952cca5a7b3ba2937a5e51981f5e3e5b036006f67030616a7c17826bfb609a",
+      "rows": 425693,
+      "sides": {
+        "buy": 182109,
+        "sell": 243584
+      },
+      "first_utc": "2026-05-31T16:00:00.199000+00:00",
+      "last_utc": "2026-06-01T15:59:59.162000+00:00",
+      "timestamp_regressions": 0,
+      "rows_in_book_time_range": 359841
+    },
+    {
+      "file": "BTC-USDT-trades-2026-06-02.zip",
+      "bytes": 6339072,
+      "sha256": "44cfa3e0cb474a8293ef474eb80747f871c0103960e4368893df9b3c78cdd9c1",
+      "rows": 696543,
+      "sides": {
+        "buy": 288242,
+        "sell": 408301
+      },
+      "first_utc": "2026-06-01T16:00:00.221000+00:00",
+      "last_utc": "2026-06-02T15:59:59.889000+00:00",
+      "timestamp_regressions": 0,
+      "rows_in_book_time_range": 143352
+    }
+  ],
+  "official_download_responses": {
+    "okx-trades-links.json": {
+      "code": "0",
+      "data": {
+        "begin": "1780272000000",
+        "ccyList": [],
+        "dateAggrType": "daily",
+        "details": [
+          {
+            "ccy": "",
+            "dateRangeEnd": "1780243200000",
+            "dateRangeStart": "1780243200000",
+            "groupDetails": [
+              {
+                "dateTs": "1780243200000",
+                "filename": "BTC-USDT-trades-2026-06-01.zip",
+                "sizeMB": "3.67",
+                "url": "https://static.okx.com/cdn/okex/traderecords/trades/daily/20260601/BTC-USDT-trades-2026-06-01.zip?v=999"
+              }
+            ],
+            "groupSizeMB": "3.67",
+            "instFamily": "",
+            "instId": "BTC-USDT",
+            "instType": "SPOT"
+          }
+        ],
+        "end": "1780272000000",
+        "exportTime": "1789911448719",
+        "instrumentList": [
+          "BTC-USDT"
+        ],
+        "totalSizeMB": "3.67"
+      },
+      "msg": ""
+    },
+    "okx-trades-next-links.json": {
+      "code": "0",
+      "data": {
+        "begin": "1780358400000",
+        "ccyList": [],
+        "dateAggrType": "daily",
+        "details": [
+          {
+            "ccy": "",
+            "dateRangeEnd": "1780329600000",
+            "dateRangeStart": "1780329600000",
+            "groupDetails": [
+              {
+                "dateTs": "1780329600000",
+                "filename": "BTC-USDT-trades-2026-06-02.zip",
+                "sizeMB": "6.09",
+                "url": "https://static.okx.com/cdn/okex/traderecords/trades/daily/20260602/BTC-USDT-trades-2026-06-02.zip?v=999"
+              }
+            ],
+            "groupSizeMB": "6.09",
+            "instFamily": "",
+            "instId": "BTC-USDT",
+            "instType": "SPOT"
+          }
+        ],
+        "end": "1780358400000",
+        "exportTime": "1789911529806",
+        "instrumentList": [
+          "BTC-USDT"
+        ],
+        "totalSizeMB": "6.09"
+      },
+      "msg": ""
+    },
+    "okx-links.json": {
+      "code": "0",
+      "data": {
+        "begin": "1780272000000",
+        "ccyList": [],
+        "dateAggrType": "daily",
+        "details": [
+          {
+            "ccy": "",
+            "dateRangeEnd": "1780272000000",
+            "dateRangeStart": "1780272000000",
+            "groupDetails": [
+              {
+                "dateTs": "1780272000000",
+                "filename": "BTC-USDT-L2orderbook-5000lv-2026-06-01.tar.gz",
+                "sizeMB": "56.68",
+                "url": "https://static.okx.com/cdn/okx/match/orderbook/L2/5000lv/daily/20260601/BTC-USDT-L2orderbook-5000lv-2026-06-01.tar.gz"
+              }
+            ],
+            "groupSizeMB": "56.68",
+            "instFamily": "",
+            "instId": "BTC-USDT",
+            "instType": "SPOT"
+          }
+        ],
+        "end": "1780272000000",
+        "exportTime": "1789911353751",
+        "instrumentList": [
+          "BTC-USDT"
+        ],
+        "totalSizeMB": "56.68"
+      },
+      "msg": ""
+    }
+  },
+  "book_depth_admissible": false,
+  "reasons": [
+    "5000 levels per side are a bounded view, not a declaration of complete depth",
+    "Archive omits exchange seqId/prevSeqId; lossless event continuity cannot be established",
+    "Timestamp cadence does not establish all intervening book events or trade/book ordering",
+    "Aggregated L2 has no order-level priority; exact FIFO cannot be validated"
+  ],
+  "scope": "Archive integrity and schema audit only; no queue-model real-data qualification; no synthetic depth_complete or exchange sequence added"
+}

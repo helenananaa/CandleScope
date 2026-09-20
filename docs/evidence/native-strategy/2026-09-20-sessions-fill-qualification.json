@@ -1,0 +1,281 @@
+{
+  "date": "2026-09-20",
+  "scope": [
+    "Fixed historical native sessions",
+    "Authoritative host fill callbacks"
+  ],
+  "tests": {
+    "backend_integration": 63,
+    "actual_installed_replay_and_fill": 15,
+    "pyne_full_suite": 1244,
+    "pyne_final_contract_subset": 9,
+    "pine_runtime_lib": 1839,
+    "frontend_backtest": 134,
+    "typecheck": "passed",
+    "i18n": "30 locales, 4309 keys",
+    "lint": "passed",
+    "frontend_build": "passed; existing chunk-size warning"
+  },
+  "installation": {
+    "wheels": {
+      "candlescope_plugin_pine_compat-0.3.0.dev1-py3-none-any.whl": "78c48b59b2728c14bddb09c278f1fc61c6112dc1b137efe2764e59a42507c1e3",
+      "candlescope_plugin_pyne-0.3.0.dev1-py3-none-any.whl": "0462c531e3141e4e6879db08f2d31374097906dc1e572e77f74cdce7844362ce",
+      "candlescope_plugin_sdk-0.2.0-py3-none-any.whl": "4cfd7d9521227d31b611c12f8eabcdf4788d3eb436d67114642e32720f9ef37e",
+      "numpy-2.2.6-cp312-cp312-win_amd64.whl": "c1f9540be57940698ed329904db803cf7a402f3fc200bfe599334c9bd84a40b2",
+      "pine_compat_runtime-0.3.0rc1-cp310-abi3-win_amd64.whl": "48730b13615c3ec55d7e4669458b2e4b9397d3bf9cf51ae551c0c87e5a405dad",
+      "pyne_runtime-0.4.0-py3-none-any.whl": "c6b54868de0b4a58be26af7beb0720b2d910784a2f10c552c0f4325d2816ef4d"
+    },
+    "identities": {
+      "candlescope.pine-compat": {
+        "protocol": "candlescope.native-strategy/1",
+        "adapter": "pine-native/1",
+        "plugin": {
+          "package": "candlescope-plugin-pine-compat",
+          "version": "0.3.0.dev1",
+          "code_sha256": "267603668ef3f2398db0e8050b4c3e531211b89afc05d2b4c805474354c14a73"
+        },
+        "engine": {
+          "package": "pine-compat-runtime",
+          "version": "0.3.0rc1",
+          "code_sha256": "1ada16a9c176de2d7a8256c83256deca0be8a3149bc92c9308c1bbd3912f2836"
+        },
+        "transport": {
+          "package": "candlescope-plugin-sdk",
+          "version": "0.2.0",
+          "code_sha256": "f7efb16d888bc6fbe70fee23ab575deef5cbf383fad37c5fc35e5e789cf32d79"
+        },
+        "historical_session": "fixed-history/1"
+      },
+      "candlescope.pine-compat.external": {
+        "protocol": "candlescope.native-strategy/1",
+        "adapter": "pine-external/1",
+        "plugin": {
+          "package": "candlescope-plugin-pine-compat",
+          "version": "0.3.0.dev1",
+          "code_sha256": "267603668ef3f2398db0e8050b4c3e531211b89afc05d2b4c805474354c14a73"
+        },
+        "engine": {
+          "package": "pine-compat-runtime",
+          "version": "0.3.0rc1",
+          "code_sha256": "1ada16a9c176de2d7a8256c83256deca0be8a3149bc92c9308c1bbd3912f2836"
+        },
+        "transport": {
+          "package": "candlescope-plugin-sdk",
+          "version": "0.2.0",
+          "code_sha256": "f7efb16d888bc6fbe70fee23ab575deef5cbf383fad37c5fc35e5e789cf32d79"
+        }
+      },
+      "candlescope.pyne": {
+        "protocol": "candlescope.native-strategy/1",
+        "adapter": "pyne-native/1",
+        "plugin": {
+          "package": "candlescope-plugin-pyne",
+          "version": "0.3.0.dev1",
+          "code_sha256": "572b3dcf8a3b9712089bc51fdeee0d99dc56c1dd1af316670b2e77b8f68bc616"
+        },
+        "engine": {
+          "package": "pyne-runtime",
+          "version": "0.4.0",
+          "code_sha256": "b308c1dcc29b1ffa66cebd8a0b2b7627c60da78b1efd9b09ea9a12e144019395"
+        },
+        "transport": {
+          "package": "candlescope-plugin-sdk",
+          "version": "0.2.0",
+          "code_sha256": "f7efb16d888bc6fbe70fee23ab575deef5cbf383fad37c5fc35e5e789cf32d79"
+        },
+        "historical_session": "fixed-history/1"
+      },
+      "candlescope.pyne.external": {
+        "protocol": "candlescope.native-strategy/1",
+        "adapter": "pyne-external/1",
+        "plugin": {
+          "package": "candlescope-plugin-pyne",
+          "version": "0.3.0.dev1",
+          "code_sha256": "572b3dcf8a3b9712089bc51fdeee0d99dc56c1dd1af316670b2e77b8f68bc616"
+        },
+        "engine": {
+          "package": "pyne-runtime",
+          "version": "0.4.0",
+          "code_sha256": "b308c1dcc29b1ffa66cebd8a0b2b7627c60da78b1efd9b09ea9a12e144019395"
+        },
+        "transport": {
+          "package": "candlescope-plugin-sdk",
+          "version": "0.2.0",
+          "code_sha256": "f7efb16d888bc6fbe70fee23ab575deef5cbf383fad37c5fc35e5e789cf32d79"
+        }
+      }
+    },
+    "installation": "C:\\Users\\MECHREVO\\AppData\\Local\\CandleScope\\plugins\\native-installs\\d88e726c6b1825a49c12e3c8d17a9240f980ef8d2a6cbdaf81865534b36d03a9"
+  },
+  "browser": {
+    "route": "/strategy.html",
+    "data_rows": 10,
+    "book_updates": 40,
+    "trade_events": 40,
+    "console_errors": 0,
+    "note": "Wrong initial /strategy-research URL opened the unrelated market page against a minimal test server; 404s from that page are excluded. Correct /strategy.html console is retained.",
+    "console_log": ".playwright-cli/console-2026-09-20T04-32-22-460Z.log",
+    "runs": [
+      {
+        "run_id": "native_6e47b40d7ca643ddb7c6e4391215cfef",
+        "language": "pyne",
+        "execution_mode": "NATIVE",
+        "input_hash": "sha256:bca63899758b34d9b58f9247a1581cb12c2c31d03f3e31101f69291d9cef2d65",
+        "report_hash": "sha256:ea6542995ee6773b283271f32a2ba11e86baa1783dfec127186e314be6b98537",
+        "fills": 1,
+        "identity": {
+          "adapter": "pyne-native/1",
+          "engine": {
+            "code_sha256": "b308c1dcc29b1ffa66cebd8a0b2b7627c60da78b1efd9b09ea9a12e144019395",
+            "package": "pyne-runtime",
+            "version": "0.4.0"
+          },
+          "historical_session": "fixed-history/1",
+          "plugin": {
+            "code_sha256": "572b3dcf8a3b9712089bc51fdeee0d99dc56c1dd1af316670b2e77b8f68bc616",
+            "package": "candlescope-plugin-pyne",
+            "version": "0.3.0.dev1"
+          },
+          "protocol": "candlescope.native-strategy/1",
+          "transport": {
+            "code_sha256": "f7efb16d888bc6fbe70fee23ab575deef5cbf383fad37c5fc35e5e789cf32d79",
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.0"
+          }
+        }
+      },
+      {
+        "run_id": "native_28cbf6155dc84f34ac314829f98c2069",
+        "language": "pyne",
+        "execution_mode": "CANDLESCOPE",
+        "input_hash": "sha256:07b4ae9c5976dd29e5d12bbd13111919321efd53ca1e7b69b57c419a2c9365db",
+        "report_hash": "sha256:95f3ea8b775af10743d32f756f8cee69186f4d70df2e5c29775a8878d393c18c",
+        "fills": 2,
+        "identity": {
+          "adapter": "pyne-external/1",
+          "engine": {
+            "code_sha256": "b308c1dcc29b1ffa66cebd8a0b2b7627c60da78b1efd9b09ea9a12e144019395",
+            "package": "pyne-runtime",
+            "version": "0.4.0"
+          },
+          "plugin": {
+            "code_sha256": "572b3dcf8a3b9712089bc51fdeee0d99dc56c1dd1af316670b2e77b8f68bc616",
+            "package": "candlescope-plugin-pyne",
+            "version": "0.3.0.dev1"
+          },
+          "protocol": "candlescope.native-strategy/1",
+          "transport": {
+            "code_sha256": "f7efb16d888bc6fbe70fee23ab575deef5cbf383fad37c5fc35e5e789cf32d79",
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.0"
+          }
+        }
+      },
+      {
+        "run_id": "native_bc37939ff3314310800fce5b5c79c06e",
+        "language": "pine",
+        "execution_mode": "CANDLESCOPE",
+        "input_hash": "sha256:346fd821896fe8922600ae34c6fd08531361e62f32363be91ade175918503ae7",
+        "report_hash": "sha256:9ad1b9e2b11badbeb07eb27cdb901e79a962a21c2e003a0deb0d7cf7b1795f24",
+        "fills": 2,
+        "identity": {
+          "adapter": "pine-external/1",
+          "engine": {
+            "code_sha256": "1ada16a9c176de2d7a8256c83256deca0be8a3149bc92c9308c1bbd3912f2836",
+            "package": "pine-compat-runtime",
+            "version": "0.3.0rc1"
+          },
+          "plugin": {
+            "code_sha256": "267603668ef3f2398db0e8050b4c3e531211b89afc05d2b4c805474354c14a73",
+            "package": "candlescope-plugin-pine-compat",
+            "version": "0.3.0.dev1"
+          },
+          "protocol": "candlescope.native-strategy/1",
+          "transport": {
+            "code_sha256": "f7efb16d888bc6fbe70fee23ab575deef5cbf383fad37c5fc35e5e789cf32d79",
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.0"
+          }
+        }
+      },
+      {
+        "run_id": "native_04dfa2a1967d40ffb133a95e16f879dc",
+        "language": "pine",
+        "execution_mode": "NATIVE",
+        "input_hash": "sha256:34dc2f8e99a66b6dcd7f322b89b4d11a35325b5ea9364eb8eea01499296906ad",
+        "report_hash": "sha256:e5ed380eb6c28709eb80d86fb945c7d77ce49238134b0e82b3a8104e077150dc",
+        "fills": 0,
+        "identity": {
+          "adapter": "pine-native/1",
+          "engine": {
+            "code_sha256": "1ada16a9c176de2d7a8256c83256deca0be8a3149bc92c9308c1bbd3912f2836",
+            "package": "pine-compat-runtime",
+            "version": "0.3.0rc1"
+          },
+          "historical_session": "fixed-history/1",
+          "plugin": {
+            "code_sha256": "267603668ef3f2398db0e8050b4c3e531211b89afc05d2b4c805474354c14a73",
+            "package": "candlescope-plugin-pine-compat",
+            "version": "0.3.0.dev1"
+          },
+          "protocol": "candlescope.native-strategy/1",
+          "transport": {
+            "code_sha256": "f7efb16d888bc6fbe70fee23ab575deef5cbf383fad37c5fc35e5e789cf32d79",
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.0"
+          }
+        }
+      }
+    ],
+    "replays": [
+      {
+        "replay_id": "nr_9243192386cd4003bf35c17e5d20a061",
+        "run_id": "native_6e47b40d7ca643ddb7c6e4391215cfef",
+        "cursor": 10,
+        "method": "FIXED_HORIZON_INCREMENTAL",
+        "final_report_hash": "sha256:ea6542995ee6773b283271f32a2ba11e86baa1783dfec127186e314be6b98537",
+        "batch_parity": true
+      },
+      {
+        "replay_id": "nr_f8645840a4034e4f9b03fbb463dd3030",
+        "run_id": "native_04dfa2a1967d40ffb133a95e16f879dc",
+        "cursor": 10,
+        "method": "FIXED_HORIZON_INCREMENTAL",
+        "final_report_hash": "sha256:e5ed380eb6c28709eb80d86fb945c7d77ce49238134b0e82b3a8104e077150dc",
+        "batch_parity": true
+      }
+    ],
+    "screenshots": [
+      "output/playwright/native-strategy/pine-fixed-history-v3.png",
+      "output/playwright/native-strategy/pyne-fixed-history-v3.png",
+      "output/playwright/native-strategy/pine-fill-callback-v3.png",
+      "output/playwright/native-strategy/pyne-fill-callback-v3.png"
+    ]
+  },
+  "remaining_boundaries": [
+    "Batch Pyne and requested/magnifier replay retain explicit historical-prefix reconstruction",
+    "Process-local state snapshots; durable checkpoints rebuild after restart",
+    "Host fill callbacks rebuild event prefixes; no production archive throughput qualification",
+    "Single net position and one pending entry; no pyramiding",
+    "Best bid/ask plus prints; no depth queue-exact model",
+    "Host request, trailing stops and tick-distance profit/loss remain unsupported",
+    "No public plugin release, Git push or desktop installer"
+  ],
+  "source": {
+    "candlescope": {
+      "path": "E:\\Disk0Merged\\H\\program\\CandleScope",
+      "base_head": "b9982f59ca460e409a2157cde152a594693b7497",
+      "delivery": "uncommitted working-tree changes"
+    },
+    "pine": {
+      "path": "E:\\projects\\pine-external-broker",
+      "base_head": "5c775fb874def80fbbc90a4d83f73ea12ad79945",
+      "delivery": "uncommitted working-tree changes"
+    },
+    "pyne": {
+      "path": "E:\\projects\\pyne-external-broker",
+      "base_head": "ddc6f4a06ed6c8d6892c55f42454ac06a2d7ea3e",
+      "delivery": "uncommitted working-tree changes"
+    }
+  }
+}

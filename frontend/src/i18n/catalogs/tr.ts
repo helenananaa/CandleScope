@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const tr = {
+  ...nativeEnglish,
   "replay.portfolio.title": "Portföy özkaynağı",
   "replay.portfolio.load": "Portföy eğrisini yükle / yenile",
   "replay.portfolio.hint": "Saat sonu örnekleri; düşüş tüm fiyat yolunu kullanır. İlerledikten sonra yenileyin. Yalnızca kaydedilmiş portföy aralıkları.",

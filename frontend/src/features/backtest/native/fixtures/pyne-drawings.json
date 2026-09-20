@@ -1,0 +1,312 @@
+{
+  "execution_mode": "NATIVE",
+  "account_authority": "pyne-runtime",
+  "fill_model": "pyne-native-standard-ohlcv",
+  "raw_output": {
+    "meta": {
+      "title": "Drawing integration",
+      "overlay": true,
+      "script_type": "strategy"
+    },
+    "lines": [
+      {
+        "id": "plot_1",
+        "title": "plot_1",
+        "color": "#f59e0b",
+        "linewidth": 2,
+        "style": "solid",
+        "pane": "main",
+        "data": [
+          {
+            "time": 1700000040,
+            "value": 11.0
+          },
+          {
+            "time": 1700000100,
+            "value": 12.0
+          },
+          {
+            "time": 1700000160,
+            "value": 13.0
+          },
+          {
+            "time": 1700000220,
+            "value": 14.0
+          },
+          {
+            "time": 1700000280,
+            "value": 15.0
+          }
+        ]
+      }
+    ],
+    "objects": {
+      "lines": [
+        {
+          "id": "line_1",
+          "x1": 0,
+          "y1": 9,
+          "x2": 4,
+          "y2": 13,
+          "color": "#ef5350",
+          "width": 1,
+          "style": "solid",
+          "extend": "none",
+          "xloc": "bar_index",
+          "pane": "main"
+        },
+        {
+          "id": "line_2",
+          "x1": 0,
+          "y1": 11,
+          "x2": 4,
+          "y2": 15,
+          "color": "#2196f3",
+          "width": 1,
+          "style": "solid",
+          "extend": "none",
+          "xloc": "bar_index",
+          "pane": "main"
+        }
+      ],
+      "labels": [
+        {
+          "id": "label_5",
+          "x": 2,
+          "y": 14,
+          "text": "Label <b>escaped</b>",
+          "color": "#ffffff",
+          "textcolor": "#000000",
+          "style": "label_down",
+          "size": "normal",
+          "xloc": "bar_index",
+          "yloc": "price",
+          "pane": "main"
+        }
+      ],
+      "boxes": [
+        {
+          "id": "box_4",
+          "left": 1,
+          "top": 14,
+          "right": 3,
+          "bottom": 10,
+          "bgcolor": "rgba(38,166,154,0.2)",
+          "border_color": "#787b86",
+          "border_width": 1,
+          "border_style": "solid",
+          "extend": "none",
+          "xloc": "bar_index",
+          "text": "Range",
+          "text_size": "normal",
+          "text_color": "#000000",
+          "text_halign": "center",
+          "text_valign": "middle",
+          "pane": "main"
+        }
+      ],
+      "tables": [
+        {
+          "id": "table_7",
+          "position": "top_right",
+          "columns": 2,
+          "rows": 2,
+          "bgcolor": null,
+          "frame_color": "#787b86",
+          "frame_width": 1,
+          "border_color": "#787b86",
+          "border_width": 1,
+          "pane": "main",
+          "cells": [
+            {
+              "column": 0,
+              "row": 0,
+              "text": "Merged title",
+              "text_color": "#000000",
+              "bgcolor": null,
+              "width": null,
+              "height": null,
+              "text_halign": "center",
+              "text_valign": "middle"
+            },
+            {
+              "column": 0,
+              "row": 1,
+              "text": "Count",
+              "text_color": "#000000",
+              "bgcolor": null,
+              "width": null,
+              "height": null,
+              "text_halign": "center",
+              "text_valign": "middle"
+            },
+            {
+              "column": 1,
+              "row": 1,
+              "text": "5",
+              "text_color": "#000000",
+              "bgcolor": null,
+              "width": null,
+              "height": null,
+              "text_halign": "center",
+              "text_valign": "middle"
+            }
+          ],
+          "merges": [
+            {
+              "start_column": 0,
+              "start_row": 0,
+              "end_column": 1,
+              "end_row": 0
+            }
+          ]
+        }
+      ],
+      "linefills": [
+        {
+          "id": "linefill_3",
+          "line1_id": "line_1",
+          "line2_id": "line_2",
+          "color": "rgba(33,150,243,0.2)",
+          "pane": "main"
+        }
+      ],
+      "polylines": [
+        {
+          "id": "polyline_6",
+          "points": [
+            {
+              "x": 0,
+              "y": 9
+            },
+            {
+              "x": 2,
+              "y": 15
+            },
+            {
+              "x": 4,
+              "y": 12
+            }
+          ],
+          "curved": true,
+          "closed": true,
+          "xloc": "bar_index",
+          "line_color": "#2196f3",
+          "fill_color": "rgba(239,83,80,0.1)",
+          "line_style": "solid",
+          "line_width": 1,
+          "pane": "main"
+        }
+      ]
+    }
+  },
+  "trades": [],
+  "orders": [],
+  "equity": [
+    {
+      "time": 1700000040,
+      "value": 0.0
+    },
+    {
+      "time": 1700000100,
+      "value": 0.0
+    },
+    {
+      "time": 1700000160,
+      "value": 0.0
+    },
+    {
+      "time": 1700000220,
+      "value": 0.0
+    },
+    {
+      "time": 1700000280,
+      "value": 0.0
+    }
+  ],
+  "position": null,
+  "graphics": [
+    {
+      "name": "plot_1",
+      "color": "#f59e0b",
+      "type": "line",
+      "pane": "main",
+      "lineWidth": 2,
+      "lineStyle": 0,
+      "data": [
+        {
+          "time": 1700000040,
+          "value": 11.0
+        },
+        {
+          "time": 1700000100,
+          "value": 12.0
+        },
+        {
+          "time": 1700000160,
+          "value": 13.0
+        },
+        {
+          "time": 1700000220,
+          "value": 14.0
+        },
+        {
+          "time": 1700000280,
+          "value": 15.0
+        }
+      ],
+      "id": "plot_1"
+    }
+  ],
+  "parameter_schema": [],
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "PYNE_EMPTY_NATIVE_REPORT",
+      "message": "Pyne 0.4.0 emitted no strategy report for this no-order run; equity is its unmodified native series."
+    }
+  ],
+  "bars": [
+    {
+      "time": 1700000040,
+      "open": 10,
+      "high": 12,
+      "low": 9,
+      "close": 11,
+      "volume": 100
+    },
+    {
+      "time": 1700000100,
+      "open": 11,
+      "high": 13,
+      "low": 10,
+      "close": 12,
+      "volume": 100
+    },
+    {
+      "time": 1700000160,
+      "open": 12,
+      "high": 14,
+      "low": 11,
+      "close": 13,
+      "volume": 100
+    },
+    {
+      "time": 1700000220,
+      "open": 13,
+      "high": 15,
+      "low": 12,
+      "close": 14,
+      "volume": 100
+    },
+    {
+      "time": 1700000280,
+      "open": 14,
+      "high": 16,
+      "low": 13,
+      "close": 15,
+      "volume": 100
+    }
+  ],
+  "report_hash": "fixture"
+}

@@ -1,0 +1,582 @@
+{
+  "schema": "candlescope.native-strategy.qualification/1",
+  "stage": "native-v9",
+  "date": "2026-09-20",
+  "delivery": "local source implementation; current installed engine bundle reused; no public release, desktop package or always-on capture",
+  "engine_bundle": "e4b09a68d69960e14c71c695c9fcd59d12a87de70efc09a10fe32a9b8b5bba1d",
+  "host_identity": {
+    "contract": "external-broker/1",
+    "host_model": "SAMPLED_BOOK_VISIBLE_TAKER_V9",
+    "code_sha256": "d2b6a3418ef0f508fbae7f68933e4fd00090533eb10c36a8b972105fcaaf5491"
+  },
+  "fidelity": "BOOK_SAMPLED",
+  "fill_model": "SAMPLED_L2_VISIBLE_TAKER_ONLY_V1",
+  "account_authority": "candlescope",
+  "real_archive_qualification": {
+    "schema": "candlescope.okx-sampled-qualification/1",
+    "manifest": {
+      "source": "OKX_PUBLIC_HISTORICAL_ARCHIVE",
+      "instrument": "BTC-USDT",
+      "market": "SPOT",
+      "fill_model": "SAMPLED_L2_VISIBLE_TAKER_ONLY_V1",
+      "book_snapshot_level_limit": 5000,
+      "nominal_sample_ms": 1000,
+      "exchange_sequence_verified": false,
+      "source_url": "https://www.okx.com/zh-hans/historical-data",
+      "start_time_ms": 1780272060000,
+      "end_time_ms_exclusive": 1780272660000,
+      "seed_sample_time_ms": 1780272059004,
+      "trade_date_timezone": "UTC+08:00",
+      "book_date_timezone": "UTC",
+      "sample_index_meaning": "local archive record index, not exchange sequence",
+      "archives": [
+        {
+          "file": "BTC-USDT-L2orderbook-5000lv-2026-06-01.tar.gz",
+          "sha256": "49735652f978b84f5c0db7c1e4d9e0cfb783c055dc2d3987c6abd693c140f794",
+          "bytes": 59434482
+        },
+        {
+          "file": "BTC-USDT-trades-2026-06-01.zip",
+          "sha256": "08952cca5a7b3ba2937a5e51981f5e3e5b036006f67030616a7c17826bfb609a",
+          "bytes": 3828556
+        },
+        {
+          "file": "BTC-USDT-trades-2026-06-02.zip",
+          "sha256": "44cfa3e0cb474a8293ef474eb80747f871c0103960e4368893df9b3c78cdd9c1",
+          "bytes": 6339072
+        }
+      ],
+      "fidelity": "BOOK_SAMPLED",
+      "bars": 10,
+      "events": 3439,
+      "execution_sha256": "e07ea01d5d6f9ba1a2e0e4cda454b5ce1f3d38240b904dea9cc4f3d897a20189",
+      "bars_sha256": "e8352a3d1dee8d2a5fb11ff87c2654d89b79393c7a6cdb08516065ad891f866e",
+      "csv_timestamp_unit": "ms"
+    },
+    "runs": [
+      {
+        "language": "pine",
+        "fill_callbacks": false,
+        "repeat_equal": true,
+        "seconds_including_repeat": 25.640999999995984,
+        "identity": {
+          "adapter": "pine-external/5",
+          "engine": {
+            "code_sha256": "ae46704ffcce989b4e9f192932314314051919951c53bb723d548969bee37a64",
+            "package": "pine-compat-runtime",
+            "version": "0.3.0rc1"
+          },
+          "plugin": {
+            "code_sha256": "a8c8da9f743e7d29a5802781182e9791238417d584367b2e3bf7a43921b7c2c0",
+            "package": "candlescope-plugin-pine-compat",
+            "version": "0.3.0.dev1"
+          },
+          "protocol": "candlescope.native-strategy/1",
+          "transport": {
+            "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6",
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.0"
+          }
+        },
+        "report_hash": "sha256:26b5d26e126ef6a71d004ab6778790258cd76775da7392832790974c1ca15f62",
+        "trades": [
+          {
+            "action": "OPEN_LONG",
+            "closed_entries": [],
+            "event_time_ms": 1780272122098,
+            "fee": "0.000000",
+            "opened_entry": {
+              "entry_id": "L",
+              "qty": "0.001"
+            },
+            "order_id": "ord-1",
+            "position_after": "0.001",
+            "position_before": "0",
+            "price": "73662.30",
+            "qty": "0.001",
+            "reason": "DEPTH_WALK",
+            "script_order_id": "L",
+            "sequence": 185,
+            "side": "BUY",
+            "time": 1780272122.098
+          },
+          {
+            "action": "CLOSE_LONG",
+            "closed_entries": [
+              {
+                "entry_id": "L",
+                "entry_order_id": "ord-1",
+                "qty": "0.001"
+              }
+            ],
+            "event_time_ms": 1780272420024,
+            "fee": "0.000000",
+            "opened_entry": null,
+            "order_id": "ord-2",
+            "position_after": "0.000",
+            "position_before": "0.001",
+            "price": "73801.90",
+            "qty": "0.001",
+            "reason": "DEPTH_WALK",
+            "script_order_id": "L",
+            "sequence": 2737,
+            "side": "SELL",
+            "time": 1780272420.024
+          }
+        ],
+        "position": {
+          "entry_price": null,
+          "equity": "10000.13960",
+          "fees_paid": "0",
+          "funding_event_count": 0,
+          "funding_paid": "0",
+          "initial_balance": "10000.0",
+          "journal": [
+            {
+              "amount": "0.13960",
+              "kind": "REALIZED"
+            }
+          ],
+          "liquidated": false,
+          "liquidation_enabled": false,
+          "mark": "73788.0",
+          "position_qty": "0.000",
+          "quote_balance": "10000.13960",
+          "rule_version": null,
+          "seen_funding_periods": []
+        },
+        "depth_model": {
+          "depth_exhaustion": "leave_unfilled",
+          "depth_scope": "BOUNDED_SAMPLED",
+          "exchange_sequence_verified": false,
+          "max_book_age_ms": 2000,
+          "passive_policy": "NO_INFERRED_PASSIVE_FILLS",
+          "queue_exact": false,
+          "same_timestamp_policy": "trades_before_new_book_sample",
+          "stale_trade_events": 0,
+          "taker_capacity": "remaining_visible_depth",
+          "taker_clock": "next_trade_print"
+        }
+      },
+      {
+        "language": "pine",
+        "fill_callbacks": true,
+        "repeat_equal": true,
+        "seconds_including_repeat": 29.437000000005355,
+        "identity": {
+          "adapter": "pine-external/5",
+          "engine": {
+            "code_sha256": "ae46704ffcce989b4e9f192932314314051919951c53bb723d548969bee37a64",
+            "package": "pine-compat-runtime",
+            "version": "0.3.0rc1"
+          },
+          "plugin": {
+            "code_sha256": "a8c8da9f743e7d29a5802781182e9791238417d584367b2e3bf7a43921b7c2c0",
+            "package": "candlescope-plugin-pine-compat",
+            "version": "0.3.0.dev1"
+          },
+          "protocol": "candlescope.native-strategy/1",
+          "transport": {
+            "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6",
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.0"
+          }
+        },
+        "report_hash": "sha256:cdd10254ec3e7ffec1fb1c1868749e2cf6e32d4df8253ad184001615542177e8",
+        "trades": [
+          {
+            "action": "OPEN_LONG",
+            "closed_entries": [],
+            "event_time_ms": 1780272122098,
+            "fee": "0.000000",
+            "opened_entry": {
+              "entry_id": "L",
+              "qty": "0.001"
+            },
+            "order_id": "ord-1",
+            "position_after": "0.001",
+            "position_before": "0",
+            "price": "73662.30",
+            "qty": "0.001",
+            "reason": "DEPTH_WALK",
+            "script_order_id": "L",
+            "sequence": 185,
+            "side": "BUY",
+            "time": 1780272122.098
+          },
+          {
+            "action": "CLOSE_LONG",
+            "closed_entries": [
+              {
+                "entry_id": "L",
+                "entry_order_id": "ord-1",
+                "qty": "0.001"
+              }
+            ],
+            "event_time_ms": 1780272420024,
+            "fee": "0.000000",
+            "opened_entry": null,
+            "order_id": "ord-2",
+            "position_after": "0.000",
+            "position_before": "0.001",
+            "price": "73801.90",
+            "qty": "0.001",
+            "reason": "DEPTH_WALK",
+            "script_order_id": "L",
+            "sequence": 2737,
+            "side": "SELL",
+            "time": 1780272420.024
+          }
+        ],
+        "position": {
+          "entry_price": null,
+          "equity": "10000.13960",
+          "fees_paid": "0",
+          "funding_event_count": 0,
+          "funding_paid": "0",
+          "initial_balance": "10000.0",
+          "journal": [
+            {
+              "amount": "0.13960",
+              "kind": "REALIZED"
+            }
+          ],
+          "liquidated": false,
+          "liquidation_enabled": false,
+          "mark": "73788.0",
+          "position_qty": "0.000",
+          "quote_balance": "10000.13960",
+          "rule_version": null,
+          "seen_funding_periods": []
+        },
+        "depth_model": {
+          "depth_exhaustion": "leave_unfilled",
+          "depth_scope": "BOUNDED_SAMPLED",
+          "exchange_sequence_verified": false,
+          "max_book_age_ms": 2000,
+          "passive_policy": "NO_INFERRED_PASSIVE_FILLS",
+          "queue_exact": false,
+          "same_timestamp_policy": "trades_before_new_book_sample",
+          "stale_trade_events": 0,
+          "taker_capacity": "remaining_visible_depth",
+          "taker_clock": "next_trade_print"
+        }
+      },
+      {
+        "language": "pyne",
+        "fill_callbacks": false,
+        "repeat_equal": true,
+        "seconds_including_repeat": 29.281999999999243,
+        "identity": {
+          "adapter": "pyne-external/4",
+          "engine": {
+            "code_sha256": "92d002bd47242c1709f0554010a26dba8154530f2de1ed176e3d730688315912",
+            "package": "pyne-runtime",
+            "version": "0.4.0"
+          },
+          "plugin": {
+            "code_sha256": "c3eb16dfa97b51a6897a54626a7e25ed776e310def0ff0f30da4d4a2ce5d9f87",
+            "package": "candlescope-plugin-pyne",
+            "version": "0.3.0.dev1"
+          },
+          "protocol": "candlescope.native-strategy/1",
+          "transport": {
+            "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6",
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.0"
+          }
+        },
+        "report_hash": "sha256:8caa742cbe580b9b1c146e5df6f24d733e324a476bcf3821876c30773083cd68",
+        "trades": [
+          {
+            "action": "OPEN_LONG",
+            "closed_entries": [],
+            "event_time_ms": 1780272122098,
+            "fee": "0.000000",
+            "opened_entry": {
+              "entry_id": "L",
+              "qty": "0.001"
+            },
+            "order_id": "ord-1",
+            "position_after": "0.001",
+            "position_before": "0",
+            "price": "73662.30",
+            "qty": "0.001",
+            "reason": "DEPTH_WALK",
+            "script_order_id": "L",
+            "sequence": 185,
+            "side": "BUY",
+            "time": 1780272122.098
+          },
+          {
+            "action": "CLOSE_LONG",
+            "closed_entries": [
+              {
+                "entry_id": "L",
+                "entry_order_id": "ord-1",
+                "qty": "0.001"
+              }
+            ],
+            "event_time_ms": 1780272420024,
+            "fee": "0.000000",
+            "opened_entry": null,
+            "order_id": "ord-2",
+            "position_after": "0.000",
+            "position_before": "0.001",
+            "price": "73801.90",
+            "qty": "0.001",
+            "reason": "DEPTH_WALK",
+            "script_order_id": "L",
+            "sequence": 2737,
+            "side": "SELL",
+            "time": 1780272420.024
+          }
+        ],
+        "position": {
+          "entry_price": null,
+          "equity": "10000.13960",
+          "fees_paid": "0",
+          "funding_event_count": 0,
+          "funding_paid": "0",
+          "initial_balance": "10000.0",
+          "journal": [
+            {
+              "amount": "0.13960",
+              "kind": "REALIZED"
+            }
+          ],
+          "liquidated": false,
+          "liquidation_enabled": false,
+          "mark": "73788.0",
+          "position_qty": "0.000",
+          "quote_balance": "10000.13960",
+          "rule_version": null,
+          "seen_funding_periods": []
+        },
+        "depth_model": {
+          "depth_exhaustion": "leave_unfilled",
+          "depth_scope": "BOUNDED_SAMPLED",
+          "exchange_sequence_verified": false,
+          "max_book_age_ms": 2000,
+          "passive_policy": "NO_INFERRED_PASSIVE_FILLS",
+          "queue_exact": false,
+          "same_timestamp_policy": "trades_before_new_book_sample",
+          "stale_trade_events": 0,
+          "taker_capacity": "remaining_visible_depth",
+          "taker_clock": "next_trade_print"
+        }
+      },
+      {
+        "language": "pyne",
+        "fill_callbacks": true,
+        "repeat_equal": true,
+        "seconds_including_repeat": 29.843000000000757,
+        "identity": {
+          "adapter": "pyne-external/4",
+          "engine": {
+            "code_sha256": "92d002bd47242c1709f0554010a26dba8154530f2de1ed176e3d730688315912",
+            "package": "pyne-runtime",
+            "version": "0.4.0"
+          },
+          "plugin": {
+            "code_sha256": "c3eb16dfa97b51a6897a54626a7e25ed776e310def0ff0f30da4d4a2ce5d9f87",
+            "package": "candlescope-plugin-pyne",
+            "version": "0.3.0.dev1"
+          },
+          "protocol": "candlescope.native-strategy/1",
+          "transport": {
+            "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6",
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.0"
+          }
+        },
+        "report_hash": "sha256:1b0bcf0544ace0f821a5a8f909860eb8591f8d30b21b17ca722bc53b3956dfbf",
+        "trades": [
+          {
+            "action": "OPEN_LONG",
+            "closed_entries": [],
+            "event_time_ms": 1780272122098,
+            "fee": "0.000000",
+            "opened_entry": {
+              "entry_id": "L",
+              "qty": "0.001"
+            },
+            "order_id": "ord-1",
+            "position_after": "0.001",
+            "position_before": "0",
+            "price": "73662.30",
+            "qty": "0.001",
+            "reason": "DEPTH_WALK",
+            "script_order_id": "L",
+            "sequence": 185,
+            "side": "BUY",
+            "time": 1780272122.098
+          },
+          {
+            "action": "CLOSE_LONG",
+            "closed_entries": [
+              {
+                "entry_id": "L",
+                "entry_order_id": "ord-1",
+                "qty": "0.001"
+              }
+            ],
+            "event_time_ms": 1780272420024,
+            "fee": "0.000000",
+            "opened_entry": null,
+            "order_id": "ord-2",
+            "position_after": "0.000",
+            "position_before": "0.001",
+            "price": "73801.90",
+            "qty": "0.001",
+            "reason": "DEPTH_WALK",
+            "script_order_id": "L",
+            "sequence": 2737,
+            "side": "SELL",
+            "time": 1780272420.024
+          }
+        ],
+        "position": {
+          "entry_price": null,
+          "equity": "10000.13960",
+          "fees_paid": "0",
+          "funding_event_count": 0,
+          "funding_paid": "0",
+          "initial_balance": "10000.0",
+          "journal": [
+            {
+              "amount": "0.13960",
+              "kind": "REALIZED"
+            }
+          ],
+          "liquidated": false,
+          "liquidation_enabled": false,
+          "mark": "73788.0",
+          "position_qty": "0.000",
+          "quote_balance": "10000.13960",
+          "rule_version": null,
+          "seen_funding_periods": []
+        },
+        "depth_model": {
+          "depth_exhaustion": "leave_unfilled",
+          "depth_scope": "BOUNDED_SAMPLED",
+          "exchange_sequence_verified": false,
+          "max_book_age_ms": 2000,
+          "passive_policy": "NO_INFERRED_PASSIVE_FILLS",
+          "queue_exact": false,
+          "same_timestamp_policy": "trades_before_new_book_sample",
+          "stale_trade_events": 0,
+          "taker_capacity": "remaining_visible_depth",
+          "taker_clock": "next_trade_print"
+        }
+      }
+    ],
+    "all_passed": true,
+    "same_host_ledger_across_languages_and_callbacks": true,
+    "scope": "actual installed engines, isolated host HTTP and export; 10-minute public archive window; no exact queue claims"
+  },
+  "live_capture": {
+    "schema": "candlescope.okx-live-capture/1",
+    "started_time_ns": 1789913309923657500,
+    "finished_time_ns": 1789913330166575200,
+    "requested_seconds": 20,
+    "status": "CONTINUOUS_BOUNDED_FEED",
+    "book_messages": 147,
+    "trades": 46,
+    "last_trade_id": 1059780433,
+    "errors": [],
+    "continuity_check": "seqId/prevSeqId",
+    "checksum_status": "deprecated_by_OKX_2026-06-23_not_used",
+    "last_book_seq_id": 81351626623,
+    "depth_levels": 400,
+    "nominal_book_interval_ms": 100,
+    "book_depth_admissible": false,
+    "limits": [
+      "bounded 400 levels, not complete market depth",
+      "100ms feed, not every matching-engine event",
+      "two connections; receive order is not exchange cross-stream ordering",
+      "no order-level FIFO priority"
+    ],
+    "source": "https://www.okx.com/docs-v5/en/#order-book-trading-market-data-ws-order-book-channel",
+    "checksum_deprecation_source": "https://www.okx.com/zh-hans/help/okx-order-book-channels-checksum-field-deprecation",
+    "raw_sha256": "3ffcfafec34c58c7968cd4f1ab503497870645d4e419a31066397ade7a7b8672"
+  },
+  "tests": {
+    "kernel-tests-final": {
+      "passed": 17,
+      "log": "output/native-v9/kernel-tests-final.log"
+    },
+    "installed-regression": {
+      "passed": 34,
+      "log": "output/native-v9/installed-regression.log"
+    },
+    "frontend": {
+      "passed": 150
+    }
+  },
+  "checks": {
+    "typecheck": "passed",
+    "eslint": "passed",
+    "i18n": "passed 30 locales 4332 keys",
+    "production_build": "passed; existing large-chunk advisory",
+    "git_diff_check": "passed"
+  },
+  "browser": {
+    "scope": "isolated loopback backend/database, actual installed engines, real 10-minute OKX data",
+    "passed": [
+      "select sampled book model",
+      "upload paired execution JSON",
+      "Pine complete run with 2 fills",
+      "Pyne complete run with 2 fills",
+      "report names host authority, separate fidelity and limitations"
+    ],
+    "snapshots": [
+      "output/native-v9/browser-pine.yml",
+      "output/native-v9/browser-pyne.yml"
+    ],
+    "screenshots": [
+      "output/playwright/native-v9/pine-report.png",
+      "output/playwright/native-v9/pyne-report.png",
+      "output/playwright/native-v9/pyne-trades.png"
+    ],
+    "screenshot_limit": "element screenshots are clipped by the scroll container; snapshots contain the full report table",
+    "console_errors": 0,
+    "services": "owned browser and temporary backend/frontend closed"
+  },
+  "network_evidence": {
+    "history_archive_api": "public download links resolved; archives reused with content hashing",
+    "http_429": "retained output/native-v9/prepare.log; downloader now reuses cached archives and retries transient failures",
+    "deprecated_checksum_attempt": "retained output/native-v9/live-okx-20s/receipt.json; current protocol confirmed by official notice",
+    "current_protocol_capture": "output/native-v9/live-final-20s/receipt.json"
+  },
+  "limits": [
+    "no inferred passive fills or exact FIFO",
+    "bounded historical 5000 levels at nominal 1s",
+    "live collection is bounded 400 levels at nominal 100ms; two connections have no exchange cross-stream ordering",
+    "BOOK_DEPTH admission remains unchanged and false for these archives",
+    "ten-minute benchmark scope; no full-day throughput claim",
+    "uses existing CandleScope account model, not all OKX spot trading rules"
+  ],
+  "source_sha256": {
+    "backend/app/api/v1/native_backtests.py": "080450085508ae267782a7a69da95add005bae588aaf440a27ae9d56c7d5c0ae",
+    "backend/app/backtest/native.py": "b8288bd06e583aa70930ee6bfe9901a82dfd8c297e629e114376c7a167b978e3",
+    "backend/app/backtest/external.py": "2fdb42b00e512f336421e9c4501510739dd40ca38d4a897fdd6f48227ba3dfc0",
+    "backend/app/backtest/external_market.py": "f2c79630e49b1240d43b6c5572e23104f502c1bc58807bbabbd87f167d48ad0e",
+    "backend/app/simulation/depth_kernel.py": "6f2ab6a57f857442a25abeb252e7de8b9fd59a01b948a85429f53ba33791a604",
+    "backend/app/simulation/sampled_book_kernel.py": "dc690474063afb94ad7bd0789401f6712a3f5b7ede5966dd316da0000c744326",
+    "backend/scripts/prepare_okx_sampled_backtest.py": "8b08f41c6c6c03f143a496c59cb9b89e4940cf7004864c2a3bd28f15b1ac7113",
+    "backend/scripts/qualify_okx_sampled_backtest.py": "d785d61a703d7aa8205af6342b9cb1b63ecd92ecd05896f57535803c05c1a2ea",
+    "backend/scripts/collect_okx_l2.py": "e5b19e27069e57fc8dbc94a719b05863dc1a2303b6aa4440e6d421ea89aebc50",
+    "backend/tests/test_sampled_book.py": "ec1f59e449c31e265656e65a7f7df0481754b777dc44d642c139ee9332d26a70",
+    "backend/tests/test_okx_capture.py": "8aa85e92fc0a1a115fedd052060336159edba21dd14873a5bb8413335d3a9b11",
+    "frontend/src/features/backtest/native/NativeStrategyPanel.tsx": "addf0ae8b799745f1a0eb19b468614da7c9f93c53519078d4299644ea4ef3517",
+    "frontend/src/features/backtest/native/NativeStrategyReport.tsx": "48dc5dc7164e531e00c138f0f2ad19a2e2d27a22e16fd554474ba7259ddb6608",
+    "frontend/src/features/backtest/native/nativeBacktest.test.tsx": "85e44445d89c16457a314fdb7a697832458dc10edeed20c3fa67bb532a1c880d",
+    "frontend/src/i18n/catalogs/nativeEnglish.ts": "c65fb4870e96b129dfe9baad70b70bf4601cc718994ba192e73ea7ceebd566df",
+    "frontend/src/i18n/catalogs/en.ts": "e8b101076504607a2bc1124aac64c5e92e9eaa8be204524ca59e4733fd813566",
+    "frontend/src/i18n/catalogs/zh-CN.ts": "1035a7b5efb1fc19374bc82a34cae6909eee9d487c38b70a468002857633e674",
+    "examples/strategies/okx_sampled.pine": "a0b591ea0f80d86a4ca414e32724322f55aaf99446746fdad2eb7ad8c2908efc",
+    "examples/strategies/okx_sampled.py": "17ee66eebfdc51fdfbf013411633f1727228c5d14217ef53fbd07df55508a5ae",
+    "docs/OKX_SAMPLED_BACKTEST_zh.md": "d41bbcccc16b16dd2fc140a7948e871236d04eb3473767b1f890a6f780d03573"
+  }
+}

@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  ...nativeEnglish,
   "replay.portfolio.title": "포트폴리오 자산",
   "replay.portfolio.load": "곡선 불러오기 / 새로고침",
   "replay.portfolio.hint": "시간별 마지막 값을 표시하며 낙폭은 전체 가격 경로로 계산합니다. 진행 후 새로고침하세요. 기록된 구간만 포함합니다.",

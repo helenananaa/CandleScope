@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const sv = {
+  ...nativeEnglish,
   "replay.portfolio.title": "Portföljens eget kapital",
   "replay.portfolio.load": "Läs in / uppdatera portföljkurvan",
   "replay.portfolio.hint": "Stickprov vid timslut; nedgången använder hela prisförloppet. Uppdatera efter framsteg. Endast registrerade portföljintervall.",

@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptPT = {
+  ...nativeEnglish,
   "replay.portfolio.title": "Capital próprio da carteira",
   "replay.portfolio.load": "Carregar / atualizar a curva da carteira",
   "replay.portfolio.hint": "Amostras no fim de cada hora; a perda máxima usa todo o percurso dos preços. Atualize após avançar. Apenas intervalos registados.",

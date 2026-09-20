@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ar = {
+  ...nativeEnglish,
   "replay.portfolio.title": "حقوق ملكية المحفظة",
   "replay.portfolio.load": "تحميل / تحديث منحنى المحفظة",
   "replay.portfolio.hint": "عينات نهاية الساعة؛ يُحسب التراجع من مسار الأسعار الكامل. حدّث بعد التقدم. يشمل فترات المحفظة المسجلة فقط.",

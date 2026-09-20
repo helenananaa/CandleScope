@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const cs = {
+  ...nativeEnglish,
   "replay.portfolio.title": "Vlastní kapitál portfolia",
   "replay.portfolio.load": "Načíst / obnovit křivku portfolia",
   "replay.portfolio.hint": "Vzorky na konci hodiny; propad používá celý průběh cen. Po posunu obnovte. Pouze zaznamenané intervaly portfolia.",

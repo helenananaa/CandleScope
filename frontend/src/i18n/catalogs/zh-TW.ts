@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhTW = {
+  ...nativeEnglish,
   "replay.portfolio.title": "帳戶組合權益",
   "replay.portfolio.load": "載入 / 更新組合曲線",
   "replay.portfolio.hint": "每小時末取樣，回撤按完整行情計算。推進後請更新；僅涵蓋已記錄的組合區間。",

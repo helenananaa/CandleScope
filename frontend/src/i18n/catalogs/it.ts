@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const it = {
+  ...nativeEnglish,
   "replay.portfolio.title": "Patrimonio del portafoglio",
   "replay.portfolio.load": "Carica / aggiorna la curva del portafoglio",
   "replay.portfolio.hint": "Campioni di fine ora; il drawdown usa l’intero percorso dei prezzi. Aggiornare dopo l’avanzamento. Solo intervalli registrati.",

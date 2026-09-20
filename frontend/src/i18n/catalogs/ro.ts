@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ro = {
+  ...nativeEnglish,
   "replay.portfolio.title": "Capitalul portofoliului",
   "replay.portfolio.load": "Încarcă / actualizează curba portofoliului",
   "replay.portfolio.hint": "Eșantioane la sfârșitul orei; scăderea folosește întregul traseu al prețurilor. Actualizați după avansare. Doar intervalele înregistrate.",

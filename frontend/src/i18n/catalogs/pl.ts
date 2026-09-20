@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const pl = {
+  ...nativeEnglish,
   "replay.portfolio.title": "Kapitał portfela",
   "replay.portfolio.load": "Wczytaj / odśwież krzywą portfela",
   "replay.portfolio.hint": "Próbki z końca godziny; obsunięcie obejmuje cały przebieg cen. Odśwież po przejściu dalej. Tylko zapisane przedziały portfela.",

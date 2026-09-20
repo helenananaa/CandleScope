@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const vi = {
+  ...nativeEnglish,
   "replay.portfolio.title": "Vốn chủ sở hữu danh mục",
   "replay.portfolio.load": "Tải / làm mới đường vốn danh mục",
   "replay.portfolio.hint": "Mẫu cuối giờ; mức sụt giảm dùng toàn bộ diễn biến giá. Làm mới sau khi tiến tiếp. Chỉ gồm các khoảng danh mục đã ghi.",

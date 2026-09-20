@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const he = {
+  ...nativeEnglish,
   "replay.portfolio.title": "הון התיק",
   "replay.portfolio.load": "טעינה / רענון של עקומת התיק",
   "replay.portfolio.hint": "דגימות בסוף שעה; הירידה מחושבת לפי כל מסלול המחירים. יש לרענן לאחר התקדמות. רק מרווחי תיק שנרשמו.",

@@ -1,3 +1,4 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 /** Neutral Spanish trading glossary for Spain and Latin America:
@@ -5,6 +6,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
  * libro de órdenes, tasa de financiación, prueba retrospectiva, reproducción.
  */
 export const es = {
+  ...nativeEnglish,
   "replay.portfolio.title": "Patrimonio de la cartera",
   "replay.portfolio.load": "Cargar / actualizar curva",
   "replay.portfolio.hint": "Muestras al cierre de cada hora; la caída máxima usa todos los precios. Actualice tras avanzar. Solo cubre intervalos registrados.",

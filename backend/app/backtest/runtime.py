@@ -105,6 +105,8 @@ class BacktestRuntime:
         )
         self.chart_context = ChartBacktestContextResolver(self)
         self._shutdown = False
+        from .native import NativeBacktests
+        self.native = NativeBacktests(self)
 
     @classmethod
     def start(
@@ -130,6 +132,7 @@ class BacktestRuntime:
         try:
             runtime.worker.start()
         except BaseException:
+            runtime.native.shutdown()
             runtime.worker.shutdown()
             service.shutdown()
             raise
@@ -139,6 +142,7 @@ class BacktestRuntime:
         if self._shutdown:
             return
         self._shutdown = True
+        self.native.shutdown()
         self.worker.shutdown()
         self.service.shutdown()
 

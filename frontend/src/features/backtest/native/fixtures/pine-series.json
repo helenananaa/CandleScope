@@ -1,0 +1,590 @@
+{
+  "execution_mode": "NATIVE",
+  "account_authority": "pine-compat-runtime",
+  "fill_model": "pine-native-standard-ohlcv",
+  "raw_output": {
+    "schemaVersion": 9,
+    "renderMetadataVersion": 1,
+    "plots": [
+      {
+        "id": 1,
+        "values": [
+          11.0,
+          12.0,
+          13.0,
+          14.0,
+          15.0
+        ],
+        "colors": [
+          2201331,
+          2201331,
+          2201331,
+          2201331,
+          2201331
+        ],
+        "title": "Close"
+      },
+      {
+        "id": 2,
+        "values": [
+          10.0,
+          11.0,
+          12.0,
+          13.0,
+          14.0
+        ],
+        "colors": [
+          15873605,
+          15873605,
+          15873605,
+          15873605,
+          15873605
+        ],
+        "title": "Open"
+      }
+    ],
+    "plotChars": [
+      {
+        "id": 9,
+        "values": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "chars": [
+          "X",
+          "X",
+          "X",
+          "X",
+          "X"
+        ],
+        "colors": [
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "locations": [
+          "location.abovebar",
+          "location.abovebar",
+          "location.abovebar",
+          "location.abovebar",
+          "location.abovebar"
+        ],
+        "texts": [
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        "textColors": [
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "sizes": [
+          "size.auto",
+          "size.auto",
+          "size.auto",
+          "size.auto",
+          "size.auto"
+        ],
+        "title": "Chars"
+      }
+    ],
+    "plotShapes": [
+      {
+        "id": 10,
+        "values": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "styles": [
+          "shape.triangleup",
+          "shape.triangleup",
+          "shape.triangleup",
+          "shape.triangleup",
+          "shape.triangleup"
+        ],
+        "locations": [
+          "location.belowbar",
+          "location.belowbar",
+          "location.belowbar",
+          "location.belowbar",
+          "location.belowbar"
+        ],
+        "colors": [
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "texts": [
+          "UP",
+          "UP",
+          "UP",
+          "UP",
+          "UP"
+        ],
+        "textColors": [
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "sizes": [
+          "size.auto",
+          "size.auto",
+          "size.auto",
+          "size.auto",
+          "size.auto"
+        ],
+        "title": "Shapes"
+      }
+    ],
+    "plotArrows": [
+      {
+        "id": 11,
+        "values": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "colorUps": [
+          32768,
+          32768,
+          32768,
+          32768,
+          32768
+        ],
+        "colorDowns": [
+          16711680,
+          16711680,
+          16711680,
+          16711680,
+          16711680
+        ],
+        "minHeights": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "maxHeights": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "title": "Arrows"
+      }
+    ],
+    "plotBars": [
+      {
+        "id": 8,
+        "opens": [
+          10.0,
+          11.0,
+          12.0,
+          13.0,
+          14.0
+        ],
+        "highs": [
+          12.0,
+          13.0,
+          14.0,
+          15.0,
+          16.0
+        ],
+        "lows": [
+          9.0,
+          10.0,
+          11.0,
+          12.0,
+          13.0
+        ],
+        "closes": [
+          11.0,
+          12.0,
+          13.0,
+          14.0,
+          15.0
+        ],
+        "colors": [
+          2201331,
+          2201331,
+          2201331,
+          2201331,
+          2201331
+        ],
+        "title": "Bars"
+      }
+    ],
+    "plotCandles": [
+      {
+        "id": 7,
+        "opens": [
+          10.0,
+          11.0,
+          12.0,
+          13.0,
+          14.0
+        ],
+        "highs": [
+          12.0,
+          13.0,
+          14.0,
+          15.0,
+          16.0
+        ],
+        "lows": [
+          9.0,
+          10.0,
+          11.0,
+          12.0,
+          13.0
+        ],
+        "closes": [
+          11.0,
+          12.0,
+          13.0,
+          14.0,
+          15.0
+        ],
+        "colors": [
+          15873605,
+          15873605,
+          15873605,
+          15873605,
+          15873605
+        ],
+        "wickColors": [
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "borderColors": [
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "title": "Candles"
+      }
+    ],
+    "bgColors": [
+      {
+        "id": 12,
+        "values": [
+          1286557734,
+          1286557734,
+          1286557734,
+          1286557734,
+          1286557734
+        ]
+      }
+    ],
+    "barColors": [
+      {
+        "id": 6,
+        "values": [
+          5025616,
+          5025616,
+          5025616,
+          5025616,
+          5025616
+        ]
+      }
+    ],
+    "hlines": [
+      {
+        "id": 5,
+        "price": 12,
+        "title": "Mid"
+      }
+    ],
+    "fills": [
+      {
+        "id": 3,
+        "firstId": 1,
+        "secondId": 2,
+        "firstIsHLine": false,
+        "secondIsHLine": false,
+        "colors": [
+          563540813,
+          563540813,
+          563540813,
+          563540813,
+          563540813
+        ]
+      },
+      {
+        "id": 14,
+        "firstId": 1,
+        "secondId": 2,
+        "firstIsHLine": false,
+        "secondIsHLine": false,
+        "colors": [
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "gradient": [
+          {
+            "topValue": 11.0,
+            "bottomValue": 10.0,
+            "topColor": 15873605,
+            "bottomColor": 2201331
+          },
+          {
+            "topValue": 12.0,
+            "bottomValue": 11.0,
+            "topColor": 15873605,
+            "bottomColor": 2201331
+          },
+          {
+            "topValue": 13.0,
+            "bottomValue": 12.0,
+            "topColor": 15873605,
+            "bottomColor": 2201331
+          },
+          {
+            "topValue": 14.0,
+            "bottomValue": 13.0,
+            "topColor": 15873605,
+            "bottomColor": 2201331
+          },
+          {
+            "topValue": 15.0,
+            "bottomValue": 14.0,
+            "topColor": 15873605,
+            "bottomColor": 2201331
+          }
+        ]
+      }
+    ],
+    "labels": [],
+    "lines": [],
+    "lineFills": [],
+    "polylines": [],
+    "boxes": [],
+    "tables": [],
+    "alerts": [],
+    "strategy": {
+      "orders": [],
+      "trades": [],
+      "position": [],
+      "equity": [
+        {
+          "barIndex": 0,
+          "cash": 1000000.0,
+          "marketValue": 0.0,
+          "equity": 1000000.0,
+          "netProfit": 0.0
+        },
+        {
+          "barIndex": 1,
+          "cash": 1000000.0,
+          "marketValue": 0.0,
+          "equity": 1000000.0,
+          "netProfit": 0.0
+        },
+        {
+          "barIndex": 2,
+          "cash": 1000000.0,
+          "marketValue": 0.0,
+          "equity": 1000000.0,
+          "netProfit": 0.0
+        },
+        {
+          "barIndex": 3,
+          "cash": 1000000.0,
+          "marketValue": 0.0,
+          "equity": 1000000.0,
+          "netProfit": 0.0
+        },
+        {
+          "barIndex": 4,
+          "cash": 1000000.0,
+          "marketValue": 0.0,
+          "equity": 1000000.0,
+          "netProfit": 0.0
+        }
+      ],
+      "alerts": [],
+      "diagnostics": []
+    },
+    "diagnostics": []
+  },
+  "trades": [],
+  "orders": [],
+  "equity": [
+    {
+      "time": 1700000040,
+      "value": 1000000.0
+    },
+    {
+      "time": 1700000100,
+      "value": 1000000.0
+    },
+    {
+      "time": 1700000160,
+      "value": 1000000.0
+    },
+    {
+      "time": 1700000220,
+      "value": 1000000.0
+    },
+    {
+      "time": 1700000280,
+      "value": 1000000.0
+    }
+  ],
+  "position": [],
+  "graphics": [
+    {
+      "id": 1,
+      "values": [
+        11.0,
+        12.0,
+        13.0,
+        14.0,
+        15.0
+      ],
+      "colors": [
+        2201331,
+        2201331,
+        2201331,
+        2201331,
+        2201331
+      ],
+      "title": "Close"
+    },
+    {
+      "id": 2,
+      "values": [
+        10.0,
+        11.0,
+        12.0,
+        13.0,
+        14.0
+      ],
+      "colors": [
+        15873605,
+        15873605,
+        15873605,
+        15873605,
+        15873605
+      ],
+      "title": "Open"
+    }
+  ],
+  "requirements": {
+    "schemaVersion": 2,
+    "discovery": "conservativeExecutableHirInventory",
+    "chart": {
+      "bars": "hostSuppliedStandardOhlcv",
+      "priceGrid": "positiveIntegerMinMoveAndPriceScale",
+      "quantityPrecision": "decimalPowerZeroThroughNine",
+      "symbolMetadata": [],
+      "defaults": {
+        "symbol": "NASDAQ:AAPL",
+        "timeframe": "1",
+        "minMove": 1,
+        "priceScale": 100,
+        "quantityPrecision": 0,
+        "synthetic": true,
+        "symbolLookup": false,
+        "currency": "USD",
+        "pointValue": 1,
+        "timezone": "Etc/UTC"
+      }
+    },
+    "account": {
+      "profile": "linearUnitPointValueSameCurrency",
+      "pointValue": 1,
+      "currencyConversion": false,
+      "unsupportedProfiles": [
+        "foreignCurrencyConversion",
+        "nonUnitContractMultiplier",
+        "nonstandardChartBroker"
+      ]
+    },
+    "execution": {
+      "clock": "notUsed",
+      "realtimeUpdates": "hostOrderedFormingReplacementAndConfirmation",
+      "calcOnEveryTick": false,
+      "calcOnOrderFills": false,
+      "processOrdersOnClose": false,
+      "magnifier": "notEnabled",
+      "sessionWindows": "notUsedByWindowRiskRules"
+    },
+    "requests": [],
+    "inputCallSiteIds": [],
+    "callSites": []
+  },
+  "diagnostics": [],
+  "bars": [
+    {
+      "time": 1700000040,
+      "open": 10,
+      "high": 12,
+      "low": 9,
+      "close": 11,
+      "volume": 100
+    },
+    {
+      "time": 1700000100,
+      "open": 11,
+      "high": 13,
+      "low": 10,
+      "close": 12,
+      "volume": 100
+    },
+    {
+      "time": 1700000160,
+      "open": 12,
+      "high": 14,
+      "low": 11,
+      "close": 13,
+      "volume": 100
+    },
+    {
+      "time": 1700000220,
+      "open": 13,
+      "high": 15,
+      "low": 12,
+      "close": 14,
+      "volume": 100
+    },
+    {
+      "time": 1700000280,
+      "open": 14,
+      "high": 16,
+      "low": 13,
+      "close": 15,
+      "volume": 100
+    }
+  ],
+  "report_hash": "fixture"
+}

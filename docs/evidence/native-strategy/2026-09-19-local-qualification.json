@@ -1,0 +1,142 @@
+{
+  "date": "2026-09-19",
+  "scope": "native historical backtests, local installation",
+  "browser": {
+    "screenshots": [
+      "output/playwright/native-strategy/pine-final.png",
+      "output/playwright/native-strategy/pyne-final.png"
+    ],
+    "runs": [
+      {
+        "trades": 6,
+        "run_id": "native_23fdeff5e3f24177b6181eea6925b1cc",
+        "identity": {
+          "adapter": "pyne-native/1",
+          "engine": {
+            "code_sha256": "c08b0bf0b6712cb2baff3e2a2d55c28d2b507603490c4496f564e270a3ceaf20",
+            "package": "pyne-runtime",
+            "version": "0.4.0"
+          },
+          "plugin": {
+            "code_sha256": "aec85b2cf46c75c36a6f4323fb3f16a913feab7cc7eeeaff4dc168d02bd5e4e8",
+            "package": "candlescope-plugin-pyne",
+            "version": "0.3.0.dev1"
+          },
+          "protocol": "candlescope.native-strategy/1",
+          "transport": {
+            "code_sha256": "81d26bd296dc86c19b425e1ff06ee7dc8fc4a95887da6baff5f54fae16d375dd",
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.0"
+          }
+        },
+        "input_hash": "sha256:1bdee9a7c3b5a73a7ef561d525f20241e03cafe62a970a17cc18d9d609be4481",
+        "report_hash": "sha256:2eb7a9ec9f04c25f41a5ebf06199969ce5bd624c632dfc7c338dc8a65149677d",
+        "orders": 12,
+        "state": "COMPLETED",
+        "equity_points": 200
+      },
+      {
+        "trades": 5,
+        "run_id": "native_48aee9df3f40415fb2db0bfa4b871d10",
+        "identity": {
+          "adapter": "pine-native/1",
+          "engine": {
+            "code_sha256": "4029180e8f5a78cc99f882114b6d79b046e7948aa75ca2b36638ccfce1e73888",
+            "package": "pine-compat-runtime",
+            "version": "0.3.0rc1"
+          },
+          "plugin": {
+            "code_sha256": "d0ee7b8c813a0c3d414919420e516075a80fac0d1857a18245d89069f63b053b",
+            "package": "candlescope-plugin-pine-compat",
+            "version": "0.3.0.dev1"
+          },
+          "protocol": "candlescope.native-strategy/1",
+          "transport": {
+            "code_sha256": "81d26bd296dc86c19b425e1ff06ee7dc8fc4a95887da6baff5f54fae16d375dd",
+            "package": "candlescope-plugin-sdk",
+            "version": "0.2.0"
+          }
+        },
+        "input_hash": "sha256:23be10ae14cb2841c3fdee6bffe925dd386da7ae7c9a1608948add67b167bc8e",
+        "report_hash": "sha256:6c7935948e4b50990719b1c31ad27604e15ee9754480512ca3c7b8e1beffb338",
+        "orders": 6,
+        "state": "COMPLETED",
+        "equity_points": 200
+      }
+    ],
+    "console_errors": 0,
+    "existing_font_warnings": 32,
+    "bars": 200,
+    "pyne_dom_fill_markers": 12,
+    "transport": "real HTTP and installed plugins"
+  },
+  "not_qualified": [
+    "interactive replay and checkpoint/seek parity",
+    "CandleScope matching feedback loop",
+    "all native drawing objects rendered",
+    "advanced dependency visual picker",
+    "published plugin or desktop release"
+  ],
+  "tests": {
+    "installed_native": 18,
+    "typecheck": "passed",
+    "i18n": "passed",
+    "architecture": "passed",
+    "production_build": "passed from real E: path; H: junction build failed path resolution",
+    "existing_backend": 27,
+    "frontend": 60,
+    "changed_frontend_lint": "passed",
+    "plugin_architecture": "passed"
+  },
+  "installation": {
+    "wheels": {
+      "candlescope_plugin_pine_compat-0.3.0.dev1-py3-none-any.whl": "26852d7d7e01e9e7d256cd567c246a4e927189e05ef58f948fd3eb70527dc14e",
+      "candlescope_plugin_pyne-0.3.0.dev1-py3-none-any.whl": "fcdfcccad5c971ed7c0b5b96eb4f0c37aef2e4226803e65a03410290d706c1bd",
+      "candlescope_plugin_sdk-0.2.0-py3-none-any.whl": "19740297dbb9b35d44f6e4d07b154d34cfb7962085dca5da073981b370a1b06c",
+      "numpy-2.2.6-cp312-cp312-win_amd64.whl": "c1f9540be57940698ed329904db803cf7a402f3fc200bfe599334c9bd84a40b2",
+      "pine_compat_runtime-0.3.0rc1-cp310-abi3-win_amd64.whl": "9c9a62ee1045d66754884da70541567bac5130e7f136b5c47640853ebc2cb99c",
+      "pyne_runtime-0.4.0-py3-none-any.whl": "134380fcb5fff41ad06371bb198c5804763fd73c0e809fd844eaa13e3e229f09"
+    },
+    "identities": {
+      "candlescope.pine-compat": {
+        "protocol": "candlescope.native-strategy/1",
+        "adapter": "pine-native/1",
+        "plugin": {
+          "package": "candlescope-plugin-pine-compat",
+          "version": "0.3.0.dev1",
+          "code_sha256": "d0ee7b8c813a0c3d414919420e516075a80fac0d1857a18245d89069f63b053b"
+        },
+        "engine": {
+          "package": "pine-compat-runtime",
+          "version": "0.3.0rc1",
+          "code_sha256": "4029180e8f5a78cc99f882114b6d79b046e7948aa75ca2b36638ccfce1e73888"
+        },
+        "transport": {
+          "package": "candlescope-plugin-sdk",
+          "version": "0.2.0",
+          "code_sha256": "81d26bd296dc86c19b425e1ff06ee7dc8fc4a95887da6baff5f54fae16d375dd"
+        }
+      },
+      "candlescope.pyne": {
+        "protocol": "candlescope.native-strategy/1",
+        "adapter": "pyne-native/1",
+        "plugin": {
+          "package": "candlescope-plugin-pyne",
+          "version": "0.3.0.dev1",
+          "code_sha256": "aec85b2cf46c75c36a6f4323fb3f16a913feab7cc7eeeaff4dc168d02bd5e4e8"
+        },
+        "engine": {
+          "package": "pyne-runtime",
+          "version": "0.4.0",
+          "code_sha256": "c08b0bf0b6712cb2baff3e2a2d55c28d2b507603490c4496f564e270a3ceaf20"
+        },
+        "transport": {
+          "package": "candlescope-plugin-sdk",
+          "version": "0.2.0",
+          "code_sha256": "81d26bd296dc86c19b425e1ff06ee7dc8fc4a95887da6baff5f54fae16d375dd"
+        }
+      }
+    },
+    "installation": "C:\\Users\\MECHREVO\\AppData\\Local\\CandleScope\\plugins\\native-installs\\05339806d03df4e07623376e61ee563635d7f1e71f30aac4fc0aa721d5135615"
+  }
+}

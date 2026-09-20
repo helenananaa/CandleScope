@@ -1,0 +1,524 @@
+{
+  "execution_mode": "NATIVE",
+  "account_authority": "pine-compat-runtime",
+  "fill_model": "pine-native-standard-ohlcv",
+  "raw_output": {
+    "schemaVersion": 9,
+    "renderMetadataVersion": 1,
+    "plots": [
+      {
+        "id": 22,
+        "values": [
+          11.0,
+          12.0,
+          13.0,
+          14.0,
+          15.0
+        ]
+      }
+    ],
+    "plotChars": [],
+    "plotShapes": [],
+    "plotArrows": [],
+    "plotBars": [],
+    "plotCandles": [],
+    "bgColors": [],
+    "barColors": [],
+    "hlines": [],
+    "fills": [],
+    "labels": [
+      {
+        "id": 1,
+        "snapshots": [
+          {
+            "barIndex": 0,
+            "exists": true,
+            "x": 2,
+            "y": 14,
+            "text": "Label <b>escaped</b>",
+            "xloc": "xloc.bar_index",
+            "yloc": "yloc.price",
+            "color": 2201331,
+            "style": "label.style_label_down",
+            "textColor": 16777215,
+            "size": "size.normal",
+            "tooltip": "",
+            "textAlign": "text.align_center",
+            "textFontFamily": "font.family_default",
+            "textFormatting": 0
+          }
+        ]
+      }
+    ],
+    "lines": [
+      {
+        "id": 1,
+        "snapshots": [
+          {
+            "barIndex": 0,
+            "exists": true,
+            "x1": 0,
+            "y1": 9,
+            "x2": 4,
+            "y2": 13,
+            "xloc": "xloc.bar_index",
+            "color": 15873605,
+            "width": 1,
+            "style": "line.style_solid",
+            "extend": "extend.none"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "snapshots": [
+          {
+            "barIndex": 0,
+            "exists": true,
+            "x1": 0,
+            "y1": 11,
+            "x2": 4,
+            "y2": 15,
+            "xloc": "xloc.bar_index",
+            "color": 2201331,
+            "width": 1,
+            "style": "line.style_solid",
+            "extend": "extend.none"
+          }
+        ]
+      }
+    ],
+    "lineFills": [
+      {
+        "id": 1,
+        "snapshots": [
+          {
+            "barIndex": 0,
+            "exists": true,
+            "line1": 1,
+            "line2": 2,
+            "color": 563540787
+          }
+        ]
+      }
+    ],
+    "polylines": [
+      {
+        "id": 1,
+        "snapshots": [
+          {
+            "barIndex": 0,
+            "exists": true,
+            "points": [
+              {
+                "time": null,
+                "index": 0,
+                "price": 9.0
+              },
+              {
+                "time": null,
+                "index": 2,
+                "price": 15.0
+              },
+              {
+                "time": null,
+                "index": 4,
+                "price": 12.0
+              }
+            ],
+            "curved": true,
+            "closed": true,
+            "xloc": "xloc.bar_index",
+            "lineColor": 2201331,
+            "fillColor": 4063642906,
+            "lineStyle": "line.style_solid",
+            "lineWidth": 1,
+            "forceOverlay": false
+          }
+        ]
+      }
+    ],
+    "boxes": [
+      {
+        "id": 1,
+        "snapshots": [
+          {
+            "barIndex": 0,
+            "exists": true,
+            "left": 1,
+            "top": 14,
+            "right": 3,
+            "bottom": 10,
+            "xloc": "xloc.bar_index",
+            "bgColor": 1286557747,
+            "borderColor": 2201331,
+            "borderWidth": 1,
+            "borderStyle": "line.style_solid",
+            "extend": "extend.none",
+            "text": "Range",
+            "textColor": 3553861,
+            "textSize": "size.auto",
+            "textHalign": "text.align_center",
+            "textValign": "text.align_center",
+            "textWrap": "text.wrap_none",
+            "textFontFamily": "font.family_default",
+            "textFormatting": 0
+          }
+        ]
+      }
+    ],
+    "tables": [
+      {
+        "id": 1,
+        "position": "position.top_right",
+        "bgColor": null,
+        "frameColor": null,
+        "frameWidth": null,
+        "borderColor": null,
+        "borderWidth": null,
+        "columns": 2,
+        "rows": 2,
+        "snapshots": [
+          {
+            "barIndex": 0,
+            "exists": true,
+            "cells": [],
+            "mergedCells": []
+          },
+          {
+            "barIndex": 0,
+            "exists": true,
+            "cells": [
+              {
+                "column": 0,
+                "row": 0,
+                "text": "Merged title",
+                "bgColor": null,
+                "textColor": null,
+                "width": null,
+                "height": null,
+                "textSize": null,
+                "textHalign": null,
+                "textValign": null,
+                "textWrap": "text.wrap_none",
+                "tooltip": "",
+                "textFontFamily": "font.family_default",
+                "textFormatting": 0
+              }
+            ],
+            "mergedCells": []
+          },
+          {
+            "barIndex": 0,
+            "exists": true,
+            "cells": [
+              {
+                "column": 0,
+                "row": 0,
+                "text": "Merged title",
+                "bgColor": null,
+                "textColor": null,
+                "width": null,
+                "height": null,
+                "textSize": null,
+                "textHalign": null,
+                "textValign": null,
+                "textWrap": "text.wrap_none",
+                "tooltip": "",
+                "textFontFamily": "font.family_default",
+                "textFormatting": 0
+              }
+            ],
+            "mergedCells": [
+              {
+                "startColumn": 0,
+                "startRow": 0,
+                "endColumn": 1,
+                "endRow": 0
+              }
+            ]
+          },
+          {
+            "barIndex": 0,
+            "exists": true,
+            "cells": [
+              {
+                "column": 0,
+                "row": 0,
+                "text": "Merged title",
+                "bgColor": null,
+                "textColor": null,
+                "width": null,
+                "height": null,
+                "textSize": null,
+                "textHalign": null,
+                "textValign": null,
+                "textWrap": "text.wrap_none",
+                "tooltip": "",
+                "textFontFamily": "font.family_default",
+                "textFormatting": 0
+              },
+              {
+                "column": 0,
+                "row": 1,
+                "text": "Count",
+                "bgColor": null,
+                "textColor": null,
+                "width": null,
+                "height": null,
+                "textSize": null,
+                "textHalign": null,
+                "textValign": null,
+                "textWrap": "text.wrap_none",
+                "tooltip": "",
+                "textFontFamily": "font.family_default",
+                "textFormatting": 0
+              }
+            ],
+            "mergedCells": [
+              {
+                "startColumn": 0,
+                "startRow": 0,
+                "endColumn": 1,
+                "endRow": 0
+              }
+            ]
+          },
+          {
+            "barIndex": 0,
+            "exists": true,
+            "cells": [
+              {
+                "column": 0,
+                "row": 0,
+                "text": "Merged title",
+                "bgColor": null,
+                "textColor": null,
+                "width": null,
+                "height": null,
+                "textSize": null,
+                "textHalign": null,
+                "textValign": null,
+                "textWrap": "text.wrap_none",
+                "tooltip": "",
+                "textFontFamily": "font.family_default",
+                "textFormatting": 0
+              },
+              {
+                "column": 0,
+                "row": 1,
+                "text": "Count",
+                "bgColor": null,
+                "textColor": null,
+                "width": null,
+                "height": null,
+                "textSize": null,
+                "textHalign": null,
+                "textValign": null,
+                "textWrap": "text.wrap_none",
+                "tooltip": "",
+                "textFontFamily": "font.family_default",
+                "textFormatting": 0
+              },
+              {
+                "column": 1,
+                "row": 1,
+                "text": "5",
+                "bgColor": null,
+                "textColor": null,
+                "width": null,
+                "height": null,
+                "textSize": null,
+                "textHalign": null,
+                "textValign": null,
+                "textWrap": "text.wrap_none",
+                "tooltip": "",
+                "textFontFamily": "font.family_default",
+                "textFormatting": 0
+              }
+            ],
+            "mergedCells": [
+              {
+                "startColumn": 0,
+                "startRow": 0,
+                "endColumn": 1,
+                "endRow": 0
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "alerts": [],
+    "strategy": {
+      "orders": [],
+      "trades": [],
+      "position": [],
+      "equity": [
+        {
+          "barIndex": 0,
+          "cash": 1000000.0,
+          "marketValue": 0.0,
+          "equity": 1000000.0,
+          "netProfit": 0.0
+        },
+        {
+          "barIndex": 1,
+          "cash": 1000000.0,
+          "marketValue": 0.0,
+          "equity": 1000000.0,
+          "netProfit": 0.0
+        },
+        {
+          "barIndex": 2,
+          "cash": 1000000.0,
+          "marketValue": 0.0,
+          "equity": 1000000.0,
+          "netProfit": 0.0
+        },
+        {
+          "barIndex": 3,
+          "cash": 1000000.0,
+          "marketValue": 0.0,
+          "equity": 1000000.0,
+          "netProfit": 0.0
+        },
+        {
+          "barIndex": 4,
+          "cash": 1000000.0,
+          "marketValue": 0.0,
+          "equity": 1000000.0,
+          "netProfit": 0.0
+        }
+      ],
+      "alerts": [],
+      "diagnostics": []
+    },
+    "diagnostics": []
+  },
+  "trades": [],
+  "orders": [],
+  "equity": [
+    {
+      "time": 1700000040,
+      "value": 1000000.0
+    },
+    {
+      "time": 1700000100,
+      "value": 1000000.0
+    },
+    {
+      "time": 1700000160,
+      "value": 1000000.0
+    },
+    {
+      "time": 1700000220,
+      "value": 1000000.0
+    },
+    {
+      "time": 1700000280,
+      "value": 1000000.0
+    }
+  ],
+  "position": [],
+  "graphics": [
+    {
+      "id": 22,
+      "values": [
+        11.0,
+        12.0,
+        13.0,
+        14.0,
+        15.0
+      ]
+    }
+  ],
+  "requirements": {
+    "schemaVersion": 2,
+    "discovery": "conservativeExecutableHirInventory",
+    "chart": {
+      "bars": "hostSuppliedStandardOhlcv",
+      "priceGrid": "positiveIntegerMinMoveAndPriceScale",
+      "quantityPrecision": "decimalPowerZeroThroughNine",
+      "symbolMetadata": [],
+      "defaults": {
+        "symbol": "NASDAQ:AAPL",
+        "timeframe": "1",
+        "minMove": 1,
+        "priceScale": 100,
+        "quantityPrecision": 0,
+        "synthetic": true,
+        "symbolLookup": false,
+        "currency": "USD",
+        "pointValue": 1,
+        "timezone": "Etc/UTC"
+      }
+    },
+    "account": {
+      "profile": "linearUnitPointValueSameCurrency",
+      "pointValue": 1,
+      "currencyConversion": false,
+      "unsupportedProfiles": [
+        "foreignCurrencyConversion",
+        "nonUnitContractMultiplier",
+        "nonstandardChartBroker"
+      ]
+    },
+    "execution": {
+      "clock": "notUsed",
+      "realtimeUpdates": "hostOrderedFormingReplacementAndConfirmation",
+      "calcOnEveryTick": false,
+      "calcOnOrderFills": false,
+      "processOrdersOnClose": false,
+      "magnifier": "notEnabled",
+      "sessionWindows": "notUsedByWindowRiskRules"
+    },
+    "requests": [],
+    "inputCallSiteIds": [],
+    "callSites": []
+  },
+  "diagnostics": [],
+  "bars": [
+    {
+      "time": 1700000040,
+      "open": 10,
+      "high": 12,
+      "low": 9,
+      "close": 11,
+      "volume": 100
+    },
+    {
+      "time": 1700000100,
+      "open": 11,
+      "high": 13,
+      "low": 10,
+      "close": 12,
+      "volume": 100
+    },
+    {
+      "time": 1700000160,
+      "open": 12,
+      "high": 14,
+      "low": 11,
+      "close": 13,
+      "volume": 100
+    },
+    {
+      "time": 1700000220,
+      "open": 13,
+      "high": 15,
+      "low": 12,
+      "close": 14,
+      "volume": 100
+    },
+    {
+      "time": 1700000280,
+      "open": 14,
+      "high": 16,
+      "low": 13,
+      "close": 15,
+      "volume": 100
+    }
+  ],
+  "report_hash": "fixture"
+}

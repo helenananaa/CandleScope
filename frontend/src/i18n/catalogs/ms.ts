@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ms = {
+  ...nativeEnglish,
   "replay.portfolio.title": "Ekuiti portfolio",
   "replay.portfolio.load": "Muat / segar semula lengkung portfolio",
   "replay.portfolio.hint": "Sampel akhir jam; susut nilai menggunakan seluruh laluan harga. Segar semula selepas maju. Hanya selang portfolio yang direkodkan.",

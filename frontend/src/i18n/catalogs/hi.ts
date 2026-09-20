@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const hi = {
+  ...nativeEnglish,
   "replay.portfolio.title": "पोर्टफोलियो इक्विटी",
   "replay.portfolio.load": "पोर्टफोलियो वक्र लोड / रीफ़्रेश करें",
   "replay.portfolio.hint": "घंटे के अंत के नमूने; गिरावट में पूरा मूल्य पथ शामिल है। आगे बढ़ने के बाद रीफ़्रेश करें। केवल दर्ज पोर्टफोलियो अंतराल।",

@@ -1,6 +1,8 @@
+import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhHant = {
+  ...nativeEnglish,
   "replay.portfolio.title": "投資組合權益",
   "replay.portfolio.load": "載入 / 重新整理組合曲線",
   "replay.portfolio.hint": "每小時結束時取樣，回撤按完整行情計算。推進後請重新整理；僅涵蓋已記錄的組合區間。",
