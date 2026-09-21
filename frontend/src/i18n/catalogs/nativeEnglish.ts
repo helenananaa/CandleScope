@@ -1,4 +1,6 @@
+import { supportEnglish } from "./supportEnglish.js";
 export const nativeEnglish = {
+  ...supportEnglish,
   "native.external.sampledLabel": "Sampled book (bounded depth)",
   "native.external.sampledHint": "Approximate sampled book: consume only visible depth; excess quantity stays unfilled. Books older than 2 seconds cannot fill. No inferred passive queue fills; resting limits fill only when marketable. Same-ms trades precede new book samples. Import paired bars.csv and upload execution.json from the same archive.",
   "native.series.title": "Strategy series graphics",

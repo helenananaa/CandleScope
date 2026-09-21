@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { t, tPlural, translateMarketType, translateWsStatus } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
 import MarketStatusBar from "./MarketStatusBar.js";
+import { APP_VERSION } from "../shared/appVersion.js";
 
 export type ConnectionStatus = "connected" | "loading" | "disconnected" | string;
 
@@ -92,7 +93,7 @@ function StatusBar({ status, extensions }: StatusBarProps) {
           ? t("status.demoMode")
           : `${exchangeLabel} ${localizedMarketLabel(marketLabel)}`}</span>
         <span title={t("status.klineScopeDetail")}>{t("status.klineScope")} {wsLabel}</span>
-        <span>CandleScope v0.2.0</span>
+        <span>{`CandleScope v${APP_VERSION}`}</span>
       </>}
     />
   );

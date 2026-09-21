@@ -23,6 +23,7 @@ class LocalOfflineProfileMiddleware:
         return path in {
             "/",
             "/health",
+            "/api/v1/support/diagnostics",
             "/docs",
             "/redoc",
             "/openapi.json",

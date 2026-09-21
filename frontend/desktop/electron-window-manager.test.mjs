@@ -146,6 +146,22 @@ test("flag-off restore opens only main-window without deleting cached secondary 
   assert.deepEqual(Object.keys(store.snapshot().windows), ["main-window", "window-2", "window-3"]);
 });
 
+test("About support links open externally only from a trusted managed page", async () => {
+  const manager = createManager(new MemoryStore(topology(0, ["main-window"])));
+  const opened = [];
+  manager.options.openExternal = async url => { opened.push(url); };
+  await manager.restoreCached(manager.options.store.snapshot());
+  const window = manager.windows.get("main-window");
+  window.webContents.getURL = () => window.url;
+  const url = "https://github.com/helenananaa/CandleScope/issues/new?body=environment";
+  assert.deepEqual(window.openHandler({ url }), { action: "deny" });
+  assert.deepEqual(opened, [url]);
+  window.openHandler({ url: "https://attacker.example/" });
+  window.webContents.getURL = () => "https://attacker.example/";
+  window.openHandler({ url });
+  assert.deepEqual(opened, [url]);
+});
+
 test("reconcile closes one approved native window without touching its peers", async () => {
   const current = topology(2, ["main-window", "window-2", "window-3"]);
   const store = new MemoryStore(current);

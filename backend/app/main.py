@@ -67,6 +67,8 @@ from app.core.config import (
     TRADE_FLOW_ROLLUP_BACKEND,
 )
 from app.core.executors import executors_snapshot
+from app.core.version import APP_VERSION
+from app.core.support_diagnostics import install_support_logging, router as support_router
 from app.core.runtime_metrics import EventLoopLagMonitor, ws_runtime_metrics
 from app.local_data.runtime import LocalOfflineProfileMiddleware
 
@@ -98,7 +100,7 @@ else:
 logger = logging.getLogger("candlescope")
 
 APP_NAME = "CandleScope"
-APP_VERSION = "0.3.0"
+install_support_logging()
 PLUGIN_PLATFORM_V2_HOST_VERSION = "0.4.0"
 
 app = FastAPI(
@@ -106,6 +108,7 @@ app = FastAPI(
     description="Backend API for CandleScope",
     version=APP_VERSION,
 )
+app.include_router(support_router)
 
 app.add_middleware(
     CORSMiddleware,

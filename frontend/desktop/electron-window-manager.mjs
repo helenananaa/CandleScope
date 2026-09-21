@@ -1,6 +1,7 @@
 import { restoreWindowPlacement, snapshotDisplay } from "./window-placement.mjs";
 import { DesktopTopologyRevisionConflictError } from "./shell-state-store.mjs";
 import { isTrustedAppUrl } from "./app-origin.mjs";
+import { isSupportLink } from "./support-links.mjs";
 
 function sameJson(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
@@ -43,6 +44,9 @@ export class ElectronWindowManager {
   protectWindow(window) {
     window.webContents.setWindowOpenHandler(({ url }) => {
       if (isTrustedAppUrl(url, this.options.appUrl)) void this.openAppPage(url).catch(() => {});
+      else if (isSupportLink(url) && isTrustedAppUrl(window.webContents.getURL(), this.options.appUrl)) {
+        void this.options.openExternal?.(url).catch(() => {});
+      }
       return { action: "deny" };
     });
     const protectNavigation = (event, url) => {

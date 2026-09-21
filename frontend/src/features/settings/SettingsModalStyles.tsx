@@ -2198,6 +2198,20 @@ input[type="color"] {
 }
 
 /* ── About section ──────────────────────────────────────── */
+.st-support-card { border: 1px solid var(--border-color, #334155); border-radius: 12px; padding: 20px; }
+.st-support-description { color: var(--text-primary); font-size: 13px; line-height: 1.7; }
+.st-support-hint { color: var(--text-secondary); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.st-support-actions, .st-support-links { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.st-support-actions a { text-decoration: none; }
+.st-support-actions label { color: var(--text-secondary); font-size: 13px; }
+.st-support-actions select { color: var(--text-primary); background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; padding: 7px; }
+.st-support-links a { color: var(--accent-blue); font-size: 13px; text-underline-offset: 4px; }
+.st-support-export { margin-top: 16px; }
+.st-support-export summary { cursor: pointer; color: var(--text-primary); font-size: 13px; padding: 6px 0; }
+.st-support-manual { width: 100%; min-height: 180px; box-sizing: border-box; color: var(--text-primary); background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; }
+.st-support-card :focus-visible, .st-support-links a:focus-visible, .st-support-export summary:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 3px; }
+.st-about-stack .st-stack-item { gap: 16px; }
+.st-about-stack .st-stack-value { overflow-wrap: anywhere; text-align: right; min-width: 0; }
 .st-about-header {
   display: flex;
   flex-direction: column;

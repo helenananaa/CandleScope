@@ -1,7 +1,8 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import process from 'node:process'
-import { realpathSync } from 'node:fs'
+import { realpathSync, readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { Agent as HttpAgent } from 'node:http'
 import { Agent as HttpsAgent } from 'node:https'
 import { resolve } from 'node:path'
@@ -10,6 +11,13 @@ import { desktopRuntimeConfigPlugin } from './desktop/runtime-config.mjs'
 
 const apiProxyTarget = process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:18080'
 const devServerPort = Number(process.env.VITE_DEV_PORT || 15173)
+const appVersion = readFileSync(new URL('../backend/app/core/version.py', import.meta.url), 'utf8').match(/APP_VERSION = "([^"]+)"/)[1]
+let appBuild = 'unknown'
+try {
+  const gitOptions = { cwd: import.meta.dirname, encoding: 'utf8', windowsHide: true }
+  appBuild = execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], gitOptions).trim()
+  if (execFileSync('git', ['status', '--porcelain', '--untracked-files=normal'], gitOptions).trim()) appBuild += '-dirty'
+} catch { /* source archives have no Git metadata */ }
 const dependencyRoot = realpathSync(resolve(import.meta.dirname, 'node_modules'))
 const replaySoakProjectionEnabled = process.env.VITE_REPLAY_SOAK_PROJECTION_ENABLED === '1'
 // The upstream owns its keep-alive deadline (Uvicorn defaults to five seconds),
@@ -36,6 +44,10 @@ const buildApiProxy = () => ({
 
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion),
+    'import.meta.env.VITE_APP_BUILD': JSON.stringify(appBuild),
+  },
   base: process.env.VITE_DESKTOP_BUILD === '1' ? './' : '/',
   plugins: [react(), loopbackAliasPlugin(), desktopRuntimeConfigPlugin()],
   build: {

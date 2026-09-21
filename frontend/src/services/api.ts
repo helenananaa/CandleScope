@@ -5,6 +5,7 @@
  * functions that have migrated consumers must validate their own payloads.
  */
 import { API_BASE, httpBaseToWsBase } from "./apiConfig.js";
+import { recordRequestFailure } from "../features/settings/supportLog.js";
 import {
   isJsonRecord,
   parseExchangeCapability,
@@ -156,8 +157,12 @@ export async function request(
     ...(requestHeaders === undefined ? {} : { headers: requestHeaders }),
     ...(requestBody === undefined ? {} : { body: requestBody }),
     ...(signal === undefined ? {} : { signal }),
+  }).catch((error: unknown) => {
+    if (!signal?.aborted) recordRequestFailure(url, 0);
+    throw error;
   });
   if (!response.ok) {
+    recordRequestFailure(url, response.status);
     const errorData: unknown = await response.json().catch(() => ({}));
     const rawDetail = isJsonRecord(errorData) ? errorData.detail : undefined;
     const detail = typeof rawDetail === "string"

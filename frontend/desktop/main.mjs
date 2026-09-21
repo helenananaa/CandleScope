@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, screen } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, screen, shell } from "electron";
 import { mkdir, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -2000,6 +2000,7 @@ async function boot() {
   const store = new DesktopShellStateStore(path.join(app.getPath("userData"), "desktop-windows-v1.json"));
   const cached = await store.load();
   manager = new ElectronWindowManager({
+    openExternal: (url) => shell.openExternal(url),
     BrowserWindow,
     screen,
     store,
