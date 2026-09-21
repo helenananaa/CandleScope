@@ -1,3 +1,14 @@
+@import "../native/nativeStrategy.css";
+
+/* Keep both modes in the workspace's column layout, including the resizable tester. */
+.chart-strategy-mode-container { display: contents; }
+.chart-strategy-mode-container > .native-strategy-panel {
+  box-sizing: border-box;
+  flex-shrink: 0;
+  height: min(480px, 60vh);
+  min-height: 0;
+}
+
 /* Semantic foregrounds stay legible on the selected theme's surfaces. */
 :root {
   --strategy-link: #93c5fd;

@@ -179,7 +179,7 @@ export interface ChartStrategyTesterPanelProps {
 export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanelProps) {
   const [mode, setMode] = useState<"NATIVE" | "CANDLESCOPE">(props.attachment ? "CANDLESCOPE" : "NATIVE");
   useLocale();
-  return <div><nav className="native-mode-switch" aria-label={t("native.mode")}>
+  return <div className="chart-strategy-mode-container"><nav className="native-mode-switch" aria-label={t("native.mode")}>
     <button aria-pressed={mode === "NATIVE"} onClick={() => setMode("NATIVE")}>{t("native.fullStrategies")}</button>
     <button aria-pressed={mode === "CANDLESCOPE"} onClick={() => setMode("CANDLESCOPE")}>{t("native.hostMode")}</button>
   </nav>{mode === "NATIVE" ? <Suspense fallback={<p>{t("native.loading")}</p>}><NativeStrategyPanel key={`${props.session.exchange}:${props.session.marketType}:${props.session.symbol}:${props.session.interval}`} {...props} /></Suspense>
