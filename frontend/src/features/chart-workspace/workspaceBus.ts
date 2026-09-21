@@ -103,6 +103,9 @@ export class WorkspaceBusClient {
       this.bridgeUnsubscribe ??= bridge.onWorkspaceBusEvent((message) => this.handleMessage(message));
       const response = await bridge.workspaceBusConnect({ snapshot });
       if (!isState(response)) throw new Error("Native WorkspaceBus returned an invalid connect response");
+      if (!response.ok) {
+        throw new Error(response.message || response.code || "Native WorkspaceBus connection failed");
+      }
       this.applyState(response, false);
       return this.state;
     }

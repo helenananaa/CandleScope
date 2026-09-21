@@ -3,7 +3,7 @@ const MAX_SNAPSHOT_BYTES = 4 * 1024 * 1024;
 const MAX_WORKSPACES = 64;
 const MAX_WINDOWS = 4;
 const MAX_CELLS = 64;
-const SUPPORTED_WORKSPACE_SCHEMA_VERSIONS = new Set([6, 7]);
+const SUPPORTED_WORKSPACE_SCHEMA_VERSIONS = new Set([6, 7, 8]);
 const MISSING = Symbol("missing");
 
 export const WORKSPACE_BUS_SCHEMA = "candlescope.workspace-bus/1";

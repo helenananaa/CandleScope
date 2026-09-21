@@ -24,7 +24,10 @@ const found = spawnSync(uv, ["python", "find", "3.12", "--managed-python"], {
 if (found.status !== 0) throw new Error(found.stderr || "Managed Python was not found");
 const executable = await fs.realpath(found.stdout.trim());
 const sourceRoot = process.platform === "win32" ? path.dirname(executable) : path.dirname(path.dirname(executable));
-if (!sourceRoot.startsWith(`${downloads}${path.sep}`)) throw new Error("Refusing to package a system Python");
+const relativeSource = path.relative(await fs.realpath(downloads), sourceRoot);
+if (!relativeSource || relativeSource === ".." || relativeSource.startsWith(`..${path.sep}`) || path.isAbsolute(relativeSource)) {
+  throw new Error("Refusing to package a system Python");
+}
 await fs.cp(sourceRoot, path.join(staging, "python"), { recursive: true, verbatimSymlinks: true });
 const python = path.join(staging, "python", ...(process.platform === "win32" ? ["python.exe"] : ["bin", "python3"]));
 // Install wheels into a relocatable directory; never copy an editable project venv.

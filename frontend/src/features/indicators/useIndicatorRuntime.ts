@@ -86,6 +86,7 @@ import {
   normalizeIndicatorRevision,
 } from "./indicatorRangeCoverage.js";
 import { createIndicatorRangeScheduler } from "./indicatorRangeScheduler.js";
+import { indicatorRangeFailureMessage, updateIndicatorErrorState } from "./indicatorErrorState.js";
 import { createIndicatorRangeBatcher } from "./indicatorRangeBatcher.js";
 import {
   createIndicatorHydrationScheduler,
@@ -1388,7 +1389,7 @@ export function useIndicatorRuntime(
 
   const setIndicatorError = useCallback((indicatorId: string, error: string) => {
     setActiveIndicators((prev) =>
-      prev.map((indicator) => (indicator.id === indicatorId ? { ...indicator, error } : indicator))
+      updateIndicatorErrorState(prev, indicatorId, error)
     );
   }, [setActiveIndicators]);
 
@@ -1651,6 +1652,11 @@ export function useIndicatorRuntime(
       },
       onError: (error, { reason: scheduledReason, target }) => {
         if (isIndicatorRuntimeError(error) && error.deferred) return;
+        // The settlement still keeps the range event retryable. Publishing an
+        // error here changes activeIndicators, reruns the range effect, and
+        // immediately retries rejected hidden-window work without yielding.
+        const message = indicatorRangeFailureMessage(error);
+        if (message === null) return;
         if (String(scheduledReason || "").startsWith("auto-")) {
           console.warn(
             "Indicator range auto-catchup failed",
@@ -1661,7 +1667,7 @@ export function useIndicatorRuntime(
         if (activeIndicatorsRef.current.some((item) => item.id === target.indicator.id)) {
           setIndicatorError(
             target.indicator.id,
-            error instanceof Error ? error.message : "Indicator range request failed",
+            message,
           );
         }
       },

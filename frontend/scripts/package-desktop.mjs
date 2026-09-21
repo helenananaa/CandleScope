@@ -1,8 +1,10 @@
 import path from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-const frontend = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+// Use the same physical root for Vite inputs and its working directory on
+// Windows mapped drives/junctions, otherwise emitted HTML paths escape root.
+const frontend = realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."));
 function run(script, args = [], env = process.env) {
   const result = spawnSync(process.execPath, [script, ...args], { cwd: frontend, stdio: "inherit", env });
   if (result.error) throw result.error;

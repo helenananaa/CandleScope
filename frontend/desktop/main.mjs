@@ -1,9 +1,11 @@
 import { app, BrowserWindow, dialog, ipcMain, screen } from "electron";
 import { mkdir, writeFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 import { resolvePythonCommand } from "./python-runtime.mjs";
+import { desktopBackendEnvironment } from "./runtime-config.mjs";
 import { isTrustedAppUrl, startDesktopAssetServer } from "./app-origin.mjs";
 
 import { ElectronWindowManager } from "./electron-window-manager.mjs";
@@ -139,6 +141,9 @@ function createSupervisor() {
     gracefulStdin: !process.env.CANDLESCOPE_DESKTOP_SIDECAR_COMMAND_JSON,
     cwd: backendRoot,
     env: {
+      ...(app.isPackaged ? desktopBackendEnvironment(JSON.parse(readFileSync(
+        path.join(app.getAppPath(), "dist", "desktop-runtime-config.json"), "utf8",
+      ))) : {}),
       ...(app.isPackaged ? { PYTHONNOUSERSITE: "1", PYTHONDONTWRITEBYTECODE: "1" } : {}),
       CANDLE_HOST: "127.0.0.1",
       CANDLE_PORT: String(backendPort),
