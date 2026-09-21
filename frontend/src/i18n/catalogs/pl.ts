@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const pl = {
+  "pc.installed": "Moje wtyczki",
+  "pc.discover": "Odkrywaj",
+  "pc.advanced": "Zaawansowane",
+  "pc.install": "Zainstaluj wtyczkę",
+  "pc.search": "Szukaj wtyczek, autorów lub funkcji",
+  "pc.filter": "Stan wtyczki",
+  "pc.active": "Włączona",
+  "pc.disabled": "Wyłączona",
+  "pc.attention": "Wymaga uwagi",
+  "pc.staged": "Oczekuje na aktywację",
+  "pc.back": "Wstecz",
+  "pc.more": "Więcej działań",
+  "pc.overview": "Przegląd",
+  "pc.configure": "Konfiguruj",
+  "pc.diagnostics": "Wersje i diagnostyka",
+  "pc.working": "Przetwarzanie…",
+  "pc.noResults": "Brak pasujących wtyczek",
+  "pc.readonly": "To połączenie jest tylko do odczytu. Instalacja, aktywacja i uprawnienia wymagają lokalnego połączenia zarządzającego.",
+  "pc.emptyHint": "Zainstaluj rozszerzenia, aby dodać funkcje do obszaru roboczego.",
+  "pc.enginesHint": "Osobno wykryte silniki skryptowe wykresów, nieuwzględnione w liczbie zainstalowanych wtyczek.",
+
   ...nativeEnglish,
   "replay.portfolio.title": "Kapitał portfela",
   "replay.portfolio.load": "Wczytaj / odśwież krzywą portfela",

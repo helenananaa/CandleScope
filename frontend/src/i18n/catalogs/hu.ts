@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const hu = {
+  "pc.installed": "Bővítményeim",
+  "pc.discover": "Felfedezés",
+  "pc.advanced": "Speciális",
+  "pc.install": "Bővítmény telepítése",
+  "pc.search": "Bővítmények, szerzők vagy funkciók keresése",
+  "pc.filter": "Bővítmény állapota",
+  "pc.active": "Engedélyezve",
+  "pc.disabled": "Letiltva",
+  "pc.attention": "Beavatkozás szükséges",
+  "pc.staged": "Aktiválásra vár",
+  "pc.back": "Vissza",
+  "pc.more": "További műveletek",
+  "pc.overview": "Áttekintés",
+  "pc.configure": "Beállítás",
+  "pc.diagnostics": "Verziók és diagnosztika",
+  "pc.working": "Feldolgozás…",
+  "pc.noResults": "Nincs megfelelő bővítmény",
+  "pc.readonly": "Ez a kapcsolat csak olvasható. A telepítéshez, aktiváláshoz és engedélyekhez helyi kezelési kapcsolat szükséges.",
+  "pc.emptyHint": "Telepítsen bővítményeket a munkaterület funkcióinak bővítéséhez.",
+  "pc.enginesHint": "Külön felismert szkriptmotorok a grafikonokhoz, amelyek nem számítanak bele a telepített bővítmények számába.",
+
   ...nativeEnglish,
   "replay.portfolio.title": "Portfólió saját tőkéje",
   "replay.portfolio.load": "Portfóliógörbe betöltése / frissítése",

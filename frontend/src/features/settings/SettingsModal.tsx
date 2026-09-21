@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { PluginSettingsPanel } from '../plugins/PluginCenter.js';
 import DataWorkbenchModal from '../data-workbench/DataWorkbenchModal.js';
 import { t } from '../../i18n/index.js';
 import { useLocale } from '../../i18n/useLocale.js';
@@ -37,6 +38,8 @@ export default function SettingsModal({
     trimChartDataCacheEntries = null,
 }: SettingsModalProps) {
     const [activeCategory, setActiveCategory] = useState<SettingsCategory>('appearance');
+    const [pluginCenterOpen, setPluginCenterOpen] = useState(false);
+    const closePluginCenter = useCallback(() => setPluginCenterOpen(false), []);
     const [dataWorkbenchOpen, setDataWorkbenchOpen] = useState(false);
     useLocale();
   const settingsRuntime = useSettingsRuntime({
@@ -66,7 +69,7 @@ export default function SettingsModal({
 
     return (
       <>
-        <div className="st-overlay" onClick={onClose}>
+        <div className="st-overlay" inert={pluginCenterOpen} aria-hidden={pluginCenterOpen || undefined} onClick={onClose}>
             <div className="st-panel" onClick={(event: MouseEvent<HTMLDivElement>) => event.stopPropagation()}>
                 {/* Sidebar */}
                 <nav className="st-sidebar">
@@ -76,7 +79,7 @@ export default function SettingsModal({
                             <button
                                 key={cat.key}
                                 className={`st-nav-item ${activeCategory === cat.key ? 'active' : ''}`}
-                                onClick={() => setActiveCategory(cat.key)}
+                                onClick={() => { if (cat.key === "plugins" && plugins) setPluginCenterOpen(true); else setActiveCategory(cat.key); }}
                             >
                                 <span className="st-nav-icon" aria-hidden="true">{cat.icon}</span>
                                 <span className="st-nav-label">{t(cat.labelKey)}</span>
@@ -113,6 +116,7 @@ export default function SettingsModal({
             </div>
             <SettingsModalStyles />
         </div>
+        {pluginCenterOpen && plugins && <PluginSettingsPanel runtime={plugins} onClose={closePluginCenter} />}
         {dataWorkbenchEnabled && <DataWorkbenchModal
             currentExchange={currentExchange}
             currentMarketType={currentMarketType}

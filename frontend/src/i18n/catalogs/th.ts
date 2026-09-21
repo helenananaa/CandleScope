@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const th = {
+  "pc.installed": "ปลั๊กอินของฉัน",
+  "pc.discover": "ค้นพบ",
+  "pc.advanced": "การจัดการขั้นสูง",
+  "pc.install": "ติดตั้งปลั๊กอิน",
+  "pc.search": "ค้นหาปลั๊กอิน ผู้พัฒนา หรือคุณสมบัติ",
+  "pc.filter": "สถานะปลั๊กอิน",
+  "pc.active": "เปิดใช้งาน",
+  "pc.disabled": "ปิดใช้งาน",
+  "pc.attention": "ต้องดำเนินการ",
+  "pc.staged": "รอเปิดใช้งาน",
+  "pc.back": "กลับ",
+  "pc.more": "การดำเนินการอื่น",
+  "pc.overview": "ภาพรวม",
+  "pc.configure": "ตั้งค่า",
+  "pc.diagnostics": "เวอร์ชันและการวินิจฉัย",
+  "pc.working": "กำลังดำเนินการ…",
+  "pc.noResults": "ไม่พบปลั๊กอินที่ตรงกัน",
+  "pc.readonly": "การเชื่อมต่อนี้อ่านได้อย่างเดียว การติดตั้ง เปิดใช้งาน และสิทธิ์ต้องใช้การเชื่อมต่อการจัดการภายในเครื่อง",
+  "pc.emptyHint": "ติดตั้งส่วนขยายเพื่อเพิ่มคุณสมบัติให้พื้นที่ทำงาน",
+  "pc.enginesHint": "เอนจินสคริปต์ที่ค้นพบแยกสำหรับคำนวณกราฟ ไม่นับรวมในจำนวนปลั๊กอินที่ติดตั้งด้านบน",
+
   ...nativeEnglish,
   "replay.portfolio.title": "มูลค่าสุทธิของพอร์ต",
   "replay.portfolio.load": "โหลด / รีเฟรชเส้นมูลค่าพอร์ต",

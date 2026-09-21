@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ms = {
+  "pc.installed": "Pemalam saya",
+  "pc.discover": "Teroka",
+  "pc.advanced": "Lanjutan",
+  "pc.install": "Pasang pemalam",
+  "pc.search": "Cari pemalam, pencipta atau ciri",
+  "pc.filter": "Status pemalam",
+  "pc.active": "Diaktifkan",
+  "pc.disabled": "Dinyahaktifkan",
+  "pc.attention": "Perlu perhatian",
+  "pc.staged": "Menunggu pengaktifan",
+  "pc.back": "Kembali",
+  "pc.more": "Tindakan lain",
+  "pc.overview": "Gambaran keseluruhan",
+  "pc.configure": "Konfigurasi",
+  "pc.diagnostics": "Versi dan diagnostik",
+  "pc.working": "Sedang diproses…",
+  "pc.noResults": "Tiada pemalam sepadan",
+  "pc.readonly": "Sambungan ini baca sahaja. Pemasangan, pengaktifan dan kebenaran memerlukan sambungan pengurusan setempat.",
+  "pc.emptyHint": "Pasang sambungan untuk menambah ciri pada ruang kerja.",
+  "pc.enginesHint": "Enjin skrip yang ditemui secara berasingan untuk carta, tidak termasuk dalam bilangan pemalam dipasang di atas.",
+
   ...nativeEnglish,
   "replay.portfolio.title": "Ekuiti portfolio",
   "replay.portfolio.load": "Muat / segar semula lengkung portfolio",

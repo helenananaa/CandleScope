@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const he = {
+  "pc.installed": "התוספים שלי",
+  "pc.discover": "גילוי",
+  "pc.advanced": "ניהול מתקדם",
+  "pc.install": "התקנת תוסף",
+  "pc.search": "חיפוש תוספים, יוצרים או תכונות",
+  "pc.filter": "מצב התוסף",
+  "pc.active": "מופעל",
+  "pc.disabled": "מושבת",
+  "pc.attention": "נדרשת פעולה",
+  "pc.staged": "ממתין להפעלה",
+  "pc.back": "חזרה",
+  "pc.more": "פעולות נוספות",
+  "pc.overview": "סקירה",
+  "pc.configure": "הגדרה",
+  "pc.diagnostics": "גרסאות ואבחון",
+  "pc.working": "מעבד…",
+  "pc.noResults": "אין תוספים תואמים",
+  "pc.readonly": "חיבור זה מיועד לקריאה בלבד. התקנה, הפעלה והרשאות דורשות חיבור ניהול מקומי.",
+  "pc.emptyHint": "התקינו הרחבות כדי להוסיף תכונות לסביבת העבודה.",
+  "pc.enginesHint": "מנועי סקריפטים שהתגלו בנפרד לחישובי תרשימים, שאינם כלולים בספירת התוספים המותקנים לעיל.",
+
   ...nativeEnglish,
   "replay.portfolio.title": "הון התיק",
   "replay.portfolio.load": "טעינה / רענון של עקומת התיק",

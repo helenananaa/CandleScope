@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const uk = {
+  "pc.installed": "Мої плагіни",
+  "pc.discover": "Огляд плагінів",
+  "pc.advanced": "Додатково",
+  "pc.install": "Установити плагін",
+  "pc.search": "Пошук плагінів, авторів або функцій",
+  "pc.filter": "Стан плагіна",
+  "pc.active": "Увімкнено",
+  "pc.disabled": "Вимкнено",
+  "pc.attention": "Потребує уваги",
+  "pc.staged": "Очікує активації",
+  "pc.back": "Назад",
+  "pc.more": "Інші дії",
+  "pc.overview": "Огляд",
+  "pc.configure": "Налаштувати",
+  "pc.diagnostics": "Версії та діагностика",
+  "pc.working": "Обробка…",
+  "pc.noResults": "Немає відповідних плагінів",
+  "pc.readonly": "Це підключення лише для читання. Для встановлення, активації та дозволів потрібне локальне підключення керування.",
+  "pc.emptyHint": "Установіть розширення, щоб додати функції до робочого простору.",
+  "pc.enginesHint": "Окремо виявлені рушії скриптів для графіків, не враховані в кількості встановлених плагінів.",
+
   ...nativeEnglish,
   "replay.portfolio.title": "Власний капітал портфеля",
   "replay.portfolio.load": "Завантажити / оновити криву портфеля",

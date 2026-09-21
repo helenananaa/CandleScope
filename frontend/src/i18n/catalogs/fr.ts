@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const fr = {
+  "pc.installed": "Mes plugins",
+  "pc.discover": "Découvrir",
+  "pc.advanced": "Avancé",
+  "pc.install": "Installer un plugin",
+  "pc.search": "Rechercher des plugins, auteurs ou fonctions",
+  "pc.filter": "État du plugin",
+  "pc.active": "Activé",
+  "pc.disabled": "Désactivé",
+  "pc.attention": "Action requise",
+  "pc.staged": "Activation en attente",
+  "pc.back": "Retour",
+  "pc.more": "Autres actions",
+  "pc.overview": "Aperçu",
+  "pc.configure": "Configurer",
+  "pc.diagnostics": "Versions et diagnostic",
+  "pc.working": "Traitement…",
+  "pc.noResults": "Aucun plugin correspondant",
+  "pc.readonly": "Cette connexion est en lecture seule. Installation, activation et autorisations nécessitent une connexion locale de gestion.",
+  "pc.emptyHint": "Installez des extensions pour enrichir votre espace de travail.",
+  "pc.enginesHint": "Moteurs de scripts détectés séparément pour les graphiques, exclus du nombre de plugins installés.",
+
   ...nativeEnglish,
   "replay.portfolio.title": "Valeur du portefeuille",
   "replay.portfolio.load": "Charger / actualiser la courbe",

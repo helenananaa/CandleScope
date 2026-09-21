@@ -182,13 +182,13 @@ test("v1-only mode keeps one product directory without exposing v2 mutations", (
 
 test("enabled platform exposes separate import and rollback previews", () => {
   const manager = renderToStaticMarkup(
-    <PluginSettingsPanel runtime={runtime(true)} />,
+    <PluginSettingsPanel runtime={runtime(true)} initialSection="advanced" />,
   );
   assert.match(manager, /data-v1-compatibility-preview="import"/);
   assert.match(manager, /data-v1-compatibility-preview="rollback"/);
   assert.match(manager, /预览注册表导入/);
   assert.match(manager, /预览兼容层回滚/);
-  assert.match(manager, /data-plugin-install-input/);
+  assert.doesNotMatch(manager, /data-plugin-install-input/);
   assert.match(manager, /data-runtime-registry-revision="1"/);
   assert.match(manager, /宿主管理的运行时/);
   assert.match(manager, /temurin-21\.0\.12\.8/);
@@ -216,7 +216,7 @@ test("Phase 6 trust UX replaces direct install with an explicit double-confirmat
     }],
     highRiskAuthorityIndependent: true,
   };
-  const manager = renderToStaticMarkup(<PluginSettingsPanel runtime={value} />);
+  const manager = renderToStaticMarkup(<PluginSettingsPanel runtime={value} initialSection="install" />);
   assert.match(manager, /data-plugin-trust-flow="itemized-double-confirmation"/);
   assert.match(manager, /完成两次独立确认后才首次执行插件代码/);
   assert.match(manager, /准备阶段不会运行语义探针或插件进程/);
@@ -312,7 +312,7 @@ test("Marketplace v2 renders publisher, maintenance, sandbox, and permission ass
     }],
   };
 
-  const manager = renderToStaticMarkup(<PluginSettingsPanel runtime={value} />);
+  const manager = renderToStaticMarkup(<PluginSettingsPanel runtime={value} initialSection="discover" />);
   assert.match(manager, /data-marketplace-publisher-verified="true"/);
   assert.match(manager, /data-marketplace-official-maintained="true"/);
   assert.match(manager, /data-marketplace-sandbox-available="true"/);
@@ -321,4 +321,29 @@ test("Marketplace v2 renders publisher, maintenance, sandbox, and permission ass
   assert.match(manager, /维护方：CandleScope 官方/);
   assert.match(manager, /权限范围：1 个必需，0 个可选/);
   assert.match(manager, /发布者验证不等于代码安全/);
+});
+
+test("default plugin center prioritizes the library and keeps maintenance and installation off the first page", () => {
+  const value = runtime(true);
+  const manager = renderToStaticMarkup(<PluginSettingsPanel runtime={value} />);
+  assert.match(manager, /我的插件/);
+  assert.match(manager, /发现插件/);
+  assert.match(manager, /高级管理/);
+  assert.match(manager, /data-v1-runtime="candlescope.pyne"/);
+  assert.doesNotMatch(manager, /data-v1-compatibility-preview|data-runtime-registry-revision|data-plugin-install-input/);
+});
+
+test("twenty installed plugins render a searchable directory without mounting their protected details", () => {
+  const value = runtime(true);
+  if (!value.view.catalog) assert.fail("catalog missing");
+  value.view.catalog.plugins = Array.from({ length: 20 }, (_, index) => ({
+    id: `test.extension-${index}`, name: `Extension ${index}`, publisher: "Test publisher", version: "1.0.0",
+    state: "disabled", enabled: false, available: false, trustLevel: "local-developer",
+    permissions: { activationReady: true, requiredSatisfied: true, requiredPermissionIds: [], permissions: [] },
+    contributions: [], runtime: { entrypoints: [] },
+  }));
+  const manager = renderToStaticMarkup(<PluginSettingsPanel runtime={value} />);
+  assert.match(manager, /Extension 19/);
+  assert.match(manager, /搜索插件、作者或功能/);
+  assert.doesNotMatch(manager, /data-v1-compatibility-preview/);
 });

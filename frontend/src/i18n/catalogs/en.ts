@@ -1,6 +1,27 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
+  "pc.installed": "My plugins",
+  "pc.discover": "Discover",
+  "pc.advanced": "Advanced",
+  "pc.install": "Install plugin",
+  "pc.search": "Search plugins, authors or features",
+  "pc.filter": "Plugin status",
+  "pc.active": "Enabled",
+  "pc.disabled": "Disabled",
+  "pc.attention": "Needs attention",
+  "pc.staged": "Awaiting activation",
+  "pc.back": "Back",
+  "pc.more": "More actions",
+  "pc.overview": "Overview",
+  "pc.configure": "Configure",
+  "pc.diagnostics": "Versions & diagnostics",
+  "pc.working": "Working…",
+  "pc.noResults": "No matching plugins",
+  "pc.readonly": "This connection is read-only. Installation, activation and permissions require a local management connection.",
+  "pc.emptyHint": "Install extensions to add capabilities to your workspace.",
+  "pc.enginesHint": "Separately discovered script engines for chart computation, excluded from the installed plugin count above.",
+
   "native.external.sampledLabel": "Sampled book (bounded depth)",
   "native.external.sampledHint": "Approximate sampled book: consume only visible depth; excess quantity stays unfilled. Books older than 2 seconds cannot fill. No inferred passive queue fills; resting limits fill only when marketable. Same-ms trades precede new book samples. Import paired bars.csv and upload execution.json from the same archive.",
   "native.series.title": "Strategy series graphics",

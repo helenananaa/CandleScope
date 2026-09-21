@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  "pc.installed": "내 플러그인",
+  "pc.discover": "플러그인 찾기",
+  "pc.advanced": "고급 관리",
+  "pc.install": "플러그인 설치",
+  "pc.search": "플러그인, 제작자 또는 기능 검색",
+  "pc.filter": "플러그인 상태",
+  "pc.active": "활성화됨",
+  "pc.disabled": "비활성화됨",
+  "pc.attention": "확인 필요",
+  "pc.staged": "활성화 대기",
+  "pc.back": "뒤로",
+  "pc.more": "추가 작업",
+  "pc.overview": "개요",
+  "pc.configure": "설정",
+  "pc.diagnostics": "버전 및 진단",
+  "pc.working": "처리 중…",
+  "pc.noResults": "일치하는 플러그인 없음",
+  "pc.readonly": "이 연결은 읽기 전용입니다. 설치, 활성화 및 권한 관리에는 로컬 관리 연결이 필요합니다.",
+  "pc.emptyHint": "확장 기능을 설치하여 작업 공간에 기능을 추가하세요.",
+  "pc.enginesHint": "별도로 검색된 차트 계산용 스크립트 엔진으로, 위의 설치된 플러그인 수에 포함되지 않습니다.",
+
   ...nativeEnglish,
   "replay.portfolio.title": "포트폴리오 자산",
   "replay.portfolio.load": "곡선 불러오기 / 새로고침",

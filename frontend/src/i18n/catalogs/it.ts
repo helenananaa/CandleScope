@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const it = {
+  "pc.installed": "I miei plugin",
+  "pc.discover": "Scopri",
+  "pc.advanced": "Avanzate",
+  "pc.install": "Installa plugin",
+  "pc.search": "Cerca plugin, autori o funzioni",
+  "pc.filter": "Stato del plugin",
+  "pc.active": "Attivato",
+  "pc.disabled": "Disattivato",
+  "pc.attention": "Richiede attenzione",
+  "pc.staged": "In attesa di attivazione",
+  "pc.back": "Indietro",
+  "pc.more": "Altre azioni",
+  "pc.overview": "Panoramica",
+  "pc.configure": "Configura",
+  "pc.diagnostics": "Versioni e diagnostica",
+  "pc.working": "Elaborazione…",
+  "pc.noResults": "Nessun plugin corrispondente",
+  "pc.readonly": "Questa connessione è di sola lettura. Installazione, attivazione e permessi richiedono una connessione locale di gestione.",
+  "pc.emptyHint": "Installa estensioni per aggiungere funzioni allo spazio di lavoro.",
+  "pc.enginesHint": "Motori di script rilevati separatamente per i grafici, esclusi dal conteggio dei plugin installati.",
+
   ...nativeEnglish,
   "replay.portfolio.title": "Patrimonio del portafoglio",
   "replay.portfolio.load": "Carica / aggiorna la curva del portafoglio",

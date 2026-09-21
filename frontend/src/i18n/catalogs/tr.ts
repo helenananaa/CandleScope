@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const tr = {
+  "pc.installed": "Eklentilerim",
+  "pc.discover": "Keşfet",
+  "pc.advanced": "Gelişmiş",
+  "pc.install": "Eklenti yükle",
+  "pc.search": "Eklenti, yazar veya özellik ara",
+  "pc.filter": "Eklenti durumu",
+  "pc.active": "Etkin",
+  "pc.disabled": "Devre dışı",
+  "pc.attention": "İşlem gerekli",
+  "pc.staged": "Etkinleştirme bekleniyor",
+  "pc.back": "Geri",
+  "pc.more": "Diğer işlemler",
+  "pc.overview": "Genel bakış",
+  "pc.configure": "Yapılandır",
+  "pc.diagnostics": "Sürümler ve tanılama",
+  "pc.working": "İşleniyor…",
+  "pc.noResults": "Eşleşen eklenti yok",
+  "pc.readonly": "Bu bağlantı salt okunurdur. Yükleme, etkinleştirme ve izinler yerel yönetim bağlantısı gerektirir.",
+  "pc.emptyHint": "Çalışma alanına özellik eklemek için uzantı yükleyin.",
+  "pc.enginesHint": "Grafikler için ayrı keşfedilen betik motorları, yukarıdaki yüklü eklenti sayısına dahil değildir.",
+
   ...nativeEnglish,
   "replay.portfolio.title": "Portföy özkaynağı",
   "replay.portfolio.load": "Portföy eğrisini yükle / yenile",

@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ja = {
+  "pc.installed": "マイプラグイン",
+  "pc.discover": "プラグインを探す",
+  "pc.advanced": "詳細管理",
+  "pc.install": "プラグインをインストール",
+  "pc.search": "プラグイン・作者・機能を検索",
+  "pc.filter": "プラグインの状態",
+  "pc.active": "有効",
+  "pc.disabled": "無効",
+  "pc.attention": "対応が必要",
+  "pc.staged": "有効化待ち",
+  "pc.back": "戻る",
+  "pc.more": "その他の操作",
+  "pc.overview": "概要",
+  "pc.configure": "設定",
+  "pc.diagnostics": "バージョンと診断",
+  "pc.working": "処理中…",
+  "pc.noResults": "一致するプラグインがありません",
+  "pc.readonly": "この接続は閲覧専用です。インストール、有効化、権限管理にはローカル管理接続が必要です。",
+  "pc.emptyHint": "拡張機能をインストールしてワークスペースに機能を追加します。",
+  "pc.enginesHint": "個別に検出されたチャート計算用スクリプトエンジンです。上のインストール済みプラグイン数には含まれません。",
+
   ...nativeEnglish,
   "replay.portfolio.title": "ポートフォリオ資産",
   "replay.portfolio.load": "組合せ曲線を読込 / 更新",

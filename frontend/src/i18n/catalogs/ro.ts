@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ro = {
+  "pc.installed": "Pluginurile mele",
+  "pc.discover": "Descoperă",
+  "pc.advanced": "Avansat",
+  "pc.install": "Instalează plugin",
+  "pc.search": "Caută pluginuri, autori sau funcții",
+  "pc.filter": "Starea pluginului",
+  "pc.active": "Activat",
+  "pc.disabled": "Dezactivat",
+  "pc.attention": "Necesită atenție",
+  "pc.staged": "Așteaptă activarea",
+  "pc.back": "Înapoi",
+  "pc.more": "Alte acțiuni",
+  "pc.overview": "Prezentare generală",
+  "pc.configure": "Configurează",
+  "pc.diagnostics": "Versiuni și diagnosticare",
+  "pc.working": "Se procesează…",
+  "pc.noResults": "Niciun plugin corespunzător",
+  "pc.readonly": "Această conexiune permite doar citirea. Instalarea, activarea și permisiunile necesită o conexiune locală de administrare.",
+  "pc.emptyHint": "Instalează extensii pentru a adăuga funcții spațiului de lucru.",
+  "pc.enginesHint": "Motoare de script detectate separat pentru grafice, excluse din numărul de pluginuri instalate.",
+
   ...nativeEnglish,
   "replay.portfolio.title": "Capitalul portofoliului",
   "replay.portfolio.load": "Încarcă / actualizează curba portofoliului",

@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const hi = {
+  "pc.installed": "मेरे प्लगइन",
+  "pc.discover": "खोजें",
+  "pc.advanced": "उन्नत प्रबंधन",
+  "pc.install": "प्लगइन इंस्टॉल करें",
+  "pc.search": "प्लगइन, लेखक या सुविधाएँ खोजें",
+  "pc.filter": "प्लगइन स्थिति",
+  "pc.active": "सक्षम",
+  "pc.disabled": "अक्षम",
+  "pc.attention": "कार्रवाई आवश्यक",
+  "pc.staged": "सक्रियण की प्रतीक्षा",
+  "pc.back": "वापस",
+  "pc.more": "अन्य कार्रवाइयाँ",
+  "pc.overview": "अवलोकन",
+  "pc.configure": "कॉन्फ़िगर करें",
+  "pc.diagnostics": "संस्करण और निदान",
+  "pc.working": "प्रक्रिया जारी…",
+  "pc.noResults": "कोई मेल खाता प्लगइन नहीं",
+  "pc.readonly": "यह कनेक्शन केवल पढ़ने के लिए है। इंस्टॉलेशन, सक्रियण और अनुमतियों के लिए स्थानीय प्रबंधन कनेक्शन आवश्यक है।",
+  "pc.emptyHint": "कार्यस्थान में सुविधाएँ जोड़ने के लिए एक्सटेंशन इंस्टॉल करें।",
+  "pc.enginesHint": "चार्ट गणना के लिए अलग से खोजे गए स्क्रिप्ट इंजन, ऊपर इंस्टॉल किए गए प्लगइन की संख्या में शामिल नहीं हैं।",
+
   ...nativeEnglish,
   "replay.portfolio.title": "पोर्टफोलियो इक्विटी",
   "replay.portfolio.load": "पोर्टफोलियो वक्र लोड / रीफ़्रेश करें",

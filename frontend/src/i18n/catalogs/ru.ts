@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ru = {
+  "pc.installed": "Мои плагины",
+  "pc.discover": "Обзор плагинов",
+  "pc.advanced": "Дополнительно",
+  "pc.install": "Установить плагин",
+  "pc.search": "Поиск плагинов, авторов или функций",
+  "pc.filter": "Состояние плагина",
+  "pc.active": "Включён",
+  "pc.disabled": "Отключён",
+  "pc.attention": "Требует внимания",
+  "pc.staged": "Ожидает включения",
+  "pc.back": "Назад",
+  "pc.more": "Другие действия",
+  "pc.overview": "Обзор",
+  "pc.configure": "Настроить",
+  "pc.diagnostics": "Версии и диагностика",
+  "pc.working": "Обработка…",
+  "pc.noResults": "Нет подходящих плагинов",
+  "pc.readonly": "Подключение доступно только для чтения. Для установки, включения и разрешений нужно локальное подключение управления.",
+  "pc.emptyHint": "Установите расширения, чтобы добавить функции в рабочее пространство.",
+  "pc.enginesHint": "Отдельно обнаруженные движки скриптов для графиков, не включённые в число установленных плагинов.",
+
   ...nativeEnglish,
   "replay.portfolio.title": "Стоимость портфеля",
   "replay.portfolio.load": "Загрузить / обновить кривую",

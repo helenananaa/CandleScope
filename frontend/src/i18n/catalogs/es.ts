@@ -6,6 +6,27 @@ import type { MessageCatalog } from "../messageCatalog.js";
  * libro de órdenes, tasa de financiación, prueba retrospectiva, reproducción.
  */
 export const es = {
+  "pc.installed": "Mis plugins",
+  "pc.discover": "Descubrir",
+  "pc.advanced": "Avanzado",
+  "pc.install": "Instalar plugin",
+  "pc.search": "Buscar plugins, autores o funciones",
+  "pc.filter": "Estado del plugin",
+  "pc.active": "Activado",
+  "pc.disabled": "Desactivado",
+  "pc.attention": "Requiere atención",
+  "pc.staged": "Pendiente de activación",
+  "pc.back": "Volver",
+  "pc.more": "Más acciones",
+  "pc.overview": "Resumen",
+  "pc.configure": "Configurar",
+  "pc.diagnostics": "Versiones y diagnóstico",
+  "pc.working": "Procesando…",
+  "pc.noResults": "No hay plugins coincidentes",
+  "pc.readonly": "Esta conexión es de solo lectura. La instalación, activación y los permisos requieren una conexión local de administración.",
+  "pc.emptyHint": "Instala extensiones para añadir funciones al espacio de trabajo.",
+  "pc.enginesHint": "Motores de scripts detectados por separado para gráficos; no se incluyen en el recuento de plugins instalados.",
+
   ...nativeEnglish,
   "replay.portfolio.title": "Patrimonio de la cartera",
   "replay.portfolio.load": "Cargar / actualizar curva",

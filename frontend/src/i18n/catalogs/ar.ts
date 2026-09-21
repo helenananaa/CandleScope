@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ar = {
+  "pc.installed": "إضافاتي",
+  "pc.discover": "استكشاف",
+  "pc.advanced": "إدارة متقدمة",
+  "pc.install": "تثبيت إضافة",
+  "pc.search": "البحث عن إضافات أو مطورين أو ميزات",
+  "pc.filter": "حالة الإضافة",
+  "pc.active": "مفعّلة",
+  "pc.disabled": "معطّلة",
+  "pc.attention": "تحتاج إلى إجراء",
+  "pc.staged": "بانتظار التفعيل",
+  "pc.back": "رجوع",
+  "pc.more": "إجراءات أخرى",
+  "pc.overview": "نظرة عامة",
+  "pc.configure": "إعداد",
+  "pc.diagnostics": "الإصدارات والتشخيص",
+  "pc.working": "جارٍ التنفيذ…",
+  "pc.noResults": "لا توجد إضافات مطابقة",
+  "pc.readonly": "هذا الاتصال للقراءة فقط. يتطلب التثبيت والتفعيل والأذونات اتصال إدارة محليًا.",
+  "pc.emptyHint": "ثبّت إضافات لإضافة ميزات إلى مساحة العمل.",
+  "pc.enginesHint": "محركات نصوص مكتشفة بشكل منفصل لحسابات الرسوم، غير مشمولة في عدد الإضافات المثبتة أعلاه.",
+
   ...nativeEnglish,
   "replay.portfolio.title": "حقوق ملكية المحفظة",
   "replay.portfolio.load": "تحميل / تحديث منحنى المحفظة",

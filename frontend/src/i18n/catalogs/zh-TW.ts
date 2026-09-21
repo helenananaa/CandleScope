@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhTW = {
+  "pc.installed": "我的外掛",
+  "pc.discover": "探索外掛",
+  "pc.advanced": "進階管理",
+  "pc.install": "安裝外掛",
+  "pc.search": "搜尋外掛、作者或功能",
+  "pc.filter": "外掛狀態",
+  "pc.active": "已啟用",
+  "pc.disabled": "已停用",
+  "pc.attention": "待處理",
+  "pc.staged": "等待啟用",
+  "pc.back": "返回",
+  "pc.more": "更多操作",
+  "pc.overview": "概覽",
+  "pc.configure": "設定",
+  "pc.diagnostics": "版本與診斷",
+  "pc.working": "正在處理…",
+  "pc.noResults": "沒有符合的外掛",
+  "pc.readonly": "目前連線僅供檢視。安裝、啟停及授權需要可管理的本機連線。",
+  "pc.emptyHint": "安裝擴充功能，為工作區加入新功能。",
+  "pc.enginesHint": "個別探索到的指令碼引擎，可用於圖表運算，不計入上方已安裝外掛。",
+
   ...nativeEnglish,
   "replay.portfolio.title": "帳戶組合權益",
   "replay.portfolio.load": "載入 / 更新組合曲線",

@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const cs = {
+  "pc.installed": "Moje pluginy",
+  "pc.discover": "Objevovat",
+  "pc.advanced": "Pokročilé",
+  "pc.install": "Nainstalovat plugin",
+  "pc.search": "Hledat pluginy, autory nebo funkce",
+  "pc.filter": "Stav pluginu",
+  "pc.active": "Zapnuto",
+  "pc.disabled": "Vypnuto",
+  "pc.attention": "Vyžaduje pozornost",
+  "pc.staged": "Čeká na aktivaci",
+  "pc.back": "Zpět",
+  "pc.more": "Další akce",
+  "pc.overview": "Přehled",
+  "pc.configure": "Nastavit",
+  "pc.diagnostics": "Verze a diagnostika",
+  "pc.working": "Zpracovávání…",
+  "pc.noResults": "Žádné odpovídající pluginy",
+  "pc.readonly": "Toto připojení je pouze pro čtení. Instalace, aktivace a oprávnění vyžadují místní připojení pro správu.",
+  "pc.emptyHint": "Nainstalujte rozšíření a přidejte funkce do pracovního prostoru.",
+  "pc.enginesHint": "Samostatně zjištěné skriptovací enginy pro grafy, nezahrnuté do počtu nainstalovaných pluginů.",
+
   ...nativeEnglish,
   "replay.portfolio.title": "Vlastní kapitál portfolia",
   "replay.portfolio.load": "Načíst / obnovit křivku portfolia",

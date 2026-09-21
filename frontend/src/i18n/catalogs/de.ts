@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const de = {
+  "pc.installed": "Meine Plugins",
+  "pc.discover": "Entdecken",
+  "pc.advanced": "Erweitert",
+  "pc.install": "Plugin installieren",
+  "pc.search": "Plugins, Autoren oder Funktionen suchen",
+  "pc.filter": "Plugin-Status",
+  "pc.active": "Aktiviert",
+  "pc.disabled": "Deaktiviert",
+  "pc.attention": "Handlung erforderlich",
+  "pc.staged": "Aktivierung ausstehend",
+  "pc.back": "Zurück",
+  "pc.more": "Weitere Aktionen",
+  "pc.overview": "Übersicht",
+  "pc.configure": "Konfigurieren",
+  "pc.diagnostics": "Versionen und Diagnose",
+  "pc.working": "Wird verarbeitet…",
+  "pc.noResults": "Keine passenden Plugins",
+  "pc.readonly": "Diese Verbindung ist schreibgeschützt. Installation, Aktivierung und Berechtigungen erfordern eine lokale Verwaltungsverbindung.",
+  "pc.emptyHint": "Installieren Sie Erweiterungen für zusätzliche Funktionen im Arbeitsbereich.",
+  "pc.enginesHint": "Separat erkannte Skript-Engines für Diagramme, nicht in der Anzahl installierter Plugins enthalten.",
+
   ...nativeEnglish,
   "replay.portfolio.title": "Portfolio-Eigenkapital",
   "replay.portfolio.load": "Portfoliokurve laden / aktualisieren",

@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const id = {
+  "pc.installed": "Plugin saya",
+  "pc.discover": "Jelajahi",
+  "pc.advanced": "Lanjutan",
+  "pc.install": "Instal plugin",
+  "pc.search": "Cari plugin, pembuat, atau fitur",
+  "pc.filter": "Status plugin",
+  "pc.active": "Aktif",
+  "pc.disabled": "Nonaktif",
+  "pc.attention": "Perlu perhatian",
+  "pc.staged": "Menunggu aktivasi",
+  "pc.back": "Kembali",
+  "pc.more": "Tindakan lainnya",
+  "pc.overview": "Ringkasan",
+  "pc.configure": "Konfigurasi",
+  "pc.diagnostics": "Versi dan diagnostik",
+  "pc.working": "Memproses…",
+  "pc.noResults": "Tidak ada plugin yang cocok",
+  "pc.readonly": "Koneksi ini hanya untuk membaca. Instalasi, aktivasi, dan izin memerlukan koneksi pengelolaan lokal.",
+  "pc.emptyHint": "Instal ekstensi untuk menambahkan fitur ke ruang kerja.",
+  "pc.enginesHint": "Mesin skrip yang ditemukan secara terpisah untuk grafik, tidak dihitung sebagai plugin terinstal di atas.",
+
   ...nativeEnglish,
   "replay.portfolio.title": "Ekuitas portofolio",
   "replay.portfolio.load": "Muat / perbarui kurva portofolio",

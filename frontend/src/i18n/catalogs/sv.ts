@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const sv = {
+  "pc.installed": "Mina insticksprogram",
+  "pc.discover": "Upptäck",
+  "pc.advanced": "Avancerat",
+  "pc.install": "Installera insticksprogram",
+  "pc.search": "Sök insticksprogram, skapare eller funktioner",
+  "pc.filter": "Status",
+  "pc.active": "Aktiverat",
+  "pc.disabled": "Inaktiverat",
+  "pc.attention": "Kräver åtgärd",
+  "pc.staged": "Väntar på aktivering",
+  "pc.back": "Tillbaka",
+  "pc.more": "Fler åtgärder",
+  "pc.overview": "Översikt",
+  "pc.configure": "Konfigurera",
+  "pc.diagnostics": "Versioner och diagnostik",
+  "pc.working": "Bearbetar…",
+  "pc.noResults": "Inga matchande insticksprogram",
+  "pc.readonly": "Anslutningen är skrivskyddad. Installation, aktivering och behörigheter kräver en lokal hanteringsanslutning.",
+  "pc.emptyHint": "Installera tillägg för att lägga till funktioner i arbetsytan.",
+  "pc.enginesHint": "Separat upptäckta skriptmotorer för diagram, inte medräknade bland installerade insticksprogram ovan.",
+
   ...nativeEnglish,
   "replay.portfolio.title": "Portföljens eget kapital",
   "replay.portfolio.load": "Läs in / uppdatera portföljkurvan",

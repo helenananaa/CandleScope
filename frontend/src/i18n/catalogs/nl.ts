@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const nl = {
+  "pc.installed": "Mijn plugins",
+  "pc.discover": "Ontdekken",
+  "pc.advanced": "Geavanceerd",
+  "pc.install": "Plugin installeren",
+  "pc.search": "Zoek plugins, auteurs of functies",
+  "pc.filter": "Pluginstatus",
+  "pc.active": "Ingeschakeld",
+  "pc.disabled": "Uitgeschakeld",
+  "pc.attention": "Actie vereist",
+  "pc.staged": "Wacht op activering",
+  "pc.back": "Terug",
+  "pc.more": "Meer acties",
+  "pc.overview": "Overzicht",
+  "pc.configure": "Configureren",
+  "pc.diagnostics": "Versies en diagnose",
+  "pc.working": "Bezig…",
+  "pc.noResults": "Geen overeenkomende plugins",
+  "pc.readonly": "Deze verbinding is alleen-lezen. Installatie, activering en rechten vereisen een lokale beheerverbinding.",
+  "pc.emptyHint": "Installeer extensies om functies aan de werkruimte toe te voegen.",
+  "pc.enginesHint": "Afzonderlijk gevonden script-engines voor grafieken, niet meegeteld bij de geïnstalleerde plugins hierboven.",
+
   ...nativeEnglish,
   "replay.portfolio.title": "Portefeuillevermogen",
   "replay.portfolio.load": "Portefeuillecurve laden / vernieuwen",

@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
+  "pc.installed": "Meus plugins",
+  "pc.discover": "Descobrir",
+  "pc.advanced": "Avançado",
+  "pc.install": "Instalar plugin",
+  "pc.search": "Buscar plugins, autores ou recursos",
+  "pc.filter": "Estado do plugin",
+  "pc.active": "Ativado",
+  "pc.disabled": "Desativado",
+  "pc.attention": "Requer atenção",
+  "pc.staged": "Aguardando ativação",
+  "pc.back": "Voltar",
+  "pc.more": "Mais ações",
+  "pc.overview": "Visão geral",
+  "pc.configure": "Configurar",
+  "pc.diagnostics": "Versões e diagnóstico",
+  "pc.working": "Processando…",
+  "pc.noResults": "Nenhum plugin encontrado",
+  "pc.readonly": "Esta conexão é somente leitura. Instalação, ativação e permissões exigem uma conexão local de gerenciamento.",
+  "pc.emptyHint": "Instale extensões para adicionar recursos ao espaço de trabalho.",
+  "pc.enginesHint": "Mecanismos de scripts descobertos separadamente para gráficos, excluídos da contagem de plugins instalados.",
+
   ...nativeEnglish,
   "replay.portfolio.title": "Patrimônio da carteira",
   "replay.portfolio.load": "Carregar / atualizar curva",

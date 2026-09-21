@@ -2,6 +2,27 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const vi = {
+  "pc.installed": "Plugin của tôi",
+  "pc.discover": "Khám phá",
+  "pc.advanced": "Nâng cao",
+  "pc.install": "Cài plugin",
+  "pc.search": "Tìm plugin, tác giả hoặc tính năng",
+  "pc.filter": "Trạng thái plugin",
+  "pc.active": "Đã bật",
+  "pc.disabled": "Đã tắt",
+  "pc.attention": "Cần xử lý",
+  "pc.staged": "Chờ kích hoạt",
+  "pc.back": "Quay lại",
+  "pc.more": "Thao tác khác",
+  "pc.overview": "Tổng quan",
+  "pc.configure": "Cấu hình",
+  "pc.diagnostics": "Phiên bản và chẩn đoán",
+  "pc.working": "Đang xử lý…",
+  "pc.noResults": "Không có plugin phù hợp",
+  "pc.readonly": "Kết nối này chỉ cho phép xem. Cài đặt, kích hoạt và quyền cần kết nối quản lý cục bộ.",
+  "pc.emptyHint": "Cài tiện ích để thêm tính năng cho không gian làm việc.",
+  "pc.enginesHint": "Các bộ máy tập lệnh được phát hiện riêng cho biểu đồ, không tính vào số plugin đã cài ở trên.",
+
   ...nativeEnglish,
   "replay.portfolio.title": "Vốn chủ sở hữu danh mục",
   "replay.portfolio.load": "Tải / làm mới đường vốn danh mục",
