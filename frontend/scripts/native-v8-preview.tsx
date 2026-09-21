@@ -4,7 +4,7 @@ import {readFileSync,writeFileSync,mkdirSync} from "node:fs";
 import {NativeSeriesScene} from "../src/features/backtest/native/NativeSeriesScene.js";
 import {NativeDrawingScene} from "../src/features/backtest/native/NativeDrawingScene.js";
 import type {NativeResult} from "../src/features/backtest/native/nativeBacktestApi.js";
-const fixture=(lang:string,type:string)=>JSON.parse(readFileSync(new URL(`../src/features/backtest/native/fixtures/${lang}-${type}.json`,import.meta.url),'utf8')) as NativeResult;
+const fixture=(lang:string,type:string)=>JSON.parse(readFileSync(new URL(`../tests/fixtures/native/${lang}-${type}.json`,import.meta.url),'utf8')) as NativeResult;
 mkdirSync('../output/playwright/native-v8',{recursive:true});
 const html=renderToStaticMarkup(<main>{['pine','pyne'].map(lang=><section key={lang}><h1>{lang}</h1><NativeSeriesScene result={fixture(lang,'series')}/><NativeDrawingScene result={fixture(lang,'drawings')}/></section>)}</main>);
 writeFileSync('../output/playwright/native-v8/report.html',`<!doctype html><html><meta charset="utf-8"><title>Native V8 report verification</title><style>body{background:#101827;color:#e2e8f0;font:16px sans-serif;max-width:1100px;margin:30px auto}svg{width:100%;display:block}figure,.native-drawing-pane{margin:15px 0;padding:16px;border:1px solid #334155}table{border-collapse:collapse}td{border:1px solid #64748b;padding:10px}p{color:#94a3b8}</style>${html}</html>`);

@@ -13,6 +13,10 @@ export interface SymbolSearchItem extends Record<string, unknown> {
   priceAdjustment?: string;
   sessionVariant?: string;
   volumeSemantics?: string;
+  seriesKey?: string;
+  groupKey?: string;
+  groupStart?: boolean;
+  groupSourceCount?: number;
   _key: string;
 }
 

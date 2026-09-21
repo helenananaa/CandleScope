@@ -1,25 +1,19 @@
 import { listenForSearchContextMenuDismiss } from "./searchContextMenuDismiss.js";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { listenForSearchEscape } from "./searchEscape.js";
 import { markPerf } from "../../runtime/performance/perfMarks";
-import { useSymbolCatalogRuntime } from "./symbolCatalogRuntime";
+import { useSymbolDiscovery } from "./useSymbolDiscovery";
+import { loadRecentSymbols, rememberRecentSymbol } from "./sourcePreferences";
 import { useSymbolFavoritesStore } from "./symbolFavoritesStore";
 import {
   ROW_HEIGHT,
   VISIBLE_ROWS,
   buildExchangeChips,
-  buildMarketTabs,
-  filterSymbols,
   getSymbolWatchlists,
-  isSameSymbolEntry,
-  resolveExchangeMarketType,
 } from "./symbolSearchFilter";
 import type {
-  Dispatch,
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
-  MutableRefObject,
-  SetStateAction,
   UIEvent as ReactUIEvent,
 } from "react";
 import type { WatchlistGroup } from "../watchlist/watchlistTypes.js";
@@ -31,6 +25,8 @@ import {
   resolveKlineSeriesIdentity,
   type KlineSeriesIdentityInput,
 } from "../market-data/klineSeriesIdentity.js";
+
+const EMPTY_SYMBOLS: SymbolSearchItem[] = [];
 
 export interface SymbolSelection extends KlineSeriesIdentityInput {
   symbol: string;
@@ -47,6 +43,7 @@ export interface SymbolContextMenu {
 
 export interface UseSymbolSearchRuntimeOptions {
   open: boolean;
+  initialSearch?: string;
   onClose(): void;
   currentSymbol: string;
   currentMarketType?: string | null;
@@ -57,148 +54,75 @@ export interface UseSymbolSearchRuntimeOptions {
   onAddToWatchlist?: ((watchlistId: string, symbolKey: string) => void) | null;
 }
 
-export interface SymbolSearchRuntime {
-  view: {
-    search: string;
-    marketType: string;
-    exchangeFilter: Set<string>;
-    quoteFilter: string;
-    favorites: string[];
-    favoriteSet: Set<string>;
-    exchangeChips: Array<{ key: string; label: string; disabled: boolean }>;
-    marketTabs: ReturnType<typeof buildMarketTabs>;
-    filteredSymbols: SymbolSearchItem[];
-    highlightIndex: number;
-    contextMenu: SymbolContextMenu | null;
-    hasWatchlists: boolean;
-    virtualRows: {
-      rowHeight: number;
-      listHeight: number;
-      totalHeight: number;
-      startIndex: number;
-      visibleItems: SymbolSearchItem[];
-      offsetY: number;
-    };
-  };
-  actions: {
-    setSearch: Dispatch<SetStateAction<string>>;
-    setMarketType: Dispatch<SetStateAction<string>>;
-    setQuoteFilter: Dispatch<SetStateAction<string>>;
-    setHighlightIndex: Dispatch<SetStateAction<number>>;
-    selectExchange(exchange: string): void;
-    toggleExchange(exchange: string): void;
-    toggleFavorite(symbolKey: string, event?: { stopPropagation(): void } | null): void;
-    selectSymbol(entry: SymbolSearchItem): void;
-    openContextMenu(event: ReactMouseEvent, symbol: string, symbolKey: string): void;
-    closeContextMenu(): void;
-    addContextSymbolToWatchlist(watchlistId: string): void;
-    getSymbolWatchlists(symbolKey: string): WatchlistGroup[];
-    handleKeyDown(event: ReactKeyboardEvent): void;
-    handleScroll(event: ReactUIEvent<HTMLDivElement>): void;
-    refreshSymbols(): Promise<void>;
-  };
-  status: {
-    loading: boolean;
-    refreshing: boolean;
-  };
-  refs: {
-    inputRef: MutableRefObject<HTMLInputElement | null>;
-    listRef: MutableRefObject<HTMLDivElement | null>;
-    modalRef: MutableRefObject<HTMLDivElement | null>;
-  };
-}
-
 export function useSymbolSearchRuntime({
   open,
+  initialSearch = "",
   onClose,
-  currentSymbol,
-  currentMarketType,
   currentExchange = "binance",
   onSelect,
   exchangeCatalog,
   watchlists,
   onAddToWatchlist,
-}: UseSymbolSearchRuntimeOptions): SymbolSearchRuntime {
+}: UseSymbolSearchRuntimeOptions) {
   const currentExchangeKey = currentExchange || "binance";
-  const currentMarketTypeKey = currentMarketType || "spot";
 
-  const [search, setSearch] = useState("");
-  const [marketType, setMarketType] = useState(currentMarketTypeKey);
-  const [exchangeFilter, setExchangeFilter] = useState<Set<string>>(() => new Set([currentExchangeKey]));
-  const [quoteFilter, setQuoteFilter] = useState("USDT");
+  const [search, setSearch] = useState(initialSearch);
+  const [marketType, setMarketType] = useState("");
+  const [exchangeFilter, setExchangeFilter] = useState<Set<string>>(() => new Set());
+  const [quoteFilter, setQuoteFilter] = useState("ALL");
   const [highlightIndex, setHighlightIndex] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
   const [contextMenu, setContextMenu] = useState<SymbolContextMenu | null>(null);
-  const queryOnlyExchanges = useMemo(() => new Set(
-    Object.entries(exchangeCatalog || {})
-      .filter(([, entry]) => entry.protocolFeatures?.has("rest.symbol_search.query_only"))
-      .map(([exchange]) => exchange),
-  ), [exchangeCatalog]);
+  const [assetClass, setAssetClass] = useState("");
+  const [venue, setVenue] = useState("");
+  const [scope, setScope] = useState<"all" | "favorites" | "recent">("all");
+  const [recent, setRecent] = useState(loadRecentSymbols);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
 
-  const catalog = useSymbolCatalogRuntime({
-    currentExchange: currentExchangeKey,
-    requestedMarketType: marketType === "favorites" ? currentMarketTypeKey : marketType,
-    requestedExchanges: exchangeFilter,
-    providerSearch: search,
-    queryOnlyExchanges,
-    open,
-  });
   const favoritesStore = useSymbolFavoritesStore();
+  const catalog = useSymbolDiscovery({
+    search, source: [...exchangeFilter][0] || "", asset_class: assetClass, market_type: marketType,
+    venue, quote: quoteFilter === "ALL" ? "" : quoteFilter, preferred_source: currentExchangeKey,
+    favorites: favoritesStore.favorites.slice(0, 500), recent, scope,
+  }, open);
+  const filteredSymbols = catalog.result?.symbols || EMPTY_SYMBOLS;
+  const facets = catalog.result?.facets;
+  const quoteOptions = facets?.quotes.map((item) => item.key) || [];
 
   useEffect(() => {
     if (open) markPerf("lazy.symbolSearch.ready");
   }, [open]);
 
+  useLayoutEffect(() => {
+    if (open) inputRef.current?.focus();
+  }, [open]);
+
   useEffect(() => {
     if (!open) return undefined;
     const resetTimer = setTimeout(() => {
-      setSearch("");
-      setMarketType(currentMarketTypeKey);
-      setExchangeFilter(new Set([currentExchangeKey]));
-      setQuoteFilter(queryOnlyExchanges.has(currentExchangeKey) ? "ALL" : "USDT");
+      setMarketType("");
+      setAssetClass("");
+      setVenue("");
+      setScope("all");
+      setRecent(loadRecentSymbols());
+      setExchangeFilter(new Set());
+      setQuoteFilter("ALL");
       setHighlightIndex(0);
       setScrollTop(0);
       setContextMenu(null);
     }, 0);
-    const focusTimer = setTimeout(() => inputRef.current?.focus(), 50);
     return () => {
       clearTimeout(resetTimer);
-      clearTimeout(focusTimer);
     };
-  }, [currentExchangeKey, currentMarketTypeKey, open, queryOnlyExchanges]);
+  }, [currentExchangeKey, open]);
 
-  const exchangeChips = useMemo(() => buildExchangeChips({
-    allSymbols: catalog.allSymbols,
-    currentExchange: currentExchangeKey,
+  const exchangeChips = buildExchangeChips({
+    allSymbols: filteredSymbols, currentExchange: currentExchangeKey,
     ...(exchangeCatalog === undefined ? {} : { exchangeCatalog }),
-  }), [catalog.allSymbols, currentExchangeKey, exchangeCatalog]);
-
-  const marketTabs = useMemo(() => buildMarketTabs({
-    allSymbols: catalog.allSymbols,
-    exchangeFilter,
-    ...(exchangeCatalog === undefined ? {} : { exchangeCatalog }),
-  }), [catalog.allSymbols, exchangeCatalog, exchangeFilter]);
-
-  useEffect(() => {
-    if (marketType === "favorites") return undefined;
-    if (marketTabs.some((tab) => tab.key === marketType)) return undefined;
-    const nextMarketType = marketTabs.find((tab) => tab.key !== "favorites")?.key || "favorites";
-    const timer = setTimeout(() => setMarketType(nextMarketType), 0);
-    return () => clearTimeout(timer);
-  }, [marketTabs, marketType]);
-
-  const filteredSymbols = useMemo(() => filterSymbols({
-    allSymbols: catalog.allSymbols,
-    marketType,
-    exchangeFilter,
-    quoteFilter,
-    search,
-    favorites: favoritesStore.favorites,
-  }), [catalog.allSymbols, exchangeFilter, favoritesStore.favorites, marketType, quoteFilter, search]);
+  });
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -207,7 +131,7 @@ export function useSymbolSearchRuntime({
       if (listRef.current) listRef.current.scrollTop = 0;
     }, 0);
     return () => clearTimeout(timer);
-  }, [exchangeFilter, marketType, quoteFilter, search]);
+  }, [exchangeFilter, marketType, quoteFilter, search, assetClass, venue, scope]);
 
   useEffect(() => {
     if (!contextMenu) return undefined;
@@ -215,47 +139,23 @@ export function useSymbolSearchRuntime({
   }, [contextMenu]);
 
   const selectSymbol = useCallback((entry: SymbolSearchItem) => {
-    if (!isSameSymbolEntry(entry, currentSymbol, currentMarketTypeKey, currentExchangeKey)) {
-      const exchange = entry.exchange || "binance";
-      onSelect({
-        symbol: entry.symbol,
-        marketType: entry.marketType,
-        exchange,
-        ...resolveKlineSeriesIdentity(exchange, entry),
-      });
-    }
+    if (catalog.stale) return;
+    const exchange = entry.exchange || "binance";
+    rememberRecentSymbol(entry._key);
+    onSelect({ symbol: entry.symbol, marketType: entry.marketType, exchange,
+      ...resolveKlineSeriesIdentity(exchange, entry) });
     onClose();
-  }, [currentExchangeKey, currentMarketTypeKey, currentSymbol, onClose, onSelect]);
+  }, [catalog.stale, onClose, onSelect]);
 
   const toggleFavorite = useCallback((symbolKey: string, event?: { stopPropagation(): void } | null) => {
     event?.stopPropagation();
     favoritesStore.actions.toggleFavorite(symbolKey);
   }, [favoritesStore.actions]);
 
-  const toggleExchange = useCallback((exchange: string) => {
-    setExchangeFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(exchange)) {
-        if (next.size > 1) next.delete(exchange);
-      } else {
-        next.add(exchange);
-      }
-      return next;
-    });
-  }, []);
-
   const selectExchange = useCallback((exchange: string) => {
-    const nextExchangeFilter = new Set([exchange]);
-    const nextMarketTabs = buildMarketTabs({
-      allSymbols: catalog.allSymbols,
-      exchangeFilter: nextExchangeFilter,
-      ...(exchangeCatalog === undefined ? {} : { exchangeCatalog }),
-    });
-    const nextMarketType = resolveExchangeMarketType(marketType, nextMarketTabs);
-    setExchangeFilter(nextExchangeFilter);
-    setMarketType(nextMarketType);
-    if (queryOnlyExchanges.has(exchange)) setQuoteFilter("ALL");
-  }, [catalog.allSymbols, exchangeCatalog, marketType, queryOnlyExchanges]);
+    setExchangeFilter(exchange ? new Set([exchange]) : new Set());
+    setMarketType(""); setQuoteFilter("ALL"); setVenue("");
+  }, []);
 
   const openContextMenu = useCallback((event: ReactMouseEvent, symbol: string, symbolKey: string) => {
     event.preventDefault();
@@ -278,21 +178,35 @@ export function useSymbolSearchRuntime({
   useEffect(() => {
     if (!open) return undefined;
     return listenForSearchEscape(document, () => {
-      if (contextMenu) setContextMenu(null);
+      const picker = modalRef.current?.querySelector<HTMLDetailsElement>("details[open]");
+      if (picker) { picker.open = false; picker.querySelector("summary")?.focus(); }
+      else if (contextMenu) setContextMenu(null);
       else onClose();
     });
   }, [open, contextMenu, onClose]);
 
   const handleKeyDown = useCallback((event: ReactKeyboardEvent) => {
+    if (event.nativeEvent.isComposing) return;
+    const target = event.target as HTMLElement;
+    if (event.key === "Tab") {
+      const items = Array.from(modalRef.current?.querySelectorAll<HTMLElement>("input, select, button, summary, [tabindex]") || [])
+        .filter((item) => item.tabIndex >= 0 && !item.matches(":disabled") && item.getClientRects().length > 0);
+      const first = items[0], last = items[items.length - 1];
+      if (event.shiftKey && target === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && target === last) { event.preventDefault(); first?.focus(); }
+      return;
+    }
+    if (target !== inputRef.current && target.closest("input, select, button, summary, details")) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setHighlightIndex((prev) => {
         const maxIndex = Math.max(0, filteredSymbols.length - 1);
         const next = Math.min(prev + 1, maxIndex);
         const topVisible = Math.floor(scrollTop / ROW_HEIGHT);
-        const bottomVisible = topVisible + VISIBLE_ROWS - 1;
+        const viewportRows = Math.max(1, Math.floor((listRef.current?.clientHeight || ROW_HEIGHT) / ROW_HEIGHT));
+        const bottomVisible = topVisible + viewportRows - 1;
         if (next > bottomVisible && listRef.current) {
-          listRef.current.scrollTop = (next - VISIBLE_ROWS + 1) * ROW_HEIGHT;
+          listRef.current.scrollTop = (next - viewportRows + 1) * ROW_HEIGHT;
         }
         return next;
       });
@@ -319,8 +233,12 @@ export function useSymbolSearchRuntime({
   }, [filteredSymbols, highlightIndex, scrollTop, selectSymbol]);
 
   const handleScroll = useCallback((event: ReactUIEvent<HTMLDivElement>) => {
-    setScrollTop(event.currentTarget.scrollTop);
-  }, []);
+    const element = event.currentTarget;
+    setScrollTop(element.scrollTop);
+    if (element.scrollHeight - element.scrollTop - element.clientHeight < ROW_HEIGHT * 4 && !catalog.loading) {
+      void catalog.loadMore();
+    }
+  }, [catalog]);
 
   const totalHeight = filteredSymbols.length * ROW_HEIGHT;
   const startIndex = Math.floor(scrollTop / ROW_HEIGHT);
@@ -330,88 +248,23 @@ export function useSymbolSearchRuntime({
   const listHeight = VISIBLE_ROWS * ROW_HEIGHT;
   const hasWatchlists = Boolean(watchlists && watchlists.length > 0);
 
-  const view = useMemo(() => ({
-    search,
-    marketType,
-    exchangeFilter,
-    quoteFilter,
-    favorites: favoritesStore.favorites,
-    favoriteSet: favoritesStore.favoriteSet,
-    exchangeChips,
-    marketTabs,
-    filteredSymbols,
-    highlightIndex,
-    contextMenu,
-    hasWatchlists,
-    virtualRows: {
-      rowHeight: ROW_HEIGHT,
-      listHeight,
-      totalHeight,
-      startIndex,
-      visibleItems,
-      offsetY,
-    },
-  }), [
-    contextMenu,
-    exchangeChips,
-    exchangeFilter,
-    favoritesStore.favoriteSet,
-    favoritesStore.favorites,
-    filteredSymbols,
-    hasWatchlists,
-    highlightIndex,
-    listHeight,
-    marketTabs,
-    marketType,
-    offsetY,
-    quoteFilter,
-    search,
-    startIndex,
-    totalHeight,
-    visibleItems,
-  ]);
-
-  const actions = useMemo(() => ({
-    setSearch,
-    setMarketType,
-    setQuoteFilter,
-    setHighlightIndex,
-    selectExchange,
-    toggleExchange,
-    toggleFavorite,
-    selectSymbol,
-    openContextMenu,
-    closeContextMenu,
-    addContextSymbolToWatchlist,
-    getSymbolWatchlists: (symbolKey: string) => getSymbolWatchlists(watchlists, symbolKey),
-    handleKeyDown,
-    handleScroll,
-    refreshSymbols: catalog.refreshSymbols,
-  }), [
-    addContextSymbolToWatchlist,
-    catalog.refreshSymbols,
-    closeContextMenu,
-    handleKeyDown,
-    handleScroll,
-    openContextMenu,
-    selectSymbol,
-    selectExchange,
-    toggleExchange,
-    toggleFavorite,
-    watchlists,
-  ]);
-
   return {
-    view,
-    actions,
-    status: {
-      loading: catalog.loading,
-      refreshing: catalog.refreshing,
+    view: {
+      search, marketType, exchangeFilter, quoteFilter, quoteOptions, assetClass, venue, scope, facets,
+      favorites: favoritesStore.favorites, favoriteSet: favoritesStore.favoriteSet,
+      exchangeChips, filteredSymbols, highlightIndex, contextMenu, hasWatchlists,
+      discovery: catalog.result,
+      virtualRows: { rowHeight: ROW_HEIGHT, listHeight, totalHeight, startIndex, visibleItems, offsetY },
     },
-    refs: {
-      inputRef,
-      listRef,
-      modalRef,
+    actions: {
+      setSearch, setMarketType, setQuoteFilter, setHighlightIndex, selectExchange,
+      setAssetClass: (value: string) => { setAssetClass(value); setMarketType(""); setVenue(""); setQuoteFilter("ALL"); },
+      setVenue, setScope, toggleFavorite, selectSymbol, openContextMenu, closeContextMenu,
+      addContextSymbolToWatchlist, getSymbolWatchlists: (key: string) => getSymbolWatchlists(watchlists, key),
+      handleKeyDown, handleScroll, refreshSymbols: catalog.refresh, loadMore: catalog.loadMore, loadSources: catalog.loadSources,
     },
+    status: { loading: catalog.loading && !catalog.result, refreshing: catalog.loading, stale: catalog.stale, error: catalog.error },
+    refs: { inputRef, listRef, modalRef },
   };
 }
+export type SymbolSearchRuntime = ReturnType<typeof useSymbolSearchRuntime>;

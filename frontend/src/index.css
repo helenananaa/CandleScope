@@ -2121,6 +2121,53 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   white-space: nowrap;
 }
 
+.sym-discovery-status { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 18px; font-size: 11px; color: var(--text-muted); }
+.sym-discovery-partial { flex-basis: 100%; line-height: 1.4; }
+.sym-discovery-status > details { min-width: 0; flex: 1; }
+.sym-discovery-status summary { cursor: pointer; }
+.sym-discovery-sources { display: flex; flex-direction: column; max-height: 150px; overflow: auto; }
+.sym-discovery-status button, .sym-discovery-error button { background: transparent; border: 1px solid var(--border-color); border-radius: 5px; color: var(--text-secondary); padding: 4px 8px; cursor: pointer; text-align: left; }
+.sym-discovery-error { padding: 8px 18px; color: var(--text-secondary); font-size: 12px; }
+.sym-modal-filter-row-chips .sym-modal-exchange-select { min-width: 75px; max-width: 180px; }
+.sym-discovery-row { position: relative; padding-top: 14px; box-sizing: border-box; }
+.sym-discovery-group-start { border-top: 1px solid var(--border-color); }
+.sym-discovery-group-label { position: absolute; top: 2px; left: 50px; font-size: 9px; color: var(--text-muted); }
+
+.sym-source-picker { position: relative; min-width: 0; }
+.sym-modal:has(.sym-source-picker[open]) { overflow: visible; }
+.sym-modal-footer { border-radius: 0 0 16px 16px; }
+.sym-source-picker summary { list-style: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sym-source-picker summary::after { content: " ▾"; }
+.sym-source-panel {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 5;
+  width: min(360px, calc(100vw - 80px)); padding: 10px;
+  border: 1px solid var(--border-color); border-radius: 10px;
+  background: var(--bg-secondary); box-shadow: 0 8px 24px rgba(0, 0, 0, .25);
+}
+.sym-source-panel input {
+  box-sizing: border-box; width: 100%; padding: 8px 10px;
+  border: 1px solid var(--border-color); border-radius: 6px;
+  background: var(--bg-primary); color: var(--text-primary); font: inherit;
+}
+.sym-source-options { max-height: min(300px, 35vh); overflow-y: auto; }
+.sym-source-group-title { padding: 10px 6px 4px; color: var(--text-muted); font-size: 11px; }
+.sym-source-option { display: flex; gap: 4px; }
+.sym-source-option button {
+  border: 0; background: transparent; color: var(--text-primary); border-radius: 6px;
+  cursor: pointer; padding: 8px; display: flex; align-items: center; gap: 8px;
+}
+.sym-source-option button:first-child { flex: 1; min-width: 0; text-align: left; }
+.sym-source-option button:first-child span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.sym-source-option small { color: var(--text-muted); font-size: 10px; }
+.sym-source-option button:hover, .sym-source-option button[aria-pressed="true"] { background: var(--bg-hover); }
+.sym-source-option button:disabled { opacity: .45; cursor: not-allowed; }
+.sym-source-option .sym-source-star[aria-pressed="true"] { color: var(--accent-blue); }
+.sym-source-picker :focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 1px; }
+.sym-modal-market-tabs { overflow-x: auto; min-width: 0; }
+.sym-modal-row-exchange { display: flex; flex-direction: column; justify-content: center; }
+.sym-modal-row-exchange small { color: var(--text-muted); font-size: 10px; }
+#sym-modal-quote-select { min-width: 90px; max-width: 150px; }
+
 .sym-modal-exchange-select {
   min-width: 170px;
   max-width: 260px;
@@ -2201,6 +2248,17 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 .sym-modal-col-quote { flex: 1; min-width: 80px; }
 .sym-modal-col-type  { width: 64px; flex-shrink: 0; text-align: center; }
 .sym-modal-col-exchange { flex: 1; min-width: 80px; text-align: right; }
+.sym-modal-row-base, .sym-modal-row-exchange > span {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .sym-modal-col-base, .sym-modal-col-quote { display: none; }
+  .sym-modal-col-pair { min-width: 0; flex: 1; overflow: hidden; }
+  .sym-modal-col-type { width: 52px; }
+  .sym-modal-col-exchange { flex: 0 0 82px; min-width: 0; }
+  .sym-modal .sym-modal-shortcut-hint { display: none; }
+  .sym-modal-result-count, .sym-modal-refresh-btn { white-space: nowrap; }
+}
 
 /* ── Virtual scroll list ── */
 .sym-modal-list {

@@ -9,7 +9,7 @@ import type { NativeResult } from "./nativeBacktestApi.js";
 
 for (const language of ["pine","pyne"]) {
   test(`${language} installed runtime objects render all six object families`, () => {
-    const result=JSON.parse(readFileSync(new URL(`./fixtures/${language}-drawings.json`,import.meta.url),"utf8")) as NativeResult;
+    const result=JSON.parse(readFileSync(new URL(`../../../../tests/fixtures/native/${language}-drawings.json`,import.meta.url),"utf8")) as NativeResult;
     const scene=nativeDrawings(result);
     assert.equal(scene.objects.length,7);
     assert.deepEqual(new Set(scene.objects.map((o) => o.kind)),new Set(["lines","labels","boxes","polylines","linefills","tables"]));
@@ -26,7 +26,7 @@ for (const language of ["pine","pyne"]) {
 }
 
 test("Pine deletion and replay cutoffs select the last visible object state", () => {
-  const result=JSON.parse(readFileSync(new URL('./fixtures/pine-drawings.json',import.meta.url),'utf8')) as NativeResult;
+  const result=JSON.parse(readFileSync(new URL('../../../../tests/fixtures/native/pine-drawings.json',import.meta.url),'utf8')) as NativeResult;
   result.raw_output.lines=[{id:1,snapshots:[{barIndex:0,exists:true,x1:0,y1:1,x2:1,y2:2},
     {barIndex:3,exists:false},{barIndex:10,exists:true,x1:0,y1:9,x2:1,y2:10}]}];
   assert.equal(nativeDrawings(result).objects.filter((o) => o.kind==='lines').length,0);

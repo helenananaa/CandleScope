@@ -7,7 +7,7 @@ import { NativeSeriesScene } from "./NativeSeriesScene.js";
 import { nativeSeries } from "./nativeSeriesModel.js";
 import { drawingColor } from "./nativeDrawingModel.js";
 import type { NativeResult } from "./nativeBacktestApi.js";
-const fixture=(language:string)=>JSON.parse(readFileSync(new URL(`./fixtures/${language}-series.json`,import.meta.url),"utf8")) as NativeResult;
+const fixture=(language:string)=>JSON.parse(readFileSync(new URL(`../../../../tests/fixtures/native/${language}-series.json`,import.meta.url),"utf8")) as NativeResult;
 for(const language of ["pine","pyne"]) test(`${language} actual installed output renders candles, markers, colors and fills`,()=>{
   const result=fixture(language), series=nativeSeries(result);
   for(const kind of ["line","candle","marker","background","barcolor","hline","fill"]) assert.ok(series.some(s=>s.kind===kind),kind);

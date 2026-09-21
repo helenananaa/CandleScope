@@ -5,7 +5,11 @@ import type {
   SymbolSearchItem,
 } from "./symbolSearchTypes.js";
 
-export const QUOTE_CHIPS = ["USDT", "BTC", "ETH", "BNB", "FDUSD", "ALL"] as const;
+export function buildQuoteOptions(symbols: SymbolSearchItem[], exchanges: Set<string>, marketType: string): string[] {
+  return [...new Set(symbols.filter((item) => (!exchanges.size || exchanges.has(item.exchange))
+    && (marketType === "favorites" || item.marketType === marketType))
+    .map((item) => item.quoteAsset).filter(Boolean))].sort();
+}
 
 export interface MarketTab {
   key: string;
@@ -19,7 +23,7 @@ export const MARKET_TABS: MarketTab[] = [
   { key: "futures", label: "合约", icon: "📄" },
 ];
 
-export const ROW_HEIGHT = 42;
+export const ROW_HEIGHT = 58;
 export const VISIBLE_ROWS = 14;
 
 export function formatExchangeLabel(
@@ -187,7 +191,7 @@ export function filterSymbols({
     const compact = (value: string) => value.toUpperCase().replace(/[\s/_-]+/g, "");
     const compactQuery = compact(query);
     list = list.filter((symbol) => (
-      [symbol.symbol, symbol.baseAsset, symbol.quoteAsset].some((value) => (
+      [symbol.symbol, symbol.baseAsset, symbol.quoteAsset, symbol.displayName, symbol.venue].filter((value): value is string => typeof value === "string").some((value) => (
         value.toUpperCase().includes(query)
         || (compactQuery.length > 0 && compact(value).includes(compactQuery))
       ))

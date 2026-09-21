@@ -16,6 +16,7 @@ import os
 import random
 import threading
 import time
+import weakref
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -69,6 +70,14 @@ _market_refresh_timers: dict[tuple[str, str], asyncio.TimerHandle] = {}
 _market_auto_refresh_tasks: dict[tuple[str, str], asyncio.Task[None]] = {}
 _foreground_busy_probe: Callable[[], bool] | None = None
 _foreground_idle_probe: Callable[[], float] | None = None
+_catalog_gates: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _catalog_gate() -> asyncio.Semaphore:
+    loop = asyncio.get_running_loop()
+    if loop not in _catalog_gates:
+        _catalog_gates[loop] = asyncio.Semaphore(2)
+    return _catalog_gates[loop]
 
 
 def _market_cache_key(exchange: str, market_type: str) -> tuple[str, str]:
@@ -639,7 +648,9 @@ async def _run_market_refresh(
     state = _market_refresh_state.setdefault(key, _MarketRefreshState())
     state.last_attempt_at = attempted_at
     try:
-        symbols = await adapter.list_symbols(market_type)
+        async with _catalog_gate():
+            async with asyncio.timeout(30):
+                symbols = await adapter.list_symbols(market_type)
         current = [item.to_dict() for item in symbols]
         if not current:
             raise RuntimeError(

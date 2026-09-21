@@ -4,10 +4,12 @@ import test from "node:test";
 import { loadSymbolFavorites } from "../symbolFavoritesStore.js";
 import {
   buildExchangeChips,
+  buildQuoteOptions,
   buildMarketTabs,
   filterSymbols,
   resolveExchangeMarketType,
 } from "../symbolSearchFilter.js";
+import { loadSourcePreferences, saveSourcePreferences } from "../sourcePreferences.js";
 import {
   symbolCatalogNeedsRetry,
   symbolCatalogRetryAtMs,
@@ -28,6 +30,27 @@ function withFavoritesStorage(raw: string, run: () => void): void {
     else Reflect.deleteProperty(globalThis, "localStorage");
   }
 }
+
+test("source preferences tolerate damaged and unavailable storage", () => {
+  withFavoritesStorage("null", () => assert.deepEqual(loadSourcePreferences(), { favorites: [], recent: [] }));
+  withFavoritesStorage(JSON.stringify({ favorites: ["okx", "okx", 2], recent: ["binance", null] }), () => {
+    assert.deepEqual(loadSourcePreferences(), { favorites: ["okx"], recent: ["binance"] });
+  });
+  assert.doesNotThrow(() => saveSourcePreferences({ favorites: [], recent: [] }));
+});
+
+test("quote options follow the selected source and market; names are searchable without merging sources", () => {
+  const stocks = ["twelvedata", "other"].map((exchange) => ({
+    symbol: "AAPL:NASDAQ", displayName: "Apple Inc", baseAsset: "AAPL", quoteAsset: "USD",
+    exchange, venue: "XNAS", marketType: "stock", _key: `${exchange}:stock:AAPL:NASDAQ`,
+  }));
+  const allSymbols = [...stocks, { symbol: "BTCUSDT", baseAsset: "BTC", quoteAsset: "USDT", exchange: "binance", marketType: "spot", _key: "binance:spot:BTCUSDT" }];
+  assert.deepEqual(buildQuoteOptions(allSymbols, new Set(["twelvedata"]), "stock"), ["USD"]);
+  assert.deepEqual(buildQuoteOptions(allSymbols, new Set(["binance"]), "stock"), []);
+  for (const search of ["apple", "xnas", "aapl"]) {
+    assert.deepEqual(filterSymbols({ allSymbols, exchangeFilter: new Set(["twelvedata"]), marketType: "stock", quoteFilter: "ALL", search, favorites: [] }), [stocks[0]]);
+  }
+});
 
 test("symbol favorites storage rejects damaged shapes and invalid entries", () => {
   withFavoritesStorage("{damaged", () => assert.deepEqual(loadSymbolFavorites(), []));

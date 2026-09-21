@@ -86,6 +86,7 @@ if RUNTIME_MODE == "LIVE":
     from app.api.v1.subscriptions import price_ws_router
     from app.api.v1.subscriptions import router as subscriptions_router
     from app.api.v1.symbols import router as symbols_router
+    from app.api.v1.symbol_discovery import router as symbol_discovery_router
     from app.api.v1.trade_flow import router as trade_flow_router
     from app.api.v1.local_data import router as local_data_router
     from app.data_engine.data_manager.capacity import build_capacity_snapshot
@@ -135,6 +136,7 @@ else:
     app.include_router(manual_history_router, prefix="/api/v1")
     app.include_router(exchanges_router, prefix="/api/v1")
     app.include_router(symbols_router, prefix="/api/v1")
+    app.include_router(symbol_discovery_router, prefix="/api/v1")
     app.include_router(subscriptions_router, prefix="/api/v1")
     app.include_router(price_ws_router, prefix="/api/v1")
     app.include_router(replay_router, prefix="/api/v1")
