@@ -181,7 +181,8 @@ def test_full_order_book_ws_separates_live_snapshots_from_stale_status() -> None
             "spot": [100, 1000],
             "futures": [100, 250, 500],
         }
-        assert connected["allowed_price_groupings"] == ["auto", "raw", "10", "100", "1000"]
+        assert connected["allowed_price_groupings"][:11] == ["auto", "raw", "2", "5", "10", "20", "50", "100", "200", "500", "1000"]
+        assert "1000000" in connected["allowed_price_groupings"]
 
         ws.send_json({
             "action": "subscribe",
@@ -344,3 +345,28 @@ def test_full_order_book_ws_unready_and_internal_errors_are_redacted() -> None:
             "full order-book subscription is temporarily unavailable"
         )
         assert "secret" not in error["detail"]
+
+
+def test_display_options_update_without_reacquiring_source():
+    dm = _FullOrderBookDataManager()
+    with _client(dm) as client:
+        with client.websocket_connect("/api/v1/stream/full-order-book") as ws:
+            assert ws.receive_json()["adaptive_grouping_control"] is True
+            ws.send_json({"action": "subscribe", "request_id": "adaptive",
+                          "display_active": False, "streams": [_stream()],
+                          "display_options": {"target_rows": 5, "range_bps": 10}})
+            assert ws.receive_json()["type"] == "subscribed"
+            ws.send_json({"action": "set_display_options", "target_rows": 8,
+                          "range_bps": 25, "auto_frozen": True})
+            ws.send_text("ping")
+            assert ws.receive_text() == "pong"
+            assert len(dm.ensure_calls) == 1
+            ws.send_json({"action": "set_display_active", "active": True})
+            ws.send_text("ping")
+            assert ws.receive_text() == "pong"
+            client.portal.call(dm.hub.publish, _event(dm.ensure_calls[0][0], update_id=12))
+            data = ws.receive_json()["data"]["data"]
+            assert data["target_rows"] == 8
+            assert data["range_bps"] == 25
+            assert len(dm.ensure_calls) == 1
+    assert len(dm.release_calls) == 1

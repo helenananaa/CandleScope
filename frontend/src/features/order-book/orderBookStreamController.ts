@@ -1,7 +1,9 @@
+import { AutoGroupingState, partialStepScores } from "./orderBookAuto.js";
 import { t } from "../../i18n/index.js";
 import { parseOrderBookSocketMessage } from "./orderBookParser.js";
 import type {
   OrderBookBook,
+  OrderBookDisplayOptions,
   OrderBookExternalStore,
   OrderBookIdentity,
   OrderBookMode,
@@ -94,7 +96,27 @@ export class OrderBookStreamController {
   private commandTimer: ReturnType<typeof setTimeout> | null = null;
   private staleTimer: ReturnType<typeof setTimeout> | null = null;
   private displayActive = true;
+  private readonly partialAuto = new AutoGroupingState();
   private supportsDisplayVisibility = false;
+  private supportsAdaptiveGrouping = false;
+  private displayOptions: OrderBookDisplayOptions = { targetRows: 12, rangeBps: 0, autoFrozen: false };
+
+  setDisplayOptions(options: OrderBookDisplayOptions): void {
+    this.displayOptions = options;
+    this.sendDisplayOptions();
+  }
+
+  private sendDisplayOptions(): void {
+    const socket = this.socket;
+    if (!this.supportsAdaptiveGrouping || this.mode !== "full" || !this.subscribed
+      || !socket || !this.isOpen(socket)) return;
+    socket.send(JSON.stringify({
+      action: "set_display_options",
+      target_rows: this.displayOptions.targetRows,
+      range_bps: this.displayOptions.rangeBps,
+      auto_frozen: this.displayOptions.autoFrozen,
+    }));
+  }
 
   setDisplayActive(active: boolean): void {
     this.displayActive = active;
@@ -184,6 +206,7 @@ export class OrderBookStreamController {
   private connect(): void {
     if (this.stopped || this.socket !== null) return;
     this.clearConnectionTimers();
+    this.partialAuto.reset();
     this.subscribed = false;
     this.pendingRequestId = null;
     this.store.publishStatus(this.hasConnected ? "reconnecting" : "connecting", { clearBook: true });
@@ -208,6 +231,7 @@ export class OrderBookStreamController {
           }
           this.hasConnected = true;
           this.supportsDisplayVisibility = asObject(raw)?.display_visibility_control === true;
+          this.supportsAdaptiveGrouping = asObject(raw)?.adaptive_grouping_control === true;
           this.clearCommandTimer();
           this.sendSubscribe(socket);
           return;
@@ -223,6 +247,7 @@ export class OrderBookStreamController {
           this.clearCommandTimer();
           this.pendingRequestId = null;
           this.subscribed = true;
+          this.sendDisplayOptions();
           // A successful subscription does not guarantee that a first book arrives.
           this.armStaleWatchdog();
           if (this.supportsDisplayVisibility && !this.displayActive) this.clearStaleTimer();
@@ -244,7 +269,15 @@ export class OrderBookStreamController {
             candidate === null || book.revision > candidate.revision ? book : candidate
           ), null as (typeof matching)[number] | null);
           if (latest) {
-            this.store.publishBook(latest);
+            if (this.mode === "partial") {
+              const step = this.partialAuto.choose(
+                partialStepScores(latest, this.displayOptions.targetRows, this.displayOptions.rangeBps),
+                performance.now(), this.displayOptions.autoFrozen,
+              );
+              this.store.publishBook({ ...latest, autoPriceStep: step });
+            } else {
+              this.store.publishBook(latest);
+            }
             if (this.mode === "partial") this.armStaleWatchdog();
             else this.clearStaleTimer();
           }
@@ -255,6 +288,7 @@ export class OrderBookStreamController {
             throw new Error("Order-book stale status did not match the active subscription");
           }
           this.clearStaleTimer();
+          this.partialAuto.reset();
           this.store.publishStatus("stale", {
             clearBook: true,
             message: describeStaleReason(parsed.message),
@@ -298,6 +332,10 @@ export class OrderBookStreamController {
       action: "subscribe",
       request_id: requestId,
       ...(this.supportsDisplayVisibility ? { display_active: this.displayActive } : {}),
+      ...(this.supportsAdaptiveGrouping ? { display_options: {
+        target_rows: this.displayOptions.targetRows, range_bps: this.displayOptions.rangeBps,
+        auto_frozen: this.displayOptions.autoFrozen,
+      } } : {}),
       streams: [this.expectedStream()],
     }));
     this.commandTimer = this.setTimer(() => {
@@ -379,6 +417,7 @@ export class OrderBookStreamController {
     this.staleTimer = this.setTimer(() => {
       this.staleTimer = null;
       if (this.stopped || !this.subscribed) return;
+      this.partialAuto.reset();
       this.store.publishStatus("stale", {
         clearBook: true,
         message: t("orderBook.rt.staleSnapshot"),

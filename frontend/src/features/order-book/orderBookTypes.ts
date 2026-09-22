@@ -3,8 +3,8 @@ export const UPDATE_INTERVALS_MS = [100, 250, 500, 1000, 2000, 3000] as const;
 export const SPOT_UPDATE_INTERVALS_MS = [100, 1000] as const;
 export const FUTURES_UPDATE_INTERVALS_MS = [100, 250, 500] as const;
 export const FULL_OUTPUT_LIMITS = [20, 50, 100] as const;
-export const PARTIAL_PRICE_GROUPINGS = ["auto", "raw", "10"] as const;
-export const FULL_PRICE_GROUPINGS = ["auto", "raw", "10", "100", "1000"] as const;
+export const FULL_PRICE_GROUPINGS = ["auto", "raw", "2", "5", "10", "20", "50", "100", "200", "500", "1000", "2000", "5000", "10000", "20000", "50000", "100000", "200000", "500000", "1000000", "2000000", "5000000", "10000000", "20000000", "50000000", "100000000", "200000000", "500000000", "1000000000"] as const;
+export const PARTIAL_PRICE_GROUPINGS = FULL_PRICE_GROUPINGS;
 
 export type OrderBookMode = "partial" | "full";
 export type OrderBookSnapshotMode = "live_snapshot" | "polling_snapshot";
@@ -30,6 +30,8 @@ export interface OrderBookIdentity {
 export type OrderBookLevel = readonly [price: number, quantity: number];
 
 export interface OrderBookBook {
+  /** Locally selected presentation step for a bounded, still-raw snapshot. */
+  autoPriceStep?: number | null;
   mode: OrderBookMode;
   identity: OrderBookIdentity;
   topic: string;
@@ -57,6 +59,10 @@ export interface OrderBookBook {
   aggregationApplied: boolean;
   bucketBidLevels: number | null;
   bucketAskLevels: number | null;
+  incompleteBidPrices?: readonly number[] | undefined;
+  incompleteAskPrices?: readonly number[] | undefined;
+  coverageBidMin?: number | null;
+  coverageAskMax?: number | null;
 }
 
 export interface OrderBookStoreSnapshot {
@@ -116,8 +122,15 @@ export interface OrderBookRuntime {
   };
   actions: OrderBookPreferenceActions & {
     retry(): void;
+    setDisplayOptions?(options: OrderBookDisplayOptions): void;
   };
   status: {
     enabled: boolean;
   };
+}
+
+export interface OrderBookDisplayOptions {
+  targetRows: number;
+  rangeBps: number;
+  autoFrozen: boolean;
 }

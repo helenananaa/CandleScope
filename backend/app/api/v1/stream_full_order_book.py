@@ -22,6 +22,7 @@ from app.api.v1.full_order_book import (
     full_order_book_key,
     serialize_record_async,
 )
+from app.api.v1.order_book_auto import AutoGroupingState
 from app.api.v1.order_book_projection import (
     FULL_PRICE_GROUPINGS,
     PriceGrouping,
@@ -55,6 +56,8 @@ async def stream_full_order_book(websocket: WebSocket, dm: Any) -> None:
     tasks: list[asyncio.Task[None]] = []
     send_lock = asyncio.Lock()
     display_active = True
+    display_options = {"target_rows": 12, "range_bps": 0, "auto_frozen": False}
+    auto_states: dict[MarketStreamKey, AutoGroupingState] = {}
 
     async def _send_json(payload: dict[str, Any]) -> None:
         async with send_lock:
@@ -115,6 +118,10 @@ async def stream_full_order_book(websocket: WebSocket, dm: Any) -> None:
                 continue
             try:
                 streams = _parse_streams(message.get("streams"))
+                initial_options = message.get("display_options", {})
+                if not isinstance(initial_options, dict):
+                    raise TypeError("display_options must be an object")
+                display_options.update(_display_options(initial_options))
             except (TypeError, ValueError) as exc:
                 await _send_json({
                     "type": "error",
@@ -157,6 +164,7 @@ async def stream_full_order_book(websocket: WebSocket, dm: Any) -> None:
                 continue
 
             active.extend(streams)
+            auto_states.update({item.key: AutoGroupingState() for item in streams})
             display_active = message.get("display_active") is not False
             requested_by_key = {requested.key: requested for requested in streams}
             await _send_json({
@@ -188,6 +196,8 @@ async def stream_full_order_book(websocket: WebSocket, dm: Any) -> None:
                     limit=requested_by_key[record.event.key].output_limit,
                     price_grouping=requested_by_key[record.event.key].price_grouping,
                     price_tick_size=requested_by_key[record.event.key].price_tick_size,
+                    auto_state=auto_states[record.event.key],
+                    **display_options,
                 )
                 for record in attachment.current.values()
             ))
@@ -232,6 +242,8 @@ async def stream_full_order_book(websocket: WebSocket, dm: Any) -> None:
                     limit=output_limit,
                     price_grouping=requested.price_grouping,
                     price_tick_size=requested.price_tick_size,
+                    auto_state=auto_states[record.event.key],
+                    **display_options,
                 ),
                 **metadata,
             })
@@ -246,6 +258,14 @@ async def stream_full_order_book(websocket: WebSocket, dm: Any) -> None:
             action = str(message.get("action", "")).strip().lower()
             if action == "set_display_active" and isinstance(message.get("active"), bool):
                 display_active = message["active"]
+                continue
+            if action == "set_display_options":
+                try:
+                    options = _display_options(message)
+                except (TypeError, ValueError) as exc:
+                    await _send_json({"type": "error", "code": "INVALID_DISPLAY_OPTIONS", "detail": str(exc)})
+                    continue
+                display_options.update(options)
                 continue
             if action == "unsubscribe":
                 await _send_json({
@@ -275,6 +295,7 @@ async def stream_full_order_book(websocket: WebSocket, dm: Any) -> None:
             },
             "allowed_price_groupings": list(FULL_PRICE_GROUPINGS),
             "display_visibility_control": True,
+            "adaptive_grouping_control": True,
             **contract_metadata(output_limit=MAX_OUTPUT_LEVELS),
         })
         if not await _subscribe():
@@ -391,3 +412,16 @@ def _integer_param(value: object, label: str) -> int:
 
 
 __all__ = ["stream_full_order_book"]
+
+
+def _display_options(message: dict[str, Any]) -> dict[str, Any]:
+    target = _integer_param(message.get("target_rows", 12), "target_rows")
+    distance = _integer_param(message.get("range_bps", 0), "range_bps")
+    frozen = message.get("auto_frozen", False)
+    if not 2 <= target <= 100:
+        raise ValueError("target_rows must be between 2 and 100")
+    if distance not in (0, 5, 10, 25, 50, 100):
+        raise ValueError("range_bps must be one of 0, 5, 10, 25, 50, 100")
+    if not isinstance(frozen, bool):
+        raise TypeError("auto_frozen must be a boolean")
+    return {"target_rows": target, "range_bps": distance, "auto_frozen": frozen}

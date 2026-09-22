@@ -9,12 +9,13 @@ from collections import OrderedDict
 from contextlib import suppress
 from decimal import Decimal
 from threading import RLock
-from typing import Any
+from typing import Any, Mapping
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from starlette.background import BackgroundTask
 
+from app.api.v1.order_book_auto import AutoGroupingState, step_scores
 from app.api.v1.order_book_projection import (
     PriceGrouping,
     cached_price_tick_size,
@@ -235,6 +236,10 @@ def serialize_record(
     limit: int,
     price_grouping: PriceGrouping = "raw",
     price_tick_size: Decimal | None = None,
+    target_rows: int = 12,
+    range_bps: int = 0,
+    auto_state: AutoGroupingState | None = None,
+    auto_frozen: bool = False,
 ) -> dict[str, Any]:
     """Serialize and share one projection per immutable hub revision/options."""
 
@@ -248,6 +253,8 @@ def serialize_record(
             limit=limit,
             price_grouping=price_grouping,
             price_tick_size=price_tick_size,
+            target_rows=target_rows, range_bps=range_bps,
+            auto_state=auto_state, auto_frozen=auto_frozen,
         )
 
 
@@ -257,6 +264,10 @@ async def serialize_record_async(
     limit: int,
     price_grouping: PriceGrouping = "raw",
     price_tick_size: Decimal | None = None,
+    target_rows: int = 12,
+    range_bps: int = 0,
+    auto_state: AutoGroupingState | None = None,
+    auto_frozen: bool = False,
 ) -> dict[str, Any]:
     return await asyncio.to_thread(
         serialize_record,
@@ -264,6 +275,8 @@ async def serialize_record_async(
         limit=limit,
         price_grouping=price_grouping,
         price_tick_size=price_tick_size,
+        target_rows=target_rows, range_bps=range_bps,
+        auto_state=auto_state, auto_frozen=auto_frozen,
     )
 
 
@@ -273,14 +286,25 @@ def _serialize_record_locked(
     limit: int,
     price_grouping: PriceGrouping,
     price_tick_size: Decimal | None,
+    target_rows: int,
+    range_bps: int,
+    auto_state: AutoGroupingState | None,
+    auto_frozen: bool,
 ) -> dict[str, Any]:
 
+    data = getattr(getattr(record, "event", None), "data", None)
+    resolved_step = None
+    if auto_state is not None and price_grouping == "auto" and price_tick_size is not None:
+        if isinstance(data, Mapping) and data.get("live") is True:
+            scores = step_scores(data, price_tick_size, target_rows, range_bps)
+            resolved_step = auto_state.choose(scores, time.monotonic(), auto_frozen)
+        else:
+            auto_state.step = auto_state.pending = None
     cache_key = _serialization_cache_key(
-        record,
-        limit=limit,
-        price_grouping=price_grouping,
-        price_tick_size=price_tick_size,
+        record, limit=limit, price_grouping=price_grouping, price_tick_size=price_tick_size,
     )
+    if cache_key is not None:
+        cache_key += (target_rows, range_bps, resolved_step)
     cached = _serialization_cache_get(cache_key, record)
     if cached is not None:
         return _copy_serialized_envelope(cached)
@@ -300,10 +324,8 @@ def _serialize_record_locked(
             price_grouping=price_grouping,
             price_tick_size=price_tick_size,
             limit=limit,
-            omit_incomplete_outer_bucket=(
-                projected.get("exchange_full_depth_exhaustive") is False
-            ),
             source_levels_canonical=source_levels_canonical,
+            target_rows=target_rows, range_bps=range_bps, resolved_step=resolved_step,
         )
         projected["bids"] = projection.bids
         projected["asks"] = projection.asks
@@ -311,6 +333,10 @@ def _serialize_record_locked(
         projected["price_step"] = projection.price_step
         projected["price_grouping"] = projection.price_grouping
         projected["aggregation_applied"] = projection.aggregation_applied
+        projected["incomplete_bid_prices"] = projection.incomplete_bid_prices
+        projected["incomplete_ask_prices"] = projection.incomplete_ask_prices
+        projected["coverage_bid_min"] = projection.coverage_bid_min
+        projected["coverage_ask_max"] = projection.coverage_ask_max
         projected["aggregation_source_bid_levels"] = projection.source_bid_levels
         projected["aggregation_source_ask_levels"] = projection.source_ask_levels
         projected["bucket_bid_levels"] = projection.bucket_bid_levels
@@ -347,6 +373,8 @@ def _serialize_record_locked(
             projected["projection_depth"] = None if full_projection else limit
             projected["full_projection"] = full_projection
         projected["output_limit"] = limit
+        projected["range_bps"] = range_bps
+        projected["target_rows"] = target_rows
         payload["data"] = projected
     _serialization_cache_put(cache_key, record, payload)
     return _copy_serialized_envelope(payload)

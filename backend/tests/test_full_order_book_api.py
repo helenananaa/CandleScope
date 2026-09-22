@@ -43,7 +43,7 @@ def test_immutable_level_iterator_matches_wire_pairs_for_all_groupings():
     for grouping in ("raw", "auto", "10", "100", "1000"):
         for _ in range(2):
             kwargs = dict(price_grouping=grouping, price_tick_size=Decimal("0.1"), limit=3,
-                          source_levels_canonical=True, omit_incomplete_outer_bucket=True)
+                          source_levels_canonical=True)
             assert project_order_book_levels({"bids": bids, "asks": asks}, **kwargs) == project_order_book_levels(wire, **kwargs)
     # Auto grouping may inspect the best level; the full walk is not indexed.
     assert bids.index_reads <= 2 and asks.index_reads <= 2
@@ -255,7 +255,7 @@ def test_full_order_book_projection_groups_before_clipping_with_safe_side_roundi
     assert data["full_projection"] is True
 
 
-def test_full_order_book_auto_grouping_uses_symbol_scale_and_degrades_without_tick() -> None:
+def test_full_order_book_auto_grouping_uses_available_density_and_degrades_without_tick() -> None:
     record = _record(
         _key(),
         update_id=44,
@@ -276,8 +276,8 @@ def test_full_order_book_auto_grouping_uses_symbol_scale_and_degrades_without_ti
         price_tick_size=None,
     )["data"]
 
-    assert automatic["price_step"] == 1.0
-    assert automatic["aggregation_applied"] is True
+    assert automatic["price_step"] == 0.1
+    assert automatic["aggregation_applied"] is False
     assert unavailable["price_step"] is None
     assert unavailable["aggregation_applied"] is False
     assert unavailable["bids"] == [[60_000.9, 1.0], [60_000.2, 2.0]]
@@ -301,7 +301,7 @@ def test_canonical_raw_projection_reports_truncation_without_tick_metadata() -> 
     assert projection.price_window_ask_truncated is True
 
 
-def test_full_order_book_omits_incomplete_outer_bucket_from_bounded_source() -> None:
+def test_full_order_book_retains_and_marks_buckets_with_unconfirmed_coverage() -> None:
     record = _record(
         _key(),
         update_id=45,
@@ -317,19 +317,21 @@ def test_full_order_book_omits_incomplete_outer_bucket_from_bounded_source() -> 
         price_tick_size=Decimal("0.1"),
     )["data"]
 
-    assert data["bids"] == [[100.0, 3.0]]
-    assert data["asks"] == [[102.0, 9.0]]
-    assert data["incomplete_outer_bid_bucket_omitted"] is True
-    assert data["incomplete_outer_ask_bucket_omitted"] is True
+    assert data["bids"] == [[100.0, 3.0], [99.0, 3.0]]
+    assert data["asks"] == [[102.0, 9.0], [103.0, 6.0]]
+    assert data["incomplete_outer_bid_bucket_omitted"] is False
+    assert data["incomplete_outer_ask_bucket_omitted"] is False
     assert data["bucket_bid_levels"] == 2
     assert data["bucket_ask_levels"] == 2
     assert data["price_window_bid_truncated"] is False
     assert data["price_window_ask_truncated"] is False
-    assert data["projection_depth"] == 20
-    assert data["full_projection"] is False
+    assert data["projection_depth"] is None
+    assert data["full_projection"] is True
+    assert data["incomplete_bid_prices"] == [price for price, _ in data["bids"]]
+    assert data["incomplete_ask_prices"] == [price for price, _ in data["asks"]]
 
 
-def test_full_order_book_limits_sparse_levels_to_near_price_window() -> None:
+def test_full_order_book_sparse_levels_retain_known_far_quantities() -> None:
     record = _record(
         _key(),
         update_id=46,
@@ -345,15 +347,17 @@ def test_full_order_book_limits_sparse_levels_to_near_price_window() -> None:
         price_tick_size=Decimal("0.1"),
     )["data"]
 
-    assert data["bids"] == [[100.0, 1.0], [99.0, 2.0]]
-    assert data["asks"] == [[102.0, 4.0], [103.0, 5.0]]
+    assert data["bids"] == [[100.0, 1.0], [99.0, 2.0], [50.0, 3.0]]
+    assert data["asks"] == [[102.0, 4.0], [103.0, 5.0], [150.0, 6.0]]
     assert data["bucket_bid_levels"] == 3
     assert data["bucket_ask_levels"] == 3
-    assert data["price_window_bid_truncated"] is True
-    assert data["price_window_ask_truncated"] is True
+    assert data["price_window_bid_truncated"] is False
+    assert data["price_window_ask_truncated"] is False
     assert data["incomplete_outer_bid_bucket_omitted"] is False
     assert data["incomplete_outer_ask_bucket_omitted"] is False
-    assert data["full_projection"] is False
+    assert data["full_projection"] is True
+    assert data["incomplete_bid_prices"] == [price for price, _ in data["bids"]]
+    assert data["incomplete_ask_prices"] == [price for price, _ in data["asks"]]
 
 
 def test_full_order_book_http_supports_spot_with_market_default_cadence() -> None:
@@ -622,3 +626,22 @@ def test_full_order_book_http_reports_missing_and_unready_manager() -> None:
     unready = _client(_Unready()).get("/api/v1/full-order-book/snapshot")
     assert unready.status_code == 503
     assert unready.json()["detail"] == "Full order-book service is not initialized"
+
+
+def test_auto_state_is_per_view_and_projection_cache_includes_resolved_step():
+    from app.api.v1.order_book_auto import AutoGroupingState
+
+    clear_full_order_book_projection_cache()
+    record = _record(_key(), update_id=77,
+                     bids=[[100000 - i, 1] for i in range(200)],
+                     asks=[[100001 + i, 1] for i in range(200)])
+    fine = AutoGroupingState(step=Decimal("1"))
+    coarse = AutoGroupingState(step=Decimal("10"))
+    options = dict(limit=20, price_grouping="auto", price_tick_size=Decimal("1"), auto_frozen=True)
+    first = serialize_record(record, auto_state=fine, **options)["data"]
+    second = serialize_record(record, auto_state=coarse, **options)["data"]
+    again = serialize_record(record, auto_state=fine, **options)["data"]
+    assert first["price_step"] == again["price_step"] == 1
+    assert second["price_step"] == 10
+    assert first["bids"] != second["bids"]
+    assert full_order_book_projection_cache_info()["hits"] == 1

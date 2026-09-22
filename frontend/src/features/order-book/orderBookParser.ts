@@ -1,3 +1,4 @@
+import { FULL_PRICE_GROUPINGS } from "./orderBookTypes.js";
 import type {
   OrderBookBook,
   OrderBookIdentity,
@@ -68,13 +69,13 @@ function optionalBoolean(value: unknown, path: string, fallback = false): boolea
 
 function priceGrouping(value: unknown): PriceGrouping {
   const grouping = value === null || value === undefined ? "raw" : string(value, "data.price_grouping");
-  if (!["auto", "raw", "10", "100", "1000"].includes(grouping)) {
+  if (!(FULL_PRICE_GROUPINGS as readonly string[]).includes(grouping)) {
     throw new Error("data.price_grouping is unsupported");
   }
   return grouping as PriceGrouping;
 }
 
-function parseLevels(value: unknown, side: "bids" | "asks"): readonly OrderBookLevel[] {
+function parseLevels(value: unknown, side: "bids" | "asks", allowZero = false): readonly OrderBookLevel[] {
   if (!Array.isArray(value)) throw new Error(`data.${side} must be an array`);
   const levels = value.map((raw, index): OrderBookLevel => {
     if (!Array.isArray(raw) || raw.length !== 2) {
@@ -82,7 +83,7 @@ function parseLevels(value: unknown, side: "bids" | "asks"): readonly OrderBookL
     }
     const price = finite(raw[0], `data.${side}[${index}][0]`);
     const quantity = finite(raw[1], `data.${side}[${index}][1]`);
-    if (price <= 0 || quantity <= 0) {
+    if (price < 0 || (price === 0 && !allowZero) || quantity <= 0) {
       throw new Error(`data.${side}[${index}] must contain positive values`);
     }
     return Object.freeze([price, quantity] as const);
@@ -126,7 +127,9 @@ export function parseOrderBookRecord(value: unknown, mode: OrderBookMode): Order
   if (mode === "full" && (data.live !== true || data.stale === true || data.state !== "live")) {
     throw new Error("full order-book record is not an atomic live snapshot");
   }
-  const bids = parseLevels(data.bids, "bids");
+  const grouped = mode === "full" && data.aggregation_applied === true
+    && typeof data.price_step === "number" && data.price_step > 0;
+  const bids = parseLevels(data.bids, "bids", grouped);
   const asks = parseLevels(data.asks, "asks");
   const topBid = bids[0]?.[0] ?? null;
   const topAsk = asks[0]?.[0] ?? null;
@@ -188,6 +191,10 @@ export function parseOrderBookRecord(value: unknown, mode: OrderBookMode): Order
     aggregationApplied: optionalBoolean(data.aggregation_applied, "data.aggregation_applied"),
     bucketBidLevels: optionalInteger(data.bucket_bid_levels, "data.bucket_bid_levels"),
     bucketAskLevels: optionalInteger(data.bucket_ask_levels, "data.bucket_ask_levels"),
+    incompleteBidPrices: incompletePrices(data.incomplete_bid_prices, bids),
+    incompleteAskPrices: incompletePrices(data.incomplete_ask_prices, asks),
+    coverageBidMin: optionalFinite(data.coverage_bid_min, "data.coverage_bid_min"),
+    coverageAskMax: optionalFinite(data.coverage_ask_max, "data.coverage_ask_max"),
   });
 }
 
@@ -269,4 +276,14 @@ export function parseOrderBookSocketMessage(
     };
   }
   throw new Error(`unsupported order-book message type: ${type}`);
+}
+
+function incompletePrices(value: unknown, levels: readonly OrderBookLevel[]): readonly number[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new Error("incomplete prices must be an array");
+  const prices = value.map((item: unknown) => finite(item, "incomplete price"));
+  if (prices.some(price => !levels.some(level => level[0] === price))) {
+    throw new Error("incomplete price must belong to displayed levels");
+  }
+  return Object.freeze(prices);
 }

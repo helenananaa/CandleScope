@@ -1029,3 +1029,41 @@ def test_live_revision_defers_full_materialization_and_keeps_old_snapshot_atomic
     assert old_deep[8_501] == 1
     assert new_deep[8_501] == 7
     assert revision._bids_cache is not None  # type: ignore[attr-defined]
+
+
+def test_trusted_price_bounds_follow_seed_not_sparse_outer_updates():
+    engine = FullOrderBookEngine()
+    epoch = _started(engine)
+    engine.apply_delta(IDENTITY, _delta(100, 101, 99), epoch=epoch)
+    engine.install_snapshot(IDENTITY, _seed(), epoch=epoch)
+    initial = engine.snapshot(IDENTITY)
+    assert initial.coverage_bid_min == 99
+    assert initial.coverage_ask_max == 102
+    engine.apply_delta(IDENTITY, _delta(102, 102, 101, bids=((50, 3),), asks=((150, 4),)), epoch=epoch)
+    updated = engine.snapshot(IDENTITY)
+    assert updated.bids[-1].price == 50
+    assert updated.asks[-1].price == 150
+    assert updated.coverage_bid_min == 99
+    assert updated.coverage_ask_max == 102
+    assert updated.to_event_data()["coverage_bid_min"] == 99
+    # Previously published snapshots retain the same immutable bounds.
+    assert initial.to_event_data()["coverage_ask_max"] == 102
+
+
+def test_retention_shrinks_trusted_bounds_and_resync_replaces_them():
+    engine = FullOrderBookEngine(max_levels_per_side=2)
+    epoch = _started(engine)
+    engine.apply_delta(IDENTITY, _delta(100, 101, 99), epoch=epoch)
+    engine.install_snapshot(IDENTITY, _seed(snapshot_limit=2), epoch=epoch)
+    engine.apply_delta(IDENTITY, _delta(102, 102, 101, bids=((100.5, 1), (100.6, 1))), epoch=epoch)
+    snapshot = engine.snapshot(IDENTITY)
+    assert snapshot.coverage_bid_min == 100
+    assert snapshot.coverage_ask_max == 102
+    epoch = engine.begin_sync(IDENTITY)
+    engine.apply_delta(IDENTITY, _delta(200, 201, 199), epoch=epoch)
+    engine.install_snapshot(IDENTITY, _seed(snapshot_limit=2, last_update_id=200,
+                            bids=((100, 1), (95, 2)), asks=((101, 3), (105, 4))), epoch=epoch)
+    refreshed = engine.snapshot(IDENTITY)
+    assert refreshed.coverage_bid_min == 95
+    assert refreshed.coverage_ask_max == 105
+    assert snapshot.coverage_bid_min == 100

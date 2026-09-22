@@ -1,6 +1,7 @@
 import { snapshotDeliveryLabel } from "./orderBookDelivery.js";
 import React, {
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -122,9 +123,11 @@ const BookRow = React.memo(function BookRow({
   return (
     <div className={`ob-level-row ob-${side}`} style={{ transform: `translateY(${offsetPx}px)` }}>
       <span className="ob-depth-bar" style={{ width: `${width}%` }} aria-hidden="true" />
-      <span className="ob-price">{formatPrice(row.price)}</span>
-      <span>{formatQuantity(row.quantity)}</span>
-      <span>{formatQuantity(row.cumulative)}</span>
+      <span className={`ob-price${row.interval ? " ob-price-interval" : ""}`}>
+        {row.interval ? <><span>{side === "bid" ? "[" : "("}{formatPrice(row.interval[0])},</span><span>{formatPrice(row.interval[1])}{side === "bid" ? ")" : "]"}</span></> : formatPrice(row.price)}
+      </span>
+      <span title={row.incomplete ? t("orderBook.partialAmount") : undefined}>{row.incomplete ? "≥ " : ""}{formatQuantity(row.quantity)}</span>
+      <span title={row.cumulativeIncomplete ? t("orderBook.partialAmount") : undefined}>{row.cumulativeIncomplete ? "≥ " : ""}{formatQuantity(row.cumulative)}</span>
     </div>
   );
 }, (previous, next) => (
@@ -134,13 +137,19 @@ const BookRow = React.memo(function BookRow({
   && previous.row.price === next.row.price
   && previous.row.quantity === next.row.quantity
   && previous.row.cumulative === next.row.cumulative
+  && previous.row.interval?.[0] === next.row.interval?.[0]
+  && previous.row.interval?.[1] === next.row.interval?.[1]
+  && previous.row.incomplete === next.row.incomplete
+  && previous.row.cumulativeIncomplete === next.row.cumulativeIncomplete
 ));
 
 function BookLevels({
   rows,
   side,
   maxCumulative,
+  onViewport,
 }: {
+  onViewport(side: "ask" | "bid", rows: number, browsing: boolean): void;
   rows: readonly DisplayOrderBookLevel[];
   side: "ask" | "bid";
   maxCumulative: number;
@@ -167,10 +176,12 @@ function BookLevels({
   const publishViewport = useCallback((element: HTMLDivElement) => {
     const height = element.clientHeight;
     const scrollTop = element.scrollTop;
+    const distance = side === "ask" ? element.scrollHeight - height - scrollTop : scrollTop;
+    onViewport(side, Math.max(2, Math.floor(height / ORDER_BOOK_ROW_HEIGHT)), distance > ORDER_BOOK_ROW_HEIGHT * 2);
     setViewport((previous) => previous.height === height && previous.scrollTop === scrollTop
       ? previous
       : { height, scrollTop });
-  }, []);
+  }, [onViewport, side]);
 
   useLayoutEffect(() => {
     const element = containerRef.current;
@@ -263,18 +274,40 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
     view.store.getSnapshot,
     view.store.getServerSnapshot,
   );
+  const [rangeBps, setRangeBps] = useState(0);
+  const [display, setDisplay] = useState(() => ({ ask: Math.max(2, Math.floor((height - 170) / 44)), bid: Math.max(2, Math.floor((height - 170) / 44)), askBrowsing: false, bidBrowsing: false }));
+  const onViewport = useCallback((side: "ask" | "bid", count: number, browsing: boolean) => {
+    setDisplay((previous) => {
+      const browsingKey = side === "ask" ? "askBrowsing" : "bidBrowsing";
+      return previous[side] === count && previous[browsingKey] === browsing ? previous
+        : { ...previous, [side]: count, [browsingKey]: browsing };
+    });
+  }, []);
+  const autoFrozen = display.askBrowsing || display.bidBrowsing;
+  const outputLimit = view.preferences.mode === "full" ? view.preferences.fullOutputLimit : view.preferences.partialDepth;
+  useEffect(() => {
+    actions.setDisplayOptions?.({
+      targetRows: Math.max(2, Math.min(100, outputLimit, display.ask, display.bid)),
+      rangeBps, autoFrozen,
+    });
+  }, [actions, autoFrozen, display.ask, display.bid, outputLimit, rangeBps]);
   const activeGrouping = view.preferences.mode === "partial"
     ? view.preferences.partialPriceGrouping
     : view.preferences.fullPriceGrouping;
   const presentation = useMemo(() => (
-    snapshot.book ? orderBookPresentation(snapshot.book, activeGrouping) : null
-  ), [activeGrouping, snapshot.book]);
+    snapshot.book ? orderBookPresentation(snapshot.book, activeGrouping, rangeBps) : null
+  ), [activeGrouping, snapshot.book, rangeBps]);
   const rows = useMemo(() => (
-    presentation ? buildOrderBookRows(presentation.bids, presentation.asks) : null
+    presentation ? buildOrderBookRows(presentation.bids, presentation.asks, presentation.aggregationApplied ? presentation.priceStep : null, presentation.incompleteBidPrices, presentation.incompleteAskPrices, { bidMin: presentation.coverageBidMin, askMax: presentation.coverageAskMax }) : null
   ), [presentation]);
   const groupingOptions = view.preferences.mode === "partial"
     ? PARTIAL_PRICE_GROUPINGS
     : FULL_PRICE_GROUPINGS;
+  // Percentages must not imply coverage out to a wide bucket's synthetic edge.
+  const coveredBid = presentation?.coverageBidMin == null ? null
+    : Math.max(presentation.coverageBidMin, presentation.bids.at(-1)?.[0] ?? presentation.coverageBidMin);
+  const coveredAsk = presentation?.coverageAskMax == null ? null
+    : Math.min(presentation.coverageAskMax, presentation.asks.at(-1)?.[0] ?? presentation.coverageAskMax);
   const symbol = view.identity.symbol.replace(/USDT$|USDC$/, "");
   const deliveryLabel = snapshotDeliveryLabel(view.preferences.mode, view.snapshotMode, snapshot.book?.source);
 
@@ -401,6 +434,32 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
             </label>
           </div>
 
+          <div className="ob-range-controls">
+            <label>
+              {t("orderBook.range")}
+              <select aria-label={t("orderBook.range")} value={rangeBps}
+                onChange={(event) => setRangeBps(Number(event.target.value))}>
+                {[0, 5, 10, 25, 50, 100].map((bps) => (
+                  <option key={bps} value={bps}>{bps ? `${bps / 100}%` : t("orderBook.rangeAll")}</option>
+                ))}
+              </select>
+            </label>
+            {snapshot.book?.midPrice && coveredBid !== null && coveredAsk !== null && (
+              <span>
+                −{(((snapshot.book.midPrice - coveredBid) / snapshot.book.midPrice) * 100).toFixed(3)}%
+                {" / "}
+                +{(((coveredAsk - snapshot.book.midPrice) / snapshot.book.midPrice) * 100).toFixed(3)}%
+              </span>
+            )}
+            {activeGrouping === "auto" && autoFrozen && <span>{t("orderBook.autoFrozen")}</span>}
+          </div>
+
+          {presentation && <div className="ob-coverage-note" title={t("orderBook.partialAmount")}>
+            {presentation.coverageBidMin !== null && presentation.coverageAskMax !== null
+              ? t("orderBook.knownRange", { min: formatPrice(presentation.coverageBidMin), max: formatPrice(presentation.coverageAskMax) })
+              : t("orderBook.unknownRange")}
+            {(rows?.bids.some(row => row.cumulativeIncomplete) || rows?.asks.some(row => row.cumulativeIncomplete)) && <div className="ob-incomplete-note">{t("orderBook.partialAmount")}</div>}
+          </div>}
           <div className="ob-column-header" aria-hidden="true">
             <span>
               {t("orderBook.price")}{presentation?.priceStep ? ` · ${formatPrice(presentation.priceStep)}` : ""}
@@ -411,7 +470,7 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
 
           {snapshot.book && presentation && rows ? (
             <div className="ob-book-scroll">
-              <BookLevels rows={rows.asks} side="ask" maxCumulative={rows.maxCumulative} />
+              <BookLevels key={`${view.identity.exchange}:${view.identity.marketType}:${view.identity.symbol}:${view.preferences.mode}:asks`} onViewport={onViewport} rows={rows.asks} side="ask" maxCumulative={rows.maxCumulative} />
               <div className="ob-spread-row">
                 <span className="ob-mid-price">{formatPrice(snapshot.book.midPrice)}</span>
                 <span>{formatSpread(snapshot.book.spread, snapshot.book.spreadBps)}</span>
@@ -425,7 +484,7 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
                   <span>{t("orderBook.aggregated", { step: formatPrice(presentation.priceStep) })}</span>
                 )}
               </div>
-              <BookLevels rows={rows.bids} side="bid" maxCumulative={rows.maxCumulative} />
+              <BookLevels key={`${view.identity.exchange}:${view.identity.marketType}:${view.identity.symbol}:${view.preferences.mode}:bids`} onViewport={onViewport} rows={rows.bids} side="bid" maxCumulative={rows.maxCumulative} />
             </div>
           ) : (
             <EmptyState

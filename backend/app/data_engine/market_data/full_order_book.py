@@ -707,6 +707,8 @@ class FullOrderBookSnapshot:
     local_level_capacity: int
     local_bid_levels_trimmed: int = 0
     local_ask_levels_trimmed: int = 0
+    coverage_bid_min: float | None = None
+    coverage_ask_max: float | None = None
     _materialization_token: object | None = field(
         default=None,
         repr=False,
@@ -918,6 +920,8 @@ class FullOrderBookSnapshot:
             "source": self.source.value,
             "local_sequence_continuity": True,
             "exchange_full_depth_exhaustive": False,
+            "coverage_bid_min": self.coverage_bid_min,
+            "coverage_ask_max": self.coverage_ask_max,
             "local_level_retention_bounded": True,
             "local_level_capacity": self.local_level_capacity,
             "local_bid_levels_trimmed": self.local_bid_levels_trimmed,
@@ -977,6 +981,8 @@ class _StreamState:
     failure_detail: str | None = None
     trusted_bid_depth: int = 0
     trusted_ask_depth: int = 0
+    coverage_bid_min: float | None = None
+    coverage_ask_max: float | None = None
     trimmed_bid_boundary: float | None = None
     trimmed_ask_boundary: float | None = None
     bid_levels_trimmed: int = 0
@@ -1214,6 +1220,8 @@ class FullOrderBookEngine:
         state.snapshot_limit = seed.snapshot_limit
         state.trusted_bid_depth = len(seed.bids)
         state.trusted_ask_depth = len(seed.asks)
+        state.coverage_bid_min = None
+        state.coverage_ask_max = None
         state.trimmed_bid_boundary = None
         state.trimmed_ask_boundary = None
         state.bid_levels_trimmed = 0
@@ -1221,6 +1229,8 @@ class FullOrderBookEngine:
         state.event_time_ms = last_event_time
         state.received_at_ms = last_received
         state.source = last_source
+        state.coverage_bid_min = min(item.price for item in seed.bids)
+        state.coverage_ask_max = max(item.price for item in seed.asks)
         state.revision = 1 if kept else 0
         state.status = FullOrderBookState.LIVE if kept else FullOrderBookState.AWAITING_BRIDGE
         state.failure = None
@@ -1589,6 +1599,12 @@ class FullOrderBookEngine:
             local_level_capacity=self._max_levels_per_side,
             local_bid_levels_trimmed=state.bid_levels_trimmed,
             local_ask_levels_trimmed=state.ask_levels_trimmed,
+            coverage_bid_min=(max(state.coverage_bid_min, state.trimmed_bid_boundary)
+                              if state.coverage_bid_min is not None and state.trimmed_bid_boundary is not None
+                              else state.coverage_bid_min),
+            coverage_ask_max=(min(state.coverage_ask_max, state.trimmed_ask_boundary)
+                              if state.coverage_ask_max is not None and state.trimmed_ask_boundary is not None
+                              else state.coverage_ask_max),
             _materialization_token=_TRUSTED_LAZY_SNAPSHOT,
         )
 
@@ -1655,6 +1671,8 @@ class FullOrderBookEngine:
         state.failure_detail = detail
         state.trusted_bid_depth = 0
         state.trusted_ask_depth = 0
+        state.coverage_bid_min = None
+        state.coverage_ask_max = None
         state.trimmed_bid_boundary = None
         state.trimmed_ask_boundary = None
         state.bid_levels_trimmed = 0
@@ -1706,6 +1724,8 @@ class FullOrderBookEngine:
         state.failure_detail = None
         state.trusted_bid_depth = 0
         state.trusted_ask_depth = 0
+        state.coverage_bid_min = None
+        state.coverage_ask_max = None
         state.trimmed_bid_boundary = None
         state.trimmed_ask_boundary = None
         state.bid_levels_trimmed = 0

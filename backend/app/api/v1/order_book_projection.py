@@ -8,14 +8,15 @@ from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_FLOOR
 from itertools import islice
 from typing import Any, Literal, Mapping, Sequence
 
+from app.api.v1.order_book_auto import step_scores
 from app.api.v1.symbols import get_cached_symbol_metadata
 from app.data_engine.market_data.models import MarketStreamKey
 from app.data_engine.market_data.full_order_book import FullOrderBookLevel
 
 
-PriceGrouping = Literal["auto", "raw", "10", "100", "1000"]
-FULL_PRICE_GROUPINGS: tuple[PriceGrouping, ...] = ("auto", "raw", "10", "100", "1000")
-PARTIAL_PRICE_GROUPINGS: tuple[PriceGrouping, ...] = ("auto", "raw", "10")
+PriceGrouping = Literal["auto", "raw", "2", "5", "10", "20", "50", "100", "200", "500", "1000", "2000", "5000", "10000", "20000", "50000", "100000", "200000", "500000", "1000000", "2000000", "5000000", "10000000", "20000000", "50000000", "100000000", "200000000", "500000000", "1000000000"]
+FULL_PRICE_GROUPINGS: tuple[PriceGrouping, ...] = ("auto", "raw", "2", "5", "10", "20", "50", "100", "200", "500", "1000", "2000", "5000", "10000", "20000", "50000", "100000", "200000", "500000", "1000000", "2000000", "5000000", "10000000", "20000000", "50000000", "100000000", "200000000", "500000000", "1000000000")
+PARTIAL_PRICE_GROUPINGS = FULL_PRICE_GROUPINGS
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +35,10 @@ class OrderBookProjection:
     price_window_ask_truncated: bool
     incomplete_outer_bid_bucket_omitted: bool
     incomplete_outer_ask_bucket_omitted: bool
+    incomplete_bid_prices: list[float]
+    incomplete_ask_prices: list[float]
+    coverage_bid_min: float | None
+    coverage_ask_max: float | None
 
 
 def normalize_price_grouping(
@@ -62,14 +67,18 @@ def project_order_book_levels(
     price_tick_size: Decimal | None,
     limit: int | None = None,
     max_auto_multiplier: int = 1_000,
-    omit_incomplete_outer_bucket: bool = False,
     source_levels_canonical: bool = False,
+    target_rows: int = 12,
+    range_bps: int = 0,
+    resolved_step: Decimal | None = None,
 ) -> OrderBookProjection:
-    price_step = _effective_price_step(
+    price_step = resolved_step or _effective_price_step(
         data,
         price_grouping=price_grouping,
         price_tick_size=price_tick_size,
         max_auto_multiplier=max_auto_multiplier,
+        target_rows=target_rows,
+        range_bps=range_bps,
     )
     aggregation_applied = (
         price_tick_size is not None
@@ -104,8 +113,8 @@ def project_order_book_levels(
 
     all_bid_buckets = bid_buckets
     all_ask_buckets = ask_buckets
-    bid_buckets = _price_window(all_bid_buckets, price_step, limit, side="bids")
-    ask_buckets = _price_window(all_ask_buckets, price_step, limit, side="asks")
+    bid_buckets = _price_window(all_bid_buckets, range_bps, side="bids")
+    ask_buckets = _price_window(all_ask_buckets, range_bps, side="asks")
     if bounded_canonical:
         price_window_bid_truncated = len(bid_buckets) < source_bid_levels
         price_window_ask_truncated = len(ask_buckets) < source_ask_levels
@@ -113,22 +122,24 @@ def project_order_book_levels(
         price_window_bid_truncated = len(bid_buckets) < len(all_bid_buckets)
         price_window_ask_truncated = len(ask_buckets) < len(all_ask_buckets)
 
-    incomplete_outer_bid_bucket_omitted = False
-    incomplete_outer_ask_bucket_omitted = False
-    if aggregation_applied and omit_incomplete_outer_bucket:
-        # A bounded source can cut through the furthest price bucket.  That
-        # bucket's quantity (and even its presence) then depends on the source
-        # depth boundary rather than the market.  Keep the near-price buckets,
-        # but never present a multi-bucket truncated edge as complete depth.
-        if not price_window_bid_truncated and len(bid_buckets) > 1:
-            bid_buckets = bid_buckets[:-1]
-            incomplete_outer_bid_bucket_omitted = True
-        if not price_window_ask_truncated and len(ask_buckets) > 1:
-            ask_buckets = ask_buckets[:-1]
-            incomplete_outer_ask_bucket_omitted = True
-
+    # Keep partial buckets visible: omitting the sole bucket of a wide grouping
+    # would hide all known liquidity. Boundary provenance determines completeness.
     visible_bids = bid_buckets if limit is None else bid_buckets[:limit]
     visible_asks = ask_buckets if limit is None else ask_buckets[:limit]
+    bid_boundary = _positive_decimal(data.get("coverage_bid_min"))
+    ask_boundary = _positive_decimal(data.get("coverage_ask_max"))
+    # A caller may project only part of a previously exhaustive/covered book.
+    bid_cut = isinstance(data.get("book_bid_levels"), int) and data["book_bid_levels"] > source_bid_levels
+    ask_cut = isinstance(data.get("book_ask_levels"), int) and data["book_ask_levels"] > source_ask_levels
+    exhaustive = data.get("exchange_full_depth_exhaustive") is True
+    if bid_cut and bids:
+        bid_boundary = max(bid_boundary, bids[-1][0]) if bid_boundary is not None else (bids[-1][0] if exhaustive else None)
+    if ask_cut and asks:
+        ask_boundary = min(ask_boundary, asks[-1][0]) if ask_boundary is not None else (asks[-1][0] if exhaustive else None)
+    incomplete_bids = [float(price) for price, _ in visible_bids if aggregation_applied
+                       and not (exhaustive and not bid_cut) and (bid_boundary is None or price <= bid_boundary)]
+    incomplete_asks = [float(price) for price, _ in visible_asks if aggregation_applied
+                       and not (exhaustive and not ask_cut) and (ask_boundary is None or price >= ask_boundary)]
     return OrderBookProjection(
         bids=_float_levels(visible_bids),
         asks=_float_levels(visible_asks),
@@ -146,8 +157,12 @@ def project_order_book_levels(
         ),
         price_window_bid_truncated=price_window_bid_truncated,
         price_window_ask_truncated=price_window_ask_truncated,
-        incomplete_outer_bid_bucket_omitted=incomplete_outer_bid_bucket_omitted,
-        incomplete_outer_ask_bucket_omitted=incomplete_outer_ask_bucket_omitted,
+        incomplete_outer_bid_bucket_omitted=False,
+        incomplete_outer_ask_bucket_omitted=False,
+        incomplete_bid_prices=incomplete_bids,
+        incomplete_ask_prices=incomplete_asks,
+        coverage_bid_min=float(bid_boundary) if bid_boundary is not None else None,
+        coverage_ask_max=float(ask_boundary) if ask_boundary is not None else None,
     )
 
 
@@ -157,6 +172,8 @@ def _effective_price_step(
     price_grouping: PriceGrouping,
     price_tick_size: Decimal | None,
     max_auto_multiplier: int,
+    target_rows: int = 12,
+    range_bps: int = 0,
 ) -> Decimal | None:
     if price_tick_size is None:
         return None
@@ -165,34 +182,8 @@ def _effective_price_step(
     if price_grouping != "auto":
         return price_tick_size * Decimal(int(price_grouping))
 
-    reference = _reference_price(data)
-    if reference is None:
-        return price_tick_size
-    target = reference * Decimal("0.00001")
-    multiplier = 1
-    while multiplier < max_auto_multiplier and price_tick_size * multiplier < target:
-        multiplier *= 10
-    return price_tick_size * min(multiplier, max_auto_multiplier)
-
-
-def _reference_price(data: Mapping[str, Any]) -> Decimal | None:
-    for name in ("mid_price", "best_bid_price", "top_bid", "best_ask_price", "top_ask"):
-        parsed = _positive_decimal(data.get(name))
-        if parsed is not None:
-            return parsed
-    for side in ("bids", "asks"):
-        raw_levels = data.get(side)
-        if (
-            isinstance(raw_levels, SequenceABC)
-            and not isinstance(raw_levels, (str, bytes))
-            and raw_levels
-        ):
-            first = raw_levels[0]
-            if isinstance(first, (list, tuple)) and first:
-                parsed = _positive_decimal(first[0])
-                if parsed is not None:
-                    return parsed
-    return None
+    scores = step_scores(data, price_tick_size, target_rows, range_bps, max_auto_multiplier)
+    return min(scores, key=lambda step: (scores[step], step))
 
 
 def _sequence_length(value: object, *, side: str) -> int:
@@ -253,15 +244,14 @@ def _aggregate_side(
 
 def _price_window(
     levels: Sequence[tuple[Decimal, Decimal]],
-    price_step: Decimal | None,
-    limit: int | None,
+    range_bps: int,
     *,
     side: Literal["bids", "asks"],
 ) -> list[tuple[Decimal, Decimal]]:
-    if limit is None or price_step is None or not levels:
+    if not range_bps or not levels:
         return list(levels)
-    max_distance = price_step * Decimal(max(0, limit - 1))
     near_price = levels[0][0]
+    max_distance = near_price * Decimal(range_bps) / 10000
     if side == "bids":
         boundary = near_price - max_distance
         return [level for level in levels if level[0] >= boundary]

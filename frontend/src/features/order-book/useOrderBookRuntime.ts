@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { API_BASE, httpBaseToWsBase } from "../../services/apiConfig.js";
 import { useOrderBookPreferences } from "./orderBookPreferencesStore.js";
@@ -12,6 +12,7 @@ import {
 import type { ExchangeCapabilityPayload } from "../../services/apiPayloadParsers.js";
 import type {
   OrderBookIdentity,
+  OrderBookDisplayOptions,
   OrderBookMode,
   OrderBookRuntime,
   OrderBookUpdateIntervalMs,
@@ -81,6 +82,12 @@ export function useOrderBookRuntime({
   const { preferences, actions: preferenceActions } = useOrderBookPreferences();
   const [store] = useState(createOrderBookStore);
   const [retryRevision, setRetryRevision] = useState(0);
+  const controllerRef = useRef<OrderBookStreamController | null>(null);
+  const displayOptionsRef = useRef<OrderBookDisplayOptions>({ targetRows: 12, rangeBps: 0, autoFrozen: false });
+  const setDisplayOptions = useCallback((options: OrderBookDisplayOptions) => {
+    displayOptionsRef.current = options;
+    controllerRef.current?.setDisplayOptions(options);
+  }, []);
   const productSupport = useMemo(
     () => exchangeMarketProductSupport(capability, identity.marketType),
     [capability, identity.marketType],
@@ -141,6 +148,8 @@ export function useOrderBookRuntime({
       fullPriceGrouping: streamPriceGrouping,
       store,
     });
+    controllerRef.current = controller;
+    controller.setDisplayOptions(displayOptionsRef.current);
     const updateVisibility = () => controller.setDisplayActive(document.visibilityState !== "hidden");
     updateVisibility();
     document.addEventListener("visibilitychange", updateVisibility);
@@ -148,6 +157,7 @@ export function useOrderBookRuntime({
     return () => {
       document.removeEventListener("visibilitychange", updateVisibility);
       controller.close();
+      controllerRef.current = null;
     };
   }, [
     enabled,
@@ -165,7 +175,7 @@ export function useOrderBookRuntime({
   ]);
 
   const retry = useCallback(() => setRetryRevision((current) => current + 1), []);
-  const actions = useMemo(() => ({ ...preferenceActions, retry }), [preferenceActions, retry]);
+  const actions = useMemo(() => ({ ...preferenceActions, retry, setDisplayOptions }), [preferenceActions, retry, setDisplayOptions]);
 
   return useMemo<OrderBookRuntime>(() => ({
     view: {

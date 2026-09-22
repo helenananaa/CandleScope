@@ -1,3 +1,4 @@
+import { partialStepScores } from "./orderBookAuto.js";
 import type {
   OrderBookBook,
   OrderBookLevel,
@@ -10,26 +11,20 @@ export interface OrderBookPresentation {
   asks: readonly OrderBookLevel[];
   priceStep: number | null;
   aggregationApplied: boolean;
+  incompleteBidPrices: readonly number[];
+  incompleteAskPrices: readonly number[];
+  coverageBidMin: number | null;
+  coverageAskMax: number | null;
 }
 
 export function resolvePriceStep(
   priceTickSize: number | null,
-  referencePrice: number | null,
   grouping: PriceGrouping,
-  maxAutoMultiplier = 1_000,
 ): number | null {
   if (!priceTickSize || !Number.isFinite(priceTickSize) || priceTickSize <= 0) return null;
-  if (grouping === "raw") return priceTickSize;
-  if (grouping !== "auto") return priceTickSize * Number(grouping);
-  if (!referencePrice || !Number.isFinite(referencePrice) || referencePrice <= 0) {
-    return priceTickSize;
-  }
-  const target = referencePrice * 0.00001;
-  let multiplier = 1;
-  while (multiplier < maxAutoMultiplier && priceTickSize * multiplier < target) {
-    multiplier *= 10;
-  }
-  return priceTickSize * Math.min(multiplier, maxAutoMultiplier);
+  // Auto needs a real book and viewport; do not advertise a price-only estimate.
+  if (grouping === "auto") return null;
+  return grouping === "raw" ? priceTickSize : priceTickSize * Number(grouping);
 }
 
 export function aggregateOrderBookLevels(
@@ -57,16 +52,10 @@ export function aggregateOrderBookLevels(
     )));
 }
 
-export function omitIncompleteOuterBucket(
-  levels: readonly OrderBookLevel[],
-): readonly OrderBookLevel[] {
-  if (levels.length <= 1) return levels;
-  return Object.freeze(levels.slice(0, -1));
-}
-
 export function orderBookPresentation(
   book: OrderBookBook,
   grouping: PriceGrouping,
+  rangeBps = 0,
 ): OrderBookPresentation {
   if (book.mode === "full") {
     return {
@@ -74,14 +63,15 @@ export function orderBookPresentation(
       asks: book.asks,
       priceStep: book.priceStep,
       aggregationApplied: book.aggregationApplied,
+      incompleteBidPrices: book.incompleteBidPrices ?? (book.aggregationApplied ? book.bids.map(([price]) => price) : []),
+      incompleteAskPrices: book.incompleteAskPrices ?? (book.aggregationApplied ? book.asks.map(([price]) => price) : []),
+      coverageBidMin: book.coverageBidMin ?? null,
+      coverageAskMax: book.coverageAskMax ?? null,
     };
   }
-  const priceStep = resolvePriceStep(
-    book.priceTickSize,
-    book.midPrice,
-    grouping,
-    10,
-  );
+  const priceStep = grouping === "auto"
+    ? (book.autoPriceStep ?? [...partialStepScores(book, 12, rangeBps)].sort(([a, sa], [b, sb]) => sa - sb || a - b)[0]?.[0] ?? book.priceTickSize)
+    : resolvePriceStep(book.priceTickSize, grouping);
   const aggregationApplied = (
     priceStep !== null
     && book.priceTickSize !== null
@@ -93,13 +83,21 @@ export function orderBookPresentation(
   const groupedAsks = aggregationApplied
     ? aggregateOrderBookLevels(book.asks, "asks", priceStep)
     : book.asks;
+  const clip = (levels: readonly OrderBookLevel[]) => {
+    const near = levels[0]?.[0];
+    return !rangeBps || !near ? levels : levels.filter(([price]) => Math.abs(price - near) <= near * rangeBps / 10_000);
+  };
+  const bids = clip(groupedBids);
+  const asks = clip(groupedAsks);
+  const coverageBidMin = book.bids.at(-1)?.[0] ?? null;
+  const coverageAskMax = book.asks.at(-1)?.[0] ?? null;
   return {
-    bids: aggregationApplied
-      ? omitIncompleteOuterBucket(groupedBids)
-      : groupedBids,
-    asks: aggregationApplied
-      ? omitIncompleteOuterBucket(groupedAsks)
-      : groupedAsks,
+    bids,
+    asks,
+    incompleteBidPrices: aggregationApplied ? bids.filter(([price]) => coverageBidMin === null || price <= coverageBidMin).map(([price]) => price) : [],
+    incompleteAskPrices: aggregationApplied ? asks.filter(([price]) => coverageAskMax === null || price >= coverageAskMax).map(([price]) => price) : [],
+    coverageBidMin,
+    coverageAskMax,
     priceStep,
     aggregationApplied,
   };
@@ -111,13 +109,9 @@ export function groupingPriceStep(
   grouping: PriceGrouping,
 ): number | null {
   if (!book) return null;
-  if (mode === "full" && grouping === book.priceGrouping) return book.priceStep;
-  return resolvePriceStep(
-    book.priceTickSize,
-    book.midPrice,
-    grouping,
-    mode === "partial" ? 10 : 1_000,
-  );
+  if (mode === "partial" && grouping === "auto") return orderBookPresentation(book, grouping).priceStep;
+  if (grouping === book.priceGrouping) return book.priceStep;
+  return resolvePriceStep(book.priceTickSize, grouping);
 }
 
 function decimalScale(value: number, levels: readonly OrderBookLevel[]): number {

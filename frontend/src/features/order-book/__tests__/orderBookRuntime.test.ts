@@ -4,7 +4,6 @@ import test from "node:test";
 import { loadOrderBookPreferences } from "../orderBookPreferencesStore.js";
 import {
   aggregateOrderBookLevels,
-  omitIncompleteOuterBucket,
   orderBookPresentation,
   resolvePriceStep,
 } from "../orderBookAggregation.js";
@@ -137,19 +136,17 @@ test("price grouping rounds bids down, asks up, and keeps raw spread metrics", (
     aggregateOrderBookLevels([[101.1, 4], [101.9, 5], [102.2, 6]], "asks", 1),
     [[102, 9], [103, 6]],
   );
-  assert.deepEqual(
-    omitIncompleteOuterBucket([[100, 3], [99, 3]]),
-    [[100, 3]],
-  );
-  assert.deepEqual(omitIncompleteOuterBucket([[100, 3]]), [[100, 3]]);
-  assert.equal(resolvePriceStep(0.1, 60_000, "auto"), 1);
+  assert.equal(resolvePriceStep(0.1, "2"), 0.2);
+  assert.equal(resolvePriceStep(0.1, "auto"), null);
 
   const partial = parsedBook("partial");
   const presentation = orderBookPresentation(partial, "10");
   assert.equal(presentation.priceStep, 1);
   assert.equal(presentation.aggregationApplied, true);
-  assert.deepEqual(presentation.bids, [[100, 1]]);
-  assert.deepEqual(presentation.asks, [[101, 1.5]]);
+  assert.deepEqual(presentation.bids, [[100, 1], [99, 2]]);
+  assert.deepEqual(presentation.incompleteBidPrices, [99]);
+  assert.deepEqual(presentation.asks, [[101, 1.5], [102, 3]]);
+  assert.deepEqual(presentation.incompleteAskPrices, [102]);
   assert.equal(partial.midPrice, 100.5);
 });
 
@@ -195,7 +192,7 @@ test("preference loading clamps height and rejects corrupt enum values", () => {
     ["candlescope-order-book-partial-depth", "50"],
     ["candlescope-order-book-interval-ms", "100"],
     ["candlescope-order-book-full-output-limit", "50"],
-    ["candlescope-order-book-partial-price-grouping", "100"],
+    ["candlescope-order-book-partial-price-grouping", "7"],
     ["candlescope-order-book-full-price-grouping", "1000"],
   ]);
   const preferences = loadOrderBookPreferences({
@@ -480,4 +477,93 @@ test("spot controller subscribes with the native market identity and cadence", (
   assert.equal(subscribe.streams[0]?.market_type, "spot");
   assert.equal(subscribe.streams[0]?.params?.update_interval_ms, 1000);
   controller.close();
+});
+
+
+test("negotiated display options change without reconnect and stay absent on older servers", () => {
+  for (const supported of [false, true]) {
+    const socket = new FakeSocket();
+    const { store } = flushableStore();
+    const controller = new OrderBookStreamController({
+      url: "ws://example/full-order-book", identity: { exchange: "binance", marketType: "futures", symbol: "BTCUSDT" },
+      mode: "full", partialDepth: 20, updateIntervalMs: 250, fullOutputLimit: 100,
+      fullPriceGrouping: "auto", store, socketFactory: () => socket,
+    });
+    controller.setDisplayOptions({ targetRows: 5, rangeBps: 10, autoFrozen: false });
+    controller.start();
+    socket.open();
+    socket.message({ type: "connected", protocol: "orderbook.full.v1", adaptive_grouping_control: supported });
+    const subscribe = JSON.parse(socket.sent[0]!) as {
+      display_options?: unknown;
+      request_id: string;
+      streams: [{ params: { output_limit?: number; price_grouping?: string }; output_limit?: number; price_grouping?: string }];
+    };
+    assert.equal(Boolean(subscribe.display_options), supported);
+    const acknowledged = structuredClone(subscribe.streams[0]);
+    delete acknowledged.params.output_limit;
+    delete acknowledged.params.price_grouping;
+    acknowledged.output_limit = 100;
+    acknowledged.price_grouping = "auto";
+    socket.message({ type: "subscribed", request_id: subscribe.request_id, streams: [acknowledged] });
+    controller.setDisplayOptions({ targetRows: 8, rangeBps: 25, autoFrozen: true });
+    if (supported) assert.deepEqual(JSON.parse(socket.sent.at(-1)!), {
+      action: "set_display_options", target_rows: 8, range_bps: 25, auto_frozen: true,
+    });
+    else assert.equal(socket.sent.length, 1);
+    assert.equal(socket.closed, false);
+    controller.close();
+  }
+});
+
+test("bounded auto keeps sparse original prices while manual two-tick grouping remains available", () => {
+  const book = parsedBook("partial");
+  const presentation = orderBookPresentation(book, "auto");
+  assert.equal(presentation.priceStep, book.priceTickSize);
+  assert.deepEqual(presentation.bids, book.bids);
+  assert.deepEqual(presentation.asks, book.asks);
+  const grouped = orderBookPresentation(book, "2");
+  assert.equal(grouped.priceStep, 0.2);
+  assert.equal(book.priceGrouping, "raw");
+});
+
+
+test("large manual grouping preserves partial edge quantity and interval semantics", () => {
+  const book = parsedBook("partial");
+  const presentation = orderBookPresentation(book, "100000");
+  assert.equal(presentation.priceStep, 10000);
+  assert.deepEqual(presentation.bids, [[0, 3]]);
+  assert.deepEqual(presentation.asks, [[10000, 4.5]]);
+  assert.deepEqual(presentation.incompleteBidPrices, [0]);
+  assert.deepEqual(presentation.incompleteAskPrices, [10000]);
+  const rows = buildOrderBookRows(presentation.bids, presentation.asks, presentation.priceStep,
+    presentation.incompleteBidPrices, presentation.incompleteAskPrices);
+  assert.deepEqual(rows.bids[0]?.interval, [0, 10000]);
+  assert.equal(rows.bids[0]?.incomplete, true);
+  assert.equal(rows.asks[0]?.cumulativeIncomplete, true);
+});
+
+test("full parser accepts zero only as an aggregated bucket boundary and validates partial flags", () => {
+  const wire = wireRecord("full", 2, { bids: [[0, 3]], asks: [[10000, 4.5]],
+    price_step: 10000, price_grouping: "100000", aggregation_applied: true,
+    incomplete_bid_prices: [0], incomplete_ask_prices: [10000] });
+  const parsed = parseOrderBookSocketMessage({ type: "full_order_book.snapshot", data: wire }, "full");
+  assert.equal(parsed.kind, "records");
+  if (parsed.kind === "records") {
+    assert.deepEqual(parsed.records[0]?.incompleteBidPrices, [0]);
+    assert.equal(parsed.records[0]?.midPrice, 100.5);
+  }
+  assert.throws(() => parseOrderBookSocketMessage({ type: "order_book.snapshot",
+    data: wireRecord("partial", 2, { bids: [[0, 3]] }) }, "partial"), /positive/);
+  assert.throws(() => parseOrderBookSocketMessage({ type: "full_order_book.snapshot",
+    data: wireRecord("full", 2, { incomplete_bid_prices: [123] }) }, "full"), /displayed levels/);
+});
+
+
+test("raw far quotes stay exact but cumulative quantities disclose unobserved gaps", () => {
+  const rows = buildOrderBookRows([[60000, 1], [50000, 2]], [[60001, 3], [90000, 4]], null, [], [],
+    { bidMin: 59900, askMax: 60100 });
+  assert.equal(rows.bids[0]?.cumulativeIncomplete, false);
+  assert.equal(rows.bids[1]?.incomplete, false);
+  assert.equal(rows.bids[1]?.cumulativeIncomplete, true);
+  assert.equal(rows.asks[1]?.cumulativeIncomplete, true);
 });
