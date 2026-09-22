@@ -30,7 +30,7 @@ export type ChartStrategyRunApi = Pick<BacktestApiClient,
   | "validate"
   | "createRun"
   | "getRun"
-> & Partial<Pick<BacktestApiClient, "previewSnapshot">>;
+> & Partial<Pick<BacktestApiClient, "previewSnapshot" | "prepareChartContext">>;
 
 export type ResearchRunSource =
   | { kind: "CURRENT_CHART"; materializeResolution?: ChartContextResolution | null }
@@ -268,7 +268,7 @@ export function buildChartStrategyRunBody(input: {
     end_time_ms: range.endTimeMs,
     symbol: input.frozen.session.symbol,
     interval: input.frozen.session.interval,
-    warmup_bars: 0,
+    warmup_bars: input.resolution.preparation?.warmup_bars ?? 0,
     parameters: cloneFrozen(input.frozen.attachment.parameters),
     output_mode: input.revision.output_modes.includes("TARGET_POSITION")
       ? "TARGET_POSITION"
@@ -616,6 +616,21 @@ export async function runResearchBacktest(options: {
     options.onStage?.("RESOLVING");
     resolution = await options.api.resolveChartContext(contextRequest, options.signal);
     options.onResolution?.(resolution);
+    if (options.api.prepareChartContext && resolution.automatic_preparation_available !== false
+      && (resolution.status === "NEEDS_DATA" || (resolution.status === "READY" && resolution.automatic_preparation_available))) {
+      options.onStage?.("MATERIALIZING");
+      const strategyIntent = {
+        strategy_revision_id: revision.revision_id,
+        parameters: frozen.attachment.parameters,
+        ...(frozen.attachment.executionOverrides ? { execution_overrides: frozen.attachment.executionOverrides } : {}),
+        chart_cell_scope: frozen.cellScope,
+        strategy_draft_id: frozen.draftId,
+      };
+      const preparationKey = await chartStrategySha256({ context: contextRequest, strategy: strategyIntent,
+        resolved_context: resolution.chart_context_hash });
+      resolution = await options.api.prepareChartContext(contextRequest, options.signal, strategyIntent, preparationKey);
+      options.onResolution?.(resolution);
+    }
     if (resolution.status === "NEEDS_DATA") {
       return { kind: "NEEDS_DATA", frozen, revision, resolution, frozenContext: null };
     }
@@ -637,14 +652,16 @@ export async function runResearchBacktest(options: {
   const body = buildChartStrategyRunBody({ frozen, revision, resolution });
   const range = readyRange(resolution);
   options.onStage?.("VALIDATING");
-  await options.api.smokeStrategyRevision(revision.revision_id, {
+  if (!resolution.prepared_run) {
+    await options.api.smokeStrategyRevision(revision.revision_id, {
     dataset_id: resolution.dataset_id,
     snapshot_hash: resolution.snapshot_hash,
     start_time_ms: range.startTimeMs,
     end_time_ms: Math.min(range.endTimeMs, range.startTimeMs + 7 * 86_400_000),
     parameters: frozen.attachment.parameters,
   }, options.signal);
-  await options.api.validate(body, options.signal);
+    await options.api.validate(body, options.signal);
+  }
 
   let refreshed = resolution;
   if (options.source.kind === "IMPORTED_DATASET") {
@@ -662,9 +679,8 @@ export async function runResearchBacktest(options: {
       refreshed,
       options.source.quality,
     );
-  } else {
-    const contextRequest = chartContextRequestForFrozen(frozen);
-    refreshed = await options.api.resolveChartContext(contextRequest, options.signal);
+  } else if (!resolution.prepared_run) {
+    refreshed = await options.api.resolveChartContext(resolution.request, options.signal);
     options.onResolution?.(refreshed);
     if (!sameReadyContext(resolution, refreshed)) {
       throw new ChartStrategyRunError(
@@ -694,7 +710,7 @@ export async function runResearchBacktest(options: {
       frozen_context_hash: frozenContext.contextHash,
     },
   });
-  const created = await options.api.createRun(refreshedBody, idempotencyKey, options.signal);
+  const created = resolution.prepared_run ?? await options.api.createRun(refreshedBody, idempotencyKey, options.signal);
   const identity = resultIdentity({
     frozen,
     revision,

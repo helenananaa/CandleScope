@@ -134,6 +134,27 @@ def _decode_blind_bar_snapshot_blob(
     )
 
 
+def is_progressive_dataset(persisted):
+    from app.replay.progressive_history import MANIFEST_SCHEMA
+    blob = persisted.get("snapshot_blob")
+    if not isinstance(blob, (bytes, bytearray)):
+        return False
+    manifest = _decode_bar_snapshot_blob(bytes(blob)).paging_manifest
+    return manifest is not None and manifest.get("schema_version") == MANIFEST_SCHEMA
+
+
+def _progressive_repository(persisted, repository, factory):
+    if not is_progressive_dataset(persisted):
+        return repository, False
+    from app.replay.progressive_history import ProgressiveHistoryRepository, validate_manifest
+    decoded = _decode_bar_snapshot_blob(bytes(persisted["snapshot_blob"]))
+    manifest = validate_manifest(decoded.paging_manifest, decoded.snapshot)
+    if factory is None:
+        raise _fail("HISTORY_SOURCE_UNAVAILABLE", "Progressive history reader is unavailable", status_code=503)
+    return ProgressiveHistoryRepository(factory(), manifest["feed_id"],
+        decoded.snapshot.provenance.source_revision), True
+
+
 def _decode_bar_snapshot(
     persisted: Mapping[str, object],
     *,
@@ -2279,6 +2300,7 @@ def build_history_page(
     expected_history_epoch: str | None,
     display_interval: str | None = None,
     repository: KlinesReadRepository | None = None,
+    progressive_history_factory=None,
 ) -> dict[str, object]:
     for field_name, value in (
         ("before_ms", before_ms),
@@ -2345,6 +2367,7 @@ def build_history_page(
             status_code=503,
         ) from exc
     snapshot = _decode_bar_snapshot(persisted, config=config)
+    repository, progressive = _progressive_repository(persisted, repository, progressive_history_factory)
     requested_display_interval = (
         config.display_interval if display_interval is None else display_interval
     )
@@ -2616,7 +2639,7 @@ def build_history_page(
             "training history epoch does not match",
         )
 
-    if history_mode == "ALL_AVAILABLE":
+    if history_mode == "ALL_AVAILABLE" or progressive:
         if repository is None:
             raise _fail(
                 "HISTORY_SOURCE_UNAVAILABLE",
@@ -2744,6 +2767,7 @@ def build_display_projection(
     data_epoch: str,
     display_interval: str,
     repository: KlinesReadRepository | None,
+    progressive_history_factory=None,
 ) -> dict[str, object]:
     """Build the revealed viewer tail from native source buckets.
 
@@ -2808,7 +2832,8 @@ def build_display_projection(
             status_code=422,
         ) from exc
     snapshot = _decode_bar_snapshot(persisted, config=config)
-    verified_halts = _decode_verified_market_halts(
+    repository, progressive = _progressive_repository(persisted, repository, progressive_history_factory)
+    verified_halts = () if progressive else _decode_verified_market_halts(
         persisted,
         snapshot=snapshot,
         config=config,

@@ -21,6 +21,7 @@ class ReplayErrorCode(str, Enum):
     NO_ELIGIBLE_WINDOW = "NO_ELIGIBLE_WINDOW"
     DATA_GAP = "DATA_GAP"
     DATASET_INCOMPLETE = "DATASET_INCOMPLETE"
+    DATASET_PENDING = "DATASET_PENDING"
     DATASET_MISMATCH = "DATASET_MISMATCH"
     ARCHIVE_DISABLED = "ARCHIVE_DISABLED"
     ARCHIVE_DEGRADED = "ARCHIVE_DEGRADED"
@@ -46,6 +47,7 @@ ERROR_HTTP_STATUS: Mapping[ReplayErrorCode, int] = MappingProxyType(
         ReplayErrorCode.NO_ELIGIBLE_WINDOW: 422,
         ReplayErrorCode.DATA_GAP: 422,
         ReplayErrorCode.DATASET_INCOMPLETE: 422,
+        ReplayErrorCode.DATASET_PENDING: 409,
         ReplayErrorCode.DATASET_MISMATCH: 409,
         ReplayErrorCode.ARCHIVE_DISABLED: 503,
         ReplayErrorCode.ARCHIVE_DEGRADED: 503,

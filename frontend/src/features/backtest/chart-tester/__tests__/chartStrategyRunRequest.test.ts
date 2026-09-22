@@ -300,6 +300,21 @@ test("NEEDS_DATA stops for confirmation and materialize always re-resolves", asy
   ]);
 });
 
+test("automatic preparation carries frozen strategy intent and observes the server-created run", async () => {
+  const calls: string[] = [];
+  const api = apiWithResolutions([resolution("NEEDS_DATA")], calls);
+  api.prepareChartContext = async (_context, _signal, intent) => {
+    calls.push("prepare");
+    assert.equal(intent?.strategy_revision_id, revision.revision_id);
+    assert.deepEqual(intent?.parameters, request.attachment.parameters);
+    assert.equal(intent?.strategy_draft_id, request.draftId);
+    return { ...resolution(), prepared_run: { ...completed(), state: "QUEUED" } };
+  };
+  const outcome = await runChartStrategyBacktest({ api, request, pollIntervalMs: 0 });
+  assert.equal(outcome.kind, "TERMINAL");
+  assert.deepEqual(calls, ["revision:PYNE_CHART_V1", "resolve", "prepare", "get"]);
+});
+
 test("validate/create drift fails before create", async () => {
   const calls: string[] = [];
   await assert.rejects(

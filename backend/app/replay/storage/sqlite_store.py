@@ -16,10 +16,12 @@ import time
 import uuid
 import zlib
 from collections import OrderedDict
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Callable, Mapping, Sequence
+from typing import Callable, Mapping, Sequence, Protocol
 
 from ..canonical import canonical_json, canonical_sha256
 from ..errors import ReplayDomainError, ReplayErrorCode
@@ -30,6 +32,27 @@ from .schema import REPLAY_SCHEMA_VERSION, migrate_replay_schema
 _BUSY_MARKERS = ("database is locked", "database table is locked", "database is busy")
 _WAL_AUTOCHECKPOINT_PAGES = 256
 _DATASET_OBJECT_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
+
+
+class DatasetObjectWriteBudget(Protocol):
+    def reserve_publication(self, size: int) -> str: ...
+    def register_publications(self, objects, *, reservation: str | None = None) -> None: ...
+    def abandon_publication(self, token: str) -> None: ...
+
+
+_dataset_write_budget: ContextVar[DatasetObjectWriteBudget | None] = ContextVar("replay_dataset_write_budget", default=None)
+
+
+@contextmanager
+def dataset_object_write_budget(budget: DatasetObjectWriteBudget | None):
+    """Scope an optional storage policy to the calling launch and its workers."""
+    token = _dataset_write_budget.set(budget)
+    try:
+        yield
+    finally:
+        _dataset_write_budget.reset(token)
+
+
 ExtensionWriter = Callable[[sqlite3.Connection, int], None]
 SessionSummaryWriter = Callable[
     [
@@ -91,20 +114,31 @@ class _DatasetObjectStore:
     def put(self, payload: bytes) -> str:
         object_id = _blob_sha256(payload)
         destination = self._path(object_id)
+        budget = _dataset_write_budget.get()
         if destination.is_file():
             if self.get(object_id) != payload:
                 raise RuntimeError("replay dataset object content changed")
+            if budget is not None:
+                budget.register_publications([(destination, "replay_session_inputs")])
             return object_id
-        destination.parent.mkdir(parents=True, exist_ok=True)
+        compressed = zlib.compress(payload, level=6)
+        reservation = budget.reserve_publication(len(compressed)) if budget is not None else None
         temporary = destination.with_name(
             f".{destination.name}.{uuid.uuid4().hex}.tmp"
         )
         try:
+            destination.parent.mkdir(parents=True, exist_ok=True)
             with temporary.open("xb") as handle:
-                handle.write(zlib.compress(payload, level=6))
+                handle.write(compressed)
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temporary, destination)
+            if budget is not None:
+                budget.register_publications([(destination, "replay_session_inputs")], reservation=reservation)
+        except BaseException:
+            if reservation is not None:
+                budget.abandon_publication(reservation)
+            raise
         finally:
             temporary.unlink(missing_ok=True)
         return object_id
@@ -939,6 +973,12 @@ class ReplaySQLiteStore:
             return tuple(self._session_row(row) for row in rows)
 
         return await self._read_async(read)
+
+    async def list_session_ids(self) -> tuple[str, ...]:
+        """Include ended/degraded rows when reconciling durable data owners."""
+        return await self._read_async(lambda connection: tuple(
+            str(row[0]) for row in connection.execute("SELECT session_id FROM replay_session")
+        ))
 
     async def load_dataset(self, session_id: str) -> dict[str, object] | None:
         def read(connection: sqlite3.Connection) -> dict[str, object] | None:

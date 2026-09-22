@@ -595,7 +595,6 @@ function tailChangedTime(sourceDelta: WindowDelta): number | null {
   }
   if (sourceDelta.type !== WINDOW_DELTA_TYPES.APPEND) return null;
   const starts = (sourceDelta.changedRanges ?? [])
-    .filter((range) => range.type === WINDOW_DELTA_TYPES.APPEND)
     .map((range) => Number(range.start))
     .filter((time) => Number.isSafeInteger(time) && time >= 0);
   return starts.length === 0 ? null : Math.min(...starts);

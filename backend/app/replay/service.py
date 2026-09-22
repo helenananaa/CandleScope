@@ -13,6 +13,7 @@ from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
 from decimal import Decimal, localcontext
+from pathlib import Path
 from typing import Callable, Mapping, Sequence, TypeVar
 
 from app.core.config import ReplaySettings
@@ -298,9 +299,29 @@ class ReplayService:
 
         return self._raw_trade_archive
 
+    def _progressive_owner_scope(self) -> str:
+        return hashlib.sha256(str(self.store.path.resolve()).encode("utf-8")).hexdigest()
+
+    def _progressive_session_owner(self, session_id: str) -> str:
+        return "session:" + self._progressive_owner_scope() + ":" + session_id
+
+    @property
+    def progressive_history(self):
+        from .progressive_history import ProgressiveBarHistory
+        history = getattr(self, "_progressive_history", None)
+        if history is None:
+            history = ProgressiveBarHistory(self.settings.replay_history_archive_dir / "progressive-index.sqlite3",
+                self._repository, now_ms=self._now_ms)
+            self._progressive_history = history
+        return history
+
     async def start(self) -> None:
         """Recover non-ended sessions without ever resuming PLAYING."""
 
+        archive_dir = self.settings.replay_history_archive_dir
+        if archive_dir is not None and (Path(archive_dir) / "progressive-index.sqlite3").exists():
+            await asyncio.to_thread(self.progressive_history.reconcile_sessions,
+                self._progressive_owner_scope(), await self.store.list_session_ids())
         if self.training is not None:
             await self.training.start()
         if self.settings.replay_multi_bar_interval_enabled:
@@ -1069,6 +1090,9 @@ class ReplayService:
         dataset: BarDatasetSnapshot,
     ) -> dict[str, object]:
         schema_version = payload.get("schema_version")
+        from .progressive_history import MANIFEST_SCHEMA, validate_manifest
+        if schema_version == MANIFEST_SCHEMA:
+            return validate_manifest(payload, dataset)
         if schema_version != PAGED_BAR_MANIFEST_SCHEMA_VERSION:
             raise ReplayDomainError(
                 ReplayErrorCode.DATASET_MISMATCH,
@@ -1359,6 +1383,80 @@ class ReplayService:
             # A dependency exception may embed a database path, partition name,
             # or real timestamp.  The blind service boundary must therefore
             # convert even unexpected data-access failures to a fixed envelope.
+            if config.blind_mode:
+                raise self._blind_unexpected_dataset_error() from exc
+            raise
+        finally:
+            self._release_session_capacity_reservation()
+
+    async def create_progressive_session(
+        self,
+        config: ReplaySessionConfig,
+        *,
+        feed_id: str,
+        initial_dataset: BarDatasetSnapshot | None = None,
+        training_selection: Mapping[str, object] | None = None,
+        initial_horizon_ms: int | None = None,
+        extension_factory: Callable[..., object] | None = None,
+        execution_mode: str = PAPER_LINEAR_EXECUTION_MODE,
+    ) -> dict[str, object]:
+        """Bind an immutable prefix while persisting the complete requested horizon.
+
+        Training supplies its saved selection and prefix length, so recovery reads
+        that archive revision instead of selecting against a moving catalog.
+        """
+        self._ensure_available(blind_mode=config.blind_mode)
+        await self._reserve_session_capacity(blind_mode=config.blind_mode)
+        try:
+            feed = self.progressive_history.status(feed_id)
+            if (
+                config.source_kind is not SourceKind.BAR
+                or config.base_interval != "1m"
+                or config.execution_model is not ExecutionModel.PAPER_LINEAR_V1
+                or execution_mode not in (PAPER_LINEAR_EXECUTION_MODE, TOUCH_OR_TAPE_EXECUTION_MODE)
+                or feed["end_ms"] - feed["start_ms"] != config.horizon_ms
+                or (config.start_policy is StartPolicy.MANUAL
+                    and config.requested_start_ms != feed["start_ms"])
+            ):
+                raise ReplayDomainError(ReplayErrorCode.DATASET_MISMATCH,
+                    "Progressive session does not match its frozen horizon or execution model")
+            if training_selection is not None:
+                if (initial_dataset is not None or type(initial_horizon_ms) is not int
+                        or initial_horizon_ms < 60_000 or initial_horizon_ms % 60_000
+                        or initial_horizon_ms > config.horizon_ms):
+                    raise ReplayDomainError(ReplayErrorCode.DATASET_MISMATCH,
+                        "Progressive training prefix commitment is invalid")
+                prefix_config = replace(config, horizon_ms=initial_horizon_ms)
+                entry, window = self._bound_training_entry_and_window(prefix_config, training_selection)
+                if (window.replay_start_ms != feed["start_ms"]
+                        or window.replay_end_open_ms + window.interval_ms > feed["ready_end_ms"]):
+                    raise ReplayDomainError(ReplayErrorCode.DATASET_MISMATCH,
+                        "Progressive training prefix is not published")
+                initial_dataset = await asyncio.to_thread(self._dataset_builder.create, entry, window)
+            elif initial_horizon_ms is not None:
+                raise ReplayDomainError(ReplayErrorCode.DATASET_MISMATCH,
+                    "Progressive prefix length requires a saved training selection")
+            if (initial_dataset is None or config.warmup_bars != initial_dataset.warmup_bars
+                    or (config.exchange, config.market_type, config.symbol) != (
+                        initial_dataset.identity.exchange, initial_dataset.identity.market_type,
+                        initial_dataset.identity.symbol)):
+                raise ReplayDomainError(ReplayErrorCode.DATASET_MISMATCH,
+                    "Progressive session initial dataset does not match its market or warmup")
+            capability = assess_bar_builder_capability(config.base_interval, config.display_interval)
+            if not capability.enabled:
+                raise ReplayDomainError(ReplayErrorCode.UNSUPPORTED_INTERVAL,
+                    "Progressive BAR display interval is unsupported")
+            manifest = self.progressive_history.manifest(feed_id, initial_dataset)
+            return await self._create_from_dataset(
+                config=config, actual_dataset=initial_dataset, bar_paging_manifest=manifest,
+                restore_checkpoint=None, forked=False, extension_factory=extension_factory,
+                execution_mode=execution_mode,
+            )
+        except ReplayDomainError as exc:
+            if config.blind_mode:
+                raise self._blind_safe_dataset_error(config, exc) from exc
+            raise
+        except Exception as exc:
             if config.blind_mode:
                 raise self._blind_unexpected_dataset_error() from exc
             raise
@@ -2312,7 +2410,16 @@ class ReplayService:
                     )
 
                 async def execute_delete() -> _TaskResult:
-                    return await delete()
+                    result = await delete()
+                    history = getattr(self, "_progressive_history", None)
+                    archive_dir = self.settings.replay_history_archive_dir
+                    if history is None and archive_dir is not None and (Path(archive_dir) / "progressive-index.sqlite3").exists():
+                        history = self.progressive_history
+                    if history is not None:
+                        for session_id in normalized:
+                            if await self.store.get_session(session_id) is None:
+                                await asyncio.to_thread(history.release, self._progressive_session_owner(session_id))
+                    return result
 
                 delete_task = asyncio.create_task(
                     execute_delete(),
@@ -2663,6 +2770,9 @@ class ReplayService:
         persisted = False
         registered = False
         try:
+            from .progressive_history import MANIFEST_SCHEMA
+            if bar_paging_manifest is not None and bar_paging_manifest["schema_version"] == MANIFEST_SCHEMA:
+                self.progressive_history.pin(str(bar_paging_manifest["feed_id"]), self._progressive_session_owner(session_id))
             if trade_dataset_ref is not None:
                 trade_pin_token = await self._pin_trade_dataset(
                     trade_dataset_ref,
@@ -2692,6 +2802,16 @@ class ReplayService:
                 trade_dataset_ref,
                 bar_paging_manifest=bar_paging_manifest,
             )
+            # A progressive snapshot is an initial cache, not the training end.
+            # Persist the fixed requested boundary while the dataset keeps only
+            # verified prefix rows; the source reports pending beyond that prefix.
+            from .progressive_history import MANIFEST_SCHEMA
+            actual_replay_end_ms = (
+                int(bar_paging_manifest["terminal_open_ms"])
+                if bar_paging_manifest is not None
+                and bar_paging_manifest["schema_version"] == MANIFEST_SCHEMA
+                else actual_dataset.replay_end_open_ms
+            )
             extension_write = None
             if extension_factory is not None:
                 extension_ref, extension_blob = self._persisted_extension_dataset(
@@ -2706,7 +2826,7 @@ class ReplayService:
                     dataset_ref=extension_ref,
                     dataset_blob=extension_blob,
                     actual_replay_start_ms=actual_dataset.replay_start_ms,
-                    actual_replay_end_ms=actual_dataset.replay_end_open_ms,
+                    actual_replay_end_ms=actual_replay_end_ms,
                 )
                 if not callable(extension_write):
                     raise TypeError("replay persistence extension must be callable")
@@ -2719,7 +2839,7 @@ class ReplayService:
                     dataset_ref=persisted_ref,
                     dataset_blob=canonical_json_bytes(persisted_blob),
                     actual_replay_start_ms=actual_dataset.replay_start_ms,
-                    actual_replay_end_ms=actual_dataset.replay_end_open_ms,
+                    actual_replay_end_ms=actual_replay_end_ms,
                     synthetic_origin_ms=origin,
                     initial_checkpoint=initial_checkpoint,
                     component_state=snapshot["components"],  # type: ignore[arg-type]
@@ -2835,6 +2955,8 @@ class ReplayService:
                         )
                     },
                 ) from compensation_error
+            if bar_paging_manifest is not None and bar_paging_manifest["schema_version"] == MANIFEST_SCHEMA:
+                self.progressive_history.release(self._progressive_session_owner(session_id))
             raise
 
     async def _recover_record(
@@ -3141,6 +3263,15 @@ class ReplayService:
             paging_manifest,
             actual_dataset,
         )
+        from .progressive_history import MANIFEST_SCHEMA
+        if manifest["schema_version"] == MANIFEST_SCHEMA:
+            from .sources.progressive_bar_source import ProgressiveBarReplaySource
+            history = self.progressive_history
+            feed = history.status(manifest["feed_id"])
+            if feed["end_ms"] - 60_000 != manifest["terminal_open_ms"]:
+                raise ReplayDomainError(ReplayErrorCode.DATASET_MISMATCH, "Progressive feed horizon changed")
+            return ProgressiveBarReplaySource(actor_dataset, actual_snapshot=actual_dataset,
+                history=history, feed_id=manifest["feed_id"], page_rows=manifest["page_rows"])
         timeline_delta_ms = (
             actor_dataset.replay_start_ms - actual_dataset.replay_start_ms
         )

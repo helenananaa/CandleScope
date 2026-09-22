@@ -368,6 +368,7 @@ def import_local_verified_day(
     market_type: str,
     symbol: str,
     day: date,
+    before_archive_import: Callable[[VerifiedRawAggTradeDay, Path], None] | None = None,
 ) -> tuple[int, VerifiedRawAggTradeDay]:
     expected_digest = parse_official_checksum(
         checksum_path.read_text(encoding="utf-8"),
@@ -385,6 +386,8 @@ def import_local_verified_day(
         symbol=symbol,
         day=day,
     )
+    if before_archive_import is not None:
+        before_archive_import(metadata, zip_path)
     accepted = archive.import_verified_day(
         iter_verified_agg_trade_rows(
             zip_path,
@@ -410,6 +413,8 @@ def import_official_date_range(
     max_rows_per_file: int = 100_000,
     download_timeout_seconds: float = 60.0,
     max_download_bytes: int = _MAX_OFFICIAL_DOWNLOAD_BYTES,
+    staging_dir: Path | None = None,
+    before_archive_import: Callable[[VerifiedRawAggTradeDay, Path], None] | None = None,
     opener: Callable[..., BinaryIO] = urllib.request.urlopen,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> dict[str, object]:
@@ -427,6 +432,9 @@ def import_official_date_range(
         raise ReplayTradeImportError("official download byte limit must be positive")
     archive_dir = archive_dir.resolve()
     archive_dir.mkdir(parents=True, exist_ok=True)
+    if staging_dir is not None:
+        staging_dir = Path(staging_dir).resolve()
+        staging_dir.mkdir(parents=True, exist_ok=True)
     archive = ParquetRawAggTradeArchive(
         archive_dir,
         max_rows_per_file=max_rows_per_file,
@@ -439,7 +447,7 @@ def import_official_date_range(
             symbol=symbol,
             day=current,
         )
-        with tempfile.TemporaryDirectory(prefix="candlescope-aggtrade-") as raw_tmp:
+        with tempfile.TemporaryDirectory(prefix="candlescope-aggtrade-", dir=staging_dir) as raw_tmp:
             temporary = Path(raw_tmp)
             zip_path = temporary / filename
             checksum_path = temporary / f"{filename}.CHECKSUM"
@@ -471,6 +479,7 @@ def import_official_date_range(
                     market_type=market_type,
                     symbol=symbol,
                     day=current,
+                    before_archive_import=before_archive_import,
                 )
             except BaseException as exc:
                 _quarantine_downloads(

@@ -7,7 +7,11 @@ import { nativeApi, nativeTerminal, nativeTimeframe, type NativeCapabilities, ty
 import { NativeStrategyReport } from "./NativeStrategyReport.js";
 import "./nativeStrategy.css";
 import { NativeAdvancedInputs } from "./NativeAdvancedInputs.js";
+import { NativePreparationContexts } from "./NativePreparationContexts.js";
+import { restorePreparationContexts, restorePreparationDate, type NativePreparationContext } from "./nativePreparationInputs.js";
 import { emptyAdvancedInputs, executionInputs, freezeAdvancedInputs, type AdvancedInputs } from "./nativeInputs.js";
+import { preparationRequest, waitForPreparation, type PreparationJob, type PreparationCapabilities } from "../../data-preparation/api.js";
+import PreparationWaiting from "../../data-preparation/PreparationWaiting.js";
 
 const NATIVE_TEMPLATES = {
   pine: '//@version=6\nstrategy("Native SMA", overlay=true, initial_capital=10000)\nfast = ta.sma(close, 3)\nslow = ta.sma(close, 5)\nif ta.crossover(fast, slow)\n    strategy.entry("L", strategy.long)\nif ta.crossunder(fast, slow)\n    strategy.close("L")\nplot(fast)\nplot(slow)\n',
@@ -38,6 +42,13 @@ export default function NativeStrategyPanel(props: Pick<ChartStrategyTesterPanel
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [resolution, setResolution] = useState<ChartContextResolution | null>(null);
+  const [automatic, setAutomatic] = useState(false);
+  const [automaticContexts, setAutomaticContexts] = useState<NativePreparationContext[]>([]);
+  const [preparation, setPreparation] = useState<PreparationJob | null>(null);
+  const [historyStart, setHistoryStart] = useState(() => new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10));
+  const [historyEnd, setHistoryEnd] = useState(() => new Date().toISOString().slice(0, 10));
+  const preparationObserver = useRef<AbortController | null>(null);
+  const preparationSubmission = useRef<{ body: string; key: string } | null>(null);
   const alive = useRef(true);
   const storageKey = `candlescope.native-draft:${props.cellScope}:${language}`;
   const onRunChange = props.onRunChange;
@@ -45,7 +56,8 @@ export default function NativeStrategyPanel(props: Pick<ChartStrategyTesterPanel
   useEffect(() => {
     alive.current = true;
     void nativeApi<NativeCapabilities>("/native/capabilities").then(setCapabilities).catch((reason) => setError(String(reason)));
-    return () => { alive.current = false; };
+    void preparationRequest<PreparationCapabilities>("/capabilities").then((value) => { if (alive.current) setAutomatic(value.enabled); }).catch(() => {});
+    return () => { alive.current = false; preparationObserver.current?.abort(); };
   }, []);
   useEffect(() => {
     const abort = new AbortController();
@@ -54,16 +66,21 @@ export default function NativeStrategyPanel(props: Pick<ChartStrategyTesterPanel
     return () => abort.abort();
   }, [runPath]);
   useEffect(() => {
+    const defaultStart = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+    const defaultEnd = new Date().toISOString().slice(0, 10);
     try { const saved = localStorage.getItem(storageKey); const draft: unknown = saved ? JSON.parse(saved) : null;
       setSource(draft && typeof draft === "object" && "source" in draft && typeof draft.source === "string" ? draft.source : NATIVE_TEMPLATES[language]);
       setParameters(draft && typeof draft === "object" && "parameters" in draft && typeof draft.parameters === "string" ? draft.parameters : "{}");
-    } catch { setSource(NATIVE_TEMPLATES[language]); setParameters("{}"); }
+      setAutomaticContexts(restorePreparationContexts(draft && typeof draft === "object" && "automaticContexts" in draft ? draft.automaticContexts : null));
+      setHistoryStart(restorePreparationDate(draft && typeof draft === "object" && "historyStart" in draft ? draft.historyStart : null, defaultStart));
+      setHistoryEnd(restorePreparationDate(draft && typeof draft === "object" && "historyEnd" in draft ? draft.historyEnd : null, defaultEnd));
+    } catch { setSource(NATIVE_TEMPLATES[language]); setParameters("{}"); setAutomaticContexts([]); setHistoryStart(defaultStart); setHistoryEnd(defaultEnd); }
     setAdvanced(emptyAdvancedInputs());
   }, [storageKey, language]);
   useEffect(() => { setResolution(null); }, [props.session.exchange, props.session.marketType, props.session.symbol, props.session.interval]);
-  const save = (text: string, params: string) => {
+  const save = (text: string, params: string, contexts = automaticContexts, start = historyStart, end = historyEnd) => {
     setSource(text); setParameters(params);
-    try { localStorage.setItem(storageKey, JSON.stringify({ source: text, parameters: params })); } catch { setError(t("native.saveFailed")); }
+    try { localStorage.setItem(storageKey, JSON.stringify({ source: text, parameters: params, automaticContexts: contexts, historyStart: start, historyEnd: end })); } catch { setError(t("native.saveFailed")); }
   };
   useEffect(() => {
     if (!run || nativeTerminal(run.state)) return;
@@ -76,12 +93,41 @@ export default function NativeStrategyPanel(props: Pick<ChartStrategyTesterPanel
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [run]);
   const start = async (prepare = false) => {
-    setBusy(true); setError(""); setRun(null);
+    setBusy(true); setError(""); setRun(null); setPreparation(null);
     try {
       const params: unknown = JSON.parse(parameters);
       if (!params || Array.isArray(params) || typeof params !== "object") throw new Error(t("native.parametersInvalid"));
       const context = props.session;
       const execution = executionInputs(mode, hostSettings, fidelity, fillRecalculation, executionData);
+      if (automatic && mode === "NATIVE" && !props.dataset && !advanced.contexts.length && !advanced.magnifier) {
+        const startTime = Date.parse(`${historyStart}T00:00:00Z`);
+        const endTime = Date.parse(`${historyEnd}T00:00:00Z`);
+        if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) throw new Error("INVALID_RANGE: select an increasing UTC date range");
+        const inputs = await freezeAdvancedInputs(advanced, language, {
+          start_time_ms: startTime, end_time_ms: endTime - 1, exchange: context.exchange, market_type: context.marketType,
+        });
+        const submission = { language, source, parameters: params, libraries: inputs.libraries,
+          contexts: automaticContexts.map((row) => ({ ...row, binding_symbol: row.binding_symbol.trim() || undefined })),
+          context: { exchange: context.exchange, market_type: context.marketType, symbol: context.symbol,
+            interval: context.interval, range_mode: "CUSTOM", fidelity_preference: "FAST", start_time_ms: startTime, end_time_ms: endTime - 1 } };
+        const body = JSON.stringify(submission);
+        if (preparationSubmission.current?.body !== body) preparationSubmission.current = { body, key: crypto.randomUUID() };
+        preparationObserver.current?.abort();
+        const observer = new AbortController();
+        preparationObserver.current = observer;
+        let initial = await preparationRequest<PreparationJob>("/native-strategy", {
+          method: "POST", headers: { "Content-Type": "application/json" }, signal: observer.signal,
+          body: JSON.stringify({ ...submission, idempotency_key: preparationSubmission.current.key }),
+        });
+        if (["FAILED", "BLOCKED_STORAGE"].includes(initial.state)) {
+          initial = await preparationRequest<PreparationJob>(`/${initial.id}/retry`, { method: "POST", signal: observer.signal });
+        }
+        if (initial.state === "CANCELLED") preparationSubmission.current = null;
+        const ready = await waitForPreparation(initial, setPreparation, observer.signal);
+        if (!ready.result?.native_run) throw new Error("Prepared native strategy is missing its run");
+        if (alive.current) { setRun(ready.result.native_run); setBusy(!nativeTerminal(ready.result.native_run.state)); }
+        return;
+      }
       if (props.dataset) {
         const catalog = await nativeApi<{ datasets: Array<{ dataset_id: string; data_epoch: string; first_open_ms: number; last_close_ms: number }> }>("/datasets");
         const dataset = catalog.datasets.find((item) => item.dataset_id === props.dataset!.datasetId && item.data_epoch === props.dataset!.dataEpoch);
@@ -125,6 +171,17 @@ export default function NativeStrategyPanel(props: Pick<ChartStrategyTesterPanel
     <div className="native-toolbar"><button aria-pressed={mode === "NATIVE"} disabled={busy} onClick={() => { setMode("NATIVE"); setAdvanced(emptyAdvancedInputs()); setRun(null); }}>{t("native.title")}</button>
       <button aria-pressed={mode === "CANDLESCOPE"} disabled={busy} onClick={() => { setMode("CANDLESCOPE"); setAdvanced(emptyAdvancedInputs()); setRun(null); }}>{t("native.external.title")}</button></div>
     <p>{t(mode === "NATIVE" ? "native.description" : "native.external.description")}</p>
+    {automatic && mode === "NATIVE" && !props.dataset && !advanced.contexts.length && !advanced.magnifier && <div className="native-toolbar">
+      <label>{t("preparation.startDate")}<input type="date" disabled={busy} value={historyStart} onChange={(event) => { setHistoryStart(event.target.value); save(source, parameters, automaticContexts, event.target.value, historyEnd); }} /></label>
+      <label>{t("preparation.endDate")}<input type="date" disabled={busy} value={historyEnd} onChange={(event) => { setHistoryEnd(event.target.value); save(source, parameters, automaticContexts, historyStart, event.target.value); }} /></label>
+    </div>}
+    {automatic && mode === "NATIVE" && !props.dataset && !advanced.contexts.length && !advanced.magnifier && <NativePreparationContexts
+      value={automaticContexts} onChange={(value) => { setAutomaticContexts(value); save(source, parameters, value); }} disabled={busy}
+      exchange={props.session.exchange} marketType={props.session.marketType} symbol={props.session.symbol} />}
+    {preparation && !["READY", "CANCELLED"].includes(preparation.state) && <p role="status">{t("preparation.title")} · {preparation.completed}/{preparation.total}
+      <PreparationWaiting job={preparation} />
+      <button disabled={preparation.stage === "STARTING" || preparation.cancel_requested} onClick={() => void preparationRequest<PreparationJob>(`/${preparation.id}/cancel`, { method: "POST" }).then(setPreparation).catch((reason) => setError(String(reason)))}>{t("preparation.cancel")}</button>
+    </p>}
     {mode === "CANDLESCOPE" && <div className="native-toolbar">{(["initial_balance", "slippage_bps", "taker_fee_bps", "price_tick"] as const).map((field) => <label key={field}>{t(`native.external.${field}`)}
       <input type="number" min="0" step="any" disabled={busy} value={hostSettings[field]} onChange={(event) => setHostSettings((value) => ({ ...value, [field]: Number(event.target.value) }))} />
     </label>)}</div>}

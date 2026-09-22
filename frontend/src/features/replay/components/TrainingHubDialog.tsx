@@ -26,6 +26,9 @@ import {
 } from "../trainingHubLabels.js";
 import ReplayStorageGovernancePanel from "./ReplayStorageGovernancePanel.js";
 import { applyTrainingPreset } from "../trainingPresets.js";
+import PreparationJobsPanel from "../../data-preparation/PreparationJobsPanel.js";
+import PreparationWaiting from "../../data-preparation/PreparationWaiting.js";
+import { preparationRequest } from "../../data-preparation/api.js";
 
 const CREATE_SECTIONS: Array<readonly [string, string, MessageKey]> = [
   ["training-hub-create-start", "1", "replay.hub.sectionStart"],
@@ -140,6 +143,7 @@ function TrainingRunCreatePanel({ runtime, onPrepareData }: TrainingHubDialogPro
   const busy = runtime.operation === "create"
     || runtime.operation === "plan"
     || runtime.operation === "create-context";
+  const canLeavePreparation = runtime.automaticPreparationAvailable && runtime.operation === "create";
   const busyLabel = runtime.operation === "create"
     ? t("replay.hub.creating")
     : runtime.operation === "create-context"
@@ -169,13 +173,13 @@ function TrainingRunCreatePanel({ runtime, onPrepareData }: TrainingHubDialogPro
         aria-modal="true"
         aria-labelledby="training-hub-create-title"
         onKeyDown={(event) => {
-          if (event.key === "Escape" && !busy) runtime.actions.closeCreate();
+          if (event.key === "Escape" && (!busy || canLeavePreparation)) runtime.actions.closeCreate();
         }}
       >
         <header className="training-hub-create-top">
           <div>
             <h2 id="training-hub-create-title">{t("replay.hub.createTitle")}</h2>
-            <p>{t("replay.hub.createIntro")}</p>
+            <p>{t(runtime.automaticPreparationAvailable ? "preparation.replayIntro" : "replay.hub.createIntro")}</p>
             <nav className="training-hub-create-steps" aria-label={t("replay.hub.createSteps")}>
               {CREATE_SECTIONS.map(([id, number, label]) => (
                 <button
@@ -189,12 +193,12 @@ function TrainingRunCreatePanel({ runtime, onPrepareData }: TrainingHubDialogPro
               ))}
             </nav>
           </div>
-          <button type="button" autoFocus onClick={runtime.actions.closeCreate} disabled={busy}>{t("replay.hub.close")}</button>
+          <button type="button" autoFocus onClick={runtime.actions.closeCreate} disabled={busy && !canLeavePreparation}>{t("replay.hub.close")}</button>
         </header>
 
         <div className="training-hub-create-body">
           <div className="training-hub-create-main">
-            {onPrepareData && draft.sourceKind === "BAR" && runtime.catalog !== null
+            {onPrepareData && !runtime.automaticPreparationAvailable && draft.sourceKind === "BAR" && runtime.catalog !== null
               && runtime.catalog.entries.every((entry) => entry.eligible_ranges.length === 0) && (
               <section className="training-hub-form-section" role="status">
                 <div className="training-hub-section-body">
@@ -213,10 +217,21 @@ function TrainingRunCreatePanel({ runtime, onPrepareData }: TrainingHubDialogPro
             </section>
             <section className="training-hub-form-section" id="training-hub-create-start">
               <header>
-                <div><h3>{t("replay.hub.sectionStart")}</h3><p>{t("replay.hub.startHint")}</p></div>
+                <div><h3>{t("replay.hub.sectionStart")}</h3><p>{t(runtime.automaticPreparationAvailable ? "preparation.replayIntro" : "replay.hub.startHint")}</p></div>
                 <span>01</span>
               </header>
               <div className="training-hub-section-body">
+                {runtime.automaticPreparationAvailable && <div className="training-hub-field-grid">
+                  <label className="training-hub-field"><span>{t("backtest.exchange")}</span>
+                    <input disabled={busy} value={draft.exchange} onChange={(event) => patchDraft(runtime, { exchange: event.target.value.trim().toLowerCase() })} /></label>
+                  <label className="training-hub-field"><span>{t("backtest.marketType")}</span>
+                    <select disabled={busy} value={draft.marketType} onChange={(event) => patchDraft(runtime, { marketType: event.target.value })}>
+                      <option value="spot">{t("market.spot")}</option><option value="futures">{t("market.futures")}</option>
+                    </select></label>
+                  <label className="training-hub-field"><span>{t("replay.hub.symbol")}</span>
+                    <input disabled={busy} value={draft.symbol} onChange={(event) => patchDraft(runtime, { symbol: event.target.value.trim().toUpperCase() })} /></label>
+                  <p>{t("preparation.background")}</p>
+                </div>}
                 <label className="training-hub-field training-hub-field-wide">
                   <span>{t("replay.hub.archiveName")}</span>
                   <input
@@ -234,9 +249,9 @@ function TrainingRunCreatePanel({ runtime, onPrepareData }: TrainingHubDialogPro
                       disabled={busy}
                       onClick={() => patchDraft(runtime, {
                         sourceKind: "BAR",
-                        requestedStartMs: null,
-                        randomRangeStartMs: null,
-                        randomRangeEndMs: null,
+                        ...(runtime.automaticPreparationAvailable ? {} : {
+                          requestedStartMs: null, randomRangeStartMs: null, randomRangeEndMs: null,
+                        }),
                       })}
                     >
                       <small>BAR</small><strong>{t("replay.source.bar")}</strong><span>{t("replay.hub.barHint")}</span>
@@ -244,12 +259,12 @@ function TrainingRunCreatePanel({ runtime, onPrepareData }: TrainingHubDialogPro
                     <button
                       type="button"
                       aria-pressed={draft.sourceKind === "AGG_TRADE"}
-                      disabled={busy || !runtime.capabilities?.sources.agg_trade.enabled}
+                      disabled={busy || (!runtime.capabilities?.sources.agg_trade.enabled && !runtime.automaticTradePreparationAvailable)}
                       onClick={() => patchDraft(runtime, {
                         sourceKind: "AGG_TRADE",
-                        requestedStartMs: null,
-                        randomRangeStartMs: null,
-                        randomRangeEndMs: null,
+                        ...(runtime.automaticTradePreparationAvailable ? {} : {
+                          requestedStartMs: null, randomRangeStartMs: null, randomRangeEndMs: null,
+                        }),
                       })}
                     >
                       <small>AGG_TRADE</small><strong>{t("replay.source.agg")}</strong><span>{t("replay.hub.aggHint")}</span>
@@ -451,11 +466,11 @@ function TrainingRunCreatePanel({ runtime, onPrepareData }: TrainingHubDialogPro
                   </select>
                   <small>{t("replay.hub.hedgeNote")}</small>
                 </label>
-                <div className="training-hub-capability-boundary" aria-label={t("replay.hub.marketInRun")}>
+                {!runtime.automaticPreparationAvailable && <div className="training-hub-capability-boundary" aria-label={t("replay.hub.marketInRun")}>
                   <h3>{t("replay.hub.marketInRun")}</h3>
                   <p>{t("replay.hub.marketInRunDesc")}</p>
                   <p>{t("replay.hub.hedgeBind")}</p>
-                </div>
+                </div>}
               </div>
             </section>
 
@@ -627,7 +642,7 @@ function TrainingRunCreatePanel({ runtime, onPrepareData }: TrainingHubDialogPro
                   <div><dt>{t("replay.hub.timeDisclosure")}</dt><dd>{trainingTimeDisclosureLabel(draft.timeDisclosurePolicy)}</dd></div>
                   <div><dt>{t("replay.hub.equityLeverage")}</dt><dd>{draft.initialEquity} · {draft.maxLeverage}×</dd></div>
                   <div><dt>{t("replay.hub.posMargin")}</dt><dd>{draft.positionMode === "HEDGE" ? t("replay.hub.hedgeShort") : t("replay.hub.oneWayShort")} · {draft.marginMode === "ISOLATED" ? t("replay.hub.isolatedShort") : t("replay.hub.crossShort")}</dd></div>
-                  <div><dt>{t("replay.hub.symbol")}</dt><dd>{t("replay.hub.pickAfterRun")}</dd></div>
+                  <div><dt>{t("replay.hub.symbol")}</dt><dd>{runtime.automaticPreparationAvailable ? `${draft.exchange} · ${draft.symbol}` : t("replay.hub.pickAfterRun")}</dd></div>
                 </dl>
               </section>
               <section className="training-hub-summary-card">
@@ -647,6 +662,13 @@ function TrainingRunCreatePanel({ runtime, onPrepareData }: TrainingHubDialogPro
               )}
             </div>
             <div className="training-hub-create-actions">
+              {runtime.preparationJob && <div role="status" aria-live="polite">
+                <p>{t("preparation.title")} · {runtime.preparationJob.completed}/{runtime.preparationJob.total}</p>
+                <PreparationWaiting job={runtime.preparationJob} />
+                <p>{t("preparation.background")}</p>
+                {busy && <button type="button" disabled={runtime.preparationJob.cancel_requested || runtime.preparationJob.stage === "STARTING"}
+                  onClick={() => void preparationRequest(`/${runtime.preparationJob!.id}/cancel`, { method: "POST" }).catch(() => undefined)}>{t("preparation.cancel")}</button>}
+              </div>}
               <button
                 className="replay-primary-action"
                 type="button"
@@ -655,8 +677,8 @@ function TrainingRunCreatePanel({ runtime, onPrepareData }: TrainingHubDialogPro
               >
                 {busy ? busyLabel : t("replay.hub.submit")}
               </button>
-              <button type="button" onClick={runtime.actions.closeCreate} disabled={busy}>{t("replay.hub.cancel")}</button>
-              <p>{t("replay.hub.submitNote")}</p>
+              <button type="button" onClick={runtime.actions.closeCreate} disabled={busy && !canLeavePreparation}>{canLeavePreparation ? t("replay.hub.close") : t("replay.hub.cancel")}</button>
+              <p>{t(runtime.automaticPreparationAvailable ? "preparation.replayIntro" : "replay.hub.submitNote")}</p>
             </div>
           </aside>
         </div>
@@ -721,6 +743,7 @@ export default function TrainingHubDialog({
           </div>
         </header>
 
+        <PreparationJobsPanel />
         <section className="training-hub-stats" aria-label={t("replay.hub.overview")}>
           <article><span>{t("replay.hub.statsAll")}</span><strong>{loadedRunCount}</strong></article>
           <article><span>{t("replay.hub.statsResume")}</span><strong>{resumableRunCount}</strong></article>

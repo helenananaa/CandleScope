@@ -70,7 +70,7 @@ from .control import (
     validate_bar_duration_ms,
     virtual_duration_ms,
 )
-from .history import build_display_projection, build_history_page
+from .history import build_display_projection, build_history_page, is_progressive_dataset
 from .account_history import (
     FUNDING_EVENT_PHASE,
     MARK_INDEX_EVENT_PHASE,
@@ -788,11 +788,27 @@ class TrainingRunService:
     async def create_empty_run(
         self,
         request: TrainingRunSetupRequest,
+        *,
+        preparation_id: str | None = None,
+        _progressive_initial_horizon_ms: int | None = None,
     ) -> dict[str, object]:
         if not isinstance(request, TrainingRunSetupRequest):
             raise TypeError("request must be TrainingRunSetupRequest")
-        run_id = self._identifier(self._run_id_factory(), field_name="run_id")
-        settings = request.to_dict()
+        run_id = self._identifier(
+            f"prepared-{preparation_id}" if preparation_id is not None else self._run_id_factory(),
+            field_name="run_id",
+        )
+        if preparation_id is not None:
+            try:
+                existing = await self.store.get_run_setup(run_id, require_awaiting_market=False)
+            except TrainingRunError as exc:
+                if exc.code != "TRAINING_RUN_NOT_FOUND":
+                    raise
+            else:
+                if existing.to_dict() != request.to_dict():
+                    raise TrainingRunError("TRAINING_RUN_CONFLICT", "preparation belongs to another setup", status_code=409)
+                return {"protocol": REPLAY_V2_PROTOCOL, "created": False, "run": await self.store.get_run(run_id)}
+        settings = self._progressive_admission_settings(request, _progressive_initial_horizon_ms)
         catalog = await self._source_catalog_for_setup(settings)
         capability_admission = await self._setup_capability_admission(settings)
         entries = [
@@ -889,6 +905,9 @@ class TrainingRunService:
         self,
         run_id: str,
         selection: TrainingRunMarketSelectionRequest,
+        *,
+        _progressive_feed_id: str | None = None,
+        _progressive_initial_horizon_ms: int | None = None,
     ) -> dict[str, object]:
         if not isinstance(selection, TrainingRunMarketSelectionRequest):
             raise TypeError("selection must be TrainingRunMarketSelectionRequest")
@@ -906,6 +925,7 @@ class TrainingRunService:
                 selection=selection,
                 setup=setup,
                 commitment=commitment,
+                progressive_initial_horizon_ms=_progressive_initial_horizon_ms,
             )
             preparation_id = canonical_sha256(
                 {
@@ -925,6 +945,8 @@ class TrainingRunService:
                     _existing_shell_run_id=normalized,
                     _preparation_id=preparation_id,
                     _committed_start_ms=int(commitment["committed_start_ms"]),
+                    _progressive_feed_id=_progressive_feed_id,
+                    _progressive_initial_horizon_ms=_progressive_initial_horizon_ms,
                 )
             else:
                 status = str(preparation.get("status"))
@@ -3155,6 +3177,8 @@ class TrainingRunService:
         _existing_shell_run_id: str | None = None,
         _preparation_id: str | None = None,
         _committed_start_ms: int | None = None,
+        _progressive_feed_id: str | None = None,
+        _progressive_initial_horizon_ms: int | None = None,
     ) -> dict[str, object]:
         if not isinstance(request, TrainingRunCreateRequest):
             raise TypeError("request must be TrainingRunCreateRequest")
@@ -3170,6 +3194,19 @@ class TrainingRunService:
                     random_seed=None,
                 )
             selection_config = self._adapter_config(selection_request)
+            if _progressive_feed_id is not None:
+                if (request.source_kind is not ReplaySource.BAR
+                        or type(_progressive_initial_horizon_ms) is not int
+                        or _progressive_initial_horizon_ms < 60_000
+                        or _progressive_initial_horizon_ms % 60_000
+                        or _progressive_initial_horizon_ms > request.forward_cache_ms):
+                    raise TrainingRunError("PROGRESSIVE_PREPARATION_INVALID",
+                        "progressive BAR preparation needs an aligned prefix within the requested horizon",
+                        status_code=422)
+                selection_config = replace(selection_config, horizon_ms=_progressive_initial_horizon_ms)
+            elif _progressive_initial_horizon_ms is not None:
+                raise TrainingRunError("PROGRESSIVE_PREPARATION_INVALID",
+                    "progressive prefix requires its durable data feed", status_code=422)
             try:
                 selection = await self.replay_service.select_training_window(
                     selection_config,
@@ -3201,6 +3238,20 @@ class TrainingRunService:
                     status_code=503,
                 )
             selection = dict(raw_selection)
+        if _retry_preparation is None and _progressive_feed_id is not None:
+            selection = {**selection, "progressive_preparation": {
+                "feed_id": _progressive_feed_id,
+                "initial_horizon_ms": _progressive_initial_horizon_ms,
+            }}
+        progressive_preparation = selection.get("progressive_preparation")
+        if progressive_preparation is not None and (
+            not isinstance(progressive_preparation, Mapping)
+            or set(progressive_preparation) != {"feed_id", "initial_horizon_ms"}
+            or not isinstance(progressive_preparation.get("feed_id"), str)
+            or type(progressive_preparation.get("initial_horizon_ms")) is not int
+        ):
+            raise TrainingRunError("PROGRESSIVE_PREPARATION_INVALID",
+                "saved progressive preparation is invalid", status_code=409)
         history_policy = resolve_history_policy(
             request,
             selection,
@@ -3480,18 +3531,28 @@ class TrainingRunService:
             )
 
         try:
-            await self.replay_service.create_session(
-                config,
-                _expected_catalog_epoch=request.catalog_epoch,
-                _internal_forced_start_ms=history_policy.actual_replay_start_ms,
-                _internal_expected_source_fingerprint=str(
-                    selection["source_fingerprint"]
-                ),
-                _internal_training_history=True,
-                _internal_training_selection=selection,
-                _extension_factory=extension_factory,
-                _internal_execution_mode=TOUCH_OR_TAPE_EXECUTION_MODE,
-            )
+            if progressive_preparation is not None:
+                await self.replay_service.create_progressive_session(
+                    config,
+                    feed_id=str(progressive_preparation["feed_id"]),
+                    training_selection=selection,
+                    initial_horizon_ms=int(progressive_preparation["initial_horizon_ms"]),
+                    extension_factory=extension_factory,
+                    execution_mode=TOUCH_OR_TAPE_EXECUTION_MODE,
+                )
+            else:
+                await self.replay_service.create_session(
+                    config,
+                    _expected_catalog_epoch=request.catalog_epoch,
+                    _internal_forced_start_ms=history_policy.actual_replay_start_ms,
+                    _internal_expected_source_fingerprint=str(
+                        selection["source_fingerprint"]
+                    ),
+                    _internal_training_history=True,
+                    _internal_training_selection=selection,
+                    _extension_factory=extension_factory,
+                    _internal_execution_mode=TOUCH_OR_TAPE_EXECUTION_MODE,
+                )
         except ReplayDomainError as exc:
             await self.store.fail_selection_preparation(
                 preparation_id,
@@ -4171,16 +4232,17 @@ class TrainingRunService:
                 status_code=409,
                 details={"required_tier": "WARM_OR_FULL"},
             )
-        binding = await self._attach_native_display_archive_pin(
-            binding,
-            display_interval=display_interval,
-        )
         persisted = await self.replay_service.store.load_dataset(normalized_session)
         if persisted is None:
             raise TrainingRunError(
                 "HISTORY_SNAPSHOT_UNAVAILABLE",
                 "training history snapshot is unavailable",
                 status_code=503,
+            )
+        if not is_progressive_dataset(persisted):
+            binding = await self._attach_native_display_archive_pin(
+                binding,
+                display_interval=display_interval,
             )
         return await asyncio.to_thread(
             build_history_page,
@@ -4193,6 +4255,7 @@ class TrainingRunService:
             expected_history_epoch=history_epoch,
             display_interval=display_interval,
             repository=self.replay_service.prepared_history_repository(normalized_session, data_epoch),
+            progressive_history_factory=lambda: self.replay_service.progressive_history,
         )
 
     async def display_projection(
@@ -4220,17 +4283,18 @@ class TrainingRunService:
                 status_code=409,
                 details={"required_tier": "WARM_OR_FULL"},
             )
-        binding = await self._attach_native_display_archive_pin(
-            binding,
-            display_interval=display_interval,
-            require_projection_grid=True,
-        )
         persisted = await self.replay_service.store.load_dataset(normalized_session)
         if persisted is None:
             raise TrainingRunError(
                 "HISTORY_SNAPSHOT_UNAVAILABLE",
                 "training display projection snapshot is unavailable",
                 status_code=503,
+            )
+        if not is_progressive_dataset(persisted):
+            binding = await self._attach_native_display_archive_pin(
+                binding,
+                display_interval=display_interval,
+                require_projection_grid=True,
             )
         return await self.replay_service.store.run_worker(
             "display_build", build_display_projection,
@@ -4241,6 +4305,7 @@ class TrainingRunService:
             data_epoch=data_epoch,
             display_interval=display_interval,
             repository=self.replay_service.prepared_history_repository(normalized_session, data_epoch),
+            progressive_history_factory=lambda: self.replay_service.progressive_history,
         )
 
     async def command(
@@ -8048,327 +8113,338 @@ class TrainingRunService:
         audit_at_terminal = False
         try:
             while not stop.is_set():
-                async with actor.serialized():
-                    if not actor.playback_is_active(generation):
-                        break
-                    binding = await self.store.run_binding(run_id)
-                    audit_at_terminal = self._requires_barrier_account_audit(binding)
-                    projection_tracks = await self.store.get_market_track_heads(run_id)
-                    tracks = TrainingRunActor.ordered_full_tracks(
-                        track
-                        for track in projection_tracks
-                        if isinstance(track, Mapping)
-                    )
-                    if len(tracks) < 1:
-                        terminal_reason = "ORDERED_PLAYBACK_REQUIRES_A_FULL_TRACK"
-                        break
-                    selected_session_id = str(binding["adapter_session_id"])
-                    selected = await self.replay_service.get_session(
-                        selected_session_id
-                    )
-                    selected_snapshot = self._snapshot(selected)
-                    cursor = _stored_mapping(
-                        selected_snapshot.get("cursor"),
-                        field_name="adapter cursor",
-                    )
-                    if cursor.get("at_end") is True:
-                        terminal_state = "ENDED"
-                        terminal_reason = "SOURCE_EXHAUSTED"
-                        break
-                    playback_client_id = actor.playback_client_id
-                    if playback_client_id is None:
-                        terminal_reason = "CONTROLLER_LEASE_LOST"
-                        break
-                    controller_lease_lost = False
-                    for track in tracks:
-                        try:
-                            await self.replay_service.heartbeat(
-                                self._track_session_id(track),
-                                playback_client_id,
-                            )
-                        except ReplayDomainError:
-                            controller_lease_lost = True
-                            terminal_reason = "CONTROLLER_LEASE_LOST"
+                try:
+                    async with actor.serialized():
+                        if not actor.playback_is_active(generation):
                             break
-                    if controller_lease_lost:
-                        break
-                    if (
-                        selected_snapshot.get("controller_client_id")
-                        != playback_client_id
-                    ):
-                        terminal_reason = "CONTROLLER_LEASE_LOST"
-                        break
-                    current_time = self._cursor_time(selected_snapshot)
-                    clock = actor.playback_snapshot()
-                    profile_revision = _stored_counter(
-                        clock["profile_revision"],
-                        field_name="global_clock.profile_revision",
-                    )
-                    now_wall = event_loop.time()
-                    if profile_revision != last_profile_revision:
-                        last_advance_wall = now_wall
-                        last_profile_revision = profile_revision
-                    raw_elapsed_seconds = now_wall - last_advance_wall
-                    elapsed_seconds = max(0.0, raw_elapsed_seconds)
-                    basis = advance_basis(clock.get("basis"))
-                    rate = control_rate(clock.get("rate"))
-                    source_kind = str(binding["source_kind"])
-                    allowed = supported_playback_bases(
-                        source_kind=source_kind,
-                        full_track_count=len(tracks),
-                    )
-                    if basis not in allowed:
-                        raise TrainingRunError(
-                            "REPLAY_CONTROL_UNSUPPORTED",
-                            "active playback basis no longer matches the FULL-track topology",
-                            status_code=409,
-                            details={
-                                "basis": basis.value,
-                                "playback_bases": [item.value for item in allowed],
-                            },
+                        binding = await self.store.run_binding(run_id)
+                        audit_at_terminal = self._requires_barrier_account_audit(binding)
+                        projection_tracks = await self.store.get_market_track_heads(run_id)
+                        tracks = TrainingRunActor.ordered_full_tracks(
+                            track
+                            for track in projection_tracks
+                            if isinstance(track, Mapping)
                         )
-                    consumed_wall_seconds = 0.0
-                    source_goal: _OrderedSourceGoal | None = None
-                    if basis is AdvanceBasis.VIRTUAL_TIME:
-                        try:
-                            next_time = await self._next_global_event_time(
-                                run_id=run_id,
-                                binding=binding,
-                                tracks=tracks,
-                            )
-                        except TrainingRunError as exc:
-                            if exc.code != "REPLAY_CONTROL_UNAVAILABLE":
-                                raise
+                        if len(tracks) < 1:
+                            terminal_reason = "ORDERED_PLAYBACK_REQUIRES_A_FULL_TRACK"
+                            break
+                        selected_session_id = str(binding["adapter_session_id"])
+                        selected = await self.replay_service.get_session(
+                            selected_session_id
+                        )
+                        selected_snapshot = self._snapshot(selected)
+                        cursor = _stored_mapping(
+                            selected_snapshot.get("cursor"),
+                            field_name="adapter cursor",
+                        )
+                        if cursor.get("at_end") is True:
                             terminal_state = "ENDED"
                             terminal_reason = "SOURCE_EXHAUSTED"
                             break
-                        elapsed_ms = max(
-                            0,
-                            int(elapsed_seconds * 1_000 * rate),
-                        )
-                        if current_time + elapsed_ms < next_time:
-                            timeout = min(
-                                0.25,
-                                max(
-                                    0.001,
-                                    (next_time - current_time) / rate / 1_000,
-                                ),
-                            )
-                            target = None
-                        else:
-                            target = max(next_time, current_time + elapsed_ms)
-                            consumed_wall_seconds = elapsed_seconds
-                            timeout = 0.0
-                    else:
-                        final_state_batch_units = 0
-                        interactive_batch_limit = 0
-                        if source_kind == "BAR":
-                            base_interval_ms = fixed_interval_ms(
-                                str(binding["base_interval"]),
-                                field_name="base_interval",
-                            )
-                            if current_time <= MAX_TIMESTAMP_MS - base_interval_ms:
-                                next_base_time = current_time + base_interval_ms
-                                interactive_batch_limit = (
-                                    self._ordered_playback_interactive_batch_limit(
-                                        binding=binding,
-                                        tracks=tracks,
-                                        snapshot=selected_snapshot,
-                                        target_virtual_time_ms=next_base_time,
-                                    )
+                        playback_client_id = actor.playback_client_id
+                        if playback_client_id is None:
+                            terminal_reason = "CONTROLLER_LEASE_LOST"
+                            break
+                        controller_lease_lost = False
+                        for track in tracks:
+                            try:
+                                await self.replay_service.heartbeat(
+                                    self._track_session_id(track),
+                                    playback_client_id,
                                 )
-                                if rate >= ORDERED_PLAYBACK_FINAL_STATE_MIN_RATE:
-                                    final_state_profile = (
-                                        self._ordered_final_state_batch_profile(
-                                            binding=binding,
-                                            tracks=tracks,
-                                            snapshot=selected_snapshot,
-                                            target_virtual_time_ms=next_base_time,
-                                            enabled=True,
-                                        )
-                                    )
-                                    if final_state_profile is not None:
-                                        final_state_batch_units = min(
-                                            final_state_profile[0],
-                                            (
-                                                rate
-                                                + ORDERED_PLAYBACK_FINAL_STATE_TARGET_HZ
-                                                - 1
-                                            )
-                                            // ORDERED_PLAYBACK_FINAL_STATE_TARGET_HZ,
-                                        )
-                        units = discrete_playback_units(
-                            elapsed_seconds,
-                            rate=rate,
+                            except ReplayDomainError:
+                                controller_lease_lost = True
+                                terminal_reason = "CONTROLLER_LEASE_LOST"
+                                break
+                        if controller_lease_lost:
+                            break
+                        if (
+                            selected_snapshot.get("controller_client_id")
+                            != playback_client_id
+                        ):
+                            terminal_reason = "CONTROLLER_LEASE_LOST"
+                            break
+                        current_time = self._cursor_time(selected_snapshot)
+                        clock = actor.playback_snapshot()
+                        profile_revision = _stored_counter(
+                            clock["profile_revision"],
+                            field_name="global_clock.profile_revision",
                         )
-                        if interactive_batch_limit > 0:
-                            # The Run actor lock is also the PAUSE/SET_SPEED
-                            # acknowledgement boundary.  Once orders or positions
-                            # exist, yield that fair lock after every committed BAR
-                            # so account growth cannot turn one playback batch into
-                            # an unbounded control-command stall.
-                            units = min(units, interactive_batch_limit)
-                        if units < final_state_batch_units:
-                            if raw_elapsed_seconds >= 0:
-                                # Keep one bounded projection batch computed
-                                # ahead of wall time. Without this lead, a fast
-                                # actor catches up and falls back to one durable
-                                # command per BAR at high public rates.
-                                units = final_state_batch_units
-                            else:
-                                units = 0
-                                target = None
-                                timeout = min(
-                                    0.25,
-                                    max(0.001, -raw_elapsed_seconds),
+                        now_wall = event_loop.time()
+                        if profile_revision != last_profile_revision:
+                            last_advance_wall = now_wall
+                            last_profile_revision = profile_revision
+                        raw_elapsed_seconds = now_wall - last_advance_wall
+                        elapsed_seconds = max(0.0, raw_elapsed_seconds)
+                        basis = advance_basis(clock.get("basis"))
+                        rate = control_rate(clock.get("rate"))
+                        source_kind = str(binding["source_kind"])
+                        allowed = supported_playback_bases(
+                            source_kind=source_kind,
+                            full_track_count=len(tracks),
+                        )
+                        if basis not in allowed:
+                            raise TrainingRunError(
+                                "REPLAY_CONTROL_UNSUPPORTED",
+                                "active playback basis no longer matches the FULL-track topology",
+                                status_code=409,
+                                details={
+                                    "basis": basis.value,
+                                    "playback_bases": [item.value for item in allowed],
+                                },
+                            )
+                        consumed_wall_seconds = 0.0
+                        source_goal: _OrderedSourceGoal | None = None
+                        if basis is AdvanceBasis.VIRTUAL_TIME:
+                            try:
+                                next_time = await self._next_global_event_time(
+                                    run_id=run_id,
+                                    binding=binding,
+                                    tracks=tracks,
                                 )
-                        if units == 0:
-                            if final_state_batch_units == 0:
-                                target = None
+                            except TrainingRunError as exc:
+                                if exc.code != "REPLAY_CONTROL_UNAVAILABLE":
+                                    raise
+                                terminal_state = "ENDED"
+                                terminal_reason = "SOURCE_EXHAUSTED"
+                                break
+                            elapsed_ms = max(
+                                0,
+                                int(elapsed_seconds * 1_000 * rate),
+                            )
+                            if current_time + elapsed_ms < next_time:
                                 timeout = min(
                                     0.25,
                                     max(
                                         0.001,
-                                        (1 / rate) - elapsed_seconds,
+                                        (next_time - current_time) / rate / 1_000,
                                     ),
                                 )
-                        elif basis is AdvanceBasis.SOURCE_EVENT:
-                            if len(tracks) != 1:
-                                raise TrainingRunError(
-                                    "REPLAY_CONTROL_UNSUPPORTED",
-                                    "SOURCE_EVENT playback requires exactly one FULL track",
-                                    status_code=409,
-                                )
-                            source_goal = await self._ordered_source_goal(
-                                tracks,
-                                max_events=units,
-                                require_exact_count=False,
-                                expected_snapshot=selected_snapshot,
-                            )
-                            if source_goal is None:
-                                terminal_state = "ENDED"
-                                terminal_reason = "SOURCE_EXHAUSTED"
-                                break
-                            target = source_goal.target_virtual_time_ms
-                            consumed_wall_seconds = source_goal.planned_count / rate
-                            timeout = 0.0
-                        else:
-                            step_interval = (
-                                clock.get("display_interval")
-                                if basis is AdvanceBasis.DISPLAY_BAR
-                                else str(binding["base_interval"])
-                            )
-                            if not isinstance(step_interval, str):
-                                raise TrainingRunError(
-                                    "TRAINING_RUN_STORAGE_DEGRADED",
-                                    "display playback profile has no interval",
-                                    status_code=503,
-                                )
-                            if basis is AdvanceBasis.DISPLAY_BAR:
-                                target = await self._source_aligned_display_target(
-                                    binding=binding,
-                                    current_virtual_time_ms=current_time,
-                                    base_interval=str(binding["base_interval"]),
-                                    display_interval=step_interval,
-                                    count=units,
-                                )
+                                target = None
                             else:
-                                target = aligned_step_target_ms(
-                                    current_virtual_time_ms=current_time,
-                                    base_interval=str(binding["base_interval"]),
-                                    step_interval=step_interval,
-                                    count=units,
-                                )
-                            base_interval_ms = compatible_step_interval_ms(
-                                base_interval=str(binding["base_interval"]),
-                                step_interval=str(binding["base_interval"]),
-                            )
-                            adapter_config = binding.get("adapter_config")
-                            if not isinstance(adapter_config, Mapping):
-                                raise TrainingRunError(
-                                    "TRAINING_RUN_STORAGE_DEGRADED",
-                                    "training adapter config is invalid",
-                                    status_code=503,
-                                )
-                            actual_start_ms = _stored_counter(
-                                binding["actual_replay_start_ms"],
-                                field_name="actual_replay_start_ms",
-                            )
-                            public_start_ms = (
-                                _stored_counter(
-                                    binding.get("synthetic_origin_ms"),
-                                    field_name="synthetic_origin_ms",
-                                )
-                                if adapter_config.get("blind_mode") is True
-                                else actual_start_ms
-                            )
-                            final_open_ms = (
-                                public_start_ms
-                                + _stored_counter(
-                                    binding["actual_replay_end_ms"],
-                                    field_name="actual_replay_end_ms",
-                                )
-                                - actual_start_ms
-                            )
-                            final_close_ms = final_open_ms + base_interval_ms - 1
-                            penultimate_close_ms = final_open_ms - 1
-                            if (
-                                current_time < penultimate_close_ms
-                                and target >= final_close_ms
-                            ):
-                                # Leave the terminal event for one final loop.
-                                # This creates a scheduling barrier where a
-                                # pending PAUSE can win without reducing steady
-                                # state playback batch throughput.
-                                target = penultimate_close_ms
-                            consumed_wall_seconds = units / rate
-                            timeout = 0.0
-                    if target is not None:
-                        tick = actor.next_playback_tick(generation)
-                        internal = ReplayV2Command(
-                            protocol="replay.v3",
-                            run_id=run_id,
-                            command_id=f"ordered-play-{generation}-{tick}",
-                            client_instance_id=str(actor.playback_client_id),
-                            expected_revision=_stored_counter(
-                                selected_snapshot["revision"], field_name="revision"
-                            ),
-                            expected_cursor=TrainingCursor(
-                                virtual_time_ms=_stored_counter(
-                                    cursor["virtual_time_ms"],
-                                    field_name="virtual_time_ms",
-                                ),
-                                source_sequence=_stored_counter(
-                                    cursor["source_sequence"],
-                                    field_name="source_sequence",
-                                ),
-                                revision=_stored_counter(
-                                    selected_snapshot["revision"],
-                                    field_name="revision",
-                                ),
-                            ),
-                            type=ReplayV2CommandType.ADVANCE_TO,
-                            payload={"virtual_time_ms": target},
-                        )
-                        await self._advance_full_tracks_to(
-                            command=internal,
-                            binding=binding,
-                            tracks=tracks,
-                            target_virtual_time_ms=target,
-                            stop_event=stop,
-                            allow_final_state_batch=True,
-                            audit_account_at_barrier=False,
-                            source_goal=(
-                                source_goal
-                                if basis is AdvanceBasis.SOURCE_EVENT
-                                else None
-                            ),
-                        )
-                        if consumed_wall_seconds > 0:
-                            last_advance_wall += consumed_wall_seconds
+                                target = max(next_time, current_time + elapsed_ms)
+                                consumed_wall_seconds = elapsed_seconds
+                                timeout = 0.0
                         else:
-                            last_advance_wall = event_loop.time()
-                        timeout = 0.0
+                            final_state_batch_units = 0
+                            interactive_batch_limit = 0
+                            if source_kind == "BAR":
+                                base_interval_ms = fixed_interval_ms(
+                                    str(binding["base_interval"]),
+                                    field_name="base_interval",
+                                )
+                                if current_time <= MAX_TIMESTAMP_MS - base_interval_ms:
+                                    next_base_time = current_time + base_interval_ms
+                                    interactive_batch_limit = (
+                                        self._ordered_playback_interactive_batch_limit(
+                                            binding=binding,
+                                            tracks=tracks,
+                                            snapshot=selected_snapshot,
+                                            target_virtual_time_ms=next_base_time,
+                                        )
+                                    )
+                                    if rate >= ORDERED_PLAYBACK_FINAL_STATE_MIN_RATE:
+                                        final_state_profile = (
+                                            self._ordered_final_state_batch_profile(
+                                                binding=binding,
+                                                tracks=tracks,
+                                                snapshot=selected_snapshot,
+                                                target_virtual_time_ms=next_base_time,
+                                                enabled=True,
+                                            )
+                                        )
+                                        if final_state_profile is not None:
+                                            final_state_batch_units = min(
+                                                final_state_profile[0],
+                                                (
+                                                    rate
+                                                    + ORDERED_PLAYBACK_FINAL_STATE_TARGET_HZ
+                                                    - 1
+                                                )
+                                                // ORDERED_PLAYBACK_FINAL_STATE_TARGET_HZ,
+                                            )
+                            units = discrete_playback_units(
+                                elapsed_seconds,
+                                rate=rate,
+                            )
+                            if interactive_batch_limit > 0:
+                                # The Run actor lock is also the PAUSE/SET_SPEED
+                                # acknowledgement boundary.  Once orders or positions
+                                # exist, yield that fair lock after every committed BAR
+                                # so account growth cannot turn one playback batch into
+                                # an unbounded control-command stall.
+                                units = min(units, interactive_batch_limit)
+                            if units < final_state_batch_units:
+                                if raw_elapsed_seconds >= 0:
+                                    # Keep one bounded projection batch computed
+                                    # ahead of wall time. Without this lead, a fast
+                                    # actor catches up and falls back to one durable
+                                    # command per BAR at high public rates.
+                                    units = final_state_batch_units
+                                else:
+                                    units = 0
+                                    target = None
+                                    timeout = min(
+                                        0.25,
+                                        max(0.001, -raw_elapsed_seconds),
+                                    )
+                            if units == 0:
+                                if final_state_batch_units == 0:
+                                    target = None
+                                    timeout = min(
+                                        0.25,
+                                        max(
+                                            0.001,
+                                            (1 / rate) - elapsed_seconds,
+                                        ),
+                                    )
+                            elif basis is AdvanceBasis.SOURCE_EVENT:
+                                if len(tracks) != 1:
+                                    raise TrainingRunError(
+                                        "REPLAY_CONTROL_UNSUPPORTED",
+                                        "SOURCE_EVENT playback requires exactly one FULL track",
+                                        status_code=409,
+                                    )
+                                source_goal = await self._ordered_source_goal(
+                                    tracks,
+                                    max_events=units,
+                                    require_exact_count=False,
+                                    expected_snapshot=selected_snapshot,
+                                )
+                                if source_goal is None:
+                                    terminal_state = "ENDED"
+                                    terminal_reason = "SOURCE_EXHAUSTED"
+                                    break
+                                target = source_goal.target_virtual_time_ms
+                                consumed_wall_seconds = source_goal.planned_count / rate
+                                timeout = 0.0
+                            else:
+                                step_interval = (
+                                    clock.get("display_interval")
+                                    if basis is AdvanceBasis.DISPLAY_BAR
+                                    else str(binding["base_interval"])
+                                )
+                                if not isinstance(step_interval, str):
+                                    raise TrainingRunError(
+                                        "TRAINING_RUN_STORAGE_DEGRADED",
+                                        "display playback profile has no interval",
+                                        status_code=503,
+                                    )
+                                if basis is AdvanceBasis.DISPLAY_BAR:
+                                    target = await self._source_aligned_display_target(
+                                        binding=binding,
+                                        current_virtual_time_ms=current_time,
+                                        base_interval=str(binding["base_interval"]),
+                                        display_interval=step_interval,
+                                        count=units,
+                                    )
+                                else:
+                                    target = aligned_step_target_ms(
+                                        current_virtual_time_ms=current_time,
+                                        base_interval=str(binding["base_interval"]),
+                                        step_interval=step_interval,
+                                        count=units,
+                                    )
+                                base_interval_ms = compatible_step_interval_ms(
+                                    base_interval=str(binding["base_interval"]),
+                                    step_interval=str(binding["base_interval"]),
+                                )
+                                adapter_config = binding.get("adapter_config")
+                                if not isinstance(adapter_config, Mapping):
+                                    raise TrainingRunError(
+                                        "TRAINING_RUN_STORAGE_DEGRADED",
+                                        "training adapter config is invalid",
+                                        status_code=503,
+                                    )
+                                actual_start_ms = _stored_counter(
+                                    binding["actual_replay_start_ms"],
+                                    field_name="actual_replay_start_ms",
+                                )
+                                public_start_ms = (
+                                    _stored_counter(
+                                        binding.get("synthetic_origin_ms"),
+                                        field_name="synthetic_origin_ms",
+                                    )
+                                    if adapter_config.get("blind_mode") is True
+                                    else actual_start_ms
+                                )
+                                final_open_ms = (
+                                    public_start_ms
+                                    + _stored_counter(
+                                        binding["actual_replay_end_ms"],
+                                        field_name="actual_replay_end_ms",
+                                    )
+                                    - actual_start_ms
+                                )
+                                final_close_ms = final_open_ms + base_interval_ms - 1
+                                penultimate_close_ms = final_open_ms - 1
+                                if (
+                                    current_time < penultimate_close_ms
+                                    and target >= final_close_ms
+                                ):
+                                    # Leave the terminal event for one final loop.
+                                    # This creates a scheduling barrier where a
+                                    # pending PAUSE can win without reducing steady
+                                    # state playback batch throughput.
+                                    target = penultimate_close_ms
+                                consumed_wall_seconds = units / rate
+                                timeout = 0.0
+                        if target is not None:
+                            tick = actor.next_playback_tick(generation)
+                            internal = ReplayV2Command(
+                                protocol="replay.v3",
+                                run_id=run_id,
+                                command_id=f"ordered-play-{generation}-{tick}",
+                                client_instance_id=str(actor.playback_client_id),
+                                expected_revision=_stored_counter(
+                                    selected_snapshot["revision"], field_name="revision"
+                                ),
+                                expected_cursor=TrainingCursor(
+                                    virtual_time_ms=_stored_counter(
+                                        cursor["virtual_time_ms"],
+                                        field_name="virtual_time_ms",
+                                    ),
+                                    source_sequence=_stored_counter(
+                                        cursor["source_sequence"],
+                                        field_name="source_sequence",
+                                    ),
+                                    revision=_stored_counter(
+                                        selected_snapshot["revision"],
+                                        field_name="revision",
+                                    ),
+                                ),
+                                type=ReplayV2CommandType.ADVANCE_TO,
+                                payload={"virtual_time_ms": target},
+                            )
+                            await self._advance_full_tracks_to(
+                                command=internal,
+                                binding=binding,
+                                tracks=tracks,
+                                target_virtual_time_ms=target,
+                                stop_event=stop,
+                                allow_final_state_batch=True,
+                                audit_account_at_barrier=False,
+                                source_goal=(
+                                    source_goal
+                                    if basis is AdvanceBasis.SOURCE_EVENT
+                                    else None
+                                ),
+                            )
+                            actor.set_playback_data_wait(generation, waiting=False)
+                            if consumed_wall_seconds > 0:
+                                last_advance_wall += consumed_wall_seconds
+                            else:
+                                last_advance_wall = event_loop.time()
+                            timeout = 0.0
+                except ReplayDomainError as exc:
+                    if exc.code is not ReplayErrorCode.DATASET_PENDING:
+                        raise
+                    async with actor.serialized():
+                        actor.set_playback_data_wait(generation, waiting=True)
+                    # Waiting is not virtual elapsed time. Avoid a catch-up jump
+                    # when a later immutable segment becomes available.
+                    last_advance_wall = event_loop.time()
+                    timeout = 0.25
                 if timeout > 0:
                     try:
                         await asyncio.wait_for(stop.wait(), timeout=timeout)
@@ -8947,6 +9023,8 @@ class TrainingRunService:
                         preserve_valuation=held_prefix_end is not None or constant_tape,
                     )
                 except (ReplayDomainError, TrainingRunError) as exc:
+                    if isinstance(exc, ReplayDomainError) and exc.code is ReplayErrorCode.DATASET_PENDING:
+                        raise
                     await self._fail_closed_multi_track(
                         run_id=command.run_id,
                         tracks=tracks,
@@ -13381,14 +13459,32 @@ class TrainingRunService:
             "message": "该商品在本局固定开始时间缺少预热、连续历史或前向覆盖。",
         }
 
+    @staticmethod
+    def _progressive_admission_settings(setup, initial_horizon_ms):
+        settings = setup.to_dict()
+        if initial_horizon_ms is not None:
+            if (type(initial_horizon_ms) is not int or initial_horizon_ms < 60_000
+                    or initial_horizon_ms % 60_000
+                    or initial_horizon_ms > settings["forward_cache_ms"]
+                    or settings["source_kind"] != "BAR"
+                    or settings["start_mode"] != "MANUAL"):
+                raise TrainingRunError("PROGRESSIVE_PREPARATION_INVALID",
+                    "progressive admission requires a fixed BAR start and aligned initial range",
+                    status_code=422)
+            # Admission needs only the published prefix. Persist the original
+            # setup and use its full range for account/dependency commitments.
+            settings = {**settings, "forward_cache_ms": initial_horizon_ms}
+        return settings
+
     async def _require_market_at_committed_start(
         self,
         *,
         selection: TrainingRunMarketSelectionRequest,
         setup: TrainingRunSetupRequest,
         commitment: Mapping[str, object],
+        progressive_initial_horizon_ms: int | None = None,
     ) -> None:
-        settings = setup.to_dict()
+        settings = self._progressive_admission_settings(setup, progressive_initial_horizon_ms)
         catalog = await self.replay_service.catalog(
             warmup_bars=int(settings["indicator_warmup_bars"]),
             horizon_ms=int(settings["forward_cache_ms"]),

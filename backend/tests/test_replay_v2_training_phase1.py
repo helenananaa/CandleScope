@@ -145,7 +145,7 @@ async def test_training_schema_is_separate_from_internal_adapter_schema(
 
 @pytest.mark.parametrize(
     "obsolete_version",
-    [version for version in range(1, TRAINING_SCHEMA_VERSION) if version not in {19, 20, 21}],
+    [version for version in range(1, TRAINING_SCHEMA_VERSION) if version not in {19, 20, 21, 22}],
 )
 def test_obsolete_training_schema_requires_a_fresh_database(
     obsolete_version: int,
@@ -164,6 +164,26 @@ def test_obsolete_training_schema_requires_a_fresh_database(
             match=rf"schema {obsolete_version} is obsolete.*clear replay training data",
         ):
             migrate_training_schema(connection, now_ms=NOW_MS)
+
+def test_training_schema_22_migrates_multi_interval_storage() -> None:
+    with sqlite3.connect(":memory:") as connection:
+        migrate_training_schema(connection, now_ms=NOW_MS)
+        # Version 22 predates the multi-interval table added in version 23.
+        connection.execute("DROP TABLE replay_multi_bar_interval")
+        connection.execute("UPDATE replay_training_schema_version SET version=22")
+        migrate_training_schema(connection, now_ms=NOW_MS + 1)
+        assert connection.execute(
+            "SELECT version, applied_at_ms FROM replay_training_schema_version"
+        ).fetchone() == (TRAINING_SCHEMA_VERSION, NOW_MS + 1)
+        assert connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' "
+            "AND name='replay_multi_bar_interval_time'"
+        ).fetchone() == ("replay_multi_bar_interval_time",)
+        migrate_training_schema(connection, now_ms=NOW_MS + 2)
+        assert connection.execute(
+            "SELECT applied_at_ms FROM replay_training_schema_version"
+        ).fetchone() == (NOW_MS + 1,)
+
 
 async def test_enabled_replay_always_creates_training_schema(tmp_path: Path) -> None:
     path = tmp_path / "training-required.db"

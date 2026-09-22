@@ -1091,11 +1091,24 @@ class ReplaySessionActor:
                     await self._handle_request(request)
                     await self._process_one_due_source_after_request()
                     continue
+                if self._state is SessionState.PAUSED and self._status_reason == "data_pending":
+                    try:
+                        self._source.peek()
+                    except ReplayDomainError as exc:
+                        if exc.code is not ReplayErrorCode.DATASET_PENDING:
+                            raise
+                        request = await self._wait_for_request(self._minimum_timeout(0.25, self._lease_delay()))
+                        if request is not None:
+                            await self._handle_request(request)
+                        continue
+                    await self._change_data_wait_state(waiting=False)
                 if self._state is SessionState.PLAYING:
                     if self._source.exhausted():
                         await self._mark_ended(reason="source_exhausted")
                         continue
-                    event = self._source.peek()
+                    event = await self._peek_playback_source()
+                    if event is None and self._state is not SessionState.PLAYING:
+                        continue
                     if event is None:
                         raise ReplayDomainError(
                             ReplayErrorCode.DATASET_MISMATCH,
@@ -1174,7 +1187,9 @@ class ReplaySessionActor:
 
         if self._state is not SessionState.PLAYING or self._source.exhausted():
             return
-        event = self._source.peek()
+        event = await self._peek_playback_source()
+        if event is None and self._state is not SessionState.PLAYING:
+            return
         if event is None:
             raise ReplayDomainError(
                 ReplayErrorCode.DATASET_MISMATCH,
@@ -1183,6 +1198,42 @@ class ReplaySessionActor:
         if self._clock.delay_until(self._event_time_ms(event)) <= 0:
             await self._process_source_event(publish=True)
             await asyncio.sleep(0)
+
+    async def _peek_playback_source(self) -> object | None:
+        try:
+            return self._source.peek()
+        except ReplayDomainError as exc:
+            if exc.code is not ReplayErrorCode.DATASET_PENDING:
+                raise
+        await self._change_data_wait_state(waiting=True)
+        return None
+
+    async def _change_data_wait_state(self, *, waiting: bool) -> None:
+        # Availability changes commit no market/account event. Explicit pause
+        # and controller loss clear the resume intent through status_reason.
+        rollback = self._capture_rollback()
+        self._begin_candidate()
+        if waiting:
+            self._pause_clock()
+        else:
+            self._clock.start()
+        self._state = SessionState.PAUSED if waiting else SessionState.PLAYING
+        self._revision += 1
+        reason = "data_pending" if waiting else "data_ready"
+        self._emit_status(reason, mandatory=True)
+        components = self._component_state()
+        checkpoint = self._checkpoint_codec.encode(self._checkpoint_payload(component_state=components))
+        try:
+            await self._commit_mutation(kind=reason, command=None, result=None, error=None,
+                checkpoint=checkpoint, component_state=components,
+                previous_component_state=rollback.component_state,
+                previous_journal_entries=rollback.journal_entries)
+        except asyncio.CancelledError:
+            self._restore_rollback(rollback, force_paused=True)
+            raise
+        except Exception as exc:
+            self._restore_rollback(rollback, force_paused=True)
+            self._enter_persistence_degraded(exc)
 
     async def _bootstrap(self) -> None:
         self._invalidate_component_state()
@@ -1528,6 +1579,14 @@ class ReplaySessionActor:
                 self._handle_unsubscribe_request(request)
             else:
                 await self._handle_shutdown_request(request)
+        except ReplayDomainError as exc:
+            if (exc.code is not ReplayErrorCode.DATASET_PENDING
+                    or not isinstance(request, (_SourceChunkPlanRequest, _SourceGoalScanRequest))):
+                raise
+            # Read-only planning may reach an unpublished progressive segment.
+            # Return that condition to its caller; the mailbox must stay alive.
+            if not request.future.done():
+                request.future.set_exception(exc)
         finally:
             # Controller requests are serialized through the actor.  A valid
             # atomic command can itself take longer than the lease TTL, which
@@ -2025,6 +2084,9 @@ class ReplaySessionActor:
                 raise ReplayDomainError(
                     ReplayErrorCode.SESSION_ENDED, "replay source is exhausted"
                 )
+            ready = getattr(self._source, "ready", None)
+            if ready is not None and not ready():
+                raise ReplayDomainError(ReplayErrorCode.DATASET_PENDING, "Historical data is still being prepared")
             self._revision += 1
             self._state = SessionState.PLAYING
             if not self._recovering_tail:
@@ -2032,7 +2094,8 @@ class ReplaySessionActor:
             self._emit_status("play", mandatory=True)
             return self._command_result(command.command_id, {})
         if command_type is CommandType.PAUSE:
-            self._require_state(SessionState.PLAYING, command_type)
+            if not (self._state is SessionState.PAUSED and self._status_reason == "data_pending"):
+                self._require_state(SessionState.PLAYING, command_type)
             self._revision += 1
             self._pause_clock()
             self._state = SessionState.PAUSED
@@ -4653,7 +4716,15 @@ class ReplaySessionActor:
                 ReplayErrorCode.DATASET_MISMATCH,
                 "checkpoint virtual clock precedes its source cursor",
             )
-        next_event = source.peek()
+        try:
+            next_event = source.peek()
+        except ReplayDomainError as exc:
+            if exc.code is not ReplayErrorCode.DATASET_PENDING:
+                raise
+            if virtual_time != (actual_source_cursor.last_event_time_ms or self._initial_virtual_time_ms):
+                raise ReplayDomainError(ReplayErrorCode.DATASET_MISMATCH,
+                    "pending checkpoint clock must remain at its last committed source event") from exc
+            next_event = None
         if next_event is not None and self._event_time_ms(next_event) < virtual_time:
             raise ReplayDomainError(
                 ReplayErrorCode.DATASET_MISMATCH,
@@ -5175,7 +5246,12 @@ class ReplaySessionActor:
         self._clock.pause(cap_ms=self._next_source_boundary())
 
     def _next_source_boundary(self) -> int:
-        event = self._source.peek()
+        try:
+            event = self._source.peek()
+        except ReplayDomainError as exc:
+            if exc.code is ReplayErrorCode.DATASET_PENDING:
+                return self._clock.virtual_time_ms
+            raise
         if event is None:
             return self._clock.virtual_time_ms
         return self._event_time_ms(event)

@@ -307,6 +307,11 @@ export function coalesceReplayViewerSourceDeltas(
     ...latest,
     type,
     changed: true,
+    // The viewer projects from the earliest changed bucket. Keeping only the
+    // final notification's range would skip earlier bars in this frame.
+    changedRanges: changed.flatMap((delta) => delta.type === WINDOW_DELTA_TYPES.TICK && delta.bar
+      ? [{ start: delta.bar.time, end: delta.bar.time, type: "mid-merge" as const }]
+      : delta.changedRanges ?? []),
     addedLeft: changed.reduce((total, delta) => (
       total + (Number(delta.addedLeft) || 0)
     ), 0),

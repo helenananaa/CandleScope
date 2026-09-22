@@ -83,6 +83,7 @@ if RUNTIME_MODE == "LIVE":
     from app.api.v1.order_book import router as order_book_router
     from app.api.v1.replay import router as replay_router
     from app.api.v1.manual_history import router as manual_history_router
+    from app.api.v1.data_preparation import router as data_preparation_router
     from app.api.v1.settings import router as settings_router
     from app.api.v1.stream import router as stream_router
     from app.api.v1.subscriptions import price_ws_router
@@ -137,6 +138,7 @@ else:
     app.include_router(alerts_router, prefix="/api/v1")
     app.include_router(settings_router, prefix="/api/v1")
     app.include_router(manual_history_router, prefix="/api/v1")
+    app.include_router(data_preparation_router, prefix="/api/v1")
     app.include_router(exchanges_router, prefix="/api/v1")
     app.include_router(symbols_router, prefix="/api/v1")
     app.include_router(symbol_discovery_router, prefix="/api/v1")
@@ -591,6 +593,25 @@ async def startup_event() -> None:
         await _init_alert_delivery()
         await _init_replay_runtime()
         await _init_data_manager()
+        from app.core.config import DATA_DIR, getenv
+        from app.data_preparation.bar_adapter import BarPreparationAdapter
+        from app.data_preparation.repository import PreparationRepository
+        from app.data_preparation.service import PreparationService
+
+        preparation = PreparationService(
+            PreparationRepository(DATA_DIR / "data-preparation.sqlite3"),
+            BarPreparationAdapter(
+                DATA_DIR / "prepared-inputs",
+                coordinator=getattr(getattr(app.state, "data_engine_runtime", None), "backfill_coordinator", None),
+                replay_service=getattr(app.state, "replay_service", None),
+                local_data=getattr(app.state, "local_data_service", None),
+                backtest_runtime=getattr(app.state, "backtest_runtime", None),
+                host_history_path=KLINES_DB_PATH,
+            ),
+            enabled=str(getenv("AUTO_HISTORY_PREPARATION_ENABLED", "1")).strip().lower() in {"1", "true", "yes", "on"},
+        )
+        app.state.data_preparation_service = preparation
+        await preparation.start()
         data_manager = getattr(app.state, "data_manager", None)
         try:
             if data_manager is not None:
@@ -630,6 +651,9 @@ async def startup_event() -> None:
             print("[startup] Plugin Platform v2 degraded; core market runtime continues")
     except BaseException:
         alert_facade = getattr(app.state, "alert_facade", None)
+        preparation = getattr(app.state, "data_preparation_service", None)
+        if preparation is not None:
+            await preparation.shutdown()
         if alert_facade is not None:
             await alert_facade.stop()
         await _stop_plugin_owner(plugin_platform_v2)
@@ -712,6 +736,9 @@ async def _wait_for_catalog_foreground_quiet() -> None:
 @app.on_event("shutdown")
 async def shutdown_event() -> None:
     """Application shutdown handler."""
+    preparation = getattr(app.state, "data_preparation_service", None)
+    if preparation is not None:
+        await preparation.shutdown()
     local_runtime = getattr(app.state, "local_offline_runtime", None)
     if local_runtime is not None:
         backtest_runtime = getattr(app.state, "backtest_runtime", None)

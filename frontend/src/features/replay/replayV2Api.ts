@@ -1,4 +1,5 @@
 import { API_BASE } from "../../services/apiConfig.js";
+import { prepareReplay, preparationRequest, type PreparationCapabilities } from "../data-preparation/api.js";
 import { ReplayApiClient } from "./replayApi.js";
 import type { ReplayApiClientOptions, ReplayCatalogQuery } from "./replayApi.js";
 import type { ReplayCapabilities, ReplayCatalog } from "./replayTypes.js";
@@ -247,6 +248,16 @@ function parseErrorEnvelope(value: unknown): {
 type Parser<T> = (value: unknown) => T;
 
 export class ReplayV2ApiClient {
+  readonly prepareReplay: typeof prepareReplay = (setup, market, onProgress, signal, key) =>
+    prepareReplay(setup, market, onProgress, signal, key, this.preparationTransport());
+
+  preparationCapabilities(signal?: AbortSignal): Promise<PreparationCapabilities> {
+    return preparationRequest("/capabilities", { signal: signal ?? null }, this.preparationTransport());
+  }
+
+  private preparationTransport() {
+    return { fetcher: this.fetcher, basePath: this.basePath.replace(/\/replay$/, "/data-preparations") };
+  }
   private readonly basePath: string;
   private readonly fetcher: typeof fetch;
   private readonly adapterApi: ReplayApiClient;

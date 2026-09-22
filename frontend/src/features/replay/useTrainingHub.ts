@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { type PreparationJob, type PreparationCapabilities, type prepareReplay } from "../data-preparation/api.js";
 import { t } from "../../i18n/index.js";
 import { ReplayApiError } from "./replayApi.js";
 import type { ReplayCapabilities, ReplayCatalog } from "./replayTypes.js";
@@ -20,6 +21,7 @@ import {
   evaluateTrainingRunSetupDraft,
 } from "./trainingHubModel.js";
 import type { TrainingRunDraft, TrainingRunDraftEvaluation } from "./trainingHubModel.js";
+import { defaultHubDraftStorage, hubDraftKey, readHubDraft, writeHubDraft, type HubDraftStorage } from "./trainingHubDraftStorage.js";
 import type {
   ReplayLaunchContext,
   ReplayV2RunState,
@@ -58,6 +60,9 @@ export interface TrainingHubError {
 }
 
 export interface TrainingHubSnapshot {
+  readonly automaticPreparationAvailable?: boolean;
+  readonly automaticTradePreparationAvailable?: boolean;
+  readonly preparationJob?: PreparationJob | null;
   readonly phase: TrainingHubPhase;
   readonly items: readonly TrainingRunCard[];
   readonly nextCursor: string | null;
@@ -78,6 +83,8 @@ export interface TrainingHubSnapshot {
 }
 
 export interface TrainingHubApiBoundary {
+  prepareReplay?: typeof prepareReplay;
+  preparationCapabilities?(signal?: AbortSignal): Promise<PreparationCapabilities>;
   listRuns(query?: TrainingRunListQuery, signal?: AbortSignal): Promise<TrainingRunListResponse>;
   capabilities(signal?: AbortSignal): Promise<ReplayCapabilities>;
   catalog(
@@ -120,6 +127,7 @@ export interface TrainingHubApiBoundary {
 }
 
 export interface TrainingHubLifecycleOptions {
+  readonly draftStorage?: HubDraftStorage | null;
   readonly api?: TrainingHubApiBoundary;
   readonly navigateToRun?: (runId: string) => void;
   readonly launchContext?: ReplayLaunchContext;
@@ -161,6 +169,10 @@ function defaultNavigateToRun(runId: string): void {
 }
 
 export class TrainingHubLifecycle {
+  private preparationJob: PreparationJob | null = null;
+  private automaticSubmission: { identity: string; key: string } | null = null;
+  private readonly draftStorage: HubDraftStorage | null;
+  private readonly draftStorageKey: string;
   private readonly api: TrainingHubApiBoundary;
   private readonly navigateToRun: (runId: string) => void;
   private readonly launchContext: ReplayLaunchContext | undefined;
@@ -177,6 +189,7 @@ export class TrainingHubLifecycle {
   private error: TrainingHubError | null = null;
   private createOpen = false;
   private capabilities: ReplayCapabilities | null = null;
+  private preparationCapabilities: PreparationCapabilities | null = null;
   private catalog: ReplayCatalog | null = null;
   private draft: TrainingRunDraft | null = null;
   private evaluation: TrainingRunDraftEvaluation | null = null;
@@ -198,11 +211,17 @@ export class TrainingHubLifecycle {
     navigateToRun = defaultNavigateToRun,
     launchContext,
     clearDeletedRunState = clearDeletedTrainingRunClientState,
+    draftStorage = defaultHubDraftStorage(),
   }: TrainingHubLifecycleOptions = {}) {
     this.api = api;
     this.navigateToRun = navigateToRun;
     this.launchContext = launchContext;
     this.clearDeletedRunState = clearDeletedRunState;
+    this.draftStorage = draftStorage;
+    this.draftStorageKey = hubDraftKey(launchContext);
+    const saved = readHubDraft(draftStorage, this.draftStorageKey);
+    this.draft = saved?.draft ?? null;
+    this.automaticSubmission = saved?.submission ?? null;
     this.snapshot = this.buildSnapshot();
   }
 
@@ -249,21 +268,26 @@ export class TrainingHubLifecycle {
       // Local history may have been archived while the workbench was open.
       // Refresh source readiness together with coverage; an empty-history
       // capability cached before import must not keep creation disabled.
-      const capabilities = await this.api.capabilities(this.abortController.signal);
+      const [capabilities, preparationCapabilities] = await Promise.all([
+        this.api.capabilities(this.abortController.signal),
+        this.api.preparationCapabilities?.(this.abortController.signal)
+          .catch(() => ({ enabled: false, replay_sources: { BAR: false, AGG_TRADE: false } })) ?? null,
+      ]);
       if (!this.accept(token)) return;
       this.capabilities = capabilities;
+      this.preparationCapabilities = preparationCapabilities;
       const seedDraft = preservedDraft ?? createTrainingRunDraft();
       const catalog = await this.api.catalog({
         warmupBars: seedDraft.indicatorWarmupBars,
         horizonMs: seedDraft.forwardCacheMs,
         qualityMode: "exact",
         blindMode: false,
-        sourceKind: seedDraft.sourceKind,
+        sourceKind: this.canPrepare(seedDraft) ? "BAR" : seedDraft.sourceKind,
       }, this.abortController.signal);
       if (!this.accept(token)) return;
       this.catalog = catalog;
       this.draft = preservedDraft ?? createTrainingRunDraft(catalog, this.launchContext);
-      if (preservedDraft === null) {
+      if (preservedDraft === null && !this.canPrepare(this.draft)) {
         this.draft = this.sourceAwareDraft(this.draft, catalog);
       }
       this.evaluation = this.evaluateSourceCoverage(
@@ -278,7 +302,15 @@ export class TrainingHubLifecycle {
   }
 
   closeCreate(): void {
-    if (this.disposed || this.operation === "create") return;
+    if (this.disposed) return;
+    if (this.operation === "create") {
+      if (!this.draft || !this.canPrepare(this.draft)) return;
+      // Leave the durable job running but invalidate this observer's navigation.
+      this.abortController.abort();
+      this.abortController = new AbortController();
+      this.requestToken += 1;
+      this.operation = null;
+    }
     this.createOpen = false;
     this.publish();
   }
@@ -442,10 +474,11 @@ export class TrainingHubLifecycle {
   }
 
   setDraft(draft: TrainingRunDraft): void {
-    if (this.disposed) return;
+    if (this.disposed || this.operation === "create") return;
     const sourceChanged = this.draft !== null
       && this.draft.sourceKind !== draft.sourceKind;
     this.draft = draft;
+    this.persistDraft();
     this.segmentPlan = null;
     if (sourceChanged) {
       this.catalog = null;
@@ -472,6 +505,49 @@ export class TrainingHubLifecycle {
 
   async createRun(draft: TrainingRunDraft): Promise<void> {
     if (this.disposed || this.capabilities === null) return;
+    if (this.operation === "create") return;
+    if (this.canPrepare(draft) && this.api.prepareReplay) {
+      const evaluation = this.evaluateAutomaticDraft(draft);
+      if (!evaluation.canSubmit) {
+        this.error = { code: "TRAINING_RUN_INVALID", message: evaluation.errors.join("；") };
+        this.publish();
+        return;
+      }
+      this.operation = "create";
+      this.error = null;
+      this.preparationJob = null;
+      const token = ++this.requestToken;
+      this.publish();
+      try {
+        const setup = buildTrainingRunCreateRequest(draft, evaluation, this.launchContext);
+        const progressive = this.preparationCapabilities?.progressive === true
+          && draft.sourceKind === "BAR" && draft.startMode === "MANUAL"
+          && draft.accountDataMode === "APPROX_PROXY" && draft.positionMode === "ONE_WAY"
+          && draft.bookMode === "OFF";
+        const market = { exchange: draft.exchange, market_type: draft.marketType, symbol: draft.symbol,
+          display_interval: draft.displayInterval, ...(progressive ? { progressive: true } : {}) };
+        const identity = JSON.stringify({ setup, market });
+        if (this.automaticSubmission?.identity !== identity) {
+          this.automaticSubmission = { identity, key: crypto.randomUUID() };
+        }
+        this.draft = draft;
+        this.persistDraft();
+        const result = await this.api.prepareReplay(
+          setup,
+          market,
+          (job) => { if (this.accept(token)) { this.preparationJob = job; this.publish(); } },
+          this.abortController.signal,
+          this.automaticSubmission.key,
+        );
+        if (!this.accept(token)) return;
+        this.automaticSubmission = null;
+        this.persistDraft();
+        this.operation = null;
+        this.publish();
+        this.navigateToRun(result.run.run_id);
+      } catch (error) { this.fail(token, error); }
+      return;
+    }
     const ready = await this.loadCreateCatalog(draft);
     if (!ready) return;
     if (this.catalog === null || this.draft === null) return;
@@ -611,6 +687,7 @@ export class TrainingHubLifecycle {
     if (this.capabilities === null) {
       throw new TypeError("replay capabilities are required for source validation");
     }
+    if (this.canPrepare(draft)) return this.evaluateAutomaticDraft(draft);
     const evaluation = evaluateTrainingRunSetupDraft(draft, this.capabilities);
     const errors = [...evaluation.errors];
     const ranges = catalog.entries.flatMap((entry) => entry.eligible_ranges);
@@ -645,6 +722,33 @@ export class TrainingHubLifecycle {
     };
   }
 
+  private persistDraft(): void {
+    if (this.draft) writeHubDraft(this.draftStorage, this.draftStorageKey, {
+      draft: this.draft, submission: this.automaticSubmission,
+    });
+  }
+
+  private canPrepare(draft: TrainingRunDraft): boolean {
+    if (!this.api.prepareReplay) return false;
+    if (draft.bookMode !== "OFF") return false;
+    if (draft.accountDataMode === "HISTORICAL_EXACT") {
+      if (!this.preparationCapabilities?.replay_account_modes?.includes("HISTORICAL_EXACT") || draft.startMode !== "MANUAL") return false;
+    } else if (draft.accountDataMode !== "APPROX_PROXY" || draft.fundingMode === "HISTORICAL_EXACT") return false;
+    if (this.preparationCapabilities === null) return draft.sourceKind === "BAR";
+    return this.preparationCapabilities.enabled && this.preparationCapabilities.replay_sources[draft.sourceKind];
+  }
+
+  private evaluateAutomaticDraft(draft: TrainingRunDraft): TrainingRunDraftEvaluation {
+    const capabilities = this.capabilities!;
+    // An empty archive can be prepared; an unavailable runtime cannot.
+    const source = draft.sourceKind === "BAR" ? "bar" : "agg_trade";
+    const advertised = capabilities.sources[source];
+    const effective = ["REPLAY_BAR_HISTORY_EMPTY", "DATASET_INCOMPLETE"].includes(advertised.reason ?? "")
+      ? { ...capabilities, sources: { ...capabilities.sources, [source]: { ...advertised, enabled: true } } }
+      : capabilities;
+    return evaluateTrainingRunSetupDraft(draft, effective);
+  }
+
   private async loadCreateCatalog(
     draft: TrainingRunDraft,
     normalizeStart = false,
@@ -660,7 +764,7 @@ export class TrainingHubLifecycle {
         horizonMs: draft.forwardCacheMs,
         qualityMode: "exact",
         blindMode: false,
-        sourceKind: draft.sourceKind,
+        sourceKind: this.canPrepare(draft) ? "BAR" : draft.sourceKind,
       }, this.abortController.signal);
       if (!this.accept(token)) return false;
       const latestDraft = this.draft;
@@ -669,7 +773,7 @@ export class TrainingHubLifecycle {
       }
       this.catalog = catalog;
       const currentDraft = latestDraft ?? draft;
-      this.draft = normalizeStart
+      this.draft = normalizeStart && !this.canPrepare(currentDraft)
         ? this.sourceAwareDraft(currentDraft, catalog)
         : currentDraft;
       this.evaluation = this.evaluateSourceCoverage(
@@ -714,6 +818,10 @@ export class TrainingHubLifecycle {
       operation: this.operation,
       error: this.error,
       createOpen: this.createOpen,
+      automaticPreparationAvailable: this.draft !== null && this.canPrepare(this.draft),
+      automaticTradePreparationAvailable: this.preparationCapabilities?.enabled === true
+        && this.preparationCapabilities.replay_sources.AGG_TRADE,
+      preparationJob: this.preparationJob,
       capabilities: this.capabilities,
       catalog: this.catalog,
       draft: this.draft,

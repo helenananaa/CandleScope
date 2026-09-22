@@ -21,10 +21,10 @@ from app.backtest.errors import BacktestError
 from app.backtest.reports import export_bundle
 from app.backtest.runtime import BacktestRuntime
 from app.backtest.service import BacktestService
+from .native_backtests import router as native_router, external_router
 
 
 router = APIRouter(prefix="/backtests", tags=["backtests"])
-from .native_backtests import router as native_router, external_router
 router.include_router(native_router)
 router.include_router(external_router)
 
@@ -445,10 +445,13 @@ def resolve_chart_context(payload: ChartContextResolveRequest, request: Request)
         runtime = _runtime(request)
         if not runtime.settings.chart_context_effective:
             raise BacktestError("FLAG_DISABLED", "BACKTEST_CHART_CONTEXT_ENABLED is 0")
-        return runtime.chart_context.resolve(
+        automatic = bool(getattr(getattr(request.app.state, "data_preparation_service", None), "enabled", False))
+        result = runtime.chart_context.resolve(
             payload.model_dump(),
             host_data_manager=getattr(request.app.state, "data_manager", None),
+            automatic_preparation=automatic,
         )
+        return {**result, "automatic_preparation_available": automatic}
     except BacktestError as exc:
         return _error(exc)
     except Exception:

@@ -122,6 +122,7 @@ class ChartBacktestContextResolver:
         values: Mapping[str, object],
         *,
         host_data_manager: Any | None = None,
+        automatic_preparation: bool = False,
     ) -> dict[str, Any]:
         request = ChartContextRequest.from_mapping(values)
         base_hash = self._hash({"request": request.wire()})
@@ -194,6 +195,10 @@ class ChartBacktestContextResolver:
                 ],
             )
         if request.fidelity_preference == "PRECISE":
+            if automatic_preparation:
+                return self._finalize(request, base_hash, "NEEDS_DATA",
+                    materialize={"required": True, "source_interval": "1m",
+                                 "reason": "verified_trade_history_required"})
             return self._unsupported_fidelity(request, base_hash)
         if host_data_manager is None:
             if ambiguous and not exact:

@@ -265,6 +265,11 @@ class TrainingRunActor:
             generation is None or generation == self._playback_generation
         )
 
+    def set_playback_data_wait(self, generation: int, *, waiting: bool) -> None:
+        """Keep the play intent while a progressive source waits for publication."""
+        if self.playback_is_active(generation):
+            self._playback_reason = "DATASET_PENDING" if waiting else None
+
     def finish_ordered_playback(
         self,
         *,

@@ -85,6 +85,7 @@ export default function ReplayControlBar({ runtime, viewer, publicTimeLabel }: R
   const [positionDisposition, setPositionDisposition] = useState<"keep" | "mark_close">("keep");
   const [requestedAdvanceBasis, setRequestedAdvanceBasis] = useState<ReplayV2AdvanceBasis | null>(null);
   const [advanceAmount, setAdvanceAmount] = useState(1);
+  const [controlError, setControlError] = useState<string | null>(null);
   const [requestedPlaybackRate, setRequestedPlaybackRate] = useState<number | null>(null);
   const endDialogRef = useRef<HTMLElement | null>(null);
   const endTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -106,6 +107,8 @@ export default function ReplayControlBar({ runtime, viewer, publicTimeLabel }: R
     store.controllerClientId,
   );
   const globalClock = viewer.marketTracks?.global_clock ?? null;
+  const runId = viewer.viewerState?.run_id;
+  useEffect(() => { setControlError(null); }, [runId]);
   const disabled = pending !== null || phase3Pending !== null
     || store.connectionState !== "connected" || !ownsController
     || viewer.viewerState === null || viewer.viewerPending;
@@ -160,7 +163,10 @@ export default function ReplayControlBar({ runtime, viewer, publicTimeLabel }: R
     type: ReplayPhase3ControlType,
     payload: Readonly<Record<string, ReplayV2Json>> = {},
   ) => {
-    void viewer.actions.submitControl(type, payload).catch(() => undefined);
+    setControlError(null);
+    void viewer.actions.submitControl(type, payload).catch((cause: unknown) => {
+      setControlError(cause instanceof Error ? cause.message : t("replay.rt.control"));
+    });
   };
   const submitCanonicalAdvance = (
     basis: ReplayV2AdvanceBasis,
@@ -253,6 +259,11 @@ export default function ReplayControlBar({ runtime, viewer, publicTimeLabel }: R
               ? t("replay.control.take")
               : effectiveState === "ENDED" ? t("replay.control.takeReview") : t("replay.control.takeControl")}
           </button>
+        </div>
+      )}
+      {controlError && (
+        <div className="replay-command-error" role="alert" data-replay-control-error>
+          {controlError}
         </div>
       )}
       {(runtime.commandError || store.error) && (

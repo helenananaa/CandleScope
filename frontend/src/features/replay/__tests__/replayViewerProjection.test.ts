@@ -3,6 +3,8 @@ import test from "node:test";
 
 import { SeriesWindowStore } from "../../market-data/window/seriesWindowStore.js";
 import type { KlineBar } from "../../market-data/marketDataTypes.js";
+import type { WindowDelta } from "../../market-data/klineContracts.js";
+import { coalesceReplayViewerSourceDeltas } from "../useReplayViewerRuntime.js";
 import {
   applyReplayViewerSeriesDelta,
   buildReplayViewerSeriesKey,
@@ -79,6 +81,24 @@ function barAt(time: number, index: number, intervalSeconds: number): KlineBar {
     replayLastBaseOpenMs: time * 1_000,
   };
 }
+
+test("a frame containing fifty appends preserves every revealed bar and the prior closing tick", () => {
+  const source = new SeriesWindowStore({ intervalSeconds: 60, seriesKey: "replay-base" });
+  const viewer = new SeriesWindowStore({ intervalSeconds: 60, seriesKey: "replay-viewer" });
+  source.replace([baseBar(0, false)]);
+  rebuildReplayViewerSeries(viewer, source, "1m", "1m");
+  const deltas: WindowDelta[] = [];
+  const unsubscribe = source.subscribe((delta) => { deltas.push(delta); });
+  source.applyTick(baseBar(0));
+  for (let index = 1; index <= 50; index += 1) source.applyRange([baseBar(index)]);
+  unsubscribe();
+  const burst = coalesceReplayViewerSourceDeltas(deltas);
+  assert.ok(burst);
+  applyReplayViewerSeriesDelta(viewer, source, "1m", "1m", burst);
+  assert.deepEqual(viewer.snapshot(), aggregateReplayBaseBars(source.snapshot(), "1m", "1m"));
+  assert.equal(viewer.barCount, 51);
+  assert.equal(viewer.snapshot()[0]?.replayClosed, true);
+});
 
 test("base 1m projects the complete 1m/5m/15m/1h close matrix", () => {
   const prefix = Array.from({ length: 60 }, (_, index) => baseBar(index));

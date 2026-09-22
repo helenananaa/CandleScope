@@ -27,6 +27,7 @@ import {
 import { returnToTrainingHub } from "../trainingHubNavigation.js";
 import {
   TrainingHubLifecycle,
+  type TrainingHubApiBoundary,
   type TrainingHubRuntime,
 } from "../useTrainingHub.js";
 import {
@@ -616,6 +617,124 @@ test("segment plan uses the selected create contract and never opens a dataset e
     body: payload,
   }]);
   assert.doesNotMatch(requests[0]?.url ?? "", /sessions|snapshot_blob/);
+});
+
+test("automatic BAR preparation accepts an empty archive and submits the frozen market", async (context) => {
+  const calls: string[] = [];
+  const lifecycle = new TrainingHubLifecycle({
+    api: {
+      async listRuns() { return parseTrainingRunListResponse(listResponse([])); },
+      async capabilities() {
+        const caps = parseReplayCapabilities(enabledCapabilities());
+        return { ...caps, sources: { ...caps.sources, bar: { enabled: false, reason: "REPLAY_BAR_HISTORY_EMPTY" } } };
+      },
+      async preparationCapabilities() {
+        return { enabled: true, progressive: true, replay_sources: { BAR: true, AGG_TRADE: false } };
+      },
+      async catalog() { return { ...hedgeCatalog(), entries: [] }; },
+      async createRun() { throw new Error("must use durable preparation"); },
+      async prepareReplay(setup, market) {
+        assert.equal(market.progressive, true);
+        calls.push(`${market.symbol}:${setup.requested_start_ms}`);
+        return parseTrainingRunMutationResponse(mutationResponse());
+      },
+    },
+    navigateToRun: (id) => calls.push(`navigate:${id}`),
+  });
+  context.after(() => lifecycle.dispose());
+  await lifecycle.openCreate();
+  const draft = lifecycle.getSnapshot().draft!;
+  assert.equal(lifecycle.getSnapshot().evaluation?.canSubmit, true);
+  await lifecycle.createRun(draft);
+  assert.deepEqual(calls, [`${draft.symbol}:${draft.requestedStartMs}`, "navigate:run-1"]);
+});
+
+test("reloaded automatic preparation retains its draft and reuses an uncertain submission", async () => {
+  const saved = new Map<string, string>();
+  const draftStorage = { getItem: (key: string) => saved.get(key) ?? null,
+    setItem: (key: string, text: string) => { saved.set(key, text); } };
+  const keys: Array<string | undefined> = [];
+  const api: TrainingHubApiBoundary = {
+    async listRuns() { return parseTrainingRunListResponse(listResponse([])); },
+    async capabilities() { return parseReplayCapabilities(enabledCapabilities()); },
+    async preparationCapabilities() { return { enabled: true, replay_sources: { BAR: true, AGG_TRADE: false } }; },
+    async catalog() { return { ...hedgeCatalog(), entries: [] }; },
+    async createRun() { throw new Error("unexpected manual creation"); },
+    async prepareReplay(_setup, _market, _progress, _signal, key) {
+      keys.push(key);
+      throw new Error("connection lost after submission");
+    },
+  };
+  const first = new TrainingHubLifecycle({ api, draftStorage });
+  await first.openCreate();
+  const draft = { ...first.getSnapshot().draft!, name: "恢复未完成准备", indicatorWarmupBars: 321 };
+  first.setDraft(draft);
+  await first.createRun(draft);
+  first.dispose();
+  const reopened = new TrainingHubLifecycle({ api, draftStorage });
+  try {
+    await reopened.openCreate();
+    assert.deepEqual(reopened.getSnapshot().draft, draft);
+    await reopened.createRun(reopened.getSnapshot().draft!);
+    assert.equal(keys.length, 2);
+    assert.ok(keys[0]);
+    assert.equal(keys[1], keys[0]);
+    const changed = { ...draft, name: "另一个训练" };
+    reopened.setDraft(changed);
+    await reopened.createRun(changed);
+    assert.notEqual(keys[2], keys[0]);
+  } finally { reopened.dispose(); }
+});
+
+test("advertised trade preparation accepts missing archives without querying an unavailable tape catalog", async (context) => {
+  const calls: string[] = [];
+  const lifecycle = new TrainingHubLifecycle({
+    api: {
+      async listRuns() { return parseTrainingRunListResponse(listResponse([])); },
+      async capabilities() {
+        const caps = parseReplayCapabilities(enabledCapabilities());
+        return { ...caps, sources: { ...caps.sources, agg_trade: { enabled: false, reason: "DATASET_INCOMPLETE" } } };
+      },
+      async preparationCapabilities() { return { enabled: true, replay_sources: { BAR: true, AGG_TRADE: true } }; },
+      async catalog(query) { assert.equal(query?.sourceKind, "BAR"); return { ...hedgeCatalog(), entries: [] }; },
+      async createRun() { throw new Error("must prepare trades"); },
+      async prepareReplay(setup) { calls.push(setup.source_kind); return parseTrainingRunMutationResponse(mutationResponse()); },
+    },
+    navigateToRun: (id) => calls.push(id),
+  });
+  context.after(() => lifecycle.dispose());
+  await lifecycle.openCreate();
+  lifecycle.setDraft({ ...lifecycle.getSnapshot().draft!, sourceKind: "AGG_TRADE" });
+  await settle();
+  assert.equal(lifecycle.getSnapshot().evaluation?.canSubmit, true);
+  await lifecycle.createRun(lifecycle.getSnapshot().draft!);
+  assert.deepEqual(calls, ["AGG_TRADE", "run-1"]);
+});
+
+test("exact account preparation preserves historical funding while filling an empty BAR archive", async (context) => {
+  const calls: string[] = [];
+  const lifecycle = new TrainingHubLifecycle({
+    api: {
+      async listRuns() { return parseTrainingRunListResponse(listResponse([])); },
+      async capabilities() { return parseReplayCapabilities(enabledCapabilities()); },
+      async preparationCapabilities() { return { enabled: true, replay_sources: { BAR: true, AGG_TRADE: false },
+        replay_account_modes: ["APPROX_PROXY", "HISTORICAL_EXACT"] }; },
+      async catalog() { return { ...hedgeCatalog(), entries: [] }; },
+      async createRun() { throw new Error("Exact preparation must retain its dependency plan"); },
+      async prepareReplay(setup) {
+        calls.push(`${setup.account_data_mode}:${setup.funding_mode}`);
+        return parseTrainingRunMutationResponse(mutationResponse());
+      },
+    },
+    navigateToRun: (id) => calls.push(id),
+  });
+  context.after(() => lifecycle.dispose());
+  await lifecycle.openCreate();
+  lifecycle.setDraft({ ...lifecycle.getSnapshot().draft!, startMode: "MANUAL", accountDataMode: "HISTORICAL_EXACT", fundingMode: "HISTORICAL_EXACT" });
+  await settle();
+  assert.equal(lifecycle.getSnapshot().automaticPreparationAvailable, true);
+  await lifecycle.createRun(lifecycle.getSnapshot().draft!);
+  assert.deepEqual(calls, ["HISTORICAL_EXACT:HISTORICAL_EXACT", "run-1"]);
 });
 
 test("Hub creates an empty run without planning a market dataset", async (context) => {

@@ -1666,6 +1666,8 @@ class ReplayHistoryArchiveWriter:
         dry_run: bool,
     ) -> dict[str, object]:
         pinned = {_digest(value, "pinned_revision") for value in pinned_revisions}
+        from .progressive_history import retained_revisions
+        pinned.update(_digest(value, "progressive_revision") for value in retained_revisions(self.root))
         pointers = sorted(self.catalogs_dir.glob("*/*/*/*/current.json"))
         current: set[str] = set()
         for pointer in pointers:

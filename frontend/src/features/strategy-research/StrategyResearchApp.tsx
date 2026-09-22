@@ -14,6 +14,7 @@ import {
 } from "react";
 
 import type { MainSeriesCrosshairValue } from "../../chart-adapter/chartAdapterTypes.js";
+const PreparationJobsPanel = lazy(() => import("../data-preparation/PreparationJobsPanel.js"));
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { ResearchDataDrawer } from "../research-data/ResearchDataDrawer.js";
@@ -488,6 +489,7 @@ export default function StrategyResearchApp({
       {historyOpen && <aside className="research-data-drawer" role="dialog" aria-label={t("ux.history")}>
         <header><strong>{t("ux.history")}</strong><button type="button" onClick={() => setHistoryOpen(false)}>{t("backtest.close")}</button></header>
         <Suspense fallback={<p>{t("research.loading")}</p>}><StrategyRunHistory draftId={state.script.draftId} currentRunId={researchRun.result?.run.run_id ?? null} onOpen={(runId) => { dispatch({ type: "result/viewHistory", runId }); setHistoryOpen(false); }} /></Suspense>
+        <Suspense fallback={null}><PreparationJobsPanel /></Suspense>
       </aside>}
       {intent.kind === "handoff" && !handoff && <p role="alert">{t("ux.handoffMissing")}</p>}
       {(intent.page === "local" || intent.page === "backtest") ? (

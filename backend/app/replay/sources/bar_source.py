@@ -27,6 +27,7 @@ from .base import SourceCursor
 
 PAGED_BAR_SOURCE_SCHEMA_VERSION = "replay-paged-bar-source.v3"
 BAR_TERMINAL_SOURCE_LATEST_CLOSED = "SOURCE_LATEST_CLOSED"
+BAR_TERMINAL_REQUESTED_HORIZON = "REQUESTED_HORIZON"
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,8 +246,8 @@ class PagedBarReplaySource:
         if not isinstance(snapshot, BarDatasetSnapshot):
             raise TypeError("snapshot must be BarDatasetSnapshot")
         BarReplaySource._validate_snapshot(snapshot)
-        if terminal_kind != BAR_TERMINAL_SOURCE_LATEST_CLOSED:
-            raise ValueError("paged BAR terminal kind must bind the source latest close")
+        if terminal_kind not in {BAR_TERMINAL_SOURCE_LATEST_CLOSED, BAR_TERMINAL_REQUESTED_HORIZON}:
+            raise ValueError("paged BAR terminal kind must bind a fixed historical horizon")
         for field_name, value in (
             ("source_revision", source_revision),
             ("source_fingerprint", source_fingerprint),

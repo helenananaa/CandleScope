@@ -1,4 +1,5 @@
 import { API_BASE } from "../../services/apiConfig.js";
+import { preparationRequest, waitForPreparation, type PreparationJob } from "../data-preparation/api.js";
 import type {
   BacktestReport,
   BacktestChartData,
@@ -104,6 +105,9 @@ export interface ChartContextMaterializeRequest {
 }
 
 export interface ChartContextResolution {
+  automatic_preparation_available?: boolean;
+  prepared_run?: BacktestRunRecord;
+  preparation?: { warmup_bars: number; requested_start_ms: number; prepared_start_ms: number };
   schema_version: "candlescope.backtest-chart-context/1";
   status: ChartContextStatus;
   resolution_token: string;
@@ -141,6 +145,13 @@ export interface ChartContextResolution {
 }
 
 export interface BacktestApiClient {
+  prepareChartContext?(body: ChartContextResolveRequest, signal?: AbortSignal, strategy?: {
+    strategy_revision_id: string;
+    parameters: Record<string, unknown>;
+    execution_overrides?: import("../../shared/strategyRunSettings.js").StrategyExecutionOverrides;
+    chart_cell_scope: string;
+    strategy_draft_id: string;
+  }, idempotencyKey?: string): Promise<ChartContextResolution>;
   capabilities(signal?: AbortSignal): Promise<BacktestCapabilities>;
   listDatasets(signal?: AbortSignal): Promise<BacktestDataset[]>;
   previewSnapshot(
@@ -326,6 +337,20 @@ export function createBacktestApi(base = `${API_BASE}/backtests`): BacktestApiCl
           body: JSON.stringify(body),
         }, signal)),
       );
+    },
+    async prepareChartContext(body, signal, strategy, idempotencyKey = crypto.randomUUID()) {
+      const transport = { basePath: base.replace(/\/backtests$/, "/data-preparations") };
+      const initial = await preparationRequest<PreparationJob>("/strategy", {
+        method: "POST", headers: { "content-type": "application/json" }, signal: signal ?? null,
+        body: JSON.stringify({ idempotency_key: idempotencyKey, context: body, ...(strategy ? { strategy } : {}) }),
+      }, transport);
+      const ready = await waitForPreparation(initial, () => undefined, signal, transport);
+      if (!ready.result?.resolution) throw new Error("Prepared strategy context is missing");
+      if (ready.result.strategy_run) return { ...ready.result.resolution, prepared_run: ready.result.strategy_run };
+      return readJson(await fetch(`${base}/chart-context/resolve`, requestOptions({
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify(ready.result.resolution.request),
+      }, signal)));
     },
     async listRuns(signal) {
       const payload = await readJson<{ runs: BacktestRunRecord[] }>(
