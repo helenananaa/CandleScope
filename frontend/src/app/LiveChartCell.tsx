@@ -130,6 +130,7 @@ export interface LiveChartCellProps {
   windowId: ChartWindowId;
   cell: ChartCellState;
   linkGroup: ChartLinkGroup | null;
+  linkGroupControl?: ReactNode;
   linkedDrawingScopeBase: string;
   layoutRole: ChartWorkspaceCellRole | null;
   active: boolean;
@@ -176,6 +177,7 @@ function LiveChartCell({
   windowId,
   cell,
   linkGroup,
+  linkGroupControl,
   layoutRole,
   active,
   maximized,
@@ -801,7 +803,7 @@ function LiveChartCell({
           <span className="multi-chart-cell-market">
             {chartSession.view.exchange} · {chartSession.view.marketType}
           </span>
-          {linkGroup && (
+          {linkGroupControl ?? (linkGroup && (
             <span
               className="multi-chart-cell-link"
               data-link-group={linkGroup.id}
@@ -815,7 +817,7 @@ function LiveChartCell({
               </span>
               {linkGroupName}
             </span>
-          )}
+          ))}
           <WorkspaceCellLayoutMenu
             cellId={cell.id}
             layoutCellIds={layoutCellIds}

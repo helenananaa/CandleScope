@@ -80,6 +80,7 @@ import {
   applyLinkedIndicatorUpdate,
   applyLinkedSessionUpdate,
   assignCellLinkGroup,
+  assignCellsLinkGroup,
   chartLinkGroupDepth,
   cloneChartLinkSettings,
   isChartLinkGroupDescendant,
@@ -156,7 +157,8 @@ export interface ChartWorkspaceRuntime {
     setActiveCell(cellId: ChartCellId): void;
     toggleMaximize(cellId: ChartCellId): void;
     setCellLinkGroup(cellId: ChartCellId, group: ChartLinkGroupId | null): void;
-    createLinkGroup(parentId?: ChartLinkGroupId | null): void;
+    setCellsLinkGroup(cellIds: readonly ChartCellId[], group: ChartLinkGroupId | null): void;
+    createLinkGroup(parentId?: ChartLinkGroupId | null, cellIds?: readonly ChartCellId[]): void;
     updateLinkGroup(
       groupId: ChartLinkGroupId,
       patch: Partial<Pick<ChartLinkGroup, "name" | "color" | "parentId">>,
@@ -800,7 +802,11 @@ export function useChartWorkspaceRuntime(
     updateActiveDocument((current) => assignCellLinkGroup(current, cellId, group));
   }, [updateActiveDocument]);
 
-  const createLinkGroup = useCallback((parentId: ChartLinkGroupId | null = null) => {
+  const setCellsLinkGroup = useCallback((cellIds: readonly ChartCellId[], group: ChartLinkGroupId | null) => {
+    updateActiveDocument((current) => assignCellsLinkGroup(current, cellIds, group));
+  }, [updateActiveDocument]);
+
+  const createLinkGroup = useCallback((parentId: ChartLinkGroupId | null = null, cellIds: readonly ChartCellId[] = []) => {
     updateActiveDocument((current) => {
       const normalizedParentId = parentId && current.linkGroups[parentId] ? parentId : null;
       if (normalizedParentId
@@ -817,7 +823,7 @@ export function useChartWorkspaceRuntime(
         peerPolicy: cloneChartLinkSettings(DEFAULT_CHART_LINK_GROUP_SETTINGS),
         receiveFromParent: cloneChartLinkSettings(DEFAULT_CHART_LINK_GROUP_SETTINGS),
       };
-      return { ...current, linkGroups: { ...current.linkGroups, [id]: group } };
+      return assignCellsLinkGroup({ ...current, linkGroups: { ...current.linkGroups, [id]: group } }, cellIds, id);
     });
   }, [updateActiveDocument]);
 
@@ -1141,6 +1147,7 @@ export function useChartWorkspaceRuntime(
       setActiveCell,
       toggleMaximize,
       setCellLinkGroup,
+      setCellsLinkGroup,
       createLinkGroup,
       updateLinkGroup,
       deleteLinkGroup,

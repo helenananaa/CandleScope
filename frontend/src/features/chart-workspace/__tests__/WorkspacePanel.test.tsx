@@ -57,6 +57,7 @@ function createRuntime(): ChartWorkspaceRuntime {
       setActiveCell: () => undefined,
       toggleMaximize: () => undefined,
       setCellLinkGroup: () => undefined,
+      setCellsLinkGroup: () => undefined,
       createLinkGroup: () => undefined,
       updateLinkGroup: () => undefined,
       deleteLinkGroup: () => undefined,

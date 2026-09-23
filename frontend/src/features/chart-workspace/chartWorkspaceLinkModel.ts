@@ -299,6 +299,18 @@ export function applyLinkedIndicatorUpdate(
   return { ...document, cells };
 }
 
+/** Apply a membership change as one document update, retaining normal join policies. */
+export function assignCellsLinkGroup(
+  document: ChartWorkspaceDocument,
+  cellIds: readonly ChartCellId[],
+  groupId: ChartLinkGroupId | null,
+): ChartWorkspaceDocument {
+  if (groupId !== null && !document.linkGroups[groupId]) return document;
+  return [...new Set(cellIds)].reduce((current, cellId) => (
+    current.cells[cellId] ? assignCellLinkGroup(current, cellId, groupId) : current
+  ), document);
+}
+
 export function assignCellLinkGroup(
   document: ChartWorkspaceDocument,
   cellId: ChartCellId,

@@ -8,6 +8,7 @@ import {
   applyLinkedIndicatorUpdate,
   applyLinkedSessionUpdate,
   assignCellLinkGroup,
+  assignCellsLinkGroup,
   cloneChartLinkSettings,
   resolveChartLinkTargets,
   resolveChartLinkTargetsForChannel,
@@ -154,4 +155,28 @@ test("joining a link group adopts the group's current session", () => {
   const next = assignCellLinkGroup(document, "cell-2", DEFAULT_CHART_LINK_GROUP_ID);
   assert.equal(chartWorkspaceCell(next, "cell-2").linkGroupId, DEFAULT_CHART_LINK_GROUP_ID);
   assert.equal(chartWorkspaceCell(next, "cell-2").session.symbol, "ETHUSDT");
+});
+
+
+test("bulk membership preserves normal join synchronization without mutating the source", () => {
+  const document = hierarchicalWorkspace();
+  const before = structuredClone(document);
+  const expected = assignCellLinkGroup(assignCellLinkGroup(document, "cell-3", DEFAULT_CHART_LINK_GROUP_ID), "cell-4", DEFAULT_CHART_LINK_GROUP_ID);
+  const actual = assignCellsLinkGroup(document, ["cell-3", "cell-4", "cell-3", "missing"], DEFAULT_CHART_LINK_GROUP_ID);
+  assert.deepEqual(actual, expected);
+  assert.deepEqual(document, before);
+  assert.equal(actual.cells["cell-3"]!.linkGroupId, DEFAULT_CHART_LINK_GROUP_ID);
+  assert.equal(actual.cells["cell-4"]!.linkGroupId, DEFAULT_CHART_LINK_GROUP_ID);
+});
+
+test("bulk detach preserves sessions and invalid targets do not detach members", () => {
+  const document = hierarchicalWorkspace();
+  const actual = assignCellsLinkGroup(document, ["cell-1", "cell-3"], null);
+  assert.equal(actual.cells["cell-1"]!.linkGroupId, null);
+  assert.equal(actual.cells["cell-3"]!.linkGroupId, null);
+  assert.deepEqual(actual.cells["cell-1"]!.session, document.cells["cell-1"]!.session);
+  assert.deepEqual(actual.cells["cell-3"]!.session, document.cells["cell-3"]!.session);
+  assert.equal(actual.cells["cell-2"], document.cells["cell-2"]);
+  assert.equal(assignCellsLinkGroup(document, ["cell-1"], "missing"), document);
+  assert.equal(assignCellsLinkGroup(document, [], null), document);
 });

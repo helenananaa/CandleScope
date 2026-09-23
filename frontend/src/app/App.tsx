@@ -59,7 +59,10 @@ import {
 import "../index.css";
 import "../features/plugins/pluginTrustUx.css";
 
+import WorkspaceCellLinkSelect from "../features/chart-workspace/WorkspaceCellLinkSelect.js";
+
 const ReplayLauncherDialog = lazy(loadReplayLauncherDialog);
+
 const WorkspacePanel = lazy(loadWorkspacePanel);
 
 const PHASE8_BUILTIN_INDICATORS: readonly IndicatorDefinition[] = Object.freeze([
@@ -400,6 +403,7 @@ function LiveWorkspaceApp() {
     ReturnType<typeof buildLiveReplayLaunchContext> | null
   >(null);
   const [workspacePanelOpen, setWorkspacePanelOpen] = useState(false);
+  const [workspacePanelLoaded, setWorkspacePanelLoaded] = useState(false);
   const currentActiveEnvironment = activeEnvironment?.workspaceId === workspace.view.activeWorkspaceId
     && activeEnvironment.workspaceRuntimeKey === workspace.view.runtimeKey
     && activeEnvironment.cellId === workspace.view.activeCellId
@@ -536,7 +540,10 @@ function LiveWorkspaceApp() {
       onPointerEnter={loadWorkspacePanel}
       onMouseEnter={loadWorkspacePanel}
       onFocus={loadWorkspacePanel}
-      onClick={() => setWorkspacePanelOpen((open) => !open)}
+      onClick={() => {
+        setWorkspacePanelLoaded(true);
+        setWorkspacePanelOpen((open) => !open);
+      }}
       aria-label={t("workspace.toggleAria", { name: workspace.view.activeWorkspaceName, count: workspace.view.layoutCellIds.length }, locale)}
       aria-expanded={workspacePanelOpen}
       title={t("workspace.toggleTitle", { name: workspace.view.activeWorkspaceName, count: workspace.view.layoutCellIds.length }, locale)}
@@ -595,6 +602,13 @@ function LiveWorkspaceApp() {
                       workspaceId={workspace.view.activeWorkspaceId}
                       windowId={workspace.view.window.id}
                       cell={chartWorkspaceCell(workspace.view.document, cellId)}
+                      linkGroupControl={<WorkspaceCellLinkSelect
+                        document={workspace.view.document}
+                        cellId={cellId}
+                        disabled={!workspace.view.ready}
+                        onChange={workspace.actions.setCellLinkGroup}
+                        onCreate={workspace.actions.createLinkGroup}
+                      />}
                       linkGroup={workspace.view.document.linkGroups[
                         chartWorkspaceCell(workspace.view.document, cellId).linkGroupId ?? ""
                       ] ?? null}
@@ -649,14 +663,14 @@ function LiveWorkspaceApp() {
         statusBar={<div className="workspace-portal-host" ref={setStatusBarHost} />}
       />
       <AlertNotificationCenter onOpenAlerts={requestAlertPanelOpen} />
-      {featureSurfacesHost && workspacePanelOpen && createPortal(
-        <Suspense fallback={(
+      {featureSurfacesHost && workspacePanelLoaded && createPortal(
+        <Suspense fallback={workspacePanelOpen ? (
           <div className="workspace-panel-overlay">
             <aside className="workspace-panel workspace-panel-loading" aria-label={t("shell.loadingWorkspace")} />
           </div>
-        )}>
+        ) : null}>
           <WorkspacePanel
-            isOpen
+            isOpen={workspacePanelOpen}
             onClose={closeWorkspacePanel}
             runtime={workspace}
             desktop={{

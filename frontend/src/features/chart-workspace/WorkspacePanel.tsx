@@ -40,6 +40,8 @@ import type {
   ChartWorkspaceSaveState,
 } from "./useChartWorkspaceRuntime.js";
 
+import WorkspaceLinkMembers from "./WorkspaceLinkMembers.js";
+
 import { workspaceHistoryShortcut } from "./workspaceHistoryShortcut.js";
 
 type WorkspacePanelTab = "workspaces" | "layout" | "links";
@@ -655,6 +657,8 @@ export default function WorkspacePanel({
                     : t("workspace.unknownGroup")
                   : t("workspace.independent")}</span>
               </section>
+
+              <WorkspaceLinkMembers key={view.activeWorkspaceId} runtime={runtime} groups={orderedLinkGroups} />
 
               <section className="workspace-panel-section">
                 <div className="workspace-panel-section-heading">
