@@ -5240,6 +5240,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     drawing: SelectedDrawingMeta | null,
   ) => {
     if (drawing) {
+      for (const [otherPaneId, api] of drawingApisByPaneRef.current) {
+        if (otherPaneId !== paneId) api.deselectAll();
+      }
       selectedDrawingsByPaneRef.current.set(paneId, drawing);
       selectedDrawingPaneIdRef.current = paneId;
       onSelectedDrawingChange?.(drawing);

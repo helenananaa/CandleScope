@@ -50,7 +50,10 @@ on legacy flat fields.
 ## Internal Ownership
 
 - `drawingModel.ts` owns tool ids, drawing constants, id creation, and pure geometry helpers.
-- `drawingToolState.ts` owns toolbar-facing drawing preferences and selected drawing style mirroring.
+- `drawingToolState.ts` owns toolbar-facing defaults and the active selection snapshot.
+- `SelectedDrawingStyleBar.tsx` owns the chart-local controls for the selected
+  drawing. Its patches target only that drawing; toolbar color and width remain
+  defaults for newly created drawings. Text keeps its inline format bar.
 - `core/drawingDocument.ts` owns the immutable nine-kind business model and
   independent document, geometry, and style revisions.
 - `core/drawingCommands.ts` and `core/drawingDocumentStore.ts` are the only

@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useDrawing } from "./drawingInteractionController.js";
 import TextEditOverlay from "../../components/TextEditOverlay";
 import TextFormatBar from "../../components/TextFormatBar";
+import SelectedDrawingStyleBar from "./SelectedDrawingStyleBar.js";
 import DrawingInteractionOverlay from "./rendering/DrawingInteractionOverlay.js";
 import {
     resolveDrawingHostInteractionSurfaceMode,
@@ -25,6 +26,7 @@ import type { SelectedDrawingMeta } from "./drawingSelectionController.js";
 
 export interface DrawingEngineApi {
     clearAll(): void;
+    deselectAll(): void;
     completeSurfaceDispose(): void;
     invalidateSurfaceCredentialsForSeriesReplacement(): void;
     prepareSurfaceDispose(boundary?: DrawingSurfaceDisposeBoundaryDescriptor): boolean;
@@ -128,6 +130,7 @@ function DrawingEngineHost({
     });
     const {
         clearAll,
+        deselectAll,
         completeSurfaceDispose,
         invalidateSurfaceCredentialsForSeriesReplacement,
         prepareExport,
@@ -186,6 +189,7 @@ function DrawingEngineHost({
         }
         onApiChange?.({
             clearAll,
+            deselectAll,
             completeSurfaceDispose,
             invalidateSurfaceCredentialsForSeriesReplacement,
             prepareSurfaceDispose,
@@ -199,6 +203,7 @@ function DrawingEngineHost({
         });
     }, [
         clearAll,
+        deselectAll,
         completeSurfaceDispose,
         invalidateSurfaceCredentialsForSeriesReplacement,
         onApiChange,
@@ -281,6 +286,15 @@ function DrawingEngineHost({
                     onPatch={drawing.updateSelectedText}
                     onDelete={drawing.deleteSelected}
                     containerWidth={chartContainerWidth}
+                />
+            )}
+            {!drawing.editingTextId && selectedDrawingMeta && (
+                <SelectedDrawingStyleBar
+                    drawing={selectedDrawingMeta}
+                    openRequestRevision={drawing.selectedDrawingSettingsRequest?.id === selectedDrawingMeta.id
+                        ? drawing.selectedDrawingSettingsRequest.revision : 0}
+                    onPatch={drawing.updateSelectedDrawingStyle}
+                    onDelete={drawing.deleteSelected}
                 />
             )}
         </>

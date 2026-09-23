@@ -31,9 +31,10 @@ import { TextDrawingPrimitive } from "./primitives/TextDrawingPrimitive.js";
 import { FreehandDrawingPrimitive } from "./primitives/FreehandDrawingPrimitive.js";
 import { createPrimitiveFromSavedDrawing } from "./drawingPrimitiveFactory.js";
 import type { AngleMeasurementPrimitive } from "./primitives/AngleMeasurementPrimitive.js";
-import type { FibonacciDrawingPrimitive } from "./primitives/FibonacciDrawingPrimitive.js";
+import { FibonacciDrawingPrimitive } from "./primitives/FibonacciDrawingPrimitive.js";
 import type { LineDrawingPrimitive } from "./primitives/LineDrawingPrimitive.js";
-import type { ShapeDrawingPrimitive } from "./primitives/ShapeDrawingPrimitive.js";
+import { ShapeDrawingPrimitive } from "./primitives/ShapeDrawingPrimitive.js";
+import { PositionDrawingPrimitive } from "./primitives/PositionDrawingPrimitive.js";
 import {
   AXIS_LINE_TOOL_IDS,
   DEFAULT_HIGHLIGHTER_BRUSH_SHAPE,
@@ -164,6 +165,7 @@ import type {
   ScreenBox,
   ScreenPoint,
   ScreenToDrawingData,
+  ShapeLineStyle,
   ShapeToolId,
   PositionToolId,
   PersistableDrawingPrimitive,
@@ -1214,6 +1216,11 @@ export interface DrawingStylePatch {
   color?: string;
   lineWidth?: number;
   opacity?: number;
+  fillColor?: string;
+  fillOpacity?: number;
+  lineStyle?: ShapeLineStyle;
+  levels?: FibonacciLevel[];
+  positionSize?: number;
 }
 
 export interface UseDrawingOptions {
@@ -1371,6 +1378,7 @@ interface DrawingExportPresentationState {
 
 export interface DrawingInteractionRuntime {
   clearAll(): void;
+  deselectAll(): void;
   completeSurfaceDispose(): void;
   invalidateSurfaceCredentialsForSeriesReplacement(): void;
   prepareSurfaceDispose(boundary?: DrawingSurfaceDisposeBoundaryDescriptor): boolean;
@@ -1379,6 +1387,7 @@ export interface DrawingInteractionRuntime {
   primitivesRef: MutableRefObject<DrawingPrimitive[]>;
   selectedPrimId: string | null;
   selectedDrawingMeta: SelectedDrawingMeta | null;
+  selectedDrawingSettingsRequest: Readonly<{ id: string; revision: number }> | null;
   subscribeVisibleScenePublication(
     listener: (stamp: DrawingCommittedPaintTicket) => void,
     options?: Readonly<{ replayLastPublication?: boolean }>,
@@ -1617,6 +1626,15 @@ export function useDrawing({
       ? { mutatePrimitiveVisualState: false }
       : { onSelectionChange: notifyDrawingSceneInvalidation }),
   });
+  const [selectedDrawingSettingsRequest, setSelectedDrawingSettingsRequest] = useState<
+    Readonly<{ id: string; revision: number }> | null
+  >(null);
+  const drawingSettingsRevisionRef = useRef(0);
+  useEffect(() => {
+    if (selectedDrawingSettingsRequest && selectedPrimId !== selectedDrawingSettingsRequest.id) {
+      setSelectedDrawingSettingsRequest(null);
+    }
+  }, [selectedDrawingSettingsRequest, selectedPrimId]);
 
   // ── Freehand-specific state ──
   const currentFreehandRef = useRef<FreehandDrawingPrimitive | null>(null); // FreehandDrawingPrimitive being drawn
@@ -4120,9 +4138,16 @@ export function useDrawing({
         }
         e.preventDefault();
         e.stopPropagation();
+      } else if (hit && isPassiveCursorTool(activeToolRef.current)) {
+        const id = drawingInteractionHitId(hit);
+        selectPrimitive(id);
+        drawingSettingsRevisionRef.current += 1;
+        setSelectedDrawingSettingsRequest({ id, revision: drawingSettingsRevisionRef.current });
+        e.preventDefault();
+        e.stopPropagation();
       }
     },
-    [getChartPos, hitTestInteractive, prepareTerminalTextMutation, startEntityTextEditing, startTextEditing],
+    [getChartPos, hitTestInteractive, prepareTerminalTextMutation, selectPrimitive, startEntityTextEditing, startTextEditing],
   );
 
   // ════════════════════════════════════════════════════
@@ -5194,6 +5219,11 @@ export function useDrawing({
         color?: string;
         lineWidth?: number;
         opacity?: number;
+        fillColor?: string;
+        fillOpacity?: number;
+        lineStyle?: ShapeLineStyle;
+        levels?: FibonacciLevel[];
+        positionSize?: number;
       };
       let changed = false;
       if (typeof patch.color === "string"
@@ -5212,6 +5242,29 @@ export function useDrawing({
         && saved.type === "highlighter"
         && patch.opacity !== saved.opacity) {
         candidate.opacity = patch.opacity;
+        changed = true;
+      }
+      if (saved.type === "shape") {
+        if (typeof patch.fillColor === "string" && patch.fillColor !== saved.fillColor) {
+          candidate.fillColor = patch.fillColor;
+          changed = true;
+        }
+        if (typeof patch.fillOpacity === "number" && patch.fillOpacity !== saved.fillOpacity) {
+          candidate.fillOpacity = patch.fillOpacity;
+          changed = true;
+        }
+        if (patch.lineStyle && patch.lineStyle !== saved.lineStyle) {
+          candidate.lineStyle = patch.lineStyle;
+          changed = true;
+        }
+      }
+      if (saved.type === "fibonacci" && patch.levels) {
+        candidate.levels = patch.levels;
+        changed = true;
+      }
+      if (saved.type === "position" && typeof patch.positionSize === "number"
+        && patch.positionSize !== saved.positionSize) {
+        candidate.positionSize = patch.positionSize;
         changed = true;
       }
       if (!changed) return;
@@ -5233,6 +5286,11 @@ export function useDrawing({
       color?: string;
       lineWidth?: number;
       opacity?: number;
+      fillColor?: string;
+      fillOpacity?: number;
+      lineStyle?: ShapeLineStyle;
+      levels?: FibonacciLevel[];
+      positionSize?: number;
     };
     const mutations: Array<Readonly<{ apply(): void; rollback(): void }>> = [];
     if (typeof patch.color === "string" && hasMutableColor(prim) && patch.color !== prim.color) {
@@ -5258,6 +5316,34 @@ export function useDrawing({
         apply: () => prim.setOpacity(patch.opacity as number),
         rollback: () => prim.setOpacity(previous),
       });
+    }
+    if (prim instanceof ShapeDrawingPrimitive) {
+      if (typeof patch.fillColor === "string" && patch.fillColor !== prim.fillColor) {
+        const previous = prim.fillColor;
+        candidate.fillColor = patch.fillColor;
+        mutations.push({ apply: () => prim.setFillColor(patch.fillColor as string), rollback: () => prim.setFillColor(previous) });
+      }
+      if (typeof patch.fillOpacity === "number" && patch.fillOpacity !== prim.fillOpacity) {
+        const previous = prim.fillOpacity;
+        candidate.fillOpacity = patch.fillOpacity;
+        mutations.push({ apply: () => prim.setFillOpacity(patch.fillOpacity), rollback: () => prim.setFillOpacity(previous) });
+      }
+      if (patch.lineStyle && patch.lineStyle !== prim.lineStyle) {
+        const previous = prim.lineStyle;
+        candidate.lineStyle = patch.lineStyle;
+        mutations.push({ apply: () => prim.setLineStyle(patch.lineStyle), rollback: () => prim.setLineStyle(previous) });
+      }
+    }
+    if (prim instanceof FibonacciDrawingPrimitive && patch.levels) {
+      const previous = [...prim.levels];
+      candidate.levels = patch.levels;
+      mutations.push({ apply: () => prim.setLevels(patch.levels as FibonacciLevel[]), rollback: () => prim.setLevels(previous) });
+    }
+    if (prim instanceof PositionDrawingPrimitive && typeof patch.positionSize === "number"
+      && patch.positionSize !== prim.positionSize) {
+      const previous = prim.positionSize;
+      candidate.positionSize = patch.positionSize;
+      mutations.push({ apply: () => prim.setPositionSize(patch.positionSize as number), rollback: () => prim.setPositionSize(previous) });
     }
     if (mutations.length > 0) {
       const commands = drawingCommandsForSavedDrawing(candidate, { type: "update-style" });
@@ -5285,6 +5371,7 @@ export function useDrawing({
 
   return {
     clearAll,
+    deselectAll,
     completeSurfaceDispose,
     invalidateSurfaceCredentialsForSeriesReplacement,
     prepareExport,
@@ -5294,6 +5381,7 @@ export function useDrawing({
     primitivesRef,
     selectedPrimId,
     selectedDrawingMeta,
+    selectedDrawingSettingsRequest,
     // Text editing state (for rendering the inline editor in the component)
     editingTextId,
     editingTextValue,

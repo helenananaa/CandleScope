@@ -148,9 +148,6 @@ export function useDrawingToolState(
 
   const handleSelectedDrawingChange = useCallback((drawing: SelectedDrawingMeta | null) => {
     setSelectedDrawing(drawing);
-    if (!drawing) return;
-    if (drawing.color) setPenColor(drawing.color);
-    if (typeof drawing.lineWidth === "number") setPenSize(drawing.lineWidth);
   }, []);
 
   return {

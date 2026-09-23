@@ -121,10 +121,6 @@ const DrawingToolbar = memo(function DrawingToolbar({
   // Position settings
   positionSize = 1000,
   onPositionSizeChange,
-  // Current stylable selection. The regular stroke controls update both this
-  // existing drawing and the default style for subsequently created drawings.
-  selectedDrawing = null,
-  onSelectedDrawingStyleChange,
   exportPanelOpen = false,
   exportInProgress = false,
   onToggleExportPanel,
@@ -232,17 +228,11 @@ const DrawingToolbar = memo(function DrawingToolbar({
 
   const handleStrokeColorChange = useCallback((color: string) => {
     onPenColorChange?.(color);
-    if (selectedDrawing) {
-      onSelectedDrawingStyleChange?.({ color });
-    }
-  }, [onPenColorChange, onSelectedDrawingStyleChange, selectedDrawing]);
+  }, [onPenColorChange]);
 
   const handleStrokeSizeChange = useCallback((lineWidth: number) => {
     onPenSizeChange?.(lineWidth);
-    if (selectedDrawing) {
-      onSelectedDrawingStyleChange?.({ lineWidth });
-    }
-  }, [onPenSizeChange, onSelectedDrawingStyleChange, selectedDrawing]);
+  }, [onPenSizeChange]);
   const drawingCapabilitiesDisabled = !drawingFeaturesEnabled;
   const drawingGestureToolsDisabled = drawingCapabilitiesDisabled || !drawingInteractionReady;
   const cursorToolsDisabled = !hasSupportedDrawingVariant(drawingAnchorMode, CURSOR_VARIANTS);
@@ -284,17 +274,6 @@ const DrawingToolbar = memo(function DrawingToolbar({
   const drawingToolTitle = !drawingFeaturesEnabled
     ? t("drawing.unsupported", { chartType: drawingVariantLabel(currentChartType) })
     : t("drawing.initializing");
-  const selectedStyleType = selectedDrawing?.type ?? null;
-  const selectedStyleControls = selectedStyleType === null ? null : {
-    fibonacci: selectedStyleType === "fibonacci",
-    line: selectedStyleType === "line"
-      || selectedStyleType === "axis-line"
-      || selectedStyleType === "angle",
-    pen: selectedStyleType === "freehand" || selectedStyleType === "highlighter",
-    position: selectedStyleType === "position",
-    shape: selectedStyleType === "shape",
-    text: selectedStyleType === "text",
-  };
   const snapTitle = usesSourceLineageAnchors
     ? (drawingSnapEnabled
         ? t("drawing.snap.sourceEnabled")
@@ -517,12 +496,12 @@ const DrawingToolbar = memo(function DrawingToolbar({
         penColor={penColor}
         penSize={penSize}
         positionSize={positionSize}
-        showFibonacciOptions={selectedStyleControls?.fibonacci ?? showFibonacciOptions}
-        showLineOptions={selectedStyleControls?.line ?? showLineOptions}
-        showPenOptions={selectedStyleControls?.pen ?? showPenOptions}
-        showPositionOptions={selectedStyleControls?.position ?? showPositionOptions}
-        showShapeOptions={selectedStyleControls?.shape ?? showShapeOptions}
-        showTextOptions={selectedStyleControls?.text ?? showTextOptions}
+        showFibonacciOptions={showFibonacciOptions}
+        showLineOptions={showLineOptions}
+        showPenOptions={showPenOptions}
+        showPositionOptions={showPositionOptions}
+        showShapeOptions={showShapeOptions}
+        showTextOptions={showTextOptions}
         textBold={textBold}
         textFontSize={textFontSize}
         textItalic={textItalic}

@@ -71,7 +71,7 @@ test("engine wait disables drawing tools without hiding chart, cursor, or export
   assert.doesNotMatch(buttonTag(html, 'data-drawing-tool="cursor"'), /disabled=""/);
   assert.doesNotMatch(buttonTag(html, 'data-drawing-action="export"'), /disabled=""/);
   assert.doesNotMatch(buttonTag(html, 'title="Snap enabled'), /disabled=""/);
-  assert.match(html, /title="Line color"/);
+  assert.doesNotMatch(html, /title="Line color"/);
 });
 
 test("continuous drawing toggle exposes its selected state beside the snap toggle", () => {

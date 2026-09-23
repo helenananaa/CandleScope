@@ -14,13 +14,17 @@ import type {
   DrawingPrimitive,
   SavedDrawing,
   ScreenBox,
+  FibonacciLevel,
+  ShapeLineStyle,
   TextAlign,
 } from "./drawingTypes.js";
 import { drawingPerfCounters } from "./performance/drawingPerfCounters.js";
 import {
   DEFAULT_DRAWING_RENDER_COLOR,
   DEFAULT_DRAWING_RENDER_LINE_WIDTH,
+  DEFAULT_FIBONACCI_RENDER_LEVELS,
   DEFAULT_HIGHLIGHTER_RENDER_OPACITY,
+  DEFAULT_SHAPE_RENDER_FILL_OPACITY,
   DEFAULT_TEXT_RENDER_COLOR,
   DEFAULT_TEXT_RENDER_FONT_FAMILY,
   DEFAULT_TEXT_RENDER_FONT_SIZE,
@@ -53,6 +57,11 @@ export interface SelectedDrawingMeta {
   color?: string;
   lineWidth?: number;
   opacity?: number;
+  fillColor?: string;
+  fillOpacity?: number;
+  lineStyle?: ShapeLineStyle;
+  levels?: FibonacciLevel[];
+  positionSize?: number;
 }
 
 export type DrawingPrimitiveHit = DrawingHit & (
@@ -85,12 +94,16 @@ export function selectedDrawingMetaFromPrimitive(
 ): SelectedDrawingMeta | null {
   if (!prim) return null;
   if (prim instanceof TextDrawingPrimitive) return null;
-  if (prim instanceof PositionDrawingPrimitive) return null;
+  if (prim instanceof PositionDrawingPrimitive) return {
+    id: prim.id,
+    type: prim.direction === "short" ? "position-short" : "position-long",
+    positionSize: prim.positionSize,
+  };
   if (typeof prim.setColor !== "function" && typeof prim.setLineWidth !== "function") {
     return null;
   }
   let type = "drawing";
-  if (prim instanceof LineDrawingPrimitive) type = "line";
+  if (prim instanceof LineDrawingPrimitive) type = prim.lineType;
   else if (prim instanceof AxisLineDrawingPrimitive) type = prim.axisLineType === "cross" ? "cross-line" : `${prim.axisLineType}-line`;
   else if (prim instanceof AngleMeasurementPrimitive) type = "angle-measure";
   else if (prim instanceof FreehandDrawingPrimitive) type = prim.type === "highlighter" ? "highlighter" : "freehand";
@@ -104,6 +117,13 @@ export function selectedDrawingMetaFromPrimitive(
     ...(typeof (prim as { opacity?: unknown }).opacity === "number"
       ? { opacity: (prim as { opacity: number }).opacity }
       : {}),
+    ...(prim instanceof ShapeDrawingPrimitive ? {
+      fillColor: prim.fillColor,
+      fillOpacity: prim.fillOpacity,
+      lineStyle: prim.lineStyle,
+    } : {}),
+    ...(prim instanceof FibonacciDrawingPrimitive
+      ? { levels: prim.levels.map((level) => ({ ...level })) } : {}),
   };
 }
 
@@ -214,8 +234,15 @@ export function selectedTextUiFromSavedDrawing(
 export function selectedDrawingMetaFromSavedDrawing(
   saved: SavedDrawing | null | undefined,
 ): SelectedDrawingMeta | null {
-  if (!saved?.id || saved.type === "text" || saved.type === "position") return null;
-  const type = saved.type === "axis-line"
+  if (!saved?.id || saved.type === "text") return null;
+  if (saved.type === "position") return {
+    id: saved.id,
+    type: saved.direction === "short" ? "position-short" : "position-long",
+    positionSize: saved.positionSize ?? 1000,
+  };
+  const type = saved.type === "line"
+    ? saved.lineType ?? "line-segment"
+    : saved.type === "axis-line"
     ? saved.axisLineType === "cross" ? "cross-line" : `${saved.axisLineType ?? "horizontal"}-line`
     : saved.type === "angle-measure"
       ? "angle-measure"
@@ -230,6 +257,14 @@ export function selectedDrawingMetaFromSavedDrawing(
     ...(saved.type === "highlighter"
       ? { opacity: saved.opacity ?? DEFAULT_HIGHLIGHTER_RENDER_OPACITY }
       : {}),
+    ...(saved.type === "shape" ? {
+      fillColor: saved.fillColor ?? saved.color ?? DEFAULT_DRAWING_RENDER_COLOR,
+      fillOpacity: saved.fillOpacity ?? DEFAULT_SHAPE_RENDER_FILL_OPACITY,
+      lineStyle: saved.lineStyle ?? "solid",
+    } : {}),
+    ...(saved.type === "fibonacci" ? {
+      levels: (saved.levels ?? DEFAULT_FIBONACCI_RENDER_LEVELS).map((level) => ({ ...level })),
+    } : {}),
   };
 }
 
