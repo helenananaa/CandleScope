@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import subprocess
+import sys
 
 import pytest
 from fastapi import FastAPI
@@ -117,7 +120,24 @@ def _item(client_id: str, symbol: str, intervals: list[str]) -> dict:
     }
 
 
-def test_batch_endpoint_is_default_off(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("override, expected", [(None, "True"), ("0", "False")])
+def test_batch_configuration_without_local_dotenv(override, expected):
+    environment = dict(os.environ)
+    environment.pop("KLINE_BATCH_STREAM_ENABLED", None)
+    if override is not None:
+        environment["KLINE_BATCH_STREAM_ENABLED"] = override
+    result = subprocess.run(
+        [sys.executable, "-c", (
+            "import dotenv; dotenv.load_dotenv = lambda *a, **k: False; "
+            "from app.core.config import KLINE_BATCH_STREAM_ENABLED; "
+            "print(KLINE_BATCH_STREAM_ENABLED)"
+        )],
+        env=environment, capture_output=True, text=True, check=True,
+    )
+    assert result.stdout.strip() == expected
+
+
+def test_batch_endpoint_explicit_rollback(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(config, "KLINE_BATCH_STREAM_ENABLED", False)
     client = _client(_BatchDataManager())
     capabilities = client.get("/api/v1/stream/klines_batch/capabilities").json()

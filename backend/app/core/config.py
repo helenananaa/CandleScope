@@ -103,7 +103,7 @@ class ReplaySettings:
     replay_segment_download_worker_enabled: bool = False
     replay_segment_auto_gc_enabled: bool = False
     replay_segment_max_archive_bytes: int = 1_099_511_627_776
-    replay_fast_forward_optimization_enabled: bool = False
+    replay_fast_forward_optimization_enabled: bool = True
     replay_multi_bar_interval_enabled: bool = True
     replay_historical_book_enabled: bool = False
     replay_historical_book_max_archive_bytes: int = 1_099_511_627_776
@@ -299,7 +299,7 @@ def load_replay_settings(
         ),
         replay_segment_max_archive_bytes=values["REPLAY_SEGMENT_MAX_ARCHIVE_BYTES"],
         replay_fast_forward_optimization_enabled=_strict_replay_bool(
-            environment, "REPLAY_FAST_FORWARD_OPTIMIZATION_ENABLED", "0"
+            environment, "REPLAY_FAST_FORWARD_OPTIMIZATION_ENABLED", "1"
         ),
         replay_multi_bar_interval_enabled=_strict_replay_bool(
             environment, "REPLAY_MULTI_BAR_INTERVAL_ENABLED", "1"
@@ -935,11 +935,11 @@ EVENT_LOOP_LAG_INTERVAL_SECONDS = float(
 
 # Multi-chart K-line transport and process capacity.  These values are hard
 # safety ceilings: environment configuration may tighten them, never expand
-# them.  The additive batch endpoint stays disabled until a release gate turns
-# it on explicitly; the legacy /stream/klines_multi endpoint remains intact.
+# them. Batch transport is enabled independently of chart/window capacity.
+# Set 0 for rollback; the legacy /stream/klines_multi endpoint remains intact.
 KLINE_BATCH_STREAM_ENABLED = _strict_multi_chart_bool(
     "KLINE_BATCH_STREAM_ENABLED",
-    "0",
+    "1",
 )
 KLINE_BATCH_MAX_SERIES_PER_CLIENT = _bounded_multi_chart_int(
     "KLINE_BATCH_MAX_SERIES_PER_CLIENT",

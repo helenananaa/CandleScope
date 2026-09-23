@@ -547,9 +547,10 @@ async def test_optimized_empty_account_matches_full_event_reference(
         )
         assert optimized_result["data"]["plan"]["mode"] == "AGGREGATE_SCAN"  # type: ignore[index]
         assert reference_result["data"]["plan"]["mode"] == "FULL_EVENT_SCAN"  # type: ignore[index]
-        assert optimized_result["data"]["plan"]["equivalence"]["status"] == (  # type: ignore[index]
-            "VERIFIED_BY_EXACT_REDUCER_PATH"
-        )
+        # The interval coordinator reports its plan separately; prove the actual
+        # result below, including a jump beyond the frozen source terminal.
+        assert optimized_result["cursor"]["at_end"] is True
+        assert optimized_result["cursor"]["virtual_time_ms"] < target
         assert optimized.training is not None
         terminal_progress = await optimized.training.get_advance_progress(
             optimized_run,
@@ -562,7 +563,10 @@ async def test_optimized_empty_account_matches_full_event_reference(
         reference_snapshot = await reference.get_session(reference_session)
         assert optimized_snapshot["snapshot"]["cursor"] == reference_snapshot["snapshot"]["cursor"]  # type: ignore[index]
         assert optimized_snapshot["snapshot"]["components"] == reference_snapshot["snapshot"]["components"]  # type: ignore[index]
-        assert optimized_snapshot["snapshot"]["state_hash"] == reference_snapshot["snapshot"]["state_hash"]  # type: ignore[index]
+        # Grouped commits intentionally have different command/revision hashes.
+        assert optimized_snapshot["snapshot"]["state"] == reference_snapshot["snapshot"]["state"] == "ENDED"
+        assert optimized._sessions[optimized_session].actor._event_chain_hash == reference._sessions[reference_session].actor._event_chain_hash
+        assert (await optimized.training.audit_account(optimized_run))["status"] == "PASS"
     finally:
         await optimized.shutdown(step_timeout=1.0)
         await reference.shutdown(step_timeout=1.0)
@@ -586,6 +590,9 @@ async def test_cancelled_optimized_scan_resumes_to_full_reference_hash(
         optimized.settings,
         replay_fast_forward_optimization_enabled=True,
     )
+    # Exercise the retained per-chunk adapter cancellation contract. The new
+    # interval coordinator drains complete cohorts (covered in tape_phases).
+    monkeypatch.setattr(optimized.training, "_uses_tape_interval_clock", lambda *_: False)
     try:
         optimized_run, optimized_session = await _create_trade_run(
             optimized, acquire_id="optimized-cancel-acquire"

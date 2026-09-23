@@ -4308,6 +4308,27 @@ class TrainingRunService:
             progressive_history_factory=lambda: self.replay_service.progressive_history,
         )
 
+    def _uses_tape_interval_clock(
+        self,
+        binding: Mapping[str, object],
+        snapshot: Mapping[str, object],
+        command: ReplayV2Command,
+    ) -> bool:
+        """Route eligible advances to the interval coordinator, retaining legacy adapters."""
+        return (
+            self.replay_service.settings.replay_fast_forward_optimization_enabled
+            and binding.get("source_kind") == "AGG_TRADE"
+            and binding.get("position_mode") == "ONE_WAY"
+            and binding.get("book_mode", "OFF") == "OFF"
+            and binding.get("funding_mode") == "OFF"
+            and binding.get("account_data_mode") != AccountDataMode.HISTORICAL_EXACT.value
+            and (command.type in {ReplayV2CommandType.ADVANCE_TO, ReplayV2CommandType.ADVANCE_BY}
+                 or (command.type is ReplayV2CommandType.ADVANCE
+                     and command.payload.get("basis") in {"DISPLAY_BAR", "VIRTUAL_TIME"}))
+            and not any(o["status"] in {"OPEN", "PARTIALLY_FILLED"}
+                        for o in snapshot["components"]["orders"])
+        )
+
     async def command(
         self,
         run_id: str,
@@ -4901,19 +4922,7 @@ class TrainingRunService:
             binding.get("account_data_mode") == AccountDataMode.HISTORICAL_EXACT.value
         )
         hedge_input_clock = binding.get("position_mode") == "HEDGE"
-        tape_interval_clock = (
-            self.replay_service.settings.replay_fast_forward_optimization_enabled
-            and binding.get("source_kind") == "AGG_TRADE"
-            and binding.get("position_mode") == "ONE_WAY"
-            and binding.get("book_mode", "OFF") == "OFF"
-            and binding.get("funding_mode") == "OFF"
-            and not exact_account_clock
-            and (command.type in {ReplayV2CommandType.ADVANCE_TO, ReplayV2CommandType.ADVANCE_BY}
-                 or (command.type is ReplayV2CommandType.ADVANCE
-                     and command.payload.get("basis") in {"DISPLAY_BAR", "VIRTUAL_TIME"}))
-            and not any(o["status"] in {"OPEN", "PARTIALLY_FILLED"}
-                        for o in snapshot["components"]["orders"])
-        )
+        tape_interval_clock = self._uses_tape_interval_clock(binding, snapshot, command)
         multi_track_command = (
             len(full_tracks) > 1
             or tape_interval_clock
@@ -7857,6 +7866,20 @@ class TrainingRunService:
                     step_interval=str(binding["base_interval"]),
                     count=count,
                 )
+                plan["target_virtual_time_ms"] = target
+            if (binding.get("source_kind") == "AGG_TRADE" and isinstance(target, int)
+                    and target > self._training_terminal_time_ms(binding)):
+                # A requested jump may exceed frozen history. Stop at the same
+                # immutable terminal as the scalar actor before deferred finalize.
+                # The binding end can be a last-bucket open; only the source
+                # knows its inclusive terminal (also mapped for blind runs).
+                for track in ordered:
+                    boundary = await self.replay_service.scan_source_goal(
+                        self._track_session_id(track), max_events=1,
+                    )
+                    target = min(target, _stored_counter(
+                        boundary["source_terminal_time_ms"], field_name="source_terminal_time_ms",
+                    ))
                 plan["target_virtual_time_ms"] = target
             control_plan = dict(plan)
             control_plan["mode"] = "GLOBAL_ORDERED_INPUT_CLOCK"

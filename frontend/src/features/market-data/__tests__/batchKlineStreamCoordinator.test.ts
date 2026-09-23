@@ -23,8 +23,11 @@ class FakeSocket implements KlineStreamSocket {
   }
 }
 
-test("batch K-line flag is strict and default-off", () => {
-  assert.equal(resolveKlineBatchStreamEnabled(), false);
+test("batch K-line flag defaults on and preserves strict explicit rollback", () => {
+  assert.equal(resolveKlineBatchStreamEnabled(), true);
+  for (const value of ["0", false, 0, "", null, "invalid"]) {
+    assert.equal(resolveKlineBatchStreamEnabled({ KLINE_BATCH_STREAM_ENABLED: value }), false);
+  }
   assert.equal(resolveKlineBatchStreamEnabled({ KLINE_BATCH_STREAM_ENABLED: "1" }), true);
   assert.equal(resolveKlineBatchStreamEnabled({ KLINE_BATCH_STREAM_ENABLED: "true" }), false);
 });

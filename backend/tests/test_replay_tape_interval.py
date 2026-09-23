@@ -4,6 +4,7 @@ import threading
 import json
 from decimal import Decimal, localcontext
 from itertools import groupby
+from dataclasses import replace
 
 import pytest
 
@@ -11,6 +12,54 @@ from app.replay.training import portfolio_history
 from app.replay.training.tape_interval import restore_curve
 from app.replay.training.multi_interval_store import reconstruct_portfolio_interval
 from tests.test_replay_tape_phases import setup_tape, arguments
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("environment, expected", [({}, True), ({"REPLAY_FAST_FORWARD_OPTIMIZATION_ENABLED": "0"}, False)])
+async def test_default_and_rollback_control_actual_tape_execution(tmp_path, environment, expected):
+    from app.core.config import load_replay_settings
+    from app.replay.training import tape_phases
+
+    service, run, sid = await setup_tape(tmp_path, held=True)
+    try:
+        configured = load_replay_settings(
+            environment, data_dir=tmp_path, klines_db_path=tmp_path / "unused.db"
+        )
+        service.settings = replace(
+            service.settings,
+            replay_fast_forward_optimization_enabled=configured.replay_fast_forward_optimization_enabled,
+        )
+        kwargs = await arguments(service, run, sid)
+        result = await tape_phases.try_advance(service.training, **kwargs)
+        assert (result is not None) is expected
+        await service.training.command(run, kwargs["command"])
+        assert (await service.training.audit_account(run))["status"] == "PASS"
+    finally:
+        await service.shutdown(step_timeout=3)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("track_count", [1, 2])
+async def test_default_tape_jump_past_history_finalizes_held_tracks(tmp_path, track_count):
+    service, run, sid = await setup_tape(tmp_path, held=True, track_count=track_count)
+    try:
+        kwargs = await arguments(service, run, sid)
+        target = kwargs["target"] + 10 * 60000
+        command = replace(kwargs["command"], payload={"virtual_time_ms": target})
+        boundaries = {
+            key: (await service.scan_source_goal(key, max_events=1))["source_terminal_time_ms"]
+            for key in service._sessions
+        }
+        result = await service.training.command(run, command)
+        assert result["data"]["progress"]["status"] == "COMPLETED"
+        for key in service._sessions:
+            snapshot = (await service.get_session(key))["snapshot"]
+            assert snapshot["state"] == "ENDED"
+            assert snapshot["cursor"]["at_end"] is True
+            assert snapshot["cursor"]["virtual_time_ms"] == boundaries[key] < target
+        assert (await service.training.audit_account(run))["status"] == "PASS"
+    finally:
+        await service.shutdown(step_timeout=3)
 
 
 async def assert_interval_history(service, run, root):

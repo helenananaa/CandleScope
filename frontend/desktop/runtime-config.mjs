@@ -1,7 +1,8 @@
 export function resolveDesktopRuntimeConfig(environment = {}) {
   return {
     schemaVersion: 1,
-    klineBatchStreamEnabled: environment.VITE_KLINE_BATCH_STREAM_ENABLED === "1",
+    klineBatchStreamEnabled: environment.VITE_KLINE_BATCH_STREAM_ENABLED === undefined
+      || environment.VITE_KLINE_BATCH_STREAM_ENABLED === "1",
   };
 }
 

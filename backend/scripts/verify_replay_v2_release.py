@@ -319,7 +319,7 @@ def _validate_default_flags() -> dict[str, str]:
         "REPLAY_HISTORICAL_BOOK_ENABLED": "1",
         "REPLAY_SEGMENT_DOWNLOAD_WORKER_ENABLED": "0",
         "REPLAY_SEGMENT_AUTO_GC_ENABLED": "0",
-        "REPLAY_FAST_FORWARD_OPTIMIZATION_ENABLED": "0",
+        "REPLAY_FAST_FORWARD_OPTIMIZATION_ENABLED": "1",
         "REPLAY_ACCOUNT_HISTORY_ENABLED": "1",
     }
     checks = {
@@ -329,8 +329,8 @@ def _validate_default_flags() -> dict[str, str]:
             settings.replay_segment_download_worker_enabled is False
         ),
         "backend_segment_gc_off": settings.replay_segment_auto_gc_enabled is False,
-        "backend_fast_forward_off": (
-            settings.replay_fast_forward_optimization_enabled is False
+        "backend_fast_forward_on": (
+            settings.replay_fast_forward_optimization_enabled is True
         ),
         "backend_account_history_on": (settings.replay_account_history_enabled is True),
         "backend_raw_agg_default_source": '"RAW_AGG_TRADE_ARCHIVE_ENABLED", "0"'

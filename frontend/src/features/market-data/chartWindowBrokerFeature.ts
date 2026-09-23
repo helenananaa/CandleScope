@@ -3,7 +3,7 @@ export interface ChartWindowBrokerEnvironment {
 }
 
 function enabled(value: unknown): boolean {
-  return value === true || value === 1 || value === "1";
+  return value === undefined || value === true || value === 1 || value === "1";
 }
 
 export function resolveChartWindowBrokerEnabled(
@@ -22,5 +22,5 @@ function viteEnvironment(): ChartWindowBrokerEnvironment {
   }
 }
 
-/** Default-off rollback boundary for the Phase 3 broker and scheduler. */
+/** Shared requests/scheduling default on, independently of chart/window capacity. */
 export const CHART_WINDOW_BROKER_ENABLED = resolveChartWindowBrokerEnabled(viteEnvironment());

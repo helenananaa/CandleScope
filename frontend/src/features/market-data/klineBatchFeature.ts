@@ -3,7 +3,7 @@ export interface KlineBatchEnvironment {
 }
 
 function enabled(value: unknown): boolean {
-  return value === true || value === 1 || value === "1";
+  return value === undefined || value === true || value === 1 || value === "1";
 }
 
 export function resolveKlineBatchStreamEnabled(
@@ -22,5 +22,5 @@ function viteEnvironment(): KlineBatchEnvironment {
   }
 }
 
-/** Default-off rollback boundary; false keeps /stream/klines_multi unchanged. */
+/** Batch transport defaults on; explicit false retains /stream/klines_multi. */
 export const KLINE_BATCH_STREAM_ENABLED = resolveKlineBatchStreamEnabled(viteEnvironment());

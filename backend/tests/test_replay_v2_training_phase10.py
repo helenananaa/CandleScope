@@ -47,7 +47,7 @@ def test_phase10_keeps_replay_and_exact_input_capabilities_default_on(
         "REPLAY_HISTORICAL_BOOK_ENABLED": "1",
         "REPLAY_SEGMENT_DOWNLOAD_WORKER_ENABLED": "0",
         "REPLAY_SEGMENT_AUTO_GC_ENABLED": "0",
-        "REPLAY_FAST_FORWARD_OPTIMIZATION_ENABLED": "0",
+        "REPLAY_FAST_FORWARD_OPTIMIZATION_ENABLED": "1",
         "REPLAY_ACCOUNT_HISTORY_ENABLED": "1",
     }
 

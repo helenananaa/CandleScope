@@ -1,5 +1,7 @@
 # CandleScope 单窗口 16 图、四窗口 64 图执行文档
 
+> 2026-09-23 默认值更新：窗口内 broker 与批量 K 线传输已独立默认开启，容量开关仍默认关闭。下文各 Phase 的“全部 flags 默认关闭”是当时验收记录；当前默认值和回退方式见 [优化默认启用记录](optimization-defaults-20260923.md)。四物理显示器等容量发布验收状态未改变。
+
 > 状态：`PHASE_8_IMPLEMENTATION_COMPLETE_HARDWARE_AND_REVIEW_PENDING`。Phase 0～8 的实现、自动化门禁、四原生窗口 64 图 W1～W3/F1～F3 实现矩阵、精确 4 小时 soak、64 → 16 → 4 回滚、当前代码 unpacked package 双 fresh-process 和全量基线差分均已完成。当前主机只暴露 1 个逻辑显示器，因此“四个真实显示器拔插及混合 DPI”仍待外部硬件验收；默认 flag 切换仍待独立 release review。所有多图、窗口 broker、批量 K 线和原生多窗口 flags 继续默认关闭；本文只证明“四窗口 64 图实现候选”，不宣称已发布支持四屏 64 图，也不自动授权合并、发布或默认启用。
 >
 > 起始审查基线：分支 `codex/multi-chart-workspace`，文档起草时 `HEAD=af9233749219f5c0bbc0dd95af2d1f7b3bb9b9f6`（2026-08-06），工作树有 12 个前端布局相关修改。它们已在 Phase 0 前审查、验证并独立冻结为 `035762e8`；Replay 文案基线漂移另行冻结为 `a0129358`。Phase 0 的实际实现基线为 `a012935801c83e583d2e9a53c70ed9112d63582d`。

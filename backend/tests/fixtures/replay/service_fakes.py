@@ -214,6 +214,9 @@ def replay_settings(path: Path, *, enabled: bool = True) -> ReplaySettings:
         event_subscriber_queue=8,
         controller_ttl_seconds=1,
         idle_ttl_seconds=60,
+        # Reference fixtures keep scalar execution; optimization tests opt in
+        # explicitly or resolve the production default before advancing.
+        replay_fast_forward_optimization_enabled=False,
     )
 
 

@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import pytest
 
+from app.core.config import load_replay_settings
 from app.replay.constants import CommandType
 from app.replay.errors import ReplayDomainError, ReplayErrorCode
 from app.replay.training.models import ReplayV2CommandType as C
@@ -80,7 +81,9 @@ async def setup_tape(path, *, held=False, quantity="1", track_count=2):
     )
     service.settings = replace(
         service.settings,
-        replay_fast_forward_optimization_enabled=True,
+        replay_fast_forward_optimization_enabled=load_replay_settings(
+            {}, data_dir=path, klines_db_path=path / "unused.db"
+        ).replay_fast_forward_optimization_enabled,
         controller_ttl_seconds=60,
     )
     created = await service.training.create_run(await _trade_request(service))

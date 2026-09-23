@@ -1200,6 +1200,7 @@ async def test_disabled_optimization_never_reads_or_prepares_summary_cache(
 @_async_test
 async def test_agg_summary_jump_and_exact_tail_match_full_trade_reference(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     optimized = await _agg_service(
         tmp_path / "agg-optimized.db",
@@ -1211,6 +1212,9 @@ async def test_agg_summary_jump_and_exact_tail_match_full_trade_reference(
         tmp_path / "agg-reference-archive",
         optimized=False,
     )
+    # Verify the retained checkpoint-summary adapter independently of the newer
+    # tape interval coordinator, which reports AGGREGATE_SCAN instead.
+    monkeypatch.setattr(optimized.training, "_uses_tape_interval_clock", lambda *_: False)
     try:
         optimized_run, optimized_session = await _create_acquired_agg_run(
             optimized

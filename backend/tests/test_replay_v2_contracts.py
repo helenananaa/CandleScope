@@ -210,7 +210,7 @@ def test_replay_has_one_strict_core_gate_and_optional_capabilities(
     assert default.enabled is True
     assert default.replay_segment_download_worker_enabled is False
     assert default.replay_segment_auto_gc_enabled is False
-    assert default.replay_fast_forward_optimization_enabled is False
+    assert default.replay_fast_forward_optimization_enabled is True
     assert default.replay_agg_trade_enabled is False
     assert default.replay_account_history_enabled is True
     assert default.replay_account_history_max_archive_bytes == 128 * 1024**3
@@ -221,6 +221,14 @@ def test_replay_has_one_strict_core_gate_and_optional_capabilities(
         klines_db_path=tmp_path / "candlescope.db",
     )
     assert enabled.enabled is True
+
+    rollback = load_replay_settings(
+        {"REPLAY_FAST_FORWARD_OPTIMIZATION_ENABLED": "0"},
+        data_dir=tmp_path,
+        klines_db_path=tmp_path / "candlescope.db",
+    )
+    assert rollback.enabled is True
+    assert rollback.replay_fast_forward_optimization_enabled is False
 
     for retired_value in ("0", "1", "sometimes"):
         with pytest.raises(ValueError, match="REPLAY_PRODUCT_V2_ENABLED was removed"):
