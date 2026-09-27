@@ -1,6 +1,8 @@
 import { supportEnglish } from "./supportEnglish.js";
 export const nativeEnglish = {
   ...supportEnglish,
+  "orderBook.bidPriceRange": "Grouped buy orders: prices at or above {min} and below {max}. Quantity is the total for this group.",
+  "orderBook.askPriceRange": "Grouped sell orders: prices above {min} and at or below {max}. Quantity is the total for this group.",
   "native.external.sampledLabel": "Sampled book (bounded depth)",
   "native.external.sampledHint": "Approximate sampled book: consume only visible depth; excess quantity stays unfilled. Books older than 2 seconds cannot fill. No inferred passive queue fills; resting limits fill only when marketable. Same-ms trades precede new book samples. Import paired bars.csv and upload execution.json from the same archive.",
   "native.series.title": "Strategy series graphics",

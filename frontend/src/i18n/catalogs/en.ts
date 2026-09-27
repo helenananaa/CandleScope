@@ -599,6 +599,8 @@ export const en = {
   "orderBook.groupingAria": "Order-book price grouping",
   "orderBook.frequency": "Order-book update interval",
   "orderBook.price": "Price",
+  "orderBook.bidPriceRange": "Grouped buy orders: prices at or above {min} and below {max}. Quantity is the total for this group.",
+  "orderBook.askPriceRange": "Grouped sell orders: prices above {min} and at or below {max}. Quantity is the total for this group.",
   "orderBook.qty": "Size",
   "orderBook.cumulative": "Total",
   "orderBook.skew": "Skew",

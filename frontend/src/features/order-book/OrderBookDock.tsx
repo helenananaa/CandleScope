@@ -119,12 +119,16 @@ const BookRow = React.memo(function BookRow({
   maxCumulative: number;
   offsetPx: number;
 }) {
+  useLocale();
   const width = maxCumulative > 0 ? Math.min(100, row.cumulative / maxCumulative * 100) : 0;
   return (
     <div className={`ob-level-row ob-${side}`} style={{ transform: `translateY(${offsetPx}px)` }}>
       <span className="ob-depth-bar" style={{ width: `${width}%` }} aria-hidden="true" />
-      <span className={`ob-price${row.interval ? " ob-price-interval" : ""}`}>
-        {row.interval ? <><span>{side === "bid" ? "[" : "("}{formatPrice(row.interval[0])},</span><span>{formatPrice(row.interval[1])}{side === "bid" ? ")" : "]"}</span></> : formatPrice(row.price)}
+      <span className="ob-price" title={row.interval ? t(
+        side === "bid" ? "orderBook.bidPriceRange" : "orderBook.askPriceRange",
+        { min: formatPrice(row.interval[0]), max: formatPrice(row.interval[1]) },
+      ) : undefined}>
+        {formatPrice(row.price)}
       </span>
       <span title={row.incomplete ? t("orderBook.partialAmount") : undefined}>{row.incomplete ? "≥ " : ""}{formatQuantity(row.quantity)}</span>
       <span title={row.cumulativeIncomplete ? t("orderBook.partialAmount") : undefined}>{row.cumulativeIncomplete ? "≥ " : ""}{formatQuantity(row.cumulative)}</span>

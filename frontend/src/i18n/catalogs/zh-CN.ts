@@ -597,6 +597,8 @@ export const zhCN = {
   "orderBook.groupingAria": "订单簿价格聚合单位",
   "orderBook.frequency": "订单簿更新频率",
   "orderBook.price": "价格",
+  "orderBook.bidPriceRange": "本档合并买单：价格不低于 {min}、低于 {max}。数量为本档合计。",
+  "orderBook.askPriceRange": "本档合并卖单：价格高于 {min}、不高于 {max}。数量为本档合计。",
   "orderBook.qty": "数量",
   "orderBook.cumulative": "累计",
   "orderBook.skew": "偏斜",
