@@ -6,7 +6,7 @@ from .models import PreparationError
 
 
 def reconcile(repository, stop):
-    repository.set_inventory_state("SCANNING")
+    generation = repository.begin_inventory()
     try:
         abandoned = repository.abandoned_publications()
         repository.refresh_publications(stop=stop)
@@ -39,7 +39,7 @@ def reconcile(repository, stop):
         repository.register_publications(batch)
         repository.reconcile_trade_receipts(stop=stop)
         repository.reconcile_abandoned_publications(abandoned)
-        repository.set_inventory_state("READY")
+        repository.finish_inventory(generation, "READY")
     except BaseException:
-        repository.set_inventory_state("INCOMPLETE")
+        repository.finish_inventory(generation, "INCOMPLETE")
         raise

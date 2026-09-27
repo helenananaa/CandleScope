@@ -194,7 +194,7 @@ def _patch_startup_dependencies(
     async def _refresh() -> dict[str, int]:
         return {"binance": 1}
 
-    import app.api.v1.symbols as symbols_module
+    import app.exchanges.symbol_catalog as symbols_module
 
     monkeypatch.setattr(symbols_module, "refresh_exchange_metadata", _refresh)
     return routing

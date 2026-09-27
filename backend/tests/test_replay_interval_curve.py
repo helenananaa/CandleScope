@@ -1,3 +1,5 @@
+from app.replay.training.persistence import curve_records as curve_records_ops
+
 import asyncio
 import sqlite3
 import threading
@@ -62,14 +64,14 @@ async def test_lazy_curve_merge_is_atomic_and_does_not_replace_newer_values(
             row = list(base)
             row[1:5] = ["EVENT", 10, 10, 10]
             row[6] = "1234"
-            TrainingRunStore._write_equity_samples(c, [row])
+            curve_records_ops.write_equity_samples(c, [row])
             older = list(row)
             older[4] = 9
             older[6] = "999"
             missing = list(row)
             missing[2:5] = [9, 9, 9]
             missing[6] = "1200"
-            TrainingRunStore._write_interval_curve(
+            curve_records_ops.write_interval_curve(
                 c,
                 run_id=run_id,
                 command_id="interval-test",
@@ -99,20 +101,20 @@ async def test_lazy_curve_merge_is_atomic_and_does_not_replace_newer_values(
             )
 
         untouched = await service.store.run_extension_read(capture)
-        original = TrainingRunStore._write_equity_samples
+        original = curve_records_ops.write_equity_samples
 
         def fail(c, rows, **kwargs):
             original(c, rows, **kwargs)
             raise RuntimeError("curve materialization fault")
 
         monkeypatch.setattr(
-            TrainingRunStore, "_write_equity_samples", staticmethod(fail)
+            curve_records_ops, 'write_equity_samples', fail
         )
         with pytest.raises(RuntimeError, match="curve materialization fault"):
             await service.training.equity(run_id, resolution="EVENT")
         assert await service.store.run_extension_read(capture) == untouched
         monkeypatch.setattr(
-            TrainingRunStore, "_write_equity_samples", staticmethod(original)
+            curve_records_ops, 'write_equity_samples', original
         )
         result = await service.training.equity(run_id, resolution="EVENT")
         samples = {r["source_sequence"]: r for r in result["samples"]}
@@ -132,11 +134,13 @@ async def test_lazy_curve_merge_is_atomic_and_does_not_replace_newer_values(
 def test_equity_query_does_not_call_event_materialize_helper():
     import inspect
 
-    source = inspect.getsource(TrainingRunStore.equity)
+    from app.replay.training.repositories.curves import TrainingCurveRepository
+
+    source = inspect.getsource(TrainingCurveRepository.equity)
     assert "_materialize_interval_curves" not in source
-    assert "_expand_pending_interval_curves" in source
+    assert "curve_records_ops.expand_pending_interval_curves" in source
     assert "run_extension_read" in source
-    assert "_persist_interval_curve_samples" in source
+    assert "curve_records_ops.persist_interval_curve_samples" in source
 
 
 @pytest.mark.anyio
@@ -214,11 +218,11 @@ async def test_hourly_equity_query_does_not_expand_every_pending_bar(
         monkeypatch.setattr(service.store, "run_extension_write", wrapped_write)
 
         expand_calls = []
-        original_expand = TrainingRunStore._expand_pending_interval_curves
+        original_expand = curve_records_ops.expand_pending_interval_curves
 
         request_thread = threading.get_ident()
 
-        def tracking_expand(cls, pending, origins, *, run_id, resolution, limit, **kwargs):
+        def tracking_expand( pending, origins, *, run_id, resolution, limit, **kwargs):
             assert not in_write["active"], "curve expansion ran inside the write lock"
             assert threading.get_ident() != request_thread
             expand_calls.append((resolution, limit, in_write["active"]))
@@ -232,9 +236,9 @@ async def test_hourly_equity_query_does_not_expand_every_pending_bar(
             )
 
         monkeypatch.setattr(
-            TrainingRunStore,
-            "_expand_pending_interval_curves",
-            classmethod(tracking_expand),
+            curve_records_ops,
+            'expand_pending_interval_curves',
+            tracking_expand,
         )
         assert not hasattr(TrainingRunStore, "_materialize_interval_curves")
 
@@ -322,17 +326,17 @@ def test_curve_global_window_matches_full_reference_and_reuses_cache(resolution,
         bucket = i + 1 if bucket_ms == 0 else i * 60000 // bucket_ms
         reference[bucket] = (i + 1, str(10000 + i))
     expected = dict(sorted(reference.items(), reverse=True)[:limit])
-    rows, _ = TrainingRunStore._expand_pending_interval_curves(
+    rows, _ = curve_records_ops.expand_pending_interval_curves(
         pending, origins, run_id="run", resolution=resolution, limit=limit,
     )
     assert {r[2]: (r[3], r[6]) for r in rows} == expected
     assert len(rows) <= limit
     cached = {(r[1], r[2]): (r[3], r[4]) for r in rows}
-    again, _ = TrainingRunStore._expand_pending_interval_curves(
+    again, _ = curve_records_ops.expand_pending_interval_curves(
         pending, origins, run_id="run", resolution=resolution, limit=limit, cached=cached,
     )
     assert again == []
-    larger, _ = TrainingRunStore._expand_pending_interval_curves(
+    larger, _ = curve_records_ops.expand_pending_interval_curves(
         pending, origins, run_id="run", resolution=resolution, limit=500, cached=cached,
     )
     assert {r[2]: (r[3], r[6]) for r in rows + larger} == reference
@@ -343,7 +347,7 @@ def test_curve_existing_newer_bucket_wins_without_recomputation():
     origins = {"session": {"actual_replay_start_ms": 0, "synthetic_origin_ms": None}}
     # Most recent cached point is newer than the deferred interval in its bucket.
     cached = {("1H", 3): (250, 250)}
-    rows, _ = TrainingRunStore._expand_pending_interval_curves(
+    rows, _ = curve_records_ops.expand_pending_interval_curves(
         pending, origins, run_id="run", resolution="1H", limit=2, cached=cached,
     )
     assert len(rows) == 1
@@ -383,14 +387,14 @@ async def test_auto_counts_buckets_instead_of_source_events(tmp_path):
 async def test_curve_preparation_leaves_event_loop_and_writer_available(tmp_path, monkeypatch):
     service, run_id, _ = await seed(tmp_path / "concurrent.db")
     started, release = threading.Event(), threading.Event()
-    original = TrainingRunStore._expand_pending_interval_curves
+    original = curve_records_ops.expand_pending_interval_curves
 
-    def paused(cls, *args, **kwargs):
+    def paused( *args, **kwargs):
         started.set()
         assert release.wait(5), "curve preparation blocked the event loop"
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(TrainingRunStore, "_expand_pending_interval_curves", classmethod(paused))
+    monkeypatch.setattr(curve_records_ops, 'expand_pending_interval_curves', paused)
     query = asyncio.create_task(service.training.equity(run_id, resolution="1H", limit=12))
     try:
         assert await asyncio.to_thread(started.wait, 5)
@@ -470,10 +474,10 @@ async def test_bounded_hourly_read_does_not_load_every_pending_curve_body(tmp_pa
                 )
 
         await service.store.run_extension_write(insert)
-        before = TrainingRunStore._curve_body_loads
+        before = curve_records_ops.CURVE_BODY_LOADS
         limit = 8
         hourly = await service.training.equity(run_id, resolution="1H", limit=limit)
-        loaded = TrainingRunStore._curve_body_loads - before
+        loaded = curve_records_ops.CURVE_BODY_LOADS - before
         assert hourly["resolution"] == "1H"
         assert len(hourly["samples"]) <= limit
         assert loaded < intervals

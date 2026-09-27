@@ -274,7 +274,10 @@ export class ChartWorkScheduler {
     cellId: string,
     lane: AsyncTask["lane"],
     work: () => TResult | PromiseLike<TResult>,
+    options: { signal?: AbortSignal } = {},
   ): Promise<TResult> {
+    const signal = options.signal;
+    if (signal?.aborted) return Promise.reject(new DOMException("The operation was aborted", "AbortError"));
     if (this.disposed) return Promise.reject(new ChartWorkDroppedError("Chart work scheduler is disposed"));
     const state = this.ensureCell(cellId);
     if (
@@ -285,15 +288,31 @@ export class ChartWorkScheduler {
       return Promise.reject(new ChartWorkDroppedError(`${lane} is disabled for ${state.diagnostics.tier} Cell`));
     }
     return new Promise<TResult>((resolve, reject) => {
+      const cleanup = () => signal?.removeEventListener("abort", onAbort);
       const task: AsyncTask<TResult> = {
         cellId,
         createdAt: this.now(),
         lane,
-        reject,
-        resolve,
-        run: work,
+        reject: (error) => {
+          cleanup();
+          reject(error instanceof Error ? error : new Error("Chart work failed", { cause: error }));
+        },
+        resolve: (value) => { cleanup(); resolve(value); },
+        run: () => {
+          if (signal?.aborted) throw new DOMException("The operation was aborted", "AbortError");
+          return work();
+        },
         sequence: this.nextSequence++,
       };
+      const onAbort = () => {
+        const index = this.asyncQueue.indexOf(task as AsyncTask);
+        if (index >= 0) {
+          this.asyncQueue.splice(index, 1);
+          this.incrementPending(state, lane, -1);
+        }
+        task.reject(new DOMException("The operation was aborted", "AbortError"));
+      };
+      signal?.addEventListener("abort", onAbort, { once: true });
       this.asyncQueue.push(task as AsyncTask);
       this.incrementPending(state, lane, 1);
       this.scheduleDrain();

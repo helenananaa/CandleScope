@@ -9,6 +9,7 @@ import type {
   KlineLatestRequestOptions,
   KlineRangeRequestOptions,
   KlineRequestOptions,
+  KlineRequestContext,
 } from "../klineContracts.js";
 import {
   isLegacyKlineSeriesIdentity,
@@ -23,6 +24,7 @@ interface RequestConsumer {
   resolve(result: KlineFetchResult): void;
   signal?: AbortSignal;
   abortListener?: () => void;
+  context?: KlineRequestContext;
 }
 
 interface SharedRequestEntry {
@@ -38,6 +40,8 @@ interface SharedPhysicalGroup {
   controller: AbortController;
   entries: SharedRequestEntry[];
   token: symbol;
+  started: boolean;
+  admission?: { consumer: RequestConsumer; controller: AbortController; superseded?: boolean };
 }
 
 export interface SharedKlineRequestCoordinatorDiagnostics {
@@ -97,7 +101,15 @@ function physicalOptions<TOptions extends KlineRequestOptions>(
   options: TOptions,
   signal: AbortSignal,
 ): TOptions {
-  return { ...options, signal };
+  const { clientContext: _clientContext, ...transport } = options;
+  return { ...transport, signal } as TOptions;
+}
+
+function readBoundary(options: KlineRequestOptions): readonly unknown[] {
+  const context = options.clientContext;
+  return context && (context.epoch || context.scope || context.realtimeVersion)
+    ? ["read-boundary", context.epoch ?? 0, context.scope ?? null, context.realtimeVersion ?? 0]
+    : [];
 }
 
 /**
@@ -118,7 +130,7 @@ export class SharedKlineRequestCoordinator implements KlineApi {
   private joinedLogical = 0;
   private completedPhysical = 0;
 
-  constructor(api: KlineApi) {
+  constructor(api: KlineApi, private readonly batchHistory = true) {
     this.api = api;
   }
 
@@ -139,11 +151,12 @@ export class SharedKlineRequestCoordinator implements KlineApi {
       options.intent ?? null,
       options.demandScope ?? null,
       options.demandGeneration ?? null,
+      ...readBoundary(options),
     ];
     return this.join(
       "history",
       requestKey("history", identity),
-      options.signal,
+      options,
       (signal) => this.api.fetchKlinesHistory(
         symbol,
         interval,
@@ -152,7 +165,7 @@ export class SharedKlineRequestCoordinator implements KlineApi {
         exchange,
         physicalOptions(options, signal),
       ),
-      this.api.fetchKlinesHistoryBatch
+      this.batchHistory && this.api.fetchKlinesHistoryBatch
         ? {
             symbol,
             interval,
@@ -193,11 +206,12 @@ export class SharedKlineRequestCoordinator implements KlineApi {
       options.maxWaitMs ?? null,
       options.demandScope ?? null,
       options.demandGeneration ?? null,
+      ...readBoundary(options),
     ];
     return this.join(
       "before",
       requestKey("before", identity),
-      options.signal,
+      options,
       (signal) => this.api.fetchKlinesBefore(
         symbol,
         interval,
@@ -229,11 +243,12 @@ export class SharedKlineRequestCoordinator implements KlineApi {
       options.strict ?? null,
       options.demandScope ?? null,
       options.demandGeneration ?? null,
+      ...readBoundary(options),
     ];
     return this.join(
       "range",
       requestKey("range", identity),
-      options.signal,
+      options,
       (signal) => this.api.fetchKlinesRange(
         symbol,
         interval,
@@ -264,11 +279,12 @@ export class SharedKlineRequestCoordinator implements KlineApi {
       options.waitMs ?? null,
       options.demandScope ?? null,
       options.demandGeneration ?? null,
+      ...readBoundary(options),
     ];
     return this.join(
       "latest",
       requestKey("latest", identity),
-      options.signal,
+      options,
       (signal) => this.api.fetchLatestKlines(
         symbol,
         interval,
@@ -316,7 +332,10 @@ export class SharedKlineRequestCoordinator implements KlineApi {
     const entries = [...this.entries.values()];
     this.entries.clear();
     this.pendingHistory.clear();
-    for (const group of this.physicalGroups.values()) group.controller.abort();
+    for (const group of this.physicalGroups.values()) {
+      group.controller.abort();
+      if (!group.started) group.admission?.controller.abort();
+    }
     this.physicalGroups.clear();
     for (const entry of entries) {
       this.settle(entry, "reject", abortError());
@@ -326,10 +345,11 @@ export class SharedKlineRequestCoordinator implements KlineApi {
   private join(
     kind: RequestKind,
     key: string,
-    signal: AbortSignal | undefined,
+    options: KlineRequestOptions,
     request: (signal: AbortSignal) => Promise<KlineFetchResult>,
     historyBatchRequest?: KlineHistoryBatchRequest,
   ): Promise<KlineFetchResult> {
+    const { signal } = options;
     this.totalLogical += 1;
     if (signal?.aborted) return Promise.reject(abortError());
 
@@ -357,11 +377,16 @@ export class SharedKlineRequestCoordinator implements KlineApi {
     return new Promise<KlineFetchResult>((resolve, reject) => {
       const token = Symbol(key);
       const consumer: RequestConsumer = { reject, resolve };
+      if (options.clientContext) consumer.context = options.clientContext;
       if (signal) {
         const abortListener = () => {
           if (!ownedEntry.consumers.delete(token)) return;
           signal.removeEventListener("abort", abortListener);
           reject(abortError());
+          const group = ownedEntry.group;
+          if (group?.admission?.consumer === consumer && !group.started) {
+            group.admission.controller.abort();
+          }
           if (ownedEntry.consumers.size === 0 && this.entries.get(key) === ownedEntry) {
             this.entries.delete(key);
             this.pendingHistory.delete(ownedEntry);
@@ -373,6 +398,12 @@ export class SharedKlineRequestCoordinator implements KlineApi {
         signal.addEventListener("abort", abortListener, { once: true });
       }
       ownedEntry.consumers.set(token, consumer);
+      const group = ownedEntry.group;
+      if (group?.admission && !group.started
+        && (consumer.context?.priority ?? 0) < (group.admission.consumer.context?.priority ?? 0)) {
+        group.admission.superseded = true;
+        group.admission.controller.abort();
+      }
     });
   }
 
@@ -382,7 +413,7 @@ export class SharedKlineRequestCoordinator implements KlineApi {
   ): void {
     const group = this.createPhysicalGroup([entry]);
     void Promise.resolve()
-      .then(() => request(group.controller.signal))
+      .then(() => this.runScheduled(group, () => request(group.controller.signal)))
       .then(
         (result) => this.finishGroup(group, [{ outcome: "resolve", value: result }]),
         (error) => this.finishGroup(group, [{ outcome: "reject", value: error }]),
@@ -422,7 +453,7 @@ export class SharedKlineRequestCoordinator implements KlineApi {
       }
       const group = this.createPhysicalGroup(entries);
       const items = entries.map((entry) => entry.historyBatchRequest as KlineHistoryBatchRequest);
-      void this.api.fetchKlinesHistoryBatch(items, { signal: group.controller.signal }).then(
+      void this.runScheduled(group, () => this.api.fetchKlinesHistoryBatch!(items, { signal: group.controller.signal })).then(
         (outcomes) => {
           if (outcomes.length !== entries.length) {
             throw new Error("History batch response length did not match the request length");
@@ -447,6 +478,7 @@ export class SharedKlineRequestCoordinator implements KlineApi {
       controller: new AbortController(),
       entries,
       token: Symbol("physical-kline-request"),
+      started: false,
     };
     for (const entry of entries) entry.group = group;
     this.physicalGroups.set(group.token, group);
@@ -459,7 +491,51 @@ export class SharedKlineRequestCoordinator implements KlineApi {
     const hasOwner = group.entries.some((entry) => (
       this.entries.get(entry.key) === entry && entry.consumers.size > 0
     ));
-    if (!hasOwner) group.controller.abort();
+    if (!hasOwner) {
+      group.controller.abort();
+      if (!group.started) group.admission?.controller.abort();
+    }
+  }
+
+  private async runScheduled<T>(group: SharedPhysicalGroup, request: () => Promise<T>): Promise<T> {
+    // Join callers before reserving scheduler capacity. A departing sponsor
+    // may relinquish queued admission, but cannot cancel another consumer.
+    while (!group.controller.signal.aborted) {
+      const candidate = group.entries.flatMap((entry) => (
+        [...entry.consumers].map(([token, consumer]) => ({ entry, token, consumer }))
+      )).sort((a, b) => (a.consumer.context?.priority ?? 0) - (b.consumer.context?.priority ?? 0))[0];
+      if (!candidate) throw abortError();
+      const { entry, token, consumer } = candidate;
+      const controller = new AbortController();
+      group.admission = { consumer, controller };
+      const execute = () => {
+        if (controller.signal.aborted || group.controller.signal.aborted) throw abortError();
+        group.started = true;
+        return request();
+      };
+      try {
+        return await (consumer.context?.schedule
+          ? consumer.context.schedule(execute, controller.signal)
+          : execute());
+      } catch (error) {
+        if (group.started) throw error;
+        if (group.admission?.superseded) continue;
+        // A scheduler may reject one Cell (hidden/unmounted). Remove only that
+        // logical caller and let another live owner sponsor the same request.
+        if (entry.consumers.delete(token)) {
+          if (consumer.signal && consumer.abortListener) {
+            consumer.signal.removeEventListener("abort", consumer.abortListener);
+          }
+          consumer.reject(error);
+          if (entry.consumers.size === 0 && this.entries.get(entry.key) === entry) {
+            this.entries.delete(entry.key);
+          }
+        }
+      } finally {
+        delete group.admission;
+      }
+    }
+    throw abortError();
   }
 
   private finishGroup(
@@ -494,4 +570,17 @@ export class SharedKlineRequestCoordinator implements KlineApi {
       else consumer.reject(value);
     }
   }
+}
+
+const adapters = new WeakMap<KlineApi, SharedKlineRequestCoordinator>();
+
+/** Reuse a supplied workspace owner; raw adapters get the same cancellation contract. */
+export function sharedKlineRequests(api: KlineApi): SharedKlineRequestCoordinator {
+  if (api instanceof SharedKlineRequestCoordinator) return api;
+  let coordinator = adapters.get(api);
+  if (!coordinator) {
+    coordinator = new SharedKlineRequestCoordinator(api, false);
+    adapters.set(api, coordinator);
+  }
+  return coordinator;
 }

@@ -55,7 +55,9 @@ class _BarListMarket:
             getattr(bar, "source", "prepared"),
         )
 
-    def summary(self, start, end):
+    def summary(self, start, end, *, prices_only=False):
+        # Match the shared market index port. Legacy in-memory blocks already
+        # contain full summaries; returning them also satisfies a price query.
         from ..shared_market_index import summarize, merge
         if not 0 <= start <= end <= self.count:
             raise IndexError("market summary bounds")

@@ -187,9 +187,8 @@ class ExchangeHistoryPolicyResolver:
     def _lookup_symbol(self, key: HistorySeriesKey) -> dict[str, Any] | None:
         lookup = self._symbol_lookup
         if lookup is None:
-            # Kept lazy to avoid making the lower-level history package import
-            # FastAPI route modules during normal module discovery.
-            from app.api.v1.symbols import get_cached_symbol_metadata
+            # Resolve the lifecycle-owned catalog only when no lookup is injected.
+            from app.exchanges.symbol_catalog import get_cached_symbol_metadata
 
             lookup = get_cached_symbol_metadata
         return lookup(key.exchange, key.market_type, key.symbol)

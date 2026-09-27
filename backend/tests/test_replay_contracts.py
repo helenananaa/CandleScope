@@ -249,6 +249,7 @@ def test_every_stable_error_code_has_transport_agnostic_http_mapping() -> None:
         "UNSUPPORTED_EXECUTION_MODEL",
         "NO_ELIGIBLE_WINDOW",
         "DATA_GAP",
+        "DATASET_PENDING",
         "DATASET_INCOMPLETE",
         "DATASET_MISMATCH",
         "ARCHIVE_DISABLED",
@@ -261,6 +262,7 @@ def test_every_stable_error_code_has_transport_agnostic_http_mapping() -> None:
     }
     assert {code.value for code in ReplayErrorCode} == expected_codes
     assert set(ERROR_HTTP_STATUS) == set(ReplayErrorCode)
+    assert ERROR_HTTP_STATUS[ReplayErrorCode.DATASET_PENDING] == 409
     assert all(400 <= status <= 599 for status in ERROR_HTTP_STATUS.values())
 
 

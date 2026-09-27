@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.replay.training.persistence import review_records as review_records_ops
+
 import copy
 import sqlite3
 from pathlib import Path
@@ -146,7 +148,7 @@ async def test_review_checkpoint_classifier_ignores_market_only_changes() -> Non
         },
     )
     with pytest.raises(TrainingRunError) as disclosure:
-        training_storage_module.TrainingRunStore._public_review_projection(  # noqa: SLF001
+        review_records_ops.public_review_projection(  # noqa: SLF001
             {"books": [{"archive_id": "must-not-cross-api"}]}
         )
     assert disclosure.value.code == "REVIEW_DISCLOSURE_VIOLATION"
@@ -1082,7 +1084,7 @@ async def test_review_budgets_rollback_and_100k_viewport_offers_are_bounded(
         failing_limit = artifact_used + document_bytes + 1
         with monkeypatch.context() as bounded:
             bounded.setattr(
-                training_storage_module,
+                review_records_ops,
                 "REVIEW_ARTIFACT_BYTES_LIMIT",
                 failing_limit,
             )

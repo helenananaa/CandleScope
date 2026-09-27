@@ -1,3 +1,5 @@
+from app.replay.training.persistence import result_records as result_records_ops
+
 """Phase batching must retain the old financial and review boundary results."""
 
 import json
@@ -41,7 +43,7 @@ async def test_phase_boundaries_match_unbatched_summary(tmp_path, monkeypatch, m
                     )
                     if phase is not None:
                         track = phase.tracks[sid]
-                        store._sync_trade_results_projection(
+                        result_records_ops.sync_trade_results_projection(
                             connection,
                             run_id=run,
                             track_id=track["track_id"],

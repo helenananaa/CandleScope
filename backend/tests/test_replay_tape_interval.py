@@ -1,3 +1,5 @@
+from app.replay.training.persistence import curve_records as curve_records_ops
+
 import hashlib
 import asyncio
 import threading
@@ -186,15 +188,15 @@ def test_tape_curve_is_lazy_and_rejects_corrupt_range(monkeypatch):
         resolution="EVENT",
         limit=1,
     )
-    rows, _ = TrainingRunStore._expand_pending_interval_curves([interval], **args)
+    rows, _ = curve_records_ops.expand_pending_interval_curves([interval], **args)
     assert len(rows) == 1 and rows[0][3:5] == (2, 3) and rows[0][6] == "1020"
     calls = shared_prepared.account_sample_visits
-    rows, _ = TrainingRunStore._expand_pending_interval_curves(
+    rows, _ = curve_records_ops.expand_pending_interval_curves(
         [interval], cached={("EVENT", 2): (2, 4)}, **args
     )
     assert rows == [] and shared_prepared.account_sample_visits == calls
     with pytest.raises(ValueError, match="committed interval"):
-        TrainingRunStore._expand_pending_interval_curves(
+        curve_records_ops.expand_pending_interval_curves(
             [{**interval, "end_time_ms": 200}], **args
         )
 

@@ -2,47 +2,47 @@
 
 from __future__ import annotations
 
+
+from .ordered_playback import TrainingOrderedPlayback
+
+from .order_service import TrainingOrderService
+from .admission_service import TrainingAdmissionService
+from .display_service import TrainingDisplayService
+
+from . import admission_rules as admission_rules_ops
+from . import command_projection as command_projection_ops
+from . import control_rules as control_rules_ops
+from . import display_state as display_state_ops
+from . import order_rules as order_rules_ops
+from . import service_validation as service_validation_ops
+
+from app.replay.training.persistence import account_marks as account_marks_ops
+
 import asyncio
-import hashlib
-import json
 import sqlite3
 import uuid
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, replace
-from decimal import ROUND_FLOOR, Decimal, InvalidOperation
+from dataclasses import replace
+from decimal import Decimal, InvalidOperation
 from time import perf_counter
 from typing import TYPE_CHECKING, cast
 
-from app.data_engine.interval_policy import (
-    VALID_INTERVALS,
-    compute_bucket_start_ms,
-    parse_interval_ms,
-)
 from app.replay.constants import (
     REPLAY_PROTOCOL,
     CommandType,
-    ExecutionModel,
-    QualityMode,
-    SlippageKind,
-    SourceKind,
     StartPolicy,
 )
 from app.replay.broker.models import TOUCH_OR_TAPE_EXECUTION_MODE, decimal_to_string
 from app.replay.canonical import canonical_sha256
 from app.replay.timing import collect_timings
-from app.replay.catalog import ReplaySeriesIdentity
-from app.replay.display_time import SourceBucketTimeMapper
 from app.replay.errors import ReplayDomainError, ReplayErrorCode
 from app.replay.internal_commands import InternalCommandType
 from app.replay.models import (
     MAX_TIMESTAMP_MS,
-    FeeModel,
     ReplayCommand,
     ReplaySessionConfig,
-    SlippageModel,
     normalize_decimal_string,
-    validate_identifier,
 )
 from app.replay.period_summary import (
     EncodedPeriodSummaryCandidate,
@@ -52,29 +52,16 @@ from app.replay.period_summary import (
 from .errors import TrainingRunError
 from .commands import ReplayV2Command
 from .control import (
-    ADVANCE_CONTRACT_VERSION,
     MAX_CONTROL_COUNT,
-    MAX_PLAYBACK_BATCH_UNITS,
     PLAYBACK_CONTRACT_VERSION,
     advance_basis,
-    aligned_step_target_ms,
     compatible_step_interval_ms,
-    control_count,
-    control_rate,
     default_playback_basis,
-    discrete_playback_units,
     fixed_interval_ms,
-    source_aligned_step_target_ms,
     supported_advance_bases,
     supported_playback_bases,
-    validate_bar_duration_ms,
-    virtual_duration_ms,
 )
-from .history import build_display_projection, build_history_page, is_progressive_dataset
 from .account_history import (
-    FUNDING_EVENT_PHASE,
-    MARK_INDEX_EVENT_PHASE,
-    RULE_EVENT_PHASE,
     AccountHistoryArchiveManager,
 )
 from .historical_book import HistoricalBookArchiveManager, HistoricalBookProjection
@@ -82,11 +69,10 @@ from .hedge_timeline import IndexedHedgeSnapshot
 from .hedge_inputs import (
     HYBRID_PUBLIC_INPUT_FIDELITY,
     HedgeInputArchiveManager,
-    HedgeInputEvent,
     PreparedHedgeInputBinding,
 )
 from .account import isolated_margin_key, round_to_step
-from .fast_forward import FastForwardContext, FastForwardDecision, FastForwardPlanner
+from .fast_forward import FastForwardDecision, FastForwardPlanner
 from .models import (
     AccountDataMode,
     AdvanceBasis,
@@ -102,23 +88,19 @@ from .models import (
     RunState,
     StartMode,
     SubscriptionTier,
-    TimeDisclosurePolicy,
     TrainingCursor,
     TrainingRunCreateRequest,
     TrainingRunMarketSelectionRequest,
     TrainingRunSetupRequest,
-    VisibleHistoryMode,
     validate_v2_counter,
 )
 
 from .multitrack import (
     GLOBAL_ORDERING_VERSION,
-    MARKET_EVENT_PHASE,
     StableMarketEvent,
     TrainingRunActor,
-    stable_market_event_order,
 )
-from .storage import HISTORICAL_L2_LIQUIDATION_FIDELITY, TrainingRunStore
+from .storage import TrainingRunStore
 from .storage_governance import ReplayStorageGovernance
 from .segments import (
     ReplaySegmentManager,
@@ -128,340 +110,6 @@ from .trade_flow import ReplayTradeFlowAdapter
 
 if TYPE_CHECKING:
     from app.replay.service import ReplayService
-
-
-ADVANCE_PROGRESS_RETENTION_SECONDS = 2.0
-FINAL_STATE_PROJECTION_DELIVERY = "FINAL_STATE"
-FINAL_STATE_EMPTY_ACCOUNT_CHUNK_EVENTS = 10_000
-FINAL_STATE_EMPTY_ACCOUNT_INTERACTIVE_BATCH_UNITS = 512
-STABLE_ORDER_RESPONSE_EVENTS = 512
-ORDERED_PLAYBACK_INTERACTIVE_BATCH_UNITS = 1
-ORDERED_PLAYBACK_FINAL_STATE_MIN_RATE = 60
-ORDERED_PLAYBACK_FINAL_STATE_TARGET_HZ = 3
-ORDERED_SOURCE_COHORT_PLAN_EVENTS = 32
-_NATIVE_DISPLAY_PIN_PROOF_CACHE_SIZE = 4_096
-_MARKET_TRACK_PLAN_CACHE_SIZE = 1_024
-_MARKET_TRACK_PLAN_TTL_MS = 60_000
-_NativeDisplayPinProofKey = tuple[str, str, str, str, str, int, int, int, str]
-_NativeDisplayPinProof = tuple[int, str, int]
-
-
-@dataclass(frozen=True, slots=True)
-class _MarketTrackPlan:
-    plan_id: str
-    run_id: str
-    exchange: str
-    market_type: str
-    symbol: str
-    base_asset: str
-    settlement_asset: str
-    subscription_tier: SubscriptionTier
-    target_virtual_time_ms: int
-    expires_at_ms: int
-
-
-@dataclass(frozen=True, slots=True)
-class _MarketSetupAdmission:
-    windows: tuple[tuple[int, int], ...]
-    code: str
-    message: str
-    book_windows: tuple[tuple[int, int], ...] = ()
-    account_windows: tuple[tuple[int, int], ...] = ()
-    hedge_book_pairs: tuple[tuple[int, int, int, int], ...] = ()
-
-    @staticmethod
-    def _merged(
-        windows: Sequence[tuple[int, int]],
-    ) -> tuple[tuple[int, int], ...]:
-        merged: list[list[int]] = []
-        for first, last in sorted(windows):
-            if not merged or first > merged[-1][1]:
-                merged.append([first, last])
-            else:
-                merged[-1][1] = max(merged[-1][1], last)
-        return tuple((first, last) for first, last in merged)
-
-    @classmethod
-    def _start_windows(
-        cls,
-        windows: Sequence[tuple[int, int]],
-        *,
-        required_span_ms: int,
-    ) -> tuple[tuple[int, int], ...]:
-        return tuple(
-            (first, last - required_span_ms)
-            for first, last in cls._merged(windows)
-            if last - required_span_ms >= first
-        )
-
-    @classmethod
-    def _intersection(
-        cls,
-        left: Sequence[tuple[int, int]],
-        right: Sequence[tuple[int, int]],
-    ) -> tuple[tuple[int, int], ...]:
-        return cls._merged(
-            tuple(
-                (max(left_start, right_start), min(left_end, right_end))
-                for left_start, left_end in left
-                for right_start, right_end in right
-                if max(left_start, right_start) <= min(left_end, right_end)
-            )
-        )
-
-    def eligible_start_windows(
-        self,
-        required_span_ms: int,
-        *,
-        book_interval_ms: int = 0,
-    ) -> tuple[tuple[int, int], ...]:
-        account_starts = self._start_windows(
-            self.account_windows,
-            required_span_ms=required_span_ms,
-        )
-        if self.hedge_book_pairs:
-            candidates: list[tuple[int, int]] = []
-            for book_start, book_end, hedge_start, hedge_end in self.hedge_book_pairs:
-                paired = self._intersection(
-                    self._start_windows(
-                        ((book_start, book_end),),
-                        required_span_ms=required_span_ms + book_interval_ms,
-                    ),
-                    self._start_windows(
-                        ((hedge_start, hedge_end),),
-                        required_span_ms=required_span_ms,
-                    ),
-                )
-                if self.account_windows:
-                    paired = self._intersection(paired, account_starts)
-                candidates.extend(paired)
-            return self._merged(candidates)
-        if self.book_windows:
-            candidates = self._start_windows(
-                self.book_windows,
-                required_span_ms=required_span_ms + book_interval_ms,
-            )
-            if self.account_windows:
-                candidates = self._intersection(candidates, account_starts)
-            return candidates
-        return self._start_windows(
-            self.windows,
-            required_span_ms=required_span_ms,
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class _OrderedSourceGoal:
-    """One immutable-source boundary planned before an ordered mutation."""
-
-    start_source_sequence: int
-    start_revision: int
-    target_source_sequence: int
-    target_virtual_time_ms: int
-    planned_count: int
-
-
-_SetupAdmissionCacheKey = tuple[str, str, str, str, str]
-
-
-def _stored_counter(value: object, *, field_name: str) -> int:
-    try:
-        return validate_v2_counter(value, field_name=field_name)
-    except (TypeError, ValueError) as exc:
-        raise TrainingRunError(
-            "TRAINING_RUN_STORAGE_DEGRADED",
-            f"{field_name} is invalid",
-            status_code=503,
-        ) from exc
-
-
-def _stored_mapping(value: object, *, field_name: str) -> Mapping[str, object]:
-    if not isinstance(value, Mapping):
-        raise TrainingRunError(
-            "TRAINING_RUN_STORAGE_DEGRADED",
-            f"{field_name} must be an object",
-            status_code=503,
-        )
-    return cast(Mapping[str, object], value)
-
-
-def _position_is_open(value: object) -> bool:
-    if not isinstance(value, Mapping):
-        return False
-    if value.get("position_mode") == "HEDGE":
-        return any(
-            isinstance(value.get(leg), Mapping)
-            and value[leg].get("quantity") not in {None, "0", 0}
-            for leg in ("long", "short")
-        )
-    return value.get("quantity") not in {None, "0", 0}
-
-
-def _position_leg(
-    value: object,
-    *,
-    position_side: object = None,
-) -> Mapping[str, object] | None:
-    if not isinstance(value, Mapping):
-        return None
-    if value.get("position_mode") != "HEDGE":
-        return cast(Mapping[str, object], value)
-    if position_side not in {"LONG", "SHORT"}:
-        return None
-    leg = value.get(str(position_side).lower())
-    return cast(Mapping[str, object], leg) if isinstance(leg, Mapping) else None
-
-
-def _position_mark(value: object, *, position_side: object = None) -> object:
-    leg = _position_leg(value, position_side=position_side)
-    if leg is not None and leg.get("mark_price") is not None:
-        return leg.get("mark_price")
-    if isinstance(value, Mapping) and value.get("position_mode") == "HEDGE":
-        for name in ("long", "short"):
-            candidate = value.get(name)
-            if (
-                isinstance(candidate, Mapping)
-                and candidate.get("mark_price") is not None
-            ):
-                return candidate.get("mark_price")
-    return None
-
-
-def _position_gross_notional(value: object) -> Decimal:
-    if not isinstance(value, Mapping):
-        return Decimal(0)
-    if value.get("position_mode") != "HEDGE":
-        return Decimal(str(value.get("notional", "0")))
-    return sum(
-        (
-            Decimal(str(leg.get("notional", "0")))
-            for name in ("long", "short")
-            if isinstance((leg := value.get(name)), Mapping)
-        ),
-        Decimal(0),
-    )
-
-
-def _portfolio_risk_position(
-    portfolio: Mapping[str, object],
-    *,
-    track_id: str,
-    position_side: object,
-) -> Mapping[str, object] | None:
-    positions = portfolio.get("positions")
-    if not isinstance(positions, list):
-        return None
-    item = next(
-        (
-            candidate
-            for candidate in positions
-            if isinstance(candidate, Mapping)
-            and candidate.get("track_id") == track_id
-            and candidate.get("position_side") == position_side
-        ),
-        None,
-    )
-    return cast(Mapping[str, object], item) if isinstance(item, Mapping) else None
-
-
-def _hedge_leg_leverage(
-    portfolio: Mapping[str, object],
-    *,
-    track_id: str,
-    position_side: object,
-) -> Decimal | None:
-    if position_side not in {"LONG", "SHORT"}:
-        return None
-    position = _portfolio_risk_position(
-        portfolio,
-        track_id=track_id,
-        position_side=position_side,
-    )
-    if position is not None and position.get("leverage") is not None:
-        return Decimal(str(position["leverage"]))
-    hedge_state = portfolio.get("hedge_state")
-    legs = (
-        hedge_state.get("position_legs") if isinstance(hedge_state, Mapping) else None
-    )
-    if not isinstance(legs, list):
-        return None
-    leg = next(
-        (
-            candidate
-            for candidate in legs
-            if isinstance(candidate, Mapping)
-            and candidate.get("track_id") == track_id
-            and candidate.get("position_side") == position_side
-        ),
-        None,
-    )
-    if not isinstance(leg, Mapping) or leg.get("leverage") is None:
-        return None
-    return Decimal(str(leg["leverage"]))
-
-
-def _sample_unique_source_time(
-    candidate_ranges: Sequence[tuple[int, int, int]],
-    *,
-    random_seed: int,
-) -> int:
-    """Map a seed to a uniformly weighted T0 without materializing every minute.
-
-    The input is a compact multiset of ``(first, interval, count)`` progressions
-    contributed by source-compatible markets. A timestamp present in more than
-    one progression still represents one Run T0, so deterministic rejection
-    removes the otherwise accidental market-count weighting.
-    """
-
-    candidate_count = sum(count for _first, _step, count in candidate_ranges)
-    if candidate_count < 1:
-        raise ValueError("candidate_ranges must contain at least one timestamp")
-    for attempt in range(10_000):
-        if attempt == 0:
-            candidate_index = random_seed % candidate_count
-        else:
-            draw = canonical_sha256(
-                {
-                    "schema_version": "replay.source-time-sample.v1",
-                    "random_seed": random_seed,
-                    "attempt": attempt,
-                }
-            )
-            candidate_index = int(draw[7:], 16) % candidate_count
-        mapped_index = candidate_index
-        candidate_start_ms: int | None = None
-        for first, interval_ms, count in candidate_ranges:
-            if mapped_index < count:
-                candidate_start_ms = first + mapped_index * interval_ms
-                break
-            mapped_index -= count
-        if candidate_start_ms is None:
-            raise RuntimeError("aggregate-trade random range mapping drifted")
-        multiplicity = sum(
-            1
-            for first, interval_ms, count in candidate_ranges
-            if first <= candidate_start_ms <= first + (count - 1) * interval_ms
-            and (candidate_start_ms - first) % interval_ms == 0
-        )
-        if multiplicity < 1:
-            raise RuntimeError(
-                "aggregate-trade random coverage multiplicity drifted"
-            )
-        acceptance = canonical_sha256(
-            {
-                "schema_version": "replay.source-time-deduplication.v1",
-                "random_seed": random_seed,
-                "attempt": attempt,
-                "candidate_start_ms": candidate_start_ms,
-            }
-        )
-        if int(acceptance[7:], 16) % multiplicity == 0:
-            return candidate_start_ms
-    raise TrainingRunError(
-        "TRAINING_RANDOM_SEED_UNAVAILABLE",
-        "server could not map the random seed to a unique source time",
-        status_code=503,
-    )
 
 
 class TrainingRunService:
@@ -528,24 +176,58 @@ class TrainingRunService:
         self._last_foreground_control: float | None = None
         self._display_source_grid_anchors: dict[tuple[str, str, str, str], int] = {}
         self._native_display_pin_proofs: OrderedDict[
-            _NativeDisplayPinProofKey,
-            _NativeDisplayPinProof,
+            display_state_ops._NativeDisplayPinProofKey,
+            display_state_ops._NativeDisplayPinProof,
         ] = OrderedDict()
-        self._market_track_plans: OrderedDict[str, _MarketTrackPlan] = OrderedDict()
+        self._market_track_plans: OrderedDict[str, admission_rules_ops._MarketTrackPlan] = OrderedDict()
         self._market_track_subscribers: dict[
             str,
             set[asyncio.Queue[Mapping[str, object] | None]],
         ] = {}
 
+        self._order_service = TrainingOrderService(
+            store=self.store,
+            replay_service=self.replay_service,
+            historical_books=self.historical_books,
+            run_actors=self._run_actors,
+        )
+        self._admission_service = TrainingAdmissionService(
+            store=self.store,
+            replay_service=self.replay_service,
+            account_history=self.account_history,
+            historical_books=self.historical_books,
+            run_id_factory=self._run_id_factory,
+            random_seed_factory=self._random_seed_factory,
+            instrument_metadata_resolver=self._instrument_metadata_resolver,
+            market_track_plans=self._market_track_plans,
+        )
+        self._display_service = TrainingDisplayService(
+            store=self.store,
+            replay_service=self.replay_service,
+            display_source_grid_anchors=self._display_source_grid_anchors,
+            native_display_pin_proofs=self._native_display_pin_proofs,
+        )
+
+        self._ordered_playback = TrainingOrderedPlayback(
+            store=self.store,
+            replay_service=self.replay_service,
+            account_history=self.account_history,
+            hedge_inputs=self.hedge_inputs,
+            historical_books=self.historical_books,
+            run_actors=self._run_actors,
+            advance_jobs=self._advance_jobs,
+            fast_forward_planner=self._fast_forward_planner,
+            display=self._display_service,
+            notify_market_tracks=self._notify_market_tracks,
+            audit_account=self.audit_account,
+        )
+
     def _remember_native_display_pin_proof(
         self,
-        key: _NativeDisplayPinProofKey,
-        proof: _NativeDisplayPinProof,
+        key: display_state_ops._NativeDisplayPinProofKey,
+        proof: display_state_ops._NativeDisplayPinProof,
     ) -> None:
-        self._native_display_pin_proofs[key] = proof
-        self._native_display_pin_proofs.move_to_end(key)
-        if len(self._native_display_pin_proofs) > _NATIVE_DISPLAY_PIN_PROOF_CACHE_SIZE:
-            self._native_display_pin_proofs.popitem(last=False)
+        return self._display_service._remember_native_display_pin_proof(key, proof)
 
     async def start(self) -> None:
         await self.store.start()
@@ -675,8 +357,8 @@ class TrainingRunService:
             )
             catalog_cache: dict[tuple[int, int, str, bool], dict[str, object]] = {}
             admission_cache: dict[
-                _SetupAdmissionCacheKey,
-                dict[tuple[str, str, str], _MarketSetupAdmission],
+                control_rules_ops._SetupAdmissionCacheKey,
+                dict[tuple[str, str, str], admission_rules_ops._MarketSetupAdmission],
             ] = {}
             result["items"] = [
                 await self._project_awaiting_market_compatibility(
@@ -698,8 +380,8 @@ class TrainingRunService:
         next_cursor: str | None = None
         catalog_cache: dict[tuple[int, int, str, bool], dict[str, object]] = {}
         admission_cache: dict[
-            _SetupAdmissionCacheKey,
-            dict[tuple[str, str, str], _MarketSetupAdmission],
+            control_rules_ops._SetupAdmissionCacheKey,
+            dict[tuple[str, str, str], admission_rules_ops._MarketSetupAdmission],
         ] = {}
         while True:
             cursor_before_row = scan_cursor
@@ -745,8 +427,8 @@ class TrainingRunService:
         *,
         catalog_cache: dict[tuple[int, int, str, bool], dict[str, object]] | None = None,
         admission_cache: dict[
-            _SetupAdmissionCacheKey,
-            dict[tuple[str, str, str], _MarketSetupAdmission],
+            control_rules_ops._SetupAdmissionCacheKey,
+            dict[tuple[str, str, str], admission_rules_ops._MarketSetupAdmission],
         ] | None = None,
     ) -> dict[str, object]:
         if card.get("state") != RunState.AWAITING_MARKET.value:
@@ -792,114 +474,7 @@ class TrainingRunService:
         preparation_id: str | None = None,
         _progressive_initial_horizon_ms: int | None = None,
     ) -> dict[str, object]:
-        if not isinstance(request, TrainingRunSetupRequest):
-            raise TypeError("request must be TrainingRunSetupRequest")
-        run_id = self._identifier(
-            f"prepared-{preparation_id}" if preparation_id is not None else self._run_id_factory(),
-            field_name="run_id",
-        )
-        if preparation_id is not None:
-            try:
-                existing = await self.store.get_run_setup(run_id, require_awaiting_market=False)
-            except TrainingRunError as exc:
-                if exc.code != "TRAINING_RUN_NOT_FOUND":
-                    raise
-            else:
-                if existing.to_dict() != request.to_dict():
-                    raise TrainingRunError("TRAINING_RUN_CONFLICT", "preparation belongs to another setup", status_code=409)
-                return {"protocol": REPLAY_V2_PROTOCOL, "created": False, "run": await self.store.get_run(run_id)}
-        settings = self._progressive_admission_settings(request, _progressive_initial_horizon_ms)
-        catalog = await self._source_catalog_for_setup(settings)
-        capability_admission = await self._setup_capability_admission(settings)
-        entries = [
-            entry
-            for entry in cast(list[Mapping[str, object]], catalog["entries"])
-            if self._setup_market_compatibility(
-                settings,
-                entry,
-                capability_admission=capability_admission,
-                committed_start_ms=None,
-            )["state"] == "READY"
-        ]
-        if not entries:
-            raise TrainingRunError(
-                "NO_SETUP_COMPATIBLE_SOURCE_MARKET",
-                "no market satisfies the run's structural data requirements",
-                status_code=409,
-                details={
-                    "source_kind": settings["source_kind"],
-                    "position_mode": settings["position_mode"],
-                    "book_mode": settings["book_mode"],
-                    "account_data_mode": settings["account_data_mode"],
-                },
-            )
-        if settings["start_mode"] == StartMode.MANUAL.value:
-            committed_start_ms = int(settings["requested_start_ms"])
-            random_seed = None
-            if not any(
-                self._market_start_compatibility(entry, committed_start_ms)["state"]
-                == "READY"
-                and self._setup_market_compatibility(
-                    settings,
-                    entry,
-                    capability_admission=capability_admission,
-                    committed_start_ms=committed_start_ms,
-                )["state"] == "READY"
-                for entry in entries
-            ):
-                raise TrainingRunError(
-                    "NO_ELIGIBLE_SOURCE_MARKET_AT_START",
-                    "no market for the selected replay source can use the "
-                    "requested start",
-                    status_code=409,
-                    details={
-                        "source_kind": settings["source_kind"],
-                        "requires_new_start": True,
-                    },
-                )
-        else:
-            random_seed = self._authoritative_random_seed()
-            range_start = int(settings["random_range_start_ms"])
-            range_end = int(settings["random_range_end_ms"])
-            candidate_ranges = self._eligible_source_ranges(
-                entries,
-                range_start_ms=range_start,
-                range_end_ms=range_end,
-                settings=settings,
-                capability_admission=capability_admission,
-            )
-            if not candidate_ranges:
-                raise TrainingRunError(
-                    "NO_ELIGIBLE_SOURCE_MARKET_IN_RANGE",
-                    "no setup-compatible market overlaps the requested range",
-                    status_code=409,
-                    details={
-                        "source_kind": settings["source_kind"],
-                        "requires_new_range": True,
-                    },
-                )
-            committed_start_ms = _sample_unique_source_time(
-                candidate_ranges,
-                random_seed=random_seed,
-            )
-        try:
-            await self.store.create_empty_run(
-                run_id=run_id,
-                request=request,
-                committed_start_ms=committed_start_ms,
-                random_seed=random_seed,
-            )
-        except sqlite3.IntegrityError as exc:
-            raise TrainingRunError(
-                "TRAINING_RUN_CONFLICT",
-                "training run identity already exists",
-                status_code=409,
-            ) from exc
-        return {
-            "protocol": REPLAY_V2_PROTOCOL,
-            "created": True,
-            "run": await self.store.get_run(run_id),
-        }
+        return await self._admission_service.create_empty_run(request, preparation_id=preparation_id, _progressive_initial_horizon_ms=_progressive_initial_horizon_ms)
 
     async def select_initial_market(
         self,
@@ -981,87 +556,11 @@ class TrainingRunService:
         *,
         _catalog_cache: dict[tuple[int, int, str, bool], dict[str, object]] | None = None,
         _admission_cache: dict[
-            _SetupAdmissionCacheKey,
-            dict[tuple[str, str, str], _MarketSetupAdmission],
+            control_rules_ops._SetupAdmissionCacheKey,
+            dict[tuple[str, str, str], admission_rules_ops._MarketSetupAdmission],
         ] | None = None,
     ) -> dict[str, object]:
-        normalized = self._identifier(run_id, field_name="run_id")
-        setup = await self.store.get_run_setup(
-            normalized,
-            require_awaiting_market=False,
-        )
-        settings = setup.to_dict()
-        cache_prefix = (
-            int(settings["indicator_warmup_bars"]),
-            int(settings["forward_cache_ms"]),
-            str(settings["source_kind"]),
-        )
-        # A MANUAL start means the user knows the committed start; it does not
-        # authorize exposing the source tail, eligible future windows, or data
-        # fingerprint while the Run's disclosure policy is still active.
-        blind_mode = settings["time_disclosure_policy"] != "NONE"
-        cache_key = (*cache_prefix, blind_mode)
-        catalog = None if _catalog_cache is None else _catalog_cache.get(cache_key)
-        if catalog is None:
-            catalog = await self.replay_service.catalog(
-                warmup_bars=int(settings["indicator_warmup_bars"]),
-                horizon_ms=int(settings["forward_cache_ms"]),
-                quality_mode="exact",
-                blind_mode=blind_mode,
-                source_kind=str(settings["source_kind"]),
-            )
-            if _catalog_cache is not None:
-                _catalog_cache[cache_key] = catalog
-        if blind_mode:
-            internal_key = (*cache_prefix, False)
-            internal_catalog = (
-                None if _catalog_cache is None else _catalog_cache.get(internal_key)
-            )
-            if internal_catalog is None:
-                internal_catalog = await self._source_catalog_for_setup(settings)
-                if _catalog_cache is not None:
-                    _catalog_cache[internal_key] = internal_catalog
-        else:
-            internal_catalog = catalog
-        commitment = await self.store.get_time_commitment(normalized)
-        admission_key = self._setup_admission_cache_key(settings)
-        capability_admission = (
-            None
-            if _admission_cache is None
-            else _admission_cache.get(admission_key)
-        )
-        if capability_admission is None:
-            capability_admission = await self._setup_capability_admission(settings)
-            if _admission_cache is not None:
-                _admission_cache[admission_key] = capability_admission
-        internal_by_identity = {
-            self._catalog_identity_key(entry): entry
-            for entry in cast(list[Mapping[str, object]], internal_catalog["entries"])
-        }
-        for entry in cast(list[dict[str, object]], catalog["entries"]):
-            internal_entry = internal_by_identity.get(
-                self._catalog_identity_key(entry), entry
-            )
-            time_compatibility = self._market_start_compatibility(
-                internal_entry,
-                int(commitment["committed_start_ms"]),
-            )
-            identity_compatibility = self._setup_market_compatibility(
-                settings,
-                internal_entry,
-                capability_admission=capability_admission,
-                committed_start_ms=int(commitment["committed_start_ms"]),
-            )
-            entry["start_compatibility"] = (
-                time_compatibility
-                if time_compatibility["state"] != "READY"
-                else identity_compatibility
-            )
-        catalog["time_commitment"] = self._public_time_commitment(
-            commitment,
-            disclose_start=settings["time_disclosure_policy"] == "NONE",
-        )
-        return catalog
+        return await self._admission_service.market_catalog(run_id, _catalog_cache=_catalog_cache, _admission_cache=_admission_cache)
 
     async def market_track_plan(
         self,
@@ -1078,130 +577,7 @@ class TrainingRunService:
         and the requested tier.  The command path consumes only ``plan_id`` so a
         browser cannot declare a quote/settlement asset on the account's behalf.
         """
-
-        normalized_run = self._identifier(run_id, field_name="run_id")
-        normalized_exchange = self._identifier(exchange, field_name="exchange")
-        normalized_market = self._identifier(market_type, field_name="market_type")
-        normalized_symbol = self._identifier(symbol, field_name="symbol")
-        try:
-            tier = SubscriptionTier(subscription_tier)
-        except ValueError as exc:
-            raise TrainingRunError(
-                "REPLAY_CONTROL_INVALID",
-                "subscription_tier is unsupported",
-                status_code=422,
-            ) from exc
-        identity = self._authoritative_instrument_identity(
-            exchange=normalized_exchange,
-            market_type=normalized_market,
-            symbol=normalized_symbol,
-        )
-        binding = await self.store.run_binding(normalized_run)
-        self._assert_same_market_scope(
-            binding=binding,
-            exchange=identity["exchange"],
-            market_type=identity["market_type"],
-            settlement_asset=identity["settlement_asset"],
-        )
-        adapter_config = binding.get("adapter_config")
-        if not isinstance(adapter_config, Mapping):
-            raise TrainingRunError(
-                "TRAINING_RUN_STORAGE_DEGRADED",
-                "training adapter config is invalid",
-                status_code=503,
-            )
-        config = ReplaySessionConfig.from_dict(adapter_config)
-        catalog = await self.replay_service.catalog(
-            warmup_bars=config.warmup_bars,
-            horizon_ms=config.horizon_ms,
-            quality_mode=config.quality_mode,
-            blind_mode=False,
-            source_kind=str(binding["source_kind"]),
-        )
-        entry = next(
-            (
-                candidate
-                for candidate in cast(list[Mapping[str, object]], catalog["entries"])
-                if self._catalog_identity_key(candidate)
-                == (
-                    identity["exchange"],
-                    identity["market_type"],
-                    identity["symbol"],
-                )
-            ),
-            None,
-        )
-        if entry is None:
-            raise TrainingRunError(
-                "MARKET_TRACK_UNAVAILABLE",
-                "market is not present in the Run capability catalog",
-                status_code=409,
-            )
-        if entry.get("selected_base_interval") != config.base_interval:
-            raise TrainingRunError(
-                "MARKET_MODE_INCOMPATIBLE",
-                "market does not support the Run's frozen base interval",
-                status_code=409,
-            )
-        compatibility = self._market_start_compatibility(
-            entry,
-            _stored_counter(
-                binding["actual_replay_start_ms"],
-                field_name="actual_replay_start_ms",
-            ),
-        )
-        if compatibility.get("state") != "READY":
-            raise TrainingRunError(
-                str(compatibility.get("code", "MARKET_TRACK_UNAVAILABLE")),
-                str(
-                    compatibility.get(
-                        "message",
-                        "market is not compatible with the Run's frozen start",
-                    )
-                ),
-                status_code=409,
-            )
-        selected_session = await self.replay_service.get_session(
-            str(binding["adapter_session_id"])
-        )
-        selected_snapshot = self._snapshot(selected_session)
-        now_ms = self.replay_service.now_ms()
-        plan = _MarketTrackPlan(
-            plan_id=f"track-plan-{uuid.uuid4().hex}",
-            run_id=normalized_run,
-            exchange=identity["exchange"],
-            market_type=identity["market_type"],
-            symbol=identity["symbol"],
-            base_asset=identity["base_asset"],
-            settlement_asset=identity["settlement_asset"],
-            subscription_tier=tier,
-            target_virtual_time_ms=self._cursor_time(selected_snapshot),
-            expires_at_ms=now_ms + _MARKET_TRACK_PLAN_TTL_MS,
-        )
-        self._prune_market_track_plans(now_ms)
-        self._market_track_plans[plan.plan_id] = plan
-        self._market_track_plans.move_to_end(plan.plan_id)
-        while len(self._market_track_plans) > _MARKET_TRACK_PLAN_CACHE_SIZE:
-            self._market_track_plans.popitem(last=False)
-        return {
-            "schema_version": "replay.market-track-plan.v1",
-            "plan_id": plan.plan_id,
-            "run_id": plan.run_id,
-            "identity": {
-                "exchange": plan.exchange,
-                "market_type": plan.market_type,
-                "symbol": plan.symbol,
-                "base_asset": plan.base_asset,
-                "settlement_asset": plan.settlement_asset,
-            },
-            "subscription_tier": plan.subscription_tier.value,
-            "compatibility": {
-                "state": "READY",
-                "code": "MARKET_TRACK_PLAN_READY",
-                "message": "商品身份、账户范围和冻结历史已校验。",
-            },
-            "expires_at_ms": plan.expires_at_ms,
-        }
+        return await self._admission_service.market_track_plan(run_id, exchange=exchange, market_type=market_type, symbol=symbol, subscription_tier=subscription_tier)
 
     async def initial_market_plan(
         self,
@@ -1442,31 +818,13 @@ class TrainingRunService:
 
     @staticmethod
     def _requires_barrier_account_audit(binding: Mapping[str, object]) -> bool:
-        return (
-            binding.get("account_data_mode")
-            == AccountDataMode.HISTORICAL_EXACT.value
-        )
+        return order_rules_ops.requires_barrier_account_audit(binding)
 
     @staticmethod
     def _public_hedge_input_audit(
         audit: Mapping[str, object],
     ) -> dict[str, object]:
-        differences = audit.get("differences")
-        if not isinstance(differences, list):
-            raise TypeError("internal HEDGE input audit differences are invalid")
-        snapshot = audit.get("snapshot")
-        if snapshot is not None and not isinstance(snapshot, Mapping):
-            raise TypeError("internal HEDGE input audit snapshot is invalid")
-        return {
-            "schema_version": "replay.hedge-input-audit-summary.v1",
-            "status": str(audit.get("status")),
-            "proof_hash": audit.get("proof_hash"),
-            "difference_count": len(differences),
-            "difference_hashes": [
-                canonical_sha256(difference) for difference in differences
-            ],
-            "snapshot_hash": (None if snapshot is None else canonical_sha256(snapshot)),
-        }
+        return order_rules_ops.public_hedge_input_audit(audit)
 
     async def list_data_segments(
         self, *, run_id: str | None = None
@@ -1539,8 +897,8 @@ class TrainingRunService:
                 "all FULL tracks must be paused before historical book resync",
                 status_code=409,
             )
-        cursor = _stored_mapping(snapshot.get("cursor"), field_name="adapter cursor")
-        virtual_time_ms = _stored_counter(
+        cursor = service_validation_ops._stored_mapping(snapshot.get("cursor"), field_name="adapter cursor")
+        virtual_time_ms = service_validation_ops._stored_counter(
             cursor.get("virtual_time_ms"), field_name="virtual_time_ms"
         )
         projection = await self.store.get_market_tracks(normalized)
@@ -1678,292 +1036,7 @@ class TrainingRunService:
         trade_plan: Mapping[str, object] | None = None,
     ) -> dict[str, object]:
         """Return a non-mutating order preview bound to one authoritative cursor."""
-
-        normalized = self._identifier(run_id, field_name="run_id")
-        if expected_revision != expected_cursor.revision:
-            raise TrainingRunError(
-                "REPLAY_CONTROL_INVALID",
-                "preview revision must match expected cursor revision",
-                status_code=422,
-            )
-        actor = self._run_actors.setdefault(normalized, TrainingRunActor(normalized))
-        async with actor.serialized():
-            binding = await self.store.run_binding(normalized)
-            projection = await self.store.get_market_tracks(normalized)
-            tracks = projection.get("tracks")
-            if not isinstance(tracks, list):
-                raise TrainingRunError(
-                    "TRAINING_RUN_STORAGE_DEGRADED",
-                    "market tracks projection is invalid",
-                    status_code=503,
-                )
-            selected_track_id = str(binding["selected_track_id"])
-            selected = next(
-                (
-                    track
-                    for track in tracks
-                    if isinstance(track, Mapping)
-                    and track.get("track_id") == selected_track_id
-                ),
-                None,
-            )
-            if (
-                selected is None
-                or selected.get("subscription_tier") != "FULL"
-                or selected.get("state") != "READY"
-            ):
-                raise TrainingRunError(
-                    "MARKET_TRACK_NOT_READY",
-                    "order preview requires the selected market track to be READY and FULL",
-                    status_code=409,
-                )
-            session_id = str(binding["adapter_session_id"])
-            session = await self.replay_service.get_session(session_id)
-            snapshot = self._snapshot(session)
-            cursor = snapshot.get("cursor")
-            if not isinstance(cursor, Mapping):
-                raise TrainingRunError(
-                    "TRAINING_RUN_STORAGE_DEGRADED",
-                    "adapter cursor is invalid",
-                    status_code=503,
-                )
-            actual = {
-                "virtual_time_ms": cursor.get("virtual_time_ms"),
-                "source_sequence": cursor.get("source_sequence"),
-                "revision": snapshot.get("revision"),
-            }
-            if actual != expected_cursor.to_dict():
-                raise TrainingRunError(
-                    "REVISION_CONFLICT",
-                    "preview cursor does not match the authoritative run cursor",
-                    status_code=409,
-                    details={"expected": expected_cursor.to_dict(), "actual": actual},
-                )
-            await self._guard_historical_book_current(
-                run_id=normalized,
-                binding=binding,
-                snapshot=snapshot,
-            )
-            payload = dict(
-                self._order_payload_with_optional_leverage(
-                    order,
-                    {
-                        "client_order_id",
-                        "side",
-                        "order_type",
-                        "quantity",
-                        "reduce_only",
-                        "limit_price",
-                        "stop_price",
-                    },
-                )
-            )
-            if position_intent not in {"NET", "OPEN"}:
-                raise TrainingRunError(
-                    "REPLAY_CONTROL_INVALID",
-                    "order preview position intent is unsupported",
-                    status_code=422,
-                )
-            if binding.get("position_mode") == "HEDGE" and payload.get(
-                "position_side"
-            ) not in {"LONG", "SHORT"}:
-                raise TrainingRunError(
-                    "ORDER_REJECTED",
-                    "HEDGE order preview requires position_side",
-                    status_code=409,
-                )
-            if position_intent == "OPEN" and binding.get("position_mode") != "HEDGE":
-                if (
-                    payload.get("order_type") != "MARKET"
-                    or payload.get("reduce_only") is not False
-                ):
-                    raise TrainingRunError(
-                        "REPLAY_CONTROL_INVALID",
-                        "OPEN preview is only available for non-reduce-only market orders",
-                        status_code=422,
-                    )
-                position = selected.get("position")
-                if not isinstance(position, Mapping):
-                    raise TrainingRunError(
-                        "TRAINING_RUN_STORAGE_DEGRADED",
-                        "selected position projection is invalid",
-                        status_code=503,
-                    )
-                try:
-                    position_quantity = Decimal(str(position.get("quantity")))
-                except InvalidOperation as exc:
-                    raise TrainingRunError(
-                        "TRAINING_RUN_STORAGE_DEGRADED",
-                        "selected position quantity is invalid",
-                        status_code=503,
-                    ) from exc
-                if position_quantity != 0 and (position_quantity > 0) != (
-                    payload.get("side") == "BUY"
-                ):
-                    raise TrainingRunError(
-                        "ORDER_REJECTED",
-                        "OPEN cannot reduce or reverse the current position",
-                        status_code=409,
-                    )
-            normalized_plan: dict[str, object] | None = None
-            if trade_plan is not None:
-                if position_intent != "OPEN":
-                    raise TrainingRunError(
-                        "TRADE_PLAN_INVALID",
-                        "trade plans are only available for opening orders",
-                        status_code=422,
-                    )
-                provisional_entry = self._planned_entry_reference(
-                    payload=payload,
-                    selected_track=selected,
-                )
-                normalized_plan = self._build_trade_plan_snapshot(
-                    draft=trade_plan,
-                    payload=payload,
-                    selected_track=selected,
-                    portfolio=projection.get("portfolio"),
-                    entry_price=provisional_entry,
-                )
-                payload["quantity"] = normalized_plan["quantity"]
-            self._assert_exact_account_order_filters(
-                payload=payload,
-                selected_track=selected,
-                portfolio=projection.get("portfolio"),
-            )
-            self._assert_shared_settlement_reservation(
-                payload=payload,
-                selected_track=selected,
-                portfolio=projection.get("portfolio"),
-                binding=binding,
-            )
-            try:
-                adapter_preview = await self.replay_service.preview_order(
-                    session_id,
-                    payload,
-                )
-            except ReplayDomainError as exc:
-                raise TrainingRunError(
-                    exc.code.value,
-                    exc.message,
-                    status_code=exc.http_status,
-                    details=exc.details,
-                ) from exc
-            preview_cursor = adapter_preview.get("cursor")
-            if not isinstance(preview_cursor, Mapping):
-                raise TrainingRunError(
-                    "TRAINING_RUN_STORAGE_DEGRADED",
-                    "adapter preview cursor is invalid",
-                    status_code=503,
-                )
-            preview_actual = {
-                "virtual_time_ms": preview_cursor.get("virtual_time_ms"),
-                "source_sequence": preview_cursor.get("source_sequence"),
-                "revision": adapter_preview.get("revision"),
-            }
-            if preview_actual != expected_cursor.to_dict():
-                raise TrainingRunError(
-                    "REVISION_CONFLICT",
-                    "market advanced while the order preview was built",
-                    status_code=409,
-                    details={
-                        "expected": expected_cursor.to_dict(),
-                        "actual": preview_actual,
-                    },
-                )
-            preview = adapter_preview.get("preview")
-            if not isinstance(preview, Mapping):
-                raise TrainingRunError(
-                    "TRAINING_RUN_STORAGE_DEGRADED",
-                    "adapter order preview is invalid",
-                    status_code=503,
-                )
-            if normalized_plan is not None:
-                normalized_plan = self._build_trade_plan_snapshot(
-                    draft=trade_plan,
-                    payload=payload,
-                    selected_track=selected,
-                    portfolio=projection.get("portfolio"),
-                    entry_price=preview.get("estimated_fill_price"),
-                )
-                if payload["quantity"] != normalized_plan["quantity"]:
-                    payload["quantity"] = normalized_plan["quantity"]
-                    self._assert_exact_account_order_filters(
-                        payload=payload,
-                        selected_track=selected,
-                        portfolio=projection.get("portfolio"),
-                    )
-                    self._assert_shared_settlement_reservation(
-                        payload=payload,
-                        selected_track=selected,
-                        portfolio=projection.get("portfolio"),
-                        binding=binding,
-                    )
-                    try:
-                        adapter_preview = await self.replay_service.preview_order(
-                            session_id,
-                            payload,
-                        )
-                    except ReplayDomainError as exc:
-                        raise TrainingRunError(
-                            exc.code.value,
-                            exc.message,
-                            status_code=exc.http_status,
-                            details=exc.details,
-                        ) from exc
-                    preview = _stored_mapping(
-                        adapter_preview.get("preview"),
-                        field_name="adapter order preview",
-                    )
-                    revised_cursor = _stored_mapping(
-                        adapter_preview.get("cursor"),
-                        field_name="adapter order preview cursor",
-                    )
-                    revised_actual = {
-                        "virtual_time_ms": revised_cursor.get("virtual_time_ms"),
-                        "source_sequence": revised_cursor.get("source_sequence"),
-                        "revision": adapter_preview.get("revision"),
-                    }
-                    if revised_actual != expected_cursor.to_dict():
-                        raise TrainingRunError(
-                            "REVISION_CONFLICT",
-                            "market advanced while the planned quantity was recalculated",
-                            status_code=409,
-                            details={
-                                "expected": expected_cursor.to_dict(),
-                                "actual": revised_actual,
-                            },
-                        )
-            preview = {
-                **dict(preview),
-                "max_quantity": self._shared_order_capacity_quantity(
-                    adapter_max_quantity=preview.get("max_quantity"),
-                    reference_price=preview.get("reference_price"),
-                    payload=payload,
-                    selected_track=selected,
-                    portfolio=projection.get("portfolio"),
-                    binding=binding,
-                ),
-            }
-            response = {
-                **dict(preview),
-                "protocol": REPLAY_V2_PROTOCOL,
-                "schema_version": (
-                    "replay.order-preview.v2"
-                    if normalized_plan is not None
-                    else "replay.order-preview.v1"
-                ),
-                "run_id": normalized,
-                "track_id": selected_track_id,
-                "accepted": True,
-                "position_intent": position_intent,
-                "revision": expected_revision,
-                "cursor": expected_cursor.to_dict(),
-                "state_hash": adapter_preview["state_hash"],
-                "execution_fidelity": adapter_preview["execution_fidelity"],
-            }
-            if normalized_plan is not None:
-                response["trade_plan"] = normalized_plan
-            return response
+        return await self._order_service.preview_order(run_id, expected_revision=expected_revision, expected_cursor=expected_cursor, position_intent=position_intent, order=order, trade_plan=trade_plan)
 
     async def order_capacity(
         self,
@@ -1975,201 +1048,7 @@ class TrainingRunService:
         context: Mapping[str, object],
     ) -> dict[str, object]:
         """Return a cursor-bound maximum without validating a draft quantity."""
-
-        normalized = self._identifier(run_id, field_name="run_id")
-        if expected_revision != expected_cursor.revision:
-            raise TrainingRunError(
-                "REPLAY_CONTROL_INVALID",
-                "capacity revision must match expected cursor revision",
-                status_code=422,
-            )
-        actor = self._run_actors.setdefault(normalized, TrainingRunActor(normalized))
-        async with actor.serialized():
-            binding = await self.store.run_binding(normalized)
-            projection = await self.store.get_market_tracks(normalized)
-            tracks = projection.get("tracks")
-            if not isinstance(tracks, list):
-                raise TrainingRunError(
-                    "TRAINING_RUN_STORAGE_DEGRADED",
-                    "market tracks projection is invalid",
-                    status_code=503,
-                )
-            selected_track_id = str(binding["selected_track_id"])
-            selected = next(
-                (
-                    track
-                    for track in tracks
-                    if isinstance(track, Mapping)
-                    and track.get("track_id") == selected_track_id
-                ),
-                None,
-            )
-            if (
-                selected is None
-                or selected.get("subscription_tier") != "FULL"
-                or selected.get("state") != "READY"
-            ):
-                raise TrainingRunError(
-                    "MARKET_TRACK_NOT_READY",
-                    "order capacity requires the selected market track to be READY and FULL",
-                    status_code=409,
-                )
-            session_id = str(binding["adapter_session_id"])
-            session = await self.replay_service.get_session(session_id)
-            snapshot = self._snapshot(session)
-            cursor = snapshot.get("cursor")
-            if not isinstance(cursor, Mapping):
-                raise TrainingRunError(
-                    "TRAINING_RUN_STORAGE_DEGRADED",
-                    "adapter cursor is invalid",
-                    status_code=503,
-                )
-            actual = {
-                "virtual_time_ms": cursor.get("virtual_time_ms"),
-                "source_sequence": cursor.get("source_sequence"),
-                "revision": snapshot.get("revision"),
-            }
-            if actual != expected_cursor.to_dict():
-                raise TrainingRunError(
-                    "REVISION_CONFLICT",
-                    "capacity cursor does not match the authoritative run cursor",
-                    status_code=409,
-                    details={"expected": expected_cursor.to_dict(), "actual": actual},
-                )
-            await self._guard_historical_book_current(
-                run_id=normalized,
-                binding=binding,
-                snapshot=snapshot,
-            )
-            payload = dict(
-                self._order_payload_with_optional_leverage(
-                    context,
-                    {
-                        "side",
-                        "order_type",
-                        "reduce_only",
-                        "limit_price",
-                        "stop_price",
-                    },
-                )
-            )
-            if position_intent not in {"NET", "OPEN"}:
-                raise TrainingRunError(
-                    "REPLAY_CONTROL_INVALID",
-                    "order capacity position intent is unsupported",
-                    status_code=422,
-                )
-            if binding.get("position_mode") == "HEDGE" and payload.get(
-                "position_side"
-            ) not in {"LONG", "SHORT"}:
-                raise TrainingRunError(
-                    "ORDER_REJECTED",
-                    "HEDGE order capacity requires position_side",
-                    status_code=409,
-                )
-            if position_intent == "OPEN" and binding.get("position_mode") != "HEDGE":
-                if (
-                    payload.get("order_type") != "MARKET"
-                    or payload.get("reduce_only") is not False
-                ):
-                    raise TrainingRunError(
-                        "REPLAY_CONTROL_INVALID",
-                        "OPEN capacity is only available for non-reduce-only market orders",
-                        status_code=422,
-                    )
-                position = selected.get("position")
-                if not isinstance(position, Mapping):
-                    raise TrainingRunError(
-                        "TRAINING_RUN_STORAGE_DEGRADED",
-                        "selected position projection is invalid",
-                        status_code=503,
-                    )
-                try:
-                    position_quantity = Decimal(str(position.get("quantity")))
-                except InvalidOperation as exc:
-                    raise TrainingRunError(
-                        "TRAINING_RUN_STORAGE_DEGRADED",
-                        "selected position quantity is invalid",
-                        status_code=503,
-                    ) from exc
-                if position_quantity != 0 and (position_quantity > 0) != (
-                    payload.get("side") == "BUY"
-                ):
-                    raise TrainingRunError(
-                        "ORDER_REJECTED",
-                        "OPEN cannot reduce or reverse the current position",
-                        status_code=409,
-                    )
-            self._assert_exact_account_capacity_context(
-                payload=payload,
-                selected_track=selected,
-                portfolio=projection.get("portfolio"),
-            )
-            try:
-                adapter_capacity = await self.replay_service.order_capacity(
-                    session_id,
-                    payload,
-                )
-            except ReplayDomainError as exc:
-                raise TrainingRunError(
-                    exc.code.value,
-                    exc.message,
-                    status_code=exc.http_status,
-                    details=exc.details,
-                ) from exc
-            capacity_cursor = adapter_capacity.get("cursor")
-            if not isinstance(capacity_cursor, Mapping):
-                raise TrainingRunError(
-                    "TRAINING_RUN_STORAGE_DEGRADED",
-                    "adapter capacity cursor is invalid",
-                    status_code=503,
-                )
-            capacity_actual = {
-                "virtual_time_ms": capacity_cursor.get("virtual_time_ms"),
-                "source_sequence": capacity_cursor.get("source_sequence"),
-                "revision": adapter_capacity.get("revision"),
-            }
-            if capacity_actual != expected_cursor.to_dict():
-                raise TrainingRunError(
-                    "REVISION_CONFLICT",
-                    "market advanced while order capacity was calculated",
-                    status_code=409,
-                    details={
-                        "expected": expected_cursor.to_dict(),
-                        "actual": capacity_actual,
-                    },
-                )
-            raw_capacity = adapter_capacity.get("capacity")
-            if not isinstance(raw_capacity, Mapping):
-                raise TrainingRunError(
-                    "TRAINING_RUN_STORAGE_DEGRADED",
-                    "adapter order capacity is invalid",
-                    status_code=503,
-                )
-            maximum = self._shared_order_capacity_quantity(
-                adapter_max_quantity=raw_capacity.get("max_quantity"),
-                reference_price=raw_capacity.get("reference_price"),
-                payload=payload,
-                selected_track=selected,
-                portfolio=projection.get("portfolio"),
-                binding=binding,
-            )
-            return {
-                "protocol": REPLAY_V2_PROTOCOL,
-                "schema_version": "replay.order-capacity.v1",
-                "run_id": normalized,
-                "track_id": selected_track_id,
-                "position_intent": position_intent,
-                "revision": expected_revision,
-                "cursor": expected_cursor.to_dict(),
-                "state_hash": adapter_capacity["state_hash"],
-                "execution_fidelity": adapter_capacity["execution_fidelity"],
-                "context": dict(raw_capacity["context"]),
-                "reference_price": raw_capacity["reference_price"],
-                "max_quantity": maximum,
-                "quote_asset": raw_capacity["quote_asset"],
-                "max_leverage": raw_capacity["max_leverage"],
-            }
+        return await self._order_service.order_capacity(run_id, expected_revision=expected_revision, expected_cursor=expected_cursor, position_intent=position_intent, context=context)
 
     async def get_fast_forward_plan(
         self,
@@ -2320,7 +1199,7 @@ class TrainingRunService:
             )
             current_time = self._cursor_time(snapshot)
             if bool(
-                _stored_mapping(
+                service_validation_ops._stored_mapping(
                     snapshot.get("cursor"),
                     field_name="adapter cursor",
                 ).get("at_end")
@@ -2473,15 +1352,15 @@ class TrainingRunService:
         session_id = self._track_session_id(track)
         session = await self.replay_service.get_session(session_id)
         snapshot = self._snapshot(session)
-        cursor = _stored_mapping(snapshot.get("cursor"), field_name="adapter cursor")
-        revealed_sequence = _stored_counter(
+        cursor = service_validation_ops._stored_mapping(snapshot.get("cursor"), field_name="adapter cursor")
+        revealed_sequence = service_validation_ops._stored_counter(
             cursor.get("source_sequence"), field_name="source_sequence"
         )
         bounded_limit = min(limit, self.replay_service.settings.trade_page_rows)
         if after_sequence is None:
             after = max(0, revealed_sequence - bounded_limit)
         else:
-            after = _stored_counter(after_sequence, field_name="after_sequence")
+            after = service_validation_ops._stored_counter(after_sequence, field_name="after_sequence")
         if after > revealed_sequence:
             raise TrainingRunError(
                 "REPLAY_TRADE_FLOW_RESYNC_REQUIRED",
@@ -2568,7 +1447,7 @@ class TrainingRunService:
         selected_snapshot = await self.replay_service.get_session_state(
             selected_session_id, include_config=True
         )
-        selected_config = _stored_mapping(
+        selected_config = service_validation_ops._stored_mapping(
             selected_snapshot.get("config"),
             field_name="selected adapter config",
         )
@@ -2590,7 +1469,7 @@ class TrainingRunService:
             actor_clock = actor.playback_snapshot()
             if (
                 actor_clock["state"] == "PLAYING"
-                and _stored_mapping(
+                and service_validation_ops._stored_mapping(
                     selected_snapshot.get("cursor"),
                     field_name="selected adapter cursor",
                 ).get("at_end")
@@ -2601,19 +1480,19 @@ class TrainingRunService:
                 actor.request_ordered_pause(reason="CONTROLLER_LEASE_LOST")
                 actor_clock = actor.playback_snapshot()
         actor_generation = (
-            _stored_counter(
+            service_validation_ops._stored_counter(
                 actor_clock.get("generation", 0), field_name="global_clock.generation"
             )
             if actor_clock is not None
             else 0
         )
         actor_tick = (
-            _stored_counter(actor_clock.get("tick", 0), field_name="global_clock.tick")
+            service_validation_ops._stored_counter(actor_clock.get("tick", 0), field_name="global_clock.tick")
             if actor_clock is not None
             else 0
         )
         actor_profile_revision = (
-            _stored_counter(
+            service_validation_ops._stored_counter(
                 actor_clock.get("profile_revision", 0),
                 field_name="global_clock.profile_revision",
             )
@@ -2867,11 +1746,11 @@ class TrainingRunService:
         broker_report = await self.replay_service.report(
             str(binding["adapter_session_id"])
         )
-        report = _stored_mapping(
+        report = service_validation_ops._stored_mapping(
             broker_report.get("report"),
             field_name="broker report",
         )
-        summary = _stored_mapping(
+        summary = service_validation_ops._stored_mapping(
             projection.get("summary"),
             field_name="training-results summary",
         )
@@ -2898,7 +1777,7 @@ class TrainingRunService:
 
     async def _assert_review_original_quiescent(self, run_id: str) -> None:
         market_tracks = await self.get_market_tracks(run_id)
-        global_clock = _stored_mapping(
+        global_clock = service_validation_ops._stored_mapping(
             market_tracks.get("global_clock"),
             field_name="review global clock",
         )
@@ -3702,508 +2581,7 @@ class TrainingRunService:
         require_projection_grid: bool = False,
     ) -> dict[str, object]:
         """Bind optional chart context without changing the execution snapshot."""
-
-        requested_interval = (
-            str(binding["display_interval"])
-            if display_interval is None
-            else display_interval
-        )
-        base_interval = str(binding["base_interval"])
-        policy = binding.get("history_policy")
-        lookback = (
-            policy.get("visible_history_lookback")
-            if isinstance(policy, Mapping)
-            else None
-        )
-        if requested_interval == base_interval or (
-            not require_projection_grid
-            and (
-                not isinstance(lookback, Mapping)
-                or lookback.get("mode") != "ALL_AVAILABLE"
-            )
-        ):
-            return dict(binding)
-
-        run_id = str(binding["run_id"])
-        track_id = str(binding["track_id"])
-        interval_ms = parse_interval_ms(requested_interval)
-        if interval_ms is None or interval_ms < 1:
-            return dict(binding)
-        actual_replay_start_ms = int(policy["actual_replay_start_ms"])
-        strict_native_source = (
-            str(binding.get("exchange", "")).lower() == "binance"
-            and str(binding.get("market_type", "")).lower() == "spot"
-            and str(binding.get("source_kind", "")).upper() == "BAR"
-        )
-        if getattr(self.replay_service, "_native_intervals_explicit", False):
-            try:
-                advertised_native_intervals = set(
-                    self.replay_service._native_intervals(  # noqa: SLF001
-                        ReplaySeriesIdentity(
-                            str(binding["exchange"]),
-                            str(binding["market_type"]),
-                            str(binding["symbol"]),
-                        )
-                    )
-                )
-            except Exception as exc:
-                raise TrainingRunError(
-                    "HISTORY_SOURCE_UNAVAILABLE",
-                    "native display interval capabilities are unavailable",
-                    status_code=503,
-                ) from exc
-        else:
-            advertised_native_intervals = set(VALID_INTERVALS)
-        native_display_required = (
-            strict_native_source and requested_interval in advertised_native_intervals
-        )
-        # BTC can legitimately have exchange-maintenance holes on intraday
-        # series. Daily and wider native bars must remain continuous; otherwise
-        # a missing archive object turns into exactly the giant chart gaps this
-        # path is responsible for preventing.
-        zero_gap_native_required = strict_native_source and interval_ms >= 86_400_000
-
-        def resolve_source_grid(
-            bounds: Mapping[str, object],
-        ) -> tuple[int, str, int]:
-            raw_anchor = bounds.get("source_bucket_anchor_ms")
-            if raw_anchor is None:
-                anchor_ms = compute_bucket_start_ms(
-                    0,
-                    interval_ms,
-                    interval=requested_interval,
-                )
-            elif isinstance(raw_anchor, bool) or not isinstance(raw_anchor, int):
-                raise TrainingRunError(
-                    "HISTORY_SOURCE_INCOMPLETE",
-                    "native display source grid is invalid",
-                    status_code=503,
-                )
-            else:
-                anchor_ms = raw_anchor
-            raw_alignment = bounds.get("alignment_policy")
-            if raw_alignment is None:
-                alignment_policy = "LEGACY_CANONICAL_INTERVAL_V1"
-            elif isinstance(raw_alignment, str) and raw_alignment:
-                alignment_policy = raw_alignment
-            else:
-                raise TrainingRunError(
-                    "HISTORY_SOURCE_INCOMPLETE",
-                    "native display source grid is invalid",
-                    status_code=503,
-                )
-            raw_start_ms = bounds.get("earliest_open_time")
-            raw_end_ms = bounds.get("latest_open_time")
-            if (
-                isinstance(raw_start_ms, bool)
-                or not isinstance(raw_start_ms, int)
-                or isinstance(raw_end_ms, bool)
-                or not isinstance(raw_end_ms, int)
-            ):
-                raise TrainingRunError(
-                    "HISTORY_SOURCE_INCOMPLETE",
-                    "native display source grid is invalid",
-                    status_code=503,
-                )
-            try:
-                mapper = SourceBucketTimeMapper.create(
-                    interval=requested_interval,
-                    actual_replay_start_ms=actual_replay_start_ms,
-                    public_replay_start_ms=actual_replay_start_ms,
-                    source_bucket_anchor_ms=anchor_ms,
-                )
-                mapper.actual_bucket_ordinal(raw_start_ms)
-                mapper.actual_bucket_ordinal(raw_end_ms)
-                previous_open_ms = mapper.actual_bucket_open(-1)
-            except ValueError as exc:
-                raise TrainingRunError(
-                    "HISTORY_SOURCE_INCOMPLETE",
-                    "native display source grid is invalid",
-                    status_code=503,
-                ) from exc
-            if previous_open_ms < 0:
-                raise TrainingRunError(
-                    "HISTORY_SOURCE_INCOMPLETE",
-                    "native display source grid does not have a closed prefix",
-                    status_code=503,
-                )
-            return anchor_ms, alignment_policy, previous_open_ms
-
-        def assert_pin_identity(
-            pin: Mapping[str, object],
-            *,
-            interval: str,
-        ) -> None:
-            if (
-                str(pin.get("exchange")) != str(binding["exchange"])
-                or str(pin.get("market_type")) != str(binding["market_type"])
-                or str(pin.get("symbol")) != str(binding["symbol"])
-                or str(pin.get("base_interval")) != interval
-                or str(pin.get("dataset_epoch")) != str(binding["track_dataset_epoch"])
-            ):
-                raise TrainingRunError(
-                    "HISTORY_SOURCE_IDENTITY_DRIFT",
-                    "training history archive pin identity changed",
-                    status_code=503,
-                )
-
-        async def assert_native_continuity(
-            *,
-            source_revision: str,
-            range_start_ms: int,
-            last_complete_open_ms: int,
-        ) -> None:
-            if not strict_native_source:
-                return
-            scan_gaps = getattr(
-                self.replay_service.history_repository,
-                "scan_gaps_at_revision",
-                None,
-            )
-            if not callable(scan_gaps):
-                raise TrainingRunError(
-                    "HISTORY_SOURCE_INCOMPLETE",
-                    "pinned native display history has no continuity proof",
-                    status_code=503,
-                )
-            try:
-                gap_evidence = await self.replay_service.store.run_worker(
-                    "display_pin", scan_gaps,
-                    source_revision,
-                    str(binding["symbol"]),
-                    requested_interval,
-                    start_ms=range_start_ms,
-                    end_ms=last_complete_open_ms,
-                    exchange=str(binding["exchange"]),
-                    market_type=str(binding["market_type"]),
-                    limit=100_000,
-                )
-            except Exception as exc:
-                raise TrainingRunError(
-                    "HISTORY_SOURCE_UNAVAILABLE",
-                    "pinned native display continuity proof is unavailable",
-                    status_code=503,
-                ) from exc
-            gap_count = (
-                gap_evidence.get("gap_count")
-                if isinstance(gap_evidence, Mapping)
-                else None
-            )
-            if (
-                not isinstance(gap_evidence, Mapping)
-                or gap_evidence.get("truncated") is not False
-                or gap_evidence.get("source_revision") not in {None, source_revision}
-                or isinstance(gap_count, bool)
-                or not isinstance(gap_count, int)
-                or gap_count < 0
-                or (zero_gap_native_required and gap_count != 0)
-            ):
-                raise TrainingRunError(
-                    "HISTORY_SOURCE_INCOMPLETE",
-                    "pinned native display history is not continuous",
-                    status_code=503,
-                )
-
-        base_pin = await self.store.history_archive_pin(
-            run_id=run_id,
-            track_id=track_id,
-            interval=base_interval,
-        )
-        if base_pin is None:
-            if native_display_required:
-                raise TrainingRunError(
-                    "HISTORY_NATIVE_DISPLAY_REQUIRED",
-                    "native replay display history requires an immutable base archive pin",
-                    status_code=503,
-                )
-            # A same-interval projection does not require a separate native pin.
-            return dict(binding)
-        assert_pin_identity(base_pin, interval=base_interval)
-        display_pin = await self.store.history_archive_pin(
-            run_id=run_id,
-            track_id=track_id,
-            interval=requested_interval,
-        )
-        candidate_proof: (
-            tuple[
-                str,
-                int,
-                int,
-                int,
-                str,
-                int,
-            ]
-            | None
-        ) = None
-        if display_pin is None:
-            repository = self.replay_service.history_repository
-            get_bounds = getattr(repository, "get_bounds", None)
-            if not callable(get_bounds):
-                if native_display_required:
-                    raise TrainingRunError(
-                        "HISTORY_NATIVE_DISPLAY_REQUIRED",
-                        "native replay display history is unavailable",
-                        status_code=503,
-                    )
-                return dict(binding)
-            try:
-                bounds = await self.replay_service.store.run_worker(
-                    "display_pin", get_bounds,
-                    str(binding["symbol"]),
-                    requested_interval,
-                    exchange=str(binding["exchange"]),
-                    market_type=str(binding["market_type"]),
-                )
-                source_revision = str(bounds["source_revision"])
-                range_start_ms = int(bounds["earliest_open_time"])
-                range_end_ms = int(bounds["latest_open_time"])
-                (
-                    candidate_source_bucket_anchor_ms,
-                    candidate_alignment_policy,
-                    candidate_last_complete_open_ms,
-                ) = resolve_source_grid(bounds)
-                get_bounds_at_revision = getattr(
-                    repository,
-                    "get_bounds_at_revision",
-                    None,
-                )
-                if strict_native_source and not callable(get_bounds_at_revision):
-                    raise TrainingRunError(
-                        "HISTORY_SOURCE_INCOMPLETE",
-                        "native display history has no immutable bounds proof",
-                        status_code=503,
-                    )
-                if not callable(get_bounds_at_revision):
-                    return dict(binding)
-                if callable(get_bounds_at_revision):
-                    exact_bounds = await self.replay_service.store.run_worker(
-                        "display_pin", get_bounds_at_revision,
-                        source_revision,
-                        str(binding["symbol"]),
-                        requested_interval,
-                        exchange=str(binding["exchange"]),
-                        market_type=str(binding["market_type"]),
-                    )
-                    exact_revision = str(exact_bounds["source_revision"])
-                    exact_start_ms = int(exact_bounds["earliest_open_time"])
-                    exact_end_ms = int(exact_bounds["latest_open_time"])
-                    (
-                        exact_source_bucket_anchor_ms,
-                        exact_alignment_policy,
-                        exact_last_complete_open_ms,
-                    ) = resolve_source_grid(exact_bounds)
-                    if (
-                        exact_revision != source_revision
-                        or exact_start_ms != range_start_ms
-                        or exact_end_ms != range_end_ms
-                        or exact_source_bucket_anchor_ms
-                        != candidate_source_bucket_anchor_ms
-                        or exact_alignment_policy != candidate_alignment_policy
-                        or exact_last_complete_open_ms
-                        != candidate_last_complete_open_ms
-                    ):
-                        raise TrainingRunError(
-                            "HISTORY_SOURCE_IDENTITY_DRIFT",
-                            "native display archive bounds changed before pinning",
-                            status_code=503,
-                        )
-                if (
-                    len(source_revision) != 71
-                    or not source_revision.startswith("sha256:")
-                    or range_start_ms < 0
-                    or range_end_ms < candidate_last_complete_open_ms
-                    or range_start_ms > candidate_last_complete_open_ms
-                ):
-                    raise TrainingRunError(
-                        "HISTORY_SOURCE_INCOMPLETE",
-                        "native display archive does not cover the replay seam",
-                        status_code=503,
-                    )
-            except (KeyError, TypeError, ValueError):
-                if native_display_required:
-                    raise TrainingRunError(
-                        "HISTORY_NATIVE_DISPLAY_REQUIRED",
-                        "native replay display history is unavailable",
-                        status_code=503,
-                    ) from None
-                return dict(binding)
-            except TrainingRunError:
-                raise
-            except Exception:
-                if native_display_required:
-                    raise TrainingRunError(
-                        "HISTORY_NATIVE_DISPLAY_REQUIRED",
-                        "native replay display history is unavailable",
-                        status_code=503,
-                    ) from None
-                # An optional native chart catalog may be absent. The pinned
-                # base archive remains the deterministic, gap-aware fallback.
-                return dict(binding)
-            # Validate the candidate before making it an immutable Run pin. A
-            # rejected or gappy catalog must never become sticky for the Run.
-            await assert_native_continuity(
-                source_revision=source_revision,
-                range_start_ms=range_start_ms,
-                last_complete_open_ms=candidate_last_complete_open_ms,
-            )
-            candidate_proof = (
-                source_revision,
-                range_start_ms,
-                range_end_ms,
-                candidate_source_bucket_anchor_ms,
-                candidate_alignment_policy,
-                candidate_last_complete_open_ms,
-            )
-            display_pin = await self.store.pin_history_archive_interval(
-                run_id=run_id,
-                track_id=track_id,
-                source_revision=source_revision,
-                exchange=str(binding["exchange"]),
-                market_type=str(binding["market_type"]),
-                symbol=str(binding["symbol"]),
-                interval=requested_interval,
-                range_start_ms=range_start_ms,
-                range_end_ms=range_end_ms,
-            )
-        assert_pin_identity(display_pin, interval=requested_interval)
-        repository = self.replay_service.history_repository
-        try:
-            pinned_start_ms = int(display_pin["range_start_ms"])
-            pinned_end_ms = int(display_pin["range_end_ms"])
-            pinned_source_revision = str(display_pin["source_revision"])
-        except (KeyError, TypeError, ValueError) as exc:
-            raise TrainingRunError(
-                "HISTORY_SOURCE_INCOMPLETE",
-                "native display archive pin range is invalid",
-                status_code=503,
-            ) from exc
-        proof_key = (
-            pinned_source_revision,
-            str(binding["exchange"]),
-            str(binding["market_type"]),
-            str(binding["symbol"]),
-            requested_interval,
-            pinned_start_ms,
-            pinned_end_ms,
-            actual_replay_start_ms,
-            str(binding["track_dataset_epoch"]),
-        )
-        if candidate_proof is not None and candidate_proof[:3] == (
-            pinned_source_revision,
-            pinned_start_ms,
-            pinned_end_ms,
-        ):
-            self._remember_native_display_pin_proof(proof_key, candidate_proof[3:])
-        cached_proof = self._native_display_pin_proofs.get(proof_key)
-        if cached_proof is not None:
-            self._native_display_pin_proofs.move_to_end(proof_key)
-        if cached_proof is None:
-            get_bounds_at_revision = getattr(
-                repository,
-                "get_bounds_at_revision",
-                None,
-            )
-            if not callable(get_bounds_at_revision):
-                raise TrainingRunError(
-                    "HISTORY_SOURCE_INCOMPLETE",
-                    "pinned native display history has no immutable bounds proof",
-                    status_code=503,
-                )
-            try:
-                pinned_bounds = await self.replay_service.store.run_worker(
-                    "display_pin", get_bounds_at_revision,
-                    pinned_source_revision,
-                    str(binding["symbol"]),
-                    requested_interval,
-                    exchange=str(binding["exchange"]),
-                    market_type=str(binding["market_type"]),
-                )
-                exact_source_revision = str(pinned_bounds["source_revision"])
-                exact_start_ms = int(pinned_bounds["earliest_open_time"])
-                exact_end_ms = int(pinned_bounds["latest_open_time"])
-                cached_proof = resolve_source_grid(pinned_bounds)
-            except TrainingRunError:
-                raise
-            except (KeyError, TypeError, ValueError) as exc:
-                raise TrainingRunError(
-                    "HISTORY_SOURCE_INCOMPLETE",
-                    "native display archive pin range is invalid",
-                    status_code=503,
-                ) from exc
-            except Exception as exc:
-                raise TrainingRunError(
-                    "HISTORY_SOURCE_UNAVAILABLE",
-                    "pinned native display history is unavailable",
-                    status_code=503,
-                ) from exc
-            if (
-                exact_source_revision != pinned_source_revision
-                or exact_start_ms != pinned_start_ms
-                or exact_end_ms != pinned_end_ms
-            ):
-                raise TrainingRunError(
-                    "HISTORY_SOURCE_IDENTITY_DRIFT",
-                    "pinned native display archive bounds changed",
-                    status_code=503,
-                )
-            (
-                display_source_bucket_anchor_ms,
-                display_alignment_policy,
-                last_complete_open_ms,
-            ) = cached_proof
-            if (
-                pinned_start_ms < 0
-                or pinned_start_ms > last_complete_open_ms
-                or pinned_end_ms < last_complete_open_ms
-            ):
-                raise TrainingRunError(
-                    "HISTORY_SOURCE_INCOMPLETE",
-                    "pinned native display archive does not cover the replay seam",
-                    status_code=503,
-                )
-            await assert_native_continuity(
-                source_revision=pinned_source_revision,
-                range_start_ms=pinned_start_ms,
-                last_complete_open_ms=last_complete_open_ms,
-            )
-            self._remember_native_display_pin_proof(proof_key, cached_proof)
-        else:
-            (
-                display_source_bucket_anchor_ms,
-                display_alignment_policy,
-                last_complete_open_ms,
-            ) = cached_proof
-        display_grid_commitment = canonical_sha256(
-            {
-                "schema_version": "replay.display-source-grid.v1",
-                "source_revision": pinned_source_revision,
-                "display_interval": requested_interval,
-                "source_bucket_anchor_ms": display_source_bucket_anchor_ms,
-                "alignment_policy": display_alignment_policy,
-            }
-        )
-        self._display_source_grid_anchors[
-            (
-                run_id,
-                track_id,
-                requested_interval,
-                str(binding["track_dataset_epoch"]),
-            )
-        ] = display_source_bucket_anchor_ms
-        return {
-            **binding,
-            "display_source_revision": pinned_source_revision,
-            # The display catalog is immutable at ``pinned_source_revision``,
-            # but it can legitimately lag the newer pinned base catalog near
-            # the live tail.  Carry its exact bounds so projection can use
-            # native authority only where that revision actually has rows and
-            # aggregate the remaining closed tail from the pinned base source.
-            "display_source_range_start_ms": pinned_start_ms,
-            "display_source_range_end_ms": pinned_end_ms,
-            "display_source_bucket_anchor_ms": display_source_bucket_anchor_ms,
-            "display_alignment_policy": display_alignment_policy,
-            "display_grid_commitment": display_grid_commitment,
-        }
+        return await self._display_service._attach_native_display_archive_pin(binding, display_interval=display_interval, require_projection_grid=require_projection_grid)
 
     async def history_page(
         self,
@@ -4218,45 +2596,7 @@ class TrainingRunService:
         display_interval: str | None = None,
     ) -> dict[str, object]:
         """Return one revealed-only page through the replay-owned data boundary."""
-
-        normalized_session = self._identifier(session_id, field_name="session_id")
-        normalized_track = self._identifier(track_id, field_name="track_id")
-        binding = await self.store.history_binding(
-            session_id=normalized_session,
-            track_id=normalized_track,
-        )
-        if binding.get("subscription_tier") == SubscriptionTier.NONE.value:
-            raise TrainingRunError(
-                "HISTORY_SUBSCRIPTION_REQUIRED",
-                "history is unavailable while the market track is unsubscribed",
-                status_code=409,
-                details={"required_tier": "WARM_OR_FULL"},
-            )
-        persisted = await self.replay_service.store.load_dataset(normalized_session)
-        if persisted is None:
-            raise TrainingRunError(
-                "HISTORY_SNAPSHOT_UNAVAILABLE",
-                "training history snapshot is unavailable",
-                status_code=503,
-            )
-        if not is_progressive_dataset(persisted):
-            binding = await self._attach_native_display_archive_pin(
-                binding,
-                display_interval=display_interval,
-            )
-        return await asyncio.to_thread(
-            build_history_page,
-            binding=binding,
-            persisted=persisted,
-            before_ms=before_ms,
-            revealed_boundary_ms=revealed_boundary_ms,
-            limit=limit,
-            data_epoch=data_epoch,
-            expected_history_epoch=history_epoch,
-            display_interval=display_interval,
-            repository=self.replay_service.prepared_history_repository(normalized_session, data_epoch),
-            progressive_history_factory=lambda: self.replay_service.progressive_history,
-        )
+        return await self._display_service.history_page(session_id, track_id=track_id, before_ms=before_ms, revealed_boundary_ms=revealed_boundary_ms, limit=limit, data_epoch=data_epoch, history_epoch=history_epoch, display_interval=display_interval)
 
     async def display_projection(
         self,
@@ -4269,44 +2609,7 @@ class TrainingRunService:
         display_interval: str,
     ) -> dict[str, object]:
         """Return a source-bucket-aligned, public-time-only viewer tail."""
-
-        normalized_session = self._identifier(session_id, field_name="session_id")
-        normalized_track = self._identifier(track_id, field_name="track_id")
-        binding = await self.store.history_binding(
-            session_id=normalized_session,
-            track_id=normalized_track,
-        )
-        if binding.get("subscription_tier") == SubscriptionTier.NONE.value:
-            raise TrainingRunError(
-                "HISTORY_SUBSCRIPTION_REQUIRED",
-                "display projection is unavailable while the market track is unsubscribed",
-                status_code=409,
-                details={"required_tier": "WARM_OR_FULL"},
-            )
-        persisted = await self.replay_service.store.load_dataset(normalized_session)
-        if persisted is None:
-            raise TrainingRunError(
-                "HISTORY_SNAPSHOT_UNAVAILABLE",
-                "training display projection snapshot is unavailable",
-                status_code=503,
-            )
-        if not is_progressive_dataset(persisted):
-            binding = await self._attach_native_display_archive_pin(
-                binding,
-                display_interval=display_interval,
-                require_projection_grid=True,
-            )
-        return await self.replay_service.store.run_worker(
-            "display_build", build_display_projection,
-            binding=binding,
-            persisted=persisted,
-            revealed_boundary_ms=revealed_boundary_ms,
-            limit=limit,
-            data_epoch=data_epoch,
-            display_interval=display_interval,
-            repository=self.replay_service.prepared_history_repository(normalized_session, data_epoch),
-            progressive_history_factory=lambda: self.replay_service.progressive_history,
-        )
+        return await self._display_service.display_projection(session_id, track_id=track_id, revealed_boundary_ms=revealed_boundary_ms, limit=limit, data_epoch=data_epoch, display_interval=display_interval)
 
     def _uses_tape_interval_clock(
         self,
@@ -4559,7 +2862,7 @@ class TrainingRunService:
                 )
                 return result
             if intent_status == "RUNNING":
-                stored_plan = _stored_mapping(
+                stored_plan = service_validation_ops._stored_mapping(
                     durable_intent.get("plan"),
                     field_name="durable advance plan",
                 )
@@ -4612,7 +2915,7 @@ class TrainingRunService:
                 result = await self._execute_target_scan(
                     command=command,
                     session_id=session_id,
-                    target_virtual_time_ms=_stored_counter(
+                    target_virtual_time_ms=service_validation_ops._stored_counter(
                         durable_intent["target_virtual_time_ms"],
                         field_name="target_virtual_time_ms",
                     ),
@@ -4719,18 +3022,18 @@ class TrainingRunService:
                     "isolated margin amount must be a non-negative canonical Decimal string",
                     status_code=422,
                 )
-            cursor = _stored_mapping(snapshot["cursor"], field_name="adapter cursor")
+            cursor = service_validation_ops._stored_mapping(snapshot["cursor"], field_name="adapter cursor")
             portfolio = await self.store.allocate_isolated_margin(
                 run_id=normalized_run,
                 track_id=track_id,
                 position_side=(None if position_side is None else str(position_side)),
                 amount=amount,
                 command_id=command.command_id,
-                virtual_time_ms=_stored_counter(
+                virtual_time_ms=service_validation_ops._stored_counter(
                     cursor["virtual_time_ms"],
                     field_name="virtual_time_ms",
                 ),
-                source_sequence=_stored_counter(
+                source_sequence=service_validation_ops._stored_counter(
                     cursor["source_sequence"],
                     field_name="source_sequence",
                 ),
@@ -5048,14 +3351,14 @@ class TrainingRunService:
                     plan["chunk_event_limit"] = max(
                         1,
                         min(
-                            FINAL_STATE_EMPTY_ACCOUNT_CHUNK_EVENTS,
+                            control_rules_ops.FINAL_STATE_EMPTY_ACCOUNT_CHUNK_EVENTS,
                             self.replay_service.settings.event_buffer_size,
                             self.replay_service.settings.trade_page_rows,
                         ),
                     )
                 plan.update(
                     {
-                        "projection_delivery": FINAL_STATE_PROJECTION_DELIVERY,
+                        "projection_delivery": control_rules_ops.FINAL_STATE_PROJECTION_DELIVERY,
                         "path_execution": (
                             "EMPTY_ACCOUNT"
                             if empty_account_path
@@ -5104,7 +3407,7 @@ class TrainingRunService:
                 details=exc.details,
             ) from exc
         adapter_data = dict(
-            _stored_mapping(
+            service_validation_ops._stored_mapping(
                 adapter_result.get("data"),
                 field_name="adapter_result.data",
             )
@@ -5244,11 +3547,11 @@ class TrainingRunService:
                     exchange=exchange,
                     market_type=market_type,
                     symbol=symbol,
-                    range_start_ms=_stored_counter(
+                    range_start_ms=service_validation_ops._stored_counter(
                         binding["actual_replay_start_ms"],
                         field_name="actual_replay_start_ms",
                     ),
-                    range_end_ms=_stored_counter(
+                    range_end_ms=service_validation_ops._stored_counter(
                         binding["actual_replay_end_ms"],
                         field_name="actual_replay_end_ms",
                     ),
@@ -5363,11 +3666,11 @@ class TrainingRunService:
                             exchange=str(track["exchange"]),
                             market_type=str(track["market_type"]),
                             symbol=str(track["symbol"]),
-                            range_start_ms=_stored_counter(
+                            range_start_ms=service_validation_ops._stored_counter(
                                 binding["actual_replay_start_ms"],
                                 field_name="actual_replay_start_ms",
                             ),
-                            range_end_ms=_stored_counter(
+                            range_end_ms=service_validation_ops._stored_counter(
                                 binding["actual_replay_end_ms"],
                                 field_name="actual_replay_end_ms",
                             ),
@@ -5504,7 +3807,7 @@ class TrainingRunService:
             base_config,
             symbol=str(track["symbol"]),
             start_policy=StartPolicy.MANUAL,
-            requested_start_ms=_stored_counter(
+            requested_start_ms=service_validation_ops._stored_counter(
                 binding["actual_replay_start_ms"],
                 field_name="actual_replay_start_ms",
             ),
@@ -5529,11 +3832,11 @@ class TrainingRunService:
                 symbol=str(track["symbol"]),
                 settlement_asset=str(track["settlement_asset"]),
                 source_kind=str(track["source_kind"]),
-                bound_range_start_ms=_stored_counter(
+                bound_range_start_ms=service_validation_ops._stored_counter(
                     binding["actual_replay_start_ms"],
                     field_name="actual_replay_start_ms",
                 ),
-                bound_range_end_ms=_stored_counter(
+                bound_range_end_ms=service_validation_ops._stored_counter(
                     binding["actual_replay_end_ms"],
                     field_name="actual_replay_end_ms",
                 ),
@@ -5556,11 +3859,11 @@ class TrainingRunService:
                 exchange=str(track["exchange"]),
                 market_type=str(track["market_type"]),
                 symbol=str(track["symbol"]),
-                range_start_ms=_stored_counter(
+                range_start_ms=service_validation_ops._stored_counter(
                     binding["actual_replay_start_ms"],
                     field_name="actual_replay_start_ms",
                 ),
-                range_end_ms=_stored_counter(
+                range_end_ms=service_validation_ops._stored_counter(
                     binding["actual_replay_end_ms"],
                     field_name="actual_replay_end_ms",
                 ),
@@ -5583,11 +3886,11 @@ class TrainingRunService:
                     market_type=str(track["market_type"]),
                     symbol=str(track["symbol"]),
                     settlement_asset=str(track["settlement_asset"]),
-                    bound_range_start_ms=_stored_counter(
+                    bound_range_start_ms=service_validation_ops._stored_counter(
                         binding["actual_replay_start_ms"],
                         field_name="actual_replay_start_ms",
                     ),
-                    bound_range_end_ms=_stored_counter(
+                    bound_range_end_ms=service_validation_ops._stored_counter(
                         binding["actual_replay_end_ms"],
                         field_name="actual_replay_end_ms",
                     ),
@@ -5620,7 +3923,7 @@ class TrainingRunService:
             created = await self.replay_service.create_session(
                 config,
                 _expected_catalog_epoch=track_catalog_epoch,
-                _internal_forced_start_ms=_stored_counter(
+                _internal_forced_start_ms=service_validation_ops._stored_counter(
                     binding["actual_replay_start_ms"],
                     field_name="actual_replay_start_ms",
                 ),
@@ -5932,7 +4235,7 @@ class TrainingRunService:
                         status_code=exc.http_status,
                         details=exc.details,
                     ) from exc
-                plan_preview = _stored_mapping(
+                plan_preview = service_validation_ops._stored_mapping(
                     raw_plan_preview.get("preview"),
                     field_name="adapter trade-plan preview",
                 )
@@ -6087,7 +4390,7 @@ class TrainingRunService:
             protocol=REPLAY_PROTOCOL,
             command_id=command.command_id,
             client_instance_id=command.client_instance_id,
-            expected_revision=_stored_counter(
+            expected_revision=service_validation_ops._stored_counter(
                 controller_snapshot["revision"], field_name="revision"
             ),
             type=v1_types[command.type],
@@ -6104,7 +4407,7 @@ class TrainingRunService:
             ) from exc
         await self.store.finalize_account_history(command.run_id)
         adapter_data = dict(
-            _stored_mapping(
+            service_validation_ops._stored_mapping(
                 acknowledged.get("data"),
                 field_name="adapter_result.data",
             )
@@ -6142,13 +4445,7 @@ class TrainingRunService:
         payload: Mapping[str, object],
         selected_track: Mapping[str, object],
     ) -> object:
-        if payload.get("order_type") == "LIMIT":
-            return payload.get("limit_price")
-        position = selected_track.get("position")
-        mark = _position_mark(position, position_side=payload.get("position_side"))
-        if mark is not None:
-            return mark
-        return selected_track.get("public_price")
+        return order_rules_ops.planned_entry_reference(payload=payload, selected_track=selected_track)
 
     @staticmethod
     def _active_instrument_rule(
@@ -6156,32 +4453,7 @@ class TrainingRunService:
         *,
         track_id: str,
     ) -> Mapping[str, object]:
-        rules = portfolio.get("instrument_rules")
-        if not isinstance(rules, list):
-            raise TrainingRunError(
-                "TRADE_PLAN_RULE_UNAVAILABLE",
-                "trade-plan sizing requires an active instrument rule",
-                status_code=409,
-            )
-        active = next(
-            (
-                item
-                for item in rules
-                if isinstance(item, Mapping)
-                and item.get("track_id") == track_id
-                and isinstance(item.get("rule"), Mapping)
-            ),
-            None,
-        )
-        if not isinstance(active, Mapping) or not isinstance(
-            active.get("rule"), Mapping
-        ):
-            raise TrainingRunError(
-                "TRADE_PLAN_RULE_UNAVAILABLE",
-                "trade-plan sizing requires an active instrument rule",
-                status_code=409,
-            )
-        return cast(Mapping[str, object], active["rule"])
+        return order_rules_ops.active_instrument_rule(portfolio, track_id=track_id)
 
     @classmethod
     def _build_trade_plan_snapshot(
@@ -6193,205 +4465,7 @@ class TrainingRunService:
         portfolio: object,
         entry_price: object,
     ) -> dict[str, object]:
-        expected = {
-            "sizing_mode",
-            "risk_amount",
-            "risk_percent",
-            "invalidation_price",
-            "target_price",
-            "reason",
-        }
-        if set(draft) != expected:
-            raise TrainingRunError(
-                "TRADE_PLAN_INVALID",
-                "trade-plan fields do not match the contract",
-                status_code=422,
-                details={
-                    "missing": sorted(expected - set(draft)),
-                    "unknown": sorted(set(draft) - expected),
-                },
-            )
-        if payload.get("reduce_only") is not False or payload.get("order_type") not in {
-            "MARKET",
-            "LIMIT",
-        }:
-            raise TrainingRunError(
-                "TRADE_PLAN_INVALID",
-                "trade plans require a non-reduce-only market or limit order",
-                status_code=422,
-            )
-        side = payload.get("side")
-        if side not in {"BUY", "SELL"}:
-            raise TrainingRunError(
-                "TRADE_PLAN_INVALID",
-                "trade-plan side is invalid",
-                status_code=422,
-            )
-        if not isinstance(portfolio, Mapping):
-            raise TrainingRunError(
-                "TRAINING_RUN_STORAGE_DEGRADED",
-                "run portfolio projection is invalid",
-                status_code=503,
-            )
-
-        def decimal_value(value: object, field_name: str) -> Decimal:
-            try:
-                normalized = normalize_decimal_string(value, field_name=field_name)
-                parsed = Decimal(normalized)
-            except (InvalidOperation, TypeError, ValueError) as exc:
-                raise TrainingRunError(
-                    "TRADE_PLAN_INVALID",
-                    f"{field_name} is invalid",
-                    status_code=422,
-                ) from exc
-            if parsed <= 0:
-                raise TrainingRunError(
-                    "TRADE_PLAN_INVALID",
-                    f"{field_name} must be positive",
-                    status_code=422,
-                )
-            return parsed
-
-        def decimal_text(value: Decimal, field_name: str) -> str:
-            return normalize_decimal_string(format(value, "f"), field_name=field_name)
-
-        entry = decimal_value(entry_price, "trade-plan entry price")
-        invalidation = decimal_value(
-            draft["invalidation_price"],
-            "trade-plan invalidation price",
-        )
-        target = decimal_value(draft["target_price"], "trade-plan target price")
-        if side == "BUY":
-            price_sides_valid = invalidation < entry < target
-        else:
-            price_sides_valid = target < entry < invalidation
-        if not price_sides_valid:
-            raise TrainingRunError(
-                "TRADE_PLAN_PRICE_SIDE_INVALID",
-                "invalidation and target prices must bracket entry in the order direction",
-                status_code=422,
-                details={"side": side, "entry_price": decimal_text(entry, "entry")},
-            )
-        reason = draft["reason"]
-        if not isinstance(reason, str):
-            raise TrainingRunError(
-                "TRADE_PLAN_INVALID",
-                "trade-plan reason must be a string",
-                status_code=422,
-            )
-        normalized_reason = reason.strip()
-        if not normalized_reason or len(normalized_reason) > 500:
-            raise TrainingRunError(
-                "TRADE_PLAN_INVALID",
-                "trade-plan reason must contain 1-500 characters",
-                status_code=422,
-            )
-        equity = decimal_value(portfolio.get("equity"), "account equity")
-        sizing_mode = draft["sizing_mode"]
-        risk_percent: str | None
-        if sizing_mode == "RISK_AMOUNT":
-            if draft.get("risk_percent") is not None:
-                raise TrainingRunError(
-                    "TRADE_PLAN_INVALID",
-                    "fixed-risk sizing must not include risk_percent",
-                    status_code=422,
-                )
-            risk_budget = decimal_value(draft.get("risk_amount"), "risk amount")
-            risk_percent = None
-        elif sizing_mode == "ACCOUNT_RISK_PERCENT":
-            if draft.get("risk_amount") is not None:
-                raise TrainingRunError(
-                    "TRADE_PLAN_INVALID",
-                    "percentage-risk sizing must not include risk_amount",
-                    status_code=422,
-                )
-            percent = decimal_value(draft.get("risk_percent"), "risk percent")
-            if percent > 100:
-                raise TrainingRunError(
-                    "TRADE_PLAN_INVALID",
-                    "risk percent must not exceed 100",
-                    status_code=422,
-                )
-            risk_percent = decimal_text(percent, "risk percent")
-            risk_budget = equity * percent / Decimal(100)
-        else:
-            raise TrainingRunError(
-                "TRADE_PLAN_INVALID",
-                "trade-plan sizing mode is unsupported",
-                status_code=422,
-            )
-        if risk_budget > equity:
-            raise TrainingRunError(
-                "TRADE_PLAN_RISK_EXCEEDS_EQUITY",
-                "planned maximum loss exceeds current account equity",
-                status_code=422,
-                details={
-                    "risk_amount": decimal_text(risk_budget, "risk amount"),
-                    "account_equity": decimal_text(equity, "account equity"),
-                },
-            )
-        track_id = str(selected_track["track_id"])
-        rule = cls._active_instrument_rule(portfolio, track_id=track_id)
-        contract_size = decimal_value(rule.get("contract_size"), "contract size")
-        quantity_step = decimal_value(rule.get("quantity_step"), "quantity step")
-        minimum_quantity = decimal_value(rule.get("min_quantity"), "minimum quantity")
-        maximum_quantity = decimal_value(rule.get("max_quantity"), "maximum quantity")
-        risk_per_unit = abs(entry - invalidation) * contract_size
-        raw_quantity = risk_budget / risk_per_unit
-        quantity = (raw_quantity / quantity_step).to_integral_value(
-            rounding=ROUND_FLOOR
-        ) * quantity_step
-        quantity = min(quantity, maximum_quantity)
-        if quantity < minimum_quantity or quantity <= 0:
-            raise TrainingRunError(
-                "TRADE_PLAN_SIZE_BELOW_MINIMUM",
-                "risk budget is too small for the active minimum quantity",
-                status_code=422,
-                details={
-                    "minimum_quantity": decimal_text(
-                        minimum_quantity, "minimum quantity"
-                    ),
-                    "quantity_step": decimal_text(quantity_step, "quantity step"),
-                },
-            )
-        position = _position_leg(
-            selected_track.get("position"),
-            position_side=payload.get("position_side"),
-        )
-        if position is not None:
-            try:
-                position_quantity = Decimal(str(position.get("quantity", "0")))
-            except InvalidOperation as exc:
-                raise TrainingRunError(
-                    "TRAINING_RUN_STORAGE_DEGRADED",
-                    "selected position quantity is invalid",
-                    status_code=503,
-                ) from exc
-            if position_quantity != 0 and (position_quantity > 0) != (side == "BUY"):
-                raise TrainingRunError(
-                    "TRADE_PLAN_REVERSE_REQUIRES_EXPLICIT_ACTION",
-                    "a trade plan cannot implicitly reduce or reverse the current position",
-                    status_code=409,
-                )
-        reward_risk_ratio = abs(target - entry) * contract_size / risk_per_unit
-        return {
-            "schema_version": "replay.trade-plan.snapshot.v1",
-            "track_id": track_id,
-            "client_order_id": str(payload["client_order_id"]),
-            "side": side,
-            "order_type": str(payload["order_type"]),
-            "sizing_mode": sizing_mode,
-            "risk_amount": decimal_text(risk_budget, "risk amount"),
-            "risk_percent": risk_percent,
-            "account_equity": decimal_text(equity, "account equity"),
-            "entry_price": decimal_text(entry, "entry price"),
-            "invalidation_price": decimal_text(invalidation, "invalidation price"),
-            "target_price": decimal_text(target, "target price"),
-            "risk_per_unit": decimal_text(risk_per_unit, "risk per unit"),
-            "reward_risk_ratio": decimal_text(reward_risk_ratio, "reward risk ratio"),
-            "quantity": decimal_text(quantity, "planned quantity"),
-            "reason": normalized_reason,
-        }
+        return order_rules_ops.build_trade_plan_snapshot(draft=draft, payload=payload, selected_track=selected_track, portfolio=portfolio, entry_price=entry_price)
 
     @staticmethod
     def _assert_exact_account_order_filters(
@@ -6401,132 +4475,7 @@ class TrainingRunService:
         portfolio: object,
         replace_position: bool = False,
     ) -> None:
-        if not isinstance(portfolio, Mapping):
-            raise TrainingRunError(
-                "TRAINING_RUN_STORAGE_DEGRADED",
-                "run portfolio projection is invalid",
-                status_code=503,
-            )
-        history = portfolio.get("account_history")
-        if (
-            not isinstance(history, Mapping)
-            or history.get("mode") != "HISTORICAL_EXACT"
-        ):
-            return
-        if history.get("status") != "ACTIVE":
-            raise TrainingRunError(
-                "ACCOUNT_HISTORY_ARCHIVE_DEGRADED",
-                "exact account inputs are not active",
-                status_code=409,
-                details={"fallback_applied": False},
-            )
-        raw_rules = portfolio.get("instrument_rules")
-        if not isinstance(raw_rules, list):
-            raise TrainingRunError(
-                "TRAINING_RUN_STORAGE_DEGRADED",
-                "exact instrument-rule projection is invalid",
-                status_code=503,
-            )
-        selected_id = str(selected_track["track_id"])
-        active = next(
-            (
-                item
-                for item in raw_rules
-                if isinstance(item, Mapping) and item.get("track_id") == selected_id
-            ),
-            None,
-        )
-        if not isinstance(active, Mapping) or not isinstance(
-            active.get("rule"), Mapping
-        ):
-            raise TrainingRunError(
-                "ACCOUNT_HISTORY_RULE_MISSING",
-                "selected exact account track has no active historical rule",
-                status_code=409,
-                details={"fallback_applied": False},
-            )
-        rule = active["rule"]
-        assert isinstance(rule, Mapping)
-        try:
-            quantity = Decimal(str(payload["quantity"]))
-            step = Decimal(str(rule["quantity_step"]))
-            minimum = Decimal(str(rule["min_quantity"]))
-            maximum = Decimal(str(rule["max_quantity"]))
-            if quantity < minimum or quantity > maximum or quantity % step != 0:
-                raise TrainingRunError(
-                    "ACCOUNT_HISTORY_QUANTITY_FILTER",
-                    "order quantity violates the active historical exchange rule",
-                    status_code=422,
-                    details={
-                        "rule_revision": active.get("revision"),
-                        "min_quantity": str(minimum),
-                        "max_quantity": str(maximum),
-                        "quantity_step": str(step),
-                    },
-                )
-            for field_name in ("limit_price", "stop_price"):
-                raw = payload.get(field_name)
-                if raw is None:
-                    continue
-                price = Decimal(str(raw))
-                tick = Decimal(str(rule["price_tick"]))
-                if price <= 0 or price % tick != 0:
-                    raise TrainingRunError(
-                        "ACCOUNT_HISTORY_PRICE_FILTER",
-                        f"{field_name} violates the active historical price tick",
-                        status_code=422,
-                        details={
-                            "rule_revision": active.get("revision"),
-                            "price_tick": str(tick),
-                        },
-                    )
-            position = selected_track.get("position")
-            if not isinstance(position, Mapping):
-                raise TypeError("selected exact position is invalid")
-            reference = (
-                payload.get("limit_price")
-                or payload.get("stop_price")
-                or _position_mark(
-                    position,
-                    position_side=payload.get("position_side"),
-                )
-            )
-            price = Decimal(str(reference))
-            contract_size = Decimal(str(rule["contract_size"]))
-            notional = quantity * price * contract_size
-            if payload.get("reduce_only") is not True:
-                minimum_notional = Decimal(str(rule["min_notional"]))
-                maximum_notional = Decimal(str(rule["max_notional"]))
-                existing_notional = (
-                    Decimal(0)
-                    if replace_position
-                    else _position_gross_notional(position)
-                )
-                if (
-                    notional < minimum_notional
-                    or notional > maximum_notional
-                    or existing_notional + notional > maximum_notional
-                ):
-                    raise TrainingRunError(
-                        "ACCOUNT_HISTORY_NOTIONAL_FILTER",
-                        "order notional violates the active historical exchange rule",
-                        status_code=422,
-                        details={
-                            "rule_revision": active.get("revision"),
-                            "min_notional": str(minimum_notional),
-                            "max_notional": str(maximum_notional),
-                            "order_notional": str(notional),
-                        },
-                    )
-        except TrainingRunError:
-            raise
-        except (InvalidOperation, KeyError, TypeError, ZeroDivisionError) as exc:
-            raise TrainingRunError(
-                "ACCOUNT_HISTORY_RULE_INVALID",
-                "active historical order filters are invalid",
-                status_code=409,
-                details={"fallback_applied": False},
-            ) from exc
+        return order_rules_ops.assert_exact_account_order_filters(payload=payload, selected_track=selected_track, portfolio=portfolio, replace_position=replace_position)
 
     @staticmethod
     def _assert_exact_account_capacity_context(
@@ -6535,54 +4484,7 @@ class TrainingRunService:
         selected_track: Mapping[str, object],
         portfolio: object,
     ) -> None:
-        """Validate quantity-independent historical price rules."""
-
-        if not isinstance(portfolio, Mapping):
-            raise TrainingRunError(
-                "TRAINING_RUN_STORAGE_DEGRADED",
-                "run portfolio projection is invalid",
-                status_code=503,
-            )
-        history = portfolio.get("account_history")
-        if (
-            not isinstance(history, Mapping)
-            or history.get("mode") != "HISTORICAL_EXACT"
-        ):
-            return
-        if history.get("status") != "ACTIVE":
-            raise TrainingRunError(
-                "ACCOUNT_HISTORY_ARCHIVE_DEGRADED",
-                "exact account inputs are not active",
-                status_code=409,
-                details={"fallback_applied": False},
-            )
-        rule = TrainingRunService._active_instrument_rule(
-            portfolio,
-            track_id=str(selected_track["track_id"]),
-        )
-        try:
-            tick = Decimal(str(rule["price_tick"]))
-            for field_name in ("limit_price", "stop_price"):
-                raw = payload.get(field_name)
-                if raw is None:
-                    continue
-                price = Decimal(str(raw))
-                if price <= 0 or price % tick != 0:
-                    raise TrainingRunError(
-                        "ACCOUNT_HISTORY_PRICE_FILTER",
-                        f"{field_name} violates the active historical price tick",
-                        status_code=422,
-                        details={"price_tick": str(tick)},
-                    )
-        except TrainingRunError:
-            raise
-        except (InvalidOperation, KeyError, TypeError) as exc:
-            raise TrainingRunError(
-                "ACCOUNT_HISTORY_RULE_INVALID",
-                "active historical capacity filters are invalid",
-                status_code=409,
-                details={"fallback_applied": False},
-            ) from exc
+        return order_rules_ops.assert_exact_account_capacity_context(payload=payload, selected_track=selected_track, portfolio=portfolio)
 
     @staticmethod
     def _shared_order_capacity_quantity(
@@ -6594,186 +4496,7 @@ class TrainingRunService:
         portfolio: object,
         binding: Mapping[str, object],
     ) -> str:
-        """Clamp adapter capacity to shared-account and historical-rule limits."""
-
-        if not isinstance(portfolio, Mapping):
-            raise TrainingRunError(
-                "TRAINING_RUN_STORAGE_DEGRADED",
-                "run portfolio projection is invalid",
-                status_code=503,
-            )
-        config = binding.get("adapter_config")
-        if not isinstance(config, Mapping):
-            raise TrainingRunError(
-                "TRAINING_RUN_STORAGE_DEGRADED",
-                "training adapter config is invalid",
-                status_code=503,
-            )
-        try:
-            maximum = Decimal(str(adapter_max_quantity))
-            price = Decimal(str(reference_price))
-            if payload.get("reduce_only") is True:
-                return decimal_to_string(maximum, field_name="max_quantity")
-            raw_leverage = payload.get("leverage")
-            leverage = Decimal(str(raw_leverage or config["max_leverage"]))
-            track_id = str(selected_track["track_id"])
-            if binding.get("position_mode") == "HEDGE":
-                active_leg_leverage = _hedge_leg_leverage(
-                    portfolio,
-                    track_id=track_id,
-                    position_side=payload.get("position_side"),
-                )
-                if raw_leverage is None and active_leg_leverage is not None:
-                    leverage = active_leg_leverage
-                active_position = _portfolio_risk_position(
-                    portfolio,
-                    track_id=track_id,
-                    position_side=payload.get("position_side"),
-                )
-                if (
-                    raw_leverage is not None
-                    and active_position is not None
-                    and active_leg_leverage is not None
-                    and leverage != active_leg_leverage
-                ):
-                    raise TrainingRunError(
-                        "RISK_LIMIT_EXCEEDED",
-                        "opening order leverage differs from the active hedge leg",
-                        status_code=409,
-                    )
-            configured_max = Decimal(str(config["max_leverage"]))
-            if leverage < 1 or leverage > configured_max:
-                raise TrainingRunError(
-                    "RISK_LIMIT_EXCEEDED",
-                    "order leverage is outside the session limit",
-                    status_code=409,
-                )
-            contract_size = Decimal(1)
-            quantity_step: Decimal | None = None
-            minimum_quantity = Decimal(0)
-            minimum_notional = Decimal(0)
-            rules = portfolio.get("instrument_rules")
-            active = (
-                next(
-                    (
-                        item
-                        for item in rules
-                        if isinstance(rules, list)
-                        and isinstance(item, Mapping)
-                        and item.get("track_id") == selected_track.get("track_id")
-                        and isinstance(item.get("rule"), Mapping)
-                    ),
-                    None,
-                )
-                if isinstance(rules, list)
-                else None
-            )
-            if isinstance(active, Mapping):
-                rule = cast(Mapping[str, object], active["rule"])
-                contract_size = Decimal(str(rule.get("contract_size", "1")))
-                rule_max_leverage = Decimal(str(rule.get("max_leverage", leverage)))
-                if (
-                    leverage > rule_max_leverage
-                    and raw_leverage is None
-                    and binding.get("position_mode") != "HEDGE"
-                ):
-                    leverage = rule_max_leverage
-                elif leverage > rule_max_leverage:
-                    raise TrainingRunError(
-                        "RISK_LIMIT_EXCEEDED",
-                        "order leverage exceeds the active instrument rule",
-                        status_code=409,
-                    )
-                quantity_step = Decimal(str(rule["quantity_step"]))
-                minimum_quantity = Decimal(str(rule["min_quantity"]))
-                minimum_notional = Decimal(str(rule["min_notional"]))
-                maximum = min(maximum, Decimal(str(rule["max_quantity"])))
-                position = selected_track.get("position")
-                if not isinstance(position, Mapping):
-                    raise TypeError("selected position projection is invalid")
-                remaining_notional = max(
-                    Decimal(0),
-                    Decimal(str(rule["max_notional"]))
-                    - _position_gross_notional(position),
-                )
-                maximum = min(maximum, remaining_notional / (price * contract_size))
-            if portfolio.get("margin_mode") == "ISOLATED":
-                allocations = portfolio.get("isolated_allocations")
-                account = selected_track.get("account")
-                if not isinstance(allocations, Mapping) or not isinstance(
-                    account, Mapping
-                ):
-                    raise TypeError("isolated account projection is invalid")
-                position_side = payload.get("position_side")
-                allocation_key = isolated_margin_key(
-                    track_id,
-                    None if position_side is None else str(position_side),
-                )
-                allocated = Decimal(str(allocations.get(allocation_key, "0")))
-                if binding.get("position_mode") == "HEDGE":
-                    positions = portfolio.get("positions")
-                    orders = portfolio.get("orders")
-                    if not isinstance(positions, list) or not isinstance(orders, list):
-                        raise TypeError("HEDGE isolated risk projection is invalid")
-                    risk_position = next(
-                        (
-                            item
-                            for item in positions
-                            if isinstance(item, Mapping)
-                            and item.get("track_id") == track_id
-                            and item.get("position_side") == position_side
-                        ),
-                        None,
-                    )
-                    in_use = Decimal(
-                        str(
-                            0
-                            if not isinstance(risk_position, Mapping)
-                            else risk_position.get("initial_margin", "0")
-                        )
-                    ) + sum(
-                        (
-                            Decimal(str(order.get("reserved_margin", "0")))
-                            for order in orders
-                            if isinstance(order, Mapping)
-                            and order.get("track_id") == track_id
-                            and order.get("position_side") == position_side
-                            and order.get("status") in {"OPEN", "PARTIALLY_FILLED"}
-                        ),
-                        Decimal(0),
-                    )
-                else:
-                    in_use = Decimal(str(account.get("margin_used", "0"))) + Decimal(
-                        str(account.get("reserved_margin", "0"))
-                    )
-                available = allocated - in_use
-                if allocated <= 0:
-                    available = Decimal(0)
-            else:
-                available = Decimal(str(portfolio["available_equity"]))
-            shared_maximum = (
-                max(Decimal(0), available) * leverage / (price * contract_size)
-            )
-            maximum = min(maximum, shared_maximum)
-            if quantity_step is not None:
-                maximum = (maximum / quantity_step).to_integral_value(
-                    rounding=ROUND_FLOOR
-                ) * quantity_step
-            maximum = max(Decimal(0), maximum)
-            if (
-                maximum < minimum_quantity
-                or maximum * price * contract_size < minimum_notional
-            ):
-                maximum = Decimal(0)
-            return decimal_to_string(maximum, field_name="max_quantity")
-        except TrainingRunError:
-            raise
-        except (InvalidOperation, KeyError, TypeError, ZeroDivisionError) as exc:
-            raise TrainingRunError(
-                "REPLAY_CONTROL_INVALID",
-                "order capacity cannot be valued against the shared settlement account",
-                status_code=422,
-            ) from exc
+        return order_rules_ops.shared_order_capacity_quantity(adapter_max_quantity=adapter_max_quantity, reference_price=reference_price, payload=payload, selected_track=selected_track, portfolio=portfolio, binding=binding)
 
     async def _reconcile_liquidations(
         self,
@@ -6783,315 +4506,7 @@ class TrainingRunService:
         command_id: str,
         pending: Sequence[Mapping[str, object]] | None = None,
     ) -> int:
-        pending_events = tuple(pending) if pending is not None else ()
-        completed_case_ids: set[str] = set()
-        for iteration in range(256):
-            events = (
-                pending_events
-                if iteration == 0 and pending_events
-                else await self.store.pending_liquidations(run_id)
-            )
-            if not events:
-                return len(completed_case_ids)
-            progressed = False
-            for event in events:
-                liquidation_id = str(event["liquidation_id"])
-                pending_step = event.get("pending_step")
-                if not isinstance(pending_step, Mapping):
-                    raise TrainingRunError(
-                        "LIQUIDATION_EXECUTION_FAILED",
-                        "liquidation case lost its durable pending step",
-                        status_code=409,
-                    )
-                step_sequence = _stored_counter(
-                    pending_step.get("step_sequence"),
-                    field_name="liquidation step sequence",
-                )
-                step_type = str(pending_step.get("step_type"))
-                plan = pending_step.get("plan")
-                if not isinstance(plan, Mapping):
-                    raise TrainingRunError(
-                        "LIQUIDATION_EXECUTION_FAILED",
-                        "liquidation step lost its immutable action plan",
-                        status_code=409,
-                    )
-                try:
-                    if step_type == "CANCEL_ORDERS":
-                        canceled: list[dict[str, object]] = []
-                        planned_orders = plan.get("orders")
-                        if not isinstance(planned_orders, list):
-                            raise TrainingRunError(
-                                "LIQUIDATION_EXECUTION_FAILED",
-                                "liquidation cancellation plan is invalid",
-                                status_code=409,
-                            )
-                        track_by_id = {
-                            str(track["track_id"]): track
-                            for track in event.get("tracks", [])
-                            if isinstance(track, Mapping)
-                        }
-                        for raw in planned_orders:
-                            if not isinstance(raw, Mapping):
-                                raise TrainingRunError(
-                                    "LIQUIDATION_EXECUTION_FAILED",
-                                    "liquidation cancellation target is invalid",
-                                    status_code=409,
-                                )
-                            track_id = str(raw["track_id"])
-                            order_id = str(raw["order_id"])
-                            track = track_by_id.get(track_id)
-                            session_id = (
-                                track.get("adapter_session_id")
-                                if track is not None
-                                else None
-                            )
-                            if not isinstance(session_id, str):
-                                raise TrainingRunError(
-                                    "LIQUIDATION_EXECUTION_FAILED",
-                                    "liquidation cancellation lost its market adapter",
-                                    status_code=409,
-                                )
-                            await self._ensure_track_controller(
-                                session_id=session_id,
-                                client_instance_id=client_instance_id,
-                                command_id=command_id,
-                            )
-                            session = await self.replay_service.get_session(session_id)
-                            snapshot = self._snapshot(session)
-                            cancel = ReplayCommand(
-                                protocol=REPLAY_PROTOCOL,
-                                command_id=self._multi_command_id(
-                                    liquidation_id,
-                                    track_id,
-                                    f"step-{step_sequence}-cancel-{order_id}",
-                                    0,
-                                ),
-                                client_instance_id=client_instance_id,
-                                expected_revision=_stored_counter(
-                                    snapshot["revision"], field_name="revision"
-                                ),
-                                type=CommandType.CANCEL_ORDER,
-                                payload={"order_id": order_id},
-                            )
-                            cancel = await self._resume_durable_liquidation_command(
-                                session_id=session_id,
-                                proposed=cancel,
-                            )
-                            await self.replay_service.command(session_id, cancel)
-                            canceled.append(
-                                {"track_id": track_id, "order_id": order_id}
-                            )
-                        await self.store.commit_liquidation_cancellation(
-                            run_id=run_id,
-                            liquidation_id=liquidation_id,
-                            step_sequence=step_sequence,
-                            canceled_orders=canceled,
-                        )
-                    elif step_type == "RISK_RECHECK":
-                        await self.store.commit_liquidation_recheck(
-                            run_id=run_id,
-                            liquidation_id=liquidation_id,
-                            step_sequence=step_sequence,
-                        )
-                    elif step_type in {"PARTIAL_LIQUIDATION", "FULL_LIQUIDATION"}:
-                        session_id = plan.get("adapter_session_id")
-                        if not isinstance(session_id, str):
-                            raise TrainingRunError(
-                                "LIQUIDATION_EXECUTION_FAILED",
-                                "liquidation execution lost its market adapter",
-                                status_code=409,
-                            )
-                        await self._ensure_track_controller(
-                            session_id=session_id,
-                            client_instance_id=client_instance_id,
-                            command_id=command_id,
-                        )
-                        session = await self.replay_service.get_session(session_id)
-                        snapshot = self._snapshot(session)
-                        hedge_execution = plan.get("position_mode") == "HEDGE"
-                        book_execution = plan.get("book_execution")
-                        historical_book_execution = isinstance(book_execution, Mapping)
-                        revealed_reference_execution = (
-                            hedge_execution and not historical_book_execution
-                        )
-                        if (
-                            plan.get("execution_model")
-                            == HISTORICAL_L2_LIQUIDATION_FIDELITY
-                            and not historical_book_execution
-                        ):
-                            raise TrainingRunError(
-                                "HISTORICAL_BOOK_EXECUTION_UNAVAILABLE",
-                                "historical L2 liquidation lost its frozen execution plan",
-                                status_code=409,
-                            )
-                        close = ReplayCommand(
-                            protocol=REPLAY_PROTOCOL,
-                            command_id=self._multi_command_id(
-                                liquidation_id,
-                                str(plan["track_id"]),
-                                f"step-{step_sequence}-close-{plan['position_side']}",
-                                0,
-                            ),
-                            client_instance_id=client_instance_id,
-                            expected_revision=_stored_counter(
-                                snapshot["revision"], field_name="revision"
-                            ),
-                            type=(
-                                InternalCommandType.EXECUTE_HISTORICAL_BOOK_CLOSE
-                                if historical_book_execution
-                                else (
-                                    InternalCommandType.EXECUTE_REVEALED_REFERENCE_CLOSE
-                                    if revealed_reference_execution
-                                    else CommandType.CLOSE_POSITION
-                                )
-                            ),
-                            payload=(
-                                {
-                                    "position_side": str(plan["position_side"]),
-                                    "side": str(plan["side"]),
-                                    "quantity": str(plan["quantity"]),
-                                    "levels": list(book_execution["levels"]),
-                                    "book_hash": str(book_execution["book_hash"]),
-                                    "last_update_id": _stored_counter(
-                                        book_execution["last_update_id"],
-                                        field_name="historical book last_update_id",
-                                    ),
-                                    "execution_fidelity": str(
-                                        book_execution["execution_fidelity"]
-                                    ),
-                                    "queue_exact": False,
-                                }
-                                if historical_book_execution
-                                else (
-                                    {
-                                        "position_side": str(plan["position_side"]),
-                                        "quantity": str(plan["quantity"]),
-                                        "reference_mark": str(plan["reference_mark"]),
-                                        "market_slippage_bps": str(
-                                            plan["market_slippage_bps"]
-                                        ),
-                                        "price_tick": str(plan["price_tick"]),
-                                        "execution_price": str(plan["execution_price"]),
-                                        "execution_fidelity": str(
-                                            plan["execution_model"]
-                                        ),
-                                    }
-                                    if revealed_reference_execution
-                                    else {
-                                        "quantity": str(plan["quantity"]),
-                                    }
-                                )
-                            ),
-                        )
-                        close = await self._resume_durable_liquidation_command(
-                            session_id=session_id,
-                            proposed=close,
-                        )
-                        closed = await self.replay_service.command(
-                            session_id,
-                            close,
-                            _training_internal=(
-                                historical_book_execution
-                                or revealed_reference_execution
-                            ),
-                        )
-                        data = _stored_mapping(
-                            closed.get("data"), field_name="liquidation close data"
-                        )
-                        orders = data.get("orders")
-                        if (
-                            not isinstance(orders, list)
-                            or not orders
-                            or not isinstance(orders[0], Mapping)
-                            or not isinstance(orders[0].get("order_id"), str)
-                        ):
-                            raise TrainingRunError(
-                                "LIQUIDATION_EXECUTION_FAILED",
-                                "liquidation close order projection is missing",
-                                status_code=409,
-                            )
-                        await self.store.commit_liquidation_execution(
-                            run_id=run_id,
-                            liquidation_id=liquidation_id,
-                            step_sequence=step_sequence,
-                            order_id=str(orders[0]["order_id"]),
-                        )
-                    elif step_type == "BANKRUPTCY_TRANSFER":
-                        await self.store.commit_liquidation_bankruptcy(
-                            run_id=run_id,
-                            liquidation_id=liquidation_id,
-                            step_sequence=step_sequence,
-                        )
-                    elif step_type == "INSURANCE_FUND_SETTLEMENT":
-                        await self.store.commit_liquidation_insurance(
-                            run_id=run_id,
-                            liquidation_id=liquidation_id,
-                            step_sequence=step_sequence,
-                        )
-                    elif step_type == "ADL":
-                        await self.store.commit_liquidation_adl(
-                            run_id=run_id,
-                            liquidation_id=liquidation_id,
-                            step_sequence=step_sequence,
-                        )
-                    elif step_type == "COMPLETE":
-                        await self.store.commit_liquidation_complete(
-                            run_id=run_id,
-                            liquidation_id=liquidation_id,
-                            step_sequence=step_sequence,
-                        )
-                        completed_case_ids.add(liquidation_id)
-                    elif step_type == "FAILED_CLOSED":
-                        raise TrainingRunError(
-                            str(
-                                plan.get("failure_code", "LIQUIDATION_EXECUTION_FAILED")
-                            ),
-                            "liquidation continuation failed closed before a fallback execution",
-                            status_code=409,
-                        )
-                    else:
-                        raise TrainingRunError(
-                            "LIQUIDATION_EXECUTION_FAILED",
-                            "liquidation durable step type is unsupported",
-                            status_code=409,
-                            details={"step_type": step_type},
-                        )
-                    progressed = True
-                except (
-                    ReplayDomainError,
-                    TrainingRunError,
-                    KeyError,
-                    TypeError,
-                    ValueError,
-                ) as exc:
-                    failure_code = (
-                        exc.code.value
-                        if isinstance(exc, ReplayDomainError)
-                        else exc.code
-                        if isinstance(exc, TrainingRunError)
-                        else type(exc).__name__
-                    )
-                    await self.store.fail_liquidation_case(
-                        run_id=run_id,
-                        liquidation_id=liquidation_id,
-                        failure_code=str(failure_code),
-                    )
-                    raise TrainingRunError(
-                        "LIQUIDATION_EXECUTION_FAILED",
-                        "simulated account liquidation failed closed",
-                        status_code=409,
-                        details={
-                            "liquidation_id": liquidation_id,
-                            "reason": failure_code,
-                        },
-                    ) from exc
-            if not progressed:
-                break
-        raise TrainingRunError(
-            "LIQUIDATION_EXECUTION_FAILED",
-            "liquidation state machine exceeded its deterministic step budget",
-            status_code=409,
-        )
+        return await self._ordered_playback._reconcile_liquidations(run_id=run_id, client_instance_id=client_instance_id, command_id=command_id, pending=pending)
 
     async def _resume_durable_liquidation_command(
         self,
@@ -7100,32 +4515,7 @@ class TrainingRunService:
         proposed: ReplayCommand,
     ) -> ReplayCommand:
         """Reuse the exact durable broker envelope after response/process loss."""
-
-        stored = await self.replay_service.store.get_command(
-            session_id,
-            proposed.command_id,
-        )
-        if stored is None:
-            return proposed
-        try:
-            durable = ReplayCommand.from_persisted_dict(stored.command)
-        except (KeyError, TypeError, ValueError) as exc:
-            raise TrainingRunError(
-                "LIQUIDATION_COMMAND_EVIDENCE_INVALID",
-                "durable liquidation command envelope is invalid",
-                status_code=503,
-            ) from exc
-        proposed_payload = proposed.to_dict()
-        durable_payload = durable.to_dict()
-        for field in ("protocol", "command_id", "type", "payload"):
-            if durable_payload[field] != proposed_payload[field]:
-                raise TrainingRunError(
-                    "LIQUIDATION_COMMAND_CONFLICT",
-                    "durable liquidation command no longer matches its immutable plan",
-                    status_code=409,
-                    details={"field": field, "command_id": proposed.command_id},
-                )
-        return durable
+        return await self._ordered_playback._resume_durable_liquidation_command(session_id=session_id, proposed=proposed)
 
     @staticmethod
     def _assert_shared_settlement_reservation(
@@ -7137,245 +4527,7 @@ class TrainingRunService:
         release_selected_margin: bool = False,
         release_order_reservation: Decimal = Decimal(0),
     ) -> None:
-        if payload.get("reduce_only") is True:
-            return
-        if not isinstance(portfolio, Mapping):
-            raise TrainingRunError(
-                "TRAINING_RUN_STORAGE_DEGRADED",
-                "run portfolio projection is invalid",
-                status_code=503,
-            )
-        config = binding.get("adapter_config")
-        if not isinstance(config, Mapping):
-            raise TrainingRunError(
-                "TRAINING_RUN_STORAGE_DEGRADED",
-                "training adapter config is invalid",
-                status_code=503,
-            )
-        price_value = payload.get("limit_price") or payload.get("stop_price")
-        if price_value is None:
-            position = selected_track.get("position")
-            price_value = _position_mark(
-                position,
-                position_side=payload.get("position_side"),
-            )
-            if price_value is None:
-                price_value = selected_track.get("public_price")
-        try:
-            quantity = Decimal(str(payload["quantity"]))
-            price = Decimal(str(price_value))
-            max_leverage = Decimal(str(config["max_leverage"]))
-            leverage = max_leverage
-            raw_leverage = payload.get("leverage")
-            if raw_leverage is not None:
-                leverage = Decimal(str(raw_leverage))
-                if leverage < 1 or leverage > max_leverage:
-                    raise TrainingRunError(
-                        "RISK_LIMIT_EXCEEDED",
-                        "order leverage must be between 1 and session max_leverage",
-                        status_code=409,
-                    )
-            track_id = str(selected_track["track_id"])
-            if binding.get("position_mode") == "HEDGE":
-                active_leg_leverage = _hedge_leg_leverage(
-                    portfolio,
-                    track_id=track_id,
-                    position_side=payload.get("position_side"),
-                )
-                if raw_leverage is None and active_leg_leverage is not None:
-                    leverage = active_leg_leverage
-                active_position = _portfolio_risk_position(
-                    portfolio,
-                    track_id=track_id,
-                    position_side=payload.get("position_side"),
-                )
-                if (
-                    raw_leverage is not None
-                    and active_position is not None
-                    and active_leg_leverage is not None
-                    and leverage != active_leg_leverage
-                ):
-                    raise TrainingRunError(
-                        "RISK_LIMIT_EXCEEDED",
-                        "opening order leverage differs from the active hedge leg",
-                        status_code=409,
-                    )
-            contract_size = Decimal(1)
-            quote_step = Decimal("0.00000001")
-            rules = portfolio.get("instrument_rules")
-            active = next(
-                (
-                    item
-                    for item in rules
-                    if isinstance(rules, list)
-                    and isinstance(item, Mapping)
-                    and item.get("track_id") == selected_track.get("track_id")
-                    and isinstance(item.get("rule"), Mapping)
-                ),
-                None,
-            )
-            if isinstance(active, Mapping):
-                active_rule = cast(Mapping[str, object], active["rule"])
-                contract_size = Decimal(str(active_rule.get("contract_size", "1")))
-                quote_step = Decimal(str(active_rule.get("quote_step", quote_step)))
-                rule_max_leverage = Decimal(
-                    str(active_rule.get("max_leverage", leverage))
-                )
-                if (
-                    leverage > rule_max_leverage
-                    and raw_leverage is None
-                    and binding.get("position_mode") != "HEDGE"
-                ):
-                    leverage = rule_max_leverage
-                elif leverage > rule_max_leverage:
-                    raise TrainingRunError(
-                        "RISK_LIMIT_EXCEEDED",
-                        "order leverage exceeds the active instrument rule",
-                        status_code=409,
-                    )
-            history = portfolio.get("account_history")
-            if (
-                isinstance(history, Mapping)
-                and history.get("mode") == "HISTORICAL_EXACT"
-            ):
-                rules = portfolio.get("instrument_rules")
-                if not isinstance(rules, list):
-                    raise TypeError("exact instrument rules are missing")
-                active = next(
-                    (
-                        item
-                        for item in rules
-                        if isinstance(item, Mapping)
-                        and item.get("track_id") == selected_track.get("track_id")
-                    ),
-                    None,
-                )
-                if not isinstance(active, Mapping) or not isinstance(
-                    active.get("rule"), Mapping
-                ):
-                    raise TypeError("exact active instrument rule is missing")
-                exact_rule = active["rule"]
-                assert isinstance(exact_rule, Mapping)
-                contract_size = Decimal(str(exact_rule["contract_size"]))
-                quote_step = Decimal(str(exact_rule["quote_step"]))
-                exact_rule_max = Decimal(str(exact_rule["max_leverage"]))
-                if (
-                    leverage > exact_rule_max
-                    and raw_leverage is None
-                    and binding.get("position_mode") != "HEDGE"
-                ):
-                    leverage = exact_rule_max
-                elif leverage > exact_rule_max:
-                    raise TrainingRunError(
-                        "RISK_LIMIT_EXCEEDED",
-                        "order leverage exceeds the active historical rule",
-                        status_code=409,
-                    )
-            if portfolio.get("margin_mode") == "ISOLATED":
-                allocations = portfolio.get("isolated_allocations")
-                track_account = selected_track.get("account")
-                if not isinstance(allocations, Mapping) or not isinstance(
-                    track_account,
-                    Mapping,
-                ):
-                    raise TrainingRunError(
-                        "TRAINING_RUN_STORAGE_DEGRADED",
-                        "isolated account projection is invalid",
-                        status_code=503,
-                    )
-                position_side = payload.get("position_side")
-                allocation_key = isolated_margin_key(
-                    track_id,
-                    None if position_side is None else str(position_side),
-                )
-                allocated = Decimal(str(allocations.get(allocation_key, "0")))
-                if binding.get("position_mode") == "HEDGE":
-                    positions = portfolio.get("positions")
-                    orders = portfolio.get("orders")
-                    if not isinstance(positions, list) or not isinstance(orders, list):
-                        raise TypeError("HEDGE isolated risk projection is invalid")
-                    risk_position = next(
-                        (
-                            item
-                            for item in positions
-                            if isinstance(item, Mapping)
-                            and item.get("track_id") == track_id
-                            and item.get("position_side") == position_side
-                        ),
-                        None,
-                    )
-                    position_margin = Decimal(
-                        str(
-                            0
-                            if not isinstance(risk_position, Mapping)
-                            else risk_position.get("initial_margin", "0")
-                        )
-                    )
-                    order_margin = sum(
-                        (
-                            Decimal(str(order.get("reserved_margin", "0")))
-                            for order in orders
-                            if isinstance(order, Mapping)
-                            and order.get("track_id") == track_id
-                            and order.get("position_side") == position_side
-                            and order.get("status") in {"OPEN", "PARTIALLY_FILLED"}
-                        ),
-                        Decimal(0),
-                    )
-                    in_use = position_margin + order_margin
-                else:
-                    position_margin = Decimal(
-                        str(track_account.get("margin_used", "0"))
-                    )
-                    in_use = position_margin + Decimal(
-                        str(track_account.get("reserved_margin", "0"))
-                    )
-                available = allocated - in_use
-                if release_selected_margin:
-                    available += position_margin
-                available += release_order_reservation
-                if allocated <= 0:
-                    raise TrainingRunError(
-                        "ISOLATED_MARGIN_REQUIRED",
-                        "allocate isolated margin before placing an opening order",
-                        status_code=409,
-                        details={"track_id": track_id},
-                    )
-            else:
-                available = Decimal(str(portfolio["available_equity"]))
-                if release_selected_margin:
-                    track_account = selected_track.get("account")
-                    if not isinstance(track_account, Mapping):
-                        raise TypeError("selected track account is invalid")
-                    available += Decimal(str(track_account.get("margin_used", "0")))
-                available += release_order_reservation
-            reservation = round_to_step(
-                quantity * price * contract_size / leverage,
-                quote_step,
-                upward=True,
-            )
-        except (InvalidOperation, KeyError, TypeError, ZeroDivisionError) as exc:
-            raise TrainingRunError(
-                "REPLAY_CONTROL_INVALID",
-                "order cannot be valued against the shared settlement account",
-                status_code=422,
-            ) from exc
-        if quantity <= 0 or price <= 0 or leverage <= 0:
-            raise TrainingRunError(
-                "REPLAY_CONTROL_INVALID",
-                "order reservation inputs must be positive",
-                status_code=422,
-            )
-        if reservation > available:
-            raise TrainingRunError(
-                "RUN_ACCOUNT_MARGIN_EXCEEDED",
-                "order exceeds the TrainingRun shared available equity",
-                status_code=409,
-                details={
-                    "required_reservation": str(reservation),
-                    "available_equity": str(available),
-                },
-            )
+        return order_rules_ops.assert_shared_settlement_reservation(payload=payload, selected_track=selected_track, portfolio=portfolio, binding=binding, release_selected_margin=release_selected_margin, release_order_reservation=release_order_reservation)
 
     async def _activate_existing_track(
         self,
@@ -7384,26 +4536,7 @@ class TrainingRunService:
         track: Mapping[str, object],
         target_virtual_time_ms: int,
     ) -> None:
-        session_id = track.get("adapter_session_id")
-        if not isinstance(session_id, str):
-            raise TrainingRunError(
-                "MARKET_TRACK_NOT_PREPARED",
-                "market track has no frozen adapter session",
-                status_code=409,
-            )
-        snapshot = await self._ensure_track_controller(
-            session_id=session_id,
-            client_instance_id=command.client_instance_id,
-            command_id=command.command_id,
-        )
-        await self._advance_adapter_to(
-            session_id=session_id,
-            target_virtual_time_ms=target_virtual_time_ms,
-            client_instance_id=command.client_instance_id,
-            command_id=command.command_id,
-            track_id=str(track["track_id"]),
-            initial_snapshot=snapshot,
-        )
+        return await self._ordered_playback._activate_existing_track(command=command, track=track, target_virtual_time_ms=target_virtual_time_ms)
 
     async def _execute_multi_track_control(
         self,
@@ -7413,706 +4546,12 @@ class TrainingRunService:
         selected_snapshot: Mapping[str, object],
         tracks: list[Mapping[str, object]],
     ) -> dict[str, object]:
-        event_stop: dict[str, object] | None = {} if self._stop_on_event(command) else None
-        ordered = tuple(
-            sorted(
-                tracks,
-                key=lambda track: (
-                    _stored_counter(
-                        track["stable_ordinal"], field_name="stable_ordinal"
-                    ),
-                    str(track["track_id"]),
-                ),
-            )
-        )
-        selected_session_id = str(binding["adapter_session_id"])
-        actor = self._run_actors.setdefault(
-            command.run_id,
-            TrainingRunActor(command.run_id),
-        )
-        if command.type is ReplayV2CommandType.END:
-            return await self._end_multi_track_run(
-                command=command,
-                tracks=ordered,
-                selected_session_id=selected_session_id,
-            )
-        direct_types = {
-            ReplayV2CommandType.ACQUIRE_CONTROLLER,
-            ReplayV2CommandType.TAKEOVER_CONTROLLER,
-            ReplayV2CommandType.RELEASE_CONTROLLER,
-            ReplayV2CommandType.PLAY,
-            ReplayV2CommandType.PAUSE,
-            ReplayV2CommandType.SET_SPEED,
-        }
-        if command.type in direct_types:
-            if command.type is ReplayV2CommandType.PLAY:
-                if actor.playback_is_active():
-                    raise TrainingRunError(
-                        "REPLAY_CONTROL_INVALID",
-                        "ordered playback is already running",
-                        status_code=409,
-                    )
-                (
-                    basis,
-                    rate,
-                    display_interval,
-                    viewer_revision,
-                    legacy_profile,
-                ) = await self._playback_profile(
-                    command=command,
-                    binding=binding,
-                    selected_snapshot=selected_snapshot,
-                    full_track_count=len(ordered),
-                    actor=actor,
-                )
-                for track in ordered:
-                    await self._ensure_track_controller(
-                        session_id=self._track_session_id(track),
-                        client_instance_id=command.client_instance_id,
-                        command_id=command.command_id,
-                    )
-                    session = await self.replay_service.get_session(
-                        self._track_session_id(track)
-                    )
-                    snapshot = self._snapshot(session)
-                    if snapshot["state"] != "PAUSED":
-                        raise TrainingRunError(
-                            "REPLAY_CONTROL_INVALID",
-                            "all FULL market tracks must be paused before playback",
-                            status_code=409,
-                            details={"track_id": track["track_id"]},
-                        )
-                if self._requires_barrier_account_audit(binding):
-                    await self.store.invalidate_account_audit(command.run_id)
-                generation, stop = actor.begin_ordered_playback(
-                    client_instance_id=command.client_instance_id,
-                    basis=basis,
-                    rate=rate,
-                    display_interval=display_interval,
-                    viewer_revision=viewer_revision,
-                )
-                task = asyncio.create_task(
-                    self._run_ordered_playback(
-                        run_id=command.run_id,
-                        generation=generation,
-                        stop=stop,
-                    ),
-                    name=f"replay-v2-play-{command.run_id}",
-                )
-                actor.attach_ordered_playback_task(
-                    generation=generation,
-                    task=task,
-                )
-                viewer = await self.store.get_viewer_state(command.run_id)
-                result = self._result_payload(
-                    command=command,
-                    session_id=selected_session_id,
-                    snapshot=selected_snapshot,
-                    viewer=viewer.to_dict(),
-                    data={
-                        "full_track_count": len(ordered),
-                        "ordering_version": GLOBAL_ORDERING_VERSION,
-                        "playback_contract": PLAYBACK_CONTRACT_VERSION,
-                        "legacy_profile": legacy_profile,
-                        "global_clock": actor.playback_snapshot(),
-                    },
-                )
-                result["state"] = "PLAYING"
-                return result
-            if command.type is ReplayV2CommandType.PAUSE:
-                self._exact_payload(command.payload, set())
-                if not actor.playback_is_active():
-                    raise TrainingRunError(
-                        "REPLAY_CONTROL_INVALID",
-                        "ordered playback is not running",
-                        status_code=409,
-                    )
-                actor.request_ordered_pause(reason="USER_PAUSE")
-                selected = await self.replay_service.get_session(selected_session_id)
-                snapshot = self._snapshot(selected)
-                viewer = await self.store.get_viewer_state(command.run_id)
-                result = self._result_payload(
-                    command=command,
-                    session_id=selected_session_id,
-                    snapshot=snapshot,
-                    viewer=viewer.to_dict(),
-                    data={
-                        "full_track_count": len(ordered),
-                        "ordering_version": GLOBAL_ORDERING_VERSION,
-                        "global_clock": actor.playback_snapshot(),
-                    },
-                )
-                result["state"] = "PAUSED"
-                return result
-            if command.type is ReplayV2CommandType.SET_SPEED:
-                if not command.payload:
-                    self._exact_payload(command.payload, {"speed"})
-                (
-                    basis,
-                    rate,
-                    display_interval,
-                    viewer_revision,
-                    legacy_profile,
-                ) = await self._playback_profile(
-                    command=command,
-                    binding=binding,
-                    selected_snapshot=selected_snapshot,
-                    full_track_count=len(ordered),
-                    actor=actor,
-                )
-                for track in ordered:
-                    await self._ensure_track_controller(
-                        session_id=self._track_session_id(track),
-                        client_instance_id=command.client_instance_id,
-                        command_id=command.command_id,
-                    )
-                selected_result: Mapping[str, object] | None = None
-                if legacy_profile:
-                    adapter_speed = command.payload["speed"]
-                    try:
-                        for track in ordered:
-                            session_id = self._track_session_id(track)
-                            session = await self.replay_service.get_session(session_id)
-                            snapshot = self._snapshot(session)
-                            adapter = ReplayCommand(
-                                protocol=REPLAY_PROTOCOL,
-                                command_id=self._multi_command_id(
-                                    command.command_id,
-                                    str(track["track_id"]),
-                                    CommandType.SET_SPEED.value,
-                                    _stored_counter(
-                                        snapshot["revision"],
-                                        field_name="revision",
-                                    ),
-                                ),
-                                client_instance_id=command.client_instance_id,
-                                expected_revision=_stored_counter(
-                                    snapshot["revision"],
-                                    field_name="revision",
-                                ),
-                                type=CommandType.SET_SPEED,
-                                payload={"speed": adapter_speed},
-                            )
-                            acknowledged = await self.replay_service.command(
-                                session_id,
-                                adapter,
-                            )
-                            if session_id == selected_session_id:
-                                selected_result = acknowledged
-                    except ReplayDomainError as exc:
-                        await self._fail_closed_multi_track(
-                            run_id=command.run_id,
-                            tracks=ordered,
-                            failed_track=track,
-                            client_instance_id=command.client_instance_id,
-                            reason=exc.code.value,
-                        )
-                        raise TrainingRunError(
-                            "MULTI_TRACK_PAUSED",
-                            "a required FULL market track rejected the global control",
-                            status_code=409,
-                            details={
-                                "reason": exc.code.value,
-                                "track_id": track["track_id"],
-                            },
-                        ) from exc
-                actor.update_ordered_profile(
-                    basis=basis,
-                    rate=rate,
-                    display_interval=display_interval,
-                    viewer_revision=viewer_revision,
-                )
-                if selected_result is None:
-                    selected = await self.replay_service.get_session(
-                        selected_session_id
-                    )
-                    selected_result = self._snapshot(selected)
-                snapshot = (
-                    selected_result
-                    if "cursor" in selected_result
-                    else self._snapshot(selected_result)
-                )
-                viewer = await self.store.get_viewer_state(command.run_id)
-                return self._result_payload(
-                    command=command,
-                    session_id=selected_session_id,
-                    snapshot=snapshot,
-                    viewer=viewer.to_dict(),
-                    data={
-                        "full_track_count": len(ordered),
-                        "ordering_version": GLOBAL_ORDERING_VERSION,
-                        "playback_contract": PLAYBACK_CONTRACT_VERSION,
-                        "legacy_profile": legacy_profile,
-                        "profile_only": not legacy_profile,
-                        "global_clock": actor.playback_snapshot(),
-                    },
-                )
-            if command.type is ReplayV2CommandType.ACQUIRE_CONTROLLER:
-                v1_type = CommandType.ACQUIRE_CONTROLLER
-                payload = dict(self._exact_payload(command.payload, {"takeover"}))
-            elif command.type is ReplayV2CommandType.TAKEOVER_CONTROLLER:
-                self._exact_payload(command.payload, set())
-                v1_type = CommandType.ACQUIRE_CONTROLLER
-                payload = {"takeover": True}
-            else:
-                self._exact_payload(command.payload, set())
-                v1_type = (
-                    CommandType.RELEASE_CONTROLLER
-                    if command.type is ReplayV2CommandType.RELEASE_CONTROLLER
-                    else CommandType.PAUSE
-                )
-                payload = {}
-            if command.type is ReplayV2CommandType.RELEASE_CONTROLLER:
-                actor.request_ordered_pause(reason="CONTROLLER_RELEASED")
-            if command.type in {
-                ReplayV2CommandType.RELEASE_CONTROLLER,
-            }:
-                for track in ordered:
-                    await self._ensure_track_controller(
-                        session_id=self._track_session_id(track),
-                        client_instance_id=command.client_instance_id,
-                        command_id=command.command_id,
-                    )
-            selected_result: Mapping[str, object] | None = None
-            try:
-                for track in ordered:
-                    session_id = self._track_session_id(track)
-                    session = await self.replay_service.get_session(session_id)
-                    snapshot = self._snapshot(session)
-                    adapter = ReplayCommand(
-                        protocol=REPLAY_PROTOCOL,
-                        command_id=self._multi_command_id(
-                            command.command_id,
-                            str(track["track_id"]),
-                            v1_type.value,
-                            _stored_counter(
-                                snapshot["revision"], field_name="revision"
-                            ),
-                        ),
-                        client_instance_id=command.client_instance_id,
-                        expected_revision=_stored_counter(
-                            snapshot["revision"], field_name="revision"
-                        ),
-                        type=v1_type,
-                        payload=payload,
-                    )
-                    acknowledged = await self.replay_service.command(
-                        session_id, adapter
-                    )
-                    if session_id == selected_session_id:
-                        selected_result = acknowledged
-            except ReplayDomainError as exc:
-                await self._fail_closed_multi_track(
-                    run_id=command.run_id,
-                    tracks=ordered,
-                    failed_track=track,
-                    client_instance_id=command.client_instance_id,
-                    reason=exc.code.value,
-                )
-                raise TrainingRunError(
-                    "MULTI_TRACK_PAUSED",
-                    "a required FULL market track rejected the global control",
-                    status_code=409,
-                    details={"reason": exc.code.value, "track_id": track["track_id"]},
-                ) from exc
-            if selected_result is None:
-                selected = await self.replay_service.get_session(selected_session_id)
-                selected_result = self._snapshot(selected)
-            snapshot = (
-                selected_result
-                if "cursor" in selected_result
-                else self._snapshot(selected_result)
-            )
-            viewer = await self.store.get_viewer_state(command.run_id)
-            return self._result_payload(
-                command=command,
-                session_id=selected_session_id,
-                snapshot=snapshot,
-                viewer=viewer.to_dict(),
-                data={
-                    "full_track_count": len(ordered),
-                    "ordering_version": GLOBAL_ORDERING_VERSION,
-                    "adapter_command": v1_type.value,
-                    "global_clock": actor.playback_snapshot(),
-                },
-            )
-
-        current_time = self._cursor_time(selected_snapshot)
-        fast_forward_plan: dict[str, object] | None = None
-        control_plan: dict[str, object] | None = None
-        advance_job: dict[str, object] | None = None
-        stable_order_state = {"truncated": False}
-        advance_key: tuple[str, str] | None = None
-        source_goal: _OrderedSourceGoal | None = None
-        if command.type is ReplayV2CommandType.ADVANCE:
-            requested_basis = advance_basis(command.payload.get("basis"))
-            if requested_basis is AdvanceBasis.SOURCE_EVENT and len(ordered) != 1:
-                normalized = self._exact_payload(
-                    command.payload,
-                    {"basis", "count"},
-                )
-                control_count(normalized["count"])
-                raise TrainingRunError(
-                    "REPLAY_CONTROL_UNSUPPORTED",
-                    "SOURCE_EVENT is unavailable with multiple FULL tracks because a same-time cohort must commit atomically",
-                    status_code=409,
-                    details={
-                        "basis": requested_basis.value,
-                        "full_track_count": len(ordered),
-                        "playback_bases": [
-                            item.value
-                            for item in supported_playback_bases(
-                                source_kind=str(binding["source_kind"]),
-                                full_track_count=len(ordered),
-                            )
-                        ],
-                    },
-                )
-        if command.type is ReplayV2CommandType.STEP_EVENT:
-            step_event_payload = self._exact_payload(command.payload, {"count"})
-            count = control_count(step_event_payload["count"])
-            if count > MAX_PLAYBACK_BATCH_UNITS:
-                raise TrainingRunError(
-                    "REPLAY_CONTROL_INVALID",
-                    f"SOURCE_EVENT count must be between 1 and {MAX_PLAYBACK_BATCH_UNITS}",
-                    status_code=422,
-                    details={
-                        "basis": AdvanceBasis.SOURCE_EVENT.value,
-                        "requested_count": count,
-                        "max_count": MAX_PLAYBACK_BATCH_UNITS,
-                    },
-                )
-            if str(binding["source_kind"]) != "AGG_TRADE":
-                raise TrainingRunError(
-                    "REPLAY_CONTROL_UNSUPPORTED",
-                    "STEP_EVENT is available only for AGG_TRADE runs",
-                    status_code=409,
-                )
-            if len(ordered) == 1:
-                source_goal = await self._ordered_source_goal(
-                    ordered,
-                    max_events=count,
-                    expected_snapshot=selected_snapshot,
-                )
-                if source_goal is None:
-                    raise TrainingRunError(
-                        "REPLAY_CONTROL_UNAVAILABLE",
-                        "all FULL market tracks reached the end of frozen history",
-                        status_code=409,
-                    )
-                total_events = list(
-                    await self._advance_full_tracks_to(
-                        command=command,
-                        binding=binding,
-                        tracks=ordered,
-                        target_virtual_time_ms=source_goal.target_virtual_time_ms,
-                        audit_account_at_barrier=False,
-                        source_goal=source_goal,
-                        stable_order_state=stable_order_state,
-                        event_stop=event_stop,
-                    )
-                )
-            else:
-                total_events = []
-                for _ in range(count):
-                    next_time = await self._next_global_event_time(
-                        run_id=command.run_id,
-                        binding=binding,
-                        tracks=ordered,
-                    )
-                    total_events.extend(
-                        await self._advance_full_tracks_to(
-                            command=command,
-                            binding=binding,
-                            tracks=ordered,
-                            target_virtual_time_ms=next_time,
-                            audit_account_at_barrier=False,
-                            stable_order_state=stable_order_state,
-                        )
-                    )
-            control_plan = {
-                "contract": ADVANCE_CONTRACT_VERSION,
-                "basis": AdvanceBasis.SOURCE_EVENT.value,
-                "count": count,
-                "grain": "EVENT",
-                "legacy_alias": command.type.value,
-                "mode": "GLOBAL_ORDERED_INPUT_CLOCK",
-            }
-        else:
-            _v1_type, _v1_payload, plan = await self._translate_control(
-                command=command,
-                binding=binding,
-                snapshot=selected_snapshot,
-            )
-            target = plan.get("target_virtual_time_ms")
-            if target is None and (
-                command.type is ReplayV2CommandType.STEP_BASE
-                or (
-                    command.type is ReplayV2CommandType.ADVANCE
-                    and plan.get("basis") == AdvanceBasis.BASE_BAR.value
-                )
-            ):
-                if command.type is ReplayV2CommandType.STEP_BASE:
-                    step_base_payload = self._exact_payload(
-                        command.payload,
-                        {"count"},
-                    )
-                    count = control_count(step_base_payload["count"])
-                else:
-                    count = control_count(plan.get("count"))
-                target = aligned_step_target_ms(
-                    current_virtual_time_ms=current_time,
-                    base_interval=str(binding["base_interval"]),
-                    step_interval=str(binding["base_interval"]),
-                    count=count,
-                )
-                plan["target_virtual_time_ms"] = target
-            if (binding.get("source_kind") == "AGG_TRADE" and isinstance(target, int)
-                    and target > self._training_terminal_time_ms(binding)):
-                # A requested jump may exceed frozen history. Stop at the same
-                # immutable terminal as the scalar actor before deferred finalize.
-                # The binding end can be a last-bucket open; only the source
-                # knows its inclusive terminal (also mapped for blind runs).
-                for track in ordered:
-                    boundary = await self.replay_service.scan_source_goal(
-                        self._track_session_id(track), max_events=1,
-                    )
-                    target = min(target, _stored_counter(
-                        boundary["source_terminal_time_ms"], field_name="source_terminal_time_ms",
-                    ))
-                plan["target_virtual_time_ms"] = target
-            control_plan = dict(plan)
-            control_plan["mode"] = "GLOBAL_ORDERED_INPUT_CLOCK"
-            if binding.get("position_mode") == "HEDGE":
-                control_plan["input_clock"] = "PINNED_HEDGE_PUBLIC_SIMULATION"
-            if plan.get("basis") == AdvanceBasis.SOURCE_EVENT.value:
-                requested_count = control_count(plan.get("count"))
-                source_goal = await self._ordered_source_goal(
-                    ordered,
-                    max_events=requested_count,
-                    expected_snapshot=selected_snapshot,
-                )
-                if source_goal is None:
-                    raise TrainingRunError(
-                        "REPLAY_CONTROL_UNAVAILABLE",
-                        "all FULL market tracks reached the end of frozen history",
-                        status_code=409,
-                    )
-                target = source_goal.target_virtual_time_ms
-                control_plan["target_virtual_time_ms"] = target
-            if not isinstance(target, int):
-                raise TrainingRunError(
-                    "REPLAY_CONTROL_UNSUPPORTED",
-                    "multi-track control requires an exact global target",
-                    status_code=409,
-                )
-            cancelable_scan = command.type in {
-                ReplayV2CommandType.ADVANCE_BY,
-                ReplayV2CommandType.ADVANCE_TO,
-            } or (
-                command.type is ReplayV2CommandType.ADVANCE
-                and (plan.get("basis") == AdvanceBasis.VIRTUAL_TIME.value
-                     or plan.get('basis') == AdvanceBasis.DISPLAY_BAR.value)
-            )
-            if cancelable_scan:
-                decision = self._plan_fast_forward(
-                    binding=binding,
-                    snapshot=selected_snapshot,
-                    tracks=ordered,
-                    target_virtual_time_ms=target,
-                )
-                fast_forward_plan = {
-                    **decision.to_dict(),
-                    **{
-                        key: value
-                        for key, value in plan.items()
-                        if key
-                        in {
-                            "contract",
-                            "basis",
-                            "count",
-                            "duration_ms",
-                            "legacy_alias",
-                            "display_interval",
-                            "viewer_revision",
-                            "target_virtual_time_ms",
-                        }
-                    },
-                }
-                if decision.plan is FastForwardPlan.BLOCKED:
-                    raise TrainingRunError(
-                        "REPLAY_FAST_FORWARD_BLOCKED",
-                        decision.explanation,
-                        status_code=409,
-                        details={"plan": fast_forward_plan},
-                    )
-                advance_key = (command.run_id, command.command_id)
-                if advance_key in self._advance_jobs:
-                    raise TrainingRunError(
-                        "ADVANCE_ALREADY_ACTIVE",
-                        "advance command is already active",
-                        status_code=409,
-                    )
-                advance_job = {
-                    "cancel": asyncio.Event(),
-                    "client_instance_id": command.client_instance_id,
-                    "status": "RUNNING",
-                    "initial_virtual_time_ms": current_time,
-                    "target_virtual_time_ms": target,
-                    "current_virtual_time_ms": current_time,
-                    "consumed": 0,
-                    "chunks": 0,
-                    "cancelable": True,
-                    "plan": dict(fast_forward_plan),
-                    "chunk_event_limit": 1,
-                    "queue_high_water": 0,
-                    "stable_order_truncated": False,
-                }
-                self._advance_jobs[advance_key] = advance_job
-            terminal_result_factory = None
-            if (advance_job is not None and source_goal is None
-                    and self.replay_service.settings.replay_multi_bar_interval_enabled
-                    and not self._requires_barrier_account_audit(binding)):
-                prepared_viewer = (await self.store.get_viewer_state(command.run_id)).to_dict()
-                def terminal_result_factory(final, events, progress):
-                    return self._multi_control_result(
-                        command=command, selected_session_id=selected_session_id, final=final,
-                        viewer=prepared_viewer, fast_forward_plan=fast_forward_plan,
-                        control_plan=control_plan, advance_job=progress, source_goal=None,
-                        ordered=ordered, total_events=events, event_stop=event_stop,
-                        stable_order_state=stable_order_state, executed_multi=True,
-                    )
-            try:
-                total_events = list(
-                    await self._advance_full_tracks_to(
-                        command=command,
-                        binding=binding,
-                        tracks=ordered,
-                        target_virtual_time_ms=target,
-                        job=advance_job,
-                        # Finalize exact account/HEDGE state at each internal
-                        # wave, then run the exhaustive history proof once at
-                        # the user-command acknowledgement barrier below.
-                        allow_final_state_batch=True,
-                        audit_account_at_barrier=False,
-                        source_goal=source_goal,
-                        stable_order_state=stable_order_state,
-                        event_stop=event_stop,
-                        terminal_result_factory=terminal_result_factory,
-                    )
-                )
-            except BaseException:
-                if advance_key is not None:
-                    self._advance_jobs.pop(advance_key, None)
-                raise
-            if advance_key is not None:
-                assert advance_job is not None
-                advance_job["cancelable"] = False
-                # The command response and a racing progress poll must agree
-                # that a terminal job cannot still be cancelled.
-                asyncio.get_running_loop().call_later(
-                    ADVANCE_PROGRESS_RETENTION_SECONDS,
-                    self._advance_jobs.pop,
-                    advance_key,
-                    None,
-                )
-        completed = getattr(self.store, "_multi_completed_results", {}).get((command.run_id, command.command_id))
-        if completed is not None:
-            if advance_job is not None:
-                advance_job["plan"] = dict(completed["data"]["plan"])
-                advance_job["status"] = completed["data"]["progress"]["status"]
-            return completed
-        if self._requires_barrier_account_audit(binding):
-            await self.audit_account(command.run_id)
-        selected = await self.replay_service.get_session(selected_session_id)
-        final = self._snapshot(selected)
-        viewer = await self.store.get_viewer_state(command.run_id)
-        return self._multi_control_result(
-            command=command, selected_session_id=selected_session_id, final=final,
-            viewer=viewer.to_dict(), fast_forward_plan=fast_forward_plan, control_plan=control_plan,
-            advance_job=advance_job, source_goal=source_goal, ordered=ordered,
-            total_events=total_events, event_stop=event_stop, stable_order_state=stable_order_state,
-            executed_multi=(command.run_id, command.command_id) in getattr(self.store, "_multi_interval_commands", set()),
-        )
+        return await self._ordered_playback._execute_multi_track_control(command=command, binding=binding, selected_snapshot=selected_snapshot, tracks=tracks)
 
     def _multi_control_result(self, *, command, selected_session_id, final, viewer,
                               fast_forward_plan, control_plan, advance_job, source_goal,
                               ordered, total_events, event_stop, stable_order_state, executed_multi):
-        if fast_forward_plan is not None:
-            if executed_multi:
-                fast_forward_plan = {**dict(fast_forward_plan),
-                    'executed_path': ('MULTI_TAPE_COHORT_V1'
-                        if fast_forward_plan.get('source_kind') == 'AGG_TRADE'
-                        else 'MULTI_BAR_INTERVAL_V1'),
-                    'financial_reference_equivalence':True,
-                    'legacy_hash_byte_equivalence':False}
-            equivalence = fast_forward_plan.get("equivalence")
-            if isinstance(equivalence, Mapping):
-                fast_forward_plan["equivalence"] = {
-                    **dict(equivalence),
-                    "status": "REFERENCE_PATH",
-                    "observed_state_hash": final["state_hash"],
-                    "observed_cursor": dict(
-                        _stored_mapping(final["cursor"], field_name="adapter cursor")
-                    ),
-                    "consumed_source_events": (
-                        int(advance_job["consumed"])
-                        if advance_job is not None
-                        else len(total_events)
-                    ),
-                }
-            if advance_job is not None:
-                advance_job["plan"] = dict(fast_forward_plan)
-        return self._result_payload(
-            command=command,
-            session_id=selected_session_id,
-            snapshot=final,
-            viewer=viewer,
-            data={
-                "consumed": (
-                    final["cursor"]["source_sequence"]
-                    - source_goal.start_source_sequence
-                    if source_goal is not None
-                    else
-                    int(advance_job["consumed"])
-                    if advance_job is not None
-                    else len(total_events)
-                ),
-                "cancelled": (
-                    advance_job is not None and advance_job["status"] == "CANCELLED"
-                ),
-                "full_track_count": len(ordered),
-                "ordering_version": GLOBAL_ORDERING_VERSION,
-                "stable_order": [
-                    event.to_dict()
-                    for event in stable_market_event_order(total_events)
-                ],
-                **({
-                    "event_stop": event_stop or None,
-                    "target_reached": self._cursor_time(final) >= int((control_plan or {}).get("target_virtual_time_ms", self._cursor_time(final))),
-                } if event_stop is not None else {}),
-                **(
-                    {
-                        "stable_order_truncated": bool(
-                            advance_job["stable_order_truncated"]
-                        ),
-                        "progress": self._public_progress(advance_job),
-                    }
-                    if advance_job is not None
-                    else {}
-                ),
-                **(
-                    {"stable_order_truncated": True}
-                    if advance_job is None and stable_order_state["truncated"]
-                    else {}
-                ),
-                **(
-                    {"plan": fast_forward_plan or control_plan}
-                    if fast_forward_plan is not None or control_plan is not None
-                    else {}
-                ),
-            },
-        )
+        return self._ordered_playback._multi_control_result(command=command, selected_session_id=selected_session_id, final=final, viewer=viewer, fast_forward_plan=fast_forward_plan, control_plan=control_plan, advance_job=advance_job, source_goal=source_goal, ordered=ordered, total_events=total_events, event_stop=event_stop, stable_order_state=stable_order_state, executed_multi=executed_multi)
 
     async def _run_ordered_playback(
         self,
@@ -8122,398 +4561,7 @@ class TrainingRunService:
         stop: asyncio.Event,
     ) -> None:
         """Drive every FULL track from one wall-clock-independent ordered lane."""
-
-        actor = self._run_actors[run_id]
-        event_loop = asyncio.get_running_loop()
-        last_advance_wall = event_loop.time()
-        initial_clock = actor.playback_snapshot()
-        last_profile_revision = _stored_counter(
-            initial_clock["profile_revision"],
-            field_name="global_clock.profile_revision",
-        )
-        terminal_state = "PAUSED"
-        terminal_reason: str | None = None
-        audit_at_terminal = False
-        try:
-            while not stop.is_set():
-                try:
-                    async with actor.serialized():
-                        if not actor.playback_is_active(generation):
-                            break
-                        binding = await self.store.run_binding(run_id)
-                        audit_at_terminal = self._requires_barrier_account_audit(binding)
-                        projection_tracks = await self.store.get_market_track_heads(run_id)
-                        tracks = TrainingRunActor.ordered_full_tracks(
-                            track
-                            for track in projection_tracks
-                            if isinstance(track, Mapping)
-                        )
-                        if len(tracks) < 1:
-                            terminal_reason = "ORDERED_PLAYBACK_REQUIRES_A_FULL_TRACK"
-                            break
-                        selected_session_id = str(binding["adapter_session_id"])
-                        selected = await self.replay_service.get_session(
-                            selected_session_id
-                        )
-                        selected_snapshot = self._snapshot(selected)
-                        cursor = _stored_mapping(
-                            selected_snapshot.get("cursor"),
-                            field_name="adapter cursor",
-                        )
-                        if cursor.get("at_end") is True:
-                            terminal_state = "ENDED"
-                            terminal_reason = "SOURCE_EXHAUSTED"
-                            break
-                        playback_client_id = actor.playback_client_id
-                        if playback_client_id is None:
-                            terminal_reason = "CONTROLLER_LEASE_LOST"
-                            break
-                        controller_lease_lost = False
-                        for track in tracks:
-                            try:
-                                await self.replay_service.heartbeat(
-                                    self._track_session_id(track),
-                                    playback_client_id,
-                                )
-                            except ReplayDomainError:
-                                controller_lease_lost = True
-                                terminal_reason = "CONTROLLER_LEASE_LOST"
-                                break
-                        if controller_lease_lost:
-                            break
-                        if (
-                            selected_snapshot.get("controller_client_id")
-                            != playback_client_id
-                        ):
-                            terminal_reason = "CONTROLLER_LEASE_LOST"
-                            break
-                        current_time = self._cursor_time(selected_snapshot)
-                        clock = actor.playback_snapshot()
-                        profile_revision = _stored_counter(
-                            clock["profile_revision"],
-                            field_name="global_clock.profile_revision",
-                        )
-                        now_wall = event_loop.time()
-                        if profile_revision != last_profile_revision:
-                            last_advance_wall = now_wall
-                            last_profile_revision = profile_revision
-                        raw_elapsed_seconds = now_wall - last_advance_wall
-                        elapsed_seconds = max(0.0, raw_elapsed_seconds)
-                        basis = advance_basis(clock.get("basis"))
-                        rate = control_rate(clock.get("rate"))
-                        source_kind = str(binding["source_kind"])
-                        allowed = supported_playback_bases(
-                            source_kind=source_kind,
-                            full_track_count=len(tracks),
-                        )
-                        if basis not in allowed:
-                            raise TrainingRunError(
-                                "REPLAY_CONTROL_UNSUPPORTED",
-                                "active playback basis no longer matches the FULL-track topology",
-                                status_code=409,
-                                details={
-                                    "basis": basis.value,
-                                    "playback_bases": [item.value for item in allowed],
-                                },
-                            )
-                        consumed_wall_seconds = 0.0
-                        source_goal: _OrderedSourceGoal | None = None
-                        if basis is AdvanceBasis.VIRTUAL_TIME:
-                            try:
-                                next_time = await self._next_global_event_time(
-                                    run_id=run_id,
-                                    binding=binding,
-                                    tracks=tracks,
-                                )
-                            except TrainingRunError as exc:
-                                if exc.code != "REPLAY_CONTROL_UNAVAILABLE":
-                                    raise
-                                terminal_state = "ENDED"
-                                terminal_reason = "SOURCE_EXHAUSTED"
-                                break
-                            elapsed_ms = max(
-                                0,
-                                int(elapsed_seconds * 1_000 * rate),
-                            )
-                            if current_time + elapsed_ms < next_time:
-                                timeout = min(
-                                    0.25,
-                                    max(
-                                        0.001,
-                                        (next_time - current_time) / rate / 1_000,
-                                    ),
-                                )
-                                target = None
-                            else:
-                                target = max(next_time, current_time + elapsed_ms)
-                                consumed_wall_seconds = elapsed_seconds
-                                timeout = 0.0
-                        else:
-                            final_state_batch_units = 0
-                            interactive_batch_limit = 0
-                            if source_kind == "BAR":
-                                base_interval_ms = fixed_interval_ms(
-                                    str(binding["base_interval"]),
-                                    field_name="base_interval",
-                                )
-                                if current_time <= MAX_TIMESTAMP_MS - base_interval_ms:
-                                    next_base_time = current_time + base_interval_ms
-                                    interactive_batch_limit = (
-                                        self._ordered_playback_interactive_batch_limit(
-                                            binding=binding,
-                                            tracks=tracks,
-                                            snapshot=selected_snapshot,
-                                            target_virtual_time_ms=next_base_time,
-                                        )
-                                    )
-                                    if rate >= ORDERED_PLAYBACK_FINAL_STATE_MIN_RATE:
-                                        final_state_profile = (
-                                            self._ordered_final_state_batch_profile(
-                                                binding=binding,
-                                                tracks=tracks,
-                                                snapshot=selected_snapshot,
-                                                target_virtual_time_ms=next_base_time,
-                                                enabled=True,
-                                            )
-                                        )
-                                        if final_state_profile is not None:
-                                            final_state_batch_units = min(
-                                                final_state_profile[0],
-                                                (
-                                                    rate
-                                                    + ORDERED_PLAYBACK_FINAL_STATE_TARGET_HZ
-                                                    - 1
-                                                )
-                                                // ORDERED_PLAYBACK_FINAL_STATE_TARGET_HZ,
-                                            )
-                            units = discrete_playback_units(
-                                elapsed_seconds,
-                                rate=rate,
-                            )
-                            if interactive_batch_limit > 0:
-                                # The Run actor lock is also the PAUSE/SET_SPEED
-                                # acknowledgement boundary.  Once orders or positions
-                                # exist, yield that fair lock after every committed BAR
-                                # so account growth cannot turn one playback batch into
-                                # an unbounded control-command stall.
-                                units = min(units, interactive_batch_limit)
-                            if units < final_state_batch_units:
-                                if raw_elapsed_seconds >= 0:
-                                    # Keep one bounded projection batch computed
-                                    # ahead of wall time. Without this lead, a fast
-                                    # actor catches up and falls back to one durable
-                                    # command per BAR at high public rates.
-                                    units = final_state_batch_units
-                                else:
-                                    units = 0
-                                    target = None
-                                    timeout = min(
-                                        0.25,
-                                        max(0.001, -raw_elapsed_seconds),
-                                    )
-                            if units == 0:
-                                if final_state_batch_units == 0:
-                                    target = None
-                                    timeout = min(
-                                        0.25,
-                                        max(
-                                            0.001,
-                                            (1 / rate) - elapsed_seconds,
-                                        ),
-                                    )
-                            elif basis is AdvanceBasis.SOURCE_EVENT:
-                                if len(tracks) != 1:
-                                    raise TrainingRunError(
-                                        "REPLAY_CONTROL_UNSUPPORTED",
-                                        "SOURCE_EVENT playback requires exactly one FULL track",
-                                        status_code=409,
-                                    )
-                                source_goal = await self._ordered_source_goal(
-                                    tracks,
-                                    max_events=units,
-                                    require_exact_count=False,
-                                    expected_snapshot=selected_snapshot,
-                                )
-                                if source_goal is None:
-                                    terminal_state = "ENDED"
-                                    terminal_reason = "SOURCE_EXHAUSTED"
-                                    break
-                                target = source_goal.target_virtual_time_ms
-                                consumed_wall_seconds = source_goal.planned_count / rate
-                                timeout = 0.0
-                            else:
-                                step_interval = (
-                                    clock.get("display_interval")
-                                    if basis is AdvanceBasis.DISPLAY_BAR
-                                    else str(binding["base_interval"])
-                                )
-                                if not isinstance(step_interval, str):
-                                    raise TrainingRunError(
-                                        "TRAINING_RUN_STORAGE_DEGRADED",
-                                        "display playback profile has no interval",
-                                        status_code=503,
-                                    )
-                                if basis is AdvanceBasis.DISPLAY_BAR:
-                                    target = await self._source_aligned_display_target(
-                                        binding=binding,
-                                        current_virtual_time_ms=current_time,
-                                        base_interval=str(binding["base_interval"]),
-                                        display_interval=step_interval,
-                                        count=units,
-                                    )
-                                else:
-                                    target = aligned_step_target_ms(
-                                        current_virtual_time_ms=current_time,
-                                        base_interval=str(binding["base_interval"]),
-                                        step_interval=step_interval,
-                                        count=units,
-                                    )
-                                base_interval_ms = compatible_step_interval_ms(
-                                    base_interval=str(binding["base_interval"]),
-                                    step_interval=str(binding["base_interval"]),
-                                )
-                                adapter_config = binding.get("adapter_config")
-                                if not isinstance(adapter_config, Mapping):
-                                    raise TrainingRunError(
-                                        "TRAINING_RUN_STORAGE_DEGRADED",
-                                        "training adapter config is invalid",
-                                        status_code=503,
-                                    )
-                                actual_start_ms = _stored_counter(
-                                    binding["actual_replay_start_ms"],
-                                    field_name="actual_replay_start_ms",
-                                )
-                                public_start_ms = (
-                                    _stored_counter(
-                                        binding.get("synthetic_origin_ms"),
-                                        field_name="synthetic_origin_ms",
-                                    )
-                                    if adapter_config.get("blind_mode") is True
-                                    else actual_start_ms
-                                )
-                                final_open_ms = (
-                                    public_start_ms
-                                    + _stored_counter(
-                                        binding["actual_replay_end_ms"],
-                                        field_name="actual_replay_end_ms",
-                                    )
-                                    - actual_start_ms
-                                )
-                                final_close_ms = final_open_ms + base_interval_ms - 1
-                                penultimate_close_ms = final_open_ms - 1
-                                if (
-                                    current_time < penultimate_close_ms
-                                    and target >= final_close_ms
-                                ):
-                                    # Leave the terminal event for one final loop.
-                                    # This creates a scheduling barrier where a
-                                    # pending PAUSE can win without reducing steady
-                                    # state playback batch throughput.
-                                    target = penultimate_close_ms
-                                consumed_wall_seconds = units / rate
-                                timeout = 0.0
-                        if target is not None:
-                            tick = actor.next_playback_tick(generation)
-                            internal = ReplayV2Command(
-                                protocol="replay.v3",
-                                run_id=run_id,
-                                command_id=f"ordered-play-{generation}-{tick}",
-                                client_instance_id=str(actor.playback_client_id),
-                                expected_revision=_stored_counter(
-                                    selected_snapshot["revision"], field_name="revision"
-                                ),
-                                expected_cursor=TrainingCursor(
-                                    virtual_time_ms=_stored_counter(
-                                        cursor["virtual_time_ms"],
-                                        field_name="virtual_time_ms",
-                                    ),
-                                    source_sequence=_stored_counter(
-                                        cursor["source_sequence"],
-                                        field_name="source_sequence",
-                                    ),
-                                    revision=_stored_counter(
-                                        selected_snapshot["revision"],
-                                        field_name="revision",
-                                    ),
-                                ),
-                                type=ReplayV2CommandType.ADVANCE_TO,
-                                payload={"virtual_time_ms": target},
-                            )
-                            await self._advance_full_tracks_to(
-                                command=internal,
-                                binding=binding,
-                                tracks=tracks,
-                                target_virtual_time_ms=target,
-                                stop_event=stop,
-                                allow_final_state_batch=True,
-                                audit_account_at_barrier=False,
-                                source_goal=(
-                                    source_goal
-                                    if basis is AdvanceBasis.SOURCE_EVENT
-                                    else None
-                                ),
-                            )
-                            actor.set_playback_data_wait(generation, waiting=False)
-                            if consumed_wall_seconds > 0:
-                                last_advance_wall += consumed_wall_seconds
-                            else:
-                                last_advance_wall = event_loop.time()
-                            timeout = 0.0
-                except ReplayDomainError as exc:
-                    if exc.code is not ReplayErrorCode.DATASET_PENDING:
-                        raise
-                    async with actor.serialized():
-                        actor.set_playback_data_wait(generation, waiting=True)
-                    # Waiting is not virtual elapsed time. Avoid a catch-up jump
-                    # when a later immutable segment becomes available.
-                    last_advance_wall = event_loop.time()
-                    timeout = 0.25
-                if timeout > 0:
-                    try:
-                        await asyncio.wait_for(stop.wait(), timeout=timeout)
-                    except TimeoutError:
-                        pass
-                else:
-                    await asyncio.sleep(0)
-        except asyncio.CancelledError:
-            terminal_reason = terminal_reason or "PLAYBACK_CANCELLED"
-        except (ReplayDomainError, TrainingRunError) as exc:
-            terminal_reason = (
-                exc.code.value if isinstance(exc, ReplayDomainError) else exc.code
-            )
-            terminal_state = (
-                "PAUSED" if terminal_reason.startswith("HISTORICAL_BOOK_") else "ERROR"
-            )
-        except Exception as exc:  # pragma: no cover - defensive task boundary
-            terminal_state = "ERROR"
-            terminal_reason = type(exc).__name__
-        finally:
-            async with actor.serialized():
-                snapshot = actor.playback_snapshot()
-                if (
-                    _stored_counter(
-                        snapshot["generation"], field_name="global_clock.generation"
-                    )
-                    == generation
-                ):
-                    if snapshot["state"] != "PLAYING":
-                        terminal_state = str(snapshot["state"])
-                        terminal_reason = (
-                            str(snapshot["reason"])
-                            if snapshot["reason"] is not None
-                            else terminal_reason
-                        )
-                    actor.finish_ordered_playback(
-                        generation=generation,
-                        state=terminal_state,
-                        reason=terminal_reason,
-                    )
-                    if audit_at_terminal:
-                        # Playback can contain many internal waves. Keep its
-                        # proof exact while paying the O(history) audit once at
-                        # the terminal PAUSE/ENDED/ERROR barrier.
-                        await self.audit_account(run_id)
-            self._notify_market_tracks(run_id)
+        return await self._ordered_playback._run_ordered_playback(run_id=run_id, generation=generation, stop=stop)
 
     async def _ordered_source_goal(
         self,
@@ -8522,111 +4570,8 @@ class TrainingRunService:
         max_events: int,
         require_exact_count: bool = True,
         expected_snapshot: Mapping[str, object] | None = None,
-    ) -> _OrderedSourceGoal | None:
-        if max_events > MAX_PLAYBACK_BATCH_UNITS:
-            raise TrainingRunError(
-                "REPLAY_CONTROL_INVALID",
-                f"SOURCE_EVENT count must be between 1 and {MAX_PLAYBACK_BATCH_UNITS}",
-                status_code=422,
-                details={
-                    "basis": AdvanceBasis.SOURCE_EVENT.value,
-                    "requested_count": max_events,
-                    "max_count": MAX_PLAYBACK_BATCH_UNITS,
-                },
-            )
-        if len(tracks) != 1:
-            raise TrainingRunError(
-                "REPLAY_CONTROL_UNSUPPORTED",
-                "an exact source-event boundary requires exactly one FULL track",
-                status_code=409,
-            )
-        for track in tracks:
-            session_id = self._track_session_id(track)
-            plan = await self.replay_service.scan_source_goal(
-                session_id,
-                max_events=max_events,
-            )
-            revision = _stored_counter(plan["revision"], field_name="revision")
-            cursor = _stored_mapping(
-                plan.get("start_cursor"), field_name="source goal start cursor"
-            )
-            start_sequence = _stored_counter(
-                cursor.get("source_sequence"), field_name="source_sequence"
-            )
-            if expected_snapshot is not None:
-                expected_cursor = _stored_mapping(
-                    expected_snapshot.get("cursor"),
-                    field_name="expected source goal cursor",
-                )
-                if (
-                    start_sequence
-                    != _stored_counter(
-                        expected_cursor.get("source_sequence"),
-                        field_name="expected source_sequence",
-                    )
-                    or revision
-                    != _stored_counter(
-                        expected_snapshot.get("revision"),
-                        field_name="expected revision",
-                    )
-                ):
-                    raise TrainingRunError(
-                        "GLOBAL_CLOCK_DIVERGED",
-                        "market source cursor changed before ordered preflight",
-                        status_code=409,
-                    )
-            event_count = _stored_counter(
-                plan["event_count"], field_name="event_count"
-            )
-            exhausted = plan.get("exhausted")
-            if not isinstance(exhausted, bool):
-                raise TrainingRunError(
-                    "TRAINING_RUN_STORAGE_DEGRADED",
-                    "market source goal is missing its exhaustion state",
-                    status_code=503,
-                )
-            if event_count == 0:
-                return None
-            if require_exact_count and event_count != max_events:
-                if not exhausted:
-                    raise TrainingRunError(
-                        "TRAINING_RUN_STORAGE_DEGRADED",
-                        "market source goal stopped before its requested boundary",
-                        status_code=503,
-                    )
-                raise TrainingRunError(
-                    "REPLAY_CONTROL_UNAVAILABLE",
-                    "source history cannot satisfy the requested event count",
-                    status_code=409,
-                    details={
-                        "requested_count": max_events,
-                        "available_count": event_count,
-                    },
-                )
-            last_event_time_ms = plan.get("last_event_time_ms")
-            if not isinstance(last_event_time_ms, int):
-                raise TrainingRunError(
-                    "TRAINING_RUN_STORAGE_DEGRADED",
-                    "market event plan is missing its timestamp",
-                    status_code=503,
-                )
-            source_terminal_time_ms = plan.get("source_terminal_time_ms")
-            if not isinstance(source_terminal_time_ms, int):
-                raise TrainingRunError(
-                    "TRAINING_RUN_STORAGE_DEGRADED",
-                    "market event plan is missing its source terminal",
-                    status_code=503,
-                )
-            return _OrderedSourceGoal(
-                start_source_sequence=start_sequence,
-                start_revision=revision,
-                target_source_sequence=start_sequence + event_count,
-                target_virtual_time_ms=(
-                    source_terminal_time_ms if exhausted else last_event_time_ms
-                ),
-                planned_count=event_count,
-            )
-        return None
+    ) -> control_rules_ops._OrderedSourceGoal | None:
+        return await self._ordered_playback._ordered_source_goal(tracks, max_events=max_events, require_exact_count=require_exact_count, expected_snapshot=expected_snapshot)
 
     async def _end_multi_track_run(
         self,
@@ -8635,119 +4580,7 @@ class TrainingRunService:
         tracks: tuple[Mapping[str, object], ...],
         selected_session_id: str,
     ) -> dict[str, object]:
-        payload = dict(
-            self._exact_payload(
-                command.payload,
-                {"open_order_disposition", "position_disposition"},
-            )
-        )
-        actor = self._run_actors[command.run_id]
-        actor.request_ordered_pause(reason="RUN_END")
-        prepared = tuple(
-            track
-            for track in tracks
-            if isinstance(track.get("adapter_session_id"), str)
-        )
-        snapshots: list[tuple[Mapping[str, object], Mapping[str, object]]] = []
-        for track in prepared:
-            session_id = self._track_session_id(track)
-            session = await self.replay_service.get_session(session_id)
-            snapshot = self._snapshot(session)
-            if snapshot["state"] == "PLAYING":
-                raise TrainingRunError(
-                    "MULTI_TRACK_PAUSED",
-                    "all market tracks must pause before the run can end",
-                    status_code=409,
-                    details={"track_id": track["track_id"]},
-                )
-            if snapshot["state"] != "ENDED":
-                await self._ensure_track_controller(
-                    session_id=session_id,
-                    client_instance_id=command.client_instance_id,
-                    command_id=command.command_id,
-                )
-                session = await self.replay_service.get_session(session_id)
-                snapshot = self._snapshot(session)
-            snapshots.append((track, snapshot))
-        selected_result: Mapping[str, object] | None = None
-        ended = 0
-        try:
-            for track, snapshot in snapshots:
-                session_id = self._track_session_id(track)
-                if snapshot["state"] == "ENDED":
-                    acknowledged = snapshot
-                else:
-                    adapter = ReplayCommand(
-                        protocol=REPLAY_PROTOCOL,
-                        command_id=self._multi_command_id(
-                            command.command_id,
-                            str(track["track_id"]),
-                            CommandType.END_SESSION.value,
-                            _stored_counter(
-                                snapshot["revision"], field_name="revision"
-                            ),
-                        ),
-                        client_instance_id=command.client_instance_id,
-                        expected_revision=_stored_counter(
-                            snapshot["revision"], field_name="revision"
-                        ),
-                        type=CommandType.END_SESSION,
-                        payload=payload,
-                    )
-                    acknowledged = await self.replay_service.command(
-                        session_id,
-                        adapter,
-                    )
-                ended += 1
-                if session_id == selected_session_id:
-                    selected_result = acknowledged
-        except ReplayDomainError as exc:
-            await self._fail_closed_multi_track(
-                run_id=command.run_id,
-                tracks=prepared,
-                failed_track=track,
-                client_instance_id=command.client_instance_id,
-                reason=exc.code.value,
-            )
-            raise TrainingRunError(
-                "MULTI_TRACK_END_FAILED",
-                "a prepared market track rejected the run end command",
-                status_code=409,
-                details={"reason": exc.code.value, "track_id": track["track_id"]},
-            ) from exc
-        if selected_result is None:
-            selected = await self.replay_service.get_session(selected_session_id)
-            selected_result = self._snapshot(selected)
-        selected_snapshot = (
-            selected_result
-            if "cursor" in selected_result
-            else self._snapshot(selected_result)
-        )
-        checkpoint = await self.store.checkpoint_market_tracks(command.run_id)
-        generation = _stored_counter(
-            actor.playback_snapshot()["generation"],
-            field_name="global_clock.generation",
-        )
-        actor.finish_ordered_playback(
-            generation=generation,
-            state="ENDED",
-            reason="RUN_END",
-        )
-        viewer = await self.store.get_viewer_state(command.run_id)
-        result = self._result_payload(
-            command=command,
-            session_id=selected_session_id,
-            snapshot=selected_snapshot,
-            viewer=viewer.to_dict(),
-            data={
-                "ended_track_count": ended,
-                "global_checkpoint": checkpoint,
-                "ordering_version": GLOBAL_ORDERING_VERSION,
-                "global_clock": actor.playback_snapshot(),
-            },
-        )
-        result["state"] = "ENDED"
-        return result
+        return await self._ordered_playback._end_multi_track_run(command=command, tracks=tracks, selected_session_id=selected_session_id)
 
     async def _advance_full_tracks_to(
         self,
@@ -8760,1057 +4593,12 @@ class TrainingRunService:
         stop_event: asyncio.Event | None = None,
         allow_final_state_batch: bool = False,
         audit_account_at_barrier: bool = True,
-        source_goal: _OrderedSourceGoal | None = None,
+        source_goal: control_rules_ops._OrderedSourceGoal | None = None,
         stable_order_state: dict[str, bool] | None = None,
         event_stop: dict[str, object] | None = None,
         terminal_result_factory=None,
     ) -> tuple[StableMarketEvent, ...]:
-        if source_goal is not None and len(tracks) != 1:
-            raise TrainingRunError(
-                "REPLAY_CONTROL_UNSUPPORTED",
-                "an exact source-event boundary requires exactly one FULL track",
-                status_code=409,
-            )
-        hedge_mode = str(binding.get("position_mode")) == "HEDGE"
-        if not hedge_mode:
-            await self.account_history.guard_run(
-                run_id=command.run_id,
-                tracks=tracks,
-            )
-        pending_account_events = await self.store.pending_account_global_events(
-            command.run_id
-        )
-        pending_hedge_events = await self.store.pending_hedge_input_global_events(
-            command.run_id
-        )
-        if pending_account_events or pending_hedge_events:
-            await self.store.record_global_events(
-                command.run_id,
-                stable_market_event_order(
-                    (*pending_account_events, *pending_hedge_events)
-                ),
-                materialize_portfolio=False,
-            )
-        hedge_runtime_snapshot = (
-            await self.hedge_inputs.runtime_snapshot(command.run_id)
-            if hedge_mode
-            else None
-        )
-        book_required = (
-            str(binding.get("book_mode", "OFF"))
-            == BookMode.BOOK_ASSISTED_REQUIRED.value
-        )
-        all_events: list[StableMarketEvent] = []
-        pending_global_events: list[StableMarketEvent] = []
-        cancel_event = stop_event
-        if job is not None:
-            job_cancel = job.get("cancel")
-            if isinstance(job_cancel, asyncio.Event):
-                cancel_event = job_cancel
-
-        async def cancel_at_committed_barrier() -> tuple[StableMarketEvent, ...]:
-            if job is not None:
-                job["status"] = "CANCELLED"
-            if audit_account_at_barrier:
-                await self.audit_account(command.run_id)
-            return stable_market_event_order(all_events)
-
-        wave_budget = (
-            10_000
-            if source_goal is None
-            else max(10_000, (source_goal.planned_count + 1) * 4)
-        )
-        source_start_verified = False
-        from .tape_phases import coordinator_waves
-        for _wave_index in coordinator_waves(self.store, command, binding, job, wave_budget):
-            if (
-                cancel_event is not None
-                and cancel_event.is_set()
-                and not pending_global_events
-            ):
-                return await cancel_at_committed_barrier()
-            snapshots: list[tuple[Mapping[str, object], Mapping[str, object]]] = []
-            times: set[int] = set()
-            next_times: list[int] = []
-            market_sequences: list[int] = []
-            compact_multi = (
-                allow_final_state_batch and source_goal is None and not pending_global_events
-                and self.replay_service.settings.replay_multi_bar_interval_enabled
-                and hedge_mode and binding.get("source_kind") == "BAR"
-                and binding.get("book_mode", "OFF") == "OFF"
-                and binding.get("account_data_mode") != AccountDataMode.HISTORICAL_EXACT.value
-                and 2 <= len(tracks) <= 8 and isinstance(hedge_runtime_snapshot, IndexedHedgeSnapshot)
-            )
-            compact_states = []
-            if compact_multi:
-                compact_states = await asyncio.gather(*(
-                    self.replay_service.get_session_state(self._track_session_id(track)) for track in tracks
-                ), return_exceptions=True)
-                for state in compact_states:
-                    if isinstance(state, BaseException):
-                        raise state
-            for track_index, track in enumerate(tracks):
-                session_id = self._track_session_id(track)
-                if compact_multi:
-                    snapshot = compact_states[track_index]
-                else:
-                    session = await self.replay_service.get_session(session_id)
-                    snapshot = self._snapshot(session)
-                if source_goal is not None and not source_start_verified:
-                    snapshot_cursor = _stored_mapping(
-                        snapshot.get("cursor"), field_name="adapter cursor"
-                    )
-                    if (
-                        _stored_counter(
-                            snapshot.get("revision"), field_name="revision"
-                        )
-                        != source_goal.start_revision
-                        or _stored_counter(
-                            snapshot_cursor.get("source_sequence"),
-                            field_name="source_sequence",
-                        )
-                        != source_goal.start_source_sequence
-                    ):
-                        raise TrainingRunError(
-                            "GLOBAL_CLOCK_DIVERGED",
-                            "market source cursor changed after ordered preflight",
-                            status_code=409,
-                        )
-                    source_start_verified = True
-                snapshots.append((track, snapshot))
-                times.add(self._cursor_time(snapshot))
-                snapshot_cursor = _stored_mapping(
-                    snapshot.get("cursor"), field_name="adapter cursor"
-                )
-                market_sequences.append(
-                    _stored_counter(
-                        snapshot_cursor.get("source_sequence"),
-                        field_name="source_sequence",
-                    )
-                )
-
-            if allow_final_state_batch and source_goal is None and not pending_global_events:
-                from .multi_interval_advance import try_advance
-                completion = None
-                if terminal_result_factory is not None and job is not None:
-                    prior_events, prior_job = tuple(all_events), dict(job)
-                    def completion(group):
-                        events = [*prior_events, *group["stable"]]
-                        progress = dict(prior_job)
-                        if len(events) > STABLE_ORDER_RESPONSE_EVENTS:
-                            events = events[-STABLE_ORDER_RESPONSE_EVENTS:]
-                            progress["stable_order_truncated"] = True
-                        progress.update(
-                            consumed=progress["consumed"] + len(group["stable"]),
-                            chunks=progress["chunks"] + 1,
-                            current_virtual_time_ms=group["target"], cancelable=False,
-                            status="CANCELLED" if cancel_event is not None and cancel_event.is_set() else "COMPLETED",
-                        )
-                        state = next(p["state"] for p in group["tracks"]
-                                     if p["session_id"] == group["selected_session_id"])
-                        final = {**state, "sequence": state["event_sequence"]}
-                        return terminal_result_factory(final, events, progress)
-                recorded = await try_advance(
-                    self, command=command, binding=binding, tracks=tracks,
-                    snapshots=snapshots, target=target_virtual_time_ms,
-                    runtime_snapshot=hedge_runtime_snapshot,
-                    cancel_event=cancel_event,
-                    completion=completion,
-                )
-                completed_multi_interval = recorded is not None
-                if recorded is None:
-                    from .tape_phases import try_advance as try_tape_phases
-                    recorded = await try_tape_phases(
-                        self, command=command, binding=binding, tracks=tracks,
-                        snapshots=snapshots, target=target_virtual_time_ms,
-                    )
-                if recorded is None:
-                    recorded = await self._try_indexed_interval(
-                    command=command, binding=binding, tracks=tracks,
-                    snapshot=snapshots[0][1], target=target_virtual_time_ms,
-                    runtime_snapshot=hedge_runtime_snapshot,
-                    )
-                if recorded is None:
-                    recorded = await self._try_recorded_interval(
-                        command=command, binding=binding, tracks=tracks,
-                        snapshot=snapshots[0][1], target=target_virtual_time_ms,
-                        runtime_snapshot=hedge_runtime_snapshot,
-                    )
-                if recorded is not None:
-                    recorded_events, recorded_time = recorded
-                    all_events.extend(recorded_events)
-                    if (job is not None or stable_order_state is not None) and len(all_events) > STABLE_ORDER_RESPONSE_EVENTS:
-                        del all_events[:-STABLE_ORDER_RESPONSE_EVENTS]
-                        if job is not None:
-                            job["stable_order_truncated"] = True
-                        if stable_order_state is not None:
-                            stable_order_state["truncated"] = True
-                    if job is not None:
-                        job["consumed"] += len(recorded_events)
-                        job["chunks"] += 1
-                        job["current_virtual_time_ms"] = recorded_time
-                    await asyncio.sleep(0)
-                    if completed_multi_interval and recorded_time >= target_virtual_time_ms:
-                        # The shared planner already proved and committed all
-                        # market/public-input events through this target. Do
-                        # not repeat eight full snapshots and source/account
-                        # preflights merely to rediscover that same boundary.
-                        durable_result = getattr(self.store, "_multi_completed_results", {}).get((command.run_id, command.command_id))
-                        if durable_result is not None:
-                            if job is not None:
-                                job["status"] = durable_result["data"]["progress"]["status"]
-                                job["cancelable"] = False
-                            return stable_market_event_order(all_events)
-                        if cancel_event is not None and cancel_event.is_set():
-                            return await cancel_at_committed_barrier()
-                        if job is not None:
-                            job["status"] = "COMPLETED"
-                            job["current_virtual_time_ms"] = recorded_time
-                        if audit_account_at_barrier:
-                            await self.audit_account(command.run_id)
-                        return stable_market_event_order(all_events)
-                    continue
-
-            if compact_multi:
-                detailed = []
-                for track, authority in snapshots:
-                    snapshot = self._snapshot(await self.replay_service.get_session(self._track_session_id(track)))
-                    if (self._cursor_time(snapshot) != self._cursor_time(authority)
-                            or snapshot["cursor"]["source_sequence"] != authority["cursor"]["source_sequence"]):
-                        raise TrainingRunError("GLOBAL_CLOCK_DIVERGED", "source changed during interval preflight", status_code=409)
-                    detailed.append((track, snapshot))
-                snapshots = detailed
-
-            # These input reads all precede this wave's mutations under the Run lock.
-            hedge_cursor_view = (
-                await self.hedge_inputs._projection_cursors(command.run_id)
-                if isinstance(hedge_runtime_snapshot, IndexedHedgeSnapshot) and not book_required
-                and binding.get("account_data_mode") != AccountDataMode.HISTORICAL_EXACT.value else None
-            )
-            held_prefix_end = await self._held_interval_batch_end(
-                command.run_id, binding=binding, tracks=tracks, snapshot=snapshots[0][1],
-                target_virtual_time_ms=target_virtual_time_ms,
-                runtime_snapshot=hedge_runtime_snapshot, cursor_view=hedge_cursor_view,
-            ) if allow_final_state_batch and source_goal is None else None
-            constant_tape = (
-                allow_final_state_batch and source_goal is None
-                and binding.get("source_kind") == "AGG_TRADE"
-                and binding.get("position_mode") == "ONE_WAY"
-                and binding.get("funding_mode") == "OFF"
-                and not book_required
-                and binding.get("account_data_mode") != AccountDataMode.HISTORICAL_EXACT.value
-                and any(not self._snapshot_is_flat(snapshot) for _, snapshot in snapshots)
-            )
-            final_state_profile = self._ordered_final_state_batch_profile(
-                binding=binding,
-                tracks=tracks,
-                snapshot=snapshots[0][1],
-                target_virtual_time_ms=target_virtual_time_ms,
-                enabled=allow_final_state_batch and source_goal is None,
-                held_certificate=held_prefix_end is not None or constant_tape,
-            )
-            if final_state_profile is None:
-                held_prefix_end = None
-                constant_tape = False
-            # Read a bounded lookahead so one exact same-timestamp market
-            # cohort can cross the adapter in one command.  The prefix below
-            # still stops at the first different timestamp, preserving every
-            # account/rule/funding/global ordering barrier.
-            source_plan_limit = (
-                ORDERED_SOURCE_COHORT_PLAN_EVENTS
-                if final_state_profile is None
-                else final_state_profile[0]
-            )
-            if source_goal is not None:
-                remaining = source_goal.target_source_sequence - market_sequences[0]
-                if remaining < 0:
-                    raise TrainingRunError(
-                        "GLOBAL_CLOCK_DIVERGED",
-                        "market track crossed the planned source-event boundary",
-                        status_code=409,
-                    )
-                source_plan_limit = max(
-                    1,
-                    min(ORDERED_SOURCE_COHORT_PLAN_EVENTS, remaining),
-                )
-            planned_event_times: dict[str, tuple[int, ...]] = {}
-            planned_source_boundaries: dict[str, int] = {}
-            for track, _snapshot in snapshots:
-                session_id = self._track_session_id(track)
-                try:
-                    plan = await self.replay_service.plan_source_chunk(
-                        session_id,
-                        target_time_ms=(target_virtual_time_ms if held_prefix_end is None else held_prefix_end),
-                        max_events=source_plan_limit,
-                        screen_interactions=final_state_profile is not None,
-                        preserve_valuation=held_prefix_end is not None or constant_tape,
-                    )
-                except (ReplayDomainError, TrainingRunError) as exc:
-                    if isinstance(exc, ReplayDomainError) and exc.code is ReplayErrorCode.DATASET_PENDING:
-                        raise
-                    await self._fail_closed_multi_track(
-                        run_id=command.run_id,
-                        tracks=tracks,
-                        failed_track=track,
-                        client_instance_id=command.client_instance_id,
-                        reason=(
-                            exc.code.value
-                            if isinstance(exc, ReplayDomainError)
-                            else exc.code
-                        ),
-                    )
-                    raise TrainingRunError(
-                        "MULTI_TRACK_PAUSED",
-                        "a required FULL market track failed global preflight",
-                        status_code=409,
-                        details={"track_id": track["track_id"]},
-                    ) from exc
-                event_count = _stored_counter(
-                    plan["event_count"], field_name="event_count"
-                )
-                raw_event_times = plan.get("event_times_ms")
-                if not isinstance(raw_event_times, (list, tuple)):
-                    raise TrainingRunError(
-                        "TRAINING_RUN_STORAGE_DEGRADED",
-                        "market event plan is missing timestamps",
-                        status_code=503,
-                    )
-                event_times = tuple(
-                    _stored_counter(value, field_name="source_event_time_ms")
-                    for value in raw_event_times
-                )
-                if len(event_times) != event_count:
-                    raise TrainingRunError(
-                        "TRAINING_RUN_STORAGE_DEGRADED",
-                        "market event plan has an invalid timestamp count",
-                        status_code=503,
-                    )
-                if event_count > 0:
-                    preserve_final_state_batch = (
-                        source_goal is None and final_state_profile is not None
-                    )
-                    next_time = (
-                        event_times[-1]
-                        if preserve_final_state_batch
-                        else event_times[0]
-                    )
-                    cohort_count = 1
-                    if preserve_final_state_batch:
-                        cohort_count = len(event_times)
-                    else:
-                        while (
-                            cohort_count < len(event_times)
-                            and event_times[cohort_count] == next_time
-                        ):
-                            cohort_count += 1
-                    track_key = str(track["track_id"])
-                    planned_event_times[track_key] = event_times[:cohort_count]
-                    plan_cursor = _stored_mapping(
-                        plan.get("cursor"), field_name="source plan cursor"
-                    )
-                    planned_source_boundaries[track_key] = _stored_counter(
-                        plan_cursor.get("source_sequence"),
-                        field_name="source_sequence",
-                    ) + cohort_count
-                    next_times.append(next_time)
-
-            def shrink_final_state_plan_to_first_event() -> None:
-                nonlocal final_state_profile
-                next_times.clear()
-                for track_index, (track, _snapshot) in enumerate(snapshots):
-                    track_key = str(track["track_id"])
-                    planned_times = planned_event_times.get(track_key, ())
-                    if not planned_times:
-                        continue
-                    first_time = planned_times[0]
-                    planned_event_times[track_key] = (first_time,)
-                    planned_source_boundaries[track_key] = (
-                        market_sequences[track_index] + 1
-                    )
-                    next_times.append(first_time)
-                final_state_profile = None
-
-            if final_state_profile is not None and len(tracks) > 1:
-                planned_batches = tuple(planned_event_times.get(str(track["track_id"]), ())
-                                        for track, _snapshot in snapshots)
-                aligned = bool(planned_batches and planned_batches[0]) and all(
-                    batch == planned_batches[0] for batch in planned_batches[1:]
-                )
-                if not aligned:
-                    # Only independent, flat accounts may coalesce unequal source
-                    # grids. The coordinator still owns the global clock, events,
-                    # cancellation and atomic checkpoint barrier.
-                    independent_flat = (
-                        not hedge_mode and not book_required
-                        and binding.get("funding_mode") == "OFF"
-                        and binding.get("account_data_mode") != AccountDataMode.HISTORICAL_EXACT.value
-                        and (constant_tape or all(self._snapshot_is_flat(snapshot) for _, snapshot in snapshots))
-                    )
-                    ends = [batch[-1] for batch in planned_batches if batch]
-                    if independent_flat and ends:
-                        boundary = min(ends)
-                        next_times[:] = [boundary]
-                        for track, _snapshot in snapshots:
-                            key = str(track["track_id"])
-                            planned_event_times[key] = tuple(t for t in planned_event_times.get(key, ()) if t <= boundary)
-                    else:
-                        shrink_final_state_plan_to_first_event()
-            if len(times) != 1:
-                raise TrainingRunError(
-                    "GLOBAL_CLOCK_DIVERGED",
-                    "FULL market tracks do not share one VirtualTime",
-                    status_code=409,
-                )
-            current = next(iter(times))
-            current_source_sequence = market_sequences[0]
-            target_actual_time_ms = self._actual_event_time_ms(
-                binding,
-                target_virtual_time_ms,
-            )
-            next_account_actual = await self.account_history.next_event_time(
-                run_id=command.run_id,
-                tracks=tracks,
-                target_actual_time_ms=target_actual_time_ms,
-                guarded=True,
-            )
-            next_hedge_actual = (
-                await self.hedge_inputs.next_event_time(
-                    run_id=command.run_id,
-                    target_actual_time_ms=target_actual_time_ms,
-                    runtime_snapshot=hedge_runtime_snapshot,
-                    cursor_view=hedge_cursor_view,
-                )
-                if hedge_mode
-                else None
-            )
-            next_account_virtual = (
-                None
-                if next_account_actual is None
-                else self._virtual_event_time_ms(
-                    binding,
-                    next_account_actual,
-                )
-            )
-            next_hedge_virtual = (
-                None
-                if next_hedge_actual is None
-                else self._virtual_event_time_ms(binding, next_hedge_actual)
-            )
-            if next_account_virtual is not None and next_account_virtual < current:
-                raise TrainingRunError(
-                    "ACCOUNT_HISTORY_CURSOR_BEHIND_MARKET",
-                    "account timeline fell behind the committed market cursor",
-                    status_code=409,
-                    details={"fallback_applied": False},
-                )
-            if next_hedge_virtual is not None and next_hedge_virtual < current:
-                await self.hedge_inputs.pause_run(
-                    command.run_id,
-                    reason="HEDGE_INPUT_CURSOR_BEHIND_MARKET",
-                )
-                raise TrainingRunError(
-                    "HEDGE_INPUT_CURSOR_BEHIND_MARKET",
-                    "HEDGE input timeline fell behind the committed market cursor",
-                    status_code=409,
-                    details={"fallback_applied": False},
-                )
-            batched_hedge_events: tuple[HedgeInputEvent, ...] = ()
-            batched_hedge_virtual_times: tuple[int, ...] = ()
-            hedge_batch_wave_time: int | None = None
-            if (
-                hedge_mode
-                and final_state_profile is not None
-                and (held_prefix_end is not None or all(self._snapshot_is_flat(snapshot) for _, snapshot in snapshots))
-                and next_times
-            ):
-                planned_batch_time = min(next_times)
-                account_after_batch = (
-                    next_account_virtual is None
-                    or next_account_virtual > planned_batch_time
-                )
-                candidate_hedge_events = await self.hedge_inputs.events_through(
-                    run_id=command.run_id,
-                    target_actual_time_ms=self._actual_event_time_ms(
-                        binding,
-                        planned_batch_time,
-                    ),
-                    runtime_snapshot=hedge_runtime_snapshot,
-                    cursor_view=hedge_cursor_view,
-                )
-                # A known settlement/rule boundary must split the candidate
-                # block, rather than forcing every preceding safe bar through
-                # the slow path. Never batch across the boundary itself.
-                if len(tracks) == 1 and not book_required:
-                    barriers = [self._virtual_event_time_ms(binding, event.event_time_ms)
-                                for event in candidate_hedge_events
-                                if event.source_kind != "PUBLIC" or event.event_kind != "MARK_INDEX"
-                                or event.event_phase != MARK_INDEX_EVENT_PHASE]
-                    if barriers:
-                        boundary = min(barriers)
-                        key = str(tracks[0]["track_id"])
-                        safe_times = tuple(t for t in planned_event_times.get(key, ()) if t < boundary)
-                        if safe_times:
-                            planned_batch_time = safe_times[-1]
-                            next_times = [planned_batch_time]
-                            planned_event_times[key] = safe_times
-                            candidate_hedge_events = tuple(event for event in candidate_hedge_events
-                                if self._virtual_event_time_ms(binding, event.event_time_ms) <= planned_batch_time)
-                            account_after_batch = next_account_virtual is None or next_account_virtual > planned_batch_time
-                hedge_batch_is_safe = (
-                    not book_required
-                    and account_after_batch
-                    and all(
-                        event.source_kind == "PUBLIC"
-                        and event.event_kind == "MARK_INDEX"
-                        and event.event_phase == MARK_INDEX_EVENT_PHASE
-                        for event in candidate_hedge_events
-                    )
-                )
-                if hedge_batch_is_safe:
-                    if candidate_hedge_events:
-                        batched_hedge_events = candidate_hedge_events
-                        batched_hedge_virtual_times = tuple(
-                            self._virtual_event_time_ms(binding, event.event_time_ms)
-                            for event in candidate_hedge_events
-                        )
-                        hedge_batch_wave_time = planned_batch_time
-                        next_hedge_virtual = planned_batch_time
-                else:
-                    # A rule, fee, funding, simulation, book, or exact-account
-                    # barrier must retain phase ordering against the first market
-                    # event.  Shrink this preflight plan before choosing wave_time.
-                    shrink_final_state_plan_to_first_event()
-            source_goal_reached = (
-                source_goal is None
-                or current_source_sequence == source_goal.target_source_sequence
-            )
-            if (
-                current >= target_virtual_time_ms
-                and source_goal_reached
-                and (not next_times or min(next_times) > current)
-                and (next_account_virtual is None or next_account_virtual > current)
-                and (next_hedge_virtual is None or next_hedge_virtual > current)
-            ):
-                if pending_global_events:
-                    raise TrainingRunError(
-                        "GLOBAL_CHECKPOINT_INCOMPLETE",
-                        "account events reached the target without a market barrier",
-                        status_code=409,
-                    )
-                if job is not None:
-                    job["status"] = "COMPLETED"
-                    job["current_virtual_time_ms"] = current
-                terminal_time_ms = self._training_terminal_time_ms(binding)
-                if (
-                    str(binding.get("source_kind")) == "AGG_TRADE"
-                    and current >= terminal_time_ms
-                    and all(
-                        _stored_mapping(
-                            snapshot.get("cursor"), field_name="adapter cursor"
-                        ).get("at_end")
-                        is True
-                        for _track, snapshot in snapshots
-                    )
-                ):
-                    await self._finalize_deferred_full_tracks(
-                        command=command,
-                        tracks=tracks,
-                    )
-                if audit_account_at_barrier:
-                    await self.audit_account(command.run_id)
-                return stable_market_event_order(all_events)
-            candidate_times = [*next_times, target_virtual_time_ms]
-            if next_account_virtual is not None:
-                candidate_times.append(next_account_virtual)
-            if next_hedge_virtual is not None:
-                candidate_times.append(next_hedge_virtual)
-            wave_time = min(candidate_times)
-            market_barrier = (
-                wave_time == target_virtual_time_ms or wave_time in next_times
-            )
-            wave_events: list[StableMarketEvent] = []
-            actual_wave_time = self._actual_event_time_ms(binding, wave_time)
-            if book_required:
-                wave_book = await self.historical_books.prepare_run_projection(
-                    run_id=command.run_id,
-                    tracks=tracks,
-                    actual_time_ms=actual_wave_time,
-                    virtual_time_ms=wave_time,
-                )
-                await self.historical_books.commit_run_projection(
-                    run_id=command.run_id,
-                    prepared=wave_book,
-                    event_type="READY",
-                )
-            account_events = await self.account_history.events_at(
-                run_id=command.run_id,
-                tracks=tracks,
-                actual_time_ms=actual_wave_time,
-                guarded=True,
-            )
-            if not hedge_mode:
-                hedge_events = ()
-            elif hedge_batch_wave_time == wave_time:
-                hedge_events = batched_hedge_events
-            else:
-                hedge_events = await self.hedge_inputs.events_at(
-                    run_id=command.run_id,
-                    actual_time_ms=actual_wave_time,
-                    runtime_snapshot=hedge_runtime_snapshot,
-                    cursor_view=hedge_cursor_view,
-                )
-            pre_account_events = tuple(
-                item
-                for item in account_events
-                if item[1].event_phase == RULE_EVENT_PHASE
-            )
-            post_account_events = tuple(
-                item
-                for item in account_events
-                if item[1].event_phase in {MARK_INDEX_EVENT_PHASE, FUNDING_EVENT_PHASE}
-            )
-            pre_hedge_events = tuple(
-                item for item in hedge_events if item.event_phase == 10
-            )
-            post_hedge_events = tuple(
-                item for item in hedge_events if item.event_phase in {30, 40}
-            )
-            simulation_hedge_events = tuple(
-                item for item in hedge_events if item.event_phase == 70
-            )
-            failed_track: Mapping[str, object] = tracks[0]
-            market_cohort_incomplete = False
-            atomic_market_wave = False
-
-            async def advance_market_barrier() -> None:
-                nonlocal failed_track, market_cohort_incomplete, atomic_market_wave, wave_checkpointed
-                if (
-                    allow_final_state_batch and source_goal is None
-                    and self.replay_service.settings.replay_multi_bar_interval_enabled
-                    and hedge_mode and binding.get("source_kind") == "BAR"
-                    and not book_required and 2 <= len(tracks) <= 8
-                    and binding.get("account_data_mode") != AccountDataMode.HISTORICAL_EXACT.value
-                    and isinstance(hedge_runtime_snapshot, IndexedHedgeSnapshot)
-                    and wave_time == target_virtual_time_ms and not wave_events
-                    and all(e.event_phase == 30 for e in pending_global_events)
-                    and not account_events and not hedge_events
-                ):
-                    from .terminal_cohort import try_commit
-                    terminal = await try_commit(
-                        self, command=command, binding=binding, snapshots=snapshots,
-                        planned_times=planned_event_times, target=wave_time,
-                        pending_events=tuple(pending_global_events),
-                    )
-                    if terminal is not None:
-                        events, wave_checkpointed = terminal
-                        wave_events.extend(events)
-                        atomic_market_wave = True
-                        return
-                for barrier_track, before in snapshots:
-                    failed_track = barrier_track
-                    before_cursor = before.get("cursor")
-                    if not isinstance(before_cursor, Mapping):
-                        raise TrainingRunError(
-                            "TRAINING_RUN_STORAGE_DEGRADED",
-                            "market track cursor is invalid",
-                            status_code=503,
-                        )
-                    before_sequence = _stored_counter(
-                        before_cursor["source_sequence"],
-                        field_name="source_sequence",
-                    )
-                    track_key = str(barrier_track["track_id"])
-                    planned_times = planned_event_times.get(track_key, ())
-                    if final_state_profile is not None:
-                        event_times = tuple(t for t in planned_times if t <= wave_time)
-                    else:
-                        event_times = planned_times if planned_times and planned_times[0] == wave_time else ()
-                    adapter_source_boundary = (
-                        before_sequence + len(event_times)
-                        if final_state_profile is not None
-                        else planned_source_boundaries[track_key]
-                        if event_times
-                        else before_sequence
-                    )
-                    after = await self._advance_adapter_to(
-                        session_id=self._track_session_id(barrier_track),
-                        target_virtual_time_ms=wave_time,
-                        client_instance_id=command.client_instance_id,
-                        command_id=command.command_id,
-                        track_id=str(barrier_track["track_id"]),
-                        initial_snapshot=before,
-                        final_state_max_events=(
-                            None
-                            if final_state_profile is None
-                            else final_state_profile[0]
-                        ),
-                        require_empty_account=(
-                            False
-                            if final_state_profile is None
-                            else final_state_profile[1]
-                        ),
-                        target_source_sequence=adapter_source_boundary,
-                        defer_source_terminal=(
-                            str(binding.get("source_kind")) == "AGG_TRADE"
-                        ),
-                    )
-                    after_cursor = after.get("cursor")
-                    if not isinstance(after_cursor, Mapping):
-                        raise TrainingRunError(
-                            "TRAINING_RUN_STORAGE_DEGRADED",
-                            "market track cursor is invalid",
-                            status_code=503,
-                        )
-                    after_sequence = _stored_counter(
-                        after_cursor["source_sequence"],
-                        field_name="source_sequence",
-                    )
-                    if (
-                        adapter_source_boundary is not None
-                        and after_sequence != adapter_source_boundary
-                    ):
-                        raise TrainingRunError(
-                            "GLOBAL_CHECKPOINT_INCOMPLETE",
-                            "market advance did not reach its exact source boundary",
-                            status_code=503,
-                            details={
-                                "expected_source_sequence": adapter_source_boundary,
-                                "actual_source_sequence": after_sequence,
-                            },
-                        )
-                    if event_times:
-                        if after_sequence - before_sequence != len(event_times):
-                            raise TrainingRunError(
-                                "GLOBAL_CHECKPOINT_INCOMPLETE",
-                                "batched market advance did not match its source plan",
-                                status_code=503,
-                                details={
-                                    "planned_count": len(event_times),
-                                    "consumed_count": after_sequence - before_sequence,
-                                },
-                            )
-                        wave_events.extend(
-                            StableMarketEvent(
-                                actual_event_time_ms=self._actual_event_time_ms(
-                                    binding,
-                                    event_time_ms,
-                                ),
-                                event_phase=MARKET_EVENT_PHASE,
-                                market_track_stable_id=str(barrier_track["track_id"]),
-                                source_sequence=before_sequence + offset,
-                            )
-                            for offset, event_time_ms in enumerate(
-                                event_times,
-                                start=1,
-                            )
-                        )
-                    else:
-                        for sequence in range(before_sequence + 1, after_sequence + 1):
-                            wave_events.append(
-                                StableMarketEvent(
-                                    actual_event_time_ms=self._actual_event_time_ms(
-                                        binding,
-                                        wave_time,
-                                    ),
-                                    event_phase=MARKET_EVENT_PHASE,
-                                    market_track_stable_id=str(
-                                        barrier_track["track_id"]
-                                    ),
-                                    source_sequence=sequence,
-                                )
-                            )
-                    continuation = await self.replay_service.plan_source_chunk(
-                        self._track_session_id(barrier_track),
-                        target_time_ms=wave_time,
-                        max_events=1,
-                    )
-                    market_cohort_incomplete = market_cohort_incomplete or (
-                        _stored_counter(
-                            continuation["event_count"], field_name="event_count"
-                        )
-                        > 0
-                    )
-
-            before_wave_state = tuple(
-                (self._cursor_time(snapshot), sequence)
-                for (_track, snapshot), sequence in zip(
-                    snapshots, market_sequences, strict=True
-                )
-            )
-
-            wave_checkpointed = False
-            try:
-                wave_events.extend(
-                    await self.store.apply_account_history_events(
-                        command.run_id,
-                        events=pre_account_events,
-                        virtual_time_ms=wave_time,
-                    )
-                )
-                wave_events.extend(
-                    await self.store.apply_hedge_input_events(
-                        command.run_id,
-                        events=pre_hedge_events,
-                        virtual_time_ms=wave_time,
-                    )
-                )
-                stop_at_input = event_stop is not None and any(
-                    getattr(event, "event_kind", "MARK_INDEX") != "MARK_INDEX"
-                    for event in (*pre_hedge_events, *post_hedge_events, *simulation_hedge_events,
-                                  *pre_account_events, *post_account_events)
-                )
-                if market_barrier or (stop_at_input and not market_cohort_incomplete):
-                    await advance_market_barrier()
-                    market_barrier = True
-                if not market_cohort_incomplete and not atomic_market_wave:
-                    supports_combined_hedge_wave = (
-                        hedge_mode
-                        and str(binding.get("source_kind")) == "BAR"
-                        and not book_required and source_goal is None
-                        and not simulation_hedge_events
-                        and str(binding.get("account_data_mode"))
-                        != AccountDataMode.HISTORICAL_EXACT.value
-                    )
-                    checkpoint_hedge_wave = supports_combined_hedge_wave and market_barrier
-                    combined_mark_wave = supports_combined_hedge_wave and bool(post_hedge_events) and all(
-                        event.source_kind == "PUBLIC" and event.event_kind == "MARK_INDEX"
-                        and event.event_phase == 30 for event in post_hedge_events
-                    )
-                    wave_events.extend(
-                        await self.store.apply_account_history_events(
-                            command.run_id,
-                            events=post_account_events,
-                            virtual_time_ms=wave_time,
-                        )
-                    )
-                    if combined_mark_wave:
-                        applied_marks, wave_checkpointed = await self.store.apply_hedge_inputs_and_checkpoint(
-                            command.run_id,
-                            input_events=post_hedge_events,
-                            events=(*pending_global_events, *wave_events),
-                            risk_virtual_time_ms=wave_time,
-                            checkpoint_market_wave=checkpoint_hedge_wave,
-                            event_virtual_times_ms=(
-                                batched_hedge_virtual_times
-                                if hedge_batch_wave_time == wave_time
-                                else None
-                            ),
-                        )
-                        wave_events.extend(applied_marks)
-                    else:
-                        wave_events.extend(
-                            await self.store.apply_hedge_input_events(
-                                command.run_id, events=post_hedge_events,
-                                virtual_time_ms=wave_time,
-                                event_virtual_times_ms=(batched_hedge_virtual_times
-                                    if hedge_batch_wave_time == wave_time else None),
-                            )
-                        )
-                    if (
-                        str(binding.get("account_data_mode"))
-                        == AccountDataMode.HISTORICAL_EXACT.value
-                    ):
-                        await self.store.finalize_account_history(
-                            command.run_id,
-                            write_audit=False,
-                            risk_virtual_time_ms=wave_time,
-                        )
-                    if checkpoint_hedge_wave and not combined_mark_wave:
-                        wave_checkpointed = (
-                            await self.store.finalize_hedge_inputs_and_checkpoint(
-                                command.run_id,
-                                risk_virtual_time_ms=wave_time,
-                                events=(*pending_global_events, *wave_events),
-                            )
-                        )
-                    elif not combined_mark_wave:
-                        await self.store.finalize_hedge_inputs(
-                            command.run_id,
-                            risk_virtual_time_ms=wave_time,
-                        )
-                    wave_events.extend(
-                        await self.store.apply_hedge_input_events(
-                            command.run_id,
-                            events=simulation_hedge_events,
-                            virtual_time_ms=wave_time,
-                        )
-                    )
-                pending_liquidations = (
-                    ()
-                    if market_cohort_incomplete or wave_checkpointed
-                    else await self.store.pending_liquidations(command.run_id)
-                )
-                if pending_liquidations and not market_barrier:
-                    # Exact account marks can trigger liquidation between two
-                    # source events. Align every adapter to that precise
-                    # account time before cancel/close mutations are issued.
-                    await advance_market_barrier()
-                    market_barrier = True
-                    # Advancing an adapter refreshes its broker projection and
-                    # therefore replaces any authoritative account/HEDGE mark
-                    # overlay. Reapply the pinned input after alignment so the
-                    # durable risk recheck and close plan use the same mark that
-                    # triggered liquidation.
-                    if hedge_mode:
-                        await self.store.finalize_hedge_inputs(
-                            command.run_id,
-                            risk_virtual_time_ms=wave_time,
-                        )
-                    else:
-                        await self.store.finalize_account_history(
-                            command.run_id,
-                            write_audit=False,
-                            risk_virtual_time_ms=wave_time,
-                        )
-                    pending_liquidations = await self.store.pending_liquidations(
-                        command.run_id
-                    )
-            except (ReplayDomainError, TrainingRunError) as exc:
-                await self._fail_closed_multi_track(
-                    run_id=command.run_id,
-                    tracks=tracks,
-                    failed_track=failed_track,
-                    client_instance_id=command.client_instance_id,
-                    reason=(
-                        exc.code.value
-                        if isinstance(exc, ReplayDomainError)
-                        else exc.code
-                    ),
-                )
-                raise TrainingRunError(
-                    "MULTI_TRACK_PAUSED",
-                    "a required FULL market track failed during global advance",
-                    status_code=409,
-                    details={"track_id": failed_track["track_id"]},
-                ) from exc
-            liquidations = await self._reconcile_liquidations(
-                run_id=command.run_id,
-                client_instance_id=command.client_instance_id,
-                command_id=command.command_id,
-                pending=pending_liquidations,
-            )
-            if wave_events:
-                ordered_wave = stable_market_event_order(wave_events)
-                pending_global_events.extend(ordered_wave)
-                all_events.extend(ordered_wave)
-                if (
-                    (job is not None or stable_order_state is not None)
-                    and len(all_events) > STABLE_ORDER_RESPONSE_EVENTS
-                ):
-                    del all_events[:-STABLE_ORDER_RESPONSE_EVENTS]
-                    if job is not None:
-                        job["stable_order_truncated"] = True
-                    if stable_order_state is not None:
-                        stable_order_state["truncated"] = True
-            if market_barrier and (
-                not market_cohort_incomplete or source_goal is not None
-            ):
-                if wave_checkpointed:
-                    pending_global_events.clear()
-                elif pending_global_events:
-                    await self.store.record_global_events(
-                        command.run_id,
-                        stable_market_event_order(pending_global_events),
-                        materialize_portfolio=False,
-                    )
-                    pending_global_events.clear()
-                else:
-                    await self.store.checkpoint_market_tracks(
-                        command.run_id,
-                        materialize_portfolio=False,
-                    )
-                self._notify_market_tracks(command.run_id)
-            if market_cohort_incomplete and source_goal is not None:
-                reached = await self.replay_service.get_session(
-                    self._track_session_id(tracks[0])
-                )
-                reached_snapshot = self._snapshot(reached)
-                reached_cursor = _stored_mapping(
-                    reached_snapshot.get("cursor"), field_name="adapter cursor"
-                )
-                reached_sequence = _stored_counter(
-                    reached_cursor.get("source_sequence"),
-                    field_name="source_sequence",
-                )
-                if reached_sequence == source_goal.target_source_sequence:
-                    if job is not None:
-                        job["status"] = "COMPLETED"
-                        job["current_virtual_time_ms"] = wave_time
-                    # This is a durable phase-20 checkpoint inside one source
-                    # timestamp.  Later input phases must wait for the rest of
-                    # that timestamp's market cohort in a subsequent command.
-                    return stable_market_event_order(all_events)
-            stop_reason: str | None = "LIQUIDATION" if liquidations else None
-            if event_stop is not None and any(
-                getattr(event, "event_kind", "MARK_INDEX") != "MARK_INDEX"
-                for event in (*pre_hedge_events, *post_hedge_events, *simulation_hedge_events,
-                              *pre_account_events, *post_account_events)
-            ):
-                stop_reason = stop_reason or "ACCOUNT_EVENT"
-            after_wave_state: list[tuple[int, int]] = []
-            for track in tracks:
-                after_session = await self.replay_service.get_session(
-                    self._track_session_id(track)
-                )
-                after_snapshot = self._snapshot(after_session)
-                if event_stop is not None:
-                    before_snapshot = next(before for original, before in snapshots if original["track_id"] == track["track_id"])
-                    stop_reason = stop_reason or self._interaction_reason(before_snapshot, after_snapshot)
-                after_cursor = _stored_mapping(
-                    after_snapshot.get("cursor"), field_name="adapter cursor"
-                )
-                after_wave_state.append(
-                    (
-                        self._cursor_time(after_snapshot),
-                        _stored_counter(
-                            after_cursor.get("source_sequence"),
-                            field_name="source_sequence",
-                        ),
-                    )
-                )
-            if tuple(after_wave_state) == before_wave_state and not wave_events:
-                raise TrainingRunError(
-                    "GLOBAL_ADVANCE_STALLED",
-                    "global advance made no progress toward its ordered boundary",
-                    status_code=409,
-                    details={
-                        "current_virtual_time_ms": current,
-                        "target_virtual_time_ms": target_virtual_time_ms,
-                        "current_source_sequence": current_source_sequence,
-                        "target_source_sequence": (
-                            None
-                            if source_goal is None
-                            else source_goal.target_source_sequence
-                        ),
-                    },
-                )
-            if job is not None:
-                job["consumed"] = int(job["consumed"]) + len(wave_events)
-                job["chunks"] = int(job["chunks"]) + 1
-                job["current_virtual_time_ms"] = (
-                    wave_time if market_barrier else current
-                )
-                job["queue_high_water"] = max(
-                    int(job["queue_high_water"]),
-                    len(tracks),
-                )
-            if event_stop is not None and stop_reason is not None:
-                event_stop.update(reason=stop_reason, virtual_time_ms=wave_time)
-                if job is not None:
-                    job["status"] = "COMPLETED"
-                return stable_market_event_order(all_events)
-            if (
-                cancel_event is not None
-                and cancel_event.is_set()
-                and not pending_global_events
-            ):
-                return await cancel_at_committed_barrier()
-            await asyncio.sleep(0)
-        raise TrainingRunError(
-            "REPLAY_SCAN_LIMIT_EXCEEDED",
-            "global advance exceeded the bounded wave budget",
-            status_code=409,
-        )
+        return await self._ordered_playback._advance_full_tracks_to(command=command, binding=binding, tracks=tracks, target_virtual_time_ms=target_virtual_time_ms, job=job, stop_event=stop_event, allow_final_state_batch=allow_final_state_batch, audit_account_at_barrier=audit_account_at_barrier, source_goal=source_goal, stable_order_state=stable_order_state, event_stop=event_stop, terminal_result_factory=terminal_result_factory)
 
     def _ordered_final_state_batch_profile(
         self,
@@ -9823,70 +4611,7 @@ class TrainingRunService:
         held_certificate: bool = False,
     ) -> tuple[int, bool] | None:
         """Choose bounded terminal delivery for ordered BAR and flat tape paths."""
-
-        if (
-            not enabled
-            or str(binding.get("source_kind")) not in {"BAR", "AGG_TRADE"}
-            or not tracks
-            or self._cursor_time(snapshot) >= target_virtual_time_ms
-        ):
-            return None
-        decision = self._plan_fast_forward(
-            binding=binding,
-            snapshot=snapshot,
-            tracks=tracks,
-            target_virtual_time_ms=target_virtual_time_ms,
-        )
-        dependencies = set(decision.context.path_dependencies)
-        allowed_dependencies = {"OPEN_ORDER", "OPEN_POSITION"}
-        if len(tracks) > 1:
-            allowed_dependencies.add("MULTI_TRACK_GLOBAL_ORDER")
-        if str(binding.get("position_mode")) == "HEDGE":
-            # A pinned funding schedule is only a potential barrier.  The
-            # coordinator inspects the exact events inside each proposed chunk
-            # and shrinks to one source event whenever a settlement is present.
-            allowed_dependencies.add("FUNDING_SCHEDULE")
-        if decision.context.blocking_reasons or not dependencies.issubset(
-            allowed_dependencies
-        ):
-            return None
-        trading_dependencies = dependencies.intersection(
-            {"OPEN_ORDER", "OPEN_POSITION"}
-        )
-        tape = str(binding.get("source_kind")) == "AGG_TRADE"
-        screened_flat_orders = (
-            trading_dependencies == {"OPEN_ORDER"}
-            and ((tape and binding.get("position_mode") == "ONE_WAY")
-                 or (not tape and len(tracks) == 1 and binding.get("position_mode") == "HEDGE"))
-            and binding.get("book_mode", "OFF") == "OFF"
-            and binding.get("account_data_mode") != AccountDataMode.HISTORICAL_EXACT.value
-            and self._snapshot_is_flat(snapshot)
-        )
-        if tape and (
-            (trading_dependencies and not screened_flat_orders and not held_certificate)
-            or not self.replay_service.settings.replay_fast_forward_optimization_enabled
-        ):
-            return None
-        if (
-            str(binding.get("account_model")) == "TOUCH_OR_TAPE_V2"
-            and trading_dependencies
-            and not screened_flat_orders
-            and not held_certificate
-        ):
-            # Contract-account marks and liquidation checks still require the
-            # global event barrier while any trading path is active.
-            return None
-        require_empty_account = not trading_dependencies
-        limit = min(
-            (
-                FINAL_STATE_EMPTY_ACCOUNT_INTERACTIVE_BATCH_UNITS
-                if require_empty_account or screened_flat_orders or held_certificate
-                else ORDERED_PLAYBACK_INTERACTIVE_BATCH_UNITS
-            ),
-            self.replay_service.settings.event_buffer_size,
-            FINAL_STATE_EMPTY_ACCOUNT_CHUNK_EVENTS,
-        )
-        return max(1, limit), require_empty_account
+        return self._ordered_playback._ordered_final_state_batch_profile(binding=binding, tracks=tracks, snapshot=snapshot, target_virtual_time_ms=target_virtual_time_ms, enabled=enabled, held_certificate=held_certificate)
 
     async def prepare_indexed_run(self, run_id, *, client_instance_id=None):
         normalized = self._identifier(run_id, field_name="run_id")
@@ -9956,7 +4681,7 @@ class TrainingRunService:
                             prepare_price_blocks(path, row["public_checksum_sha256"], public_lanes[row["track_id"]].events)
                 await asyncio.to_thread(prepare_blocks)
             fingerprint = await self.replay_service.store.run_extension_read(
-                lambda connection:self.store._hedge_risk_fingerprint(connection,run_id=run_id))
+                lambda connection:account_marks_ops.hedge_risk_fingerprint(connection,run_id=run_id))
             if self.store._hedge_risk_fingerprints.get(run_id) != fingerprint:
                 audit = await self.audit_account(run_id)
                 if audit['status'] != 'PASS':
@@ -9986,363 +4711,12 @@ class TrainingRunService:
     async def _try_indexed_interval(
         self, *, command, binding, tracks, snapshot, target, runtime_snapshot
     ):
-        from bisect import bisect_left, bisect_right
-
-        if (
-            len(tracks) != 1
-            or binding.get("source_kind") != "BAR"
-            or binding.get("position_mode") != "HEDGE"
-            or binding.get("book_mode", "OFF") != "OFF"
-            or binding.get("account_data_mode")
-            == AccountDataMode.HISTORICAL_EXACT.value
-            or binding.get("funding_mode") not in {"OFF", "HISTORICAL_EXACT"}
-            or snapshot.get("state") != "PAUSED"
-            or not isinstance(runtime_snapshot, IndexedHedgeSnapshot)
-            or str(tracks[0]["track_id"]) != "track-1"
-        ):
-            return None
-        base_ms = parse_interval_ms(str(binding["base_interval"]))
-        if base_ms is None or target - self._cursor_time(snapshot) < 64 * base_ms:
-            return None
-        if (
-            self._ordered_final_state_batch_profile(
-                binding=binding,
-                tracks=tracks,
-                snapshot=snapshot,
-                target_virtual_time_ms=target,
-                enabled=True,
-                held_certificate=not self._snapshot_is_flat(snapshot),
-            )
-            is None
-        ):
-            return None
-        public, simulation = await self.hedge_inputs._projection_cursors(command.run_id)
-        actual_target = self._actual_event_time_ms(binding, target)
-        lane = None
-        for current in runtime_snapshot.lanes:
-            start = bisect_right(current.sequences, current.cursor(public, simulation))
-            if current.source_kind != "PUBLIC" or current.track_id != "track-1":
-                barrier = start
-            else:
-                lane = current
-                at = bisect_left(current.barrier_indices, start)
-                barrier = (
-                    current.barrier_indices[at]
-                    if at < len(current.barrier_indices)
-                    else len(current.events)
-                )
-            if barrier < len(current.events):
-                actual_target = min(actual_target, current.times[barrier] - 1)
-        if lane is None:
-            return None
-        target = min(target, self._virtual_event_time_ms(binding, actual_target))
-        if target - self._cursor_time(snapshot) < 64 * base_ms:
-            return None
-        session_id = self._track_session_id(tracks[0])
-        source = await self.replay_service.plan_source_chunk(
-            session_id, target_time_ms=target, max_events=100_000, indexed=True
-        )
-        if not source or source["end"] - source["start"] < 64:
-            return None
-        index, start, end = source["index"], source["start"], source["end"]
-        end_time = index.times[end - 1]
-        a = bisect_right(lane.sequences, public.get("track-1", 0))
-        b = bisect_right(lane.times, self._actual_event_time_ms(binding, end_time))
-        first, last = (lane.events[a], lane.events[b - 1]) if b > a else (None, None)
-        mark = Decimal(str(snapshot["components"]["position"]["long"]["mark_price"]))
-        bounds = lane.price_index.range_bounds(start=a, end=b) if b > a else None
-        if bounds is not None and not self._snapshot_is_flat(snapshot):
-            long = (
-                Decimal(str(snapshot["components"]["position"]["long"]["quantity"]))
-                != 0
-            )
-            worst = bounds[0] if long else bounds[1]
-            if await self.store.indexed_review_minimum(command.run_id, worst):
-                worst_at = lane.price_index.first_touch(
-                    worst, below=long, start=a, end=b
-                )
-                worst_end = (
-                    bisect_left(
-                        index.times,
-                        self._virtual_event_time_ms(binding, lane.times[worst_at]),
-                    )
-                    + 1
-                )
-                if start < worst_end < end and (
-                    worst_at + 1 == len(lane.times)
-                    or lane.times[worst_at + 1]
-                    > self._actual_event_time_ms(binding, index.times[worst_end - 1])
-                ):
-                    if worst_end - start < 64:
-                        return None
-                    end = worst_end
-                    end_time = index.times[end - 1]
-                    b = bisect_right(
-                        lane.times, self._actual_event_time_ms(binding, end_time)
-                    )
-                    first, last = lane.events[a], lane.events[b - 1]
-                    bounds = lane.price_index.range_bounds(start=a, end=b)
-        low, high = (
-            (mark, mark)
-            if bounds is None
-            else (min(mark, bounds[0]), max(mark, bounds[1]))
-        )
-        fingerprint = await self.store.recorded_interval_certificate(
-            command.run_id,
-            low=low,
-            high=high,
-            target_actual_time_ms=self._actual_event_time_ms(binding, end_time),
-            allow_empty=True,
-        )
-        if fingerprint is None and self._snapshot_is_flat(snapshot):
-            await self.store.finalize_hedge_inputs(
-                command.run_id, risk_virtual_time_ms=self._cursor_time(snapshot)
-            )
-            fingerprint = await self.store.recorded_interval_certificate(
-                command.run_id,
-                low=low,
-                high=high,
-                target_actual_time_ms=self._actual_event_time_ms(binding, end_time),
-                allow_empty=True,
-            )
-        if fingerprint is None:
-            baseline = await self.store.recorded_interval_certificate(
-                command.run_id, low=mark, high=mark, allow_empty=True
-            )
-            if baseline is None:
-                return None
-            left, right = start, end
-            while left + 1 < right:
-                middle = (left + right) // 2
-                mark_end = bisect_right(
-                    lane.times,
-                    self._actual_event_time_ms(binding, index.times[middle - 1]),
-                )
-                bounds = (
-                    lane.price_index.range_bounds(start=a, end=mark_end)
-                    if mark_end > a
-                    else None
-                )
-                lower, upper = (
-                    (mark, mark)
-                    if bounds is None
-                    else (min(mark, bounds[0]), max(mark, bounds[1]))
-                )
-                certificate = await self.store.recorded_interval_certificate(
-                    command.run_id,
-                    low=lower,
-                    high=upper,
-                    target_actual_time_ms=self._actual_event_time_ms(
-                        binding, index.times[middle - 1]
-                    ),
-                    allow_empty=True,
-                )
-                if certificate is None:
-                    right = middle
-                else:
-                    left = middle
-            end = left
-            if end - start < 64:
-                return None
-            fingerprint = baseline
-            end_time = index.times[end - 1]
-            b = bisect_right(lane.times, self._actual_event_time_ms(binding, end_time))
-            first, last = (
-                (lane.events[a], lane.events[b - 1]) if b > a else (None, None)
-            )
-        curve_id = await self.store.prepare_indexed_curve(command.run_id, index)
-        try:
-            await self.replay_service.heartbeat(session_id, command.client_instance_id)
-        except ReplayDomainError as exc:
-            if exc.code is ReplayErrorCode.CONTROLLER_CONFLICT:
-                return None
-            raise
-        part_id = self._multi_command_id(
-            command.command_id, "track-1", "indexed", int(snapshot["revision"])
-        )
-        plan = {
-            "command_id": part_id,
-            "run_id": command.run_id,
-            "track_id": "track-1",
-            "fingerprint": fingerprint,
-            "first_mark": first,
-            "last_mark": last,
-            "actual_delta": self._actual_event_time_ms(binding, end_time) - end_time,
-            "curve_id": curve_id,
-            "start": start,
-            "end": end,
-            "policy": binding["time_disclosure_policy"],
-        }
-        if session_id in self.store._recorded_interval_plans:
-            raise RuntimeError("indexed interval plan already active")
-        self.store._recorded_interval_plans[session_id] = plan
-        try:
-            await self.replay_service.command(
-                session_id,
-                ReplayCommand(
-                    protocol=REPLAY_PROTOCOL,
-                    command_id=part_id,
-                    client_instance_id=command.client_instance_id,
-                    expected_revision=int(snapshot["revision"]),
-                    type=(InternalCommandType.SHARED_INDEXED_INTERVAL if getattr(index, "shared", False)
-                          else InternalCommandType.INDEXED_INTERVAL),
-                    payload={
-                        "target_virtual_time_ms": end_time,
-                        "max_events": end - start,
-                        "require_empty_account": False,
-                        "snapshot_only": False,
-                    },
-                ),
-                _training_internal=True,
-            )
-            self.store._cache_committed_hedge_fingerprint(
-                command.run_id, plan["fingerprint_after"]
-            )
-            return plan["stable"], end_time
-        finally:
-            self.store._recorded_interval_plans.pop(session_id, None)
+        return await self._ordered_playback._try_indexed_interval(command=command, binding=binding, tracks=tracks, snapshot=snapshot, target=target, runtime_snapshot=runtime_snapshot)
 
     async def _try_recorded_interval(
         self, *, command, binding, tracks, snapshot, target, runtime_snapshot
     ):
-        if (
-            len(tracks) != 1
-            or binding.get("source_kind") != "BAR"
-            or binding.get("position_mode") != "HEDGE"
-            or binding.get("book_mode", "OFF") != "OFF"
-            or binding.get("account_data_mode")
-            == AccountDataMode.HISTORICAL_EXACT.value
-            or binding.get("funding_mode") not in {"OFF", "HISTORICAL_EXACT"}
-            or snapshot.get("state") != "PAUSED"
-            or self._snapshot_is_flat(snapshot)
-            or not isinstance(runtime_snapshot, IndexedHedgeSnapshot)
-        ):
-            return None
-        if (
-            self._ordered_final_state_batch_profile(
-                binding=binding,
-                tracks=tracks,
-                snapshot=snapshot,
-                target_virtual_time_ms=target,
-                enabled=True,
-                held_certificate=True,
-            )
-            is None
-        ):
-            return None
-        track = tracks[0]
-        session_id = self._track_session_id(track)
-        maximum = min(32, self.replay_service.settings.event_buffer_size)
-        if maximum < 2:
-            return None
-        source = await self.replay_service.plan_source_chunk(
-            session_id,
-            target_time_ms=target,
-            max_events=maximum + 1,
-            screen_interactions=True,
-        )
-        # Leave the last previewed event to the ordinary path, including source
-        # exhaustion. A recorded block never hides terminal broker behavior.
-        times = list(source["event_times_ms"][:-1])
-        if len(times) < 2:
-            return None
-        public, simulation = await self.hedge_inputs._projection_cursors(command.run_id)
-        inputs = runtime_snapshot.events_through(
-            public, simulation, self._actual_event_time_ms(binding, times[-1])
-        )
-        barriers = [
-            self._virtual_event_time_ms(binding, e.event_time_ms)
-            for e in inputs
-            if e.source_kind != "PUBLIC"
-            or e.event_kind != "MARK_INDEX"
-            or e.event_phase != 30
-            or e.track_id != track["track_id"]
-        ]
-        if barriers:
-            times = [time for time in times if time < min(barriers)]
-        if len(times) < 2:
-            return None
-        target_time = times[-1]
-        constant = runtime_snapshot.stable_mark_prefix(
-            public,
-            simulation,
-            str(track["track_id"]),
-            self._actual_event_time_ms(binding, target_time),
-        )
-        if constant is not None and constant[1] >= self._actual_event_time_ms(
-            binding, target_time
-        ):
-            return None
-        inputs = tuple(
-            (e, self._virtual_event_time_ms(binding, e.event_time_ms))
-            for e in inputs
-            if self._virtual_event_time_ms(binding, e.event_time_ms) <= target_time
-        )
-        if len(inputs) > 256:
-            return None
-        position = snapshot["components"]["position"]
-        prices = [Decimal(str(position["long"]["mark_price"]))]
-        prices.extend(Decimal(str(event.payload["mark_price"])) for event, _ in inputs)
-        fingerprint = await self.store.recorded_interval_certificate(
-            command.run_id,
-            low=min(prices),
-            high=max(prices),
-            target_actual_time_ms=self._actual_event_time_ms(binding, target_time),
-        )
-        if fingerprint is None:
-            return None
-        try:
-            await self.replay_service.heartbeat(session_id, command.client_instance_id)
-        except ReplayDomainError as exc:
-            if exc.code is ReplayErrorCode.CONTROLLER_CONFLICT:
-                return None
-            raise
-        part_id = self._multi_command_id(
-            command.command_id,
-            str(track["track_id"]),
-            "recorded",
-            int(snapshot["revision"]),
-        )
-        plan = {
-            "command_id": part_id,
-            "run_id": command.run_id,
-            "track_id": track["track_id"],
-            "times": tuple(times),
-            "inputs": inputs,
-            "fingerprint": fingerprint,
-            "start_sequence": snapshot["cursor"]["source_sequence"],
-            "actual_delta": self._actual_event_time_ms(binding, target_time)
-            - target_time,
-        }
-        if session_id in self.store._recorded_interval_plans:
-            raise RuntimeError("recorded interval plan already active")
-        self.store._recorded_interval_plans[session_id] = plan
-        try:
-            await self.replay_service.command(
-                session_id,
-                ReplayCommand(
-                    protocol=REPLAY_PROTOCOL,
-                    command_id=part_id,
-                    client_instance_id=command.client_instance_id,
-                    expected_revision=int(snapshot["revision"]),
-                    type=InternalCommandType.RECORDED_INTERVAL,
-                    payload={
-                        "target_virtual_time_ms": target_time,
-                        "max_events": len(times),
-                        "require_empty_account": False,
-                        "snapshot_only": False,
-                    },
-                ),
-                _training_internal=True,
-            )
-            if "stable" not in plan:
-                raise RuntimeError("recorded interval did not commit its history")
-            self.store._cache_committed_hedge_fingerprint(
-                command.run_id, plan["fingerprint_after"]
-            )
-            return plan["stable"], target_time
-        finally:
-            self.store._recorded_interval_plans.pop(session_id, None)
+        return await self._ordered_playback._try_recorded_interval(command=command, binding=binding, tracks=tracks, snapshot=snapshot, target=target, runtime_snapshot=runtime_snapshot)
 
     async def _held_interval_batch_end(
         self, run_id: str, *, binding: Mapping[str, object],
@@ -10351,69 +4725,19 @@ class TrainingRunService:
     ) -> int | None:
         # Price-varying marks require the original per-event position/margin
         # ledger. Only a constant authoritative mark preserves that history.
-        if (len(tracks) != 1 or binding.get("source_kind") != "BAR"
-            or binding.get("position_mode") != "HEDGE" or binding.get("book_mode", "OFF") != "OFF"
-            or binding.get("account_data_mode") == AccountDataMode.HISTORICAL_EXACT.value
-            or binding.get("funding_mode") not in {"OFF", "HISTORICAL_EXACT"} or runtime_snapshot is None
-            or self._snapshot_is_flat(snapshot)):
-            return None
-        current = self._cursor_time(snapshot)
-        prefix = await self.hedge_inputs.stable_mark_prefix(
-            run_id=run_id, track_id=str(tracks[0]["track_id"]),
-            target_actual_time_ms=self._actual_event_time_ms(binding, target_virtual_time_ms),
-            runtime_snapshot=runtime_snapshot, cursor_view=cursor_view,
-        )
-        if prefix is None:
-            return None
-        mark, end_actual = prefix
-        end_virtual = self._virtual_event_time_ms(binding, end_actual)
-        base_interval_ms = parse_interval_ms(str(binding["base_interval"]))
-        if base_interval_ms is None or end_virtual - current < 2 * base_interval_ms:
-            return None
-        if not await self.store.held_mark_guard(
-            run_id, track_id=str(tracks[0]["track_id"]), mark=mark,
-            current_virtual_time_ms=current, target_actual_time_ms=end_actual,
-        ):
-            return None
-        return end_virtual
+        return await self._ordered_playback._held_interval_batch_end(run_id, binding=binding, tracks=tracks, snapshot=snapshot, target_virtual_time_ms=target_virtual_time_ms, runtime_snapshot=runtime_snapshot, cursor_view=cursor_view)
 
     @staticmethod
     def _stop_on_event(command: ReplayV2Command) -> bool:
-        value = command.payload.get("stop_on_event", False)
-        if type(value) is not bool:
-            raise TrainingRunError("REPLAY_CONTROL_INVALID", "stop_on_event must be boolean", status_code=422)
-        return value
+        return control_rules_ops.stop_on_event(command)
 
     @staticmethod
     def _interaction_reason(before: Mapping[str, object], after: Mapping[str, object]) -> str | None:
-        old = before.get("components", {})
-        new = after.get("components", {})
-        if not isinstance(old, Mapping) or not isinstance(new, Mapping):
-            return None
-        if len(new.get("fills", ())) > len(old.get("fills", ())):
-            return "ORDER_FILLED"
-        def orders(state):
-            return [(order.get("order_id"), order.get("status"), order.get("filled_quantity"))
-                    for order in state.get("orders", ()) if isinstance(order, Mapping)]
-        if orders(old) != orders(new):
-            return "ORDER_CHANGED"
-        if len(new.get("warnings", ())) > len(old.get("warnings", ())):
-            return "WARNING"
-        return None
+        return control_rules_ops.interaction_reason(before, after)
 
     @staticmethod
     def _snapshot_is_flat(snapshot: Mapping[str, object]) -> bool:
-        components = snapshot.get("components")
-        position = components.get("position") if isinstance(components, Mapping) else None
-        if not isinstance(position, Mapping):
-            return False
-        if position.get("position_mode") == "HEDGE":
-            return all(
-                isinstance(position.get(side), Mapping)
-                and position[side].get("quantity") in {"0", 0}
-                for side in ("long", "short")
-            )
-        return position.get("quantity") in {"0", 0}
+        return control_rules_ops.snapshot_is_flat(snapshot)
 
     def _ordered_playback_interactive_batch_limit(
         self,
@@ -10424,54 +4748,21 @@ class TrainingRunService:
         target_virtual_time_ms: int,
     ) -> int:
         """Bound a playing account to one durable market barrier per Run lock."""
-
-        decision = self._plan_fast_forward(
-            binding=binding,
-            snapshot=snapshot,
-            tracks=tracks,
-            target_virtual_time_ms=target_virtual_time_ms,
-        )
-        dependencies = set(decision.context.path_dependencies)
-        if dependencies.intersection({"OPEN_ORDER", "OPEN_POSITION"}):
-            return ORDERED_PLAYBACK_INTERACTIVE_BATCH_UNITS
-        return 0
+        return self._ordered_playback._ordered_playback_interactive_batch_limit(binding=binding, tracks=tracks, snapshot=snapshot, target_virtual_time_ms=target_virtual_time_ms)
 
     @staticmethod
     def _actual_event_time_ms(
         binding: Mapping[str, object],
         virtual_time_ms: int,
     ) -> int:
-        synthetic_origin = binding.get("synthetic_origin_ms")
-        if synthetic_origin is None:
-            return virtual_time_ms
-        return (
-            _stored_counter(
-                binding["actual_replay_start_ms"],
-                field_name="actual_replay_start_ms",
-            )
-            + virtual_time_ms
-            - _stored_counter(synthetic_origin, field_name="synthetic_origin_ms")
-        )
+        return control_rules_ops.actual_event_time_ms(binding, virtual_time_ms)
 
     @staticmethod
     def _virtual_event_time_ms(
         binding: Mapping[str, object],
         actual_time_ms: int,
     ) -> int:
-        synthetic_origin = binding.get("synthetic_origin_ms")
-        if synthetic_origin is None:
-            return actual_time_ms
-        return (
-            _stored_counter(
-                synthetic_origin,
-                field_name="synthetic_origin_ms",
-            )
-            + actual_time_ms
-            - _stored_counter(
-                binding["actual_replay_start_ms"],
-                field_name="actual_replay_start_ms",
-            )
-        )
+        return control_rules_ops.virtual_event_time_ms(binding, actual_time_ms)
 
     async def _guard_historical_book_current(
         self,
@@ -10481,33 +4772,7 @@ class TrainingRunService:
         snapshot: Mapping[str, object],
         tracks: list[Mapping[str, object]] | None = None,
     ) -> None:
-        if (
-            str(binding.get("book_mode", "OFF"))
-            != BookMode.BOOK_ASSISTED_REQUIRED.value
-        ):
-            return
-        cursor = _stored_mapping(snapshot.get("cursor"), field_name="adapter cursor")
-        virtual_time_ms = _stored_counter(
-            cursor.get("virtual_time_ms"), field_name="virtual_time_ms"
-        )
-        if tracks is None:
-            values = await self.store.get_market_track_heads(run_id)
-            tracks = [
-                cast(Mapping[str, object], track)
-                for track in values
-                if isinstance(track, Mapping)
-                and track.get("subscription_tier") == "FULL"
-            ]
-        prepared = await self.historical_books.prepare_run_projection(
-            run_id=run_id,
-            tracks=tracks,
-            actual_time_ms=self._actual_event_time_ms(binding, virtual_time_ms),
-            virtual_time_ms=virtual_time_ms,
-        )
-        await self.historical_books.commit_run_projection(
-            run_id=run_id,
-            prepared=prepared,
-        )
+        return await self._order_service._guard_historical_book_current(run_id=run_id, binding=binding, snapshot=snapshot, tracks=tracks)
 
     async def _next_global_event_time(
         self,
@@ -10516,89 +4781,11 @@ class TrainingRunService:
         binding: Mapping[str, object],
         tracks: tuple[Mapping[str, object], ...],
     ) -> int:
-        candidates: list[int] = []
-        for track in tracks:
-            plan = await self.replay_service.plan_source_chunk(
-                self._track_session_id(track),
-                target_time_ms=MAX_TIMESTAMP_MS,
-                max_events=1,
-            )
-            if _stored_counter(
-                plan["event_count"], field_name="event_count"
-            ) == 1 and isinstance(plan["last_event_time_ms"], int):
-                candidates.append(int(plan["last_event_time_ms"]))
-        next_account_actual = await self.account_history.next_event_time(
-            run_id=run_id,
-            tracks=tracks,
-            target_actual_time_ms=_stored_counter(
-                binding["actual_replay_end_ms"],
-                field_name="actual_replay_end_ms",
-            ),
-        )
-        if next_account_actual is not None:
-            candidates.append(self._virtual_event_time_ms(binding, next_account_actual))
-        if str(binding.get("position_mode")) == "HEDGE":
-            next_hedge_actual = await self.hedge_inputs.next_event_time(
-                run_id=run_id,
-                target_actual_time_ms=_stored_counter(
-                    binding["actual_replay_end_ms"],
-                    field_name="actual_replay_end_ms",
-                ),
-            )
-            if next_hedge_actual is not None:
-                candidates.append(
-                    self._virtual_event_time_ms(binding, next_hedge_actual)
-                )
-        if not candidates and str(binding.get("source_kind")) == "AGG_TRADE":
-            terminal_time_ms = self._training_terminal_time_ms(binding)
-            snapshots = [
-                self._snapshot(
-                    await self.replay_service.get_session(
-                        self._track_session_id(track)
-                    )
-                )
-                for track in tracks
-            ]
-            if all(
-                _stored_mapping(
-                    snapshot.get("cursor"), field_name="adapter cursor"
-                ).get("at_end")
-                is True
-                for snapshot in snapshots
-            ):
-                current_times = [self._cursor_time(snapshot) for snapshot in snapshots]
-                if any(current < terminal_time_ms for current in current_times):
-                    candidates.append(terminal_time_ms)
-        if not candidates:
-            raise TrainingRunError(
-                "REPLAY_CONTROL_UNAVAILABLE",
-                "all FULL market tracks reached the end of frozen history",
-                status_code=409,
-            )
-        return min(candidates)
+        return await self._ordered_playback._next_global_event_time(run_id=run_id, binding=binding, tracks=tracks)
 
     @staticmethod
     def _training_terminal_time_ms(binding: Mapping[str, object]) -> int:
-        actual_start_ms = _stored_counter(
-            binding.get("actual_replay_start_ms"),
-            field_name="actual_replay_start_ms",
-        )
-        actual_end_ms = _stored_counter(
-            binding.get("actual_replay_end_ms"),
-            field_name="actual_replay_end_ms",
-        )
-        adapter_config = _stored_mapping(
-            binding.get("adapter_config"), field_name="adapter_config"
-        )
-        public_start_ms = (
-            _stored_counter(
-                binding.get("synthetic_origin_ms"),
-                field_name="synthetic_origin_ms",
-            )
-            if adapter_config.get("blind_mode") is True
-            else actual_start_ms
-        )
-        return public_start_ms + actual_end_ms - actual_start_ms
+        return control_rules_ops.training_terminal_time_ms(binding)
 
     async def _finalize_deferred_full_tracks(
         self,
@@ -10607,57 +4794,7 @@ class TrainingRunService:
         tracks: tuple[Mapping[str, object], ...],
     ) -> None:
         """End actors only after the committed global terminal input barrier."""
-
-        for track in tracks:
-            session_id = self._track_session_id(track)
-            session = await self.replay_service.get_session(session_id)
-            snapshot = self._snapshot(session)
-            if snapshot.get("state") == "ENDED":
-                continue
-            cursor = _stored_mapping(
-                snapshot.get("cursor"), field_name="adapter cursor"
-            )
-            if cursor.get("at_end") is not True:
-                raise TrainingRunError(
-                    "GLOBAL_CHECKPOINT_INCOMPLETE",
-                    "market track source is not exhausted at terminal finalize",
-                    status_code=503,
-                    details={"track_id": track["track_id"]},
-                )
-            snapshot = await self._ensure_track_controller(
-                session_id=session_id,
-                client_instance_id=command.client_instance_id,
-                command_id=command.command_id,
-                known_snapshot=snapshot,
-            )
-            finalize = ReplayCommand(
-                protocol=REPLAY_PROTOCOL,
-                command_id=self._multi_command_id(
-                    command.command_id,
-                    str(track["track_id"]),
-                    InternalCommandType.FINALIZE_DEFERRED_TERMINAL.value,
-                    _stored_counter(snapshot["revision"], field_name="revision"),
-                ),
-                client_instance_id=command.client_instance_id,
-                expected_revision=_stored_counter(
-                    snapshot["revision"], field_name="revision"
-                ),
-                type=InternalCommandType.FINALIZE_DEFERRED_TERMINAL,
-                payload={},
-            )
-            try:
-                await self.replay_service.command(
-                    session_id,
-                    finalize,
-                    _training_internal=True,
-                )
-            except ReplayDomainError as exc:
-                raise TrainingRunError(
-                    exc.code.value,
-                    exc.message,
-                    status_code=exc.http_status,
-                    details=exc.details,
-                ) from exc
+        return await self._ordered_playback._finalize_deferred_full_tracks(command=command, tracks=tracks)
 
     async def _advance_adapter_to(
         self,
@@ -10673,178 +4810,7 @@ class TrainingRunService:
         target_source_sequence: int | None = None,
         defer_source_terminal: bool = False,
     ) -> Mapping[str, object]:
-        known_snapshot = initial_snapshot
-        for _chunk_index in range(100_000):
-            snapshot = await self._ensure_track_controller(
-                session_id=session_id,
-                client_instance_id=client_instance_id,
-                command_id=command_id,
-                known_snapshot=known_snapshot,
-            )
-            known_snapshot = None
-            cursor = snapshot.get("cursor")
-            if not isinstance(cursor, Mapping):
-                raise TrainingRunError(
-                    "TRAINING_RUN_STORAGE_DEGRADED",
-                    "market track cursor is invalid",
-                    status_code=503,
-                )
-            current = int(cursor["virtual_time_ms"])
-            current_source_sequence = _stored_counter(
-                cursor.get("source_sequence"), field_name="source_sequence"
-            )
-            if (
-                target_source_sequence is not None
-                and current_source_sequence > target_source_sequence
-            ):
-                raise TrainingRunError(
-                    "GLOBAL_CLOCK_DIVERGED",
-                    "market track crossed the planned source-event boundary",
-                    status_code=409,
-                )
-            terminal_final_state = (
-                final_state_max_events is not None and cursor.get("at_end") is True
-                and not defer_source_terminal
-            )
-            if current > target_virtual_time_ms and not terminal_final_state:
-                raise TrainingRunError(
-                    "GLOBAL_CLOCK_DIVERGED",
-                    "market track is ahead of the TrainingRun clock",
-                    status_code=409,
-                )
-            if terminal_final_state:
-                return snapshot
-            if (
-                current == target_virtual_time_ms
-                and (
-                    target_source_sequence is None
-                    or current_source_sequence == target_source_sequence
-                )
-            ):
-                return snapshot
-            remaining_source_events = (
-                None
-                if target_source_sequence is None
-                else target_source_sequence - current_source_sequence
-            )
-            plan = await self.replay_service.plan_source_chunk(
-                session_id,
-                target_time_ms=target_virtual_time_ms,
-                max_events=(
-                    min(
-                        32 if final_state_max_events is None else final_state_max_events,
-                        remaining_source_events,
-                    )
-                    if remaining_source_events is not None
-                    and remaining_source_events > 0
-                    else 32
-                    if final_state_max_events is None
-                    else final_state_max_events
-                ),
-            )
-            count = _stored_counter(plan["event_count"], field_name="event_count")
-            if count > 0:
-                terminal_tail = defer_source_terminal and not plan.get("has_more_before_target", True)
-                if final_state_max_events is not None and terminal_tail and count > 1:
-                    count -= 1
-                if final_state_max_events is None or (terminal_tail and count == 1):
-                    v1_type: CommandType | InternalCommandType = (
-                        InternalCommandType.STEP_DEFER_TERMINAL
-                        if defer_source_terminal
-                        else CommandType.STEP
-                    )
-                    payload: dict[str, object] = {"count": count}
-                else:
-                    v1_type = InternalCommandType.FAST_FORWARD_FINAL_STATE
-                    payload = {
-                        "target_virtual_time_ms": target_virtual_time_ms,
-                        "max_events": count,
-                        "require_empty_account": require_empty_account,
-                        "snapshot_only": False,
-                    }
-            else:
-                if snapshot["state"] == "ENDED":
-                    raise TrainingRunError(
-                        "MARKET_TRACK_COVERAGE_UNAVAILABLE",
-                        "market track ended before the TrainingRun VirtualTime",
-                        status_code=409,
-                    )
-                v1_type = CommandType.ADVANCE_BY
-                payload = {"ms": min(target_virtual_time_ms - current, 30 * 86_400_000)}
-            part = ReplayCommand(
-                protocol=REPLAY_PROTOCOL,
-                command_id=self._multi_command_id(
-                    command_id,
-                    track_id,
-                    v1_type.value,
-                    _stored_counter(snapshot["revision"], field_name="revision"),
-                ),
-                client_instance_id=client_instance_id,
-                expected_revision=_stored_counter(
-                    snapshot["revision"], field_name="revision"
-                ),
-                type=v1_type,
-                payload=payload,
-            )
-            try:
-                acknowledged = await self.replay_service.command(
-                    session_id,
-                    part,
-                    _training_internal=isinstance(v1_type, InternalCommandType),
-                )
-            except ReplayDomainError as exc:
-                raise TrainingRunError(
-                    exc.code.value,
-                    exc.message,
-                    status_code=exc.http_status,
-                    details=exc.details,
-                ) from exc
-            acknowledged_cursor = acknowledged.get("cursor")
-            if isinstance(acknowledged_cursor, Mapping):
-                acknowledged_time = int(acknowledged_cursor["virtual_time_ms"])
-                acknowledged_sequence = _stored_counter(
-                    acknowledged_cursor.get("source_sequence"),
-                    field_name="source_sequence",
-                )
-                if acknowledged_sequence < current_source_sequence or (
-                    acknowledged_sequence == current_source_sequence
-                    and acknowledged_time == current
-                ):
-                    raise TrainingRunError(
-                        "GLOBAL_ADVANCE_STALLED",
-                        "market adapter made no progress toward the ordered boundary",
-                        status_code=409,
-                        details={
-                            "current_virtual_time_ms": current,
-                            "target_virtual_time_ms": target_virtual_time_ms,
-                            "current_source_sequence": current_source_sequence,
-                            "target_source_sequence": target_source_sequence,
-                        },
-                    )
-                if (
-                    target_source_sequence is not None
-                    and acknowledged_sequence > target_source_sequence
-                ):
-                    raise TrainingRunError(
-                        "GLOBAL_CLOCK_DIVERGED",
-                        "market adapter crossed the planned source-event boundary",
-                        status_code=409,
-                    )
-                acknowledged_at_end = acknowledged_cursor.get("at_end") is True
-                if final_state_max_events is not None and acknowledged_at_end:
-                    return acknowledged
-                if acknowledged_time == target_virtual_time_ms and (
-                    target_source_sequence is None
-                    or acknowledged_sequence == target_source_sequence
-                ):
-                    return acknowledged
-            known_snapshot = acknowledged
-            await asyncio.sleep(0)
-        raise TrainingRunError(
-            "REPLAY_SCAN_LIMIT_EXCEEDED",
-            "market track catch-up exceeded the bounded chunk budget",
-            status_code=409,
-        )
+        return await self._ordered_playback._advance_adapter_to(session_id=session_id, target_virtual_time_ms=target_virtual_time_ms, client_instance_id=client_instance_id, command_id=command_id, track_id=track_id, initial_snapshot=initial_snapshot, final_state_max_events=final_state_max_events, require_empty_account=require_empty_account, target_source_sequence=target_source_sequence, defer_source_terminal=defer_source_terminal)
 
     async def _ensure_track_controller(
         self,
@@ -10854,107 +4820,14 @@ class TrainingRunService:
         command_id: str,
         known_snapshot: Mapping[str, object] | None = None,
     ) -> Mapping[str, object]:
-        if known_snapshot is None:
-            session = await self.replay_service.get_session(session_id)
-            snapshot = self._snapshot(session)
-        else:
-            snapshot = known_snapshot
-        owner = snapshot.get("controller_client_id")
-        if owner == client_instance_id:
-            try:
-                await self.replay_service.heartbeat(
-                    session_id,
-                    client_instance_id,
-                    _renew_group=False,
-                )
-                return snapshot
-            except ReplayDomainError as exc:
-                if exc.code is not ReplayErrorCode.CONTROLLER_CONFLICT:
-                    raise TrainingRunError(
-                        exc.code.value,
-                        exc.message,
-                        status_code=exc.http_status,
-                        details=exc.details,
-                    ) from exc
-                session = await self.replay_service.get_session(session_id)
-                snapshot = self._snapshot(session)
-                owner = snapshot.get("controller_client_id")
-        if owner is not None:
-            raise TrainingRunError(
-                "CONTROLLER_CONFLICT",
-                "market track is controlled by another client",
-                status_code=409,
-            )
-        acquire = ReplayCommand(
-            protocol=REPLAY_PROTOCOL,
-            command_id=self._multi_command_id(
-                command_id,
-                session_id,
-                "acquire",
-                _stored_counter(snapshot["revision"], field_name="revision"),
-            ),
-            client_instance_id=client_instance_id,
-            expected_revision=_stored_counter(
-                snapshot["revision"], field_name="revision"
-            ),
-            type=CommandType.ACQUIRE_CONTROLLER,
-            payload={"takeover": False},
-        )
-        try:
-            return await self.replay_service.command(session_id, acquire)
-        except ReplayDomainError as exc:
-            raise TrainingRunError(
-                exc.code.value,
-                exc.message,
-                status_code=exc.http_status,
-                details=exc.details,
-            ) from exc
+        return await self._ordered_playback._ensure_track_controller(session_id=session_id, client_instance_id=client_instance_id, command_id=command_id, known_snapshot=known_snapshot)
 
     async def _pause_ready_full_tracks(
         self,
         run_id: str,
         client_instance_id: str,
     ) -> None:
-        projection = await self.store.get_market_tracks(run_id)
-        tracks = projection["tracks"]
-        if not isinstance(tracks, list):
-            raise TrainingRunError(
-                "TRAINING_RUN_STORAGE_DEGRADED",
-                "market tracks projection is invalid",
-                status_code=503,
-            )
-        for track in sorted(tracks, key=lambda item: int(item["stable_ordinal"])):
-            if track["subscription_tier"] != "FULL" or not track["adapter_session_id"]:
-                continue
-            session_id = str(track["adapter_session_id"])
-            session = await self.replay_service.get_session(session_id)
-            snapshot = self._snapshot(session)
-            if snapshot["state"] != "PLAYING":
-                continue
-            pause = ReplayCommand(
-                protocol=REPLAY_PROTOCOL,
-                command_id=self._multi_command_id(
-                    "select-pause",
-                    str(track["track_id"]),
-                    "pause",
-                    _stored_counter(snapshot["revision"], field_name="revision"),
-                ),
-                client_instance_id=client_instance_id,
-                expected_revision=_stored_counter(
-                    snapshot["revision"], field_name="revision"
-                ),
-                type=CommandType.PAUSE,
-                payload={},
-            )
-            try:
-                await self.replay_service.command(session_id, pause)
-            except ReplayDomainError as exc:
-                raise TrainingRunError(
-                    "MULTI_TRACK_PAUSED",
-                    "global clock could not pause before selecting a track",
-                    status_code=409,
-                    details={"reason": exc.code.value},
-                ) from exc
+        return await self._ordered_playback._pause_ready_full_tracks(run_id, client_instance_id)
 
     async def _fail_closed_multi_track(
         self,
@@ -10965,37 +4838,7 @@ class TrainingRunService:
         client_instance_id: str,
         reason: str,
     ) -> None:
-        await self.store.mark_market_track_error(
-            run_id=run_id,
-            track_id=str(failed_track["track_id"]),
-            reason=reason,
-            degraded=True,
-        )
-        for track in tracks:
-            try:
-                session_id = self._track_session_id(track)
-                session = await self.replay_service.get_session(session_id)
-                snapshot = self._snapshot(session)
-                if snapshot["state"] != "PLAYING":
-                    continue
-                pause = ReplayCommand(
-                    protocol=REPLAY_PROTOCOL,
-                    command_id=self._multi_command_id(
-                        "fail-closed",
-                        str(track["track_id"]),
-                        "pause",
-                        _stored_counter(snapshot["revision"], field_name="revision"),
-                    ),
-                    client_instance_id=client_instance_id,
-                    expected_revision=_stored_counter(
-                        snapshot["revision"], field_name="revision"
-                    ),
-                    type=CommandType.PAUSE,
-                    payload={},
-                )
-                await self.replay_service.command(session_id, pause)
-            except (ReplayDomainError, TrainingRunError):
-                continue
+        return await self._ordered_playback._fail_closed_multi_track(run_id=run_id, tracks=tracks, failed_track=failed_track, client_instance_id=client_instance_id, reason=reason)
 
     async def _market_track_result(
         self,
@@ -11005,14 +4848,7 @@ class TrainingRunService:
         snapshot: Mapping[str, object],
         data: Mapping[str, object],
     ) -> dict[str, object]:
-        viewer = await self.store.get_viewer_state(command.run_id)
-        return self._result_payload(
-            command=command,
-            session_id=session_id,
-            snapshot=snapshot,
-            viewer=viewer.to_dict(),
-            data=data,
-        )
+        return await self._ordered_playback._market_track_result(command=command, session_id=session_id, snapshot=snapshot, data=data)
 
     @staticmethod
     def _result_payload(
@@ -11023,86 +4859,27 @@ class TrainingRunService:
         viewer: Mapping[str, object],
         data: Mapping[str, object],
     ) -> dict[str, object]:
-        return {
-            "protocol": "replay.v3",
-            "run_id": command.run_id,
-            "session_id": session_id,
-            "command_id": command.command_id,
-            "revision": snapshot["revision"],
-            "sequence": snapshot["sequence"],
-            "state": snapshot["state"],
-            "state_hash": snapshot["state_hash"],
-            "cursor": snapshot["cursor"],
-            "viewer_state": dict(viewer),
-            "data": dict(data),
-        }
+        return command_projection_ops.result_payload(command=command, session_id=session_id, snapshot=snapshot, viewer=viewer, data=data)
 
-    _PRIVATE_COMMAND_RESULT_FIELDS = frozenset(
-        {
-            "actual_event_time_ms",
-            "actual_time_ms",
-            "as_of_actual_time_ms",
-            "bound_range_end_ms",
-            "bound_range_start_ms",
-            "global_checkpoint",
-            "hedge_inputs",
-            "recovery_checkpoint",
-            "source_fingerprint",
-        }
-    )
 
     @classmethod
     def project_public_command_result(
         cls,
         result: Mapping[str, object],
     ) -> dict[str, object]:
-        """Project a durable internal command result onto the HTTP boundary."""
-
-        data = result.get("data")
-        if not isinstance(data, Mapping):
-            raise TrainingRunError(
-                "TRAINING_RUN_STORAGE_DEGRADED",
-                "stored command result data is invalid",
-                status_code=503,
-            )
-        return {
-            **dict(result),
-            "data": cls._project_public_command_value(data),
-        }
+        return command_projection_ops.project_public_command_result(result)
 
     @classmethod
     def _project_public_command_value(cls, value: object) -> object:
-        if isinstance(value, Mapping):
-            return {
-                str(key): cls._project_public_command_value(item)
-                for key, item in value.items()
-                if str(key) not in cls._PRIVATE_COMMAND_RESULT_FIELDS
-            }
-        if isinstance(value, (list, tuple)):
-            return [cls._project_public_command_value(item) for item in value]
-        return value
+        return command_projection_ops.project_public_command_value(value)
 
     @staticmethod
     def _cursor_time(snapshot: Mapping[str, object]) -> int:
-        cursor = snapshot.get("cursor")
-        if not isinstance(cursor, Mapping):
-            raise TrainingRunError(
-                "TRAINING_RUN_STORAGE_DEGRADED",
-                "adapter cursor is invalid",
-                status_code=503,
-            )
-        return int(cursor["virtual_time_ms"])
+        return service_validation_ops.cursor_time(snapshot)
 
     @staticmethod
     def _track_session_id(track: Mapping[str, object]) -> str:
-        session_id = track.get("adapter_session_id")
-        if not isinstance(session_id, str):
-            raise TrainingRunError(
-                "MARKET_TRACK_NOT_PREPARED",
-                "FULL market track has no adapter session",
-                status_code=409,
-            )
-        return session_id
+        return service_validation_ops.track_session_id(track)
 
     @staticmethod
     def _multi_command_id(
@@ -11111,8 +4888,7 @@ class TrainingRunService:
         operation: str,
         revision: int,
     ) -> str:
-        material = f"{command_id}:{track_id}:{operation}:{revision}".encode("utf-8")
-        return f"v2multi-{hashlib.sha256(material).hexdigest()[:40]}"
+        return control_rules_ops.multi_command_id(command_id, track_id, operation, revision)
 
     @staticmethod
     def _assert_same_market_scope(
@@ -11122,19 +4898,7 @@ class TrainingRunService:
         market_type: str,
         settlement_asset: str,
     ) -> None:
-        actual = (exchange, market_type, settlement_asset)
-        expected = (
-            str(binding["exchange"]),
-            str(binding["market_type"]),
-            str(binding["settlement_asset"]),
-        )
-        if actual != expected:
-            raise TrainingRunError(
-                "MARKET_SCOPE_MISMATCH",
-                "multi-market tracks must share exchange, market type, and settlement asset",
-                status_code=409,
-                details={"expected": list(expected), "actual": list(actual)},
-            )
+        return admission_rules_ops.assert_same_market_scope(binding=binding, exchange=exchange, market_type=market_type, settlement_asset=settlement_asset)
 
     def _authoritative_instrument_identity(
         self,
@@ -11143,64 +4907,10 @@ class TrainingRunService:
         market_type: str,
         symbol: str,
     ) -> dict[str, str]:
-        resolver = self._instrument_metadata_resolver
-        if resolver is None:
-            raise TrainingRunError(
-                "INSTRUMENT_METADATA_UNAVAILABLE",
-                "authoritative instrument metadata is unavailable",
-                status_code=503,
-            )
-        metadata = resolver(exchange, market_type, symbol)
-        if not isinstance(metadata, Mapping):
-            raise TrainingRunError(
-                "INSTRUMENT_METADATA_UNAVAILABLE",
-                "instrument is absent from the authoritative local catalog",
-                status_code=409,
-            )
-        try:
-            resolved = {
-                "exchange": self._identifier(
-                    metadata.get("exchange"), field_name="instrument.exchange"
-                ).lower(),
-                "market_type": self._identifier(
-                    metadata.get("marketType"), field_name="instrument.market_type"
-                ).lower(),
-                "symbol": self._identifier(
-                    metadata.get("symbol"), field_name="instrument.symbol"
-                ).upper(),
-                "base_asset": self._identifier(
-                    metadata.get("baseAsset"), field_name="instrument.base_asset"
-                ).upper(),
-                "settlement_asset": self._identifier(
-                    metadata.get("quoteAsset"),
-                    field_name="instrument.settlement_asset",
-                ).upper(),
-            }
-        except (TypeError, ValueError) as exc:
-            raise TrainingRunError(
-                "INSTRUMENT_METADATA_INVALID",
-                "authoritative instrument metadata is invalid",
-                status_code=503,
-            ) from exc
-        requested = (exchange.lower(), market_type.lower(), symbol.upper())
-        actual = (resolved["exchange"], resolved["market_type"], resolved["symbol"])
-        if actual != requested:
-            raise TrainingRunError(
-                "INSTRUMENT_IDENTITY_MISMATCH",
-                "instrument metadata does not match the requested market identity",
-                status_code=409,
-                details={"expected": list(requested), "actual": list(actual)},
-            )
-        return resolved
+        return self._admission_service._authoritative_instrument_identity(exchange=exchange, market_type=market_type, symbol=symbol)
 
     def _prune_market_track_plans(self, now_ms: int) -> None:
-        expired = [
-            plan_id
-            for plan_id, plan in self._market_track_plans.items()
-            if plan.expires_at_ms < now_ms
-        ]
-        for plan_id in expired:
-            self._market_track_plans.pop(plan_id, None)
+        return self._admission_service._prune_market_track_plans(now_ms)
 
     def _claim_market_track_plan(
         self,
@@ -11208,55 +4918,8 @@ class TrainingRunService:
         run_id: str,
         plan_id: str,
         selected_snapshot: Mapping[str, object],
-    ) -> _MarketTrackPlan:
-        now_ms = self.replay_service.now_ms()
-        self._prune_market_track_plans(now_ms)
-        plan = self._market_track_plans.get(plan_id)
-        if plan is None or plan.run_id != run_id:
-            raise TrainingRunError(
-                "MARKET_TRACK_PLAN_EXPIRED",
-                "market track plan is missing or expired; request a new plan",
-                status_code=409,
-            )
-        self._market_track_plans.pop(plan_id, None)
-        if plan.expires_at_ms < now_ms:
-            raise TrainingRunError(
-                "MARKET_TRACK_PLAN_EXPIRED",
-                "market track plan expired; request a new plan",
-                status_code=409,
-            )
-        if plan.target_virtual_time_ms != self._cursor_time(selected_snapshot):
-            raise TrainingRunError(
-                "MARKET_TRACK_PLAN_STALE",
-                "the Run clock changed after planning; request a new plan",
-                status_code=409,
-            )
-        current = self._authoritative_instrument_identity(
-            exchange=plan.exchange,
-            market_type=plan.market_type,
-            symbol=plan.symbol,
-        )
-        expected = (
-            plan.exchange,
-            plan.market_type,
-            plan.symbol,
-            plan.base_asset,
-            plan.settlement_asset,
-        )
-        actual = (
-            current["exchange"],
-            current["market_type"],
-            current["symbol"],
-            current["base_asset"],
-            current["settlement_asset"],
-        )
-        if actual != expected:
-            raise TrainingRunError(
-                "MARKET_TRACK_PLAN_STALE",
-                "authoritative instrument metadata changed after planning",
-                status_code=409,
-            )
-        return plan
+    ) -> admission_rules_ops._MarketTrackPlan:
+        return self._admission_service._claim_market_track_plan(run_id=run_id, plan_id=plan_id, selected_snapshot=selected_snapshot)
 
     async def _execute_policy_command(
         self,
@@ -11428,17 +5091,17 @@ class TrainingRunService:
                         status_code=409,
                         details={"fallback_applied": False},
                     )
-            cursor = _stored_mapping(snapshot["cursor"], field_name="adapter cursor")
+            cursor = service_validation_ops._stored_mapping(snapshot["cursor"], field_name="adapter cursor")
             policy = await self.store.revise_contract_policy(
                 run_id=command.run_id,
                 command_id=command.command_id,
                 command_type=command_value,
                 payload=policy_payload,
-                virtual_time_ms=_stored_counter(
+                virtual_time_ms=service_validation_ops._stored_counter(
                     cursor["virtual_time_ms"],
                     field_name="virtual_time_ms",
                 ),
-                source_sequence=_stored_counter(
+                source_sequence=service_validation_ops._stored_counter(
                     cursor["source_sequence"],
                     field_name="source_sequence",
                 ),
@@ -11579,99 +5242,7 @@ class TrainingRunService:
         target_virtual_time_ms: int,
         summary: ReplayPeriodSummary | None = None,
     ) -> FastForwardDecision:
-        if (
-            isinstance(target_virtual_time_ms, bool)
-            or not isinstance(target_virtual_time_ms, int)
-            or target_virtual_time_ms < 0
-        ):
-            raise TrainingRunError(
-                "REPLAY_CONTROL_INVALID",
-                "fast-forward target must be a non-negative integer",
-                status_code=422,
-            )
-        cursor = _stored_mapping(snapshot.get("cursor"), field_name="adapter cursor")
-        current = _stored_counter(
-            cursor.get("virtual_time_ms"), field_name="virtual_time_ms"
-        )
-        full_tracks = tuple(
-            track for track in tracks if track.get("subscription_tier") == "FULL"
-        )
-        dependencies: set[str] = set()
-        blocking: set[str] = set()
-        if len(full_tracks) > 1:
-            dependencies.add("MULTI_TRACK_GLOBAL_ORDER")
-        if str(binding.get("funding_mode")) != "OFF":
-            dependencies.add("FUNDING_SCHEDULE")
-        if (
-            str(binding.get("account_data_mode"))
-            == AccountDataMode.HISTORICAL_EXACT.value
-        ):
-            dependencies.add("ACCOUNT_HISTORY_TIMELINE")
-        if str(binding.get("account_status")) != "ACTIVE":
-            dependencies.add("ACCOUNT_RISK_STATE")
-        if str(binding.get("book_mode", "OFF")) != "OFF":
-            dependencies.add("BOOK_ASSISTED_PATH")
-        if (
-            snapshot.get("state") == "ERROR"
-            or snapshot.get("degraded_reason") is not None
-        ):
-            blocking.add("SESSION_DEGRADED")
-        terminal_order_states = {"FILLED", "CANCELED", "REJECTED", "EXPIRED"}
-        for track in full_tracks or tracks:
-            if (
-                track.get("state") in {"DEGRADED", "ERROR"}
-                or track.get("degraded_reason") is not None
-            ):
-                blocking.add("TRACK_DEGRADED")
-            position = track.get("position")
-            if _position_is_open(position):
-                dependencies.add("OPEN_POSITION")
-            count = track.get("open_order_count")
-            if isinstance(count, int) and not isinstance(count, bool) and count > 0:
-                dependencies.add("OPEN_ORDER")
-        components = snapshot.get("components")
-        if isinstance(components, Mapping):
-            orders = components.get("orders")
-            if isinstance(orders, (list, tuple)) and any(
-                isinstance(order, Mapping)
-                and order.get("status") not in terminal_order_states
-                for order in orders
-            ):
-                dependencies.add("OPEN_ORDER")
-            position = components.get("position")
-            if _position_is_open(position):
-                dependencies.add("OPEN_POSITION")
-        optimization_enabled = bool(
-            self.replay_service.settings.replay_fast_forward_optimization_enabled
-        )
-        optimized_candidate = optimization_enabled and not dependencies and not blocking
-        chunk_event_limit = (
-            min(
-                4_096,
-                self.replay_service.settings.event_buffer_size,
-                self.replay_service.settings.trade_page_rows,
-            )
-            if optimized_candidate
-            else min(32, self.replay_service.settings.event_buffer_size)
-        )
-        context = FastForwardContext(
-            source_kind=ReplaySource(str(binding["source_kind"])),
-            current_virtual_time_ms=current,
-            target_virtual_time_ms=target_virtual_time_ms,
-            dataset_epoch=str(binding["dataset_epoch"]),
-            optimization_enabled=optimization_enabled,
-            path_dependencies=tuple(dependencies),
-            blocking_reasons=tuple(blocking),
-            checkpoint_identity_match=summary is not None,
-            checkpoint_state_hash=(
-                summary.summary_hash if summary is not None else None
-            ),
-            estimated_events=(summary.event_count if summary is not None else None),
-            chunk_event_limit=max(1, chunk_event_limit),
-            tail_event_count=(min(32, chunk_event_limit) if optimized_candidate else 0),
-            track_count=max(1, len(full_tracks)),
-        )
-        return self._fast_forward_planner.plan(context)
+        return self._ordered_playback._plan_fast_forward(binding=binding, snapshot=snapshot, tracks=tracks, target_virtual_time_ms=target_virtual_time_ms, summary=summary)
 
     async def _eligible_period_summary(
         self,
@@ -11698,7 +5269,7 @@ class TrainingRunService:
                 "reason_code": "OPTIMIZATION_DISABLED",
                 "summary": None,
             }
-        cursor = _stored_mapping(snapshot.get("cursor"), field_name="adapter cursor")
+        cursor = service_validation_ops._stored_mapping(snapshot.get("cursor"), field_name="adapter cursor")
         session_id = str(binding["adapter_session_id"])
         authority = await self.replay_service.summary_authority(session_id)
         if authority.get("has_active_trading_path") is True:
@@ -11710,7 +5281,7 @@ class TrainingRunService:
         integrity = await self.store.integrity(run_id)
         lookup = await self.store.period_summary_candidate(
             run_id=run_id,
-            current_source_sequence=_stored_counter(
+            current_source_sequence=service_validation_ops._stored_counter(
                 cursor.get("source_sequence"),
                 field_name="source_sequence",
             ),
@@ -11737,7 +5308,7 @@ class TrainingRunService:
                 "reason_code": "SUMMARY_DOMAIN_LINEAGE_MISMATCH",
                 "summary": None,
             }
-        current_sequence = _stored_counter(
+        current_sequence = service_validation_ops._stored_counter(
             cursor.get("source_sequence"),
             field_name="source_sequence",
         )
@@ -11758,29 +5329,7 @@ class TrainingRunService:
         *,
         summary_lookup: Mapping[str, object],
     ) -> dict[str, object]:
-        payload = decision.to_dict()
-        candidate = summary_lookup.get("summary")
-        payload["period_summary"] = {
-            "status": str(summary_lookup.get("status", "UNAVAILABLE")),
-            "reason_code": str(
-                summary_lookup.get("reason_code", "SUMMARY_UNAVAILABLE")
-            ),
-            **(
-                {
-                    "set_id": str(summary_lookup["set_id"]),
-                    "summary_id": candidate.summary_id,
-                    "summary_hash": candidate.summary_hash,
-                    "build_proof_hash": str(summary_lookup["build_proof_hash"]),
-                    "base_source_sequence": candidate.base_source_sequence,
-                    "end_source_sequence": candidate.end_source_sequence,
-                    "skippable_source_events": candidate.event_count,
-                    "algorithm_version": candidate.algorithm_version,
-                }
-                if isinstance(candidate, ReplayPeriodSummary)
-                else {}
-            ),
-        }
-        return payload
+        return control_rules_ops.fast_forward_plan_payload(decision, summary_lookup=summary_lookup)
 
     async def get_advance_progress(
         self,
@@ -11849,11 +5398,11 @@ class TrainingRunService:
                 "durable advance identity changed",
                 status_code=409,
             )
-        stored_initial_cursor = _stored_mapping(
+        stored_initial_cursor = service_validation_ops._stored_mapping(
             intent["initial_cursor"],
             field_name="durable initial cursor",
         )
-        initial = _stored_counter(
+        initial = service_validation_ops._stored_counter(
             stored_initial_cursor.get("virtual_time_ms"),
             field_name="initial_virtual_time_ms",
         )
@@ -11904,7 +5453,7 @@ class TrainingRunService:
             "simulated_account_liquidations": 0,
             "cancelable": bool(plan.get("cancelable", False)),
             "plan": dict(plan),
-            "chunk_event_limit": _stored_counter(
+            "chunk_event_limit": service_validation_ops._stored_counter(
                 plan.get("chunk_event_limit", 32), field_name="chunk_event_limit"
             ),
             "queue_high_water": 0,
@@ -11917,21 +5466,21 @@ class TrainingRunService:
                 summary is not None
                 and plan.get("mode") == FastForwardPlan.CHECKPOINT_JUMP.value
             ):
-                current = _stored_mapping(
+                current = service_validation_ops._stored_mapping(
                     await self.replay_service.get_session_state(session_id),
                     field_name="adapter snapshot",
                 )
-                current_cursor = _stored_mapping(
+                current_cursor = service_validation_ops._stored_mapping(
                     current.get("cursor"),
                     field_name="adapter cursor",
                 )
-                current_sequence = _stored_counter(
+                current_sequence = service_validation_ops._stored_counter(
                     current_cursor.get("source_sequence"),
                     field_name="source_sequence",
                 )
                 if (
                     current_sequence < summary.end_source_sequence
-                    and _stored_counter(
+                    and service_validation_ops._stored_counter(
                         current_cursor.get("virtual_time_ms"),
                         field_name="virtual_time_ms",
                     )
@@ -11942,7 +5491,7 @@ class TrainingRunService:
                             session_id,
                             summary,
                             client_instance_id=command.client_instance_id,
-                            expected_revision=_stored_counter(
+                            expected_revision=service_validation_ops._stored_counter(
                                 current.get("revision"),
                                 field_name="revision",
                             ),
@@ -11959,22 +5508,22 @@ class TrainingRunService:
                         plan = fallback_plan
                         job["plan"] = fallback_plan
                     else:
-                        skipped = _stored_counter(
+                        skipped = service_validation_ops._stored_counter(
                             jumped.get("skipped_source_events"),
                             field_name="summary skipped_source_events",
                         )
                         summary_applied = summary
                         job["summary_skipped_events"] = skipped
                         job["consumed"] = skipped
-                        jumped_snapshot = _stored_mapping(
+                        jumped_snapshot = service_validation_ops._stored_mapping(
                             jumped.get("snapshot"),
                             field_name="summary jump snapshot",
                         )
-                        jumped_cursor = _stored_mapping(
+                        jumped_cursor = service_validation_ops._stored_mapping(
                             jumped_snapshot.get("cursor"),
                             field_name="summary jump cursor",
                         )
-                        job["current_virtual_time_ms"] = _stored_counter(
+                        job["current_virtual_time_ms"] = service_validation_ops._stored_counter(
                             jumped_cursor.get("virtual_time_ms"),
                             field_name="virtual_time_ms",
                         )
@@ -11987,14 +5536,14 @@ class TrainingRunService:
                 if cancel.is_set():
                     job["status"] = "CANCELLED"
                     break
-                current = _stored_mapping(
+                current = service_validation_ops._stored_mapping(
                     await self.replay_service.get_session_state(session_id),
                     field_name="adapter snapshot",
                 )
-                cursor = _stored_mapping(
+                cursor = service_validation_ops._stored_mapping(
                     current.get("cursor"), field_name="adapter cursor"
                 )
-                current_time = _stored_counter(
+                current_time = service_validation_ops._stored_counter(
                     cursor.get("virtual_time_ms"), field_name="virtual_time_ms"
                 )
                 job["current_virtual_time_ms"] = current_time
@@ -12010,11 +5559,11 @@ class TrainingRunService:
                     self._snapshot(await self.replay_service.get_session(session_id))
                     if self._stop_on_event(command) else None
                 )
-                if plan.get("projection_delivery") == FINAL_STATE_PROJECTION_DELIVERY:
+                if plan.get("projection_delivery") == control_rules_ops.FINAL_STATE_PROJECTION_DELIVERY:
                     v1_type = InternalCommandType.FAST_FORWARD_FINAL_STATE
                     payload = {
                         "target_virtual_time_ms": target_virtual_time_ms,
-                        "max_events": _stored_counter(
+                        "max_events": service_validation_ops._stored_counter(
                             job.get("chunk_event_limit"),
                             field_name="chunk_event_limit",
                         ),
@@ -12029,7 +5578,7 @@ class TrainingRunService:
                     chunk = await self.replay_service.plan_source_chunk(
                         session_id,
                         target_time_ms=target_virtual_time_ms,
-                        max_events=1 if interaction_before is not None and not self._snapshot_is_flat(interaction_before) else _stored_counter(
+                        max_events=1 if interaction_before is not None and not self._snapshot_is_flat(interaction_before) else service_validation_ops._stored_counter(
                             job.get("chunk_event_limit"),
                             field_name="chunk_event_limit",
                         ),
@@ -12038,7 +5587,7 @@ class TrainingRunService:
                     if cancel.is_set():
                         job["status"] = "CANCELLED"
                         break
-                    count = _stored_counter(
+                    count = service_validation_ops._stored_counter(
                         chunk.get("event_count"), field_name="event_count"
                     )
                     if count > 0:
@@ -12051,7 +5600,7 @@ class TrainingRunService:
                                 "count": count,
                                 "tail_events": min(
                                     count,
-                                    _stored_counter(
+                                    service_validation_ops._stored_counter(
                                         plan.get("tail_event_count", 0),
                                         field_name="tail_event_count",
                                     ),
@@ -12072,7 +5621,7 @@ class TrainingRunService:
                     protocol=REPLAY_PROTOCOL,
                     command_id=self._advance_part_id(
                         command,
-                        source_sequence=_stored_counter(
+                        source_sequence=service_validation_ops._stored_counter(
                             cursor.get("source_sequence"),
                             field_name="source_sequence",
                         ),
@@ -12080,7 +5629,7 @@ class TrainingRunService:
                         target_virtual_time_ms=target_virtual_time_ms,
                     ),
                     client_instance_id=command.client_instance_id,
-                    expected_revision=_stored_counter(
+                    expected_revision=service_validation_ops._stored_counter(
                         current.get("revision"), field_name="revision"
                     ),
                     type=v1_type,
@@ -12099,17 +5648,17 @@ class TrainingRunService:
                         status_code=exc.http_status,
                         details=exc.details,
                     ) from exc
-                acknowledged_data = _stored_mapping(
+                acknowledged_data = service_validation_ops._stored_mapping(
                     acknowledged.get("data"), field_name="adapter command data"
                 )
-                acknowledged_cursor = _stored_mapping(
+                acknowledged_cursor = service_validation_ops._stored_mapping(
                     acknowledged.get("cursor"), field_name="adapter cursor"
                 )
-                acknowledged_consumed = _stored_counter(
+                acknowledged_consumed = service_validation_ops._stored_counter(
                     acknowledged_data.get("consumed", 0),
                     field_name="acknowledged consumed",
                 )
-                acknowledged_time = _stored_counter(
+                acknowledged_time = service_validation_ops._stored_counter(
                     acknowledged_cursor.get("virtual_time_ms"),
                     field_name="virtual_time_ms",
                 )
@@ -12124,43 +5673,43 @@ class TrainingRunService:
                         status_code=409,
                     )
                 job["chunks"] = (
-                    _stored_counter(job.get("chunks"), field_name="chunks") + 1
+                    service_validation_ops._stored_counter(job.get("chunks"), field_name="chunks") + 1
                 )
                 job["queue_high_water"] = max(
-                    _stored_counter(
+                    service_validation_ops._stored_counter(
                         job.get("queue_high_water"), field_name="queue_high_water"
                     ),
                     1,
                 )
                 job["consumed"] = (
-                    _stored_counter(job.get("consumed"), field_name="consumed")
+                    service_validation_ops._stored_counter(job.get("consumed"), field_name="consumed")
                     + acknowledged_consumed
                 )
                 job["tail_reducer_events"] = (
-                    _stored_counter(
+                    service_validation_ops._stored_counter(
                         job.get("tail_reducer_events"),
                         field_name="tail_reducer_events",
                     )
                     + acknowledged_consumed
                 )
-                job["coalesced_projection_events"] = _stored_counter(
+                job["coalesced_projection_events"] = service_validation_ops._stored_counter(
                     job.get("coalesced_projection_events"),
                     field_name="coalesced_projection_events",
-                ) + _stored_counter(
+                ) + service_validation_ops._stored_counter(
                     acknowledged_data.get("coalesced_projection_events", 0),
                     field_name="acknowledged coalesced_projection_events",
                 )
-                job["published_projection_events"] = _stored_counter(
+                job["published_projection_events"] = service_validation_ops._stored_counter(
                     job.get("published_projection_events"),
                     field_name="published_projection_events",
-                ) + _stored_counter(
+                ) + service_validation_ops._stored_counter(
                     acknowledged_data.get("published_projection_events", 0),
                     field_name="acknowledged published_projection_events",
                 )
-                job["batch_reducer_events"] = _stored_counter(
+                job["batch_reducer_events"] = service_validation_ops._stored_counter(
                     job.get("batch_reducer_events"),
                     field_name="batch_reducer_events",
-                ) + _stored_counter(
+                ) + service_validation_ops._stored_counter(
                     acknowledged_data.get("batch_reducer_events", 0),
                     field_name="acknowledged batch_reducer_events",
                 )
@@ -12170,7 +5719,7 @@ class TrainingRunService:
                     command_id=command.command_id,
                     cursor=acknowledged_cursor,
                 )
-                job["simulated_account_liquidations"] = _stored_counter(
+                job["simulated_account_liquidations"] = service_validation_ops._stored_counter(
                     job.get("simulated_account_liquidations"),
                     field_name="simulated_account_liquidations",
                 ) + await self._reconcile_liquidations(
@@ -12189,18 +5738,18 @@ class TrainingRunService:
 
             if (
                 job.get("status") == "CANCELLED"
-                and plan.get("projection_delivery") == FINAL_STATE_PROJECTION_DELIVERY
-                and _stored_counter(job.get("consumed"), field_name="consumed") > 0
+                and plan.get("projection_delivery") == control_rules_ops.FINAL_STATE_PROJECTION_DELIVERY
+                and service_validation_ops._stored_counter(job.get("consumed"), field_name="consumed") > 0
             ):
-                cancelled_state = _stored_mapping(
+                cancelled_state = service_validation_ops._stored_mapping(
                     await self.replay_service.get_session_state(session_id),
                     field_name="adapter snapshot",
                 )
-                cancelled_cursor = _stored_mapping(
+                cancelled_cursor = service_validation_ops._stored_mapping(
                     cancelled_state.get("cursor"),
                     field_name="adapter cursor",
                 )
-                cancelled_time = _stored_counter(
+                cancelled_time = service_validation_ops._stored_counter(
                     cancelled_cursor.get("virtual_time_ms"),
                     field_name="virtual_time_ms",
                 )
@@ -12208,7 +5757,7 @@ class TrainingRunService:
                     protocol=REPLAY_PROTOCOL,
                     command_id=self._advance_part_id(
                         command,
-                        source_sequence=_stored_counter(
+                        source_sequence=service_validation_ops._stored_counter(
                             cancelled_cursor.get("source_sequence"),
                             field_name="source_sequence",
                         ),
@@ -12216,7 +5765,7 @@ class TrainingRunService:
                         target_virtual_time_ms=cancelled_time,
                     ),
                     client_instance_id=command.client_instance_id,
-                    expected_revision=_stored_counter(
+                    expected_revision=service_validation_ops._stored_counter(
                         cancelled_state.get("revision"),
                         field_name="revision",
                     ),
@@ -12241,7 +5790,7 @@ class TrainingRunService:
                         status_code=exc.http_status,
                         details=exc.details,
                     ) from exc
-                synchronized_cursor = _stored_mapping(
+                synchronized_cursor = service_validation_ops._stored_mapping(
                     synchronized.get("cursor"),
                     field_name="adapter cursor",
                 )
@@ -12253,14 +5802,14 @@ class TrainingRunService:
                 job["cancel_snapshot_published"] = True
 
             final_response = await self.replay_service.get_session(session_id)
-            final = _stored_mapping(
+            final = service_validation_ops._stored_mapping(
                 final_response.get("snapshot"), field_name="adapter snapshot"
             )
-            final_cursor = _stored_mapping(
+            final_cursor = service_validation_ops._stored_mapping(
                 final.get("cursor"), field_name="adapter cursor"
             )
             if prepared_book:
-                final_virtual_time = _stored_counter(
+                final_virtual_time = service_validation_ops._stored_counter(
                     final_cursor.get("virtual_time_ms"), field_name="virtual_time_ms"
                 )
                 if final_virtual_time != target_virtual_time_ms:
@@ -12309,14 +5858,14 @@ class TrainingRunService:
                     "observed_component_state_hash": component_hash,
                     "observed_report_hash": report_hash,
                     "observed_cursor": dict(final_cursor),
-                    "consumed_source_events": _stored_counter(
+                    "consumed_source_events": service_validation_ops._stored_counter(
                         job.get("consumed"), field_name="consumed"
                     ),
-                    "summary_skipped_events": _stored_counter(
+                    "summary_skipped_events": service_validation_ops._stored_counter(
                         job.get("summary_skipped_events"),
                         field_name="summary_skipped_events",
                     ),
-                    "tail_reducer_events": _stored_counter(
+                    "tail_reducer_events": service_validation_ops._stored_counter(
                         job.get("tail_reducer_events"),
                         field_name="tail_reducer_events",
                     ),
@@ -12348,29 +5897,29 @@ class TrainingRunService:
                 "cursor": final["cursor"],
                 "viewer_state": viewer.to_dict(),
                 "data": {
-                    "consumed": _stored_counter(
+                    "consumed": service_validation_ops._stored_counter(
                         job.get("consumed"), field_name="consumed"
                     ),
                     **({"event_stop": job.get("event_stop"),
                         "target_reached": self._cursor_time(final) >= target_virtual_time_ms}
                        if self._stop_on_event(command) else {}),
-                    "summary_skipped_events": _stored_counter(
+                    "summary_skipped_events": service_validation_ops._stored_counter(
                         job.get("summary_skipped_events"),
                         field_name="summary_skipped_events",
                     ),
-                    "tail_reducer_events": _stored_counter(
+                    "tail_reducer_events": service_validation_ops._stored_counter(
                         job.get("tail_reducer_events"),
                         field_name="tail_reducer_events",
                     ),
-                    "coalesced_projection_events": _stored_counter(
+                    "coalesced_projection_events": service_validation_ops._stored_counter(
                         job.get("coalesced_projection_events"),
                         field_name="coalesced_projection_events",
                     ),
-                    "published_projection_events": _stored_counter(
+                    "published_projection_events": service_validation_ops._stored_counter(
                         job.get("published_projection_events"),
                         field_name="published_projection_events",
                     ),
-                    "batch_reducer_events": _stored_counter(
+                    "batch_reducer_events": service_validation_ops._stored_counter(
                         job.get("batch_reducer_events"),
                         field_name="batch_reducer_events",
                     ),
@@ -12378,7 +5927,7 @@ class TrainingRunService:
                     "target_virtual_time_ms": target_virtual_time_ms,
                     "plan": resolved_plan,
                     "progress": progress,
-                    "simulated_account_liquidations": _stored_counter(
+                    "simulated_account_liquidations": service_validation_ops._stored_counter(
                         job.get("simulated_account_liquidations"),
                         field_name="simulated_account_liquidations",
                     ),
@@ -12398,7 +5947,7 @@ class TrainingRunService:
                 # returns 200 without leaving a completed job cancelable.
                 job["cancelable"] = False
                 asyncio.get_running_loop().call_later(
-                    ADVANCE_PROGRESS_RETENTION_SECONDS,
+                    control_rules_ops.ADVANCE_PROGRESS_RETENTION_SECONDS,
                     self._advance_jobs.pop,
                     key,
                     None,
@@ -12465,65 +6014,7 @@ class TrainingRunService:
 
     @staticmethod
     def _public_progress(job: Mapping[str, object]) -> dict[str, object]:
-        initial = _stored_counter(
-            job.get("initial_virtual_time_ms"), field_name="initial_virtual_time_ms"
-        )
-        target = _stored_counter(
-            job.get("target_virtual_time_ms"), field_name="target_virtual_time_ms"
-        )
-        current = min(
-            target,
-            max(
-                initial,
-                _stored_counter(
-                    job.get("current_virtual_time_ms"),
-                    field_name="current_virtual_time_ms",
-                ),
-            ),
-        )
-        span = target - initial
-        ratio_ppm = (
-            1_000_000 if span <= 0 else ((current - initial) * 1_000_000) // span
-        )
-        return {
-            "status": str(job["status"]),
-            "current_virtual_time_ms": current,
-            "target_virtual_time_ms": target,
-            "ratio_ppm": ratio_ppm,
-            "consumed": _stored_counter(job.get("consumed"), field_name="consumed"),
-            "summary_skipped_events": _stored_counter(
-                job.get("summary_skipped_events", 0),
-                field_name="summary_skipped_events",
-            ),
-            "tail_reducer_events": _stored_counter(
-                job.get("tail_reducer_events", 0),
-                field_name="tail_reducer_events",
-            ),
-            "coalesced_projection_events": _stored_counter(
-                job.get("coalesced_projection_events", 0),
-                field_name="coalesced_projection_events",
-            ),
-            "published_projection_events": _stored_counter(
-                job.get("published_projection_events", 0),
-                field_name="published_projection_events",
-            ),
-            "batch_reducer_events": _stored_counter(
-                job.get("batch_reducer_events", 0),
-                field_name="batch_reducer_events",
-            ),
-            "chunks": _stored_counter(job.get("chunks"), field_name="chunks"),
-            "cancelable": bool(job["cancelable"]),
-            "commit_boundary": "COMPLETE_ACTOR_COMMAND",
-            "chunk_event_limit": _stored_counter(
-                job.get("chunk_event_limit", 32), field_name="chunk_event_limit"
-            ),
-            "queue_high_water": _stored_counter(
-                job.get("queue_high_water", 0), field_name="queue_high_water"
-            ),
-            "plan": dict(
-                _stored_mapping(job.get("plan"), field_name="fast-forward plan")
-            ),
-        }
+        return control_rules_ops.public_progress(job)
 
     @staticmethod
     def _advance_part_id(
@@ -12533,11 +6024,7 @@ class TrainingRunService:
         virtual_time_ms: int,
         target_virtual_time_ms: int,
     ) -> str:
-        material = (
-            f"{command.run_id}:{command.command_id}:{source_sequence}:"
-            f"{virtual_time_ms}:{target_virtual_time_ms}"
-        ).encode("utf-8")
-        return f"v2part-{hashlib.sha256(material).hexdigest()[:40]}"
+        return control_rules_ops.advance_part_id(command, source_sequence=source_sequence, virtual_time_ms=virtual_time_ms, target_virtual_time_ms=target_virtual_time_ms)
 
     async def _set_display_interval(
         self,
@@ -12546,58 +6033,7 @@ class TrainingRunService:
         binding: Mapping[str, object],
         snapshot: Mapping[str, object],
     ) -> dict[str, object]:
-        payload = self._exact_payload(
-            command.payload,
-            {"display_interval", "expected_viewer_revision"},
-        )
-        interval = payload["display_interval"]
-        if not isinstance(interval, str):
-            raise TrainingRunError(
-                "REPLAY_CONTROL_INVALID",
-                "display_interval must be a string",
-                status_code=422,
-            )
-        base_interval = str(binding["base_interval"])
-        compatible_step_interval_ms(
-            base_interval=base_interval,
-            step_interval=interval,
-        )
-        expected_viewer_revision = payload["expected_viewer_revision"]
-        if (
-            isinstance(expected_viewer_revision, bool)
-            or not isinstance(expected_viewer_revision, int)
-            or expected_viewer_revision < 0
-        ):
-            raise TrainingRunError(
-                "REPLAY_CONTROL_INVALID",
-                "expected_viewer_revision must be a non-negative integer",
-                status_code=422,
-            )
-        viewer = await self.store.set_display_interval(
-            run_id=command.run_id,
-            display_interval=interval,
-            expected_revision=expected_viewer_revision,
-            command_id=command.command_id,
-            command=command.to_dict(),
-        )
-        cursor = dict(snapshot["cursor"])  # type: ignore[arg-type]
-        return {
-            "protocol": "replay.v3",
-            "run_id": command.run_id,
-            "session_id": snapshot["session_id"],
-            "command_id": command.command_id,
-            "revision": snapshot["revision"],
-            "sequence": snapshot["sequence"],
-            "state": snapshot["state"],
-            "state_hash": snapshot["state_hash"],
-            "cursor": cursor,
-            "viewer_state": viewer.to_dict(),
-            "data": {
-                "source_events_consumed": 0,
-                "domain_hash_unchanged": True,
-                "display_interval": interval,
-            },
-        }
+        return await self._display_service._set_display_interval(command=command, binding=binding, snapshot=snapshot)
 
     async def _validate_display_binding(
         self,
@@ -12608,35 +6044,7 @@ class TrainingRunService:
         display_interval: object,
         viewer_revision: object,
     ) -> tuple[str, int]:
-        if (
-            not isinstance(display_interval, str)
-            or isinstance(viewer_revision, bool)
-            or not isinstance(viewer_revision, int)
-            or viewer_revision < 0
-        ):
-            raise TrainingRunError(
-                "REPLAY_CONTROL_INVALID",
-                "display control binding is invalid",
-                status_code=422,
-            )
-        compatible_step_interval_ms(
-            base_interval=base_interval,
-            step_interval=display_interval,
-        )
-        submitted_view = await self.store.viewer_state_at_revision(
-            command.run_id,
-            viewer_revision,
-        )
-        if (
-            submitted_view.display_interval != display_interval
-            or submitted_view.selected_track_id != str(binding["selected_track_id"])
-        ):
-            raise TrainingRunError(
-                "VIEWER_REVISION_CONFLICT",
-                "display control does not match the bound viewer revision",
-                status_code=409,
-            )
-        return display_interval, viewer_revision
+        return await self._display_service._validate_display_binding(command=command, binding=binding, base_interval=base_interval, display_interval=display_interval, viewer_revision=viewer_revision)
 
     async def _display_advance_target(
         self,
@@ -12649,24 +6057,7 @@ class TrainingRunService:
         display_interval: object,
         viewer_revision: object,
     ) -> tuple[int, str, int]:
-        interval, revision = await self._validate_display_binding(
-            command=command,
-            binding=binding,
-            base_interval=base_interval,
-            display_interval=display_interval,
-            viewer_revision=viewer_revision,
-        )
-        return (
-            await self._source_aligned_display_target(
-                binding=binding,
-                current_virtual_time_ms=current_time,
-                base_interval=base_interval,
-                display_interval=interval,
-                count=count,
-            ),
-            interval,
-            revision,
-        )
+        return await self._display_service._display_advance_target(command=command, binding=binding, base_interval=base_interval, current_time=current_time, count=count, display_interval=display_interval, viewer_revision=viewer_revision)
 
     async def _display_source_bucket_anchor_ms(
         self,
@@ -12674,37 +6065,7 @@ class TrainingRunService:
         binding: Mapping[str, object],
         display_interval: str,
     ) -> int | None:
-        if display_interval == str(binding["base_interval"]):
-            return None
-        history_binding = await self.store.history_binding(
-            session_id=str(binding["adapter_session_id"]),
-            track_id=str(binding["selected_track_id"]),
-        )
-        cache_key = (
-            str(history_binding["run_id"]),
-            str(history_binding["track_id"]),
-            display_interval,
-            str(history_binding["track_dataset_epoch"]),
-        )
-        cached = self._display_source_grid_anchors.get(cache_key)
-        if cached is not None:
-            return cached
-        grid_binding = await self._attach_native_display_archive_pin(
-            history_binding,
-            display_interval=display_interval,
-            require_projection_grid=True,
-        )
-        raw_anchor = grid_binding.get("display_source_bucket_anchor_ms")
-        if raw_anchor is None:
-            return None
-        if isinstance(raw_anchor, bool) or not isinstance(raw_anchor, int):
-            raise TrainingRunError(
-                "HISTORY_SOURCE_INCOMPLETE",
-                "pinned native display grid anchor is invalid",
-                status_code=503,
-            )
-        self._display_source_grid_anchors[cache_key] = raw_anchor
-        return raw_anchor
+        return await self._display_service._display_source_bucket_anchor_ms(binding=binding, display_interval=display_interval)
 
     async def _source_aligned_display_target(
         self,
@@ -12715,39 +6076,11 @@ class TrainingRunService:
         display_interval: str,
         count: int,
     ) -> int:
-        actual_start_ms = _stored_counter(
-            binding["actual_replay_start_ms"],
-            field_name="actual_replay_start_ms",
-        )
-        synthetic_origin_ms = binding.get("synthetic_origin_ms")
-        public_start_ms = (
-            actual_start_ms
-            if synthetic_origin_ms is None
-            else _stored_counter(
-                synthetic_origin_ms,
-                field_name="synthetic_origin_ms",
-            )
-        )
-        source_bucket_anchor_ms = await self._display_source_bucket_anchor_ms(
-            binding=binding,
-            display_interval=display_interval,
-        )
-        return source_aligned_step_target_ms(
-            current_virtual_time_ms=current_virtual_time_ms,
-            actual_replay_start_ms=actual_start_ms,
-            public_replay_start_ms=public_start_ms,
-            source_bucket_anchor_ms=source_bucket_anchor_ms,
-            base_interval=base_interval,
-            step_interval=display_interval,
-            count=count,
-        )
+        return await self._display_service._source_aligned_display_target(binding=binding, current_virtual_time_ms=current_virtual_time_ms, base_interval=base_interval, display_interval=display_interval, count=count)
 
     @staticmethod
     def _legacy_playback_rate(value: object) -> int:
-        return control_rate(
-            10_000 if value == "MAX" else value,
-            field_name="rate",
-        )
+        return control_rules_ops.legacy_playback_rate(value)
 
     async def _playback_profile(
         self,
@@ -12764,95 +6097,7 @@ class TrainingRunService:
         It is used only to preserve adapter compatibility; the public clock is
         always normalized to replay.playback.v1.
         """
-
-        source_kind = str(binding["source_kind"])
-        base_interval = str(binding["base_interval"])
-        allowed = supported_playback_bases(
-            source_kind=source_kind,
-            full_track_count=full_track_count,
-        )
-        payload = command.payload
-        legacy = not payload or set(payload) == {"speed"}
-        if legacy:
-            actor_profile = actor.playback_snapshot()
-            profile_revision = actor_profile.get("profile_revision")
-            candidate_basis: AdvanceBasis
-            if (
-                isinstance(profile_revision, int)
-                and not isinstance(profile_revision, bool)
-                and profile_revision > 0
-                and actor_profile.get("basis") is not None
-            ):
-                candidate_basis = advance_basis(actor_profile["basis"])
-            else:
-                candidate_basis = default_playback_basis(source_kind)
-            basis = (
-                candidate_basis
-                if candidate_basis in allowed
-                else default_playback_basis(source_kind)
-            )
-            if set(payload) == {"speed"}:
-                rate = self._legacy_playback_rate(payload["speed"])
-            elif (
-                isinstance(profile_revision, int)
-                and not isinstance(profile_revision, bool)
-                and profile_revision > 0
-            ):
-                rate = control_rate(actor_profile.get("rate"))
-            else:
-                rate = self._legacy_playback_rate(selected_snapshot.get("speed", 1))
-            display_interval = (
-                actor_profile.get("display_interval")
-                if basis is AdvanceBasis.DISPLAY_BAR
-                else None
-            )
-            viewer_revision = (
-                actor_profile.get("viewer_revision")
-                if basis is AdvanceBasis.DISPLAY_BAR
-                else None
-            )
-            if basis is AdvanceBasis.DISPLAY_BAR:
-                (
-                    display_interval,
-                    viewer_revision,
-                ) = await self._validate_display_binding(
-                    command=command,
-                    binding=binding,
-                    base_interval=base_interval,
-                    display_interval=display_interval,
-                    viewer_revision=viewer_revision,
-                )
-            return basis, rate, display_interval, viewer_revision, True
-
-        basis = advance_basis(payload.get("basis"))
-        if basis not in allowed:
-            raise TrainingRunError(
-                "REPLAY_CONTROL_UNSUPPORTED",
-                "playback basis is unavailable for the current source and FULL-track topology",
-                status_code=409,
-                details={
-                    "basis": basis.value,
-                    "playback_bases": [item.value for item in allowed],
-                    "full_track_count": full_track_count,
-                },
-            )
-        expected = {"basis", "rate"}
-        if basis is AdvanceBasis.DISPLAY_BAR:
-            expected.update({"display_interval", "viewer_revision"})
-        normalized = self._exact_payload(payload, expected)
-        rate = control_rate(normalized["rate"])
-        if basis is AdvanceBasis.DISPLAY_BAR:
-            display_interval, viewer_revision = await self._validate_display_binding(
-                command=command,
-                binding=binding,
-                base_interval=base_interval,
-                display_interval=normalized["display_interval"],
-                viewer_revision=normalized["viewer_revision"],
-            )
-        else:
-            display_interval = None
-            viewer_revision = None
-        return basis, rate, display_interval, viewer_revision, False
+        return await self._display_service._playback_profile(command=command, binding=binding, selected_snapshot=selected_snapshot, full_track_count=full_track_count, actor=actor)
 
     async def _translate_control(
         self,
@@ -12861,376 +6106,25 @@ class TrainingRunService:
         binding: Mapping[str, object],
         snapshot: Mapping[str, object],
     ) -> tuple[CommandType, dict[str, object], dict[str, object]]:
-        if "stop_on_event" in command.payload and command.type in {
-            ReplayV2CommandType.ADVANCE, ReplayV2CommandType.ADVANCE_BY,
-            ReplayV2CommandType.ADVANCE_TO, ReplayV2CommandType.STEP_DISPLAY,
-        }:
-            self._stop_on_event(command)
-            command = replace(command, payload={k: v for k, v in command.payload.items() if k != "stop_on_event"})
-        source_kind = str(binding["source_kind"])
-        base_interval = str(binding["base_interval"])
-        cursor = snapshot["cursor"]
-        if not isinstance(cursor, Mapping):
-            raise TrainingRunError(
-                "TRAINING_RUN_STORAGE_DEGRADED",
-                "adapter cursor is invalid",
-                status_code=503,
-            )
-        current_time = int(cursor["virtual_time_ms"])
-        command_type = command.type
-        plan: dict[str, object] = {
-            "contract": ADVANCE_CONTRACT_VERSION,
-            "mode": "DIRECT_ADAPTER",
-            "cancelable": False,
-            "source_kind": source_kind,
-        }
-
-        if command_type is ReplayV2CommandType.ACQUIRE_CONTROLLER:
-            payload = self._exact_payload(command.payload, {"takeover"})
-            if not isinstance(payload["takeover"], bool):
-                raise TrainingRunError(
-                    "REPLAY_CONTROL_INVALID",
-                    "takeover must be a boolean",
-                    status_code=422,
-                )
-            return CommandType.ACQUIRE_CONTROLLER, dict(payload), plan
-        if command_type is ReplayV2CommandType.TAKEOVER_CONTROLLER:
-            self._exact_payload(command.payload, set())
-            return CommandType.ACQUIRE_CONTROLLER, {"takeover": True}, plan
-        direct_empty = {
-            ReplayV2CommandType.RELEASE_CONTROLLER: CommandType.RELEASE_CONTROLLER,
-            ReplayV2CommandType.PLAY: CommandType.PLAY,
-            ReplayV2CommandType.PAUSE: CommandType.PAUSE,
-        }
-        if command_type in direct_empty:
-            self._exact_payload(command.payload, set())
-            return direct_empty[command_type], {}, plan
-        if command_type is ReplayV2CommandType.SET_SPEED:
-            payload = self._exact_payload(command.payload, {"speed"})
-            return CommandType.SET_SPEED, dict(payload), plan
-        if command_type is ReplayV2CommandType.END:
-            payload = self._exact_payload(
-                command.payload,
-                {"open_order_disposition", "position_disposition"},
-            )
-            return CommandType.END_SESSION, dict(payload), plan
-        if command_type is ReplayV2CommandType.ADVANCE:
-            payload = command.payload
-            basis = advance_basis(payload.get("basis"))
-            allowed = supported_advance_bases(
-                source_kind=source_kind,
-                full_track_count=1,
-            )
-            if basis not in allowed:
-                raise TrainingRunError(
-                    "REPLAY_CONTROL_UNSUPPORTED",
-                    "advance basis is unavailable for the current source",
-                    status_code=409,
-                    details={
-                        "basis": basis.value,
-                        "supported_bases": [item.value for item in allowed],
-                    },
-                )
-            if basis is AdvanceBasis.DISPLAY_BAR:
-                normalized = self._exact_payload(
-                    payload,
-                    {"basis", "count", "display_interval", "viewer_revision"},
-                )
-                count = control_count(normalized["count"])
-                target, interval, viewer_revision = await self._display_advance_target(
-                    command=command,
-                    binding=binding,
-                    base_interval=base_interval,
-                    current_time=current_time,
-                    count=count,
-                    display_interval=normalized["display_interval"],
-                    viewer_revision=normalized["viewer_revision"],
-                )
-                return (
-                    CommandType.ADVANCE_BY,
-                    {"ms": target - current_time},
-                    {
-                        **plan,
-                        "basis": basis.value,
-                        "count": count,
-                        "display_interval": interval,
-                        "viewer_revision": viewer_revision,
-                        "target_virtual_time_ms": target,
-                    },
-                )
-            if basis is AdvanceBasis.BASE_BAR:
-                normalized = self._exact_payload(payload, {"basis", "count"})
-                count = control_count(normalized["count"])
-                if source_kind == "BAR":
-                    return (
-                        CommandType.STEP,
-                        {"count": count},
-                        {**plan, "basis": basis.value, "count": count},
-                    )
-                target = aligned_step_target_ms(
-                    current_virtual_time_ms=current_time,
-                    base_interval=base_interval,
-                    step_interval=base_interval,
-                    count=count,
-                )
-                return (
-                    CommandType.ADVANCE_BY,
-                    {"ms": target - current_time},
-                    {
-                        **plan,
-                        "basis": basis.value,
-                        "count": count,
-                        "target_virtual_time_ms": target,
-                    },
-                )
-            if basis is AdvanceBasis.SOURCE_EVENT:
-                normalized = self._exact_payload(payload, {"basis", "count"})
-                count = control_count(normalized["count"])
-                return (
-                    CommandType.STEP,
-                    {"count": count},
-                    {**plan, "basis": basis.value, "count": count},
-                )
-            normalized = self._exact_payload(payload, {"basis", "duration_ms"})
-            duration = virtual_duration_ms(
-                normalized["duration_ms"],
-                source_kind=source_kind,
-                base_interval=base_interval,
-            )
-            if current_time > MAX_TIMESTAMP_MS - duration:
-                raise TrainingRunError(
-                    "REPLAY_CONTROL_INVALID",
-                    "advance target exceeds the timestamp range",
-                    status_code=422,
-                )
-            target = current_time + duration
-            return (
-                CommandType.ADVANCE_BY,
-                {"ms": duration},
-                {
-                    **plan,
-                    "basis": basis.value,
-                    "duration_ms": duration,
-                    "mode": "FULL_EVENT_SCAN",
-                    "cancelable": True,
-                    "target_virtual_time_ms": target,
-                },
-            )
-        if command_type is ReplayV2CommandType.STEP_EVENT:
-            if source_kind != "AGG_TRADE":
-                raise TrainingRunError(
-                    "REPLAY_CONTROL_UNSUPPORTED",
-                    "STEP_EVENT is available only for AGG_TRADE runs",
-                    status_code=409,
-                )
-            payload = self._exact_payload(command.payload, {"count"})
-            count = control_count(payload["count"])
-            return (
-                CommandType.STEP,
-                {"count": count},
-                {
-                    **plan,
-                    "basis": AdvanceBasis.SOURCE_EVENT.value,
-                    "count": count,
-                    "grain": "EVENT",
-                    "legacy_alias": command_type.value,
-                },
-            )
-        if command_type is ReplayV2CommandType.STEP_BASE:
-            payload = self._exact_payload(command.payload, {"count"})
-            count = control_count(payload["count"])
-            if source_kind == "BAR":
-                return (
-                    CommandType.STEP,
-                    {"count": count},
-                    {
-                        **plan,
-                        "basis": AdvanceBasis.BASE_BAR.value,
-                        "count": count,
-                        "grain": "BASE",
-                        "legacy_alias": command_type.value,
-                    },
-                )
-            target = aligned_step_target_ms(
-                current_virtual_time_ms=current_time,
-                base_interval=base_interval,
-                step_interval=base_interval,
-                count=count,
-            )
-            return (
-                CommandType.ADVANCE_BY,
-                {"ms": target - current_time},
-                {
-                    **plan,
-                    "basis": AdvanceBasis.BASE_BAR.value,
-                    "count": count,
-                    "grain": "BASE",
-                    "legacy_alias": command_type.value,
-                    "target_virtual_time_ms": target,
-                },
-            )
-        if command_type is ReplayV2CommandType.STEP_DISPLAY:
-            payload = self._exact_payload(
-                command.payload,
-                {"count", "display_interval", "viewer_revision"},
-            )
-            count = control_count(payload["count"])
-            target, interval, viewer_revision = await self._display_advance_target(
-                command=command,
-                binding=binding,
-                base_interval=base_interval,
-                current_time=current_time,
-                count=count,
-                display_interval=payload["display_interval"],
-                viewer_revision=payload["viewer_revision"],
-            )
-            return (
-                CommandType.ADVANCE_BY,
-                {"ms": target - current_time},
-                {
-                    **plan,
-                    "basis": AdvanceBasis.DISPLAY_BAR.value,
-                    "count": count,
-                    "grain": "DISPLAY",
-                    "legacy_alias": command_type.value,
-                    "display_interval": interval,
-                    "viewer_revision": viewer_revision,
-                    "target_virtual_time_ms": target,
-                },
-            )
-        if command_type is ReplayV2CommandType.ADVANCE_BY:
-            payload = self._exact_payload(command.payload, {"ms"})
-            duration = payload["ms"]
-            if source_kind == "BAR":
-                duration = validate_bar_duration_ms(
-                    duration_ms=duration,
-                    base_interval=base_interval,
-                )
-            elif (
-                isinstance(duration, bool)
-                or not isinstance(duration, int)
-                or duration <= 0
-            ):
-                raise TrainingRunError(
-                    "REPLAY_CONTROL_INVALID",
-                    "advance duration must be a positive integer",
-                    status_code=422,
-                )
-            if current_time > MAX_TIMESTAMP_MS - duration:
-                raise TrainingRunError(
-                    "REPLAY_CONTROL_INVALID",
-                    "advance target exceeds the timestamp range",
-                    status_code=422,
-                )
-            target = current_time + duration
-            return (
-                CommandType.ADVANCE_BY,
-                {"ms": duration},
-                {
-                    **plan,
-                    "basis": AdvanceBasis.VIRTUAL_TIME.value,
-                    "duration_ms": duration,
-                    "legacy_alias": command_type.value,
-                    "mode": "FULL_EVENT_SCAN",
-                    "cancelable": True,
-                    "target_virtual_time_ms": target,
-                },
-            )
-        if command_type is ReplayV2CommandType.ADVANCE_TO:
-            payload = self._exact_payload(command.payload, {"virtual_time_ms"})
-            target = payload["virtual_time_ms"]
-            if (
-                isinstance(target, bool)
-                or not isinstance(target, int)
-                or target <= current_time
-                or target > MAX_TIMESTAMP_MS
-            ):
-                raise TrainingRunError(
-                    "REPLAY_CONTROL_INVALID",
-                    "advance target must be ahead of the current cursor",
-                    status_code=422,
-                )
-            duration = target - current_time
-            if source_kind == "BAR":
-                validate_bar_duration_ms(
-                    duration_ms=duration,
-                    base_interval=base_interval,
-                )
-            return (
-                CommandType.ADVANCE_BY,
-                {"ms": duration},
-                {
-                    **plan,
-                    "basis": AdvanceBasis.VIRTUAL_TIME.value,
-                    "duration_ms": duration,
-                    "legacy_alias": command_type.value,
-                    "mode": "FULL_EVENT_SCAN",
-                    "cancelable": True,
-                    "target_virtual_time_ms": target,
-                },
-            )
-        raise TrainingRunError(
-            "REPLAY_CONTROL_UNSUPPORTED",
-            f"command {command_type.value} is not implemented in Phase 3",
-            status_code=409,
-        )
+        return await self._display_service._translate_control(command=command, binding=binding, snapshot=snapshot)
 
     @staticmethod
     def _snapshot(session: Mapping[str, object]) -> Mapping[str, object]:
-        snapshot = session.get("snapshot")
-        if not isinstance(snapshot, Mapping):
-            raise TrainingRunError(
-                "TRAINING_RUN_STORAGE_DEGRADED",
-                "adapter snapshot is invalid",
-                status_code=503,
-            )
-        return snapshot
+        return service_validation_ops.adapter_snapshot(session)
 
     @staticmethod
     def _assert_expected_cursor(
         command: ReplayV2Command,
         session: Mapping[str, object],
     ) -> Mapping[str, object]:
-        snapshot = TrainingRunService._snapshot(session)
-        cursor = snapshot.get("cursor")
-        if not isinstance(cursor, Mapping):
-            raise TrainingRunError(
-                "TRAINING_RUN_STORAGE_DEGRADED",
-                "adapter cursor is invalid",
-                status_code=503,
-            )
-        actual = {
-            "virtual_time_ms": cursor.get("virtual_time_ms"),
-            "source_sequence": cursor.get("source_sequence"),
-            "revision": snapshot.get("revision"),
-        }
-        if actual != command.expected_cursor.to_dict():
-            raise TrainingRunError(
-                "REVISION_CONFLICT",
-                "command cursor does not match the authoritative run cursor",
-                status_code=409,
-                details={
-                    "expected": command.expected_cursor.to_dict(),
-                    "actual": actual,
-                },
-            )
-        return snapshot
+        return service_validation_ops.assert_expected_cursor(command, session)
 
     @staticmethod
     def _exact_payload(
         payload: Mapping[str, object],
         expected: set[str],
     ) -> Mapping[str, object]:
-        missing = expected - set(payload)
-        unknown = set(payload) - expected
-        if missing or unknown:
-            raise TrainingRunError(
-                "REPLAY_CONTROL_INVALID",
-                "command payload fields do not match the control contract",
-                status_code=422,
-                details={"missing": sorted(missing), "unknown": sorted(unknown)},
-            )
-        return payload
+        return service_validation_ops.exact_payload(payload, expected)
 
     @classmethod
     def _order_payload_with_optional_leverage(
@@ -13238,68 +6132,11 @@ class TrainingRunService:
         payload: Mapping[str, object],
         expected: set[str],
     ) -> Mapping[str, object]:
-        """Exact payload contract with optional per-order leverage ≤ max."""
-
-        data = dict(payload)
-        leverage = data.pop("leverage", None)
-        position_side = data.pop("position_side", None)
-        validated = dict(cls._exact_payload(data, expected))
-        if position_side is not None:
-            if position_side not in {"LONG", "SHORT"}:
-                raise TrainingRunError(
-                    "REPLAY_CONTROL_INVALID",
-                    "position_side must be LONG or SHORT",
-                    status_code=422,
-                )
-            validated["position_side"] = position_side
-        if leverage is not None:
-            if not isinstance(leverage, str):
-                raise TrainingRunError(
-                    "REPLAY_CONTROL_INVALID",
-                    "leverage must be a canonical Decimal string",
-                    status_code=422,
-                )
-            try:
-                normalized = normalize_decimal_string(leverage, field_name="leverage")
-            except (TypeError, ValueError) as exc:
-                raise TrainingRunError(
-                    "REPLAY_CONTROL_INVALID",
-                    "leverage is invalid",
-                    status_code=422,
-                ) from exc
-            if Decimal(normalized) < 1:
-                raise TrainingRunError(
-                    "REPLAY_CONTROL_INVALID",
-                    "leverage must be at least 1",
-                    status_code=422,
-                )
-            validated["leverage"] = normalized
-        return validated
+        return order_rules_ops.order_payload_with_optional_leverage(payload, expected)
 
     @staticmethod
     def _selection_warmup_bars(request: TrainingRunCreateRequest) -> int:
-        visible = request.visible_history_lookback
-        if visible is None or visible.mode is VisibleHistoryMode.ALL_AVAILABLE:
-            return request.indicator_warmup_bars
-        assert visible.duration_ms is not None
-        interval_ms = parse_interval_ms(request.base_interval)
-        if interval_ms is None:
-            raise TrainingRunError(
-                "VISIBLE_HISTORY_INTERVAL_MISMATCH",
-                "visible history requires a fixed base interval",
-                status_code=422,
-            )
-        if visible.duration_ms % interval_ms:
-            raise TrainingRunError(
-                "VISIBLE_HISTORY_INTERVAL_MISMATCH",
-                "visible history duration must be an exact base-interval multiple",
-                status_code=422,
-                details={"base_interval_ms": interval_ms},
-            )
-        return max(
-            request.indicator_warmup_bars,
-            visible.duration_ms // interval_ms,
-        )
+        return admission_rules_ops.selection_warmup_bars(request)
 
     @staticmethod
     def _adapter_config(
@@ -13307,197 +6144,39 @@ class TrainingRunService:
         *,
         warmup_bars: int | None = None,
     ) -> ReplaySessionConfig:
-        return ReplaySessionConfig(
-            protocol=REPLAY_PROTOCOL,
-            source_kind=(
-                SourceKind.BAR
-                if request.source_kind is ReplaySource.BAR
-                else SourceKind.AGG_TRADE
-            ),
-            exchange=request.exchange,
-            market_type=request.market_type,
-            symbol=request.symbol,
-            base_interval=request.base_interval,
-            # Phase 3 keeps the adapter projection at the atomic base interval.
-            # Mutable display projection lives in replay_training_viewer_state.
-            display_interval=request.base_interval,
-            start_policy=(
-                StartPolicy.MANUAL
-                if request.start_mode is StartMode.MANUAL
-                else StartPolicy.RANDOM_ELIGIBLE
-            ),
-            requested_start_ms=request.requested_start_ms,
-            warmup_bars=(
-                request.indicator_warmup_bars if warmup_bars is None else warmup_bars
-            ),
-            horizon_ms=request.forward_cache_ms,
-            random_seed=0 if request.random_seed is None else request.random_seed,
-            quality_mode=QualityMode.EXACT,
-            blind_mode=(
-                request.time_disclosure_policy is not TimeDisclosurePolicy.NONE
-            ),
-            initial_equity=request.initial_equity,
-            quote_asset=request.settlement_asset,
-            execution_model=ExecutionModel.PAPER_LINEAR_V1,
-            fee_model=FeeModel(request.maker_fee_bps, request.taker_fee_bps),
-            slippage_model=SlippageModel(
-                SlippageKind.FIXED_BPS,
-                request.market_slippage_bps,
-            ),
-            max_leverage=request.max_leverage,
-            pause_on_controller_loss=True,
-            position_mode=request.position_mode.value,
-        )
+        return admission_rules_ops.adapter_config(request, warmup_bars=warmup_bars)
 
     @staticmethod
     def _identifier(value: object, *, field_name: str) -> str:
-        try:
-            return validate_identifier(value, field_name=field_name)
-        except (TypeError, ValueError) as exc:
-            raise TrainingRunError(
-                "TRAINING_RUN_INVALID",
-                f"{field_name} is invalid",
-                status_code=422,
-            ) from exc
+        return service_validation_ops.identifier(value, field_name=field_name)
 
     @staticmethod
     def _digest(value: object, *, field_name: str) -> str:
-        if (
-            not isinstance(value, str)
-            or len(value) != 71
-            or not value.startswith("sha256:")
-        ):
-            raise TrainingRunError(
-                "TRAINING_RUN_INVALID",
-                f"{field_name} is invalid",
-                status_code=422,
-            )
-        try:
-            int(value[7:], 16)
-        except ValueError as exc:
-            raise TrainingRunError(
-                "TRAINING_RUN_INVALID",
-                f"{field_name} is invalid",
-                status_code=422,
-            ) from exc
-        return value
+        return service_validation_ops.digest(value, field_name=field_name)
 
     def _authoritative_start_request(
         self,
         request: TrainingRunCreateRequest,
     ) -> TrainingRunCreateRequest:
-        if request.start_mode is StartMode.MANUAL:
-            return replace(request, random_seed=None)
-        return replace(request, random_seed=self._authoritative_random_seed())
+        return self._admission_service._authoritative_start_request(request)
 
     def _authoritative_random_seed(self) -> int:
-        try:
-            seed = validate_v2_counter(
-                self._random_seed_factory(),
-                field_name="server random_seed",
-            )
-        except (TypeError, ValueError, RuntimeError, StopIteration) as exc:
-            raise TrainingRunError(
-                "TRAINING_RANDOM_SEED_UNAVAILABLE",
-                "server could not generate an authoritative random start seed",
-                status_code=503,
-            ) from exc
-        return seed
+        return self._admission_service._authoritative_random_seed()
 
     @staticmethod
     def _catalog_identity_key(entry: Mapping[str, object]) -> tuple[str, str, str]:
-        identity = entry.get("identity")
-        if not isinstance(identity, Mapping):
-            return ("", "", "")
-        return (
-            str(identity.get("exchange", "")),
-            str(identity.get("market_type", "")),
-            str(identity.get("symbol", "")),
-        )
+        return admission_rules_ops.catalog_identity_key(entry)
 
     @staticmethod
     def _market_start_compatibility(
         entry: Mapping[str, object],
         committed_start_ms: int,
     ) -> dict[str, object]:
-        interval = entry.get("selected_base_interval")
-        if not isinstance(interval, str):
-            return {
-                "state": "UNSUPPORTED",
-                "code": "MARKET_MODE_INCOMPATIBLE",
-                "message": "当前训练参数没有可用的精确基础周期。",
-            }
-        interval_ms = parse_interval_ms(interval)
-        if interval_ms is None:
-            return {
-                "state": "UNSUPPORTED",
-                "code": "START_NOT_ALIGNED",
-                "message": "本局固定开始时间无法对齐该商品的基础周期。",
-            }
-        raw_ranges = entry.get("eligible_ranges")
-        within_range_but_unaligned = False
-        if isinstance(raw_ranges, list):
-            for raw_range in raw_ranges:
-                if not isinstance(raw_range, Mapping):
-                    continue
-                first = raw_range.get("first_start_ms")
-                last = raw_range.get("last_start_ms")
-                step = raw_range.get("interval_ms")
-                if (
-                    isinstance(first, int)
-                    and not isinstance(first, bool)
-                    and isinstance(last, int)
-                    and not isinstance(last, bool)
-                    and isinstance(step, int)
-                    and not isinstance(step, bool)
-                    and step > 0
-                    and first <= committed_start_ms <= last
-                ):
-                    if (committed_start_ms - first) % step == 0:
-                        return {
-                            "state": "READY",
-                            "code": "TIME_COMPATIBLE",
-                            "message": "该商品支持本局已冻结的开始时间。",
-                        }
-                    within_range_but_unaligned = True
-        if within_range_but_unaligned:
-            return {
-                "state": "UNSUPPORTED",
-                "code": "START_NOT_ALIGNED",
-                "message": "本局固定开始时间无法对齐该商品的基础周期。",
-            }
-        bounds = entry.get("bounds")
-        earliest = (
-            bounds.get("earliest_open_ms") if isinstance(bounds, Mapping) else None
-        )
-        if isinstance(earliest, int) and committed_start_ms < earliest:
-            return {
-                "state": "UNSUPPORTED",
-                "code": "MARKET_NOT_LISTED_AT_START",
-                "message": "本局开始时该商品尚未上市或尚无历史数据。",
-            }
-        return {
-            "state": "UNSUPPORTED",
-            "code": "MARKET_COVERAGE_INSUFFICIENT",
-            "message": "该商品在本局固定开始时间缺少预热、连续历史或前向覆盖。",
-        }
+        return admission_rules_ops.market_start_compatibility(entry, committed_start_ms)
 
     @staticmethod
     def _progressive_admission_settings(setup, initial_horizon_ms):
-        settings = setup.to_dict()
-        if initial_horizon_ms is not None:
-            if (type(initial_horizon_ms) is not int or initial_horizon_ms < 60_000
-                    or initial_horizon_ms % 60_000
-                    or initial_horizon_ms > settings["forward_cache_ms"]
-                    or settings["source_kind"] != "BAR"
-                    or settings["start_mode"] != "MANUAL"):
-                raise TrainingRunError("PROGRESSIVE_PREPARATION_INVALID",
-                    "progressive admission requires a fixed BAR start and aligned initial range",
-                    status_code=422)
-            # Admission needs only the published prefix. Persist the original
-            # setup and use its full range for account/dependency commitments.
-            settings = {**settings, "forward_cache_ms": initial_horizon_ms}
-        return settings
+        return admission_rules_ops.progressive_admission_settings(setup, initial_horizon_ms)
 
     async def _require_market_at_committed_start(
         self,
@@ -13507,340 +6186,35 @@ class TrainingRunService:
         commitment: Mapping[str, object],
         progressive_initial_horizon_ms: int | None = None,
     ) -> None:
-        settings = self._progressive_admission_settings(setup, progressive_initial_horizon_ms)
-        catalog = await self.replay_service.catalog(
-            warmup_bars=int(settings["indicator_warmup_bars"]),
-            horizon_ms=int(settings["forward_cache_ms"]),
-            quality_mode="exact",
-            blind_mode=False,
-            source_kind=str(settings["source_kind"]),
-        )
-        if catalog["catalog_epoch"] != selection.catalog_epoch:
-            raise TrainingRunError(
-                "CATALOG_EPOCH_MISMATCH",
-                "data capability changed after validation; refresh and try again",
-                status_code=409,
-            )
-        identity = (selection.exchange, selection.market_type, selection.symbol)
-        entry = next(
-            (
-                item
-                for item in cast(list[Mapping[str, object]], catalog["entries"])
-                if self._catalog_identity_key(item) == identity
-            ),
-            None,
-        )
-        if entry is None:
-            compatibility = {
-                "state": "UNSUPPORTED",
-                "code": "MARKET_NOT_IN_CATALOG",
-                "message": "该商品不在当前回放能力目录中。",
-            }
-        elif entry.get("selected_base_interval") != selection.base_interval:
-            compatibility = {
-                "state": "UNSUPPORTED",
-                "code": "MARKET_MODE_INCOMPATIBLE",
-                "message": "所选基础周期与当前精确回放能力不兼容。",
-            }
-        else:
-            compatibility = self._market_start_compatibility(
-                entry,
-                int(commitment["committed_start_ms"]),
-            )
-            if compatibility["state"] == "READY":
-                compatibility = self._setup_market_compatibility(
-                    settings,
-                    entry,
-                    capability_admission=await self._setup_capability_admission(
-                        settings
-                    ),
-                    committed_start_ms=int(commitment["committed_start_ms"]),
-                )
-        if compatibility["state"] != "READY":
-            raise TrainingRunError(
-                str(compatibility["code"]),
-                str(compatibility["message"]),
-                status_code=409,
-                details={
-                    "requires_new_run": True,
-                    "time_commitment_hash": commitment["commitment_hash"],
-                },
-            )
+        return await self._admission_service._require_market_at_committed_start(selection=selection, setup=setup, commitment=commitment, progressive_initial_horizon_ms=progressive_initial_horizon_ms)
 
     async def _source_catalog_for_setup(
         self,
         settings: Mapping[str, object],
     ) -> dict[str, object]:
-        return await self.replay_service.catalog(
-            warmup_bars=int(settings["indicator_warmup_bars"]),
-            horizon_ms=int(settings["forward_cache_ms"]),
-            quality_mode="exact",
-            blind_mode=False,
-            source_kind=str(settings["source_kind"]),
-        )
+        return await self._admission_service._source_catalog_for_setup(settings)
 
     @staticmethod
     def _setup_market_compatibility(
         settings: Mapping[str, object],
         entry: Mapping[str, object],
         *,
-        capability_admission: Mapping[tuple[str, str, str], _MarketSetupAdmission],
+        capability_admission: Mapping[tuple[str, str, str], admission_rules_ops._MarketSetupAdmission],
         committed_start_ms: int | None,
     ) -> dict[str, object]:
-        identity = entry.get("identity")
-        exchange = str(identity.get("exchange", "")) if isinstance(identity, Mapping) else ""
-        market_type = (
-            str(identity.get("market_type", ""))
-            if isinstance(identity, Mapping)
-            else ""
-        )
-        if settings.get("position_mode") == "HEDGE" and (
-            exchange != "binance" or market_type != "futures"
-        ):
-            return {
-                "state": "UNSUPPORTED",
-                "code": "HEDGE_BINANCE_USDM_REQUIRED",
-                "message": "双向持仓当前只支持 Binance futures（USD-M 线性合约）。",
-            }
-        if settings.get("book_mode") == "BOOK_ASSISTED_REQUIRED" and (
-            exchange != "binance" or market_type != "futures"
-        ):
-            return {
-                "state": "UNSUPPORTED",
-                "code": "BOOK_BINANCE_USDM_REQUIRED",
-                "message": "历史盘口辅助当前只支持 Binance futures（USD-M）。",
-            }
-        identity_key = (exchange, market_type, str(identity.get("symbol", "")))
-        admission = capability_admission.get(identity_key)
-        requires_local_capability = (
-            settings.get("book_mode") == "BOOK_ASSISTED_REQUIRED"
-            or settings.get("account_data_mode") == "HISTORICAL_EXACT"
-        )
-        if requires_local_capability and admission is None:
-            return {
-                "state": "UNSUPPORTED",
-                "code": "REQUIRED_HISTORY_UNAVAILABLE",
-                "message": (
-                    "该商品缺少本局要求的完整精确账户历史或连续历史盘口。"
-                ),
-            }
-        interval_ms = parse_interval_ms(str(entry.get("selected_base_interval", "")))
-        required_span_ms = int(settings.get("forward_cache_ms", 0))
-        book_interval_ms = (
-            interval_ms
-            if settings.get("book_mode") == "BOOK_ASSISTED_REQUIRED"
-            and interval_ms is not None
-            else 0
-        )
-        if admission is not None and committed_start_ms is not None and not any(
-            first <= committed_start_ms <= last
-            for first, last in admission.eligible_start_windows(
-                required_span_ms,
-                book_interval_ms=book_interval_ms,
-            )
-        ):
-            return {
-                "state": "UNSUPPORTED",
-                "code": admission.code,
-                "message": admission.message,
-            }
-        return {
-            "state": "READY",
-            "code": "SETUP_COMPATIBLE",
-            "message": "该商品支持本局已选择的账户与执行模式。",
-        }
+        return admission_rules_ops.setup_market_compatibility(settings, entry, capability_admission=capability_admission, committed_start_ms=committed_start_ms)
 
     async def _setup_capability_admission(
         self,
         settings: Mapping[str, object],
-    ) -> dict[tuple[str, str, str], _MarketSetupAdmission]:
-        require_book = settings.get("book_mode") == "BOOK_ASSISTED_REQUIRED"
-        require_account = settings.get("account_data_mode") == "HISTORICAL_EXACT"
-        if not require_book and not require_account:
-            return {}
-
-        settlement_asset = str(settings.get("settlement_asset", ""))
-
-        def read(
-            connection: sqlite3.Connection,
-        ) -> dict[tuple[str, str, str], _MarketSetupAdmission]:
-            book_windows: dict[tuple[str, str, str], list[tuple[int, int]]] = {}
-            books_by_ref: dict[
-                tuple[str, str, str],
-                tuple[tuple[str, str, str], int, int],
-            ] = {}
-            if require_book and self.historical_books.enabled:
-                for row in connection.execute(
-                    """
-                    SELECT archive_id, dataset_epoch, checksum_sha256,
-                           exchange, market_type, symbol,
-                           range_start_ms, range_end_ms, local_path
-                    FROM replay_historical_book_archive
-                    WHERE health = 'READY' AND coverage_state = 'EXACT'
-                      AND continuity_state = 'CONTIGUOUS'
-                    """
-                ).fetchall():
-                    key = (str(row["exchange"]), str(row["market_type"]), str(row["symbol"]))
-                    if not isinstance(row["local_path"], str) or not row["local_path"]:
-                        continue
-                    window = (int(row["range_start_ms"]), int(row["range_end_ms"]))
-                    book_windows.setdefault(key, []).append(window)
-                    books_by_ref[
-                        (
-                            str(row["archive_id"]),
-                            str(row["dataset_epoch"]),
-                            str(row["checksum_sha256"]),
-                        )
-                    ] = (key, *window)
-
-            account_windows: dict[tuple[str, str, str], list[tuple[int, int]]] = {}
-            if require_account and self.account_history.enabled:
-                funding_clause = (
-                    " AND funding_count > 0"
-                    if settings.get("funding_mode") == "HISTORICAL_EXACT"
-                    else ""
-                )
-                for row in connection.execute(
-                    f"""
-                    SELECT exchange, market_type, symbol,
-                           range_start_ms, range_end_ms, local_path
-                    FROM replay_account_history_archive
-                    WHERE health = 'READY' AND settlement_asset = ?{funding_clause}
-                    """,
-                    (settlement_asset,),
-                ).fetchall():
-                    key = (str(row["exchange"]), str(row["market_type"]), str(row["symbol"]))
-                    if not isinstance(row["local_path"], str) or not row["local_path"]:
-                        continue
-                    account_windows.setdefault(key, []).append(
-                        (int(row["range_start_ms"]), int(row["range_end_ms"]))
-                    )
-
-            hedge_book_pairs: dict[
-                tuple[str, str, str],
-                list[tuple[int, int, int, int]],
-            ] = {}
-            require_exact_hedge = (
-                settings.get("position_mode") == "HEDGE" and require_book
-            )
-            if require_exact_hedge:
-                simulations: list[tuple[sqlite3.Row, set[str]]] = []
-                for simulation in connection.execute(
-                    """
-                    SELECT range_start_ms, range_end_ms, required_symbols_json,
-                           local_path
-                    FROM replay_hedge_simulation_manifest
-                    WHERE health = 'READY' AND settlement_asset = ?
-                    """,
-                    (settlement_asset,),
-                ).fetchall():
-                    if not isinstance(simulation["local_path"], str) or not simulation["local_path"]:
-                        continue
-                    try:
-                        required_symbols = json.loads(
-                            str(simulation["required_symbols_json"])
-                        )
-                    except (TypeError, ValueError, json.JSONDecodeError):
-                        continue
-                    if isinstance(required_symbols, list):
-                        simulations.append(
-                            (simulation, {str(item) for item in required_symbols})
-                        )
-                for public in connection.execute(
-                    """
-                    SELECT exchange, market_type, symbol, settlement_asset,
-                           range_start_ms, range_end_ms,
-                           l2_archive_id, l2_dataset_epoch, l2_checksum_sha256,
-                           local_path
-                    FROM replay_hedge_public_archive
-                    WHERE health = 'READY' AND settlement_asset = ?
-                      AND archive_id NOT LIKE 'hybrid-public-%'
-                    """,
-                    (settlement_asset,),
-                ).fetchall():
-                    if not isinstance(public["local_path"], str) or not public["local_path"]:
-                        continue
-                    symbol = str(public["symbol"])
-                    key = (
-                        str(public["exchange"]),
-                        str(public["market_type"]),
-                        symbol,
-                    )
-                    referenced_book = books_by_ref.get(
-                        (
-                            public["l2_archive_id"],
-                            public["l2_dataset_epoch"],
-                            public["l2_checksum_sha256"],
-                        )
-                    )
-                    if referenced_book is None or referenced_book[0] != key:
-                        continue
-                    _book_key, book_start, book_end = referenced_book
-                    for simulation, required_symbols in simulations:
-                        if symbol not in required_symbols:
-                            continue
-                        start = max(
-                            int(public["range_start_ms"]),
-                            int(simulation["range_start_ms"]),
-                        )
-                        end = min(
-                            int(public["range_end_ms"]),
-                            int(simulation["range_end_ms"]),
-                        )
-                        if start <= end:
-                            hedge_book_pairs.setdefault(key, []).append(
-                                (book_start, book_end, start, end)
-                            )
-
-            if require_exact_hedge:
-                keys = set(hedge_book_pairs)
-                if require_account:
-                    keys &= set(account_windows)
-            elif require_book:
-                keys = set(book_windows)
-                if require_account:
-                    keys &= set(account_windows)
-            else:
-                keys = set(account_windows)
-            result: dict[tuple[str, str, str], _MarketSetupAdmission] = {}
-            for key in keys:
-                result[key] = _MarketSetupAdmission(
-                    windows=(
-                        tuple(account_windows[key])
-                        if require_account and not require_book
-                        else ()
-                    ),
-                    code="REQUIRED_HISTORY_COVERAGE_UNAVAILABLE",
-                    message="本局固定开始时间不在精确账户历史或连续盘口覆盖内。",
-                    book_windows=(
-                        tuple(book_windows[key])
-                        if require_book and not require_exact_hedge
-                        else ()
-                    ),
-                    account_windows=(
-                        tuple(account_windows[key])
-                        if require_account and require_book
-                        else ()
-                    ),
-                    hedge_book_pairs=(
-                        tuple(hedge_book_pairs[key]) if require_exact_hedge else ()
-                    ),
-                )
-            return result
-
-        return await self.store.base_store.run_extension_read(read)
+    ) -> dict[tuple[str, str, str], admission_rules_ops._MarketSetupAdmission]:
+        return await self._admission_service._setup_capability_admission(settings)
 
     @staticmethod
     def _setup_admission_cache_key(
         settings: Mapping[str, object],
-    ) -> _SetupAdmissionCacheKey:
-        return (
-            str(settings.get("book_mode", "")),
-            str(settings.get("account_data_mode", "")),
-            str(settings.get("position_mode", "")),
-            str(settings.get("funding_mode", "")),
-            str(settings.get("settlement_asset", "")),
-        )
+    ) -> control_rules_ops._SetupAdmissionCacheKey:
+        return admission_rules_ops.setup_admission_cache_key(settings)
 
     @staticmethod
     def _eligible_source_ranges(
@@ -13849,53 +6223,9 @@ class TrainingRunService:
         range_start_ms: int,
         range_end_ms: int,
         settings: Mapping[str, object],
-        capability_admission: Mapping[tuple[str, str, str], _MarketSetupAdmission],
+        capability_admission: Mapping[tuple[str, str, str], admission_rules_ops._MarketSetupAdmission],
     ) -> list[tuple[int, int, int]]:
-        candidate_ranges: list[tuple[int, int, int]] = []
-        for entry in entries:
-            identity = entry.get("identity")
-            identity_key = (
-                str(identity.get("exchange", "")),
-                str(identity.get("market_type", "")),
-                str(identity.get("symbol", "")),
-            ) if isinstance(identity, Mapping) else ("", "", "")
-            admission = capability_admission.get(identity_key)
-            interval_ms = parse_interval_ms(str(entry.get("selected_base_interval", "")))
-            required_span_ms = int(settings.get("forward_cache_ms", 0))
-            book_interval_ms = (
-                interval_ms
-                if settings.get("book_mode") == "BOOK_ASSISTED_REQUIRED"
-                and interval_ms is not None
-                else 0
-            )
-            capability_windows = (
-                ((range_start_ms, range_end_ms),)
-                if admission is None
-                else admission.eligible_start_windows(
-                    required_span_ms,
-                    book_interval_ms=book_interval_ms,
-                )
-            )
-            for eligible_range in cast(
-                list[Mapping[str, object]], entry.get("eligible_ranges", [])
-            ):
-                source_first = int(eligible_range["first_start_ms"])
-                source_last = int(eligible_range["last_start_ms"])
-                source_interval_ms = int(eligible_range["interval_ms"])
-                origin = int(eligible_range["first_start_ms"])
-                for capability_first, capability_last in capability_windows:
-                    first = max(range_start_ms, source_first, capability_first)
-                    last = min(range_end_ms, source_last, capability_last)
-                    first += (-((first - origin) % source_interval_ms)) % source_interval_ms
-                    if first <= last:
-                        candidate_ranges.append(
-                            (
-                                first,
-                                source_interval_ms,
-                                ((last - first) // source_interval_ms) + 1,
-                            )
-                        )
-        return candidate_ranges
+        return admission_rules_ops.eligible_source_ranges(entries, range_start_ms=range_start_ms, range_end_ms=range_end_ms, settings=settings, capability_admission=capability_admission)
 
     @staticmethod
     def _public_time_commitment(
@@ -13903,21 +6233,7 @@ class TrainingRunService:
         *,
         disclose_start: bool,
     ) -> dict[str, object]:
-        return {
-            "schema_version": "replay.time-commitment.v1",
-            "start_mode": commitment["start_mode"],
-            "committed": True,
-            "committed_start_ms": (
-                commitment["committed_start_ms"] if disclose_start else None
-            ),
-            "random_range_start_ms": (
-                commitment["random_range_start_ms"] if disclose_start else None
-            ),
-            "random_range_end_ms": (
-                commitment["random_range_end_ms"] if disclose_start else None
-            ),
-            "commitment_hash": commitment["commitment_hash"],
-        }
+        return admission_rules_ops.public_time_commitment(commitment, disclose_start=disclose_start)
 
 
 __all__ = ["TrainingRunService"]

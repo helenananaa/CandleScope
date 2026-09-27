@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.replay.training.persistence import account_marks as account_marks_ops
+
 import json
 import sqlite3
 from dataclasses import replace
@@ -296,7 +298,7 @@ async def test_opposite_funding_fee_revision_retry_and_restart_are_exact(
         assert portfolio["active_fee_policy"]["policy_version"] == ("BINANCE_VIP0_V1")
         assert portfolio["active_fee_policy"]["liquidation_fee_bps"] == "25"
         aggregated = await training.store.base_store.run_extension_read(
-            lambda connection: training.store._hedge_accounting_totals_by_leg(
+            lambda connection: account_marks_ops.hedge_accounting_totals_by_leg(
                 connection,
                 run_id=run_id,
             )
@@ -641,7 +643,7 @@ async def test_account_auditor_names_tampered_hedge_funding_field(
                 """,
                 (run_id,),
             ).fetchone()
-            component = training.store._position_leg_component(
+            component = account_marks_ops.position_leg_component(
                 leg,
                 accumulated_funding="999",
                 trading_fees=str(leg["trading_fees"]),
@@ -673,7 +675,7 @@ async def test_account_auditor_names_tampered_hedge_funding_field(
                 """,
                 (run_id,),
             ).fetchone()
-            component = training.store._position_leg_component(
+            component = account_marks_ops.position_leg_component(
                 leg,
                 accumulated_funding="-0.01",
                 trading_fees=str(leg["trading_fees"]),

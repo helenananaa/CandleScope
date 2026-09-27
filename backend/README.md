@@ -558,6 +558,27 @@ cd backend
 python -m pytest -q
 ```
 
+Dependency boundaries (without importing or starting the application):
+
+```bash
+cd backend
+python -B scripts/check_architecture.py
+python -B -m pytest -q tests/test_api_dependency_boundaries.py tests/test_replay_dependency_boundaries.py
+```
+
+Business packages cannot import `app.api` or `app.main`; the HTTP tree and
+`app.main` own route composition. Shared request models, symbol catalogs and
+order-book contracts/projections belong to their business modules. HTTP adapters
+map domain errors to wire responses. The gate checks absolute, relative and
+literal dynamic imports, plus transitive dependencies of shared modules. A fresh
+process test blocks FastAPI/Starlette while exercising preparation, history and
+plugin reads.
+
+The same gate enforces replay responsibility direction and keeps SQLite
+transaction ownership out of extracted persistence operations. See the
+[training ownership guide](app/replay/training/README.md) for transaction,
+publication and recovery boundaries.
+
 Compile check:
 
 ```bash

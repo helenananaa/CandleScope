@@ -58,6 +58,9 @@ class AlertRuntimeEngine:
         self._evaluation_errors = 0
         self._system_error: str | None = None
         self._rule_errors: dict[str, str] = {}
+        self._recovery_required: dict[str, dict] = {}
+        self._require_recovery_seed: set[str] = set()
+        self._seed_frontiers: dict[str, int] = {}
         self._reconcile_task: asyncio.Task[None] | None = None
         self._reconcile_wakeup = asyncio.Event()
         self._warmup_tasks: dict[str, asyncio.Task[None]] = {}
@@ -103,6 +106,7 @@ class AlertRuntimeEngine:
             return
         rules = self.facade.list_rules()
         seen = {str(rule.get("id")) for rule in rules if rule.get("id")}
+        self._require_recovery_seed.intersection_update(seen)
         for rule in rules:
             await self.sync_rule(rule)
         for stale_rule_id in list(self._subscriptions):
@@ -121,6 +125,9 @@ class AlertRuntimeEngine:
             if self._deactivation_reason(rule) in {"expired", "trigger_limit"}:
                 self.facade.set_enabled(rule_id, False)
             await self.remove_rule(rule_id)
+            return
+
+        if rule_id in self._recovery_required:
             return
 
         target = self._target(rule)
@@ -150,6 +157,19 @@ class AlertRuntimeEngine:
             except Exception as exc:
                 self._evaluation_errors += 1
                 self._record_error(exc, rule_id=current_rule_id)
+                raise
+
+        async def _on_recovery(error) -> None:
+            # Alerts have external side effects. Never guess which missed bars
+            # would have triggered, or automatically replay an ambiguous failure.
+            self._recovery_required[rule_id] = error.to_dict()
+            self._require_recovery_seed.add(rule_id)
+            self._previous_values.pop(rule_id, None)
+            self._bar_windows.pop(rule_id, None)
+            warmup = self._warmup_tasks.pop(rule_id, None)
+            if warmup is not None:
+                warmup.cancel()
+            self._record_error(error, rule_id=rule_id)
 
         consumer_id = f"alert:rule:{rule_id}"
         try:
@@ -170,6 +190,7 @@ class AlertRuntimeEngine:
             )
             handle = self.data_manager.subscribe(
                 callback=_on_event,
+                on_recovery=_on_recovery,
                 symbol=target["symbol"],
                 interval=target["interval"],
                 exchange=target["exchange"],
@@ -198,12 +219,15 @@ class AlertRuntimeEngine:
             consumer_id=consumer_id,
             handle=handle,
         )
+        self._require_recovery_seed.discard(rule_id)
         self._schedule_backfill_wait(rule_id, target, request_ids)
         self._clear_rule_error(rule_id)
         logger.info("Alert rule subscribed: %s %s", rule_id, target_key)
 
     async def remove_rule(self, rule_id: str) -> None:
         """Unsubscribe and release one rule's stream lease."""
+        self._recovery_required.pop(rule_id, None)
+        self._seed_frontiers.pop(rule_id, None)
         sub = self._subscriptions.pop(rule_id, None)
         warmup_task = self._warmup_tasks.pop(rule_id, None)
         if warmup_task is not None and warmup_task is not asyncio.current_task():
@@ -236,7 +260,12 @@ class AlertRuntimeEngine:
 
     async def evaluate_event(self, rule_id: str, event: DataEvent) -> dict[str, Any] | None:
         """Evaluate one DataEvent for a rule and emit history when matched."""
-        if event.bar is None:
+        if rule_id in self._recovery_required or event.bar is None:
+            return None
+        if (
+            event.event_type != DataEventType.BAR_AMENDED
+            and int(event.bar.time) <= self._seed_frontiers.get(rule_id, -1)
+        ):
             return None
 
         self._events_evaluated += 1
@@ -346,6 +375,9 @@ class AlertRuntimeEngine:
         return {
             "started": self._started,
             "dataManager": self.data_manager is not None,
+            "recoveryRequired": dict(self._recovery_required),
+            "awaitingVerifiedSeed": sorted(self._require_recovery_seed),
+            "recoveryAction": "disable_then_enable_to_seed_current_history",
             "status": "error" if last_error else ("running" if self._started else "stopped"),
             "eventsEvaluated": self._events_evaluated,
             "triggersEmitted": self._triggers_emitted,
@@ -431,6 +463,8 @@ class AlertRuntimeEngine:
     ) -> list[str]:
         query_latest = getattr(self.data_manager, "query_latest", None)
         if not callable(query_latest):
+            if rule_id in self._require_recovery_seed:
+                raise RuntimeError("Alert recovery requires a canonical history snapshot")
             return []
         try:
             result = query_latest(
@@ -450,10 +484,20 @@ class AlertRuntimeEngine:
                 limit=ALERT_INDICATOR_HISTORY_LIMIT,
             )
         except Exception:
+            if rule_id in self._require_recovery_seed:
+                raise
             logger.debug("Failed to seed previous alert values for %s", rule_id, exc_info=True)
             return []
 
         bars = getattr(result, "bars", None)
+        recovery_seed = rule_id in self._require_recovery_seed
+        if recovery_seed and (
+            getattr(result, "complete", None) is not True
+            or bool(getattr(result, "retryable", True))
+            or bool(getattr(result, "missing_ranges", None))
+            or not any(getattr(bar, "is_closed", True) for bar in (bars or []))
+        ):
+            raise RuntimeError("Alert recovery history is incomplete; waiting for a verified seed")
         if bars:
             window = [
                 bar for bar in list(bars)[-ALERT_INDICATOR_HISTORY_LIMIT:]
@@ -466,6 +510,8 @@ class AlertRuntimeEngine:
                     **self._bar_values(window[-1]),
                     **indicators,
                 }
+                if recovery_seed:
+                    self._seed_frontiers[rule_id] = max(int(bar.time) for bar in window)
         else:
             window = []
             indicators = compute_alert_indicator_values(window)
@@ -640,6 +686,8 @@ class AlertRuntimeEngine:
                 state = "exhausted"
             elif not bool(rule.get("enabled", True)):
                 state = "disabled"
+            elif rule_id in self._recovery_required:
+                state = "recovery_required"
             elif rule_id in self._rule_errors:
                 state = "degraded"
             elif not subscribed:
@@ -676,6 +724,8 @@ class AlertRuntimeEngine:
         logger.error("Alert runtime error%s: %s", f" for {rule_id}" if rule_id else "", message)
 
     def _clear_rule_error(self, rule_id: str) -> None:
+        if rule_id in self._recovery_required:
+            return
         self._rule_errors.pop(rule_id, None)
         diagnostics = self._rule_diagnostics.get(rule_id)
         if diagnostics is not None:

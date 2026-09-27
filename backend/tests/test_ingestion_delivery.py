@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import pytest
+from app.data_engine.consumer_recovery import ConsumerRecoveryRequired
 
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.delivery import DeliveryLayer
@@ -101,6 +103,9 @@ def test_queue_subscriber_drop_does_not_block_ordered_callback() -> None:
         assert calls == [60_000, 120_000]
         assert subscriber.queue_size == 1
         assert delivery.metrics.get_counter("queue_drops") == 1
+        with pytest.raises(ConsumerRecoveryRequired, match="ingestion_queue_overflow"):
+            await anext(subscriber.__aiter__())
+        assert delivery.snapshot()["active_subscribers"] == 0
 
         await subscriber.close()
 

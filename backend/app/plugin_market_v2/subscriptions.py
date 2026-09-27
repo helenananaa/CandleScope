@@ -17,6 +17,8 @@ from candlescope_plugin_sdk.platform_v2 import (
 
 from app.plugin_security_v2.capabilities import CapabilityLease
 
+from app.data_engine.consumer_recovery import ConsumerRecoveryRequired
+
 from .errors import market_error
 from .ports import MarketDataConsumerPort, PortBarSubscription
 from .projections import public_bar_rows
@@ -77,6 +79,11 @@ class _BarSubscription:
             )
 
     async def enqueue(self, event: Any) -> None:
+        if isinstance(event, ConsumerRecoveryRequired):
+            async with self._condition:
+                self._overflow_reason = str(event)
+                self._condition.notify_all()
+            return
         event_type = str(getattr(getattr(event, "event_type", ""), "value", ""))
         bar = getattr(event, "bar", None)
         if (

@@ -117,7 +117,7 @@ async def test_progressive_job_launches_before_tail_and_recovers_download(tmp_pa
             if playback == "paused":
                 await control("pause", ReplayV2CommandType.PAUSE, {})
         if recovery == "cancel":
-            service.cancel(job["id"])
+            await service.cancel(job["id"])
             cancelled = await terminal(service, job["id"])
             assert cancelled["state"] == "CANCELLED"
             assert cancelled["result"]["run"]["run_id"] == run_id
@@ -132,7 +132,7 @@ async def test_progressive_job_launches_before_tail_and_recovers_download(tmp_pa
         if recovery == "retry":
             assert finished["state"] == "FAILED"
             assert finished["result"]["run"]["run_id"] == run_id
-            service.retry(job["id"])
+            await service.retry(job["id"])
             finished = await terminal(service, job["id"])
         assert finished["state"] == "READY", finished
         assert finished["completed"] == finished["total"] == 2
@@ -193,7 +193,7 @@ async def test_progressive_job_launches_before_tail_and_recovers_download(tmp_pa
             from app.data_preparation.models import PreparationRequest
             reference_request = PreparationRequest.model_validate(job["request"]).model_copy(
                 update={"idempotency_key": "complete-reference", "progressive": False})
-            reference_job = await terminal(service, service.submit(reference_request)["id"])
+            reference_job = await terminal(service, (await service.submit(reference_request))["id"])
             assert reference_job["state"] == "READY", reference_job
             reference_run = reference_job["result"]["run"]["run_id"]
             reference_session = reference_job["result"]["run"]["adapter_session_id"]

@@ -15,7 +15,8 @@ def revision(runtime, revision_id):
 
 
 def launch(runtime, intent, resolution, job_id):
-    from app.api.v1.backtests import RunCreateRequest, _require_declared_snapshot, _require_contract_snapshot
+    from app.backtest.request_contracts import RunCreateRequest
+    from app.backtest.snapshot_validation import require_declared_snapshot, require_contract_snapshot
     from app.backtest.errors import BacktestError
 
     key = f"preparation:{job_id}"
@@ -72,8 +73,8 @@ def launch(runtime, intent, resolution, job_id):
         preview = runtime.preview_snapshot(**{name: normalized[name] for name in (
             "dataset_id", "data_epoch", "start_time_ms", "end_time_ms", "interval", "fidelity_mode",
             "exchange", "market_type", "contract_data_mode", "account_model", "funding_mode")})
-        _require_contract_snapshot(preview, payload.contract_data_mode)
-        _require_declared_snapshot(preview, payload)
+        require_contract_snapshot(preview, payload.contract_data_mode)
+        require_declared_snapshot(preview, payload)
         return runtime.service.create_run(normalized, idempotency_key=key)
     except BacktestError as exc:
         raise PreparationError(exc.code, str(exc)) from exc

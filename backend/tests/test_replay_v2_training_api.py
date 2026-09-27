@@ -1084,7 +1084,7 @@ async def test_phase5_market_track_routes_expose_replay_only_portfolio_contract(
         assert "live_price" not in by_run.text
         assert "actual_event_time_ms" not in by_run.text
 
-        service.training._instrument_metadata_resolver = (  # type: ignore[union-attr]
+        service.training._admission_service._instrument_metadata_resolver = (  # type: ignore[union-attr]
             lambda exchange, market_type, symbol: {
                 "exchange": exchange,
                 "marketType": market_type,

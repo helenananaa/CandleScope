@@ -76,3 +76,10 @@ def normalize_exchange(exchange: str) -> str:
     if not get_exchange_registry().has(normalized):
         raise ValueError(f"Unsupported exchange: {normalized}.")
     return normalized
+
+
+async def close_for_resync(websocket) -> None:
+    """Terminal wire signal: discard local continuity and bootstrap history."""
+    await asyncio.wait_for(
+        websocket.close(code=1013, reason="CONSUMER_RESYNC_REQUIRED"), timeout=2.0,
+    )

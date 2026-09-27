@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+from . import command_projection as command_projection_ops
+from . import control_rules as control_rules_ops
+from . import service_validation as service_validation_ops
+
+from app.replay.training.persistence import account_marks as account_marks_ops
+
 import asyncio
 from bisect import bisect_left, bisect_right
 from decimal import Decimal
@@ -29,7 +35,7 @@ async def resume_advance(owner, *, command, binding, intent):
     )
     expected = {t["session_id"]: t for t in intent["plan"]["latest_tracks"]}
     fingerprint = await store.base_store.run_extension_read(
-        lambda connection: store._hedge_risk_fingerprint(
+        lambda connection: account_marks_ops.hedge_risk_fingerprint(
             connection, run_id=command.run_id
         )
     )
@@ -39,7 +45,7 @@ async def resume_advance(owner, *, command, binding, intent):
             "account state changed after the committed interval",
             status_code=409,
         )
-    if {owner._track_session_id(t) for t in tracks} != set(expected) or binding[
+    if {service_validation_ops.track_session_id(t) for t in tracks} != set(expected) or binding[
         "adapter_session_id"
     ] != intent["session_id"]:
         raise TrainingRunError(
@@ -48,8 +54,8 @@ async def resume_advance(owner, *, command, binding, intent):
             status_code=409,
         )
     for track in tracks:
-        sid = owner._track_session_id(track)
-        snapshot = owner._snapshot(await service.get_session(sid))
+        sid = service_validation_ops.track_session_id(track)
+        snapshot = service_validation_ops.adapter_snapshot(await service.get_session(sid))
         prior = expected[sid]
         if (
             snapshot["cursor"]["source_sequence"] != prior["source_sequence"]
@@ -63,11 +69,11 @@ async def resume_advance(owner, *, command, binding, intent):
             )
     for track in tracks:
         await service.ensure_advance_recovery_controller(
-            owner._track_session_id(track),
+            service_validation_ops.track_session_id(track),
             client_instance_id=command.client_instance_id,
         )
     target = int(intent["target_virtual_time_ms"])
-    snapshot = owner._snapshot(await service.get_session(intent["session_id"]))
+    snapshot = service_validation_ops.adapter_snapshot(await service.get_session(intent["session_id"]))
     decision = owner._plan_fast_forward(
         binding=binding, snapshot=snapshot, tracks=tracks, target_virtual_time_ms=target
     )
@@ -88,7 +94,7 @@ async def resume_advance(owner, *, command, binding, intent):
     )
     key = (command.run_id, command.command_id)
     owner._advance_jobs[key] = job
-    event_stop = {} if owner._stop_on_event(command) else None
+    event_stop = {} if control_rules_ops.stop_on_event(command) else None
     try:
         if snapshot["cursor"]["virtual_time_ms"] < target:
             await owner._advance_full_tracks_to(
@@ -101,13 +107,13 @@ async def resume_advance(owner, *, command, binding, intent):
                 audit_account_at_barrier=False,
                 event_stop=event_stop,
             )
-        final = owner._snapshot(await service.get_session(intent["session_id"]))
+        final = service_validation_ops.adapter_snapshot(await service.get_session(intent["session_id"]))
         cancelled = job["status"] == "CANCELLED"
         if not cancelled:
             job["status"] = "COMPLETED"
         job["cancelable"] = False
         viewer = await store.get_viewer_state(command.run_id)
-        result = owner._result_payload(
+        result = command_projection_ops.result_payload(
             command=command,
             session_id=intent["session_id"],
             snapshot=final,
@@ -118,7 +124,7 @@ async def resume_advance(owner, *, command, binding, intent):
                 "consumed": final["cursor"]["source_sequence"]
                 - intent["initial_cursor"]["source_sequence"],
                 "full_track_count": len(tracks),
-                "progress": owner._public_progress(job),
+                "progress": control_rules_ops.public_progress(job),
                 **({"event_stop": event_stop} if event_stop else {}),
             },
         )
@@ -165,7 +171,7 @@ async def try_advance(
     if not hasattr(store, "_portfolio_summary_runs"):
         store._portfolio_summary_runs = {}
     store._portfolio_summary_runs[command.run_id] = True
-    starts = {owner._cursor_time(snapshot) for _, snapshot in snapshots}
+    starts = {service_validation_ops.cursor_time(snapshot) for _, snapshot in snapshots}
     if len(starts) != 1 or any(
         snapshot.get("state") != "PAUSED" for _, snapshot in snapshots
     ):
@@ -178,7 +184,7 @@ async def try_advance(
     # before capturing candidate revisions (including after idle expiry).
     controlled = []
     for track, snapshot in snapshots:
-        session_id = owner._track_session_id(track)
+        session_id = service_validation_ops.track_session_id(track)
         controlled_snapshot = await owner._ensure_track_controller(
             session_id=session_id,
             client_instance_id=command.client_instance_id,
@@ -200,7 +206,7 @@ async def try_advance(
     if context is None:
         return None
     public, simulation = await owner.hedge_inputs._projection_cursors(command.run_id)
-    delta = owner._actual_event_time_ms(binding, target) - target
+    delta = control_rules_ops.actual_event_time_ms(binding, target) - target
     actual_target = target + delta
     lanes = {}
     for lane in runtime_snapshot.lanes:
@@ -223,7 +229,7 @@ async def try_advance(
     sources = await asyncio.gather(
         *(
             service.plan_source_chunk(
-                owner._track_session_id(track),
+                service_validation_ops.track_session_id(track),
                 target_time_ms=target,
                 max_events=100000,
                 indexed=True,
@@ -236,7 +242,7 @@ async def try_advance(
         if isinstance(source, BaseException):
             raise source
     for (track, snapshot), source in zip(snapshots, sources, strict=True):
-        session = owner._track_session_id(track)
+        session = service_validation_ops.track_session_id(track)
         if (
             not source
             or not getattr(source["index"], "shared", False)
@@ -357,7 +363,7 @@ async def try_advance(
             b = bisect_right(lane.times, target + delta)
             plan["first_mark"] = lane.events[a] if b > a else None
             plan["last_mark"] = lane.events[b - 1] if b > a else None
-            part = owner._multi_command_id(
+            part = control_rules_ops.multi_command_id(
                 command.command_id,
                 plan["track_id"],
                 "multi-indexed",
@@ -458,7 +464,7 @@ async def try_advance(
 
     def before(connection):
         if (
-            store._hedge_risk_fingerprint(connection, run_id=command.run_id)
+            account_marks_ops.hedge_risk_fingerprint(connection, run_id=command.run_id)
             != context["fingerprint"]
         ):
             raise ValueError(

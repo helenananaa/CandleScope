@@ -32,6 +32,8 @@ import time
 from typing import Callable, Awaitable, AsyncIterator
 
 from .config import BarAggregatorConfig
+from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
+from app.data_engine.consumer_recovery import ConsumerRecoveryRequired, terminate_queue
 from .models import (
     BarEvent,
     BarEventType,
@@ -74,6 +76,8 @@ class BarAggregatorPublisher:
         self._events_emitted: int = 0
         self._events_throttled: int = 0
         self._callback_errors: int = 0
+        self._queue_recovery_required: int = 0
+        self._preview_drops: int = 0
 
     # ── Public: Callback Registration ────────────────────────
 
@@ -159,7 +163,7 @@ class BarAggregatorPublisher:
         Break out of the loop to unsubscribe.
         """
         queue: asyncio.Queue[BarEvent | None] = asyncio.Queue(
-            maxsize=self._cfg.publisher_queue_size,
+            maxsize=max(1, self._cfg.publisher_queue_size),
         )
         entry = (queue, event_filter)
         self._subscribers.append(entry)
@@ -170,6 +174,8 @@ class BarAggregatorPublisher:
                 event = await queue.get()
                 if event is None:
                     break
+                if isinstance(event, ConsumerRecoveryRequired):
+                    raise event
                 yield event
         finally:
             self._subscribers = [s for s in self._subscribers if s[0] is not queue]
@@ -178,10 +184,7 @@ class BarAggregatorPublisher:
     async def close_all_subscribers(self) -> None:
         """Send sentinel to all subscriber queues to unblock them."""
         for queue, _ in list(self._subscribers):
-            try:
-                queue.put_nowait(None)
-            except asyncio.QueueFull:
-                pass
+            terminate_queue(queue, None)
         self._subscribers.clear()
 
     # ── Public: Emit Events ──────────────────────────────────
@@ -256,6 +259,8 @@ class BarAggregatorPublisher:
             "events_emitted": self._events_emitted,
             "events_throttled": self._events_throttled,
             "callback_errors": self._callback_errors,
+            "queue_recovery_required": self._queue_recovery_required,
+            "preview_drops": self._preview_drops,
             "all_callbacks": len(self._all_callbacks),
             "created_callbacks": len(self._created_callbacks),
             "updated_callbacks": len(self._updated_callbacks),
@@ -327,6 +332,9 @@ class BarAggregatorPublisher:
         for cb in specific + self._all_callbacks:
             try:
                 await cb(event)
+            except BarDeliveryUnavailable:
+                self._callback_errors += 1
+                raise
             except Exception as exc:
                 self._callback_errors += 1
                 logger.error(
@@ -345,7 +353,9 @@ class BarAggregatorPublisher:
             try:
                 queue.put_nowait(event)
             except asyncio.QueueFull:
-                logger.warning(
-                    "Subscriber queue full (size=%d), dropping bar event",
-                    queue.maxsize,
-                )
+                if event.event_type == BarEventType.UPDATED:
+                    self._preview_drops += 1
+                    continue
+                self._queue_recovery_required += 1
+                self._subscribers = [entry for entry in self._subscribers if entry[0] is not queue]
+                terminate_queue(queue, ConsumerRecoveryRequired("bar_publisher_queue_overflow"))

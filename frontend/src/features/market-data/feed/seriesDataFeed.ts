@@ -13,6 +13,7 @@ import type {
   KlineApi,
   KlineFetchResult,
   KlineHistoryIntent,
+  KlineRequestContext,
   KlineStreamController,
   KlineStreamFactory,
   KlineStreamOptions,
@@ -52,12 +53,11 @@ import {
   parseIntervalSeconds,
 } from "../../../utils/intervals.js";
 import { createIntervalTimeline } from "../../../utils/intervalTimeline.js";
-import { InflightRegistry } from "./inflightRegistry.js";
+import { sharedKlineRequests } from "./sharedKlineRequestCoordinator.js";
 import { KlineStreamSubscription } from "./klineStreamSubscription.js";
 import {
   normalizeRangeSec,
   planBarsFetch,
-  requestKeyFor,
   rowsFromResult,
   seriesKeyFor,
 } from "./fetchPlanner.js";
@@ -692,7 +692,6 @@ function dataPlaneDisabledResult(): AppliedKlineResult {
 }
 
 export class SeriesDataFeed {
-  inflight: InflightRegistry;
   epochBySeries: Map<SeriesKey, number>;
   beforePageCooldownUntil: Map<SeriesKey, number>;
   pendingBeforePages: Map<SeriesKey, PendingBeforePage>;
@@ -724,7 +723,6 @@ export class SeriesDataFeed {
   private chartWorkSchedulerCellId: string | null;
 
   constructor(config: SeriesDataFeedConfig = {}) {
-    this.inflight = new InflightRegistry();
     this.epochBySeries = new Map();
     this.beforePageCooldownUntil = new Map();
     this.pendingBeforePages = new Map();
@@ -758,7 +756,7 @@ export class SeriesDataFeed {
   }
 
   configure(config: SeriesDataFeedConfig = {}): void {
-    this.api = config.api || this.api || null;
+    if (config.api) this.api = sharedKlineRequests(config.api);
     if (config.foregroundPreloadGate !== undefined) {
       this.foregroundPreloadGate = config.foregroundPreloadGate;
     }
@@ -802,25 +800,47 @@ export class SeriesDataFeed {
     return this.seriesKey(series);
   }
 
-  private async runPhysicalTransport<TResult>(
+  private async runLogicalRequest<TResult>(
     priority: FeedRequestPriority,
     owner: string,
     request: () => Promise<TResult>,
+    signal?: AbortSignal,
   ): Promise<TResult> {
-    const execute = async () => {
-      const gate = this.foregroundPreloadGate;
-      if (!gate || priority !== "foreground") return request();
-      const lease = gate.enterForeground(owner);
-      try {
-        return await request();
-      } finally {
-        lease.release();
-      }
-    };
+    throwIfAborted(signal);
+    const gate = this.foregroundPreloadGate;
+    if (!gate || priority !== "foreground") return request();
+    const lease = gate.enterForeground(owner);
+    try {
+      return await request();
+    } finally {
+      lease.release();
+    }
+  }
+
+  private transportContext(
+    series: MarketSeries,
+    epoch: number,
+    scope: string | undefined,
+    priority: FeedRequestPriority,
+    owner: string,
+  ): KlineRequestContext {
     const scheduler = this.chartWorkScheduler;
     const cellId = this.chartWorkSchedulerCellId;
-    if (!scheduler || !cellId) return execute();
-    return scheduler.run(cellId, this.schedulerLane(priority, owner), execute);
+    return {
+      epoch,
+      realtimeVersion: this.realtimeFenceBySeries.get(this.seriesKey(series))?.version ?? 0,
+      priority: priority === "foreground" ? 0 : priority === "hydrate" ? 1 : 2,
+      ...(scope === undefined ? {} : { scope }),
+      ...(scheduler && cellId ? {
+        schedule: <T>(work: () => Promise<T>, signal: AbortSignal) => scheduler.run(
+          cellId, this.schedulerLane(priority, owner), () => {
+            throwIfAborted(signal);
+            if (!this.isSeriesRequestAllowed(series)) throw new DOMException("Series is no longer available", "AbortError");
+            return work();
+          }, { signal },
+        ),
+      } : {}),
+    };
   }
 
   private schedulerLane(
@@ -2556,19 +2576,9 @@ export class SeriesDataFeed {
       [days, countBack, requestScope, maxWaitMs, intent],
     );
     const transportDemand = this.transportDemandOptions(series);
-    const key = requestKeyFor("history", series, {
-      countBack,
-      days,
-      epoch,
-      source,
-      priority,
-      requestScope,
-      maxWaitMs,
-      intent,
-      ...transportDemand,
-    });
+    const clientContext = this.transportContext(series, epoch, requestScope, priority, `kline-history:${source}`);
     const realtimeFence = this.beginRealtimeRequest(series);
-    return this.inflight.run(key, () => this.runPhysicalTransport(
+    return this.runLogicalRequest(
       priority,
       `kline-history:${source}`,
       async () => {
@@ -2582,6 +2592,7 @@ export class SeriesDataFeed {
         series.marketType,
         series.exchange,
         {
+          clientContext,
           seriesIdentity: series,
           ...(countBack === undefined ? {} : { countBack }),
           ...(signal === undefined ? {} : { signal }),
@@ -2600,7 +2611,8 @@ export class SeriesDataFeed {
         indicatorWindowOwner,
       });
       },
-    )).finally(() => {
+      signal,
+    ).finally(() => {
       this.endRealtimeRequest(realtimeFence);
     });
   }
@@ -2628,18 +2640,9 @@ export class SeriesDataFeed {
       [before, bars, requestScope],
     );
     const transportDemand = this.transportDemandOptions(series);
-    const key = requestKeyFor("before", series, {
-      before,
-      bars,
-      epoch,
-      source,
-      priority,
-      requestScope,
-      maxWaitMs,
-      ...transportDemand,
-    });
+    const clientContext = this.transportContext(series, epoch, requestScope, priority, `kline-before:${source}`);
     const realtimeFence = this.beginRealtimeRequest(series);
-    return this.inflight.run(key, () => this.runPhysicalTransport(
+    return this.runLogicalRequest(
       priority,
       `kline-before:${source}`,
       async () => {
@@ -2654,6 +2657,7 @@ export class SeriesDataFeed {
         series.marketType,
         series.exchange,
         {
+          clientContext,
           seriesIdentity: series,
           ...(signal === undefined ? {} : { signal }),
           ...(maxWaitMs === undefined ? {} : { maxWaitMs }),
@@ -2672,7 +2676,8 @@ export class SeriesDataFeed {
       if (!applied.stale) this.updateBeforePageAvailability(series, before, applied);
       return applied;
       },
-    )).finally(() => {
+      signal,
+    ).finally(() => {
       this.endRealtimeRequest(realtimeFence);
     });
   }
@@ -2710,21 +2715,9 @@ export class SeriesDataFeed {
       [range.start, range.end, requestScope],
     );
     const transportDemand = this.transportDemandOptions(series);
-    const key = requestKeyFor("range", series, {
-      start: range.start,
-      end: range.end,
-      epoch,
-      repair,
-      waitMs,
-      strict,
-      source,
-      priority,
-      maxPages,
-      requestScope,
-      ...transportDemand,
-    });
+    const clientContext = this.transportContext(series, epoch, requestScope, priority, `kline-range:${source}`);
     const realtimeFence = this.beginRealtimeRequest(series);
-    return this.inflight.run(key, () => this.runPhysicalTransport(
+    return this.runLogicalRequest(
       priority,
       `kline-range:${source}`,
       async () => {
@@ -2748,6 +2741,7 @@ export class SeriesDataFeed {
           series.marketType,
           series.exchange,
           {
+            clientContext,
             seriesIdentity: series,
             repair,
             waitMs,
@@ -2878,7 +2872,8 @@ export class SeriesDataFeed {
       }
       return combinedResult;
       },
-    )).finally(() => {
+      signal,
+    ).finally(() => {
       this.endRealtimeRequest(realtimeFence);
     });
   }
@@ -2899,18 +2894,9 @@ export class SeriesDataFeed {
     if (!this.isSeriesRequestAllowed(series)) return dataPlaneDisabledResult();
     const epoch = this.currentEpoch(series);
     const transportDemand = this.transportDemandOptions(series);
-    const key = requestKeyFor("latest", series, {
-      apiSource,
-      epoch,
-      limit,
-      priority,
-      repair,
-      source,
-      waitMs,
-      ...transportDemand,
-    });
+    const clientContext = this.transportContext(series, epoch, undefined, priority, `kline-latest:${source}`);
     const realtimeFence = this.beginRealtimeRequest(series);
-    return this.inflight.run(key, () => this.runPhysicalTransport(
+    return this.runLogicalRequest(
       priority,
       `kline-latest:${source}`,
       async () => {
@@ -2925,6 +2911,7 @@ export class SeriesDataFeed {
         series.exchange,
         apiSource,
         {
+          clientContext,
           seriesIdentity: series,
           ...(signal === undefined ? {} : { signal }),
           repair,
@@ -2941,7 +2928,8 @@ export class SeriesDataFeed {
         expectedRealtimeVersion: realtimeFence.version,
       });
       },
-    )).finally(() => {
+      signal,
+    ).finally(() => {
       this.endRealtimeRequest(realtimeFence);
     });
   }

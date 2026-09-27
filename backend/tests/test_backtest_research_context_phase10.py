@@ -55,7 +55,7 @@ def _context(**overrides: object) -> dict[str, object]:
 
 
 def test_execution_overrides_survive_context_round_trip_and_reject_invalid_ranges(tmp_path: Path) -> None:
-    from app.api.v1.backtests import ResearchLaunchContextRequest
+    from app.backtest.request_contracts import ResearchLaunchContextRequest
     from pydantic import ValidationError
     overrides = {"initialBalance": "2000", "equityPercent": "25", "leverage": "2", "feeBps": "7", "slippageBps": "3"}
     payload = ResearchLaunchContextRequest.model_validate(_context(execution_overrides=overrides))
@@ -166,8 +166,7 @@ def test_schema_v7_rollback_is_empty_only_and_preserves_contexts_on_refusal(
     empty_root = tmp_path / "empty"
     empty_root.mkdir()
     empty_path = empty_root / "backtest.db"
-    empty = _service(empty_root)
-    empty.shutdown()
+    _create_v7_rollback_fixture(empty_path)
     receipt = rollback_research_contexts(empty_path)
     assert receipt == {
         "schemaVersion": 6,
@@ -186,9 +185,7 @@ def test_schema_v7_rollback_is_empty_only_and_preserves_contexts_on_refusal(
     populated_root = tmp_path / "populated"
     populated_root.mkdir()
     populated_path = populated_root / "backtest.db"
-    populated = _service(populated_root)
-    context = populated.create_research_launch_context(_context(), now_ms=30)
-    populated.shutdown()
+    _create_v7_rollback_fixture(populated_path, populated=True)
     with pytest.raises(RuntimeError, match="context rows exist"):
         rollback_research_contexts(populated_path)
     connection = sqlite3.connect(populated_path)
@@ -198,5 +195,60 @@ def test_schema_v7_rollback_is_empty_only_and_preserves_contexts_on_refusal(
     assert connection.execute(
         "SELECT COUNT(*) FROM backtest_research_launch_contexts"
     ).fetchone()[0] == 1
+    assert json.loads(connection.execute(
+        "SELECT payload_json FROM backtest_research_launch_contexts"
+    ).fetchone()[0]) == _context()
     connection.close()
-    assert context["context_id"]
+
+
+def _create_v7_rollback_fixture(database: Path, *, populated: bool = False) -> None:
+    # Historical v7 tables touched by this rollback (5040391f). Do not start the
+    # current service here: its schema migrator deliberately upgrades to v9+.
+    connection = sqlite3.connect(database)
+    try:
+        connection.executescript("""
+            CREATE TABLE backtest_schema_meta (
+                schema_version INTEGER NOT NULL, migrated_at_ms INTEGER NOT NULL
+            );
+            INSERT INTO backtest_schema_meta VALUES (7, 10);
+            CREATE TABLE backtest_research_launch_contexts (
+                context_id TEXT PRIMARY KEY, schema_version TEXT NOT NULL,
+                payload_json TEXT NOT NULL, payload_hash TEXT NOT NULL,
+                created_at_ms INTEGER NOT NULL
+            );
+            CREATE INDEX idx_backtest_research_context_created
+                ON backtest_research_launch_contexts(created_at_ms DESC);
+        """)
+        if populated:
+            connection.execute(
+                "INSERT INTO backtest_research_launch_contexts VALUES (?, ?, ?, ?, ?)",
+                ("brc_historical", "candlescope.backtest-research-launch-context/1",
+                 json.dumps(_context()), "historical-test-hash", 30),
+            )
+            connection.commit()
+    finally:
+        connection.close()
+
+
+def test_v7_rollback_refuses_current_schema_without_changing_data(tmp_path: Path) -> None:
+    from app.backtest.research_context_rollback import rollback_research_contexts
+    from app.backtest.schema import SCHEMA_VERSION
+
+    service = _service(tmp_path)
+    try:
+        context = service.create_research_launch_context(_context(), now_ms=30)
+    finally:
+        service.shutdown()
+    database = tmp_path / "backtest.db"
+    connection = sqlite3.connect(database)
+    try:
+        before = list(connection.iterdump())
+        assert connection.execute("SELECT schema_version FROM backtest_schema_meta").fetchone()[0] == SCHEMA_VERSION
+        with pytest.raises(RuntimeError, match="requires exact schema version 7"):
+            rollback_research_contexts(database)
+        assert list(connection.iterdump()) == before
+        assert connection.execute(
+            "SELECT context_id FROM backtest_research_launch_contexts"
+        ).fetchone()[0] == context["context_id"]
+    finally:
+        connection.close()

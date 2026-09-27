@@ -9,6 +9,7 @@ from collections import OrderedDict
 from typing import Any
 
 from app.core.executors import run_storage
+from app.data_engine.consumer_recovery import ConsumerRecoveryRequired
 from app.data_engine.data_manager.models import DataEventType
 from app.data_engine.interval_policy import (
     compute_bucket_start_ms,
@@ -546,18 +547,56 @@ def bridge_indicator_engine(
                 name=f"indicator-backfill-refresh:{task_key}",
             )
 
-    data_manager.subscribe(
-        callback=_on_bar_event,
-        event_types={DataEventType.BAR_CLOSED, DataEventType.BAR_UPDATED},
-    )
-    data_manager.subscribe(
-        callback=_on_backfill,
-        event_types={DataEventType.BACKFILL_COMPLETED},
-    )
-    data_manager.subscribe(
-        callback=_on_backfill,
-        event_types={DataEventType.BAR_AMENDED},
-    )
+    handles = []
+    resetting = False
+
+    async def _on_recovery(error: ConsumerRecoveryRequired) -> None:
+        nonlocal resetting
+        if resetting or (error.subscription_id and not any(h.id == error.subscription_id for h in handles)):
+            return
+        resetting = True
+        indicator_engine.source_delivery_state = {"state": "recovering", "gap": error.to_dict()}
+        try:
+            for handle in handles:
+                data_manager.unsubscribe(handle)
+            handles.clear()
+            indicator_engine.invalidate_source_gap(error.to_dict())
+            tasks = [task for task in pending_backfills.values() if task is not asyncio.current_task()]
+            for task in tasks:
+                task.cancel()
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+            pending_backfills.clear()
+            pending_series_refreshes.clear()
+            completed_backfills.clear()
+            if result_service is not None:
+                result_service.invalidate_source_gap()
+            # No warm instance may survive a gap as valid. Existing owners get
+            # a terminal wire signal; reconnect seeds from canonical storage.
+            _subscribe_bridge()
+            indicator_engine.source_delivery_state = {"state": "live", "last_gap": error.to_dict()}
+        except Exception as exc:
+            for handle in handles:
+                data_manager.unsubscribe(handle)
+            handles.clear()
+            indicator_engine.source_delivery_state = {
+                "state": "recovery_failed", "gap": error.to_dict(), "error": str(exc),
+            }
+            raise
+        finally:
+            resetting = False
+
+    def _subscribe_bridge() -> None:
+        for callback, event_types in (
+            (_on_bar_event, {DataEventType.BAR_CLOSED, DataEventType.BAR_UPDATED}),
+            (_on_backfill, {DataEventType.BACKFILL_COMPLETED}),
+            (_on_backfill, {DataEventType.BAR_AMENDED}),
+        ):
+            handles.append(data_manager.subscribe(
+                callback=callback, event_types=event_types, on_recovery=_on_recovery,
+            ))
+
+    _subscribe_bridge()
 
     return indicator_engine
 

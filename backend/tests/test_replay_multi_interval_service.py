@@ -1,3 +1,6 @@
+from app.replay.training.persistence import liquidation as liquidation_ops
+from app.replay.training.persistence import portfolio as portfolio_ops
+
 import json
 from decimal import Decimal
 import pytest
@@ -40,7 +43,7 @@ async def test_multi_interval_matches_scalar_finances_and_curve(
         )
         try:
             risk_equities = []
-            original = s.training.store._detect_contract_liquidations
+            original = liquidation_ops.detect_contract_liquidations
 
             def observe(
                 connection,
@@ -57,21 +60,21 @@ async def test_multi_interval_matches_scalar_finances_and_curve(
                     (rid,),
                 ).fetchone()[0]
                 heads = [
-                    _owner._market_track_from_row(r)
+                    portfolio_ops.market_track_from_row(r)
                     for r in connection.execute(
                         "SELECT * FROM replay_training_market_track WHERE run_id=? ORDER BY stable_ordinal,track_id",
                         (rid,),
                     )
                 ]
                 _values.append(
-                    _owner._contract_current_equity(
+                    portfolio_ops.contract_current_equity(
                         connection, run_id=rid, initial_equity=initial, tracks=heads
                     )
                 )
                 return value
 
             monkeypatch.setattr(
-                s.training.store, "_detect_contract_liquidations", observe
+                liquidation_ops, 'detect_contract_liquidations', observe
             )
             before = (await s.get_session_state(session))["cursor"]["virtual_time_ms"]
             await send(

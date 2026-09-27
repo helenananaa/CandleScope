@@ -1310,5 +1310,12 @@ class IndicatorRangeResultService:
             self._entries.clear()
             self._bars_entries.clear()
 
+    def invalidate_source_gap(self) -> None:
+        """Fence in-flight reads and reconnect cursors, then discard snapshots."""
+        with self._lock:
+            self.revisions.reset_epoch()
+            self._entries.clear()
+            self._bars_entries.clear()
+
 
 __all__ = ["IndicatorRangeResultService", "IndicatorRangeRevisionChangedError"]

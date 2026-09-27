@@ -243,3 +243,66 @@ test("one batch consumer abort does not cancel the other distinct history reques
   ]);
   assert.equal(await second, result);
 });
+
+test("late completion of an abandoned physical group cannot remove its replacement", async () => {
+  const works = [deferred<KlineFetchResult>(), deferred<KlineFetchResult>()];
+  const calls = { value: 0 };
+  const coordinator = new SharedKlineRequestCoordinator(fakeApi(() => works[calls.value - 1]!.promise, calls));
+  const owner = new AbortController();
+  const first = coordinator.fetchKlinesHistory("BTCUSDT", "1m", 1, "spot", "binance", { signal: owner.signal });
+  const failure = assert.rejects(first, (error: unknown) => (error as Error).name === "AbortError");
+  await Promise.resolve(); owner.abort(); await failure;
+  const second = coordinator.fetchKlinesHistory("BTCUSDT", "1m", 1, "spot", "binance", {});
+  await Promise.resolve();
+  works[0]!.resolve({ data: [] });
+  await new Promise((resolve) => setImmediate(resolve));
+  const third = coordinator.fetchKlinesHistory("BTCUSDT", "1m", 1, "spot", "binance", {});
+  assert.equal(calls.value, 2);
+  works[1]!.resolve(result);
+  assert.equal(await second, result);
+  assert.equal(await third, result);
+  assert.equal(coordinator.diagnostics().physicalInflight, 0);
+});
+
+test("synchronous batch failure rejects every owner and allows an immediate retry", async () => {
+  const calls = { value: 0 };
+  const api = fakeApi(async () => result, calls);
+  api.fetchKlinesHistoryBatch = () => { throw new Error("batch unavailable"); };
+  const coordinator = new SharedKlineRequestCoordinator(api);
+  await Promise.all(["BTCUSDT", "ETHUSDT"].map((symbol) => assert.rejects(
+    coordinator.fetchKlinesHistory(symbol, "1m", 1, "spot", "binance", {}), /batch unavailable/,
+  )));
+  assert.equal(coordinator.diagnostics().logicalInflight, 0);
+  assert.equal(coordinator.diagnostics().physicalInflight, 0);
+  api.fetchKlinesHistoryBatch = async (requests) => requests.map(() => ({ ok: true, result }));
+  await Promise.all(["BTCUSDT", "ETHUSDT"].map((symbol) => (
+    coordinator.fetchKlinesHistory(symbol, "1m", 1, "spot", "binance", {})
+  )));
+  assert.equal(coordinator.diagnostics().completedPhysical, 2);
+});
+
+test("history batches stay bounded and preserve semantic identity and independent outcomes", async () => {
+  const calls = { value: 0 };
+  const batches: number[] = [];
+  const api = fakeApi(async () => result, calls);
+  api.fetchKlinesHistoryBatch = async (requests) => {
+    batches.push(requests.length);
+    assert.equal(requests[1]?.options.seriesIdentity?.providerId, "secondary");
+    assert.ok(requests.every((request) => !("clientContext" in request.options)));
+    return requests.map((_request, index) => index === 1
+      ? { ok: false, error: new Error("provider failed") }
+      : { ok: true, result });
+  };
+  const coordinator = new SharedKlineRequestCoordinator(api);
+  const outcomes = await Promise.allSettled(Array.from({ length: 17 }, (_value, index) => (
+    coordinator.fetchKlinesHistory("BTCUSDT", "1m", 1, "spot", "binance", {
+      seriesIdentity: { providerId: index === 1 ? "secondary" : `provider-${index}` },
+      clientContext: { epoch: 3, scope: "probe" },
+    })
+  )));
+  assert.deepEqual(batches, [16]);
+  assert.equal(calls.value, 1);
+  assert.equal(outcomes.filter((outcome) => outcome.status === "fulfilled").length, 16);
+  assert.equal(outcomes[1]?.status, "rejected");
+  assert.equal(coordinator.diagnostics().physicalInflight, 0);
+});

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.replay.training.persistence import account_math as account_math_ops
+
 import random
 import json
 import sqlite3
@@ -95,7 +97,7 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
     if not indexed:
         async def no_index(**kwargs):
             return None
-        monkeypatch.setattr(service.training, "_try_indexed_interval", no_index)
+        monkeypatch.setattr(service.training._ordered_playback, "_try_indexed_interval", no_index)
     try:
         catalog = await service.catalog(
             warmup_bars=2,
@@ -209,13 +211,13 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
                 shutil.copytree(src, dst)
         before = await service.get_session_state(session)
         batches = []
-        original = service.training._advance_adapter_to
+        original = service.training._ordered_playback._advance_adapter_to
 
         async def observe(**kwargs):
             batches.append(kwargs.get("final_state_max_events"))
             return await original(**kwargs)
 
-        monkeypatch.setattr(service.training, "_advance_adapter_to", observe)
+        monkeypatch.setattr(service.training._ordered_playback, "_advance_adapter_to", observe)
         result = await _send(
             service,
             run_id=run,
@@ -288,7 +290,7 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
             from app.replay.training import storage as training_storage
 
             monkeypatch.setattr(
-                training_storage, "_direct_liquidation_tick", lambda **kwargs: None
+                account_math_ops, '_direct_liquidation_tick', lambda **kwargs: None
             )
         reference = await _risk_service(
             reference_path,
@@ -338,7 +340,7 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
                     separate_mark_inputs,
                 )
             monkeypatch.setattr(
-                reference.training,
+                reference.training._ordered_playback,
                 "_ordered_final_state_batch_profile",
                 lambda **kwargs: None,
             )
@@ -359,7 +361,7 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
                     await reference.get_session(session),
                     {"basis": "BASE_BAR", "count": consumed},
                 )
-                await reference.training._advance_full_tracks_to(
+                await reference.training._ordered_playback._advance_full_tracks_to(
                     command=command,
                     binding=await reference.training.store.run_binding(run),
                     tracks=tuple(

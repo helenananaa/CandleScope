@@ -29,8 +29,8 @@ async def test_shared_wait_is_persisted_without_retrying_or_losing_cancel_isolat
     await service.start()
     try:
         # Use foreground consumers so both observers can occupy a worker.
-        first = service.submit(request().model_copy(update={"consumer": "STRATEGY"}))
-        second = service.submit(request("second-request").model_copy(update={"consumer": "STRATEGY"}))
+        first = await service.submit(request().model_copy(update={"consumer": "STRATEGY"}))
+        second = await service.submit(request("second-request").model_copy(update={"consumer": "STRATEGY"}))
         async def both_waiting():
             while any(repo.get(job["id"])["waiting"] != waiting for job in (first, second)):
                 await asyncio.sleep(.02)
@@ -40,7 +40,7 @@ async def test_shared_wait_is_persisted_without_retrying_or_losing_cancel_isolat
         revision = repo.get(second["id"])["revision"]
         repo.set_waiting(second["id"], waiting)
         assert repo.get(second["id"])["revision"] == revision
-        service.cancel(first["id"])
+        await service.cancel(first["id"])
         cancelled = await terminal(service, first["id"])
         assert cancelled["state"] == "CANCELLED" and cancelled["waiting"] is None
         assert repo.get(second["id"])["waiting"] == waiting

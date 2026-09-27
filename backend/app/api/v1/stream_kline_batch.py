@@ -22,6 +22,7 @@ from app.api.v1.stream_klines import (
     should_forward_browser_event,
 )
 from app.api.v1.stream_utils import (
+    close_for_resync,
     normalize_market_type,
     send_json_with_timeout,
     send_text_with_timeout,
@@ -583,6 +584,7 @@ class KlineBatchConnection:
                 callback = self._event_callback(subscription.client_id)
                 handle = self.dm.subscribe(
                     callback=callback,
+                    on_recovery=self._require_resync,
                     symbol=subscription.symbol,
                     interval=interval,
                     exchange=subscription.exchange,
@@ -597,6 +599,12 @@ class KlineBatchConnection:
                 continue
             subscription.handles[interval] = handle
         return failures
+
+    async def _require_resync(self, error=None) -> None:
+        if self.closed:
+            return
+        self.closed = True
+        await close_for_resync(self.websocket)
 
     def _event_callback(self, client_id: str) -> Callable[[Any], Any]:
         async def callback(event: Any) -> None:

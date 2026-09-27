@@ -273,7 +273,7 @@ def test_builtin_subscribe_coalesces_seed_query_and_sends_small_resume_patch():
     asyncio.run(_run())
 
 
-def test_indicator_critical_queue_evicts_preview_and_preserves_final_fifo() -> None:
+def test_indicator_critical_queue_evicts_preview_or_requires_resync() -> None:
     async def _run() -> None:
         queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=1)
         _queue_indicator_message(queue, {
@@ -298,10 +298,11 @@ def test_indicator_critical_queue_evicts_preview_and_preserves_final_fifo() -> N
             })
         )
         await asyncio.sleep(0)
-        assert not pending.done()
-        assert (await queue.get())["clientId"] == "final-2"
-        await asyncio.wait_for(pending, timeout=1)
-        assert (await queue.get())["clientId"] == "final-3"
+        assert pending.done()
+        assert (await queue.get())["type"] == "resync_required"
+        await pending
+        await _queue_indicator_critical_message(queue, {"type": "indicator.update"})
+        assert queue.empty()  # terminal until a fresh connection/snapshot
 
     asyncio.run(_run())
 

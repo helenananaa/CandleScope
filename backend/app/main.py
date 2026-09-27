@@ -67,6 +67,7 @@ from app.core.config import (
     TRADE_FLOW_ROLLUP_BACKEND,
 )
 from app.core.executors import executors_snapshot
+from app.core.bounded_executor import ExecutorBusyError
 from app.core.version import APP_VERSION
 from app.core.support_diagnostics import install_support_logging, router as support_router
 from app.core.runtime_metrics import EventLoopLagMonitor, ws_runtime_metrics
@@ -110,6 +111,14 @@ app = FastAPI(
     version=APP_VERSION,
 )
 app.include_router(support_router)
+
+
+@app.exception_handler(ExecutorBusyError)
+async def executor_busy_handler(request, exc):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=503, headers={"Retry-After": "1"}, content={
+        "detail": {"code": exc.code, "message": str(exc), "retryable": True},
+    })
 
 app.add_middleware(
     CORSMiddleware,
@@ -246,7 +255,7 @@ async def _init_data_manager() -> None:
 async def _init_replay_runtime() -> None:
     """Start replay as an application sibling, independent of live DataEngine."""
 
-    from app.api.v1.symbols import get_cached_symbol_metadata
+    from app.exchanges.symbol_catalog import get_cached_symbol_metadata
     from app.replay.runtime import start_replay_runtime
 
     runtime = await start_replay_runtime(
@@ -535,7 +544,7 @@ async def startup_event() -> None:
     # 2. Restore the validated local symbol snapshot before the API is opened.
     # This is local disk I/O only; optional upstream catalog I/O remains
     # asynchronous so it cannot hold core readiness hostage.
-    from app.api.v1.symbols import initialize_exchange_metadata_cache
+    from app.exchanges.symbol_catalog import initialize_exchange_metadata_cache
 
     restored_catalog = initialize_exchange_metadata_cache()
     if restored_catalog:
@@ -597,10 +606,11 @@ async def startup_event() -> None:
         from app.data_preparation.bar_adapter import BarPreparationAdapter
         from app.data_preparation.repository import PreparationRepository
         from app.data_preparation.service import PreparationService
+        from app.data_preparation.storage import storage_call
 
         preparation = PreparationService(
-            PreparationRepository(DATA_DIR / "data-preparation.sqlite3"),
-            BarPreparationAdapter(
+            await storage_call(PreparationRepository, DATA_DIR / "data-preparation.sqlite3"),
+            await storage_call(BarPreparationAdapter,
                 DATA_DIR / "prepared-inputs",
                 coordinator=getattr(getattr(app.state, "data_engine_runtime", None), "backfill_coordinator", None),
                 replay_service=getattr(app.state, "replay_service", None),
@@ -620,7 +630,7 @@ async def startup_event() -> None:
                 plugin_platform_v2.bind_market_data(
                     DataManagerConsumerPort(data_manager)
                 )
-            from app.api.v1.symbols import (
+            from app.exchanges.symbol_catalog import (
                 evict_exchange_metadata,
                 refresh_exchange_metadata,
             )
@@ -671,7 +681,7 @@ async def startup_event() -> None:
         await lag_monitor.stop()
         raise
 
-    from app.api.v1.symbols import configure_exchange_metadata_foreground_probe
+    from app.exchanges.symbol_catalog import configure_exchange_metadata_foreground_probe
 
     runtime = getattr(app.state, "data_engine_runtime", None)
     configure_exchange_metadata_foreground_probe(
@@ -687,7 +697,7 @@ async def startup_event() -> None:
 def _schedule_symbol_catalog_refresh() -> asyncio.Task[None]:
     async def _refresh() -> None:
         try:
-            from app.api.v1.symbols import refresh_exchange_metadata
+            from app.exchanges.symbol_catalog import refresh_exchange_metadata
 
             await _wait_for_catalog_foreground_quiet()
             counts = await refresh_exchange_metadata()
@@ -774,7 +784,7 @@ async def shutdown_event() -> None:
         except asyncio.CancelledError:
             pass
     try:
-        from app.api.v1.symbols import (
+        from app.exchanges.symbol_catalog import (
             cancel_exchange_metadata_refreshes,
             configure_exchange_metadata_foreground_probe,
         )

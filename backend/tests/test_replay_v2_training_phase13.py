@@ -462,7 +462,7 @@ async def test_phase13_contract_position_disables_ordered_final_state_batch(
         assert tracks[0]["position"]["quantity"] == "1"
         assert binding["account_model"] == "TOUCH_OR_TAPE_V2"
         assert (
-            service.training._ordered_final_state_batch_profile(
+            service.training._ordered_playback._ordered_final_state_batch_profile(
                 binding=binding,
                 tracks=tracks,
                 snapshot=snapshot,
@@ -500,7 +500,7 @@ async def test_phase13_pause_interrupts_high_rate_batch_at_committed_wave(
         )
         after_profile = await service.get_session(run["adapter_session_id"])
 
-        original_advance = service.training._advance_adapter_to
+        original_advance = service.training._ordered_playback._advance_adapter_to
         original_adapter_command = service.command
         first_wave_advanced = asyncio.Event()
         second_wave_started = asyncio.Event()
@@ -525,13 +525,13 @@ async def test_phase13_pause_interrupts_high_rate_batch_at_committed_wave(
             return result
 
         monkeypatch.setattr(
-            service.training,
+            service.training._ordered_playback,
             "_advance_adapter_to",
             controlled_advance,
         )
         monkeypatch.setattr(service, "command", recorded_adapter_command)
         monkeypatch.setattr(
-            "app.replay.training.service.discrete_playback_units",
+            "app.replay.training.ordered_playback.discrete_playback_units",
             lambda _elapsed_seconds, *, rate: 0,
         )
 

@@ -19,6 +19,7 @@ from app.api.v1.stream_indicator_payloads import (
 )
 from app.api.v1.stream_pyne_subscriptions import handle_pyne_indicator_subscribe
 from app.api.v1.stream_utils import (
+    close_for_resync,
     normalize_exchange as _normalize_exchange,
     normalize_market_type as _normalize_market_type,
     send_json_with_timeout as _send_json_with_timeout,
@@ -32,6 +33,7 @@ from app.core.operator_origin import (
 )
 from app.core.executors import run_storage
 from app.core.runtime_metrics import ws_runtime_metrics
+from app.data_engine.consumer_recovery import terminate_queue
 from app.data_engine.interval_policy import parse_interval_ms, parse_interval_spec
 from app.data_engine.interval_resolution import IntervalResolutionError
 from app.indicator import registry as indicator_registry
@@ -141,12 +143,11 @@ async def stream_indicators(
     seed_query_cache: dict[tuple[str, str, str, str, int], dict[str, Any]] = {}
     ws_closed = False
     seq = 0
-    critical_enqueue_tasks: set[asyncio.Task] = set()
 
     loop = asyncio.get_running_loop()
 
     def _listener(event: IndicatorEvent) -> None:
-        if ws_closed:
+        if ws_closed or getattr(queue, "_resync_required", False):
             return
         for client_id, key in list(subscribed.items()):
             if key != event.key:
@@ -157,21 +158,16 @@ async def stream_indicators(
                 range_service = getattr(indicator_engine, "indicator_range_service", None)
                 if range_service is not None:
                     msg["dataRevision"] = range_service.data_revision_for_meta(meta)
-                if not _is_droppable_indicator_preview(msg):
-                    def _schedule_critical(
-                        critical_msg: dict = msg,
-                        critical_client_id: str = client_id,
-                    ) -> None:
-                        if ws_closed:
-                            return
-                        task = asyncio.create_task(
-                            _queue_indicator_critical_message(queue, critical_msg),
-                            name=f"indicator_ws_critical_{critical_client_id}",
-                        )
-                        critical_enqueue_tasks.add(task)
-                        task.add_done_callback(critical_enqueue_tasks.discard)
-
-                    loop.call_soon_threadsafe(_schedule_critical)
+                if event.detail.get("resyncRequired"):
+                    msg = {"type": "resync_required"}
+                # One bounded queue, no task per critical frame. A saturated
+                # socket must reconnect instead of accumulating blocked puts.
+                try:
+                    in_owner_loop = asyncio.get_running_loop() is loop
+                except RuntimeError:
+                    in_owner_loop = False
+                if in_owner_loop:
+                    _queue_indicator_message(queue, msg)
                 else:
                     loop.call_soon_threadsafe(_queue_indicator_message, queue, msg)
 
@@ -207,6 +203,9 @@ async def stream_indicators(
     async def _forwarder() -> None:
         while not ws_closed:
             msg = await queue.get()
+            if msg.get("type") == "resync_required":
+                await close_for_resync(websocket)
+                return
             if not await _safe_send_json(msg):
                 return
 
@@ -300,8 +299,6 @@ async def stream_indicators(
         ws_closed = True
         forwarder_task.cancel()
         heartbeat_task.cancel()
-        for task in tuple(critical_enqueue_tasks):
-            task.cancel()
         try:
             await forwarder_task
         except (asyncio.CancelledError, Exception):
@@ -310,11 +307,6 @@ async def stream_indicators(
             await heartbeat_task
         except (asyncio.CancelledError, Exception):
             pass
-        if critical_enqueue_tasks:
-            await asyncio.gather(
-                *tuple(critical_enqueue_tasks),
-                return_exceptions=True,
-            )
         indicator_engine.remove_listener(_listener)
         client_ids = set(subscribed) | set(custom_handles) | set(custom_tasks) | set(client_meta)
         for client_id in list(client_ids):
@@ -988,12 +980,34 @@ async def _release_indicator_stream(dm, meta: dict) -> None:
 
 
 def _queue_indicator_message(queue: asyncio.Queue, msg: dict) -> None:
+    if getattr(queue, "_resync_required", False):
+        return
+    if msg.get("type") == "resync_required":
+        queue._resync_required = True
+        terminate_queue(queue, msg)
+        return
     try:
         queue.put_nowait(msg)
     except asyncio.QueueFull:
-        if not _is_droppable_indicator_preview(msg):
-            return
-        _coalesce_indicator_preview(queue, msg)
+        if _is_droppable_indicator_preview(msg):
+            _coalesce_indicator_preview(queue, msg)
+        else:
+            # Evict a replaceable preview before declaring a reliable gap.
+            kept = []
+            removed = False
+            while not queue.empty():
+                current = queue.get_nowait()
+                if not removed and _is_droppable_indicator_preview(current):
+                    removed = True
+                else:
+                    kept.append(current)
+            if removed:
+                for current in kept:
+                    queue.put_nowait(current)
+                queue.put_nowait(msg)
+            else:
+                queue._resync_required = True
+                queue.put_nowait({"type": "resync_required"})
 
 
 def _is_droppable_indicator_preview(msg: dict) -> bool:
@@ -1006,38 +1020,9 @@ def _is_droppable_indicator_preview(msg: dict) -> bool:
     )
 
 
-async def _queue_indicator_critical_message(
-    queue: asyncio.Queue,
-    msg: dict,
-) -> None:
-    """Enqueue a correction/finality frame without silently dropping it."""
-    try:
-        queue.put_nowait(msg)
-        return
-    except asyncio.QueueFull:
-        pass
-
-    kept: list[dict] = []
-    removed_preview = False
-    while True:
-        try:
-            current = queue.get_nowait()
-        except asyncio.QueueEmpty:
-            break
-        if not removed_preview and _is_droppable_indicator_preview(current):
-            removed_preview = True
-            continue
-        kept.append(current)
-    for current in kept:
-        queue.put_nowait(current)
-    if removed_preview:
-        queue.put_nowait(msg)
-        return
-
-    # Backpressure only this client's correction worker until the websocket
-    # forwarder consumes an older final frame.  The shared correction ingress
-    # remains free to fan out to other clients.
-    await queue.put(msg)
+async def _queue_indicator_critical_message(queue: asyncio.Queue, msg: dict) -> None:
+    """Bounded admission; a terminal marker forces canonical reinitialization."""
+    _queue_indicator_message(queue, msg)
 
 
 def _coalesce_indicator_preview(queue: asyncio.Queue, msg: dict) -> None:

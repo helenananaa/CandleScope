@@ -27,6 +27,34 @@ from app.data_engine.data_manager.models import (
 )
 from app.data_engine.history import AlwaysOpenCalendar, SessionCalendar
 from app.data_engine.series_identity import KlineSeriesIdentity
+from app.core.bounded_executor import BoundedExecutor
+
+
+def test_latest_returns_retryable_503_when_storage_capacity_is_exhausted(monkeypatch):
+    pool = BoundedExecutor("storage", max_workers=1, max_pending=0)
+    release = threading.Event()
+    occupied = None
+    class Manager(_FakeDataManager):
+        async def ensure_stream(self, *args, **kwargs):
+            nonlocal occupied
+            await super().ensure_stream(*args, **kwargs)
+            # Fill capacity at the actual query boundary, after symbol policy
+            # resolution, without depending on its cache warmup duration.
+            occupied = pool.submit(lambda: release.wait(5))
+    monkeypatch.setattr("app.core.executors._storage_executor", pool)
+    try:
+        response = _client(Manager()).get("/api/v1/klines/latest", params={
+            "symbol": "BTCUSDT", "interval": "1m", "exchange": "binance", "market_type": "spot", "limit": 1,
+        })
+        assert response.status_code == 503, response.text
+        assert response.json()["detail"]["code"] == "EXECUTOR_BUSY"
+        assert response.headers["Retry-After"] == "1"
+        assert pool.snapshot()["submitted"] == 1
+    finally:
+        release.set()
+        if occupied is not None:
+            occupied.result(2)
+        pool.shutdown()
 
 
 def test_range_verifier_rejects_explicitly_unclosed_bar_inside_closed_range() -> None:

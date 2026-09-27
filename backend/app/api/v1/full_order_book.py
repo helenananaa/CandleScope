@@ -15,8 +15,8 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from starlette.background import BackgroundTask
 
-from app.api.v1.order_book_auto import AutoGroupingState, step_scores
-from app.api.v1.order_book_projection import (
+from app.data_engine.market_data.order_book_auto import AutoGroupingState, step_scores
+from app.data_engine.market_data.order_book_projection import (
     PriceGrouping,
     cached_price_tick_size,
     normalize_price_grouping,

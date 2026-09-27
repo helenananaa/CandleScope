@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from app.replay.training.persistence import account_marks as account_marks_ops
+from app.replay.training.persistence import liquidation as liquidation_ops
+from app.replay.training.persistence import portfolio as portfolio_ops
+
 import asyncio
 import json
 import sqlite3
@@ -66,7 +70,7 @@ async def test_public_hedge_input_view_uses_one_disclosed_time_domain(
         def read_private(
             connection: sqlite3.Connection,
         ) -> tuple[dict[str, object], sqlite3.Row]:
-            private_view = service.training.store._hedge_input_projection(
+            private_view = portfolio_ops.hedge_input_projection(
                 connection,
                 run_id=run_id,
             )
@@ -379,7 +383,7 @@ async def test_high_rate_hedge_playback_yields_control_lock_after_each_bar(
         before_play = await service.get_session(session_id)
         before_sequence = int(before_play["snapshot"]["cursor"]["source_sequence"])
         assert (
-            service.training._ordered_playback_interactive_batch_limit(
+            service.training._ordered_playback._ordered_playback_interactive_batch_limit(
                 binding=binding,
                 tracks=tracks,
                 snapshot=before_play["snapshot"],
@@ -399,7 +403,7 @@ async def test_high_rate_hedge_playback_yields_control_lock_after_each_bar(
             payload={"basis": "BASE_BAR", "rate": 10_000},
         )
 
-        original_advance = service.training._advance_adapter_to
+        original_advance = service.training._ordered_playback._advance_adapter_to
         first_bar_advanced = asyncio.Event()
         advance_kwargs: list[dict[str, object]] = []
 
@@ -422,7 +426,7 @@ async def test_high_rate_hedge_playback_yields_control_lock_after_each_bar(
             return result
 
         monkeypatch.setattr(
-            service.training,
+            service.training._ordered_playback,
             "_advance_adapter_to",
             controlled_advance,
         )
@@ -437,7 +441,7 @@ async def test_high_rate_hedge_playback_yields_control_lock_after_each_bar(
             forbidden_full_track_projection,
         )
         monkeypatch.setattr(
-            "app.replay.training.service.discrete_playback_units",
+            "app.replay.training.ordered_playback.discrete_playback_units",
             lambda _elapsed_seconds, *, rate: 64,
         )
 
@@ -518,10 +522,10 @@ async def test_manual_hedge_bar_step_keeps_exhaustive_audit_off_hot_path(
         )
         original_audit = service.training.audit_account
         advance_kwargs: list[dict[str, object]] = []
-        original_advance = service.training._advance_adapter_to
+        original_advance = service.training._ordered_playback._advance_adapter_to
         original_get_market_tracks = service.training.store.get_market_tracks
         original_detect_liquidations = (
-            service.training.store._detect_contract_liquidations
+            liquidation_ops.detect_contract_liquidations
         )
         liquidation_detection_count = 0
 
@@ -553,7 +557,8 @@ async def test_manual_hedge_bar_step_keeps_exhaustive_audit_off_hot_path(
             return original_detect_liquidations(*args, **kwargs)
 
         monkeypatch.setattr(service.training, "audit_account", forbidden_account_audit)
-        monkeypatch.setattr(service.training, "_advance_adapter_to", observed_advance)
+        monkeypatch.setattr(service.training._ordered_playback, "audit_account", forbidden_account_audit)
+        monkeypatch.setattr(service.training._ordered_playback, "_advance_adapter_to", observed_advance)
         monkeypatch.setattr(
             service.training.store,
             "get_market_tracks",
@@ -565,8 +570,8 @@ async def test_manual_hedge_bar_step_keeps_exhaustive_audit_off_hot_path(
             forbidden_exact_account_finalize,
         )
         monkeypatch.setattr(
-            service.training.store,
-            "_detect_contract_liquidations",
+            liquidation_ops,
+            'detect_contract_liquidations',
             observed_detect_liquidations,
         )
         advanced = await _send(
@@ -652,7 +657,7 @@ async def test_empty_hedge_display_step_batches_marks_without_losing_audit_event
     async def no_index(**kwargs):
         return None
 
-    monkeypatch.setattr(service.training, "_try_indexed_interval", no_index)
+    monkeypatch.setattr(service.training._ordered_playback, "_try_indexed_interval", no_index)
     try:
         catalog = await service.catalog(
             warmup_bars=2,
@@ -691,7 +696,7 @@ async def test_empty_hedge_display_step_batches_marks_without_losing_audit_event
         adapter_event_counts: list[int] = []
         hedge_apply_sizes: list[int] = []
         hedge_finalize_count = 0
-        original_advance = service.training._advance_adapter_to
+        original_advance = service.training._ordered_playback._advance_adapter_to
         original_apply = service.training.store._hedge_input_write_operation
         original_finalize = service.training.store._finalize_hedge_inputs_in_transaction
 
@@ -710,7 +715,7 @@ async def test_empty_hedge_display_step_batches_marks_without_losing_audit_event
             hedge_finalize_count += 1
             return original_finalize(*args, **kwargs)
 
-        monkeypatch.setattr(service.training, "_advance_adapter_to", observed_advance)
+        monkeypatch.setattr(service.training._ordered_playback, "_advance_adapter_to", observed_advance)
         monkeypatch.setattr(
             service.training.store,
             "_hedge_input_write_operation",
@@ -722,7 +727,7 @@ async def test_empty_hedge_display_step_batches_marks_without_losing_audit_event
             observed_finalize,
         )
         monkeypatch.setattr(
-            "app.replay.training.service.STABLE_ORDER_RESPONSE_EVENTS",
+            "app.replay.training.control_rules.STABLE_ORDER_RESPONSE_EVENTS",
             64,
         )
         before = await service.get_session(session_id)
@@ -886,13 +891,13 @@ async def test_empty_multitrack_hedge_display_step_batches_aligned_bars(
         )
 
         adapter_batch_sizes: list[int | None] = []
-        original_advance = service.training._advance_adapter_to
+        original_advance = service.training._ordered_playback._advance_adapter_to
 
         async def observed_advance(**kwargs):
             adapter_batch_sizes.append(kwargs.get("final_state_max_events"))
             return await original_advance(**kwargs)
 
-        monkeypatch.setattr(service.training, "_advance_adapter_to", observed_advance)
+        monkeypatch.setattr(service.training._ordered_playback, "_advance_adapter_to", observed_advance)
         before = await service.get_session(session_id)
         before_sequence = int(before["snapshot"]["cursor"]["source_sequence"])
         advanced = await _send(
@@ -1388,23 +1393,30 @@ async def test_real_add_track_uses_track_specific_mark_funding_and_audit(
             prefix="phase9-multitrack",
         )
         assert service.training is not None
-        original_totals = service.training.store._hedge_accounting_totals_by_leg
-        funding_wave_aggregations = 0
+        original_totals = account_marks_ops.hedge_accounting_totals_by_leg
+        funding_wave_aggregations = []
+        funding_inputs = []
+        original_settlement = account_marks_ops.settle_hedge_funding_event
 
         def observed_totals(
             connection: sqlite3.Connection,
             *,
             run_id: str,
         ) -> dict[tuple[str, str], tuple[Decimal, Decimal, Decimal]]:
-            nonlocal funding_wave_aggregations
-            funding_wave_aggregations += 1
-            return original_totals(connection, run_id=run_id)
+            totals = original_totals(connection, run_id=run_id)
+            funding_wave_aggregations.append(totals)
+            return totals
+
+        def observed_settlement(connection, **kwargs):
+            funding_inputs.append(kwargs["accounting_totals"])
+            return original_settlement(connection, **kwargs)
 
         monkeypatch.setattr(
-            service.training.store,
-            "_hedge_accounting_totals_by_leg",
+            account_marks_ops,
+            'hedge_accounting_totals_by_leg',
             observed_totals,
         )
+        monkeypatch.setattr(account_marks_ops, "settle_hedge_funding_event", observed_settlement)
         await _send(
             service,
             run_id=run_id,
@@ -1413,7 +1425,13 @@ async def test_real_add_track_uses_track_specific_mark_funding_and_audit(
             command_type=ReplayV2CommandType.STEP_BASE,
             payload={"count": 2},
         )
-        assert funding_wave_aggregations == 1
+        # Both tracks settle from the same once-loaded, then updated totals.
+        # Other account refreshes now use this module too; they are not funding
+        # waves and were invisible to the old instance-only monkeypatch.
+        assert len(funding_inputs) == 2
+        assert funding_inputs[0] is not None
+        assert funding_inputs[0] is funding_inputs[1]
+        assert sum(item is funding_inputs[0] for item in funding_wave_aggregations) == 1
         projection = await service.training.get_market_tracks(run_id)
         tracks = {str(track["symbol"]): track for track in projection["tracks"]}
         assert tracks["BTCUSDT"]["public_price"] == "101"

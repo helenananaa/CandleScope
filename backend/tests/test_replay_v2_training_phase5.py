@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.replay.training.persistence import portfolio as portfolio_ops
+
 import asyncio
 import json
 import os
@@ -909,7 +911,7 @@ async def test_market_track_projection_materializes_each_track_once(
             command_id="projection-once-add-track",
         )
         store = service.training.store  # type: ignore[union-attr]
-        original = store._market_track_from_row
+        original = portfolio_ops.market_track_from_row
         materializations = 0
 
         def observed(row: sqlite3.Row) -> dict[str, object]:
@@ -917,7 +919,7 @@ async def test_market_track_projection_materializes_each_track_once(
             materializations += 1
             return original(row)
 
-        monkeypatch.setattr(store, "_market_track_from_row", observed)
+        monkeypatch.setattr(portfolio_ops, 'market_track_from_row', observed)
         projection = await service.training.get_market_tracks(run_id)  # type: ignore[union-attr]
 
         assert len(projection["tracks"]) == 2

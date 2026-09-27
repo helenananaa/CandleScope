@@ -6,7 +6,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from app.api.v1.backtests import RunCreateRequest, router as backtests_router
+from app.backtest.request_contracts import RunCreateRequest
+from app.api.v1.backtests import router as backtests_router
 from app.backtest.errors import BacktestError
 from app.backtest.runtime import BacktestRuntime
 from app.core.config import load_backtest_settings

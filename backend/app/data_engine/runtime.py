@@ -1034,6 +1034,8 @@ async def start_data_engine() -> DataEngineRuntime:
         if callable(set_suppression_lookup):
             set_suppression_lookup(backfill_coordinator.get_repair_suppression)
         dm.set_backfill_trigger(backfill_coordinator.trigger)
+        from app.data_engine.data_manager.bar_delivery import source_recovery_handler
+        dm.aggregator_bridge.delivery.recover_source = source_recovery_handler(backfill_coordinator)
         print("[startup] BackfillCoordinator injected [ok]")
 
         await dm.start()

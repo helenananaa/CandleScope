@@ -8,12 +8,9 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-import app.replay.training.service as training_service_module
-from app.api.v1.replay import (
-    TrainingRunPreparationPayload,
-    TrainingRunSetupPayload,
-    router,
-)
+import app.replay.training.admission_rules as admission_rules
+from app.replay.request_contracts import TrainingRunPreparationPayload, TrainingRunSetupPayload
+from app.api.v1.replay import router
 from app.replay.service import ReplayService
 from app.replay.storage import ReplaySQLiteStore
 from app.replay.training.models import (
@@ -402,7 +399,7 @@ async def test_legacy_hedge_shell_catalog_and_selection_share_setup_admission(
 
 
 def test_setup_admission_merges_adjacent_archive_windows() -> None:
-    admission = training_service_module._MarketSetupAdmission(
+    admission = admission_rules._MarketSetupAdmission(
         windows=((0, 2 * INTERVAL_MS), (2 * INTERVAL_MS, 5 * INTERVAL_MS)),
         code="REQUIRED_HISTORY_COVERAGE_UNAVAILABLE",
         message="coverage unavailable",
@@ -561,7 +558,8 @@ async def test_run_list_reuses_source_catalog_across_awaiting_market_cards(
         calls = 0
         admission_calls = 0
         original_catalog = service.catalog
-        original_admission = service.training._setup_capability_admission
+        admission = service.training._admission_service
+        original_admission = admission._setup_capability_admission
 
         async def counted_catalog(**kwargs):
             nonlocal calls
@@ -575,7 +573,7 @@ async def test_run_list_reuses_source_catalog_across_awaiting_market_cards(
 
         monkeypatch.setattr(service, "catalog", counted_catalog)
         monkeypatch.setattr(
-            service.training,
+            admission,
             "_setup_capability_admission",
             counted_admission,
         )
@@ -612,8 +610,8 @@ async def test_agg_random_sampling_deduplicates_t0_shared_by_markets(
             suffix = "0"
         return "sha256:" + "0" * 63 + suffix
 
-    monkeypatch.setattr(training_service_module, "canonical_sha256", controlled_hash)
-    selected = training_service_module._sample_unique_source_time(
+    monkeypatch.setattr(admission_rules, "canonical_sha256", controlled_hash)
+    selected = admission_rules._sample_unique_source_time(
         (
             (0, INTERVAL_MS, 2),
             (INTERVAL_MS, INTERVAL_MS, 2),

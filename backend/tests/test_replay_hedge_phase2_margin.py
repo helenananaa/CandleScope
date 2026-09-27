@@ -21,12 +21,7 @@ from app.replay.internal_commands import REVEALED_REFERENCE_CLOSE_FIDELITY
 from app.replay.training.account import InstrumentRule, MaintenanceTier
 from app.replay.training.errors import TrainingRunError
 from app.replay.training.models import ReplayV2CommandType
-from app.replay.training.storage import (
-    EXTRAPOLATED_MAINTENANCE_TIER_FIDELITY,
-    VERSIONED_MAINTENANCE_TIER_FIDELITY,
-    _maintenance_margin_proof,
-    _project_liquidation_price_pair,
-)
+from app.replay.training.persistence.account_math import EXTRAPOLATED_MAINTENANCE_TIER_FIDELITY, VERSIONED_MAINTENANCE_TIER_FIDELITY, _maintenance_margin_proof, _project_liquidation_price_pair
 from tests.fixtures.replay.broker_fakes import CONFIG, bar, make_broker, request
 from tests.fixtures.replay.hedge_input_fakes import prepare_hedge_request
 from tests.test_replay_v2_training_phase5 import _acquire, _request

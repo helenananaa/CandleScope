@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from app.api.v1 import symbols as catalog
+from app.exchanges import symbol_catalog as catalog
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +22,10 @@ async def refresh_discovery_catalogs() -> None:
             continue
         for market in adapter.capabilities().markets:
             # Yield to chart/history work. This sweep is optional background I/O.
-            while catalog._foreground_busy_probe and catalog._foreground_busy_probe():
+            while catalog.foreground_is_busy():
                 await asyncio.sleep(1)
             try:
-                await catalog._refresh_market_catalog(adapter, market.market_type, force=False)
+                await catalog.refresh_market_catalog(adapter, market.market_type, force=False)
             except asyncio.CancelledError:
                 raise
             except Exception:

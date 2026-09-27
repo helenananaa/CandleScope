@@ -9,15 +9,15 @@ from typing import Any
 
 from fastapi import WebSocket, WebSocketDisconnect
 
-from app.api.v1.order_book import (
+from app.data_engine.market_data.order_book_contract import (
     ALLOWED_DEPTH_LEVELS,
     ALLOWED_UPDATE_INTERVALS_BY_MARKET,
     ALLOWED_UPDATE_INTERVALS_MS,
     PROTOCOL,
-    order_book_contract,
     serialize_record,
 )
-from app.api.v1.order_book_projection import cached_price_tick_size
+from app.api.v1.order_book import order_book_contract
+from app.data_engine.market_data.order_book_projection import cached_price_tick_size
 from app.api.v1.stream_utils import send_json_with_timeout, send_text_with_timeout
 from app.data_engine.market_data.models import MarketChannel, MarketStreamKey
 

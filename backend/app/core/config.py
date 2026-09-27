@@ -878,6 +878,12 @@ INDICATOR_HTTP_TIMEOUT_SECONDS = float(os.getenv("INDICATOR_HTTP_TIMEOUT_SECONDS
 INDICATOR_THREAD_WORKERS = int(os.getenv("INDICATOR_THREAD_WORKERS", "2"))
 PYNE_HTTP_THREAD_WORKERS = int(os.getenv("PYNE_HTTP_THREAD_WORKERS", "2"))
 STORAGE_THREAD_WORKERS = int(os.getenv("STORAGE_THREAD_WORKERS", "4"))
+# Admission is immediate: running + queued calls may not exceed workers + pending.
+INDICATOR_THREAD_PENDING = int(os.getenv("INDICATOR_THREAD_PENDING", "64"))
+PYNE_HTTP_THREAD_PENDING = int(os.getenv("PYNE_HTTP_THREAD_PENDING", "64"))
+STORAGE_THREAD_PENDING = int(os.getenv("STORAGE_THREAD_PENDING", "128"))
+PREPARATION_THREAD_WORKERS = int(os.getenv("PREPARATION_THREAD_WORKERS", "2"))
+PREPARATION_THREAD_PENDING = int(os.getenv("PREPARATION_THREAD_PENDING", "64"))
 # Backfill chunks perform SQLite projection and reconciliation in the same
 # process as the async API. Keep the coordinator serialized by default so a
 # 16-series repair burst cannot occupy every storage worker and starve control

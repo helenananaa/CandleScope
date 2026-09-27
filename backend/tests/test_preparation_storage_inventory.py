@@ -110,7 +110,7 @@ async def test_host_growth_blocks_snapshot_publication_after_download(tmp_path):
     service = PreparationService(repo, adapter)
     await service.start()
     try:
-        job = service.submit(request())
+        job = await service.submit(request())
         result = await terminal(service, job["id"])
         assert result["state"] == "BLOCKED_STORAGE", result
         assert result["error"]["code"] == "STORAGE_BUDGET"
@@ -165,11 +165,11 @@ async def test_inventory_runs_in_background_and_gates_only_preparation(tmp_path,
     await asyncio.wait_for(service.start(), 1)
     try:
         assert await asyncio.to_thread(entered.wait, 1)
-        job = service.submit(request())
+        job = await service.submit(request())
         await asyncio.sleep(0.05)
         assert adapter.calls == 0
         if cancel:
-            service.cancel(job["id"])
+            await service.cancel(job["id"])
             assert (await terminal(service, job["id"]))["state"] == "CANCELLED"
             assert adapter.calls == 0
         else:
@@ -198,10 +198,10 @@ async def test_retry_repeats_failed_inventory_before_acquisition(tmp_path, monke
     service = PreparationService(PreparationRepository(tmp_path / "jobs.db"), adapter)
     await service.start()
     try:
-        job = service.submit(request())
+        job = await service.submit(request())
         assert (await terminal(service, job["id"]))["state"] == "FAILED"
         assert adapter.calls == 0
-        service.retry(job["id"])
+        await service.retry(job["id"])
         assert (await terminal(service, job["id"]))["state"] == "READY"
         assert attempts == 2 and adapter.calls == 1
     finally:

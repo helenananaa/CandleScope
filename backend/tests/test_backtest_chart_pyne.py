@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 import app.backtest.strategy.chart_pyne as chart_pyne_module
-from app.api.v1.backtests import RunCreateRequest
+from app.backtest.request_contracts import RunCreateRequest
 from app.backtest.service import BacktestService
 from app.backtest.strategy.chart_pyne import (
     CHART_PYNE_REVISION,

@@ -1,5 +1,7 @@
 """Acquire the existing actor leases before the prepared training UI opens."""
 
+from . import service_validation as service_validation_ops
+
 import uuid
 
 from ..constants import REPLAY_PROTOCOL
@@ -15,7 +17,7 @@ async def prepare_controllers(owner, run_id, client_id):
     for track in tracks:
         if track["subscription_tier"] != "FULL":
             continue
-        sid = owner._track_session_id(track)
+        sid = service_validation_ops.track_session_id(track)
         snapshot = await service.get_session_state(sid)
         snapshots.append((sid, snapshot))
     # Opening another client's training remains a read-only operation.

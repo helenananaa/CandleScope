@@ -14,14 +14,14 @@ from candlescope_plugin_sdk.platform_v2 import (
     TradesReadRequest,
 )
 
-from app.api.v1.order_book import (
+from app.data_engine.market_data.order_book_contract import (
     ALLOWED_DEPTH_LEVELS,
     ALLOWED_UPDATE_INTERVALS_BY_MARKET,
     DEFAULT_UPDATE_INTERVAL_MS_BY_MARKET,
-    cached_price_tick_size,
     serialize_record,
 )
-from app.api.v1.symbols import list_cached_symbols
+from app.data_engine.market_data.order_book_projection import cached_price_tick_size
+from app.exchanges.symbol_catalog import list_cached_symbols
 from app.data_engine.data_manager.models import DataEventType
 from app.data_engine.market_data.models import MarketChannel, MarketStreamKey
 
@@ -77,6 +77,7 @@ class DataManagerConsumerPort:
             request.series.interval,
             exchange=request.context.exchange,
             market_type=request.context.market_type,
+            on_recovery=callback,
             event_types={
                 DataEventType.BAR_CREATED,
                 DataEventType.BAR_UPDATED,

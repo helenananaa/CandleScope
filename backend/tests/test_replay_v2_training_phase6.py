@@ -722,7 +722,7 @@ async def test_multi_market_funding_settles_once_per_track_at_global_boundary(
 
         monkeypatch.setattr(service, "heartbeat", observed_heartbeat)
         assert service.training is not None
-        original_multi_track_control = service.training._execute_multi_track_control
+        original_multi_track_control = service.training._ordered_playback._execute_multi_track_control
         expire_before_step = True
 
         async def expire_after_cursor_validation(**kwargs):
@@ -736,7 +736,7 @@ async def test_multi_market_funding_settles_once_per_track_at_global_boundary(
             return await original_multi_track_control(**kwargs)
 
         monkeypatch.setattr(
-            service.training,
+            service.training._ordered_playback,
             "_execute_multi_track_control",
             expire_after_cursor_validation,
         )

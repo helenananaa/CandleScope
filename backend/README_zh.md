@@ -345,6 +345,22 @@ cd backend
 python -m pytest -q
 ```
 
+依赖边界门禁（不导入应用或启动服务）：
+
+```bash
+cd backend
+python -B scripts/check_architecture.py
+python -B -m pytest -q tests/test_api_dependency_boundaries.py tests/test_replay_dependency_boundaries.py
+```
+
+业务包不能导入 `app.api` 或 `app.main`；只有 HTTP 层和 `app.main` 负责组合路由。
+共用请求模型、交易对缓存、订单簿契约与投影由各自业务模块持有，HTTP 层负责错误映射。
+门禁解析绝对、相对和字面量动态导入，并检查共享模块的传递依赖。
+独立进程测试还禁止加载 FastAPI/Starlette，实际执行数据准备、历史查询和插件读取路径。
+
+同一门禁还检查回放职责的依赖方向，禁止拆出的持久化操作自行管理 SQLite 事务。
+事务、发布与恢复边界见[回放训练职责说明](app/replay/training/README.md)。
+
 编译检查：
 
 ```bash

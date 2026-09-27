@@ -697,6 +697,11 @@ async def test_exact_account_only_waves_batch_until_market_barrier(
             "audit_account",
             counted_audit_account,
         )
+        monkeypatch.setattr(
+            service.training._ordered_playback,
+            "audit_account",
+            counted_audit_account,
+        )
         stepped = await _send(
             service,
             run_id=run_id,

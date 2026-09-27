@@ -34,12 +34,12 @@ async def test_prefetch_leaves_a_foreground_worker_available(tmp_path):
     service = PreparationService(PreparationRepository(tmp_path / "jobs.db"), adapter, workers=2)
     await service.start()
     try:
-        first = service.submit(request("prefetch-one"))
-        second = service.submit(request("prefetch-two"))
+        first = await service.submit(request("prefetch-one"))
+        second = await service.submit(request("prefetch-two"))
         await asyncio.wait_for(adapter.entered.wait(), 2)
         foreground_req = request("foreground-one").model_copy(update={"consumer": "REPLAY",
             "requirements": [request().requirements[0].model_copy(update={"symbol": "ETHUSDT"})]})
-        foreground = service.submit(foreground_req)
+        foreground = await service.submit(foreground_req)
         for _ in range(100):
             if adapter.calls == 2:
                 break

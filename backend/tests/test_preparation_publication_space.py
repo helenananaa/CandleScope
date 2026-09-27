@@ -85,7 +85,7 @@ async def test_publication_budget_stops_before_archive_or_snapshot_write_and_ret
     service = PreparationService(repo, adapter)
     await service.start()
     try:
-        job = service.submit(request().model_copy(update={"consumer": consumer}))
+        job = await service.submit(request().model_copy(update={"consumer": consumer}))
         result = await terminal(service, job["id"])
         assert result["state"] == "BLOCKED_STORAGE", result
         assert result["error"]["code"] == "STORAGE_BUDGET"
@@ -93,7 +93,7 @@ async def test_publication_budget_stops_before_archive_or_snapshot_write_and_ret
         assert not list((tmp_path / "archive").rglob("*.parquet"))
         assert repo.cache_inventory()["publication_reserved_bytes"] == 0
         repo.configure(cache_budget_bytes=16 * 1024**2, prefetch_enabled=False)
-        service.retry(job["id"])
+        await service.retry(job["id"])
         result = await terminal(service, job["id"])
         assert result["state"] == "READY", result
         assert repo.cache_inventory()["publication_reserved_bytes"] == 0
@@ -122,7 +122,7 @@ async def test_failure_after_snapshot_rename_is_inventoried_before_reservation_r
     service = PreparationService(repo, adapter)
     await service.start()
     try:
-        job = service.submit(request().model_copy(update={"consumer": "STRATEGY"}))
+        job = await service.submit(request().model_copy(update={"consumer": "STRATEGY"}))
         result = await terminal(service, job["id"])
         assert result["state"] == "FAILED"
         async def reconciled():

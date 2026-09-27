@@ -19,7 +19,7 @@ from app.api.v1.klines import router as klines_router
 from app.api.v1.settings import router as settings_router
 from app.api.v1.stream import router as stream_router
 from app.api.v1.subscriptions import price_ws_router, router as subscriptions_router
-from app.api.v1.symbols import (
+from app.exchanges.symbol_catalog import (
     evict_exchange_metadata,
     refresh_exchange_metadata,
     router as symbols_router,

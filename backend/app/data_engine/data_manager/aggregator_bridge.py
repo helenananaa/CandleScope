@@ -5,10 +5,12 @@ import logging
 from collections.abc import Callable
 
 from app.core.executors import run_storage
+from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
 from app.data_engine.interval_policy import is_ephemeral_interval
 
 from ..bar_aggregator import BarEvent, BarEventType, BarFinality, BarState
 from .cache import BarCache
+from .bar_delivery import DurableBarDelivery
 from .event_bus import DataEventBus
 from .models import BarData, DataEvent, DataEventType, SeriesKey, StorageBackend
 
@@ -30,14 +32,17 @@ class AggregatorBridge:
         storage_provider: StorageProvider,
         mark_bar_received: StreamMarker,
         is_started: StartedProvider,
+        recovery_lookback_bars: int = 500,
     ) -> None:
         self._cache = cache
         self._event_bus = event_bus
         self._storage_provider = storage_provider
         self._mark_bar_received = mark_bar_received
         self._is_started = is_started
+        self.delivery = DurableBarDelivery(storage_provider, self._publish,
+                                           recovery_lookback_bars=recovery_lookback_bars)
 
-    async def on_bar_event(self, event: BarEvent) -> None:
+    async def on_bar_event(self, event: BarEvent) -> str | None:
         """Convert an aggregator event into cache updates and DataEvents."""
         if not self._is_started():
             return
@@ -101,51 +106,34 @@ class AggregatorBridge:
                 )
                 return
 
-        # Durable quality arbitration is authoritative when production
-        # storage is present. A zero affected-row result means SQLite retained
-        # a higher-ranked canonical row, so cache and downstream consumers
-        # must not observe the rejected event. None preserves availability for
-        # storage-less/ephemeral paths and legacy test doubles.
-        durable_accepted = await self._persist_bar_event(
-            bar_state,
-            dm_event_type,
-            storage_source,
-        )
-        if durable_accepted is False:
-            logger.warning(
-                "Dropped durable-rejected %s for %s bucket=%d source=%s",
-                dm_event_type.value,
-                key,
-                bar_state.bucket_start_ms,
-                bar_data.source,
-            )
-            return
-
-        if cache_write_event:
-            accepted, canonical = self._cache.upsert_if_accepted(key, bar_data)
-            if not accepted:
-                logger.warning(
-                    "Dropped lower-quality %s for %s bucket=%d "
-                    "incoming_source=%s canonical_source=%s",
-                    dm_event_type.value,
-                    key,
-                    bar_state.bucket_start_ms,
-                    bar_data.source,
-                    canonical.source,
-                )
-                return
-
-        self._mark_bar_received(key)
-
-        dm_event = DataEvent(
-            event_type=dm_event_type,
-            key=key,
-            bar=bar_data,
-        )
+        dm_event = DataEvent(dm_event_type, key, bar_data, timestamp_ms=event.timestamp_ms)
         if event.previous_bar is not None:
             dm_event.previous_bar = BarData.from_bar_state(event.previous_bar)
+        if storage_source is not None and not is_ephemeral_interval(key.interval) and self.delivery.journal is not None:
+            # Snapshot mutable aggregator state before any thread/await boundary.
+            fields = ("time", "open", "high", "low", "close", "volume", "is_closed", "source",
+                      "quote_volume", "trades", "taker_buy_base", "taker_buy_quote")
+            payload = dm_event.to_dict()
+            payload["bar"] = {name: getattr(bar_data, name) for name in fields}
+            if dm_event.previous_bar is not None:
+                payload["previous_bar"] = {name: getattr(dm_event.previous_bar, name) for name in fields}
+            payload["storage_row"] = bar_state.to_storage_dict()
+            return await self.delivery.submit(event.delivery_id, payload, key)
 
-        await self._event_bus.emit(dm_event)
+        durable_accepted = await self._persist_bar_event(bar_state, dm_event_type, storage_source)
+        if durable_accepted is False:
+            return "rejected"
+        await self._publish(dm_event)
+        return "accepted"
+
+    async def _publish(self, event: DataEvent) -> None:
+        if event.event_type in (DataEventType.BAR_CREATED, DataEventType.BAR_UPDATED,
+                               DataEventType.BAR_CLOSED, DataEventType.BAR_AMENDED):
+            accepted, _canonical = self._cache.upsert_if_accepted(event.key, event.bar)
+            if not accepted:
+                return
+        self._mark_bar_received(event.key)
+        await self._event_bus.emit(event)
 
     async def _persist_bar_event(
         self,
@@ -157,8 +145,8 @@ class AggregatorBridge:
 
         ``True`` means at least one row was accepted, ``False`` means the
         durable source-rank predicate rejected it, and ``None`` means storage
-        was not applicable, unavailable, failed, or did not expose an affected
-        row count. The latter preserves the existing live-path availability.
+        was not applicable or the legacy backend did not expose a row count.
+        Storage failures propagate; they are never quality rejections.
         """
         if is_ephemeral_interval(bar_state.interval):
             return None
@@ -199,7 +187,7 @@ class AggregatorBridge:
                 exc,
                 exc_info=True,
             )
-            return False
+            raise BarDeliveryUnavailable(f"Final bar persistence failed: {exc}") from exc
 
     @staticmethod
     def _authoritative_storage_source(

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from app.api.v1.backtests import _require_contract_snapshot
+from app.backtest.snapshot_validation import require_contract_snapshot
 from app.backtest.errors import BacktestError
 from app.backtest.runtime import _bar_execution_events, _snapshot_wire
 from app.local_data.service import (
@@ -217,7 +217,7 @@ def test_deleted_mark_row_fails_manifest_and_preview_closed(tmp_path: Path) -> N
     )
     assert incomplete.quality["contract_data"]["status"] == "partial"
     with pytest.raises(BacktestError, match="historical contract roles"):
-        _require_contract_snapshot(
+        require_contract_snapshot(
             _snapshot_wire(incomplete),
             "HISTORICAL_CONTRACT_V1",
         )

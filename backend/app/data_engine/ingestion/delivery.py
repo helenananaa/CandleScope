@@ -27,8 +27,8 @@ Usage::
             process(event.market_event)
 
 Ordered callbacks are awaited and can backpressure the ingestion path. Queue
-subscribers are non-blocking; when a queue is full, the new event is dropped
-for that subscriber.
+subscribers are non-blocking; overflow terminates that subscription with an
+explicit gap. Raw deltas must be re-seeded from their source snapshot.
 """
 from __future__ import annotations
 
@@ -39,6 +39,8 @@ from typing import AsyncIterator, Awaitable, Callable
 from .config import IngestionConfig
 from .metrics import LayerMetrics
 from .models import StreamDescriptor, MarketEvent, GapMarker, IngestionEvent
+from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
+from app.data_engine.consumer_recovery import ConsumerRecoveryRequired, terminate_queue
 
 logger = logging.getLogger("ingestion.L6_Delivery")
 
@@ -75,6 +77,8 @@ class DeliveryQueueSubscriber:
                 event = await self._queue.get()
                 if event is None:
                     break
+                if isinstance(event, ConsumerRecoveryRequired):
+                    raise event
                 yield event
         finally:
             await self.close()
@@ -151,7 +155,7 @@ class DeliveryLayer:
     ) -> DeliveryQueueSubscriber:
         """Create a bounded queue subscriber for non-core consumers."""
         queue: asyncio.Queue[IngestionEvent | None] = asyncio.Queue(
-            maxsize=maxsize if maxsize is not None else self._cfg.delivery_queue_size,
+            maxsize=max(1, maxsize if maxsize is not None else self._cfg.delivery_queue_size),
         )
         self._subscriber_queues.append(queue)
         self._metrics.inc("subscribers_total")
@@ -223,6 +227,9 @@ class DeliveryLayer:
         for cb in self._market_event_callbacks:
             try:
                 await cb(market_event)
+            except BarDeliveryUnavailable:
+                self._metrics.inc("callback_errors")
+                raise
             except Exception as exc:
                 self._metrics.inc("callback_errors")
                 logger.error("MarketEvent callback error: %s", exc, exc_info=True)
@@ -252,10 +259,11 @@ class DeliveryLayer:
                 queue.put_nowait(event)
             except asyncio.QueueFull:
                 self._metrics.inc("queue_drops")
-                logger.warning(
-                    "Subscriber queue full (size=%d), dropping event",
-                    queue.maxsize,
-                )
+                self._metrics.inc("queue_recovery_required")
+                self._remove_queue(queue)
+                terminate_queue(queue, ConsumerRecoveryRequired(
+                    "ingestion_queue_overflow", subscription_id=self._descriptor.key,
+                ))
 
     def _remove_queue(self, queue: asyncio.Queue[IngestionEvent | None]) -> None:
         self._subscriber_queues = [q for q in self._subscriber_queues if q is not queue]

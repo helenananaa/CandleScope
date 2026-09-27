@@ -22,8 +22,8 @@ from app.api.v1.full_order_book import (
     full_order_book_key,
     serialize_record_async,
 )
-from app.api.v1.order_book_auto import AutoGroupingState
-from app.api.v1.order_book_projection import (
+from app.data_engine.market_data.order_book_auto import AutoGroupingState
+from app.data_engine.market_data.order_book_projection import (
     FULL_PRICE_GROUPINGS,
     PriceGrouping,
     cached_price_tick_size,

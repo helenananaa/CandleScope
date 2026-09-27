@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from app.alerts.facade import AlertFacade
 from app.alerts.runtime import AlertRuntimeEngine
+from app.data_engine.consumer_recovery import ConsumerRecoveryRequired
 from app.data_engine.data_manager.models import BarData, DataEvent, DataEventType, SeriesKey, SubscriptionHandle
 
 
@@ -446,3 +447,36 @@ def test_alert_runtime_reports_warming_then_ready_after_backfill(tmp_path: Path)
         await runtime.stop()
 
     asyncio.run(_run())
+
+
+def test_alert_gap_blocks_side_effects_until_explicit_rearm(tmp_path: Path) -> None:
+    async def run():
+        facade = AlertFacade(store_path=tmp_path / "alerts.json")
+        rule = facade.save_rule(_rule_payload())
+        dm = FakeDataManager([BarData(time=1, open=99, high=99, low=99, close=99, volume=1)])
+        runtime = AlertRuntimeEngine(facade=facade, data_manager=dm)
+        await runtime.start()
+        await dm.subscriptions[0]["on_recovery"](ConsumerRecoveryRequired("replay_window_exhausted"))
+        await runtime.sync_rules()
+        assert len(dm.subscriptions) == 1
+        assert runtime.snapshot()["recoveryRequired"][rule["id"]]["code"] == "CONSUMER_RESYNC_REQUIRED"
+        assert await runtime.evaluate_event(rule["id"], _bar_event(101)) is None
+        assert facade.list_history(rule_id=rule["id"]) == []
+        facade.set_enabled(rule["id"], False)
+        await runtime.sync_rule(facade.get_rule(rule["id"]))
+        dm.seed_bars = [BarData(time=10, open=105, high=105, low=105, close=105, volume=1)]
+        facade.set_enabled(rule["id"], True)
+        await runtime.sync_rule(facade.get_rule(rule["id"]))
+        assert runtime.snapshot()["awaitingVerifiedSeed"] == [rule["id"]]
+        assert len(dm.subscriptions) == 1  # unverified custom adapter stays stopped
+        dm.query_latest = lambda *a, **kw: SimpleNamespace(
+            bars=dm.seed_bars, complete=True, retryable=False, missing_ranges=[],
+        )
+        await runtime.sync_rule(facade.get_rule(rule["id"]))
+        assert runtime.snapshot()["recoveryRequired"] == {}
+        assert runtime.snapshot()["awaitingVerifiedSeed"] == []
+        assert await runtime.evaluate_event(rule["id"], _bar_event(99, timestamp_ms=5_000)) is None
+        # The missed crossing is not manufactured after current-history seed.
+        assert await runtime.evaluate_event(rule["id"], _bar_event(106, timestamp_ms=11_000)) is None
+        await runtime.stop()
+    asyncio.run(run())

@@ -1,3 +1,10 @@
+from app.replay.training.persistence import account_marks as account_marks_ops
+from app.replay.training.persistence import account_math as account_math_ops
+from app.replay.training.persistence import curve_records as curve_records_ops
+from app.replay.training.persistence import ledger as ledger_ops
+from app.replay.training.persistence import liquidation as liquidation_ops
+from app.replay.training.persistence import portfolio as portfolio_ops
+
 from types import SimpleNamespace
 from decimal import Decimal
 import sqlite3
@@ -26,10 +33,10 @@ def test_stored_rule_cache_uses_content_and_keeps_values_immutable():
 
     rule = make_rule()
     encoded = json.dumps(rule.to_dict())
-    training_storage._stored_instrument_rule.cache_clear()
-    cached = training_storage._stored_instrument_rule(encoded)
+    account_math_ops._stored_instrument_rule.cache_clear()
+    cached = account_math_ops._stored_instrument_rule(encoded)
     assert cached == rule
-    assert training_storage._stored_instrument_rule(encoded) is cached
+    assert account_math_ops._stored_instrument_rule(encoded) is cached
     with pytest.raises(FrozenInstanceError):
         cached.price_tick = "2"
     with pytest.raises(FrozenInstanceError):
@@ -37,11 +44,11 @@ def test_stored_rule_cache_uses_content_and_keeps_values_immutable():
     edited = rule.to_dict()
     edited["price_tick"] = "2"
     assert (
-        training_storage._stored_instrument_rule(json.dumps(edited)).price_tick == "2"
+        account_math_ops._stored_instrument_rule(json.dumps(edited)).price_tick == "2"
     )
     edited["price_tick"] = "-1"
     with pytest.raises((ValueError, TypeError)):
-        training_storage._stored_instrument_rule(json.dumps(edited))
+        account_math_ops._stored_instrument_rule(json.dumps(edited))
 
 
 def test_ledger_tail_lookup_uses_bounded_work_with_large_history():
@@ -53,7 +60,7 @@ def test_ledger_tail_lookup_uses_bounded_work_with_large_history():
                                                         PRIMARY KEY(run_id,ledger_sequence));
             INSERT INTO replay_training_contract_account VALUES ('run','tail');
         """)
-        empty = TrainingRunStore._contract_ledger_append_state(connection, run_id="run")
+        empty = ledger_ops.contract_ledger_append_state(connection, run_id="run")
         assert (empty.next_sequence, empty.tail_hash) == (1, "tail")
         connection.executemany(
             "INSERT INTO replay_training_contract_ledger VALUES ('run',?)",
@@ -67,7 +74,7 @@ def test_ledger_tail_lookup_uses_bounded_work_with_large_history():
             return 0
 
         connection.set_progress_handler(progress, 1)
-        state = TrainingRunStore._contract_ledger_append_state(connection, run_id="run")
+        state = ledger_ops.contract_ledger_append_state(connection, run_id="run")
         connection.set_progress_handler(None, 0)
         assert (state.next_sequence, state.tail_hash) == (10001, "tail")
         assert steps < 100
@@ -155,11 +162,11 @@ async def test_recorded_owned_encoding_matches_full_state_hash(tmp_path, monkeyp
 @pytest.mark.anyio
 async def test_recorded_retention_matches_per_event_pruning(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        training_storage,
-        "_EQUITY_RESOLUTIONS",
+        curve_records_ops,
+        '_EQUITY_RESOLUTIONS',
         tuple(
             (name, bucket, 4)
-            for name, bucket, _ in training_storage._EQUITY_RESOLUTIONS
+            for name, bucket, _ in curve_records_ops._EQUITY_RESOLUTIONS
         ),
     )
     await run_case(tmp_path, monkeypatch, False, 0, True, "SHORT", "CROSS", True)
@@ -170,11 +177,11 @@ async def test_recorded_interval_bounds_fingerprint_and_equity_work(
     tmp_path, monkeypatch, record_property
 ):
     original_trajectory = TrainingRunStore._sync_recorded_trajectory
-    original_fingerprint = TrainingRunStore._hedge_risk_fingerprint
-    original_write = TrainingRunStore._write_equity_samples
-    original_checkpoint = TrainingRunStore._insert_global_checkpoint
-    original_ledger = TrainingRunStore._append_contract_ledger
-    original_risk = TrainingRunStore._detect_contract_liquidations
+    original_fingerprint = account_marks_ops.hedge_risk_fingerprint
+    original_write = curve_records_ops.write_equity_samples
+    original_checkpoint = portfolio_ops.insert_global_checkpoint
+    original_ledger = ledger_ops.append_contract_ledger
+    original_risk = liquidation_ops.detect_contract_liquidations
     original_capture = ConservativeBarBroker._capture_recorded_frame
     captured_frames = materialized_frames = 0
     active = False
@@ -240,17 +247,17 @@ async def test_recorded_interval_bounds_fingerprint_and_equity_work(
 
     monkeypatch.setattr(TrainingRunStore, "_sync_recorded_trajectory", trajectory)
     monkeypatch.setattr(
-        TrainingRunStore, "_hedge_risk_fingerprint", staticmethod(fingerprint)
+        account_marks_ops, 'hedge_risk_fingerprint', fingerprint
     )
-    monkeypatch.setattr(TrainingRunStore, "_write_equity_samples", staticmethod(write))
+    monkeypatch.setattr(curve_records_ops, 'write_equity_samples', write)
     monkeypatch.setattr(
-        TrainingRunStore, "_insert_global_checkpoint", staticmethod(checkpoint)
-    )
-    monkeypatch.setattr(
-        TrainingRunStore, "_append_contract_ledger", staticmethod(ledger)
+        portfolio_ops, 'insert_global_checkpoint', checkpoint
     )
     monkeypatch.setattr(
-        TrainingRunStore, "_detect_contract_liquidations", staticmethod(risk)
+        ledger_ops, 'append_contract_ledger', ledger
+    )
+    monkeypatch.setattr(
+        liquidation_ops, 'detect_contract_liquidations', risk
     )
     monkeypatch.setattr(ConservativeBarBroker, "_capture_recorded_frame", capture)
     # The fixture compares final state, every retained curve bucket, ledger,
@@ -415,7 +422,7 @@ async def test_recorded_committed_prefix_recovers_and_continues(tmp_path):
             payload={"basis": "BASE_BAR", "count": 3},
         )
         snapshot = (await service.get_session(session_id))["snapshot"]
-        result = await service.training._try_recorded_interval(
+        result = await service.training._ordered_playback._try_recorded_interval(
             command=SimpleNamespace(
                 run_id=run_id,
                 command_id="committed-prefix",
@@ -537,11 +544,15 @@ async def test_recorded_interval_failure_rolls_back_the_entire_prefix(
         cache = dict(store._hedge_risk_fingerprints)
         offset = (await service.store.get_session(session_id))["command_log_offset"]
         called = 0
-        owner = service.store if stage == "final_checkpoint" else store
+        owner = (
+            service.store if stage == "final_checkpoint"
+            else curve_records_ops if stage == "equity_flush"
+            else store
+        )
         name = (
             "_insert_checkpoint"
             if stage == "final_checkpoint"
-            else "_write_interval_curve"
+            else "write_interval_curve"
             if stage == "equity_flush"
             else "_finalize_hedge_inputs_in_transaction"
             if stage == "history"
@@ -564,7 +575,7 @@ async def test_recorded_interval_failure_rolls_back_the_entire_prefix(
 
         monkeypatch.setattr(owner, name, fail_inside)
         with pytest.raises(ReplayDomainError) as failed:
-            result = await service.training._try_recorded_interval(
+            result = await service.training._ordered_playback._try_recorded_interval(
                 command=SimpleNamespace(
                     run_id=run_id,
                     command_id="recorded-fault",

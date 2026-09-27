@@ -176,9 +176,9 @@ def test_legacy_prepare_valuation_does_not_rescan_ledger_per_bar(monkeypatch):
 def test_indexed_interval_keeps_book_funding_and_liquidation_guards():
     import inspect
 
-    from app.replay.training.service import TrainingRunService
+    from app.replay.training.ordered_playback import TrainingOrderedPlayback
 
-    source = inspect.getsource(TrainingRunService._try_indexed_interval)
+    source = inspect.getsource(TrainingOrderedPlayback._try_indexed_interval)
     assert 'binding.get("book_mode", "OFF") != "OFF"' in source
     assert "AccountDataMode.HISTORICAL_EXACT.value" in source
     assert 'binding.get("funding_mode") not in {"OFF", "HISTORICAL_EXACT"}' in source

@@ -2,8 +2,8 @@ from decimal import Decimal
 
 import pytest
 
-from app.api.v1.order_book_auto import AutoGroupingState, step_scores
-from app.api.v1.order_book_projection import project_order_book_levels
+from app.data_engine.market_data.order_book_auto import AutoGroupingState, step_scores
+from app.data_engine.market_data.order_book_projection import project_order_book_levels
 from app.api.v1.stream_full_order_book import _display_options
 
 

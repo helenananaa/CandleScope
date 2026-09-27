@@ -18,7 +18,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.api.v1 import symbols as catalog
+from app.exchanges import symbol_catalog as catalog
 from app.api.v1.discovery_ranking import contract_rank, provider_search_text, relevance
 from app.api.v1.discovery_store import exchange_rows
 
@@ -50,7 +50,7 @@ class ProviderQueries:
 
     async def restore(self) -> None:
         snapshot = Path(catalog.SYMBOL_CATALOG_SNAPSHOT_PATH)
-        if not catalog._snapshot_persistence_enabled(snapshot):
+        if not catalog.snapshot_persistence_enabled(snapshot):
             return
         self.store_path = snapshot.with_name("symbol_discovery.providers.sqlite3")
         rows = await asyncio.to_thread(exchange_rows, self.store_path)
@@ -76,15 +76,15 @@ class ProviderQueries:
         try:
             async with asyncio.timeout(5):
                 async with self.gate:
-                    rows = await catalog._search_provider_symbols(
+                    rows = await catalog.search_provider_symbols(
                         exchange=adapter.id, market_type=market, search=query,
                     ) or []
                     if len(rows) >= 120:
                         status = "limited"
         except TimeoutError:
             status = "timeout"
-        except HTTPException as exc:
-            status = "rate_limited" if exc.status_code == 429 else "unavailable"
+        except catalog.SymbolCatalogError as exc:
+            status = "rate_limited" if exc.code == "provider_rate_limited" else "unavailable"
         except Exception:
             status = "unavailable"
         finally:
@@ -115,7 +115,7 @@ provider_queries = ProviderQueries()
 
 @asynccontextmanager
 async def lifespan(_app):
-    from app.api.v1.discovery_catalog import run_discovery_catalogs
+    from app.exchanges.discovery_catalog import run_discovery_catalogs
     await provider_queries.restore()
     task = asyncio.create_task(run_discovery_catalogs(), name="discovery:catalogs")
     try:
@@ -254,8 +254,8 @@ async def search_symbols(query: DiscoveryQuery) -> dict:
 
     async def warm(source: str) -> None:
         try:
-            await catalog._ensure_requested_catalog(source, query.market_type)
-        except HTTPException:
+            await catalog.ensure_catalog(source, query.market_type)
+        except catalog.SymbolCatalogError:
             pass  # Coverage below distinguishes unavailable catalogs from zero matches.
 
     await asyncio.gather(*(warm(source) for source in warm_sources))
@@ -280,10 +280,10 @@ async def search_symbols(query: DiscoveryQuery) -> dict:
                 rows.extend(row for row in provider_queries.known.values() if row["exchange"] == source)
             rows.extend(found)
         elif source in cached_sources:
-            payload = catalog._catalog_status_payload(exchange=source)
+            payload = catalog.catalog_status(exchange=source)
             status = "stale" if payload["stale"] else "ready"
         else:
-            payload = catalog._catalog_status_payload(exchange=source)
+            payload = catalog.catalog_status(exchange=source)
             failed = any(market.get("last_error") for market in payload.get("markets", {}).values())
             status = "unavailable" if source in requested or failed else "not_loaded"
         statuses.append({"id": source, "status": status})

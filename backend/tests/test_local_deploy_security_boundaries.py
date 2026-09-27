@@ -23,11 +23,8 @@ from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 
-from app.api.v1.backtests import (
-    RunCreateRequest,
-    StrategySmokeRequest,
-    _operator_python_payload,
-)
+from app.backtest.request_contracts import RunCreateRequest, StrategySmokeRequest
+from app.api.v1.backtests import _operator_python_payload
 from app.api.v1 import stream_indicators
 from app.api.v1.stream import indicator_stream
 from app.backtest.service import BacktestService

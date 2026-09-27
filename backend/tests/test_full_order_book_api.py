@@ -17,7 +17,7 @@ from app.api.v1.full_order_book import (
     router as full_order_book_router,
     serialize_record,
 )
-from app.api.v1.order_book_projection import project_order_book_levels
+from app.data_engine.market_data.order_book_projection import project_order_book_levels
 from app.data_engine.ingestion.models import DataSource
 from app.data_engine.market_data.events import HubRecord, MarketStateEvent
 from app.data_engine.market_data.full_order_book_service import FullOrderBookRateLimited
@@ -629,7 +629,7 @@ def test_full_order_book_http_reports_missing_and_unready_manager() -> None:
 
 
 def test_auto_state_is_per_view_and_projection_cache_includes_resolved_step():
-    from app.api.v1.order_book_auto import AutoGroupingState
+    from app.data_engine.market_data.order_book_auto import AutoGroupingState
 
     clear_full_order_book_projection_cache()
     record = _record(_key(), update_id=77,

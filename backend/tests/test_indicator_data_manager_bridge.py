@@ -34,7 +34,7 @@ class _DataManager:
         self.query_failures = 0
         self.query_pending = 0
 
-    def subscribe(self, *, callback: Any, event_types: set[DataEventType]) -> None:
+    def subscribe(self, *, callback: Any, event_types: set[DataEventType], on_recovery=None) -> None:
         self.subscriptions.append((callback, event_types))
 
     def query_latest(self, *args: Any, **kwargs: Any) -> Any:

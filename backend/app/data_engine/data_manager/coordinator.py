@@ -181,6 +181,7 @@ class StreamCoordinator:
         self._bar_aggregator: Any = None  # BarAggregator instance
         self._storage: StorageBackend | None = None
         self._gap_handler: Callable[[SeriesKey, Any], Awaitable[None]] | None = None
+        self._before_stream_start: Callable[[SeriesKey], Awaitable[None]] | None = None
 
         # Background tasks
         self._reaper_task: asyncio.Task | None = None
@@ -194,6 +195,10 @@ class StreamCoordinator:
         ingestion pipelines.
         """
         self._ingestion_factory = factory
+
+    def set_before_stream_start(self, callback: Callable[[SeriesKey], Awaitable[None]]) -> None:
+        """Durably register recovery scope before a physical source can emit."""
+        self._before_stream_start = callback
 
     def set_bar_aggregator(self, aggregator: Any) -> None:
         """Set the BarAggregator instance for routing ingestion data.
@@ -792,6 +797,8 @@ class StreamCoordinator:
 
         if self._ingestion_factory is not None:
             try:
+                if self._before_stream_start is not None:
+                    await self._before_stream_start(key)
                 if self._bar_aggregator is None:
                     raise RuntimeError(
                         "StreamCoordinator requires a BarAggregator for realtime kline streams"

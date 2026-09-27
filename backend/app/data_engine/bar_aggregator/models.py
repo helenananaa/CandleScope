@@ -21,6 +21,7 @@ from app.data_engine.series_identity import (
 
 import enum
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
@@ -356,6 +357,7 @@ class BarEvent:
 
     # For AMENDED events — the old bar state before amendment
     previous_bar: BarState | None = None
+    delivery_id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     def to_dict(self) -> dict:
         d: dict[str, Any] = {

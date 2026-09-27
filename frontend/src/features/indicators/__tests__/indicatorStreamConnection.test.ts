@@ -518,3 +518,34 @@ test("close releases active indicator clients and never schedules a reconnect", 
   socket.serverClose();
   assert.equal(timers.timers.length, 0);
 });
+
+
+test("resync close forces a cold seed even if the owner supplies its old resume cursor again", () => {
+  const sockets: FakeSocket[] = [];
+  const timers = createTimers();
+  const controller = new IndicatorStreamConnection({
+    url: "ws://example/indicators", subscriptionAckTimeoutMs: 0,
+    socketFactory: () => { const socket = new FakeSocket(); sockets.push(socket); return socket; },
+    setTimer: timers.setTimer, clearTimer: timers.clearTimer,
+  });
+  const desired = subscription();
+  desired.message.resumeFrom = 120;
+  desired.message.serverEpoch = "old";
+  desired.message.correctionRevision = "9";
+  controller.setSubscriptions([desired]);
+  controller.start();
+  const first = sockets[0] as FakeSocket;
+  first.open();
+  assert.equal(wireMessage(first, 0).resumeFrom, 120);
+  first.onclose?.({ code: 1013, reason: "CONSUMER_RESYNC_REQUIRED" } as CloseEvent);
+  controller.setSubscriptions([desired]);
+  timers.run(0);
+  const second = sockets[1] as FakeSocket;
+  second.open();
+  const cold = wireMessage(second, 0);
+  assert.equal("resumeFrom" in cold, false);
+  assert.equal("serverEpoch" in cold, false);
+  assert.equal("correctionRevision" in cold, false);
+  assert.equal(cold.historyLimit, desired.message.historyLimit);
+  controller.close();
+});

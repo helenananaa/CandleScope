@@ -15,7 +15,7 @@ from scripts import audit_replay_determinism, benchmark_replay
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
-FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "replay"
+FIXTURE_ROOT = BACKEND_ROOT / "tests" / "fixtures" / "replay"
 GIT_HEAD = "ABCDEF0123456789ABCDEF0123456789ABCDEF01"
 RECORDED_AT = "2026-07-20T12:34:56Z"
 

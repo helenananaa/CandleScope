@@ -1058,7 +1058,7 @@ def main() -> None:
 
     import uvicorn
     from app.local_data.network_guard import OfflineNetworkGuard
-    from app.api.v1 import symbols as symbols_api
+    from app.exchanges import symbol_catalog as symbols_api
 
     network_guard = OfflineNetworkGuard()
 

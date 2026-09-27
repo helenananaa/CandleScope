@@ -119,7 +119,7 @@ async def test_trade_preparation_publishes_real_immutable_reference(tmp_path):
     service = PreparationService(PreparationRepository(tmp_path / "jobs.db"), adapter)
     await service.start()
     try:
-        job = service.submit(PreparationRequest(idempotency_key="trade-prefetch", consumer="PREFETCH",
+        job = await service.submit(PreparationRequest(idempotency_key="trade-prefetch", consumer="PREFETCH",
                                                 requirements=[requirement()]))
         ready = await terminal(service, job["id"])
         assert ready["state"] == "READY", ready["error"]

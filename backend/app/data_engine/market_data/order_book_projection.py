@@ -8,8 +8,8 @@ from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_FLOOR
 from itertools import islice
 from typing import Any, Literal, Mapping, Sequence
 
-from app.api.v1.order_book_auto import step_scores
-from app.api.v1.symbols import get_cached_symbol_metadata
+from app.data_engine.market_data.order_book_auto import step_scores
+from app.exchanges.symbol_catalog import get_cached_symbol_metadata
 from app.data_engine.market_data.models import MarketStreamKey
 from app.data_engine.market_data.full_order_book import FullOrderBookLevel
 

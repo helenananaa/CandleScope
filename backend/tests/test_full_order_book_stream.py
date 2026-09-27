@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api.v1 import symbols as symbols_api
+from app.exchanges import symbol_catalog as symbols_api
 from app.api.v1.stream import router as stream_router
 from app.data_engine.ingestion.models import DataSource
 from app.data_engine.market_data.events import MarketStateEvent

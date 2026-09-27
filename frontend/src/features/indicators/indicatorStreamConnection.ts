@@ -102,6 +102,7 @@ export class IndicatorStreamConnection {
   private reconnectDelayMs: number;
   private stopped = true;
   private lastSeq = 0;
+  private readonly coldResumeRequired = new Set<string>();
   private wsGeneration = 0;
 
   constructor({
@@ -163,6 +164,9 @@ export class IndicatorStreamConnection {
     for (const subscription of subscriptions) {
       if (!subscription.clientId || !subscription.signature) continue;
       next.set(subscription.clientId, subscription);
+    }
+    for (const id of this.coldResumeRequired) {
+      if (!next.has(id)) this.coldResumeRequired.delete(id);
     }
     this.desiredSubscriptions.clear();
     for (const [clientId, subscription] of next) {
@@ -268,8 +272,11 @@ export class IndicatorStreamConnection {
       if (this.stopped || this.socket !== socket) return;
       this.failSocket(socket, event);
     };
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       if (this.stopped || this.socket !== socket) return;
+      if (event.code === 1013 || event.reason === "CONSUMER_RESYNC_REQUIRED") {
+        for (const id of this.desiredSubscriptions.keys()) this.coldResumeRequired.add(id);
+      }
       this.socket = null;
       this.resetConnectionState();
       this.onConnectionReset("closed");
@@ -337,6 +344,7 @@ export class IndicatorStreamConnection {
     }
 
     this.pendingSubscriptions.delete(clientId);
+    this.coldResumeRequired.delete(clientId);
     this.activeSubscriptions.set(clientId, desired.signature);
     this.reconnectDelayMs = this.reconnectBaseMs;
     this.scheduleSubscriptionAckCheck();
@@ -407,7 +415,13 @@ export class IndicatorStreamConnection {
     });
 
     try {
-      socket.send(JSON.stringify(subscription.message));
+      const message = { ...subscription.message };
+      if (this.coldResumeRequired.has(subscription.clientId)) {
+        delete message.resumeFrom;
+        delete message.serverEpoch;
+        delete message.correctionRevision;
+      }
+      socket.send(JSON.stringify(message));
     } catch (error) {
       this.pendingSubscriptions.delete(subscription.clientId);
       this.failSocket(socket, error);

@@ -122,7 +122,7 @@ def test_provider_metadata_survives_restart_and_keeps_full_identity(tmp_path):
 
 @async_test
 async def test_background_sweep_includes_lazy_catalogs_but_never_query_providers(monkeypatch):
-    from app.api.v1 import discovery_catalog
+    from app.exchanges import discovery_catalog
     adapters = [SimpleNamespace(id="lazy", eager_catalog_refresh=False, capabilities=lambda: SimpleNamespace(markets=[SimpleNamespace(market_type="spot")])),
                 SimpleNamespace(id="provider", search_symbols=lambda: None)]
     monkeypatch.setattr(discovery.catalog, "bootstrap_default_adapters", lambda: None)
@@ -131,7 +131,7 @@ async def test_background_sweep_includes_lazy_catalogs_but_never_query_providers
     calls = []
     async def refresh(adapter, market, force):
         calls.append((adapter.id, market, force))
-    monkeypatch.setattr(discovery.catalog, "_refresh_market_catalog", refresh)
+    monkeypatch.setattr(discovery.catalog, "refresh_market_catalog", refresh)
     await discovery_catalog.refresh_discovery_catalogs()
     assert calls == [("lazy", "spot", False)]
 
@@ -148,7 +148,7 @@ async def test_provider_query_singleflight_cache_and_cancellation(monkeypatch):
         await release.wait()
         return [row("provider")]
 
-    monkeypatch.setattr(discovery.catalog, "_search_provider_symbols", search)
+    monkeypatch.setattr(discovery.catalog, "search_provider_symbols", search)
     adapter = SimpleNamespace(id="provider")
     first = asyncio.create_task(cache.get(adapter, "BTC", ""))
     await started.wait()
@@ -169,13 +169,13 @@ async def test_global_discovery_does_not_fan_out_catalog_downloads(monkeypatch):
     monkeypatch.setattr(discovery.catalog, "bootstrap_default_adapters", lambda: None)
     monkeypatch.setattr(discovery.catalog, "get_exchange_registry", lambda: SimpleNamespace(list=lambda: adapters))
     monkeypatch.setattr(discovery.catalog, "list_cached_symbols", lambda: ([row("source0")], 0))
-    monkeypatch.setattr(discovery.catalog, "_catalog_status_payload", lambda **kwargs: {"stale": False})
+    monkeypatch.setattr(discovery.catalog, "catalog_status", lambda **kwargs: {"stale": False})
     calls = []
 
     async def ensure(source, market):
         calls.append((source, market))
 
-    monkeypatch.setattr(discovery.catalog, "_ensure_requested_catalog", ensure)
+    monkeypatch.setattr(discovery.catalog, "ensure_catalog", ensure)
     result = await discovery.search_symbols(discovery.DiscoveryQuery(search="btc"))
     assert calls == []
     assert result["total"] == 1 and result["partial"]
@@ -191,14 +191,14 @@ async def test_failure_does_not_become_empty_success_or_hide_other_sources(monke
     monkeypatch.setattr(discovery.catalog, "bootstrap_default_adapters", lambda: None)
     monkeypatch.setattr(discovery.catalog, "get_exchange_registry", lambda: SimpleNamespace(list=lambda: adapters))
     monkeypatch.setattr(discovery.catalog, "list_cached_symbols", lambda: ([row()], 0))
-    monkeypatch.setattr(discovery.catalog, "_catalog_status_payload", lambda **kwargs: {"stale": False})
+    monkeypatch.setattr(discovery.catalog, "catalog_status", lambda **kwargs: {"stale": False})
 
     async def fail(**kwargs):
-        raise HTTPException(429)
+        raise discovery.catalog.SymbolCatalogError("provider_rate_limited", "quota exhausted", retryable=True)
 
     cache = discovery.ProviderQueries()
     monkeypatch.setattr(discovery, "provider_queries", cache)
-    monkeypatch.setattr(discovery.catalog, "_search_provider_symbols", fail)
+    monkeypatch.setattr(discovery.catalog, "search_provider_symbols", fail)
     result = await discovery.search_symbols(discovery.DiscoveryQuery(search="btc"))
     assert result["total"] == 1 and result["partial"]
     assert result["sources"][1] == {"id": "provider", "status": "rate_limited"}

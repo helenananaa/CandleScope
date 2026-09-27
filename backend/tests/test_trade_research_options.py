@@ -89,7 +89,7 @@ def test_invalid_research_options_rejected(tmp_path, options):
 
 
 def test_public_request_accepts_research_options():
-    from app.api.v1.backtests import RunCreateRequest
+    from app.backtest.request_contracts import RunCreateRequest
     value = RunCreateRequest(**{**request(True), "cost_sensitivity_mode": "SKIP", "checkpoint_policy": "FINAL_ONLY"})
     assert value.model_dump()["cost_sensitivity_mode"] == "SKIP"
 

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import pytest
+import threading
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.v1 import indicators as indicators_api
 from app.data_engine.data_manager.models import BarData
+from app.core.bounded_executor import BoundedExecutor
 
 
 def _client() -> TestClient:
@@ -56,6 +58,24 @@ def _body(requests: list[dict], *, schema_version: int = 1) -> dict:
         "ohlcv": _bars(),
         "requests": requests,
     }
+
+
+def test_compute_batch_reports_capacity_as_retryable_without_computing(monkeypatch):
+    pool = BoundedExecutor("indicator", max_workers=1, max_pending=0)
+    release = threading.Event()
+    occupied = pool.submit(lambda: release.wait(5))
+    monkeypatch.setattr("app.core.executors._indicator_executor", pool)
+    try:
+        response = _client().post("/api/v1/indicators/compute/batch", json=_body([_item(1), _item(2)]))
+        assert response.status_code == 200
+        for result in response.json()["results"]:
+            assert result["payload"]["code"] == "EXECUTOR_BUSY"
+            assert result["payload"]["retryable"] is True
+        assert pool.snapshot()["submitted"] == 1
+    finally:
+        release.set()
+        occupied.result(2)
+        pool.shutdown()
 
 
 @pytest.mark.parametrize(

@@ -1,3 +1,5 @@
+from app.replay.training.persistence import account_math as account_math_ops
+
 from dataclasses import replace
 from decimal import Decimal
 import random
@@ -34,7 +36,7 @@ def rule():
 
 def test_direct_risk_search_matches_reference_across_money_rounding(monkeypatch):
     rng = random.Random(93541)
-    direct = storage._direct_liquidation_tick
+    direct = account_math_ops._direct_liquidation_tick
     hits = 0
     for i in range(3000):
         instrument = replace(
@@ -72,10 +74,10 @@ def test_direct_risk_search_matches_reference_across_money_rounding(monkeypatch)
             hits += result is not None
             return result
 
-        monkeypatch.setattr(storage, "_direct_liquidation_tick", counted)
-        actual = storage._project_liquidation_price_pair(**kwargs)
-        monkeypatch.setattr(storage, "_direct_liquidation_tick", lambda **args: None)
-        expected = storage._project_liquidation_price_pair(**kwargs)
+        monkeypatch.setattr(account_math_ops, '_direct_liquidation_tick', counted)
+        actual = account_math_ops._project_liquidation_price_pair(**kwargs)
+        monkeypatch.setattr(account_math_ops, '_direct_liquidation_tick', lambda **args: None)
+        expected = account_math_ops._project_liquidation_price_pair(**kwargs)
         assert actual == expected, kwargs
     assert hits > 500
 
@@ -99,11 +101,11 @@ def test_direct_search_reduces_exact_maintenance_evaluations(monkeypatch):
         return original(self, *args, **options)
 
     monkeypatch.setattr(InstrumentRule, "maintenance_margin", counted)
-    actual = storage._project_liquidation_price_pair(**kwargs)
+    actual = account_math_ops._project_liquidation_price_pair(**kwargs)
     optimized_calls = calls
     calls = 0
-    monkeypatch.setattr(storage, "_direct_liquidation_tick", lambda **args: None)
-    assert storage._project_liquidation_price_pair(**kwargs) == actual
+    monkeypatch.setattr(account_math_ops, '_direct_liquidation_tick', lambda **args: None)
+    assert account_math_ops._project_liquidation_price_pair(**kwargs) == actual
     assert optimized_calls < calls // 2
 
 

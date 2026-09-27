@@ -44,9 +44,7 @@ export function MarketDataWorkspaceProvider({
     const workspaceBus = CHART_WORKSPACE_FEATURE_FLAGS.multiChart64Enabled
       ? defaultWorkspaceBus(desktopWindowManager.windowId)
       : null;
-    const requestCoordinator = brokerEnabled
-      ? new SharedKlineRequestCoordinator(defaultKlineApi)
-      : null;
+    const requestCoordinator = new SharedKlineRequestCoordinator(defaultKlineApi, brokerEnabled);
     return {
       brokerEnabled,
       indicatorStreamCoordinator: brokerEnabled
@@ -56,7 +54,7 @@ export function MarketDataWorkspaceProvider({
             url: getIndicatorStreamUrl(),
           })
         : null,
-      klineApi: requestCoordinator || defaultKlineApi,
+      klineApi: requestCoordinator,
       requestCoordinator,
       streamCoordinator: batchStreamEnabled
         ? new BatchKlineStreamCoordinator()

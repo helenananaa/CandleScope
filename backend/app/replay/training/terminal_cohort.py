@@ -1,5 +1,8 @@
 """Atomically persist the exact final BAR cohort requested by an advance."""
 
+from . import control_rules as control_rules_ops
+from . import service_validation as service_validation_ops
+
 import json
 
 from ..canonical import canonical_json
@@ -20,7 +23,7 @@ async def try_commit(
     service, store = owner.replay_service, owner.store
     commands, expected, events = [], {}, []
     for track, snapshot in snapshots:
-        tid, sid = track["track_id"], owner._track_session_id(track)
+        tid, sid = track["track_id"], service_validation_ops.track_session_id(track)
         if snapshot["state"] != "PAUSED" or planned_times.get(tid) != (target,):
             return None
         # The coordinator already planned this exact one-event BAR cohort.
@@ -41,7 +44,7 @@ async def try_commit(
                 sid,
                 ReplayCommand(
                     protocol=REPLAY_PROTOCOL,
-                    command_id=owner._multi_command_id(
+                    command_id=control_rules_ops.multi_command_id(
                         command.command_id,
                         tid,
                         CommandType.STEP.value,
@@ -56,7 +59,7 @@ async def try_commit(
         )
         events.append(
             StableMarketEvent(
-                actual_event_time_ms=owner._actual_event_time_ms(binding, target),
+                actual_event_time_ms=control_rules_ops.actual_event_time_ms(binding, target),
                 event_phase=20,
                 market_track_stable_id=tid,
                 source_sequence=expected[sid][1] + 1,

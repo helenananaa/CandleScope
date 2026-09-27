@@ -16,6 +16,7 @@ import type {
   PatchCacheTick,
 } from "./klineContracts.js";
 import type { KlineBar } from "./marketDataTypes.js";
+import { KlineConsumerRecovery } from "./feed/klineConsumerRecovery.js";
 import type { SeriesDataFeed } from "./feed/seriesDataFeed.js";
 import { planTargetBarRequest } from "./intervalRequestBudget.js";
 import type { ChartWorkScheduler } from "./chartWorkScheduler.js";
@@ -215,6 +216,12 @@ export function useKlineStreamRuntime({
       return undefined;
     }
     let active = true;
+    const consumerRecovery = new KlineConsumerRecovery();
+    let nextConsumerRecoveryAt = 0;
+    const setTransportStatus: typeof setWsStatus = (status) => setWsStatus((previous) => {
+      const next = typeof status === "function" ? status(previous) : status;
+      return consumerRecovery.requiredFor(intervalRef.current) ? "reconnecting" : next;
+    });
     let subscription: KlineStreamController | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -275,7 +282,7 @@ export function useKlineStreamRuntime({
             acknowledgementState,
             currentIntv,
           );
-          setWsStatus((previous) => {
+          setTransportStatus((previous) => {
             if (acknowledgedStatus === "live") return "live";
             if (acknowledgedStatus === "fallback") return "fallback";
             return previous === "connecting" || previous === "reconnecting"
@@ -293,14 +300,14 @@ export function useKlineStreamRuntime({
     const applyAcknowledgedStatus = () => {
       if (!webSocketEnabled) {
         startPolling();
-        setWsStatus("fallback");
+        setTransportStatus("fallback");
         return;
       }
       const currentIntv = intervalRef.current;
       const status = getKlineStreamIntervalStatus(acknowledgementState, currentIntv);
       if (status === "live") {
         stopPolling();
-        setWsStatus("live");
+        setTransportStatus("live");
         markPerfOnce("ws.kline.live", {
           symbol,
           marketType,
@@ -311,7 +318,7 @@ export function useKlineStreamRuntime({
         return;
       }
       startPolling();
-      setWsStatus(status);
+      setTransportStatus(status);
     };
 
     const reconcileTrackedIntervals = (intervals: readonly IntervalString[]) => {
@@ -332,12 +339,12 @@ export function useKlineStreamRuntime({
       reconnectAttempts += 1;
       if (reconnectAttempts > WS_MAX_RECONNECT_ATTEMPTS) {
         console.warn(`WS: exceeded ${WS_MAX_RECONNECT_ATTEMPTS} reconnect attempts, staying on polling fallback`);
-        setWsStatus("fallback");
+        setTransportStatus("fallback");
         return;
       }
 
       console.log(`WS: scheduling reconnect #${reconnectAttempts} in ${reconnectDelay}ms`);
-      setWsStatus("reconnecting");
+      setTransportStatus("reconnecting");
       reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
         connect();
@@ -348,7 +355,7 @@ export function useKlineStreamRuntime({
 
     const connect = () => {
       if (!active || !webSocketEnabled) return;
-      setWsStatus("connecting");
+      setTransportStatus("connecting");
 
       if (subscription) {
         subscription.close();
@@ -369,7 +376,7 @@ export function useKlineStreamRuntime({
               reconnectDelay = WS_RECONNECT_BASE_DELAY;
               reconnectAttempts = 0;
 
-              setWsStatus("connecting");
+              setTransportStatus("connecting");
               startPing();
 
               if (isReconnection) {
@@ -422,11 +429,11 @@ export function useKlineStreamRuntime({
                   ) === "live"
                 ) {
                   stopPolling();
-                  setWsStatus("live");
+                  setTransportStatus("live");
                 }
                 if (msg.status === "reconnecting") {
                   startPolling();
-                  setWsStatus("reconnecting");
+                  setTransportStatus("reconnecting");
                 }
               }
             },
@@ -467,7 +474,7 @@ export function useKlineStreamRuntime({
                 if (!active) return;
                 if (currentIntervalTick) {
                   stopPolling();
-                  setWsStatus("live");
+                  setTransportStatus("live");
                   // The active interval shares one window store with the cache;
                   // commitPatchedChartData applies the tick and keeps React
                   // meta (barCount, coverage) in sync. Applying it twice via
@@ -508,6 +515,11 @@ export function useKlineStreamRuntime({
             },
             onClose: () => {
               if (!active) return;
+              for (const interval of trackedIntervalsRef.current) {
+                const series = { exchange, marketType, symbol, interval };
+                consumerRecovery.capture(seriesDataFeed, series, getCacheRows(series));
+              }
+              nextConsumerRecoveryAt = 0;
               acknowledgementState = createKlineStreamAcknowledgementState();
               stopPing();
               startPolling();
@@ -527,7 +539,7 @@ export function useKlineStreamRuntime({
       connect();
     } else {
       startPolling();
-      setWsStatus("fallback");
+      setTransportStatus("fallback");
     }
 
     // Query-triggered repairs are intentionally internal backend work and may
@@ -535,6 +547,14 @@ export function useKlineStreamRuntime({
     // known to be pending; this never rescans or reloads the whole window.
     pendingRepairInterval = setInterval(() => {
       if (!active || pendingRepairPollingInFlight) return;
+      if (consumerRecovery.required && Date.now() >= nextConsumerRecoveryAt) {
+        nextConsumerRecoveryAt = Date.now() + 10_000;
+        void consumerRecovery.recover(seriesDataFeed, (candidate) => (
+          getKlineStreamIntervalStatus(acknowledgementState, candidate) === "live"
+        )).then(() => {
+          if (active) setTransportStatus(getKlineStreamIntervalStatus(acknowledgementState, intervalRef.current));
+        });
+      }
       const currentIntv = intervalRef.current;
       const series = { exchange, marketType, symbol, interval: currentIntv };
       if (seriesDataFeed.pendingRepairCount(series) === 0) return;

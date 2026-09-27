@@ -441,8 +441,9 @@ async def test_bar_subscription_coalesces_forming_preserves_final_events_and_rel
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("upstream_gap", [False, True])
 async def test_reliable_subscription_overflow_requires_resync_and_disconnects(
-    tmp_path: Path,
+    tmp_path: Path, upstream_gap: bool,
 ) -> None:
     deliveries: list[dict[str, Any]] = []
 
@@ -478,14 +479,18 @@ async def test_reliable_subscription_overflow_requires_resync_and_disconnects(
     await subscriptions.create(request, lease)
     callback = next(iter(port.callbacks.values()))
     key = SeriesKey("BTCUSDT", "1m")
-    for index in range(9):
-        await callback(
-            DataEvent(
-                DataEventType.BAR_CLOSED,
-                key,
-                bar=_bar(60 + index * 60, 100 + index),
+    if upstream_gap:
+        from app.data_engine.consumer_recovery import ConsumerRecoveryRequired
+        await callback(ConsumerRecoveryRequired("replay_window_exhausted"))
+    else:
+        for index in range(9):
+            await callback(
+                DataEvent(
+                    DataEventType.BAR_CLOSED,
+                    key,
+                    bar=_bar(60 + index * 60, 100 + index),
+                )
             )
-        )
     await asyncio.sleep(0.1)
 
     assert any(item["resyncRequired"] is True for item in deliveries)

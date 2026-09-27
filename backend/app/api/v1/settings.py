@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.config import KLINES_DB_PATH
 from app.core.executors import run_storage
+from app.core.bounded_executor import ExecutorBusyError
 from app.core.market import MarketType
 from app.core.config import (
     load_proxy_settings,
@@ -827,6 +828,8 @@ async def storage_inventory(
             interval=normalized_interval,
             limit=limit,
         )
+    except ExecutorBusyError:
+        raise
     except Exception as exc:
         logger.exception("Storage inventory failed")
         raise HTTPException(status_code=500, detail=f"Storage inventory failed: {exc}") from exc

@@ -68,7 +68,7 @@ class _SingleStreamDataManager:
             "consumer_id": consumer_id,
         })
 
-    async def subscribe_iter(self, *, symbol, interval, exchange, market_type, event_types):
+    async def subscribe_iter(self, *, symbol, interval, exchange, market_type, event_types, on_recovery=None):
         yield DataEvent(
             event_type=self.event_type,
             key=SeriesKey(symbol, interval, exchange=exchange, market_type=market_type),
@@ -150,6 +150,7 @@ class _MultiStreamDataManager:
         exchange,
         market_type,
         event_types,
+        on_recovery=None,
     ):
         self.subscribe_calls.append({
             "symbol": symbol,

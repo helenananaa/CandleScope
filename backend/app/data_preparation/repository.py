@@ -204,12 +204,19 @@ class PreparationRepository:
             return [self.wire(row) for row in db.execute(
                 f"SELECT * FROM preparation_jobs {where} ORDER BY created_ms DESC LIMIT 200")]
 
-    def update(self, job_id, *, state=None, stage=None, completed=None, result=None, error=None):
+    def update(self, job_id, *, state=None, stage=None, completed=None, result=None, error=None, inventory_dirty=False):
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             job = self.wire(db.execute("SELECT * FROM preparation_jobs WHERE id=?", (job_id,)).fetchone())
             if job["state"] in TERMINAL:
                 return job
+            if inventory_dirty:
+                # Observers must not see the new terminal state alongside an
+                # old READY inventory. Publish both changes in one transaction.
+                row = db.execute("SELECT value FROM preparation_settings WHERE name='storage_inventory_generation'").fetchone()
+                generation = int(json.loads(row[0])) + 1 if row else 1
+                db.execute("INSERT OR REPLACE INTO preparation_settings VALUES ('storage_inventory_generation',?)", (canonical(generation),))
+                db.execute("INSERT OR REPLACE INTO preparation_settings VALUES ('storage_inventory_state',?)", (canonical("SCANNING"),))
             # Cancellation wins over late publication/consumer replies.
             if job["cancel_requested"] and state == "READY":
                 state, stage = "CANCELLED", "CANCELLED"
@@ -449,6 +456,22 @@ class PreparationRepository:
 
     def set_inventory_state(self, state):
         with self.connect() as db:
+            db.execute("INSERT OR REPLACE INTO preparation_settings VALUES ('storage_inventory_state',?)", (canonical(state),))
+
+    def begin_inventory(self):
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            db.execute("INSERT OR REPLACE INTO preparation_settings VALUES ('storage_inventory_state',?)", (canonical("SCANNING"),))
+            row = db.execute("SELECT value FROM preparation_settings WHERE name='storage_inventory_generation'").fetchone()
+            return int(json.loads(row[0])) if row else 0
+
+    def finish_inventory(self, generation, state):
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT value FROM preparation_settings WHERE name='storage_inventory_generation'").fetchone()
+            current = int(json.loads(row[0])) if row else 0
+            # A scan started before a newer publication cannot certify it.
+            state = state if current == generation else "SCANNING"
             db.execute("INSERT OR REPLACE INTO preparation_settings VALUES ('storage_inventory_state',?)", (canonical(state),))
 
     def refresh_publications(self, *, stop=None, paths=None):

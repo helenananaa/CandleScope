@@ -65,7 +65,7 @@ class _BatchDataManager:
     async def release_stream(self, symbol: str, interval: str, **kwargs) -> None:
         self.release_calls.append({"symbol": symbol, "interval": interval, **kwargs})
 
-    def subscribe(self, *, callback, symbol, interval, exchange, market_type, event_types):
+    def subscribe(self, *, callback, symbol, interval, exchange, market_type, event_types, on_recovery=None):
         handle = object()
         self.subscribe_calls.append({
             "callback": callback,

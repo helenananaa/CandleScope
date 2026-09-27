@@ -113,7 +113,18 @@ export interface BeforePageAvailability {
   retryAtMs: EpochMilliseconds | number | null;
 }
 
+/** Client-only read boundary and scheduling; never serialized to the server. */
+export interface KlineRequestContext {
+  epoch?: number;
+  realtimeVersion?: number;
+  scope?: string;
+  /** Lower values sponsor queued physical work first. */
+  priority?: number;
+  schedule?<T>(work: () => Promise<T>, signal: AbortSignal): Promise<T>;
+}
+
 export interface KlineRequestOptions {
+  clientContext?: KlineRequestContext;
   signal?: AbortSignal;
   /** Stable chart/pane demand owner used by the backend to supersede stale work. */
   demandScope?: string;
@@ -146,7 +157,7 @@ export interface KlineHistoryBatchRequest {
   days: number | null | undefined;
   marketType: string;
   exchange: string;
-  options: Omit<KlineHistoryRequestOptions, "signal">;
+  options: Omit<KlineHistoryRequestOptions, "signal" | "clientContext">;
 }
 
 export type KlineHistoryBatchOutcome =

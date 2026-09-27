@@ -70,6 +70,13 @@ class SeriesRevisionRegistry:
         self._seen_events: OrderedDict[str, None] = OrderedDict()
         self._lock = threading.RLock()
 
+    def reset_epoch(self) -> None:
+        """Invalidate every cursor after an unbounded source delivery gap."""
+        with self._lock:
+            self.server_epoch = uuid.uuid4().hex
+            self._states.clear()
+            self._seen_events.clear()
+
     def observe_closed(
         self,
         symbol: str,

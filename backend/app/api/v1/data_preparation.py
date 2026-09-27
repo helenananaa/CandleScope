@@ -4,8 +4,9 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.data_preparation.models import PreparationError, PreparationRequest, Requirement
-from app.api.v1.replay import TrainingRunSetupPayload
-from app.api.v1.backtests import ChartContextResolveRequest, ResearchExecutionOverrides, _operator_python_payload
+from app.replay.request_contracts import TrainingRunSetupPayload
+from app.backtest.request_contracts import ChartContextResolveRequest, ResearchExecutionOverrides
+from app.api.v1.backtests import _operator_python_payload
 
 router = APIRouter(prefix="/data-preparations", tags=["data-preparation"])
 
@@ -62,12 +63,11 @@ class NativePreparationPayload(BaseModel):
 async def prepare_native_strategy(request: Request, payload: NativePreparationPayload):
     import time
     from app.data_engine.interval_policy import parse_interval_spec
-    from app.data_preparation.bar_adapter import storage_call
     from app.data_preparation.models import canonical
     from app.data_preparation.native_plan import requested_contexts, requested_lookbacks, chart_interval, plan_inputs
     from app.backtest.chart_context import ChartContextRequest
     submission = payload.model_dump(mode="json")
-    prior = service(request).repository.by_idempotency(payload.idempotency_key)
+    prior = await invoke_async(lambda: service(request).storage(service(request).repository.by_idempotency, payload.idempotency_key))
     if prior is not None:
         if canonical(prior["request"]["intent"].get("submission")) != canonical(submission):
             raise HTTPException(409, detail={"code": "IDEMPOTENCY_CONFLICT", "message": "Key belongs to a different native preparation"})
@@ -79,9 +79,9 @@ async def prepare_native_strategy(request: Request, payload: NativePreparationPa
         raise HTTPException(409, detail={"code": "NATIVE_INPUT_UNSUPPORTED", "message": "Native execution requires its own BAR input profile"})
     context = payload.context.model_dump()
     if context["range_mode"] == "ALL_AVAILABLE":
-        resolved = await storage_call(runtime.chart_context.resolve, context)
+        resolved = await call_storage(request, runtime.chart_context.resolve, context)
         bounds = ((resolved["coverage"]["requested_start_ms"], resolved["coverage"]["requested_end_ms"])
-                  if resolved["status"] == "READY" else runtime.chart_context._host_range(
+                  if resolved["status"] == "READY" else await call_storage(request, runtime.chart_context._host_range,
                       ChartContextRequest.from_mapping(context), getattr(request.app.state, "data_manager", None), "1m"))
         if bounds is None:
             raise HTTPException(409, detail={"code": "RANGE_REQUIRED", "message": "Select the historical range to prepare"})
@@ -131,7 +131,7 @@ async def prepare_native_strategy(request: Request, payload: NativePreparationPa
         requirements=requirements, intent={"submission": submission, "native_strategy": {
             "language": payload.language, "source": payload.source, "parameters": payload.parameters,
             "libraries": payload.libraries, "bindings": bindings, "dependency_requirements": dependencies}})
-    return invoke(lambda: service(request).submit(prepared))
+    return await invoke_async(lambda: service(request).submit(prepared))
 
 
 @router.post("/strategy", status_code=202)
@@ -140,9 +140,8 @@ async def prepare_strategy(request: Request, payload: StrategyPreparationPayload
     from app.backtest.chart_context import ChartContextRequest
     from app.data_engine.interval_policy import parse_interval_spec
     from app.data_preparation.models import canonical
-    from app.data_preparation.bar_adapter import storage_call
     submission = payload.model_dump(mode="json")
-    prior = service(request).repository.by_idempotency(payload.idempotency_key)
+    prior = await invoke_async(lambda: service(request).storage(service(request).repository.by_idempotency, payload.idempotency_key))
     if prior is not None:
         if canonical(prior["request"]["intent"].get("submission")) != canonical(submission):
             raise HTTPException(409, detail={"code": "IDEMPOTENCY_CONFLICT", "message": "Key belongs to a different strategy preparation"})
@@ -157,9 +156,9 @@ async def prepare_strategy(request: Request, payload: StrategyPreparationPayload
     if interval is None:
         raise HTTPException(422, detail={"code": "INVALID_INTERVAL", "message": "Select a supported interval"})
     host = getattr(request.app.state, "data_manager", None)
-    bounds = runtime.chart_context._host_range(context, host, "1m") if host is not None else None
+    bounds = await call_storage(request, runtime.chart_context._host_range, context, host, "1m") if host is not None else None
     if bounds is None and context.range_mode == "ALL_AVAILABLE":
-        existing = await storage_call(runtime.chart_context.resolve, context.wire())
+        existing = await call_storage(request, runtime.chart_context.resolve, context.wire())
         if existing["status"] == "READY":
             bounds = (existing["coverage"]["requested_start_ms"], existing["coverage"]["requested_end_ms"])
     if bounds is None:
@@ -176,7 +175,7 @@ async def prepare_strategy(request: Request, payload: StrategyPreparationPayload
     warmup_bars = 0
     if payload.strategy is not None:
         from app.data_preparation.dependency_plan import strategy_warmup, warmup_start
-        warmup_bars = invoke(lambda: strategy_warmup(runtime, payload.strategy.strategy_revision_id, payload.strategy.parameters))
+        warmup_bars = await invoke_async(lambda: service(request).storage(strategy_warmup, runtime, payload.strategy.strategy_revision_id, payload.strategy.parameters))
         if context.range_mode == "ALL_AVAILABLE":
             # The first available bars are the warmup; do not invent required
             # history before listing simply because the user chose ALL.
@@ -195,18 +194,18 @@ async def prepare_strategy(request: Request, payload: StrategyPreparationPayload
     intent = {"chart_context": frozen_context, "submission": submission}
     if payload.strategy is not None:
         from app.data_preparation.strategy_launcher import revision
-        invoke(lambda: revision(runtime, payload.strategy.strategy_revision_id))
+        await invoke_async(lambda: service(request).storage(revision, runtime, payload.strategy.strategy_revision_id))
         intent["strategy"] = _operator_python_payload(request, payload.strategy.model_dump())
         intent["strategy"]["warmup_bars"] = warmup_bars
         intent["preparation"] = {"warmup_bars": warmup_bars, "requested_start_ms": requested_start,
                                  "prepared_start_ms": start}
-    existing = await storage_call(runtime.chart_context.resolve, frozen_context)
+    existing = await call_storage(request, runtime.chart_context.resolve, frozen_context)
     if existing["status"] == "READY":
         intent["ready_resolution"] = existing
     prepared = PreparationRequest(idempotency_key=payload.idempotency_key, consumer="STRATEGY",
         requirements=requirements,
         intent=intent)
-    return invoke(lambda: service(request).submit(prepared))
+    return await invoke_async(lambda: service(request).submit(prepared))
 
 
 @router.post("/replay", status_code=202)
@@ -235,7 +234,7 @@ async def prepare_replay(request: Request, payload: ReplayPreparationPayload):
         progressive=payload.progressive,
         intent={"replay_setup": setup, "display_interval": payload.display_interval},
     )
-    return invoke(lambda: service(request).submit(prepared))
+    return await invoke_async(lambda: service(request).submit(prepared))
 
 
 def service(request: Request):
@@ -253,9 +252,21 @@ def invoke(operation):
                             detail={"code": exc.code, "message": str(exc), "retryable": exc.retryable}) from exc
 
 
+async def invoke_async(operation):
+    from app.core.bounded_executor import ExecutorBusyError
+    try:
+        return await operation()
+    except ExecutorBusyError as exc:
+        raise HTTPException(503, detail={"code": exc.code, "message": str(exc), "retryable": True},
+                            headers={"Retry-After": "1"}) from exc
+    except PreparationError as exc:
+        raise HTTPException(404 if exc.code == "JOB_NOT_FOUND" else 409,
+                            detail={"code": exc.code, "message": str(exc), "retryable": exc.retryable}) from exc
+
+
 @router.get("")
-def list_jobs(request: Request):
-    return {"items": service(request).repository.list()}
+async def list_jobs(request: Request):
+    return {"items": await invoke_async(lambda: service(request).storage(service(request).repository.list))}
 
 
 @router.get("/capabilities")
@@ -281,8 +292,8 @@ def capabilities(request: Request):
 
 
 @router.get("/cache")
-def cache_inventory(request: Request):
-    return service(request).repository.cache_inventory()
+async def cache_inventory(request: Request):
+    return await invoke_async(lambda: service(request).storage(service(request).repository.cache_inventory))
 
 
 class CacheSettingsPayload(BaseModel):
@@ -294,19 +305,19 @@ class CacheSettingsPayload(BaseModel):
 @router.put("/cache/settings")
 async def configure_cache(request: Request, payload: CacheSettingsPayload):
     instance = service(request)
-    result = invoke(lambda: instance.repository.configure(**payload.model_dump()))
+    result = await invoke_async(lambda: instance.storage(instance.repository.configure, **payload.model_dump()))
     if not payload.prefetch_enabled:
-        for job in instance.repository.list(active=True):
+        for job in await invoke_async(lambda: instance.storage(instance.repository.list, active=True)):
             if job["request"]["consumer"] == "PREFETCH" and job["stage"] != "STARTING":
-                instance.cancel(job["id"])
+                await invoke_async(lambda: instance.cancel(job["id"]))
     return result
 
 
 @router.post("/cache/cleanup")
-def cleanup_cache(request: Request):
+async def cleanup_cache(request: Request):
     instance = service(request)
-    result = invoke(lambda: instance.repository.evict_unreferenced(instance.adapter.remove_cached_object))
-    instance.repository.refresh_publications()
+    result = await invoke_async(lambda: instance.storage(instance.repository.evict_unreferenced, instance.adapter.remove_cached_object))
+    await invoke_async(lambda: instance.storage(instance.repository.refresh_publications))
     return result
 
 
@@ -315,33 +326,37 @@ async def create_job(request: Request, payload: PreparationRequest):
     if "strategy" in payload.intent or "native_strategy" in payload.intent:
         raise HTTPException(422, detail={"code": "STRATEGY_ENDPOINT_REQUIRED",
             "message": "Submit strategy execution through /data-preparations/strategy"})
-    return invoke(lambda: service(request).submit(payload))
+    return await invoke_async(lambda: service(request).submit(payload))
 
 
 @router.get("/{job_id}")
-def get_job(request: Request, job_id: str):
-    return invoke(lambda: service(request).repository.get(job_id))
+async def get_job(request: Request, job_id: str):
+    return await invoke_async(lambda: service(request).storage(service(request).repository.get, job_id))
 
 
 @router.post("/{job_id}/cancel")
 async def cancel_job(request: Request, job_id: str):
-    return invoke(lambda: service(request).cancel(job_id))
+    return await invoke_async(lambda: service(request).cancel(job_id))
 
 
 @router.post("/{job_id}/retry")
 async def retry_job(request: Request, job_id: str):
-    return invoke(lambda: service(request).retry(job_id))
+    return await invoke_async(lambda: service(request).retry(job_id))
 
 
 @router.post("/{job_id}/release-cache")
-def release_cache(request: Request, job_id: str):
+async def release_cache(request: Request, job_id: str):
     instance = service(request)
-    invoke(lambda: instance.repository.release_finished(job_id))
-    job = instance.repository.get(job_id)
+    await invoke_async(lambda: instance.storage(instance.repository.release_finished, job_id))
+    job = await invoke_async(lambda: instance.storage(instance.repository.get, job_id))
     # Failed tasks remain retryable, so their feed cannot lose its archive
     # references even when disposable acquisition chunks are released.
     if job["request"].get("progressive") and job["state"] in {"READY", "CANCELLED"}:
         replay = getattr(instance.adapter, "replay_service", None)
         if replay is not None:
-            replay.progressive_history.release("preparation:preparation-" + job_id)
+            await invoke_async(lambda: instance.storage(replay.progressive_history.release, "preparation:preparation-" + job_id))
     return {"released": True, "job_id": job_id}
+
+
+async def call_storage(request: Request, function, *args, **kwargs):
+    return await invoke_async(lambda: service(request).storage(function, *args, **kwargs))

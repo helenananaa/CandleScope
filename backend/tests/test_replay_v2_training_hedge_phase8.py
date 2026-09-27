@@ -110,7 +110,7 @@ async def _finish_pending_liquidation(
     assert service.training is not None
     projection: dict[str, object] | None = None
     for _wave in range(4):
-        await service.training._reconcile_liquidations(  # noqa: SLF001
+        await service.training._ordered_playback._reconcile_liquidations(  # noqa: SLF001
             run_id=run_id,
             client_instance_id="phase8-recovery-client",
             command_id=command_id,
@@ -213,12 +213,12 @@ async def test_each_liquidation_transition_recovers_after_real_restart(
             insurance_opening_balance="0",
         )
         assert seed.training is not None
-        original_reconcile = seed.training._reconcile_liquidations  # noqa: SLF001
+        original_reconcile = seed.training._ordered_playback._reconcile_liquidations  # noqa: SLF001
 
         async def defer_liquidation(**_kwargs: object) -> int:
             return 0
 
-        monkeypatch.setattr(seed.training, "_reconcile_liquidations", defer_liquidation)
+        monkeypatch.setattr(seed.training._ordered_playback, "_reconcile_liquidations", defer_liquidation)
         await _trigger_crash(
             seed,
             run_id=run_id,
@@ -226,7 +226,7 @@ async def test_each_liquidation_transition_recovers_after_real_restart(
             prefix=f"phase8-{boundary}-{method_name}-prepare",
         )
         monkeypatch.setattr(
-            seed.training,
+            seed.training._ordered_playback,
             "_reconcile_liquidations",
             original_reconcile,
         )
@@ -259,7 +259,7 @@ async def test_each_liquidation_transition_recovers_after_real_restart(
 
         monkeypatch.setattr(store, method_name, inject)
         with pytest.raises(RuntimeError, match="phase8 (process|response) loss"):
-            await crashing.training._reconcile_liquidations(  # noqa: SLF001
+            await crashing.training._ordered_playback._reconcile_liquidations(  # noqa: SLF001
                 run_id=run_id,
                 client_instance_id="phase8-recovery-client",
                 command_id=f"phase8-{boundary}-{method_name}",
@@ -322,12 +322,12 @@ async def test_sqlite_busy_exhaustion_preserves_pending_projection_and_wal_recov
             insurance_opening_balance="0",
         )
         assert seed.training is not None
-        original_reconcile = seed.training._reconcile_liquidations  # noqa: SLF001
+        original_reconcile = seed.training._ordered_playback._reconcile_liquidations  # noqa: SLF001
 
         async def defer_liquidation(**_kwargs: object) -> int:
             return 0
 
-        monkeypatch.setattr(seed.training, "_reconcile_liquidations", defer_liquidation)
+        monkeypatch.setattr(seed.training._ordered_playback, "_reconcile_liquidations", defer_liquidation)
         await _trigger_crash(
             seed,
             run_id=run_id,
@@ -335,7 +335,7 @@ async def test_sqlite_busy_exhaustion_preserves_pending_projection_and_wal_recov
             prefix="phase8-busy-prepare",
         )
         monkeypatch.setattr(
-            seed.training,
+            seed.training._ordered_playback,
             "_reconcile_liquidations",
             original_reconcile,
         )
@@ -355,7 +355,7 @@ async def test_sqlite_busy_exhaustion_preserves_pending_projection_and_wal_recov
             blocker.execute("PRAGMA busy_timeout=0")
             blocker.execute("BEGIN IMMEDIATE")
             with pytest.raises(ReplayDomainError) as captured:
-                await busy.training._reconcile_liquidations(  # noqa: SLF001
+                await busy.training._ordered_playback._reconcile_liquidations(  # noqa: SLF001
                     run_id=run_id,
                     client_instance_id="phase8-busy-client",
                     command_id="phase8-busy-command",

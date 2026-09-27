@@ -21,8 +21,8 @@ Design constraints:
     blocks producers or other subscribers.
   * Queue-based subscribers that fall behind keep only the latest pending
     ``BAR_UPDATED`` event per topic.  Closed bars, historical amendments, and
-    completed backfill parents use lossless bounded delivery so they are never
-    silently discarded behind live previews.
+    other events use a shared bounded replay log. Exhaustion terminates the
+    affected subscription explicitly; producers never await consumer capacity.
 
 Usage::
 
@@ -54,8 +54,13 @@ import asyncio
 import logging
 import threading
 import time
+import uuid
+from copy import deepcopy
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Callable, Awaitable
+
+from app.data_engine.consumer_recovery import ConsumerRecoveryRequired, RecoveryCallback
 
 from .config import EventBusConfig
 from .models import (
@@ -72,98 +77,86 @@ logger = logging.getLogger("data_manager.event_bus")
 MiddlewareHook = Callable[[DataEvent], Awaitable[DataEvent | None]]
 
 
-_LOSSLESS_FINALITY_TYPES: frozenset[DataEventType] = frozenset({
-    DataEventType.BAR_CLOSED,
-    DataEventType.BAR_AMENDED,
-    DataEventType.BACKFILL_COMPLETED,
-})
+# Only these events are replaceable snapshots. Lifecycle/control events must
+# either arrive in order or explicitly invalidate the subscription.
+_REPLACEABLE_TYPES = frozenset({DataEventType.BAR_UPDATED, DataEventType.PRICE_UPDATED})
 
 
 @dataclass(slots=True)
 class _QueuedEvent:
     event: DataEvent
     enqueued_at: float
+    sequence: int = 0
 
 
 class _SubscriberQueue(asyncio.Queue[_QueuedEvent | None]):
-    """Hard-bounded live queue with lossless correction backpressure.
+    """Bounded pending events; overflow recovery belongs to the bus journal."""
 
-    ``BAR_UPDATED`` is preview state and may be coalesced or evicted while it
-    is still pending.  ``BAR_CLOSED``, ``BAR_AMENDED``, and
-    ``BACKFILL_COMPLETED`` are durable finality/invalidation barriers: dropping
-    one can leave an indicator permanently stale.  When the configured
-    capacity contains no preview that can be evicted, :class:`DataEventBus`
-    applies asynchronous per-subscriber backpressure.  The queue therefore
-    remains hard-bounded without blocking the event loop or silently losing a
-    finality barrier.
-    """
-
-    def __init__(self, maxsize: int = 0) -> None:
+    def __init__(self, maxsize: int = 1000) -> None:
+        if maxsize <= 0:
+            raise ValueError("subscriber_queue_size must be positive")
         super().__init__(maxsize=maxsize)
-        self._latest_forming: dict[SeriesKey, _QueuedEvent] = {}
+        self._latest_forming: dict[tuple[SeriesKey, DataEventType], _QueuedEvent] = {}
         self._closed = False
+        self._delivery_ids: OrderedDict[str, None] = OrderedDict()
+        self.replay_next: int | None = None
+        self.replayed = 0
+        self.confirmed_sequence = 0
+        self.confirmed_delivery_id: str | None = None
+        self.recovery_error: ConsumerRecoveryRequired | None = None
 
-    def offer(self, event: DataEvent) -> str:
+    def _remember_delivery(self, event):
+        delivery_id = event.detail.get("delivery_id")
+        if delivery_id:
+            self._delivery_ids[delivery_id] = None
+            while len(self._delivery_ids) > max(1024, self.maxsize * 2):
+                self._delivery_ids.popitem(last=False)
+
+    def offer(self, event: DataEvent, sequence: int = 0) -> str:
         if self._closed:
             return "closed"
-        if event.event_type == DataEventType.BAR_UPDATED:
-            pending = self._latest_forming.get(event.key)
+        if event.detail.get("delivery_id") in self._delivery_ids:
+            return "duplicate"
+        if event.event_type in _REPLACEABLE_TYPES:
+            pending = self._latest_forming.get((event.key, event.event_type))
             if pending is not None:
                 pending.event = event
                 pending.enqueued_at = time.perf_counter()
                 return "coalesced"
-        item = _QueuedEvent(event=event, enqueued_at=time.perf_counter())
+        item = _QueuedEvent(event=event, enqueued_at=time.perf_counter(), sequence=sequence)
         try:
             self.put_nowait(item)
-            if event.event_type == DataEventType.BAR_UPDATED:
-                self._latest_forming[event.key] = item
+            self._remember_delivery(event)
+            if event.event_type in _REPLACEABLE_TYPES:
+                self._latest_forming[(event.key, event.event_type)] = item
             else:
                 # Seal an older forming slot only after the final/correction or
                 # lifecycle event is safely queued.  On QueueFull the old slot
                 # remains replaceable instead of losing its routing index.
-                self._latest_forming.pop(event.key, None)
+                self._seal_previews(event.key)
             return "queued"
         except asyncio.QueueFull:
-            if event.event_type in _LOSSLESS_FINALITY_TYPES:
-                # Prefer reclaiming every pending live preview before asking
-                # the publisher coroutine to wait for bounded capacity.
+            if event.event_type not in _REPLACEABLE_TYPES:
+                # Prefer reclaiming pending previews before switching to replay.
                 # Removing previews is safe because their latest state is
                 # replaceable; correction barriers are not.
                 while self.full() and self._evict_oldest_forming_update():
                     pass
                 try:
                     self.put_nowait(item)
+                    self._remember_delivery(event)
                 except asyncio.QueueFull:
                     return "critical_full"
                 # The correction now follows any older forming update for the
                 # same series, so that slot must no longer be replaceable by a
                 # later preview.
-                self._latest_forming.pop(event.key, None)
+                self._seal_previews(event.key)
                 return "queued"
             return "full"
 
-    async def put_lossless(self, event: DataEvent) -> bool:
-        """Wait asynchronously for bounded capacity and enqueue a correction."""
-        item = _QueuedEvent(event=event, enqueued_at=time.perf_counter())
-        while self.full() and not self._closed:
-            putter = self._get_loop().create_future()
-            self._putters.append(putter)
-            try:
-                await putter
-            except BaseException:
-                putter.cancel()
-                try:
-                    self._putters.remove(putter)
-                except ValueError:
-                    pass
-                if not self.full() and not putter.cancelled():
-                    self._wakeup_next(self._putters)
-                raise
-        if self._closed:
-            return False
-        super().put_nowait(item)
-        self._latest_forming.pop(event.key, None)
-        return True
+    def _seal_previews(self, key: SeriesKey) -> None:
+        for kind in _REPLACEABLE_TYPES:
+            self._latest_forming.pop((key, kind), None)
 
     def close_nowait(self) -> None:
         """Discard a detached subscriber's backlog and enqueue one sentinel."""
@@ -173,14 +166,8 @@ class _SubscriberQueue(asyncio.Queue[_QueuedEvent | None]):
                 super().get_nowait()
             except asyncio.QueueEmpty:
                 break
-        # A producer may be asynchronously backpressured on a full critical
-        # queue while this subscriber is detached.  Wake every waiter so it can
-        # observe ``_closed`` and finish instead of leaking an emit task.
-        while self._putters:
-            putter = self._putters.popleft()
-            if not putter.done():
-                putter.set_result(None)
         self._latest_forming.clear()
+        self._delivery_ids.clear()
         # Queue consumers in this module do not use join()/task_done().  Reset
         # the inherited bookkeeping as part of terminal cleanup so a detached
         # queue cannot retain stale unfinished state either.
@@ -193,12 +180,12 @@ class _SubscriberQueue(asyncio.Queue[_QueuedEvent | None]):
         for index, pending in enumerate(self._queue):
             if (
                 pending is None
-                or pending.event.event_type != DataEventType.BAR_UPDATED
+                or pending.event.event_type not in _REPLACEABLE_TYPES
             ):
                 continue
             del self._queue[index]
-            if self._latest_forming.get(pending.event.key) is pending:
-                self._latest_forming.pop(pending.event.key, None)
+            if self._latest_forming.get((pending.event.key, pending.event.event_type)) is pending:
+                self._latest_forming.pop((pending.event.key, pending.event.event_type), None)
             if self._unfinished_tasks > 0:
                 self._unfinished_tasks -= 1
                 if self._unfinished_tasks == 0:
@@ -211,9 +198,9 @@ class _SubscriberQueue(asyncio.Queue[_QueuedEvent | None]):
         item = super().get_nowait()
         if (
             item is not None
-            and self._latest_forming.get(item.event.key) is item
+            and self._latest_forming.get((item.event.key, item.event.event_type)) is item
         ):
-            self._latest_forming.pop(item.event.key, None)
+            self._latest_forming.pop((item.event.key, item.event.event_type), None)
         return item
 
 
@@ -222,6 +209,9 @@ class _CallbackSubscription:
     queue: _SubscriberQueue
     handle: SubscriptionHandle
     task: asyncio.Task | None = None
+    on_recovery: RecoveryCallback | None = None
+    recovery_task: asyncio.Task | None = None
+    recovery_notification_error: str | None = None
     dropped: int = 0
     last_error: str | None = None
     delivered: int = 0
@@ -229,7 +219,7 @@ class _CallbackSubscription:
     max_lag_ms: float = 0.0
     last_lag_ms: float = 0.0
     coalesced: int = 0
-    backpressured: int = 0
+    replay_entries: int = 0
 
 
 @dataclass(slots=True)
@@ -242,7 +232,7 @@ class _QueueSubscription:
     max_lag_ms: float = 0.0
     last_lag_ms: float = 0.0
     coalesced: int = 0
-    backpressured: int = 0
+    replay_entries: int = 0
 
 
 class DataEventBus:
@@ -263,7 +253,16 @@ class DataEventBus:
         on_subscription_change: Callable[[], None] | None = None,
     ) -> None:
         self._cfg = config or EventBusConfig()
+        if self._cfg.subscriber_queue_size <= 0 or self._cfg.replay_capacity <= 0:
+            raise ValueError("event bus queue and replay capacities must be positive")
+        self._epoch = uuid.uuid4().hex
+        self._sequence = 0
+        self._journal: OrderedDict[int, _QueuedEvent] = OrderedDict()
+        self._delivery_ids: OrderedDict[str, None] = OrderedDict()
+        self._recovery_required = 0
+        self._closed = False
         self._protection_lock = protection_lock or threading.RLock()
+        self._worker_tasks: set[asyncio.Task] = set()
         self._on_subscription_change = on_subscription_change
 
         # Callback subscriptions: handle.id → SubscriptionHandle
@@ -294,6 +293,8 @@ class DataEventBus:
         callback: EventCallback,
         key: SeriesKey | None = None,
         event_types: set[DataEventType] | None = None,
+        *,
+        on_recovery: RecoveryCallback | None = None,
     ) -> SubscriptionHandle:
         """Register a callback to receive events.
 
@@ -316,6 +317,8 @@ class DataEventBus:
                 event_types={DataEventType.BAR_CLOSED},
             )
         """
+        if self._closed:
+            raise RuntimeError("event bus is closed")
         handle = SubscriptionHandle(
             key=key,
             event_types=event_types,
@@ -324,7 +327,7 @@ class DataEventBus:
         queue = _SubscriberQueue(
             maxsize=self._cfg.subscriber_queue_size,
         )
-        sub = _CallbackSubscription(queue=queue, handle=handle)
+        sub = _CallbackSubscription(queue=queue, handle=handle, on_recovery=on_recovery)
         with self._protection_lock:
             self._subscriptions[handle.id] = handle
             self._callback_subs[handle.id] = sub
@@ -370,8 +373,13 @@ class DataEventBus:
 
         if callback_entry:
             self._put_sentinel(callback_entry.queue)
-            if callback_entry.task is not None:
-                callback_entry.task.cancel()
+            try:
+                current_task = asyncio.current_task()
+            except RuntimeError:
+                current_task = None
+            for task in (callback_entry.task, callback_entry.recovery_task):
+                if task is not None and task is not current_task:
+                    task.cancel()
             logger.debug("Callback subscription removed: id=%s", handle.id)
 
         # Also check queue subscriptions
@@ -399,6 +407,8 @@ class DataEventBus:
             ):
                 push_to_websocket(event)
         """
+        if self._closed:
+            raise RuntimeError("event bus is closed")
         queue = _SubscriberQueue(
             maxsize=self._cfg.subscriber_queue_size,
         )
@@ -422,11 +432,12 @@ class DataEventBus:
 
         try:
             while True:
-                item = await queue.get()
+                item = await self._next_item(sub)
                 if item is None:
                     break
                 self._record_queue_lag(sub, item.enqueued_at)
-                yield item.event
+                yield deepcopy(item.event) if item.sequence else item.event
+                self._confirm(sub, item)
         finally:
             removed = None
             with self._protection_lock:
@@ -454,10 +465,8 @@ class DataEventBus:
         middleware returns ``None``, the event is suppressed.
 
         Then it is delivered to callback and iterator subscribers via bounded
-        queues. Live previews use non-blocking puts; lossless historical
-        corrections apply asynchronous backpressure when a subscriber's queue
-        contains no replaceable preview. Slow callbacks never block the event
-        loop, although their publisher coroutine may wait for bounded capacity.
+        queues and a shared bounded replay window. Exhaustion requires a fresh
+        snapshot and subscription. No queue-capacity wait occurs in emit().
         """
         # Apply config-level filters
         if not self._should_emit(event):
@@ -474,56 +483,55 @@ class DataEventBus:
             if processed is None:
                 return  # middleware suppressed the event
 
+        if self._closed:
+            raise RuntimeError("event bus is closed")
         event = processed
+        delivery_id = event.detail.get("delivery_id")
+        if delivery_id and delivery_id in self._delivery_ids:
+            return
         self._events_emitted += 1
+        sequence = 0
+        if event.event_type not in _REPLACEABLE_TYPES:
+            # A single immutable copy is shared by the replay window and queues.
+            # Callbacks receive a copy, so mutation cannot corrupt later replay.
+            event = deepcopy(event)
+            self._sequence += 1
+            sequence = self._sequence
+            self._journal[sequence] = _QueuedEvent(event, time.perf_counter(), sequence)
+            if delivery_id:
+                self._delivery_ids[delivery_id] = None
+                while len(self._delivery_ids) > max(1024, self._cfg.replay_capacity * 2):
+                    self._delivery_ids.popitem(last=False)
+            while len(self._journal) > self._cfg.replay_capacity:
+                evicted_sequence, evicted = self._journal.popitem(last=False)
+                callbacks, queues = self._matching_subscriptions(evicted.event.key)
+                for _, sub in callbacks + queues:
+                    cursor = sub.queue.replay_next
+                    if cursor is not None and cursor <= evicted_sequence and sub.handle.matches(evicted.event):
+                        self._require_recovery(sub, "replay_window_exhausted", cursor)
 
-        callback_subs, queue_subs = self._matching_subscriptions(event.key)
-        lossless_puts: list[Awaitable[bool]] = []
-
-        # Callback subscribers
-        for sub_id, sub in callback_subs:
-            handle = sub.handle
-            if not handle.matches(event):
+        callbacks, queues = self._matching_subscriptions(event.key)
+        for _, sub in callbacks + queues:
+            if not sub.handle.matches(event) or sub.queue.recovery_error is not None:
                 continue
-            if handle.callback is None:
+            if isinstance(sub, _CallbackSubscription):
+                self._ensure_callback_worker(sub)
+            if sub.queue.replay_next is not None:
+                # Reliable events already live in the shared log. Previews are
+                # dispensable while catching up, and cannot overtake finality.
+                if not sequence:
+                    sub.dropped += 1
+                    self._events_dropped += 1
                 continue
-            self._ensure_callback_worker(sub)
-            offer = sub.queue.offer(event)
+            offer = sub.queue.offer(event, sequence)
             if offer == "coalesced":
                 sub.coalesced += 1
             elif offer == "critical_full":
-                sub.backpressured += 1
-                lossless_puts.append(sub.queue.put_lossless(event))
+                sub.replay_entries += 1
+                sub.queue.replay_next = sequence
             elif offer == "full":
                 sub.dropped += 1
                 self._events_dropped += 1
-                logger.warning(
-                    "Callback subscriber %s full, dropping event", sub_id,
-                )
-
-        # Queue subscribers
-        for sub_id, sub in queue_subs:
-            handle = sub.handle
-            if not handle.matches(event):
-                continue
-            offer = sub.queue.offer(event)
-            if offer == "coalesced":
-                sub.coalesced += 1
-            elif offer == "critical_full":
-                sub.backpressured += 1
-                lossless_puts.append(sub.queue.put_lossless(event))
-            elif offer == "full":
-                sub.dropped += 1
-                self._events_dropped += 1
-                logger.warning(
-                    "Queue subscriber %s full, dropping event", sub_id,
-                )
-
-        if lossless_puts:
-            # Capacity waits are concurrent across subscribers.  A slow
-            # consumer backpressures this publisher coroutine, but never blocks
-            # the asyncio loop or causes other subscribers to wait serially.
-            await asyncio.gather(*lossless_puts)
 
     async def emit_many(self, events: list[DataEvent]) -> None:
         """Emit multiple events in sequence."""
@@ -564,13 +572,21 @@ class DataEventBus:
 
     async def close(self) -> None:
         """Send sentinel to all queue subscribers and clear everything."""
+        self._closed = True
         callback_tasks: list[asyncio.Task] = []
         for sub_id, sub in list(self._callback_subs.items()):
             self._put_sentinel(sub.queue)
-            if sub.task is not None:
-                sub.task.cancel()
-                callback_tasks.append(sub.task)
+            for task in (sub.task, sub.recovery_task):
+                if task is not None and task is not asyncio.current_task():
+                    task.cancel()
+                    callback_tasks.append(task)
             logger.debug("Callback subscription closed: id=%s", sub_id)
+        # A recovery hook can unsubscribe itself before awaiting snapshot work.
+        # Its task still belongs to this bus and must be drained on shutdown.
+        for task in tuple(self._worker_tasks):
+            if task is not asyncio.current_task() and task not in callback_tasks:
+                task.cancel()
+                callback_tasks.append(task)
         if callback_tasks:
             await asyncio.gather(*callback_tasks, return_exceptions=True)
         for sub_id, sub in list(self._queue_subs.items()):
@@ -588,6 +604,8 @@ class DataEventBus:
             self._queue_wildcard_ids.clear()
             if changed and self._on_subscription_change is not None:
                 self._on_subscription_change()
+        self._journal.clear()
+        self._delivery_ids.clear()
         logger.info("Event bus closed")
 
     # ── Public: Introspection ────────────────────────────────
@@ -638,6 +656,24 @@ class DataEventBus:
             "callback_subscriptions": len(self._subscriptions),
             "queue_subscriptions": len(self._queue_subs),
             "middleware_count": len(self._middleware),
+            "epoch": self._epoch,
+            "replay_capacity": self._cfg.replay_capacity,
+            "replay_size": len(self._journal),
+            "sequence": self._sequence,
+            "recovery_required_total": self._recovery_required,
+            "consumer_states": {
+                sub_id: {
+                    "state": ("recovery_required" if sub.queue.recovery_error else
+                              "replaying" if sub.queue.replay_next is not None else "live"),
+                    "confirmed_sequence": sub.queue.confirmed_sequence,
+                    "confirmed_delivery_id": sub.queue.confirmed_delivery_id,
+                    "replay_next": sub.queue.replay_next,
+                    "replayed": sub.queue.replayed,
+                    "recovery": sub.queue.recovery_error.to_dict() if sub.queue.recovery_error else None,
+                    "notification_error": getattr(sub, "recovery_notification_error", None),
+                }
+                for sub_id, sub in [*self._callback_subs.items(), *self._queue_subs.items()]
+            },
             "events_emitted": self._events_emitted,
             "events_dropped": self._events_dropped,
             "callback_errors": self._callback_errors,
@@ -737,6 +773,8 @@ class DataEventBus:
         return True
 
     def _ensure_callback_worker(self, sub: _CallbackSubscription) -> None:
+        if sub.queue.recovery_error is not None or sub.queue._closed:
+            return
         if sub.task is not None and not sub.task.done():
             return
         try:
@@ -745,6 +783,7 @@ class DataEventBus:
                 self._callback_worker(sub),
                 name=f"event-bus-callback:{sub.handle.id}",
             )
+            self._track_task(sub.task)
         except RuntimeError:
             # subscribe() may run during setup before an event loop exists.
             # The worker will be started on the first emit inside a loop.
@@ -753,14 +792,18 @@ class DataEventBus:
     async def _callback_worker(self, sub: _CallbackSubscription) -> None:
         handle = sub.handle
         while True:
-            item = await sub.queue.get()
+            try:
+                item = await self._next_item(sub)
+            except ConsumerRecoveryRequired:
+                return
             if item is None:
                 return
             if handle.callback is None:
                 continue
             self._record_queue_lag(sub, item.enqueued_at)
             try:
-                await handle.callback(item.event)
+                await handle.callback(deepcopy(item.event) if item.sequence else item.event)
+                self._confirm(sub, item)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -770,6 +813,72 @@ class DataEventBus:
                     "Event callback error (sub=%s): %s",
                     handle.id, exc, exc_info=True,
                 )
+
+                self._require_recovery(sub, "callback_failed", item.sequence or None)
+                return
+
+    async def _next_item(self, sub: _CallbackSubscription | _QueueSubscription) -> _QueuedEvent | None:
+        queue = sub.queue
+        if queue.recovery_error is not None:
+            raise queue.recovery_error
+        if not queue.empty():
+            return queue.get_nowait()
+        if queue.replay_next is not None:
+            for sequence, item in self._journal.items():
+                if sequence < queue.replay_next:
+                    continue
+                queue.replay_next = sequence + 1
+                if sub.handle.matches(item.event):
+                    queue.replayed += 1
+                    return item
+            queue.replay_next = None
+        item = await queue.get()
+        if queue.recovery_error is not None:
+            raise queue.recovery_error
+        return item
+
+    @staticmethod
+    def _confirm(sub: _CallbackSubscription | _QueueSubscription, item: _QueuedEvent) -> None:
+        # Callback return / iterator next() confirms local handling only. A
+        # downstream task, socket peer or side effect has its own acknowledgement.
+        if sub.queue.recovery_error is None and item.sequence:
+            sub.queue.confirmed_sequence = item.sequence
+            sub.queue.confirmed_delivery_id = item.event.detail.get("delivery_id")
+
+    def _require_recovery(self, sub, reason: str, first_missing: int | None) -> None:
+        queue = sub.queue
+        if queue.recovery_error is not None:
+            return
+        error = ConsumerRecoveryRequired(
+            reason, subscription_id=sub.handle.id, epoch=self._epoch,
+            confirmed_sequence=queue.confirmed_sequence,
+            first_missing_sequence=first_missing,
+        )
+        queue.recovery_error = error
+        queue.replay_next = None
+        queue.close_nowait()
+        self._recovery_required += 1
+        logger.error("Consumer recovery required: %s", error.to_dict())
+        if isinstance(sub, _CallbackSubscription) and sub.on_recovery is not None:
+            # Separate bounded task: a hung callback must not hide the gap.
+            sub.recovery_task = asyncio.create_task(
+                self._notify_recovery(sub, error),
+                name=f"event-bus-recovery:{sub.handle.id}",
+            )
+            self._track_task(sub.recovery_task)
+
+    def _track_task(self, task: asyncio.Task) -> None:
+        self._worker_tasks.add(task)
+        task.add_done_callback(self._worker_tasks.discard)
+
+    async def _notify_recovery(self, sub: _CallbackSubscription, error: ConsumerRecoveryRequired) -> None:
+        try:
+            await sub.on_recovery(error)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            sub.recovery_notification_error = str(exc)
+            logger.exception("Consumer recovery notification failed: %s", sub.handle.id)
 
     @staticmethod
     def _put_sentinel(queue: _SubscriberQueue) -> None:
@@ -795,7 +904,8 @@ class DataEventBus:
             "delivered": sub.delivered,
             "dropped": sub.dropped,
             "coalesced": sub.coalesced,
-            "backpressured": sub.backpressured,
+            "backpressured": 0,  # retained diagnostic key; publishers never wait
+            "replay_entries": sub.replay_entries,
             "avg_lag_ms": round(avg, 2),
             "max_lag_ms": round(sub.max_lag_ms, 2),
             "last_lag_ms": round(sub.last_lag_ms, 2),

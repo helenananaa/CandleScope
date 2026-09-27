@@ -502,16 +502,16 @@ async def test_blind_display_playback_targets_the_same_source_grid(
             stop.set()
 
         monkeypatch.setattr(
-            service.training,
+            service.training._ordered_playback,
             "_advance_full_tracks_to",
             capture_advance,
         )
         monkeypatch.setattr(
-            "app.replay.training.service.discrete_playback_units",
+            "app.replay.training.ordered_playback.discrete_playback_units",
             lambda _elapsed_seconds, *, rate: 1,
         )
         await asyncio.wait_for(
-            service.training._run_ordered_playback(  # noqa: SLF001
+            service.training._ordered_playback._run_ordered_playback(  # noqa: SLF001
                 run_id=str(run["run_id"]),
                 generation=generation,
                 stop=stop,

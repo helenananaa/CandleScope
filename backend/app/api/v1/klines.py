@@ -27,6 +27,7 @@ from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.executors import run_storage
+from app.core.bounded_executor import ExecutorBusyError
 from app.exchanges import (
     bootstrap_default_adapters,
     get_exchange_registry,
@@ -292,6 +293,9 @@ def _bars_to_dicts(bars: list) -> list[dict]:
 
 
 def _query_http_exception(exc: Exception, prefix: str) -> HTTPException:
+    if isinstance(exc, ExecutorBusyError):
+        return HTTPException(status_code=503, headers={"Retry-After": "1"},
+                             detail={"code": exc.code, "message": str(exc), "retryable": True})
     if isinstance(exc, IntervalResolutionError):
         return HTTPException(status_code=400, detail=exc.to_dict())
     return HTTPException(status_code=500, detail=f"{prefix}: {exc}")

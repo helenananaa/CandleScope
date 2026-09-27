@@ -140,7 +140,7 @@ def freeze_bindings(runtime, bindings):
 
 
 def launch(runtime, intent, inputs, job_id):
-    from app.api.v1.native_backtests import NativeRunRequest
+    from app.backtest.native_contracts import NativeRunRequest
     main, *contexts = inputs
     payload = {key: value for key, value in main.items() if key not in {"symbol", "timeframe"}}
     payload.update(language=intent["language"], source=intent["source"], parameters=intent["parameters"],

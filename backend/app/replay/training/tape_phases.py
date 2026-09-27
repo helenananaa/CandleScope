@@ -1,3 +1,9 @@
+
+from . import control_rules as control_rules_ops
+from . import service_validation as service_validation_ops
+from app.replay.training.persistence import account_marks as account_marks_ops
+from app.replay.training.persistence import portfolio as portfolio_ops
+
 """Bounded exact tape cohorts sharing a durable publication barrier.
 
 Account projections, risk detection and review execute in their original cohort
@@ -42,8 +48,8 @@ def require_safe_prices(store, connection, run_id, planned_prices):
         "SELECT * FROM replay_training_market_track WHERE run_id=? ORDER BY stable_ordinal,track_id",
         (run_id,),
     ).fetchall()
-    tracks = [store._market_track_from_row(row) for row in rows]
-    portfolio = store._portfolio_projection(
+    tracks = [portfolio_ops.market_track_from_row(row) for row in rows]
+    portfolio = portfolio_ops.portfolio_projection(
         initial_equity=account["initial_equity"], tracks=tracks
     )
     isolated = json.loads(account["isolated_margin_json"])
@@ -90,7 +96,7 @@ def require_safe_prices(store, connection, run_id, planned_prices):
         cash=Decimal(portfolio["cash_balance"]) + Decimal(account["overlay_cash"]),
         legs=legs,
         initial_prices=initial_prices,
-        fingerprint=store._hedge_risk_fingerprint(connection, run_id=run_id),
+        fingerprint=account_marks_ops.hedge_risk_fingerprint(connection, run_id=run_id),
     )
 
 
@@ -130,7 +136,7 @@ def update_intent(store, connection, run_id):
             raise ValueError("tape intent requires a complete global cohort")
         plan.update(
             latest_tracks=[dict(r) for r in rows],
-            risk_fingerprint=store._hedge_risk_fingerprint(connection, run_id=run_id),
+            risk_fingerprint=account_marks_ops.hedge_risk_fingerprint(connection, run_id=run_id),
         )
         selected = next(r for r in rows if r["session_id"] == intent["session_id"])
         cursor = {
@@ -177,7 +183,7 @@ async def try_advance(owner, *, command, binding, tracks, snapshots, target):
     prices = {}
     cap = target
     for track, snapshot in snapshots:
-        sid = owner._track_session_id(track)
+        sid = service_validation_ops.track_session_id(track)
         controlled = await owner._ensure_track_controller(
             session_id=sid,
             client_instance_id=command.client_instance_id,
@@ -208,8 +214,8 @@ async def try_advance(owner, *, command, binding, tracks, snapshots, target):
         return None
     while True:
         planned_prices = {
-            track["track_id"]: prices[owner._track_session_id(track)][
-                : bisect_right(plans[owner._track_session_id(track)], times[-1])
+            track["track_id"]: prices[service_validation_ops.track_session_id(track)][
+                : bisect_right(plans[service_validation_ops.track_session_id(track)], times[-1])
             ]
             for track, _ in snapshots
         }
@@ -239,7 +245,7 @@ async def try_advance(owner, *, command, binding, tracks, snapshots, target):
         commands, expected, events, bounds = [], {}, [], {}
         prepared_tape = {}
         for track, snapshot in snapshots:
-            sid, tid = owner._track_session_id(track), track["track_id"]
+            sid, tid = service_validation_ops.track_session_id(track), track["track_id"]
             first = bisect_right(plans[sid], previous)
             last = bisect_right(plans[sid], at)
             if first < last:
@@ -258,7 +264,7 @@ async def try_advance(owner, *, command, binding, tracks, snapshots, target):
                     sid,
                     ReplayCommand(
                         protocol=REPLAY_PROTOCOL,
-                        command_id=owner._multi_command_id(
+                        command_id=control_rules_ops.multi_command_id(
                             command.command_id,
                             tid,
                             "tape_batch",
@@ -273,7 +279,7 @@ async def try_advance(owner, *, command, binding, tracks, snapshots, target):
             )
             events.extend(
                 StableMarketEvent(
-                    actual_event_time_ms=owner._actual_event_time_ms(
+                    actual_event_time_ms=control_rules_ops.actual_event_time_ms(
                         binding, plans[sid][i]
                     ),
                     event_phase=20,
@@ -306,7 +312,7 @@ async def try_advance(owner, *, command, binding, tracks, snapshots, target):
                 if row is None or tuple(row) != (revision, first):
                     raise ValueError("tape phase lost its committed source basis")
             if ordinal == 0:
-                if context["fingerprint"] != store._hedge_risk_fingerprint(
+                if context["fingerprint"] != account_marks_ops.hedge_risk_fingerprint(
                     connection, run_id=command.run_id
                 ):
                     raise TapeRiskBoundary()

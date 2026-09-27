@@ -10,10 +10,12 @@ from typing import Any
 from fastapi import WebSocket, WebSocketDisconnect
 
 from app.api.v1.stream_utils import (
+    close_for_resync,
     send_json_with_timeout,
     send_text_with_timeout,
     validate_ws_interval,
 )
+from app.data_engine.consumer_recovery import ConsumerRecoveryRequired
 from app.data_engine.data_manager.models import DataEventType, StreamStatus
 from app.data_engine.interval_policy import parse_interval_spec
 from app.data_engine.interval_resolution import IntervalResolutionError
@@ -332,6 +334,13 @@ async def stream_multi_kline(
             ws_closed = True
             return False
 
+    async def require_resync(error=None):
+        nonlocal ws_closed
+        if ws_closed:
+            return
+        ws_closed = True
+        await close_for_resync(websocket)
+
     async def event_callback(event):
         if ws_closed:
             return
@@ -345,7 +354,7 @@ async def stream_multi_kline(
         )
         try:
             if event.event_type == DataEventType.BACKFILL_COMPLETED:
-                await event_queue.put(
+                queued = await event_queue.put(
                     {
                         "type": "backfill_completed",
                         "exchange": event.key.exchange,
@@ -357,17 +366,21 @@ async def stream_multi_kline(
                     key=event_key,
                     timeout=1.0,
                 )
+                if not queued:
+                    await require_resync()
                 return
 
             bar_dict = _serialize_kline_event(event)
-            await event_queue.put(
+            queued = await event_queue.put(
                 bar_dict,
                 key=event_key,
                 replaceable=event.event_type == DataEventType.BAR_UPDATED,
                 timeout=1.0,
             )
-        except (asyncio.TimeoutError, Exception):
-            pass
+            if not queued and event.event_type != DataEventType.BAR_UPDATED:
+                await require_resync()
+        except Exception:
+            await require_resync()
 
     try:
         async def forwarder() -> None:
@@ -453,6 +466,7 @@ async def stream_multi_kline(
                                 _require_active_stream_info(info, iv)
                                 handle = dm.subscribe(
                                     callback=event_callback,
+                                    on_recovery=require_resync,
                                     symbol=symbol,
                                     interval=iv,
                                     exchange=exchange,
@@ -592,41 +606,44 @@ async def forward_events_to_ws(
     market_type: str = "spot",
 ) -> None:
     """Forward DataManager K-line events to a WebSocket client."""
-    for interval in intervals:
-        async for event in dm.subscribe_iter(
-            symbol=symbol,
-            interval=interval,
-            exchange=exchange,
-            market_type=market_type,
-            event_types={
-                DataEventType.BAR_CREATED,
-                DataEventType.BAR_UPDATED,
-                DataEventType.BAR_CLOSED,
-                DataEventType.BAR_AMENDED,
-                DataEventType.BACKFILL_COMPLETED,
-            },
-        ):
-            if event.event_type == DataEventType.BACKFILL_COMPLETED:
-                if not should_forward_browser_event(event):
+    try:
+        for interval in intervals:
+            async for event in dm.subscribe_iter(
+                symbol=symbol,
+                interval=interval,
+                exchange=exchange,
+                market_type=market_type,
+                event_types={
+                    DataEventType.BAR_CREATED,
+                    DataEventType.BAR_UPDATED,
+                    DataEventType.BAR_CLOSED,
+                    DataEventType.BAR_AMENDED,
+                    DataEventType.BACKFILL_COMPLETED,
+                },
+            ):
+                if event.event_type == DataEventType.BACKFILL_COMPLETED:
+                    if not should_forward_browser_event(event):
+                        continue
+                    try:
+                        await send_json_with_timeout(websocket, {
+                            "type": "backfill_completed",
+                            "exchange": event.key.exchange,
+                            "symbol": event.key.symbol,
+                            "interval": event.key.interval,
+                            "market_type": event.key.market_type,
+                            "detail": event.detail or {},
+                        })
+                    except Exception:
+                        return
                     continue
+                bar_dict = _serialize_kline_event(event)
+
                 try:
-                    await send_json_with_timeout(websocket, {
-                        "type": "backfill_completed",
-                        "exchange": event.key.exchange,
-                        "symbol": event.key.symbol,
-                        "interval": event.key.interval,
-                        "market_type": event.key.market_type,
-                        "detail": event.detail or {},
-                    })
+                    await send_json_with_timeout(websocket, bar_dict)
                 except Exception:
                     return
-                continue
-            bar_dict = _serialize_kline_event(event)
-
-            try:
-                await send_json_with_timeout(websocket, bar_dict)
-            except Exception:
-                return
+    except ConsumerRecoveryRequired:
+        await close_for_resync(websocket)
 
 
 async def read_client_messages(websocket: WebSocket) -> None:

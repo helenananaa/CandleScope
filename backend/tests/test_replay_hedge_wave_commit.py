@@ -98,7 +98,7 @@ async def test_merged_wave_matches_reference_and_reduces_transactions(
                 return None
 
             monkeypatch.setattr(
-                service.training, "_try_recorded_interval", no_recorded_interval
+                service.training._ordered_playback, "_try_recorded_interval", no_recorded_interval
             )
             if mode == "reference":
 
@@ -370,7 +370,7 @@ async def test_pending_liquidation_keeps_separate_global_commit(
             prefix="pending",
             book_mode="OFF",
         )
-        original = service.training._reconcile_liquidations
+        original = service.training._ordered_playback._reconcile_liquidations
 
         async def stop_at_liquidation(**kwargs):
             if kwargs.get("pending"):
@@ -378,7 +378,7 @@ async def test_pending_liquidation_keeps_separate_global_commit(
             return await original(**kwargs)
 
         monkeypatch.setattr(
-            service.training, "_reconcile_liquidations", stop_at_liquidation
+            service.training._ordered_playback, "_reconcile_liquidations", stop_at_liquidation
         )
         with pytest.raises(RuntimeError, match="pending liquidation boundary"):
             await _trigger_crash(

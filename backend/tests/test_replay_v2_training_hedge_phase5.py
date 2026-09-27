@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.replay.training.persistence import liquidation as liquidation_ops
+
 import json
 import shutil
 import sqlite3
@@ -516,7 +518,7 @@ async def test_cross_margin_breach_creates_one_account_case_across_full_tracks(
                     rule["created_at_ms"],
                 ),
             )
-            store._detect_contract_liquidations(  # type: ignore[attr-defined]
+            liquidation_ops.detect_contract_liquidations(  # type: ignore[attr-defined]
                 connection,
                 run_id=run_id,
                 now_ms=store.base_store._validated_now_ms(),
@@ -690,13 +692,13 @@ async def test_liquidation_recovers_after_each_durable_step_without_duplicates(
             prefix=f"phase5-recovery-{method_name}",
             insurance_opening_balance="0",
         )
-        original_seed_reconcile = seed.training._reconcile_liquidations  # type: ignore[union-attr]
+        original_seed_reconcile = seed.training._ordered_playback._reconcile_liquidations  # type: ignore[union-attr]
 
         async def defer_liquidation(**_kwargs: object) -> int:
             return 0
 
         monkeypatch.setattr(
-            seed.training,  # type: ignore[union-attr]
+            seed.training._ordered_playback,  # type: ignore[union-attr]
             "_reconcile_liquidations",
             defer_liquidation,
         )
@@ -707,7 +709,7 @@ async def test_liquidation_recovers_after_each_durable_step_without_duplicates(
             prefix=f"phase5-recovery-{method_name}-prepare",
         )
         monkeypatch.setattr(
-            seed.training,  # type: ignore[union-attr]
+            seed.training._ordered_playback,  # type: ignore[union-attr]
             "_reconcile_liquidations",
             original_seed_reconcile,
         )
@@ -763,14 +765,14 @@ async def test_liquidation_recovers_after_each_durable_step_without_duplicates(
 
         monkeypatch.setattr(store, method_name, crash_after_commit)
         with pytest.raises(RuntimeError, match="simulated process loss"):
-            await service.training._reconcile_liquidations(  # type: ignore[union-attr]
+            await service.training._ordered_playback._reconcile_liquidations(  # type: ignore[union-attr]
                 run_id=run_id,
                 client_instance_id="phase5-recovery-client",
                 command_id=f"phase5-recovery-{method_name}",
             )
         monkeypatch.setattr(store, method_name, original)
         for _wave in range(3):
-            await service.training._reconcile_liquidations(  # type: ignore[union-attr]
+            await service.training._ordered_playback._reconcile_liquidations(  # type: ignore[union-attr]
                 run_id=run_id,
                 client_instance_id="phase5-recovery-client",
                 command_id=f"phase5-recovery-{method_name}",
@@ -803,7 +805,7 @@ async def test_liquidation_recovers_after_each_durable_step_without_duplicates(
         assert len(hedge_state["adl_selections"]) == 1
         assert len(hedge_state["adl_counterparty_ledger"]) == 1
         for _wave in range(3):
-            await reference.training._reconcile_liquidations(  # type: ignore[union-attr]
+            await reference.training._ordered_playback._reconcile_liquidations(  # type: ignore[union-attr]
                 run_id=run_id,
                 client_instance_id="phase5-recovery-client",
                 command_id=f"phase5-recovery-{method_name}",

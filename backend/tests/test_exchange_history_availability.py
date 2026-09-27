@@ -4,7 +4,7 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from app.api.v1 import symbols as symbols_api
+from app.exchanges import symbol_catalog as symbols_api
 from app.data_engine.market_data import (
     DeliveryClass,
     MarketChannel,

@@ -853,8 +853,15 @@ async def handle_pyne_indicator_subscribe(
             name=f"pyne_indicator_{client_id}",
         )
 
+    async def _require_resync(error) -> None:
+        # Dispose runtime state before permitting a canonical re-subscription.
+        meta["_disposed"] = True
+        await unsubscribe_client(client_id)
+        queue_message(queue, {"type": "resync_required"})
+
     realtime_handle = dm.subscribe(
         callback=_on_data_event,
+        on_recovery=_require_resync,
         symbol=symbol,
         interval=interval,
         exchange=exchange,
@@ -882,6 +889,7 @@ async def handle_pyne_indicator_subscribe(
         "market_type": market_type,
         "symbol": symbol,
         "callback": _on_data_event,
+        "on_recovery": _require_resync,
     }
     meta["_pyneCorrectionState"] = correction_state
     if correction_state.get("handle") is None:
@@ -907,8 +915,14 @@ async def handle_pyne_indicator_subscribe(
                         event_symbol,
                     )
 
+        async def _recover_corrections(error) -> None:
+            # Snapshot because each callback removes itself during disposal.
+            for entry in list(callbacks.values()):
+                await entry["on_recovery"](error)
+
         correction_state["handle"] = dm.subscribe(
             callback=_fanout_correction,
+            on_recovery=_recover_corrections,
             event_types={
                 DataEventType.BAR_AMENDED,
                 DataEventType.BACKFILL_COMPLETED,

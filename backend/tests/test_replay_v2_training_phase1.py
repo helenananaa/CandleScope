@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.replay.training.persistence import run_records as run_records_ops
+
 import asyncio
 import json
 import sqlite3
@@ -351,7 +353,7 @@ async def test_create_run_rolls_back_every_row_and_runtime_pin_on_late_failure(
     def fail_action(*_args, **_kwargs) -> None:
         raise RuntimeError("injected initial action failure")
 
-    monkeypatch.setattr(training.store, "_insert_initial_action", fail_action)
+    monkeypatch.setattr(run_records_ops, 'insert_initial_action', fail_action)
     try:
         with pytest.raises(RuntimeError, match="initial action failure"):
             await training.create_run(await _request(service))

@@ -107,8 +107,12 @@ class EventBusConfig:
 
     Attributes:
         subscriber_queue_size:
-            Max queue depth per async-iterator subscriber.
-            Events are dropped if the queue is full.
+            Positive queue depth per callback/iterator subscriber. Replaceable
+            previews may be dropped; other events use the bounded replay log.
+
+        replay_capacity:
+            Shared in-process replay window. Falling behind this window is a
+            terminal recovery error, never producer backpressure.
 
         emit_bar_updated:
             Whether to forward UPDATED bar events to external subscribers.
@@ -121,6 +125,7 @@ class EventBusConfig:
     subscriber_queue_size: int = 1000
     emit_bar_updated: bool = True
     emit_bar_created: bool = True
+    replay_capacity: int = 8192
 
 
 @dataclass
@@ -212,6 +217,7 @@ class DataManagerConfig:
             },
             "event_bus": {
                 "subscriber_queue_size": self.event_bus.subscriber_queue_size,
+                "replay_capacity": self.event_bus.replay_capacity,
                 "emit_bar_updated": self.event_bus.emit_bar_updated,
                 "emit_bar_created": self.event_bus.emit_bar_created,
             },

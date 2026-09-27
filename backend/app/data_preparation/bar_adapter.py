@@ -17,16 +17,7 @@ from app.data_engine.kline_quality import source_is_trusted_final
 from app.data_engine.storage.klines_repo import query_klines
 
 from .models import PreparationError, PreparationRequest, Requirement, canonical, fingerprint
-
-
-async def storage_call(function, *args):
-    """Cancellation drains a storage thread before releasing the input owner."""
-    task = asyncio.create_task(asyncio.to_thread(function, *args))
-    try:
-        return await asyncio.shield(task)
-    except asyncio.CancelledError:
-        await asyncio.gather(task, return_exceptions=True)
-        raise
+from .storage import storage_call
 
 
 class BarPreparationAdapter:
@@ -91,7 +82,7 @@ class BarPreparationAdapter:
         if request.consumer == "STRATEGY" and self.local_data is None:
             raise PreparationError("STRATEGY_PREPARATION_UNAVAILABLE", "Local dataset service is unavailable")
         if "replay_setup" in request.intent:
-            from app.api.v1.replay import TrainingRunSetupPayload
+            from app.replay.request_contracts import TrainingRunSetupPayload
             from app.replay.training.models import TrainingRunSetupRequest
             from app.data_engine.interval_policy import parse_interval_spec
             try:
@@ -464,7 +455,7 @@ class BarPreparationAdapter:
             return result
         if request.consumer != "REPLAY" or "replay_setup" not in request.intent:
             return result
-        from app.api.v1.replay import TrainingRunSetupPayload
+        from app.replay.request_contracts import TrainingRunSetupPayload
         from app.replay.training.models import TrainingRunSetupRequest, TrainingRunMarketSelectionRequest
         payload = TrainingRunSetupPayload.model_validate(request.intent["replay_setup"])
         setup = TrainingRunSetupRequest.from_dict(payload.model_dump(mode="json"))

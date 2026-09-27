@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .persistence import public_time as public_time_ops
+
 from ..storage.checkpoint_delta import resolve as resolve_checkpoint
 
 import hashlib
@@ -12,7 +14,7 @@ import sqlite3
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-from typing import TYPE_CHECKING
+from typing import Protocol
 
 from app.replay.broker.models import decimal_to_string
 from app.replay.canonical import canonical_json, canonical_sha256
@@ -23,8 +25,26 @@ from .liquidation_projection import load_public_liquidation_cases
 from .models import REPLAY_V2_PROTOCOL
 from .schema import REVIEW_TIMELINE_SCHEMA_VERSION, RUN_RULES_SCHEMA_VERSION
 
-if TYPE_CHECKING:
-    from .storage import TrainingRunStore
+class RecordedReviewContext(Protocol):
+    """Transaction-local lazy materialization supplied by the write coordinator.
+
+    The recorder does not own the store or its transaction lifecycle. The frame
+    exists only while a recorded phase is being written on the same connection.
+    """
+
+    _recorded_review_frame: Mapping[str, object] | None
+
+    def _recorded_review_checkpoint(
+        self, connection: sqlite3.Connection, session_id: str, now_ms: int,
+    ) -> bytes | None: ...
+
+    def _materialize_recorded_risk(
+        self, connection: sqlite3.Connection, *, run_id: str,
+    ) -> None: ...
+
+    def _materialize_recorded_actor_frame(
+        self, connection: sqlite3.Connection, *, run_id: str,
+    ) -> str | None: ...
 
 
 @dataclass
@@ -423,7 +443,7 @@ def _decoded_object(raw: object, *, field: str) -> dict[str, object]:
 class ReviewRecorder:
     """Writes review evidence inside the owning replay SQLite transaction."""
 
-    def __init__(self, owner: TrainingRunStore) -> None:
+    def __init__(self, owner: RecordedReviewContext) -> None:
         self.owner = owner
 
     def backfill(self, connection: sqlite3.Connection, *, now_ms: int) -> None:
@@ -547,7 +567,7 @@ class ReviewRecorder:
                     action["public_time_json"], field="rule public_time"
                 )
                 return decoded
-            return self.owner._public_time(
+            return public_time_ops.public_time(
                 connection,
                 session_id=str(run["adapter_session_id"]),
                 policy=str(run["time_disclosure_policy"]),
@@ -2039,7 +2059,7 @@ class ReviewRecorder:
                 for track_id in sorted(anchors)
             ]
         )
-        public_time = self.owner._public_time(
+        public_time = public_time_ops.public_time(
             connection,
             session_id=session_id,
             policy=str(run["time_disclosure_policy"]),

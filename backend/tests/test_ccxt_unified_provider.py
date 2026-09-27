@@ -7,7 +7,7 @@ from typing import Any
 import aiohttp
 import pytest
 
-from app.api.v1.symbols import _catalog_refresh_requests
+from app.exchanges.symbol_catalog import _catalog_refresh_requests
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import (
     DataSource,

@@ -137,10 +137,10 @@ async def test_shared_download_cancel_does_not_cancel_other_consumer(tmp_path):
     service = PreparationService(repo, adapter)
     await service.start()
     try:
-        a = service.submit(request().model_copy(update={"consumer": "REPLAY"}))
-        b = service.submit(request("request-0002").model_copy(update={"consumer": "REPLAY"}))
+        a = await service.submit(request().model_copy(update={"consumer": "REPLAY"}))
+        b = await service.submit(request("request-0002").model_copy(update={"consumer": "REPLAY"}))
         await asyncio.wait_for(adapter.entered.wait(), 2)
-        service.cancel(a["id"])
+        await service.cancel(a["id"])
         adapter.release.set()
         assert (await terminal(service, a["id"]))["state"] == "CANCELLED"
         assert (await terminal(service, b["id"]))["state"] == "READY"
@@ -156,7 +156,7 @@ async def test_shared_download_cancel_does_not_cancel_other_consumer(tmp_path):
 async def test_restart_resumes_publication_without_redownload(tmp_path):
     repo, adapter = PreparationRepository(tmp_path / "jobs.db"), Adapter()
     service = PreparationService(repo, adapter)
-    job = service.submit(request())
+    job = await service.submit(request())
     from app.data_preparation.models import fingerprint
     fragment = request().requirements[0].model_dump()
     repo.publish_chunk(fingerprint(fragment), fragment, {"data": "saved"}, 40, job["id"])
@@ -213,9 +213,9 @@ async def test_failed_publish_retries_without_redownload(tmp_path):
     service = PreparationService(PreparationRepository(tmp_path / "jobs.db"), adapter)
     await service.start()
     try:
-        job = service.submit(request())
+        job = await service.submit(request())
         assert (await terminal(service, job["id"]))["state"] == "FAILED"
-        service.retry(job["id"])
+        await service.retry(job["id"])
         assert (await terminal(service, job["id"]))["state"] == "READY"
         assert adapter.calls == 1
     finally:
@@ -246,7 +246,7 @@ async def test_real_bar_adapter_download_archive_and_pinned_revision(tmp_path):
     service = PreparationService(PreparationRepository(tmp_path / "jobs.db"), adapter)
     await service.start()
     try:
-        job = service.submit(req)
+        job = await service.submit(req)
         result = await terminal(service, job["id"])
         assert result["state"] == "READY", result
         assert len(repairs) == 1
@@ -258,7 +258,7 @@ async def test_real_bar_adapter_download_archive_and_pinned_revision(tmp_path):
         assert len(rows) == 2
         assert float(rows[0]["close"]) == 101
         values[0]["close"] = 100
-        again = service.submit(req.model_copy(update={"idempotency_key": "request-repeat"}))
+        again = await service.submit(req.model_copy(update={"idempotency_key": "request-repeat"}))
         repeated = await terminal(service, again["id"])
         assert repeated["state"] == "READY", repeated
         assert repeated["result"]["inputs"][0]["source_revision"] == revision
@@ -300,7 +300,7 @@ async def test_prepared_strategy_dataset_is_readable(tmp_path):
     service = PreparationService(PreparationRepository(tmp_path / "jobs.db"), adapter)
     await service.start()
     try:
-        job = service.submit(request().model_copy(update={"consumer": "STRATEGY"}))
+        job = await service.submit(request().model_copy(update={"consumer": "STRATEGY"}))
         result = await terminal(service, job["id"])
         assert result["state"] == "READY", result
         item = result["result"]["inputs"][0]
@@ -374,7 +374,7 @@ async def test_replay_api_empty_archive_downloads_and_creates_one_recoverable_ru
                 assert not list(object_store.root.rglob("*.json.zlib"))
                 monkeypatch.setattr(object_store, "put", put)
                 service.repository.configure(cache_budget_bytes=16 * 1024**2, prefetch_enabled=False)
-                service.retry(job["id"])
+                await service.retry(job["id"])
                 job = await terminal(service, job["id"])
             if account_history == "missing":
                 assert job["state"] == "FAILED", job
@@ -478,7 +478,7 @@ async def test_shutdown_drains_acquisition_and_new_owner_recovers(tmp_path):
     repo = PreparationRepository(tmp_path / "jobs.db")
     service = PreparationService(repo, adapter)
     await service.start()
-    job = service.submit(request())
+    job = await service.submit(request())
     await asyncio.wait_for(adapter.entered.wait(), 2)
     with pytest.raises(PreparationError, match="Another backend"):
         await PreparationService(repo, adapter).start()
@@ -581,10 +581,10 @@ async def test_partial_overlap_only_downloads_gap_and_containment_is_sliced(tmp_
     service = PreparationService(PreparationRepository(tmp_path / "jobs.db"), adapter)
     await service.start()
     try:
-        first = service.submit(request())
+        first = await service.submit(request())
         assert (await terminal(service, first["id"]))["state"] == "READY"
         fragment = request().requirements[0].model_copy(update={"start_ms": START + 60_000, "end_ms": START + 180_000})
-        second = service.submit(request("partial-0002").model_copy(update={"consumer": "STRATEGY", "requirements": [fragment]}))
+        second = await service.submit(request("partial-0002").model_copy(update={"consumer": "STRATEGY", "requirements": [fragment]}))
         result = await terminal(service, second["id"])
         assert result["state"] == "READY", result
         item = result["result"]["inputs"][0]

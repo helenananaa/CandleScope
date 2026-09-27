@@ -116,6 +116,7 @@ from .auto_gc import (
 from .cache import BarCache
 from .config import DataManagerConfig
 from .coordinator import IngestionFactory, StreamCoordinator
+from app.data_engine.consumer_recovery import RecoveryCallback
 from .event_bus import DataEventBus, MiddlewareHook
 from .facades import (
     BarDataFacade,
@@ -353,7 +354,9 @@ class DataManager:
             storage_provider=lambda: self.query_engine.storage,
             mark_bar_received=self.coordinator.mark_bar_received,
             is_started=lambda: self._started,
+            recovery_lookback_bars=self.bar_aggregator.config.max_closed_bars_in_memory,
         )
+        self.coordinator.set_before_stream_start(self.aggregator_bridge.delivery.prepare_series)
         self.warm_start = AggregatorWarmStartService(
             cache=self.cache,
             bar_aggregator=self.bar_aggregator,
@@ -551,6 +554,7 @@ class DataManager:
             "ready": storage is not None,
             "cache": self.cache.health_snapshot(),
             "storage_backend": type(storage).__name__ if storage is not None else None,
+            "bar_delivery": self.aggregator_bridge.delivery.snapshot(),
         }
 
     @property
@@ -766,6 +770,7 @@ class DataManager:
         logger.info("DataManager starting...")
 
         # Start BarAggregator
+        await self.aggregator_bridge.delivery.start()
         await self.bar_aggregator.start()
 
         # Prewarm
@@ -797,7 +802,6 @@ class DataManager:
         """Gracefully shut down everything."""
         if not self._started:
             return
-        self._started = False
         logger.info("DataManager shutting down...")
 
         related_warmup_scheduler = getattr(
@@ -841,6 +845,9 @@ class DataManager:
 
         # Stop BarAggregator (flushes active bars)
         await self.bar_aggregator.stop()
+
+        self._started = False
+        await self.aggregator_bridge.delivery.stop()
 
         # Close event bus
         await self.event_bus.close()
@@ -1615,6 +1622,8 @@ class DataManager:
         exchange: str = "binance",
         market_type: str = "spot",
         event_types: set[DataEventType] | None = None,
+        *,
+        on_recovery: RecoveryCallback | None = None,
     ) -> SubscriptionHandle:
         """Subscribe to bar/stream events via callback.
 
@@ -1651,6 +1660,7 @@ class DataManager:
             )
         return self.event_bus.subscribe(
             callback=callback, key=key, event_types=event_types,
+            on_recovery=on_recovery,
         )
 
     def unsubscribe(self, handle: SubscriptionHandle) -> None:
@@ -1745,6 +1755,7 @@ class DataManager:
             # A bounded storage-delete batch and stream activation therefore
             # have one shared linearization boundary.
             for target in plan.aggregation_targets:
+                await self.aggregator_bridge.delivery.prepare_series(target)
                 self.bar_aggregator.add_target(
                     target.symbol,
                     target.interval,
@@ -3080,6 +3091,7 @@ class DataManager:
             "coordinator": self.coordinator.snapshot(),
             "stream_leases": self.stream_lease_snapshot(),
             "bar_aggregator": self.bar_aggregator.snapshot(),
+            "bar_delivery": self.aggregator_bridge.delivery.snapshot(),
             "retention": self.retention.snapshot(),
             "storage_intents": self.storage_intents.snapshot(),
             "behavior_heat": self.cache_behavior_snapshot(),
@@ -3200,6 +3212,7 @@ class DataManager:
             "active_streams": coordinator["active_streams"],
             "cache_series": cache["series_count"],
             "cache_bars": cache["total_bars"],
+            "bar_delivery": self.aggregator_bridge.delivery.snapshot(),
         }
 
     @property

@@ -8,7 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.api.v1 import symbols as symbols_api
+from app.api.v1 import symbols as symbols_routes
+from app.exchanges import symbol_catalog as symbols_api
 from app.exchanges import (
     HistoricalRequest,
     RateLimitDeferred,
@@ -203,7 +204,7 @@ def test_successful_refresh_restores_validated_snapshot_after_process_reset(
     restored = symbols_api.get_cached_symbol_metadata("test", "spot", "AAAUSDT")
     assert restored is not None
     assert restored["active"] is True
-    status = symbols_api._catalog_status_payload("test", "spot")
+    status = symbols_api.catalog_status("test", "spot")
     assert status["stale"] is True
     assert status["last_success_at"] > 0
 
@@ -230,7 +231,7 @@ def test_empty_get_bounded_joins_initial_singleflight(monkeypatch) -> None:
     async def run() -> dict:
         adapter.started = asyncio.Event()
         adapter.release = asyncio.Event()
-        response = asyncio.create_task(symbols_api.get_exchange_info(
+        response = asyncio.create_task(symbols_routes.get_exchange_info(
             search="",
             quote_asset="",
             exchange="test",
@@ -279,7 +280,7 @@ def test_partial_get_returns_lkg_and_completes_missing_stale_markets_in_backgrou
         # Neither physical refresh is released yet: the first response must
         # still return the usable partial LKG rather than joining upstream I/O.
         partial = await asyncio.wait_for(
-            symbols_api.get_exchange_info(
+            symbols_routes.get_exchange_info(
                 search="",
                 quote_asset="",
                 exchange="test",
@@ -310,7 +311,7 @@ def test_partial_get_returns_lkg_and_completes_missing_stale_markets_in_backgrou
         ):
             await asyncio.sleep(0.01)
 
-        complete = await symbols_api.get_exchange_info(
+        complete = await symbols_routes.get_exchange_info(
             search="",
             quote_asset="",
             exchange="test",
@@ -333,8 +334,8 @@ def test_empty_get_returns_retryable_503_instead_of_false_empty(monkeypatch) -> 
     _install_registry(monkeypatch, adapter)
     monkeypatch.setattr(symbols_api, "SYMBOL_CATALOG_EMPTY_WAIT_SECONDS", 0.05)
 
-    with pytest.raises(symbols_api.HTTPException) as caught:
-        asyncio.run(symbols_api.get_exchange_info(
+    with pytest.raises(symbols_routes.HTTPException) as caught:
+        asyncio.run(symbols_routes.get_exchange_info(
             search="",
             quote_asset="",
             exchange="test",
@@ -439,7 +440,7 @@ def test_failed_empty_refresh_keeps_last_known_good_and_exposes_stale(monkeypatc
         before = copy.deepcopy(symbols_api._symbol_cache)
         adapter.empty = True
         counts = await symbols_api.refresh_exchange_metadata(force=True)
-        payload = await symbols_api.get_exchange_info(
+        payload = await symbols_routes.get_exchange_info(
             search="",
             quote_asset="",
             exchange="test",

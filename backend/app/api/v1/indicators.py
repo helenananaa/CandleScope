@@ -50,6 +50,7 @@ from app.core.operator_origin import (
     is_trusted_operator_origin,
     origin_from,
 )
+from app.core.bounded_executor import ExecutorBusyError
 from app.core.executors import (
     executors_snapshot,
     run_indicator,
@@ -1117,6 +1118,8 @@ async def compute_range(req: IndicatorRangeRequest, request: Request):
         )
         payload["detail"] = {"range": {"start": start_s, "end": end_s}}
         return payload
+    except ExecutorBusyError as exc:
+        return _executor_busy_payload(exc)
     except Exception as exc:
         payload = build_error_payload(
             "INDICATOR_RANGE_COMPUTE_FAILED",
@@ -1134,6 +1137,8 @@ def _batch_range_error_payload(
     start_s: int,
     end_s: int,
 ) -> dict[str, Any]:
+    if isinstance(exc, ExecutorBusyError):
+        return _executor_busy_payload(exc)
     if isinstance(exc, IndicatorRuntimeUnavailableError):
         payload = build_error_payload(
             exc.failure.public_code,
@@ -1599,6 +1604,8 @@ async def _compute_batch_item(
             "Provide either 'name' or 'script'",
             hint="内置指标传 name，自定义指标传 script。",
         )
+    except ExecutorBusyError as exc:
+        return _executor_busy_payload(exc)
     except Exception as exc:
         return build_error_payload(
             "INDICATOR_BATCH_ITEM_FAILED",
@@ -1689,6 +1696,8 @@ async def _compute_engine(
             f"Indicator compute exceeded {config.INDICATOR_HTTP_TIMEOUT_SECONDS:g}s timeout",
             hint="指标计算超时，请缩小历史窗口或优化参数。",
         )
+    except ExecutorBusyError as exc:
+        return _executor_busy_payload(exc)
     except Exception as exc:
         return build_error_payload(
             "INDICATOR_COMPUTE_FAILED",
@@ -1756,6 +1765,12 @@ async def _compute_script(
         )
 
     payload["scriptHash"] = script_hash(req.script or "")
+    return payload
+
+
+def _executor_busy_payload(exc: ExecutorBusyError) -> dict:
+    payload = build_error_payload(exc.code, str(exc))
+    payload.update(retryable=True, retryAfterMs=1000)
     return payload
 
 

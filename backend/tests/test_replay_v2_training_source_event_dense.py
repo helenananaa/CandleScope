@@ -1146,7 +1146,7 @@ async def test_dense_source_event_playback_never_commits_an_empty_due_batch(
             return 0
 
         monkeypatch.setattr(
-            "app.replay.training.service.discrete_playback_units",
+            "app.replay.training.ordered_playback.discrete_playback_units",
             two_due_batches,
         )
         playing = await _send(
@@ -1343,7 +1343,7 @@ async def test_source_event_playback_finishes_as_source_exhausted(
             tail_mark_price="103",
         )
         monkeypatch.setattr(
-            "app.replay.training.service.discrete_playback_units",
+            "app.replay.training.ordered_playback.discrete_playback_units",
             lambda _elapsed_seconds, *, rate: 128,
         )
         playing = await _send(

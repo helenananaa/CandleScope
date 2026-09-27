@@ -116,6 +116,7 @@ class IndicatorEngine:
         # Track which (symbol, interval) streams have active instances
         self._stream_keys: dict[str, set[IndicatorKey]] = {}
         self._started = False
+        self.source_delivery_state: dict[str, Any] = {"state": "live"}
 
     # =============================================================
     #  Lifecycle
@@ -221,6 +222,8 @@ class IndicatorEngine:
         Returns:
             (key, result) -- result is None if bars not provided.
         """
+        if self.source_delivery_state["state"] != "live":
+            raise RuntimeError("Indicator source recovery is incomplete; restart the data runtime")
         self._prune_idle_instances()
         key = IndicatorKey(
             symbol,
@@ -855,6 +858,18 @@ class IndicatorEngine:
     #  Query
     # =============================================================
 
+    def invalidate_source_gap(self, detail: dict) -> None:
+        """Require a fresh history seed, preserving existing owner refcounts."""
+        self._stream_keys.clear()
+        self._first_committed.clear()
+        self._last_committed.clear()
+        for key, instance in list(self._instances.items()):
+            instance.reset()
+            self._emit(IndicatorEventType.INDICATOR_ERROR, key, detail={
+                **detail, "resyncRequired": True,
+                "error": "Source delivery gap; reload canonical history",
+            })
+
     def get_instance(self, key: IndicatorKey) -> Indicator | None:
         """Get an indicator instance by key."""
         self._prune_idle_instances()
@@ -862,9 +877,11 @@ class IndicatorEngine:
 
     def get_result(self, key: IndicatorKey) -> IndicatorResult | None:
         """Get the current result for an indicator instance."""
+        if self.source_delivery_state["state"] != "live":
+            return None
         self._prune_idle_instances()
         instance = self._instances.get(key)
-        if instance is None:
+        if instance is None or not instance.is_initialized:
             return None
         return instance.build_result(key)
 
@@ -894,6 +911,7 @@ class IndicatorEngine:
         self._prune_idle_instances()
         return {
             "started": self._started,
+            "source_delivery": dict(self.source_delivery_state),
             "instance_count": len(self._instances),
             "stream_count": len(self._stream_keys),
             "listener_count": len(self._listeners),

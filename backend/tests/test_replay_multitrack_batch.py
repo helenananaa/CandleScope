@@ -36,11 +36,11 @@ async def test_real_multitrack_tape_batch_preserves_global_order_and_reduces_com
                                    client_order_id="wait", quantity="1", limit_price="500" if waiting_order in ("marketable", "held-constant") else "90")
             before = await owner.get_session_state(session)
             calls = []
-            original = owner.training._advance_adapter_to
+            original = owner.training._ordered_playback._advance_adapter_to
             async def observe(*args, _original=original, _calls=calls, _owner=owner, **kwargs):
                 _calls.append(kwargs.get("final_state_max_events"))
                 return await _original(*args, **kwargs)
-            monkeypatch.setattr(owner.training, "_advance_adapter_to", observe)
+            monkeypatch.setattr(owner.training._ordered_playback, "_advance_adapter_to", observe)
             started = perf_counter()
             target = (owner.training._training_terminal_time_ms(await owner.training.store.run_binding(run))
                       if terminal else int(before["cursor"]["virtual_time_ms"]) + 3 * INTERVAL_MS)

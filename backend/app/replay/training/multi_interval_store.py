@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from app.replay.training.persistence import account_marks as account_marks_ops
+from app.replay.training.persistence import liquidation as liquidation_ops
+from app.replay.training.persistence import portfolio as portfolio_ops
+
 import json
 from decimal import Decimal, localcontext
 
@@ -223,7 +227,7 @@ async def risk_context(store, run_id, tracks, *, all_tracks=None):
             (run_id,),
         ).fetchone():
             return None
-        fingerprint = store._hedge_risk_fingerprint(connection, run_id=run_id)
+        fingerprint = account_marks_ops.hedge_risk_fingerprint(connection, run_id=run_id)
         if store._hedge_risk_fingerprints.get(run_id) != fingerprint:
             return None
         legs, prices, archives = [], {}, {}
@@ -284,7 +288,7 @@ async def risk_context(store, run_id, tracks, *, all_tracks=None):
                             Decimal(isolated.get(isolated_margin_key(tid, side), "0")),
                         )
                     )
-        portfolio = store._portfolio_projection(
+        portfolio = portfolio_ops.portfolio_projection(
             initial_equity=run["initial_equity"],
             tracks=list(tracks if all_tracks is None else all_tracks),
         )
@@ -384,7 +388,7 @@ def finish_group(store, connection, group):
                 (last.event_sequence - 1, last.previous_hash, run_id, plan["track_id"]),
             )
             stable.extend(
-                store._apply_hedge_public_mark_batch(
+                account_marks_ops.apply_hedge_public_mark_batch(
                     connection,
                     run_id=run_id,
                     events=(last,),
@@ -402,8 +406,8 @@ def finish_group(store, connection, group):
                 source_sequence=state["source_sequence"],
             )
         )
-    store._apply_hedge_mark_projection(connection, run_id=run_id, now_ms=now)
-    store._detect_contract_liquidations(
+    account_marks_ops.apply_hedge_mark_projection(connection, run_id=run_id, now_ms=now)
+    liquidation_ops.detect_contract_liquidations(
         connection,
         run_id=run_id,
         now_ms=now,
@@ -476,7 +480,7 @@ def finish_group(store, connection, group):
         ),
     )
     group["stable"] = tuple(ordered)
-    group["fingerprint_after"] = store._hedge_risk_fingerprint(
+    group["fingerprint_after"] = account_marks_ops.hedge_risk_fingerprint(
         connection, run_id=run_id
     )
     latest = next(

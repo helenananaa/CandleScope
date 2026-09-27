@@ -336,6 +336,8 @@ def init_klines_storage() -> None:
         from app.data_engine.manual_history.repository import init_manual_history_storage
 
         init_manual_history_storage(conn)
+        from .bar_delivery import init_bar_delivery_storage
+        init_bar_delivery_storage(conn)
 
 
 def dataframe_to_rows(df: Any) -> list[dict]:
@@ -376,6 +378,7 @@ def upsert_klines(
     exchange: str = DEFAULT_EXCHANGE,
     market_type: str = DEFAULT_MARKET_TYPE,
     series_identity: KlineSeriesIdentity | None = None,
+    _connection: sqlite3.Connection | None = None,
 ) -> int:
     if not rows:
         return 0
@@ -413,7 +416,7 @@ def upsert_klines(
         else nullcontext()
     )
     with write_guard:
-        with _connect() as conn:
+        with (nullcontext(_connection) if _connection is not None else _connect()) as conn:
             incoming_rank_sql = source_rank_sql("excluded.source")
             stored_rank_sql = source_rank_sql("klines.source")
             changes_before = conn.total_changes
@@ -480,7 +483,8 @@ def upsert_klines(
                 ]
             conn.executemany(sql, write_payload)
             affected = conn.total_changes - changes_before
-            conn.commit()
+            if _connection is None:
+                conn.commit()
 
     return int(affected)
 
@@ -1420,6 +1424,9 @@ class KlinesRepoAdapter:
         self._series_identity = series_identity
         self._calendar_resolver = calendar_resolver
         self._calendar_registry = calendar_registry
+        from .bar_delivery import BarDeliveryJournal
+        self.bar_delivery = BarDeliveryJournal(
+            lambda: _connect(timeout_seconds=1.0, configure_journal_mode=False), upsert_klines)
 
     def set_calendar_resolver(
         self,

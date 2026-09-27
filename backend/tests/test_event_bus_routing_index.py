@@ -179,36 +179,13 @@ def test_full_subscriber_queue_evicts_preview_for_lossless_amendment() -> None:
     )) == "queued"
 
 
-def test_lossless_finality_lane_is_hard_bounded_and_ordered() -> None:
-    async def _run() -> None:
-        queue = _SubscriberQueue(maxsize=1)
-        target = SeriesKey("BTC-USDT", "1m")
-        first = DataEvent(
-            event_type=DataEventType.BAR_CLOSED,
-            key=target,
-            detail={"seq": 1},
-        )
-        second = DataEvent(
-            event_type=DataEventType.BACKFILL_COMPLETED,
-            key=target,
-            detail={"seq": 2, "request_id": "parent-2"},
-        )
-
-        assert queue.offer(first) == "queued"
-        assert queue.offer(second) == "critical_full"
-        put_task = asyncio.create_task(queue.put_lossless(second))
-        await asyncio.sleep(0)
-        assert not put_task.done()
-        assert queue.qsize() == queue.maxsize == 1
-
-        pending = queue.get_nowait()
-        assert pending is not None and pending.event.detail["seq"] == 1
-        assert await asyncio.wait_for(put_task, timeout=0.2) is True
-        assert queue.qsize() == queue.maxsize == 1
-        pending = queue.get_nowait()
-        assert pending is not None and pending.event.detail["seq"] == 2
-
-    asyncio.run(_run())
+def test_full_reliable_queue_requests_replay_without_extra_storage() -> None:
+    queue = _SubscriberQueue(maxsize=1)
+    target = SeriesKey("BTC-USDT", "1m")
+    assert queue.offer(DataEvent(DataEventType.BAR_CLOSED, target)) == "queued"
+    assert queue.offer(DataEvent(DataEventType.BACKFILL_COMPLETED, target)) == "critical_full"
+    assert queue.qsize() == queue.maxsize == 1
+    assert not queue._putters
 
 
 def test_event_bus_lossless_finality_does_not_increment_drop_metrics() -> None:
@@ -253,12 +230,12 @@ def test_event_bus_lossless_finality_does_not_increment_drop_metrics() -> None:
         asyncio.get_running_loop().call_soon(loop_progressed.set)
         await asyncio.wait_for(loop_progressed.wait(), timeout=0.2)
 
-        # The third parent is asynchronously backpressured, not stored beyond
-        # the hard queue bound, while unrelated event-loop work still runs.
-        assert not third_emit.done()
+        # The publisher has returned; overflow lives in the bounded replay log,
+        # and the subscriber queue still obeys its hard limit.
+        assert third_emit.done()
         sub = bus._callback_subs[handle.id]
         assert sub.queue.qsize() == sub.queue.maxsize == 1
-        assert bus.snapshot()["callback_lag"][handle.id]["backpressured"] == 1
+        assert bus.snapshot()["callback_lag"][handle.id]["replay_entries"] == 1
 
         release_first.set()
         await asyncio.wait_for(third_emit, timeout=0.2)
@@ -271,13 +248,13 @@ def test_event_bus_lossless_finality_does_not_increment_drop_metrics() -> None:
         snapshot = bus.snapshot()
         assert snapshot["events_dropped"] == 0
         assert snapshot["callback_lag"][handle.id]["dropped"] == 0
-        assert snapshot["callback_lag"][handle.id]["backpressured"] == 1
+        assert snapshot["callback_lag"][handle.id]["replay_entries"] == 1
         await bus.close()
 
     asyncio.run(_run())
 
 
-def test_iterator_close_wakes_lossless_backpressure() -> None:
+def test_iterator_close_discards_replay_without_leaking_tasks() -> None:
     async def _run() -> None:
         bus = DataEventBus(EventBusConfig(subscriber_queue_size=1))
         target = SeriesKey("BTC-USDT", "1m")
@@ -310,14 +287,14 @@ def test_iterator_close_wakes_lossless_backpressure() -> None:
             detail={"seq": 3, "request_id": "parent-3"},
         )))
         await asyncio.sleep(0)
-        assert not blocked_emit.done()
+        assert blocked_emit.done()
         assert sub.queue.qsize() == sub.queue.maxsize == 1
 
         await iterator.aclose()
         await asyncio.wait_for(blocked_emit, timeout=0.2)
 
         assert bus._queue_subs == {}
-        assert sub.backpressured == 1
+        assert sub.replay_entries == 1
         assert sub.dropped == 0
         assert sub.queue.qsize() == 1
         assert sub.queue.get_nowait() is None
@@ -326,7 +303,7 @@ def test_iterator_close_wakes_lossless_backpressure() -> None:
     asyncio.run(_run())
 
 
-def test_unsubscribe_wakes_lossless_backpressure_before_sentinel() -> None:
+def test_unsubscribe_discards_replay_before_sentinel() -> None:
     async def _run() -> None:
         bus = DataEventBus(EventBusConfig(subscriber_queue_size=1))
         target = SeriesKey("BTC-USDT", "1m")
@@ -355,10 +332,11 @@ def test_unsubscribe_wakes_lossless_backpressure_before_sentinel() -> None:
             detail={"seq": 3},
         )))
         await asyncio.sleep(0)
-        assert not blocked_emit.done()
+        assert blocked_emit.done()
         assert sub.queue.qsize() == sub.queue.maxsize == 1
 
         bus.unsubscribe(handle)
+        await asyncio.sleep(0)
         await asyncio.wait_for(blocked_emit, timeout=0.2)
 
         assert handle.id not in bus._callback_subs
