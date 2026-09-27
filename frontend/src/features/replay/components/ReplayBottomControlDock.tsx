@@ -10,9 +10,10 @@ export interface ReplayBottomControlDockProps {
   readonly runtime: ReplayRuntime;
   readonly viewer: ReplayViewerRuntime;
   readonly publicTimeLabel?: string | undefined;
+  readonly independentCharts?: boolean;
 }
 
-function ReplayBottomControlDock({ runtime, viewer, publicTimeLabel }: ReplayBottomControlDockProps) {
+function ReplayBottomControlDock({ runtime, viewer, publicTimeLabel, independentCharts }: ReplayBottomControlDockProps) {
   useLocale();
   return (
     <div
@@ -20,7 +21,7 @@ function ReplayBottomControlDock({ runtime, viewer, publicTimeLabel }: ReplayBot
       data-replay-control-location="bottom"
       aria-label={t("replay.control.dock")}
     >
-      <ReplayControlBar runtime={runtime} viewer={viewer} publicTimeLabel={publicTimeLabel} />
+      <ReplayControlBar runtime={runtime} viewer={viewer} publicTimeLabel={publicTimeLabel} independentCharts={independentCharts ?? false} />
     </div>
   );
 }

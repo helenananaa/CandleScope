@@ -1,0 +1,65 @@
+[
+  {
+    "symbol": "BTCUSDT",
+    "interval": "1m",
+    "rows": 4005,
+    "catalog_epoch": "sha256:096b799550ce4fa5c44ebbef5ae550b5bae1c008b26dabd23ecff18b45cbc0b8",
+    "synthetic": true
+  },
+  {
+    "symbol": "BTCUSDT",
+    "interval": "5m",
+    "rows": 801,
+    "catalog_epoch": "sha256:5355523ebd769a3f48c0ba4f6a445a891d788a7ff015db21f2f7b214c2c1025a",
+    "synthetic": true
+  },
+  {
+    "symbol": "BTCUSDT",
+    "interval": "15m",
+    "rows": 267,
+    "catalog_epoch": "sha256:cb12db126de56950997b7c203a6e5586f2bec50efa361f71837d698d94664426",
+    "synthetic": true
+  },
+  {
+    "symbol": "ETHUSDT",
+    "interval": "1m",
+    "rows": 4005,
+    "catalog_epoch": "sha256:5869baf642c91d9d8e79d6011341d00815d3046a8e431cf29a43a5fb854e328b",
+    "synthetic": true
+  },
+  {
+    "symbol": "ETHUSDT",
+    "interval": "5m",
+    "rows": 801,
+    "catalog_epoch": "sha256:7bb1b5451cc8017427690541f10fecd5f2a3c405e48a8b73927408456b585936",
+    "synthetic": true
+  },
+  {
+    "symbol": "ETHUSDT",
+    "interval": "15m",
+    "rows": 267,
+    "catalog_epoch": "sha256:7a8f9d37c43d475347dd4d00f16c266e14b60004440eddf2aa01deebc1e4bd29",
+    "synthetic": true
+  },
+  {
+    "symbol": "SOLUSDT",
+    "interval": "1m",
+    "rows": 4005,
+    "catalog_epoch": "sha256:59ac5a57a15494061168ee8c43cf9e70d6280c1c3d53ff208da4e60ff0a4fca4",
+    "synthetic": true
+  },
+  {
+    "symbol": "SOLUSDT",
+    "interval": "5m",
+    "rows": 801,
+    "catalog_epoch": "sha256:ce23836750a1f286d1cf1fd6acc77cc924a53d51c93afdd7e34e6392c5aa6f58",
+    "synthetic": true
+  },
+  {
+    "symbol": "SOLUSDT",
+    "interval": "15m",
+    "rows": 267,
+    "catalog_epoch": "sha256:6eb0013edfccc0f023b8d873ab3aa9af7a52cb69f5ef7d8527aa3b69ac0afb25",
+    "synthetic": true
+  }
+]

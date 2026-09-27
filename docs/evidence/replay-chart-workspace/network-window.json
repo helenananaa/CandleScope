@@ -1,0 +1,50 @@
+{
+  "truncated": false,
+  "hasMore": false,
+  "requests": [
+    {
+      "url": "http://127.0.0.1:15186/api/v1/replay/runs/e8b17ed9745649bdb8569978dc5f6cb6/market-catalog",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:15186/api/v1/replay/runs/e8b17ed9745649bdb8569978dc5f6cb6/commands",
+      "method": "POST"
+    },
+    {
+      "url": "http://127.0.0.1:15186/api/v1/replay/runs/e8b17ed9745649bdb8569978dc5f6cb6/market-catalog",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:15186/api/v1/replay/runs/e8b17ed9745649bdb8569978dc5f6cb6/tracks",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:15186/api/v1/replay/runs/session/14535d370fb44300911f6bd1d62c0a53/viewer",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:15186/api/v1/replay/runs/session/14535d370fb44300911f6bd1d62c0a53/tracks",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:15186/api/v1/replay/runs/e8b17ed9745649bdb8569978dc5f6cb6/order-capacity",
+      "method": "POST"
+    },
+    {
+      "url": "http://127.0.0.1:15186/api/v1/replay/runs/e8b17ed9745649bdb8569978dc5f6cb6/order-preview",
+      "method": "POST"
+    },
+    {
+      "url": "http://127.0.0.1:15186/@fs/E:/Disk0Merged/H/program/CandleScope/frontend/src/features/replay/ReplayChartWorkspace.tsx?t=1790506291917",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:15186/@fs/E:/Disk0Merged/H/program/CandleScope/frontend/src/features/replay/replayChartProjection.ts?t=1790506291917",
+      "method": "GET"
+    }
+  ],
+  "sockets": [
+    "ws://127.0.0.1:15186/api/v1/stream/replay/runs/e8b17ed9745649bdb8569978dc5f6cb6?protocol=replay.v3&projection=delta.v1"
+  ],
+  "errors": []
+}

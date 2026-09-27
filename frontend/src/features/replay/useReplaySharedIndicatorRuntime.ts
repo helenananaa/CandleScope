@@ -13,6 +13,7 @@ import {
 } from "../indicators/activeIndicatorStore.js";
 import type {
   IndicatorStorageLike,
+  ActiveIndicatorPersistence,
 } from "../indicators/activeIndicatorStore.js";
 import type {
   IndicatorPanelMarketStudy,
@@ -296,6 +297,7 @@ export function useReplaySharedIndicatorRuntime(
   runtime: ReplayRuntime,
   viewer: ReplayViewerRuntime,
   runScope: string,
+  cellPersistence?: ActiveIndicatorPersistence,
 ): ReplaySharedIndicatorRuntime {
   const locale = useLocale();
   const seriesStore = viewer.seriesStore;
@@ -436,7 +438,7 @@ export function useReplaySharedIndicatorRuntime(
     exchange,
     interval,
     marketType,
-    persistence,
+    persistence: cellPersistence ?? persistence,
     seriesReady: indicatorRevision,
     sourceOrdinal: indicatorCursorMs ?? -1,
     sourceScopeKey,

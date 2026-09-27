@@ -1315,6 +1315,11 @@ export function useReplayRuntime(
     () => lifecycleEffectGuard.mount(lifecycle),
     [lifecycle, lifecycleEffectGuard],
   );
+  return useReplayLifecycleRuntime(lifecycle);
+}
+
+/** Observe a leased lifecycle without creating another stream or controller. */
+export function useReplayLifecycleRuntime(lifecycle: ReplayRuntimeLifecycle): ReplayRuntime {
   const snapshot = useSyncExternalStore(lifecycle.subscribe, lifecycle.getSnapshot, lifecycle.getSnapshot);
   const marketData = useMemo(
     () => buildReplayMarketDataRuntime(snapshot, lifecycle),

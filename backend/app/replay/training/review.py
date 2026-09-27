@@ -319,6 +319,36 @@ def validate_drawing_document(
     """Validate and canonicalize the cross-runtime drawing evidence record."""
 
     try:
+        if _drawing_plain_object(document) and document.get("documentSchemaVersion") == 2:
+            if set(document) != {"documentSchemaVersion", "scopeKey", "charts"}:
+                raise ValueError("workspace drawing keys are invalid")
+            if document["scopeKey"] != f"replay-run:{run_id}":
+                raise ValueError("workspace drawing scope does not match the run")
+            charts = document["charts"]
+            if not isinstance(charts, dict) or len(charts) > 256:
+                raise ValueError("workspace drawing chart budget exceeded")
+            entities = []
+            for scope, chart in charts.items():
+                if not isinstance(scope, str) or not 1 <= len(scope) <= 1024:
+                    raise ValueError("workspace drawing scope is invalid")
+                if not isinstance(chart, dict) or chart.get("documentSchemaVersion") != 1:
+                    raise ValueError("workspace drawing child must use v1")
+                child_entities = chart.get("entities")
+                if not isinstance(child_entities, list):
+                    raise ValueError("workspace drawing entities are invalid")
+                validate_drawing_document(chart, run_id=run_id, entity_count=len(child_entities))
+                # Validate aggregate geometry budgets through the existing v1 contract.
+                for entity in child_entities:
+                    entities.append({**entity, "id": f"workspace-{len(entities)}"})
+            aggregate = {
+                "documentSchemaVersion": 1, "scopeKey": f"replay-run:{run_id}",
+                "documentRevision": 0, "updatedAt": 0, "entities": entities,
+            }
+            validate_drawing_document(aggregate, run_id=run_id, entity_count=entity_count)
+            document_json = canonical_json(document)
+            if len(document_json.encode("utf-8")) > REVIEW_DRAWING_DOCUMENT_BYTES_LIMIT:
+                raise ValueError("workspace drawing byte budget exceeded")
+            return document_json, canonical_sha256(document)
         if not _drawing_plain_object(document) or set(document) != _DRAWING_ROOT_KEYS:
             raise ValueError("drawing document root keys are invalid")
         if document["documentSchemaVersion"] != 1:

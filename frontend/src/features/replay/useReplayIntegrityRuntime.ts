@@ -104,6 +104,7 @@ export function useReplayIntegrityRuntime(
   runtime: ReplayRuntime,
   viewer: ReplayViewerRuntime,
   equityVisible = true,
+  enabled = true,
 ): ReplayIntegrityRuntime {
   const [integrity, setIntegrity] = useState<ReplayIntegrityResponse | null>(null);
   const [rules, setRules] = useState<ReplayRunRulesResponse | null>(null);
@@ -129,7 +130,7 @@ export function useReplayIntegrityRuntime(
   const viewerRef = useRef(viewer);
   runtimeRef.current = runtime;
   viewerRef.current = viewer;
-  const runId = replayRunId(viewer);
+  const runId = enabled ? replayRunId(viewer) : null;
   const globalClock = viewer.marketTracks?.global_clock ?? null;
   const effectiveState = replayEffectiveTrainingState(
     globalClock?.state,

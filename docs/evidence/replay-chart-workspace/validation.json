@@ -1,0 +1,21 @@
+{
+  "date": "2026-09-27",
+  "branch": "codex/replay-chart-workspace",
+  "scope": "Local Web single-window replay, synthetic BAR, four charts and three markets",
+  "replay_tests": 422,
+  "workspace_tests": 104,
+  "backend_related_tests": 36,
+  "typecheck": "PASS",
+  "eslint": "PASS",
+  "architecture": "PASS",
+  "i18n": "PASS: 30 locales",
+  "production_build": "PASS via E:/Disk0Merged/H/program/CandleScope/frontend",
+  "focus_p95_ms": 159.6,
+  "paused_interval_readiness_p95_ms": 710,
+  "evidence_stage": "pre-commit validation",
+  "limitations": [
+    "Synthetic archive is not exchange data fidelity evidence",
+    "Native multi-window, sixteen-chart capacity and AGG_TRADE performance are not qualified",
+    "Backend controller readiness is separate from immediate chart focus"
+  ]
+}

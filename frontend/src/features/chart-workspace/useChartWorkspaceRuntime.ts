@@ -147,6 +147,7 @@ export interface ChartWorkspaceRuntime {
       cellId: ChartCellId,
       direction: ChartWorkspaceSplitDirection,
       creationMode: ChartCellCreationMode,
+      initialSession?: ChartSession,
     ): void;
     closeCell(cellId: ChartCellId): void;
     swapCells(firstCellId: ChartCellId, secondCellId: ChartCellId): void;
@@ -684,14 +685,17 @@ export function useChartWorkspaceRuntime(
     cellId: ChartCellId,
     direction: ChartWorkspaceSplitDirection,
     creationMode: ChartCellCreationMode,
+    initialSession?: ChartSession,
   ) => {
-    updateActiveLayoutDocument((current) => splitChartWorkspaceDocument(
-      current,
-      cellId,
-      direction,
-      creationMode,
-      services.editOptions,
-    ));
+    updateActiveLayoutDocument((current) => {
+      const result = splitChartWorkspaceDocument(current, cellId, direction, creationMode, services.editOptions);
+      if (!initialSession || result.document === current) return result;
+      const id = activeChartWorkspaceWindow(result.document).activeCellId;
+      return { ...result, document: { ...result.document, cells: {
+        ...result.document.cells,
+        [id]: { ...result.document.cells[id]!, session: { ...initialSession }, linkGroupId: null },
+      } } };
+    });
   }, [services, updateActiveLayoutDocument]);
 
   const closeCell = useCallback((cellId: ChartCellId) => {

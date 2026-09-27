@@ -2,6 +2,8 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const vi = {
+  "replay.workspace.openNew": "Mở trong biểu đồ mới",
+  "replay.workspace.splitUnavailable": "Mở khóa bố cục hoặc đóng một biểu đồ trước khi mở biểu đồ khác.",
   "preparation.rateLimited": "Waiting for data-source rate limits. Scheduled to retry after {time}; the task is kept if you close this page.",
   "preparation.contextsTitle": "Requested contexts to prepare automatically",
   "preparation.contextsHint": "Symbols and intervals are normally detected from the script. Declare dynamic requests or history lengths that cannot be inferred here. Prior bars use each context interval and do not move the main trading start.",

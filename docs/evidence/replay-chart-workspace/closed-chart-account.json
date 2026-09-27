@@ -1,0 +1,124 @@
+{
+  "run_id": "e8b17ed9745649bdb8569978dc5f6cb6",
+  "scenario": "Close ETH chart after buying ETH 0.01 and BTC 0.001; advance one base bar",
+  "before": [
+    {
+      "symbol": "BTCUSDT",
+      "cursor": {
+        "virtual_time_ms": 1700020800000,
+        "source_sequence": 0,
+        "revision": 2
+      },
+      "position": {
+        "entry_price": "30056.0053",
+        "mark_price": "30053",
+        "notional": "30.053",
+        "quantity": "0.001",
+        "realized_pnl": "0",
+        "unrealized_pnl": "-0.0030053"
+      },
+      "forced_full_reasons": [
+        "LIQUIDATION_RISK",
+        "OPEN_POSITION",
+        "VIEWED"
+      ]
+    },
+    {
+      "symbol": "ETHUSDT",
+      "cursor": {
+        "virtual_time_ms": 1700020800000,
+        "source_sequence": 0,
+        "revision": 3
+      },
+      "position": {
+        "entry_price": "2053.2053",
+        "mark_price": "2053",
+        "notional": "20.53",
+        "quantity": "0.01",
+        "realized_pnl": "0",
+        "unrealized_pnl": "-0.002053"
+      },
+      "forced_full_reasons": [
+        "LIQUIDATION_RISK",
+        "OPEN_POSITION"
+      ]
+    },
+    {
+      "symbol": "SOLUSDT",
+      "cursor": {
+        "virtual_time_ms": 1700020800000,
+        "source_sequence": 0,
+        "revision": 2
+      },
+      "position": {
+        "entry_price": null,
+        "mark_price": "153",
+        "notional": "0",
+        "quantity": "0",
+        "realized_pnl": "0",
+        "unrealized_pnl": "0"
+      },
+      "forced_full_reasons": []
+    }
+  ],
+  "after": [
+    {
+      "symbol": "BTCUSDT",
+      "cursor": {
+        "virtual_time_ms": 1700020859999,
+        "source_sequence": 1,
+        "revision": 3
+      },
+      "position": {
+        "entry_price": "30056.0053",
+        "mark_price": "30057",
+        "notional": "30.057",
+        "quantity": "0.001",
+        "realized_pnl": "0",
+        "unrealized_pnl": "0.0009947"
+      },
+      "forced_full_reasons": [
+        "LIQUIDATION_RISK",
+        "OPEN_POSITION",
+        "VIEWED"
+      ]
+    },
+    {
+      "symbol": "ETHUSDT",
+      "cursor": {
+        "virtual_time_ms": 1700020859999,
+        "source_sequence": 1,
+        "revision": 7
+      },
+      "position": {
+        "entry_price": "2053.2053",
+        "mark_price": "2057",
+        "notional": "20.57",
+        "quantity": "0.01",
+        "realized_pnl": "0",
+        "unrealized_pnl": "0.037947"
+      },
+      "forced_full_reasons": [
+        "LIQUIDATION_RISK",
+        "OPEN_POSITION"
+      ]
+    },
+    {
+      "symbol": "SOLUSDT",
+      "cursor": {
+        "virtual_time_ms": 1700020859999,
+        "source_sequence": 1,
+        "revision": 3
+      },
+      "position": {
+        "entry_price": null,
+        "mark_price": "157",
+        "notional": "0",
+        "quantity": "0",
+        "realized_pnl": "0",
+        "unrealized_pnl": "0"
+      },
+      "forced_full_reasons": []
+    }
+  ]
+}

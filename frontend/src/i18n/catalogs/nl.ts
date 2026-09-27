@@ -2,6 +2,8 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const nl = {
+  "replay.workspace.openNew": "In nieuwe grafiek openen",
+  "replay.workspace.splitUnavailable": "Ontgrendel de indeling of sluit een grafiek voordat u een nieuwe opent.",
   "preparation.rateLimited": "Waiting for data-source rate limits. Scheduled to retry after {time}; the task is kept if you close this page.",
   "preparation.contextsTitle": "Requested contexts to prepare automatically",
   "preparation.contextsHint": "Symbols and intervals are normally detected from the script. Declare dynamic requests or history lengths that cannot be inferred here. Prior bars use each context interval and do not move the main trading start.",

@@ -2,6 +2,8 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  "replay.workspace.openNew": "새 차트에서 열기",
+  "replay.workspace.splitUnavailable": "레이아웃 잠금을 해제하거나 차트를 닫은 후 추가하세요.",
   "preparation.rateLimited": "Waiting for data-source rate limits. Scheduled to retry after {time}; the task is kept if you close this page.",
   "preparation.contextsTitle": "Requested contexts to prepare automatically",
   "preparation.contextsHint": "Symbols and intervals are normally detected from the script. Declare dynamic requests or history lengths that cannot be inferred here. Prior bars use each context interval and do not move the main trading start.",

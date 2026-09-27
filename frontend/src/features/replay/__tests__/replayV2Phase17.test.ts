@@ -7,6 +7,7 @@ import {
   createDrawingEntity,
 } from "../../drawings/core/drawingDocument.js";
 import {
+  parseReplayCurrentDrawingDocumentResponse,
   parseReplayReviewControlResponse,
   parseReplayReviewForkResponse,
   parseReplayReviewResponse,
@@ -29,6 +30,20 @@ const publicTime = {
   sequence: 7,
   label: "D+1 T+00:07:00",
 };
+
+test("current drawings accept bounded multi-chart records and reject ambiguous counts or nesting", () => {
+  const child = { documentSchemaVersion: 1, scopeKey: "replay-run:run-17", documentRevision: 1, updatedAt: 1, entities: [] };
+  const document = { documentSchemaVersion: 2, scopeKey: "replay-run:run-17", charts: { btc: child, eth: child } };
+  const response = { protocol: "replay.v3", schema_version: "replay.review.drawing-current.v1", run_id: "run-17",
+    document_hash: digest("6"), revision: 1, entity_count: 0, document, budget: budgetPayload() };
+  assert.equal(parseReplayCurrentDrawingDocumentResponse(response).document?.documentSchemaVersion, 2);
+  assert.throws(() => parseReplayCurrentDrawingDocumentResponse({ ...response, entity_count: 1 }), /count/);
+  assert.throws(() => parseReplayCurrentDrawingDocumentResponse({ ...response,
+    document: { ...document, charts: { btc: document } } }), /drawing/);
+  assert.throws(() => parseReplayCurrentDrawingDocumentResponse({ ...response,
+    document: { ...document, charts: Object.fromEntries(Array.from({ length: 257 }, (_, i) => [String(i), child])) } }), /budget/);
+  assert.equal(parseReplayCurrentDrawingDocumentResponse({ ...response, document: child }).document?.documentSchemaVersion, 1);
+});
 
 function rulesPayload() {
   const common = {

@@ -6,7 +6,10 @@ import MarketStatusBar from "../../app/MarketStatusBar.js";
 import MarketTopBarFrame from "../../app/MarketTopBarFrame.js";
 import { AlertRailIcon, ProfileRailIcon } from "../../app/marketRailIcons.js";
 import type { ChartSurfaceActions, ChartSurfaceHandle, ChartSurfaceVisibleRange } from "../../chart-adapter/useChartSurfaceRuntime.js";
-import type { RefObject } from "react";
+import type { RefObject, ComponentType, ReactNode } from "react";
+import type { MarketPageFrameProps } from "../../app/MarketPageFrame.js";
+import type { ReplayIntegrityRuntime } from "./useReplayIntegrityRuntime.js";
+import type { MainSeriesCrosshairValue } from "../../chart-adapter/chartAdapterTypes.js";
 import type { SurfaceViewportSnapshot } from "../chart-representation/chartRepresentationTypes.js";
 import DrawingToolbar from "../../components/DrawingToolbar.js";
 import IntervalSelector from "../../components/IntervalSelector.js";
@@ -85,6 +88,25 @@ export interface ReplayTrainingPageShellProps {
   readonly chartSurfaceActions: ChartSurfaceActions;
   readonly viewer: ReplayViewerRuntime;
   readonly chartSettingsRuntime: ChartSettingsRuntime;
+  readonly cell?: {
+    readonly scope: string;
+    readonly drawingScope: string;
+    readonly active: boolean;
+    readonly priceScale: { readonly invertScale: boolean; readonly priceScaleMode: number };
+    readonly onPriceScaleChange: (value: { invertScale: boolean; priceScaleMode: number }) => void;
+    readonly integrity: ReplayIntegrityRuntime;
+    readonly frame: ComponentType<ReplayChartPageFrameProps>;
+    readonly controls: ReactNode;
+    readonly controlViewer: ReplayViewerRuntime;
+    readonly preferences: ReturnType<typeof useReplayWorkspacePreferences>;
+    readonly onCrosshairMove: (value: MainSeriesCrosshairValue | null) => void;
+    readonly onVisibleRangeChange: (range: ChartSurfaceVisibleRange) => void;
+  };
+}
+
+export interface ReplayChartPageFrameProps extends MarketPageFrameProps {
+  toolbar?: ReactNode;
+  rightRail?: ReactNode;
 }
 
 interface ReplayIntervalViewportTransfer {
@@ -172,7 +194,9 @@ export default function ReplayTrainingPageShell({
   chartSurfaceActions,
   viewer,
   chartSettingsRuntime,
+  cell,
 }: ReplayTrainingPageShellProps) {
+  const PageFrame = cell?.frame ?? MarketPageFrame;
   const locale = useLocale();
   const [returningToHub, setReturningToHub] = useState(false);
   const [returnToHubError, setReturnToHubError] = useState<string | null>(null);
@@ -221,7 +245,8 @@ export default function ReplayTrainingPageShell({
       current?.snapshot === activeIntervalViewportTransfer ? null : current
     ));
   }, [activeIntervalViewportTransfer, history.viewportTransferUnavailable]);
-  const integrityRuntime = useReplayIntegrityRuntime(runtime, viewer, integrityOpen);
+  const ownIntegrity = useReplayIntegrityRuntime(runtime, viewer, integrityOpen, cell === undefined);
+  const integrityRuntime = cell?.integrity ?? ownIntegrity;
   const review = integrityRuntime.review;
   useEffect(() => {
     if (review !== null && !trainingResultsOpen) setIntegrityOpen(true);
@@ -245,12 +270,12 @@ export default function ReplayTrainingPageShell({
       requestAnimationFrame(() => toggle?.focus());
     };
   }, [integrityOpen]);
-  const liveDrawingScopeBase = integrityRuntime.runId === null
+  const liveDrawingScopeBase = cell?.drawingScope ?? (integrityRuntime.runId === null
     ? `replay-run:pending`
-    : `replay-run:${integrityRuntime.runId}`;
+    : `replay-run:${integrityRuntime.runId}`);
   const reviewDrawingScopeBase = review === null
     ? null
-    : `replay-review:${review.review_id}`;
+    : `replay-review:${review.review_id}${cell ? `:${cell.scope}` : ""}`;
   const reviewDrawingDocument = review?.drawing_document ?? null;
   const reviewDrawingCursorRevision = review?.cursor_revision ?? null;
   const reviewSelectedTrackId = review === null
@@ -274,7 +299,8 @@ export default function ReplayTrainingPageShell({
   const [reviewChartBounded, setReviewChartBounded] = useState(false);
   const [liveDrawingError, setLiveDrawingError] = useState<string | null>(null);
   const [reviewDrawingError, setReviewDrawingError] = useState<string | null>(null);
-  const workspace = useReplayWorkspacePreferences(runtime.store.sessionId ?? "pending");
+  const ownWorkspace = useReplayWorkspacePreferences(viewer.viewerState?.run_id ?? runtime.store.sessionId ?? "pending");
+  const workspace = cell?.preferences ?? ownWorkspace;
   const config = runtime.store.sessionConfig;
   const active = runtime.phase === "ACTIVE" && config !== null && runtime.store.hasAuthoritativeSnapshot;
   const ownsController = replayOwnsController(runtime.store, runtime.clientInstanceId);
@@ -342,6 +368,7 @@ export default function ReplayTrainingPageShell({
 
   useEffect(() => {
     setLiveDrawingError(null);
+    if (cell !== undefined) return;
     const runId = integrityRuntime.runId;
     if (runId === null || !integrityRuntime.drawingLoaded) return;
     const current = integrityRuntime.currentDrawing;
@@ -365,12 +392,14 @@ export default function ReplayTrainingPageShell({
     }
   }, [
     integrityRuntime.currentDrawing,
+    cell,
     integrityRuntime.drawingLoaded,
     integrityRuntime.runId,
     locale,
   ]);
 
   useEffect(() => {
+    if (cell !== undefined) return;
     const runId = integrityRuntime.runId;
     const currentDrawing = integrityRuntime.currentDrawing;
     if (runId === null
@@ -418,6 +447,7 @@ export default function ReplayTrainingPageShell({
     };
   }, [
     integrityRuntime.actions.recordDrawing,
+    cell,
     integrityRuntime.currentDrawing,
     integrityRuntime.drawingLoaded,
     integrityRuntime.runId,
@@ -557,6 +587,7 @@ export default function ReplayTrainingPageShell({
   const handleVisibleRangeChange = useCallback((range: ChartSurfaceVisibleRange) => {
     if (integrityRuntime.review !== null) return;
     runtime.marketData.actions.onVisibleRangeChange(range);
+    cell?.onVisibleRangeChange(range);
     const value: Record<string, number> = {};
     if (range.logical !== undefined) {
       value.from_logical_ppm = Math.round(range.logical.from * 1_000_000);
@@ -565,9 +596,10 @@ export default function ReplayTrainingPageShell({
     if (range.barSpacing !== undefined) value.bar_spacing_ppm = Math.round(range.barSpacing * 1_000_000);
     if (range.rightOffset !== undefined) value.right_offset_ppm = Math.round(range.rightOffset * 1_000_000);
     integrityRuntime.actions.offerViewAction("VISIBLE_RANGE", "main-chart-range", value);
-  }, [integrityRuntime.actions, integrityRuntime.review, runtime.marketData.actions]);
+  }, [cell, integrityRuntime.actions, integrityRuntime.review, runtime.marketData.actions]);
 
   useEffect(() => {
+    if (cell?.active === false) return;
     const listener = (event: KeyboardEvent) => {
       handleReplayShortcut(event, (action) => {
         if (integrityRuntime.review !== null
@@ -613,7 +645,7 @@ export default function ReplayTrainingPageShell({
     };
     window.addEventListener("keydown", listener);
     return () => window.removeEventListener("keydown", listener);
-  }, [effectiveState, globalClock, integrityRuntime.review, ownsController, runtime.pendingCommand, runtime.store.connectionState, viewer.actions, viewer.controlPending, viewer.viewerPending]);
+  }, [cell?.active, effectiveState, globalClock, integrityRuntime.review, ownsController, runtime.pendingCommand, runtime.store.connectionState, viewer.actions, viewer.controlPending, viewer.viewerPending]);
 
   const interval = (viewer.viewerState?.display_interval ?? config?.base_interval ?? "1m") as IntervalString;
   const reviewSelectedTrack = review?.projection.tracks.find((track) => (
@@ -878,10 +910,11 @@ export default function ReplayTrainingPageShell({
       seriesStore={displayedSeriesStore}
       symbol={displayedSymbol}
       drawingKeyBase={drawingScopeBase}
+      paneLayoutScope={cell?.scope ?? null}
       interval={displayedInterval}
       loading={review === null
         && (runtime.marketData.view.loading || viewer.loading)}
-      onCrosshairMove={runtime.marketData.actions.onCrosshairMove}
+      onCrosshairMove={cell?.onCrosshairMove ?? runtime.marketData.actions.onCrosshairMove}
       onNeedMoreLeft={review === null ? history.loadMoreLeft : null}
       onNeedMoreRight={review === null ? history.restoreLatestWindow : null}
       canLoadMoreLeft={review === null && history.hasMore}
@@ -938,8 +971,10 @@ export default function ReplayTrainingPageShell({
       indicatorBgcolors={review === null ? indicators.view.bgcolors : []}
       indicatorBarcolors={review === null ? indicators.view.barcolors : []}
       onRemoveSubPane={review === null ? removeSubPane : null}
-      invertScale={priceScale.invert}
-      priceScaleMode={priceScale.mode}
+      invertScale={cell?.priceScale.invertScale ?? priceScale.invert}
+      priceScaleMode={cell?.priceScale.priceScaleMode ?? priceScale.mode}
+      onInvertScaleChange={cell ? (invertScale) => cell.onPriceScaleChange({ ...cell.priceScale, invertScale }) : null}
+      onPriceScaleModeChange={cell ? (priceScaleMode) => cell.onPriceScaleChange({ ...cell.priceScale, priceScaleMode }) : null}
     />
   ) : active ? (
     <div className="chart-area" data-replay-state="empty"><div className="error-overlay"><div className="error-message"><strong>{t("replay.shell.noBar")}</strong><br />{t("replay.shell.noBarHint")}</div></div></div>
@@ -984,8 +1019,18 @@ export default function ReplayTrainingPageShell({
     />
   );
 
+  const rightRail = active ? (
+    review !== null ? <ReplayReviewRightRail review={review} /> : <ReplayRightMarketRail
+      runtime={runtime} viewer={viewer} indicators={indicators}
+      preferences={workspace.preferences} actions={workspace.actions}
+      upColor={settings.upColor} downColor={settings.downColor}
+      formatTime={publicTimeRuntime.formatTime}
+    />
+  ) : null;
   return (
-    <MarketPageFrame
+    <PageFrame
+      toolbar={drawingToolbar}
+      rightRail={rightRail}
       topBar={(
         <MarketTopBarFrame
           source="replay"
@@ -1006,6 +1051,7 @@ export default function ReplayTrainingPageShell({
             </button>
           )}
           controls={<>
+            {cell?.controls}
             <button
               className={`indicator-toggle-btn ${indicatorPanelOpen ? "active" : ""}`}
               type="button"
@@ -1110,23 +1156,12 @@ export default function ReplayTrainingPageShell({
           }}
         />
       )}
-      workspace={(
+      workspace={cell ? chart : (
         <MarketChartWorkspace
           toolbar={drawingToolbar}
           exportOverlay={null}
           chart={chart}
-          rightRail={active ? (
-            review !== null ? <ReplayReviewRightRail review={review} /> : <ReplayRightMarketRail
-                runtime={runtime}
-                viewer={viewer}
-                indicators={indicators}
-                preferences={workspace.preferences}
-                actions={workspace.actions}
-                upColor={settings.upColor}
-                downColor={settings.downColor}
-                formatTime={publicTimeRuntime.formatTime}
-              />
-          ) : null}
+          rightRail={rightRail}
         />
       )}
       featureSurfaces={active ? <>
@@ -1136,7 +1171,7 @@ export default function ReplayTrainingPageShell({
             <button type="button" onClick={history.dismissNotice} aria-label={t("replay.shell.dismissHistory")}>×</button>
           </div>
         )}
-        {review === null && <ReplayBottomControlDock runtime={runtime} viewer={viewer} publicTimeLabel={publicTime} />}
+        {review === null && <ReplayBottomControlDock runtime={runtime} viewer={cell?.controlViewer ?? viewer} publicTimeLabel={publicTime} independentCharts={cell !== undefined} />}
         {review === null && indicatorPanelOpen && (
           <div id="replay-indicator-panel" className="replay-shared-indicator-panel">
             <IndicatorPanel

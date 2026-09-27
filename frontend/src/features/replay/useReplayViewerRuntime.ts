@@ -17,6 +17,7 @@ import type {
   ReplayV2CommandResult,
   ReplayV2CommandType,
   ReplayV2Json,
+  ReplayTrainingMarketTrack,
   ReplayMarketTracksResponse,
   ReplayV2SubscriptionTier,
   ReplayViewerState,
@@ -367,6 +368,12 @@ export interface ReplayViewerRuntime {
     ): Promise<ReplayV2CommandResult>;
     cancelAdvance(): Promise<ReplayV2CommandResult>;
     selectTrack(trackId: string): Promise<ReplayV2CommandResult>;
+    openTrack?(trackId: string, target: "current" | "new"): Promise<void>;
+    addTrack?(identity: {
+      readonly exchange: string;
+      readonly marketType: string;
+      readonly symbol: string;
+    }): Promise<ReplayTrainingMarketTrack>;
     setSubscriptionTier(
       trackId: string,
       tier: ReplayV2SubscriptionTier,
@@ -399,6 +406,7 @@ export interface ReplayViewerRuntime {
 }
 
 export interface ReplayViewerRuntimeOptions {
+  readonly controllerOnly?: boolean;
   readonly onSelectedSessionChange?: (sessionId: string) => void;
 }
 
@@ -421,6 +429,7 @@ export function useReplayViewerRuntime(
   options: ReplayViewerRuntimeOptions = {},
 ): ReplayViewerRuntime {
   const onSelectedSessionChange = options.onSelectedSessionChange;
+  const controllerOnly = options.controllerOnly === true;
   const [viewerState, setViewerState] = useState<ReplayViewerState | null>(null);
   const [marketTracks, setMarketTracks] = useReducer(
     (current: ReplayMarketTracksResponse | null, next: ReplayMarketTracksResponse | null) =>
@@ -486,6 +495,7 @@ export function useReplayViewerRuntime(
   }), [sessionId]);
   const { viewerSeriesCache, unavailableSeriesStore } = viewerStores;
   const prepareViewerSeries = useCallback((next: ReplayViewerState): void => {
+    if (controllerOnly) return;
     if (baseInterval === null) throw new Error("replay base interval is unavailable");
     if (adapterDisplayInterval !== null && !intervalsSemanticallyEquivalent(
       baseInterval,
@@ -510,6 +520,7 @@ export function useReplayViewerRuntime(
       sourcePublicTimeMsRef.current,
     );
   }, [
+    controllerOnly,
     adapterDisplayInterval,
     baseInterval,
     config?.source_kind,
@@ -672,6 +683,7 @@ export function useReplayViewerRuntime(
   }, [publishViewerState, viewerState?.run_id]);
 
   useEffect(() => {
+    if (controllerOnly) return;
     if (requiresSourceBucketProjection) {
       let disposed = false;
       let projectedBoundaryMs: number | null = null;
@@ -854,6 +866,7 @@ export function useReplayViewerRuntime(
       pendingSourceDeltas = [];
     };
   }, [
+    controllerOnly,
     baseInterval,
     dataEpoch,
     displayInterval,
@@ -1176,11 +1189,11 @@ export function useReplayViewerRuntime(
     "track-tier",
   ), [submitTrackCommand]);
 
-  const addAndSelectTrack = useCallback(async (identity: {
+  const addTrack = useCallback(async (identity: {
     readonly exchange: string;
     readonly marketType: string;
     readonly symbol: string;
-  }): Promise<ReplayV2CommandResult> => {
+  }): Promise<ReplayTrainingMarketTrack> => {
     const viewer = viewerRef.current;
     if (viewer === null) throw new Error("ViewerState is unavailable");
     const plan = await defaultReplayV2Api.planMarketTrack(viewer.run_id, {
@@ -1201,8 +1214,14 @@ export function useReplayViewerRuntime(
       && candidate.symbol === identity.symbol
     ));
     if (track === undefined) throw new Error("created MarketTrack is missing from replay.v3");
+    return track;
+  }, [refreshMarketTracks, submitTrackCommand]);
+  const addAndSelectTrack = useCallback(async (identity: {
+    readonly exchange: string; readonly marketType: string; readonly symbol: string;
+  }): Promise<ReplayV2CommandResult> => {
+    const track = await addTrack(identity);
     return selectTrack(track.track_id);
-  }, [refreshMarketTracks, selectTrack, submitTrackCommand]);
+  }, [addTrack, selectTrack]);
 
   const submitTrade = useCallback(async (
     type: ReplayPhase5TradeType,
@@ -1352,11 +1371,11 @@ export function useReplayViewerRuntime(
 
   const actions = useMemo(() => ({
     setDisplayInterval, submitControl, cancelAdvance, selectTrack, setSubscriptionTier,
-    addAndSelectTrack, submitTrade, previewOrder, orderCapacity, auditAccount,
+    addAndSelectTrack, addTrack, submitTrade, previewOrder, orderCapacity, auditAccount,
     resyncHistoricalBook, preparePeriodSummaries,
     reload: () => setReloadRevision((value) => value + 1),
   }), [setDisplayInterval, submitControl, cancelAdvance, selectTrack, setSubscriptionTier,
-    addAndSelectTrack, submitTrade, previewOrder, orderCapacity, auditAccount,
+    addAndSelectTrack, addTrack, submitTrade, previewOrder, orderCapacity, auditAccount,
     resyncHistoricalBook, preparePeriodSummaries]);
   return {
     viewerState,

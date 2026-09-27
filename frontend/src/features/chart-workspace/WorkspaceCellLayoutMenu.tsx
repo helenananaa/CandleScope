@@ -3,6 +3,8 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
+import type { ReactNode } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import type {
@@ -16,6 +18,7 @@ export interface WorkspaceCellLayoutMenuProps {
   layoutCellIds: readonly ChartCellId[];
   maxCellsPerWindow?: number;
   disabled?: boolean;
+  portal?: boolean;
   onSplit(
     cellId: ChartCellId,
     direction: ChartWorkspaceSplitDirection,
@@ -25,15 +28,12 @@ export interface WorkspaceCellLayoutMenuProps {
   onSwap(firstCellId: ChartCellId, secondCellId: ChartCellId): void;
 }
 
-function cellNumber(cellId: ChartCellId): string {
-  return cellId.slice("cell-".length);
-}
-
 export default function WorkspaceCellLayoutMenu({
   cellId,
   layoutCellIds,
   maxCellsPerWindow = 4,
   disabled = false,
+  portal = false,
   onSplit,
   onClose,
   onSwap,
@@ -43,6 +43,9 @@ export default function WorkspaceCellLayoutMenu({
   const [creationMode, setCreationMode] = useState<ChartCellCreationMode>("copy");
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const [position, setPosition] = useState({ top: 0, right: 0 });
+  const cellNumber = (id: ChartCellId) => String(layoutCellIds.indexOf(id) + 1);
   const canSplit = layoutCellIds.length < maxCellsPerWindow;
   const canClose = layoutCellIds.length > 1;
   const swapTargets = layoutCellIds.filter((candidate) => candidate !== cellId);
@@ -52,6 +55,7 @@ export default function WorkspaceCellLayoutMenu({
     if (!menuOpen) return undefined;
     const handlePointerDown = (event: PointerEvent) => {
       if (rootRef.current?.contains(event.target as Node)) return;
+      if (popoverRef.current?.contains(event.target as Node)) return;
       setOpen(false);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -73,6 +77,7 @@ export default function WorkspaceCellLayoutMenu({
     action();
     setOpen(false);
   };
+  const renderPopover = (content: ReactNode) => portal ? createPortal(content, document.body) : content;
 
   return (
     <div
@@ -91,14 +96,21 @@ export default function WorkspaceCellLayoutMenu({
         disabled={disabled}
         onClick={(event) => {
           event.stopPropagation();
+          if (portal) {
+            const rect = event.currentTarget.getBoundingClientRect();
+            setPosition({ top: Math.max(8, Math.min(rect.bottom + 7, window.innerHeight - 300)),
+              right: Math.max(8, Math.min(window.innerWidth - rect.right, window.innerWidth - 244)) });
+          }
           setOpen((value) => !value);
         }}
       >
         ⋯
       </button>
-      {menuOpen && (
+      {menuOpen && renderPopover(
         <div
+          ref={popoverRef}
           className="workspace-cell-layout-popover"
+          style={portal ? { position: "fixed", ...position, zIndex: 2000, maxHeight: "calc(100vh - 16px)", overflowY: "auto" } : undefined}
           role="dialog"
           aria-label={t("workspace.cellMenu", { n: cellNumber(cellId) })}
           onPointerDown={(event) => event.stopPropagation()}

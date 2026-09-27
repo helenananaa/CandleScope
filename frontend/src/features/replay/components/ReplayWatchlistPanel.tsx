@@ -26,7 +26,8 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [marketQuery, setMarketQuery] = useState("");
   const [addingMarket, setAddingMarket] = useState<string | null>(null);
-  const primaryKey = config === null
+  const primaryTrack = viewer.marketTracks?.tracks.find((track) => track.track_id === "track-1");
+  const primaryKey = primaryTrack ? symbolKey(primaryTrack.symbol, primaryTrack.market_type, primaryTrack.exchange) : config === null
     ? ""
     : symbolKey(config.symbol, config.market_type, config.exchange);
   const trackedKeys = useMemo(() => new Set(
@@ -58,22 +59,33 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
     )).slice(0, 20);
   }, [catalog, config, marketQuery]);
 
-  const addCatalogMarket = async (entry: ReplayCatalogEntry) => {
-    if (config === null || addingMarket !== null || viewer.viewerPending) return;
+  const addCatalogMarket = async (entry: ReplayCatalogEntry, target: "watchlist" | "current" | "new" = "watchlist") => {
+    if (config === null || addingMarket !== null || viewer.viewerPending || viewer.controlPending) return;
     const key = symbolKey(
       entry.identity.symbol,
       entry.identity.market_type,
       entry.identity.exchange,
     );
-    if (trackedKeys.has(key)) return;
+    const existing = viewer.marketTracks?.tracks.find((track) => symbolKey(track.symbol, track.market_type, track.exchange) === key);
+    if (existing) {
+      if (target !== "watchlist") {
+        try { await viewer.actions.openTrack?.(existing.track_id, target); }
+        catch (reason) { setCatalogError(String(reason)); }
+      }
+      return;
+    }
     setAddingMarket(key);
     setCatalogError(null);
     try {
-      await viewer.actions.addAndSelectTrack({
+      const identity = {
         exchange: entry.identity.exchange,
         marketType: entry.identity.market_type,
         symbol: entry.identity.symbol,
-      });
+      };
+      if (viewer.actions.addTrack) {
+        const track = await viewer.actions.addTrack(identity);
+        if (target !== "watchlist") await viewer.actions.openTrack?.(track.track_id, target);
+      } else await viewer.actions.addAndSelectTrack(identity);
       setMarketQuery("");
     } catch (reason) {
       setCatalogError(reason instanceof Error ? reason.message : t("replay.watchlist.addFailed"));
@@ -159,13 +171,18 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
     const activate = () => {
       if (pending || selected || !sameScope) return;
       const action = track === null
-        ? viewer.actions.addAndSelectTrack({
+        ? (viewer.actions.addTrack && viewer.actions.openTrack
+          ? viewer.actions.addTrack({ exchange: identity.exchange, marketType: identity.marketType, symbol: identity.symbol })
+            .then((added) => viewer.actions.openTrack!(added.track_id, "current"))
+          : viewer.actions.addAndSelectTrack({
             exchange: identity.exchange,
             marketType: identity.marketType,
             symbol: identity.symbol,
-          })
-        : viewer.actions.selectTrack(track.track_id);
-      void action.catch(() => undefined);
+          }))
+        : viewer.actions.openTrack
+          ? viewer.actions.openTrack(track.track_id, "current")
+          : viewer.actions.selectTrack(track.track_id);
+      void action.catch((reason: unknown) => setCatalogError(reason instanceof Error ? reason.message : String(reason)));
     };
     return (
       <div
@@ -173,6 +190,10 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
         className={`replay-watchlist-row ${selected ? "active" : ""}`}
         data-replay-tier={tier}
         data-replay-track-id={track?.track_id ?? "unregistered"}
+        draggable={track !== null}
+        onDragStart={(event) => {
+          if (track) event.dataTransfer.setData("application/x-candlescope-replay-track", track.track_id);
+        }}
       >
         <button
           type="button"
@@ -190,9 +211,14 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
           <span><strong>{identity.symbol}</strong><small>{identity.exchange} · {identity.marketType}</small></span>
           <span>{last ?? "--"}</span>
         </button>
-        <code>{tier}</code>
-        {forced.length > 0 && <small className="replay-track-force" title={forced.join(", ")}>🔒 {forced.join(" · ")}</small>}
-        {track !== null && !selected && (
+        {viewer.actions.openTrack && track !== null && <button type="button"
+          aria-label={`${identity.symbol} · ${t("replay.workspace.openNew")}`}
+          disabled={pending} title={t("replay.workspace.openNew")}
+          onClick={() => void viewer.actions.openTrack?.(track.track_id, "new").catch((reason: unknown) => setCatalogError(String(reason)))}
+        >{t("replay.workspace.openNew")}</button>}
+        {!viewer.actions.openTrack && <code>{tier}</code>}
+        {!viewer.actions.openTrack && forced.length > 0 && <small className="replay-track-force" title={forced.join(", ")}>🔒 {forced.join(" · ")}</small>}
+        {!viewer.actions.openTrack && track !== null && !selected && (
           <select
             aria-label={t("replay.watchlist.tierAria", { symbol: identity.symbol })}
             value={tier}
@@ -269,16 +295,25 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
                 const unavailableReason = entry.start_compatibility?.message
                   ?? t("replay.watchlist.noCover");
                 return (
+                  <div key={key} className="replay-market-search-result">
                   <button
-                    key={key}
                     type="button"
                     disabled={tracked || !available || addingMarket !== null || viewer.viewerPending}
-                    title={tracked ? t("replay.watchlist.inRun") : available ? t("replay.watchlist.addTitle") : unavailableReason}
+                    title={tracked ? t("replay.watchlist.inRun") : available ? t("search.addToWatchlist") : unavailableReason}
                     onClick={() => void addCatalogMarket(entry)}
                   >
                     <strong>{entry.identity.symbol}</strong>
-                    <small>{tracked ? t("replay.watchlist.added") : addingMarket === key ? t("replay.watchlist.adding") : available ? t("replay.watchlist.addBtn") : t("replay.watchlist.unavailable")}</small>
+                    <small>{tracked ? t("replay.watchlist.added") : addingMarket === key ? t("replay.watchlist.adding") : available ? t("search.addToWatchlist") : t("replay.watchlist.unavailable")}</small>
                   </button>
+                  {viewer.actions.openTrack && (tracked || available) && <div className="replay-market-open-actions">
+                    <button type="button" disabled={addingMarket !== null || viewer.viewerPending || viewer.controlPending !== null}
+                      aria-label={`${entry.identity.symbol} · ${t("workspace.activeChart")}`}
+                      onClick={() => void addCatalogMarket(entry, "current")}>{t("workspace.activeChart")}</button>
+                    <button type="button" disabled={addingMarket !== null || viewer.viewerPending || viewer.controlPending !== null}
+                      aria-label={`${entry.identity.symbol} · ${t("replay.workspace.openNew")}`}
+                      onClick={() => void addCatalogMarket(entry, "new")}>{t("replay.workspace.openNew")}</button>
+                  </div>}
+                  </div>
                 );
               })}
             </div>

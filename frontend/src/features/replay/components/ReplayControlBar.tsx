@@ -76,9 +76,10 @@ export interface ReplayControlBarProps {
   readonly runtime: ReplayRuntime;
   readonly viewer: ReplayViewerRuntime;
   readonly publicTimeLabel?: string | undefined;
+  readonly independentCharts?: boolean;
 }
 
-export default function ReplayControlBar({ runtime, viewer, publicTimeLabel }: ReplayControlBarProps) {
+export default function ReplayControlBar({ runtime, viewer, publicTimeLabel, independentCharts = false }: ReplayControlBarProps) {
   useLocale();
   const [showEnd, setShowEnd] = useState(false);
   const [openOrderDisposition, setOpenOrderDisposition] = useState<"expire" | "cancel" | "preserve">("expire");
@@ -327,6 +328,17 @@ export default function ReplayControlBar({ runtime, viewer, publicTimeLabel }: R
             ))}
           </select>
         </label>
+        {independentCharts && <label className="replay-speed-control">
+          {t("replay.control.displayBar")}
+          <select value={viewer.viewerState?.display_interval ?? "1m"}
+            disabled={disabled || effectiveState !== "PAUSED"}
+            onChange={(event) => { void viewer.actions.setDisplayInterval(event.target.value)
+              .catch((cause: unknown) => setControlError(String(cause))); }}>
+            {Array.from(new Set([config?.base_interval ?? "1m", "1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d"]))
+              .filter((interval) => (parseIntervalSeconds(interval) ?? 0) >= (parseIntervalSeconds(config?.base_interval ?? "1m") ?? 60))
+              .map((interval) => <option key={interval} value={interval}>{interval}</option>)}
+          </select>
+        </label>}
         <button
           type="button"
           data-replay-action={effectiveState === "PLAYING" ? "pause" : "play"}

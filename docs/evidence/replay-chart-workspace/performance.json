@@ -1,0 +1,187 @@
+{
+  "scope": "Final code, Vite dev, Windows i9-13900HX, in-app Chromium, synthetic BAR, 4 charts 3 markets, 20 samples",
+  "focusPaint": [
+    {
+      "id": "cell-2",
+      "ms": 176.10000000149012
+    },
+    {
+      "id": "cell-3",
+      "ms": 159.60000000149012
+    },
+    {
+      "id": "cell-4",
+      "ms": 147.5
+    },
+    {
+      "id": "cell-1",
+      "ms": 130
+    },
+    {
+      "id": "cell-2",
+      "ms": 111.89999999850988
+    },
+    {
+      "id": "cell-3",
+      "ms": 140.29999999701977
+    },
+    {
+      "id": "cell-4",
+      "ms": 65
+    },
+    {
+      "id": "cell-1",
+      "ms": 120.5
+    },
+    {
+      "id": "cell-2",
+      "ms": 62.60000000149011
+    },
+    {
+      "id": "cell-3",
+      "ms": 127.5
+    },
+    {
+      "id": "cell-4",
+      "ms": 112.20000000298025
+    },
+    {
+      "id": "cell-1",
+      "ms": 125.80000000447036
+    },
+    {
+      "id": "cell-2",
+      "ms": 97.80000000447036
+    },
+    {
+      "id": "cell-3",
+      "ms": 78.29999999701977
+    },
+    {
+      "id": "cell-4",
+      "ms": 46
+    },
+    {
+      "id": "cell-1",
+      "ms": 97.79999999701975
+    },
+    {
+      "id": "cell-2",
+      "ms": 52.89999999850989
+    },
+    {
+      "id": "cell-3",
+      "ms": 121.60000000149012
+    },
+    {
+      "id": "cell-4",
+      "ms": 96.10000000149012
+    },
+    {
+      "id": "cell-1",
+      "ms": 51.79999999701977
+    }
+  ],
+  "warmIntervalReadyIncludingToolRoundTrips": [
+    {
+      "interval": "1m",
+      "readyMs": 395,
+      "bars": 317
+    },
+    {
+      "interval": "5m",
+      "readyMs": 593,
+      "bars": 24
+    },
+    {
+      "interval": "1m",
+      "readyMs": 328,
+      "bars": 317
+    },
+    {
+      "interval": "5m",
+      "readyMs": 670,
+      "bars": 24
+    },
+    {
+      "interval": "1m",
+      "readyMs": 361,
+      "bars": 317
+    },
+    {
+      "interval": "5m",
+      "readyMs": 569,
+      "bars": 24
+    },
+    {
+      "interval": "1m",
+      "readyMs": 330,
+      "bars": 317
+    },
+    {
+      "interval": "5m",
+      "readyMs": 710,
+      "bars": 24
+    },
+    {
+      "interval": "1m",
+      "readyMs": 523,
+      "bars": 317
+    },
+    {
+      "interval": "5m",
+      "readyMs": 394,
+      "bars": 24
+    },
+    {
+      "interval": "1m",
+      "readyMs": 319,
+      "bars": 317
+    },
+    {
+      "interval": "5m",
+      "readyMs": 507,
+      "bars": 24
+    },
+    {
+      "interval": "1m",
+      "readyMs": 389,
+      "bars": 317
+    },
+    {
+      "interval": "5m",
+      "readyMs": 507,
+      "bars": 24
+    },
+    {
+      "interval": "1m",
+      "readyMs": 473,
+      "bars": 317
+    },
+    {
+      "interval": "5m",
+      "readyMs": 762,
+      "bars": 96
+    },
+    {
+      "interval": "1m",
+      "readyMs": 321,
+      "bars": 317
+    },
+    {
+      "interval": "5m",
+      "readyMs": 368,
+      "bars": 24
+    },
+    {
+      "interval": "1m",
+      "readyMs": 328,
+      "bars": 317
+    },
+    {
+      "interval": "5m",
+      "readyMs": 616,
+      "bars": 24
+    }
+  ]
+}

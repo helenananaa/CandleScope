@@ -1,9 +1,8 @@
-import { Profiler, useEffect, useMemo, useState } from "react";
+import { Profiler, useEffect, useState } from "react";
 import type { ProfilerOnRenderCallback } from "react";
 import { recordPerfEvent } from "../../runtime/performance/perfMarks.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
-import { useChartSurfaceRuntime } from "../../chart-adapter/useChartSurfaceRuntime.js";
 import {
   useChartSettingsRuntime,
   type ChartSettingsRuntime,
@@ -14,9 +13,9 @@ import { defaultReplayV2Api } from "./replayV2Api.js";
 import { getReplayControllerClientInstanceId } from "./replayControllerIdentity.js";
 import ReplayInitialMarketPicker from "./components/ReplayInitialMarketPicker.js";
 import TrainingHubDialog from "./components/TrainingHubDialog.js";
-import ReplayTrainingPageShell from "./ReplayTrainingPageShell.js";
-import { useReplaySharedIndicatorRuntime } from "./useReplaySharedIndicatorRuntime.js";
-import { useReplayRuntime } from "./useReplayRuntime.js";
+import ReplayChartWorkspace from "./ReplayChartWorkspace.js";
+import type { ChartSession } from "../chart-session/chartSessionTypes.js";
+import { createReplayChartRuntimePool, useSharedReplayChartRuntime } from "./replayChartRuntimePool.js";
 import { useReplayViewerRuntime } from "./useReplayViewerRuntime.js";
 import { useTrainingHub } from "./useTrainingHub.js";
 
@@ -63,36 +62,6 @@ function ReplayStatusSurface({
   );
 }
 
-function ReplayTrainingWorkspaceSurface({
-  chartSettingsRuntime,
-  indicatorScope,
-  replay,
-  viewer,
-}: {
-  chartSettingsRuntime: ChartSettingsRuntime;
-  indicatorScope: string;
-  replay: ReturnType<typeof useReplayRuntime>;
-  viewer: ReturnType<typeof useReplayViewerRuntime>;
-}) {
-  const indicators = useReplaySharedIndicatorRuntime(
-    replay,
-    viewer,
-    indicatorScope,
-  );
-  const chartSurface = useChartSurfaceRuntime();
-  return (
-    <ReplayTrainingPageShell
-      key={indicatorScope}
-      runtime={replay}
-      indicators={indicators}
-      chartSurfaceRef={chartSurface.ref}
-      chartSurfaceActions={chartSurface.actions}
-      viewer={viewer}
-      chartSettingsRuntime={chartSettingsRuntime}
-    />
-  );
-}
-
 function ReplayInitializedRun({
   chartSettingsRuntime,
   onSelectedSessionChange,
@@ -104,25 +73,19 @@ function ReplayInitializedRun({
   runId: string;
   sessionId: string;
 }) {
-  const runtimeEntry = useMemo(
-    () => ({ kind: "adapter" as const, sessionId }),
-    [sessionId],
-  );
-  const clientInstanceId = useMemo(
-    () => getReplayControllerClientInstanceId(runId),
-    [runId],
-  );
-  const replay = useReplayRuntime(runtimeEntry, { clientInstanceId });
-  const viewer = useReplayViewerRuntime(replay, { onSelectedSessionChange });
-  return (
-    <ReplayTrainingWorkspaceSurface
-      key={`${runId}:${sessionId}`}
-      chartSettingsRuntime={chartSettingsRuntime}
-      indicatorScope={runId}
-      replay={replay}
-      viewer={viewer}
-    />
-  );
+  const [pool] = useState(() => createReplayChartRuntimePool(getReplayControllerClientInstanceId(runId)));
+  const replay = useSharedReplayChartRuntime(pool, sessionId);
+  const viewer = useReplayViewerRuntime(replay, { onSelectedSessionChange, controllerOnly: true });
+  const [initialSession, setInitialSession] = useState<ChartSession | null>(null);
+  useEffect(() => {
+    const config = replay.store.sessionConfig;
+    if (initialSession !== null || config === null) return;
+    setInitialSession({ exchange: config.exchange, marketType: config.market_type,
+      symbol: config.symbol, interval: config.base_interval });
+  }, [initialSession, replay.store.sessionConfig]);
+  if (initialSession === null) return <ReplayStatusSurface title={t("replay.opening")} message={replay.error?.message ?? t("replay.openingMessage", { runId })} />;
+  return <ReplayChartWorkspace runId={runId} initialSession={initialSession}
+    runtime={replay} viewer={viewer} pool={pool} chartSettingsRuntime={chartSettingsRuntime} />;
 }
 
 function ReplayTrainingRunApp({
@@ -175,7 +138,7 @@ function ReplayTrainingRunApp({
   }
   return (
     <ReplayInitializedRun
-      key={`${run.run_id}:${selectedSessionId ?? run.adapter_session_id}`}
+      key={run.run_id}
       chartSettingsRuntime={chartSettingsRuntime}
       runId={run.run_id}
       sessionId={selectedSessionId ?? run.adapter_session_id}

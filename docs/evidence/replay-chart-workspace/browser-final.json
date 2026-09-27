@@ -1,0 +1,37 @@
+{
+  "cells": [
+    {
+      "replayBoundaryMs": "1700027819999",
+      "replayCellBars": "317",
+      "replayCellDiagnostics": "cell-1",
+      "replayCellError": "",
+      "replayCellInterval": "1m",
+      "replayTrackId": "track-1"
+    },
+    {
+      "replayBoundaryMs": "1700027819999",
+      "replayCellBars": "32",
+      "replayCellDiagnostics": "cell-2",
+      "replayCellError": "",
+      "replayCellInterval": "15m",
+      "replayTrackId": "track-1"
+    },
+    {
+      "replayBoundaryMs": "1700027819999",
+      "replayCellBars": "96",
+      "replayCellDiagnostics": "cell-4",
+      "replayCellError": "",
+      "replayCellInterval": "5m",
+      "replayTrackId": "track-3"
+    },
+    {
+      "replayBoundaryMs": "1700027819999",
+      "replayCellBars": "96",
+      "replayCellDiagnostics": "cell-3",
+      "replayCellError": "",
+      "replayCellInterval": "5m",
+      "replayTrackId": "track-2"
+    }
+  ],
+  "errors": []
+}

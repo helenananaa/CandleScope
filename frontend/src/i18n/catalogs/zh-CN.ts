@@ -1,4 +1,6 @@
 export const zhCN = {
+  "replay.workspace.openNew": "在新图表打开",
+  "replay.workspace.splitUnavailable": "请先解锁布局或关闭一张图表，再打开新图表。",
   "preparation.rateLimited": "数据源限流，预计 {time} 后继续。关闭页面后任务仍会保留。",
   "preparation.contextsTitle": "自动准备的请求上下文",
   "preparation.contextsHint": "品种和周期通常由脚本自动识别。动态请求或无法推断历史长度的表达式可在这里补充；历史根数按各自周期计算，不改变主图交易起点。",

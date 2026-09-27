@@ -1260,20 +1260,32 @@ export function parseReplayCurrentDrawingDocumentResponse(
   if (revision < 1 || source.document_hash === null) {
     throw new TypeError("current drawing content requires a revision and hash");
   }
-  const rawDocument = exactObject(source.document, "current_drawing.document", [
-    "documentSchemaVersion", "scopeKey", "documentRevision", "updatedAt", "entities",
-  ]);
-  if (rawDocument.documentSchemaVersion !== 1
-    || typeof rawDocument.scopeKey !== "string"
-    || !rawDocument.scopeKey.startsWith("replay-run:")
-    || !Number.isSafeInteger(rawDocument.documentRevision)
-    || (rawDocument.documentRevision as number) < 0
-    || !Number.isSafeInteger(rawDocument.updatedAt)
-    || (rawDocument.updatedAt as number) < 0
-    || !Array.isArray(rawDocument.entities)
-    || rawDocument.entities.length !== entityCount) {
-    throw new TypeError("current drawing document is not a bounded canonical record");
-  }
+  const root = objectValue(source.document, "current_drawing.document");
+  const validateChild = (value: unknown): number => {
+    const child = exactObject(value, "current_drawing.document", [
+      "documentSchemaVersion", "scopeKey", "documentRevision", "updatedAt", "entities",
+    ]);
+    if (child.documentSchemaVersion !== 1 || typeof child.scopeKey !== "string"
+      || !child.scopeKey.startsWith("replay-run:")
+      || !Number.isSafeInteger(child.documentRevision) || Number(child.documentRevision) < 0
+      || !Number.isSafeInteger(child.updatedAt) || Number(child.updatedAt) < 0
+      || !Array.isArray(child.entities)) throw new TypeError("invalid drawing chart record");
+    return child.entities.length;
+  };
+  let count = 0;
+  if (root.documentSchemaVersion === 2) {
+    const workspace = exactObject(root, "current_drawing.workspace", ["documentSchemaVersion", "scopeKey", "charts"]);
+    if (typeof workspace.scopeKey !== "string" || !workspace.scopeKey.startsWith("replay-run:")) {
+      throw new TypeError("invalid drawing workspace scope");
+    }
+    const charts = objectValue(workspace.charts, "current_drawing.charts");
+    if (Object.keys(charts).length > 256) throw new TypeError("drawing chart budget exceeded");
+    for (const [scope, chart] of Object.entries(charts)) {
+      if (!scope || scope.length > 1024) throw new TypeError("invalid drawing chart scope");
+      count += validateChild(chart);
+    }
+  } else count = validateChild(root);
+  if (count !== entityCount) throw new TypeError("current drawing entity count does not match");
   return {
     protocol: "replay.v3",
     schema_version: "replay.review.drawing-current.v1",

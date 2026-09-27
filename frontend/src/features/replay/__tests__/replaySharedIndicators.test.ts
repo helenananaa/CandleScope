@@ -453,8 +453,10 @@ test("v2 composition reuses the shared indicator product without hosted/cache re
     "src/features/indicators/useProvidedBarsIndicatorRuntime.ts",
   );
 
-  assert.match(composition, /useReplaySharedIndicatorRuntime/);
-  assert.match(composition, /key=\{indicatorScope\}/);
+  assert.match(composition, /ReplayChartWorkspace/);
+  const cells = source("src/features/replay/ReplayChartWorkspace.tsx");
+  assert.match(cells, /useReplaySharedIndicatorRuntime\(runtime, viewer, scope, persistence\)/);
+  assert.match(cells, /controlled: true/);
   assert.match(workspace, /<IndicatorPanel/);
   assert.match(workspace, /allowedScriptLanguages=\{\["pyne", "pine"\]\}/);
   assert.doesNotMatch(workspace, /ReplayIndicatorPanel/);

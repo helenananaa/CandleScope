@@ -77,7 +77,8 @@ test("v2 workspace owns the same source-neutral market slots without legacy repl
 
 test("every replay route stays on the v2 Hub or workspace", () => {
   const composition = source("src/features/replay/ReplayApp.tsx");
-  assert.match(composition, /ReplayTrainingPageShell/);
+  assert.match(composition, /ReplayChartWorkspace/);
+  assert.match(source("src/features/replay/ReplayChartWorkspace.tsx"), /ReplayTrainingPageShell/);
   assert.match(composition, /entry\.kind === "configure"/);
   assert.match(composition, /entry\.kind === "run"/);
   assert.match(composition, /ReplayInitialMarketPicker/);
@@ -89,8 +90,8 @@ test("Phase 13 workspace projects ViewerState and exposes capability-driven adva
   const composition = source("src/features/replay/ReplayApp.tsx");
   const controls = source("src/features/replay/components/ReplayControlBar.tsx");
   const viewerRuntime = source("src/features/replay/useReplayViewerRuntime.ts");
-  assert.match(composition, /useReplayViewerRuntime\(replay, \{ onSelectedSessionChange \}\)/);
-  assert.match(composition, /useReplaySharedIndicatorRuntime\(/);
+  assert.match(composition, /useReplayViewerRuntime\(replay, \{ onSelectedSessionChange, controllerOnly: true \}\)/);
+  assert.match(source("src/features/replay/ReplayChartWorkspace.tsx"), /useReplaySharedIndicatorRuntime\(/);
   assert.match(workspace, /<IndicatorPanel/);
   assert.doesNotMatch(workspace, /ReplayIndicatorPanel/);
   for (const prop of [

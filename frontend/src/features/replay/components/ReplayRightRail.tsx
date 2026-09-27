@@ -458,7 +458,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
   }, [capacityScheduler, previewScheduler]);
   useTradeNoticeAutoDismiss(notice, setNotice);
   const store = runtime.store;
-  const viewerReady = viewer.viewerState !== null;
+  const viewerReady = viewer.viewerState !== null && !viewer.viewerPending;
   const config = store.sessionConfig;
   const ownsController = replayOwnsController(store, runtime.clientInstanceId);
   const commandAvailable = ownsController

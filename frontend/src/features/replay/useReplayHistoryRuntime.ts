@@ -80,6 +80,7 @@ export function useReplayHistoryRuntime(
   const dataEpoch = runtime.store.dataEpoch;
   const runtimeGeneration = runtime.store.generation;
   const displayInterval = viewer.viewerState?.display_interval ?? null;
+  const trackId = viewer.viewerState?.selected_track_id ?? "track-1";
   const exchange = config?.exchange ?? null;
   const marketType = config?.market_type ?? null;
   const symbol = config?.symbol ?? null;
@@ -113,8 +114,8 @@ export function useReplayHistoryRuntime(
   const provider = useMemo(() => (
     sessionId === null || identity === null || dataEpoch === null
       ? null
-      : new ReplayHistoryProvider({ sessionId, trackId: "track-1", identity })
-  ), [dataEpoch, identity, sessionId]);
+      : new ReplayHistoryProvider({ sessionId, trackId, identity })
+  ), [dataEpoch, identity, sessionId, trackId]);
   const historyKey = useMemo(() => (
     sessionId === null || identity === null || dataEpoch === null
       ? null
@@ -191,7 +192,6 @@ export function useReplayHistoryRuntime(
   const initialContextPagePending = usesSourceBucketProjection
     && provider?.historyEpoch === null
     && runtime.store.replayStartMs !== null
-    && runtime.store.virtualTimeMs === runtime.store.replayStartMs
     && replayHistoryStoreBeforeMs(viewer.seriesStore) !== null;
   const viewportNeedsLatestRestore = replayHistoryViewportTransferNeedsLatestWindow(
     viewer.seriesStore,
