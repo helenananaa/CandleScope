@@ -14,6 +14,7 @@ import React, {
   type SetStateAction,
 } from "react";
 import { createPortal } from "react-dom";
+import "../features/backtest/chart-tester/chartStrategyEntry.css";
 import IntervalSelector from "../components/IntervalSelector.js";
 import { useChartSurfaceRuntime } from "../chart-adapter/useChartSurfaceRuntime.js";
 import type { ChartSurfaceVisibleRange } from "../chart-adapter/useChartSurfaceRuntime.js";
