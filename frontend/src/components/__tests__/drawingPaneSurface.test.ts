@@ -7,12 +7,35 @@ import {
   drawingToolForPane,
   drawingPaneScopeKey,
   isDrawingInteractionReady,
+  isDrawingEditorPointerBoundary,
   ownsDrawingApiRegistrationCleanup,
   reconcileRegisteredDrawingPaneMountKeys,
   reconcileDrawingPaneHostMountKeys,
   resolveDrawingInteractionPaneId,
 } from "../drawingPaneSurface.js";
 import type { DrawingExportLease } from "../../features/drawings/drawingInteractionController.js";
+
+test("open drawing settings keep ownership over lower panes, backdrop, and chart leave", () => {
+  const container = { querySelector: (selector: string) => {
+    assert.equal(selector, ".drawing-properties-panel[open]");
+    return {} as Element;
+  } };
+  assert.equal(isDrawingEditorPointerBoundary(container, null), true);
+  assert.equal(isDrawingEditorPointerBoundary(container, { closest: () => null }), true);
+});
+
+test("toolbar and nested popovers keep ownership; closing settings restores chart hover", () => {
+  const container = { querySelector: () => null };
+  const editorChild = { closest: (selector: string) => {
+    assert.ok(selector.includes(".selected-drawing-style-bar"));
+    assert.ok(selector.includes(".drawing-object-list"));
+    assert.ok(selector.includes(".text-edit-overlay"));
+    return {} as Element;
+  } };
+  assert.equal(isDrawingEditorPointerBoundary(container, editorChild), true);
+  assert.equal(isDrawingEditorPointerBoundary(container, { closest: () => null }), false);
+  assert.equal(isDrawingEditorPointerBoundary(container, null), false);
+});
 
 function lease(
   scopeKey: string,

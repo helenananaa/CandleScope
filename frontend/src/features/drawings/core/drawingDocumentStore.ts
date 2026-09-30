@@ -30,6 +30,9 @@ export interface DrawingDocumentLoadFailure {
 export type DrawingDocumentLoadResult = DrawingDocumentLoadSuccess | DrawingDocumentLoadFailure;
 
 export interface DrawingDocumentStore {
+  readonly canUndo: boolean;
+  readonly canRedo: boolean;
+  replayHistory(direction: "undo" | "redo", commit: (commands: readonly DrawingCommand[]) => boolean): boolean;
   readonly dirty: boolean;
   readonly dirtyRevision: number | null;
   acknowledgePersisted(scopeKey: string, documentRevision: number): boolean;
@@ -88,6 +91,9 @@ export function createDrawingDocumentStore(
       });
   let currentDirtyRevision: number | null = null;
   const listeners = new Set<DrawingDocumentStoreListener>();
+  const undo: Array<{ before: DrawingDocument; after: DrawingDocument }> = [];
+  const redo: typeof undo = [];
+  let replaying: "undo" | "redo" | null = null;
 
   const publish = (next: DrawingDocument): void => {
     const previous = snapshot;
@@ -104,12 +110,56 @@ export function createDrawingDocumentStore(
   const dispatchMany = (commands: readonly DrawingCommand[]): DrawingCommandApplyResult => {
     const result = applyDrawingCommands(snapshot, commands);
     if (!result.ok || !result.changed) return result;
+    if (replaying) {
+      const source = replaying === "undo" ? undo : redo;
+      const target = replaying === "undo" ? redo : undo;
+      const entry = source.pop();
+      if (entry) target.push(entry);
+    } else {
+      undo.push({ before: snapshot, after: result.document });
+      if (undo.length > 50) undo.shift();
+      redo.length = 0;
+    }
     currentDirtyRevision = result.document.documentRevision;
     publish(result.document);
     return result;
   };
 
   const store: DrawingDocumentStore = {
+    get canUndo() { return undo.length > 0; },
+    get canRedo() { return redo.length > 0; },
+    replayHistory(direction, commit) {
+      if (replaying) return false;
+      const entry = (direction === "undo" ? undo : redo).at(-1);
+      if (!entry) return false;
+      const target = direction === "undo" ? entry.before : entry.after;
+      const commands: DrawingCommand[] = [];
+      const replaced = new Set<string>();
+      // Restore exact styles (including removed optional fields), retaining
+      // unchanged entities and advancing revisions to invalidate render caches.
+      for (const [id, entity] of snapshot.entities) {
+        const wanted = target.entities.get(id);
+        if (!wanted || wanted.kind !== entity.kind
+          || !canonicalDrawingValueEquals(entity.geometry, wanted.geometry)
+          || !canonicalDrawingValueEquals(entity.style, wanted.style)) {
+          commands.push({ type: "delete", id });
+          replaced.add(id);
+        }
+      }
+      for (const [id, entity] of target.entities) {
+        const current = snapshot.entities.get(id);
+        if (!current || replaced.has(id)) {
+          commands.push({ type: "create", entity: { ...entity,
+            geometryRevision: Math.max(snapshot.documentRevision, entity.geometryRevision, current?.geometryRevision ?? 0) + 1,
+            styleRevision: Math.max(snapshot.documentRevision, entity.styleRevision, current?.styleRevision ?? 0) + 1,
+          } });
+        }
+      }
+      commands.push({ type: "reorder", order: target.zOrder });
+      replaying = direction;
+      try { return commit(commands); }
+      finally { replaying = null; }
+    },
     get dirty() { return currentDirtyRevision !== null; },
     get dirtyRevision() { return currentDirtyRevision; },
     acknowledgePersisted(scopeKey, documentRevision) {
@@ -147,6 +197,7 @@ export function createDrawingDocumentStore(
         return loadFailure(snapshot, error);
       }
       const changed = !documentsEqual(snapshot, next);
+      if (changed) { undo.length = 0; redo.length = 0; }
       currentDirtyRevision = null;
       if (changed) publish(next);
       return Object.freeze({ changed, document: snapshot, ok: true });

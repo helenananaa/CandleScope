@@ -19,6 +19,7 @@ import type {
   TextAlign,
 } from "./drawingTypes.js";
 import { drawingPerfCounters } from "./performance/drawingPerfCounters.js";
+import { drawingCoordinates, type DrawingCoordinate } from "./drawingProperties.js";
 import {
   DEFAULT_DRAWING_RENDER_COLOR,
   DEFAULT_DRAWING_RENDER_LINE_WIDTH,
@@ -31,6 +32,8 @@ import {
 } from "./rendering/drawingRenderDefaults.js";
 
 export interface SelectedTextSnapshot {
+  visibleIntervals?: readonly string[] | null;
+  locked?: boolean;
   text: string;
   color: string;
   fontSize: number;
@@ -52,6 +55,9 @@ export interface SelectedTextUi {
 }
 
 export interface SelectedDrawingMeta {
+  visibleIntervals?: readonly string[] | null;
+  locked?: boolean;
+  coordinates?: readonly DrawingCoordinate[];
   id: string;
   type: string;
   color?: string;
@@ -213,6 +219,8 @@ export function selectedTextUiFromSavedDrawing(
   if (!saved || saved.type !== "text") return EMPTY_SELECTED_TEXT_UI;
   return {
     snapshot: {
+      locked: saved.locked === true,
+    ...(saved.visibleIntervals === undefined ? {} : { visibleIntervals: saved.visibleIntervals }),
       text: saved.text ?? "Text",
       color: saved.color || DEFAULT_TEXT_RENDER_COLOR,
       fontSize: saved.fontSize || DEFAULT_TEXT_RENDER_FONT_SIZE,
@@ -235,8 +243,11 @@ export function selectedDrawingMetaFromSavedDrawing(
   saved: SavedDrawing | null | undefined,
 ): SelectedDrawingMeta | null {
   if (!saved?.id || saved.type === "text") return null;
+  const coordinates = drawingCoordinates(saved);
   if (saved.type === "position") return {
     id: saved.id,
+    locked: saved.locked === true,
+    ...(saved.visibleIntervals === undefined ? {} : { visibleIntervals: saved.visibleIntervals }),
     type: saved.direction === "short" ? "position-short" : "position-long",
     positionSize: saved.positionSize ?? 1000,
   };
@@ -251,7 +262,10 @@ export function selectedDrawingMetaFromSavedDrawing(
         : saved.type;
   return {
     id: saved.id,
+    locked: saved.locked === true,
+    ...(saved.visibleIntervals === undefined ? {} : { visibleIntervals: saved.visibleIntervals }),
     type,
+    ...(coordinates ? { coordinates } : {}),
     color: saved.color || DEFAULT_DRAWING_RENDER_COLOR,
     lineWidth: saved.lineWidth || DEFAULT_DRAWING_RENDER_LINE_WIDTH,
     ...(saved.type === "highlighter"

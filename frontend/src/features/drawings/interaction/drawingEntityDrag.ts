@@ -1,3 +1,4 @@
+import { translateStroke, type CaptureStroke } from "./freehandDrag.js";
 import {
   parseDrawingAnchor,
   parseDrawingDataPoint,
@@ -32,12 +33,15 @@ export interface DrawingEntityDragOptions {
   readonly screenToDrawingData: ScreenToDrawingData;
   readonly dataToScreen: DrawingDataToScreen;
   readonly snap: boolean;
+  readonly captureStroke?: CaptureStroke;
 }
 
 export function drawingEntityGeometryCommandForDrag(
   descriptor: DrawingDragDescriptor,
 ): DrawingEntityGeometryCommand {
   switch (descriptor.type) {
+    case "freehand":
+    case "highlighter":
     case "text":
     case "position-move":
     case "position-panel":
@@ -636,6 +640,13 @@ export function applyDrawingEntityDrag(options: DrawingEntityDragOptions): Saved
     const { descriptor, drawing, pos } = options;
     if (!descriptor || !drawing || drawing.id !== descriptor.id || !finiteScreenPoint(pos)) return null;
     switch (descriptor.type) {
+      case "freehand":
+      case "highlighter":
+        return !drawing.locked && options.captureStroke ? translateStroke(
+          descriptor.original, descriptor.origScreenPoints,
+          { x: pos.x - descriptor.startMouse.x, y: pos.y - descriptor.startMouse.y },
+          descriptor.captureIdentity, options.captureStroke,
+        ) : null;
       case "text-handle":
         return applyTextHandleDrag(options);
       case "text":

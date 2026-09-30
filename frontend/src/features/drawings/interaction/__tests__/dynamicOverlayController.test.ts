@@ -54,6 +54,7 @@ function fixture() {
   return {
     arcs,
     boxes,
+    context,
     canvas,
     clears,
     dashes,
@@ -469,4 +470,25 @@ test("unchanged layout refresh preserves the committed handoff frame", () => {
   rect = { ...rect, width: 220 };
   assert.equal(controller.refreshLayout(), true);
   assert.ok(clears.length > clearsAfterDraftPaint);
+});
+
+
+test("whole-stroke preview uses pane-local coordinates and preserves highlighter paint", () => {
+  const { canvas, context, moves, lines } = fixture();
+  const controller = createDynamicOverlayController({ canvas,
+    getPlotRect: () => ({ x: 20, y: 100, width: 300, height: 200, dpr: 1 }),
+    requestFrame: () => 1, cancelFrame() {},
+  });
+  controller.render({ decorations: [{ type: "freehand",
+    points: [{ x: 40, y: 120 }, { x: 60, y: 150 }, { x: 80, y: 160 }],
+    color: "#ffff00", lineWidth: 14, opacity: 0.25, compositeOperation: "multiply", squareBrush: true,
+  }] });
+  controller.flush();
+  assert.deepEqual(moves, [[20, 20]]);
+  assert.deepEqual(lines, [[40, 50], [60, 60]]);
+  assert.equal(context.globalAlpha, 0.25);
+  assert.equal(context.globalCompositeOperation, "multiply");
+  assert.equal(context.lineCap, "square");
+  assert.equal(context.lineJoin, "bevel");
+  controller.dispose();
 });

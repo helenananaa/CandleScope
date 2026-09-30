@@ -217,3 +217,61 @@ test("session registry retains dirty scopes across host reacquisition without mi
   assert.equal(registry.shouldLoadFromPersistence("scope-a", scopeA), false);
   assert.equal(registry.markLoaded("scope-a", scopeB), false);
 });
+
+test("history restores create, move/style batches, delete and order with increasing revisions", () => {
+  const store = createDrawingDocumentStore("history");
+  const replay = (direction: "undo" | "redo") => store.replayHistory(direction, (commands) => store.dispatchMany(commands).ok);
+  store.dispatchMany([{ type: "create", entity: lineInput("a") }, { type: "create", entity: lineInput("b") }]);
+  const initial = store.getSnapshot();
+  const geometry = { ...lineInput("a").geometry, dataPoints: [{ time: 100, price: 30 }, { time: 200, price: 40 }] } as DrawingEntityInput["geometry"];
+  store.dispatchMany([{ type: "move", id: "a", geometry }, { type: "update-style", id: "a", patch: { color: "#f00" } }, { type: "reorder", order: ["b", "a"] }]);
+  const changed = store.getSnapshot();
+  assert.equal(replay("undo"), true);
+  assert.deepEqual(store.getSnapshot().entities.get("a")?.geometry, initial.entities.get("a")?.geometry);
+  assert.deepEqual(store.getSnapshot().entities.get("a")?.style, initial.entities.get("a")?.style);
+  assert.deepEqual(store.getSnapshot().zOrder, ["a", "b"]);
+  assert.ok(store.getSnapshot().documentRevision > changed.documentRevision);
+  assert.equal(store.canRedo, true);
+  assert.equal(replay("redo"), true);
+  assert.deepEqual(store.getSnapshot().entities.get("a")?.style, changed.entities.get("a")?.style);
+  store.dispatch({ type: "delete", id: "a" });
+  assert.equal(replay("undo"), true);
+  assert.deepEqual(store.getSnapshot().zOrder, ["b", "a"]);
+  assert.equal(replay("redo"), true);
+  assert.equal(store.getSnapshot().entities.has("a"), false);
+  store.dispatch({ type: "clear" });
+  assert.equal(replay("undo"), true);
+  assert.equal(store.getSnapshot().entities.has("b"), true);
+  assert.equal(store.dirtyRevision, store.getSnapshot().documentRevision);
+});
+
+test("history ignores no-op, failure and rejected replay; edits invalidate redo; scopes stay isolated", () => {
+  const registry = createDrawingDocumentSessionRegistry();
+  const store = registry.getStore("a");
+  store.dispatch({ type: "create", entity: lineInput("line") });
+  assert.equal(store.replayHistory("undo", () => false), false);
+  assert.equal(store.canUndo, true);
+  assert.equal(store.canRedo, false);
+  store.dispatch({ type: "update-style", id: "missing", patch: {} });
+  store.dispatch({ type: "update-style", id: "line", patch: { color: "#fff" } });
+  assert.equal(store.replayHistory("undo", (commands) => store.dispatchMany(commands).ok), true);
+  assert.equal(store.canUndo, false);
+  assert.equal(store.canRedo, true);
+  assert.equal(registry.getStore("b").canUndo, false);
+  store.dispatch({ type: "create", entity: lineInput("new") });
+  assert.equal(store.canRedo, false);
+  store.loadDocument(createDrawingDocument({ scopeKey: "a" }));
+  assert.equal(store.canUndo, false);
+});
+
+test("history is bounded and publishes updated undo availability atomically", () => {
+  const store = createDrawingDocumentStore("bounded");
+  for (let index = 0; index < 55; index++) store.dispatch({ type: "create", entity: lineInput(String(index)) });
+  let undoCount = 0;
+  let lastCanRedo = false;
+  store.subscribe(() => { lastCanRedo = store.canRedo; });
+  while (store.replayHistory("undo", (commands) => store.dispatchMany(commands).ok)) undoCount++;
+  assert.equal(undoCount, 50);
+  assert.equal(store.getSnapshot().entities.size, 5);
+  assert.equal(lastCanRedo, true);
+});

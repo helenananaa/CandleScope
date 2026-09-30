@@ -1,8 +1,10 @@
+import type { DrawingObjectApi } from "./drawingObjectApi.js";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useDrawing } from "./drawingInteractionController.js";
 import TextEditOverlay from "../../components/TextEditOverlay";
 import TextFormatBar from "../../components/TextFormatBar";
 import SelectedDrawingStyleBar from "./SelectedDrawingStyleBar.js";
+import DrawingHistoryBar from "./DrawingHistoryBar.js";
 import DrawingInteractionOverlay from "./rendering/DrawingInteractionOverlay.js";
 import {
     resolveDrawingHostInteractionSurfaceMode,
@@ -25,6 +27,7 @@ import type { DrawingCommittedPaintTicket } from "./useDrawingPersistenceLifecyc
 import type { SelectedDrawingMeta } from "./drawingSelectionController.js";
 
 export interface DrawingEngineApi {
+    objects?: DrawingObjectApi;
     clearAll(): void;
     deselectAll(): void;
     completeSurfaceDispose(): void;
@@ -52,6 +55,7 @@ export interface DrawingEngineHostProps {
     positionSize: number;
     drawingSnapEnabled: boolean;
     drawingContinuousEnabled: boolean;
+    drawingAutoSelectEnabled: boolean;
     drawingKey: string;
     drawingSeriesGeneration: number;
     drawingChartType: string;
@@ -79,6 +83,7 @@ function DrawingEngineHost({
     positionSize,
     drawingSnapEnabled,
     drawingContinuousEnabled,
+    drawingAutoSelectEnabled,
     drawingKey,
     drawingSeriesGeneration,
     drawingChartType,
@@ -116,6 +121,7 @@ function DrawingEngineHost({
         positionSize,
         drawingSnapEnabled,
         drawingContinuousEnabled,
+        drawingAutoSelectEnabled,
         symbol: drawingKey,
         seriesReady: drawingSeriesGeneration,
         drawingChartType,
@@ -129,6 +135,7 @@ function DrawingEngineHost({
         ...(onToolChange === undefined ? {} : { onToolChange }),
     });
     const {
+        getObjectDocument, subscribeObjectDocument, selectObject, updateObject, deleteObject, reorderObject,
         clearAll,
         deselectAll,
         completeSurfaceDispose,
@@ -143,28 +150,10 @@ function DrawingEngineHost({
     const legacyPrimitiveEvidence = drawing.getLegacyPrimitiveRuntimeEvidence();
     const appliedInitialHiddenRef = useRef(false);
     const interactionMarkerRef = useRef<HTMLSpanElement | null>(null);
-    const [chartContainerWidth, setChartContainerWidth] = useState<number>(0);
 
     useEffect(() => {
         drawingPerfCounters.incrementCounter("reactRenderCount");
     });
-
-    useEffect(() => {
-        const el = chartContainerRef.current;
-        if (!el) return undefined;
-
-        const updateWidth = () => setChartContainerWidth(el.clientWidth || 0);
-        updateWidth();
-
-        if (typeof ResizeObserver === "undefined") {
-            window.addEventListener("resize", updateWidth);
-            return () => window.removeEventListener("resize", updateWidth);
-        }
-
-        const ro = new ResizeObserver(updateWidth);
-        ro.observe(el);
-        return () => ro.disconnect();
-    }, [chartContainerRef]);
 
     useEffect(() => {
         if (appliedInitialHiddenRef.current) return;
@@ -172,9 +161,12 @@ function DrawingEngineHost({
         if (initialHidden) setHidden(true);
     }, [initialHidden, setHidden]);
 
+    const selectedTextId = drawing.selectedTextSnapshot ? drawing.selectedPrimId : null;
     useEffect(() => {
-        onSelectedDrawingChange?.(selectedDrawingMeta);
-    }, [onSelectedDrawingChange, selectedDrawingMeta]);
+        // Text uses its own formatter but still participates in cross-pane selection.
+        onSelectedDrawingChange?.(selectedDrawingMeta
+            ?? (selectedTextId ? { id: selectedTextId, type: "text" } : null));
+    }, [onSelectedDrawingChange, selectedDrawingMeta, selectedTextId]);
 
     useEffect(() => () => {
         onSelectedDrawingChange?.(null);
@@ -188,6 +180,7 @@ function DrawingEngineHost({
             interactionMarkerRef.current.dataset.drawingEngine = "ready";
         }
         onApiChange?.({
+            ...(interactionSurfaceMode === "overlay" ? { objects: { getObjectDocument, subscribeObjectDocument, selectObject, updateObject, deleteObject, reorderObject } } : {}),
             clearAll,
             deselectAll,
             completeSurfaceDispose,
@@ -202,6 +195,7 @@ function DrawingEngineHost({
             ),
         });
     }, [
+        interactionSurfaceMode, getObjectDocument, subscribeObjectDocument, selectObject, updateObject, deleteObject, reorderObject,
         clearAll,
         deselectAll,
         completeSurfaceDispose,
@@ -276,27 +270,28 @@ function DrawingEngineHost({
                 />
             )}
 
-            {!drawing.editingTextId && drawing.selectedTextSnapshot && drawing.selectedTextBox && (
+            {!drawing.editingTextId && drawing.selectedTextSnapshot && (
                 <TextFormatBar
-                    position={{
-                        x: drawing.selectedTextBox.x,
-                        y: Math.max(2, drawing.selectedTextBox.y - 44),
-                    }}
+                    key={drawing.selectedPrimId}
                     snapshot={drawing.selectedTextSnapshot}
                     onPatch={drawing.updateSelectedText}
+                    {...(interactionSurfaceMode === "overlay" ? { currentInterval: drawingInterval, onToggleLock: () => drawing.updateSelectedDrawingStyle({ locked: !drawing.selectedTextSnapshot?.locked }) } : {})}
                     onDelete={drawing.deleteSelected}
-                    containerWidth={chartContainerWidth}
                 />
             )}
             {!drawing.editingTextId && selectedDrawingMeta && (
                 <SelectedDrawingStyleBar
                     drawing={selectedDrawingMeta}
+                    {...(interactionSurfaceMode === "overlay" ? { onSave: drawing.saveDrawingProperties, currentInterval: drawingInterval } : {})}
                     openRequestRevision={drawing.selectedDrawingSettingsRequest?.id === selectedDrawingMeta.id
                         ? drawing.selectedDrawingSettingsRequest.revision : 0}
                     onPatch={drawing.updateSelectedDrawingStyle}
                     onDelete={drawing.deleteSelected}
                 />
             )}
+            {interactionSurfaceMode === "overlay" && <DrawingHistoryBar container={chartContainerRef} adapter={chartAdapter} scope={drawingKey}
+                canUndo={!drawing.editingTextId && drawing.canUndo} canRedo={!drawing.editingTextId && drawing.canRedo}
+                replay={drawing.replayHistory} />}
         </>
     );
 }

@@ -1,3 +1,4 @@
+import { drawingVisibleAtInterval } from "../../drawingVisibility.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createDrawingFrameSnapshotFactory } from "../../../../chart-adapter/drawingFrameSnapshot.js";
@@ -2957,4 +2958,51 @@ test("frame loss fails closed and disposal is idempotent", () => {
   assert.equal(adapter.listenerCount(), 0);
   assert.equal(runtime.snapshot().disposed, true);
   assert.equal(runtime.invalidate(), false);
+});
+
+test("interval visibility changes the published scene and hit index without mutating the document", () => {
+  const entity = createDrawingEntity({ ...lineEntity("filtered", 10, 20), style: { kind: "line", visibleIntervals: ["1h"] } });
+  const document = createDrawingDocument({ scopeKey: "scope-a", entities: [entity], zOrder: [entity.id] });
+  const store = createDrawingDocumentStore(document);
+  const adapter = fakeAdapter();
+  const renderer = fakeRenderer(store.getSnapshot());
+  let interval = "1h";
+  const runtime = createDrawingSceneRuntime({ mode: "scene-canary", requestFrame: () => 1, cancelFrame: () => {} });
+  runtime.activate({ adapter: adapter.adapter, renderer: renderer.renderer, store, projectScene: project,
+    shouldProjectNode: node => drawingVisibleAtInterval(node.entity.style, interval), publishScene: () => true });
+  assert.equal(runtime.flushNow(), true);
+  assert.equal(runtime.snapshot().plan?.entities.length, 1);
+  interval = "15m";
+  runtime.invalidate("drawing-interval-visibility");
+  assert.equal(runtime.flushNow(), true);
+  assert.equal(runtime.snapshot().plan?.entities.length, 0);
+  assert.equal(runtime.snapshot().hitIndex?.stats.segmentCount, 0);
+  assert.deepEqual(store.getSnapshot(), document);
+  interval = "1h";
+  runtime.invalidate("drawing-interval-visibility");
+  assert.equal(runtime.flushNow(), true);
+  assert.equal(runtime.snapshot().plan?.entities.length, 1);
+  assert.equal(runtime.snapshot().hitIndex?.stats.segmentCount, 1);
+  runtime.dispose();
+});
+
+test("hidden objects remain in the document but leave both scene and hit index until restored", () => {
+  const entity = createDrawingEntity({ ...lineEntity("hidden", 10, 20), style: { kind: "line", hidden: true } });
+  const store = createDrawingDocumentStore(createDrawingDocument({ scopeKey: "scope-a", entities: [entity], zOrder: [entity.id] }));
+  const adapter = fakeAdapter();
+  const renderer = fakeRenderer(store.getSnapshot());
+  const runtime = createDrawingSceneRuntime({ mode: "scene-canary", requestFrame: () => 1, cancelFrame: () => {} });
+  runtime.activate({ adapter: adapter.adapter, renderer: renderer.renderer, store, projectScene: project,
+    shouldProjectNode: node => drawingVisibleAtInterval(node.entity.style, "15m"), publishScene: () => true });
+  assert.equal(runtime.flushNow(), true);
+  assert.equal(runtime.snapshot().plan?.entities.length, 0);
+  assert.equal(runtime.snapshot().hitIndex?.stats.segmentCount, 0);
+  assert.equal(store.getSnapshot().entities.size, 1);
+  assert.equal(store.dispatch({ type: "update-style", id: entity.id, patch: { hidden: false } }).ok, true);
+  renderer.setDocument(store.getSnapshot());
+  runtime.invalidate("restore-hidden-object");
+  assert.equal(runtime.flushNow(), true);
+  assert.equal(runtime.snapshot().plan?.entities.length, 1);
+  assert.equal(runtime.snapshot().hitIndex?.stats.segmentCount, 1);
+  runtime.dispose();
 });

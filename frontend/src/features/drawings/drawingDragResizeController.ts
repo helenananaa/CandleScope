@@ -1,3 +1,4 @@
+import type { SavedStroke } from "./interaction/freehandDrag.js";
 /**
  * drawingDragResizeController — drag / resize lifecycle for existing drawings.
  *
@@ -113,7 +114,15 @@ interface LineLikeDrag extends DragBase {
   origPoints: DrawingDataPoint[];
 }
 
-export type DrawingDragDescriptor = TextHandleDrag
+export interface FreehandDrag extends DragBase {
+  type: "freehand" | "highlighter";
+  original: SavedStroke;
+  origScreenPoints: readonly ScreenPoint[];
+  captureIdentity: unknown;
+}
+
+export type DrawingDragDescriptor = FreehandDrag
+  | TextHandleDrag
   | TextDrag
   | PositionPriceDrag
   | PositionMoveDrag
@@ -134,6 +143,8 @@ export function drawingGeometryCommandForDrag(
   dragging: DrawingDragDescriptor,
 ): DrawingGeometryCommand {
   switch (dragging.type) {
+    case "freehand":
+    case "highlighter":
     case "text":
     case "position-move":
     case "position-panel":

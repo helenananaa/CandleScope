@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { drawingVisibleAtInterval } from "./drawingVisibility.js";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { createPrimitiveFromSavedDrawing } from "./drawingPrimitiveFactory.js";
 import {
@@ -835,6 +836,7 @@ export interface UseDrawingPersistenceLifecycleOptions {
   currentFreehandRef: MutableRefObject<FreehandDrawingPrimitive | null>;
   draggingRef: MutableRefObject<unknown | null>;
   dynamicOverlayEnabled?: boolean;
+  drawingInterval?: string;
   getChartAdapter(): DrawingPersistenceAdapter | null;
   getDrawingSceneAdapter(): DrawingChartAdapter | null;
   hiddenRef: MutableRefObject<boolean>;
@@ -861,6 +863,7 @@ export function useDrawingPersistenceLifecycle({
   currentFreehandRef,
   draggingRef,
   dynamicOverlayEnabled = false,
+  drawingInterval = "",
   getChartAdapter,
   getDrawingSceneAdapter,
   hiddenRef,
@@ -890,6 +893,9 @@ export function useDrawingPersistenceLifecycle({
     candidatePrimitives?: readonly DrawingPrimitive[],
   ): DrawingDetachedCommitReceipt | null;
   persistSceneCommands(commands: readonly DrawingCommand[]): DrawingDetachedCommitReceipt | null;
+  canUndo: boolean;
+  canRedo: boolean;
+  replayHistory(direction: "undo" | "redo"): boolean;
   persistDrawings(commands: readonly DrawingCommand[]): boolean;
   persistActiveScopeDrawings(commands: readonly DrawingCommand[]): boolean;
   subscribeVisibleScenePaint(
@@ -906,6 +912,8 @@ export function useDrawingPersistenceLifecycle({
   hitTestScene(x: number, y: number): DrawingDisplayHitResult | null;
   getSceneScreenBox(id: string): ScreenBox | null;
   getSceneScreenHandles(id: string): readonly ScreenPoint[] | null;
+  getObjectDocument(): DrawingDocument;
+  subscribeObjectDocument(listener: () => void): () => void;
   getSavedDrawing(id: string): SavedDrawing | null;
   getLegacyPrimitiveRuntimeEvidence(): DrawingLegacyPrimitiveRuntimeEvidence;
   getActiveDocumentTarget(): DrawingActiveDocumentTarget | null;
@@ -1002,6 +1010,7 @@ export function useDrawingPersistenceLifecycle({
     ),
     onCurrentPaintRejected: () => scenePaintRecoveryDelegate.read()(),
   }));
+  const intervalRef = useRef(drawingInterval);
   const [visibleScenePublicationListeners] = useState(() => (
     new Set<(stamp: DrawingCommittedPaintTicket) => void>()
   ));
@@ -1050,6 +1059,11 @@ export function useDrawingPersistenceLifecycle({
     scenePaintRecoveryDelegate.write(recoverCurrentPaint);
     return () => scenePaintRecoveryDelegate.write(() => {});
   }, [scenePaintRecoveryDelegate, sceneRuntime]);
+
+  useLayoutEffect(() => {
+    intervalRef.current = drawingInterval;
+    sceneRuntime.invalidate("drawing-interval-visibility");
+  }, [drawingInterval, sceneRuntime]);
   useEffect(() => {
     sceneChartFrameSyncDelegate.write(() => {
       sceneRuntime.synchronizeChartFrame();
@@ -1059,6 +1073,8 @@ export function useDrawingPersistenceLifecycle({
   const [initialStore] = useState(() => drawingDocumentSessionRegistry.getStore(symbol));
   const [scopeRetryGeneration, setScopeRetryGeneration] = useState(0);
   const activeStoreRef = useRef<DrawingDocumentStore>(initialStore);
+  const historyStore = drawingDocumentSessionRegistry.getStore(symbol);
+  useSyncExternalStore(historyStore.subscribe, historyStore.getSnapshot, historyStore.getSnapshot);
   const rendererRef = useRef<LegacyPrimitiveRenderer | null>(null);
   const requestedScopeRef = useRef(symbol);
   const persistenceRestoreSourceRef = useRef<Readonly<{
@@ -1298,7 +1314,7 @@ export function useDrawingPersistenceLifecycle({
       isVisible: () => !hiddenRef.current,
       selectedId: () => visibleSceneSelectedId(selectedIdRef.current, dynamicOverlayEnabled),
       ...(visibleCanary ? {
-        shouldProjectNode: (node) => shouldProjectVisibleSceneEntity(
+        shouldProjectNode: (node) => drawingVisibleAtInterval(node.entity.style, intervalRef.current) && shouldProjectVisibleSceneEntity(
           node.entity.kind,
           node.id,
           dynamicOverlayEnabled,
@@ -1936,6 +1952,12 @@ export function useDrawingPersistenceLifecycle({
     sceneDocumentOnlyEnabled,
     sceneRuntime,
   ]);
+
+  const replayHistory = useCallback((direction: "undo" | "redo"): boolean => {
+    if (!prepareUserMutationScope()) return false;
+    return activeStoreRef.current.replayHistory(direction,
+      (commands) => persistSceneCommands(commands)?.committed === true);
+  }, [persistSceneCommands, prepareUserMutationScope]);
 
   const clearDrawings = useCallback((): boolean => {
     // This check happens before any canonical primitive is detached. In a
@@ -2904,6 +2926,11 @@ export function useDrawingPersistenceLifecycle({
 
   return {
     clearDrawings,
+    getObjectDocument: historyStore.getSnapshot,
+    subscribeObjectDocument: historyStore.subscribe,
+    canUndo: dynamicOverlayEnabled && authorityMode === "document" && historyStore.canUndo,
+    canRedo: dynamicOverlayEnabled && authorityMode === "document" && historyStore.canRedo,
+    replayHistory,
     completeSurfaceDispose,
     invalidateSurfaceCredentialsForSeriesReplacement,
     invalidateVisibleScene,

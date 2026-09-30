@@ -91,3 +91,14 @@ test("continuous drawing toggle exposes its selected state beside the snap toggl
   assert.match(button, /class="drawing-tool-btn active"/);
   assert.match(button, /title="Continuous drawing enabled; stay on the selected tool after completing a drawing"/);
 });
+
+test("auto-select defaults off and reflects an enabled preference beside continuous drawing", () => {
+  for (const enabled of [false, true]) {
+    const html = renderInEnglish(<DrawingToolbar activeTool="cursor-default" drawingAutoSelectEnabled={enabled}
+      penColor="#f59e0b" penSize={2} onClearAll={() => {}} onToggleDrawingsHidden={() => {}} onPositionSizeChange={() => {}} />);
+    const button = buttonTag(html, 'data-drawing-tool="auto-select"');
+    assert.ok(button.includes(enabled ? 'class="drawing-tool-btn active"' : 'class="drawing-tool-btn"'));
+    assert.ok(button.includes(enabled ? "Auto-select enabled" : "Auto-select disabled"));
+    assert.ok(html.indexOf('data-drawing-tool="continuous"') < html.indexOf('data-drawing-tool="auto-select"'));
+  }
+});

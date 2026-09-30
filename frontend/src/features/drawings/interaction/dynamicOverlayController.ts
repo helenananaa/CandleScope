@@ -52,6 +52,16 @@ export type DynamicFibonacciOverlayDecoration = Readonly<{
 
 export type DynamicOverlayDecoration =
   | Readonly<{
+      type: "freehand";
+      points: readonly ScreenPoint[];
+      color: string;
+      lineWidth: number;
+      opacity: number;
+      compositeOperation: GlobalCompositeOperation;
+      squareBrush: boolean;
+      quadratic?: boolean;
+    }>
+  | Readonly<{
       type: "box";
       box: ScreenBox;
       color?: string;
@@ -579,7 +589,35 @@ export function createDynamicOverlayController({
     context.lineCap = "round";
     context.lineJoin = "round";
     for (const item of frame.decorations) {
-      if (item.type === "box") {
+      if (item.type === "freehand") {
+        if (item.points.length < 2 || !item.points.every(finitePoint)) continue;
+        context.save();
+        context.strokeStyle = item.color;
+        context.lineWidth = item.lineWidth;
+        context.globalAlpha = item.opacity;
+        context.globalCompositeOperation = item.compositeOperation;
+        context.lineCap = item.squareBrush ? "square" : "round";
+        context.lineJoin = item.squareBrush ? "bevel" : "round";
+        context.setLineDash([]);
+        context.beginPath();
+        const points = item.points.map(point => ({ x: point.x - layout.rect.x, y: point.y - layout.rect.y }));
+        const first = points[0]!;
+        context.moveTo(first.x, first.y);
+        if (item.quadratic && !item.squareBrush && points.length > 2) {
+          for (let index = 1; index < points.length - 1; index++) {
+            const point = points[index]!;
+            const next = points[index + 1]!;
+            context.quadraticCurveTo(point.x, point.y, (point.x + next.x) / 2, (point.y + next.y) / 2);
+          }
+          const beforeLast = points[points.length - 2]!;
+          const last = points[points.length - 1]!;
+          context.quadraticCurveTo(beforeLast.x, beforeLast.y, last.x, last.y);
+        } else {
+          for (const point of points.slice(1)) context.lineTo(point.x, point.y);
+        }
+        context.stroke();
+        context.restore();
+      } else if (item.type === "box") {
         const { box } = item;
         if (![box.x, box.y, box.width, box.height].every(Number.isFinite)) continue;
         context.strokeStyle = item.color ?? "#3b82f6";

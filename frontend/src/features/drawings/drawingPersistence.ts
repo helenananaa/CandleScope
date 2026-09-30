@@ -1,3 +1,4 @@
+import { validDrawingIntervals } from "./drawingVisibility.js";
 /**
  * drawingStorage.js — Persist chart drawings to localStorage.
  *
@@ -129,9 +130,9 @@ function optionalBoolean(item: UnknownRecord, key: string): boolean | undefined 
   return typeof item[key] === "boolean" ? item[key] : undefined;
 }
 
-function savedBase(item: UnknownRecord): { id?: string } {
+function savedBase(item: UnknownRecord): { id?: string; hidden?: boolean; locked?: boolean; visibleIntervals?: readonly string[] | null } {
   const id = optionalString(item, "id", 256);
-  return id === undefined ? {} : { id };
+  return { ...(typeof item.hidden === "boolean" ? { hidden: item.hidden } : {}), ...(item.visibleIntervals === undefined ? {} : { visibleIntervals: item.visibleIntervals as readonly string[] | null }), ...(id === undefined ? {} : { id }), ...(typeof item.locked === "boolean" ? { locked: item.locked } : {}) };
 }
 
 function savedStyle(item: UnknownRecord): { color?: string; lineWidth?: number } {
@@ -223,6 +224,9 @@ function normalizeSavedFreehandItem(
 export function normalizeSavedDrawingItem(item: unknown): SavedDrawing | null {
   if (!isRecord(item) || typeof item.type !== "string") return null;
   if (!SAVED_DRAWING_TYPES.has(item.type as DrawingKind)) return null;
+  if (!validDrawingIntervals(item.visibleIntervals)) return null;
+  if (item.hidden !== undefined && typeof item.hidden !== "boolean") return null;
+  if (item.locked !== undefined && typeof item.locked !== "boolean") return null;
   if (item.type === "freehand" || item.type === "highlighter") {
     return normalizeSavedFreehandItem({ ...item, type: item.type });
   }

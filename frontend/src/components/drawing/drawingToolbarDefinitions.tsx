@@ -202,6 +202,12 @@ const MagnetIcon = (
   </svg>
 );
 
+const AutoSelectIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 8V4h4m8 0h4v4M4 16v4h4m12-4v4h-4M9 8l3 10 2-4 4-2-9-4Z" />
+  </svg>
+);
+
 const ContinuousDrawingIcon = (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M7 7h9a4 4 0 0 1 4 4v1" />
@@ -417,6 +423,7 @@ const CHART_TYPE_VARIANTS: ToolbarVariant<MainChartType>[] = [
 export {
   CHART_TYPE_VARIANTS,
   ContinuousDrawingIcon,
+  AutoSelectIcon,
   CURSOR_TOOL_IDS,
   CURSOR_VARIANTS,
   EraserIcon,

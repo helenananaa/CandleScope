@@ -1,3 +1,8 @@
+import { drawingObjectOrder } from "./drawingObjectApi.js";
+import { projectStrokeForDrag, type SavedStroke } from "./interaction/freehandDrag.js";
+import { drawingToolForSavedObject, isAutomaticObjectEditing, rememberAutomaticObjectTool, automaticObjectTool, clearAutomaticObjectTool } from "./drawingAutoSelection.js";
+import type { DrawingObjectApi } from "./drawingObjectApi.js";
+import { drawingVisibleAtInterval } from "./drawingVisibility.js";
 /**
  * useDrawing — Unified React hook for ALL native drawing on the chart.
  *
@@ -110,6 +115,7 @@ import type { DrawingDomPointerEvent } from "./drawingPointerController.js";
 import { useDrawingTextEdit } from "./drawingTextEditController.js";
 import type { TextEditingOptions } from "./drawingTextEditController.js";
 import { useDrawingKeyboard } from "./drawingKeyboardController.js";
+import { drawingPropertiesCandidate, type DrawingCoordinate } from "./drawingProperties.js";
 import {
   applyTextAndPositionDrag,
   applyLineFibShapeDrag,
@@ -679,6 +685,7 @@ export function dynamicDecorationsForSavedDrawingDraft(
   dataToScreen: DrawingDataToScreen,
   themePalette: DrawingFrameThemePalette = DEFAULT_DRAWING_POSITION_THEME_PALETTE,
   currentPrice: number | null = null,
+  projectStroke?: (saved: SavedStroke) => readonly ScreenPoint[] | null,
 ): readonly DynamicOverlayDecoration[] {
   const color = "color" in saved && typeof saved.color === "string"
     ? saved.color
@@ -686,6 +693,16 @@ export function dynamicDecorationsForSavedDrawingDraft(
   const lineWidth = "lineWidth" in saved && typeof saved.lineWidth === "number"
     ? saved.lineWidth
     : 2;
+  if (saved.type === "freehand" || saved.type === "highlighter") {
+    const points = projectStroke?.(saved);
+    if (!points) return [];
+    const highlighter = saved.type === "highlighter";
+    return [{ type: "freehand", points, color, lineWidth, quadratic: !saved.stroke,
+      opacity: highlighter ? saved.opacity ?? 0.35 : 1,
+      compositeOperation: highlighter ? saved.compositeOperation ?? "multiply" : "source-over",
+      squareBrush: highlighter && (saved.brushShape ?? "square") === "square",
+    }];
+  }
   if ("dataPoints" in saved && Array.isArray(saved.dataPoints)) {
     const projected = saved.dataPoints
       .map((point) => dataToScreen(point))
@@ -900,6 +917,7 @@ export function dynamicSelectionHandlesForSavedDrawing(
   sceneHandles: readonly ScreenPoint[] | null = null,
   positionBarSpacing: number | null = null,
 ): readonly DynamicSelectionHandleSpec[] {
+  if (saved.locked) return [];
   if ((saved.type === "text" || saved.type === "shape") && screenBox) {
     return dynamicBoxSelectionHandles(screenBox);
   }
@@ -1213,6 +1231,9 @@ function hasMutableOpacity(
 }
 
 export interface DrawingStylePatch {
+  hidden?: boolean;
+  visibleIntervals?: readonly string[] | null;
+  locked?: boolean;
   color?: string;
   lineWidth?: number;
   opacity?: number;
@@ -1238,6 +1259,7 @@ export interface UseDrawingOptions {
   positionSize: number;
   drawingSnapEnabled?: boolean;
   drawingContinuousEnabled?: boolean;
+  drawingAutoSelectEnabled?: boolean;
   symbol: string;
   seriesReady: number;
   drawingChartType: string;
@@ -1376,7 +1398,11 @@ interface DrawingExportPresentationState {
   readonly replacementScene: DrawingExportSceneReceipt | null;
 }
 
-export interface DrawingInteractionRuntime {
+export interface DrawingInteractionRuntime extends DrawingObjectApi {
+  saveDrawingProperties(id: string, patch: DrawingStylePatch, coordinates?: readonly DrawingCoordinate[], expectedCoordinates?: readonly DrawingCoordinate[]): boolean;
+  canUndo: boolean;
+  canRedo: boolean;
+  replayHistory(direction: "undo" | "redo"): boolean;
   clearAll(): void;
   deselectAll(): void;
   completeSurfaceDispose(): void;
@@ -1536,6 +1562,7 @@ export function useDrawing({
   positionSize,
   drawingSnapEnabled = true,
   drawingContinuousEnabled = false,
+  drawingAutoSelectEnabled = false,
   symbol,
   seriesReady,
   drawingChartType,
@@ -1688,6 +1715,21 @@ export function useDrawing({
   const positionSizeRef = useRef(positionSize);
   const drawingSnapEnabledRef = useRef(drawingSnapEnabled);
   const drawingContinuousEnabledRef = useRef(drawingContinuousEnabled);
+  const drawingAutoSelectEnabledRef = useRef(drawingAutoSelectEnabled);
+  const previousAutoSelectEnabledRef = useRef(drawingAutoSelectEnabled);
+  const autoSelectedToolRef = useRef<DrawingToolId | null>(null);
+  const automaticToolTransitionRef = useRef<DrawingToolId | null>(null);
+  const enterObjectTool = useCallback((saved: SavedDrawing) => {
+    const target = drawingToolForSavedObject(saved);
+    autoSelectedToolRef.current = target;
+    rememberAutomaticObjectTool(chartContainerRef?.current, target);
+    if (activeToolRef.current !== target && onToolChangeRef.current) {
+      automaticToolTransitionRef.current = target;
+      activeToolRef.current = target;
+      onToolChangeRef.current(target);
+    }
+    return target;
+  }, [chartContainerRef]);
 
   const symbolRef = useRef(symbol);
 
@@ -1707,7 +1749,8 @@ export function useDrawing({
     positionSizeRef.current = positionSize;
     drawingSnapEnabledRef.current = drawingSnapEnabled;
     drawingContinuousEnabledRef.current = drawingContinuousEnabled;
-  }, [onToolChange, activeTool, penColor, penSize, textFontSize, textBold, textItalic, fibLevels, fibInverted, positionSize, drawingSnapEnabled, drawingContinuousEnabled]);
+    drawingAutoSelectEnabledRef.current = drawingAutoSelectEnabled;
+  }, [onToolChange, activeTool, penColor, penSize, textFontSize, textBold, textItalic, fibLevels, fibInverted, positionSize, drawingSnapEnabled, drawingContinuousEnabled, drawingAutoSelectEnabled]);
 
   const exitDrawingToolAfterCreation = useCallback((completedTool: DrawingToolId) => {
     if (!shouldReturnToCursorAfterDrawingCompletion(
@@ -1935,6 +1978,9 @@ export function useDrawing({
 
   const {
     clearDrawings,
+    canUndo,
+    canRedo,
+    replayHistory: replayDocumentHistory,
     completeSurfaceDispose: completePersistenceSurfaceDispose,
     invalidateSurfaceCredentialsForSeriesReplacement,
     invalidateVisibleScene,
@@ -1950,6 +1996,8 @@ export function useDrawing({
     getSceneScreenBox: getPaneSceneScreenBox,
     getSceneScreenHandles: getPaneSceneScreenHandles,
     getSavedDrawing,
+    getObjectDocument,
+    subscribeObjectDocument,
     getLegacyPrimitiveRuntimeEvidence,
     getActiveDocumentTarget,
     flushActiveDocument,
@@ -1967,6 +2015,7 @@ export function useDrawing({
     hiddenRef,
     activeOverlayEntityIdRef,
     dynamicOverlayEnabled: interactionSurfaceMode === "overlay",
+    drawingInterval,
     sceneDocumentOnly: interactionSurfaceMode === "overlay",
     isDrawingFreehandRef,
     prevSymbolRef,
@@ -2046,6 +2095,8 @@ export function useDrawing({
     if (interactionSurfaceMode !== "overlay" || hiddenRef.current) return null;
     const selectedId = selectedIdRef.current;
     if (!selectedId) return null;
+    const selected = getSavedDrawing(selectedId);
+    if (selected && !drawingVisibleAtInterval(selected, drawingInterval)) return null;
     return hitTestSelectedOverlayDrawingHandle({
       selectedId,
       x,
@@ -2056,7 +2107,7 @@ export function useDrawing({
       getSceneScreenHandles,
       getPositionBarSpacing: () => getDynamicFramePresentation().barSpacing,
     });
-  }, [dataToScreen, getDynamicFramePresentation, getSavedDrawing, getSceneScreenBox, getSceneScreenHandles, interactionSurfaceMode, selectedIdRef]);
+  }, [dataToScreen, getDynamicFramePresentation, getSavedDrawing, getSceneScreenBox, getSceneScreenHandles, interactionSurfaceMode, selectedIdRef, drawingInterval]);
 
   // ── Hit-test all primitives ──
 
@@ -2393,6 +2444,10 @@ export function useDrawing({
     return { x: left, y: top, width: right - left, height: bottom - top };
   }, [dataToScreen, getPrimitiveById, getSceneScreenBox]);
 
+  const projectStroke = useCallback((saved: SavedStroke) => (
+    projectStrokeForDrag(saved, dataToScreen, getChartAdapter())
+  ), [dataToScreen, getChartAdapter]);
+
   const renderDynamicFeedback = useCallback((
     hover: DynamicHoverDecoration | null = dynamicHoverDecorationRef.current,
   ) => {
@@ -2419,6 +2474,7 @@ export function useDrawing({
             dataToScreen,
             presentation.themePalette,
             presentation.currentPrice,
+            projectStroke,
           )
         : dynamicDecorationsForDrawingDraft(
             transient as DrawingPrimitive,
@@ -2444,7 +2500,7 @@ export function useDrawing({
             selectedPrimitive as unknown as PersistableDrawingPrimitive,
           )
         : null);
-      const handles = selectionSaved
+      const handles = selectionSaved && drawingVisibleAtInterval(selectionSaved, drawingInterval)
         ? dynamicSelectionHandlesForSavedDrawing(
             selectionSaved,
             dataToScreen,
@@ -2465,7 +2521,7 @@ export function useDrawing({
     }));
     if (decorations.length === 0) dynamicOverlayControllerRef.current?.clear();
     else dynamicOverlayControllerRef.current?.render({ decorations });
-  }, [dataToScreen, getDynamicFramePresentation, getDynamicScreenBox, getPrimitiveById, getSavedDrawing, getSceneScreenHandles, interactionSurfaceMode, selectedIdRef]);
+  }, [projectStroke, dataToScreen, getDynamicFramePresentation, getDynamicScreenBox, getPrimitiveById, getSavedDrawing, getSceneScreenHandles, interactionSurfaceMode, selectedIdRef, drawingInterval]);
   renderDynamicFeedbackRef.current = renderDynamicFeedback;
 
   const startDynamicOverlayOwnershipSession = useCallback(({
@@ -2697,6 +2753,10 @@ export function useDrawing({
 
       const container = chartContainerRef?.current;
       if (!container || !manageChartCursor) return;
+      if (hit && isDrawingEntityHit(hit) && hit.saved.locked) {
+        setCursor(container, "default");
+        return;
+      }
       const cursorHit = hit
         && isDrawingEntityHit(hit)
         && hit.saved.type === "axis-line"
@@ -2796,6 +2856,7 @@ export function useDrawing({
           dataToScreen,
           presentation.themePalette,
           presentation.currentPrice,
+          projectStroke,
         ),
       });
       return;
@@ -2809,7 +2870,7 @@ export function useDrawing({
       presentation.currentPrice,
     );
     dynamicOverlayControllerRef.current?.render({ decorations });
-  }, [dataToScreen, getDynamicFramePresentation, interactionSurfaceMode]);
+  }, [projectStroke, dataToScreen, getDynamicFramePresentation, interactionSurfaceMode]);
 
   const releaseOverlayDrag = useCallback((restoreStatic: boolean, clearDynamic = true) => {
     const original = overlayDragOriginalRef.current;
@@ -2923,6 +2984,7 @@ export function useDrawing({
       if (draggingRef.current && entityDraft) {
         const next = applyDrawingEntityDrag({
           descriptor: draggingRef.current,
+          captureStroke: captureOverlayFreehandBatch,
           drawing: entityDraft,
           pos,
           screenToData,
@@ -3379,16 +3441,34 @@ export function useDrawing({
   //  MOUSE DOWN
   // ════════════════════════════════════════════════════
 
+  const exitAutomaticObjectEditing = useCallback(() => {
+    if (!isAutomaticObjectEditing(activeToolRef.current, automaticObjectTool(chartContainerRef?.current) ?? autoSelectedToolRef.current)) return false;
+    autoSelectedToolRef.current = null;
+    clearAutomaticObjectTool(chartContainerRef?.current);
+    automaticToolTransitionRef.current = null;
+    activeToolRef.current = null;
+    clearHoverFeedback();
+    deselectAll();
+    onToolChangeRef.current?.(null);
+    return true;
+  }, [chartContainerRef, clearHoverFeedback, deselectAll]);
+
   const handleMouseDown = useCallback(
     (e: DrawingDomPointerEvent) => {
+      if (e.target instanceof Element && e.target.closest(".drawing-object-list, .selected-drawing-style-bar, .text-format-bar, .text-edit-overlay")) return;
       flushActiveDrawingMove();
-      const tool = activeToolRef.current;
+      let tool = activeToolRef.current;
       // Establish one geometry snapshot for the interaction. Every pane host
       // shares this chart container, so the following document-level samples
       // can reuse the stable rect instead of entering layout again.
       const pos = getChartPos(e, capturePointerRect());
       if (!pos) return;
       if (!isInsideDrawingPanePlot(pos)) return;
+      if (isPassiveCursorTool(tool) && !drawingAutoSelectEnabledRef.current && !editingTextIdRef.current) {
+        if (selectedIdRef.current) deselectAll();
+        clearHoverFeedback();
+        return; // Preserve native chart pan/zoom and never capture disabled selection.
+      }
       if (interactionSurfaceMode === "overlay") cancelDynamicPaintHandoff(true);
       if (liveInkControllerRef.current?.snapshot().retainingFinalFrame) {
         liveInkControllerRef.current.cancel();
@@ -3444,8 +3524,9 @@ export function useDrawing({
       if (editingTextIdRef.current) {
         const hit = hitTestInteractive(pos.x, pos.y);
         const clickedTextId = hit?.type === "text" ? drawingInteractionHitId(hit) : null;
-        commitTextEditing({ clearSelection: !clickedTextId, exitTool: true });
-        if (clickedTextId && (interactionSurfaceMode === "overlay"
+        const committed = commitTextEditing({ clearSelection: !clickedTextId, exitTool: true });
+        if (committed && !hit) exitAutomaticObjectEditing();
+        if (committed && clickedTextId && (interactionSurfaceMode === "overlay"
           ? getSavedDrawing(clickedTextId) !== null
           : primitivesRef.current.some((p) => p.id === clickedTextId))) {
           selectPrimitive(clickedTextId);
@@ -3453,6 +3534,35 @@ export function useDrawing({
         e.preventDefault();
         e.stopPropagation();
         return;
+      }
+
+      // Resolve the object before the creation branches, then reuse its tool's
+      // drag path in this same pointerdown. The React tool transition must not
+      // cancel the gesture started here.
+      let automaticHit: DrawingInteractionHit | null = null;
+      if (((drawingAutoSelectEnabledRef.current && isPassiveCursorTool(tool)) || isAutomaticObjectEditing(tool, automaticObjectTool(chartContainerRef?.current) ?? autoSelectedToolRef.current))
+        && !anchorDataRef.current && !isDrawingFreehandRef.current) {
+        automaticHit = hitTestSelectedOverlayHandle(pos.x, pos.y) || hitTestInteractive(pos.x, pos.y);
+        const saved = automaticHit && savedDrawingFromInteractionHit(automaticHit);
+        if (saved) tool = enterObjectTool(saved);
+        else if (!automaticHit && exitAutomaticObjectEditing()) {
+          // Finish editing before any creation branch can interpret this blank
+          // pointerdown as a new anchor, text box, position or freehand stroke.
+          return;
+        }
+      }
+
+      // Locked objects remain selectable; no drag descriptor or resize draft is created.
+      // Leave native chart panning available when the pointer starts on a locked object.
+      if (interactionSurfaceMode === "overlay" && tool !== "eraser" && tool !== "pen"
+        && tool !== "highlighter" && !anchorDataRef.current
+        && !(e.target instanceof Element && e.target.closest(".selected-drawing-style-bar, .text-edit-overlay"))) {
+        const hit = hitTestSelectedOverlayHandle(pos.x, pos.y) || hitTestInteractive(pos.x, pos.y);
+        if (hit && getSavedDrawing(drawingInteractionHitId(hit))?.locked) {
+          selectPrimitive(drawingInteractionHitId(hit));
+          clearHoverFeedback();
+          return;
+        }
       }
 
       // Passive cursor mode: PPT-style click-away deselect for text boxes,
@@ -3527,6 +3637,25 @@ export function useDrawing({
         return;
       }
 
+      if (automaticHit && (automaticHit.type === "freehand" || automaticHit.type === "highlighter")) {
+        selectPrimitive(drawingInteractionHitId(automaticHit));
+        const saved = savedDrawingFromInteractionHit(automaticHit);
+        if (interactionSurfaceMode === "overlay" && saved?.id
+          && (saved.type === "freehand" || saved.type === "highlighter") && !saved.locked) {
+          const points = projectStroke(saved);
+          const batch = points && captureOverlayFreehandBatch(points);
+          if (points && batch) {
+            draggingRef.current = { type: saved.type, id: saved.id, startMouse: pos,
+              original: saved, origScreenPoints: points, captureIdentity: batch.captureIdentity };
+            beginOverlayEntityDrag(saved);
+          }
+        }
+        clearHoverFeedback();
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
       // ── PEN / HIGHLIGHTER (freehand): start stroke ──
       if (tool === "pen" || tool === "highlighter") {
         const adapter = getChartAdapter();
@@ -3590,7 +3719,7 @@ export function useDrawing({
       // ── TEXT TOOL ──
       if (tool === "text") {
         // Check if clicking on existing text → select it (or grab a handle)
-        const hit = hitTestInteractive(pos.x, pos.y);
+        const hit = automaticHit || hitTestInteractive(pos.x, pos.y);
         if (hit && hit.type === "text") {
           const id = drawingInteractionHitId(hit);
           selectPrimitive(id);
@@ -3638,7 +3767,7 @@ export function useDrawing({
       // ── POSITION TOOLS ──
       if (isPositionToolId(tool)) {
         // Clicking on existing position → select
-        const hit = hitTestInteractive(pos.x, pos.y);
+        const hit = automaticHit || hitTestInteractive(pos.x, pos.y);
         if (hit && hit.type === "position") {
           const saved = savedDrawingFromInteractionHit(hit);
           const id = saved?.id;
@@ -3830,7 +3959,6 @@ export function useDrawing({
 
       // ── LINE/FIB/SHAPE TOOLS ──
       if (isTwoPointCreationTool(tool) || isAxisLineToolId(tool)) {
-        const isAxisLineTool = isAxisLineToolId(tool);
 
         // Second click — commit new line/fib/shape
         if (isTwoPointCreationTool(tool)) {
@@ -3916,7 +4044,7 @@ export function useDrawing({
         }
 
         // Hit existing element?
-        const hit = hitTestInteractive(pos.x, pos.y);
+        const hit = automaticHit || hitTestInteractive(pos.x, pos.y);
         if (hit && (hit.type === "line" || hit.type === "axis-line" || hit.type === "angle" || hit.type === "fibonacci" || hit.type === "shape")) {
           const saved = savedDrawingFromInteractionHit(hit);
           const id = saved?.id;
@@ -4009,7 +4137,7 @@ export function useDrawing({
         );
 
         // One-point axis lines: click creates immediately; drag before mouseup adjusts it.
-        if (isAxisLineTool) {
+        if (isAxisLineToolId(tool)) {
           if (interactionSurfaceMode === "overlay") {
             e.preventDefault();
             e.stopPropagation();
@@ -4112,7 +4240,7 @@ export function useDrawing({
         }
       }
     },
-    [flushActiveDrawingMove, capturePointerRect, getChartPos, isInsideDrawingPanePlot, captureOverlayFreehandBatch, interactionSurfaceMode, screenToFreehandData, screenToDrawingData, dataToScreen, detachPrim, attachPrim, hitTestAll, hitTestInteractive, hitTestSelectedOverlayHandle, selectPrimitive, deselectAll, getPrimitiveById, getSavedDrawing, getSceneScreenBox, beginOverlayEntityDrag, beginSavedTextDrag, beginTextDrag, startEntityTextEditing, startTextEditing, commitTextEditing, cancelTextEditing, persistDrawings, persistSceneCommands, prepareUserMutationScope, removePreview, cancelActiveFreehandStroke, cancelDynamicPaintHandoff, ensureOverlayDragRegistry, getChartAdapter, getDynamicFramePresentation, getDynamicThemePalette, chartContainerRef, drawingAnchorMode, editingTextIdRef, selectedIdRef, setSelectedPrimId, setSelectedTextUi, clearHoverFeedback, renderDynamicFeedback, renderOverlayDragDraft, retainDynamicOverlayUntilPaint, exitDrawingToolAfterCreation],
+    [projectStroke, exitAutomaticObjectEditing, enterObjectTool, flushActiveDrawingMove, capturePointerRect, getChartPos, isInsideDrawingPanePlot, captureOverlayFreehandBatch, interactionSurfaceMode, screenToFreehandData, screenToDrawingData, dataToScreen, detachPrim, attachPrim, hitTestAll, hitTestInteractive, hitTestSelectedOverlayHandle, selectPrimitive, deselectAll, getPrimitiveById, getSavedDrawing, getSceneScreenBox, beginOverlayEntityDrag, beginSavedTextDrag, beginTextDrag, startEntityTextEditing, startTextEditing, commitTextEditing, cancelTextEditing, persistDrawings, persistSceneCommands, prepareUserMutationScope, removePreview, cancelActiveFreehandStroke, cancelDynamicPaintHandoff, ensureOverlayDragRegistry, getChartAdapter, getDynamicFramePresentation, getDynamicThemePalette, chartContainerRef, drawingAnchorMode, editingTextIdRef, selectedIdRef, setSelectedPrimId, setSelectedTextUi, clearHoverFeedback, renderDynamicFeedback, renderOverlayDragDraft, retainDynamicOverlayUntilPaint, exitDrawingToolAfterCreation],
   );
 
   // ════════════════════════════════════════════════════
@@ -4121,6 +4249,8 @@ export function useDrawing({
 
   const handleDblClick = useCallback(
     (e: MouseEvent) => {
+      if (e.target instanceof Element && e.target.closest(".drawing-object-list, .selected-drawing-style-bar, .text-format-bar, .text-edit-overlay")) return;
+      if (isPassiveCursorTool(activeToolRef.current) && !drawingAutoSelectEnabledRef.current) return;
       const pos = getChartPos(e);
       if (!pos) return;
 
@@ -4138,7 +4268,7 @@ export function useDrawing({
         }
         e.preventDefault();
         e.stopPropagation();
-      } else if (hit && isPassiveCursorTool(activeToolRef.current)) {
+      } else if (hit && (isPassiveCursorTool(activeToolRef.current) || (drawingAutoSelectEnabledRef.current && autoSelectedToolRef.current === activeToolRef.current))) {
         const id = drawingInteractionHitId(hit);
         selectPrimitive(id);
         drawingSettingsRevisionRef.current += 1;
@@ -4413,6 +4543,9 @@ export function useDrawing({
             const receipt = persistSceneCommands(commands);
             persisted = receipt?.committed === true;
             const changed = receipt?.changed === true;
+            if (persisted && changed && selectedIdRef.current === completedEntityDragDraft.id) {
+              setSelectedDrawingMeta(selectedDrawingMetaFromSavedDrawing(completedEntityDragDraft));
+            }
             // Even an unchanged click removes the active-entity exclusion from
             // the static scene. Keep the exact detached pixels until that
             // visibility-only repaint is acknowledged; otherwise a click with
@@ -4504,7 +4637,7 @@ export function useDrawing({
     const durationMs = Math.max(0, drawingPerfNow() - mouseupStartedAt);
     drawingPerfCounters.recordMouseupSyncDuration(durationMs);
     drawingPerfCounters.gestureEnded();
-  }, [cancelActiveFreehandStroke, flushActiveDrawingMove, interactionSurfaceMode, invalidateVisibleScene, persistDetachedDrawings, persistDrawings, persistSceneCommands, prepareUserMutationScope, dataToScreen, refreshSelectedTextUi, releaseOverlayDrag, retainDynamicOverlayUntilPaint, selectPrimitive, subscribeVisibleScenePaint, exitDrawingToolAfterCreation]);
+  }, [cancelActiveFreehandStroke, flushActiveDrawingMove, interactionSurfaceMode, invalidateVisibleScene, persistDetachedDrawings, persistDrawings, persistSceneCommands, prepareUserMutationScope, dataToScreen, refreshSelectedTextUi, releaseOverlayDrag, retainDynamicOverlayUntilPaint, selectPrimitive, selectedIdRef, setSelectedDrawingMeta, subscribeVisibleScenePaint, exitDrawingToolAfterCreation]);
 
   const terminalizeExportInteraction = useCallback((): boolean => {
     if (editingTextIdRef.current) {
@@ -4638,6 +4771,15 @@ export function useDrawing({
     [removePreview],
   );
 
+  const replayHistory = useCallback((direction: "undo" | "redo") => {
+    if (editingTextIdRef.current || interactionSurfaceMode !== "overlay") return false;
+    handlePointerCancel();
+    if (!prepareTerminalTextMutation()) return false;
+    const committed = replayDocumentHistory(direction);
+    if (committed) deselectAll();
+    return committed;
+  }, [editingTextIdRef, interactionSurfaceMode, handlePointerCancel, prepareTerminalTextMutation, replayDocumentHistory, deselectAll]);
+
   // ── KEYBOARD: Escape / Delete (extracted) ──
 
   useDrawingKeyboard({
@@ -4663,12 +4805,37 @@ export function useDrawing({
       handlePointerCancel();
       return true;
     },
+    exitObjectEditing: () => {
+      if (!isAutomaticObjectEditing(activeToolRef.current, automaticObjectTool(chartContainerRef?.current) ?? autoSelectedToolRef.current)) return false;
+      handlePointerCancel();
+      return exitAutomaticObjectEditing();
+    },
     deleteSelected: () => deleteSelectedRef.current(),
   });
+
+  useEffect(() => {
+    if (previousAutoSelectEnabledRef.current === drawingAutoSelectEnabled) return;
+    previousAutoSelectEnabledRef.current = drawingAutoSelectEnabled;
+    if (drawingAutoSelectEnabled) return;
+    handlePointerCancel();
+    clearHoverFeedback();
+    deselectAll();
+    exitAutomaticObjectEditing();
+  }, [drawingAutoSelectEnabled, handlePointerCancel, clearHoverFeedback, deselectAll, exitAutomaticObjectEditing]);
 
   // ── Clean up when tool changes ──
 
   useEffect(() => {
+    // null means another native pane owns the tool; it is not a manual exit.
+    if (activeTool !== null && activeTool !== automaticObjectTool(chartContainerRef?.current)) {
+      clearAutomaticObjectTool(chartContainerRef?.current);
+    }
+    if (automaticToolTransitionRef.current !== null && automaticToolTransitionRef.current === activeTool && activeToolRef.current === activeTool) {
+      automaticToolTransitionRef.current = null;
+      return; // An automatic switch continues the current selected-object gesture.
+    }
+    automaticToolTransitionRef.current = null;
+    autoSelectedToolRef.current = null;
     cancelActiveDrawingMove();
     if (interactionSurfaceMode === "overlay"
       && (overlayDragPrimitiveRef.current || overlayDragEntityDraftRef.current)) {
@@ -4717,7 +4884,7 @@ export function useDrawing({
     if (!isEraserTool) {
       clearHoverFeedback();
     }
-  }, [interactionSurfaceMode, isLineTool, isFibTool, isShapeTool, isPenTool, isHighlighterTool, isEraserTool, isTextTool, isPositionTool, removePreview, deselectAll, cancelTextEditing, selectedIdRef, clearHoverFeedback, cancelActiveDrawingMove, cancelActiveFreehandStroke, getSavedDrawing, releaseOverlayDrag]);
+  }, [chartContainerRef, activeTool, interactionSurfaceMode, isLineTool, isFibTool, isShapeTool, isPenTool, isHighlighterTool, isEraserTool, isTextTool, isPositionTool, removePreview, deselectAll, cancelTextEditing, selectedIdRef, clearHoverFeedback, cancelActiveDrawingMove, cancelActiveFreehandStroke, getSavedDrawing, releaseOverlayDrag]);
 
   useDrawingPointerEvents({
     chartContainerRef,
@@ -5108,6 +5275,7 @@ export function useDrawing({
       if (!receipt?.committed) return;
       refreshSelectedTextUi(id);
       setSelectedDrawingMeta(selectedDrawingMetaFromSavedDrawing(candidate));
+      if (!drawingVisibleAtInterval(candidate, drawingInterval)) deselectAll();
       return;
     }
     const prim = getPrimitiveById(id);
@@ -5150,7 +5318,7 @@ export function useDrawing({
       }
       refreshSelectedTextUi(id);
     }
-  }, [getPrimitiveById, getSavedDrawing, interactionSurfaceMode, persistSceneCommands, prepareTerminalTextMutation, refreshSelectedTextUi, persistDrawings, selectedIdRef, setSelectedDrawingMeta]);
+  }, [getPrimitiveById, getSavedDrawing, interactionSurfaceMode, persistSceneCommands, prepareTerminalTextMutation, refreshSelectedTextUi, persistDrawings, selectedIdRef, setSelectedDrawingMeta, drawingInterval, deselectAll]);
 
   /** Delete the currently selected primitive (any type). */
   const deleteSelected = useCallback(() => {
@@ -5209,71 +5377,60 @@ export function useDrawing({
    * line / freehand / fibonacci drawing. Persists the change and refreshes
    * the toolbar's meta snapshot.
    */
+  const updateObjectProperties = useCallback((id: string, patch: DrawingStylePatch,
+    coordinates?: readonly DrawingCoordinate[], expectedCoordinates?: readonly DrawingCoordinate[]) => {
+    if (interactionSurfaceMode !== "overlay") return false;
+    const saved = getSavedDrawing(id);
+    if (!saved) return false;
+    const candidate = drawingPropertiesCandidate(saved, patch, coordinates, expectedCoordinates);
+    if (!candidate) return false;
+    const commands = drawingCommandsForSavedDrawing(candidate, coordinates
+      ? { type: "update", geometryCommand: "resize" } : { type: "update-style" });
+    if (!commands || !prepareTerminalTextMutation()) return false;
+    const receipt = persistSceneCommands(commands);
+    if (!receipt?.committed) return false;
+    if (selectedIdRef.current === id) {
+      setSelectedDrawingMeta(selectedDrawingMetaFromSavedDrawing(candidate));
+      if (candidate.type === "text") refreshSelectedTextUi(id);
+      if (!drawingVisibleAtInterval(candidate, drawingInterval)) deselectAll();
+    }
+    return true;
+  }, [getSavedDrawing, interactionSurfaceMode, persistSceneCommands, prepareTerminalTextMutation, selectedIdRef, setSelectedDrawingMeta, refreshSelectedTextUi, drawingInterval, deselectAll]);
+
+  const saveDrawingProperties = useCallback((id: string, patch: DrawingStylePatch,
+    coordinates?: readonly DrawingCoordinate[], expectedCoordinates?: readonly DrawingCoordinate[]) =>
+    selectedIdRef.current === id && updateObjectProperties(id, patch, coordinates, expectedCoordinates),
+  [selectedIdRef, updateObjectProperties]);
+  const updateObject = useCallback((id: string, patch: DrawingStylePatch) => updateObjectProperties(id, patch), [updateObjectProperties]);
+  const selectObject = useCallback((id: string) => {
+    const saved = getSavedDrawing(id);
+    if (interactionSurfaceMode !== "overlay" || !saved || !drawingVisibleAtInterval(saved, drawingInterval)
+      || !prepareTerminalTextMutation()) return false;
+    enterObjectTool(saved);
+    selectPrimitive(id);
+    return true;
+  }, [enterObjectTool, getSavedDrawing, drawingInterval, interactionSurfaceMode, prepareTerminalTextMutation, selectPrimitive]);
+  const reorderObject = useCallback((id: string, placement: "front" | "back") => {
+    if (interactionSurfaceMode !== "overlay" || !prepareTerminalTextMutation()) return false;
+    const document = getObjectDocument();
+    const order = drawingObjectOrder(document, id, placement);
+    if (!order) return false;
+    if (order === document.zOrder) return true;
+    return !!persistSceneCommands([{ type: "reorder", order }])?.committed;
+  }, [interactionSurfaceMode, prepareTerminalTextMutation, getObjectDocument, persistSceneCommands]);
+
+  const deleteObject = useCallback((id: string) => {
+    if (interactionSurfaceMode !== "overlay" || !getSavedDrawing(id) || !prepareTerminalTextMutation()) return false;
+    if (!persistSceneCommands([{ type: "delete", id }])?.committed) return false;
+    if (selectedIdRef.current === id) deselectAll();
+    return true;
+  }, [getSavedDrawing, interactionSurfaceMode, prepareTerminalTextMutation, persistSceneCommands, selectedIdRef, deselectAll]);
+
   const updateSelectedDrawingStyle = useCallback((patch: DrawingStylePatch) => {
     const id = selectedIdRef.current;
     if (!id || !patch) return;
     if (interactionSurfaceMode === "overlay") {
-      const saved = getSavedDrawing(id);
-      if (!saved) return;
-      const candidate = { ...saved } as SavedDrawing & {
-        color?: string;
-        lineWidth?: number;
-        opacity?: number;
-        fillColor?: string;
-        fillOpacity?: number;
-        lineStyle?: ShapeLineStyle;
-        levels?: FibonacciLevel[];
-        positionSize?: number;
-      };
-      let changed = false;
-      if (typeof patch.color === "string"
-        && "color" in saved
-        && patch.color !== saved.color) {
-        candidate.color = patch.color;
-        changed = true;
-      }
-      if (typeof patch.lineWidth === "number"
-        && "lineWidth" in saved
-        && patch.lineWidth !== saved.lineWidth) {
-        candidate.lineWidth = patch.lineWidth;
-        changed = true;
-      }
-      if (typeof patch.opacity === "number"
-        && saved.type === "highlighter"
-        && patch.opacity !== saved.opacity) {
-        candidate.opacity = patch.opacity;
-        changed = true;
-      }
-      if (saved.type === "shape") {
-        if (typeof patch.fillColor === "string" && patch.fillColor !== saved.fillColor) {
-          candidate.fillColor = patch.fillColor;
-          changed = true;
-        }
-        if (typeof patch.fillOpacity === "number" && patch.fillOpacity !== saved.fillOpacity) {
-          candidate.fillOpacity = patch.fillOpacity;
-          changed = true;
-        }
-        if (patch.lineStyle && patch.lineStyle !== saved.lineStyle) {
-          candidate.lineStyle = patch.lineStyle;
-          changed = true;
-        }
-      }
-      if (saved.type === "fibonacci" && patch.levels) {
-        candidate.levels = patch.levels;
-        changed = true;
-      }
-      if (saved.type === "position" && typeof patch.positionSize === "number"
-        && patch.positionSize !== saved.positionSize) {
-        candidate.positionSize = patch.positionSize;
-        changed = true;
-      }
-      if (!changed) return;
-      const commands = drawingCommandsForSavedDrawing(candidate, { type: "update-style" });
-      if (!commands || !prepareTerminalTextMutation()) return;
-      const receipt = persistSceneCommands(commands);
-      if (!receipt?.committed) return;
-      setSelectedDrawingMeta(selectedDrawingMetaFromSavedDrawing(candidate));
-      if (candidate.type === "text") refreshSelectedTextUi(id);
+      saveDrawingProperties(id, patch);
       return;
     }
     const prim = primitivesRef.current.find((p) => p.id === id);
@@ -5364,13 +5521,16 @@ export function useDrawing({
       const current = primitivesRef.current.find((candidate) => candidate.id === id) ?? null;
       setSelectedDrawingMeta(current ? selectedDrawingMetaFromPrimitive(current) : null);
     }
-  }, [getSavedDrawing, interactionSurfaceMode, persistSceneCommands, prepareTerminalTextMutation, persistDrawings, refreshSelectedTextUi, selectedIdRef, setSelectedDrawingMeta]);
+  }, [interactionSurfaceMode, prepareTerminalTextMutation, persistDrawings, saveDrawingProperties, selectedIdRef, setSelectedDrawingMeta]);
 
   const selectedTextSnapshot = selectedTextUi.snapshot;
   const selectedTextBox = selectedTextUi.box;
 
   return {
     clearAll,
+    canUndo,
+    canRedo,
+    replayHistory,
     deselectAll,
     completeSurfaceDispose,
     invalidateSurfaceCredentialsForSeriesReplacement,
@@ -5396,6 +5556,13 @@ export function useDrawing({
     subscribeVisibleScenePublication,
     updateSelectedText,
     updateSelectedDrawingStyle,
+    saveDrawingProperties,
+    getObjectDocument,
+    subscribeObjectDocument,
+    selectObject,
+    updateObject,
+    deleteObject,
+    reorderObject,
     deleteSelected,
   };
 }

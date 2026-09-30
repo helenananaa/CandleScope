@@ -217,6 +217,7 @@ function StrategyResearchChartPanes({
           positionSize={drawings.view.positionSize}
           drawingSnapEnabled={drawings.view.drawingSnapEnabled}
           drawingContinuousEnabled={drawings.view.drawingContinuousEnabled}
+          drawingAutoSelectEnabled={drawings.view.drawingAutoSelectEnabled}
           onSelectedDrawingChange={drawings.actions.handleSelectedDrawingChange}
           mainOverlayLines={indicators.view.mainOverlayLines}
           subPanes={indicators.view.subPanes}
@@ -385,7 +386,9 @@ export function StrategyResearchImportedWorkspace({
       drawingSnapEnabled={drawings.view.drawingSnapEnabled}
       onDrawingSnapEnabledChange={drawings.actions.handleDrawingSnapEnabledChange}
       drawingContinuousEnabled={drawings.view.drawingContinuousEnabled}
+      drawingAutoSelectEnabled={drawings.view.drawingAutoSelectEnabled}
       onDrawingContinuousEnabledChange={drawings.actions.handleDrawingContinuousEnabledChange}
+      onDrawingAutoSelectEnabledChange={drawings.actions.handleDrawingAutoSelectEnabledChange}
       textFontSize={drawings.view.textFontSize}
       onTextFontSizeChange={drawings.actions.setTextFontSize}
       textBold={drawings.view.textBold}

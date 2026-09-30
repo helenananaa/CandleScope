@@ -197,6 +197,8 @@ export interface FreehandAppendResult {
 }
 
 export interface FreehandFinalizeOptions {
+  /** Retain canonical samples when translating an existing stroke. */
+  preservePoints?: boolean;
   captureIdentity?: unknown;
   epsilon?: number;
 }
@@ -267,6 +269,9 @@ export type SavedFreehandPayload =
   | { dataPoints: DrawingDataPoint[]; stroke?: never };
 
 interface SavedDrawingBase<TKind extends DrawingKind> {
+  visibleIntervals?: readonly string[] | null;
+  hidden?: boolean;
+  locked?: boolean;
   type: TKind;
   id?: string;
 }
@@ -442,6 +447,7 @@ export interface TextPrimitiveOptions extends PrimitiveBaseOptions {
 }
 
 export interface TextDrawingPatch {
+  visibleIntervals?: readonly string[] | null;
   text?: string;
   color?: string;
   fontSize?: number;

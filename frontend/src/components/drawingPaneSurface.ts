@@ -1,5 +1,16 @@
 import type { DrawingExportLease } from "../features/drawings/drawingInteractionController.js";
 
+/** Editor surfaces keep their owning pane even when rendered over another pane. */
+export function isDrawingEditorPointerBoundary(
+  container: Pick<Element, "querySelector">,
+  target: Pick<Element, "closest"> | null,
+): boolean {
+  return Boolean(
+    container.querySelector(".drawing-properties-panel[open]")
+    || target?.closest(".drawing-object-list, .selected-drawing-style-bar, .text-format-bar, .text-edit-overlay"),
+  );
+}
+
 export function drawingPaneScopeKey(base: string, paneId: string): string {
   return `${base}__${paneId}`;
 }

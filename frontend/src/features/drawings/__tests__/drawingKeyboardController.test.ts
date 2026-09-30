@@ -33,3 +33,35 @@ test("Escape consumes only a genuinely active freehand stroke", () => {
   });
   assert.deepEqual(calls, ["freehand", "prevent"]);
 });
+
+test("Escape exits automatic object editing before generic hover/selection cleanup", () => {
+  const calls: string[] = [];
+  handleDrawingEscape({
+    hasActiveFreehandStroke: false,
+    cancelActiveFreehandStroke: () => true,
+    hasAnchor: false,
+    hasSelection: true,
+    hasActiveInteractionGesture: true,
+    cancelActiveInteractionGesture: () => { calls.push("gesture"); return true; },
+    removePreview: () => calls.push("preview"),
+    deselectAll: () => calls.push("deselect"),
+    exitObjectEditing: () => { calls.push("exit-auto"); return true; },
+    preventDefault: () => calls.push("prevent"),
+  });
+  assert.deepEqual(calls, ["exit-auto", "prevent"]);
+});
+
+test("manual drawing placement keeps its existing Escape cancellation", () => {
+  const calls: string[] = [];
+  handleDrawingEscape({
+    hasActiveFreehandStroke: false,
+    cancelActiveFreehandStroke: () => true,
+    hasAnchor: true,
+    hasSelection: false,
+    removePreview: () => calls.push("preview"),
+    deselectAll: () => calls.push("deselect"),
+    exitObjectEditing: () => false,
+    preventDefault: () => calls.push("prevent"),
+  });
+  assert.deepEqual(calls, ["preview"]);
+});

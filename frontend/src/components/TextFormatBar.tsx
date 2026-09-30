@@ -1,274 +1,75 @@
-/**
- * TextFormatBar — Floating PPT-style format toolbar that appears above a
- * selected text annotation on the chart.
- *
- * Receives a "snapshot" of the current selected text's style fields and a
- * callback to apply patches to the live primitive.
- */
-import { useState } from "react";
-import type { SyntheticEvent } from "react";
+import DrawingVisibilityInputs from "../features/drawings/DrawingVisibilityInputs.js";
+import { useRef, useState } from "react";
 import { t } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
 import type { TextDrawingPatch } from "../features/drawings/drawingTypes.js";
 import type { SelectedTextSnapshot } from "../features/drawings/drawingSelectionController.js";
-
-const PRESET_COLORS = [
-  "#f8fafc", "#e2e8f0", "#94a3b8", "#475569", "#0f172a",
-  "#fbbf24", "#f97316", "#ef4444", "#ec4899",
-  "#22c55e", "#10b981", "#06b6d4", "#3b82f6", "#8b5cf6",
-];
-
-const FONT_SIZE_PRESETS = [10, 12, 14, 16, 18, 20, 24, 28, 32, 40, 48, 64, 80];
-
-interface ColorSwatchProps {
-  value: string | null;
-  onChange(value: string | null): void;
-  allowNone?: boolean;
-  title: string;
-}
-
-function ColorSwatch({ value, onChange, allowNone = false, title }: ColorSwatchProps) {
-  useLocale();
-  const [open, setOpen] = useState(false);
-  const isNone = !value || value === "transparent";
-
-  return (
-    <div className="tfb-color-wrap" title={title}>
-      <button
-        type="button"
-        className="tfb-btn tfb-color-btn"
-        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span
-          className="tfb-color-chip"
-          style={{
-            background: isNone
-              ? "repeating-linear-gradient(45deg,#e11d48 0 2px,transparent 2px 5px)"
-              : value,
-          }}
-        />
-      </button>
-      {open && (
-        <div
-          className="tfb-popover"
-          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="tfb-color-grid">
-            {allowNone && (
-              <button
-                type="button"
-                className="tfb-color-cell tfb-color-cell-none"
-                onClick={() => { onChange(null); setOpen(false); }}
-                title={t("format.none")}
-              />
-            )}
-            {PRESET_COLORS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                className="tfb-color-cell"
-                style={{ background: c }}
-                onClick={() => { onChange(c); setOpen(false); }}
-              />
-            ))}
-          </div>
-          <input
-            type="color"
-            className="tfb-color-input"
-            value={isNone ? "#000000" : value}
-            onChange={(e) => onChange(e.target.value)}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
+import { ColorControl, StyleIcon } from "../features/drawings/DrawingStyleInputs.js";
+import { useDrawingSurfacePlacement, useDrawingToolbarPosition } from "../features/drawings/useDrawingEditorLayout.js";
 
 export interface TextFormatBarProps {
-  position: { x: number; y: number } | null;
   snapshot: SelectedTextSnapshot | null;
   onPatch(patch: TextDrawingPatch): void;
   onDelete?: () => void;
-  containerWidth?: number;
+  onToggleLock?: () => void;
+  currentInterval?: string;
 }
 
-export default function TextFormatBar({
-  position,            // { x, y } in CSS px relative to chart container
-  snapshot,            // { color, fontSize, bold, italic, underline, align, bgColor, borderColor }
-  onPatch,             // (partial) => void
-  onDelete,            // () => void
-  containerWidth = 0,  // chart container CSS width — used to clamp position
-}: TextFormatBarProps) {
+function FontSize({ value, commit }: { value: number; commit(value: number): void }) {
+  const [draft, setDraft] = useState(String(value));
+  const cancelled = useRef(false);
+  return <input className="drawing-font-size" aria-label={t("drawing.settings.fontSize")} type="number" min={8} max={200} value={draft}
+    onChange={(event) => setDraft(event.target.value)}
+    onBlur={() => {
+      if (!cancelled.current && draft.trim() && Number.isFinite(Number(draft)) && Number(draft) >= 8 && Number(draft) <= 200) {
+        if (Number(draft) !== value) commit(Number(draft));
+      } else setDraft(String(value));
+      cancelled.current = false;
+    }}
+    onKeyDown={(event) => {
+      event.stopPropagation();
+      if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); }
+      if (event.key === "Escape") { event.preventDefault(); cancelled.current = true; event.currentTarget.blur(); }
+    }} />;
+}
+
+export default function TextFormatBar({ snapshot, onPatch, onDelete, onToggleLock, currentInterval }: TextFormatBarProps) {
   useLocale();
-  // Local string state for the font-size input so the user can freely clear
-  // and retype without the controlled value snapping back mid-edit.
-  const snapshotFontSize = snapshot?.fontSize ?? 14;
-  const [previousSnapshotFontSize, setPreviousSnapshotFontSize] = useState(snapshotFontSize);
-  const [fontSizeText, setFontSizeText] = useState(String(snapshotFontSize));
-  if (snapshotFontSize !== previousSnapshotFontSize) {
-    setPreviousSnapshotFontSize(snapshotFontSize);
-    setFontSizeText(String(snapshotFontSize));
-  }
-
-  if (!position || !snapshot) return null;
-
-  // Clamp horizontally so the bar stays inside the chart.
-  const BAR_WIDTH = 360;
-  let left = position.x;
-  if (containerWidth > 0) {
-    if (left + BAR_WIDTH > containerWidth - 8) left = containerWidth - BAR_WIDTH - 8;
-    if (left < 8) left = 8;
-  }
-
-  // Eat all mouse-related events so they don't bubble to chart-container.
-  const stopAll = (event: SyntheticEvent) => { event.stopPropagation(); };
-
-  return (
-    <div
-      className="text-format-bar"
-      style={{
-        position: "absolute",
-        left,
-        top: position.y,
-        zIndex: 110,
-      }}
-      onMouseDown={(e) => { e.stopPropagation(); /* keep textarea focused if editing */ }}
-      onMouseUp={stopAll}
-      onClick={stopAll}
-      onDoubleClick={stopAll}
-      onWheel={stopAll}
-      onContextMenu={stopAll}
-    >
-      {/* Font size */}
-      <div className="tfb-group">
-        <button
-          type="button"
-          className="tfb-btn tfb-btn-icon"
-          title={t("format.smaller")}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => onPatch({ fontSize: Math.max(8, (snapshot.fontSize || 14) - 2) })}
-        >A−</button>
-        <input
-          type="number"
-          min={8}
-          max={200}
-          step={1}
-          className="tfb-fontsize-input"
-          value={fontSizeText}
-          onMouseDown={(e) => e.stopPropagation()}
-          onChange={(e) => {
-            const raw = e.target.value;
-            setFontSizeText(raw);
-            // Only push to the primitive when the value is a valid in-range number.
-            // This lets the user clear the field and retype freely.
-            if (raw === "") return;
-            const v = Number(raw);
-            if (Number.isFinite(v) && v >= 8 && v <= 200) {
-              onPatch({ fontSize: v });
-            }
-          }}
-          onBlur={() => {
-            // On blur, snap back to the current primitive value if the field
-            // was left empty or out of range.
-            const v = Number(fontSizeText);
-            if (!Number.isFinite(v) || v < 8 || v > 200) {
-              setFontSizeText(String(snapshot.fontSize));
-            }
-          }}
-        />
-        <button
-          type="button"
-          className="tfb-btn tfb-btn-icon"
-          title={t("format.larger")}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => onPatch({ fontSize: Math.min(200, (snapshot.fontSize || 14) + 2) })}
-        >A+</button>
-      </div>
-
-      <div className="tfb-divider" />
-
-      {/* Bold / Italic / Underline */}
-      <div className="tfb-group">
-        <button
-          type="button"
-          className={`tfb-btn tfb-btn-toggle ${snapshot.bold ? "active" : ""}`}
-          title={t("format.bold")}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => onPatch({ bold: !snapshot.bold })}
-        ><b>B</b></button>
-        <button
-          type="button"
-          className={`tfb-btn tfb-btn-toggle ${snapshot.italic ? "active" : ""}`}
-          title={t("format.italic")}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => onPatch({ italic: !snapshot.italic })}
-        ><i>I</i></button>
-        <button
-          type="button"
-          className={`tfb-btn tfb-btn-toggle ${snapshot.underline ? "active" : ""}`}
-          title={t("format.underline")}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => onPatch({ underline: !snapshot.underline })}
-        ><u>U</u></button>
-      </div>
-
-      <div className="tfb-divider" />
-
-      {/* Alignment */}
-      <div className="tfb-group">
-        {([
-          { id: "left", label: "⇤" },
-          { id: "center", label: "≡" },
-          { id: "right", label: "⇥" },
-        ] satisfies Array<{ id: SelectedTextSnapshot["align"]; label: string }>).map((a) => (
-          <button
-            key={a.id}
-            type="button"
-            className={`tfb-btn tfb-btn-toggle ${snapshot.align === a.id ? "active" : ""}`}
-            title={t("format.align", { id: a.id })}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => onPatch({ align: a.id })}
-          >{a.label}</button>
-        ))}
-      </div>
-
-      <div className="tfb-divider" />
-
-      {/* Text color / Background / Border */}
-      <div className="tfb-group">
-        <span className="tfb-label" title={t("format.textColor")}>A</span>
-        <ColorSwatch
-          value={snapshot.color}
-          onChange={(c) => c && onPatch({ color: c })}
-          title={t("format.textColor")}
-        />
-        <span className="tfb-label" title={t("format.bgColor")}>▣</span>
-        <ColorSwatch
-          value={snapshot.bgColor}
-          onChange={(c) => onPatch({ bgColor: c })}
-          allowNone
-          title={t("format.bgColor")}
-        />
-        <span className="tfb-label" title={t("format.border")}>□</span>
-        <ColorSwatch
-          value={snapshot.borderColor}
-          onChange={(c) => onPatch({ borderColor: c })}
-          allowNone
-          title={t("format.borderColor")}
-        />
-      </div>
-
-      <div className="tfb-divider" />
-
-      <button
-        type="button"
-        className="tfb-btn tfb-btn-danger"
-        title={t("format.delete")}
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={() => onDelete?.()}
-      >{t("format.delete")}</button>
+  const toolbar = useDrawingToolbarPosition();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const settings = useRef<HTMLButtonElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [draft, setDraft] = useState<TextDrawingPatch>({});
+  const [resetRevision, setResetRevision] = useState(0);
+  const placement = useDrawingSurfacePlacement(dialog, toolbar.root, expanded);
+  if (!snapshot) return null;
+  const value = { ...snapshot, ...draft };
+  const patch = (next: TextDrawingPatch) => expanded ? setDraft((previous) => ({ ...previous, ...next })) : onPatch(next);
+  const close = () => { setExpanded(false); setDraft({}); requestAnimationFrame(() => settings.current?.focus()); };
+  const toggles = (["bold", "italic", "underline"] as const).map((field, index) => <button key={field} type="button" aria-label={t(`format.${field}`)} title={t(`format.${field}`)} aria-pressed={value[field]} onClick={() => patch({ [field]: !value[field] })}><span style={{ fontWeight: field === "bold" ? 700 : undefined, fontStyle: field === "italic" ? "italic" : undefined, textDecoration: field === "underline" ? "underline" : undefined }}>{["B", "I", "U"][index]}</span></button>);
+  return <div ref={toolbar.root} className="selected-drawing-style-bar drawing-text-style-bar" style={toolbar.style}
+    onPointerDown={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onWheel={(event) => event.stopPropagation()} onContextMenu={(event) => event.stopPropagation()}>
+    <div className="selected-drawing-style-bar-main" inert={expanded}>
+      <button type="button" className="drawing-toolbar-grip" aria-label={t("drawing.editor.moveToolbar")} {...toolbar.handle}><StyleIcon name="drag" /></button>
+      <span className="drawing-object-name">{t("drawing.textNote")}</span>
+      <ColorControl color={value.color} label={t("format.textColor")} onCommit={(color) => patch({ color })} />
+      <FontSize key={value.fontSize} value={value.fontSize} commit={(fontSize) => patch({ fontSize })} />
+      <div className="drawing-line-options">{toggles}</div>
+      {onToggleLock && <button type="button" aria-label={t(snapshot.locked ? "drawing.editor.unlock" : "drawing.editor.lock")} title={t(snapshot.locked ? "drawing.editor.unlock" : "drawing.editor.lock")} aria-pressed={snapshot.locked === true} onClick={onToggleLock}><StyleIcon name={snapshot.locked ? "lock" : "unlock"} /></button>}
+      <button ref={settings} type="button" aria-label={t("settings.title")} title={t("settings.title")} onClick={() => setExpanded(true)}><StyleIcon name="settings" /></button>
+      <button type="button" className="drawing-delete-button" aria-label={t("format.delete")} title={t("format.delete")} onClick={onDelete}><StyleIcon name="delete" /></button>
     </div>
-  );
+    {expanded && <dialog ref={dialog} style={placement} className="drawing-properties-panel" aria-label={t("drawing.textNote")} aria-modal="true" onCancel={(event) => { event.preventDefault(); close(); }} onKeyDown={(event) => event.stopPropagation()}>
+      <header className="drawing-properties-header"><div><span className="drawing-control-caption">{t("settings.category.appearance")}</span><h3>{t("drawing.textNote")}</h3></div><button type="button" aria-label={t("settings.close")} onClick={close}><StyleIcon name="close" /></button></header>
+      <div className="selected-drawing-style-bar-detail">
+        {currentInterval && <DrawingVisibilityInputs value={value.visibleIntervals} currentInterval={currentInterval} onChange={visibleIntervals => patch({ visibleIntervals })} />}
+        <div className="drawing-property-row"><span>{t("drawing.settings.fontSize")}</span><FontSize key={`${resetRevision}-${value.fontSize}`} value={value.fontSize} commit={(fontSize) => patch({ fontSize })} /></div>
+        <div className="drawing-property-row"><span>{t("drawing.textNote")}</span><div className="drawing-line-options">{toggles}</div></div>
+        <div className="drawing-property-row"><span>{t("format.textColor")}</span><ColorControl color={value.color} label={t("format.textColor")} onCommit={(color) => patch({ color })} /></div>
+        <div className="drawing-property-row"><div className="drawing-line-options">{(["left", "center", "right"] as const).map((align) => <button key={align} type="button" aria-label={t("format.align", { id: align })} title={t("format.align", { id: align })} aria-pressed={value.align === align} onClick={() => patch({ align })}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><path d={`M2 4h16M${align === "right" ? 7 : align === "center" ? 4.5 : 2} 8h11M2 12h16M${align === "right" ? 7 : align === "center" ? 4.5 : 2} 16h11`} /></svg></button>)}</div></div>
+        {(["bgColor", "borderColor"] as const).map((field) => <div className="drawing-property-row" key={field}><span>{t(field === "bgColor" ? "format.bgColor" : "format.borderColor")}</span><div className="drawing-line-options"><button type="button" aria-pressed={!value[field]} onClick={() => patch({ [field]: null })}>{t("format.none")}</button><ColorControl color={value[field] ?? "#64748b"} label={t(field === "bgColor" ? "format.bgColor" : "format.borderColor")} onCommit={(color) => patch({ [field]: color })} /></div></div>)}
+      </div>
+      <footer className="drawing-properties-footer"><button type="button" className="drawing-reset-button" title={t("drawing.editor.resetChangesHint")} onClick={() => { setDraft({}); setResetRevision((revision) => revision + 1); }}>{t("drawing.editor.resetChanges")}</button><button type="button" onClick={close}>{t("workspace.cancel")}</button><button type="button" className="drawing-save-button" disabled={value.visibleIntervals?.length === 0} onClick={() => { if (Object.keys(draft).length) onPatch(draft); close(); }}>{t("settings.saveAndClose")}</button></footer>
+    </dialog>}
+  </div>;
 }

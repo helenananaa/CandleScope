@@ -146,6 +146,7 @@ function applyGeometry(
   const entity = draft.entities.get(command.id);
   if (!entity) throw new TypeError(`drawing entity does not exist: ${command.id}`);
   if (canonicalDrawingValueEquals(entity.geometry, command.geometry)) return;
+  if (entity.style.locked) throw new TypeError("Unlock the drawing before changing its geometry");
   draft.entities.set(entity.id, cloneDrawingEntity(entity, {
     bounds: { kind: "deferred" },
     geometry: command.geometry,

@@ -53,6 +53,7 @@ export interface DrawingToolStateRuntime {
     drawingsHidden: boolean;
     drawingSnapEnabled: boolean;
     drawingContinuousEnabled: boolean;
+    drawingAutoSelectEnabled: boolean;
     selectedDrawing: SelectedDrawingMeta | null;
   };
   actions: {
@@ -68,6 +69,7 @@ export interface DrawingToolStateRuntime {
     handlePositionSizeChange(size: number): void;
     handleDrawingSnapEnabledChange(enabled: boolean): void;
     handleDrawingContinuousEnabledChange(enabled: boolean): void;
+    handleDrawingAutoSelectEnabledChange(enabled: boolean): void;
     handleSelectedDrawingChange(drawing: SelectedDrawingMeta | null): void;
     setSelectedDrawing: Dispatch<SetStateAction<SelectedDrawingMeta | null>>;
   };
@@ -119,6 +121,7 @@ export function useDrawingToolState(
     "candlescope-drawing-continuous-enabled",
     false,
   ));
+  const [drawingAutoSelectEnabled, setDrawingAutoSelectEnabled] = useState(() => loadBooleanPreference("candlescope-drawing-auto-select-enabled", false));
   const [selectedDrawing, setSelectedDrawing] = useState<SelectedDrawingMeta | null>(null);
 
   const handleFibLevelsChange = useCallback((levels: FibonacciLevel[] | null) => {
@@ -146,6 +149,11 @@ export function useDrawingToolState(
     savePreference("candlescope-drawing-continuous-enabled", String(enabled));
   }, []);
 
+  const handleDrawingAutoSelectEnabledChange = useCallback((enabled: boolean) => {
+    setDrawingAutoSelectEnabled(enabled);
+    savePreference("candlescope-drawing-auto-select-enabled", String(enabled));
+  }, []);
+
   const handleSelectedDrawingChange = useCallback((drawing: SelectedDrawingMeta | null) => {
     setSelectedDrawing(drawing);
   }, []);
@@ -164,6 +172,7 @@ export function useDrawingToolState(
       drawingsHidden,
       drawingSnapEnabled,
       drawingContinuousEnabled,
+      drawingAutoSelectEnabled,
       selectedDrawing,
     },
     actions: {
@@ -179,6 +188,7 @@ export function useDrawingToolState(
       handlePositionSizeChange,
       handleDrawingSnapEnabledChange,
       handleDrawingContinuousEnabledChange,
+      handleDrawingAutoSelectEnabledChange,
       handleSelectedDrawingChange,
       setSelectedDrawing,
     },

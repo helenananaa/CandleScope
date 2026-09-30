@@ -722,7 +722,7 @@ function retainCandidatePathIndexes(
   }
 }
 
-function retainedDraftIndexes(samples: DraftSampleStorage, epsilon: number): Uint8Array | null {
+function retainedDraftIndexes(samples: DraftSampleStorage, epsilon: number, preservePoints = false): Uint8Array | null {
   const retained = new Uint8Array(samples.length);
   let pathStart = -1;
   let hasRenderablePath = false;
@@ -735,7 +735,10 @@ function retainedDraftIndexes(samples: DraftSampleStorage, epsilon: number): Uin
       const pathEnd = index - 1;
       if (pathEnd > pathStart) hasRenderablePath = true;
       const pathLength = pathEnd - pathStart + 1;
-      if (pathLength <= FREEHAND_STROKE_DRAFT_CHUNK_CAPACITY) {
+      if (preservePoints) {
+        // Existing-stroke moves keep all samples; RDP here would be discarded.
+        retained.fill(1, pathStart, pathEnd + 1);
+      } else if (pathLength <= FREEHAND_STROKE_DRAFT_CHUNK_CAPACITY) {
         retainPathIndexes(samples, pathStart, pathEnd, epsilon, retained);
       } else {
         // First simplify overlapping fixed windows so terminal work is bounded
@@ -1055,6 +1058,7 @@ export function cancelFreehandStrokeDraft(
 export function finalizeFreehandStrokeDraft(draft: FreehandStrokeDraft | null | undefined, {
   captureIdentity,
   epsilon = 1.5,
+  preservePoints = false,
 }: FreehandFinalizeOptions = {}): FreehandStroke | null {
   if (!draft) return null;
   const state = draftStates.get(draft);
@@ -1067,7 +1071,7 @@ export function finalizeFreehandStrokeDraft(draft: FreehandStrokeDraft | null | 
     || state.samples.length < 2) {
     return null;
   }
-  const retained = retainedDraftIndexes(state.samples, tolerance);
+  const retained = retainedDraftIndexes(state.samples, tolerance, preservePoints);
   if (!retained) return null;
   let keptCount = 0;
   let usesV3Point = false;

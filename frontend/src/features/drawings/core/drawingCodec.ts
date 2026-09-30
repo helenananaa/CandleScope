@@ -235,7 +235,7 @@ function createEntityFromSavedDrawing(item: SavedDrawing, id: string): DrawingEn
       break;
   }
 
-  return createDrawingEntity({ id, kind: item.type, geometry, style });
+  return createDrawingEntity({ id, kind: item.type, geometry, style: { ...style, ...(item.hidden === undefined ? {} : { hidden: item.hidden }), ...(item.visibleIntervals === undefined ? {} : { visibleIntervals: item.visibleIntervals }), ...(item.locked === undefined ? {} : { locked: item.locked }) } });
 }
 
 function copyDefinedFields(
@@ -260,6 +260,7 @@ export function savedDrawingFromEntity(entity: DrawingEntity): SavedDrawing | nu
     const geometry = canonical.geometry as unknown as Record<string, unknown>;
     const style = canonical.style as unknown as Record<string, unknown>;
     const candidate: Record<string, unknown> = { type: canonical.kind, id: canonical.id };
+    copyDefinedFields(candidate, style, ["hidden", "locked", "visibleIntervals"]);
 
     switch (canonical.kind) {
       case "line":

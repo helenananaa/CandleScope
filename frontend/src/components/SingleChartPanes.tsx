@@ -114,6 +114,7 @@ import {
   drawingToolForPane,
   drawingPaneScopeKey,
   isDrawingInteractionReady,
+  isDrawingEditorPointerBoundary,
   ownsDrawingApiRegistrationCleanup,
   reconcileRegisteredDrawingPaneMountKeys,
   reconcileDrawingPaneHostMountKeys,
@@ -234,6 +235,7 @@ import type {
   SurfaceViewportSnapshot,
 } from "../features/chart-representation/chartRepresentationTypes.js";
 import type { VisibleRangeSnapshot as SavedVisibleRangeSnapshot } from "../features/chart-session/chartSessionTypes.js";
+import DrawingObjectList from "../features/drawings/DrawingObjectList.js";
 import type { DrawingEngineApi, DrawingEngineHostProps } from "../features/drawings/DrawingEngineHost.js";
 import type {
   DrawingExportLease,
@@ -321,6 +323,7 @@ export interface SingleChartPanesProps {
   positionSize?: number;
   drawingSnapEnabled?: boolean;
   drawingContinuousEnabled?: boolean;
+  drawingAutoSelectEnabled?: boolean;
   onSelectedDrawingChange?: ((drawing: SelectedDrawingMeta | null) => void) | null;
   mainOverlayLines?: IndicatorLine[];
   subPanes?: IndicatorSubPane[];
@@ -1308,6 +1311,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   positionSize = 1000,
   drawingSnapEnabled = true,
   drawingContinuousEnabled = false,
+  drawingAutoSelectEnabled = false,
   onSelectedDrawingChange,
   mainOverlayLines = resolveStableOptionalChartCollection<IndicatorLine>(),
   subPanes = resolveStableOptionalChartCollection<IndicatorSubPane>(),
@@ -1473,6 +1477,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   const onUserViewportRangeChangeRef = useRef(onUserViewportRangeChange);
   const onVisibleRangeChangeRef = useRef(onVisibleRangeChange);
   const drawingApiRef = useRef<DrawingEngineApi | null>(null);
+  const [drawingObjectApis, setDrawingObjectApis] = useState<ReadonlyMap<string, DrawingEngineApi>>(new Map());
   const drawingApisByPaneRef = useRef<Map<string, DrawingEngineApi>>(new Map());
   const drawingPublicationUnsubscribesByPaneRef = useRef<Map<string, () => void>>(new Map());
   const drawingRevisionListenersRef = useRef<Set<(scopeKey: string, revision: number) => void>>(new Set());
@@ -4743,6 +4748,12 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   }, []);
 
   const handleChartPanePointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    // Modal backdrops and editor popovers can cover other panes. Their pointer
+    // coordinates must not transfer the active tool and clear its selection.
+    if (isDrawingEditorPointerBoundary(
+      event.currentTarget,
+      event.target instanceof Element ? event.target : null,
+    )) return;
     if (event.pointerType === "touch") {
       publishHoveredPaneId(null);
       return;
@@ -4750,7 +4761,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     publishHoveredPaneId(paneIdAtClientY(panePointerLayoutRef.current, event.clientY));
   }, [publishHoveredPaneId]);
 
-  const handleChartPanePointerLeave = useCallback(() => {
+  const handleChartPanePointerLeave = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (isDrawingEditorPointerBoundary(event.currentTarget, null)) return;
     publishHoveredPaneId(drawingPaneIdAfterPointerLeave(
       hoveredPaneIdRef.current,
       drawingEngineToolActive,
@@ -5183,6 +5195,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         }
       }));
       drawingApisByPaneRef.current.set(paneId, api);
+      setDrawingObjectApis(new Map(drawingApisByPaneRef.current));
       // The host consumes `initialHidden` when it mounts, while later user
       // changes flow through the chart-surface API. Replaying visibility here
       // would turn API registration during an asynchronous document restore
@@ -5215,6 +5228,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       drawingPublicationUnsubscribesByPaneRef.current.get(paneId)?.();
       drawingPublicationUnsubscribesByPaneRef.current.delete(paneId);
       drawingApisByPaneRef.current.delete(paneId);
+      setDrawingObjectApis(new Map(drawingApisByPaneRef.current));
       drawingApiMountKeysByPaneRef.current.delete(paneId);
     }
     setRegisteredDrawingPaneMountKeys((previous) => (
@@ -5504,6 +5518,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         </div>
       )}
 
+      {shouldMountDrawingEngine && <DrawingObjectList apis={drawingObjectApis} currentInterval={interval} panes={activeSubPanes} onSelectPane={publishHoveredPaneId} />}
+
       {DrawingEngineHost && shouldMountDrawingEngine && drawingPaneSurfaces
         .filter((surface) => drawingPaneMountKeys.has(surface.drawingKey))
         .map((surface) => (
@@ -5543,6 +5559,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
               positionSize,
               drawingSnapEnabled,
               drawingContinuousEnabled,
+              drawingAutoSelectEnabled,
               drawingKey: surface.drawingKey,
               drawingSeriesGeneration: surface.seriesGeneration,
               drawingChartType: resolvedChartType,

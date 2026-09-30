@@ -1,3 +1,4 @@
+import { validDrawingIntervals } from "../drawingVisibility.js";
 import type {
   AxisLineType,
   BasicLineToolId,
@@ -71,7 +72,7 @@ export type CanonicalDrawingGeometry =
       dataPoints?: readonly DrawingDataPoint[];
     }>;
 
-export type DrawingStyle =
+export type DrawingStyle = Readonly<{ hidden?: boolean; locked?: boolean; visibleIntervals?: readonly string[] | null }> & (
   | Readonly<{
       kind: "line" | "axis-line" | "angle-measure";
       color?: string;
@@ -124,7 +125,7 @@ export type DrawingStyle =
       opacity?: number;
       compositeOperation?: GlobalCompositeOperation;
       brushShape?: BrushShape;
-    }>;
+    }>);
 
 export interface DrawingEntity {
   readonly id: string;
@@ -257,7 +258,10 @@ function matchingKind(
     ],
   };
   const geometryAllowed = new Set(geometryKeys[kind]);
-  const styleAllowed = new Set(styleKeys[kind]);
+  const styleAllowed = new Set([...styleKeys[kind], "hidden", "locked", "visibleIntervals"]);
+  if (!validDrawingIntervals(style.visibleIntervals)) return false;
+  if (style.hidden !== undefined && typeof style.hidden !== "boolean") return false;
+  if (style.locked !== undefined && typeof style.locked !== "boolean") return false;
   if (Object.keys(geometry).some((key) => !geometryAllowed.has(key))
     || Object.keys(style).some((key) => !styleAllowed.has(key))) return false;
   const geometryRecord = geometry as Readonly<Record<string, unknown>>;

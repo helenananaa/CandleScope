@@ -98,7 +98,7 @@ export function shouldShowCrosshairDetails(tool: DrawingToolId | null | undefine
 }
 
 export function isTextOverlayTarget(target: EventTarget | null): boolean {
-  return target instanceof Element && !!target.closest(".text-format-bar, .text-edit-overlay");
+  return target instanceof Element && !!target.closest(".text-format-bar, .drawing-text-style-bar, .text-edit-overlay");
 }
 
 export function isFiniteNumber(value: unknown): value is number {

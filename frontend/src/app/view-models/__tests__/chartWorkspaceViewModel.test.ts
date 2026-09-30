@@ -297,3 +297,15 @@ test("pane delete controls dispatch to the owning indicator or market study", ()
     "trade-flow:trade-flow:cvd",
   ]);
 });
+
+test("auto-selection preference reaches both toolbar and chart surface", () => {
+  const changes: boolean[] = [];
+  const model = buildChartWorkspaceViewModel(buildContext({
+    drawingActions: { handleDrawingAutoSelectEnabledChange: (enabled: boolean) => { changes.push(enabled); } },
+    drawingView: { drawingAutoSelectEnabled: true },
+  }));
+  assert.equal(model.drawingToolbar.drawingAutoSelectEnabled, true);
+  assert.equal(model.chart.chartProps.drawingAutoSelectEnabled, true);
+  mustBeDefined(model.drawingToolbar.onDrawingAutoSelectEnabledChange)(false);
+  assert.deepEqual(changes, [false]);
+});

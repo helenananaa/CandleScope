@@ -46,3 +46,11 @@ test("shared drawing tool selection overrides every chart-local tool state", () 
   assert.match(html, /data-left-tool="line-segment"/);
   assert.match(html, /data-right-tool="line-segment"/);
 });
+
+test("auto-selection defaults to off without a saved preference", () => {
+  function Probe() {
+    const state = useDrawingToolState();
+    return createElement("span", { "data-auto-select": state.view.drawingAutoSelectEnabled });
+  }
+  assert.match(renderToStaticMarkup(createElement(Probe)), /data-auto-select="false"/);
+});

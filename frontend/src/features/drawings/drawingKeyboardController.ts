@@ -34,6 +34,7 @@ export interface UseDrawingKeyboardOptions {
   cancelActiveFreehandStroke?: (() => boolean) | null;
   hasActiveInteractionGesture?: (() => boolean) | null;
   cancelActiveInteractionGesture?: (() => boolean) | null;
+  exitObjectEditing?: (() => boolean) | null;
   deleteSelected?: (() => void) | null;
 }
 
@@ -47,6 +48,7 @@ export function handleDrawingEscape({
   preventDefault,
   hasActiveInteractionGesture = false,
   cancelActiveInteractionGesture = () => true,
+  exitObjectEditing = () => false,
 }: Readonly<{
   hasActiveFreehandStroke: boolean;
   cancelActiveFreehandStroke(): boolean;
@@ -57,9 +59,14 @@ export function handleDrawingEscape({
   preventDefault(): void;
   hasActiveInteractionGesture?: boolean;
   cancelActiveInteractionGesture?: () => boolean;
+  exitObjectEditing?: () => boolean;
 }>): void {
   if (hasActiveFreehandStroke) {
     cancelActiveFreehandStroke();
+    preventDefault();
+    return;
+  }
+  if (exitObjectEditing()) {
     preventDefault();
     return;
   }
@@ -90,16 +97,20 @@ export function useDrawingKeyboard({
   hasActiveInteractionGesture = null,
   cancelActiveInteractionGesture = null,
   deleteSelected = null,
+  exitObjectEditing = null,
 }: UseDrawingKeyboardOptions): void {
   useEffect(() => {
     if (!active) return undefined;
 
     const handleKeyDown = (e: KeyboardEvent): void => {
       // Don't intercept if editing text
-      if (editingTextIdRef.current) return;
+      if (editingTextIdRef.current || e.defaultPrevented) return;
 
       if (e.key === "Escape") {
+        // Editors own their Escape; closing a panel must not also exit the tool.
+        if (e.target instanceof Element && e.target.closest('dialog, input, textarea, select, [contenteditable="true"]')) return;
         handleDrawingEscape({
+          exitObjectEditing: () => exitObjectEditing?.() === true,
           hasActiveFreehandStroke: hasActiveFreehandStroke?.() === true,
           cancelActiveFreehandStroke: () => cancelActiveFreehandStroke?.() !== false,
           hasActiveInteractionGesture: hasActiveInteractionGesture?.() === true,
@@ -140,7 +151,7 @@ export function useDrawingKeyboard({
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [active, anchorDataRef, beforeTerminalMutation, selectedIdRef, editingTextIdRef, primitivesRef, removePreview, deselectAll, detachPrim, persistDrawings, setSelectedPrimId, setSelectedTextUi, hasActiveFreehandStroke, cancelActiveFreehandStroke, hasActiveInteractionGesture, cancelActiveInteractionGesture, deleteSelected]);
+  }, [active, anchorDataRef, beforeTerminalMutation, selectedIdRef, editingTextIdRef, primitivesRef, removePreview, deselectAll, detachPrim, persistDrawings, setSelectedPrimId, setSelectedTextUi, hasActiveFreehandStroke, cancelActiveFreehandStroke, hasActiveInteractionGesture, cancelActiveInteractionGesture, deleteSelected, exitObjectEditing]);
 }
 
 export default useDrawingKeyboard;

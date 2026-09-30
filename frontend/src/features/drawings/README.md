@@ -54,6 +54,11 @@ on legacy flat fields.
 - `SelectedDrawingStyleBar.tsx` owns the chart-local controls for the selected
   drawing. Its patches target only that drawing; toolbar color and width remain
   defaults for newly created drawings. Text keeps its inline format bar.
+- `DrawingStyleInputs.tsx` owns shared color, width and shape line-style controls.
+  `useDrawingEditorLayout.ts` clamps the draggable toolbar within its chart and
+  anchors native top-layer dialogs/popovers within the viewport. Toolbar positions
+  are container-local UI state; detailed settings stay in a draft until saved
+  through the existing drawing style command path.
 - `core/drawingDocument.ts` owns the immutable nine-kind business model and
   independent document, geometry, and style revisions.
 - `core/drawingCommands.ts` and `core/drawingDocumentStore.ts` are the only
@@ -147,3 +152,29 @@ IndexedDB writes continue refreshing the bounded legacy-compatible
 `SavedDrawing[]` snapshot; no rollback path may delete user data. Legacy
 primitives and their factory remain until the Phase 9 deletion conditions are
 satisfied.
+
+Text annotation formatting shares the selected-object toolbar and top-layer draft dialog. Drawing document stores keep a bounded, session-only undo/redo history (50 committed batches). History replay uses the existing scene persistence barrier and monotonic revisions; it does not load an old persisted document. Native-pane history buttons and keyboard ownership are handled by `DrawingHistoryBar`; legacy primitive mode does not advertise history.
+
+The selected-object properties dialog supports precise price/time endpoints for ordinary time-anchored line/shape/Fibonacci/angle/axis objects. `drawingProperties.ts` validates the supported anchor forms and prepares an immutable candidate; the interaction controller commits combined geometry and style as one undoable batch. The coordinate UI uses explicit UTC and refuses to reinterpret source-lineage or legacy logical anchors.
+
+`drawingStyleTemplateStore.ts` owns versioned, device-local reusable style preferences. `DrawingStyleTemplates` only copies compatible whitelisted appearance fields into the properties draft; saving that draft uses the normal drawing command and undo path. Templates never become a parallel authority for drawing coordinates or defaults. Template operations validate names/schema/limits and fail visibly on storage errors.
+
+## Geometry locking
+
+Overlay-mode toolbars persist optional `locked` state through the existing document style commands. Locked objects remain selectable, style-editable and deletable, but pointer gestures and property coordinates cannot move or resize them. Canonical move/resize commands reject changes while locked; undo/redo restores document snapshots normally. Old payloads without the flag remain unlocked. Saved style templates exclude the flag. Legacy primitive controls do not expose locking.
+
+## Interval visibility
+
+Optional `visibleIntervals` is a canonical style field; missing/null means all chart intervals. `drawingVisibility.ts` validates exact interval tokens (minute `m` differs from month `M`). The lifecycle's scene projection filter reads the current interval and invalidates on interval changes, so paint, hit-index and export use the same filtered nodes. Hidden drawings remain in the document. Settings save through the existing command/history path and clear selection if the object becomes hidden; templates never copy interval filters.
+
+`DrawingObjectList` groups the mounted pane APIs within one chart and subscribes directly to each scope's `DrawingDocumentStore`; UI state holds only API registrations, dialog state and operation feedback. `DrawingObjectApi` resolves arbitrary IDs through the active document and persists edits using the existing mutation barrier/commands. The optional strict `hidden` style field controls individual visibility independently of interval filters and the global hide-all switch. The scene predicate handles both hidden and interval-filtered entities, including hit testing. List selection reuses the existing cross-pane selection coordinator. Legacy primitive mode does not publish the object API.
+
+Auto-selection is an opt-in local preference beside continuous drawing. Passive pointerdown/double-click cannot select drawings when it is off. When enabled, `drawingToolForSavedObject` resolves the precise tool variant and the controller reuses the existing tool's drag path in the same pointerdown. Only the explicitly marked automatic tool transition skips normal tool-switch gesture cleanup. Explicit object-list selection transfers pane ownership and enters the object's tool even with passive auto-selection off; freehand/highlighter support whole-stroke dragging in overlay mode.
+
+Automatic object editing ends on a blank chart click or Escape, before the creation state machine runs. A chart-container-scoped WeakMap retains only automatic-tool intent across native pane hover ownership changes; a manually selected tool clears it. Escape in dialogs/inputs remains owned by those editors. Explicit drawing creation and its continuous-drawing preference are unaffected.
+
+Whole-stroke movement resolves every canonical sample (including lineage spans and exact ordinal anchors), translates from the gesture's original screen coordinates, and recaptures through the pane adapter. It never uses the decimated display list or simplifies a saved stroke again. Unresolved points, partial capture, changed capture identity, and locked drawings reject the move. Legacy point payloads retain quadratic rendering; legacy moves requiring span-only captures fail closed. Dynamic previews preserve brush/compositing and use pane-local canvas coordinates. Mouseup commits one normal document/history batch; a stationary click is a geometry no-op.
+
+The object list provides local keyword search over translated names, annotation text and IDs, combined with hidden/locked/interval-excluded filters. Filtering uses the same subscribed canonical document and interval predicate as the rows. Counts and membership update after edits; closing the dialog clears only its search/filter UI state.
+
+Object-list front/back actions reorder the complete current pane document through the existing canonical reorder command and persistence/history barrier. Canonical z-order is back-to-front while the list displays front-to-back. Filtered rows use full-document boundaries; layering does not mutate geometry or styles and remains available for hidden/geometry-locked objects.

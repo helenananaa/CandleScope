@@ -30,6 +30,7 @@ import { drawingVariantLabel } from "./drawing/drawingToolbarI18n.js";
 import {
   CHART_TYPE_VARIANTS,
   ContinuousDrawingIcon,
+  AutoSelectIcon,
   CURSOR_VARIANTS,
   EraserIcon,
   FibonacciIcon,
@@ -63,7 +64,9 @@ export interface DrawingToolbarProps {
   drawingSnapEnabled?: boolean;
   onDrawingSnapEnabledChange?: (enabled: boolean) => void;
   drawingContinuousEnabled?: boolean;
+  drawingAutoSelectEnabled?: boolean;
   onDrawingContinuousEnabledChange?: (enabled: boolean) => void;
+  onDrawingAutoSelectEnabledChange?: (enabled: boolean) => void;
   textFontSize?: number;
   onTextFontSizeChange?: (size: number) => void;
   textBold?: boolean;
@@ -105,7 +108,9 @@ const DrawingToolbar = memo(function DrawingToolbar({
   drawingSnapEnabled = true,
   onDrawingSnapEnabledChange,
   drawingContinuousEnabled = false,
+  drawingAutoSelectEnabled = false,
   onDrawingContinuousEnabledChange,
+  onDrawingAutoSelectEnabledChange,
   // Text settings
   textFontSize = 14,
   onTextFontSizeChange,
@@ -480,6 +485,15 @@ const DrawingToolbar = memo(function DrawingToolbar({
         title={drawingCapabilitiesDisabled
           ? drawingToolTitle
           : continuousDrawingTitle}
+      />
+
+      <DrawingToolButton
+        active={drawingAutoSelectEnabled}
+        dataDrawingTool="auto-select"
+        disabled={drawingCapabilitiesDisabled}
+        icon={AutoSelectIcon}
+        onClick={() => onDrawingAutoSelectEnabledChange?.(!drawingAutoSelectEnabled)}
+        title={drawingCapabilitiesDisabled ? drawingToolTitle : t(drawingAutoSelectEnabled ? "drawing.autoSelect.on" : "drawing.autoSelect.off")}
       />
 
       {/* Divider */}
