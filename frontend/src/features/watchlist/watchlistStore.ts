@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import type { SetStateAction } from "react";
 import { parseSymbolKey, symbolKey } from "../../utils/symbolKey";
 import type { WatchlistGroup } from "./watchlistTypes.js";
+import { MARKET_RAIL_MAX_WIDTH } from "../../shared/marketRailLayout.js";
 
 export const WATCHLISTS_KEY = "candlescope-watchlists";
 export const SIDEBAR_WIDTH_KEY = "candlescope-sidebar-width";
@@ -10,7 +11,7 @@ export const COLLAPSED_LISTS_KEY = "candlescope-collapsed-lists";
 
 export const DEFAULT_WATCHLIST_WIDTH = 320;
 export const MIN_WATCHLIST_WIDTH = 260;
-export const MAX_WATCHLIST_WIDTH = 520;
+export const MAX_WATCHLIST_WIDTH = MARKET_RAIL_MAX_WIDTH;
 
 export const WATCHLIST_COLORS = [
   "#3b82f6", "#8b5cf6", "#06b6d4", "#22c55e", "#f59e0b",

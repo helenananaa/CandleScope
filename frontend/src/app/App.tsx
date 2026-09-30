@@ -664,11 +664,7 @@ function LiveWorkspaceApp() {
       />
       <AlertNotificationCenter onOpenAlerts={requestAlertPanelOpen} />
       {featureSurfacesHost && workspacePanelLoaded && createPortal(
-        <Suspense fallback={workspacePanelOpen ? (
-          <div className="workspace-panel-overlay">
-            <aside className="workspace-panel workspace-panel-loading" aria-label={t("shell.loadingWorkspace")} />
-          </div>
-        ) : null}>
+        <Suspense fallback={null}>
           <WorkspacePanel
             isOpen={workspacePanelOpen}
             onClose={closeWorkspacePanel}

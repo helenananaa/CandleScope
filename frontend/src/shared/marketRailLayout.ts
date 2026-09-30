@@ -1,7 +1,13 @@
 /** Source-neutral geometry shared by live and replay right-rail adapters. */
 export const MARKET_RAIL_DEFAULT_WIDTH = 320;
 export const MARKET_RAIL_MIN_WIDTH = 260;
-export const MARKET_RAIL_MAX_WIDTH = 520;
+export const MARKET_RAIL_MAX_WIDTH = Number.MAX_SAFE_INTEGER;
+
+/** Leave a small chart strip and the activity bar accessible at maximum width. */
+export function marketRailWidthBounds(viewportWidth: number): { min: number; max: number } {
+  const max = Math.max(0, viewportWidth - MARKET_ACTIVITY_BAR_WIDTH - 121);
+  return { min: Math.min(MARKET_RAIL_MIN_WIDTH, max), max };
+}
 
 /** Fixed outer activity-bar strip (VS Code style). */
 export const MARKET_ACTIVITY_BAR_WIDTH = 44;

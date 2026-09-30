@@ -251,7 +251,7 @@ export default function WorkspacePanel({
   } = useRightDrawerResize({
     initialWidth: 430,
     minWidth: 360,
-    maxWidth: 780,
+    storageKey: "candlescope-workspace-drawer-width",
   });
 
   useEffect(() => {

@@ -337,7 +337,7 @@ export default function IndicatorPanel({
   } = useRightDrawerResize({
     initialWidth: 400,
     minWidth: 350,
-    maxWidth: 860,
+    storageKey: "candlescope-indicator-drawer-width",
   });
 
   const getSchemaForIndicator = useCallback((indicator: IndicatorDefinition): UiParamSchema[] => {

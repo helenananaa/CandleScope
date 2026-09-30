@@ -11,7 +11,8 @@ import {
 export interface RightDrawerResizeOptions {
   initialWidth: number;
   minWidth: number;
-  maxWidth: number;
+  maxWidth?: number;
+  storageKey?: string;
   viewportMargin?: number;
   keyboardStep?: number;
 }
@@ -23,7 +24,7 @@ interface RightDrawerWidthBounds {
 
 function viewportWidthFor(options: RightDrawerResizeOptions): number {
   if (typeof window === "undefined") {
-    return options.maxWidth + (options.viewportMargin ?? 80);
+    return options.maxWidth ?? options.initialWidth;
   }
   return window.innerWidth;
 }
@@ -32,9 +33,9 @@ export function rightDrawerWidthBounds(
   options: RightDrawerResizeOptions,
   viewportWidth: number,
 ): RightDrawerWidthBounds {
-  const viewportMargin = options.viewportMargin ?? 80;
+  const viewportMargin = options.viewportMargin ?? 0;
   const viewportMaximum = Math.max(0, Math.floor(viewportWidth - viewportMargin));
-  const max = Math.max(0, Math.min(options.maxWidth, viewportMaximum));
+  const max = Math.max(0, Math.min(options.maxWidth ?? viewportMaximum, viewportMaximum));
   return {
     min: Math.min(options.minWidth, max),
     max,
@@ -54,8 +55,8 @@ export function useRightDrawerResize(options: RightDrawerResizeOptions) {
   const resizeOptions = useMemo<RightDrawerResizeOptions>(() => ({
     initialWidth: options.initialWidth,
     minWidth: options.minWidth,
-    maxWidth: options.maxWidth,
-    viewportMargin: options.viewportMargin ?? 80,
+    ...(options.maxWidth === undefined ? {} : { maxWidth: options.maxWidth }),
+    viewportMargin: options.viewportMargin ?? 0,
     keyboardStep: options.keyboardStep ?? 16,
   }), [
     options.initialWidth,
@@ -64,11 +65,23 @@ export function useRightDrawerResize(options: RightDrawerResizeOptions) {
     options.minWidth,
     options.viewportMargin,
   ]);
-  const [width, setWidth] = useState(() => clampRightDrawerWidth(
-    resizeOptions.initialWidth,
-    resizeOptions,
-    viewportWidthFor(resizeOptions),
-  ));
+  // Keep the preferred width separate so a smaller window does not erase it.
+  const [preferredWidth, setPreferredWidth] = useState(() => {
+    try {
+      const saved = options.storageKey ? localStorage.getItem(options.storageKey) : null;
+      const parsed = Number(saved);
+      if (saved !== null && Number.isFinite(parsed) && parsed > 0) return parsed;
+    } catch { /* Storage may be unavailable. Resizing still works in memory. */ }
+    return resizeOptions.initialWidth;
+  });
+  const [viewportWidth, setViewportWidth] = useState(() => viewportWidthFor(resizeOptions));
+  const width = clampRightDrawerWidth(preferredWidth, resizeOptions, viewportWidth);
+  const setWidth = useCallback((nextWidth: number) => {
+    setPreferredWidth(nextWidth);
+    try {
+      if (options.storageKey) localStorage.setItem(options.storageKey, String(nextWidth));
+    } catch { /* Ignore unavailable storage. */ }
+  }, [options.storageKey]);
   const [isResizing, setIsResizing] = useState(false);
   const resizeCleanupRef = useRef<(() => void) | null>(null);
 
@@ -78,7 +91,7 @@ export function useRightDrawerResize(options: RightDrawerResizeOptions) {
 
   const handlePointerMove = useCallback((event: PointerEvent) => {
     setWidth(clampToViewport(window.innerWidth - event.clientX));
-  }, [clampToViewport]);
+  }, [clampToViewport, setWidth]);
 
   const beginResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
@@ -111,15 +124,15 @@ export function useRightDrawerResize(options: RightDrawerResizeOptions) {
     if (nextWidth === null) return;
     event.preventDefault();
     setWidth(clampToViewport(nextWidth));
-  }, [clampToViewport, resizeOptions, width]);
+  }, [clampToViewport, resizeOptions, setWidth, width]);
 
   useEffect(() => {
     const handleViewportResize = () => {
-      setWidth((current) => clampToViewport(current));
+      setViewportWidth(viewportWidthFor(resizeOptions));
     };
     window.addEventListener("resize", handleViewportResize);
     return () => window.removeEventListener("resize", handleViewportResize);
-  }, [clampToViewport]);
+  }, [resizeOptions]);
 
   useEffect(() => () => resizeCleanupRef.current?.(), []);
 

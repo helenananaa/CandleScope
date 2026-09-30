@@ -6,6 +6,8 @@ import {
   WATCHLISTS_KEY,
   loadCollapsedLists,
   loadWatchlists,
+  loadSidebarWidth,
+  SIDEBAR_WIDTH_KEY,
 } from "../watchlistStore.js";
 import { mustBeDefined } from "../../../test/testHelpers.js";
 
@@ -25,6 +27,12 @@ function withStorage(values: Record<string, string | undefined>, run: () => void
     else Reflect.deleteProperty(globalThis, "localStorage");
   }
 }
+
+test("wide sidebar preference survives storage without the old 520px cap", () => {
+  withStorage({ [SIDEBAR_WIDTH_KEY]: "1275" }, () => {
+    assert.equal(loadSidebarWidth(), 1275);
+  });
+});
 
 test("watchlist storage rejects damaged and malformed groups", () => {
   withStorage({ [WATCHLISTS_KEY]: "{damaged" }, () => {

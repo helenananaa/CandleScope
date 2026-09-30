@@ -903,7 +903,7 @@ export default function AlertsPanel({
   } = useRightDrawerResize({
     initialWidth: 520,
     minWidth: 430,
-    maxWidth: 780,
+    storageKey: "candlescope-alert-drawer-width",
   });
   const [selectedProductKey, setSelectedProductKey] = useState("");
   const [selectedInterval, setSelectedInterval] = useState("");

@@ -10,8 +10,7 @@ import {
   MARKET_DOCK_DEFAULT_HEIGHT,
   MARKET_DOCK_MAX_HEIGHT,
   MARKET_DOCK_MIN_HEIGHT,
-  MARKET_RAIL_MAX_WIDTH,
-  MARKET_RAIL_MIN_WIDTH,
+  marketRailWidthBounds,
   MARKET_RAIL_SPLITTER_HEIGHT,
 } from "../shared/marketRailLayout.js";
 import { t } from "../i18n/index.js";
@@ -116,6 +115,9 @@ export default function MarketRightRailFrame({
   const [widthResizing, setWidthResizing] = useState(false);
   const [heightResizingViewId, setHeightResizingViewId] = useState<string | null>(null);
   const [transientWidth, setTransientWidth] = useState<number | null>(null);
+  const [viewportWidth, setViewportWidth] = useState(() => (
+    typeof window === "undefined" ? 1920 : window.innerWidth
+  ));
   const [transientHeights, setTransientHeights] = useState<Record<string, number> | null>(null);
 
   const sortedViews = useMemo(
@@ -123,7 +125,8 @@ export default function MarketRightRailFrame({
     [views],
   );
   const panelOpen = sortedViews.length > 0 && !panelCollapsed;
-  const width = transientWidth ?? layout.width;
+  const widthBounds = marketRailWidthBounds(viewportWidth);
+  const width = clamp(transientWidth ?? layout.width, widthBounds.min, widthBounds.max);
   const effectiveHeights = transientHeights ?? viewHeights;
 
   const colorVars = useMemo<RailCssVars>(() => ({
@@ -131,6 +134,12 @@ export default function MarketRightRailFrame({
     "--wl-down-color": downColor,
     "--market-activity-bar-width": `${MARKET_ACTIVITY_BAR_WIDTH}px`,
   }), [downColor, upColor]);
+
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   useEffect(() => {
     if (panelCollapsed || pendingRevealRef.current === null) return undefined;
@@ -155,10 +164,11 @@ export default function MarketRightRailFrame({
     const onMove = (event: PointerEvent) => {
       const start = widthStartRef.current;
       if (!start) return;
+      const bounds = marketRailWidthBounds(window.innerWidth);
       const next = clamp(
         start.width - (event.clientX - start.x),
-        MARKET_RAIL_MIN_WIDTH,
-        MARKET_RAIL_MAX_WIDTH,
+        bounds.min,
+        bounds.max,
       );
       transientWidthRef.current = next;
       setTransientWidth(next);
