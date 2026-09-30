@@ -778,7 +778,57 @@ def test_backfill_scheduler_reserves_foreground_lane_beside_active_background() 
     asyncio.run(_run())
 
 
-def test_backfill_scheduler_visible_repair_bypasses_running_daily_open_maintenance() -> None:
+@pytest.mark.parametrize("failure", ["report", "exception", "verification"])
+def test_retry_backoff_releases_single_worker_and_keeps_attempt_limit(failure):
+    async def run():
+        calls = []
+
+        class Engine:
+            async def run(self, **kwargs):
+                calls.append(kwargs["symbol"])
+                if kwargs["symbol"] == "BTCUSDT":
+                    if failure == "exception":
+                        raise RuntimeError("temporary failure")
+                    if failure == "report":
+                        return _RepairReport(status="failed", errors=["temporary failure"])
+                return _RepairReport(status="completed")
+
+        dm, ledger = _DataManager(), _Ledger()
+        coord = BackfillCoordinator(storage=_Storage(), bars_backfilled=dm.on_bars_backfilled,
+                                    emit_event=dm.event_bus.emit, engine=Engine(), gap_ledger=ledger,
+                                    loop=asyncio.get_running_loop(), max_concurrency=1,
+                                    base_delay_seconds=0.5, max_retries=3)
+
+        async def verify(request, **kwargs):
+            missing = request.symbol == "BTCUSDT" and failure == "verification"
+            return {"verified_contiguous": not missing, "remaining_missing_bars": int(missing)}
+
+        coord._verify_request_range = verify
+        first = asyncio.create_task(coord.request_and_wait(RepairRequest(
+            symbol="BTCUSDT", interval="1m", start_ms=0, end_ms=0,
+            metadata={"requires_trusted_finality": True})))
+        await _wait_until(lambda: coord.snapshot()["deferred_chunks"] == 1, timeout=5)
+        assert coord.snapshot()["running_chunks"] == 0
+        assert coord.snapshot()["exchange_rate_limit_deferrals"] == 0
+        second = await asyncio.wait_for(coord.request_and_wait(RepairRequest(
+            symbol="ETHUSDT", interval="1m", start_ms=0, end_ms=0)), timeout=0.3)
+        assert second.status == "completed"
+        assert not first.done()
+        result = await asyncio.wait_for(first, timeout=5)
+        assert calls.count("BTCUSDT") == 3
+        assert result.attempts == 3
+        if failure == "verification":
+            assert result.verified_contiguous is False
+            assert result.retryable is True
+        else:
+            assert result.status == "failed"
+        assert coord.snapshot()["running_chunks"] == 0
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("maintenance_reason", ["price_daily_open", "bar_delivery_recovery"])
+def test_backfill_scheduler_visible_repair_bypasses_running_maintenance(maintenance_reason: str) -> None:
     async def _run() -> None:
         class _Engine:
             def __init__(self) -> None:
@@ -790,7 +840,7 @@ def test_backfill_scheduler_visible_repair_bypasses_running_daily_open_maintenan
             async def run(self, **kwargs):
                 self.calls.append(kwargs)
                 reason = kwargs["metadata"]["reason"]
-                if reason == "price_daily_open":
+                if reason == maintenance_reason:
                     self.daily_open_started.set()
                 if reason == "visible_range_gap":
                     self.visible_started.set()
@@ -814,7 +864,7 @@ def test_backfill_scheduler_visible_repair_bypasses_running_daily_open_maintenan
             interval="1m",
             start_ms=0,
             end_ms=0,
-            reason="price_daily_open",
+            reason=maintenance_reason,
             request_id="daily-open-maintenance",
         )))
         await engine.daily_open_started.wait()
@@ -830,7 +880,7 @@ def test_backfill_scheduler_visible_repair_bypasses_running_daily_open_maintenan
         await asyncio.wait_for(engine.visible_started.wait(), timeout=1.0)
 
         assert {call["metadata"]["reason"] for call in engine.calls} == {
-            "price_daily_open",
+            maintenance_reason,
             "visible_range_gap",
         }
         assert coordinator.snapshot()["foreground_reserve_dispatches"] == 1
@@ -841,7 +891,38 @@ def test_backfill_scheduler_visible_repair_bypasses_running_daily_open_maintenan
     asyncio.run(_run())
 
 
-def test_backfill_scheduler_internal_query_cannot_consume_visible_reserve() -> None:
+def test_cancelled_retry_does_not_restart_after_backoff():
+    async def run():
+        calls = []
+
+        class Engine:
+            async def run(self, **kwargs):
+                calls.append(kwargs)
+                return _RepairReport(status="failed", errors=["temporary failure"])
+
+        dm = _DataManager()
+        coord = BackfillCoordinator(storage=_Storage(), bars_backfilled=dm.on_bars_backfilled,
+                                    emit_event=dm.event_bus.emit, engine=Engine(),
+                                    loop=asyncio.get_running_loop(), max_concurrency=1,
+                                    base_delay_seconds=0.5)
+        request_id = coord.request(RepairRequest(
+            symbol="BTCUSDT", interval="1m", start_ms=0, end_ms=0,
+            metadata={"demand_owner_id": "retry-owner"}))
+        assert await coord.acquire_demand(request_id, owner_id="retry-owner")
+        await _wait_until(lambda: coord.snapshot()["deferred_chunks"] == 1, timeout=5)
+        assert await coord.release_demand(request_id, owner_id="retry-owner", cancel_if_unobserved=True)
+        outcome = await coord.wait_for_request(request_id)
+        assert outcome.status == "cancelled"
+        await asyncio.sleep(0.6)
+        assert len(calls) == 1
+        assert coord.snapshot()["deferred_chunks"] == 0
+        assert coord.snapshot()["running_chunks"] == 0
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("maintenance_reason", ["price_daily_open", "bar_delivery_recovery"])
+def test_backfill_scheduler_internal_query_cannot_consume_visible_reserve(maintenance_reason: str) -> None:
     async def _run() -> None:
         class _Engine:
             def __init__(self) -> None:
@@ -853,7 +934,7 @@ def test_backfill_scheduler_internal_query_cannot_consume_visible_reserve() -> N
             async def run(self, **kwargs):
                 self.calls.append(kwargs)
                 reason = kwargs["metadata"]["reason"]
-                if reason == "price_daily_open":
+                if reason == maintenance_reason:
                     self.daily_open_started.set()
                 if reason == "latest_refresh":
                     self.visible_started.set()
@@ -877,7 +958,7 @@ def test_backfill_scheduler_internal_query_cannot_consume_visible_reserve() -> N
             interval="1m",
             start_ms=0,
             end_ms=0,
-            reason="price_daily_open",
+            reason=maintenance_reason,
             request_id="daily-open",
         )))
         await engine.daily_open_started.wait()
@@ -892,7 +973,7 @@ def test_backfill_scheduler_internal_query_cannot_consume_visible_reserve() -> N
         )))
         await asyncio.sleep(0)
         assert [call["metadata"]["reason"] for call in engine.calls] == [
-            "price_daily_open",
+            maintenance_reason,
         ]
 
         visible = asyncio.create_task(coordinator.request_and_wait(RepairRequest(
@@ -906,7 +987,7 @@ def test_backfill_scheduler_internal_query_cannot_consume_visible_reserve() -> N
         )))
         await asyncio.wait_for(engine.visible_started.wait(), timeout=1.0)
         assert [call["metadata"]["reason"] for call in engine.calls] == [
-            "price_daily_open",
+            maintenance_reason,
             "latest_refresh",
         ]
         assert coordinator.snapshot()["foreground_reserve_dispatches"] == 1

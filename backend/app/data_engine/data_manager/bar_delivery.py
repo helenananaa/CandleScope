@@ -257,6 +257,13 @@ def source_recovery_handler(coordinator):
         if spec is None:
             return False
         end = spec.previous_ms(spec.floor_ms(watch["through_ms"]))
+        from app.data_engine.history.exchange_policy import native_kline_calendar
+        from app.data_engine.history.calendar import latest_closed_expected_open_ms
+        calendar = native_kline_calendar(series["exchange"], series["market_type"], series["interval"])
+        if calendar is not None:
+            end = latest_closed_expected_open_ms(calendar, watch["through_ms"], series["interval"])
+            if end is None:
+                return False
         if end < watch["from_ms"]:
             return True
         key = SeriesKey(**series)

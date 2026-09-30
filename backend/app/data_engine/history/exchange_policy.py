@@ -33,6 +33,14 @@ from app.exchanges import (
 SymbolMetadataLookup = Callable[[str, str, str], dict[str, Any] | None]
 
 
+def native_kline_calendar(exchange: str, market_type: str, interval: str):
+    """Resolve provider-native exceptions without changing synthetic intervals."""
+    if exchange == "binance" and market_type == "futures" and interval == "3d":
+        from app.exchanges.plugins.binance.calendar import BinanceFuturesCalendar
+        return BinanceFuturesCalendar()
+    return None
+
+
 @dataclass(frozen=True, slots=True)
 class ResolvedHistoryContext:
     """All static and learned inputs for one historical series."""
@@ -99,12 +107,21 @@ class ExchangeHistoryPolicyResolver:
             getattr(policy, "calendar_id", None)
             or getattr(market, "calendar_id", None)
         )
+        native_calendar = (
+            native_kline_calendar(key.exchange, key.market_type, key.variant)
+            if key.channel == "kline" else None
+        )
+        if native_calendar is not None:
+            calendar_id = native_calendar.calendar_id
+            self.service.calendars.register(calendar_id, native_calendar, replace=True)
         revision = self._revision(
             capabilities=capabilities,
             policy=policy,
             market=market,
             metadata=metadata,
         )
+        if native_calendar is not None:
+            revision = f"{revision}:{calendar_id}"
 
         listed_at = self._timestamp(metadata, "continuousTradingAtMs")
         if listed_at is None:

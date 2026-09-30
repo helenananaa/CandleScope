@@ -101,7 +101,10 @@ _INTERACTIVE_BACKFILL_REASONS = frozenset({
     "tail_gap",
 })
 _MAINTENANCE_BACKFILL_REASONS = (
-    _BACKGROUND_BACKFILL_REASONS | frozenset({"price_daily_open"})
+    # Durable delivery recovery may retry old series for much longer than an
+    # interactive gap fetch. Keep its normal priority, but let a visible chart
+    # use the bounded reserve while that recovery occupies the single lane.
+    _BACKGROUND_BACKFILL_REASONS | frozenset({"price_daily_open", "bar_delivery_recovery"})
 )
 
 # Public API waits are capped at eight seconds, so one minute preserves useful
@@ -186,6 +189,19 @@ BarsBackfilledCallback = Callable[..., Awaitable[None]]
 EventEmitter = Callable[[DataEvent], Awaitable[None]]
 
 
+class _RepairRetryDeferred(Exception):
+    """Retryable work yields its worker without settling the caller's future."""
+
+    def __init__(self, delay: float, attempt: int) -> None:
+        super().__init__("repair_retry")
+        self.retry_after_seconds = delay
+        self.attempt = attempt
+        self.retry_at_monotonic = None
+        self.retry_at_ms = None
+        self.reason = "repair_retry"
+        self.bucket_key = None
+
+
 @dataclass(slots=True)
 class RepairRequest:
     """A single requested historical repair range."""
@@ -202,6 +218,8 @@ class RepairRequest:
     wait_policy: str = "async"
     metadata: dict[str, Any] = field(default_factory=dict)
     request_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+
+    _retry_attempt: int = field(default=1, repr=False)
 
     def __post_init__(self) -> None:
         if self.priority is None:
@@ -1612,6 +1630,10 @@ class _BackfillScheduler:
         try:
             try:
                 outcome = await self._execute(chunk.request)
+            except _RepairRetryDeferred as exc:
+                chunk.request._retry_attempt = exc.attempt + 1
+                await self._defer_chunk(chunk, exc)
+                return
             except RateLimitDeferred as exc:
                 await self._defer_chunk(chunk, exc)
                 return
@@ -1640,9 +1662,9 @@ class _BackfillScheduler:
     async def _defer_chunk(
         self,
         chunk: _FetchChunk,
-        exc: RateLimitDeferred,
+        exc: RateLimitDeferred | _RepairRetryDeferred,
     ) -> None:
-        """Return quota-blocked work to the ready heap without completing it."""
+        """Return deferred work to the ready heap without completing it."""
 
         state = self._requests.get(chunk.parent_id)
         series = self._series.get(chunk.request.series_key)
@@ -1686,7 +1708,8 @@ class _BackfillScheduler:
         chunk.defer_reason = exc.reason
         chunk.rate_limit_bucket = exc.bucket_key
         chunk.defer_count += 1
-        self.exchange_rate_limit_deferrals += 1
+        if isinstance(exc, RateLimitDeferred):
+            self.exchange_rate_limit_deferrals += 1
         if series is None:
             series = self._series.setdefault(
                 chunk.request.series_key,
@@ -1698,7 +1721,7 @@ class _BackfillScheduler:
         state.progress_revision += 1
         self._publish_progress(
             state,
-            status="rate_limit_deferred",
+            status="rate_limit_deferred" if isinstance(exc, RateLimitDeferred) else "retry_wait",
             details={
                 "retry_at_ms": chunk.retry_at_ms,
                 "retry_in_ms": max(
@@ -4493,6 +4516,7 @@ class BackfillCoordinator:
         return future
 
     async def _run_with_retries(self, request: RepairRequest) -> RepairOutcome:
+        next_attempt = request._retry_attempt
         prepared = self._prepare_history_request(request)
         if prepared.request is None:
             return self._history_no_fetch_outcome(request, prepared.plan)
@@ -4509,7 +4533,7 @@ class BackfillCoordinator:
         last_error: str | None = None
         report: Any | None = None
 
-        for attempt in range(1, self._max_retries + 1):
+        for attempt in range(next_attempt, self._max_retries + 1):
             try:
                 await self._ledger_mark_started(request, attempt=attempt)
                 report = await self._engine.run(
@@ -4535,8 +4559,7 @@ class BackfillCoordinator:
                         error="; ".join(report.errors) if report.errors else None,
                         delay_seconds=delay,
                     )
-                    await asyncio.sleep(delay)
-                    continue
+                    raise _RepairRetryDeferred(delay, attempt)
 
                 bars_loaded = 0
                 verification: dict[str, Any] = {
@@ -4587,8 +4610,7 @@ class BackfillCoordinator:
                             ),
                             delay_seconds=delay,
                         )
-                        await asyncio.sleep(delay)
-                        continue
+                        raise _RepairRetryDeferred(delay, attempt)
                     bars_loaded = await self._load_backfilled_to_cache(
                         request,
                         report,
@@ -4639,6 +4661,8 @@ class BackfillCoordinator:
                         or self._report_retryable(report)
                     ),
                 )
+            except _RepairRetryDeferred:
+                raise
             except RateLimitDeferred as exc:
                 await self._ledger_mark_retry_wait(
                     request,
@@ -4670,7 +4694,7 @@ class BackfillCoordinator:
                         error=last_error,
                         delay_seconds=delay,
                     )
-                    await asyncio.sleep(delay)
+                    raise _RepairRetryDeferred(delay, attempt)
 
         await self._emit_failed(request, report, last_error)
         return RepairOutcome(
