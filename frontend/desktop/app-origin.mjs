@@ -43,10 +43,18 @@ export async function startDesktopAssetServer(directory, { port = 18079 } = {}) 
       response.end(request.method === "HEAD" ? undefined : data);
     } catch { response.writeHead(404).end(); }
   });
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(port, "127.0.0.1", resolve);
+  const listen = (candidate) => new Promise((resolve, reject) => {
+    const failed = (error) => { server.off("listening", ready); reject(error); };
+    const ready = () => { server.off("error", failed); resolve(); };
+    server.once("error", failed);
+    server.once("listening", ready);
+    server.listen(candidate, "127.0.0.1");
   });
+  try { await listen(port); }
+  catch (error) {
+    if (port === 0 || !["EADDRINUSE", "EACCES"].includes(error.code)) throw error;
+    await listen(0);
+  }
   origin = `http://127.0.0.1:${server.address().port}`;
   return { appUrl: `${origin}/`, close: () => new Promise((resolve, reject) => {
     server.close((error) => error ? reject(error) : resolve());

@@ -1,13 +1,76 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import { SidecarSupervisor, SidecarStartupError } from "./sidecar-supervisor.mjs";
+
+test("dynamic endpoint stays fixed across restarts and an occupied session port fails closed", async () => {
+  const occupied = http.createServer((_q, r) => r.end(JSON.stringify({ desktop_instance_id: "unrelated" })));
+  await new Promise(resolve => occupied.listen(0, "127.0.0.1", resolve));
+  const preferred = occupied.address().port;
+  const root = await mkdtemp(path.join(os.tmpdir(), "candlescope-dynamic-"));
+  const source = `
+    const http = require('node:http');
+    const fs = require('node:fs');
+    const id = process.env.CANDLESCOPE_DESKTOP_INSTANCE_ID;
+    const server = http.createServer((q,r) => r.end(JSON.stringify({desktop_instance_id:id})));
+    server.listen(Number(process.env.CANDLESCOPE_DESKTOP_BOUND_PORT || 0), '127.0.0.1', () => fs.writeFileSync(process.env.CANDLESCOPE_DESKTOP_ENDPOINT_FILE,
+      JSON.stringify({port:server.address().port,instanceId:id})));
+    process.stdin.resume();
+    process.stdin.on('end', () => server.close());
+  `;
+  const supervisor = new SidecarSupervisor({ command: process.execPath, args: ["-e", source], cwd: root,
+    dynamicPort: true, gracefulStdin: true, healthUrl: `http://127.0.0.1:${preferred}/health`,
+    healthTimeoutMs: 5000, shutdownTimeoutMs: 1000, logPath: path.join(root, "child.log") });
+  let sessionUrl;
+  const replacement = http.createServer((_q, r) => r.end("unrelated replacement"));
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await supervisor.start();
+      assert.notEqual(new URL(result.healthUrl).port, String(preferred));
+      assert.equal(result.running, true);
+      if (sessionUrl) assert.equal(result.healthUrl, sessionUrl);
+      sessionUrl = result.healthUrl;
+      assert.deepEqual(await readdir(root), ["child.log"]);
+      await supervisor.stop();
+      await assert.rejects(fetch(result.healthUrl));
+    }
+    await new Promise(resolve => replacement.listen(Number(new URL(sessionUrl).port), "127.0.0.1", resolve));
+    await assert.rejects(supervisor.start(), SidecarStartupError);
+    assert.equal(supervisor.diagnostics().running, false);
+    assert.equal(await (await fetch(sessionUrl)).text(), "unrelated replacement");
+    assert.deepEqual(await readdir(root), ["child.log"]);
+    replacement.closeAllConnections();
+    await new Promise(resolve => replacement.close(resolve));
+    assert.equal((await supervisor.start()).healthUrl, sessionUrl);
+    assert.equal((await (await fetch(`http://127.0.0.1:${preferred}`)).json()).desktop_instance_id, "unrelated");
+  } finally {
+    await supervisor.stop();
+    replacement.closeAllConnections();
+    if (replacement.listening) await new Promise(resolve => replacement.close(resolve));
+    occupied.closeAllConnections();
+    await new Promise(resolve => occupied.close(resolve));
+  }
+});
+
+test("a mismatched endpoint announcement is never probed and is removed on failure", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "candlescope-bad-endpoint-"));
+  let requests = 0;
+  const supervisor = new SidecarSupervisor({ command: process.execPath,
+    args: ["-e", "require('node:fs').writeFileSync(process.env.CANDLESCOPE_DESKTOP_ENDPOINT_FILE, JSON.stringify({port:18080,instanceId:'wrong'}));setInterval(()=>{},1000)"],
+    cwd: root, dynamicPort: true, healthUrl: "http://127.0.0.1:18080/health",
+    fetchImpl: () => { requests++; throw new Error("must not probe"); },
+    healthTimeoutMs: 300, shutdownTimeoutMs: 1000, logPath: path.join(root, "child.log") });
+  await assert.rejects(supervisor.start(), SidecarStartupError);
+  assert.equal(requests, 0);
+  assert.deepEqual(await readdir(root), ["child.log"]);
+  assert.equal(supervisor.diagnostics().running, false);
+});
 
 async function freePort() {
   const server = http.createServer();

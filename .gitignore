@@ -276,6 +276,9 @@ backend/data/prepared-inputs/
 .codex/
 local_docs/
 
+# Local design preview
+/frontend/public/design-previews/quiet-terminal-preview.html
+
 # CandleScope user preferences (stored in browser localStorage, never in files)
 # Keys: candlescope-user-prefs, candlescope-visible-ranges, candlescope-custom-intervals, candlescope-drawings-*
 

@@ -380,6 +380,7 @@ const PT_BR_PRODUCT_TOKENS = new Set([
   "version", "index", "group", "momentum", "sample", "cursor", "download",
   "bytes", "job", "jobs", "studio", "kernel", "stream", "checkpoint",
   "amplitude", "use", "decide", "prepare", "ms", "px", "id", "vs",
+  "min", "bps", "pixel", "real", "zero",
 ]);
 
 function isAllowedEnglishClone(message: string): boolean {
@@ -404,6 +405,11 @@ function isAllowedEnglishClone(message: string): boolean {
 function stripProtocol(text: string): string {
   return text
     .replace(/\{\{?[A-Za-z0-9_]+\}?\}/g, " ")
+    .replace(/\b(?:React|Lightweight Charts)\b/g, " ")
+    .replace(/\bHome\b/g, " ") // Keyboard key label; lowercase English prose still counts.
+    .replace(/\b[\w-]+\.(?:csv|json)\b/g, " ")
+    .replace(/\b[a-z]+(?:_[a-z0-9]+)+=(?:true|false)\b/g, " ")
+    .replace(/\binit\/on_bar\/on_fill\(ctx, bar\)/g, " ")
     .replace(/\bfail closed\b/gi, " ")
     .replace(/\bOne Step Back\b/g, " ")
     .replace(/\bPoint & Figure\b/g, " ")
@@ -446,6 +452,20 @@ function leftoverSourceTokens(english: string, portuguese: string): string[] {
   }
   return [...leftover].sort();
 }
+
+test("Portuguese copy checks preserve product names and executable examples without allowing English prose", () => {
+  assert.deepEqual(leftoverSourceTokens(
+    "Use React and Lightweight Charts; import bars.csv and execution.json; use_bar_magnifier=true; init/on_bar/on_fill(ctx, bar).",
+    "Utilize React e Lightweight Charts; importe bars.csv e execution.json; use_bar_magnifier=true; init/on_bar/on_fill(ctx, bar).",
+  ), []);
+  assert.deepEqual(leftoverSourceTokens("Load libraries", "Load bibliotecas"), ["load"]);
+  assert.equal(isAllowedEnglishClone("Load libraries"), false);
+  assert.deepEqual(leftoverSourceTokens(
+    "Drag toolbar; arrow keys move, Home resets",
+    "Arraste a barra; setas movem, Home redefine",
+  ), []);
+  assert.deepEqual(leftoverSourceTokens("Go home", "Ir home"), ["home"]);
+});
 
 test("pt-BR host chrome uses Brazilian trading copy rather than English clones or European Portuguese", () => {
   withLocale("pt-BR", () => {

@@ -51,7 +51,7 @@ export function MarketDataWorkspaceProvider({
         ? new SharedIndicatorStreamCoordinator({
             // Fail closed until /indicators/diagnostics advertises its limit.
             maxSubscriptions: 1,
-            url: getIndicatorStreamUrl(),
+            url: getIndicatorStreamUrl,
           })
         : null,
       klineApi: requestCoordinator,

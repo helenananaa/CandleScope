@@ -55,7 +55,7 @@ function stringList(value: unknown): IntervalString[] {
 export class BatchKlineStreamCoordinator {
   private readonly subscriptions = new Map<string, LogicalBatchSubscription>();
   private readonly socketFactory: (url: string) => KlineStreamSocket;
-  private readonly url: string;
+  private readonly url: string | undefined;
   private socket: KlineStreamSocket | null = null;
   private sequence = 0;
   private requestSequence = 0;
@@ -73,7 +73,7 @@ export class BatchKlineStreamCoordinator {
 
   constructor(options: BatchKlineStreamCoordinatorOptions = {}) {
     this.socketFactory = options.socketFactory || ((url) => new WebSocket(url));
-    this.url = options.url || getBatchKlineStreamUrl();
+    this.url = options.url;
   }
 
   readonly subscribe: KlineStreamFactory = (series, options = {}) => {
@@ -155,9 +155,13 @@ export class BatchKlineStreamCoordinator {
 
   private ensureSocket(): void {
     if (this.socket !== null) return;
-    const socket = this.socketFactory(this.url);
+    const socket = this.socketFactory(this.url || getBatchKlineStreamUrl());
     this.socket = socket;
+    // Closing the last subscription retires this socket immediately, but its
+    // browser events can arrive after a replacement has acquired subscribers.
+    // Never let those events reset the replacement's acknowledgements/epochs.
     socket.onopen = () => {
+      if (this.socket !== socket) return;
       this.counts.socketOpens += 1;
       const active = [...this.subscriptions.values()].filter((item) => (
         !item.closed && item.intervals.length > 0
@@ -168,13 +172,18 @@ export class BatchKlineStreamCoordinator {
       });
       this.sendCommand("subscribe", active);
     };
-    socket.onmessage = (event) => this.handleMessage(event);
+    socket.onmessage = (event) => {
+      if (this.socket !== socket) return;
+      this.handleMessage(event);
+    };
     socket.onerror = (event) => {
+      if (this.socket !== socket) return;
       this.subscriptions.forEach((item) => item.options.onError?.(event, item.controller));
     };
     socket.onclose = (event) => {
+      if (this.socket !== socket) return;
       this.counts.socketCloses += 1;
-      if (this.socket === socket) this.socket = null;
+      this.socket = null;
       this.subscriptions.forEach((item) => {
         item.serverState = "absent";
         item.activeIntervals = [];

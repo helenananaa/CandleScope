@@ -101,6 +101,7 @@ function createManager(store, multiWindowEnabled = true) {
     store,
     channels: { lifecycle: "lifecycle", placement: "placement", closeRequested: "close" },
     preloadPath: "preload.cjs",
+    backendPort: 28081,
     appUrl: "http://127.0.0.1:15287/",
     multiWindowEnabled,
   });
@@ -112,6 +113,12 @@ test("cached four-window topology restores four native windows with scoped URLs"
   await manager.restoreCached(state);
   assert.deepEqual(manager.diagnostics().windowIds, ["main-window", "window-2", "window-3", "window-4"]);
   assert.match(manager.windows.get("window-3").url, /windowId=window-3/);
+  for (const window of manager.windows.values()) {
+    assert.deepEqual(window.options.webPreferences.additionalArguments, ["--candlescope-backend-port=28081"]);
+  }
+  await manager.openAppPage("http://127.0.0.1:15287/replay.html");
+  assert.deepEqual([...manager.appWindows.values()][0].options.webPreferences.additionalArguments,
+    ["--candlescope-backend-port=28081"]);
 });
 
 test("desktop authority rejects unknown windows, subframes and external navigation", async () => {

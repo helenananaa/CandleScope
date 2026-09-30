@@ -50,6 +50,33 @@ function sent(socket: FakeSocket): Array<Record<string, unknown>> {
   return socket.sent.map((payload) => JSON.parse(payload) as Record<string, unknown>);
 }
 
+test("browser URL resolution waits for an active indicator subscription", () => {
+  const browser = { url: undefined as string | undefined };
+  let resolutions = 0;
+  const urls: string[] = [];
+  const coordinator = new SharedIndicatorStreamCoordinator({
+    url: () => {
+      resolutions += 1;
+      assert.ok(browser.url, "browser context must be ready before connecting");
+      return browser.url;
+    },
+    socketFactory: (url) => {
+      urls.push(url);
+      return new FakeSocket();
+    },
+  });
+  const connection = coordinator.createLogicalConnection({
+    workspaceId: "workspace-a", windowId: "main-window", cellId: "cell-1",
+  });
+  connection.setSubscriptions([subscription("ma")]);
+  assert.equal(resolutions, 0);
+  browser.url = "wss://example/api/v1/indicators/stream";
+  connection.start();
+  assert.equal(resolutions, 1);
+  assert.deepEqual(urls, [browser.url]);
+  coordinator.closeAll();
+});
+
 test("wire IDs include workspace, window, Cell, and indicator identity", () => {
   assert.equal(
     indicatorWireClientId(

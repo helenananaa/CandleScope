@@ -4,6 +4,10 @@ import test from "node:test";
 import type { KlineStreamSocket } from "../klineContracts.js";
 import { BatchKlineStreamCoordinator } from "../feed/batchKlineStreamCoordinator.js";
 import { resolveKlineBatchStreamEnabled } from "../klineBatchFeature.js";
+import { SeriesDataFeed } from "../feed/seriesDataFeed.js";
+import { KlineConsumerRecovery } from "../feed/klineConsumerRecovery.js";
+import type { KlineFetchResult } from "../klineContracts.js";
+import { epochSeconds } from "../../../test/testHelpers.js";
 
 class FakeSocket implements KlineStreamSocket {
   readonly OPEN = 1;
@@ -22,6 +26,101 @@ class FakeSocket implements KlineStreamSocket {
     this.onmessage?.({ data: JSON.stringify(payload) } as MessageEvent<string>);
   }
 }
+
+for (const retire of ["last-subscriber", "close-all"] as const) {
+  test(`retired socket events cannot invalidate a new interval's history (${retire})`, async () => {
+    const sockets: FakeSocket[] = [];
+    const coordinator = new BatchKlineStreamCoordinator({
+      url: "ws://test/stream/klines_batch",
+      socketFactory: () => { const socket = new FakeSocket(); sockets.push(socket); return socket; },
+    });
+    const series = { exchange: "binance", marketType: "spot", symbol: "BTCUSDT", interval: "4h" };
+    let finish!: (result: KlineFetchResult) => void;
+    const response = new Promise<KlineFetchResult>((resolve) => { finish = resolve; });
+    const committed: number[] = [];
+    const feed = new SeriesDataFeed({
+      api: {
+        fetchKlinesHistory: () => response,
+        fetchKlinesBefore: () => response,
+        fetchKlinesRange: () => response,
+        fetchLatestKlines: () => response,
+        getMultiStreamUrl: () => "ws://test",
+      },
+      getActiveSeries: () => series,
+      commitMergedChartData: (_symbol, _interval, rows) => { committed.push(rows.length); },
+    });
+    const recovery = new KlineConsumerRecovery();
+    let closes = 0;
+    let opens = 0;
+    let errors = 0;
+    let controls = 0;
+    try {
+      const previous = coordinator.subscribe(series, { intervals: ["1m"] });
+      const oldSocket = sockets[0]!;
+      oldSocket.open();
+      if (retire === "close-all") coordinator.closeAll();
+      else previous.close();
+      coordinator.subscribe(series, {
+        intervals: ["4h"],
+        onClose: () => { closes += 1; recovery.capture(feed, series, []); },
+        onOpen: () => { opens += 1; },
+        onError: () => { errors += 1; },
+        onControlMessage: () => { controls += 1; },
+      });
+      const currentSocket = sockets[1]!;
+      currentSocket.open();
+      feed.beginEpoch(series);
+      const history = feed.getBars(series, { countBack: 500, source: "initial-history" });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      // Browser close events arrive asynchronously, after the new subscription
+      // and its HTTP bootstrap have already started.
+      oldSocket.onclose?.({} as CloseEvent);
+      oldSocket.onerror?.({} as Event);
+      oldSocket.onopen?.({} as Event);
+      oldSocket.message({ type: "connected" });
+      finish({ data: [{ time: epochSeconds(14400), close: 1 }], complete: true, retryable: false });
+      const result = await history;
+      assert.equal(result.stale, false, "retired socket must not fence the new bootstrap");
+      assert.deepEqual(committed, [1]);
+      assert.equal(closes, 0);
+      assert.equal(errors, 0);
+      assert.equal(opens, 1);
+      assert.equal(controls, 0);
+      assert.equal(currentSocket.sent.length, 1, "retired open must not duplicate subscribe");
+      // A genuine close of the current transport still triggers recovery.
+      currentSocket.onclose?.({} as CloseEvent);
+      assert.equal(closes, 1);
+    } finally {
+      coordinator.closeAll();
+    }
+  });
+}
+
+test("batch stream resolves the browser origin at subscription time, not during rendering", () => {
+  const previousLocation = Object.getOwnPropertyDescriptor(globalThis, "location");
+  const urls: string[] = [];
+  let coordinator: BatchKlineStreamCoordinator | undefined;
+  try {
+    Reflect.deleteProperty(globalThis, "location");
+    coordinator = new BatchKlineStreamCoordinator({
+      socketFactory: (url) => { urls.push(url); return new FakeSocket(); },
+    });
+    assert.equal(urls.length, 0);
+    Object.defineProperty(globalThis, "location", {
+      configurable: true, value: { protocol: "https:", host: "charts.example" },
+    });
+    coordinator.subscribe(
+      { exchange: "binance", marketType: "spot", symbol: "BTCUSDT" },
+      { intervals: ["1m"], onKline() {} },
+    );
+    assert.equal(urls.length, 1);
+    assert.ok(urls[0]?.startsWith("wss://charts.example/api/v1/"));
+  } finally {
+    coordinator?.closeAll();
+    if (previousLocation) Object.defineProperty(globalThis, "location", previousLocation);
+    else Reflect.deleteProperty(globalThis, "location");
+  }
+});
 
 test("batch K-line flag defaults on and preserves strict explicit rollback", () => {
   assert.equal(resolveKlineBatchStreamEnabled(), true);

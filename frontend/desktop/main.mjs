@@ -41,7 +41,7 @@ const managementSession = {
   sessionToken: randomBytes(32).toString("base64url"),
   csrfToken: randomBytes(32).toString("base64url"),
 };
-const backendPort = Number(process.env.CANDLESCOPE_DESKTOP_BACKEND_PORT || 18080);
+let backendPort = Number(process.env.CANDLESCOPE_DESKTOP_BACKEND_PORT || 18080);
 const phase7Scenario = String(process.env.CANDLESCOPE_DESKTOP_PHASE7_SCENARIO || "W1").toUpperCase();
 const phase8Output = process.env.CANDLESCOPE_DESKTOP_PHASE8_OUT || "";
 const phase8Mode = String(process.env.CANDLESCOPE_DESKTOP_PHASE8_MODE || "W3").toUpperCase();
@@ -139,6 +139,7 @@ function createSupervisor() {
   return new SidecarSupervisor({
     ...command,
     gracefulStdin: !process.env.CANDLESCOPE_DESKTOP_SIDECAR_COMMAND_JSON,
+    dynamicPort: !process.env.CANDLESCOPE_DESKTOP_SIDECAR_COMMAND_JSON,
     cwd: backendRoot,
     env: {
       ...(app.isPackaged ? desktopBackendEnvironment(JSON.parse(readFileSync(
@@ -1996,6 +1997,7 @@ async function boot() {
   if (!isTrustedAppUrl(appUrl, appUrl)) throw new Error("Desktop URL must be a loopback application page");
   supervisor = createSupervisor();
   await supervisor?.start();
+  if (supervisor) backendPort = Number(new URL(supervisor.diagnostics().healthUrl).port);
 
   const store = new DesktopShellStateStore(path.join(app.getPath("userData"), "desktop-windows-v1.json"));
   const cached = await store.load();
@@ -2006,6 +2008,7 @@ async function boot() {
     store,
     channels: DESKTOP_IPC,
     preloadPath: path.join(desktopDir, "preload.cjs"),
+    backendPort,
     appUrl: instrumentedAppUrl(),
     multiWindowEnabled,
   });

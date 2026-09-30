@@ -56,7 +56,7 @@ interface PhysicalShard {
 export interface SharedIndicatorStreamCoordinatorOptions {
   maxSubscriptions?: number;
   socketFactory?: (url: string) => IndicatorStreamSocket;
-  url: string;
+  url: string | (() => string);
 }
 
 export interface SharedIndicatorStreamDiagnostics {
@@ -97,7 +97,7 @@ function localizeMessage(message: IndicatorWsMessage, localClientId: string): In
  * into physical shards no larger than the backend-advertised limit.
  */
 export class SharedIndicatorStreamCoordinator {
-  private readonly url: string;
+  private readonly url: SharedIndicatorStreamCoordinatorOptions["url"];
   private readonly socketFactory: ((url: string) => IndicatorStreamSocket) | undefined;
   private readonly logicalClients = new Map<number, LogicalClient>();
   private readonly shards: PhysicalShard[] = [];
@@ -263,7 +263,8 @@ export class SharedIndicatorStreamCoordinator {
       logicals.forEach((logical) => callback(logical, ...args));
     };
     shard.connection = new IndicatorStreamConnection({
-      url: this.url,
+      // Resolve browser context only when a subscription needs a wire connection.
+      url: typeof this.url === "function" ? this.url() : this.url,
       ...(this.socketFactory ? { socketFactory: this.socketFactory } : {}),
       onConnectionReset: (reason) => notifyOwners(
         (logical, value) => logical.options.onConnectionReset?.(value),

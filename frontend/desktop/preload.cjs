@@ -30,8 +30,13 @@ function subscribe(channel, listener) {
   return () => ipcRenderer.removeListener(channel, handler);
 }
 
+const backendPort = Number(process.argv.find((value) => value.startsWith("--candlescope-backend-port="))?.split("=")[1]);
+if (!Number.isInteger(backendPort) || backendPort < 1 || backendPort > 65535) {
+  throw new Error("Desktop backend endpoint was not configured by the host");
+}
+
 contextBridge.exposeInMainWorld("candlescopeDesktop", Object.freeze({
-  apiBase: `http://127.0.0.1:${process.env.CANDLESCOPE_DESKTOP_BACKEND_PORT || "18080"}/api/v1`,
+  apiBase: `http://127.0.0.1:${backendPort}/api/v1`,
   getBootstrap: () => ipcRenderer.invoke(channels.bootstrap),
   getPluginManagementSession: () => ipcRenderer.sendSync(channels.managementSession),
   openAppPage: (url) => ipcRenderer.invoke(channels.openAppPage, url),

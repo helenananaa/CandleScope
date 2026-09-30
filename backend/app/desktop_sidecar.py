@@ -7,12 +7,16 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import errno
+import json
 import os
+import socket
 import sys
 import threading
 import time
 from collections.abc import Iterator
 from typing import Any
+from pathlib import Path
 
 import uvicorn
 
@@ -67,21 +71,68 @@ def watch_parent(server: Any) -> None:
         server.should_exit = True
 
 
+def bind_desktop_socket(host: str, port: int, *, allow_fallback: bool = True) -> socket.socket:
+    """Keep the socket reserved through Uvicorn startup; never probe then rebind."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        if os.name == "nt":
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        try:
+            sock.bind((host, port))
+        except OSError as error:
+            if not allow_fallback:
+                raise
+            if error.errno not in (errno.EADDRINUSE, errno.EACCES) and getattr(error, "winerror", None) not in (10048, 10013):
+                raise
+            sock.bind((host, 0))
+        sock.listen(128)
+        sock.setblocking(False)
+        return sock
+    except BaseException:
+        sock.close()
+        raise
+
+
 def serve(host: str, port: int) -> None:
+    endpoint_file = os.environ.get("CANDLESCOPE_DESKTOP_ENDPOINT_FILE")
+    bound_port = os.environ.get("CANDLESCOPE_DESKTOP_BOUND_PORT") if endpoint_file else None
+    if bound_port:
+        port = int(bound_port)
+        if not 1 <= port <= 65535:
+            raise ValueError("Invalid desktop session port")
+    sock = bind_desktop_socket(host, port, allow_fallback=not bound_port) if endpoint_file else None
+    if sock is not None:
+        port = sock.getsockname()[1]
+        os.environ["CANDLE_PORT"] = str(port)
+        endpoint = Path(endpoint_file)
+        temporary = endpoint.with_suffix(".tmp")
+        try:
+            temporary.write_text(json.dumps({
+                "port": port,
+                "instanceId": os.environ["CANDLESCOPE_DESKTOP_INSTANCE_ID"],
+            }), encoding="utf-8")
+            temporary.replace(endpoint)
+        except BaseException:
+            sock.close()
+            raise
     server = uvicorn.Server(uvicorn.Config("app.main:app", host=host, port=port))
     threading.Thread(target=watch_parent, args=(server,), name="desktop-parent-pipe", daemon=True).start()
 
     async def run() -> None:
         try:
-            await server.serve()
+            await server.serve(sockets=[sock] if sock is not None else None)
         finally:
             # Uvicorn returns early if shutdown was requested during startup.
             # Finish lifespan cleanup before asyncio cancels background tasks.
             if server.started and not server.lifespan.shutdown_event.is_set():
-                await server.shutdown()
+                await server.shutdown(sockets=[sock] if sock is not None else None)
 
     server.config.setup_event_loop()
-    asyncio.run(run())
+    try:
+        asyncio.run(run())
+    finally:
+        if sock is not None:
+            sock.close()
 
 
 if __name__ == "__main__":

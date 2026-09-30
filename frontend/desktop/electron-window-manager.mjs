@@ -83,7 +83,8 @@ export class ElectronWindowManager {
     target.searchParams.set("windowId", id);
     const window = new this.options.BrowserWindow({
       width: 1280, height: 850, show: false, title: "CandleScope",
-      webPreferences: { preload: this.options.preloadPath, contextIsolation: true, nodeIntegration: false, sandbox: true },
+      webPreferences: { preload: this.options.preloadPath, contextIsolation: true, nodeIntegration: false, sandbox: true,
+        additionalArguments: [`--candlescope-backend-port=${this.options.backendPort}`] },
     });
     this.appWindows.set(id, window);
     this.protectWindow(window);
@@ -156,6 +157,7 @@ export class ElectronWindowManager {
         nodeIntegration: false,
         sandbox: true,
         spellcheck: false,
+        additionalArguments: [`--candlescope-backend-port=${this.options.backendPort}`],
       },
     });
     this.windows.set(saved.id, window);

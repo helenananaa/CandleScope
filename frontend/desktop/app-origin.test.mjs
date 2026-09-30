@@ -6,6 +6,26 @@ import test from "node:test";
 import http from "node:http";
 import { isTrustedAppUrl, startDesktopAssetServer } from "./app-origin.mjs";
 
+test("occupied asset port falls back to an owned listener and preserves the existing service", async () => {
+  const occupied = http.createServer((_req, res) => res.end("existing service"));
+  await new Promise(resolve => occupied.listen(0, "127.0.0.1", resolve));
+  const port = occupied.address().port;
+  const root = await mkdtemp(path.join(os.tmpdir(), "candlescope-assets-busy-"));
+  await writeFile(path.join(root, "index.html"), "desktop");
+  let server;
+  try {
+    server = await startDesktopAssetServer(root, { port });
+    assert.notEqual(Number(new URL(server.appUrl).port), port);
+    assert.equal(await (await fetch(server.appUrl)).text(), "desktop");
+    assert.equal(await (await fetch(`http://127.0.0.1:${port}`)).text(), "existing service");
+    assert.equal(isTrustedAppUrl(`http://127.0.0.1:${port}/`, server.appUrl), false);
+  } finally {
+    await server?.close();
+    occupied.closeAllConnections();
+    await new Promise(resolve => occupied.close(resolve));
+  }
+});
+
 test("packaged assets have an exact loopback origin and do not expose sibling files", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "candlescope-assets-"));
   const dist = path.join(root, "dist");
