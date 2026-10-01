@@ -1,3 +1,4 @@
+import type { StrategyTradeFocus } from "./strategyTradeReview.js";
 import {
   Suspense,
   lazy,
@@ -61,6 +62,8 @@ import {
   saveChartStrategyPanelPreferences,
   type ChartStrategyPanelTab,
 } from "./chartStrategyPanelPreferences.js";
+
+import StrategyDock from "./StrategyDock.js";
 
 const StrategyScriptWorkspace = lazy(() => import("./StrategyScriptWorkspace.js"));
 const NativeStrategyPanel = lazy(() => import("../native/NativeStrategyPanel.js"));
@@ -166,6 +169,8 @@ export interface ChartStrategyTesterPanelProps {
   onSelectExplanation?(selection: TradeExplanationSelection): void;
   onCloseExplanation?(): void;
   onLocateTrade?(timeMs: number): void;
+  active?: boolean;
+  onReviewTrade?(trade: StrategyTradeFocus | null): void;
   onPrepareData(): void;
   onStopObserving(): void;
   onResumeObserving(): void;
@@ -178,12 +183,17 @@ export interface ChartStrategyTesterPanelProps {
 
 export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanelProps) {
   const [mode, setMode] = useState<"NATIVE" | "CANDLESCOPE">(props.attachment ? "CANDLESCOPE" : "NATIVE");
+  const [visited, setVisited] = useState(() => new Set([mode]));
   useLocale();
-  return <div className="chart-strategy-mode-container"><nav className="native-mode-switch" aria-label={t("native.mode")}>
-    <button aria-pressed={mode === "NATIVE"} onClick={() => setMode("NATIVE")}>{t("native.fullStrategies")}</button>
-    <button aria-pressed={mode === "CANDLESCOPE"} onClick={() => setMode("CANDLESCOPE")}>{t("native.hostMode")}</button>
-  </nav>{mode === "NATIVE" ? <Suspense fallback={<p>{t("native.loading")}</p>}><NativeStrategyPanel key={`${props.session.exchange}:${props.session.marketType}:${props.session.symbol}:${props.session.interval}`} {...props} /></Suspense>
-    : <CandleScopeStrategyTesterPanel {...props} />}</div>;
+  return <StrategyDock key={props.cellScope} scope={props.cellScope}
+    title={`${props.attachment ? `${props.attachment.displayName} · ` : ""}${props.session.symbol} · ${props.session.interval}`}
+    selector={<select aria-label={t("native.mode")} value={mode} onChange={(event) => { const next = event.target.value as typeof mode; setMode(next); setVisited((items) => new Set([...items, next])); }}>
+      <option value="NATIVE">{t("native.fullStrategies")}</option>
+      <option value="CANDLESCOPE">{t("native.hostMode")}</option>
+    </select>}>
+    {visited.has("NATIVE") && <div className="strategy-mode-pane" hidden={mode !== "NATIVE"}><Suspense fallback={<p>{t("native.loading")}</p>}><NativeStrategyPanel key={`${props.session.exchange}:${props.session.marketType}:${props.session.symbol}:${props.session.interval}`} {...props} active={props.active !== false && mode === "NATIVE"} docked /></Suspense></div>}
+    {visited.has("CANDLESCOPE") && <div className="strategy-mode-pane" hidden={mode !== "CANDLESCOPE"}><CandleScopeStrategyTesterPanel {...props} active={props.active !== false && mode === "CANDLESCOPE"} /></div>}
+  </StrategyDock>;
 }
 
 export function CandleScopeStrategyTesterPanel({
@@ -207,6 +217,8 @@ export function CandleScopeStrategyTesterPanel({
   onSelectExplanation = () => undefined,
   onCloseExplanation = () => undefined,
   onLocateTrade = () => undefined,
+  onReviewTrade,
+  active = true,
   onPrepareData,
   onStopObserving,
   onResumeObserving,
@@ -901,12 +913,12 @@ export function CandleScopeStrategyTesterPanel({
           </div>
         )}
 
-        {activeTab === "trades" && (
-          result
-            ? <ChartStrategyTradeList
+        <div hidden={activeTab !== "trades"}>{result
+            ? <ChartStrategyTradeList key={result.run.run_id} active={active && activeTab === "trades"}
               result={result}
               locale={locale}
               onLocateTrade={onLocateTrade}
+              {...(onReviewTrade ? { onReviewTrade } : {})}
               onSelectExplanation={onSelectExplanation}
             />
             : (
@@ -915,7 +927,7 @@ export function CandleScopeStrategyTesterPanel({
                 <p>{resultError ?? t("chartTester.placeholder.trades")}</p>
               </div>
             )
-        )}
+        }</div>
       </div>
       {selectedExplanation && (
         <TradeExplanationPopover

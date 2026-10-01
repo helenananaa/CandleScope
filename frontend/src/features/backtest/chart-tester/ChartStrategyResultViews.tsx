@@ -1,4 +1,6 @@
+import { strategyTradeFocus, type StrategyTradeFocus } from "./strategyTradeReview.js";
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -330,11 +332,15 @@ export function ChartStrategyResultOverview({
 }
 
 export function ChartStrategyTradeList({
+  active = true,
+  onReviewTrade,
   result,
   locale,
   onLocateTrade,
   onSelectExplanation,
 }: {
+  active?: boolean;
+  onReviewTrade?(trade: StrategyTradeFocus | null): void;
   result: ChartStrategyResultBundle;
   locale: string;
   onLocateTrade(timeMs: number): void;
@@ -345,6 +351,29 @@ export function ChartStrategyTradeList({
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(224);
   const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);
+  const selectedIndex = trades.findIndex((trade, index) => (trade.trade_id ?? `trade-${index + 1}`) === selectedTradeId);
+  const selectedTrade = trades[selectedIndex];
+  const focus = useMemo(() => selectedTrade ? strategyTradeFocus(selectedTrade as unknown as Record<string, unknown>, selectedTradeId!) : null, [selectedTrade, selectedTradeId]);
+  useEffect(() => {
+    if (!active) return;
+    onReviewTrade?.(focus);
+    return () => onReviewTrade?.(null);
+  }, [active, focus, onReviewTrade]);
+  const selectTrade = (index: number, focusRow = false) => {
+    const trade = trades[index];
+    if (!trade) return;
+    setSelectedTradeId(trade.trade_id ?? `trade-${index + 1}`);
+    if (focusRow) requestAnimationFrame(() => viewportRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus({ preventScroll: true }));
+    const time = chartStrategyTradeFocusTimeMs(trade);
+    if (!onReviewTrade && time !== null) onLocateTrade(time);
+    if (viewportRef.current) {
+      const top = index * CHART_STRATEGY_TRADE_ROW_HEIGHT;
+      if (top < viewportRef.current.scrollTop || top + CHART_STRATEGY_TRADE_ROW_HEIGHT > viewportRef.current.scrollTop + viewportRef.current.clientHeight) {
+        viewportRef.current.scrollTop = top;
+        setScrollTop(top);
+      }
+    }
+  };
   const window = useMemo(() => chartStrategyVirtualTradeWindow({
     count: trades.length,
     scrollTop,
@@ -365,6 +394,11 @@ export function ChartStrategyTradeList({
   }
   return (
     <div className="chart-strategy-trades" data-testid="chart-strategy-trades" data-trade-count={trades.length}>
+      <div className="strategy-trade-navigation" aria-label={t("strategyReview.navigation")}>
+        <button disabled={selectedIndex === 0} onClick={() => selectTrade(Math.max(0, selectedIndex - 1))}>{t("strategyReview.previous")}</button>
+        <span role="status">{selectedIndex < 0 ? t("strategyReview.select") : `${selectedIndex + 1} / ${trades.length}`}</span>
+        <button disabled={selectedIndex === trades.length - 1} onClick={() => selectTrade(selectedIndex + 1)}>{t("strategyReview.next")}</button>
+      </div>
       <div className="chart-strategy-trade-head" aria-hidden="true">
         <span>{t("chartTester.result.trade")}</span><span>{t("chartTester.result.side")}</span>
         <span>{t("chartTester.result.entry")}</span><span>{t("chartTester.result.exit")}</span>
@@ -382,7 +416,6 @@ export function ChartStrategyTradeList({
             {visible.map((trade, offset) => {
               const absoluteIndex = window.start + offset;
               const tradeId = trade.trade_id ?? `trade-${absoluteIndex + 1}`;
-              const focusTime = chartStrategyTradeFocusTimeMs(trade);
               const entryTime = Number(trade.entry_time_ms);
               return (
                 <button
@@ -390,11 +423,12 @@ export function ChartStrategyTradeList({
                   type="button"
                   role="row"
                   aria-rowindex={absoluteIndex + 1}
+                  aria-selected={selectedTradeId === tradeId}
+                  onKeyDown={(event) => { if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); selectTrade(Math.max(0, Math.min(trades.length - 1, absoluteIndex + (event.key === "ArrowDown" ? 1 : -1))), true); } }}
                   className={selectedTradeId === tradeId ? "chart-strategy-trade-row selected" : "chart-strategy-trade-row"}
                   style={{ height: `${CHART_STRATEGY_TRADE_ROW_HEIGHT}px` }}
                   onClick={() => {
-                    setSelectedTradeId(tradeId);
-                    if (focusTime !== null) onLocateTrade(focusTime);
+                    selectTrade(absoluteIndex);
                     const items = [
                       ...(trade.entry_explanation
                         ? [{ label: t("chartTester.explain.entry"), explanation: trade.entry_explanation }]

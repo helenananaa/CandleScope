@@ -1,4 +1,9 @@
 export const zhCN = {
+  "strategyDock.pnl": "盈亏",
+  "strategyDock.diagnostics": "运行诊断",
+  "strategyDock.empty": "运行策略后，在这里查看结果。",
+  "strategyDock.maximize": "最大化面板",
+  "strategyDock.restore": "恢复面板",
   "drawing.autoSelect.on": "自动选择已开启；点击图形自动切换工具并编辑",
   "drawing.autoSelect.off": "自动选择已关闭；鼠标点击图形不会选中",
 
@@ -4593,6 +4598,21 @@ export const zhCN = {
   "common.listSeparator": "，",
   "editor.pyne.namespaceDetail": "{ns}.* — 输入 \"{ns}.\" 查看方法",
   "editor.pyne.namespaceDocumentation": "输入 `{ns}.` 触发自动补全",
+  "strategyReview.navigation": "交易复盘",
+  "strategyReview.previous": "上一笔",
+  "strategyReview.select": "选择一笔交易",
+  "strategyReview.next": "下一笔",
+  "strategyReview.status.idle": "待运行",
+  "strategyReview.status.preparing": "准备数据中…",
+  "strategyReview.status.running": "运行中…",
+  "strategyReview.status.completed": "已完成",
+  "strategyReview.status.failed": "运行失败",
+  "strategyReview.status.cancelled": "已取消",
+  "strategyReview.status.needsData": "需要准备数据",
+  "strategyReview.jump": "交易或订单序号（回车跳转）",
+  "strategyReview.go": "跳转",
+  "strategyReview.previousPage": "上一页",
+  "strategyReview.nextPage": "下一页",
 } as const;
 
 export type MessageKey = keyof typeof zhCN;

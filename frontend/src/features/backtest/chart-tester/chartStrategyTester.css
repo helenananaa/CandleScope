@@ -1,5 +1,6 @@
 @import "../native/nativeStrategy.css";
 @import "./chartStrategyEntry.css";
+@import "./strategyDock.css";
 
 /* Keep both modes in the workspace's column layout, including the resizable tester. */
 .chart-strategy-mode-container { display: contents; }

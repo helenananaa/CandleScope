@@ -51,3 +51,78 @@
 .native-advanced-inputs select,.native-advanced-inputs input,.native-advanced-inputs textarea { width:100%; box-sizing:border-box; }
 .native-advanced-inputs textarea { min-height:140px; padding:10px; color:inherit; background:var(--bg-primary, #0c111b); border:1px solid var(--border-color); font-family:monospace; }
 .native-advanced-inputs fieldset { margin:10px 0; border:1px solid var(--border-color); min-width:0; }
+
+.native-strategy-docked { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto minmax(0, 1fr); padding: 0; overflow: hidden; background: var(--bg-primary); }
+.native-dock-tabs { min-width: 0; grid-column: 1; grid-row: 1; display: flex; min-height: 40px; gap: 18px; align-items: stretch; border-bottom: 1px solid var(--border-color); padding: 0 14px; overflow-x: auto; }
+.native-dock-tabs button { border: 0; border-radius: 0; background: transparent; color: var(--text-secondary); white-space: nowrap; padding: 0 2px; }
+.native-dock-tabs button[aria-pressed=true] { border-bottom: 2px solid var(--accent-blue); color: var(--text-primary); }
+.native-strategy-docked .native-dock-actions { grid-column: 2; grid-row: 1; padding: 6px 14px; border-bottom: 1px solid var(--border-color); }
+.native-strategy-docked .native-dock-actions .native-toolbar { gap: 8px; }
+.native-strategy-docked .native-dock-actions p { margin: 4px 0; }
+.native-strategy-docked .native-dock-actions button:first-of-type { background: var(--accent-blue); color: #fff; border-color: transparent; }
+.native-strategy-docked .native-dock-scroll { grid-column: 1 / -1; grid-row: 2; min-height: 0; flex: 1; overflow: auto; padding: 0 14px 12px; }
+.native-strategy-docked .native-editor { margin: 10px 0 0; gap: 16px; }
+.native-strategy-docked .native-editor textarea { min-height: 160px; resize: vertical; line-height: 1.6; border-radius: 3px; }
+.native-strategy-docked .native-editor label { color: var(--text-secondary); display: flex; flex-direction: column; gap: 6px; }
+.native-strategy-docked .native-dock-settings { padding-top: 12px; }
+.native-strategy-docked .native-dock-settings label { display: flex; flex-direction: column; gap: 6px; }
+.native-strategy-docked .native-dock-settings > .native-toolbar { margin-bottom: 12px; }
+.native-dock-empty { display: grid; place-items: center; min-height: 80px; }
+.native-strategy-docked .native-replay-controls { padding: 8px 0; margin: 0; border: 0; border-bottom: 1px solid var(--border-color); border-radius: 0; }
+.native-strategy-docked .native-replay-controls p { margin: 6px 0; }
+.native-strategy-docked .native-curve { border: 0; border-radius: 0; padding: 10px 0; margin: 8px 0; }
+.native-strategy-docked .native-table { max-height: none; }
+.native-strategy-docked .native-table th { position: sticky; top: 0; background: var(--bg-secondary); }
+.native-report-method { margin: 8px 0; color: var(--text-secondary); }
+.native-report-diagnostics { margin: 8px 0; color: var(--strategy-error); }
+.native-report-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 8px 0; }
+.native-report-metrics > div { padding: 0 16px; border-right: 1px solid var(--border-color); min-width: 0; }
+.native-report-metrics > div:first-child { padding-left: 0; }
+.native-report-metrics > div:last-child { border: 0; }
+.native-report-metrics span { display: block; font-size: 12px; color: var(--text-secondary); }
+.native-report-metrics strong { display: block; font: 600 20px/1.5 var(--font-mono); font-variant-numeric: tabular-nums; }
+.native-report-metrics small { font-size: 10px; color: var(--text-secondary); }
+
+.native-report-toolbar { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 18px; font-size: 11px; }
+.native-report-toolbar details[open] { flex-basis: 100%; }
+.native-report-toolbar a { margin-left: auto; color: var(--accent-blue); }
+.native-strategy-docked .native-replay-controls > strong { margin-right: 12px; }
+.native-strategy-docked .native-report-toolbar .native-replay-controls { border: 0; padding: 0; }
+.native-strategy-docked .native-report-toolbar { padding: 6px 0; }
+.native-strategy-docked .native-report-metrics > div { padding-top: 0; padding-bottom: 0; }
+.native-strategy-docked .native-curve svg { display: block; height: 120px; }
+
+/* Keep review controls outside the table's scroll area, even in a short dock. */
+.native-trade-controls, .native-trade-sections, .native-trade-pages, .native-trade-jump { display: flex; align-items: center; gap: 6px; }
+.native-trade-controls { flex-wrap: wrap; gap: 6px 16px; padding: 6px 0; flex-shrink: 0; }
+.native-trade-sections button[aria-pressed=true] { color: var(--accent-blue); border-color: var(--accent-blue); }
+.native-trade-controls .strategy-trade-navigation { padding: 0; gap: 6px; }
+.native-trade-pages { margin-left: auto; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.native-trade-jump input { width: 56px; box-sizing: border-box; padding: 5px; font: inherit; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 3px; }
+.native-trade-jump span { min-width: 0; white-space: nowrap; }
+.native-trade-controls button { white-space: nowrap; }
+.native-strategy-docked .native-dock-scroll:has(> .native-dock-report[data-view=trades]:not([hidden])) { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; }
+.native-strategy-docked .native-dock-report[data-view=trades]:not([hidden]),
+.native-strategy-docked .native-report[data-view=trades],
+.native-strategy-docked .native-trade-view:not([hidden]) { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.native-strategy-docked .native-report[data-view=trades] > .native-report-toolbar { flex-shrink: 0; max-height: 40%; overflow: auto; }
+.native-strategy-docked .native-table { flex: 1; min-height: 0; overscroll-behavior: contain; margin: 0; }
+.native-strategy-docked .native-table th { z-index: 1; }
+@container strategy-dock (max-width: 720px) {
+  .native-strategy-docked { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); }
+  .native-strategy-docked .native-dock-actions { grid-column: 1; grid-row: 2; padding: 4px 10px; }
+  .native-strategy-docked .native-dock-actions .native-toolbar { flex-wrap: wrap; }
+  .native-strategy-docked .native-dock-scroll { grid-row: 3; padding-left: 10px; padding-right: 10px; }
+  .native-dock-tabs { gap: 16px; min-height: 34px; padding: 0 10px; }
+  .native-report-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 12px; }
+  .native-report-metrics > div:nth-child(3) { padding-left: 0; }
+  .native-report-metrics > div:nth-child(2) { border: 0; }
+  .native-trade-controls { gap: 4px 10px; }
+  .native-trade-controls button { padding: 4px 6px; }
+  .native-report-toolbar { gap: 4px 10px; }
+}
+
+/* Short windows take precedence over the normal report minimum. Keep all actions reachable. */
+.strategy-dock[data-compact=true] .native-dock-scroll:has(> .native-dock-report[data-view=trades]:not([hidden])) { overflow: auto; }
+.strategy-dock[data-compact=true] .native-dock-report[data-view=trades]:not([hidden]) { flex: none; }
+.strategy-dock[data-compact=true] .native-table { flex: none; min-height: 90px; max-height: 180px; }

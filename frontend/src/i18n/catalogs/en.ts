@@ -1,6 +1,11 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
+  "strategyDock.pnl": "Profit / loss",
+  "strategyDock.diagnostics": "Run diagnostics",
+  "strategyDock.empty": "Run a strategy to see its results here.",
+  "strategyDock.maximize": "Maximize panel",
+  "strategyDock.restore": "Restore panel",
   "drawing.autoSelect.on": "Auto-select enabled; click a drawing to switch tools and edit",
   "drawing.autoSelect.off": "Auto-select disabled; cursor clicks do not select drawings",
 
@@ -4595,4 +4600,19 @@ export const en = {
   "common.listSeparator": ", ",
   "editor.pyne.namespaceDetail": "{ns}.* — type \"{ns}.\" to list members",
   "editor.pyne.namespaceDocumentation": "Type `{ns}.` to trigger completion.",
+  "strategyReview.navigation": "Trade review",
+  "strategyReview.previous": "Previous trade",
+  "strategyReview.select": "Select a trade",
+  "strategyReview.next": "Next trade",
+  "strategyReview.status.idle": "Ready",
+  "strategyReview.status.preparing": "Preparing data…",
+  "strategyReview.status.running": "Running…",
+  "strategyReview.status.completed": "Completed",
+  "strategyReview.status.failed": "Failed",
+  "strategyReview.status.cancelled": "Cancelled",
+  "strategyReview.status.needsData": "Data required",
+  "strategyReview.jump": "Trade or order number (Enter to jump)",
+  "strategyReview.go": "Go",
+  "strategyReview.previousPage": "Previous page",
+  "strategyReview.nextPage": "Next page",
 } as const satisfies MessageCatalog;

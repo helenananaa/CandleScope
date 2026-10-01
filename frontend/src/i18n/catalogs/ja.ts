@@ -1,6 +1,11 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ja = {
+  "strategyDock.pnl": "損益",
+  "strategyDock.diagnostics": "実行診断",
+  "strategyDock.empty": "ストラテジーを実行すると、ここに結果が表示されます。",
+  "strategyDock.maximize": "パネルを最大化",
+  "strategyDock.restore": "パネルを元に戻す",
   "drawing.autoSelect.on": "自動選択オン：描画をクリックしてツールを切り替え、編集",
   "drawing.autoSelect.off": "自動選択オフ：カーソルで描画をクリックしても選択しません",
 
@@ -4530,4 +4535,19 @@ export const ja = {
   "common.listSeparator": "、",
   "editor.pyne.namespaceDetail": "{ns}.* — \"{ns}.\" と入力してメンバーを表示",
   "editor.pyne.namespaceDocumentation": "`{ns}.` と入力すると補完が始まります",
+  "strategyReview.navigation": "取引レビュー",
+  "strategyReview.previous": "前の取引",
+  "strategyReview.select": "取引を選択",
+  "strategyReview.next": "次の取引",
+  "strategyReview.status.idle": "実行待ち",
+  "strategyReview.status.preparing": "データ準備中…",
+  "strategyReview.status.running": "実行中…",
+  "strategyReview.status.completed": "完了",
+  "strategyReview.status.failed": "失敗",
+  "strategyReview.status.cancelled": "キャンセル済み",
+  "strategyReview.status.needsData": "データが必要",
+  "strategyReview.jump": "取引・注文番号（Enterで移動）",
+  "strategyReview.go": "移動",
+  "strategyReview.previousPage": "前のページ",
+  "strategyReview.nextPage": "次のページ",
 } as const satisfies MessageCatalog;

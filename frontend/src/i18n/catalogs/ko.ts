@@ -1,6 +1,11 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  "strategyDock.pnl": "손익",
+  "strategyDock.diagnostics": "실행 진단",
+  "strategyDock.empty": "전략을 실행하면 여기에 결과가 표시됩니다.",
+  "strategyDock.maximize": "패널 최대화",
+  "strategyDock.restore": "패널 복원",
   "drawing.autoSelect.on": "자동 선택 켜짐: 그리기를 클릭하면 도구를 전환하여 편집",
   "drawing.autoSelect.off": "자동 선택 꺼짐: 커서 클릭으로 그리기를 선택하지 않음",
 
@@ -4530,4 +4535,19 @@ export const ko = {
   "common.listSeparator": ", ",
   "editor.pyne.namespaceDetail": "{ns}.* — \"{ns}.\"를 입력하면 메서드 표시",
   "editor.pyne.namespaceDocumentation": "`{ns}.`를 입력하면 자동 완성",
+  "strategyReview.navigation": "거래 검토",
+  "strategyReview.previous": "이전 거래",
+  "strategyReview.select": "거래 선택",
+  "strategyReview.next": "다음 거래",
+  "strategyReview.status.idle": "준비됨",
+  "strategyReview.status.preparing": "데이터 준비 중…",
+  "strategyReview.status.running": "실행 중…",
+  "strategyReview.status.completed": "완료",
+  "strategyReview.status.failed": "실패",
+  "strategyReview.status.cancelled": "취소됨",
+  "strategyReview.status.needsData": "데이터 필요",
+  "strategyReview.jump": "거래 또는 주문 번호 (Enter로 이동)",
+  "strategyReview.go": "이동",
+  "strategyReview.previousPage": "이전 페이지",
+  "strategyReview.nextPage": "다음 페이지",
 } as const satisfies MessageCatalog;

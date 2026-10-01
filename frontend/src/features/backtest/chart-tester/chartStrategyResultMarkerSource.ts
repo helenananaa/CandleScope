@@ -1,3 +1,5 @@
+import type { StrategyTradeFocus } from "./strategyTradeReview.js";
+import { floorIntervalTime } from "../../../utils/intervalTimeline.js";
 import type {
   ExternalMarkerSnapshot,
   ExternalMarkerSource,
@@ -90,6 +92,7 @@ function sameRange(
 
 export interface ChartStrategyResultMarkerSource
   extends ExternalMarkerSource, ChartStrategyTesterMarkerSource {
+  setTradeFocus(trade: StrategyTradeFocus | null, interval: string, entryLabel: string, exitLabel: string): void;
   setResult(chart: BacktestChartData | null): void;
   setVisibleRange(range: ChartSurfaceVisibleRange | null): void;
   clear(): void;
@@ -117,6 +120,7 @@ export function createChartStrategyResultMarkerSource({
   labels: BacktestMarkerLabels;
   onActivate?: (evidence: ChartStrategyMarkerEvidence) => void;
 }): ChartStrategyResultMarkerSource {
+  let focus: { trade: StrategyTradeFocus; interval: string; entryLabel: string; exitLabel: string } | null = null;
   let chart: BacktestChartData | null = null;
   let visibleRange: { from: number; to: number } | null = null;
   let projected: readonly ExternalSeriesMarker[] = [];
@@ -153,15 +157,29 @@ export function createChartStrategyResultMarkerSource({
   };
   const getSnapshot = (): ExternalMarkerSnapshot => {
     if (disposed) return EMPTY_SNAPSHOT;
-    if (snapshotRevision === revision) return snapshot;
+    if (snapshotRevision === revision && projectedAxisRevision === Number(seriesStore.axisRevision)) return snapshot;
+    if (projectedAxisRevision !== Number(seriesStore.axisRevision)) revision += 1;
     project();
     const intervalSeconds = chart ? Math.max(1, parseIntervalSeconds(chart.interval) ?? 1) : 1;
     const markers = boundVisibleBacktestMarkers(projected, visibleRange, intervalSeconds);
-    snapshot = { markers, revision };
+    const focused: ExternalSeriesMarker[] = [];
+    if (focus) {
+      const { trade, interval, entryLabel, exitLabel } = focus;
+      for (const [kind, timeMs, label, price] of [["entry", trade.entryTimeMs, entryLabel, trade.entryPrice], ["exit", trade.exitTimeMs, exitLabel, trade.exitPrice]] as const) {
+        if (timeMs === null) continue;
+        const time = floorIntervalTime(interval, timeMs / 1000);
+        if (time === null || !seriesStore.hasTime(time)) continue;
+        focused.push({ id: `review:${trade.id}:${kind}`, time, position: kind === "entry" ? "belowBar" : "aboveBar",
+          color: kind === "entry" ? "#38bdf8" : "#f59e0b", shape: kind === "entry" ? "arrowUp" : "arrowDown",
+          text: `${label}${price === null ? "" : ` ${price}`}`, size: 2 });
+      }
+    }
+    snapshot = { markers: [...markers, ...focused], revision };
     snapshotRevision = revision;
     return snapshot;
   };
-  const unsubscribeSeries = seriesStore.subscribe(() => {
+  let unsubscribeSeries: (() => void) | null = null;
+  const observeSeries = () => seriesStore.subscribe(() => {
     const nextAxisRevision = Number(seriesStore.axisRevision);
     if (nextAxisRevision === projectedAxisRevision) return;
     projectedAxisRevision = -1;
@@ -172,8 +190,12 @@ export function createChartStrategyResultMarkerSource({
     getSnapshot,
     subscribe(listener) {
       if (disposed) return () => undefined;
+      if (!unsubscribeSeries) unsubscribeSeries = observeSeries();
       listeners.add(listener);
-      return () => listeners.delete(listener);
+      return () => {
+        listeners.delete(listener);
+        if (!listeners.size) { unsubscribeSeries?.(); unsubscribeSeries = null; }
+      };
     },
     activate(markerId) {
       if (!chart || !markerId.startsWith("backtest:")) return false;
@@ -192,6 +214,11 @@ export function createChartStrategyResultMarkerSource({
       });
       return true;
     },
+    setTradeFocus(trade, interval, entryLabel, exitLabel) {
+      if (disposed) return;
+      focus = trade ? { trade, interval, entryLabel, exitLabel } : null;
+      invalidate();
+    },
     setResult(next) {
       if (disposed || chart?.chart_hash === next?.chart_hash) return;
       chart = next;
@@ -207,7 +234,8 @@ export function createChartStrategyResultMarkerSource({
       invalidate();
     },
     clear() {
-      if (disposed || chart === null) return;
+      if (disposed || (chart === null && focus === null)) return;
+      focus = null;
       chart = null;
       projected = [];
       projectedRunHash = "";
@@ -216,10 +244,12 @@ export function createChartStrategyResultMarkerSource({
     dispose() {
       if (disposed) return;
       disposed = true;
+      focus = null;
       chart = null;
       projected = [];
       listeners.clear();
-      unsubscribeSeries();
+      unsubscribeSeries?.();
+      unsubscribeSeries = null;
     },
     diagnostics() {
       const current = getSnapshot();

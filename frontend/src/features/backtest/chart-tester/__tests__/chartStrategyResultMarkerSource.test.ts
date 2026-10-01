@@ -119,3 +119,22 @@ test("fill and rejection marker activation returns only their bound explanation"
   ]);
   source.dispose();
 });
+
+test("unused renders create no subscriptions and last observer releases the series listener", () => {
+  const seriesStore = new SeriesWindowStore({ maxBars: 100, intervalSeconds: 60 });
+  const original = seriesStore.subscribe.bind(seriesStore);
+  let live = 0;
+  seriesStore.subscribe = (listener) => { live++; const off = original(listener); return () => { live--; return off(); }; };
+  for (let index = 0; index < 100; index++) createChartStrategyResultMarkerSource({ seriesStore, labels });
+  assert.equal(live, 0);
+  const source = createChartStrategyResultMarkerSource({ seriesStore, labels });
+  const off1 = source.subscribe(() => {});
+  const off2 = source.subscribe(() => {});
+  assert.equal(live, 1);
+  off1(); assert.equal(live, 1);
+  off2(); assert.equal(live, 0);
+  const off3 = source.subscribe(() => {});
+  assert.equal(live, 1);
+  source.dispose(); assert.equal(live, 0);
+  off3(); assert.equal(live, 0);
+});

@@ -1,3 +1,4 @@
+import type { StrategyTradeFocus } from "./strategyTradeReview.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -74,6 +75,7 @@ export interface ChartStrategyTesterCellBridgeProps {
   getCurrentVisibleRange(): ChartSurfaceVisibleRange | null;
   onMarkerSourceChange(source: ChartStrategyResultMarkerSource | null): void;
   onLocateTrade(timeMs: number): void;
+  onReviewTrade?(trade: StrategyTradeFocus | null): void;
   onAttachmentChange(attachment: ChartStrategyAttachmentRecord | null): void;
   onEntryStateChange(state: ChartStrategyTesterEntryState): void;
   onOpenPanel(): void;
@@ -92,6 +94,7 @@ export default function ChartStrategyTesterCellBridge({
   getCurrentVisibleRange,
   onMarkerSourceChange,
   onLocateTrade,
+  onReviewTrade,
   onAttachmentChange,
   onEntryStateChange,
   onOpenPanel,
@@ -206,12 +209,22 @@ export default function ChartStrategyTesterCellBridge({
     },
   }), [onOpenPanel, projectionSeriesStore, resultMarkerLabels]);
 
+  const pendingMarkerDisposals = useRef(new Map<ChartStrategyResultMarkerSource, symbol>());
   useLayoutEffect(() => {
+    const pending = pendingMarkerDisposals.current;
+    pending.delete(resultMarkerSource);
     resultMarkerSource.setVisibleRange(getCurrentVisibleRange());
     onMarkerSourceChange(resultMarkerSource);
     return () => {
       onMarkerSourceChange(null);
-      resultMarkerSource.dispose();
+      // StrictMode replays setup after cleanup using the same memoized source.
+      const token = Symbol("marker-disposal");
+      pending.set(resultMarkerSource, token);
+      queueMicrotask(() => {
+        if (pending.get(resultMarkerSource) !== token) return;
+        pending.delete(resultMarkerSource);
+        resultMarkerSource.dispose();
+      });
     };
   }, [getCurrentVisibleRange, onMarkerSourceChange, resultMarkerSource]);
 
@@ -718,9 +731,11 @@ export default function ChartStrategyTesterCellBridge({
   const handleOpenAdvanced = useCallback(() => openResearch("PRECISE_EXECUTION"), [openResearch]);
   const handleOpenBatchStudy = useCallback(() => openResearch("PARAMETER_ROBUSTNESS"), [openResearch]);
 
-  if (!active || !panelOpen || !bottomPanelHost) return null;
+  if (!bottomPanelHost) return null;
   return createPortal(
+    <div className="strategy-panel-slot" hidden={!active || !panelOpen}>
     <ChartStrategyTesterPanel
+      active={active && panelOpen}
       cellScope={`${workspaceId}\u0000${cellId}`}
       session={session}
       attachment={attachment}
@@ -743,6 +758,7 @@ export default function ChartStrategyTesterCellBridge({
       }}
       onCloseExplanation={() => setSelectedExplanation(null)}
       onLocateTrade={onLocateTrade}
+      {...(onReviewTrade ? { onReviewTrade } : {})}
       onPrepareData={handlePrepareData}
       onStopObserving={handleStopObserving}
       onResumeObserving={handleResumeObserving}
@@ -755,7 +771,7 @@ export default function ChartStrategyTesterCellBridge({
       }}
       onOpenBatchStudy={handleOpenBatchStudy}
       onClose={onClosePanel}
-    />,
+    /></div>,
     bottomPanelHost,
   );
 }

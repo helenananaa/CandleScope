@@ -1,0 +1,54 @@
+.strategy-dock {
+  container-type: inline-size;
+  container-name: strategy-dock;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-height: 36px;
+  min-width: 0;
+  box-sizing: border-box;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: 12px var(--font-sans);
+}
+.strategy-dock-divider { position: absolute; top: -4px; left: 0; right: 0; height: 8px; z-index: 10; cursor: row-resize; touch-action: none; }
+.strategy-dock-divider:hover, .strategy-dock-divider:focus-visible { background: color-mix(in srgb, var(--accent-blue) 35%, transparent); outline: none; }
+.strategy-dock-bar { display: flex; align-items: center; flex: 0 0 35px; gap: 12px; padding: 0 12px; min-width: 0; border-bottom: 1px solid var(--border-color); }
+.strategy-dock-bar button, .strategy-dock-bar select { font: inherit; color: var(--text-secondary); background: transparent; border: 0; cursor: pointer; padding: 5px 6px; white-space: nowrap; border-radius: 3px; }
+.strategy-dock-bar select { max-width: 210px; background: var(--bg-primary); }
+.strategy-dock-bar button:hover { background: var(--bg-hover); color: var(--text-primary); }
+.strategy-dock-bar .strategy-dock-title { color: var(--text-primary); font-weight: 600; }
+.strategy-dock-context { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.strategy-dock-selector { margin-left: auto; }
+.strategy-dock-content { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
+.strategy-dock-content[hidden] { display: none; }
+.strategy-dock-content .chart-strategy-tester-panel,
+.strategy-dock-content .native-strategy-panel { flex: 1 1 0; height: auto; min-height: 0; max-height: none; box-shadow: none; border-top: 0; width: 100%; box-sizing: border-box; }
+.strategy-dock .chart-strategy-resize-handle,
+.strategy-dock .chart-strategy-tester-head > .chart-strategy-tester-title,
+.strategy-dock .chart-strategy-close-button { display: none; }
+.strategy-dock .chart-strategy-tester-head { flex-basis: 40px; gap: 10px; padding-top: 0; background: var(--bg-primary); overflow-x: auto; }
+.strategy-dock .chart-strategy-result-metric { border: 0; border-right: 1px solid var(--border-color); border-radius: 0; background: transparent; }
+.strategy-dock .chart-strategy-result-metric span { font-size: 11px; }
+.strategy-dock .chart-strategy-result-metric small { font-size: 10px; }
+.strategy-dock :is(button, select):focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; }
+@media (max-width: 700px) {
+  .strategy-dock-bar { gap: 4px; padding: 0 6px; }
+  .strategy-dock-context { display: none; }
+  .strategy-dock-bar select { max-width: 150px; }
+}
+
+.strategy-mode-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+.strategy-mode-pane[hidden] { display: none; }
+.strategy-trade-navigation { display: flex; align-items: center; gap: 10px; padding: 6px 0; color: var(--text-secondary); }
+.strategy-trade-navigation span { min-width: 80px; text-align: center; font-variant-numeric: tabular-nums; }
+.native-table tr[data-selected="true"] { background: color-mix(in srgb, var(--accent-blue) 16%, transparent); outline: 1px solid var(--accent-blue); outline-offset: -1px; }
+.native-table tr:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; }
+.native-table .positive { color: #22c55e; }
+.native-table .negative { color: #fb7185; }
+.native-run-status { color: var(--text-secondary); font-size: 11px; white-space: nowrap; }
+
+.strategy-panel-slot { display: contents; }
+.strategy-panel-slot[hidden] { display: none; }

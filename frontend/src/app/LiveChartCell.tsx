@@ -1,3 +1,5 @@
+import { parseIntervalSeconds } from "../utils/intervals.js";
+import { strategyTradeRange, type StrategyTradeFocus } from "../features/backtest/chart-tester/strategyTradeReview.js";
 import React, {
   Suspense,
   lazy,
@@ -651,6 +653,8 @@ function LiveChartCell({
     if (linkedViewportFrameRef.current !== null) return;
     linkedViewportFrameRef.current = requestAnimationFrame(flushLinkedViewportRange);
   }, [flushLinkedViewportRange]);
+  const [strategyPanelVisited, setStrategyPanelVisited] = useState(false);
+  useEffect(() => { if (active && strategyPanelOpen) setStrategyPanelVisited(true); }, [active, strategyPanelOpen]);
   const strategyMarkerSourceRef = useRef<ChartStrategyResultMarkerSource | null>(null);
   const [strategyMarkerSource, setStrategyMarkerSource] = useState<ChartStrategyResultMarkerSource | null>(null);
   const handleStrategyMarkerSourceChange = useCallback((source: ChartStrategyResultMarkerSource | null) => {
@@ -667,6 +671,12 @@ function LiveChartCell({
     upstreamViewportRangeChangeRef.current?.(range);
     strategyMarkerSourceRef.current?.setVisibleRange(range);
   }, []);
+  const handleReviewStrategyTrade = useCallback((trade: StrategyTradeFocus | null) => {
+    strategyMarkerSourceRef.current?.setTradeFocus(trade, liveSourceSession.interval, t("chartTester.result.entry"), t("chartTester.result.exit"));
+    if (!trade) return;
+    chartSurface.actions.setLinkedVisibleTimeRange(strategyTradeRange(trade, parseIntervalSeconds(liveSourceSession.interval) ?? 60));
+    chartSurface.actions.setLinkedCrosshairTime(trade.entryTimeMs / 1000);
+  }, [chartSurface.actions, liveSourceSession.interval]);
   const handleLocateStrategyTrade = useCallback((timeMs: number) => {
     const timeSeconds = timeMs / 1_000;
     chartSurface.actions.setLinkedVisibleTimeAnchor(timeSeconds);
@@ -863,7 +873,7 @@ function LiveChartCell({
       </section>
 
       {CHART_STRATEGY_TESTER_ENABLED
-        && (cell.strategyAttachment !== null || (active && strategyPanelOpen)) && (
+        && (cell.strategyAttachment !== null || strategyPanelVisited || (active && strategyPanelOpen)) && (
           <Suspense fallback={null}>
             <ChartStrategyTesterCellBridge
               workspaceId={workspaceId}
@@ -877,6 +887,7 @@ function LiveChartCell({
               getCurrentVisibleRange={chartSurface.actions.getVisibleRange}
               onMarkerSourceChange={handleStrategyMarkerSourceChange}
               onLocateTrade={handleLocateStrategyTrade}
+              onReviewTrade={handleReviewStrategyTrade}
               onAttachmentChange={handleStrategyAttachmentChange}
               onEntryStateChange={handleStrategyEntryStateChange}
               onOpenPanel={openStrategyPanel}

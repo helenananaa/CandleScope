@@ -1,6 +1,11 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
+  "strategyDock.pnl": "Lucro / prejuízo",
+  "strategyDock.diagnostics": "Diagnóstico da execução",
+  "strategyDock.empty": "Execute uma estratégia para ver os resultados aqui.",
+  "strategyDock.maximize": "Maximizar painel",
+  "strategyDock.restore": "Restaurar painel",
   "drawing.autoSelect.on": "Seleção automática ativada; clique no desenho para trocar de ferramenta e editar",
   "drawing.autoSelect.off": "Seleção automática desativada; cliques do cursor não selecionam desenhos",
 
@@ -4599,4 +4604,19 @@ export const ptBR = {
   "common.listSeparator": ", ",
   "editor.pyne.namespaceDetail": "{ns}.* — digite \"{ns}.\" para listar os membros",
   "editor.pyne.namespaceDocumentation": "Digite `{ns}.` para acionar o autocomplete.",
+  "strategyReview.navigation": "Revisão de operações",
+  "strategyReview.previous": "Operação anterior",
+  "strategyReview.select": "Selecione uma operação",
+  "strategyReview.next": "Próxima operação",
+  "strategyReview.status.idle": "Pronto",
+  "strategyReview.status.preparing": "Preparando dados…",
+  "strategyReview.status.running": "Executando…",
+  "strategyReview.status.completed": "Concluído",
+  "strategyReview.status.failed": "Falhou",
+  "strategyReview.status.cancelled": "Cancelado",
+  "strategyReview.status.needsData": "Dados necessários",
+  "strategyReview.jump": "Número da operação ou ordem (Enter para ir)",
+  "strategyReview.go": "Ir",
+  "strategyReview.previousPage": "Página anterior",
+  "strategyReview.nextPage": "Próxima página",
 } as const satisfies MessageCatalog;
