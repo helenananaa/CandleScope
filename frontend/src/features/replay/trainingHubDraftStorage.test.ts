@@ -25,3 +25,14 @@ test("restricted or corrupt browser storage does not prevent replay creation", (
   assert.doesNotThrow(() => writeHubDraft(blocked, "draft", { draft: createTrainingRunDraft(), submission: null }));
   assert.equal(readHubDraft({ getItem: () => "{bad", setItem() {} }, "draft"), null);
 });
+
+
+test("market random scope survives reload and older drafts retain range random behavior", () => {
+  let saved = "";
+  const storage = { getItem: () => saved, setItem: (_key: string, value: string) => { saved = value; } };
+  const draft = { ...createTrainingRunDraft(), startMode: "RANDOM" as const, randomScope: "MARKET" as const, requestedStartMs: null };
+  writeHubDraft(storage, "draft", { draft, submission: null });
+  assert.equal(readHubDraft(storage, "draft")?.draft.randomScope, "MARKET");
+  saved = JSON.stringify({ version: 1, draft: { ...draft, randomScope: undefined }, submission: null });
+  assert.equal(readHubDraft(storage, "draft")?.draft.randomScope, "RANGE");
+});

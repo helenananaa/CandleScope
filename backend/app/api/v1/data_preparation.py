@@ -20,6 +20,7 @@ class ReplayPreparationPayload(BaseModel):
     symbol: str
     display_interval: str = "1m"
     progressive: bool = False
+    random_by_market: bool = False
 
 
 class StrategyLaunchPayload(BaseModel):
@@ -210,7 +211,19 @@ async def prepare_strategy(request: Request, payload: StrategyPreparationPayload
 
 @router.post("/replay", status_code=202)
 async def prepare_replay(request: Request, payload: ReplayPreparationPayload):
+    from app.data_preparation.models import canonical
+    instance = service(request)
+    submission = payload.model_dump(mode="json")
+    prior = await invoke_async(lambda: instance.storage(instance.repository.by_idempotency, payload.idempotency_key))
+    if prior is not None and payload.random_by_market:
+        if canonical(prior["request"]["intent"].get("submission")) != canonical(submission):
+            raise HTTPException(409, detail={"code": "IDEMPOTENCY_CONFLICT", "message": "Key belongs to another replay preparation"})
+        return prior
     setup = payload.setup.model_dump(mode="json")
+    if payload.random_by_market:
+        from app.data_preparation.market_random import resolve_market_random
+        runtime = getattr(request.app.state, "data_engine_runtime", None)
+        setup = await invoke_async(lambda: resolve_market_random(payload, getattr(runtime, "ingestion_factory", None)))
     if setup["start_mode"] == "MANUAL":
         first = last = setup["requested_start_ms"]
     else:
@@ -232,9 +245,19 @@ async def prepare_replay(request: Request, payload: ReplayPreparationPayload):
         idempotency_key=payload.idempotency_key, consumer="REPLAY",
         requirements=requirements,
         progressive=payload.progressive,
-        intent={"replay_setup": setup, "display_interval": payload.display_interval},
+        intent={"replay_setup": setup, "display_interval": payload.display_interval,
+                **({"submission": submission} if payload.random_by_market else {})},
     )
-    return await invoke_async(lambda: service(request).submit(prepared))
+    try:
+        return await invoke_async(lambda: instance.submit(prepared))
+    except HTTPException as exc:
+        # Concurrent retries can resolve different draws; the first persisted
+        # job wins iff the original, unsampled request is identical.
+        if payload.random_by_market and exc.detail.get("code") == "IDEMPOTENCY_CONFLICT":
+            prior = await invoke_async(lambda: instance.storage(instance.repository.by_idempotency, payload.idempotency_key))
+            if prior and canonical(prior["request"]["intent"].get("submission")) == canonical(submission):
+                return prior
+        raise
 
 
 def service(request: Request):

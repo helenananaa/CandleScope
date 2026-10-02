@@ -37,6 +37,7 @@ export interface TrainingRunDraft {
   readonly name: string;
   readonly sourceKind: ReplayV2SourceKind;
   readonly startMode: ReplayV2StartMode;
+  readonly randomScope?: "RANGE" | "MARKET";
   readonly exchange: string;
   readonly marketType: string;
   readonly symbol: string;
@@ -128,6 +129,7 @@ export function createTrainingRunDraft(
     name: t("replay.hub.defaultName"),
     sourceKind: "BAR",
     startMode: "MANUAL",
+    randomScope: "RANGE",
     exchange: launchContext?.exchange ?? entry?.identity.exchange ?? "binance",
     marketType: launchContext?.market_type ?? entry?.identity.market_type ?? "futures",
     symbol,
@@ -279,6 +281,10 @@ export function evaluateTrainingRunDraft(
     if (segmentPlan?.historical_book.capability_state !== "AVAILABLE_EXACT") {
       errors.push(t("replay.err.l2Proof"));
     }
+  }
+  if (draft.startMode === "RANDOM" && draft.randomScope === "MARKET") {
+    if (!draft.exchange.trim() || !draft.marketType.trim() || !draft.symbol.trim()) errors.push(t("replay.err.marketRandomSymbol"));
+    if (draft.sourceKind !== "BAR" || draft.accountDataMode !== "APPROX_PROXY" || draft.bookMode !== "OFF" || draft.fundingMode === "HISTORICAL_EXACT") errors.push(t("replay.err.marketRandomUnsupported"));
   }
   if (draft.indicatorWarmupBars < 1
     || draft.indicatorWarmupBars > capabilities.limits.max_warmup_bars) {
@@ -445,7 +451,7 @@ export function evaluateTrainingRunSetupDraft(
   if (draft.startMode === "RANDOM" && draft.requestedStartMs !== null) {
     errors.push(t("replay.err.randomNoTime"));
   }
-  if (draft.startMode === "RANDOM") {
+  if (draft.startMode === "RANDOM" && draft.randomScope !== "MARKET") {
     if (draft.randomRangeStartMs === null || draft.randomRangeEndMs === null) {
       errors.push(t("replay.err.rangeNeedTimes"));
     } else if (draft.randomRangeEndMs < draft.randomRangeStartMs) {
@@ -453,6 +459,10 @@ export function evaluateTrainingRunSetupDraft(
     } else if ((draft.randomRangeEndMs - draft.randomRangeStartMs) % 60_000 !== 0) {
       errors.push(t("replay.err.rangeGrid"));
     }
+  }
+  if (draft.startMode === "RANDOM" && draft.randomScope === "MARKET") {
+    if (!draft.exchange.trim() || !draft.marketType.trim() || !draft.symbol.trim()) errors.push(t("replay.err.marketRandomSymbol"));
+    if (draft.sourceKind !== "BAR" || draft.accountDataMode !== "APPROX_PROXY" || draft.bookMode !== "OFF" || draft.fundingMode === "HISTORICAL_EXACT") errors.push(t("replay.err.marketRandomUnsupported"));
   }
   if (draft.indicatorWarmupBars < 1
     || draft.indicatorWarmupBars > capabilities.limits.max_warmup_bars) {
@@ -632,8 +642,8 @@ export function buildTrainingRunCreateRequest(
     start_mode: draft.startMode,
     settlement_asset: draft.settlementAsset,
     requested_start_ms: draft.startMode === "MANUAL" ? draft.requestedStartMs : null,
-    random_range_start_ms: draft.startMode === "RANDOM" ? draft.randomRangeStartMs : null,
-    random_range_end_ms: draft.startMode === "RANDOM" ? draft.randomRangeEndMs : null,
+    random_range_start_ms: draft.startMode === "RANDOM" && draft.randomScope !== "MARKET" ? draft.randomRangeStartMs : null,
+    random_range_end_ms: draft.startMode === "RANDOM" && draft.randomScope !== "MARKET" ? draft.randomRangeEndMs : null,
     indicator_warmup_bars: draft.indicatorWarmupBars,
     visible_history_lookback: {
       mode: draft.visibleHistoryMode,

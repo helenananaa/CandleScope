@@ -57,6 +57,7 @@ class TrainingAdmissionService:
         request: TrainingRunSetupRequest,
         *,
         preparation_id: str | None = None,
+        _market_identity: tuple[str, str, str] | None = None,
         _progressive_initial_horizon_ms: int | None = None,
     ) -> dict[str, object]:
         if not isinstance(request, TrainingRunSetupRequest):
@@ -95,7 +96,8 @@ class TrainingAdmissionService:
         entries = [
             entry
             for entry in cast(list[Mapping[str, object]], catalog["entries"])
-            if admission_rules_ops.setup_market_compatibility(
+            if (_market_identity is None or admission_rules_ops.catalog_identity_key(entry) == _market_identity)
+            and admission_rules_ops.setup_market_compatibility(
                 settings,
                 entry,
                 capability_admission=capability_admission,

@@ -15396,3 +15396,16 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 .drawing-object-filters { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 14px 10px; border-bottom: 1px solid var(--drawing-border); flex-shrink: 0; }
 .drawing-object-filters button { font-size: 11px; }
 .drawing-object-filters button[aria-pressed='true'] { background: var(--bg-hover); }
+
+/* Keep background preparation subordinate to the training library. */
+.training-hub-resume { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin: 18px 0; padding: 20px; border: 1px solid var(--hub-border); border-radius: var(--radius-md); background: var(--hub-panel); }
+.training-hub-resume span, .training-hub-resume p { color: var(--hub-muted); font-size: 13px; }
+.training-hub-resume h2 { margin: 6px 0; color: var(--hub-text); overflow-wrap: anywhere; }
+.training-hub-resume p { margin: 0; }
+.training-hub-preparation { margin: 12px 0; border: 1px solid var(--hub-border); border-radius: var(--radius-md); color: var(--hub-muted); }
+.training-hub-preparation > summary { padding: 12px 16px; cursor: pointer; font-size: 13px; }
+.preparation-job-list { max-height: 320px; overflow: auto; overscroll-behavior: contain; }
+.preparation-job-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 16px; border-top: 1px solid var(--hub-border); font-size: 13px; overflow-wrap: anywhere; }
+.preparation-job-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.preparation-job-actions > :is(button, a) { width: auto; padding: 6px 10px; }
+.training-hub-preparation summary:focus-visible { outline: 2px solid var(--hub-text); outline-offset: 2px; }

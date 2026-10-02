@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { replayPreparationActivity, replayPreparationCompleted } from "./preparationActivity.js";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { preparationRequest, type PreparationJob } from "./api.js";
 import type { NativeRun } from "../backtest/native/nativeBacktestApi.js";
@@ -18,7 +19,13 @@ interface CacheInventory {
   prefetch_enabled: boolean;
 }
 
-export default function PreparationJobsPanel() {
+export default function PreparationJobsPanel({ summary = false, onReady }: {
+  summary?: boolean;
+  onReady?: () => void;
+}) {
+  const readyCallback = useRef(onReady);
+  useEffect(() => { readyCallback.current = onReady; }, [onReady]);
+  const [visibleCount, setVisibleCount] = useState(20);
   const [jobs, setJobs] = useState<PreparationJob[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [cache, setCache] = useState<CacheInventory | null>(null);
@@ -28,11 +35,17 @@ export default function PreparationJobsPanel() {
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
+    let previousJobs: PreparationJob[] | null = null;
     const refresh = async () => {
       try {
         const result = await preparationRequest<{ items: PreparationJob[] }>("", { signal: controller.signal });
+        if (controller.signal.aborted) return;
         setJobs(result.items);
-        if (!controller.signal.aborted) {
+        if (previousJobs && replayPreparationCompleted(previousJobs, result.items)) {
+          readyCallback.current?.();
+        }
+        previousJobs = result.items;
+        if (!summary && !controller.signal.aborted) {
           const inventory = await preparationRequest<CacheInventory>("/cache", { signal: controller.signal });
           setCache(inventory);
         }
@@ -41,7 +54,7 @@ export default function PreparationJobsPanel() {
     };
     void refresh();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, []);
+  }, [summary]);
   if (!jobs.length && !cache) return null;
   const budgetValue = budgetMiB ?? (cache?.cache_budget_bytes ?? 2048 * 1024**2) / 1024**2;
   const action = async (job: PreparationJob, command: "retry" | "cancel" | "release-cache") => {
@@ -65,22 +78,35 @@ export default function PreparationJobsPanel() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
   };
-  return <section className="training-hub-summary-card" aria-label={t("preparation.title")}>
-    <h3>{t("preparation.title")}</h3>
-    <p>{t("preparation.background")}</p>
-    {error && <p role="alert">{error}</p>}
-    {jobs.slice(0, 20).map((job) => <div key={job.id} className="training-hub-create-actions">
-      <span>{[...new Set(job.request.requirements.map((item) => item.symbol))].join(", ")}</span>
-      <span>{job.state === "READY" ? t("preparation.ready") : job.state === "CANCELLED" ? t("preparation.cancelled") : `${job.completed}/${job.total}`}</span>
+  const { pending, failed } = replayPreparationActivity(jobs);
+  if (summary && pending.length === 0) return null;
+  const rows = <div className="preparation-job-list">
+    {(summary ? pending : jobs).slice(0, visibleCount).map((job) => <div key={job.id} className="preparation-job-row">
+      <strong>{[...new Set(job.request.requirements.map((item) => item.symbol))].join(", ")}</strong>
+      <span>{job.state === "READY" ? t("preparation.ready") : job.state === "CANCELLED" ? t("preparation.cancelled") : ["FAILED", "BLOCKED_STORAGE"].includes(job.state) ? t("preparation.needsAttention") : `${job.completed}/${job.total}`}</span>
       {job.error && <span role="status">{job.error.message}</span>}
       <PreparationWaiting job={job} />
+      <div className="preparation-job-actions">
       {job.result?.run && <a href={`/replay.html?run=${encodeURIComponent(job.result.run.run_id)}`}>{t("preparation.open")}</a>}
       {job.result?.strategy_run && <a href={`/backtest.html?run=${encodeURIComponent(job.result.strategy_run.run_id)}`}>{t("ux.openResult")}</a>}
       {job.result?.native_run && <button type="button" onClick={() => setNativeRun(job.result!.native_run!)}>{t("ux.openResult")}</button>}
       {["FAILED", "BLOCKED_STORAGE"].includes(job.state) && <button type="button" onClick={() => void action(job, "retry")}>{t("preparation.retry")}</button>}
       {["QUEUED", "RUNNING", "BLOCKED_STORAGE"].includes(job.state) && <button type="button" disabled={job.cancel_requested || job.stage === "STARTING"} onClick={() => void action(job, "cancel")}>{t("preparation.cancel")}</button>}
-      {["READY", "FAILED", "CANCELLED"].includes(job.state) && <button type="button" onClick={() => void action(job, "release-cache")}>{t("preparation.releaseCache")}</button>}
+      {!summary && ["READY", "FAILED", "CANCELLED"].includes(job.state) && <button type="button" onClick={() => void action(job, "release-cache")}>{t("preparation.releaseCache")}</button>}
+      </div>
     </div>)}
+    {(summary ? pending : jobs).length > visibleCount && <button type="button" onClick={() => setVisibleCount((count) => count + 20)}>{t("replay.hub.loadMore")}</button>}
+  </div>;
+  if (summary) return <details className="training-hub-preparation">
+    <summary>{t("preparation.activity", { active: pending.length - failed, failed })}</summary>
+    {error && <p role="alert">{error}</p>}
+    {rows}
+  </details>;
+  return <section className="training-hub-summary-card" aria-label={t("preparation.title")}>
+    <h3>{t("preparation.history")}</h3>
+    <p>{t("preparation.background")}</p>
+    {error && <p role="alert">{error}</p>}
+    {rows}
     {nativeRun && <Suspense fallback={<p role="status">{t("native.loading")}</p>}>
       <PreparedNativeRun key={nativeRun.run_id} initial={nativeRun} onClose={() => setNativeRun(null)} />
     </Suspense>}

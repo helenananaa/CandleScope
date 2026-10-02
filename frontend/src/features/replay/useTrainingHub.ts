@@ -525,7 +525,8 @@ export class TrainingHubLifecycle {
           && draft.accountDataMode === "APPROX_PROXY" && draft.positionMode === "ONE_WAY"
           && draft.bookMode === "OFF";
         const market = { exchange: draft.exchange, market_type: draft.marketType, symbol: draft.symbol,
-          display_interval: draft.displayInterval, ...(progressive ? { progressive: true } : {}) };
+          display_interval: draft.displayInterval,
+          ...(draft.startMode === "RANDOM" && draft.randomScope === "MARKET" ? { random_by_market: true } : {}), ...(progressive ? { progressive: true } : {}) };
         const identity = JSON.stringify({ setup, market });
         if (this.automaticSubmission?.identity !== identity) {
           this.automaticSubmission = { identity, key: crypto.randomUUID() };
@@ -688,6 +689,10 @@ export class TrainingHubLifecycle {
       throw new TypeError("replay capabilities are required for source validation");
     }
     if (this.canPrepare(draft)) return this.evaluateAutomaticDraft(draft);
+    if (draft.startMode === "RANDOM" && draft.randomScope === "MARKET") {
+      const evaluation = evaluateTrainingRunSetupDraft(draft, this.capabilities);
+      return { ...evaluation, canSubmit: false, errors: [...evaluation.errors, t("replay.err.marketRandomUnsupported")] };
+    }
     const evaluation = evaluateTrainingRunSetupDraft(draft, this.capabilities);
     const errors = [...evaluation.errors];
     const ranges = catalog.entries.flatMap((entry) => entry.eligible_ranges);

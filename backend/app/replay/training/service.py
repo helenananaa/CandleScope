@@ -472,9 +472,10 @@ class TrainingRunService:
         request: TrainingRunSetupRequest,
         *,
         preparation_id: str | None = None,
+        _market_identity: tuple[str, str, str] | None = None,
         _progressive_initial_horizon_ms: int | None = None,
     ) -> dict[str, object]:
-        return await self._admission_service.create_empty_run(request, preparation_id=preparation_id, _progressive_initial_horizon_ms=_progressive_initial_horizon_ms)
+        return await self._admission_service.create_empty_run(request, preparation_id=preparation_id, _market_identity=_market_identity, _progressive_initial_horizon_ms=_progressive_initial_horizon_ms)
 
     async def select_initial_market(
         self,

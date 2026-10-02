@@ -18,6 +18,7 @@ export function hubDraftKey(context?: ReplayLaunchContext): string {
 }
 
 const enums: Partial<Record<keyof TrainingRunDraft, readonly string[]>> = {
+  randomScope: ["RANGE", "MARKET"],
   sourceKind: REPLAY_V2_ENUMS.source_kind, startMode: REPLAY_V2_ENUMS.start_mode,
   visibleHistoryMode: REPLAY_V2_ENUMS.visible_history_mode, marginMode: REPLAY_V2_ENUMS.margin_mode,
   positionMode: REPLAY_V2_ENUMS.position_mode, fundingMode: REPLAY_V2_ENUMS.funding_mode,
@@ -36,6 +37,7 @@ export function readHubDraft(storage: HubDraftStorage | null, key: string): Stor
     const draft = createTrainingRunDraft();
     for (const field of Object.keys(draft) as Array<keyof TrainingRunDraft>) {
       const item = raw[field];
+      if (field === "randomScope" && item === undefined) continue;
       const base = draft[field];
       if (field === "allowedMutations") {
         if (!Array.isArray(item) || item.length > REPLAY_POLICY_MUTATIONS.length

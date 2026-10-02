@@ -1,3 +1,4 @@
+import PreparationJobsPanel from "../../data-preparation/PreparationJobsPanel.js";
 import { useState } from "react";
 
 import { t } from "../../../i18n/index.js";
@@ -148,6 +149,8 @@ export default function ReplayStorageGovernancePanel({
           <button type="button" onClick={runtime.actions.closeStorage}>{t("replay.hub.close")}</button>
         </div>
       </header>
+
+      <PreparationJobsPanel />
 
       {inventory === null ? (
         <div className="training-hub-empty">

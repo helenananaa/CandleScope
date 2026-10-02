@@ -312,8 +312,8 @@ async def test_prepared_strategy_dataset_is_readable(tmp_path):
 
 
 @async_test
-@pytest.mark.parametrize("account_history,block_session_copy", [("proxy", False), ("exact", False), ("missing", False), ("proxy", True)])
-async def test_replay_api_empty_archive_downloads_and_creates_one_recoverable_run(tmp_path, account_history, block_session_copy, monkeypatch):
+@pytest.mark.parametrize("account_history,block_session_copy,random_by_market", [("proxy", False, False), ("exact", False, False), ("missing", False, False), ("proxy", True, False), ("proxy", False, True)])
+async def test_replay_api_empty_archive_downloads_and_creates_one_recoverable_run(tmp_path, account_history, block_session_copy, random_by_market, monkeypatch):
     from dataclasses import replace
     import httpx
     from fastapi import FastAPI
@@ -364,6 +364,22 @@ async def test_replay_api_empty_archive_downloads_and_creates_one_recoverable_ru
             setup.update(account_data_mode="HISTORICAL_EXACT", funding_mode="HISTORICAL_EXACT")
         body = {"idempotency_key": "api-launch-1", "setup": setup,
                 "exchange": "binance", "market_type": "futures", "symbol": "BTCUSDT"}
+        if random_by_market:
+            from app.data_engine.ingestion.models import StreamType
+            class Factory:
+                calls = 0
+                async def fetch_market(self, descriptor, **kwargs):
+                    self.calls += 1
+                    times = ([START] if kwargs.get("start_ms") == 0
+                        else [START + 11 * 60_000] if kwargs.get("start_ms") is None
+                        else range(kwargs["start_ms"], kwargs["end_ms"] + 1, 60_000))
+                    return [NS(exchange="binance", market_type="futures", symbol="BTCUSDT",
+                        event_type=StreamType.KLINE, data={"open_time": t}) for t in times]
+            factory = Factory()
+            app.state.data_engine_runtime = NS(ingestion_factory=factory)
+            monkeypatch.setattr("app.data_preparation.market_random.get_cached_symbol_metadata", lambda *args: None)
+            setup.update(start_mode="RANDOM", requested_start_ms=None, random_range_start_ms=None, random_range_end_ms=None)
+            body["random_by_market"] = True
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post("/data-preparations/replay", json=body)
             assert response.status_code == 202, response.text
@@ -388,8 +404,21 @@ async def test_replay_api_empty_archive_downloads_and_creates_one_recoverable_ru
             run_id = job["result"]["run"]["run_id"]
             assert run_id == f"prepared-{job['id']}"
             assert job["result"]["run"]["adapter_session_id"]
+            boundary_calls = factory.calls if random_by_market else 0
             repeated = await client.post("/data-preparations/replay", json=body)
             assert repeated.json()["id"] == job["id"]
+            if random_by_market:
+                assert factory.calls == boundary_calls and factory.calls >= 3
+                frozen = job["request"]["intent"]["replay_setup"]
+                assert frozen["random_range_start_ms"] == frozen["random_range_end_ms"]
+                assert frozen["random_range_start_ms"] >= START + setup["indicator_warmup_bars"] * 60_000
+                changed = await client.post("/data-preparations/replay", json={**body, "symbol": "ETHUSDT"})
+                assert changed.status_code == 409
+                from app.replay.training.models import TrainingRunSetupRequest
+                from app.replay.training.errors import TrainingRunError
+                with pytest.raises(TrainingRunError, match="no market satisfies"):
+                    await replay.training.create_empty_run(TrainingRunSetupRequest.from_dict(frozen),
+                        _market_identity=("binance", "spot", "ETHUSDT"))
             # Crash after consumer commit and before job READY is retry-safe.
             replayed = await adapter.launch(PreparationRequest.model_validate(job["request"]), {"inputs": []}, job["id"])
             assert replayed["run"]["run_id"] == run_id

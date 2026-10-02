@@ -1339,6 +1339,15 @@ test("hub markup exposes saves, native actions, filters and explicit unavailable
       continueRun() {},
     },
   } satisfies TrainingHubRuntime;
+  const marketRandomHtml = renderToStaticMarkup(<TrainingHubDialog runtime={{ ...runtime,
+    automaticPreparationAvailable: true,
+    draft: { ...draft, startMode: "RANDOM", randomScope: "MARKET", requestedStartMs: null,
+      randomRangeStartMs: null, randomRangeEndMs: null },
+  }} />);
+  assert.match(marketRandomHtml, /按商品随机/);
+  assert.match(marketRandomHtml, /无需填写日期/);
+  assert.match(marketRandomHtml, /交易所/);
+  assert.doesNotMatch(marketRandomHtml, /随机区间开始（UTC）|随机区间结束（UTC）|data-training-field="requested-start-utc"/);
   const html = renderToStaticMarkup(<TrainingHubDialog runtime={runtime} />);
   assert.doesNotMatch(html, /准备历史数据/);
   const noCoverage: typeof catalog = { ...catalog, entries: [] };
@@ -1353,7 +1362,7 @@ test("hub markup exposes saves, native actions, filters and explicit unavailable
   assert.doesNotMatch(renderPreparation("AGG_TRADE"), /准备历史数据/);
   assert.doesNotMatch(renderPreparation("BAR", hedgeCatalog()), /准备历史数据/);
   assert.match(html, /role="dialog"/);
-  assert.match(html, /训练存档大厅/);
+  assert.match(html, /回放训练/);
   assert.match(html, /BTC 手动训练/);
   assert.match(html, /继续训练/);
   const endedNameOffset = html.indexOf("ETH 已结束训练");
@@ -1482,4 +1491,46 @@ test("return-to-hub preserves terminal durable states and still navigates", asyn
     checkpointed: true,
     released: true,
   }));
+});
+
+
+test("market-random creation needs no dates and freezes identity across retry until the market changes", async (context) => {
+  const calls: Array<{ symbol: string; key: string | undefined }> = [];
+  const lifecycle = new TrainingHubLifecycle({
+    draftStorage: null,
+    api: {
+      async listRuns() { return parseTrainingRunListResponse(listResponse([])); },
+      async capabilities() { return parseReplayCapabilities(enabledCapabilities()); },
+      async preparationCapabilities() { return { enabled: true, replay_sources: { BAR: true, AGG_TRADE: false } }; },
+      async catalog() { return { ...hedgeCatalog(), entries: [] }; },
+      async createRun() { throw new Error("must not choose from the global catalog"); },
+      async prepareReplay(setup, market, _progress, _signal, key) {
+        assert.equal(setup.start_mode, "RANDOM");
+        assert.equal(setup.requested_start_ms, null);
+        assert.equal(setup.random_range_start_ms, null);
+        assert.equal(setup.random_range_end_ms, null);
+        assert.equal(market.random_by_market, true);
+        calls.push({ symbol: market.symbol, key });
+        throw new Error("uncertain delivery");
+      },
+    },
+  });
+  context.after(() => lifecycle.dispose());
+  await lifecycle.openCreate();
+  const draft = { ...lifecycle.getSnapshot().draft!, startMode: "RANDOM" as const,
+    randomScope: "MARKET" as const, requestedStartMs: null, randomRangeStartMs: null, randomRangeEndMs: null };
+  lifecycle.setDraft(draft);
+  assert.equal(lifecycle.getSnapshot().evaluation?.canSubmit, true);
+  await lifecycle.createRun(draft);
+  await lifecycle.createRun(draft);
+  const changed = { ...draft, symbol: "ETHUSDT" };
+  lifecycle.setDraft(changed);
+  await lifecycle.createRun(changed);
+  assert.equal(calls.length, 3);
+  assert.ok(calls[0]?.key);
+  assert.equal(calls[0]?.key, calls[1]?.key);
+  assert.notEqual(calls[0]?.key, calls[2]?.key);
+  assert.equal(calls[2]?.symbol, "ETHUSDT");
+  assert.equal(evaluateTrainingRunSetupDraft({ ...draft, symbol: "" }, parseReplayCapabilities(enabledCapabilities())).canSubmit, false);
+  assert.equal(evaluateTrainingRunSetupDraft({ ...draft, randomScope: "RANGE" }, parseReplayCapabilities(enabledCapabilities())).canSubmit, false);
 });

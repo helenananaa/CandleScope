@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { t, type MessageKey } from "../../../i18n/index.js";
+import { t, getDateTimeLocale, type MessageKey } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import type { TrainingRunDraft } from "../trainingHubModel.js";
 import {
@@ -103,7 +103,7 @@ export function TrainingRunDeleteConfirmation({
   );
 }
 
-function TrainingRunCreatePanel({ runtime, onPrepareData }: TrainingHubDialogProps) {
+function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: TrainingHubDialogProps) {
   useLocale();
   const { draft, evaluation } = runtime;
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -180,6 +180,7 @@ function TrainingRunCreatePanel({ runtime, onPrepareData }: TrainingHubDialogPro
           <div>
             <h2 id="training-hub-create-title">{t("replay.hub.createTitle")}</h2>
             <p>{t(runtime.automaticPreparationAvailable ? "preparation.replayIntro" : "replay.hub.createIntro")}</p>
+            {launchLabel && <p>{launchLabel}</p>}
             <nav className="training-hub-create-steps" aria-label={t("replay.hub.createSteps")}>
               {CREATE_SECTIONS.map(([id, number, label]) => (
                 <button
@@ -273,17 +274,26 @@ function TrainingRunCreatePanel({ runtime, onPrepareData }: TrainingHubDialogPro
                 </div>
                 <div className="training-hub-field">
                   <span>{t("replay.hub.startMode")}</span>
-                  <div className="training-hub-choice-grid" role="group" aria-label={t("replay.hub.startMode")}>
+                  <div className="training-hub-choice-grid training-hub-choice-grid-three" role="group" aria-label={t("replay.hub.startMode")}>
                     <button
                       type="button"
-                      aria-pressed={draft.startMode === "RANDOM"}
+                      aria-pressed={draft.startMode === "RANDOM" && draft.randomScope !== "MARKET"}
                       disabled={busy}
                       onClick={() => patchDraft(runtime, {
                         startMode: "RANDOM",
+                        randomScope: "RANGE",
                         requestedStartMs: null,
                       })}
                     >
                       <small>RANDOM</small><strong>{t("replay.hub.randomWindow")}</strong><span>{t("replay.hub.randomHint")}</span>
+                    </button>
+                    <button type="button"
+                      aria-pressed={draft.startMode === "RANDOM" && draft.randomScope === "MARKET"}
+                      disabled={busy || !runtime.automaticPreparationAvailable || draft.sourceKind !== "BAR"}
+                      title={!runtime.automaticPreparationAvailable || draft.sourceKind !== "BAR" ? t("replay.err.marketRandomUnsupported") : undefined}
+                      onClick={() => patchDraft(runtime, { startMode: "RANDOM", randomScope: "MARKET",
+                        requestedStartMs: null, randomRangeStartMs: null, randomRangeEndMs: null })}>
+                      <strong>{t("replay.hub.marketRandom")}</strong><span>{t("replay.hub.marketRandomHint")}</span>
                     </button>
                     <button
                       type="button"
@@ -318,6 +328,8 @@ function TrainingRunCreatePanel({ runtime, onPrepareData }: TrainingHubDialogPro
                         {t("replay.hub.manualWarning")}
                       </p>
                     </>
+                  ) : draft.randomScope === "MARKET" ? (
+                    <p className="training-hub-field-note" role="note">{t("replay.hub.marketRandomRange")}</p>
                   ) : (
                     <>
                       <label className="training-hub-field">
@@ -637,7 +649,7 @@ function TrainingRunCreatePanel({ runtime, onPrepareData }: TrainingHubDialogPro
                 <strong>{draft.name || t("replay.hub.unnamed")}</strong>
                 <dl>
                   <div><dt>{t("replay.hub.sourceKind")}</dt><dd>{trainingSourceKindLabel(draft.sourceKind)}</dd></div>
-                  <div><dt>{t("replay.hub.start")}</dt><dd>{draft.startMode === "RANDOM" ? t("replay.hub.randomStartMode") : t("replay.hub.manualStartMode")}</dd></div>
+                  <div><dt>{t("replay.hub.start")}</dt><dd>{draft.startMode === "RANDOM" ? t(draft.randomScope === "MARKET" ? "replay.hub.marketRandom" : "replay.hub.randomStartMode") : t("replay.hub.manualStartMode")}</dd></div>
                   <div><dt>{t("replay.hub.integrity")}</dt><dd>{trainingIntegrityLabel(draft.integrityMode)}</dd></div>
                   <div><dt>{t("replay.hub.timeDisclosure")}</dt><dd>{trainingTimeDisclosureLabel(draft.timeDisclosurePolicy)}</dd></div>
                   <div><dt>{t("replay.hub.equityLeverage")}</dt><dd>{draft.initialEquity} · {draft.maxLeverage}×</dd></div>
@@ -700,6 +712,8 @@ export default function TrainingHubDialog({
   const [deleteCandidate, setDeleteCandidate] = useState<TrainingRunCard | null>(
     null,
   );
+  const recent = [...runtime.items].filter((card) => card.resume_action !== "UNAVAILABLE" && card.state !== "ENDED")
+    .sort((a, b) => b.updated_at_ms - a.updated_at_ms)[0];
   const loadedRunCount = runtime.items.length;
   const resumableRunCount = runtime.items.filter((card) => (
     card.resume_action !== "UNAVAILABLE" && card.state !== "ENDED"
@@ -723,7 +737,7 @@ export default function TrainingHubDialog({
             <div>
               <h1 id="training-hub-title">{t("replay.hub.title")}</h1>
               <p>
-                {launchLabel ?? t("replay.hub.subtitle")}
+                {t("replay.hub.welcome")}
               </p>
             </div>
           </div>
@@ -743,13 +757,14 @@ export default function TrainingHubDialog({
           </div>
         </header>
 
-        <PreparationJobsPanel />
-        <section className="training-hub-stats" aria-label={t("replay.hub.overview")}>
-          <article><span>{t("replay.hub.statsAll")}</span><strong>{loadedRunCount}</strong></article>
-          <article><span>{t("replay.hub.statsResume")}</span><strong>{resumableRunCount}</strong></article>
-          <article><span>{t("replay.hub.statsActive")}</span><strong>{activeRunCount}</strong></article>
-          <article><span>{t("replay.hub.statsEnded")}</span><strong>{completedRunCount}</strong></article>
-        </section>
+        <ReplayStorageGovernancePanel runtime={runtime} />
+        {recent && <section className="training-hub-resume">
+          <div><span>{t("replay.hub.recent")}</span><h2>{recent.name}</h2>
+            <p>{recent.last_symbol ?? t("replay.hub.unselected")} · {trainingRunStateLabel(recent.state)}</p></div>
+          <button className="training-hub-primary-button" type="button" disabled={busy}
+            onClick={() => runtime.actions.continueRun(recent)}>{trainingRunPrimaryActionLabel(recent)}</button>
+        </section>}
+        <PreparationJobsPanel summary onReady={runtime.actions.refresh} />
 
         <div className="training-hub-toolbar">
           <div className="training-hub-filters" aria-label={t("replay.hub.filterStatus")}>
@@ -866,6 +881,7 @@ export default function TrainingHubDialog({
                 <dl className="training-hub-card-meta">
                   <div><dt>{t("replay.hub.accountSymbol")}</dt><dd>{card.last_symbol ?? t("replay.hub.unselected")}{card.subscribed_track_count > 0 ? t("replay.hub.activeTracks", { count: card.subscribed_track_count }) : ""}</dd></div>
                   <div><dt>{t("replay.hub.sourceKind")}</dt><dd>{trainingSourceKindLabel(card.source_kind)}</dd></div>
+                  <div><dt>{t("replay.hub.updated")}</dt><dd><time dateTime={new Date(card.updated_at_ms).toISOString()}>{new Date(card.updated_at_ms).toLocaleString(getDateTimeLocale())}</time></dd></div>
                   <div><dt>{t("replay.hub.progress")}</dt><dd>#{card.progress.source_sequence}</dd></div>
                   <div><dt>{t("replay.hub.timeDisclosure")}</dt><dd>{trainingTimeDisclosureLabel(card.time_disclosure_policy)}</dd></div>
                   <div><dt>{t("replay.hub.compat")}</dt><dd>{trainingCompatibilityLabel(card.compatibility)}</dd></div>
@@ -888,8 +904,13 @@ export default function TrainingHubDialog({
             </button>
           </div>
         )}
-        <TrainingRunCreatePanel key={runtime.createOpen ? "open" : "closed"} runtime={runtime} {...(onPrepareData ? { onPrepareData } : {})} />
-        <ReplayStorageGovernancePanel runtime={runtime} />
+        <section className="training-hub-stats" aria-label={t("replay.hub.overview")}>
+          <article><span>{t("replay.hub.statsAll")}</span><strong>{loadedRunCount}</strong></article>
+          <article><span>{t("replay.hub.statsResume")}</span><strong>{resumableRunCount}</strong></article>
+          <article><span>{t("replay.hub.statsActive")}</span><strong>{activeRunCount}</strong></article>
+          <article><span>{t("replay.hub.statsEnded")}</span><strong>{completedRunCount}</strong></article>
+        </section>
+        <TrainingRunCreatePanel key={runtime.createOpen ? "open" : "closed"} runtime={runtime} {...(launchLabel ? { launchLabel } : {})} {...(onPrepareData ? { onPrepareData } : {})} />
       </section>
       {deleteCandidate !== null && (
         <TrainingRunDeleteConfirmation
