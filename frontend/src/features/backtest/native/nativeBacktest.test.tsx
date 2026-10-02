@@ -39,6 +39,16 @@ test("replay starts paused with a server cursor and no future account output", (
   assert.doesNotMatch(html, /<svg/);
 });
 
+test("a report without replay output keeps controls mounted instead of blanking the panel", () => {
+  const run: NativeRun = { run_id: "empty-replay", execution_mode: "NATIVE", state: "COMPLETED", created_at_ms: 1,
+    runtime_identity: { engine: { package: "pine-compat-runtime", version: "test", code_sha256: "hash" } }, result: null };
+  const html = renderToStaticMarkup(<NativeStrategyReport run={run} />);
+  assert.match(html, /native-report-toolbar/);
+  assert.match(html, /native-replay-controls/);
+  assert.ok(html.includes(t("native.replay.empty")));
+  assert.doesNotMatch(html, /native-report-metrics|<svg|download=/);
+});
+
 test("native chart markers retain engine fill prices", () => {
   const html = renderToStaticMarkup(<NativeCurve title="Native fills" points={[{ time: 1, value: 10 }, { time: 2, value: 20 }]}
     markers={[{ time: 1, value: 9.5, kind: "entry" }, { time: 2, value: 20.5, kind: "exit" }]} />);
@@ -68,6 +78,7 @@ test("native report shows authority, native trades and export independently of h
   assert.match(html, /pine-compat-runtime/);
   assert.match(html, /native-trade-1/);
   assert.match(html, /native\/runs\/native_test\/export/);
-  assert.match(html, /10005/);
+  assert.match(html, /0\.05%/);
+  assert.ok(html.includes(t("report.change")));
   assert.doesNotMatch(html, /SimulationKernel/);
 });

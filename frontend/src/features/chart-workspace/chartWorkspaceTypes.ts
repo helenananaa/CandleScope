@@ -1,3 +1,4 @@
+import type { NativeStrategyCollection } from "../backtest/native/nativeStrategyCollection.js";
 import type { ChartSession } from "../chart-session/chartSessionTypes.js";
 import type { ChartSettings } from "../settings/chartAppearanceSettings.js";
 import type { IndicatorDefinition } from "../indicators/indicatorTypes.js";
@@ -144,6 +145,8 @@ export interface ChartCellState {
   priceScale: ChartCellPriceScale;
   indicators: IndicatorDefinition[];
   strategyAttachment: ChartStrategyAttachmentRecord | null;
+  nativeStrategies?: NativeStrategyCollection;
+  strategyTesterMode?: "NATIVE" | "CANDLESCOPE";
 }
 
 export interface ChartWindowBoundsDip {

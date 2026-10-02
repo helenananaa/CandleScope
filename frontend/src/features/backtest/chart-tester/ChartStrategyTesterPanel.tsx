@@ -1,3 +1,5 @@
+import { resolveStrategyTesterMode } from "./chartStrategyMode.js";
+import type { NativeStrategyCollection } from "../native/nativeStrategyCollection.js";
 import type { StrategyTradeFocus } from "./strategyTradeReview.js";
 import {
   Suspense,
@@ -152,6 +154,10 @@ export interface ChartStrategyTesterPanelProps {
   cellScope: string;
   session: ChartSession;
   attachment: ChartStrategyAttachmentRecord | null;
+  nativeStrategies?: NativeStrategyCollection | undefined;
+  strategyTesterMode?: "NATIVE" | "CANDLESCOPE" | undefined;
+  onStrategyTesterModeChange?(value: "NATIVE" | "CANDLESCOPE"): void;
+  onNativeStrategiesChange?(value: NativeStrategyCollection): void;
   draftStore: StrategyDraftStore;
   onAttachmentChange(attachment: ChartStrategyAttachmentRecord | null): void;
   onEntryStateChange(state: ChartStrategyTesterEntryState): void;
@@ -182,17 +188,21 @@ export interface ChartStrategyTesterPanelProps {
 }
 
 export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanelProps) {
-  const [mode, setMode] = useState<"NATIVE" | "CANDLESCOPE">(props.attachment ? "CANDLESCOPE" : "NATIVE");
+  const [localMode, setMode] = useState(() => resolveStrategyTesterMode(props.strategyTesterMode, !!props.attachment));
+  const mode = props.strategyTesterMode ?? localMode;
+  const selectedName = mode === "NATIVE"
+    ? props.nativeStrategies?.items.find((item) => item.id === props.nativeStrategies?.activeId)?.name || t("strategyCollection.default")
+    : props.attachment?.displayName;
   const [visited, setVisited] = useState(() => new Set([mode]));
   useLocale();
   return <StrategyDock key={props.cellScope} scope={props.cellScope}
-    title={`${props.attachment ? `${props.attachment.displayName} · ` : ""}${props.session.symbol} · ${props.session.interval}`}
-    selector={<select aria-label={t("native.mode")} value={mode} onChange={(event) => { const next = event.target.value as typeof mode; setMode(next); setVisited((items) => new Set([...items, next])); }}>
+    title={`${selectedName ? `${selectedName} · ` : ""}${props.session.symbol} · ${props.session.interval}`}
+    selector={<select aria-label={t("native.mode")} value={mode} onChange={(event) => { const next = event.target.value as typeof mode; setMode(next); props.onStrategyTesterModeChange?.(next); setVisited((items) => new Set([...items, next])); }}>
       <option value="NATIVE">{t("native.fullStrategies")}</option>
       <option value="CANDLESCOPE">{t("native.hostMode")}</option>
     </select>}>
-    {visited.has("NATIVE") && <div className="strategy-mode-pane" hidden={mode !== "NATIVE"}><Suspense fallback={<p>{t("native.loading")}</p>}><NativeStrategyPanel key={`${props.session.exchange}:${props.session.marketType}:${props.session.symbol}:${props.session.interval}`} {...props} active={props.active !== false && mode === "NATIVE"} docked /></Suspense></div>}
-    {visited.has("CANDLESCOPE") && <div className="strategy-mode-pane" hidden={mode !== "CANDLESCOPE"}><CandleScopeStrategyTesterPanel {...props} active={props.active !== false && mode === "CANDLESCOPE"} /></div>}
+    {(mode === "NATIVE" || visited.has("NATIVE")) && <div className="strategy-mode-pane" hidden={mode !== "NATIVE"}><Suspense fallback={<p>{t("native.loading")}</p>}><NativeStrategyPanel key={`${props.session.exchange}:${props.session.marketType}:${props.session.symbol}:${props.session.interval}`} {...props} active={props.active !== false && mode === "NATIVE"} docked /></Suspense></div>}
+    {(mode === "CANDLESCOPE" || visited.has("CANDLESCOPE")) && <div className="strategy-mode-pane" hidden={mode !== "CANDLESCOPE"}><CandleScopeStrategyTesterPanel {...props} active={props.active !== false && mode === "CANDLESCOPE"} /></div>}
   </StrategyDock>;
 }
 

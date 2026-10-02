@@ -1,3 +1,4 @@
+import type { NativeStrategyCollection } from "../native/nativeStrategyCollection.js";
 import type { StrategyTradeFocus } from "./strategyTradeReview.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -68,6 +69,10 @@ export interface ChartStrategyTesterCellBridgeProps {
   cellId: string;
   session: ChartSession;
   attachment: ChartStrategyAttachmentRecord | null;
+  nativeStrategies?: NativeStrategyCollection | undefined;
+  strategyTesterMode?: "NATIVE" | "CANDLESCOPE" | undefined;
+  onStrategyTesterModeChange?(value: "NATIVE" | "CANDLESCOPE"): void;
+  onNativeStrategiesChange?(value: NativeStrategyCollection): void;
   active: boolean;
   panelOpen: boolean;
   bottomPanelHost: HTMLElement | null;
@@ -87,6 +92,10 @@ export default function ChartStrategyTesterCellBridge({
   cellId,
   session,
   attachment,
+  nativeStrategies,
+  strategyTesterMode,
+  onStrategyTesterModeChange,
+  onNativeStrategiesChange,
   active,
   panelOpen,
   bottomPanelHost,
@@ -739,6 +748,10 @@ export default function ChartStrategyTesterCellBridge({
       cellScope={`${workspaceId}\u0000${cellId}`}
       session={session}
       attachment={attachment}
+      nativeStrategies={nativeStrategies}
+      strategyTesterMode={strategyTesterMode}
+      {...(onStrategyTesterModeChange ? { onStrategyTesterModeChange } : {})}
+      {...(onNativeStrategiesChange ? { onNativeStrategiesChange } : {})}
       draftStore={draftStore}
       onAttachmentChange={onAttachmentChange}
       onEntryStateChange={onEntryStateChange}

@@ -1,3 +1,5 @@
+import NativeStrategyComparison from "./NativeStrategyComparison.js";
+import { recordStrategyRun, strategyRunIds, normalizeNativeStrategies, copyNativeStrategy, strategyInstanceScope, type NativeStrategyInstance, type NativeStrategyCollection } from "./nativeStrategyCollection.js";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ChartStrategyTesterPanelProps } from "../chart-tester/ChartStrategyTesterPanel.js";
 import type { ChartContextResolution } from "../backtestApi.js";
@@ -18,21 +20,102 @@ const NATIVE_TEMPLATES = {
   pyne: 'strategy("Native SMA", overlay=True, initial_capital=10000)\nfast = ta.sma(close, 3)\nslow = ta.sma(close, 5)\nstrategy.entry_when(ta.crossover(fast, slow), "L", strategy.long, qty=1)\nstrategy.close_when(ta.crossunder(fast, slow), "L")\nplot(fast, "Fast")\nplot(slow, "Slow")\n',
 };
 
-type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | "cellScope" | "onClose" | "onLocateTrade" | "onReviewTrade" | "active"> & {
+type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | "cellScope" | "onClose" | "onLocateTrade" | "onReviewTrade" | "active" | "nativeStrategies" | "onNativeStrategiesChange"> & {
   dataset?: { datasetId: string; dataEpoch: string } | undefined;
   onRunChange?: (run: NativeRun | null) => void;
   externalReport?: boolean;
   docked?: boolean;
 };
 export default function NativeStrategyPanel(props: NativeStrategyPanelProps) {
-  const [mode, setMode] = useState<"NATIVE" | "CANDLESCOPE">("NATIVE");
+  useLocale();
+  const [collection, setCollection] = useState(() => normalizeNativeStrategies(props.nativeStrategies));
+  const current = useRef(collection);
+  const persist = useRef(props.onNativeStrategiesChange);
+  persist.current = props.onNativeStrategiesChange;
+  const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set());
+  const [editing, setEditing] = useState(false);
+  const [comparing, setComparing] = useState(false);
+  const [storageError, setStorageError] = useState("");
+  const update = useCallback((change: (value: NativeStrategyCollection) => NativeStrategyCollection) => {
+    const next = change(current.current);
+    current.current = next; setCollection(next); persist.current?.(next);
+  }, []);
+  const updateInstance = useCallback((id: string, change: Partial<NativeStrategyInstance>) => {
+    update((value) => ({ ...value, items: value.items.map((item) => item.id === id ? { ...item, ...change, drafts: { ...item.drafts, ...change.drafts }, runs: { ...item.runs, ...change.runs }, runHistory: { ...item.runHistory, ...change.runHistory } } : item) }));
+  }, [update]);
+  const setInstanceBusy = useCallback((id: string, busy: boolean) => {
+    setBusyIds((old) => { const next = new Set(old); if (busy) next.add(id); else next.delete(id); return next; });
+  }, []);
+  const isBusy = (id: string) => [...busyIds].some((key) => key.startsWith(`${id}:`));
+  const selected = collection.items.find((item) => item.id === collection.activeId)!;
+  const name = (item: NativeStrategyInstance) => item.name || t("strategyCollection.default");
+  const add = (copy: boolean) => {
+    const id = crypto.randomUUID();
+    if (copy && !selected) return;
+    const drafts = { ...selected?.drafts };
+    if (copy && selected) {
+      try {
+        for (const language of ["pine", "pyne"]) for (const mode of ["NATIVE", "CANDLESCOPE"]) {
+          const key = `${language}:${mode}`;
+          const prefix = `candlescope.native-draft:${strategyInstanceScope(props.cellScope, selected.id)}:${language}`;
+          const saved = drafts[key] ?? localStorage.getItem(`${prefix}:${mode}`) ?? (selected.id === "default" ? localStorage.getItem(prefix) : null);
+          if (saved) drafts[key] = saved;
+        }
+      } catch { setStorageError(t("native.saveFailed")); return; }
+    }
+    const item = copy && selected ? copyNativeStrategy({ ...selected, drafts }, id, `${name(selected)} · ${t("strategyCollection.copyName")}`)
+      : { id, name: `${t("strategyCollection.default")} ${collection.items.length + 1}`, language: "pine" as const, drafts: {}, runs: {} };
+    update((value) => ({ ...value, activeId: id, items: [...value.items, item] }));
+    setEditing(false); setComparing(false);
+  };
+  return <>
+    <div className="native-strategy-collection" aria-label={t("strategyCollection.list")}>
+      <div className="native-strategy-switcher">
+        {collection.items.length <= 5 ? collection.items.map((item) => <button key={item.id} aria-pressed={item.id === collection.activeId}
+          onClick={() => { update((value) => ({ ...value, activeId: item.id })); setEditing(false); setComparing(false); }}>
+          {name(item)}{isBusy(item.id) ? ` · ${t("strategyReview.status.running")}` : ""}</button>)
+          : <select aria-label={t("strategyCollection.select")} value={collection.activeId} onChange={(event) => { update((value) => ({ ...value, activeId: event.target.value })); setComparing(false); }}>
+            {collection.items.map((item) => <option key={item.id} value={item.id}>{name(item)}{isBusy(item.id) ? ` · ${t("strategyReview.status.running")}` : ""}</option>)}
+          </select>}
+      </div>
+      <button aria-pressed={comparing} onClick={() => setComparing(!comparing)}>{t("strategyCompare.title")}</button>
+      <button onClick={() => add(false)}>{t("strategyCollection.add")}</button>
+      <details className="native-actions-menu"><summary>{t("report.more")}</summary><div>
+      <button disabled={!selected} onClick={() => add(true)}>{t("strategyCollection.copy")}</button>
+      <button disabled={!selected} aria-expanded={editing} onClick={() => setEditing(!editing)}>{t("strategyCollection.rename")}</button>
+      <button disabled={!selected || isBusy(selected.id)} title={selected && isBusy(selected.id) ? t("strategyCollection.runningHint") : undefined}
+        onClick={() => { if (!selected) return; update((value) => normalizeNativeStrategies({ ...value, items: value.items.filter((item) => item.id !== selected.id) })); setEditing(false); }}>{t("strategyCollection.remove")}</button>
+      </div></details>
+    </div>
+    {editing && selected && <label className="native-strategy-name">{t("strategyCollection.name")}<input autoFocus maxLength={80} value={selected.name}
+      placeholder={t("strategyCollection.default")} onChange={(event) => updateInstance(selected.id, { name: event.target.value })}
+      onKeyDown={(event) => { if (event.key === "Enter" || event.key === "Escape") setEditing(false); }} /></label>}
+    {storageError && <p role="alert">{storageError}</p>}
+    <div className="strategy-mode-pane" hidden={!comparing}><NativeStrategyComparison items={collection.items}
+      context={[props.session.exchange, props.session.marketType, props.session.symbol, props.session.interval]}
+      saved={collection.comparisons?.[JSON.stringify([props.session.exchange, props.session.marketType, props.session.symbol, props.session.interval])]}
+      onSave={(selection) => update((value) => ({ ...value, comparisons: { ...value.comparisons, [JSON.stringify([props.session.exchange, props.session.marketType, props.session.symbol, props.session.interval])]: selection } }))}
+      onOpen={(id) => { update((value) => ({ ...value, activeId: id })); setComparing(false); }} /></div>
+    {collection.items.map((item) => <div key={item.id} className="strategy-mode-pane" hidden={comparing || item.id !== collection.activeId}>
+      <NativeStrategyInstancePanel {...props} instance={item} onInstanceChange={updateInstance} onInstanceBusy={setInstanceBusy}
+        cellScope={strategyInstanceScope(props.cellScope, item.id)} active={props.active !== false && !comparing && item.id === collection.activeId} />
+    </div>)}
+  </>;
+}
+type InstanceProps = NativeStrategyPanelProps & {
+  instance: NativeStrategyInstance;
+  onInstanceChange(id: string, change: Partial<NativeStrategyInstance>): void;
+  onInstanceBusy(id: string, busy: boolean): void;
+};
+function NativeStrategyInstancePanel(props: InstanceProps) {
+  const [mode, setMode] = useState<"NATIVE" | "CANDLESCOPE">(props.instance.executionMode ?? "NATIVE");
   const [visited, setVisited] = useState(() => new Set([mode]));
-  const switchMode = (next: typeof mode) => { setMode(next); setVisited((items) => new Set([...items, next])); };
+  const switchMode = (next: typeof mode) => { props.onInstanceChange(props.instance.id, { executionMode: next }); setMode(next); setVisited((items) => new Set([...items, next])); };
   return <>{([...visited]).map((item) => <div key={item} className="strategy-mode-pane" hidden={mode !== item}>
     <NativeStrategySession {...props} active={(props.active ?? true) && mode === item} executionMode={item} onExecutionModeChange={switchMode} />
   </div>)}</>;
 }
-function NativeStrategySession(props: NativeStrategyPanelProps & { executionMode: "NATIVE" | "CANDLESCOPE"; onExecutionModeChange(mode: "NATIVE" | "CANDLESCOPE"): void }) {
+function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" | "CANDLESCOPE"; onExecutionModeChange(mode: "NATIVE" | "CANDLESCOPE"): void }) {
   const locale = useLocale();
   const tabStorageKey = `candlescope.native-tab:${props.cellScope}:${props.executionMode}`;
   const [tab, setTab] = useState<"script" | "settings" | "overview" | "trades" | "history">(() => {
@@ -50,7 +133,7 @@ function NativeStrategySession(props: NativeStrategyPanelProps & { executionMode
   useLayoutEffect(() => {
     if (scrollPane.current) scrollPane.current.scrollTop = scrollPositions.current[tab] ?? 0;
   }, [tab]);
-  const [language, setLanguage] = useState<"pine" | "pyne">("pine");
+  const [language, setLanguage] = useState<"pine" | "pyne">(props.instance.language);
   const mode = props.executionMode;
   const [hostSettings, setHostSettings] = useState({ initial_balance: 10000, slippage_bps: 1, taker_fee_bps: 0, price_tick: 0.01 });
   const [fidelity, setFidelity] = useState("BAR_APPROX");
@@ -66,6 +149,8 @@ function NativeStrategySession(props: NativeStrategyPanelProps & { executionMode
   const [run, setRun] = useState<NativeRun | null>(null);
   const [previousRun, setPreviousRun] = useState<NativeRun | null>(null);
   const [history, setHistory] = useState<NativeRun[]>([]);
+  const [allHistory, setAllHistory] = useState(false);
+  const [historicalRun, setHistoricalRun] = useState<NativeRun | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [resolution, setResolution] = useState<ChartContextResolution | null>(null);
@@ -81,14 +166,35 @@ function NativeStrategySession(props: NativeStrategyPanelProps & { executionMode
   const storageKey = `${legacyStorageKey}:${mode}`;
   const onRunChange = props.onRunChange;
   useEffect(() => { if (props.active !== false) onRunChange?.(run); }, [run, onRunChange, props.active]);
+  const instanceRef = useRef(props.instance);
+  instanceRef.current = props.instance;
+  const patchInstance = useRef(props.onInstanceChange);
+  patchInstance.current = props.onInstanceChange;
+  const runContext = JSON.stringify([mode, props.session.exchange, props.session.marketType, props.session.symbol, props.session.interval]);
+  const { onInstanceBusy } = props;
+  const instanceId = props.instance.id;
+  useEffect(() => { onInstanceBusy(`${instanceId}:${mode}`, busy); return () => onInstanceBusy(`${instanceId}:${mode}`, false); }, [busy, onInstanceBusy, instanceId, mode]);
+  useEffect(() => { patchInstance.current(instanceRef.current.id, { language }); }, [language]);
   const receiveRun = useCallback((value: NativeRun) => {
+    const item = instanceRef.current;
+    if (item.runs[runContext] !== value.run_id || !item.runHistory?.[runContext]?.includes(value.run_id)) patchInstance.current(item.id, recordStrategyRun(item, runContext, value.run_id));
     setRun(value); setBusy(!nativeTerminal(value.state));
     if (nativeTerminal(value.state)) {
       setHistory((items) => [value, ...items.filter((item) => item.run_id !== value.run_id)]);
       if (value.state === "COMPLETED" && pendingOverview.current === navigationRevision.current) selectTab("overview");
       pendingOverview.current = null;
     }
-  }, [selectTab]);
+  }, [selectTab, runContext]);
+  useEffect(() => {
+    const saved = instanceRef.current.runs[runContext];
+    if (!saved) return;
+    setBusy(true);
+    const abort = new AbortController();
+    void nativeApi<NativeRun>(`${runPath}/${encodeURIComponent(saved)}`, undefined, undefined, abort.signal)
+      .then((value) => { if (!abort.signal.aborted) receiveRun(value); })
+      .catch((reason) => { if (!abort.signal.aborted) { setError(String(reason)); setBusy(false); } });
+    return () => abort.abort();
+  }, [runContext, runPath, receiveRun]);
   useEffect(() => {
     alive.current = true;
     void nativeApi<NativeCapabilities>("/native/capabilities").then(setCapabilities).catch((reason) => setError(String(reason)));
@@ -97,14 +203,21 @@ function NativeStrategySession(props: NativeStrategyPanelProps & { executionMode
   }, []);
   useEffect(() => {
     const abort = new AbortController();
-    void nativeApi<{ runs: NativeRun[] }>(runPath, undefined, undefined, abort.signal).then((value) => setHistory(value.runs))
+    void nativeApi<{ runs: NativeRun[] }>(runPath, undefined, undefined, abort.signal).then(async (value) => {
+      const listed = new Set(value.runs.map((item) => item.run_id));
+      const missing = [...strategyRunIds(instanceRef.current, mode)].filter((id) => !listed.has(id));
+      const restored = await Promise.all(missing.map((id) => nativeApi<NativeRun>(`${runPath}/${encodeURIComponent(id)}`, undefined, undefined, abort.signal).catch(() => null)));
+      if (abort.signal.aborted) return;
+      setHistory((items) => [...new Map([...value.runs, ...restored.filter((item): item is NativeRun => item !== null), ...items].map((item) => [item.run_id, item])).values()]);
+    })
       .catch((reason) => { if (!abort.signal.aborted) setError(String(reason)); });
     return () => abort.abort();
-  }, [runPath]);
+  }, [runPath, mode]);
   useEffect(() => {
     const defaultStart = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
     const defaultEnd = new Date().toISOString().slice(0, 10);
-    try { const saved = localStorage.getItem(storageKey) ?? localStorage.getItem(legacyStorageKey); const draft: unknown = saved ? JSON.parse(saved) : null;
+    try { const saved = instanceRef.current.drafts[`${language}:${mode}`] ?? localStorage.getItem(storageKey) ?? localStorage.getItem(legacyStorageKey); const draft: unknown = saved ? JSON.parse(saved) : null;
+      if (saved && !instanceRef.current.drafts[`${language}:${mode}`]) patchInstance.current(instanceRef.current.id, { drafts: { [`${language}:${mode}`]: saved } });
       setSource(draft && typeof draft === "object" && "source" in draft && typeof draft.source === "string" ? draft.source : NATIVE_TEMPLATES[language]);
       setParameters(draft && typeof draft === "object" && "parameters" in draft && typeof draft.parameters === "string" ? draft.parameters : "{}");
       setAutomaticContexts(restorePreparationContexts(draft && typeof draft === "object" && "automaticContexts" in draft ? draft.automaticContexts : null));
@@ -112,11 +225,14 @@ function NativeStrategySession(props: NativeStrategyPanelProps & { executionMode
       setHistoryEnd(restorePreparationDate(draft && typeof draft === "object" && "historyEnd" in draft ? draft.historyEnd : null, defaultEnd));
     } catch { setSource(NATIVE_TEMPLATES[language]); setParameters("{}"); setAutomaticContexts([]); setHistoryStart(defaultStart); setHistoryEnd(defaultEnd); }
     setAdvanced(emptyAdvancedInputs());
-  }, [storageKey, legacyStorageKey, language]);
+  }, [storageKey, legacyStorageKey, language, mode]);
   useEffect(() => { setResolution(null); }, [props.session.exchange, props.session.marketType, props.session.symbol, props.session.interval]);
   const save = (text: string, params: string, contexts = automaticContexts, start = historyStart, end = historyEnd) => {
     setSource(text); setParameters(params);
-    try { localStorage.setItem(storageKey, JSON.stringify({ source: text, parameters: params, automaticContexts: contexts, historyStart: start, historyEnd: end })); } catch { setError(t("native.saveFailed")); }
+    const draft = JSON.stringify({ source: text, parameters: params, automaticContexts: contexts, historyStart: start, historyEnd: end });
+    const item = instanceRef.current;
+    patchInstance.current(item.id, { drafts: { ...item.drafts, [`${language}:${mode}`]: draft } });
+    try { localStorage.setItem(storageKey, draft); } catch { setError(t("native.saveFailed")); }
   };
   useEffect(() => {
     if (!run || nativeTerminal(run.state)) return;
@@ -131,7 +247,7 @@ function NativeStrategySession(props: NativeStrategyPanelProps & { executionMode
   const start = async (prepare = false) => {
     pendingOverview.current = !run?.result && !previousRun?.result ? navigationRevision.current : null;
     if (run?.result) setPreviousRun(run);
-    setBusy(true); setError(""); setRun(null); setPreparation(null); setResolution(null);
+    setHistoricalRun(null); setBusy(true); setError(""); setRun(null); setPreparation(null); setResolution(null);
     try {
       const params: unknown = JSON.parse(parameters);
       if (!params || Array.isArray(params) || typeof params !== "object") throw new Error(t("native.parametersInvalid"));
@@ -203,7 +319,9 @@ function NativeStrategySession(props: NativeStrategyPanelProps & { executionMode
       if (alive.current) receiveRun(result);
     } catch (reason) { if (alive.current) { setError(String(reason)); setBusy(false); } }
   };
-  const reportRun = run?.result ? run : previousRun;
+  const ownedRunIds = strategyRunIds(props.instance, mode);
+  const visibleHistory = allHistory ? history : history.filter((item) => ownedRunIds.has(item.run_id));
+  const reportRun = historicalRun ?? (run?.result ? run : previousRun);
   let parametersChanged = false;
   try { parametersChanged = JSON.stringify(reportRun?.config?.parameters ?? {}) !== JSON.stringify(JSON.parse(parameters)); } catch { parametersChanged = true; }
   const resultStale = !!reportRun && (reportRun !== run || reportRun.config?.source !== source || reportRun.config?.language !== language || parametersChanged);
@@ -211,8 +329,9 @@ function NativeStrategySession(props: NativeStrategyPanelProps & { executionMode
   return <section className={`native-strategy-panel${props.docked ? " native-strategy-docked" : ""}`} aria-label={t("native.title")}>
     {!props.docked && <header><strong>{t(mode === "NATIVE" ? "native.title" : "native.external.title")}</strong><span>{props.session.symbol} · {props.session.interval}</span><button onClick={props.onClose}>×</button></header>}
     {props.docked && <nav className="native-dock-tabs" aria-label={t("chartTester.tabsAria")}>
-      {(["overview", "trades", "script", "settings", "history"] as const).map((item) => <button key={item} aria-pressed={tab === item}
-        onClick={() => selectTab(item)}>{t(item === "history" ? "native.history" : `chartTester.tab.${item}`)}</button>)}
+      {(["overview", "trades", "script", "settings"] as const).map((item) => <button key={item} aria-pressed={tab === item}
+        onClick={() => selectTab(item)}>{t(`chartTester.tab.${item}`)}</button>)}
+    <details className="native-actions-menu"><summary>{t("report.more")}</summary><div><button aria-pressed={tab === "history"} onClick={(event) => { selectTab("history"); event.currentTarget.closest("details")?.removeAttribute("open"); }}>{t("native.history")}</button></div></details>
     </nav>}
     <div className="native-dock-actions">
     <div className="native-toolbar"><select aria-label={t("native.language")} value={language} disabled={busy} onChange={(event) => setLanguage(event.target.value as "pine" | "pyne")}>
@@ -273,14 +392,18 @@ function NativeStrategySession(props: NativeStrategyPanelProps & { executionMode
     {<NativeAdvancedInputs native={mode === "NATIVE"} value={advanced} onChange={setAdvanced} language={language} disabled={busy} exchange={props.session.exchange} />}
     </details></div>
     <div className="native-dock-report" data-view={tab} hidden={props.docked && tab !== "overview" && tab !== "trades"}>
-      {resultStale && <p role="status">{t("chartTester.result.staleGuidanceTitle")}</p>}
+      {historicalRun && <p role="status">{t("strategyHistory.viewing")} <code>{historicalRun.run_id}</code> <button onClick={() => setHistoricalRun(null)}>{t("strategyHistory.latest")}</button></p>}
+      {resultStale && !historicalRun && <p role="status">{t("chartTester.result.staleGuidanceTitle")}</p>}
       {!reportRun?.result && props.docked && <p className="native-dock-empty">{t("strategyDock.empty")}</p>}
-      {reportRun?.result && !props.externalReport && <NativeStrategyReport key={reportRun.run_id} run={reportRun} onLocate={props.onLocateTrade} onReviewTrade={props.onReviewTrade} active={props.active !== false && (!props.docked || tab === "trades")}
+      {reportRun?.result && !props.externalReport && <NativeStrategyReport key={reportRun.run_id} run={reportRun} onLocate={props.onLocateTrade} onReviewTrade={props.onReviewTrade} active={!historicalRun && props.active !== false && (!props.docked || tab === "trades")}
         view={props.docked ? (tab === "trades" ? "trades" : "overview") : "all"} />}
     </div>
     <div hidden={props.docked && tab !== "history"}>
     {run?.config?.source && <details><summary>{t("native.source")}</summary><pre>{run.config.source}</pre></details>}
-    <details open={props.docked}><summary>{t(mode === "NATIVE" ? "native.history" : "native.external.history")}</summary>{history.map((item) => <button key={item.run_id} disabled={busy} onClick={() => void nativeApi<NativeRun>(`${runPath}/${item.run_id}`).then((value) => { pendingOverview.current = null; setError(""); setPreparation(null); setResolution(null); receiveRun(value); }).catch((reason) => setError(String(reason)))}>
+    <label><input type="checkbox" checked={allHistory} onChange={(event) => setAllHistory(event.target.checked)} />{t("strategyHistory.all")}</label>
+    <p>{t("strategyHistory.ownership")}</p>
+    {!visibleHistory.length && <p>{t("strategyHistory.empty")}</p>}
+    <details open={props.docked}><summary>{t(mode === "NATIVE" ? "native.history" : "native.external.history")}</summary>{visibleHistory.map((item) => <button key={item.run_id} disabled={busy} onClick={() => void nativeApi<NativeRun>(`${runPath}/${item.run_id}`).then((value) => { pendingOverview.current = null; setError(""); setHistoricalRun(value); selectTab("overview"); }).catch((reason) => setError(String(reason)))}>
       {new Date(item.created_at_ms).toLocaleString(locale)} · {item.runtime_identity.engine.package} · {item.state}</button>)}</details>
     </div>
     </div>

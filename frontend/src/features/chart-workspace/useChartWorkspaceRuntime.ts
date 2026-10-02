@@ -1,3 +1,4 @@
+import type { NativeStrategyCollection } from "../backtest/native/nativeStrategyCollection.js";
 import {
   useCallback,
   useEffect,
@@ -176,6 +177,8 @@ export interface ChartWorkspaceRuntime {
     updateCellChartSettings(cellId: ChartCellId, settings: ChartSettings | ChartCellChartSettings): void;
     updateCellPriceScale(cellId: ChartCellId, priceScale: ChartCellPriceScale): void;
     updateCellIndicators(cellId: ChartCellId, indicators: IndicatorDefinition[]): void;
+    updateCellStrategyTesterMode(cellId: ChartCellId, mode: "NATIVE" | "CANDLESCOPE"): void;
+    updateCellNativeStrategies(cellId: ChartCellId, strategies: NativeStrategyCollection): void;
     updateCellStrategyAttachment(
       cellId: ChartCellId,
       attachment: ChartStrategyAttachmentRecord | null,
@@ -997,6 +1000,14 @@ export function useChartWorkspaceRuntime(
     });
   }, [updateActiveDocument]);
 
+  const updateCellStrategyTesterMode = useCallback((cellId: ChartCellId, strategyTesterMode: "NATIVE" | "CANDLESCOPE") => {
+    updateActiveDocument((current) => ({ ...current, cells: { ...current.cells, [cellId]: { ...chartWorkspaceCell(current, cellId), strategyTesterMode } } }));
+  }, [updateActiveDocument]);
+
+  const updateCellNativeStrategies = useCallback((cellId: ChartCellId, nativeStrategies: NativeStrategyCollection) => {
+    updateActiveDocument((current) => ({ ...current, cells: { ...current.cells, [cellId]: { ...chartWorkspaceCell(current, cellId), nativeStrategies } } }));
+  }, [updateActiveDocument]);
+
   const updateCellStrategyAttachment = useCallback((
     cellId: ChartCellId,
     attachment: ChartStrategyAttachmentRecord | null,
@@ -1163,6 +1174,8 @@ export function useChartWorkspaceRuntime(
       updateCellPriceScale,
       updateCellIndicators,
       updateCellStrategyAttachment,
+      updateCellNativeStrategies,
+      updateCellStrategyTesterMode,
       configureCells,
       createWindow,
       closeWindow,

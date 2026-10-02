@@ -1,3 +1,4 @@
+import { normalizeNativeStrategies } from "../backtest/native/nativeStrategyCollection.js";
 import { canonicalizeIntervalValue } from "../../utils/intervals.js";
 import { t } from "../../i18n/index.js";
 import { validExecutionOverrides } from "../../shared/strategyRunSettings.js";
@@ -456,6 +457,8 @@ function normalizeCellState(
     chartSettings: normalizeCellChartSettings(source.chartSettings),
     priceScale: normalizePriceScale(source.priceScale),
     indicators: normalizeIndicators(source.indicators),
+    ...(source.strategyTesterMode === "NATIVE" || source.strategyTesterMode === "CANDLESCOPE" ? { strategyTesterMode: source.strategyTesterMode } : {}),
+    ...(source.nativeStrategies ? { nativeStrategies: normalizeNativeStrategies(source.nativeStrategies) } : {}),
     strategyAttachment: migrateFromV7
       ? null
       : normalizeAttachment(

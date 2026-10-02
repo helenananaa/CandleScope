@@ -109,6 +109,8 @@ function blankCell(
     priceScale: { invertScale: false, priceScaleMode: 0 },
     indicators: [],
     strategyAttachment: null,
+    strategyTesterMode: "NATIVE",
+    nativeStrategies: { activeId: "default", items: [{ id: "default", name: "", language: "pine", drafts: {}, runs: {} }] },
     drawingLayerSet: blankDrawingLayer(source, existing),
     chartSettings: blankChartSettings(),
   };

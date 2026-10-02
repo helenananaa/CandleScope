@@ -228,3 +228,41 @@ test("load ignores old keys and malformed v7 JSON", () => {
   assert.equal(loaded.schemaVersion, CHART_WORKSPACE_SCHEMA_VERSION);
   assert.equal(loaded.revision, 0);
 });
+
+
+test("workspace saves multiple native strategy drafts and per-context run references", () => {
+  const { storage } = memoryStorage();
+  const workspace = createDefaultChartWorkspace();
+  const collection = { activeId: "b", items: [
+    { id: "a", name: "Fast", language: "pine" as const, drafts: { "pine:NATIVE": '{"source":"fast"}' }, runs: { btc1h: "run-a" } },
+    { id: "b", name: "Slow", language: "pine" as const, drafts: { "pine:NATIVE": '{"source":"slow"}' }, runs: { btc1h: "run-b" } },
+  ] };
+  chartWorkspaceCell(workspace, "cell-1").nativeStrategies = collection;
+  saveChartWorkspace(workspace, storage);
+  const restored = chartWorkspaceCell(loadChartWorkspace(storage), "cell-1").nativeStrategies;
+  assert.deepEqual(restored, collection);
+  assert.notEqual(restored, collection);
+});
+
+
+test("comparison pins and strategy ownership survive the workspace storage round trip", () => {
+  const { storage } = memoryStorage();
+  const workspace = createDefaultChartWorkspace();
+  const context = JSON.stringify(["NATIVE", "binance", "spot", "BTCUSDT", "1h"]);
+  const collection = { activeId: "a", items: [{ id: "a", name: "A", language: "pine" as const, drafts: {}, runs: { [context]: "latest" }, runHistory: { [context]: ["latest", "pinned"] } }],
+    comparisons: { btc: { name: "Baseline", metric: "returnPct" as const, pinned: [{ id: "a", name: "A", runId: "pinned", mode: "NATIVE" as const }] } } };
+  chartWorkspaceCell(workspace, "cell-1").nativeStrategies = collection;
+  saveChartWorkspace(workspace, storage);
+  assert.deepEqual(chartWorkspaceCell(loadChartWorkspace(storage), "cell-1").nativeStrategies, collection);
+});
+
+test("strategy tester mode is saved independently for each chart", () => {
+  const { storage } = memoryStorage();
+  const workspace = createDefaultChartWorkspace();
+  chartWorkspaceCell(workspace, "cell-1").strategyTesterMode = "NATIVE";
+  chartWorkspaceCell(workspace, "cell-2").strategyTesterMode = "CANDLESCOPE";
+  saveChartWorkspace(workspace, storage);
+  const restored = loadChartWorkspace(storage);
+  assert.equal(chartWorkspaceCell(restored, "cell-1").strategyTesterMode, "NATIVE");
+  assert.equal(chartWorkspaceCell(restored, "cell-2").strategyTesterMode, "CANDLESCOPE");
+});

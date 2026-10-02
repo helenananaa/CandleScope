@@ -68,6 +68,8 @@ function createRuntime(): ChartWorkspaceRuntime {
       updateCellChartSettings: () => undefined,
       updateCellPriceScale: () => undefined,
       updateCellIndicators: () => undefined,
+      updateCellNativeStrategies: () => undefined,
+      updateCellStrategyTesterMode: () => undefined,
       updateCellStrategyAttachment: () => undefined,
       configureCells: () => undefined,
       createWindow: () => undefined,

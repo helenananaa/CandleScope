@@ -1,3 +1,5 @@
+import { resolveStrategyTesterMode } from "../features/backtest/chart-tester/chartStrategyMode.js";
+import type { NativeStrategyCollection } from "../features/backtest/native/nativeStrategyCollection.js";
 import { parseIntervalSeconds } from "../utils/intervals.js";
 import { strategyTradeRange, type StrategyTradeFocus } from "../features/backtest/chart-tester/strategyTradeReview.js";
 import React, {
@@ -167,6 +169,8 @@ export interface LiveChartCellProps {
   onIndicatorsChange(cellId: ChartCellId, indicators: ChartCellState["indicators"]): void;
   strategyPanelOpen: boolean;
   onStrategyPanelOpenChange(open: boolean): void;
+  onStrategyTesterModeChange(cellId: ChartCellId, mode: "NATIVE" | "CANDLESCOPE"): void;
+  onNativeStrategiesChange(cellId: ChartCellId, strategies: NativeStrategyCollection): void;
   onStrategyAttachmentChange(
     cellId: ChartCellId,
     attachment: ChartStrategyAttachmentRecord | null,
@@ -210,6 +214,8 @@ function LiveChartCell({
   strategyPanelOpen,
   onStrategyPanelOpenChange,
   onStrategyAttachmentChange,
+  onNativeStrategiesChange,
+  onStrategyTesterModeChange,
   onOpenReplayLauncher,
   onActiveEnvironmentChange,
 }: LiveChartCellProps) {
@@ -268,9 +274,11 @@ function LiveChartCell({
     >
       {t("chartTester.entry")}
       <span>
-        {cell.strategyAttachment
-          ? `${cell.strategyAttachment.displayName} · ${t(`chartTester.entryState.${strategyEntryState}`)}`
-          : t("chartTester.entryState.unattached")}
+        {resolveStrategyTesterMode(cell.strategyTesterMode, !!cell.strategyAttachment) === "CANDLESCOPE"
+          ? cell.strategyAttachment ? `${cell.strategyAttachment.displayName} · ${t(`chartTester.entryState.${strategyEntryState}`)}` : t("chartTester.entryState.unattached")
+          : cell.nativeStrategies?.items.length
+            ? `${cell.nativeStrategies.items.find((item) => item.id === cell.nativeStrategies?.activeId)?.name || t("strategyCollection.default")} · ${cell.nativeStrategies.items.length}`
+            : t("chartTester.entryState.unattached")}
       </span>
     </button>
   ) : null;
@@ -656,9 +664,12 @@ function LiveChartCell({
   const [strategyPanelVisited, setStrategyPanelVisited] = useState(false);
   useEffect(() => { if (active && strategyPanelOpen) setStrategyPanelVisited(true); }, [active, strategyPanelOpen]);
   const strategyMarkerSourceRef = useRef<ChartStrategyResultMarkerSource | null>(null);
+  const strategyTradeFocusRef = useRef<{ trade: StrategyTradeFocus; interval: string } | null>(null);
   const [strategyMarkerSource, setStrategyMarkerSource] = useState<ChartStrategyResultMarkerSource | null>(null);
   const handleStrategyMarkerSourceChange = useCallback((source: ChartStrategyResultMarkerSource | null) => {
     strategyMarkerSourceRef.current = source;
+    const focus = strategyTradeFocusRef.current;
+    if (source && focus) source.setTradeFocus(focus.trade, focus.interval, t("chartTester.result.entry"), t("chartTester.result.exit"));
     setStrategyMarkerSource(source);
   }, []);
   const upstreamViewportRangeChangeRef = useRef(
@@ -672,6 +683,7 @@ function LiveChartCell({
     strategyMarkerSourceRef.current?.setVisibleRange(range);
   }, []);
   const handleReviewStrategyTrade = useCallback((trade: StrategyTradeFocus | null) => {
+    strategyTradeFocusRef.current = trade ? { trade, interval: liveSourceSession.interval } : null;
     strategyMarkerSourceRef.current?.setTradeFocus(trade, liveSourceSession.interval, t("chartTester.result.entry"), t("chartTester.result.exit"));
     if (!trade) return;
     chartSurface.actions.setLinkedVisibleTimeRange(strategyTradeRange(trade, parseIntervalSeconds(liveSourceSession.interval) ?? 60));
@@ -880,6 +892,10 @@ function LiveChartCell({
               cellId={cell.id}
               session={liveSourceSession}
               attachment={cell.strategyAttachment}
+              nativeStrategies={cell.nativeStrategies}
+              strategyTesterMode={cell.strategyTesterMode}
+              onStrategyTesterModeChange={(value) => onStrategyTesterModeChange(cell.id, value)}
+              onNativeStrategiesChange={(value) => onNativeStrategiesChange(cell.id, value)}
               active={active}
               panelOpen={strategyPanelOpen}
               bottomPanelHost={portalHosts.bottomPanel}
