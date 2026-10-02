@@ -241,6 +241,8 @@ export const ms = {
   "settings.category.about": "Perihal",
   "settings.language.title": "Bahasa antaramuka",
   "settings.language.description": "Pilih bahasa aplikasi. Zon waktu carta dan kod simbol tidak berubah.",
+  "settings.language.loadFailed": "Bahasa ini tidak dapat dimuatkan. Muat semula halaman, kemudian cuba lagi.",
+  "settings.language.reload": "Muat semula halaman",
   "settings.appearance.themeTitle": "Tema visual",
   "settings.appearance.themeDescription": "Pilih gaya antaramuka keseluruhan, atau ikut tetapan cerah/gelap sistem",
   "settings.appearance.theme.dark": "Gelap",

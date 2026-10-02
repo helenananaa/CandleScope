@@ -7,6 +7,7 @@ import os
 import threading
 import time
 import uuid
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -52,18 +53,42 @@ class AlertStore:
         if self.webhook_settings.ready:
             self.deliverable_action_types.add("webhook")
         self._lock = threading.RLock()
+        # Published only after a successful load/commit. Readers never wait on
+        # a writer serializing history and cannot mutate the cached snapshot.
+        self._rules_snapshot: dict[str, dict[str, Any]] | None = None
+        self._rules_stamp: tuple[int, int, int] | None = None
 
     def list_rules(self) -> list[dict[str, Any]]:
+        self.refresh_rules()
+        return sorted(
+            deepcopy(self._rules_snapshot or {}).values(),
+            key=lambda item: item.get("updatedAt", 0), reverse=True,
+        )
+
+    def refresh_rules(self) -> None:
+        """Refresh external JSON edits on reconciliation, outside the hot path."""
         with self._lock:
-            return sorted(
-                self._load()["rules"].values(),
-                key=lambda item: item.get("updatedAt", 0),
-                reverse=True,
-            )
+            stamp = self._file_stamp()
+            if self._rules_snapshot is None or stamp != self._rules_stamp:
+                self._rules_snapshot = deepcopy(self._load()["rules"])
+                self._rules_stamp = stamp
 
     def get_rule(self, rule_id: str) -> dict[str, Any] | None:
-        with self._lock:
-            return self._load()["rules"].get(rule_id)
+        if self._rules_snapshot is None:
+            self.refresh_rules()
+        return deepcopy((self._rules_snapshot or {}).get(rule_id))
+
+    def cached_rules(self) -> list[dict[str, Any]]:
+        if self._rules_snapshot is None:
+            self.refresh_rules()
+        return deepcopy(list((self._rules_snapshot or {}).values()))
+
+    def _file_stamp(self) -> tuple[int, int, int] | None:
+        try:
+            stat = self.path.stat()
+            return stat.st_mtime_ns, stat.st_size, stat.st_ino
+        except FileNotFoundError:
+            return None
 
     def upsert_rule(self, item: dict[str, Any]) -> dict[str, Any]:
         with self._lock:
@@ -358,6 +383,8 @@ class AlertStore:
             f.write(serialized)
             f.write("\n")
         os.replace(tmp_path, self.path)
+        self._rules_snapshot = deepcopy(data["rules"])
+        self._rules_stamp = self._file_stamp()
 
     @staticmethod
     def _pick(item: dict[str, Any], existing: dict[str, Any], key: str, default: Any) -> Any:

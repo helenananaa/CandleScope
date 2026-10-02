@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DEFAULT_LOCALE,
-  hydrateLocale,
+  setLocaleAsync,
   normalizeLocale,
   type LocaleId,
 } from "../../i18n/index.js";
@@ -227,6 +227,7 @@ export interface ChartSettingsRuntime {
 
 export function useChartSettingsRuntime(): ChartSettingsRuntime {
   const [settings, updateSettings] = useState<ChartSettings>(loadSettings);
+  const previousLocale = useRef(settings.locale);
   const persistRequested = useRef(false);
   const setSettings = useCallback<Dispatch<SetStateAction<ChartSettings>>>((action) => {
     persistRequested.current = true;
@@ -278,7 +279,6 @@ export function useChartSettingsRuntime(): ChartSettingsRuntime {
     }
     root.style.setProperty("--candle-up", settings.upColor);
     root.style.setProperty("--candle-down", settings.downColor);
-    hydrateLocale(settings.locale);
     try {
       if (persistRequested.current) {
         localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
@@ -288,6 +288,16 @@ export function useChartSettingsRuntime(): ChartSettingsRuntime {
       // Settings persistence failures must not interrupt chart rendering.
     }
   }, [resolvedTheme, settings]);
+
+  useEffect(() => {
+    // Entry points hydrate before mounting. A newly mounted research chart
+    // must not cancel a user language selection still loading in the shell.
+    if (previousLocale.current === settings.locale) return;
+    previousLocale.current = settings.locale;
+    void setLocaleAsync(settings.locale).catch((error) => {
+      console.warn("Saved locale could not be loaded; retaining the current language", error);
+    });
+  }, [settings.locale]);
 
   return { settings, setSettings, resolvedTheme };
 }

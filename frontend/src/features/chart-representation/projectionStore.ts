@@ -549,7 +549,7 @@ export class ProjectionStore {
     trimmedLeft: number,
   ): ProjectionPatch {
     const previousLength = this._display.length;
-    const retainedSource = trimmedLeft > 0 ? this._source.slice(trimmedLeft) : this._source.slice();
+    const retainedSource = trimmedLeft > 0 ? this._source.slice(trimmedLeft) : this._source;
     const retainedDisplay = trimmedLeft > 0 ? this._display.slice(trimmedLeft) : this._display.slice();
     const appendedCount = delta.type === "append"
       ? Math.max(0, Number(delta.addedRight) || 0)
@@ -561,24 +561,28 @@ export class ProjectionStore {
       if (!replacementSource || retainedSource.length === 0) {
         return this.reset(currentRows);
       }
-      const previousDisplayRow = this._resolvePreviousDisplayRow(retainedDisplay.slice(0, -1));
+      const previousDisplayRow = this._resolvePreviousDisplayRow(retainedDisplay, retainedDisplay.length - 1);
       const insert = this.projector.project([replacementSource], { previousDisplayRow });
       retainedSource[retainedSource.length - 1] = replacementSource;
       retainedDisplay.splice(Math.max(0, retainedDisplay.length - 1), 1, ...insert);
       this._source = retainedSource;
+      const previousDisplay = this._display;
       this._display = retainedDisplay;
-      this._rebuildDisplayTimeIndex();
+      this._commitOneToOneTailIndexes(previousDisplay, previousLength - 1, insert);
       return patchResult(previousLength - 1, previousLength, insert, this._display);
     }
 
     const appendedRows = appendedCount > 0
-      ? Array.from(currentRows).slice(currentRows.length - appendedCount)
+      ? currentRows.slice(currentRows.length - appendedCount)
       : [];
     const previousDisplayRow = this._resolvePreviousDisplayRow(retainedDisplay);
     const projectedTail = this.projector.project(appendedRows, { previousDisplayRow });
-    this._source = retainedSource.concat(appendedRows);
+    for (const row of appendedRows) retainedSource.push(row);
+    this._source = retainedSource;
+    const previousDisplay = this._display;
     this._display = retainedDisplay.concat(projectedTail);
-    this._rebuildDisplayTimeIndex();
+    if (trimmedLeft > 0) this._rebuildDisplayTimeIndex();
+    else this._commitOneToOneTailIndexes(previousDisplay, previousLength, projectedTail);
 
     if (trimmedLeft > 0) {
       return patchResult(0, previousLength, this._display.slice(), this._display);
@@ -747,11 +751,39 @@ export class ProjectionStore {
     };
   }
 
-  _resolvePreviousDisplayRow(rows: readonly DisplayRow[]): DisplayRow | null {
+  _resolvePreviousDisplayRow(rows: readonly DisplayRow[], end = rows.length): DisplayRow | null {
     if (typeof this.projector.resolvePreviousDisplayRow === "function") {
-      return this.projector.resolvePreviousDisplayRow(rows);
+      return this.projector.resolvePreviousDisplayRow(end === rows.length ? rows : rows.slice(0, end));
     }
-    return rows.at(-1) ?? null;
+    return rows[end - 1] ?? null;
+  }
+
+  /** Ordinary candle ticks do not change the time axis. Keep its indexes and
+   * versioned Set, while replacing only the owned display snapshot array. */
+  _commitOneToOneTailIndexes(
+    previousDisplay: DisplayRow[],
+    fromOutputIndex: number,
+    insert: DisplayRow[],
+  ): void {
+    const numericTail = insert.every((row) => typeof row.time === "number")
+      && (previousDisplay.length === 0 || typeof previousDisplay.at(-1)?.time === "number");
+    if (!numericTail) {
+      this._rebuildDisplayTimeIndex();
+      return;
+    }
+    const sameAxis = previousDisplay.length === this._display.length
+      && insert.every((row, index) => row.time === previousDisplay[fromOutputIndex + index]?.time);
+    if (!sameAxis) {
+      const plan = this._planDisplayTimeIndexTail(previousDisplay, fromOutputIndex, insert);
+      if (!plan) {
+        this._rebuildDisplayTimeIndex();
+        return;
+      }
+      this._replaceDisplayTimeIndexTail(plan);
+    }
+    this._hasStrictlyIncreasingDisplayOrders = this._display.length === 0;
+    // The lineage index stores no per-row records on numeric time axes.
+    this._drawingLineageIndex.reset(this._display);
   }
 
   _commitStatefulSourceTail({

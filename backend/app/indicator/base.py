@@ -65,8 +65,9 @@ class Indicator(ABC):
         self.params: dict[str, Any] = params or {}
         self._initialized: bool = False
         self._bar_count: int = 0
+        self._output_limit: int | None = None
         # Outputs: name → list of OutputPoint
-        self._outputs: dict[str, list[OutputPoint]] = {
+        self._outputs: dict[str, list[OutputPoint] | deque[OutputPoint]] = {
             name: [] for name in self.output_specs
         }
         # Preview values (for partial bar updates, not committed)
@@ -137,7 +138,8 @@ class Indicator(ABC):
         """
         self._initialized = False
         self._bar_count = 0
-        self._outputs = {name: [] for name in self.output_specs}
+        self._outputs = {name: deque(maxlen=self._output_limit) if self._output_limit else []
+                         for name in self.output_specs}
         self._preview = {name: None for name in self.output_specs}
         # Reset subclass-specific state if available
         if hasattr(self, "_reset_state") and callable(self._reset_state):
@@ -180,7 +182,7 @@ class Indicator(ABC):
             Dict mapping output name → list of OutputPoint.
         """
         if output_name is not None:
-            points = self._outputs.get(output_name, [])
+            points = list(self._outputs.get(output_name, []))
             if limit > 0:
                 points = points[-limit:]
             return {output_name: points}
@@ -188,10 +190,20 @@ class Indicator(ABC):
         result = {}
         for name, points in self._outputs.items():
             if limit > 0:
-                result[name] = points[-limit:]
+                result[name] = list(points)[-limit:]
             else:
                 result[name] = list(points)
         return result
+
+    def retain_outputs(self, limit: int) -> None:
+        """Bound display history without resetting recursive calculation state."""
+        self._output_limit = max(1, int(limit))
+        self._outputs = {name: deque(points, maxlen=self._output_limit)
+                         for name, points in self._outputs.items()}
+
+    def output_range(self) -> dict[str, int] | None:
+        points = next((points for points in self._outputs.values() if points), None)
+        return {"start": points[0].timestamp, "end": points[-1].timestamp} if points else None
 
     def get_meta(self) -> IndicatorMeta:
         """Return indicator metadata.  Override for custom metadata."""

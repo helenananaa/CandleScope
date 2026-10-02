@@ -241,6 +241,8 @@ export const th = {
   "settings.category.about": "เกี่ยวกับ",
   "settings.language.title": "ภาษาอินเทอร์เฟซ",
   "settings.language.description": "เลือกภาษาของแอปพลิเคชัน เขตเวลากราฟและรหัสสัญลักษณ์จะไม่เปลี่ยน",
+  "settings.language.loadFailed": "ไม่สามารถโหลดภาษานี้ได้ โปรดรีเฟรชหน้าแล้วลองอีกครั้ง",
+  "settings.language.reload": "รีเฟรชหน้า",
   "settings.appearance.themeTitle": "ธีมภาพ",
   "settings.appearance.themeDescription": "เลือกรูปแบบอินเทอร์เฟซโดยรวม หรือตามการตั้งค่าสว่าง/มืดของระบบ",
   "settings.appearance.theme.dark": "มืด",

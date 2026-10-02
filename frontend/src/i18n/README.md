@@ -26,7 +26,16 @@ chrome. It is app-wide infrastructure, not a business feature.
   aliases and optional date/number format locales. `LocaleId`, the settings
   options, locale normalization and catalog checks are derived from it.
 - Persistence lives in `features/settings` (`candlescope-settings.locale`).
-- `hydrateLocale` / `setLocale` write `document.documentElement.lang` so plugin
+- The default Chinese and English catalogs are bundled with startup; all other
+  catalogs load on demand. Entry points await `initializeLocale(savedLocale)`
+  before mounting. Settings await `setLocaleAsync(locale)` before persisting a
+  selection. Failed loads preserve the current language. Settings provide a
+  page refresh action because browsers can cache failed module imports;
+  refresh before retrying a failed download. Only the latest requested
+  language can become active. Newly mounted charts do not repeat hydration;
+  actual setting changes, including storage events, request a language change.
+- Synchronous `hydrateLocale` / `setLocale` require a loaded catalog (use
+  `loadLocaleCatalog` first when needed). Locale changes write `document.documentElement.lang` so plugin
   sandbox snapshots stay in sync, and apply the registered text direction.
 - `bindDocumentLocale` also writes CSS custom properties used by `content:`
   fallbacks in `index.css`, so chrome that lives in stylesheets follows locale.
@@ -53,8 +62,8 @@ chrome. It is app-wide infrastructure, not a business feature.
 1. Add `catalogs/<locale>.ts`, exporting an object that `satisfies MessageCatalog`
    from `messageCatalog.ts`. Translate every reference key, including the manual
    history messages. Keep interpolation tokens such as `{count}` unchanged.
-2. Import that catalog in `registry.ts` and add its BCP 47 locale tag,
-   `nativeLabel`, and `messages`. Optional `aliases` handle alternative tags;
+2. Add its BCP 47 locale tag, `nativeLabel`, and a dynamic `loadMessages` import
+   to `registry.ts`. Optional `aliases` handle alternative tags;
    optional `dateTimeLocale`, `numberLocale` and `direction` customize formatting.
    The picker, saved settings and runtime translation lookup need no changes.
 3. `tPlural()` uses `Intl.PluralRules`. An unsuffixed key is the `other` form;
@@ -62,7 +71,9 @@ chrome. It is app-wide infrastructure, not a business feature.
    `.many` as required by the new language. These variants are local to the
    target catalog and need not be added to Chinese. The checker validates all
    required categories and compares every variant's placeholders with its base.
-4. Run `npm run check:i18n`, `npm run typecheck` and the locale/UI tests. Check
+4. Run `npx tsx scripts/sync-workspace-name-aliases.mts` to update the small
+   legacy workspace-name migration table, then `npm run check:i18n`,
+   `npm run typecheck` and the locale/UI tests. Check
    translated layouts, number/date presentation and switching in the app;
    right-to-left languages also need layout review beyond the `dir` attribute.
 5. Add plugin-owned translations in each plugin's resources and manifest.

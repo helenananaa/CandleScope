@@ -46,6 +46,24 @@ test("main window bootstraps one authoritative snapshot and secondary receives i
   assert.equal(messages.some(([id, message]) => id === "window-2" && message.type === "snapshot"), true);
 });
 
+test("health broadcasts contain only ownership metadata regardless of document size", () => {
+  const messages = [];
+  const hub = new WorkspaceBusHub();
+  hub.register("main-window", (message) => messages.push(message));
+  hub.register("window-2", (message) => messages.push(message));
+  const large = snapshot();
+  large.workspaces[0].document.cells["cell-1"].notes = "x".repeat(100_000);
+  hub.connect("main-window", large);
+  messages.length = 0;
+  hub.stateResult = () => { throw new Error("Health must not build or clone a persistent snapshot"); };
+  hub.reportWindow("main-window", { focused: true, visible: true });
+  hub.disconnect("main-window");
+  assert.equal(messages.length, 3);
+  assert.ok(messages.every((message) => message.type === "health" && !("snapshot" in message)));
+  assert.ok(messages.every((message) => Buffer.byteLength(JSON.stringify(message)) < 300));
+  assert.equal(messages.at(-1).writerWindowId, "window-2");
+});
+
 test("revision CAS accepts one writer and rejects a stale peer with authoritative details", () => {
   const hub = new WorkspaceBusHub();
   hub.register("main-window", () => {});

@@ -4,12 +4,15 @@ export {
   LOCALE_OPTIONS,
   getLocale,
   hydrateLocale,
+  initializeLocale,
   isLocaleId,
   normalizeLocale,
   setLocale,
+  setLocaleAsync,
   subscribeLocale,
   type LocaleId,
 } from "./locale.js";
+export { loadLocaleCatalog } from "./registry.js";
 export { resolveLocale } from "./localeResolution.js";
 export { getDateTimeLocale, getNumberLocale } from "./formatting.js";
 export type { MessageCatalog, PluralMessageKey } from "./messageCatalog.js";

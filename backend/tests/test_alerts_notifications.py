@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from pathlib import Path
+
+import pytest
 
 from app.alerts.facade import AlertFacade
 from app.alerts.notifications import AlertNotificationBroker, BrowserOwnedAlertChannel
+from app.core.executors import run_storage
 
 
 def test_browser_owned_channel_publishes_to_active_subscriber() -> None:
@@ -84,3 +88,53 @@ def test_facade_persists_dispatch_before_client_receives_event(tmp_path: Path) -
         assert persisted["dispatch"][0]["status"] == "published"
 
     asyncio.run(_run())
+
+
+@pytest.mark.anyio
+async def test_mixed_actions_do_not_publish_before_receipts_are_committed(tmp_path, monkeypatch):
+    from app.alerts.outbox import AlertOutboxStore
+    from app.alerts.webhook import WebhookSettings
+
+    entered, resume = threading.Event(), threading.Event()
+    settings = WebhookSettings(enabled=True, secret="test-signing-secret", allowed_hosts=("hooks.example.com",),
+                               outbox_path=tmp_path / "outbox.sqlite3")
+    outbox = AlertOutboxStore(settings.outbox_path)
+    original = outbox.stage
+    def stage(*args, **kwargs):
+        entered.set()
+        assert resume.wait(3)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(outbox, "stage", stage)
+    facade = AlertFacade(store_path=tmp_path / "alerts.json", webhook_settings=settings, outbox_store=outbox)
+    subscription = facade.notification_broker.subscribe()
+    emit = asyncio.create_task(facade.emit_triggered({
+        "ruleId": "probe", "message": "hit", "actions": [
+            {"type": "in_app"},
+            {"type": "webhook", "config": {"url": "https://hooks.example.com/test"}},
+        ],
+    }, enforce_limits=False))
+    try:
+        assert await asyncio.to_thread(entered.wait, 3)
+        assert subscription.queue.empty()
+    finally:
+        resume.set()
+    notification = await asyncio.wait_for(subscription.queue.get(), timeout=3)
+    receipt = await run_storage(facade.record_dispatch_receipt, notification["eventId"],
+                                notification["dispatchId"], status="delivered")
+    await emit
+    assert receipt is not None
+    assert facade.list_history()[0]["dispatch"][0]["status"] == "delivered"
+
+
+@pytest.mark.anyio
+async def test_failed_dispatch_commit_never_publishes_browser_notification(tmp_path, monkeypatch):
+    facade = AlertFacade(store_path=tmp_path / "alerts.json")
+    subscription = facade.notification_broker.subscribe()
+    def fail(*args):
+        raise OSError("disk failure")
+    monkeypatch.setattr(facade.store, "update_history_dispatch", fail)
+    with pytest.raises(OSError, match="disk failure"):
+        await facade.emit_triggered({"ruleId": "probe", "actions": [{"type": "in_app"}]}, enforce_limits=False)
+    await asyncio.sleep(0)
+    assert subscription.queue.empty()
+    assert facade.notification_broker.snapshot()["published"] == 0

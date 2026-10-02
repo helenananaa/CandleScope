@@ -7,6 +7,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
+from app.alerts.dispatcher import PreparedAlertDispatch
 
 @dataclass(slots=True)
 class AlertNotificationSubscription:
@@ -72,6 +73,13 @@ class BrowserOwnedAlertChannel:
         self.broker = broker
 
     async def dispatch(self, event: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
+        prepared = self.prepare(event, action)
+        if prepared.publish is not None:
+            prepared.publish()
+        return prepared.outcome
+
+    def prepare(self, event: dict[str, Any], action: dict[str, Any]) -> PreparedAlertDispatch:
+        """Create the receipt identity; the facade publishes after its commit."""
         dispatch_id = f"dispatch-{uuid.uuid4().hex[:16]}"
         payload = {
             "schemaVersion": 1,
@@ -89,19 +97,16 @@ class BrowserOwnedAlertChannel:
         }
         subscriber_count = self.broker.subscriber_count
         if subscriber_count == 0:
-            return {
+            return PreparedAlertDispatch({
                 "type": self.action_type,
                 "status": "unavailable",
                 "reason": "no_active_clients",
                 "dispatchId": dispatch_id,
                 "subscriberCount": 0,
-            }
-        # Defer publication until AlertFacade has persisted this dispatchId.
-        # A client can otherwise race its delivery receipt against history.
-        asyncio.get_running_loop().call_soon(self.broker.publish, payload)
-        return {
+            })
+        return PreparedAlertDispatch({
             "type": self.action_type,
             "status": "published",
             "dispatchId": dispatch_id,
             "subscriberCount": subscriber_count,
-        }
+        }, publish=lambda: self.broker.publish(payload))

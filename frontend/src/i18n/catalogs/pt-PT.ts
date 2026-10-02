@@ -241,6 +241,8 @@ export const ptPT = {
   "settings.category.about": "Acerca de",
   "settings.language.title": "Idioma da interface",
   "settings.language.description": "Escolha o idioma da aplicação. O fuso horário do gráfico e os códigos dos símbolos não se alteram.",
+  "settings.language.loadFailed": "Não foi possível carregar este idioma. Atualize a página e tente novamente.",
+  "settings.language.reload": "Atualizar página",
   "settings.appearance.themeTitle": "Tema visual",
   "settings.appearance.themeDescription": "Escolha o estilo geral da interface ou siga a definição clara/escura do sistema",
   "settings.appearance.theme.dark": "Escuro",

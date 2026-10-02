@@ -503,6 +503,8 @@ export const ja = {
   "settings.category.about": "このアプリについて",
   "settings.language.title": "表示言語",
   "settings.language.description": "アプリの表示言語を選択します。チャートのタイムゾーンと銘柄コードは変わりません。",
+  "settings.language.loadFailed": "この言語を読み込めませんでした。ページを再読み込みしてから、もう一度お試しください。",
+  "settings.language.reload": "ページを再読み込み",
   "settings.appearance.themeTitle": "ビジュアルテーマ",
   "settings.appearance.themeDescription": "インターフェース全体の見た目を選ぶか、システムのライト/ダーク設定に従います",
   "settings.appearance.theme.dark": "ダーク",

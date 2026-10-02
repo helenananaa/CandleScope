@@ -1,15 +1,20 @@
 """Daily open resolver for price snapshots."""
 from __future__ import annotations
 
-import logging
 import inspect
+import logging
+import math
+import time
+from collections import OrderedDict
 from collections.abc import Callable
 from typing import Any
 
+from app.core.executors import run_storage
 from app.data_engine.interval_policy import (
     compute_bucket_start_ms,
     last_closed_bar_open_ms,
 )
+from app.data_engine.market_data.lifecycle import KeyedAsyncLockPool
 
 from .backfill_coordinator import priority_for_reason
 from .price_cache import PriceSnapshot
@@ -28,14 +33,22 @@ class DailyOpenService:
         *,
         storage_provider: Callable[[], Any | None],
         backfill_trigger_provider: Callable[[], BackfillTrigger | None],
+        miss_ttl_seconds: float = 2.0,
+        repair_retry_seconds: float = 30.0,
+        max_cached_symbols: int = 4096,
+        monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self._storage_provider = storage_provider
-        # Kept in the constructor for DataManager/API compatibility.  The
-        # historical fetcher intentionally admits only closed candles, so it
-        # must not be used to fetch the current (forming) daily candle.
+        # History repairs admit only closed candles, so request the first
+        # closed minute instead of the current forming daily candle.
         self._backfill_trigger_provider = backfill_trigger_provider
-        self._cache: dict[tuple[str, str, str], tuple[int, float]] = {}
-        self._requested: set[tuple[str, str, str, int]] = set()
+        self._cache: OrderedDict[tuple[str, str, str], tuple[int, float, float]] = OrderedDict()
+        self._requested: OrderedDict[tuple[str, str, str], tuple[int, float]] = OrderedDict()
+        self._locks = KeyedAsyncLockPool[tuple[str, str, str]]()
+        self._miss_ttl = max(0.01, float(miss_ttl_seconds))
+        self._repair_retry = max(self._miss_ttl, float(repair_retry_seconds))
+        self._max_cached_symbols = max(1, int(max_cached_symbols))
+        self._monotonic = monotonic
 
     async def resolve(self, snapshot: PriceSnapshot) -> float:
         """Return the best daily open for a price snapshot."""
@@ -45,22 +58,26 @@ class DailyOpenService:
             interval="1d",
         )
         key = (snapshot.exchange, snapshot.market_type, snapshot.symbol)
-        cached = self._cache.get(key)
-        if cached is not None and cached[0] == bucket_start_ms:
-            return cached[1]
+        async with self._locks.hold(key):
+            cached = self._cache.get(key)
+            now = self._monotonic()
+            if cached is None or cached[0] != bucket_start_ms or (cached[1] <= 0 and now >= cached[2]):
+                storage_open = await run_storage(self._load_from_storage, snapshot, bucket_start_ms)
+                cached = (bucket_start_ms, storage_open, self._monotonic() + self._miss_ttl)
+                self._cache[key] = cached
+            self._cache.move_to_end(key)
+            while len(self._cache) > self._max_cached_symbols:
+                self._cache.popitem(last=False)
+            if cached[1] > 0:
+                self._requested.pop(key, None)
+                return cached[1]
 
-        storage_open = await self._load_from_storage(snapshot, bucket_start_ms)
-        if storage_open > 0:
-            self._cache[key] = (bucket_start_ms, storage_open)
-            return storage_open
-
-        # The current 1d candle is forming and therefore cannot enter the
-        # closed-only history pipeline.  Repair only the first 1m candle of
-        # the UTC day once it has closed; its open is the same daily open.
-        self._request_open_minute_backfill_once(snapshot, bucket_start_ms)
+            # Retry a failed/asynchronously rejected repair at a bounded rate;
+            # a missing row must not pin the fallback for the rest of the day.
+            self._request_open_minute_backfill(snapshot, bucket_start_ms)
         return snapshot.daily_open or snapshot.open
 
-    async def _load_from_storage(
+    def _load_from_storage(
         self,
         snapshot: PriceSnapshot,
         bucket_start_ms: int,
@@ -93,12 +110,14 @@ class DailyOpenService:
             if not rows:
                 continue
             try:
-                return float(rows[0].get("open", 0) or 0)
+                value = float(rows[0].get("open", 0) or 0)
+                if math.isfinite(value) and value > 0:
+                    return value
             except (TypeError, ValueError):
                 continue
         return 0.0
 
-    def _request_open_minute_backfill_once(
+    def _request_open_minute_backfill(
         self,
         snapshot: PriceSnapshot,
         bucket_start_ms: int,
@@ -110,14 +129,18 @@ class DailyOpenService:
             snapshot.exchange,
             snapshot.market_type,
             snapshot.symbol,
-            bucket_start_ms,
         )
-        if request_key in self._requested:
+        previous = self._requested.get(request_key)
+        now = self._monotonic()
+        if previous is not None and previous[0] == bucket_start_ms and now < previous[1]:
             return
         trigger = self._backfill_trigger_provider()
         if trigger is None:
             return
-        self._requested.add(request_key)
+        self._requested[request_key] = (bucket_start_ms, now + self._repair_retry)
+        self._requested.move_to_end(request_key)
+        while len(self._requested) > self._max_cached_symbols:
+            self._requested.popitem(last=False)
         try:
             kwargs = self._supported_trigger_kwargs(
                 trigger,
@@ -143,7 +166,6 @@ class DailyOpenService:
                 **kwargs,
             )
         except Exception as exc:
-            self._requested.discard(request_key)
             logger.warning(
                 "Daily open minute backfill trigger failed for %s:%s:%s: %s",
                 snapshot.exchange,

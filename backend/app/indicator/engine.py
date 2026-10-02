@@ -84,9 +84,11 @@ class IndicatorEngine:
         warm_ttl_seconds: float | None = None,
         warm_max_instances: int | None = None,
         max_active_targets: int | None = None,
+        max_output_points: int = 5_000,
     ) -> None:
         # Instance cache: IndicatorKey -> Indicator
         self._instances: dict[IndicatorKey, Indicator] = {}
+        self._max_output_points = max(1, int(max_output_points))
         # Reference counting: IndicatorKey -> subscriber count
         self._refcounts: dict[IndicatorKey, int] = {}
         # Zero-ref instances stay warm for fast interval switches.  They are
@@ -238,6 +240,7 @@ class IndicatorEngine:
         instance = self._get_or_create(key)
         if instance is None:
             return key, None
+        instance.retain_outputs(self._max_output_points)
 
         # Bump refcount
         self._refcounts[key] = self._refcounts.get(key, 0) + 1
@@ -272,7 +275,7 @@ class IndicatorEngine:
                     full_result=result,
                     detail={
                         "range": dict(input_range),
-                        "computedRange": dict(input_range),
+                        "computedRange": instance.output_range() or dict(input_range),
                         **(
                             {"dataRevision": dict(data_revision)}
                             if isinstance(data_revision, dict)
@@ -329,6 +332,7 @@ class IndicatorEngine:
                     "start": self._first_committed.get(key, supplied_range["start"]),
                     "end": self._last_committed.get(key, supplied_range["end"]),
                 }
+                computed_range = instance.output_range() or computed_range
                 self._emit(
                     IndicatorEventType.INSTANCE_INITIALIZED,
                     key,
@@ -605,10 +609,12 @@ class IndicatorEngine:
 
         requires_recompute = dirty_range is None
         required_target_bars = 1
+        minimum_computed_bars = 0
         dirty_start = int((dirty_range or {}).get("start", 0))
         dirty_end = int((dirty_range or {}).get("end", dirty_start))
         for key in active_keys:
             instance = self._instances[key]
+            minimum_computed_bars = max(minimum_computed_bars, int(instance.bar_count or 0))
             required_target_bars = max(
                 required_target_bars,
                 int(instance.bar_count or 0),
@@ -630,6 +636,7 @@ class IndicatorEngine:
             "hasActive": True,
             "requiresRecompute": requires_recompute,
             "requiredTargetBars": required_target_bars,
+            "minimumComputedBars": minimum_computed_bars,
         }
 
     def active_series_intervals(
@@ -794,6 +801,7 @@ class IndicatorEngine:
                     "start": int(confirmed_bars[0].time),
                     "end": int(confirmed_bars[-1].time),
                 }
+                computed_range = instance.output_range() or computed_range
                 detail = {
                     "range": dict(dirty_range or computed_range),
                     "computedRange": computed_range,

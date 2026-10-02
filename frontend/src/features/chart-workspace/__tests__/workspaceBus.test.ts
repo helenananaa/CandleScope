@@ -117,6 +117,11 @@ test("native WorkspaceBus forwards exact CAS authority and adopts conflict snaps
     const bus = new WorkspaceBusClient("main-window");
     const connected = await bus.connect(snapshot);
     assert.equal(connected.sequence, 0);
+    const existingSnapshot = bus.current.snapshot;
+    for (const listener of events) listener({ type: "health", sequence: 0, writerWindowId: "window-2" });
+    assert.equal(bus.current.snapshot, existingSnapshot);
+    assert.equal(bus.current.writerWindowId, "window-2");
+    assert.equal(bus.current.sequence, 0);
     await bus.commit(snapshot);
     assert.deepEqual(commits, [{
       expectedSequence: 0,

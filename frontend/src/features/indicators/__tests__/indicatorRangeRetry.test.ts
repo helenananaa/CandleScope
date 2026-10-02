@@ -1,58 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createServer } from "vite";
-import { structuralMock } from "../../../test/testHelpers.js";
-
-type RuntimeModule = typeof import("../useIndicatorRuntime.js");
-
-let server: Awaited<ReturnType<typeof createServer>> | null = null;
-let hostedIndicatorRangeRequestsReady = structuralMock<
-  RuntimeModule["hostedIndicatorRangeRequestsReady"]
->(() => {
-  throw new Error("indicator runtime not loaded");
-});
-let shouldWaitForIndicatorRangeSubscription = structuralMock<
-  RuntimeModule["shouldWaitForIndicatorRangeSubscription"]
->(() => {
-  throw new Error("indicator runtime not loaded");
-});
-let buildIndicatorRangeLifecycleKey = structuralMock<
-  RuntimeModule["buildIndicatorRangeLifecycleKey"]
->(() => {
-  throw new Error("indicator runtime not loaded");
-});
-let isTypedIndicatorRangeWait = structuralMock<RuntimeModule["isTypedIndicatorRangeWait"]>(() => {
-  throw new Error("indicator runtime not loaded");
-});
-let isResolvedIndicatorRangeEmpty = structuralMock<
-  RuntimeModule["isResolvedIndicatorRangeEmpty"]
->(() => {
-  throw new Error("indicator runtime not loaded");
-});
-let resolveIndicatorRealtimeMode = structuralMock<
-  RuntimeModule["resolveIndicatorRealtimeMode"]
->(() => {
-  throw new Error("indicator runtime not loaded");
-});
-
-test.before(async () => {
-  server = await createServer({
-    appType: "custom",
-    optimizeDeps: { noDiscovery: true, include: [] },
-    server: { hmr: false, middlewareMode: true },
-  });
-  ({
-    hostedIndicatorRangeRequestsReady,
-    shouldWaitForIndicatorRangeSubscription,
-    buildIndicatorRangeLifecycleKey,
-    isTypedIndicatorRangeWait,
-    isResolvedIndicatorRangeEmpty,
-    resolveIndicatorRealtimeMode,
-} = structuralMock<RuntimeModule>(await server.ssrLoadModule(
-    "/src/features/indicators/useIndicatorRuntime.js",
-  )));
-});
+import {
+  hostedIndicatorRangeRequestsReady,
+  shouldWaitForIndicatorRangeSubscription,
+  buildIndicatorRangeLifecycleKey,
+  isTypedIndicatorRangeWait,
+  isResolvedIndicatorRangeEmpty,
+  resolveIndicatorRealtimeMode,
+} from "../useIndicatorRuntime.js";
 
 test("indicator realtime follows the main K-line fallback boundary", () => {
   assert.equal(resolveIndicatorRealtimeMode(true, "live"), "enabled");
@@ -112,10 +68,6 @@ test("hosted range lifecycle changes with request scope and generation", () => {
     scope: "viewport",
     generation: 1,
   }), first);
-});
-
-test.after(async () => {
-  await server?.close();
 });
 
 test("typed bounded-wait responses defer to events without a blind retry", () => {

@@ -3,7 +3,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { getLocale, setLocale } from "../../i18n/index.js";
+import { getLocale, setLocale, setLocaleAsync } from "../../i18n/index.js";
 import DrawingToolbar from "../DrawingToolbar.js";
 
 function buttonTag(html: string, attribute: string): string {
@@ -20,7 +20,7 @@ function renderInEnglish(element: React.ReactNode): string {
   }
 }
 
-test("drawing tool tips follow the six added interface languages", () => {
+test("drawing tool tips follow the six added interface languages", async () => {
   const previousLocale = getLocale();
   try {
     for (const [locale, eraser, text] of [
@@ -31,7 +31,7 @@ test("drawing tool tips follow the six added interface languages", () => {
       ["vi", "Tẩy", "Ghi chú văn bản"],
       ["pl", "Gumka", "Notatka tekstowa"],
     ] as const) {
-      setLocale(locale);
+      await setLocaleAsync(locale);
       const html = renderToStaticMarkup(
         <DrawingToolbar
           activeTool="cursor-crosshair"

@@ -38,6 +38,10 @@ def merge_alert_bar_window(
     limit: int = ALERT_INDICATOR_HISTORY_LIMIT,
 ) -> list[BarData]:
     """Replace an amended/forming timestamp or append a newer bar."""
+    if not existing or int(bar.time) > int(existing[-1].time):
+        return [*existing[-max(0, limit - 1):], bar][-limit:]
+    if int(bar.time) == int(existing[-1].time):
+        return [*existing[:-1], bar][-limit:]
     by_time: dict[int, BarData] = {int(item.time): item for item in existing}
     by_time[int(bar.time)] = bar
     return [by_time[key] for key in sorted(by_time)[-limit:]]

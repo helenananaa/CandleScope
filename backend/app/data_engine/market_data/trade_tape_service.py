@@ -12,6 +12,7 @@ from app.data_engine.ingestion.models import MarketEvent, StreamDescriptor, Stre
 from app.exchanges.products import observational_trade_delivery_mode
 
 from .append_hub import AppendBatchHub, AppendBatchSubscription
+from .lifecycle import KeyedAsyncLockPool, drain_cancellation_safe_cleanup
 from .models import MarketChannel, MarketStreamKey
 from .trade_tape import ObservedTrade, StreamIdentity, TradeTapeEngine
 
@@ -39,6 +40,7 @@ class TradeTapeAttachment:
 class _PhysicalLease:
     handle: Any
     consumers: set[str] = field(default_factory=set)
+    stop_task: asyncio.Task[None] | None = None
 
 
 class TradeTapeService:
@@ -67,7 +69,9 @@ class TradeTapeService:
         )
         self._physical: dict[StreamIdentity, _PhysicalLease] = {}
         self._lock = asyncio.Lock()
+        self._identity_locks = KeyedAsyncLockPool[StreamIdentity]()
         self._flush_task: asyncio.Task[None] | None = None
+        self._shutdown_task: asyncio.Task[None] | None = None
         self._closed = False
         self._metrics = {
             "events_received": 0,
@@ -80,6 +84,15 @@ class TradeTapeService:
     async def ensure_stream(self, key: MarketStreamKey, *, consumer_id: str) -> bool:
         identity = self._validate_key(key)
         consumer = _consumer_id(consumer_id)
+        async with self._identity_locks.hold(identity):
+            return await self._ensure_stream(identity, consumer)
+
+    async def _ensure_stream(self, identity: StreamIdentity, consumer: str) -> bool:
+        existing = self._physical.get(identity)
+        if existing is not None and existing.stop_task is not None:
+            # A cancelled/timed-out caller does not cancel the physical stop.
+            # Finish it before admitting another lease on this identity.
+            await self._stop_entry(identity, existing)
         async with self._lock:
             self._ensure_open()
             existing = self._physical.get(identity)
@@ -97,7 +110,7 @@ class TradeTapeService:
             self._start_flusher()
 
         async def _on_event(event: MarketEvent) -> None:
-            if identity not in self._physical:
+            if self._physical.get(identity) is not reservation:
                 return
             self._metrics["events_received"] += 1
             try:
@@ -114,54 +127,51 @@ class TradeTapeService:
 
         try:
             handle = await self._factory.start_market(_descriptor(identity), _on_event)
-        except BaseException:
+            reservation.handle = handle
             async with self._lock:
-                if self._physical.get(identity) is reservation:
-                    self._physical.pop(identity, None)
-                    self.engine.deactivate_stream(identity)
-            raise
-
-        close_after_start = False
-        async with self._lock:
-            if self._closed or self._physical.get(identity) is not reservation:
-                close_after_start = True
-            else:
-                reservation.handle = handle
+                self._ensure_open()
                 reservation.consumers.add(consumer)
-        if close_after_start:
-            await handle.stop()
-            raise RuntimeError("trade-tape service closed while stream was starting")
-        return True
+            return True
+        except BaseException:
+            await drain_cancellation_safe_cleanup(
+                self._stop_entry(identity, reservation),
+                name=f"trade-tape-start-cleanup:{identity}",
+            )
+            raise
 
     async def release_stream(self, key: MarketStreamKey, *, consumer_id: str) -> bool:
         identity = _normalize_key(key)
         consumer = _consumer_id(consumer_id)
-        async with self._lock:
+        async with self._identity_locks.hold(identity):
             entry = self._physical.get(identity)
             if entry is None or consumer not in entry.consumers:
                 return False
             if len(entry.consumers) > 1:
                 entry.consumers.remove(consumer)
                 return True
-            entry.consumers.remove(consumer)
+            await self._stop_entry(identity, entry)
+            return True
+
+    async def _stop_entry(self, identity: StreamIdentity, entry: _PhysicalLease) -> None:
+        task = entry.stop_task
+        if task is None or (task.done() and (task.cancelled() or task.exception() is not None)):
+            task = entry.stop_task = asyncio.create_task(
+                self._finish_stop(identity, entry), name=f"trade-tape-stop:{identity}",
+            )
+            task.add_done_callback(lambda done: None if done.cancelled() else done.exception())
         try:
-            if entry.handle is not None:
-                stopped = await asyncio.wait_for(
-                    entry.handle.stop(),
-                    timeout=self._physical_stop_timeout_seconds,
-                )
-                if stopped is False:
-                    raise RuntimeError("ingestion handle reported stop failure")
+            await asyncio.wait_for(asyncio.shield(task), timeout=self._physical_stop_timeout_seconds)
         except BaseException:
             self._metrics["physical_stop_failures"] += 1
-            async with self._lock:
-                entry.consumers.add(consumer)
             raise
+
+    async def _finish_stop(self, identity: StreamIdentity, entry: _PhysicalLease) -> None:
+        if entry.handle is not None and await entry.handle.stop() is False:
+            raise RuntimeError("ingestion handle reported stop failure")
         async with self._lock:
             if self._physical.get(identity) is entry:
                 self._physical.pop(identity, None)
                 self.engine.deactivate_stream(identity)
-        return True
 
     def recent(self, key: MarketStreamKey, *, limit: int = 500) -> list[ObservedTrade]:
         self._ensure_open()
@@ -208,22 +218,24 @@ class TradeTapeService:
         }
 
     async def shutdown(self) -> None:
+        if self._shutdown_task is None:
+            self._shutdown_task = asyncio.create_task(self._shutdown(), name="trade-tape-shutdown")
+        await asyncio.shield(self._shutdown_task)
+
+    async def _shutdown(self) -> None:
         async with self._lock:
             if self._closed:
                 return
             self._closed = True
-            entries = tuple(self._physical.items())
-            self._physical.clear()
-        for identity, entry in entries:
+            identities = tuple(self._physical)
+        for identity in identities:
             try:
-                if entry.handle is not None:
-                    await asyncio.wait_for(
-                        entry.handle.stop(),
-                        timeout=self._physical_stop_timeout_seconds,
-                    )
-            except BaseException:
-                self._metrics["physical_stop_failures"] += 1
-            self.engine.deactivate_stream(identity)
+                async with self._identity_locks.hold(identity):
+                    entry = self._physical.get(identity)
+                    if entry is not None:
+                        await self._stop_entry(identity, entry)
+            except Exception:
+                logger.warning("Trade-tape stop failed during shutdown", exc_info=True)
         if self._flush_task is not None:
             self._flush_task.cancel()
             await asyncio.gather(self._flush_task, return_exceptions=True)

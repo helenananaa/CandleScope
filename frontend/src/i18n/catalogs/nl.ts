@@ -241,6 +241,8 @@ export const nl = {
   "settings.category.about": "Over",
   "settings.language.title": "Interfacetaal",
   "settings.language.description": "Kies de taal van de toepassing. Tijdzone van de grafiek en symboolcodes blijven ongewijzigd.",
+  "settings.language.loadFailed": "Deze taal kon niet worden geladen. Vernieuw de pagina en probeer het opnieuw.",
+  "settings.language.reload": "Pagina vernieuwen",
   "settings.appearance.themeTitle": "Visueel thema",
   "settings.appearance.themeDescription": "Kies de algemene interfacestijl, of volg de lichte/donkere systeeminstelling",
   "settings.appearance.theme.dark": "Donker",

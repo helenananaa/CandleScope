@@ -191,6 +191,47 @@ test("identity projection remains source-equivalent across reset, append and loo
   assert.deepEqual([...store.displayTimeSet()], [10, 20, 30]);
 });
 
+test("numeric tail ticks preserve axis indexes without inspecting the historical prefix", () => {
+  for (const projector of [new IdentityProjector(), new HeikinAshiProjector()]) {
+    const store = new ProjectionStore({ projector });
+    const source = Array.from({ length: 10_000 }, (_, index) => row(index + 1));
+    store.reset(source);
+    const before = store.displaySnapshot();
+    const previousClose = before.at(-1)?.close;
+    const sourceBefore = store.sourceSnapshot();
+    const times = store.displayTimeSet();
+    const index = store._displayTimeIndex;
+    const clear = index.clear.bind(index);
+    const set = index.set.bind(index);
+    let indexWrites = 0;
+    index.clear = () => { indexWrites += index.size; clear(); };
+    index.set = (key, value) => { indexWrites += 1; return set(key, value); };
+    let prefixTimeReads = 0;
+    const historical = before[100]!;
+    const historicalTime = historical.time;
+    Object.defineProperty(historical, "time", { get: () => { prefixTimeReads += 1; return historicalTime; } });
+    source[source.length - 1] = row(source.length, { close: 123 });
+    store.applySourceDelta({ type: "tick", replaced: true }, source);
+    assert.equal(indexWrites, 0);
+    assert.equal(prefixTimeReads, 0);
+    assert.equal(store.displayTimeSet(), times);
+    assert.equal(store._displayTimeIndex, index);
+    assert.notEqual(store.displaySnapshot(), before);
+    assert.equal(before.at(-1)?.close, previousClose);
+    assert.notEqual(sourceBefore.at(-1)?.close, source.at(-1)?.close);
+    assert.equal(store.indexOfDisplayTime(source.length), source.length - 1);
+    assert.deepEqual(ohlc(store.displaySnapshot()), ohlc(projector.project(source)));
+    const previousTimes = new Set(times);
+    source.push(row(source.length + 1));
+    indexWrites = 0;
+    store.applySourceDelta({ type: "tick", appended: true }, source);
+    assert.equal(indexWrites, 1);
+    assert.deepEqual(times, previousTimes, "previously published time sets stay immutable");
+    assert.equal(store.indexOfDisplayTime(source.length), source.length - 1);
+    assert.equal(store.displayTimeSet().size, source.length);
+  }
+});
+
 test("drawing coordinate snapshots atomically version the numeric source horizon", () => {
   const store = new ProjectionStore({ projector: new IdentityProjector() });
   const emptySnapshot = store.drawingCoordinateSnapshot();

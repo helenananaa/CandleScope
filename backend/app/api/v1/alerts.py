@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from app.core.config import getenv as app_getenv
+from app.core.executors import run_storage
 
 import asyncio
 import json
@@ -58,7 +59,7 @@ async def _remove_runtime_rule(request: Request, rule_id: str) -> None:
 @router.get("/rules")
 async def list_alert_rules(request: Request) -> list[dict]:
     try:
-        return _get_facade(request).list_rules()
+        return await run_storage(_get_facade(request).list_rules)
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -68,7 +69,7 @@ async def create_alert_rule(request: Request, payload: AlertRulePayload) -> dict
     try:
         data = dump_model(payload)
         data.pop("id", None)
-        rule = _get_facade(request).save_rule(data)
+        rule = await run_storage(_get_facade(request).save_rule, data)
         await _sync_runtime_rule(request, rule)
         return rule
     except ValueError as exc:
@@ -78,7 +79,7 @@ async def create_alert_rule(request: Request, payload: AlertRulePayload) -> dict
 @router.get("/rules/{rule_id}")
 async def get_alert_rule(request: Request, rule_id: str) -> dict:
     try:
-        rule = _get_facade(request).get_rule(rule_id)
+        rule = await run_storage(_get_facade(request).get_rule, rule_id)
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     if rule is None:
@@ -89,11 +90,11 @@ async def get_alert_rule(request: Request, rule_id: str) -> dict:
 @router.put("/rules/{rule_id}")
 async def update_alert_rule(request: Request, rule_id: str, payload: AlertRulePayload) -> dict:
     try:
-        if _get_facade(request).get_rule(rule_id) is None:
+        if await run_storage(_get_facade(request).get_rule, rule_id) is None:
             raise HTTPException(status_code=404, detail=f"Alert rule '{rule_id}' not found")
         data = dump_model(payload)
         data["id"] = rule_id
-        rule = _get_facade(request).save_rule(data)
+        rule = await run_storage(_get_facade(request).save_rule, data)
         await _sync_runtime_rule(request, rule)
         return rule
     except ValueError as exc:
@@ -103,7 +104,7 @@ async def update_alert_rule(request: Request, rule_id: str, payload: AlertRulePa
 @router.patch("/rules/{rule_id}/enabled")
 async def set_alert_rule_enabled(request: Request, rule_id: str, payload: AlertEnabledPatch) -> dict:
     try:
-        rule = _get_facade(request).set_enabled(rule_id, payload.enabled)
+        rule = await run_storage(_get_facade(request).set_enabled, rule_id, payload.enabled)
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     if rule is None:
@@ -115,7 +116,7 @@ async def set_alert_rule_enabled(request: Request, rule_id: str, payload: AlertE
 @router.delete("/rules/{rule_id}")
 async def delete_alert_rule(request: Request, rule_id: str) -> dict:
     try:
-        deleted = _get_facade(request).delete_rule(rule_id)
+        deleted = await run_storage(_get_facade(request).delete_rule, rule_id)
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     if not deleted:
@@ -133,7 +134,7 @@ async def list_alert_history(
     acknowledged: bool | None = Query(None),
 ) -> list[dict]:
     try:
-        return _get_facade(request).list_history(
+        return await run_storage(_get_facade(request).list_history,
             limit=limit,
             rule_id=rule_id,
             since_ms=since_ms,
@@ -150,7 +151,7 @@ async def set_alert_history_acknowledged(
     payload: AlertAcknowledgedPatch,
 ) -> dict:
     try:
-        event = _get_facade(request).acknowledge_history(event_id, payload.acknowledged)
+        event = await run_storage(_get_facade(request).acknowledge_history, event_id, payload.acknowledged)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if event is None:
@@ -168,7 +169,7 @@ async def record_alert_dispatch_receipt(
     if payload.status not in {"delivered", "denied", "unsupported", "error"}:
         raise HTTPException(status_code=400, detail="Unsupported alert dispatch receipt status")
     try:
-        event = _get_facade(request).record_dispatch_receipt(
+        event = await run_storage(_get_facade(request).record_dispatch_receipt,
             event_id,
             dispatch_id,
             status=payload.status,
@@ -225,7 +226,7 @@ async def get_alert_status(request: Request) -> dict:
     facade = _get_facade(request)
     runtime = _get_runtime(request)
     return {
-        **facade.status(),
+        **(await run_storage(facade.status)),
         "runtime": runtime.snapshot() if runtime is not None else {
             "started": False,
             "dataManager": False,
@@ -254,7 +255,7 @@ async def emit_alert_triggered(request: Request, payload: AlertTriggerPayload) -
         facade = _get_facade(request)
         data = dump_model(payload)
         rule_id = str(data.get("ruleId") or "").strip()
-        rule = facade.get_rule(rule_id)
+        rule = await run_storage(facade.get_rule, rule_id)
         if rule is None:
             raise HTTPException(status_code=404, detail=f"Alert rule '{rule_id}' not found")
         data.update({

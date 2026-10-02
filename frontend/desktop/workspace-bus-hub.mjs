@@ -391,7 +391,11 @@ export class WorkspaceBusHub {
   broadcast(type, details = {}) {
     const message = {
       type,
-      ...this.stateResult(),
+      ...(type === "health" ? {
+        schemaVersion: WORKSPACE_BUS_SCHEMA,
+        sequence: this.sequence,
+        writerWindowId: this.writerWindowId,
+      } : this.stateResult()),
       ...details,
     };
     for (const participant of this.participants.values()) participant.send(message);

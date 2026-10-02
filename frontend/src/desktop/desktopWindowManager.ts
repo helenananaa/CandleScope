@@ -130,6 +130,7 @@ export class DesktopWindowManager {
   readonly windowId = requestedDesktopWindowId();
   private bootstrap: DesktopBootstrap = browserBootstrap();
   private bootstrapPromise: Promise<DesktopBootstrap> | null = null;
+  private reconcileQueue: Promise<unknown> = Promise.resolve();
 
   isNative(): boolean {
     return Boolean(globalThis.window?.candlescopeDesktop);
@@ -147,13 +148,21 @@ export class DesktopWindowManager {
         this.bootstrap = bootstrap;
         return bootstrap;
       });
-    } else {
-      await this.bootstrapPromise;
     }
+    await this.bootstrapPromise;
     return this.bootstrap;
   }
 
-  async reconcileWorkspace(
+  reconcileWorkspace(
+    workspaceId: ChartWorkspaceId,
+    document: ChartWorkspaceDocument,
+  ): Promise<DesktopTopologyResult> {
+    const operation = this.reconcileQueue.then(() => this.reconcileNow(workspaceId, document));
+    this.reconcileQueue = operation.catch(() => undefined);
+    return operation;
+  }
+
+  private async reconcileNow(
     workspaceId: ChartWorkspaceId,
     document: ChartWorkspaceDocument,
   ): Promise<DesktopTopologyResult> {

@@ -241,6 +241,8 @@ export const sv = {
   "settings.category.about": "Om",
   "settings.language.title": "Gränssnittsspråk",
   "settings.language.description": "Välj programmets språk. Diagrammets tidszon och symbolkoder ändras inte.",
+  "settings.language.loadFailed": "Det gick inte att läsa in det här språket. Uppdatera sidan och försök igen.",
+  "settings.language.reload": "Uppdatera sidan",
   "settings.appearance.themeTitle": "Visuellt tema",
   "settings.appearance.themeDescription": "Välj övergripande gränssnittsstil eller följ systemets ljus-/mörkerinställning",
   "settings.appearance.theme.dark": "Mörkt",

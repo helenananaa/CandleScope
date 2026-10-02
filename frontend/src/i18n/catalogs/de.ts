@@ -242,6 +242,8 @@ export const de = {
   "settings.category.about": "Info",
   "settings.language.title": "Oberflächensprache",
   "settings.language.description": "Wählen Sie die Anwendungssprache. Chart-Zeitzone und Symbolcodes bleiben unverändert.",
+  "settings.language.loadFailed": "Diese Sprache konnte nicht geladen werden. Laden Sie die Seite neu und versuchen Sie es erneut.",
+  "settings.language.reload": "Seite neu laden",
   "settings.appearance.themeTitle": "Visuelles Thema",
   "settings.appearance.themeDescription": "Gesamten Oberflächensstil wählen oder der Systemeinstellung Hell/Dunkel folgen",
   "settings.appearance.theme.dark": "Dunkel",

@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import type {
     ChartSettings,
     ChartTheme,
@@ -6,7 +7,7 @@ import type {
 import {
     LOCALE_OPTIONS,
     normalizeLocale,
-    setLocale,
+    setLocaleAsync,
     t,
     type LocaleId,
     type MessageKey,
@@ -37,12 +38,21 @@ export interface ChartAppearancePanelProps {
 
 export default function ChartAppearancePanel({ settings, onUpdate }: ChartAppearancePanelProps) {
     useLocale();
+    const [loadingLocale, setLoadingLocale] = useState(false);
+    const [localeError, setLocaleError] = useState(false);
+    const latest = useRef({ settings, onUpdate });
+    latest.current = { settings, onUpdate };
     const handleUpdate = <K extends keyof ChartSettings>(key: K, value: ChartSettings[K]) => {
         onUpdate({ ...settings, [key]: value });
     };
     const handleLocaleChange = (locale: LocaleId) => {
-        setLocale(locale);
-        handleUpdate("locale", locale);
+        setLoadingLocale(true);
+        setLocaleError(false);
+        void setLocaleAsync(locale).then((activeLocale) => {
+            if (activeLocale === locale) {
+                latest.current.onUpdate({ ...latest.current.settings, locale });
+            }
+        }).catch(() => setLocaleError(true)).finally(() => setLoadingLocale(false));
     };
 
     return (
@@ -53,6 +63,8 @@ export default function ChartAppearancePanel({ settings, onUpdate }: ChartAppear
                 <select
                     className="st-select"
                     value={normalizeLocale(settings.locale)}
+                    disabled={loadingLocale}
+                    aria-busy={loadingLocale}
                     onChange={(event) => handleLocaleChange(normalizeLocale(event.target.value))}
                     aria-label={t("settings.language.title")}
                     data-settings-locale="true"
@@ -61,6 +73,12 @@ export default function ChartAppearancePanel({ settings, onUpdate }: ChartAppear
                         <option key={option.id} value={option.id}>{option.nativeLabel}</option>
                     ))}
                 </select>
+                {localeError && <div role="alert">
+                    <p>{t("settings.language.loadFailed")}</p>
+                    <button type="button" onClick={() => window.location.reload()}>
+                        {t("settings.language.reload")}
+                    </button>
+                </div>}
             </div>
 
             <div className="st-group">

@@ -8,18 +8,18 @@ import {
 } from "react";
 import type { ChartDataCommitMeta } from "../market-data/useChartDataRuntime.js";
 import type { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
-import {
-  mergeHistoryCoverage,
-  type MarketHistoryRange,
-} from "../advanced-market-data/marketHistoryCoverage.js";
+import type { MarketHistoryRange } from "../advanced-market-data/marketHistoryCoverage.js";
 import type {
   AdvancedMarketConnectionStatus,
   AdvancedMarketIdentity,
 } from "../advanced-market-data/advancedMarketDataTypes.js";
-import { fetchLiquidationHistory, getLiquidationStreamUrl } from "./liquidationApi.js";
+import { getLiquidationStreamUrl } from "./liquidationApi.js";
+import { loadLiquidationHistoryPages } from "./liquidationHistoryLoader.js";
 import {
   LiquidationHistoryRequestCoordinator,
+  liquidationHistoryRangeForCandles,
   normalizeLiquidationHistoryRange,
+  subtractLiquidationHistoryCoverage,
 } from "./liquidationHistoryRequests.js";
 import { liquidationStore } from "./liquidationStore.js";
 import { LiquidationStreamController } from "./liquidationStreamController.js";
@@ -56,8 +56,6 @@ interface ActiveContext {
 }
 
 const LIQUIDATION_SIDES: readonly LiquidationPositionSide[] = ["long", "short"];
-const MAX_HISTORY_PAGES_PER_LOAD = 8;
-const HISTORY_PAGE_LIMIT = 5000;
 const HISTORY_RETRY_DELAY_MS = 30_000;
 const MINUTE_MS = 60_000;
 const LIVE_HISTORY_RECONCILE_MS = 60_000;
@@ -67,33 +65,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function parseVisibleRange(value: unknown): MarketHistoryRange | null {
+function parseVisibleRange(value: unknown, interval: string): MarketHistoryRange | null {
   if (!isRecord(value) || !isRecord(value.time)) return null;
   const from = Number(value.time.from);
   const to = Number(value.time.to);
   if (!Number.isFinite(from) || !Number.isFinite(to)) return null;
-  return normalizeLiquidationHistoryRange({
-    startMs: Math.floor(Math.min(from, to) * 1000),
-    endMs: Math.ceil(Math.max(from, to) * 1000),
-  });
+  return liquidationHistoryRangeForCandles(from, to, interval);
 }
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
-}
-
-function assertHistoryIdentity(
-  identity: AdvancedMarketIdentity,
-  side: LiquidationPositionSide,
-  payload: Awaited<ReturnType<typeof fetchLiquidationHistory>>,
-): void {
-  if (payload.key.exchange !== identity.exchange.toLowerCase()
-    || payload.key.market_type !== identity.marketType.toLowerCase()
-    || payload.key.symbol !== identity.symbol.toUpperCase()
-    || payload.key.params.period !== "1m"
-    || payload.key.params.position_side !== side) {
-    throw new Error(`Liquidation ${side} history identity did not match the request`);
-  }
 }
 
 export function useLiquidationRuntime({
@@ -127,14 +108,17 @@ export function useLiquidationRuntime({
     interval,
     seriesReady,
   });
-  const coverageRef = useRef(new Map<LiquidationPositionSide, MarketHistoryRange[]>());
   const requestCoordinatorRef = useRef(new LiquidationHistoryRequestCoordinator());
   const abortControllersRef = useRef(new Set<AbortController>());
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const automaticRangeRef = useRef<MarketHistoryRange | null>(null);
+  const automaticTokenRef = useRef(historyToken);
 
   useLayoutEffect(() => {
     activeRef.current = { enabled, identity, identityKey, interval, seriesReady };
   }, [enabled, identity, identityKey, interval, seriesReady]);
+
+  useLayoutEffect(() => enabled ? liquidationStore.retain(identity) : undefined, [enabled, identity]);
 
   const clearRetryTimer = useCallback(() => {
     if (retryTimerRef.current === null) return;
@@ -142,13 +126,12 @@ export function useLiquidationRuntime({
     retryTimerRef.current = null;
   }, []);
 
-  const invalidateHistory = useCallback((clearCoverage: boolean) => {
+  const invalidateHistory = useCallback(() => {
     generationRef.current += 1;
     for (const controller of abortControllersRef.current) controller.abort();
     abortControllersRef.current = new Set();
     requestCoordinatorRef.current.clear();
     clearRetryTimer();
-    if (clearCoverage) coverageRef.current = new Map();
   }, [clearRetryTimer]);
 
   const scheduleHistoryRetry = useCallback((expectedGeneration: number) => {
@@ -166,7 +149,7 @@ export function useLiquidationRuntime({
     disposedRef.current = false;
     return () => {
       disposedRef.current = true;
-      invalidateHistory(true);
+      invalidateHistory();
     };
   }, [invalidateHistory]);
 
@@ -181,7 +164,7 @@ export function useLiquidationRuntime({
       const claims = requestCoordinatorRef.current.claim(
         side,
         requested,
-        coverageRef.current.get(side) || [],
+        liquidationStore.historyCoverage(context.identity, side),
       );
       if (claims.length > 0) scheduled = true;
       for (const claim of claims) {
@@ -199,43 +182,19 @@ export function useLiquidationRuntime({
             && current.interval === context.interval;
         };
         void (async () => {
-          let pageStartMs = uncovered.startMs;
           try {
             setHistoryError(null);
-            for (let page = 0; page < MAX_HISTORY_PAGES_PER_LOAD; page += 1) {
-              if (!isCurrent() || pageStartMs > uncovered.endMs) return;
-              const payload = await fetchLiquidationHistory(context.identity, {
-                positionSide: side,
-                startMs: pageStartMs,
-                endMs: uncovered.endMs,
-                limit: HISTORY_PAGE_LIMIT,
-                signal: controller.signal,
-              });
-              if (!isCurrent()) return;
-              assertHistoryIdentity(context.identity, side, payload);
-              liquidationStore.mergeHistory(context.identity, payload.data, payload.quality);
-              setQuality(payload.quality);
-              const tail = payload.data.at(-1);
-              if (!payload.hasMore) {
-                coverageRef.current.set(side, mergeHistoryCoverage(
-                  coverageRef.current.get(side) || [],
-                  uncovered,
-                ));
-                return;
-              }
-              if (!tail || tail.bucketStartMs < pageStartMs) {
-                throw new Error(`Liquidation ${side} history did not advance its cursor`);
-              }
-              const coveredEndMs = Math.min(uncovered.endMs, tail.bucketStartMs);
-              coverageRef.current.set(side, mergeHistoryCoverage(
-                coverageRef.current.get(side) || [],
-                { startMs: pageStartMs, endMs: coveredEndMs },
-              ));
-              pageStartMs = tail.bucketStartMs + MINUTE_MS;
-            }
-            if (pageStartMs <= uncovered.endMs && isCurrent()) {
-              setHistoryToken((value) => value + 1);
-            }
+            await loadLiquidationHistoryPages({
+              identity: context.identity,
+              side,
+              range: uncovered,
+              signal: controller.signal,
+              isCurrent,
+              onPage: (payload, covered) => {
+                liquidationStore.mergeHistory(context.identity, payload.data, payload.quality, { side, range: covered });
+                setQuality(payload.quality);
+              },
+            });
           } catch (caught: unknown) {
             if (isAbortError(caught) || !isCurrent()) return;
             console.warn(`Liquidation ${side} history failed:`, caught);
@@ -252,13 +211,14 @@ export function useLiquidationRuntime({
   }, [scheduleHistoryRetry]);
 
   const ensureVisibleRange = useCallback((range: unknown): boolean => {
-    const requested = parseVisibleRange(range);
+    const requested = parseVisibleRange(range, activeRef.current.interval);
     return requested ? loadHistory(requested) : false;
   }, [loadHistory]);
 
   const reloadHistory = useCallback((clearUnconfirmed: boolean) => {
     if (clearUnconfirmed) liquidationStore.clearUnconfirmed(identity);
-    invalidateHistory(true);
+    liquidationStore.invalidateHistoryCoverage(identity);
+    invalidateHistory();
     setHistoryError(null);
     setHistoryToken((value) => value + 1);
   }, [identity, invalidateHistory]);
@@ -271,27 +231,23 @@ export function useLiquidationRuntime({
   }, [enabled, reloadHistory]);
 
   useEffect(() => {
-    invalidateHistory(true);
+    invalidateHistory();
+    automaticRangeRef.current = null;
     setHistoryError(null);
     setQuality(null);
-  }, [identityKey, interval, invalidateHistory]);
+  }, [enabled, identityKey, interval, invalidateHistory]);
 
   useEffect(() => {
     if (!enabled || !seriesReady) return undefined;
     const reconcileTail = () => {
       const cutoffMs = Math.max(0, Date.now() - LIVE_HISTORY_RECONCILE_WINDOW_MS);
-      for (const side of LIQUIDATION_SIDES) {
-        const retained = (coverageRef.current.get(side) || []).flatMap((range) => {
-          if (range.startMs >= cutoffMs) return [];
-          return [{ ...range, endMs: Math.min(range.endMs, cutoffMs - 1) }];
-        });
-        coverageRef.current.set(side, retained);
-      }
-      setHistoryToken((value) => value + 1);
+      const range = { startMs: cutoffMs, endMs: Date.now() };
+      liquidationStore.invalidateHistoryCoverage(identity, range);
+      loadHistory(range);
     };
     const timer = window.setInterval(reconcileTail, LIVE_HISTORY_RECONCILE_MS);
     return () => { window.clearInterval(timer); };
-  }, [enabled, identityKey, seriesReady]);
+  }, [enabled, identity, identityKey, loadHistory, seriesReady]);
 
   useEffect(() => {
     if (!enabled) {
@@ -347,10 +303,19 @@ export function useLiquidationRuntime({
     const firstTime = Number(dataMeta.firstTime);
     const lastTime = Number(dataMeta.lastTime);
     if (!Number.isFinite(firstTime) || !Number.isFinite(lastTime)) return;
-    loadHistory({
-      startMs: Math.max(0, Math.floor(firstTime * 1000)),
-      endMs: Math.max(0, Math.ceil(lastTime * 1000)),
-    });
+    const range = liquidationHistoryRangeForCandles(firstTime, lastTime, interval);
+    if (!range) return;
+    const previous = automaticRangeRef.current;
+    const force = automaticTokenRef.current !== historyToken;
+    automaticTokenRef.current = historyToken;
+    automaticRangeRef.current = range;
+    // Automatic candle growth only requests newly exposed boundaries. Explicit
+    // viewport demand may reload evicted history, but a new candle must not
+    // continuously repopulate the entire evicted prefix of a large window.
+    const additions = previous && !force
+      ? subtractLiquidationHistoryCoverage(range, [previous])
+      : [range];
+    for (const addition of additions) loadHistory(addition);
   }, [
     dataMeta.firstTime,
     dataMeta.lastTime,

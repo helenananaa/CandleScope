@@ -17,6 +17,7 @@ import {
   resolveDataTimeSet,
   resolveStableOptionalChartCollection,
   sameIndicatorSeriesData,
+  needsIndicatorSeriesDataUpdate,
   shouldAdvanceDrawingCoordinateGeneration,
   shouldAdvanceIndicatorSeriesReady,
   shouldInvalidateDrawingFrameOnPointerRelease,
@@ -27,6 +28,26 @@ import {
   shouldReplayIntervalTransitionSeries,
   shouldRestoreChartViewport as shouldRestoreChartViewportProduction,
 } from "../singleChartPaneLifecycle.js";
+
+test("trusted indicator tail updates examine only the boundary points", () => {
+  let reads = 0;
+  const previous = Array.from({ length: 10_000 }, (_, index) => ({
+    get time() { reads += 1; return index + 1; }, value: index,
+  }));
+  const next = previous.slice();
+  next[next.length - 1] = { time: next.length, value: 42 };
+  assert.equal(needsIndicatorSeriesDataUpdate(previous, next, true), true);
+  assert.ok(reads < 10, `tail update unexpectedly read ${reads} historical timestamps`);
+  assert.equal(needsIndicatorSeriesDataUpdate(previous, previous.slice(), true), false);
+  assert.equal(needsIndicatorSeriesDataUpdate(previous, [...previous, { time: 10_001, value: 42 }], true), true);
+});
+
+test("untrusted or structurally changed indicator lines still detect historical edits", () => {
+  const previous = [{ time: 1, value: 1 }, { time: 2, value: 2 }, { time: 3, value: 3 }];
+  assert.equal(needsIndicatorSeriesDataUpdate(previous, [{ time: 1, value: 9 }, ...previous.slice(1)]), true);
+  assert.equal(needsIndicatorSeriesDataUpdate(previous, previous.slice(1), true), true);
+  assert.equal(needsIndicatorSeriesDataUpdate(previous, [{ time: 0, value: 9 }, ...previous.slice(1)], true), true);
+});
 import { structuralMock } from "../../test/testHelpers.js";
 
 function hasCurrentDatasetOwnership(value: object): boolean {

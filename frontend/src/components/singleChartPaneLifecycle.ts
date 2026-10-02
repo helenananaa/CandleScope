@@ -1,5 +1,6 @@
 import type { ChartSurfaceVisibleRange } from "../chart-adapter/useChartSurfaceRuntime.js";
 import { linePointEquals } from "../chart-adapter/chartSeriesData.js";
+import { chartTimesEqual } from "../chart-adapter/chartTime.js";
 import type { IndicatorDataEntry } from "../chart-adapter/chartAdapterTypes.js";
 import type { ChartDataCommitMeta } from "../features/market-data/useChartDataRuntime.js";
 import type { SeriesWindowStore } from "../features/market-data/window/seriesWindowStore.js";
@@ -218,6 +219,21 @@ export function sameIndicatorSeriesData(
     if (!linePointEquals(left[index], right[index])) return false;
   }
   return true;
+}
+
+export function needsIndicatorSeriesDataUpdate(
+  previous: readonly IndicatorDataEntry[],
+  next: readonly IndicatorDataEntry[],
+  trustedTail = false,
+): boolean {
+  if (previous === next) return false;
+  if (trustedTail && previous.length > 0
+    && next.length >= previous.length && next.length <= previous.length + 1
+    && chartTimesEqual(previous[0]?.time, next[0]?.time)
+    && chartTimesEqual(previous.at(-1)?.time, next[previous.length - 1]?.time)) {
+    return next.length !== previous.length || !linePointEquals(previous.at(-1), next.at(-1));
+  }
+  return !sameIndicatorSeriesData(previous, next);
 }
 
 export function resolveDataTimeSet(

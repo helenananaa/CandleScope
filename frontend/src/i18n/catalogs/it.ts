@@ -242,6 +242,8 @@ export const it = {
   "settings.category.about": "Informazioni",
   "settings.language.title": "Lingua dell’interfaccia",
   "settings.language.description": "Scegli la lingua dell’applicazione. Il fuso orario del grafico e i codici dei simboli restano invariati.",
+  "settings.language.loadFailed": "Impossibile caricare questa lingua. Ricarica la pagina e riprova.",
+  "settings.language.reload": "Ricarica pagina",
   "settings.appearance.themeTitle": "Tema visivo",
   "settings.appearance.themeDescription": "Scegli lo stile generale dell’interfaccia, oppure segui l’impostazione chiaro/scuro del sistema",
   "settings.appearance.theme.dark": "Scuro",

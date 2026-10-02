@@ -19,7 +19,7 @@ import {
 } from "./features/backtest/backtestFlags.js";
 import { mountStrategyResearchPage } from "./features/strategy-research/strategyResearchBootstrap.js";
 
-mountStrategyResearchPage({
+void mountStrategyResearchPage({
   page: "backtest",
   researchEnabled: isBacktestResearchEnabled(),
   legacyEnabled: isBacktestLegacyWorkbenchEnabled(),

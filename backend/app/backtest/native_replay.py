@@ -11,6 +11,7 @@ import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from collections import OrderedDict
 
 from app.data_engine.interval_policy import parse_interval_spec
 from .errors import BacktestError
@@ -23,38 +24,75 @@ class NativeReplay:
         self.jobs = {}
         self.workers = {}
         self.closed = False
+        self._inputs = OrderedDict()
         db = native.db
         db.execute("CREATE TABLE IF NOT EXISTS native_replays (id TEXT PRIMARY KEY, record TEXT NOT NULL)")
         db.execute("CREATE TABLE IF NOT EXISTS native_replay_snapshots (id TEXT PRIMARY KEY, record TEXT NOT NULL)")
-        for key, raw in db.execute("SELECT id,record FROM native_replays").fetchall():
+        from .native_replay_storage import ResultJournal
+        self.results = ResultJournal(db)
+        for (key,) in db.execute("SELECT id FROM native_replays").fetchall():
+            raw = db.execute("SELECT record FROM native_replays WHERE id=?", (key,)).fetchone()[0]
             record = json.loads(raw)
+            if "_resultStorage" not in record:
+                self._save(record)
             if record["state"] == "RUNNING":
                 record.update(state="INTERRUPTED", revision=record["revision"] + 1)
-                self._save(record)
+                self._save(self.get(key) | {"state": "INTERRUPTED", "revision": record["revision"]})
         db.commit()
 
     def _save(self, record):
         from .native import encoded
-        self.native.db.execute("INSERT OR REPLACE INTO native_replays VALUES (?,?)", (record["replay_id"], encoded(record)))
-        self.native.db.commit()
+        from .native_replay_storage import SCHEMA
+        header = {**record, "result": None, "_resultStorage": SCHEMA}
+        result = record.get("result")
+        body = {k: v for k, v in result.items() if k not in {"bars", "report_hash"}} if result is not None else None
+        try:
+            with self.native.db:
+                header["_resultRevision"] = self.results.save(record["replay_id"], body)
+                self.native.db.execute("INSERT OR REPLACE INTO native_replays VALUES (?,?)", (record["replay_id"], encoded(header)))
+        except BaseException:
+            self.results.cache.clear()
+            raise
 
     def get(self, key):
         with self.native.lock:
             row = self.native.db.execute("SELECT record FROM native_replays WHERE id=?", (key,)).fetchone()
             if not row:
                 raise BacktestError("RUN_NOT_FOUND", "native replay not found")
-            return json.loads(row[0])
+            record = json.loads(row[0])
+            storage = record.pop("_resultStorage", None)
+            result_revision = record.pop("_resultRevision", None)
+            if storage is not None:
+                from .native import digest
+                from .native_replay_storage import SCHEMA
+                if storage != SCHEMA:
+                    raise ValueError("unsupported native replay result storage")
+                if type(result_revision) is not int:
+                    raise ValueError("native replay result revision is missing")
+                result = copy.deepcopy(self.results.load(key, expected_revision=result_revision))
+                if result is not None:
+                    result["bars"] = copy.deepcopy(self._input(record["run_id"])["bars"][:record["cursor"]])
+                    result["report_hash"] = digest(result)
+                record["result"] = result
+            return record
 
     def list(self):
         with self.native.lock:
-            return [{k: v for k, v in json.loads(row[0]).items() if k != "result"}
+            return [{k: v for k, v in json.loads(row[0]).items() if k not in {"result", "_resultStorage", "_resultRevision"}}
                     for row in self.native.db.execute("SELECT record FROM native_replays ORDER BY rowid DESC LIMIT 100")]
 
     def _input(self, run_id):
+        if run_id in self._inputs:
+            self._inputs.move_to_end(run_id)
+            return self._inputs[run_id]
         row = self.native.db.execute("SELECT wire FROM native_inputs WHERE id=?", (run_id,)).fetchone()
         if row is None:
             raise BacktestError("NATIVE_REPLAY_INPUT_MISSING", "rerun this strategy to capture replay inputs")
-        return json.loads(row[0])
+        wire = json.loads(row[0])
+        self._inputs[run_id] = wire
+        while len(self._inputs) > 2:
+            self._inputs.popitem(last=False)
+        return wire
 
     def create(self, run_id):
         with self.native.lock:
@@ -104,14 +142,19 @@ class NativeReplay:
             return record
 
     def _prefix(self, wire, config, count):
-        clipped = copy.deepcopy(wire)
-        clipped["bars"] = clipped["bars"][:count]
+        # Detach only the revealed prefix; never copy unrevealed history.
+        clipped = {key: copy.deepcopy(value) for key, value in wire.items()
+                   if key not in {"bars", "contexts", "magnifier"}}
+        clipped["bars"] = copy.deepcopy(wire["bars"][:count])
         boundary = parse_interval_spec(config["interval"]).next_ms(clipped["bars"][-1]["time"] * 1000)
-        for context, ref in zip(clipped["contexts"], config.get("contexts", []), strict=True):
+        clipped["contexts"] = []
+        for context, ref in zip(wire["contexts"], config.get("contexts", []), strict=True):
             interval = parse_interval_spec(ref["interval"])
-            context["bars"] = [bar for bar in context["bars"] if interval.next_ms(bar["time"] * 1000) <= boundary]
-        if clipped.get("magnifier"):
-            clipped["magnifier"]["chartBars"] = clipped["magnifier"]["chartBars"][:count]
+            clipped["contexts"].append({**copy.deepcopy({key: value for key, value in context.items() if key != "bars"}),
+                "bars": copy.deepcopy([bar for bar in context["bars"] if interval.next_ms(bar["time"] * 1000) <= boundary])})
+        clipped["magnifier"] = ({**copy.deepcopy({key: value for key, value in wire["magnifier"].items() if key != "chartBars"}),
+                                "chartBars": copy.deepcopy(wire["magnifier"]["chartBars"][:count])}
+                               if wire.get("magnifier") else None)
         return clipped
 
     def _worker(self, key, plugin, wire, cancelled):
@@ -159,18 +202,18 @@ class NativeReplay:
                 if count == 0:
                     result = None
                 else:
-                    prefix = self._prefix(wire, origin["config"], count)
-                    result = worker.advance(count, cancelled) if worker else self.native.runner(plugin, prefix, cancelled=cancelled)
+                    result = worker.advance(count, cancelled) if worker else self.native.runner(plugin, self._prefix(wire, origin["config"], count), cancelled=cancelled)
                     if result.get("identity") != wire["identity"] or result.get("account_authority") != origin["result"]["account_authority"] or result.get("execution_mode") != "NATIVE":
                         raise BacktestError("NATIVE_IDENTITY_MISMATCH", "unexpected replay account authority")
-                    result["bars"] = prefix["bars"]
-                    result["report_hash"] = digest(result)
-                    if count == current["total"] and result["report_hash"] != origin["result"]["report_hash"]:
-                        raise BacktestError("NATIVE_REPLAY_PARITY_FAILED", "replay endpoint differs from frozen batch result")
+                    if count == current["total"]:
+                        result["bars"] = wire["bars"]
+                        result["report_hash"] = digest(result)
+                        if result["report_hash"] != origin["result"]["report_hash"]:
+                            raise BacktestError("NATIVE_REPLAY_PARITY_FAILED", "replay endpoint differs from frozen batch result")
                 with self.native.lock:
                     if cancelled.is_set():
                         return
-                    record = self.get(key)
+                    record = current
                     record.update(cursor=count, result=result, method=method, revision=record["revision"] + 1,
                                   state="COMPLETED" if count == record["total"] else "RUNNING" if action == "play" else "PAUSED")
                     self._save(record)
@@ -178,7 +221,7 @@ class NativeReplay:
                     return
             with self.native.lock:
                 if not cancelled.is_set():
-                    record = self.get(key)
+                    record = current
                     record.update(state="COMPLETED" if record["cursor"] == record["total"] else "PAUSED")
                     self._save(record)
         except Exception as exc:
@@ -244,3 +287,5 @@ class NativeReplay:
             if worker:
                 worker.close()
         self.workers.clear()
+        self.results.cache.clear()
+        self._inputs.clear()

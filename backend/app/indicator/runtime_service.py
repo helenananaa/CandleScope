@@ -23,6 +23,7 @@ from candlescope_plugin_sdk import (
 )
 
 from app.plugin_runtime.errors import PluginHostError, PluginRequestError
+from app.core.executors import run_indicator
 
 from .runtime_routes import (
     ROUTE_MODE_LEGACY,
@@ -627,11 +628,12 @@ class IndicatorRuntimeService:
         try:
             if self.host is None:
                 raise IndicatorRuntimeRoutesError("plugin host is unavailable")
-            result = await self.host.execute_batch(
-                route.runtime_id,
-                request.to_sdk_request(),
-            )
-            payload = adapt_sidecar(result)
+            # Tiny requests keep the established shadow dispatch ordering;
+            # historical windows use the bounded CPU pool before IPC begins.
+            sdk_request = (request.to_sdk_request() if len(request.bars) <= 64
+                           else await run_indicator(request.to_sdk_request))
+            result = await self.host.execute_batch(route.runtime_id, sdk_request)
+            payload = await run_indicator(adapt_sidecar, result)
             if not isinstance(payload, dict):
                 raise TypeError("sidecar adapter must return a dict payload")
             return payload

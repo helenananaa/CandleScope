@@ -21,12 +21,40 @@ def test_phase6_historical_v1_fixture_is_not_rewritten() -> None:
     assert historical["ui"]["verifiedPublisherNotSafeOrOfficial"] is True
 
 
+def test_phase6_previous_v2_fixture_is_not_rewritten() -> None:
+    previous = phase6.validate_previous_contract_v2()
+
+    assert previous["schemaVersion"].endswith("/2")
+    assert previous["previousContractSha256"] == (
+        "sha256:" + phase6.HISTORICAL_CONTRACT_FILE_SHA256
+    )
+
+
+def test_phase6_v3_only_migrates_ui_contract() -> None:
+    previous = phase6.validate_previous_contract_v2()
+    current = phase6.validate_contract()
+    changed = {key for key in previous.keys() | current.keys() if previous.get(key) != current.get(key)}
+    assert changed == {"schemaVersion", "migratedOn", "previousContractSha256", "ui"}
+
+
+def test_phase6_rejects_rewritten_v2_history(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    previous = phase6.validate_previous_contract_v2()
+    previous["trust"]["singleUseTokens"] = False
+    path = tmp_path / "phase6-rewritten-v2.json"
+    path.write_text(json.dumps(previous), encoding="utf-8")
+    monkeypatch.setattr(phase6, "PREVIOUS_CONTRACT_PATH", path)
+    with pytest.raises(phase6.Phase6GateError, match="v2 was rewritten"):
+        phase6.validate_contract()
+
+
 def test_phase6_contract_freezes_trust_grants_sandbox_and_jre_migration() -> None:
     contract = phase6.validate_contract()
 
     assert contract["schemaVersion"] == phase6.CONTRACT_SCHEMA_VERSION
     assert contract["previousContractSha256"] == (
-        "sha256:" + phase6.HISTORICAL_CONTRACT_FILE_SHA256
+        "sha256:" + phase6.PREVIOUS_CONTRACT_FILE_SHA256
     )
     assert contract["realGateEvidenceContractSha256"] == (
         phase6._canonical_sha256(phase6.validate_historical_contract_v1())
@@ -74,6 +102,103 @@ def test_phase6_contract_freezes_trust_grants_sandbox_and_jre_migration() -> Non
     assert contract["rollout"]["liveDefaults"] == [False] * 5
     assert contract["ui"]["runtimeAndPermissionDiff"] is True
     assert contract["ui"]["verifiedPublisherNotSafeOrOfficial"] is True
+    assert contract["ui"]["catalogScope"] == ["plugin.", "pc."]
+    assert set(contract["ui"]["managementSurfaceSha256"]) == {
+        "PluginCenter.tsx",
+        "PluginInstallFlow.tsx",
+        "PluginDetail.tsx",
+        "PluginManagementSections.tsx",
+    }
+
+
+def _replace_source(
+    monkeypatch: pytest.MonkeyPatch, relative: str, old: str, new: str
+) -> None:
+    target = (phase6.REPOSITORY_ROOT / relative).resolve()
+    original = Path.read_text
+
+    def read_text(path: Path, *args, **kwargs):
+        source = original(path, *args, **kwargs)
+        if path.resolve() == target:
+            assert old in source
+            return source.replace(old, new)
+        return source
+
+    monkeypatch.setattr(Path, "read_text", read_text)
+
+
+@pytest.mark.parametrize(
+    ("marker", "field"),
+    [
+        ('data-plugin-trust-flow="itemized-double-confirmation"', "itemizedDoubleConfirmation"),
+        ('t("plugin.host.runtimeDiff")', "runtimeAndPermissionDiff"),
+        ("useState<PluginTrustReview | null>", "tokenKeptInReactMemory"),
+        ('t("plugin.market.notCodeSafety")', "verifiedPublisherNotSafeOrOfficial"),
+    ],
+)
+def test_phase6_reads_actual_management_surface_and_rejects_drift(
+    monkeypatch: pytest.MonkeyPatch, marker: str, field: str
+) -> None:
+    _replace_source(
+        monkeypatch,
+        "frontend/src/features/plugins/PluginManagementSections.tsx",
+        marker,
+        "REMOVED_TRUST_BOUNDARY",
+    )
+    assert phase6.capture_contract()["ui"][field] is False
+    with pytest.raises(phase6.Phase6GateError, match="contract drift"):
+        phase6.validate_contract()
+
+
+def test_phase6_rejects_disconnected_install_flow(monkeypatch: pytest.MonkeyPatch) -> None:
+    _replace_source(
+        monkeypatch,
+        "frontend/src/features/plugins/PluginCenter.tsx",
+        "<PluginInstallFlow ",
+        "<DisconnectedInstallFlow ",
+    )
+    with pytest.raises(phase6.Phase6GateError, match="contract drift"):
+        phase6.validate_contract()
+
+
+def test_phase6_ignores_unrelated_catalog_copy(monkeypatch: pytest.MonkeyPatch) -> None:
+    before = phase6.validate_contract()
+    _replace_source(
+        monkeypatch,
+        "frontend/src/i18n/catalogs/en.ts",
+        '"settings.language.reload": "Refresh page"',
+        '"settings.language.reload": "Reload this page"',
+    )
+    assert phase6.validate_contract() == before
+
+
+@pytest.mark.parametrize(
+    "relative",
+    ["frontend/src/i18n/catalogs/en.ts", "frontend/src/i18n/catalogs/zh-CN.ts"],
+)
+def test_phase6_rejects_plugin_catalog_copy_drift(
+    monkeypatch: pytest.MonkeyPatch, relative: str
+) -> None:
+    _replace_source(
+        monkeypatch, relative, '"plugin.market.notCodeSafety":', '"plugin.market.removedWarning":'
+    )
+    assert phase6.capture_contract()["ui"]["verifiedPublisherNotSafeOrOfficial"] is False
+    with pytest.raises(phase6.Phase6GateError, match="contract drift"):
+        phase6.validate_contract()
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        '"plugin.message": computedCopy,',
+        '"plugin.message": "first",\n"plugin.message": "duplicate",',
+        '"plugin.message": "first", "plugin.message": "duplicate",',
+        '"settings.message": "unrelated",',
+    ],
+)
+def test_phase6_catalog_capture_fails_closed_on_unrecognized_entries(source: str) -> None:
+    with pytest.raises(phase6.Phase6GateError, match="plugin catalog"):
+        phase6._plugin_catalog_entries(source)
 
 
 def test_phase6_contract_drift_fails_closed(
@@ -146,6 +271,10 @@ def test_phase6_gate_binds_real_evidence_to_frozen_contract(
     assert gate_result["residualProcesses"] == 0
     assert gate_result["trustUxDefault"] is False
     assert gate_result["liveDefaultsRemainOff"] is True
+    assert gate_result["realEvidenceContractSha256"] == (
+        phase6._canonical_sha256(phase6.validate_historical_contract_v1())
+    )
+    assert gate_result["realEvidenceContractSha256"] != gate_result["contractSha256"]
 
 
 def test_phase6_cli_prints_and_atomically_writes_contract(

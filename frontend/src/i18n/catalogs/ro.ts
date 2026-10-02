@@ -241,6 +241,8 @@ export const ro = {
   "settings.category.about": "Despre",
   "settings.language.title": "Limba interfeței",
   "settings.language.description": "Alegeți limba aplicației. Fusul orar al graficului și codurile simbolurilor rămân neschimbate.",
+  "settings.language.loadFailed": "Această limbă nu a putut fi încărcată. Reîmprospătați pagina, apoi încercați din nou.",
+  "settings.language.reload": "Reîmprospătați pagina",
   "settings.appearance.themeTitle": "Temă vizuală",
   "settings.appearance.themeDescription": "Alegeți stilul general al interfeței sau urmați setarea luminos/întunecat a sistemului",
   "settings.appearance.theme.dark": "Întunecat",

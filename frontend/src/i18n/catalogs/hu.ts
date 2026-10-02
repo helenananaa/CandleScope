@@ -241,6 +241,8 @@ export const hu = {
   "settings.category.about": "Névjegy",
   "settings.language.title": "Felület nyelve",
   "settings.language.description": "Válassza ki az alkalmazás nyelvét. A grafikon időzónája és a szimbólumkódok nem változnak.",
+  "settings.language.loadFailed": "Nem sikerült betölteni ezt a nyelvet. Frissítse az oldalt, majd próbálja újra.",
+  "settings.language.reload": "Oldal frissítése",
   "settings.appearance.themeTitle": "Vizuális téma",
   "settings.appearance.themeDescription": "Válassza ki a teljes felület stílusát, vagy kövesse a rendszer világos/sötét beállítását",
   "settings.appearance.theme.dark": "Sötét",

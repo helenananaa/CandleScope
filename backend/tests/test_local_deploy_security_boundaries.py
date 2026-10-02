@@ -192,19 +192,20 @@ def test_prepare_installs_wheels_with_host_python_target(tmp_path: Path) -> None
         run_command,
     )
     assert recorded
-    venv_python = str(
+    venv_python = (
         installation
         / ("venv/Scripts/python.exe" if sys.platform == "win32" else "venv/bin/python")
     )
     for command in recorded:
-        assert command[0] != venv_python
-        assert command[0] == str(Path(sys.executable))
+        # A drive alias/junction can spell the same executable differently.
+        assert Path(command[0]).resolve() != venv_python.resolve()
+        assert Path(command[0]).samefile(sys.executable)
     install = recorded[-1]
-    assert install[:3] == (str(Path(sys.executable)), "-I", "-m")
+    assert install[1:3] == ("-I", "-m")
     assert "pip" in install
     assert "--target" in install
     expected = host_wheel_install_command(
-        Path(sys.executable), site, (wheel,)
+        Path(sys.executable).resolve(), site, (wheel,)
     )
     assert install == expected
 

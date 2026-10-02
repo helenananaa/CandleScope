@@ -11,6 +11,7 @@ from app.alerts.outbox import AlertOutboxStore, AlertOutboxWorker, DurableWebhoo
 from app.alerts.store import AlertStore
 from app.alerts.validation import validate_alert_expression
 from app.alerts.webhook import WebhookSender, WebhookSettings
+from app.core.executors import run_storage
 
 
 class AlertFacade:
@@ -57,6 +58,7 @@ class AlertFacade:
         self.evaluator = evaluator or AlertEvaluator()
 
     async def start(self) -> None:
+        await run_storage(self.store.refresh_rules)
         if self.outbox_worker is not None:
             await self.outbox_worker.start()
 
@@ -123,10 +125,11 @@ class AlertFacade:
         enforce_limits: bool = True,
     ) -> dict[str, Any] | None:
         """Record an alert event and pass it to registered action channels."""
-        record = (
-            self.store.append_history_if_eligible(event)
+        record = await run_storage(
+            self.store.append_history_if_eligible
             if enforce_limits
-            else self.store.append_history(event)
+            else self.store.append_history,
+            event,
         )
         if record is None:
             return None
@@ -134,11 +137,16 @@ class AlertFacade:
         if not isinstance(actions, list) or not actions:
             rule = self.get_rule(record["ruleId"]) or {}
             actions = rule.get("actions") if isinstance(rule.get("actions"), list) else []
-        outcomes = await self.dispatcher.dispatch(record, actions)
-        updated = self.store.update_history_dispatch(record["id"], outcomes)
+        publications = []
+        outcomes = await self.dispatcher.dispatch(record, actions, pending_publications=publications)
+        updated = await run_storage(self.store.update_history_dispatch, record["id"], outcomes)
+        if updated is None:
+            raise RuntimeError("Alert history disappeared before dispatch was committed")
+        for publish in publications:
+            publish()
         if self.outbox_worker is not None:
             await self.outbox_worker.activate_event(record["id"])
-        return updated or {**record, "dispatch": outcomes}
+        return updated
 
     def status(self) -> dict[str, Any]:
         return {

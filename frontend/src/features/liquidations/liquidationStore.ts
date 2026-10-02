@@ -1,10 +1,13 @@
 import type { AdvancedMarketConnectionStatus } from "../advanced-market-data/advancedMarketDataTypes.js";
+import { mergeHistoryCoverage, type MarketHistoryRange } from "../advanced-market-data/marketHistoryCoverage.js";
+import { subtractLiquidationHistoryRanges } from "./liquidationHistoryRequests.js";
 import type {
   LiquidationEvent,
   LiquidationIdentity,
   LiquidationQualityMetadata,
   LiquidationRollup,
   LiquidationSnapshot,
+  LiquidationPositionSide,
 } from "./liquidationTypes.js";
 
 const MAX_ROLLUPS_PER_IDENTITY = 100_000;
@@ -28,6 +31,8 @@ interface LiquidationEntry {
   quality: LiquidationQualityMetadata | null;
   revision: number;
   snapshot: LiquidationSnapshot;
+  coverage: Map<LiquidationPositionSide, MarketHistoryRange[]>;
+  leases: number;
 }
 
 function identityKey(identity: LiquidationIdentity): string {
@@ -106,36 +111,19 @@ function mergeSortedChanges<T>(
   return Object.freeze(merged);
 }
 
-function trimOldestSorted<T>(
-  values: Map<string, T>,
-  sortedValues: readonly T[],
-  limit: number,
-  keyOf: (value: T) => string,
-): readonly T[] {
-  if (sortedValues.length <= limit) return sortedValues;
-  const excess = sortedValues.length - limit;
-  for (let index = 0; index < excess; index += 1) {
-    const value = sortedValues[index];
-    if (value !== undefined) values.delete(keyOf(value));
-  }
-  return Object.freeze(sortedValues.slice(excess));
-}
-
 function trimOldestEvents(
   values: Map<string, LiquidationEvent>,
   sortedValues: readonly LiquidationEvent[],
   limit: number,
 ): readonly LiquidationEvent[] {
   if (values.size <= limit) return sortedValues;
-  const removed = new Set<string>();
-  while (values.size > limit) {
-    let oldest: LiquidationEvent | null = null;
-    for (const event of values.values()) {
-      if (!oldest || event.receivedAtMs < oldest.receivedAtMs) oldest = event;
-    }
-    if (!oldest) break;
-    values.delete(oldest.fingerprint);
-    removed.add(oldest.fingerprint);
+  const excess = values.size - limit;
+  // Stable sort preserves Map insertion order for equal receipt timestamps,
+  // exactly as the previous repeated oldest-event scan did.
+  const oldest = [...values.values()].sort((left, right) => left.receivedAtMs - right.receivedAtMs);
+  const removed = new Set(oldest.slice(0, excess).map((event) => event.fingerprint));
+  for (const fingerprint of removed) {
+    values.delete(fingerprint);
   }
   return removed.size === 0
     ? sortedValues
@@ -164,17 +152,59 @@ function createEntry(): LiquidationEntry {
     quality: null,
     revision: 0,
     snapshot: EMPTY_LIQUIDATION_SNAPSHOT,
+    coverage: new Map(),
+    leases: 0,
   };
 }
 
 export class LiquidationStore {
   private readonly entries = new Map<string, LiquidationEntry>();
 
+  constructor(private readonly limits: {
+    maxEntries?: number;
+    maxRollupsPerIdentity?: number;
+    maxLiveEventsPerIdentity?: number;
+    maxTotalRecords?: number;
+  } = {}) {}
+
+  retain(identity: LiquidationIdentity): () => void {
+    const key = identityKey(identity);
+    const entry = this.entry(key);
+    entry.leases += 1;
+    this.enforceBudget();
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      entry.leases -= 1;
+      if (entry.leases === 0 && entry.listeners.size === 0) this.entries.delete(key);
+      this.enforceBudget();
+    };
+  }
+
   subscribe(identity: LiquidationIdentity | string, listener: () => void): () => void {
     const key = typeof identity === "string" ? identity : identityKey(identity);
     const entry = this.entry(key);
     entry.listeners.add(listener);
-    return () => { entry.listeners.delete(listener); };
+    this.enforceBudget();
+    return () => {
+      entry.listeners.delete(listener);
+      if (entry.leases === 0 && entry.listeners.size === 0) this.entries.delete(key);
+      this.enforceBudget();
+    };
+  }
+
+  historyCoverage(identity: LiquidationIdentity, side: LiquidationPositionSide): readonly MarketHistoryRange[] {
+    return this.entries.get(identityKey(identity))?.coverage.get(side) ?? [];
+  }
+
+  invalidateHistoryCoverage(identity: LiquidationIdentity, range?: MarketHistoryRange): void {
+    const entry = this.entries.get(identityKey(identity));
+    if (!entry) return;
+    if (!range) entry.coverage.clear();
+    else for (const [side, coverage] of entry.coverage) {
+      entry.coverage.set(side, subtractLiquidationHistoryRanges(coverage, [range]));
+    }
   }
 
   getSnapshot(identity: LiquidationIdentity | string): LiquidationSnapshot {
@@ -186,16 +216,26 @@ export class LiquidationStore {
     identity: LiquidationIdentity,
     rollups: readonly LiquidationRollup[],
     quality: LiquidationQualityMetadata,
+    covered?: { side: LiquidationPositionSide; range: MarketHistoryRange },
   ): void {
     const key = identityKey(identity);
     const entry = this.entry(key);
     let changed = entry.quality !== quality;
     const changedRollups = new Map<string, LiquidationRollup>();
     entry.quality = quality;
+    if (covered) entry.coverage.set(covered.side, mergeHistoryCoverage(
+      entry.coverage.get(covered.side) ?? [], covered.range,
+    ));
     for (const rollup of rollups) {
       if (!rollupMatchesIdentity(rollup, key)) continue;
       const naturalKey = rollupKey(rollup);
       const current = entry.rollups.get(naturalKey);
+      // Recently requested historical pages must survive a revisit even when
+      // newer timestamps previously filled the cache.
+      if (current) {
+        entry.rollups.delete(naturalKey);
+        entry.rollups.set(naturalKey, current);
+      }
       if (!shouldReplaceRollup(current, rollup)) continue;
       entry.rollups.set(naturalKey, rollup);
       changedRollups.set(naturalKey, rollup);
@@ -225,13 +265,9 @@ export class LiquidationStore {
     if (retainedLiveEvents.length !== entry.sortedLiveEvents.length) {
       entry.sortedLiveEvents = Object.freeze(retainedLiveEvents);
     }
-    entry.sortedRollups = trimOldestSorted(
-      entry.rollups,
-      entry.sortedRollups,
-      MAX_ROLLUPS_PER_IDENTITY,
-      rollupKey,
-    );
+    this.trimRollups(entry, this.limits.maxRollupsPerIdentity ?? MAX_ROLLUPS_PER_IDENTITY);
     if (changed) this.publish(entry);
+    this.enforceBudget();
   }
 
   applyEvents(
@@ -266,9 +302,10 @@ export class LiquidationStore {
     entry.sortedLiveEvents = trimOldestEvents(
       entry.liveEvents,
       entry.sortedLiveEvents,
-      MAX_LIVE_EVENTS_PER_IDENTITY,
+      this.limits.maxLiveEventsPerIdentity ?? MAX_LIVE_EVENTS_PER_IDENTITY,
     );
     if (changed) this.publish(entry);
+    this.enforceBudget();
   }
 
   setConnectionStatus(
@@ -276,12 +313,15 @@ export class LiquidationStore {
     status: AdvancedMarketConnectionStatus,
     quality?: LiquidationQualityMetadata | null,
   ): void {
-    const entry = this.entry(identityKey(identity));
+    const key = identityKey(identity);
+    if ((status === "disabled" || status === "disconnected") && !this.entries.has(key)) return;
+    const entry = this.entry(key);
     const nextQuality = quality === undefined ? entry.quality : quality;
     if (entry.connectionStatus === status && entry.quality === nextQuality) return;
     entry.connectionStatus = status;
     entry.quality = nextQuality;
     this.publish(entry);
+    this.enforceBudget();
   }
 
   clearUnconfirmed(identity: LiquidationIdentity): void {
@@ -289,6 +329,7 @@ export class LiquidationStore {
     let changed = entry.liveEvents.size > 0;
     entry.liveEvents.clear();
     entry.sortedLiveEvents = Object.freeze([]);
+    entry.coverage.clear();
     for (const [key, row] of entry.rollups) {
       if (row.isFinal) continue;
       entry.rollups.delete(key);
@@ -311,8 +352,57 @@ export class LiquidationStore {
     if (!entry) {
       entry = createEntry();
       this.entries.set(key, entry);
+    } else {
+      this.entries.delete(key);
+      this.entries.set(key, entry);
     }
     return entry;
+  }
+
+  private trimRollups(entry: LiquidationEntry, limit: number): void {
+    if (entry.rollups.size <= limit) return;
+    const removed = new Set<string>();
+    const missing = new Map<LiquidationPositionSide, MarketHistoryRange[]>();
+    for (const [key, row] of entry.rollups) {
+      if (entry.rollups.size <= limit) break;
+      entry.rollups.delete(key);
+      removed.add(key);
+      const ranges = missing.get(row.positionSide) ?? [];
+      ranges.push({ startMs: row.bucketStartMs, endMs: row.bucketEndMs - 1 });
+      missing.set(row.positionSide, ranges);
+    }
+    entry.sortedRollups = Object.freeze(entry.sortedRollups.filter((row) => !removed.has(rollupKey(row))));
+    for (const [side, gaps] of missing) {
+      entry.coverage.set(side, subtractLiquidationHistoryRanges(entry.coverage.get(side) ?? [], gaps));
+    }
+  }
+
+  private enforceBudget(): void {
+    const maxEntries = this.limits.maxEntries ?? 16;
+    const maxRecords = this.limits.maxTotalRecords ?? 200_000;
+    let total = [...this.entries.values()].reduce((sum, entry) => (
+      sum + entry.rollups.size + entry.liveEvents.size
+    ), 0);
+    for (const [key, entry] of this.entries) {
+      if (this.entries.size <= maxEntries && total <= maxRecords) break;
+      if (entry.leases > 0 || entry.listeners.size > 0) continue;
+      total -= entry.rollups.size + entry.liveEvents.size;
+      this.entries.delete(key);
+    }
+    // Active identities retain their entry and subscribers. Their oldest data
+    // can still be trimmed to honor the process-wide record budget.
+    for (const entry of this.entries.values()) {
+      if (total <= maxRecords) break;
+      const before = entry.rollups.size + entry.liveEvents.size;
+      this.trimRollups(entry, Math.max(0, entry.rollups.size - (total - maxRecords)));
+      const excess = total - maxRecords - (before - entry.rollups.size - entry.liveEvents.size);
+      if (excess > 0) entry.sortedLiveEvents = trimOldestEvents(
+        entry.liveEvents, entry.sortedLiveEvents, Math.max(0, entry.liveEvents.size - excess),
+      );
+      const after = entry.rollups.size + entry.liveEvents.size;
+      if (before !== after) this.publish(entry);
+      total -= before - after;
+    }
   }
 
   private publish(entry: LiquidationEntry): void {

@@ -242,6 +242,8 @@ export const vi = {
   "settings.category.about": "Giới thiệu",
   "settings.language.title": "Ngôn ngữ giao diện",
   "settings.language.description": "Chọn ngôn ngữ ứng dụng. Múi giờ biểu đồ và mã giao dịch không đổi.",
+  "settings.language.loadFailed": "Không thể tải ngôn ngữ này. Hãy làm mới trang rồi thử lại.",
+  "settings.language.reload": "Làm mới trang",
   "settings.appearance.themeTitle": "Chủ đề hình ảnh",
   "settings.appearance.themeDescription": "Chọn phong cách giao diện tổng thể, hoặc theo cài đặt sáng/tối của hệ thống",
   "settings.appearance.theme.dark": "Tối",

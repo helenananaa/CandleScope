@@ -11,6 +11,9 @@ import { desktopRuntimeConfigPlugin } from './desktop/runtime-config.mjs'
 
 const apiProxyTarget = process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:18080'
 const devServerPort = Number(process.env.VITE_DEV_PORT || 15173)
+// Use the same physical root for Vite and HTML inputs when the checkout is
+// reached through a drive alias or junction.
+const frontendRoot = realpathSync.native(import.meta.dirname)
 const appVersion = readFileSync(new URL('../backend/app/core/version.py', import.meta.url), 'utf8').match(/APP_VERSION = "([^"]+)"/)[1]
 let appBuild = 'unknown'
 try {
@@ -44,6 +47,7 @@ const buildApiProxy = () => ({
 
 // https://vite.dev/config/
 export default defineConfig({
+  root: frontendRoot,
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion),
     'import.meta.env.VITE_APP_BUILD': JSON.stringify(appBuild),
@@ -56,15 +60,15 @@ export default defineConfig({
         ? { preserveEntrySignatures: 'strict' }
         : {}),
       input: {
-        live: resolve(import.meta.dirname, 'index.html'),
-        replay: resolve(import.meta.dirname, 'replay.html'),
-        local: resolve(import.meta.dirname, 'local.html'),
-        backtest: resolve(import.meta.dirname, 'backtest.html'),
-        strategy: resolve(import.meta.dirname, 'strategy.html'), // canonical; local/backtest stay one release cycle
+        live: resolve(frontendRoot, 'index.html'),
+        replay: resolve(frontendRoot, 'replay.html'),
+        local: resolve(frontendRoot, 'local.html'),
+        backtest: resolve(frontendRoot, 'backtest.html'),
+        strategy: resolve(frontendRoot, 'strategy.html'), // canonical; local/backtest stay one release cycle
         ...(replaySoakProjectionEnabled
           ? {
               replaySoakProjection: resolve(
-                import.meta.dirname,
+                frontendRoot,
                 'scripts/replay-soak-projection.ts',
               ),
             }
@@ -93,7 +97,7 @@ export default defineConfig({
     // font assets to that junction's real path, so explicitly allow only the
     // frontend root and the resolved dependency root.
     fs: {
-      allow: [import.meta.dirname, dependencyRoot],
+      allow: [frontendRoot, dependencyRoot],
     },
     proxy: buildApiProxy(),
   },

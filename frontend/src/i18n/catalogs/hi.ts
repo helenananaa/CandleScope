@@ -241,6 +241,8 @@ export const hi = {
   "settings.category.about": "परिचय",
   "settings.language.title": "इंटरफ़ेस भाषा",
   "settings.language.description": "ऐप की भाषा चुनें। चार्ट टाइमज़ोन और सिंबल कोड नहीं बदलते।",
+  "settings.language.loadFailed": "इस भाषा को लोड नहीं किया जा सका। पेज रीफ़्रेश करें, फिर दोबारा कोशिश करें।",
+  "settings.language.reload": "पेज रीफ़्रेश करें",
   "settings.appearance.themeTitle": "विज़ुअल थीम",
   "settings.appearance.themeDescription": "कुल इंटरफ़ेस शैली चुनें, या सिस्टम की लाइट/डार्क सेटिंग अपनाएँ",
   "settings.appearance.theme.dark": "डार्क",

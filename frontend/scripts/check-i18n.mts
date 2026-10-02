@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { DEFAULT_LOCALE, LOCALES, localeDefinition } from "../src/i18n/registry.js";
+import { DEFAULT_LOCALE, LOCALES, loadLocaleCatalog, localeDefinition } from "../src/i18n/registry.js";
+import { workspaceNameAliases } from "../src/i18n/workspaceNameAliases.js";
 
 const ZH_TW_SIMPLIFIED_HAN = new Set(
   fs.readFileSync(new URL("./zh-tw-simplified-han.txt", import.meta.url), "utf8").trim(),
@@ -191,7 +192,8 @@ export function sourceProblems(root: string): I18nProblem[] {
   ));
 }
 
-function main(): void {
+async function main(): Promise<void> {
+  await Promise.all(LOCALES.map(loadLocaleCatalog));
   const frontendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const catalogs = Object.fromEntries(LOCALES.map((locale) => [locale, localeDefinition(locale).messages]));
   const catalog = catalogProblems(catalogs, DEFAULT_LOCALE);
@@ -200,6 +202,12 @@ function main(): void {
     ...catalog.map((message) => `catalog: ${message}`),
     ...sources.map((problem) => `${problem.file}:${problem.line}: ${problem.message}`),
   ];
+  for (const [key, aliases] of Object.entries(workspaceNameAliases)) {
+    for (const locale of LOCALES) {
+      const value = (catalogs[locale] as Readonly<Record<string, string>>)[key];
+      if (value && !aliases.includes(value)) lines.push(`catalog: refresh workspace name aliases for ${locale}:${key}`);
+    }
+  }
   if (lines.length > 0) {
     console.error(lines.join("\n"));
     process.exitCode = 1;
@@ -208,4 +216,4 @@ function main(): void {
   console.log(`i18n check passed (${LOCALES.length} locales, ${Object.keys(catalogs[DEFAULT_LOCALE]!).length} catalog keys, ${sourceFiles(path.join(frontendRoot, "src")).length} source files)`);
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) void main();

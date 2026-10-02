@@ -2,9 +2,17 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 logger = logging.getLogger("candlescope.alerts.dispatcher")
+
+
+@dataclass(frozen=True)
+class PreparedAlertDispatch:
+    outcome: dict[str, Any]
+    publish: Callable[[], Any] | None = None
 
 
 class AlertActionChannel(Protocol):
@@ -27,7 +35,10 @@ class AlertActionDispatcher:
     def registered_types(self) -> list[str]:
         return sorted(self._channels)
 
-    async def dispatch(self, event: dict[str, Any], actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    async def dispatch(
+        self, event: dict[str, Any], actions: list[dict[str, Any]],
+        *, pending_publications: list[Callable[[], Any]] | None = None,
+    ) -> list[dict[str, Any]]:
         outcomes: list[dict[str, Any]] = []
         for action in actions:
             if not action.get("enabled", True):
@@ -41,7 +52,14 @@ class AlertActionDispatcher:
                 continue
 
             try:
-                result = await channel.dispatch(event, action)
+                prepare = getattr(channel, "prepare", None)
+                if pending_publications is not None and callable(prepare):
+                    prepared = prepare(event, action)
+                    result = prepared.outcome
+                    if prepared.publish is not None:
+                        pending_publications.append(prepared.publish)
+                else:
+                    result = await channel.dispatch(event, action)
             except Exception as exc:
                 logger.exception("Alert action failed: type=%s event=%s", action_type, event.get("id"))
                 result = {"type": action_type, "status": "error", "error": str(exc)}

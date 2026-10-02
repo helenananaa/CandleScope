@@ -241,6 +241,8 @@ export const zhHK = {
   "settings.category.about": "關於",
   "settings.language.title": "介面語言",
   "settings.language.description": "選擇應用介面語言。圖表時區與品種程式碼不受影響。",
+  "settings.language.loadFailed": "無法載入此語言。請重新整理頁面後再試。",
+  "settings.language.reload": "重新整理頁面",
   "settings.appearance.themeTitle": "視覺主題",
   "settings.appearance.themeDescription": "選擇介面的整體視覺風格，可跟隨系統亮/暗色自動切換",
   "settings.appearance.theme.dark": "深色",

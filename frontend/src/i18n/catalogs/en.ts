@@ -505,6 +505,8 @@ export const en = {
   "settings.category.about": "About & support",
   "settings.language.title": "Interface language",
   "settings.language.description": "Choose the application language. Chart timezone and symbol codes are unchanged.",
+  "settings.language.loadFailed": "Could not load this language. Refresh the page, then try again.",
+  "settings.language.reload": "Refresh page",
 
   "settings.appearance.themeTitle": "Visual theme",
   "settings.appearance.themeDescription": "Choose the overall interface style, or follow the system light/dark setting",

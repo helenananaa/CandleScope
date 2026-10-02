@@ -242,6 +242,8 @@ export const tr = {
   "settings.category.about": "Hakkında",
   "settings.language.title": "Arayüz dili",
   "settings.language.description": "Uygulama dilini seçin. Grafik saat dilimi ve sembol kodları değişmez.",
+  "settings.language.loadFailed": "Bu dil yüklenemedi. Sayfayı yenileyip tekrar deneyin.",
+  "settings.language.reload": "Sayfayı yenile",
   "settings.appearance.themeTitle": "Görsel tema",
   "settings.appearance.themeDescription": "Genel arayüz stilini seçin veya sistemin açık/koyu ayarını izleyin",
   "settings.appearance.theme.dark": "Koyu",

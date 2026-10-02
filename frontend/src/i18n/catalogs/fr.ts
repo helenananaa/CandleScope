@@ -242,6 +242,8 @@ export const fr = {
   "settings.category.about": "À propos",
   "settings.language.title": "Langue de l’interface",
   "settings.language.description": "Choisissez la langue de l’application. Le fuseau horaire du graphique et les codes de symbole restent inchangés.",
+  "settings.language.loadFailed": "Impossible de charger cette langue. Actualisez la page, puis réessayez.",
+  "settings.language.reload": "Actualiser la page",
   "settings.appearance.themeTitle": "Thème visuel",
   "settings.appearance.themeDescription": "Choisissez le style général de l’interface, ou suivez le réglage clair/sombre du système",
   "settings.appearance.theme.dark": "Sombre",

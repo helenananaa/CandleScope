@@ -242,6 +242,8 @@ export const pl = {
   "settings.category.about": "Informacje",
   "settings.language.title": "Język interfejsu",
   "settings.language.description": "Wybierz język aplikacji. Strefa czasowa wykresu i kody symboli pozostają bez zmian.",
+  "settings.language.loadFailed": "Nie udało się wczytać tego języka. Odśwież stronę i spróbuj ponownie.",
+  "settings.language.reload": "Odśwież stronę",
   "settings.appearance.themeTitle": "Motyw wizualny",
   "settings.appearance.themeDescription": "Wybierz ogólny styl interfejsu albo stosuj systemowe ustawienie jasny/ciemny",
   "settings.appearance.theme.dark": "Ciemny",

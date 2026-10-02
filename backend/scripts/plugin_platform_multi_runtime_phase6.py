@@ -8,6 +8,7 @@ import ctypes
 import hashlib
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -23,7 +24,11 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = REPOSITORY_ROOT / "backend"
 SDK_SOURCE = REPOSITORY_ROOT / "packages" / "candlescope-plugin-sdk" / "src"
 FIXTURE_ROOT = BACKEND_ROOT / "tests" / "fixtures" / "plugin_platform_multi_runtime"
-CONTRACT_PATH = FIXTURE_ROOT / "phase6_contract_v2.json"
+CONTRACT_PATH = FIXTURE_ROOT / "phase6_contract_v3.json"
+PREVIOUS_CONTRACT_PATH = FIXTURE_ROOT / "phase6_contract_v2.json"
+PREVIOUS_CONTRACT_FILE_SHA256 = (
+    "33e52c3ea03db04f4037dbe80e556b12eb6542e688fdc722f3633f651aee4b1f"
+)
 HISTORICAL_CONTRACT_PATH = FIXTURE_ROOT / "phase6_contract_v1.json"
 HISTORICAL_CONTRACT_FILE_SHA256 = (
     "c9b5e173a6f7a2fc42741b5a39c9c64f4cd5ee23ffdb1807b857091bb165dc90"
@@ -44,7 +49,7 @@ REAL_EVIDENCE_PATH = (
     / "plugin-platform-v2"
     / "multi-runtime-phase6-2026-08-03-windows-amd64.json"
 )
-CONTRACT_SCHEMA_VERSION = "candlescope.plugin-platform.multi-runtime.phase6-contract/2"
+CONTRACT_SCHEMA_VERSION = "candlescope.plugin-platform.multi-runtime.phase6-contract/3"
 HISTORICAL_CONTRACT_SCHEMA_VERSION = (
     "candlescope.plugin-platform.multi-runtime.phase6-contract/1"
 )
@@ -104,6 +109,33 @@ def _canonical_sha256(value: Any) -> str:
     from candlescope_plugin_sdk.platform_v2 import canonical_sha256
 
     return canonical_sha256(value)
+
+
+def _plugin_catalog_entries(source: str) -> dict[str, str]:
+    """Freeze plugin/center copy, independent of unrelated application messages.
+
+    These catalog entries are static JSON string pairs. A syntax change must be
+    reviewed rather than silently dropping an entry from the contract digest.
+    """
+    entries: dict[str, str] = {}
+    for line in source.splitlines():
+        if not re.match(r'\s*"(?:plugin|pc)\.', line):
+            continue
+        try:
+            entry = json.loads(
+                "{" + line.strip().removesuffix(",") + "}", object_pairs_hook=list
+            )
+        except ValueError as exc:
+            raise Phase6GateError("plugin catalog entry is not a static JSON pair") from exc
+        if len(entry) != 1:
+            raise Phase6GateError("plugin catalog line must contain one entry")
+        key, value = entry[0]
+        if key in entries or not isinstance(value, str):
+            raise Phase6GateError("plugin catalog entries must be unique strings")
+        entries[key] = value
+    if not entries:
+        raise Phase6GateError("plugin catalog entries are missing")
+    return entries
 
 
 def capture_contract() -> dict[str, Any]:
@@ -190,6 +222,19 @@ def capture_contract() -> dict[str, Any]:
     surface_source = (ui_path / "PluginPlatformSurfaces.tsx").read_text(
         encoding="utf-8"
     )
+    # The plugin center split moved trust flows out of PluginPlatformSurfaces.
+    # Freeze both the actual flows and their entrypoints, so orphaned safe-looking
+    # components cannot satisfy the current UI contract.
+    management_sources = {
+        name: (ui_path / name).read_text(encoding="utf-8")
+        for name in (
+            "PluginCenter.tsx",
+            "PluginInstallFlow.tsx",
+            "PluginDetail.tsx",
+            "PluginManagementSections.tsx",
+        )
+    }
+    management_surface = management_sources["PluginManagementSections.tsx"]
     parser_source = (ui_path / "pluginPlatformParsers.ts").read_text(encoding="utf-8")
     english_catalog_source = (
         REPOSITORY_ROOT / "frontend" / "src" / "i18n" / "catalogs" / "en.ts"
@@ -197,14 +242,18 @@ def capture_contract() -> dict[str, Any]:
     chinese_catalog_source = (
         REPOSITORY_ROOT / "frontend" / "src" / "i18n" / "catalogs" / "zh-CN.ts"
     ).read_text(encoding="utf-8")
+    english_catalog = _plugin_catalog_entries(english_catalog_source)
+    chinese_catalog = _plugin_catalog_entries(chinese_catalog_source)
+    english_warning = english_catalog.get("plugin.market.notCodeSafety", "")
+    chinese_warning = chinese_catalog.get("plugin.market.notCodeSafety", "")
     return {
         "schemaVersion": CONTRACT_SCHEMA_VERSION,
         "implementedOn": "2026-08-03",
-        "migratedOn": "2026-08-26",
-        "previousContractSha256": "sha256:" + HISTORICAL_CONTRACT_FILE_SHA256,
+        "migratedOn": "2026-10-02",
+        "previousContractSha256": "sha256:" + PREVIOUS_CONTRACT_FILE_SHA256,
         "phase5ContractSha256": _canonical_sha256(phase5_contract),
-        # The recorded Windows AppContainer run predates the UI-only i18n
-        # migration. Bind it to the immutable contract it actually exercised.
+        # The recorded Windows AppContainer run predates both the i18n and
+        # plugin-center migrations. It only qualifies the original v1 contract.
         "realGateEvidenceContractSha256": _canonical_sha256(
             _strict_json(HISTORICAL_CONTRACT_PATH)
         ),
@@ -316,44 +365,38 @@ def capture_contract() -> dict[str, Any]:
         },
         "ui": {
             "surfaceSha256": _sha256_bytes(surface_source.encode("utf-8")),
+            "managementSurfaceSha256": {
+                name: _sha256_bytes(source.encode("utf-8"))
+                for name, source in management_sources.items()
+            },
             "parserSha256": _sha256_bytes(parser_source.encode("utf-8")),
-            "englishCatalogSha256": _sha256_bytes(
-                english_catalog_source.encode("utf-8")
-            ),
-            "chineseCatalogSha256": _sha256_bytes(
-                chinese_catalog_source.encode("utf-8")
-            ),
+            "catalogScope": ["plugin.", "pc."],
+            "englishCatalogSha256": _canonical_sha256(english_catalog),
+            "chineseCatalogSha256": _canonical_sha256(chinese_catalog),
             "itemizedDoubleConfirmation": (
                 'data-plugin-trust-flow="itemized-double-confirmation"'
-                in surface_source
+                in management_surface
             ),
             "runtimeAndPermissionDiff": all(
-                value in surface_source
+                value in management_surface
                 for value in (
                     't("plugin.host.runtimeDiff")',
                     't("plugin.host.permissionDiff")',
                 )
-            ) and all(
-                value in english_catalog_source
-                for value in (
-                    '"plugin.host.runtimeDiff": "Runtime diff"',
-                    '"plugin.host.permissionDiff": "Permission diff"',
-                )
-            ) and all(
-                value in chinese_catalog_source
-                for value in (
-                    '"plugin.host.runtimeDiff": "运行时差异"',
-                    '"plugin.host.permissionDiff": "权限差异"',
-                )
+            ) and (
+                english_catalog.get("plugin.host.runtimeDiff") == "Runtime diff"
+                and english_catalog.get("plugin.host.permissionDiff") == "Permission diff"
+                and chinese_catalog.get("plugin.host.runtimeDiff") == "运行时差异"
+                and chinese_catalog.get("plugin.host.permissionDiff") == "权限差异"
             ),
             "tokenKeptInReactMemory": "useState<PluginTrustReview | null>"
-            in surface_source,
+            in management_surface,
             "verifiedPublisherNotSafeOrOfficial": (
-                't("plugin.market.notCodeSafety")' in surface_source
-                and "publisher verification is not code safety" in english_catalog_source
-                and "not mean the plugin is official" in english_catalog_source
-                and "发布者验证不等于代码安全" in chinese_catalog_source
-                and "不表示插件是 CandleScope 官方提供" in chinese_catalog_source
+                't("plugin.market.notCodeSafety")' in management_surface
+                and "publisher verification is not code safety" in english_warning
+                and "not mean the plugin is official" in english_warning
+                and "发布者验证不等于代码安全" in chinese_warning
+                and "不表示插件是 CandleScope 官方提供" in chinese_warning
             ),
             "strictTrustParsers": all(
                 value in parser_source
@@ -421,6 +464,7 @@ def validate_historical_contract_v1() -> dict[str, Any]:
 
 def validate_contract() -> dict[str, Any]:
     validate_historical_contract_v1()
+    validate_previous_contract_v2()
     fixture = _strict_json(CONTRACT_PATH)
     current = capture_contract()
     if fixture != current:
@@ -429,6 +473,19 @@ def validate_contract() -> dict[str, Any]:
             f"fixture={_canonical_sha256(fixture)} current={_canonical_sha256(current)}"
         )
     return fixture
+
+
+def validate_previous_contract_v2() -> dict[str, Any]:
+    """Retain the reviewed pre-plugin-center snapshot when migrating to v3."""
+    raw = PREVIOUS_CONTRACT_PATH.read_bytes().replace(b"\r\n", b"\n")
+    if hashlib.sha256(raw).hexdigest() != PREVIOUS_CONTRACT_FILE_SHA256:
+        raise Phase6GateError("historical Phase 6 contract v2 was rewritten")
+    previous = _strict_json(PREVIOUS_CONTRACT_PATH)
+    if previous.get("schemaVersion") != (
+        "candlescope.plugin-platform.multi-runtime.phase6-contract/2"
+    ):
+        raise Phase6GateError("historical Phase 6 contract lost schemaVersion /2")
+    return previous
 
 
 class _LocalEvidenceFetcher:
@@ -1034,6 +1091,7 @@ def run_gate() -> dict[str, Any]:
         "result": "pass",
         "contractSha256": _canonical_sha256(contract),
         "realEvidenceSha256": _sha256_path(REAL_EVIDENCE_PATH),
+        "realEvidenceContractSha256": evidence["contractSha256"],
         "attackKinds": sorted(evidence["attacks"]),
         "signedMarketplaceKinds": sorted(
             evidence["signedMarketplaceLifecycle"]["kinds"]

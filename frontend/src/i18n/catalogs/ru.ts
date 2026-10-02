@@ -242,6 +242,8 @@ export const ru = {
   "settings.category.about": "О программе",
   "settings.language.title": "Язык интерфейса",
   "settings.language.description": "Выберите язык приложения. Часовой пояс графика и коды инструментов не изменятся.",
+  "settings.language.loadFailed": "Не удалось загрузить этот язык. Обновите страницу и попробуйте снова.",
+  "settings.language.reload": "Обновить страницу",
   "settings.appearance.themeTitle": "Тема оформления",
   "settings.appearance.themeDescription": "Выберите общий стиль интерфейса или следуйте системной светлой/тёмной теме",
   "settings.appearance.theme.dark": "Тёмная",

@@ -248,6 +248,8 @@ export const es = {
   "settings.category.about": "Acerca de",
   "settings.language.title": "Idioma de la interfaz",
   "settings.language.description": "Elige el idioma de la aplicación. La zona horaria del gráfico y los códigos de símbolo no cambian.",
+  "settings.language.loadFailed": "No se pudo cargar este idioma. Actualiza la página y vuelve a intentarlo.",
+  "settings.language.reload": "Actualizar página",
   "settings.appearance.themeTitle": "Tema visual",
   "settings.appearance.themeDescription": "Elige el estilo general de la interfaz o sigue el ajuste claro/oscuro del sistema",
   "settings.appearance.theme.dark": "Oscuro",

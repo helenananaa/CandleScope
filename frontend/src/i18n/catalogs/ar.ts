@@ -241,6 +241,8 @@ export const ar = {
   "settings.category.about": "حول",
   "settings.language.title": "لغة الواجهة",
   "settings.language.description": "اختر لغة التطبيق. المنطقة الزمنية للرسم ورموز الأدوات دون تغيير.",
+  "settings.language.loadFailed": "تعذر تحميل هذه اللغة. حدّث الصفحة، ثم حاول مرة أخرى.",
+  "settings.language.reload": "تحديث الصفحة",
   "settings.appearance.themeTitle": "السمة البصرية",
   "settings.appearance.themeDescription": "اختر أسلوب الواجهة العام، أو اتبع إعداد النظام الفاتح/الداكن",
   "settings.appearance.theme.dark": "داكن",

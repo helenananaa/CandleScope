@@ -241,6 +241,8 @@ export const cs = {
   "settings.category.about": "O aplikaci",
   "settings.language.title": "Jazyk rozhraní",
   "settings.language.description": "Zvolte jazyk aplikace. Časové pásmo grafu a kódy symbolů se nemění.",
+  "settings.language.loadFailed": "Tento jazyk se nepodařilo načíst. Obnovte stránku a zkuste to znovu.",
+  "settings.language.reload": "Obnovit stránku",
   "settings.appearance.themeTitle": "Vizuální motiv",
   "settings.appearance.themeDescription": "Zvolte celkový styl rozhraní, nebo se řiďte světlým/tmavým nastavením systému",
   "settings.appearance.theme.dark": "Tmavý",

@@ -241,6 +241,8 @@ export const he = {
   "settings.category.about": "אודות",
   "settings.language.title": "שפת ממשק",
   "settings.language.description": "בחרו את שפת היישום. אזור הזמן של הגרף וקודי הסימולים אינם משתנים.",
+  "settings.language.loadFailed": "לא ניתן לטעון את השפה הזו. רעננו את הדף ונסו שוב.",
+  "settings.language.reload": "רענון הדף",
   "settings.appearance.themeTitle": "ערכת נושא חזותית",
   "settings.appearance.themeDescription": "בחרו את סגנון הממשק הכללי, או עקבו אחרי הגדרת בהיר/כהה של המערכת",
   "settings.appearance.theme.dark": "כהה",

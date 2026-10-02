@@ -242,6 +242,8 @@ export const id = {
   "settings.category.about": "Tentang",
   "settings.language.title": "Bahasa antarmuka",
   "settings.language.description": "Pilih bahasa aplikasi. Zona waktu grafik dan kode simbol tidak berubah.",
+  "settings.language.loadFailed": "Bahasa ini tidak dapat dimuat. Muat ulang halaman, lalu coba lagi.",
+  "settings.language.reload": "Muat ulang halaman",
   "settings.appearance.themeTitle": "Tema visual",
   "settings.appearance.themeDescription": "Pilih gaya antarmuka keseluruhan, atau ikuti pengaturan terang/gelap sistem",
   "settings.appearance.theme.dark": "Gelap",

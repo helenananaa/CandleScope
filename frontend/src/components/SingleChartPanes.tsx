@@ -150,7 +150,7 @@ import {
   resolveLeftHistoryDemand,
   resolveDrawingSurfaceChartTypeBoundary,
   resolveStableOptionalChartCollection,
-  sameIndicatorSeriesData,
+  needsIndicatorSeriesDataUpdate,
   shouldAdvanceDrawingCoordinateGeneration,
   shouldAdvanceIndicatorSeriesReady,
   shouldInvalidateDrawingFrameOnPointerRelease,
@@ -4531,9 +4531,10 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           existing.series.applyOptions?.(buildIndicatorSeriesOptions(line, {
             crosshairMarkerVisible: showCrosshairDetails && !drawingEngineToolActive,
           }));
-          if (!sameIndicatorSeriesData(existing.data, validData)) {
+          const declaredTailUpdate = !usesDerivedAxis && line.renderUpdate === "tail";
+          if (needsIndicatorSeriesDataUpdate(existing.data, validData, declaredTailUpdate)) {
             const trustedTrailingUpdate = !usesDerivedAxis && (
-              line.renderUpdate === "tail"
+              declaredTailUpdate
               || (
                 line.indicatorId === "advanced-market-data"
                 && canUseTrailingSeriesUpdate(existing.data, validData)

@@ -13,4 +13,4 @@ import "@fontsource/jetbrains-mono/latin-500.css";
 import "./index.css";
 import { mountStrategyResearchPage } from "./features/strategy-research/strategyResearchBootstrap.js";
 
-mountStrategyResearchPage({ page: "strategy" });
+void mountStrategyResearchPage({ page: "strategy" });

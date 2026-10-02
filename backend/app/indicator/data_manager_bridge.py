@@ -60,7 +60,7 @@ def _indicator_refresh_limit(
     but cap derived work to one ordinary source-history page.
     """
     required = (
-        min(_INDICATOR_REFRESH_TARGET_LIMIT, max(1, int(required_target_bars)))
+        max(1, int(required_target_bars))
         if required_target_bars is not None
         else None
     )
@@ -83,7 +83,7 @@ def _indicator_refresh_limit(
                 purpose=IntervalPurpose.HISTORY,
             )
             if route.kind is IntervalRouteKind.NATIVE:
-                return _INDICATOR_REFRESH_TARGET_LIMIT
+                return required or _INDICATOR_REFRESH_TARGET_LIMIT
             base_interval = route.base_interval
         except Exception:
             # The query call remains the authority for routing/errors.  This
@@ -119,7 +119,8 @@ def _indicator_refresh_limit(
     )
     # The source-row budget is an idle/default optimization, not permission to
     # truncate an active recursive/windowed instance.  Active work keeps its
-    # existing target-bar span, capped by the same 5k target safety ceiling.
+    # existing computation span. Display output retention is independently
+    # bounded by IndicatorEngine; it must not truncate recursive reseeding.
     return max(budget_limit, required or 0)
 
 
@@ -288,10 +289,7 @@ def bridge_indicator_engine(
                     # ``query_latest`` may include one forming tail.  Fetch
                     # one guard row, then keep exactly the requested number of
                     # closed bars so rebuilds neither shrink nor grow.
-                    query_limit = min(
-                        _INDICATOR_REFRESH_TARGET_LIMIT + 1,
-                        refresh_limit + 1,
-                    )
+                    query_limit = refresh_limit + 1
                 result = await run_storage(
                     data_manager.query_latest,
                     symbol,
@@ -320,6 +318,11 @@ def bridge_indicator_engine(
                     target_count = max(1, int(required_target_bars))
                     if len(confirmed_bars) > target_count:
                         confirmed_bars = confirmed_bars[-target_count:]
+                if len(confirmed_bars) < int(correction_plan.get("minimumComputedBars") or 0):
+                    # A truncated storage response cannot reconstruct an
+                    # existing recursive seed. Cold instances may still seed
+                    # from whatever closed history has become available.
+                    return False
 
                 observed_revision = (
                     revision_reader(series_meta)

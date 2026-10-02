@@ -3,8 +3,28 @@ import {
   type MarketHistoryRange,
 } from "../advanced-market-data/marketHistoryCoverage.js";
 import type { LiquidationPositionSide } from "./liquidationTypes.js";
+import { createIntervalTimeline } from "../../utils/intervalTimeline.js";
 
 const MINUTE_MS = 60_000;
+
+/** Chart range endpoints are candle opens; history must include the final
+ * candle's contents, including calendar-month intervals and its forming tail. */
+export function liquidationHistoryRangeForCandles(
+  fromSeconds: number,
+  toSeconds: number,
+  interval: string,
+  nowMs = Date.now(),
+): MarketHistoryRange | null {
+  if (!Number.isFinite(fromSeconds) || !Number.isFinite(toSeconds)) return null;
+  const first = Math.min(fromSeconds, toSeconds);
+  const last = Math.max(fromSeconds, toSeconds);
+  const end = createIntervalTimeline(interval)?.end(last);
+  if (end == null) return null;
+  return normalizeLiquidationHistoryRange({
+    startMs: Math.floor(first * 1000),
+    endMs: Math.ceil(end * 1000) - 1,
+  }, nowMs);
+}
 
 export interface LiquidationHistoryRequestClaim {
   readonly id: number;
@@ -16,6 +36,46 @@ function normalizedRange(range: MarketHistoryRange): MarketHistoryRange {
   const startMs = Math.max(0, Math.floor(Math.min(range.startMs, range.endMs)));
   const endMs = Math.max(startMs, Math.ceil(Math.max(range.startMs, range.endMs)));
   return { startMs, endMs };
+}
+
+function unionRanges(ranges: readonly MarketHistoryRange[]): MarketHistoryRange[] {
+  const sorted = ranges.map(normalizedRange)
+    .sort((left, right) => left.startMs - right.startMs || left.endMs - right.endMs);
+  const result: MarketHistoryRange[] = [];
+  for (const range of sorted) {
+    const previous = result.at(-1);
+    if (previous && range.startMs <= previous.endMs + 1) previous.endMs = Math.max(previous.endMs, range.endMs);
+    else result.push(range);
+  }
+  return result;
+}
+
+/** Subtract a whole eviction batch with one ordered sweep. Repeating a full
+ * gap scan for every retained segment becomes quadratic after fragmented LRU
+ * eviction; both inputs are sorted once here and visited monotonically. */
+export function subtractLiquidationHistoryRanges(
+  coverage: readonly MarketHistoryRange[],
+  removed: readonly MarketHistoryRange[],
+): MarketHistoryRange[] {
+  const targets = unionRanges(coverage);
+  const gaps = unionRanges(removed);
+  const retained: MarketHistoryRange[] = [];
+  let gapIndex = 0;
+  for (const target of targets) {
+    let cursor = target.startMs;
+    while (gapIndex < gaps.length && gaps[gapIndex]!.endMs < cursor) gapIndex += 1;
+    let index = gapIndex;
+    for (; index < gaps.length; index += 1) {
+      const gap = gaps[index]!;
+      if (gap.startMs > target.endMs) break;
+      if (gap.startMs > cursor) retained.push({ startMs: cursor, endMs: gap.startMs - 1 });
+      cursor = Math.max(cursor, gap.endMs + 1);
+      if (cursor > target.endMs) break;
+    }
+    gapIndex = index;
+    if (cursor <= target.endMs) retained.push({ startMs: cursor, endMs: target.endMs });
+  }
+  return retained;
 }
 
 /**

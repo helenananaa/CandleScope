@@ -4,9 +4,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
 
+from app.core.executors import run_storage
 from app.alerts.facade import AlertFacade
 from app.alerts.indicator_context import (
     ALERT_INDICATOR_HISTORY_LIMIT,
@@ -52,6 +54,7 @@ class AlertRuntimeEngine:
         self._subscriptions: dict[str, _RuleSubscription] = {}
         self._previous_values: dict[str, dict[str, Any]] = {}
         self._bar_windows: dict[str, list[BarData]] = {}
+        self._indicator_contexts: OrderedDict[tuple[str, str, str, str], tuple[tuple, dict]] = OrderedDict()
         self._rule_diagnostics: dict[str, dict[str, Any]] = {}
         self._events_evaluated = 0
         self._triggers_emitted = 0
@@ -99,12 +102,13 @@ class AlertRuntimeEngine:
             await asyncio.gather(*warmup_tasks, return_exceptions=True)
         for rule_id in list(self._subscriptions):
             await self.remove_rule(rule_id)
+        self._indicator_contexts.clear()
 
     async def sync_rules(self) -> None:
         """Reconcile runtime subscriptions with persisted rules."""
         if self.data_manager is None:
             return
-        rules = self.facade.list_rules()
+        rules = await run_storage(self.facade.list_rules)
         seen = {str(rule.get("id")) for rule in rules if rule.get("id")}
         self._require_recovery_seed.intersection_update(seen)
         for rule in rules:
@@ -123,7 +127,7 @@ class AlertRuntimeEngine:
             return
         if not self._is_rule_active(rule):
             if self._deactivation_reason(rule) in {"expired", "trigger_limit"}:
-                self.facade.set_enabled(rule_id, False)
+                await run_storage(self.facade.set_enabled, rule_id, False)
             await self.remove_rule(rule_id)
             return
 
@@ -272,7 +276,7 @@ class AlertRuntimeEngine:
         rule = self.facade.get_rule(rule_id)
         if not self._is_rule_active(rule):
             if self._deactivation_reason(rule) in {"expired", "trigger_limit"}:
-                self.facade.set_enabled(rule_id, False)
+                await run_storage(self.facade.set_enabled, rule_id, False)
             await self.remove_rule(rule_id)
             return None
 
@@ -282,7 +286,7 @@ class AlertRuntimeEngine:
         closed_window = [
             bar for bar in window if getattr(bar, "is_closed", True)
         ]
-        indicator_values = compute_alert_indicator_values(closed_window)
+        indicator_values = self._indicator_values(rule, closed_window)
 
         if event.event_type == DataEventType.BAR_AMENDED:
             frontier = closed_window[-1] if closed_window else window[-1]
@@ -364,7 +368,7 @@ class AlertRuntimeEngine:
         refreshed = self.facade.get_rule(rule_id)
         if not self._is_rule_active(refreshed):
             if self._deactivation_reason(refreshed) in {"expired", "trigger_limit"}:
-                self.facade.set_enabled(rule_id, False)
+                await run_storage(self.facade.set_enabled, rule_id, False)
             await self.remove_rule(rule_id)
         return emitted
 
@@ -504,7 +508,7 @@ class AlertRuntimeEngine:
                 if getattr(bar, "is_closed", True)
             ][-ALERT_INDICATOR_HISTORY_LIMIT:]
             self._bar_windows[rule_id] = window
-            indicators = compute_alert_indicator_values(window)
+            indicators = self._indicator_values(rule, window)
             if window:
                 self._previous_values[rule_id] = {
                     **self._bar_values(window[-1]),
@@ -514,7 +518,7 @@ class AlertRuntimeEngine:
                     self._seed_frontiers[rule_id] = max(int(bar.time) for bar in window)
         else:
             window = []
-            indicators = compute_alert_indicator_values(window)
+            indicators = self._indicator_values(rule, window)
         self._update_diagnostics(
             rule_id,
             rule,
@@ -625,6 +629,23 @@ class AlertRuntimeEngine:
         expression = rule.get("expression") if isinstance(rule, dict) else None
         return referenced_alert_fields(expression) & _INDICATOR_FIELDS
 
+    def _indicator_values(self, rule: dict[str, Any], bars: list[BarData]) -> dict[str, Any]:
+        if not self._required_indicator_fields(rule):
+            return {"rsi": None, "macdHist": None, "ma20": None}
+        target = self._target(rule)
+        key = (target["exchange"], target["marketType"], target["symbol"], target["interval"])
+        # All supported indicators use close. Include every timestamp/value so
+        # amendments and different warmup windows cannot reuse stale results.
+        fingerprint = tuple((bar.time, bar.close) for bar in bars)
+        cached = self._indicator_contexts.get(key)
+        if cached is None or cached[0] != fingerprint:
+            cached = (fingerprint, compute_alert_indicator_values(bars))
+            self._indicator_contexts[key] = cached
+        self._indicator_contexts.move_to_end(key)
+        while len(self._indicator_contexts) > 256:
+            self._indicator_contexts.popitem(last=False)
+        return dict(cached[1])
+
     @classmethod
     def _required_indicators_ready(
         cls,
@@ -669,7 +690,7 @@ class AlertRuntimeEngine:
 
     def _rule_states(self) -> list[dict[str, Any]]:
         states: list[dict[str, Any]] = []
-        for rule in self.facade.list_rules():
+        for rule in self.facade.store.cached_rules():
             rule_id = str(rule.get("id") or "")
             diagnostics = self._rule_diagnostics.get(rule_id, {})
             subscribed = rule_id in self._subscriptions

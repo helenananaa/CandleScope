@@ -1,3 +1,7 @@
+import { LOCALES as lazyTestLocales, loadLocaleCatalog } from "../registry.js";
+
+test.before(async () => { await Promise.all(lazyTestLocales.map(loadLocaleCatalog)); });
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

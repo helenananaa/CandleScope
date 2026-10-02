@@ -3,9 +3,41 @@ import test from "node:test";
 
 import {
   LiquidationHistoryRequestCoordinator,
+  liquidationHistoryRangeForCandles,
   normalizeLiquidationHistoryRange,
   subtractLiquidationHistoryCoverage,
+  subtractLiquidationHistoryRanges,
 } from "../liquidationHistoryRequests.js";
+
+test("forming hourly candle history reaches now instead of its opening minute", () => {
+  const open = Date.UTC(2026, 9, 2, 10);
+  const now = open + 40 * 60_000;
+  assert.deepEqual(liquidationHistoryRangeForCandles(open / 1000, open / 1000, "1h", now), {
+    startMs: open, endMs: now,
+  });
+});
+
+test("closed last candle and calendar month include the entire final bucket", () => {
+  const open = Date.UTC(2026, 0, 1);
+  const nextMonth = Date.UTC(2026, 1, 1);
+  assert.deepEqual(liquidationHistoryRangeForCandles(open / 1000, open / 1000, "1M", nextMonth + 1), {
+    startMs: open, endMs: nextMonth - 1,
+  });
+  assert.deepEqual(liquidationHistoryRangeForCandles(open / 1000, open / 1000, "1h", nextMonth), {
+    startMs: open, endMs: open + 3_600_000 - 1,
+  });
+  assert.equal(liquidationHistoryRangeForCandles(nextMonth / 1000, nextMonth / 1000, "1h", open), null);
+});
+
+test("bulk coverage eviction handles 5000 fragmented segments and gaps spanning segments", () => {
+  const coverage = Array.from({ length: 5000 }, (_, index) => ({ startMs: index * 10, endMs: index * 10 + 5 }));
+  const removed = Array.from({ length: 5000 }, (_, index) => ({ startMs: index * 10 + 3, endMs: index * 10 + 8 }));
+  assert.deepEqual(subtractLiquidationHistoryRanges(coverage, removed),
+    coverage.map((range) => ({ startMs: range.startMs, endMs: range.startMs + 2 })));
+  assert.deepEqual(subtractLiquidationHistoryRanges(coverage.slice(0, 3), [{ startMs: 3, endMs: 22 }]), [
+    { startMs: 0, endMs: 2 }, { startMs: 23, endMs: 25 },
+  ]);
+});
 
 test("future-only ranges fail closed before any history claim can be created", () => {
   const nowMs = 1_700_000_000_000;

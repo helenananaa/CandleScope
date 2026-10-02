@@ -32,13 +32,38 @@ class BOLLIndicator(Indicator):
         self.warmup_period = self._period
 
         self._window: deque[float] = deque(maxlen=self._period)
-        self._rolling_sum: float = 0.0
-        self._rolling_sq_sum: float = 0.0
+        self._mean = 0.0
+        self._m2 = 0.0
+        self._updates = 0
 
     def _reset_state(self) -> None:
         self._window.clear()
-        self._rolling_sum = 0.0
-        self._rolling_sq_sum = 0.0
+        self._mean = self._m2 = 0.0
+        self._updates = 0
+
+    def _next_moments(self, val: float) -> tuple[float, float]:
+        n = len(self._window)
+        mean, m2 = self._mean, self._m2
+        if n == self._period:
+            old = self._window[0]
+            reduced = mean - (old - mean) / (n - 1)
+            m2 -= (old - mean) * (old - reduced)
+            mean = reduced
+            n -= 1
+        delta = val - mean
+        mean += delta / (n + 1)
+        return mean, m2 + delta * (val - mean)
+
+    def _push(self, val: float) -> None:
+        self._mean, self._m2 = self._next_moments(val)
+        self._window.append(val)
+        self._updates += 1
+        if self._updates % self._period == 0:
+            # Recenter periodically to bound accumulated removal error. The
+            # differences stay small even when absolute prices are large.
+            anchor = self._window[0]
+            self._mean = anchor + math.fsum(value - anchor for value in self._window) / len(self._window)
+            self._m2 = math.fsum((value - self._mean) ** 2 for value in self._window)
 
     def init(self, bars: list[BarData]) -> None:
         self._reset_state()
@@ -46,14 +71,7 @@ class BOLLIndicator(Indicator):
         for bar in bars:
             val = self._get_field(bar, self._source)
 
-            if len(self._window) == self._period:
-                old = self._window[0]
-                self._rolling_sum -= old
-                self._rolling_sq_sum -= old * old
-
-            self._window.append(val)
-            self._rolling_sum += val
-            self._rolling_sq_sum += val * val
+            self._push(val)
 
             if len(self._window) >= self._period:
                 mid, upper, lower = self._compute()
@@ -70,8 +88,8 @@ class BOLLIndicator(Indicator):
 
     def _compute(self) -> tuple[float, float, float]:
         n = self._period
-        mean = self._rolling_sum / n
-        variance = (self._rolling_sq_sum / n) - (mean * mean)
+        mean = self._mean
+        variance = self._m2 / n
         std = math.sqrt(max(variance, 0.0))
         return mean, mean + self._mult * std, mean - self._mult * std
 
@@ -81,13 +99,8 @@ class BOLLIndicator(Indicator):
             return
 
         val = self._get_field(bar, self._source)
-        old_first = self._window[0] if len(self._window) == self._period else 0.0
-        temp_sum = self._rolling_sum - old_first + val
-        temp_sq = self._rolling_sq_sum - old_first * old_first + val * val
-
-        n = self._period
-        mean = temp_sum / n
-        variance = (temp_sq / n) - (mean * mean)
+        mean, m2 = self._next_moments(val)
+        variance = m2 / self._period
         std = math.sqrt(max(variance, 0.0))
 
         self._preview["middle"] = mean
@@ -98,14 +111,7 @@ class BOLLIndicator(Indicator):
         val = self._get_field(bar, self._source)
         self._bar_count += 1
 
-        if len(self._window) == self._period:
-            old = self._window[0]
-            self._rolling_sum -= old
-            self._rolling_sq_sum -= old * old
-
-        self._window.append(val)
-        self._rolling_sum += val
-        self._rolling_sq_sum += val * val
+        self._push(val)
 
         if len(self._window) >= self._period:
             mid, upper, lower = self._compute()

@@ -503,6 +503,8 @@ export const zhCN = {
   "settings.category.about": "关于与支持",
   "settings.language.title": "界面语言",
   "settings.language.description": "选择应用界面语言。图表时区与品种代码不受影响。",
+  "settings.language.loadFailed": "无法加载此语言。请刷新页面后重试。",
+  "settings.language.reload": "刷新页面",
 
   "settings.appearance.themeTitle": "视觉主题",
   "settings.appearance.themeDescription": "选择界面的整体视觉风格，可跟随系统亮/暗色自动切换",

@@ -1,5 +1,6 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { randomUUID } from "node:crypto";
 
 export const DESKTOP_SHELL_STATE_SCHEMA = "candlescope.desktop-shell-state/1";
 export const MAX_DESKTOP_WINDOWS = 4;
@@ -19,6 +20,7 @@ export function emptyShellState() {
     schemaVersion: DESKTOP_SHELL_STATE_SCHEMA,
     workspaceId: null,
     workspaceRevision: -1,
+    shellRevision: -1,
     activeWindowId: "main-window",
     windows: {},
   };
@@ -50,6 +52,10 @@ export function normalizeShellState(value) {
     workspaceRevision: Number.isSafeInteger(value.workspaceRevision)
       ? value.workspaceRevision
       : -1,
+    // Existing v1 projections used the document revision as their CAS token.
+    shellRevision: Number.isSafeInteger(value.shellRevision) && value.shellRevision >= -1
+      ? value.shellRevision
+      : Number.isSafeInteger(value.workspaceRevision) ? value.workspaceRevision : -1,
     activeWindowId,
     windows,
   };
@@ -57,23 +63,24 @@ export function normalizeShellState(value) {
 
 export function compareAndSwapShellState(current, expectedRevision, candidate) {
   const normalizedCurrent = normalizeShellState(current);
-  if (normalizedCurrent.workspaceRevision !== expectedRevision) {
+  if (normalizedCurrent.shellRevision !== expectedRevision) {
     throw new DesktopTopologyRevisionConflictError(
       expectedRevision,
-      normalizedCurrent.workspaceRevision,
+      normalizedCurrent.shellRevision,
     );
   }
   const normalizedCandidate = normalizeShellState(candidate);
   if (Object.keys(normalizedCandidate.windows).length > MAX_DESKTOP_WINDOWS) {
     throw new RangeError(`Desktop topology exceeds ${MAX_DESKTOP_WINDOWS} windows`);
   }
-  return normalizedCandidate;
+  return { ...normalizedCandidate, shellRevision: normalizedCurrent.shellRevision + 1 };
 }
 
 export class DesktopShellStateStore {
   constructor(filePath) {
     this.filePath = filePath;
     this.state = emptyShellState();
+    this.writeQueue = Promise.resolve();
   }
 
   async load() {
@@ -90,12 +97,25 @@ export class DesktopShellStateStore {
     return structuredClone(this.state);
   }
 
-  async compareAndSwap(expectedRevision, candidate) {
+  compareAndSwap(expectedRevision, candidate) {
+    const captured = structuredClone(candidate);
+    const operation = this.writeQueue.then(() => this.commit(expectedRevision, captured));
+    // A rejected write must not prevent the next independent attempt.
+    this.writeQueue = operation.catch(() => {});
+    return operation;
+  }
+
+  async commit(expectedRevision, candidate) {
     const committed = compareAndSwapShellState(this.state, expectedRevision, candidate);
     await mkdir(dirname(this.filePath), { recursive: true });
-    const temporary = `${this.filePath}.${process.pid}.tmp`;
-    await writeFile(temporary, `${JSON.stringify(committed, null, 2)}\n`, "utf8");
-    await rename(temporary, this.filePath);
+    const temporary = `${this.filePath}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(temporary, `${JSON.stringify(committed, null, 2)}\n`, "utf8");
+      await rename(temporary, this.filePath);
+    } catch (error) {
+      await unlink(temporary).catch(() => {});
+      throw error;
+    }
     this.state = committed;
     return this.snapshot();
   }

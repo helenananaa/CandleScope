@@ -41,7 +41,7 @@ test("reconcile uses the latest acknowledged shell revision after bootstrap", as
     multiWindowEnabled: true,
     windowId: "main-window",
     workspaceId: "workspace-default",
-    shellRevision: -1,
+    shellRevision: 40,
     displayCount: 1,
     logsPath: null,
     sidecar: null,
@@ -50,7 +50,8 @@ test("reconcile uses the latest acknowledged shell revision after bootstrap", as
     getBootstrap: async () => bootstrap,
     reconcileWorkspace: async (payload: DesktopTopologyPayload) => {
       expectedRevisions.push(payload.expectedShellRevision);
-      return { ok: true, shellRevision: payload.workspaceRevision };
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      return { ok: true, shellRevision: payload.expectedShellRevision + 1 };
     },
   } as NonNullable<Window["candlescopeDesktop"]>;
   Object.defineProperty(globalRef, "window", {
@@ -62,9 +63,12 @@ test("reconcile uses the latest acknowledged shell revision after bootstrap", as
     const manager = new DesktopWindowManager();
     const first = createDefaultChartWorkspace();
     const second = { ...first, revision: first.revision + 1 };
-    await manager.reconcileWorkspace("workspace-default", first);
-    await manager.reconcileWorkspace("workspace-default", second);
-    assert.deepEqual(expectedRevisions, [-1, first.revision]);
+    await Promise.all([
+      manager.reconcileWorkspace("workspace-default", first),
+      manager.reconcileWorkspace("workspace-new", second),
+    ]);
+    assert.deepEqual(expectedRevisions, [40, 41]);
+    assert.equal(manager.cachedBootstrap.shellRevision, 42);
   } finally {
     if (originalWindow === undefined) delete globalRef.window;
     else Object.defineProperty(globalRef, "window", { configurable: true, value: originalWindow });

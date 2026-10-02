@@ -241,6 +241,8 @@ export const uk = {
   "settings.category.about": "Про програму",
   "settings.language.title": "Мова інтерфейсу",
   "settings.language.description": "Виберіть мову програми. Часовий пояс графіка та коди інструментів не змінюються.",
+  "settings.language.loadFailed": "Не вдалося завантажити цю мову. Оновіть сторінку й спробуйте ще раз.",
+  "settings.language.reload": "Оновити сторінку",
   "settings.appearance.themeTitle": "Тема оформлення",
   "settings.appearance.themeDescription": "Виберіть загальний стиль інтерфейсу або дотримуйтеся системної світлої/темної теми",
   "settings.appearance.theme.dark": "Темна",

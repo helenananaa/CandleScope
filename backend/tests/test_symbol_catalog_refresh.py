@@ -782,15 +782,19 @@ def test_catalog_shutdown_cancels_shielded_physical_refresh(monkeypatch) -> None
     asyncio.run(run())
 
 
-def test_startup_initializes_data_manager_before_catalog_schedule(monkeypatch) -> None:
+def test_startup_initializes_data_manager_before_catalog_schedule(monkeypatch, tmp_path) -> None:
     from starlette.datastructures import State
 
     from app import main as main_module
+    from app.core import config
     from app.plugin_core_v2 import DisabledCorePluginPlatform
 
     # Startup writes app.state directly. Keep its test owners out of later
     # tests and avoid starting the user's installed sidecars for an order check.
     monkeypatch.setattr(main_module.app, "state", State())
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "runtime-data")
+    monkeypatch.setattr(main_module, "KLINES_DB_PATH", tmp_path / "candlescope.db")
+    monkeypatch.setattr(main_module, "RUNTIME_MODE", "LIVE")
     monkeypatch.setattr(main_module, "BACKTEST_SETTINGS", SimpleNamespace(enabled=False))
     monkeypatch.setattr(main_module, "RESEARCH_DATA_LIBRARY_ENABLED", False)
     monkeypatch.setattr(symbols_api, "initialize_exchange_metadata_cache", lambda: {})
@@ -802,6 +806,9 @@ def test_startup_initializes_data_manager_before_catalog_schedule(monkeypatch) -
 
     class _LagMonitor:
         def start(self) -> None:
+            pass
+
+        async def stop(self) -> None:
             pass
 
     async def init_data_manager() -> None:
@@ -835,5 +842,14 @@ def test_startup_initializes_data_manager_before_catalog_schedule(monkeypatch) -
     monkeypatch.setattr(main_module, "_init_data_manager", init_data_manager)
     monkeypatch.setattr(main_module, "_schedule_symbol_catalog_refresh", schedule_catalog)
 
-    asyncio.run(main_module.startup_event())
-    assert events == ["data-manager", "catalog"]
+    async def run() -> None:
+        await main_module.startup_event()
+        try:
+            assert events == ["data-manager", "catalog"]
+            assert main_module.app.state.data_preparation_service.repository.path == (
+                tmp_path / "runtime-data" / "data-preparation.sqlite3"
+            )
+        finally:
+            await main_module.shutdown_event()
+
+    asyncio.run(run())

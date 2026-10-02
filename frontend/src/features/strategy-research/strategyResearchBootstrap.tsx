@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import AppProviders, { ChartErrorBoundary } from "../../app/AppProviders.js";
 import { MarketDataWorkspaceProvider } from "../market-data/MarketDataWorkspaceProvider.js";
 import { RESEARCH_DATA_LIBRARY_ENABLED } from "../research-data/researchDataFlags.js";
-import { bindDocumentLocale, hydrateLocale } from "../../i18n/index.js";
+import { bindDocumentLocale, initializeLocale } from "../../i18n/index.js";
 import { readPersistedLocale } from "../settings/chartAppearanceSettings.js";
 import "./strategyResearch.css";
 import "../backtest/research/backtestResearch.css";
@@ -66,12 +66,12 @@ export function renderStrategyResearchBootstrap(input: {
   );
 }
 
-export function mountStrategyResearchPage(input: {
+export async function mountStrategyResearchPage(input: {
   page: StrategyResearchPage;
   researchEnabled?: boolean;
   legacyEnabled?: boolean;
-}): void {
-  hydrateLocale(readPersistedLocale());
+}): Promise<void> {
+  await initializeLocale(readPersistedLocale());
   bindDocumentLocale(strategyResearchDocumentKeys(input.page));
   const root = document.getElementById("root");
   if (!(root instanceof HTMLElement)) {

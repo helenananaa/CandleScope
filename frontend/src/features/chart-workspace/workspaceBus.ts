@@ -230,8 +230,17 @@ export class WorkspaceBusClient {
       for (const listener of [...this.linkListeners]) listener(message.event);
       return;
     }
-    if ((messageType === "snapshot" || messageType === "health") && isState(message)) {
-      this.applyState(message, messageType === "snapshot");
+    if (messageType === "health"
+      && Number.isSafeInteger(message.sequence)
+      && (message.sequence as number) >= this.state.sequence
+      && (message.writerWindowId === null || typeof message.writerWindowId === "string")) {
+      // Health changes ownership only; the persistent snapshot remains the
+      // last snapshot message, without another full-document clone.
+      this.state = { ...this.state, writerWindowId: message.writerWindowId };
+      return;
+    }
+    if (messageType === "snapshot" && isState(message)) {
+      this.applyState(message, true);
     }
   }
 

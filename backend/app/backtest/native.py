@@ -114,11 +114,19 @@ class NativeBacktests:
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, key TEXT UNIQUE, hash TEXT NOT NULL, record TEXT NOT NULL)")
         self.db.execute("CREATE TABLE IF NOT EXISTS native_inputs (id TEXT PRIMARY KEY, wire TEXT NOT NULL)")
-        for run_id, raw in self.db.execute("SELECT id,record FROM runs").fetchall():
+        self.db.execute("CREATE TABLE IF NOT EXISTS native_run_summaries (id TEXT PRIMARY KEY, record TEXT NOT NULL)")
+        # Upgrade old records once. Subsequent list/startup reads never decode
+        # completed reports merely to display their metadata.
+        for run_id, raw in self.db.execute("SELECT id,record FROM runs WHERE id NOT IN (SELECT id FROM native_run_summaries)"):
+            record = json.loads(raw)
+            self._save_summary(record)
+        for run_id, raw in self.db.execute("SELECT id,record FROM native_run_summaries").fetchall():
             record = json.loads(raw)
             if record["state"] not in TERMINAL:
+                record = self.get(run_id)
                 record.update(state="INTERRUPTED", error={"code": "HOST_RESTARTED", "message": "host stopped before native completion; rerun explicitly"})
                 self.db.execute("UPDATE runs SET record=? WHERE id=?", (encoded(record), run_id))
+                self._save_summary(record)
         self.db.commit()
         from .native_replay import NativeReplay
         self.replay = NativeReplay(self)
@@ -253,6 +261,7 @@ class NativeBacktests:
                       "row_count": len(bars), "result": None, "error": None}
             self.db.execute("INSERT INTO runs VALUES (?,?,?,?)", (run_id, key, fingerprint, encoded(record)))
             self.db.execute("INSERT INTO native_inputs VALUES (?,?)", (run_id, encoded(wire)))
+            self._save_summary(record)
             self.db.commit()
             cancel = threading.Event()
             self.cancel_events[run_id] = cancel
@@ -268,13 +277,18 @@ class NativeBacktests:
 
     def list(self):
         with self.lock:
-            records = [json.loads(row[0]) for row in self.db.execute("SELECT record FROM runs ORDER BY rowid DESC LIMIT 100")]
-            return [{key: value for key, value in record.items() if key not in {"result", "config"}} for record in records]
+            return [json.loads(row[0]) for row in self.db.execute(
+                "SELECT s.record FROM native_run_summaries s JOIN runs r ON r.id=s.id ORDER BY r.rowid DESC LIMIT 100")]
+
+    def _save_summary(self, record):
+        summary = {key: value for key, value in record.items() if key not in {"result", "config"}}
+        self.db.execute("INSERT OR REPLACE INTO native_run_summaries VALUES (?,?)", (record["run_id"], encoded(summary)))
 
     def _update(self, run_id, **values):
         record = self.get(run_id)
         record.update(values)
         self.db.execute("UPDATE runs SET record=? WHERE id=?", (encoded(record), run_id))
+        self._save_summary(record)
         self.db.commit()
 
     def _execute(self, run_id, plugin, wire, cancel):

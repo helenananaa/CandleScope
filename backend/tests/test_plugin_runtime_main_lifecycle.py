@@ -136,11 +136,24 @@ def _patch_startup_dependencies(
     platform_root: Path,
     routing: _RoutingService | None = None,
 ) -> _RoutingService:
+    from starlette.datastructures import State
+    from app.core import config
     import app.plugin_runtime as plugin_runtime_module
     import app.first_party_plugin_bootstrap as first_party_bootstrap_module
     import app.indicator.runtime_service as runtime_service_module
 
     routing = routing or _RoutingService()
+
+    # Each startup owns a preparation journal and its lock. Never attach these
+    # test owners to the application's persistent data or a preceding test.
+    data_root = platform_root.parent / "runtime-data"
+    monkeypatch.setattr(main_module.app, "state", State())
+    monkeypatch.setattr(config, "DATA_DIR", data_root)
+    monkeypatch.setattr(main_module, "KLINES_DB_PATH", data_root / "candlescope.db")
+    monkeypatch.setattr(main_module, "LOCAL_DATA_DIR", data_root / "local-data")
+    monkeypatch.setattr(main_module, "RUNTIME_MODE", "LIVE")
+    monkeypatch.setattr(main_module, "BACKTEST_SETTINGS", SimpleNamespace(enabled=False))
+    monkeypatch.setattr(main_module, "RESEARCH_DATA_LIBRARY_ENABLED", False)
 
     for name in (
         "CANDLESCOPE_PLUGIN_PLATFORM_V2_ENABLED",
@@ -196,6 +209,7 @@ def _patch_startup_dependencies(
 
     import app.exchanges.symbol_catalog as symbols_module
 
+    monkeypatch.setattr(symbols_module, "initialize_exchange_metadata_cache", lambda: {})
     monkeypatch.setattr(symbols_module, "refresh_exchange_metadata", _refresh)
     return routing
 
@@ -210,6 +224,9 @@ async def test_application_lifecycle_owns_plugin_host_and_health_summary(
 
     await main_module.startup_event()
     try:
+        assert main_module.app.state.data_preparation_service.repository.path == (
+            tmp_path / "runtime-data" / "data-preparation.sqlite3"
+        )
         assert host.start_calls == 1
         assert routing.start_calls == 1
         assert callable(routing.catalog_projector)

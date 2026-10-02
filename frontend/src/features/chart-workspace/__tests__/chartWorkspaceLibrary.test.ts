@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { loadLocaleCatalog } from "../../../i18n/index.js";
 
 import {
   chartCellStorageScope,
@@ -118,7 +119,8 @@ test("built-in workspace names follow locale without rewriting persisted user da
   assert.equal(chartWorkspaceDisplayName(second, "zh-CN"), "左右双图工作区 2");
 });
 
-test("zh-TW built-in workspace names follow locale without rewriting custom names", () => {
+test("zh-TW built-in workspace names follow locale without rewriting custom names", async () => {
+  await loadLocaleCatalog("zh-TW");
   const defaultWorkspace = createDefaultChartWorkspaceRecord(100, "zh-TW");
   assert.equal(defaultWorkspace.name, "預設工作區");
   assert.deepEqual(defaultWorkspace.builtinName, { kind: "default" });

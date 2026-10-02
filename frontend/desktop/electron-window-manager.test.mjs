@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import test from "node:test";
 
 import { ElectronWindowManager } from "./electron-window-manager.mjs";
-import { emptyShellState, normalizeShellState } from "./shell-state-store.mjs";
+import { compareAndSwapShellState, emptyShellState, normalizeShellState } from "./shell-state-store.mjs";
 
 const display = {
   id: 1,
@@ -67,8 +67,7 @@ class MemoryStore {
   constructor(state) { this.state = normalizeShellState(state); }
   snapshot() { return structuredClone(this.state); }
   async compareAndSwap(expected, candidate) {
-    assert.equal(this.state.workspaceRevision, expected);
-    this.state = normalizeShellState(candidate);
+    this.state = compareAndSwapShellState(this.state, expected, candidate);
     return this.snapshot();
   }
 }
@@ -190,4 +189,31 @@ test("first topology commit advances from the empty shell revision", async () =>
   const candidate = topology(0, ["main-window"]);
   const result = await manager.reconcile({ ...candidate, expectedShellRevision: -1 });
   assert.deepEqual(result, { shellRevision: 0, idempotent: false });
+});
+
+test("workspace switches compare independent shell versions and retain document versions", async () => {
+  const current = topology(50, ["main-window", "window-2"]);
+  const store = new MemoryStore(current);
+  const manager = createManager(store);
+  await manager.restoreCached(current);
+  const next = { ...topology(0, ["main-window"]), workspaceId: "workspace-new" };
+  assert.deepEqual(await manager.reconcile({ ...next, expectedShellRevision: 50 }), {
+    shellRevision: 51, idempotent: false,
+  });
+  assert.equal(store.snapshot().workspaceRevision, 0);
+  assert.deepEqual(manager.diagnostics().windowIds, ["main-window"]);
+  assert.deepEqual(await manager.reconcile({ ...current, expectedShellRevision: 51 }), {
+    shellRevision: 52, idempotent: false,
+  });
+  assert.equal(store.snapshot().workspaceRevision, 50);
+  await assert.rejects(manager.reconcile({ ...next, expectedShellRevision: 50 }), /revision conflict/);
+});
+
+test("equal document versions in different workspaces are valid and same-workspace regressions fail", async () => {
+  const store = new MemoryStore(topology(4, ["main-window"]));
+  const manager = createManager(store);
+  const next = { ...topology(4, ["main-window"]), workspaceId: "workspace-other" };
+  assert.equal((await manager.reconcile({ ...next, expectedShellRevision: 4 })).shellRevision, 5);
+  assert.equal((await manager.reconcile({ ...next, expectedShellRevision: 5 })).idempotent, true);
+  await assert.rejects(manager.reconcile({ ...next, workspaceRevision: 3, expectedShellRevision: 5 }), /revision conflict/);
 });

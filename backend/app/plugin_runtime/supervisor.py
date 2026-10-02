@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import os
 import time
+import io
 from collections import deque
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
@@ -33,6 +34,8 @@ from candlescope_plugin_sdk.constants import (
 )
 
 from app.plugin_host.framing import JsonLineError, compact_json_bytes, strict_json_loads
+from app.core.executors import run_indicator
+from app.core.bounded_executor import ExecutorBusyError
 from app.plugin_host.process import (
     SidecarProcessSpec,
     launch_sidecar_process,
@@ -60,6 +63,50 @@ _T = TypeVar("_T")
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _encode_request(request: dict[str, Any], *, max_message_bytes: int) -> bytes:
+    """Keep exact JSONL bytes while bounding native JSON encoder GIL holds.
+
+    A large bars array is encoded in 1024-row chunks in the CPU worker. Other
+    fields retain the shared strict encoder, including its finite-value checks.
+    """
+    params = request.get("params")
+    bars = params.get("bars") if isinstance(params, dict) else None
+    if request.get("method") != METHOD_EXECUTE_BATCH or not isinstance(bars, list) or len(bars) <= 1024:
+        return compact_json_bytes(request, max_message_bytes=max_message_bytes)
+    buffer = io.BytesIO()
+    def write(raw: bytes) -> None:
+        if buffer.tell() + len(raw) > max_message_bytes:
+            raise JsonLineError("MESSAGE_TOO_LARGE", "control message exceeds the configured byte limit")
+        buffer.write(raw)
+    def encode(value) -> bytes:
+        return compact_json_bytes(value, max_message_bytes=max_message_bytes)
+    write(b"{")
+    for index, (key, value) in enumerate(request.items()):
+        if index:
+            write(b",")
+        write(encode(key) + b":")
+        if key != "params":
+            write(encode(value))
+            continue
+        write(b"{")
+        for param_index, (name, item) in enumerate(params.items()):
+            if param_index:
+                write(b",")
+            write(encode(name) + b":")
+            if name != "bars":
+                write(encode(item))
+                continue
+            write(b"[")
+            for offset in range(0, len(bars), 1024):
+                if offset:
+                    write(b",")
+                write(encode(bars[offset:offset + 1024])[1:-1])
+            write(b"]")
+        write(b"}")
+    write(b"}")
+    return buffer.getvalue()
 
 
 class RuntimeSupervisor:
@@ -139,9 +186,10 @@ class RuntimeSupervisor:
                 message="execute_batch requires an ExecuteBatchRequest value",
                 runtime_id=self.runtime_id,
             )
+        params = await run_indicator(request.to_wire)
         return await self._call(
             METHOD_EXECUTE_BATCH,
-            request.to_wire(),
+            params,
             ExecuteBatchResult.from_wire,
             required_feature="batch-execution/1",
         )
@@ -240,6 +288,15 @@ class RuntimeSupervisor:
         except PluginHostError as exc:
             await self._mark_failed_locked(exc, generation)
             raise
+        except ExecutorBusyError as exc:
+            error = PluginRequestError(
+                code=exc.code,
+                message="runtime startup codec capacity is busy; retry later",
+                runtime_id=self.runtime_id,
+                details={"retryable": True},
+            )
+            await self._mark_failed_locked(error, generation)
+            raise error from exc
         except (OSError, ValueError) as exc:
             error = PluginTransportError(
                 code="PLUGIN_START_FAILED",
@@ -398,7 +455,7 @@ class RuntimeSupervisor:
                 raise
 
             try:
-                return parser(raw)
+                return await run_indicator(parser, raw)
             except ProtocolError as exc:
                 error = PluginTransportError(
                     code="PLUGIN_RESULT_INVALID",
@@ -435,7 +492,7 @@ class RuntimeSupervisor:
             "params": params,
         }
         try:
-            encoded = compact_json_bytes(
+            encoded = await run_indicator(_encode_request,
                 request,
                 max_message_bytes=self.spec.max_message_bytes,
             )
@@ -500,7 +557,7 @@ class RuntimeSupervisor:
                 details={"maxMessageBytes": self.spec.max_message_bytes},
             )
         try:
-            response = strict_json_loads(
+            response = await run_indicator(strict_json_loads,
                 message,
                 max_message_bytes=self.spec.max_message_bytes,
             )

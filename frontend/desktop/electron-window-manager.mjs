@@ -16,6 +16,7 @@ export class ElectronWindowManager {
     this.closingApproved = new Set();
     this.boundTimers = new Map();
     this.quitting = false;
+    this.reconcileQueue = Promise.resolve();
   }
 
   diagnostics() {
@@ -211,7 +212,14 @@ export class ElectronWindowManager {
     }
   }
 
-  async reconcile(payload) {
+  reconcile(payload) {
+    const captured = structuredClone(payload);
+    const operation = this.reconcileQueue.then(() => this.reconcileNow(captured));
+    this.reconcileQueue = operation.catch(() => {});
+    return operation;
+  }
+
+  async reconcileNow(payload) {
     const current = this.options.store.snapshot();
     const projectedWindows = this.options.multiWindowEnabled
       ? payload.windows
@@ -220,33 +228,36 @@ export class ElectronWindowManager {
       schemaVersion: current.schemaVersion,
       workspaceId: payload.workspaceId,
       workspaceRevision: payload.workspaceRevision,
+      shellRevision: current.shellRevision,
       activeWindowId: projectedWindows[payload.activeWindowId]
         ? payload.activeWindowId
         : "main-window",
       windows: projectedWindows,
     };
-    if (current.workspaceRevision === candidate.workspaceRevision) {
+    if (current.workspaceId === candidate.workspaceId
+      && current.workspaceRevision === candidate.workspaceRevision) {
       if (!sameJson(current, candidate)) {
         throw new DesktopTopologyRevisionConflictError(
           payload.expectedShellRevision,
-          current.workspaceRevision,
+          current.shellRevision,
         );
       }
-      return { shellRevision: current.workspaceRevision, idempotent: true };
+      return { shellRevision: current.shellRevision, idempotent: true };
     }
-    if (payload.expectedShellRevision !== current.workspaceRevision) {
+    if (payload.expectedShellRevision !== current.shellRevision) {
       throw new DesktopTopologyRevisionConflictError(
         payload.expectedShellRevision,
-        current.workspaceRevision,
+        current.shellRevision,
       );
     }
-    if (candidate.workspaceRevision < current.workspaceRevision) {
+    if (candidate.workspaceId === current.workspaceId
+      && candidate.workspaceRevision < current.workspaceRevision) {
       throw new DesktopTopologyRevisionConflictError(
         candidate.workspaceRevision,
         current.workspaceRevision,
       );
     }
-    await this.options.store.compareAndSwap(current.workspaceRevision, candidate);
+    const committed = await this.options.store.compareAndSwap(current.shellRevision, candidate);
     for (const saved of Object.values(projectedWindows)) {
       await this.createWindow(payload.workspaceId, saved);
     }
@@ -255,7 +266,7 @@ export class ElectronWindowManager {
       this.closingApproved.add(windowId);
       window.close();
     }
-    return { shellRevision: candidate.workspaceRevision, idempotent: false };
+    return { shellRevision: committed.shellRevision, idempotent: false };
   }
 
   recoverOffscreenWindows() {

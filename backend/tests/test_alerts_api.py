@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+import threading
 from pathlib import Path
 
+import httpx
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -293,3 +297,33 @@ def test_alert_manual_trigger_endpoint_is_disabled_by_default(tmp_path: Path) ->
 
     assert response.status_code == 404
     assert client.get(f"/api/v1/alerts/history?rule_id={rule['id']}").json() == []
+
+
+@pytest.mark.anyio
+async def test_slow_api_write_allows_other_requests_and_drains_after_cancellation(tmp_path, monkeypatch):
+    app = FastAPI()
+    app.include_router(alerts_router, prefix="/api/v1")
+    facade = app.state.alert_facade = AlertFacade(store_path=tmp_path / "alerts.json")
+    entered, resume = threading.Event(), threading.Event()
+    original = facade.save_rule
+    def slow_save(payload):
+        entered.set()
+        assert resume.wait(3)
+        return original(payload)
+    monkeypatch.setattr(facade, "save_rule", slow_save)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        pending = asyncio.create_task(client.post("/api/v1/alerts/rules", json=_rule_payload()))
+        try:
+            assert await asyncio.to_thread(entered.wait, 3)
+            response = await asyncio.wait_for(client.post("/api/v1/alerts/evaluate", json={
+                "expression": _rule_payload()["expression"], "context": {"values": {"close": 100001}},
+            }), timeout=1)
+            assert response.status_code == 200
+            pending.cancel()
+            await asyncio.sleep(0)
+            assert not pending.done()
+        finally:
+            resume.set()
+        with pytest.raises(asyncio.CancelledError):
+            await pending
+    assert len(facade.list_rules()) == 1
