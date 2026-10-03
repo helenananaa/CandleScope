@@ -413,8 +413,10 @@ test("Russian layout CSS keeps long chrome wrapping and a Cyrillic-capable font 
     new URL("../../features/settings/SettingsModalStyles.tsx", import.meta.url),
     "utf8",
   );
-  assert.match(css, /Segoe UI/);
-  assert.match(css, /Noto Sans/);
+  const tokens = fs.readFileSync(new URL("../../styles/tokens.css", import.meta.url), "utf8");
+  assert.match(tokens, /--font-sans:[^;]*Segoe UI/);
+  assert.match(tokens, /--font-sans:[^;]*Noto Sans/);
+  assert.match(css, /@import "\.\/styles\/tokens\.css";/);
   assert.match(css, /html\[lang="ru"\] \.market-rail-accordion-trigger strong/);
   const main = fs.readFileSync(new URL("../../main.tsx", import.meta.url), "utf8");
   assert.match(main, /@fontsource\/inter\/cyrillic-400\.css/);

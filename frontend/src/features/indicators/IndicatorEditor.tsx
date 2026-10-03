@@ -453,7 +453,7 @@ export default function IndicatorEditor({
               : editorProfile?.pineEnhancements
                 ? <>{t("indicator.editor.hintPine")} <code>ta.</code> <code>timeframe.</code> {t("indicator.editor.hintComplete")} </>
               : <>{t("indicator.editor.hintPlugin")} </>}
-            <kbd style={{ background: 'var(--bg-tertiary)', padding: '1px 5px', borderRadius: '3px', fontSize: '10px', border: '1px solid var(--border-color)' }}>Ctrl+Enter</kbd> {t("indicator.editor.runKbd")}
+            <kbd style={{ background: 'var(--bg-tertiary)', padding: '1px 5px', borderRadius: '3px', fontSize: 'var(--font-size-2xs)', border: '1px solid var(--border-color)' }}>Ctrl+Enter</kbd> {t("indicator.editor.runKbd")}
           </span>
         </div>
         {!readOnly && allowedRuntimeCatalog && !languageReady && (
@@ -462,12 +462,12 @@ export default function IndicatorEditor({
           </div>
         )}
         {runtimeCatalogError && (
-          <div style={{ marginBottom: '8px', color: 'var(--candle-down)', fontSize: '12px' }}>
+          <div style={{ marginBottom: '8px', color: 'var(--text-danger)', fontSize: '12px' }}>
             {t("indicator.editor.runtimeMissing", { error: runtimeCatalogError })}
           </div>
         )}
         {editorProfile?.pyneEnhancements && securityMode === "unsafe" && (
-          <div style={{ marginBottom: '8px', padding: '8px 10px', border: '1px solid rgba(239, 68, 68, 0.35)', borderRadius: '6px', color: 'var(--candle-down)', background: 'rgba(239, 68, 68, 0.08)', fontSize: '12px' }}>
+          <div style={{ marginBottom: '8px', padding: '8px 10px', border: '1px solid rgba(239, 68, 68, 0.35)', borderRadius: '6px', color: 'var(--text-danger)', background: 'rgba(239, 68, 68, 0.08)', fontSize: '12px' }}>
             {t("indicator.editor.unsafeHint")}
           </div>
         )}
@@ -506,7 +506,7 @@ export default function IndicatorEditor({
         {readOnly ? (
           <span style={{ color: 'var(--text-muted)' }}>{t("indicator.editor.builtinHint")}</span>
         ) : !languageReady ? (
-          <span style={{ color: 'var(--candle-down)' }}>
+          <span style={{ color: 'var(--text-danger)' }}>
             {runtimeCatalogError
               ? t("indicator.editor.noRuntime")
               : allowedRuntimeCatalog && requestedLanguageId
@@ -516,11 +516,11 @@ export default function IndicatorEditor({
                   : t("indicator.editor.discovering")}
           </span>
         ) : previewState?.error ? (
-          <span style={{ color: 'var(--candle-down)', whiteSpace: 'pre-wrap' }}>❌ {previewState.error}</span>
+          <span style={{ color: 'var(--text-danger)', whiteSpace: 'pre-wrap' }}>❌ {previewState.error}</span>
         ) : previewState?.isComputing ? (
           <span style={{ color: 'var(--accent-blue)' }}>{t("indicator.editor.computingData")}</span>
         ) : previewState?.id ? (
-          <span style={{ color: 'var(--candle-up)' }}>{t("indicator.editor.runOk")}</span>
+          <span style={{ color: 'var(--text-success)' }}>{t("indicator.editor.runOk")}</span>
         ) : (
           <span style={{ color: 'var(--text-muted)' }}>
             {editorProfile?.pyneEnhancements

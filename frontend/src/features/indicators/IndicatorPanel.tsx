@@ -212,7 +212,7 @@ function IndicatorBadge({ children, tone = "neutral" }: IndicatorBadgeProps) {
   };
   return (
     <span style={{
-      fontSize: 9,
+      fontSize: "var(--font-size-2xs)",
       marginLeft: 6,
       padding: "1px 5px",
       borderRadius: 3,

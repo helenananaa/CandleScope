@@ -277,7 +277,7 @@
 .local-interval-buttons { display: flex; gap: 4px; flex-wrap: wrap; }
 .local-interval-buttons button { padding: 6px 9px; border: 1px solid var(--border-color); border-radius: 5px; color: var(--text-primary); background: var(--bg-secondary); font: 12px var(--font-sans); }
 .local-interval-buttons button.active { color: var(--strategy-link); border-color: var(--strategy-link); }
-.local-interval-buttons small { margin-left: 4px; color: var(--text-secondary); font-size: 10px; }
+.local-interval-buttons small { margin-left: 4px; color: var(--text-secondary); font-size: var(--font-size-xs); }
 .local-custom-interval label { font-size: 12px; color: var(--text-secondary); }
 .local-custom-interval input { padding: 6px; margin-inline: 8px; border: 1px solid var(--border-color); border-radius: 5px; background: var(--bg-primary); color: var(--text-primary); }
 .local-interval-feedback { font-size: 12px; color: var(--text-secondary); }

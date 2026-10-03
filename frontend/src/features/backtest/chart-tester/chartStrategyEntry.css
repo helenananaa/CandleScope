@@ -2,22 +2,16 @@
 /* Semantic foregrounds stay legible on the selected theme's surfaces. */
 :root {
   --strategy-link: #93c5fd;
-  --strategy-accent: #67e8f9;
-  --strategy-success: #86efac;
-  --strategy-positive: #86efac;
-  --strategy-error: #fda4af;
-  --strategy-negative: #fda4af;
-  --strategy-warning: #fcd34d;
+  --strategy-accent: var(--text-info);
+  --strategy-success: var(--text-success);
+  --strategy-positive: var(--text-success);
+  --strategy-error: var(--text-danger);
+  --strategy-negative: var(--text-danger);
+  --strategy-warning: var(--text-warning);
 }
 
 [data-theme='light'] {
-  --strategy-link: #1d4ed8;
-  --strategy-accent: #0e7490;
-  --strategy-success: #15803d;
-  --strategy-positive: #15803d;
-  --strategy-error: #b91c1c;
-  --strategy-negative: #be123c;
-  --strategy-warning: #92400e;
+  --strategy-link: var(--text-accent);
 }
 
 .chart-strategy-entry-button {

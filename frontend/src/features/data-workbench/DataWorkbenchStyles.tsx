@@ -1,13 +1,13 @@
 export default function DataWorkbenchStyles() {
   return <style>{`
 .dw-overlay {
-  --dw-ink: var(--text-primary, #e2e8f0);
+  --dw-ink: var(--text-primary);
   --dw-label: #cbd5e1;
   --dw-subtle: #94a3b8;
-  --dw-card-bg: var(--bg-tertiary, #1a2332);
-  --dw-card-border: color-mix(in srgb, var(--border-color, #334155) 72%, #94a3b8);
-  --dw-inset-bg: color-mix(in srgb, var(--bg-primary, #0a0e17) 62%, var(--bg-tertiary, #1a2332));
-  --dw-chip-bg: color-mix(in srgb, var(--accent-blue, #3b82f6) 20%, transparent);
+  --dw-card-bg: var(--bg-tertiary);
+  --dw-card-border: color-mix(in srgb, var(--border-color) 72%, #94a3b8);
+  --dw-inset-bg: color-mix(in srgb, var(--bg-primary) 62%, var(--bg-tertiary));
+  --dw-chip-bg: color-mix(in srgb, var(--accent-blue) 20%, transparent);
   --dw-chip-fg: #bfdbfe;
   --dw-ok: #34d399;
   --dw-ok-bg: rgba(52, 211, 153, 0.16);
@@ -18,8 +18,8 @@ export default function DataWorkbenchStyles() {
   --dw-info: #93c5fd;
   --dw-info-bg: rgba(59, 130, 246, 0.16);
   --dw-accent: #93c5fd;
-  --dw-filter-bg: color-mix(in srgb, var(--accent-blue, #3b82f6) 12%, var(--bg-tertiary, #1a2332));
-  --dw-hover: color-mix(in srgb, var(--accent-blue, #3b82f6) 8%, transparent);
+  --dw-filter-bg: color-mix(in srgb, var(--accent-blue) 12%, var(--bg-tertiary));
+  --dw-hover: color-mix(in srgb, var(--accent-blue) 8%, transparent);
   --dw-overlay-bg: rgba(2, 6, 23, 0.72);
   --dw-scroll: color-mix(in srgb, var(--dw-ink) 22%, transparent);
   position: fixed;
@@ -52,7 +52,7 @@ export default function DataWorkbenchStyles() {
   --dw-info-bg: #eff6ff;
   --dw-accent: #1d4ed8;
   --dw-filter-bg: #eff6ff;
-  --dw-hover: color-mix(in srgb, var(--accent-blue, #3b82f6) 6%, #ffffff);
+  --dw-hover: color-mix(in srgb, var(--accent-blue) 6%, #ffffff);
   --dw-overlay-bg: rgba(15, 23, 42, 0.45);
   --dw-scroll: color-mix(in srgb, var(--dw-ink) 18%, transparent);
 }
@@ -65,7 +65,7 @@ export default function DataWorkbenchStyles() {
   overflow: hidden;
   border: 1px solid var(--dw-card-border);
   border-radius: 16px;
-  background: var(--bg-secondary, #1e293b);
+  background: var(--bg-secondary);
   color: var(--dw-ink);
   box-shadow: 0 28px 72px rgba(15, 23, 42, 0.42);
 }
@@ -124,7 +124,7 @@ export default function DataWorkbenchStyles() {
 .dw-instrument-head:focus-visible,
 .dw-filter-grid input:focus-visible,
 .dw-filter-grid select:focus-visible {
-  outline: 2px solid var(--accent-blue, #3b82f6);
+  outline: 2px solid var(--accent-blue);
   outline-offset: 2px;
 }
 
@@ -152,7 +152,7 @@ export default function DataWorkbenchStyles() {
 
 .dw-filter-card {
   padding: 14px 16px;
-  border-color: color-mix(in srgb, var(--accent-blue, #3b82f6) 42%, var(--dw-card-border));
+  border-color: color-mix(in srgb, var(--accent-blue) 42%, var(--dw-card-border));
   background: var(--dw-filter-bg);
 }
 
@@ -248,8 +248,8 @@ export default function DataWorkbenchStyles() {
 }
 
 .dw-section.expanded > .dw-fold-head .dw-fold-disclosure {
-  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 18%, transparent);
-  color: var(--accent-blue, #3b82f6);
+  background: color-mix(in srgb, var(--accent-blue) 18%, transparent);
+  color: var(--text-accent);
 }
 
 .dw-section.expanded > .dw-fold-head .dw-fold-chevron {
@@ -399,7 +399,7 @@ export default function DataWorkbenchStyles() {
 
 .dw-filter-grid input:focus,
 .dw-filter-grid select:focus {
-  border-color: var(--accent-blue, #3b82f6);
+  border-color: var(--accent-blue);
 }
 
 .dw-actions {
@@ -430,7 +430,7 @@ export default function DataWorkbenchStyles() {
 }
 
 .dw-button-secondary:hover:not(:disabled) {
-  border-color: var(--accent-blue, #3b82f6);
+  border-color: var(--accent-blue);
   color: var(--dw-accent);
 }
 
@@ -638,8 +638,8 @@ export default function DataWorkbenchStyles() {
 }
 
 .dw-instrument.expanded .dw-fold-disclosure {
-  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 18%, transparent);
-  color: var(--accent-blue, #3b82f6);
+  background: color-mix(in srgb, var(--accent-blue) 18%, transparent);
+  color: var(--text-accent);
 }
 
 .dw-instrument.expanded .dw-fold-chevron {
@@ -729,7 +729,7 @@ export default function DataWorkbenchStyles() {
   gap: 12px 14px;
   margin: 0 0 14px;
   padding: 18px;
-  border: 1px solid color-mix(in srgb, var(--accent-blue, #3b82f6) 38%, var(--dw-card-border));
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 38%, var(--dw-card-border));
   border-radius: 12px;
   background: linear-gradient(145deg, var(--dw-filter-bg), var(--dw-card-bg));
 }

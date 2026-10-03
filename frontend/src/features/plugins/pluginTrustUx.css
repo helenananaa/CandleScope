@@ -1,5 +1,5 @@
 .plugin-trust-install-card {
-  border-color: color-mix(in srgb, #f59e0b 42%, var(--border-color, #263142));
+  border-color: color-mix(in srgb, #f59e0b 42%, var(--border-color));
 }
 
 .plugin-trust-review,
@@ -9,7 +9,7 @@
   gap: 12px;
   margin-top: 14px;
   padding: 14px;
-  border: 1px solid color-mix(in srgb, #f59e0b 30%, var(--border-color, #263142));
+  border: 1px solid color-mix(in srgb, #f59e0b 30%, var(--border-color));
   border-radius: 10px;
   background: color-mix(in srgb, #111827 94%, #f59e0b 6%);
 }
@@ -48,7 +48,7 @@
   display: grid;
   gap: 4px;
   padding: 9px 10px;
-  border: 1px solid var(--border-color, #263142);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   background: rgb(15 23 42 / 60%);
 }
@@ -63,7 +63,7 @@
 .plugin-trust-runtime span,
 .plugin-trust-runtime small {
   overflow-wrap: anywhere;
-  color: var(--text-secondary, #a8b0bf);
+  color: var(--text-secondary);
 }
 
 .plugin-trust-reason {
@@ -75,10 +75,10 @@
   min-height: 74px;
   resize: vertical;
   padding: 9px 10px;
-  border: 1px solid var(--border-color, #263142);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   background: var(--surface-raised, #111827);
-  color: var(--text-primary, #f4f7fb);
+  color: var(--text-primary);
 }
 
 .plugin-trust-acknowledgements {
@@ -86,7 +86,7 @@
   gap: 8px;
   margin: 0;
   padding: 12px;
-  border: 1px solid var(--border-color, #263142);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
 }
 
