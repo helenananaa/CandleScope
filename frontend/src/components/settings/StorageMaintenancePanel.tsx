@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
+import { SettingsIcon } from "../icons/settingsIcons.js";
 import type {
     MaintenanceResult,
     MaintenanceScope,
@@ -114,7 +115,7 @@ export default function StorageMaintenancePanel({
 
             <div className="st-tool-card">
                 <div className="st-tool-header">
-                    <span className="st-tool-icon">🔧</span>
+                    <span className="st-tool-icon"><SettingsIcon name="wrench" size={20} /></span>
                     <div>
                         <div className="st-tool-name">{t("settings.maint.repairName")}</div>
                         <div className="st-tool-desc">
@@ -173,7 +174,7 @@ export default function StorageMaintenancePanel({
 
             <div className="st-tool-card" style={{ marginTop: 12 }}>
                 <div className="st-tool-header">
-                    <span className="st-tool-icon">🔍</span>
+                    <span className="st-tool-icon"><SettingsIcon name="search" size={20} /></span>
                     <div>
                         <div className="st-tool-name">{t("settings.maint.gapName")}</div>
                         <div className="st-tool-desc">
@@ -230,7 +231,7 @@ export default function StorageMaintenancePanel({
 
             <div className="st-tool-card" style={{ marginTop: 12 }}>
                 <div className="st-tool-header">
-                    <span className="st-tool-icon">🔄</span>
+                    <span className="st-tool-icon"><SettingsIcon name="refresh" size={20} /></span>
                     <div>
                         <div className="st-tool-name">{t("settings.maint.refreshName")}</div>
                         <div className="st-tool-desc">

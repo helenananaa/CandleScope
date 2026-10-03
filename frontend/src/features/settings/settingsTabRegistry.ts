@@ -4,12 +4,12 @@ import type {
 } from "./settingsTypes.js";
 
 export const SETTINGS_CATEGORIES = [
-  { key: "appearance", labelKey: "settings.category.appearance", icon: "🎨" },
-  { key: "network", labelKey: "settings.category.network", icon: "🌐" },
-  { key: "exchanges", labelKey: "settings.category.exchanges", icon: "🏦" },
-  { key: "data", labelKey: "settings.category.data", icon: "💾" },
-  { key: "plugins", labelKey: "settings.category.plugins", icon: "" },
-  { key: "about", labelKey: "settings.category.about", icon: "ℹ️" },
+  { key: "appearance", labelKey: "settings.category.appearance", icon: "palette" },
+  { key: "network", labelKey: "settings.category.network", icon: "globe" },
+  { key: "exchanges", labelKey: "settings.category.exchanges", icon: "exchange" },
+  { key: "data", labelKey: "settings.category.data", icon: "database" },
+  { key: "plugins", labelKey: "settings.category.plugins", icon: "puzzle" },
+  { key: "about", labelKey: "settings.category.about", icon: "info" },
 ] as const satisfies readonly SettingsCategoryDescriptor[];
 
 export function resolveSettingsTab(

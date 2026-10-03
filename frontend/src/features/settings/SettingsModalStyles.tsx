@@ -106,10 +106,22 @@ export default function SettingsModalStyles(props: SettingsModalStylesProps) {
 }
 
 .st-nav-icon {
-  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 22px;
-  text-align: center;
   flex-shrink: 0;
+  color: var(--text-muted, #64748b);
+}
+
+.st-nav-item:hover .st-nav-icon,
+.st-nav-item.active .st-nav-icon {
+  color: inherit;
+}
+
+.st-content-title-icon {
+  display: inline-flex;
+  color: var(--text-secondary, #94a3b8);
 }
 
 .st-sidebar-footer {
@@ -256,7 +268,12 @@ html[lang="ru"] .st-preset-btn {
 }
 
 .st-theme-icon {
-  font-size: 22px;
+  display: inline-flex;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.st-theme-card.active .st-theme-icon {
+  color: var(--accent-blue, #3b82f6);
 }
 
 .st-theme-label {
@@ -439,6 +456,14 @@ input[type="color"] {
   flex: 1;
 }
 
+a.st-btn {
+  text-decoration: none;
+}
+
+.st-content-body section > a.st-btn:first-child {
+  margin-bottom: 16px;
+}
+
 .st-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -515,8 +540,30 @@ input[type="color"] {
   box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25);
 }
 
-.st-preset-icon {
-  font-size: 20px;
+.st-preset-level {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 16px;
+}
+
+.st-preset-level > span {
+  width: 4px;
+  border-radius: 1px;
+  background: var(--border-color, #334155);
+}
+
+.st-preset-level > span:nth-child(1) { height: 25%; }
+.st-preset-level > span:nth-child(2) { height: 50%; }
+.st-preset-level > span:nth-child(3) { height: 75%; }
+.st-preset-level > span:nth-child(4) { height: 100%; }
+
+.st-preset-level > span.on {
+  background: var(--text-secondary, #94a3b8);
+}
+
+.st-preset-card.active .st-preset-level > span.on {
+  background: var(--accent-blue, #3b82f6);
 }
 
 .st-preset-name {
@@ -1714,9 +1761,16 @@ input[type="color"] {
 }
 
 .st-tool-icon {
-  font-size: 20px;
+  display: inline-flex;
   flex-shrink: 0;
   margin-top: 1px;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.st-result-message {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .st-tool-name {
@@ -2326,9 +2380,12 @@ input[type="color"] {
 }
 
 .st-exchange-result-icon {
-  font-size: 13px;
+  display: inline-flex;
   flex-shrink: 0;
 }
+
+.st-exchange-result-item.ok .st-exchange-result-icon { color: #22c55e; }
+.st-exchange-result-item.fail .st-exchange-result-icon { color: #ef4444; }
 
 .st-exchange-result-label {
   font-weight: 600;

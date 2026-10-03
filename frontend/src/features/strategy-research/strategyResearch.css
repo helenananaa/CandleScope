@@ -80,10 +80,25 @@
   flex: 1 1 240px;
 }
 
-.strategy-research-compat-notice a,
-.strategy-research-compat-notice button {
+.strategy-research-compat-notice a {
   font: inherit;
-  color: inherit;
+  color: var(--strategy-link);
+}
+
+.strategy-research-compat-notice button {
+  min-height: 28px;
+  padding: 4px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: 500 12px/1.4 var(--font-sans);
+  cursor: pointer;
+}
+
+.strategy-research-compat-notice button:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
 }
 
 .local-interval-strip {
@@ -130,6 +145,7 @@
 
 /* A common, source-neutral surface for the independent research entry. */
 .strategy-research-shell :where(.strategy-research-first-open, .strategy-research-script, .strategy-research-result-slot, .research-data-source-bar) :where(button),
+.strategy-research-shell .research-header-btn,
 .research-data-drawer button,
 .research-data-drawer input,
 .research-data-drawer select {
@@ -144,6 +160,8 @@
 .strategy-research-shell button, .research-data-drawer button { cursor: pointer; }
 .strategy-research-shell button:hover:not(:disabled), .research-data-drawer button:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--strategy-link); }
 .strategy-research-shell button:disabled, .research-data-drawer button:disabled { opacity: .55; cursor: not-allowed; }
+/* The drawer takes focus on open for keyboard users; it is a container, not a control. */
+.research-data-drawer:focus { outline: none; }
 .strategy-research-shell :is(button, a, input, select, summary):focus-visible,
 .research-data-drawer :is(button, a, input, select, summary):focus-visible { outline: 2px solid var(--strategy-link); outline-offset: 3px; }
 .strategy-research-shell a { color: var(--strategy-link); font-size: 13px; }
@@ -153,6 +171,10 @@
 .strategy-research-shell button.research-primary:hover:not(:disabled),
 .strategy-research-shell button[data-testid='strategy-research-run']:hover:not(:disabled),
 .research-data-drawer button[type='submit']:hover:not(:disabled) { background: #1d4ed8; color: white; }
+/* A dimmed blue still reads as clickable; disabled primaries go neutral instead. */
+.strategy-research-shell .research-primary:disabled,
+.strategy-research-shell [data-testid='strategy-research-run']:disabled,
+.research-data-drawer button[type='submit']:disabled { opacity: 1; background: var(--bg-tertiary); border-color: var(--border-color); color: var(--text-muted); }
 .research-data-source-bar { display: flex; gap: 12px; align-items: center; color: var(--text-secondary); font-size: 13px; }
 .research-data-source-bar > span { max-width: min(32vw, 420px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .strategy-research-shell .top-bar { gap: 16px; }
@@ -225,7 +247,11 @@
 .local-import-grid label:last-child { grid-column: 1 / -1; }
 .local-import-form input, .local-import-form select { width: 100%; min-width: 0; }
 .local-import-form p { font-size: 12px; line-height: 1.65; color: var(--text-secondary); }
-.local-file-picker { padding: 16px; border: 1px dashed var(--border-color); border-radius: 8px; background: var(--bg-secondary); }
+.local-file-picker { position: relative; align-items: center; padding: 20px 16px; border: 1px dashed var(--border-color); border-radius: 8px; background: var(--bg-secondary); color: var(--text-secondary); text-align: center; cursor: pointer; }
+.local-file-picker:hover { border-color: var(--strategy-link); color: var(--text-primary); }
+.local-file-picker:focus-within { outline: 2px solid var(--strategy-link); outline-offset: 2px; }
+/* Keep the native input focusable and screen-reader visible, but hide its unlocalized "Choose File" chrome. */
+.local-import-form .local-file-picker input[type='file'] { position: absolute; width: 1px; height: 1px; min-height: 0; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .local-import-form .local-revision-choice { flex-direction: row; align-items: center; }
 .local-revision-choice input { width: auto; min-height: 0; }
 .local-dataset-list { display: grid; gap: 8px; }

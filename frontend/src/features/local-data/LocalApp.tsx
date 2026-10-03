@@ -20,6 +20,7 @@ import type {
   LocalAnalysisFocusRequest,
 } from "./localAnalysisTypes.js";
 import { useLocalIntervalSelection } from "./useLocalIntervalSelection.js";
+import { CapabilityRailIcon, ProfileRailIcon } from "../../app/marketRailIcons.js";
 import SettingsModal from "../settings/SettingsModal.js";
 import { useChartSettingsRuntime } from "../settings/chartAppearanceSettings.js";
 import {
@@ -150,12 +151,12 @@ export default function LocalApp() {
           controls={<>
             <button
               type="button"
-              className="settings-btn"
+              className="settings-btn indicator-toggle-btn"
               onClick={() => setSettingsOpen(true)}
               title={t("shell.settings")}
               aria-label={t("shell.settings")}
             >
-              ⚙️
+              <span aria-hidden="true" style={{ display: "flex" }}><CapabilityRailIcon /></span>
             </button>
             <button
               type="button"
@@ -163,8 +164,9 @@ export default function LocalApp() {
               disabled={selected === null}
               onClick={() => setIndicatorPanelOpen((open) => !open)}
               title={t("shell.indicators")}
+              aria-label={t("shell.indicators")}
             >
-              📊
+              <span aria-hidden="true" style={{ display: "flex" }}><ProfileRailIcon /></span>
               {activeIndicatorCount > 0 && (
                 <span className="indicator-badge">{activeIndicatorCount}</span>
               )}

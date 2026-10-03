@@ -1,4 +1,6 @@
 import { useRef, useState } from "react";
+import { SettingsIcon } from "../icons/settingsIcons.js";
+import type { SettingsIconName } from "../icons/settingsIcons.js";
 import type {
     ChartSettings,
     ChartTheme,
@@ -16,15 +18,15 @@ import { useLocale } from "../../i18n/useLocale.js";
 
 interface ThemeOption {
     value: ChartTheme;
-    icon: string;
+    icon: SettingsIconName;
     labelKey: MessageKey;
 }
 
 const THEME_OPTIONS: ThemeOption[] = [
-    { value: "dark", icon: "🌙", labelKey: "settings.appearance.theme.dark" },
-    { value: "light", icon: "☀️", labelKey: "settings.appearance.theme.light" },
-    { value: "system", icon: "🌓", labelKey: "settings.appearance.theme.system" },
-    { value: "custom", icon: "🎨", labelKey: "settings.appearance.theme.custom" },
+    { value: "dark", icon: "moon", labelKey: "settings.appearance.theme.dark" },
+    { value: "light", icon: "sun", labelKey: "settings.appearance.theme.light" },
+    { value: "system", icon: "contrast", labelKey: "settings.appearance.theme.system" },
+    { value: "custom", icon: "palette", labelKey: "settings.appearance.theme.custom" },
 ];
 
 function priceBoxSizeMode(value: string): PriceBoxSizeMode {
@@ -91,7 +93,7 @@ export default function ChartAppearancePanel({ settings, onUpdate }: ChartAppear
                             className={`st-theme-card ${settings.theme === theme.value ? 'active' : ''}`}
                             onClick={() => handleUpdate('theme', theme.value)}
                         >
-                            <span className="st-theme-icon">{theme.icon}</span>
+                            <span className="st-theme-icon"><SettingsIcon name={theme.icon} size={22} /></span>
                             <span className="st-theme-label">{t(theme.labelKey)}</span>
                         </button>
                     ))}

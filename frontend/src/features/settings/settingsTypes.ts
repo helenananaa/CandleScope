@@ -1,3 +1,4 @@
+import type { SettingsIconName } from "../../components/icons/settingsIcons.js";
 export type SettingsActionType = "local_only" | "backend_endpoint";
 
 import type { MessageKey } from "../../i18n/index.js";
@@ -26,7 +27,7 @@ export interface SettingsActionDescriptor {
 export interface SettingsCategoryDescriptor {
   key: SettingsCategory;
   labelKey: MessageKey;
-  icon: string;
+  icon: SettingsIconName;
 }
 
 export interface SettingsRuntimeView {

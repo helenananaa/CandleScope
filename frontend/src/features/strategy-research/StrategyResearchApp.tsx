@@ -57,6 +57,7 @@ import { loadStrategyResearchHostHealth } from "./strategyResearchHostHealth.js"
 import type { StrategyResearchNetworkDiagnostics } from "./strategyResearchHostHealth.js";
 import { createStrategyResearchAdvancedHref } from "./strategyResearchAdvanced.js";
 import { StrategyResearchCompatNotice } from "./StrategyResearchCompatNotice.js";
+import { CapabilityRailIcon, ProfileRailIcon } from "../../app/marketRailIcons.js";
 import { MarketDataWorkspaceProvider } from "../market-data/MarketDataWorkspaceProvider.js";
 
 const BacktestResearchApp = lazy(() => import("../backtest/research/BacktestResearchApp.js"));
@@ -460,15 +461,15 @@ export default function StrategyResearchApp({
   const advancedWorkspace = intent.kind === "advanced" || intent.kind === "deep-link";
   const controls = (
     <>
-      <button type="button" onClick={() => setHistoryOpen((open) => !open)} aria-expanded={historyOpen}>{t("ux.history")}</button>
+      <button type="button" className="research-header-btn" onClick={() => setHistoryOpen((open) => !open)} aria-expanded={historyOpen}>{t("ux.history")}</button>
       <button
         type="button"
-        className="settings-btn"
+        className="settings-btn indicator-toggle-btn"
         onClick={() => setSettingsOpen(true)}
         title={t("shell.settings")}
         aria-label={t("shell.settings")}
       >
-        ⚙️
+        <span aria-hidden="true" style={{ display: "flex" }}><CapabilityRailIcon /></span>
       </button>
       <button
         type="button"
@@ -476,8 +477,9 @@ export default function StrategyResearchApp({
         disabled={importedManifest === null}
         onClick={() => setIndicatorPanel({ scope: chartUiScope, open: !indicatorPanelOpen })}
         title={t("shell.indicators")}
+        aria-label={t("shell.indicators")}
       >
-        📊
+        <span aria-hidden="true" style={{ display: "flex" }}><ProfileRailIcon /></span>
         {activeIndicatorCount > 0 && (
           <span className="indicator-badge">{activeIndicatorCount}</span>
         )}
