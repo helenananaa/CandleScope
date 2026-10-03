@@ -24,7 +24,9 @@ ingestion -> bar_aggregator -> DataManager -> API / WS / Indicator
 | Streams | `StreamCoordinator` / `StreamEnsurePlanner` | 启停 ingestion 和 bar aggregator targets；跨 consumer lease 共享 upstream stream |
 | Events | `DataEventBus` | callback 和 async-iterator 事件分发 |
 | Aggregation Bridge | `AggregatorBridge` | 持久化 bar events、合并 cache、发出 `DataEvent` |
-| Backfill | `BackfillCoordinator` | request 去重、合并、retry、cancel、storage 回读、事件映射 |
+| Backfill | `BackfillCoordinator` | 执行修复、持久化与核验缺口、storage 回读 cache、完成事件 |
+| Backfill Scheduling | `BackfillScheduler` | 需求租约、去重合并、分块调度、公平性、限速和取消 |
+| Backfill Admission | `BackfillHistoryPlanner` | 可用性和日历规划、闭合 K 线裁剪、无需抓取的结果 |
 | Custom Query | `CustomQueryEngine` | 自定义周期一致查询 |
 | Warm Start | `AggregatorWarmStartService` | 启动时从 storage seed aggregator state |
 | Price | `IngestionPriceSource` / `PriceSnapshotCache` | 轻量实时价格流和快照 |
@@ -141,6 +143,17 @@ StreamCoordinator
 planner 会选择需要的 source streams。对于自定义周期，可能会启动合适的 base interval，并在 aggregator 中注册用户请求的 target interval。
 
 ## Backfill 协调
+
+组件依赖方向如下：
+
+- [backfill_contracts.py](backfill_contracts.py) 持有请求、结果和需求优先级。
+  请求生产者可以只导入契约，不加载调度器或协调器；原协调器入口继续导出相同对象。
+- [backfill_history.py](backfill_history.py) 只依赖历史可用性服务和策略解析器，
+  负责请求规划，不持有缓存或调度状态。
+- [backfill_scheduler.py](backfill_scheduler.py) 独立持有调度状态和需求租约，
+  通过显式回调执行修复、持久化最终结果和完成通知，不导入协调器或直接访问存储、缓存。
+- [backfill_coordinator.py](backfill_coordinator.py) 将以上组件与引擎、持久化缺口账本、
+  缓存回读和事件交付连接起来。持久化最终结果完成后，调度器才释放共享等待者。
 
 `BackfillCoordinator` 和 `BackfillEngine` 分离：
 

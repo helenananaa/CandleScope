@@ -29,7 +29,7 @@ from ..bar_aggregator import (
     BarState,
 )
 from .cache import BarCache
-from .backfill_coordinator import priority_for_reason
+from .backfill_contracts import priority_for_reason
 from .models import BarData, SeriesKey, StorageBackend
 from .query import BackfillTrigger
 

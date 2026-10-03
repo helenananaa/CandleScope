@@ -68,6 +68,10 @@ def test_reexports_cannot_hide_reverse_replay_dependencies(tmp_path):
     ("admission_rules", "from .storage import TrainingRunStore"),
     ("order_rules", "from .persistence.ledger import append_contract_ledger"),
     ("ordered_playback", "from .service import TrainingRunService"),
+    ("advance_service", "from .service import TrainingRunService"),
+    ("review_service", "from .service import TrainingRunService"),
+    ("persistence/ledger", "from ..advance_service import TrainingAdvanceService"),
+    ("repositories/runs", "from ..review_service import TrainingReviewService"),
 ])
 def test_rule_and_application_components_have_no_facade_back_reference(tmp_path, owner, source):
     assert check_fixture(tmp_path, source, owner)

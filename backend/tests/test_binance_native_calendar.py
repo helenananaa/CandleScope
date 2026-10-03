@@ -46,9 +46,14 @@ def test_real_rows_verify_but_a_missing_or_untrusted_bar_does_not():
     async def run():
         fixture = json.loads((Path(__file__).parent / "fixtures/binance_usdm_3d_opens.json").read_text())
         rows = [{"open_time": value, "source": "backfill"} for value in fixture["opens"]]
-        coordinator = object.__new__(BackfillCoordinator)
-        coordinator._storage = SimpleNamespace(query_bars=lambda **kwargs: rows)
-        coordinator._history_service = None
+        async def ignore(*args, **kwargs):
+            pass
+
+        coordinator = BackfillCoordinator(
+            storage=SimpleNamespace(query_bars=lambda **kwargs: rows),
+            bars_backfilled=ignore,
+            emit_event=ignore,
+        )
         request = RepairRequest(symbol="BTCUSDT", interval="3d", market_type="futures",
                                 start_ms=fixture["range"][0], end_ms=fixture["range"][1],
                                 metadata={"requires_trusted_finality": True})
@@ -61,6 +66,7 @@ def test_real_rows_verify_but_a_missing_or_untrusted_bar_does_not():
         rows.append({**removed, "source": "unknown"})
         result = await coordinator._verify_request_range(request, context=context)
         assert result["remaining_missing_bars"] == 1
+        await coordinator.shutdown()
     asyncio.run(run())
 
 

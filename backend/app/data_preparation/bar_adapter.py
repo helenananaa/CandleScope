@@ -12,7 +12,7 @@ import shutil
 import time
 import uuid
 
-from app.data_engine.data_manager.backfill_coordinator import RepairRequest
+from app.data_engine.data_manager.backfill_contracts import RepairRequest
 from app.data_engine.kline_quality import source_is_trusted_final
 from app.data_engine.storage.klines_repo import query_klines
 

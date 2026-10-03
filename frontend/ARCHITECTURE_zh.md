@@ -45,6 +45,18 @@ Phase 10 后，`src/app` 拥有应用组合根和 Shell。Phase 11 后，原先�
 `document.documentElement.lang`。Feature 边界规则见
 [src/features/README.md](src/features/README.md)。
 
+## 桌面启动与验收
+
+`desktop/main.mjs` 负责 Electron 生命周期、后端 sidecar、窗口与 IPC 的组合。
+`desktop/evidence-harness-loader.mjs` 独立负责验收模式选择、启动参数、拓扑控制权
+和运行分派；只在显式设置验收输出路径时创建会话，再懒加载
+`desktop/evidence-harness.mjs` 中的压测、故障注入和证据采集实现。
+普通启动不加载这些实现。新增验收场景应在验收模块内完成，避免重新向主入口添加模式分支。
+
+验收会话接收现有窗口、sidecar 和总线实例，不创建第二份生产状态。
+窗口恢复、验收失败向启动错误处理传播、退出时排空 sidecar 仍由原来的生命周期负责。
+`desktop/evidence-session.test.mjs` 验证各模式分派、拓扑交接、恢复顺序和失败传播。
+
 ## 后端连接
 
 前端默认使用同源 `/api/v1`。在 Vite 本地开发时，`vite.config.js` 会把
@@ -81,6 +93,21 @@ CORS 阻止访问另一个后端源，导致 K 线 HTTP 请求失败。
 | React、Lightweight Charts、editor、export 库的构建期 vendor chunk | 已完成 |
 | Phase 10 app shell 和 lazy surfaces 迁入 `src/app` | 已完成 |
 | Phase 11 清理 `src/hooks` 和业务 `src/runtime` 迁移期入口 | 已完成 |
+
+## 原生多 pane 图表的内部职责
+
+`SingleChartPanes` 保留 chart/主 series 所有权、实时 delta 提交、视口恢复和
+跨能力协作；以下独立职责从组合组件中拆出，不通过共享巨型 context 互相访问：
+
+- `singleChartPaneLayout.ts`：原生 pane 位置、保存的高度布局以及空 pane 占位
+  series 的创建、重排和回收。重排后按实际 pane 索引重新确认占位所有权。
+- `singleChartIndicatorPanes.ts`：指标 line/marker/fill/hline/bgcolor 的按 pane
+  隔离、时间对齐及过滤缓存；输出有序描述，不持有 chart 或 React 状态。
+- `NativePaneDrawingHost.tsx`：每个 pane 的 drawing adapter、API 发布和
+  frame invalidation 生命周期；主 pane 继续复用稳定 adapter。
+- `usePanePriceScaleMenu.ts`、`panePriceScaleMenuModel.ts` 和
+  `PanePriceScaleMenu.tsx`：菜单状态和文档监听、pane 命中/操作解析、界面。
+  菜单操作时重新按 pane id 定位，避免打开菜单后 pane 移动或删除导致误操作。
 
 ## 验证基线
 

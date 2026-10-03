@@ -1,3 +1,17 @@
+import PanePriceScaleMenu from "./PanePriceScaleMenu.js";
+import { usePanePriceScaleMenu } from "./usePanePriceScaleMenu.js";
+import NativePaneDrawingHost from "./NativePaneDrawingHost.js";
+import { buildPaneDescriptors, type PaneDescriptor } from "./singleChartIndicatorPanes.js";
+import {
+  ensurePanePlaceholderSeries,
+  moveMainPane,
+  preparePaneLayout,
+  reindexPanePlaceholderSeries,
+  resolveMainPaneIndex,
+  resolvePaneHeightLayout,
+  trimPanePlaceholderSeries,
+  type PanePlaceholderState,
+} from "./singleChartPaneLayout.js";
 import { readablePaneMinimums, constrainReadablePaneHeights } from "./paneReadableHeight.js";
 /**
  * SingleChartPanes — lightweight-charts v5 native panes path.
@@ -8,7 +22,6 @@ import { readablePaneMinimums, constrainReadablePaneHeights } from "./paneReadab
 import { forwardRef, memo, useCallback, useEffect, useEffectEvent, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   ComponentType,
-  MouseEvent as ReactMouseEvent,
   MutableRefObject,
   PointerEvent as ReactPointerEvent,
 } from "react";
@@ -26,7 +39,6 @@ import {
 } from "../chart-adapter/chartPaneLifecycle";
 import {
   buildPaneLayoutOptions,
-  chartSeriesTypes,
   createChartInstance,
 } from "../chart-adapter/lightweightChartSurface";
 import {
@@ -42,7 +54,6 @@ import {
   shouldPreferIndicatorSetData,
 } from "../chart-adapter/seriesLifecycle";
 import {
-  ensurePane,
   materializePaneLayout,
   readPaneHeights,
   setPaneHeights,
@@ -78,15 +89,11 @@ import {
   resolveFutureTimeAxisPointCount,
 } from "../chart-adapter/futureTimeAxis";
 import {
-  alignIndicatorBgcolorsToTimes,
-  alignIndicatorLinesToTimes,
-  alignIndicatorMarkersToTimes,
   applyLineSeriesData,
-  buildAllowedTimeKeys,
   buildFillRenderEntries,
   canUseTrailingSeriesUpdate,
 } from "../chart-adapter/chartSeriesData";
-import { t, type LocaleId, type MessageKey } from "../i18n/index.js";
+import { t, type LocaleId } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
 import { normalizeMainChartType } from "../shared/mainChartTypes";
 import { parseIntervalSeconds } from "../utils/intervals";
@@ -104,7 +111,6 @@ import { createPaneCrosshairStoreLifecycle } from "./paneCrosshairStore";
 import {
   buildPanePointerLayout,
   paneIdAtClientY,
-  paneTargetAtClientY,
   type PanePointerLayout,
 } from "./panePointerModel";
 import {
@@ -342,9 +348,6 @@ export interface SingleChartPanesProps {
 }
 
 type AdapterChart = Parameters<typeof createMainSeries>[0];
-type AdapterPriceScale = ReturnType<AdapterChart["priceScale"]>;
-type PriceScaleOptions = ReturnType<AdapterPriceScale["options"]>;
-type PriceScaleOptionsPatch = Parameters<AdapterPriceScale["applyOptions"]>[0];
 type ChartCrosshairParam = Parameters<Parameters<AdapterChart["subscribeCrosshairMove"]>[0]>[0];
 type ChartClickParam = Parameters<Parameters<AdapterChart["subscribeClick"]>[0]>[0];
 
@@ -370,27 +373,6 @@ type FutureAxisPlan = Omit<FutureTimeAxisPlan, "key"> & { key: string | null };
 interface LookupMap<TKey, TValue> {
   get(key: TKey): TValue | null;
   has(key: TKey): boolean;
-}
-
-interface PanePlaceholderEntry {
-  anchorKey: string | null;
-  series: FutureTimeAxisSeries;
-}
-
-interface PanePlaceholderState {
-  chart: AdapterChart | null;
-  seriesByPane: Map<number, PanePlaceholderEntry>;
-}
-
-interface PaneDescriptor {
-  id: string;
-  paneIndex: number;
-  label: string;
-  lines: ReturnType<typeof alignIndicatorLinesToTimes>;
-  markers: ReturnType<typeof alignIndicatorMarkersToTimes>;
-  fills: IndicatorFill[];
-  hlines: IndicatorHLine[];
-  bgcolors: ReturnType<typeof alignIndicatorBgcolorsToTimes>;
 }
 
 interface IndicatorSeriesEntry {
@@ -457,16 +439,6 @@ interface ActiveSurfaceOwner {
   surfaceConfigKey: string | null;
 }
 
-interface PriceScaleContextMenuState {
-  x: number;
-  y: number;
-  paneId: string;
-  paneIndex: number;
-  autoScale: boolean;
-  invertScale: boolean;
-  mode: number;
-}
-
 interface ChartPointerGestureState {
   kind: "mouse" | "touch" | null;
   mainPanePlotStart: boolean;
@@ -489,49 +461,8 @@ const VISIBLE_RANGE_SAVE_DEBOUNCE_MS = 500;
 // v1 layouts may contain 30px panes produced by sequential setHeight replay.
 // Keep the corrected ratio-based layout isolated from those polluted values.
 const SINGLE_PANE_HEIGHT_KEY_PREFIX = "single-v2:";
-const PRICE_SCALE_CONTEXT_HIT_WIDTH = 96;
-const PRICE_SCALE_CONTEXT_MENU_WIDTH = 220;
-const PRICE_SCALE_CONTEXT_MENU_HEIGHT = 236;
-const PRICE_SCALE_CONTEXT_MENU_MARGIN = 8;
 const EMPTY_DERIVED_AUXILIARY_INDEX = buildDisplaySourceTimeIndex([]);
 const EMPTY_INDICATOR_BAR_COLOR_MAP = buildIndicatorBarColorMap([]);
-const PRICE_SCALE_MODES: readonly {
-  value: number;
-  labelKey: MessageKey;
-  labelEn: string;
-}[] = [
-  { value: 0, labelKey: "scale.regular", labelEn: "Regular" },
-  { value: 1, labelKey: "scale.log", labelEn: "Logarithmic" },
-  { value: 2, labelKey: "scale.percent", labelEn: "Percentage" },
-  { value: 3, labelKey: "scale.indexed", labelEn: "Indexed to 100" },
-];
-
-function resolvePaneHeightLayout(
-  storageKey: string | null | undefined,
-  subPaneCount: number,
-  totalHeight: number,
-  mainPaneIndex = 0,
-): number[] | null {
-  const expectedPaneCount = Math.max(1, subPaneCount + 1);
-  const saved = storageKey ? loadPaneHeights()[storageKey] : undefined;
-  if (Array.isArray(saved)
-    && saved.length === expectedPaneCount
-    && saved.every((height) => Number.isFinite(height) && height > 0)) {
-    return saved;
-  }
-  if (subPaneCount <= 0 || !Number.isFinite(totalHeight) || totalHeight <= 0) return null;
-
-  const mainHeight = Math.max(180, Math.round(totalHeight * 0.65));
-  const subHeight = Math.max(80, Math.round((totalHeight - mainHeight) / subPaneCount));
-  const safeMainPaneIndex = Number.isInteger(mainPaneIndex)
-    ? Math.min(Math.max(mainPaneIndex, 0), expectedPaneCount - 1)
-    : 0;
-  return Array.from(
-    { length: expectedPaneCount },
-    (_unused, index) => index === safeMainPaneIndex ? mainHeight : subHeight,
-  );
-}
-
 interface DrawingPaneSurface {
   readonly paneId: string;
   readonly paneIndex: number;
@@ -546,315 +477,6 @@ interface DrawingPaneSurface {
 interface DrawingPresenceState {
   readonly error: Error | null;
   readonly present: boolean;
-}
-
-type PaneDrawingHostProps = Omit<
-  DrawingEngineHostProps,
-  "chartAdapter" | "chartContainerRef" | "onApiChange" | "onSelectedDrawingChange"
->;
-
-interface NativePaneDrawingHostProps {
-  readonly component: DrawingEngineHostComponent;
-  readonly chartAdapter?: ReturnType<typeof createLightweightChartAdapter>;
-  readonly paneId: string;
-  readonly paneIndex: number;
-  readonly series: MainSeriesHandle;
-  readonly chartRef: MutableRefObject<AdapterChart | null>;
-  readonly chartContainerRef: MutableRefObject<HTMLDivElement | null>;
-  readonly seriesDataRef: MutableRefObject<DisplayRow[]>;
-  readonly sourceTimeHorizonRef: MutableRefObject<number | null>;
-  readonly sourceIntervalRef: MutableRefObject<IntervalString>;
-  readonly sourceIntervalSecondsRef: MutableRefObject<number | null>;
-  readonly projectionConfigRef: MutableRefObject<string | null>;
-  readonly frameInvalidationRevision: number;
-  readonly captureDrawingFrame: (
-    paneId: string,
-    series: MainSeriesHandle,
-    paneIndex: number,
-  ) => DrawingFrameSnapshot | null;
-  readonly hostProps: PaneDrawingHostProps;
-  readonly interactionKey: string;
-  readonly onPaneApiChange: (
-    paneId: string,
-    drawingKey: string,
-    interactionKey: string,
-    api: DrawingEngineApi | null,
-    previousApi: DrawingEngineApi | null,
-  ) => void;
-  readonly onPaneAdapterChange: (
-    paneId: string,
-    adapter: ReturnType<typeof createLightweightChartAdapter> | null,
-  ) => void;
-  readonly onPaneSelectedDrawingChange: (
-    paneId: string,
-    drawing: SelectedDrawingMeta | null,
-  ) => void;
-}
-
-/** One independent document/interaction surface attached to one native LWC pane. */
-function NativePaneDrawingHost({
-  component: DrawingEngineHostComponent,
-  chartAdapter: providedChartAdapter,
-  paneId,
-  paneIndex,
-  series,
-  chartRef,
-  chartContainerRef,
-  seriesDataRef,
-  sourceTimeHorizonRef,
-  sourceIntervalRef,
-  sourceIntervalSecondsRef,
-  projectionConfigRef,
-  frameInvalidationRevision,
-  captureDrawingFrame,
-  hostProps,
-  interactionKey,
-  onPaneApiChange,
-  onPaneAdapterChange,
-  onPaneSelectedDrawingChange,
-}: NativePaneDrawingHostProps) {
-  const paneChartAdapter = useMemo(() => createLightweightChartAdapter({
-    chartRef,
-    seriesRef: series,
-    containerRef: chartContainerRef,
-    drawingPaneIndexRef: paneIndex,
-    seriesDataRef,
-    sourceTimeHorizonRef,
-    sourceIntervalRef,
-    sourceIntervalSecondsRef,
-    projectionConfigRef,
-    drawingCoordinateSnapshotProvider: () => captureDrawingFrame(paneId, series, paneIndex),
-  }), [
-    captureDrawingFrame,
-    chartContainerRef,
-    chartRef,
-    paneId,
-    paneIndex,
-    projectionConfigRef,
-    series,
-    seriesDataRef,
-    sourceIntervalRef,
-    sourceIntervalSecondsRef,
-    sourceTimeHorizonRef,
-  ]);
-  // The main chart already owns a stable ref-backed adapter. Reuse it so
-  // main-series replacements do not tear down and recreate the drawing worker;
-  // subpanes still need their series-specific adapters.
-  const chartAdapter = providedChartAdapter ?? paneChartAdapter;
-  const publishedApiRef = useRef<DrawingEngineApi | null>(null);
-  const handleApiChange = useCallback((api: DrawingEngineApi | null) => {
-    const previousApi = publishedApiRef.current;
-    publishedApiRef.current = api;
-    onPaneApiChange(paneId, hostProps.drawingKey, interactionKey, api, previousApi);
-  }, [hostProps.drawingKey, interactionKey, onPaneApiChange, paneId]);
-  const handleSelectedDrawingChange = useCallback((drawing: SelectedDrawingMeta | null) => {
-    onPaneSelectedDrawingChange(paneId, drawing);
-  }, [onPaneSelectedDrawingChange, paneId]);
-
-  useEffect(() => {
-    onPaneAdapterChange(paneId, chartAdapter);
-    return () => onPaneAdapterChange(paneId, null);
-  }, [chartAdapter, onPaneAdapterChange, paneId]);
-
-  useEffect(() => {
-    if (frameInvalidationRevision <= 0) return;
-    chartAdapter.notifyDrawingFrameInvalidation();
-  }, [chartAdapter, frameInvalidationRevision]);
-
-  return (
-    <DrawingEngineHostComponent
-      {...hostProps}
-      chartAdapter={chartAdapter}
-      chartContainerRef={chartContainerRef}
-      onApiChange={handleApiChange}
-      onSelectedDrawingChange={handleSelectedDrawingChange}
-    />
-  );
-}
-
-function preparePaneLayout(chart: AdapterChart | null, {
-  storageKey,
-  subPaneCount,
-  totalHeight,
-  mainPaneIndex = 0,
-}: {
-  storageKey?: string | null;
-  subPaneCount?: number;
-  totalHeight?: number;
-  mainPaneIndex?: number;
-} = {}): boolean {
-  const resolvedSubPaneCount = subPaneCount ?? -1;
-  const resolvedTotalHeight = totalHeight ?? 0;
-  if (!chart || !Number.isInteger(resolvedSubPaneCount) || resolvedSubPaneCount < 0) return false;
-  for (let paneIndex = 1; paneIndex <= resolvedSubPaneCount; paneIndex += 1) {
-    ensurePane(chart, paneIndex);
-  }
-  const paneHeights = resolvePaneHeightLayout(
-    storageKey,
-    resolvedSubPaneCount,
-    resolvedTotalHeight,
-    mainPaneIndex,
-  );
-  if (!paneHeights) return resolvedSubPaneCount === 0;
-  setPaneHeights(chart, paneHeights);
-  return true;
-}
-
-function resolveMainPaneIndex(
-  chart: AdapterChart | null | undefined,
-  series: MainSeriesHandle | null | undefined,
-  fallback = 0,
-): number {
-  try {
-    const paneIndex = series?.getPane?.()?.paneIndex?.();
-    if (typeof paneIndex === "number"
-      && Number.isInteger(paneIndex)
-      && paneIndex >= 0
-      && paneIndex < (chart?.panes?.()?.length ?? 0)) {
-      return paneIndex;
-    }
-  } catch {
-    // Fall through to the last materialized index while panes are rebuilding.
-  }
-  return Number.isInteger(fallback) && fallback >= 0 ? fallback : 0;
-}
-
-function moveMainPane(
-  chart: AdapterChart | null | undefined,
-  series: MainSeriesHandle | null | undefined,
-  targetIndex: number,
-): number | null {
-  const panes = chart?.panes?.() || [];
-  if (!series || !Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= panes.length) {
-    return null;
-  }
-  const currentIndex = resolveMainPaneIndex(chart, series, 0);
-  if (currentIndex === targetIndex) return currentIndex;
-  try {
-    series.getPane().moveTo(targetIndex);
-    return resolveMainPaneIndex(chart, series, targetIndex);
-  } catch {
-    return null;
-  }
-}
-
-function reindexPanePlaceholderSeries(
-  placeholderStateRef: MutableRefObject<PanePlaceholderState>,
-): void {
-  const state = placeholderStateRef.current;
-  if (!state.chart || state.seriesByPane.size === 0) return;
-  const next = new Map<number, PanePlaceholderEntry>();
-  for (const [fallbackIndex, entry] of state.seriesByPane) {
-    let paneIndex = fallbackIndex;
-    try {
-      const resolved = entry.series.getPane?.()?.paneIndex?.();
-      if (Number.isInteger(resolved) && resolved >= 0) paneIndex = resolved;
-    } catch {
-      // Keep the last known key until LWC finishes the structural mutation.
-    }
-    next.set(paneIndex, entry);
-  }
-  state.seriesByPane = next;
-}
-
-function ensurePanePlaceholderSeries(
-  chart: AdapterChart | null,
-  placeholderStateRef: MutableRefObject<PanePlaceholderState>,
-  subPaneCount: number,
-  anchorTime: AxisTime | null = null,
-  { mainPaneIndex = 0 }: { mainPaneIndex?: number } = {},
-): void {
-  if (!chart || !placeholderStateRef || !Number.isInteger(subPaneCount) || subPaneCount < 0) return;
-  if (placeholderStateRef.current.chart !== chart) {
-    placeholderStateRef.current = { chart, seriesByPane: new Map() };
-  }
-  reindexPanePlaceholderSeries(placeholderStateRef);
-  const seriesByPane = placeholderStateRef.current.seriesByPane;
-  const baseAnchorKey = axisTimeKey(anchorTime);
-  const anchorKey = baseAnchorKey && anchorTime && typeof anchorTime === "object"
-    ? `${baseAnchorKey}:source:${anchorTime.sourceTime}:ordinal:${anchorTime.sourceOrdinal}`
-    : baseAnchorKey;
-  for (let paneIndex = 0; paneIndex <= subPaneCount; paneIndex += 1) {
-    if (paneIndex === mainPaneIndex) continue;
-    ensurePane(chart, paneIndex);
-    let entry = seriesByPane.get(paneIndex);
-    if (!entry) {
-      const series = chart.addSeries(chartSeriesTypes.line, {
-        color: "rgba(0, 0, 0, 0)",
-        crosshairMarkerVisible: false,
-        lastValueVisible: false,
-        priceLineVisible: false,
-        priceScaleId: "__pane-layout-placeholder",
-        title: "",
-      }, paneIndex);
-      entry = { anchorKey: null, series };
-      seriesByPane.set(paneIndex, entry);
-    }
-    if (anchorKey && anchorTime != null && entry.anchorKey !== anchorKey) {
-      entry.series.setData([{ time: anchorTime, value: 0 }]);
-      entry.anchorKey = anchorKey;
-    }
-  }
-}
-
-function trimPanePlaceholderSeries(
-  chart: AdapterChart | null,
-  placeholderStateRef: MutableRefObject<PanePlaceholderState>,
-  retainPaneCount: number,
-): void {
-  if (!chart || placeholderStateRef?.current?.chart !== chart) return;
-  reindexPanePlaceholderSeries(placeholderStateRef);
-  for (const [paneIndex, entry] of placeholderStateRef.current.seriesByPane) {
-    if (paneIndex < retainPaneCount) continue;
-    try {
-      chart.removeSeries(entry.series);
-    } catch {
-      // The pane may already have been removed during surface disposal.
-    }
-    placeholderStateRef.current.seriesByPane.delete(paneIndex);
-  }
-}
-
-function paneKeyForItem(item: { pane?: string; indicatorId?: string } | null | undefined): string {
-  const pane = item?.pane || "main";
-  if (pane === "main") return "main";
-  if (!item?.indicatorId) return pane;
-  return `${pane}-${item.indicatorId}`;
-}
-
-const paneItemFilterCache = new WeakMap<object, Map<string, readonly unknown[]>>();
-
-function filterItemsForPane<T extends { pane?: string; indicatorId?: string }>(
-  items: readonly T[] | null | undefined,
-  paneId: string,
-): T[] {
-  if (!items) return [];
-  const cacheKey = items as object;
-  let byPane = paneItemFilterCache.get(cacheKey);
-  if (!byPane) {
-    byPane = new Map();
-    paneItemFilterCache.set(cacheKey, byPane);
-  }
-  const cached = byPane.get(paneId);
-  if (cached) return cached as T[];
-  const filtered = items.filter((item) => paneKeyForItem(item) === paneId);
-  byPane.set(paneId, filtered);
-  return filtered;
-}
-
-function filterFillsForLines(
-  fills: readonly IndicatorFill[] | null | undefined,
-  lines: readonly { id?: string; indicatorId?: string }[] | null | undefined,
-): IndicatorFill[] {
-  const lineKeys = new Set();
-  for (const line of lines || []) {
-    if (!line?.id) continue;
-    lineKeys.add(`${line.indicatorId || ""}:${line.id}`);
-  }
-  return (fills || []).filter((fill) => (
-    lineKeys.has(`${fill.indicatorId || ""}:${fill.plot1_id}`)
-    && lineKeys.has(`${fill.indicatorId || ""}:${fill.plot2_id}`)
-  ));
 }
 
 function rowsFromStore(store: SeriesWindowStore | null | undefined): KlineBar[] {
@@ -1185,71 +807,6 @@ function clearAuxiliaryChartState({
       series: removedSeriesCount,
     });
   }
-}
-
-function buildPaneDescriptors({
-  dataTimeSet,
-  intervalSeconds,
-  mainOverlayLines,
-  paneOrder,
-  subPanes,
-  indicatorMarkers,
-  indicatorFills,
-  indicatorHlines,
-  indicatorBgcolors,
-}: {
-  dataTimeSet: ReadonlySet<number>;
-  intervalSeconds: number | null;
-  mainOverlayLines: IndicatorLine[];
-  paneOrder: readonly string[];
-  subPanes: IndicatorSubPane[];
-  indicatorMarkers: IndicatorMarker[];
-  indicatorFills: IndicatorFill[];
-  indicatorHlines: IndicatorHLine[];
-  indicatorBgcolors: IndicatorBgColor[];
-}): PaneDescriptor[] {
-  const allowedTimeKeys = buildAllowedTimeKeys(dataTimeSet);
-  const mainLines = alignIndicatorLinesToTimes(
-    mainOverlayLines,
-    dataTimeSet,
-    allowedTimeKeys,
-    intervalSeconds,
-  );
-  const descriptors: PaneDescriptor[] = [{
-    id: "main",
-    paneIndex: 0,
-    label: "",
-    lines: mainLines,
-    markers: alignIndicatorMarkersToTimes(filterItemsForPane(indicatorMarkers, "main"), dataTimeSet, allowedTimeKeys),
-    fills: filterFillsForLines(indicatorFills, mainLines),
-    hlines: filterItemsForPane(indicatorHlines, "main"),
-    bgcolors: alignIndicatorBgcolorsToTimes(filterItemsForPane(indicatorBgcolors, "main"), dataTimeSet, allowedTimeKeys),
-  }];
-
-  for (const [index, subPane] of subPanes.entries()) {
-    const lines = alignIndicatorLinesToTimes(
-      subPane.lines,
-      dataTimeSet,
-      allowedTimeKeys,
-      intervalSeconds,
-    );
-    descriptors.push({
-      id: subPane.id,
-      paneIndex: index + 1,
-      label: subPane.label,
-      lines,
-      markers: alignIndicatorMarkersToTimes(filterItemsForPane(indicatorMarkers, subPane.id), dataTimeSet, allowedTimeKeys),
-      fills: filterFillsForLines(indicatorFills, lines),
-      hlines: filterItemsForPane(indicatorHlines, subPane.id),
-      bgcolors: alignIndicatorBgcolorsToTimes(filterItemsForPane(indicatorBgcolors, subPane.id), dataTimeSet, allowedTimeKeys),
-    });
-  }
-
-  const descriptorById = new Map(descriptors.map((descriptor) => [descriptor.id, descriptor]));
-  return paneOrder.flatMap((paneId, paneIndex) => {
-    const descriptor = descriptorById.get(paneId);
-    return descriptor ? [{ ...descriptor, paneIndex }] : [];
-  });
 }
 
 const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(function SingleChartPanes({
@@ -1684,7 +1241,6 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   const [registeredDrawingPaneMountKeys, setRegisteredDrawingPaneMountKeys] = useState<
     ReadonlySet<string>
   >(() => new Set());
-  const [contextMenu, setContextMenu] = useState<PriceScaleContextMenuState | null>(null);
   const [paneOrder, setPaneOrder] = useState<string[]>(() => {
     const stored = loadPaneOrder(paneLayoutScope);
     return stored.includes("main") ? stored : ["main", ...stored];
@@ -2013,6 +1569,14 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       if (adapter !== chartAdapter) adapter.notifyDrawingFrameInvalidation();
     }
   }, [chartAdapter]);
+  const priceScaleMenu = usePanePriceScaleMenu({
+    chartRef,
+    containerRef,
+    activePaneIdsRef,
+    panePointerLayoutRef,
+    onScaleChanged: notifyDrawingFrameInvalidation,
+  });
+
   const reportCrosshairMove = useEffectEvent((value: MainSeriesCrosshairValue | null) => {
     onCrosshairMove?.(value);
   });
@@ -3787,72 +3351,6 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     } catch { /* */ }
   }, [notifyDrawingFrameInvalidation]);
 
-  const handlePriceScaleContextMenu = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
-    const rect = containerRef.current?.getBoundingClientRect?.();
-    if (!rect) return;
-    if (event.clientX < rect.right - PRICE_SCALE_CONTEXT_HIT_WIDTH) return;
-    const target = paneTargetAtClientY(panePointerLayoutRef.current, event.clientY);
-    if (!target) return;
-    const chart = chartRef.current;
-    const activePaneIds = activePaneIdsRef.current;
-    if (!chart
-      || target.paneIndex >= (chart.panes?.()?.length ?? 0)
-      || activePaneIds[target.paneIndex] !== target.paneId) {
-      return;
-    }
-    let scaleOptions: PriceScaleOptions;
-    try {
-      scaleOptions = chart.priceScale("right", target.paneIndex).options();
-    } catch {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    const margin = PRICE_SCALE_CONTEXT_MENU_MARGIN;
-    const maxX = Math.max(rect.left + margin, rect.right - PRICE_SCALE_CONTEXT_MENU_WIDTH - margin);
-    const maxY = Math.max(rect.top + margin, rect.bottom - PRICE_SCALE_CONTEXT_MENU_HEIGHT - margin);
-    setContextMenu({
-      x: Math.min(Math.max(event.clientX, rect.left + margin), maxX),
-      y: Math.min(Math.max(event.clientY, rect.top + margin), maxY),
-      paneId: target.paneId,
-      paneIndex: target.paneIndex,
-      autoScale: scaleOptions.autoScale,
-      invertScale: scaleOptions.invertScale,
-      mode: scaleOptions.mode,
-    });
-  }, []);
-
-  const applyContextMenuPriceScaleOptions = useCallback((options: PriceScaleOptionsPatch) => {
-    if (!contextMenu) return false;
-    const chart = chartRef.current;
-    const paneIndex = activePaneIdsRef.current.indexOf(contextMenu.paneId);
-    if (!chart || paneIndex < 0 || paneIndex >= (chart.panes?.()?.length ?? 0)) return false;
-    try {
-      chart.priceScale("right", paneIndex).applyOptions(options);
-      notifyDrawingFrameInvalidation();
-      return true;
-    } catch {
-      return false;
-    }
-  }, [contextMenu, notifyDrawingFrameInvalidation]);
-
-  useEffect(() => {
-    if (!contextMenu) return undefined;
-    const handleClick = () => setContextMenu(null);
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setContextMenu(null);
-    };
-    const timer = setTimeout(() => {
-      document.addEventListener("mousedown", handleClick);
-      document.addEventListener("keydown", handleKey);
-    }, 0);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener("mousedown", handleClick);
-      document.removeEventListener("keydown", handleKey);
-    };
-  }, [contextMenu]);
-
   useEffect(() => {
     const chart = chartRef.current;
     const activeOwner = activeSurfaceOwnerRef.current;
@@ -5376,7 +4874,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         data-chart-type={resolvedChartType}
         data-pane-id="single-chart"
         data-pane-type="native-panes"
-        onContextMenu={handlePriceScaleContextMenu}
+        onContextMenu={priceScaleMenu.handleContextMenu}
         style={{ cursor: cursorStyleForDrawingTool(effectiveDrawingTool) }}
       />
 
@@ -5459,65 +4957,12 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       )}
 
 
-      {contextMenu && (
-        <div
-          className="price-scale-context-menu"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onMouseDown={(event) => event.stopPropagation()}
-        >
-          <button
-            type="button"
-            className={`price-scale-menu-item${contextMenu.autoScale ? " active" : ""}`}
-            onClick={() => {
-              applyContextMenuPriceScaleOptions({ autoScale: !contextMenu.autoScale });
-              setContextMenu(null);
-            }}
-          >
-            <span className="price-scale-menu-check">{contextMenu.autoScale ? "✓" : ""}</span>
-            <span>{t("scale.auto", {}, locale)}</span>
-            {locale === "en" ? null : <span className="price-scale-menu-label-en">{t("scale.auto", {}, "en")}</span>}
-          </button>
-          {(contextMenu.paneId !== "main" || onInvertScaleChange) && (
-            <button
-              type="button"
-              className={`price-scale-menu-item${contextMenu.invertScale ? " active" : ""}`}
-              onClick={() => {
-                const next = !contextMenu.invertScale;
-                if (contextMenu.paneId === "main" && onInvertScaleChange) {
-                  onInvertScaleChange(next);
-                } else {
-                  applyContextMenuPriceScaleOptions({ invertScale: next });
-                }
-                setContextMenu(null);
-              }}
-            >
-              <span className="price-scale-menu-check">{contextMenu.invertScale ? "✓" : ""}</span>
-              <span>{t("scale.invert", {}, locale)}</span>
-              {locale === "en" ? null : <span className="price-scale-menu-label-en">{t("scale.invert", {}, "en")}</span>}
-            </button>
-          )}
-          <div className="price-scale-menu-divider" />
-          {PRICE_SCALE_MODES.map((mode) => (
-            <button
-              type="button"
-              key={mode.value}
-              className={`price-scale-menu-item${contextMenu.mode === mode.value ? " active" : ""}`}
-              onClick={() => {
-                if (contextMenu.paneId === "main" && onPriceScaleModeChange) {
-                  onPriceScaleModeChange(mode.value);
-                } else {
-                  applyContextMenuPriceScaleOptions({ mode: mode.value });
-                }
-                setContextMenu(null);
-              }}
-            >
-              <span className="price-scale-menu-check">{contextMenu.mode === mode.value ? "✓" : ""}</span>
-              <span>{t(mode.labelKey, {}, locale)}</span>
-              {locale === "en" ? null : <span className="price-scale-menu-label-en">{mode.labelEn}</span>}
-            </button>
-          ))}
-        </div>
-      )}
+      <PanePriceScaleMenu
+        menu={priceScaleMenu}
+        locale={locale}
+        onInvertScaleChange={onInvertScaleChange}
+        onPriceScaleModeChange={onPriceScaleModeChange}
+      />
 
       {shouldMountDrawingEngine && <DrawingObjectList apis={drawingObjectApis} currentInterval={interval} panes={activeSubPanes} onSelectPane={publishHoveredPaneId} />}
 

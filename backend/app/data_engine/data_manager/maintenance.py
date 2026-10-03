@@ -18,7 +18,7 @@ from app.data_engine.interval_policy import (
 )
 from app.data_engine.series_identity import KlineSeriesIdentity
 
-from .backfill_coordinator import RepairRequest
+from .backfill_contracts import RepairRequest
 from .models import BarData, SeriesKey
 
 logger = logging.getLogger("data_manager.maintenance")

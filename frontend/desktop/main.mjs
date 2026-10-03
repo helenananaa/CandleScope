@@ -11,7 +11,7 @@ import { isTrustedAppUrl, startDesktopAssetServer } from "./app-origin.mjs";
 import { ElectronWindowManager } from "./electron-window-manager.mjs";
 import { AppWorkBudgetHub } from "./app-work-budget-hub.mjs";
 import { DESKTOP_IPC, validateTopologyPayload } from "./ipc-contract.mjs";
-import { loadEvidenceHarness } from "./evidence-harness-loader.mjs";
+import { createEvidenceSession } from "./evidence-harness-loader.mjs";
 import { SidecarSupervisor } from "./sidecar-supervisor.mjs";
 import { SeriesSnapshotHub } from "./series-snapshot-hub.mjs";
 import { DesktopShellStateStore } from "./shell-state-store.mjs";
@@ -35,23 +35,14 @@ const managementSession = {
   csrfToken: randomBytes(32).toString("base64url"),
 };
 let backendPort = Number(process.env.CANDLESCOPE_DESKTOP_BACKEND_PORT || 18080);
-const phase8Output = process.env.CANDLESCOPE_DESKTOP_PHASE8_OUT || "";
-function instrumentedAppUrl() {
-  const target = new URL(appUrl);
-  if (phase8Output) target.searchParams.set("capacityProbe", "phase8");
-  else if (process.env.CANDLESCOPE_DESKTOP_PHASE7_OUT) {
-    target.searchParams.set("capacityProbe", "phase7");
-  }
-  return target.href;
-}
-if (phase8Output) app.commandLine.appendSwitch("js-flags", "--expose-gc");
+const evidenceSession = createEvidenceSession(process.env);
+evidenceSession?.configureApp(app);
 const gotSingleInstanceLock = app.requestSingleInstanceLock({ source: "desktop-shell" });
 
 let manager = null;
 let supervisor = null;
 let shutdownComplete = false;
 let shutdownPromise = null;
-let evidenceHarness = null;
 const workspaceBus = new WorkspaceBusHub();
 const appWorkBudget = new AppWorkBudgetHub();
 const seriesSnapshots = new SeriesSnapshotHub();
@@ -171,11 +162,11 @@ async function boot() {
     channels: DESKTOP_IPC,
     preloadPath: path.join(desktopDir, "preload.cjs"),
     backendPort,
-    appUrl: instrumentedAppUrl(),
+    appUrl: evidenceSession?.instrumentAppUrl(appUrl) ?? new URL(appUrl).href,
     multiWindowEnabled,
   });
 
-  evidenceHarness = await loadEvidenceHarness({
+  await evidenceSession?.initialize({
     app, screen, manager, supervisor, backendPort, multiWindowEnabled,
     workspaceBus, appWorkBudget, seriesSnapshots, process,
   });
@@ -204,17 +195,8 @@ async function boot() {
     };
   });
   trustedIpc.handle(DESKTOP_IPC.reconcile, async (_event, raw) => {
-    if (process.env.CANDLESCOPE_DESKTOP_SPIKE_OUT
-      || process.env.CANDLESCOPE_DESKTOP_RESTORE_PROBE_OUT
-      || (process.env.CANDLESCOPE_DESKTOP_PHASE7_OUT && !evidenceHarness?.state.phase7TopologyArmed)
-      || (phase8Output && !evidenceHarness?.state.phase7TopologyArmed)) {
-      return {
-        ok: false,
-        code: "SPIKE_TOPOLOGY_OWNED_BY_SHELL",
-        message: "Automated desktop spike freezes its four-window topology until evidence is captured",
-        shellRevision: store.snapshot().shellRevision,
-      };
-    }
+    const probeRejection = evidenceSession?.topologyRejection(store.snapshot().shellRevision);
+    if (probeRejection) return probeRejection;
     try {
       const result = await manager.reconcile(validateTopologyPayload(raw));
       return { ok: true, ...result };
@@ -310,51 +292,20 @@ async function boot() {
   trustedIpc.handle(DESKTOP_IPC.seriesSnapshotDiagnostics, () => seriesSnapshots.diagnostics());
 
   screen.on("display-added", () => {
-    evidenceHarness?.noteDisplayEvent("added");
+    evidenceSession?.noteDisplayEvent("added");
     manager.recoverOffscreenWindows();
   });
   screen.on("display-removed", () => {
-    evidenceHarness?.noteDisplayEvent("removed");
+    evidenceSession?.noteDisplayEvent("removed");
     manager.recoverOffscreenWindows();
   });
   screen.on("display-metrics-changed", () => {
-    evidenceHarness?.noteDisplayEvent("metricsChanged");
+    evidenceSession?.noteDisplayEvent("metricsChanged");
     manager.recoverOffscreenWindows();
   });
 
-  const spikeOutput = process.env.CANDLESCOPE_DESKTOP_SPIKE_OUT;
-  const restoreOutput = process.env.CANDLESCOPE_DESKTOP_RESTORE_PROBE_OUT;
-  const phase7Output = process.env.CANDLESCOPE_DESKTOP_PHASE7_OUT;
-  if (phase8Output) {
-    await evidenceHarness.runPhase8Evidence(store, phase8Output);
-    app.quit();
-    return;
-  }
-  if (phase7Output) {
-    await evidenceHarness.runPhase7Evidence(store, phase7Output);
-    app.quit();
-    return;
-  }
-  if (spikeOutput || restoreOutput) {
-    if (spikeOutput) {
-      const topology = evidenceHarness.syntheticSpikeTopology(
-        cached,
-        Math.min(4, Math.max(1, Number(process.env.CANDLESCOPE_DESKTOP_SPIKE_WINDOW_COUNT || 4))),
-      );
-      await manager.reconcile(topology);
-    } else {
-      await manager.restoreCached(cached);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 2_000));
-    const closeIsolation = await evidenceHarness.exerciseCloseIsolation(store);
-    const lifecycle = await evidenceHarness.exerciseNativeLifecycle();
-    await evidenceHarness.writeSpikeEvidence(
-      store,
-      spikeOutput || restoreOutput,
-      spikeOutput ? "create" : "restore",
-      lifecycle,
-      closeIsolation,
-    );
+  if (evidenceSession) {
+    await evidenceSession.run({ store, cached, manager });
     app.quit();
     return;
   }

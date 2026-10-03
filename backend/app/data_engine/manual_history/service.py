@@ -768,7 +768,7 @@ class ManualHistoryService:
         coordinator = self.coordinator
         if coordinator is None:
             return 0
-        from app.data_engine.data_manager.backfill_coordinator import RepairRequest
+        from app.data_engine.data_manager.backfill_contracts import RepairRequest
 
         request = RepairRequest(
             symbol=symbol,

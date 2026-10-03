@@ -24,7 +24,9 @@ ingestion -> bar_aggregator -> DataManager -> API / WS / Indicator
 | Streams | `StreamCoordinator` / `StreamEnsurePlanner` | Start and stop ingestion + bar aggregator targets; share upstream streams across consumer leases |
 | Events | `DataEventBus` | Callback and async-iterator event distribution |
 | Aggregation Bridge | `AggregatorBridge` | Persist bar events, merge cache, emit `DataEvent` |
-| Backfill | `BackfillCoordinator` | Request dedup, merge, retry, cancel, storage readback, event mapping |
+| Backfill | `BackfillCoordinator` | Execute repairs, persist/verify gaps, read storage back into cache, emit completion events |
+| Backfill Scheduling | `BackfillScheduler` | Demand leases, dedup/merge, chunk scheduling, fairness, pacing and cancellation |
+| Backfill Admission | `BackfillHistoryPlanner` | Availability/calendar planning, closed-bar clamping and no-fetch outcomes |
 | Custom Query | `CustomQueryEngine` | Query custom intervals consistently |
 | Warm Start | `AggregatorWarmStartService` | Seed aggregator state from storage on startup |
 | Price | `IngestionPriceSource` / `PriceSnapshotCache` | Lightweight realtime price stream and snapshots |
@@ -141,6 +143,20 @@ StreamCoordinator
 The planner chooses the required source streams. For custom intervals, this can mean starting a suitable base interval and registering the requested target interval with the aggregator.
 
 ## Backfill Coordination
+
+The component dependency direction is explicit:
+
+- [backfill_contracts.py](backfill_contracts.py) owns request/result values and
+  demand priorities. Producers import this module without loading the scheduler
+  or coordinator; existing coordinator imports remain compatible re-exports.
+- [backfill_history.py](backfill_history.py) plans requests using only the
+  availability service and policy resolver. It has no cache or scheduler state.
+- [backfill_scheduler.py](backfill_scheduler.py) owns scheduling state and demand
+  leases. Execution, durable finalization and completion are injected callbacks;
+  the scheduler does not import the coordinator or access storage/cache directly.
+- [backfill_coordinator.py](backfill_coordinator.py) composes these owners with
+  the engine, persistent gap ledger, cache readback and event delivery. The
+  durable finalizer completes before the scheduler releases shared waiters.
 
 `BackfillCoordinator` is deliberately separate from `BackfillEngine`:
 

@@ -147,7 +147,7 @@ from .models import (
 from .maintenance import MaintenanceService, RepairRequester
 from .price_cache import PriceSnapshot, PriceSnapshotCache, normalize_price_key, price_key
 from .query import BackfillTrigger, QueryEngine
-from .backfill_coordinator import priority_for_reason
+from .backfill_contracts import priority_for_reason
 from .retention import RetentionService
 from .runtime_pressure import (
     disk_pressure_snapshot,

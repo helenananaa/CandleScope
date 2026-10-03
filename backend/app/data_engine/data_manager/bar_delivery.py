@@ -251,7 +251,7 @@ class DurableBarDelivery:
 def source_recovery_handler(coordinator):
     """Reuse the existing paged, provider-aware authoritative repair path."""
     async def recover(watch):
-        from .backfill_coordinator import RepairRequest
+        from .backfill_contracts import RepairRequest
         series = watch["series"]
         spec = parse_interval_spec(series["interval"])
         if spec is None:

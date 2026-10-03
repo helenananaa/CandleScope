@@ -9,6 +9,8 @@ delegates keep existing callers stable; implementations live in their owners.
 | `admission_service.py` | Market eligibility, committed start time, catalog and track plans |
 | `order_service.py` | Order preview, capacity and current historical-book checks |
 | `display_service.py` | Revealed history, display grids, display pins and control translation |
+| `advance_service.py` | Period-summary preparation and eligibility, durable target scans, progress and cancellation |
+| `review_service.py` | Reports and training results, disclosed time projections, annotations and ReviewMode navigation |
 | `ordered_playback.py` | Global-time progression, complete timestamp cohorts, account/input barriers and liquidation recovery |
 | `*_rules.py`, `service_validation.py`, `command_projection.py` | Pure policy, validation and public result projections |
 | `storage.py` | Cross-domain mutation writers, actor/account phases, fork/attach transactions and lazy recorded review context |
@@ -20,6 +22,18 @@ caches to the relevant components. These are per-service objects. Shutdown,
 command serialization and playback use the same actors and jobs. Immutable market
 indexes remain separate from account-specific state. There is no second database
 or executor behind the repositories.
+
+`TrainingAdvanceService` owns its summary-build guard. Its actor and advance-job
+maps are the same objects used by the facade and ordered playback, so progress,
+cancellation and shutdown cannot observe separate task registries. Planning and
+liquidation reconciliation are explicit callbacks to the existing coordinator;
+command admission, serialization and durable recovery dispatch stay in the
+facade. The scan keeps its original commit, publication and cancellation order.
+
+`TrainingReviewService` receives account audit and global-clock readers as
+explicit callbacks. Reports retain public-time disclosure and historical-account
+audit behavior; ReviewMode still requires the original run to be paused or ended.
+It does not advance an actor or acquire an independent storage transaction.
 
 ## Atomic writes and publication
 

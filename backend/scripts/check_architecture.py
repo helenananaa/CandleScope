@@ -163,6 +163,7 @@ def training_violations(app_root: Path, graph: dict[str, list[Dependency]]) -> l
     prefix = "app.replay.training."
     components = tuple(prefix + name for name in (
         "admission_service", "order_service", "display_service", "ordered_playback",
+        "advance_service", "review_service",
     ))
     rules = tuple(prefix + name for name in (
         "admission_rules", "order_rules", "control_rules", "service_validation",

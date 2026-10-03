@@ -16,7 +16,7 @@ from app.data_engine.interval_policy import (
 )
 from app.data_engine.market_data.lifecycle import KeyedAsyncLockPool
 
-from .backfill_coordinator import priority_for_reason
+from .backfill_contracts import priority_for_reason
 from .price_cache import PriceSnapshot
 from .query import BackfillTrigger
 
