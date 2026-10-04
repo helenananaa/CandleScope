@@ -2625,6 +2625,48 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   box-shadow: 0 0 8px color-mix(in srgb, var(--accent-cyan) 50%, transparent);
 }
 
+/* Compact variant: pinned intervals inside the top bar instead of a row */
+.toolbar.toolbar-compact {
+  height: auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  gap: 2px;
+  overflow: visible;
+}
+
+/* Only the pinned chips scroll when the bar is tight; the picker button stays visible */
+.toolbar-compact .toolbar-group {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.toolbar-compact .toolbar-group::-webkit-scrollbar { display: none; }
+
+.top-bar .interval-toolbar-wrap {
+  flex-shrink: 1;
+  min-width: 0;
+  z-index: auto;
+}
+
+.toolbar-compact .interval-btn {
+  font-family: var(--font-mono);
+}
+
+.toolbar-compact .interval-more-btn {
+  height: 26px;
+  margin-left: 2px;
+  padding: 0 var(--space-2);
+}
+
+.interval-chip-wrap.pin-only:hover .interval-chip,
+.interval-chip-wrap.pin-only:focus-within .interval-chip {
+  padding-right: 26px;
+}
+
 /* Box, color and type come from .ui-control */
 .interval-more-btn {
   flex-shrink: 0;
@@ -10845,49 +10887,144 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   }
 }
 
-/* ── 图表工作区侧栏 ──────────────────────────────────────── */
-.workspace-toggle-btn {
-  width: 34px;
-  height: 30px;
-  justify-content: center;
-  padding: 5px 7px;
+/* ── 布局选择（顶栏） ────────────────────────────────────── */
+.workspace-layout-picker {
+  position: relative;
+  flex-shrink: 0;
 }
 
-.workspace-toggle-icon {
-  display: grid;
-  width: 15px;
-  height: 15px;
-  grid-template-columns: repeat(2, 1fr);
-  grid-template-rows: repeat(2, 1fr);
-  gap: 2px;
+/* Box, color and type come from .ui-control */
+.workspace-layout-trigger {
+  position: relative;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
 }
 
-.workspace-toggle-icon i {
-  border: 1px solid currentColor;
-  border-radius: 1px;
-  background: color-mix(in srgb, currentColor 9%, transparent);
+.workspace-layout-thumb {
+  display: block;
+  flex: 0 0 auto;
 }
 
-.workspace-toggle-badge {
+.workspace-layout-thumb rect {
+  fill: color-mix(in srgb, currentColor 12%, transparent);
+  stroke: currentColor;
+  stroke-width: 1;
+}
+
+.workspace-layout-caret {
+  font-size: var(--font-size-2xs);
+  opacity: 0.8;
+}
+
+.workspace-layout-trigger[data-save-state="error"]::after {
+  content: "";
   position: absolute;
-  top: -4px;
-  right: -4px;
+  top: -3px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--surface-1);
+  border-radius: var(--radius-full);
+  background: var(--color-danger);
+}
+
+.workspace-layout-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: var(--z-menu);
+  width: 252px;
+  padding: var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-lg);
+}
+
+.workspace-layout-popover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 0 var(--space-1) var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.workspace-layout-popover-hint {
+  margin: 0 var(--space-1) var(--space-2);
+  color: var(--text-warning);
+  font-size: var(--font-size-xs);
+}
+
+.workspace-layout-grid {
   display: grid;
-  min-width: 15px;
-  height: 15px;
-  place-items: center;
-  padding: 0 3px;
-  border: 1px solid var(--bg-primary);
-  border-radius: 8px;
-  color: var(--text-on-accent);
-  background: var(--accent-solid);
-  font: 700 var(--font-size-2xs)/1 var(--font-mono);
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-1);
 }
 
-.workspace-toggle-btn[data-save-state="error"] .workspace-toggle-badge {
-  background: var(--candle-down);
+.workspace-layout-grid button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 44px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
 }
 
+.workspace-layout-grid button span {
+  color: var(--text-muted);
+  font: 500 var(--font-size-2xs)/1 var(--font-mono);
+}
+
+.workspace-layout-grid button:hover:not(:disabled),
+.workspace-layout-grid button:focus-visible {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.workspace-layout-grid button.active {
+  border-color: var(--accent-blue);
+  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
+  color: var(--text-accent);
+}
+
+.workspace-layout-grid button.active span {
+  color: var(--text-accent);
+}
+
+.workspace-layout-grid button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.workspace-layout-manage {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-1) 0;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  font: 500 var(--font-size-sm) var(--font-sans);
+  cursor: pointer;
+}
+
+.workspace-layout-manage:hover,
+.workspace-layout-manage:focus-visible {
+  color: var(--text-primary);
+}
+
+/* ── 图表工作区侧栏 ──────────────────────────────────────── */
 .workspace-panel-overlay {
   position: fixed;
   inset: 0;

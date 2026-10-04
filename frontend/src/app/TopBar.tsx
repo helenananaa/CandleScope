@@ -46,6 +46,7 @@ export interface TopBarProps {
   replayEntry: ReplayEntryCapabilityView;
   onOpenReplayLauncher(): void;
   identityAccessory?: ReactNode;
+  intervalControl?: ReactNode;
   extensionControls?: ReactNode;
 }
 
@@ -57,6 +58,7 @@ function TopBar({
   replayEntry,
   onOpenReplayLauncher,
   identityAccessory,
+  intervalControl,
   extensionControls,
 }: TopBarProps) {
   const {
@@ -125,6 +127,7 @@ function TopBar({
         />
         {identityAccessory}
       </>}
+      intervals={intervalControl}
       controls={<>
         <button
         className="settings-btn indicator-toggle-btn"

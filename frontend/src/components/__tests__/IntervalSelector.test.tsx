@@ -89,3 +89,27 @@ test("open interval picker uses a chip grid and keeps the create composer collap
   assert.doesNotMatch(html, /data-interval-composer="true"/);
   assert.doesNotMatch(html, /2700s/);
 });
+
+test("compact variant shows only pinned native and custom intervals", () => {
+  const html = render({ defaultOpen: false, variant: "compact", interval: "5m" });
+  assert.match(html, /class="toolbar toolbar-compact"/);
+  for (const value of ["1m", "5m", "15m", "1h", "4h", "1d"]) {
+    assert.match(html, new RegExp(`id="interval-${value}"`));
+  }
+  assert.match(html, /id="interval-45m"/, "pinned custom interval stays on the bar");
+  assert.doesNotMatch(html, /id="interval-90m"/, "unpinned custom interval is picker-only");
+  assert.doesNotMatch(html, /class="interval-more-label"/);
+  assert.match(html, /aria-label="打开周期选择与自定义周期管理"/);
+});
+
+test("compact variant keeps an unpinned active interval visible", () => {
+  const html = render({ defaultOpen: false, variant: "compact", interval: "90m" });
+  assert.match(html, /class="interval-btn active custom-interval-btn" id="interval-90m"|id="interval-90m"[^>]*class="interval-btn active/);
+});
+
+test("compact picker opens on the full list with a pin toggle on every chip", () => {
+  const html = render({ variant: "compact", interval: "5m" });
+  assert.match(html, /data-interval-tab="all"[^>]*class="interval-panel-tab active"|class="interval-panel-tab active"[^>]*data-interval-tab="all"/);
+  assert.match(html, /aria-label="1m 取消置顶"/);
+  assert.match(html, /aria-label="90m 置顶到工具栏"/);
+});

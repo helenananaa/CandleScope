@@ -27,6 +27,10 @@ import type {
   NativeInterval,
 } from "../features/chart-session/chartSessionTypes.js";
 import { getEffectiveCustomIntervalRecords } from "../features/chart-session/intervalPolicy.js";
+import {
+  toggleFavoriteInterval,
+  useFavoriteIntervals,
+} from "../features/chart-session/intervalFavoritesStore.js";
 
 type IntervalTab = "common" | "custom" | "all";
 type IntervalStatusKind = "invalid" | "native" | "exists" | "new";
@@ -211,6 +215,12 @@ export interface IntervalSelectorProps {
   intervalAvailability?: (interval: IntervalString) => boolean;
   unavailableIntervalMessage?: (interval: IntervalString) => string;
   defaultOpen?: boolean;
+  /**
+   * "row" renders every native interval as its own toolbar row.
+   * "compact" renders only pinned intervals plus the active one, for
+   * placement inside the top bar; the picker can pin any interval.
+   */
+  variant?: "row" | "compact";
 }
 
 function IntervalSelector({
@@ -232,10 +242,13 @@ function IntervalSelector({
   intervalAvailability,
   unavailableIntervalMessage: unavailableIntervalMessageOverride,
   defaultOpen = false,
+  variant = "row",
 }: IntervalSelectorProps) {
   const locale = useLocale();
+  const compact = variant === "compact";
+  const favoriteIntervals = useFavoriteIntervals();
   const [open, setOpen] = useState(defaultOpen);
-  const [activeTab, setActiveTab] = useState<IntervalTab>("common");
+  const [activeTab, setActiveTab] = useState<IntervalTab>(variant === "compact" ? "all" : "common");
   const [search, setSearch] = useState("");
   const [amount, setAmount] = useState("45");
   const [unit, setUnit] = useState<IntervalUnit>("m");
@@ -278,6 +291,24 @@ function IntervalSelector({
     () => groupIntervalsByDuration(toolbarCustomRecords.map(buildItemFromRecord)),
     [toolbarCustomRecords],
   );
+  const favoriteSignatures = useMemo(
+    () => new Set(favoriteIntervals.map(intervalSemanticSignature)),
+    [favoriteIntervals],
+  );
+  const compactToolbarItems = useMemo((): IntervalItem[] => {
+    if (!compact) return [];
+    const natives = nativeIntervals
+      .filter((item) => (
+        favoriteSignatures.has(intervalSemanticSignature(item.value))
+        || intervalsSemanticallyEquivalent(item.value, interval)
+      ))
+      .map((item) => ({ ...item, isCustom: false }));
+    const customs = effectiveCustomRecords
+      .filter((record) => record.pinned || intervalsSemanticallyEquivalent(record.value, interval))
+      .map(buildItemFromRecord);
+    return dedupeItems([...natives, ...customs])
+      .sort((a, b) => (a.seconds || parseIntervalSeconds(a.value) || 0) - (b.seconds || parseIntervalSeconds(b.value) || 0));
+  }, [compact, effectiveCustomRecords, favoriteSignatures, interval, nativeIntervals]);
   const sortedCustomRecords = useMemo(
     () => sortCustomRecords(effectiveCustomRecords),
     [effectiveCustomRecords],
@@ -614,10 +645,18 @@ function IntervalSelector({
     const highlighted = index === clampedHighlightIndex;
     const available = isIntervalAvailable(item.value);
     const active = intervalsSemanticallyEquivalent(interval, item.value);
+    const pinned = item.isCustom
+      ? Boolean(record?.pinned)
+      : compact && favoriteSignatures.has(intervalSemanticSignature(item.value));
+    const pinOnly = compact && !(manage && item.isCustom);
+    const togglePinned = () => {
+      if (item.isCustom) onTogglePinCustomInterval(item.value);
+      else toggleFavoriteInterval(item.value);
+    };
     return (
       <div
         key={item.value}
-        className={clsx("interval-chip-wrap", manage && item.isCustom && "manage")}
+        className={clsx("interval-chip-wrap", manage && item.isCustom && "manage", pinOnly && "manage pin-only")}
       >
         <button
           type="button"
@@ -636,8 +675,22 @@ function IntervalSelector({
         >
           {item.isCustom && <span className="interval-custom-dot" />}
           {item.label || item.value}
-          {record?.pinned && <span className="interval-chip-star" aria-hidden="true">★</span>}
+          {pinned && <span className="interval-chip-star" aria-hidden="true">★</span>}
         </button>
+        {pinOnly && (
+          <div className="interval-chip-actions">
+            <button
+              type="button"
+              className={clsx("interval-chip-action", pinned && "active")}
+              onClick={togglePinned}
+              title={pinned ? t("interval.unpin", {}, locale) : t("interval.pin", {}, locale)}
+              aria-label={`${item.value} ${pinned ? t("interval.unpin", {}, locale) : t("interval.pin", {}, locale)}`}
+              aria-pressed={pinned}
+            >
+              {pinned ? "★" : "☆"}
+            </button>
+          </div>
+        )}
         {manage && item.isCustom && (
           <div className="interval-chip-actions">
             <button
@@ -671,8 +724,14 @@ function IntervalSelector({
       data-readonly={readOnlyReason === null ? "false" : "true"}
       title={readOnlyReason ?? undefined}
     >
-      <nav ref={toolbarRef} className="toolbar" id="toolbar" aria-label={t("interval.toolbar", {}, locale)}>
-        {nativeGroups.map((group, gi) => (
+      <nav ref={toolbarRef} className={clsx("toolbar", compact && "toolbar-compact")} id="toolbar" aria-label={t("interval.toolbar", {}, locale)}>
+        {compact && (
+          <div className="toolbar-group">
+            {compactToolbarItems.map((item) => renderIntervalButton(item))}
+          </div>
+        )}
+
+        {!compact && nativeGroups.map((group, gi) => (
           <div key={group.label} className="toolbar-group-wrap">
             {gi > 0 && <div className="toolbar-divider" />}
             <div className="toolbar-group">
@@ -681,7 +740,7 @@ function IntervalSelector({
           </div>
         ))}
 
-        {toolbarCustomGroups.length > 0 && (
+        {!compact && toolbarCustomGroups.length > 0 && (
           <>
             <div className="toolbar-divider" />
             <div className="toolbar-group custom-toolbar-group">
@@ -690,7 +749,7 @@ function IntervalSelector({
           </>
         )}
 
-        <div className="toolbar-divider" />
+        {!compact && <div className="toolbar-divider" />}
         <button
           ref={moreBtnRef}
           type="button"
@@ -705,10 +764,11 @@ function IntervalSelector({
           disabled={readOnlyReason !== null}
           aria-expanded={open}
           aria-haspopup="dialog"
+          aria-label={compact ? t("interval.openPicker", {}, locale) : undefined}
           title={readOnlyReason ?? t("interval.openPicker", {}, locale)}
         >
-          <span className="interval-more-label">{t("interval.label", {}, locale)}</span>
-          <span className="interval-more-value">{interval}</span>
+          {!compact && <span className="interval-more-label">{t("interval.label", {}, locale)}</span>}
+          {!compact && <span className="interval-more-value">{interval}</span>}
           <span className="interval-more-caret">▾</span>
         </button>
       </nav>

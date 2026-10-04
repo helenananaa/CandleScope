@@ -114,7 +114,6 @@ let liveChartCellMountSequence = 0;
 
 export interface WorkspacePortalHosts {
   topBar: HTMLElement | null;
-  intervalSelector: HTMLElement | null;
   drawingToolbar: HTMLElement | null;
   rightRail: HTMLElement | null;
   featureSurfaces: HTMLElement | null;
@@ -916,6 +915,7 @@ function LiveChartCell({
         <TopBar
           {...model.topBar}
           identityAccessory={strategyEntryControl}
+          intervalControl={<IntervalSelector {...model.intervalSelector} variant="compact" />}
           extensionControls={(
             <>
               {workspaceControls}
@@ -926,10 +926,6 @@ function LiveChartCell({
           )}
         />,
         portalHosts.topBar,
-      )}
-      {active && portalHosts.intervalSelector && createPortal(
-        <IntervalSelector {...model.intervalSelector} />,
-        portalHosts.intervalSelector,
       )}
       {active && portalHosts.drawingToolbar && createPortal(
         <Suspense fallback={<div className="drawing-toolbar drawing-toolbar-loading" aria-hidden="true" />}>

@@ -24,6 +24,7 @@ import {
 import { chartCellDrawingScopeBase } from "../features/chart-workspace/chartWorkspaceDrawingLink.js";
 import { chartWorkspaceCell } from "../features/chart-workspace/chartWorkspaceDocument.js";
 import WorkspaceLayoutTree from "../features/chart-workspace/WorkspaceLayoutTree.js";
+import WorkspaceLayoutPicker from "../features/chart-workspace/WorkspaceLayoutPicker.js";
 import { CHART_WORKSPACE_FEATURE_FLAGS } from "../features/chart-workspace/chartWorkspaceCapacity.js";
 import { defaultWorkspaceBus } from "../features/chart-workspace/workspaceBus.js";
 import { useChartSettingsRuntime } from "../features/settings/chartAppearanceSettings.js";
@@ -509,7 +510,6 @@ function LiveWorkspaceApp() {
   }, [toggleWorkspaceMaximize, workspace.view.window.maximizedCellId]);
 
   const [topBarHost, setTopBarHost] = useState<HTMLElement | null>(null);
-  const [intervalSelectorHost, setIntervalSelectorHost] = useState<HTMLElement | null>(null);
   const [drawingToolbarHost, setDrawingToolbarHost] = useState<HTMLElement | null>(null);
   const [rightRailHost, setRightRailHost] = useState<HTMLElement | null>(null);
   const [featureSurfacesHost, setFeatureSurfacesHost] = useState<HTMLElement | null>(null);
@@ -518,7 +518,6 @@ function LiveWorkspaceApp() {
   const [strategyPanelOpen, setStrategyPanelOpen] = useState(false);
   const portalHosts = useMemo<WorkspacePortalHosts>(() => ({
     topBar: topBarHost,
-    intervalSelector: intervalSelectorHost,
     drawingToolbar: drawingToolbarHost,
     rightRail: rightRailHost,
     featureSurfaces: featureSurfacesHost,
@@ -528,43 +527,38 @@ function LiveWorkspaceApp() {
     bottomPanelHost,
     drawingToolbarHost,
     featureSurfacesHost,
-    intervalSelectorHost,
     rightRailHost,
     statusBarHost,
     topBarHost,
   ]);
+  const setWorkspaceLayout = workspace.actions.setLayout;
+  const openWorkspaceManager = useCallback(() => {
+    setWorkspacePanelLoaded(true);
+    setWorkspacePanelOpen(true);
+  }, []);
   const workspaceControls = useMemo(() => (
-    <button
-      type="button"
-      className={`indicator-toggle-btn workspace-toggle-btn ${workspacePanelOpen ? "active" : ""}`}
-      data-save-state={workspace.status.saveState}
-      onPointerEnter={loadWorkspacePanel}
-      onMouseEnter={loadWorkspacePanel}
-      onFocus={loadWorkspacePanel}
-      onClick={() => {
-        setWorkspacePanelLoaded(true);
-        setWorkspacePanelOpen((open) => !open);
-      }}
-      aria-label={t("workspace.toggleAria", { name: workspace.view.activeWorkspaceName, count: workspace.view.layoutCellIds.length }, locale)}
-      aria-expanded={workspacePanelOpen}
-      title={t("workspace.toggleTitle", { name: workspace.view.activeWorkspaceName, count: workspace.view.layoutCellIds.length }, locale)}
-    >
-      <span className="workspace-toggle-icon" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-        <i />
-      </span>
-      <span className="workspace-toggle-badge" aria-hidden="true">
-        {workspace.view.layoutCellIds.length}
-      </span>
-    </button>
+    <WorkspaceLayoutPicker
+      tree={workspace.view.window.layoutTree}
+      layout={workspace.view.layout}
+      cellCount={workspace.view.layoutCellIds.length}
+      maxCellsPerWindow={workspace.view.maxCellsPerWindow}
+      ready={workspace.view.ready}
+      locked={workspace.view.layoutLocked}
+      saveState={workspace.status.saveState}
+      onSelectLayout={setWorkspaceLayout}
+      onOpenManager={openWorkspaceManager}
+      onPreloadManager={loadWorkspacePanel}
+    />
   ), [
-    locale,
+    openWorkspaceManager,
+    setWorkspaceLayout,
     workspace.status.saveState,
-    workspace.view.activeWorkspaceName,
+    workspace.view.layout,
     workspace.view.layoutCellIds.length,
-    workspacePanelOpen,
+    workspace.view.layoutLocked,
+    workspace.view.maxCellsPerWindow,
+    workspace.view.ready,
+    workspace.view.window.layoutTree,
   ]);
   const gridClassName = [
     "multi-chart-grid",
@@ -577,7 +571,7 @@ function LiveWorkspaceApp() {
       <MarketPageFrame
         rootRef={pageExportRef}
         topBar={<div className="workspace-portal-host" ref={setTopBarHost} />}
-        intervalSelector={<div className="workspace-portal-host" ref={setIntervalSelectorHost} />}
+        intervalSelector={null}
         workspace={(
           <MarketWorkspaceFrame
             toolbar={<div className="workspace-portal-host" ref={setDrawingToolbarHost} />}
