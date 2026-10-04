@@ -1095,13 +1095,6 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   50% { opacity: 1; }
 }
 
-.ob-last-update {
-  padding: 3px 8px;
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-  font-variant-numeric: tabular-nums;
-}
-
 .ob-controls {
   display: grid;
   flex: 0 0 38px;
@@ -1242,6 +1235,20 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 
 .ob-ask .ob-depth-bar { background: color-mix(in srgb, var(--wl-down-color) 11%, transparent); }
 .ob-bid .ob-depth-bar { background: color-mix(in srgb, var(--wl-up-color) 11%, transparent); }
+/* Depth beyond the confirmed range: hatched instead of explained in prose */
+.ob-depth-bar.ob-depth-bar-partial {
+  background-image: repeating-linear-gradient(135deg, transparent 0 3px, color-mix(in srgb, var(--text-muted) 22%, transparent) 3px 4px);
+}
+.ob-coverage-info {
+  display: inline-flex;
+  vertical-align: -2px;
+  margin-left: var(--space-1);
+  color: var(--text-muted);
+  cursor: help;
+}
+.ob-coverage-info.is-partial { color: var(--text-warning); }
+.ob-coverage-info:hover,
+.ob-coverage-info:focus-visible { color: var(--text-primary); }
 
 .ob-spread-row {
   display: grid;
@@ -15189,7 +15196,6 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
   font: inherit;
 }
 
-.ob-coverage-note { flex: 0 0 auto; padding: 3px 8px; font-size: var(--font-size-xs); color: var(--text-secondary); }
 
 /* Chart-local membership shortcut and grouped bulk editor. */
 .multi-chart-cell-link.workspace-cell-link-select select {
