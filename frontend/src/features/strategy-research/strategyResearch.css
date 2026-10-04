@@ -167,10 +167,10 @@
 .strategy-research-shell a:not(.top-bar a) { color: var(--strategy-link); font-size: 13px; }
 .strategy-research-shell .research-primary,
 .strategy-research-shell [data-testid='strategy-research-run'],
-.research-data-drawer button[type='submit'] { background: #2563eb; color: white; border-color: #2563eb; }
+.research-data-drawer button[type='submit'] { background: var(--accent-solid); color: white; border-color: var(--accent-solid); }
 .strategy-research-shell button.research-primary:hover:not(:disabled),
 .strategy-research-shell button[data-testid='strategy-research-run']:hover:not(:disabled),
-.research-data-drawer button[type='submit']:hover:not(:disabled) { background: #1d4ed8; color: white; }
+.research-data-drawer button[type='submit']:hover:not(:disabled) { background: var(--accent-solid-hover); color: white; }
 /* A dimmed blue still reads as clickable; disabled primaries go neutral instead. */
 .strategy-research-shell .research-primary:disabled,
 .strategy-research-shell [data-testid='strategy-research-run']:disabled,
@@ -290,4 +290,11 @@
   .strategy-research-shell .chart-with-toolbar { flex: 1 0 420px; }
   .strategy-research-right-rail { flex: 0 0 auto; min-height: 420px; overflow: visible; border-left: 0; }
   .research-data-source-bar > span { display: none; }
+}
+
+/* The research chart reuses the app top-bar frame. Inside the strategy shell the
+   outer header already shows the brand and workspace navigation, so the nested
+   bar keeps only its research controls. Standalone it keeps everything. */
+.strategy-research-shell .research-top-bar :is(.logo, .workspace-navigation) {
+  display: none;
 }

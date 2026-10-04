@@ -456,7 +456,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   cursor: pointer;
 }
 .wl-table-header > button:hover { color: var(--text-primary); }
-.wl-table-header > button:focus-visible { outline: 2px solid var(--accent-color, var(--accent-blue)); }
+.wl-table-header > button:focus-visible { outline: 2px solid var(--accent-blue); }
 .wl-th-name {
   flex: 1;
   min-width: 0;
@@ -3408,7 +3408,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 
 [data-theme='light'] .export-option-card {
-  background: rgba(241, 245, 249, 0.65);
+  background: color-mix(in srgb, var(--surface-2) 65%, transparent);
 }
 
 .export-option-card:hover,
@@ -3532,7 +3532,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   margin-top: 6px;
   padding: 6px 8px;
   border-radius: 8px;
-  background: rgba(100, 116, 139, 0.12);
+  background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
   color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
@@ -3595,7 +3595,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 
 [data-theme='light'] .export-preview-panel {
-  background: rgba(241, 245, 249, 0.7);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
 }
 
 .export-preview-header {
@@ -3935,7 +3935,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   border-radius: 6px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px color-mix(in srgb, var(--accent-blue) 15%, transparent);
   font-family: var(--font-sans);
-  color: #e2e8f0;
+  color: var(--text-primary);
   user-select: none;
 }
 
@@ -3972,12 +3972,12 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 .selected-drawing-style-bar button:hover, .drawing-color-control > button:hover { background: color-mix(in srgb, var(--text-primary) 8%, transparent); }
 .selected-drawing-style-bar :is(button, summary, input, select):focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
 .selected-drawing-style-bar button[aria-pressed='true'] { background: color-mix(in srgb, var(--accent-blue) 16%, transparent); border-color: var(--accent-blue); }
-.selected-drawing-style-bar .drawing-delete-button:hover { color: #ef4444; background: #ef444415; }
+.selected-drawing-style-bar .drawing-delete-button:hover { color: #ef4444; background: color-mix(in srgb, var(--color-danger) 8%, transparent); }
 .drawing-toolbar-divider { width: 1px; height: 20px; margin: 0 4px; background: var(--drawing-border); }
 .drawing-color-control { position: relative; }
 .drawing-color-control > button { list-style: none; }
 
-.drawing-color-swatch { width: 18px; height: 18px; border-radius: 4px; border: 1px solid #94a3b866; }
+.drawing-color-swatch { width: 18px; height: 18px; border-radius: 4px; border: 1px solid color-mix(in srgb, var(--text-secondary) 40%, transparent); }
 .drawing-chevron { opacity: .6; font-size: 12px; }
 .drawing-color-popover { position: fixed; inset: auto; margin: 0; box-sizing: border-box; color: inherit; font: inherit; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow: auto; z-index: 3; width: 236px; padding: 14px; border: 1px solid var(--drawing-border); border-radius: 9px; background: var(--drawing-surface); box-shadow: 0 8px 28px #0004; }
 .drawing-control-caption { display: block; color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
@@ -3994,7 +3994,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 .drawing-line-options { display: flex; gap: 2px; }
  .drawing-properties-panel { position: fixed; inset: auto; margin: 0; padding: 0; box-sizing: border-box; color: inherit; font: inherit; width: min(320px, calc(100vw - 16px)); max-height: min(580px, calc(100dvh - 16px)); overflow: hidden; background: var(--drawing-surface); border: 1px solid var(--drawing-border); border-radius: 12px; box-shadow: 0 12px 36px #0004; outline: none; }
 .drawing-properties-panel[open] { display: flex; flex-direction: column; }
-.drawing-properties-panel::backdrop { background: #0f172a0a; }
+.drawing-properties-panel::backdrop { background: color-mix(in srgb, var(--text-primary) 4%, transparent); }
 .selected-drawing-style-bar .drawing-drag-handle { cursor: grab; touch-action: none; color: var(--text-secondary); min-width: 24px; padding: 0 3px; }
 .selected-drawing-style-bar .drawing-drag-handle:active { cursor: grabbing; }
 .drawing-properties-header { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 18px 18px 14px; border-bottom: 1px solid var(--drawing-border); }
@@ -4021,8 +4021,8 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 
 [data-theme='light'] .text-format-bar {
   background: color-mix(in srgb, var(--surface-0) 98%, transparent);
-  border-color: rgba(15, 23, 42, 0.12);
-  color: #1e293b;
+  border-color: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  color: var(--text-primary);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
 }
 
@@ -4084,8 +4084,8 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   cursor: pointer;
 }
 [data-theme='light'] .text-format-bar .tfb-select {
-  background: rgba(241, 245, 249, 0.9);
-  border-color: rgba(15, 23, 42, 0.15);
+  background: color-mix(in srgb, var(--surface-2) 90%, transparent);
+  border-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
 }
 
 .text-format-bar .tfb-fontsize-input {
@@ -4107,8 +4107,8 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   margin: 0;
 }
 [data-theme='light'] .text-format-bar .tfb-fontsize-input {
-  background: rgba(241, 245, 249, 0.9);
-  border-color: rgba(15, 23, 42, 0.15);
+  background: color-mix(in srgb, var(--surface-2) 90%, transparent);
+  border-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
 }
 
 .text-format-bar .tfb-label {
@@ -4148,7 +4148,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 [data-theme='light'] .text-format-bar .tfb-popover {
   background: #ffffff;
-  border-color: rgba(15, 23, 42, 0.15);
+  border-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
 }
 .text-format-bar .tfb-color-grid {
@@ -4913,9 +4913,9 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   display: grid;
   gap: 9px;
   padding: 12px;
-  border: 1px solid rgba(167, 139, 250, 0.42);
+  border: 1px solid color-mix(in srgb, var(--accent-purple) 42%, transparent);
   border-radius: 8px;
-  background: rgba(109, 40, 217, 0.08);
+  background: color-mix(in srgb, var(--accent-purple) 8%, transparent);
 }
 
 .plugin-v1-compatibility h3,
@@ -4925,8 +4925,8 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 .plugin-v1-compatibility ul { margin: 0; padding-left: 20px; color: var(--text-secondary); }
 .plugin-v1-compatibility-preview {
   padding: 10px;
-  border-left: 3px solid #a78bfa;
-  background: rgba(109, 40, 217, 0.12);
+  border-left: 3px solid var(--accent-purple);
+  background: color-mix(in srgb, var(--accent-purple) 12%, transparent);
 }
 
 .plugin-marketplace-panel {
@@ -4934,9 +4934,9 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   gap: 10px;
   margin-top: 12px;
   padding: 12px;
-  border: 1px solid rgba(56, 189, 248, 0.38);
+  border: 1px solid color-mix(in srgb, var(--accent-cyan) 38%, transparent);
   border-radius: 8px;
-  background: rgba(14, 116, 144, 0.08);
+  background: color-mix(in srgb, var(--accent-cyan) 8%, transparent);
 }
 
 .plugin-marketplace-panel > header,
@@ -5318,13 +5318,13 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 .plugin-state-pill.is-ready {
   border-color: color-mix(in srgb, var(--color-success) 30%, transparent);
   background: color-mix(in srgb, var(--color-success) 10%, transparent);
-  color: #4ade80;
+  color: var(--text-success);
 }
 
 .plugin-state-pill.is-compatibility {
-  border-color: rgba(167, 139, 250, 0.35);
+  border-color: color-mix(in srgb, var(--accent-purple) 35%, transparent);
   background: color-mix(in srgb, var(--accent-purple) 10%, transparent);
-  color: #c4b5fd;
+  color: var(--text-purple);
 }
 
 .plugin-state-pill.is-muted {
@@ -5589,7 +5589,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   border: 1px solid color-mix(in srgb, var(--color-warning) 78%, transparent);
   border-radius: 999px;
   padding: 8px 16px;
-  background: rgba(120, 53, 15, 0.96);
+  background: color-mix(in srgb, var(--color-warning) 22%, var(--surface-1));
   color: #fff7ed;
   box-shadow: 0 10px 36px rgba(0, 0, 0, 0.48);
   font: inherit;
@@ -5612,22 +5612,22 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 
 .live-control-banner.live-control-armed {
   border-color: color-mix(in srgb, var(--color-danger) 92%, transparent);
-  background: rgba(127, 29, 29, 0.97);
+  background: color-mix(in srgb, var(--color-danger) 22%, var(--surface-1));
 }
 
 .live-control-banner.live-control-killed {
-  border-color: rgba(248, 113, 113, 0.9);
-  background: rgba(69, 10, 10, 0.98);
+  border-color: color-mix(in srgb, var(--color-danger) 90%, transparent);
+  background: color-mix(in srgb, var(--color-danger) 22%, var(--surface-1));
 }
 
 .live-control-banner.live-control-unavailable {
-  border-color: rgba(248, 113, 113, 0.92);
+  border-color: color-mix(in srgb, var(--color-danger) 92%, transparent);
   background: repeating-linear-gradient(
     135deg,
-    rgba(69, 10, 10, 0.98) 0,
-    rgba(69, 10, 10, 0.98) 10px,
-    rgba(127, 29, 29, 0.98) 10px,
-    rgba(127, 29, 29, 0.98) 20px
+    color-mix(in srgb, var(--color-danger) 22%, var(--surface-1)) 0,
+    color-mix(in srgb, var(--color-danger) 22%, var(--surface-1)) 10px,
+    color-mix(in srgb, var(--color-danger) 22%, var(--surface-1)) 10px,
+    color-mix(in srgb, var(--color-danger) 22%, var(--surface-1)) 20px
   );
 }
 
@@ -5701,8 +5701,8 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   border: 1px solid color-mix(in srgb, var(--color-danger) 72%, transparent);
   border-radius: 9px;
   padding: 12px;
-  background: rgba(127, 29, 29, 0.18);
-  color: #fecaca;
+  background: color-mix(in srgb, var(--color-danger) 18%, transparent);
+  color: var(--text-danger);
 }
 
 .live-intent-facts {
@@ -5722,8 +5722,8 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 
 .plugin-modal .live-danger-action {
   border-color: color-mix(in srgb, var(--color-danger) 80%, transparent);
-  background: rgba(127, 29, 29, 0.32);
-  color: #fecaca;
+  background: color-mix(in srgb, var(--color-danger) 32%, transparent);
+  color: var(--text-danger);
 }
 
 .live-control-primary-actions { align-items: center; }
@@ -5740,7 +5740,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   border: 1px solid color-mix(in srgb, var(--color-success) 55%, transparent);
   border-radius: 9px;
   padding: 12px;
-  background: rgba(22, 101, 52, 0.12);
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
 }
 
 .live-receipt-summary span {
@@ -6796,7 +6796,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   bottom: -12px;
   margin: 0 -12px -12px;
   padding: 10px 12px;
-  background: linear-gradient(to top, var(--bg-secondary), rgba(17, 24, 39, 0.92));
+  background: linear-gradient(to top, var(--bg-secondary), color-mix(in srgb, var(--surface-1) 92%, transparent));
   border-top: 1px solid var(--border-color);
   z-index: 3;
 }
@@ -6914,7 +6914,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 
 .alert-panel {
   min-width: 0;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-0) 98%, transparent), rgba(10, 14, 23, 0.98)),
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-0) 98%, transparent), color-mix(in srgb, var(--surface-0) 98%, transparent)),
     var(--bg-secondary);
   border-left: 1px solid color-mix(in srgb, var(--text-secondary) 18%, transparent);
   box-shadow: -18px 0 42px rgba(0, 0, 0, 0.38);
@@ -6922,7 +6922,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 
 [data-theme='light'] .alert-panel {
   background:
-    linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.98)),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-1) 98%, transparent), color-mix(in srgb, var(--surface-2) 98%, transparent)),
     var(--bg-secondary);
   box-shadow: -18px 0 42px rgba(15, 23, 42, 0.16);
 }
@@ -7382,7 +7382,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 
 [data-theme='light'] .alert-test-trace-node {
-  background: rgba(248, 250, 252, 0.78);
+  background: color-mix(in srgb, var(--surface-1) 78%, transparent);
 }
 
 .alert-test-trace-node.depth-1,
@@ -7476,12 +7476,12 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 
 .sticky-actions {
   bottom: -12px;
-  background: linear-gradient(to top, rgba(10, 14, 23, 0.98), rgba(10, 14, 23, 0.88));
+  background: linear-gradient(to top, color-mix(in srgb, var(--surface-0) 98%, transparent), color-mix(in srgb, var(--surface-0) 88%, transparent));
   border-top-color: color-mix(in srgb, var(--text-secondary) 16%, transparent);
 }
 
 [data-theme='light'] .sticky-actions {
-  background: linear-gradient(to top, rgba(248, 250, 252, 0.98), rgba(248, 250, 252, 0.88));
+  background: linear-gradient(to top, color-mix(in srgb, var(--surface-1) 98%, transparent), color-mix(in srgb, var(--surface-1) 88%, transparent));
 }
 
 .alert-toolbar-row {
@@ -8652,10 +8652,10 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   bottom: 30px;
   z-index: 14;
   padding: 6px 11px;
-  border: 1px solid rgba(56, 189, 248, 0.45);
+  border: 1px solid color-mix(in srgb, var(--accent-cyan) 45%, transparent);
   border-radius: 999px;
-  color: #e0f2fe;
-  background: rgba(3, 105, 161, 0.88);
+  color: var(--text-on-accent);
+  background: color-mix(in srgb, var(--accent-cyan) 22%, var(--surface-1));
   box-shadow: 0 4px 14px rgba(2, 8, 23, 0.24);
   font-size: 11px;
   font-weight: 600;
@@ -8664,7 +8664,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 
 .chart-return-to-realtime:hover:not(:disabled) {
-  background: rgba(2, 132, 199, 0.94);
+  background: color-mix(in srgb, var(--accent-cyan) 22%, var(--surface-1));
 }
 
 .chart-return-to-realtime:disabled {
@@ -8673,9 +8673,9 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 
 [data-theme='light'] .chart-return-to-realtime {
-  color: #f8fafc;
-  border-color: rgba(2, 132, 199, 0.38);
-  background: rgba(3, 105, 161, 0.9);
+  color: var(--text-on-accent);
+  border-color: color-mix(in srgb, var(--accent-cyan) 38%, transparent);
+  background: color-mix(in srgb, var(--accent-cyan) 22%, var(--surface-1));
 }
 
 .synthetic-chart-notice {
@@ -8898,7 +8898,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   opacity: 1;
   transform: translate3d(0, 0, 0) scale(1);
   pointer-events: auto;
-  border-color: rgba(96, 165, 250, 0.34);
+  border-color: color-mix(in srgb, var(--accent-blue) 34%, transparent);
 }
 
 .pane-control-button {
@@ -8957,8 +8957,8 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 
 [data-theme='light'] .pane-control-bar {
-  border-color: rgba(15, 23, 42, 0.13);
-  background: rgba(248, 250, 252, 0.82);
+  border-color: color-mix(in srgb, var(--text-primary) 13%, transparent);
+  background: color-mix(in srgb, var(--surface-1) 82%, transparent);
   box-shadow: 0 2px 9px rgba(15, 23, 42, 0.12);
 }
 
@@ -9784,7 +9784,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   border: 1px solid color-mix(in srgb, var(--color-warning) 68%, var(--border-color));
   border-radius: 6px;
   color: var(--text-warning);
-  background: color-mix(in srgb, #78350f 88%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 22%, var(--surface-1));
   box-shadow: 0 8px 24px rgb(0 0 0 / 38%);
   font-size: var(--font-size-xs);
   line-height: 1.4;
@@ -10910,7 +10910,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   overflow: hidden;
   border-left: 1px solid color-mix(in srgb, var(--text-secondary) 18%, transparent);
   color: var(--text-primary);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-0) 98%, transparent), rgba(10, 14, 23, 0.98)),
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-0) 98%, transparent), color-mix(in srgb, var(--surface-0) 98%, transparent)),
     var(--bg-secondary);
   box-shadow: -18px 0 42px rgba(0, 0, 0, 0.38);
   animation: slide-in-right 0.2s ease-out;
@@ -10918,7 +10918,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 
 [data-theme="light"] .workspace-panel {
   background:
-    linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.98)),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-1) 98%, transparent), color-mix(in srgb, var(--surface-2) 98%, transparent)),
     var(--bg-secondary);
   box-shadow: -18px 0 42px rgba(15, 23, 42, 0.16);
 }
@@ -11156,7 +11156,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 
 [data-theme="light"] .workspace-panel-workspace-list {
-  background: rgba(241, 245, 249, 0.74);
+  background: color-mix(in srgb, var(--surface-2) 74%, transparent);
 }
 
 .workspace-panel-workspace-list > button {
@@ -11467,7 +11467,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 
 [data-theme="light"] .workspace-panel-guidance {
-  background: rgba(241, 245, 249, 0.72);
+  background: color-mix(in srgb, var(--surface-2) 72%, transparent);
 }
 
 .workspace-panel-context-card {
@@ -11581,7 +11581,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 
 [data-theme="light"] .workspace-panel-segmented {
-  background: rgba(241, 245, 249, 0.72);
+  background: color-mix(in srgb, var(--surface-2) 72%, transparent);
 }
 
 .workspace-panel-segmented button {
@@ -12004,7 +12004,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 
 .advanced-market-pane-value[data-appearance='realtime'] {
   text-decoration: underline;
-  text-decoration-color: #38bdf8;
+  text-decoration-color: var(--accent-cyan);
   text-decoration-thickness: 2px;
   text-underline-offset: 3px;
 }
@@ -12064,7 +12064,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 
 .advanced-market-pane-legend-swatch[data-appearance='carried'] {
-  background: linear-gradient(90deg, rgba(74, 222, 128, 0.55) 0 50%, rgba(251, 113, 133, 0.55) 50% 100%);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-success) 55%, transparent) 0 50%, color-mix(in srgb, var(--color-danger) 55%, transparent) 50% 100%);
   border: 1px dashed color-mix(in srgb, var(--text-secondary) 75%, transparent);
   opacity: 0.66;
 }
@@ -12087,7 +12087,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 
 [data-theme='light'] .chart-pane-label {
-  background: rgba(248, 250, 252, 0.7);
+  background: color-mix(in srgb, var(--surface-1) 70%, transparent);
 }
 
 .advanced-market-pane-status {
@@ -12173,7 +12173,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 
 [data-theme='light'] .chart-pane-cursor-highlighter {
   background: color-mix(in srgb, var(--color-warning) 20%, transparent);
-  border-color: rgba(217, 119, 6, 0.36);
+  border-color: color-mix(in srgb, var(--color-warning) 36%, transparent);
 }
 
 /* ── Pane Resizer (draggable divider) ─────────────────────── */
@@ -12257,7 +12257,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   padding: 7px 14px;
   border: none;
   background: none;
-  color: #e2e8f0;
+  color: var(--text-primary);
   font-size: 13px;
   cursor: pointer;
   text-align: left;
@@ -12283,7 +12283,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 .price-scale-menu-label-en {
   margin-left: auto;
   font-size: 11px;
-  color: #64748b;
+  color: var(--text-muted);
   font-weight: 400;
 }
 
@@ -12294,7 +12294,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 
 [data-theme='light'] .price-scale-menu-item {
-  color: #1e293b;
+  color: var(--text-primary);
 }
 
 [data-theme='light'] .price-scale-menu-item:hover {
@@ -12302,7 +12302,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 
 [data-theme='light'] .price-scale-menu-label-en {
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
 /* ── Replay desktop trading workstation ───────────────────── */
@@ -14135,16 +14135,16 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
   display: flex;
   align-items: flex-start;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--accent-color, #2962ff) 42%, var(--border-color));
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 42%, var(--border-color));
   border-radius: 10px;
-  background: color-mix(in srgb, var(--panel-bg, #17191d) 94%, transparent);
+  background: color-mix(in srgb, var(--surface-1) 94%, transparent);
   box-shadow: 0 14px 40px rgb(0 0 0 / 36%);
   backdrop-filter: blur(12px);
   pointer-events: auto;
 }
 
 .alert-toast.is-error {
-  border-color: color-mix(in srgb, var(--danger-color, #ef5350) 58%, var(--border-color));
+  border-color: color-mix(in srgb, var(--color-danger) 58%, var(--border-color));
 }
 
 .alert-toast-main {
@@ -14173,7 +14173,7 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 }
 
 .alert-toast-kicker {
-  color: var(--accent-color, #5b8cff);
+  color: var(--accent-blue);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -14200,18 +14200,18 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 }
 
 .alert-runtime-status.status-running {
-  color: var(--success-color, #22c55e);
+  color: var(--text-success);
 }
 
 .alert-runtime-status.status-error {
-  color: var(--danger-color, #ef5350);
+  color: var(--text-danger);
 }
 
 .alert-channel-setup-message {
   padding: 8px 10px;
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  background: color-mix(in srgb, var(--panel-bg, #17191d) 88%, transparent);
+  background: color-mix(in srgb, var(--surface-1) 88%, transparent);
 }
 
 /* Replay training hub — uses the shared workspace theme and compact panels. */
@@ -15091,7 +15091,7 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 .workspace-member-row strong, .workspace-member-row small { display: block; overflow-wrap: anywhere; }
 .workspace-member-row small { color: var(--text-muted); font-size: var(--font-size-xs); }
 .workspace-member-row .workspace-cell-link-select { flex-shrink: 0; max-width: 120px; }
-.workspace-link-members input[type="checkbox"] { flex-shrink: 0; accent-color: var(--accent-color, var(--accent-blue)); }
+.workspace-link-members input[type="checkbox"] { flex-shrink: 0; accent-color: var(--accent-blue); }
 
 .workspace-link-members { font-size: 12px; }
 .workspace-member-row strong { font-size: 12px; font-weight: 600; }

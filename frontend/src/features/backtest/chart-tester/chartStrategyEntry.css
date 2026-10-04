@@ -1,7 +1,7 @@
 /* The visible chart entry must be styled before the tester is lazily loaded. */
 /* Semantic foregrounds stay legible on the selected theme's surfaces. */
 :root {
-  --strategy-link: #93c5fd;
+  --strategy-link: var(--text-accent);
   --strategy-accent: var(--text-info);
   --strategy-success: var(--text-success);
   --strategy-positive: var(--text-success);

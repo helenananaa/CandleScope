@@ -11,7 +11,7 @@
   padding: 14px;
   border: 1px solid color-mix(in srgb, var(--color-warning) 30%, var(--border-color));
   border-radius: 10px;
-  background: color-mix(in srgb, #111827 94%, var(--color-warning) 6%);
+  background: color-mix(in srgb, var(--surface-1) 94%, var(--color-warning) 6%);
 }
 
 .plugin-trust-source,
@@ -24,7 +24,7 @@
 .plugin-trust-source code,
 .plugin-trust-runtime code {
   overflow-wrap: anywhere;
-  color: #a5b4fc;
+  color: var(--text-accent);
   font-size: 11px;
 }
 
@@ -32,7 +32,7 @@
   margin: 0;
   padding: 10px 12px;
   border-left: 3px solid var(--color-warning);
-  background: rgb(245 158 11 / 10%);
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
   color: var(--text-warning);
 }
 
@@ -50,11 +50,11 @@
   padding: 9px 10px;
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  background: rgb(15 23 42 / 60%);
+  background: color-mix(in srgb, var(--surface-0) 60%, transparent);
 }
 
 .plugin-trust-risk-grid > div[data-requested="true"] {
-  border-color: rgb(245 158 11 / 55%);
+  border-color: color-mix(in srgb, var(--color-warning) 55%, transparent);
 }
 
 .plugin-trust-risk-grid span,
@@ -77,7 +77,7 @@
   padding: 9px 10px;
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  background: var(--surface-raised, #111827);
+  background: var(--surface-2);
   color: var(--text-primary);
 }
 
@@ -99,11 +99,11 @@
 
 .plugin-trust-confirmations .is-danger {
   border-color: var(--color-danger);
-  color: #fecaca;
+  color: var(--text-danger);
 }
 
 .plugin-state-pill.is-warn {
-  border-color: rgb(245 158 11 / 45%);
+  border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
   color: var(--text-warning);
 }
 

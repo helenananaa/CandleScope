@@ -46,12 +46,12 @@
 .research-market-identity strong { font: 650 12px/1 var(--font-mono); }
 .research-market-identity span { color: var(--text-muted); font: var(--font-size-xs)/1 var(--font-mono); }
 .research-source-switch { display: flex; gap: 4px; margin-left: auto; }
-.research-source-switch button[data-active="true"] { border-color: color-mix(in srgb, var(--accent-cyan) 62%, transparent); color: #b8fff7; background: rgba(20, 184, 166, .12); }
+.research-source-switch button[data-active="true"] { border-color: color-mix(in srgb, var(--accent-cyan) 62%, transparent); color: var(--text-info); background: color-mix(in srgb, var(--accent-cyan) 12%, transparent); }
 .research-source-switch button:disabled { opacity: .38; cursor: not-allowed; }
 .research-top-actions { display: flex; align-items: center; gap: 6px; }
 .research-top-actions a { display: inline-flex; align-items: center; }
 .research-advanced-state { padding: 5px 7px; border: 1px solid var(--border-color); border-radius: 5px; color: var(--text-muted); font: 650 var(--font-size-xs)/1 var(--font-mono); letter-spacing: .08em; }
-.research-advanced-state[data-enabled="true"] { border-color: rgba(45, 212, 191, .34); color: #99f6e4; background: rgba(20, 184, 166, .08); }
+.research-advanced-state[data-enabled="true"] { border-color: color-mix(in srgb, var(--accent-cyan) 34%, transparent); color: var(--text-info); background: color-mix(in srgb, var(--accent-cyan) 8%, transparent); }
 
 .research-left-rail,
 .research-right-rail { display: flex; flex-direction: column; width: 264px; min-width: 264px; min-height: 0; overflow: auto; border-color: var(--border-color); background: var(--bg-secondary); }
@@ -91,8 +91,8 @@
 .research-advanced-details > summary { margin-bottom: 8px; }
 .research-json-readout,
 .research-result-detail pre { max-height: 220px; margin: 0; padding: 8px; overflow: auto; border: 1px solid var(--border-color); border-radius: 5px; color: var(--text-muted); background: var(--bg-primary); font: var(--font-size-xs)/1.45 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
-.research-operation-message { padding: 7px 8px; border: 1px solid rgba(45, 212, 191, .22); border-radius: 5px; color: #99f6e4; background: rgba(20, 184, 166, .06); font-size: var(--font-size-xs); line-height: 1.45; }
-.research-operation-message.error { border-color: rgba(248, 113, 113, .28); color: var(--text-danger); background: rgba(127, 29, 29, .08); }
+.research-operation-message { padding: 7px 8px; border: 1px solid color-mix(in srgb, var(--accent-cyan) 22%, transparent); border-radius: 5px; color: var(--text-info); background: color-mix(in srgb, var(--accent-cyan) 6%, transparent); font-size: var(--font-size-xs); line-height: 1.45; }
+.research-operation-message.error { border-color: color-mix(in srgb, var(--color-danger) 28%, transparent); color: var(--text-danger); background: color-mix(in srgb, var(--color-danger) 8%, transparent); }
 .research-python-studio { min-width: 0; }
 .research-python-studio .python-studio { display: grid; gap: 8px; min-width: 0; margin-top: 8px; }
 .research-python-studio .backtest-form-row { display: grid; grid-template-columns: 1fr; gap: 6px; }
@@ -123,7 +123,7 @@
 .research-chart-stage { position: relative; flex: 1; min-height: 0; background: var(--bg-primary); }
 .research-chart-stage > .chart-area { height: 100%; }
 .research-chart-context { position: absolute; z-index: 8; top: 8px; left: 10px; display: flex; max-width: calc(100% - 20px); align-items: center; gap: 8px; pointer-events: none; }
-.research-chart-context span { padding: 5px 7px; border: 1px solid rgba(45, 212, 191, .24); border-radius: 5px; color: #99f6e4; background: rgba(8, 15, 24, .86); font: 650 var(--font-size-xs)/1 var(--font-mono); letter-spacing: .08em; }
+.research-chart-context span { padding: 5px 7px; border: 1px solid color-mix(in srgb, var(--accent-cyan) 24%, transparent); border-radius: 5px; color: var(--text-info); background: color-mix(in srgb, var(--surface-0) 86%, transparent); font: 650 var(--font-size-xs)/1 var(--font-mono); letter-spacing: .08em; }
 .research-chart-context small { overflow: hidden; color: var(--text-muted); font: var(--font-size-xs)/1 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .research-chart-warning { position: absolute; z-index: 8; top: 10px; right: 10px; padding: 5px 7px; border-radius: 5px; color: var(--text-warning); background: color-mix(in srgb, var(--surface-0) 90%, transparent); font-size: var(--font-size-xs); }
 .research-chart-error { display: grid; height: 100%; place-items: center; color: var(--text-danger); background: var(--bg-primary); font: 11px/1.5 var(--font-mono); }

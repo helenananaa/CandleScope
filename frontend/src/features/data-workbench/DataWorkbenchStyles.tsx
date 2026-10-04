@@ -2,25 +2,25 @@ export default function DataWorkbenchStyles() {
   return <style>{`
 .dw-overlay {
   --dw-ink: var(--text-primary);
-  --dw-label: #cbd5e1;
-  --dw-subtle: #94a3b8;
-  --dw-card-bg: var(--bg-tertiary);
-  --dw-card-border: color-mix(in srgb, var(--border-color) 72%, #94a3b8);
-  --dw-inset-bg: color-mix(in srgb, var(--bg-primary) 62%, var(--bg-tertiary));
+  --dw-label: color-mix(in srgb, var(--text-primary) 50%, var(--text-secondary));
+  --dw-subtle: var(--text-secondary);
+  --dw-card-bg: var(--surface-2);
+  --dw-card-border: color-mix(in srgb, var(--border-subtle) 72%, var(--text-secondary));
+  --dw-inset-bg: color-mix(in srgb, var(--surface-0) 62%, var(--surface-2));
   --dw-chip-bg: color-mix(in srgb, var(--accent-blue) 20%, transparent);
-  --dw-chip-fg: #bfdbfe;
-  --dw-ok: #34d399;
-  --dw-ok-bg: rgba(52, 211, 153, 0.16);
-  --dw-warn: #fbbf24;
-  --dw-warn-bg: rgba(251, 191, 36, 0.14);
-  --dw-fail: #f87171;
-  --dw-fail-bg: rgba(248, 113, 113, 0.16);
-  --dw-info: #93c5fd;
+  --dw-chip-fg: var(--text-accent);
+  --dw-ok: var(--text-success);
+  --dw-ok-bg: color-mix(in srgb, var(--color-success) 14%, transparent);
+  --dw-warn: var(--text-warning);
+  --dw-warn-bg: color-mix(in srgb, var(--color-warning) 14%, transparent);
+  --dw-fail: var(--text-danger);
+  --dw-fail-bg: color-mix(in srgb, var(--color-danger) 14%, transparent);
+  --dw-info: var(--text-accent);
   --dw-info-bg: color-mix(in srgb, var(--accent-blue) 16%, transparent);
-  --dw-accent: #93c5fd;
-  --dw-filter-bg: color-mix(in srgb, var(--accent-blue) 12%, var(--bg-tertiary));
+  --dw-accent: var(--text-accent);
+  --dw-filter-bg: color-mix(in srgb, var(--accent-blue) 12%, var(--surface-2));
   --dw-hover: color-mix(in srgb, var(--accent-blue) 8%, transparent);
-  --dw-overlay-bg: rgba(2, 6, 23, 0.72);
+  --dw-overlay-bg: var(--backdrop);
   --dw-scroll: color-mix(in srgb, var(--dw-ink) 22%, transparent);
   position: fixed;
   inset: 0;
@@ -33,27 +33,14 @@ export default function DataWorkbenchStyles() {
   backdrop-filter: blur(8px);
 }
 
+/* Light theme uses opaque cards */
 [data-theme='light'] .dw-overlay {
-  --dw-ink: #0f172a;
-  --dw-label: #334155;
-  --dw-subtle: #475569;
-  --dw-card-bg: #ffffff;
-  --dw-card-border: #d8e0ea;
-  --dw-inset-bg: #f8fafc;
-  --dw-chip-bg: #eff6ff;
-  --dw-chip-fg: #1d4ed8;
-  --dw-ok: #047857;
-  --dw-ok-bg: #ecfdf5;
-  --dw-warn: #b45309;
-  --dw-warn-bg: #fffbeb;
-  --dw-fail: #b91c1c;
-  --dw-fail-bg: #fef2f2;
-  --dw-info: #1d4ed8;
-  --dw-info-bg: #eff6ff;
-  --dw-accent: #1d4ed8;
-  --dw-filter-bg: #eff6ff;
-  --dw-hover: color-mix(in srgb, var(--accent-blue) 6%, #ffffff);
-  --dw-overlay-bg: rgba(15, 23, 42, 0.45);
+  --dw-card-bg: var(--surface-0);
+  --dw-card-border: var(--border-subtle);
+  --dw-inset-bg: var(--surface-1);
+  --dw-chip-bg: color-mix(in srgb, var(--accent-blue) 8%, var(--surface-0));
+  --dw-filter-bg: color-mix(in srgb, var(--accent-blue) 8%, var(--surface-0));
+  --dw-hover: color-mix(in srgb, var(--accent-blue) 6%, var(--surface-0));
   --dw-scroll: color-mix(in srgb, var(--dw-ink) 18%, transparent);
 }
 
@@ -147,7 +134,7 @@ export default function DataWorkbenchStyles() {
   border: 1px solid var(--dw-card-border);
   border-radius: 12px;
   background: var(--dw-card-bg);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--shadow-sm);
 }
 
 .dw-filter-card {
@@ -182,7 +169,7 @@ export default function DataWorkbenchStyles() {
   border: 1px solid var(--dw-card-border);
   border-radius: 10px;
   background: var(--dw-card-bg);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--shadow-sm);
 }
 
 .dw-summary-chip span,
@@ -435,13 +422,13 @@ export default function DataWorkbenchStyles() {
 }
 
 .dw-button-primary {
-  border-color: #2563eb;
-  background: #2563eb;
-  color: #ffffff;
+  border-color: var(--accent-solid);
+  background: var(--accent-solid);
+  color: var(--text-on-accent);
 }
 
 .dw-button-primary:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: var(--accent-solid-hover);
 }
 
 .dw-stat-grid {

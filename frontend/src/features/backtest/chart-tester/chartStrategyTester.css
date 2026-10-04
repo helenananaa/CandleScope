@@ -25,7 +25,7 @@
   overflow: hidden;
   border-top: 1px solid var(--border-color);
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--bg-primary) 98%, #020617);
+  background: var(--surface-0);
   box-shadow: 0 -3px 12px rgba(0, 0, 0, 0.08);
 }
 
@@ -142,8 +142,8 @@
 .chart-strategy-run-button {
   min-width: 78px;
   border: 0;
-  color: #fff;
-  background: linear-gradient(135deg, #2563eb, #0891b2);
+  color: var(--text-on-accent);
+  background: var(--accent-solid);
   font-weight: 750;
 }
 
@@ -367,7 +367,7 @@
   padding: 10px;
   border: 1px solid color-mix(in srgb, var(--accent-blue) 30%, transparent);
   border-radius: 6px;
-  background: rgba(37, 99, 235, 0.08);
+  background: color-mix(in srgb, var(--accent-blue) 8%, transparent);
 }
 
 .chart-strategy-run-status strong,
@@ -483,14 +483,14 @@
 .chart-strategy-explain-summary span { padding: 3px 6px; border-radius: 999px; color: var(--strategy-success); background: color-mix(in srgb, var(--color-success) 10%, transparent); font: var(--font-size-xs)/1 var(--font-mono); }
 .chart-strategy-explain-summary span.state-partial { color: var(--strategy-warning); background: color-mix(in srgb, var(--color-warning) 10%, transparent); }
 .chart-strategy-explain-summary span.state-unavailable { color: var(--text-secondary); background: color-mix(in srgb, var(--text-secondary) 10%, transparent); }
-.chart-strategy-explain-unavailable { margin: 10px 0 0; padding: 9px; border-left: 2px solid #64748b; color: var(--text-secondary); background: rgba(100, 116, 139, 0.08); font-size: var(--font-size-xs); line-height: 1.5; }
+.chart-strategy-explain-unavailable { margin: 10px 0 0; padding: 9px; border-left: 2px solid var(--text-muted); color: var(--text-secondary); background: color-mix(in srgb, var(--text-secondary) 8%, transparent); font-size: var(--font-size-xs); line-height: 1.5; }
 .chart-strategy-explain-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin: 10px 0; }
 .chart-strategy-explain-facts > div { min-width: 0; padding: 8px; border: 1px solid var(--border-color); border-radius: 5px; }
 .chart-strategy-explain-facts dt { color: var(--text-muted); font-size: var(--font-size-xs); }
 .chart-strategy-explain-facts dd { margin: 5px 0 0; overflow: hidden; color: var(--text-primary); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
 .chart-strategy-explain-block { margin-top: 8px; padding: 8px; border: 1px solid var(--border-color); border-radius: 5px; }
 .chart-strategy-explain-block > strong { display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: var(--font-size-xs); }
-.chart-strategy-explain-block > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(72px, auto); gap: 10px; padding: 5px 0; border-top: 1px solid rgba(38, 51, 72, 0.58); }
+.chart-strategy-explain-block > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(72px, auto); gap: 10px; padding: 5px 0; border-top: 1px solid color-mix(in srgb, var(--border-subtle) 58%, transparent); }
 .chart-strategy-explain-block code { overflow: hidden; color: var(--text-secondary); font: var(--font-size-xs)/1.3 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .chart-strategy-explain-block span { overflow: hidden; color: var(--text-secondary); font: var(--font-size-xs)/1.3 var(--font-mono); text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .chart-strategy-explain-technical { margin-top: 8px; color: var(--text-muted); font-size: var(--font-size-xs); }
@@ -574,7 +574,7 @@
   width: 100%;
   padding: 0 10px;
   border: 0;
-  border-bottom: 1px solid rgba(38, 51, 72, 0.55);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 55%, transparent);
   color: var(--text-secondary);
   background: transparent;
   font: var(--font-size-xs)/1 var(--font-mono);
@@ -583,7 +583,7 @@
 }
 .chart-strategy-trade-row:hover,
 .chart-strategy-trade-row:focus-visible { background: var(--bg-hover); outline: 0; }
-.chart-strategy-trade-row.selected { background: rgba(37, 99, 235, 0.12); box-shadow: inset 2px 0 var(--accent-blue); }
+.chart-strategy-trade-row.selected { background: color-mix(in srgb, var(--accent-blue) 12%, transparent); box-shadow: inset 2px 0 var(--accent-blue); }
 .chart-strategy-trade-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chart-strategy-trade-row span.positive { color: var(--strategy-success); }
 .chart-strategy-trade-row span.negative { color: var(--strategy-error); }

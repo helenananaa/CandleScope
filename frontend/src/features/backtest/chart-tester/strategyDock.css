@@ -46,8 +46,8 @@
 .strategy-trade-navigation span { min-width: 80px; text-align: center; font-variant-numeric: tabular-nums; }
 .native-table tr[data-selected="true"] { background: color-mix(in srgb, var(--accent-blue) 16%, transparent); outline: 1px solid var(--accent-blue); outline-offset: -1px; }
 .native-table tr:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; }
-.native-table .positive { color: #22c55e; }
-.native-table .negative { color: #fb7185; }
+.native-table .positive { color: var(--text-up); }
+.native-table .negative { color: var(--text-down); }
 .native-run-status { color: var(--text-secondary); font-size: 11px; white-space: nowrap; }
 
 .strategy-panel-slot { display: contents; }
