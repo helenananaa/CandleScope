@@ -14460,7 +14460,7 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 }
 .training-hub-stats article { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; padding: 10px 12px; background: var(--hub-panel); }
 .training-hub-stats span { color: var(--hub-muted); font-size: 12px; }
-.training-hub-stats strong { color: var(--hub-text); font: 600 16px/1.2 var(--font-mono); }
+.training-hub-stats strong { color: var(--hub-text); font: 600 16px/1.2 var(--font-sans); font-variant-numeric: tabular-nums; }
 
 .training-hub-toolbar {
   display: flex;

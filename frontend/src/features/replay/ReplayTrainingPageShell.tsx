@@ -1035,8 +1035,6 @@ export default function ReplayTrainingPageShell({
         <MarketTopBarFrame
           source="replay"
           className="replay-top-bar"
-          brandIcon="◀"
-          brandText="CandleScope"
           navigation={<span className="replay-mode-badge">{t("replay.kicker.training")}</span>}
           identity={config && (
             <button className="replay-identity-readonly" type="button" title={t("replay.shell.identityImmutable")}>

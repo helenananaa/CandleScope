@@ -198,3 +198,27 @@
 .ui-empty-action {
   margin-top: var(--space-2);
 }
+
+/* App page: shared header above a scrolling body (pages without a chart workspace) */
+.app-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--surface-0);
+}
+
+.app-page-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Pages that used to own the viewport now fill and scroll inside the body */
+.app-page-body > :is(.training-hub-page, main) {
+  flex: 1 0 auto;
+  min-height: 0;
+  overflow: visible;
+}

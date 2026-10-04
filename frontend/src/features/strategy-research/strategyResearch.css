@@ -144,8 +144,7 @@
 }
 
 /* A common, source-neutral surface for the independent research entry. */
-.strategy-research-shell :where(.strategy-research-first-open, .strategy-research-script, .strategy-research-result-slot, .research-data-source-bar) :where(button),
-.strategy-research-shell .research-header-btn,
+.strategy-research-shell :where(.strategy-research-first-open, .strategy-research-script, .strategy-research-result-slot) :where(button),
 .research-data-drawer button,
 .research-data-drawer input,
 .research-data-drawer select {
@@ -158,13 +157,14 @@
   font: 500 13px/1.4 var(--font-sans);
 }
 .strategy-research-shell button, .research-data-drawer button { cursor: pointer; }
-.strategy-research-shell button:hover:not(:disabled), .research-data-drawer button:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--strategy-link); }
+.strategy-research-shell button:not(.ui-control):hover:not(:disabled), .research-data-drawer button:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--strategy-link); }
 .strategy-research-shell button:disabled, .research-data-drawer button:disabled { opacity: .55; cursor: not-allowed; }
 /* The drawer takes focus on open for keyboard users; it is a container, not a control. */
 .research-data-drawer:focus { outline: none; }
 .strategy-research-shell :is(button, a, input, select, summary):focus-visible,
 .research-data-drawer :is(button, a, input, select, summary):focus-visible { outline: 2px solid var(--strategy-link); outline-offset: 3px; }
-.strategy-research-shell a { color: var(--strategy-link); font-size: 13px; }
+/* Content links only; the shared top bar keeps its own navigation colors */
+.strategy-research-shell a:not(.top-bar a) { color: var(--strategy-link); font-size: 13px; }
 .strategy-research-shell .research-primary,
 .strategy-research-shell [data-testid='strategy-research-run'],
 .research-data-drawer button[type='submit'] { background: #2563eb; color: white; border-color: #2563eb; }

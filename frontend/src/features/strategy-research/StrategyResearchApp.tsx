@@ -461,7 +461,7 @@ export default function StrategyResearchApp({
   const advancedWorkspace = intent.kind === "advanced" || intent.kind === "deep-link";
   const controls = (
     <>
-      <button type="button" className="research-header-btn" onClick={() => setHistoryOpen((open) => !open)} aria-expanded={historyOpen}>{t("ux.history")}</button>
+      <button type="button" className="research-header-btn ui-control" onClick={() => setHistoryOpen((open) => !open)} aria-expanded={historyOpen}>{t("ux.history")}</button>
       <button
         type="button"
         className="settings-btn indicator-toggle-btn"
