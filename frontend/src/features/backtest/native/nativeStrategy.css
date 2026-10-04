@@ -59,7 +59,7 @@
 .native-strategy-docked .native-dock-actions { grid-column: 2; grid-row: 1; padding: 6px 14px; border-bottom: 1px solid var(--border-color); }
 .native-strategy-docked .native-dock-actions .native-toolbar { gap: 8px; }
 .native-strategy-docked .native-dock-actions p { margin: 4px 0; }
-.native-strategy-docked .native-dock-actions button:first-of-type { background: var(--accent-solid); color: #fff; border-color: transparent; }
+.native-strategy-docked .native-dock-actions button:first-of-type { background: var(--accent-solid); color: var(--text-on-accent); border-color: transparent; }
 .native-strategy-docked .native-dock-scroll { grid-column: 1 / -1; grid-row: 2; min-height: 0; flex: 1; overflow: auto; padding: 0 14px 12px; }
 .native-strategy-docked .native-editor { margin: 10px 0 0; gap: 16px; }
 .native-strategy-docked .native-editor textarea { min-height: 160px; resize: vertical; line-height: 1.6; border-radius: 3px; }
