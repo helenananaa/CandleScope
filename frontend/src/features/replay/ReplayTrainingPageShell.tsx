@@ -1088,7 +1088,7 @@ export default function ReplayTrainingPageShell({
             {active && (
               <button
                 ref={integrityToggleRef}
-                className="replay-integrity-toggle"
+                className="replay-integrity-toggle ui-control"
                 type="button"
                 data-replay-action="toggle-integrity"
                 data-review-active={review === null ? "false" : "true"}
@@ -1104,7 +1104,7 @@ export default function ReplayTrainingPageShell({
             )}
             {active && integrityRuntime.runId !== null && (
               <button
-                className="replay-integrity-toggle"
+                className="replay-integrity-toggle ui-control"
                 type="button"
                 data-replay-action="toggle-training-results"
                 aria-controls="replay-training-results-drawer"
@@ -1115,8 +1115,8 @@ export default function ReplayTrainingPageShell({
                 }}
               >{t("replay.shell.results")}</button>
             )}
-            {active && viewer.viewerState?.run_id !== undefined && <button className="replay-return-hub" type="button" disabled={returningToHub || review !== null} title={review !== null ? t("replay.shell.exitReviewFirst") : returnToHubError ?? t("replay.shell.returnHubHint")} onClick={() => void returnToHub()}>{returningToHub ? t("replay.shell.saving") : t("replay.shell.hub")}</button>}
-            <a className="replay-live-link" href="/" target="_blank" rel="noopener noreferrer">{t("replay.shell.liveLink")}</a>
+            {active && viewer.viewerState?.run_id !== undefined && <button className="replay-return-hub ui-control" type="button" disabled={returningToHub || review !== null} title={review !== null ? t("replay.shell.exitReviewFirst") : returnToHubError ?? t("replay.shell.returnHubHint")} onClick={() => void returnToHub()}>{returningToHub ? t("replay.shell.saving") : t("replay.shell.hub")}</button>}
+            <a className="replay-live-link ui-control" href="/" target="_blank" rel="noopener noreferrer">{t("replay.shell.liveLink")}</a>
           </>}
         />
       )}
