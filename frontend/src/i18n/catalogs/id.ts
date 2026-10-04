@@ -2,6 +2,17 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const id = {
+  "indicator.editor.pyneApiHint": "Pyne API:",
+  "indicator.editor.pineApiHint": "API Pine v5/v6 bar tertutup:",
+  "serverError.notFound": "Item yang diminta tidak ada atau sudah dihapus",
+  "serverError.conflict": "Sudah diubah di tempat lain. Muat ulang lalu coba lagi",
+  "serverError.invalid": "Data yang dikirim tidak valid",
+  "serverError.unavailable": "Fitur ini sedang tidak tersedia",
+  "serverError.timeout": "Permintaan habis waktu. Coba lagi",
+  "serverError.forbidden": "Anda tidak memiliki izin untuk ini saat ini",
+  "serverError.network": "Tidak dapat menghubungi layanan lokal",
+  "serverError.generic": "Operasi gagal",
+  "serverError.withDetail": "{summary} ({detail})",
   "replay.workspace.openNew": "Buka di grafik baru",
   "replay.workspace.splitUnavailable": "Buka kunci tata letak atau tutup grafik sebelum membuka yang lain.",
   "preparation.rateLimited": "Waiting for data-source rate limits. Scheduled to retry after {time}; the task is kept if you close this page.",

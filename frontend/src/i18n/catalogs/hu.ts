@@ -2,6 +2,17 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const hu = {
+  "indicator.editor.pyneApiHint": "Pyne API:",
+  "indicator.editor.pineApiHint": "Pine v5/v6 closed-bar API:",
+  "serverError.notFound": "A kért elem nem létezik, vagy törölték",
+  "serverError.conflict": "Máshol módosították. Frissítsen, majd próbálja újra",
+  "serverError.invalid": "Az elküldött adatok érvénytelenek",
+  "serverError.unavailable": "Ez a funkció jelenleg nem érhető el",
+  "serverError.timeout": "A kérés túllépte az időkorlátot. Próbálja újra",
+  "serverError.forbidden": "Ehhez jelenleg nincs jogosultsága",
+  "serverError.network": "A helyi szolgáltatás nem érhető el",
+  "serverError.generic": "A művelet sikertelen",
+  "serverError.withDetail": "{summary} ({detail})",
   "replay.workspace.openNew": "Megnyitás új grafikonon",
   "replay.workspace.splitUnavailable": "Új grafikon megnyitásához oldja fel az elrendezést vagy zárjon be egy grafikont.",
   "preparation.rateLimited": "Waiting for data-source rate limits. Scheduled to retry after {time}; the task is kept if you close this page.",

@@ -1,6 +1,17 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ja = {
+  "indicator.editor.pyneApiHint": "Pyne API：",
+  "indicator.editor.pineApiHint": "Pine v5/v6 確定足 API：",
+  "serverError.notFound": "要求された項目が存在しないか、削除されています",
+  "serverError.conflict": "別の操作で更新されました。再読み込みしてやり直してください",
+  "serverError.invalid": "送信された内容が無効です",
+  "serverError.unavailable": "この機能は現在利用できません",
+  "serverError.timeout": "要求がタイムアウトしました。もう一度お試しください",
+  "serverError.forbidden": "現在この操作を行う権限がありません",
+  "serverError.network": "ローカルサービスに接続できません",
+  "serverError.generic": "操作に失敗しました",
+  "serverError.withDetail": "{summary}（{detail}）",
   "report.more": "More",
   "report.return": "Cumulative return",
   "report.equity": "Account equity",

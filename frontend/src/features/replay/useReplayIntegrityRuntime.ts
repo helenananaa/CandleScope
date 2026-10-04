@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 
@@ -188,7 +189,7 @@ export function useReplayIntegrityRuntime(
         setError(null);
       } catch (cause) {
         if (requestGeneration !== generation.current) return;
-        setError(cause instanceof Error ? cause.message : t("replay.rt.integrityLoad"));
+        setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.integrityLoad"));
       } finally {
         if (requestGeneration === generation.current) {
           setOperation((current) => current === "refresh" ? null : current);
@@ -214,7 +215,7 @@ export function useReplayIntegrityRuntime(
         setError(null);
       } catch (cause) {
         if (requestGeneration !== generation.current) return;
-        setError(cause instanceof Error ? cause.message : t("replay.rt.integrityLoad"));
+        setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.integrityLoad"));
       }
     });
   }, []);
@@ -232,7 +233,7 @@ export function useReplayIntegrityRuntime(
         setError(null);
       } catch (cause) {
         if (requestGeneration !== generation.current) return;
-        setError(cause instanceof Error ? cause.message : t("replay.rt.integrityLoad"));
+        setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.integrityLoad"));
       }
     });
   }, []);
@@ -333,7 +334,7 @@ export function useReplayIntegrityRuntime(
       await refresh();
       return result;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t("replay.rt.integrityCmd"));
+      setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.integrityCmd"));
       throw cause;
     } finally {
       pendingPolicy.current = false;
@@ -405,7 +406,7 @@ export function useReplayIntegrityRuntime(
       setDrawingLoaded(true);
       setBudget(hydrated.budget);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t("replay.rt.drawingCommit"));
+      setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.drawingCommit"));
       throw cause;
     } finally {
       setOperation((current) => current === "drawing" ? null : current);
@@ -425,7 +426,7 @@ export function useReplayIntegrityRuntime(
       );
       setBudget(response.budget);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t("replay.rt.reviewMark"));
+      setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.reviewMark"));
       throw cause;
     } finally {
       setOperation((current) => current === "marker" ? null : current);
@@ -444,7 +445,7 @@ export function useReplayIntegrityRuntime(
       setBudget(response.budget);
       return response;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t("replay.rt.reviewLoad"));
+      setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.reviewLoad"));
       throw cause;
     } finally {
       setOperation((current) => current === "review" ? null : current);
@@ -499,7 +500,7 @@ export function useReplayIntegrityRuntime(
       setBudget(response.budget);
       return response;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t("replay.rt.reviewCursor"));
+      setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.reviewCursor"));
       throw cause;
     } finally {
       pendingReviewControl.current = false;
@@ -540,7 +541,7 @@ export function useReplayIntegrityRuntime(
       setForked(response);
       return response;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t("replay.rt.reviewFork"));
+      setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.reviewFork"));
       throw cause;
     } finally {
       setOperation((current) => current === "fork" ? null : current);

@@ -6,6 +6,17 @@ import type { MessageCatalog } from "../messageCatalog.js";
  * libro de órdenes, tasa de financiación, prueba retrospectiva, reproducción.
  */
 export const es = {
+  "indicator.editor.pyneApiHint": "Pyne API:",
+  "indicator.editor.pineApiHint": "API de Pine v5/v6 con barras cerradas:",
+  "serverError.notFound": "El elemento solicitado no existe o se eliminó",
+  "serverError.conflict": "Se modificó en otro lugar. Actualiza e inténtalo de nuevo",
+  "serverError.invalid": "Los datos enviados no son válidos",
+  "serverError.unavailable": "Esta función no está disponible ahora",
+  "serverError.timeout": "La solicitud agotó el tiempo. Inténtalo de nuevo",
+  "serverError.forbidden": "Ahora no tienes permiso para hacer esto",
+  "serverError.network": "No se puede conectar con el servicio local",
+  "serverError.generic": "La operación falló",
+  "serverError.withDetail": "{summary} ({detail})",
   "replay.workspace.openNew": "Abrir en un gráfico nuevo",
   "replay.workspace.splitUnavailable": "Desbloquea el diseño o cierra un gráfico antes de abrir otro.",
   "preparation.rateLimited": "Waiting for data-source rate limits. Scheduled to retry after {time}; the task is kept if you close this page.",

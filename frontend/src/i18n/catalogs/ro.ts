@@ -2,6 +2,17 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ro = {
+  "indicator.editor.pyneApiHint": "Pyne API:",
+  "indicator.editor.pineApiHint": "Pine v5/v6 closed-bar API:",
+  "serverError.notFound": "Elementul solicitat nu există sau a fost șters",
+  "serverError.conflict": "A fost modificat în altă parte. Reîmprospătați și încercați din nou",
+  "serverError.invalid": "Datele trimise nu sunt valide",
+  "serverError.unavailable": "Această funcție nu este disponibilă momentan",
+  "serverError.timeout": "Cererea a expirat. Încercați din nou",
+  "serverError.forbidden": "Momentan nu aveți permisiunea să faceți asta",
+  "serverError.network": "Serviciul local nu poate fi accesat",
+  "serverError.generic": "Operațiunea a eșuat",
+  "serverError.withDetail": "{summary} ({detail})",
   "replay.workspace.openNew": "Deschide într-un grafic nou",
   "replay.workspace.splitUnavailable": "Deblochează aspectul sau închide un grafic înainte de a deschide altul.",
   "preparation.rateLimited": "Waiting for data-source rate limits. Scheduled to retry after {time}; the task is kept if you close this page.",

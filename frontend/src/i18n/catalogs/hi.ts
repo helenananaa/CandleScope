@@ -2,6 +2,17 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const hi = {
+  "indicator.editor.pyneApiHint": "Pyne API:",
+  "indicator.editor.pineApiHint": "Pine v5/v6 closed-bar API:",
+  "serverError.notFound": "अनुरोधित आइटम मौजूद नहीं है या हटा दिया गया है",
+  "serverError.conflict": "इसे कहीं और बदला गया है। रीफ़्रेश करके फिर कोशिश करें",
+  "serverError.invalid": "भेजा गया डेटा अमान्य है",
+  "serverError.unavailable": "यह सुविधा अभी उपलब्ध नहीं है",
+  "serverError.timeout": "अनुरोध का समय समाप्त हो गया। फिर कोशिश करें",
+  "serverError.forbidden": "अभी आपके पास यह करने की अनुमति नहीं है",
+  "serverError.network": "स्थानीय सेवा तक नहीं पहुँच पा रहे",
+  "serverError.generic": "कार्रवाई विफल रही",
+  "serverError.withDetail": "{summary} ({detail})",
   "replay.workspace.openNew": "नए चार्ट में खोलें",
   "replay.workspace.splitUnavailable": "दूसरा चार्ट खोलने से पहले लेआउट अनलॉक करें या कोई चार्ट बंद करें।",
   "preparation.rateLimited": "Waiting for data-source rate limits. Scheduled to retry after {time}; the task is kept if you close this page.",

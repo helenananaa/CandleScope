@@ -2,6 +2,17 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const nl = {
+  "indicator.editor.pyneApiHint": "Pyne API:",
+  "indicator.editor.pineApiHint": "Pine v5/v6-API voor gesloten candles:",
+  "serverError.notFound": "Het gevraagde item bestaat niet of is verwijderd",
+  "serverError.conflict": "Elders gewijzigd. Vernieuw en probeer het opnieuw",
+  "serverError.invalid": "De verzonden gegevens zijn ongeldig",
+  "serverError.unavailable": "Deze functie is momenteel niet beschikbaar",
+  "serverError.timeout": "Er is een time-out opgetreden. Probeer het opnieuw",
+  "serverError.forbidden": "Je hebt hier momenteel geen toestemming voor",
+  "serverError.network": "Kan de lokale service niet bereiken",
+  "serverError.generic": "De bewerking is mislukt",
+  "serverError.withDetail": "{summary} ({detail})",
   "replay.workspace.openNew": "In nieuwe grafiek openen",
   "replay.workspace.splitUnavailable": "Ontgrendel de indeling of sluit een grafiek voordat u een nieuwe opent.",
   "preparation.rateLimited": "Waiting for data-source rate limits. Scheduled to retry after {time}; the task is kept if you close this page.",

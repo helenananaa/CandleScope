@@ -1,6 +1,17 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  "indicator.editor.pyneApiHint": "Pyne API:",
+  "indicator.editor.pineApiHint": "Pine v5/v6 마감 봉 API:",
+  "serverError.notFound": "요청한 항목이 없거나 삭제되었습니다",
+  "serverError.conflict": "다른 작업으로 변경되었습니다. 새로고침 후 다시 시도하세요",
+  "serverError.invalid": "제출한 내용이 올바르지 않습니다",
+  "serverError.unavailable": "이 기능은 현재 사용할 수 없습니다",
+  "serverError.timeout": "요청 시간이 초과되었습니다. 다시 시도하세요",
+  "serverError.forbidden": "현재 이 작업을 수행할 권한이 없습니다",
+  "serverError.network": "로컬 서비스에 연결할 수 없습니다",
+  "serverError.generic": "작업에 실패했습니다",
+  "serverError.withDetail": "{summary} ({detail})",
   "report.more": "더 보기",
   "report.return": "누적 수익률",
   "report.equity": "계좌 순자산",

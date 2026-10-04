@@ -2,6 +2,17 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ms = {
+  "indicator.editor.pyneApiHint": "Pyne API:",
+  "indicator.editor.pineApiHint": "Pine v5/v6 closed-bar API:",
+  "serverError.notFound": "Item yang diminta tidak wujud atau telah dipadam",
+  "serverError.conflict": "Telah diubah di tempat lain. Muat semula dan cuba lagi",
+  "serverError.invalid": "Data yang dihantar tidak sah",
+  "serverError.unavailable": "Ciri ini tidak tersedia buat masa ini",
+  "serverError.timeout": "Permintaan tamat masa. Cuba lagi",
+  "serverError.forbidden": "Anda tiada kebenaran untuk melakukan ini sekarang",
+  "serverError.network": "Tidak dapat menghubungi perkhidmatan setempat",
+  "serverError.generic": "Operasi gagal",
+  "serverError.withDetail": "{summary} ({detail})",
   "replay.workspace.openNew": "Buka dalam carta baharu",
   "replay.workspace.splitUnavailable": "Buka kunci susun atur atau tutup carta sebelum membuka carta lain.",
   "preparation.rateLimited": "Waiting for data-source rate limits. Scheduled to retry after {time}; the task is kept if you close this page.",

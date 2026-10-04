@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TickMarkType } from "../../chart-adapter/chartAdapterTypes.js";
 import MarketChartWorkspace from "../../app/MarketChartWorkspace.js";
@@ -361,7 +362,7 @@ export default function ReplayTrainingPageShell({
     try {
       await returnToTrainingHub(runId, defaultReplayV2Api);
     } catch (cause) {
-      setReturnToHubError(cause instanceof Error ? cause.message : t("replay.shell.returnFailed", {}, locale));
+      setReturnToHubError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.shell.returnFailed", {}, locale));
       setReturningToHub(false);
     }
   }, [locale, returningToHub, viewer.viewerState?.run_id]);
@@ -387,7 +388,7 @@ export default function ReplayTrainingPageShell({
       drawingDocumentSessionRegistry.markLoaded(scopeKey, store);
     } catch (cause) {
       setLiveDrawingError(
-        cause instanceof Error ? cause.message : t("replay.shell.drawingRestoreFailed", {}, locale),
+        cause instanceof Error ? describeError(cause, cause.message) : t("replay.shell.drawingRestoreFailed", {}, locale),
       );
     }
   }, [
@@ -469,7 +470,7 @@ export default function ReplayTrainingPageShell({
       drawingDocumentSessionRegistry.markLoaded(scopeKey, store);
     } catch (cause) {
       setReviewDrawingError(
-        cause instanceof Error ? cause.message : t("replay.shell.reviewRestoreFailed", {}, locale),
+        cause instanceof Error ? describeError(cause, cause.message) : t("replay.shell.reviewRestoreFailed", {}, locale),
       );
     }
   }, [
@@ -561,7 +562,7 @@ export default function ReplayTrainingPageShell({
       if (cause instanceof DOMException && cause.name === "AbortError") return;
       reviewSeriesStore.replace([], { source: "replay-review-fail-closed" });
       setReviewChartError(
-        cause instanceof Error ? cause.message : t("replay.shell.reviewPrefixFailed", {}, locale),
+        cause instanceof Error ? describeError(cause, cause.message) : t("replay.shell.reviewPrefixFailed", {}, locale),
       );
     }).finally(() => {
       if (!abort.signal.aborted) setReviewChartLoading(false);

@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import {
   useCallback,
   useEffect,
@@ -198,7 +199,7 @@ export function useLiquidationRuntime({
           } catch (caught: unknown) {
             if (isAbortError(caught) || !isCurrent()) return;
             console.warn(`Liquidation ${side} history failed:`, caught);
-            setHistoryError(caught instanceof Error ? caught.message : String(caught));
+            setHistoryError(caught instanceof Error ? describeError(caught, caught.message) : String(caught));
             scheduleHistoryRetry(expectedGeneration);
           } finally {
             requestCoordinatorRef.current.release(claim);
@@ -281,7 +282,7 @@ export function useLiquidationRuntime({
       onError: (caught) => {
         if (!current) return;
         console.warn("Liquidation stream error:", caught);
-        setError(caught instanceof Error ? caught.message : String(caught));
+        setError(caught instanceof Error ? describeError(caught, caught.message) : String(caught));
       },
       onResyncRequired: () => {
         if (current) reloadHistory(true);

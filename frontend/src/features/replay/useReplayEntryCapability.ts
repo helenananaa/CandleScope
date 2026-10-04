@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import { useEffect, useState } from "react";
 import { defaultReplayApi } from "./replayApi.js";
 import type { ReplayApiClient } from "./replayApi.js";
@@ -43,7 +44,7 @@ export function useReplayEntryCapability({
         setView({
           state: "disabled",
           href: "/replay.html",
-          reason: error instanceof Error ? error.message : "Replay capability check failed",
+          reason: error instanceof Error ? describeError(error, error.message) : "Replay capability check failed",
         });
       },
     );

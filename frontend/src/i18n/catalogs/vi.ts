@@ -2,6 +2,17 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const vi = {
+  "indicator.editor.pyneApiHint": "Pyne API:",
+  "indicator.editor.pineApiHint": "API Pine v5/v6 theo nến đã đóng:",
+  "serverError.notFound": "Mục được yêu cầu không tồn tại hoặc đã bị xóa",
+  "serverError.conflict": "Đã bị thay đổi ở nơi khác. Hãy làm mới rồi thử lại",
+  "serverError.invalid": "Dữ liệu đã gửi không hợp lệ",
+  "serverError.unavailable": "Tính năng này hiện không khả dụng",
+  "serverError.timeout": "Yêu cầu đã hết thời gian. Hãy thử lại",
+  "serverError.forbidden": "Hiện bạn không có quyền thực hiện thao tác này",
+  "serverError.network": "Không thể kết nối tới dịch vụ cục bộ",
+  "serverError.generic": "Thao tác thất bại",
+  "serverError.withDetail": "{summary} ({detail})",
   "replay.workspace.openNew": "Mở trong biểu đồ mới",
   "replay.workspace.splitUnavailable": "Mở khóa bố cục hoặc đóng một biểu đồ trước khi mở biểu đồ khác.",
   "preparation.rateLimited": "Waiting for data-source rate limits. Scheduled to retry after {time}; the task is kept if you close this page.",

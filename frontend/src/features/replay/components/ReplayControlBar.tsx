@@ -1,3 +1,4 @@
+import { describeError } from "../../../i18n/serverErrors.js";
 import { useEffect, useRef, useState } from "react";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
@@ -166,7 +167,7 @@ export default function ReplayControlBar({ runtime, viewer, publicTimeLabel, ind
   ) => {
     setControlError(null);
     void viewer.actions.submitControl(type, payload).catch((cause: unknown) => {
-      setControlError(cause instanceof Error ? cause.message : t("replay.rt.control"));
+      setControlError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.control"));
     });
   };
   const submitCanonicalAdvance = (

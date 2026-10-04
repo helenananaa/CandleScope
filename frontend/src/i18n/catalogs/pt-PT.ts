@@ -2,6 +2,17 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptPT = {
+  "indicator.editor.pyneApiHint": "Pyne API:",
+  "indicator.editor.pineApiHint": "API Pine v5/v6 de barras fechadas:",
+  "serverError.notFound": "O item pedido não existe ou foi eliminado",
+  "serverError.conflict": "Foi alterado noutro local. Atualize e tente novamente",
+  "serverError.invalid": "Os dados enviados são inválidos",
+  "serverError.unavailable": "Esta funcionalidade não está disponível de momento",
+  "serverError.timeout": "O pedido expirou. Tente novamente",
+  "serverError.forbidden": "Neste momento não tem permissão para fazer isto",
+  "serverError.network": "Não foi possível contactar o serviço local",
+  "serverError.generic": "A operação falhou",
+  "serverError.withDetail": "{summary} ({detail})",
   "replay.workspace.openNew": "Abrir num novo gráfico",
   "replay.workspace.splitUnavailable": "Desbloqueie o esquema ou feche um gráfico antes de abrir outro.",
   "preparation.rateLimited": "Waiting for data-source rate limits. Scheduled to retry after {time}; the task is kept if you close this page.",

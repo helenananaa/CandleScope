@@ -1,3 +1,4 @@
+import { describeError } from "../../../i18n/serverErrors.js";
 import { useEffect, useState } from "react";
 
 import { getNumberLocale, t } from "../../../i18n/index.js";
@@ -108,7 +109,7 @@ export default function ReplayTrainingResultsPanel({
       setResults(response);
     }).catch((cause: unknown) => {
       if (controller.signal.aborted) return;
-      setError(cause instanceof Error ? cause.message : t("replay.results.loadFailed"));
+      setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.results.loadFailed"));
     }).finally(() => {
       if (!controller.signal.aborted) setLoading(false);
     });
@@ -137,7 +138,7 @@ export default function ReplayTrainingResultsPanel({
       }
       onClose();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t("replay.results.jumpFailed"));
+      setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.results.jumpFailed"));
     } finally {
       setJumpingId(null);
     }
@@ -151,7 +152,7 @@ export default function ReplayTrainingResultsPanel({
       const response = await integrityRuntime.actions.forkReview(item.review_event_id);
       setForkedRunId(response.run.run_id);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t("replay.results.forkFailed"));
+      setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.results.forkFailed"));
     } finally {
       setForkingId(null);
     }

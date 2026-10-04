@@ -1,3 +1,4 @@
+import { describeError } from "../i18n/serverErrors.js";
 import PanePriceScaleMenu from "./PanePriceScaleMenu.js";
 import { usePanePriceScaleMenu } from "./usePanePriceScaleMenu.js";
 import NativePaneDrawingHost from "./NativePaneDrawingHost.js";
@@ -1129,7 +1130,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     } catch (error) {
       cleared = false;
       recordPerfEvent("chart.futureTimeAxis.renderError", {
-        message: error instanceof Error ? error.message : String(error),
+        message: error instanceof Error ? describeError(error, error.message) : String(error),
         phase: "clear",
       });
     } finally {
@@ -1220,7 +1221,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         futureTimeAxisPointCountRef.current = previousCount;
         try { clearFutureTimeAxis({ force: true }); } catch { /* best-effort carrier cleanup */ }
         recordPerfEvent("chart.futureTimeAxis.renderError", {
-          message: error instanceof Error ? error.message : String(error),
+          message: error instanceof Error ? describeError(error, error.message) : String(error),
           phase: "viewport-extend",
         });
       } finally {
@@ -3069,7 +3070,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         }
       } catch (error) {
         recordPerfEvent("chart.intervalTransition.reindexError", {
-          message: error instanceof Error ? error.message : String(error),
+          message: error instanceof Error ? describeError(error, error.message) : String(error),
           paneId: "single-chart",
         });
       } finally {
@@ -3593,7 +3594,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         renderedMainSeriesGenerationRef.current += 1;
         committedProjectionGenerationRef.current = -1;
         recordPerfEvent("chart.candleSeries.renderError", {
-          message: error instanceof Error ? error.message : String(error),
+          message: error instanceof Error ? describeError(error, error.message) : String(error),
           paneId: "main",
           phase: "sync",
         });
@@ -3604,7 +3605,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         } catch (error) {
           try { clearFutureTimeAxis({ force: true }); } catch { /* best-effort carrier cleanup */ }
           recordPerfEvent("chart.futureTimeAxis.renderError", {
-            message: error instanceof Error ? error.message : String(error),
+            message: error instanceof Error ? describeError(error, error.message) : String(error),
             phase: "projection-sync",
           });
         }
@@ -3764,7 +3765,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           renderedMainSeriesGenerationRef.current += 1;
           committedProjectionGenerationRef.current = -1;
           recordPerfEvent("chart.candleSeries.renderError", {
-            message: error instanceof Error ? error.message : String(error),
+            message: error instanceof Error ? describeError(error, error.message) : String(error),
             paneId: "main",
             phase: "delta",
           });
@@ -3775,7 +3776,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           } catch (error) {
             try { clearFutureTimeAxis({ force: true }); } catch { /* best-effort carrier cleanup */ }
             recordPerfEvent("chart.futureTimeAxis.renderError", {
-              message: error instanceof Error ? error.message : String(error),
+              message: error instanceof Error ? describeError(error, error.message) : String(error),
               phase: "projection-delta",
             });
           }

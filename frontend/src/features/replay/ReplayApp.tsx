@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import { Profiler, useEffect, useState } from "react";
 import type { ProfilerOnRenderCallback } from "react";
 import { recordPerfEvent } from "../../runtime/performance/perfMarks.js";
@@ -113,7 +114,7 @@ function ReplayTrainingRunApp({
       setRun(loaded);
     }).catch((reason: unknown) => {
       if (reason instanceof DOMException && reason.name === "AbortError") return;
-      setError(reason instanceof Error ? reason.message : t("replay.runLoadFailed"));
+      setError(reason instanceof Error ? describeError(reason, reason.message) : t("replay.runLoadFailed"));
     });
     return () => controller.abort();
   }, [attempt, runId]);
@@ -132,7 +133,7 @@ function ReplayTrainingRunApp({
     return <AppPageShell source="replay"><ReplayInitialMarketPicker run={run} onInitialized={(initialized) => {
       setRun(null);
       void defaultReplayV2Api.prepareIndex(runId, undefined, getReplayControllerClientInstanceId(runId)).then(() => setRun(initialized)).catch((reason: unknown) => {
-        setError(reason instanceof Error ? reason.message : t("replay.runLoadFailed"));
+        setError(reason instanceof Error ? describeError(reason, reason.message) : t("replay.runLoadFailed"));
       });
     }} /></AppPageShell>;
   }

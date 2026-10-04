@@ -1,6 +1,17 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
+  "indicator.editor.pyneApiHint": "Pyne API:",
+  "indicator.editor.pineApiHint": "Pine v5/v6 closed-bar API:",
+  "serverError.notFound": "The requested item doesn't exist or was deleted",
+  "serverError.conflict": "This was changed elsewhere. Refresh and try again",
+  "serverError.invalid": "The submitted data is invalid",
+  "serverError.unavailable": "This feature is currently unavailable",
+  "serverError.timeout": "The request timed out. Try again",
+  "serverError.forbidden": "You don't have permission to do this right now",
+  "serverError.network": "Can't reach the local service",
+  "serverError.generic": "The operation failed",
+  "serverError.withDetail": "{summary} ({detail})",
   "report.more": "More",
   "report.return": "Cumulative return",
   "report.equity": "Account equity",

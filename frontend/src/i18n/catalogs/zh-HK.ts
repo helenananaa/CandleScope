@@ -2,6 +2,17 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhHK = {
+  "indicator.editor.pyneApiHint": "Pyne API：",
+  "indicator.editor.pineApiHint": "Pine v5/v6 收市 K 線 API：",
+  "serverError.notFound": "請求的內容不存在，可能已被刪除",
+  "serverError.conflict": "內容已被其他操作更新，請重新整理後再試",
+  "serverError.invalid": "提交的內容無效",
+  "serverError.unavailable": "此功能目前無法使用",
+  "serverError.timeout": "請求逾時，請再試",
+  "serverError.forbidden": "目前沒有權限執行此操作",
+  "serverError.network": "無法連線到本機服務",
+  "serverError.generic": "操作失敗",
+  "serverError.withDetail": "{summary}（{detail}）",
   "replay.workspace.openNew": "在新圖表開啟",
   "replay.workspace.splitUnavailable": "請先解鎖版面或關閉一張圖表，再開啟新圖表。",
   "preparation.rateLimited": "Waiting for data-source rate limits. Scheduled to retry after {time}; the task is kept if you close this page.",

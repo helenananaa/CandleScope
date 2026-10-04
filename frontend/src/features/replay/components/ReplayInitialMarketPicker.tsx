@@ -1,3 +1,4 @@
+import { describeError } from "../../../i18n/serverErrors.js";
 import { useEffect, useMemo, useState } from "react";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
@@ -127,7 +128,7 @@ export default function ReplayInitialMarketPicker({
     setDowngrade(null);
     setCatalog(null);
     void defaultReplayV2Api.marketCatalog(run.run_id).then(setCatalog).catch((reason: unknown) => {
-      setError(reason instanceof Error ? reason.message : t("replay.picker.catalogFailed"));
+      setError(reason instanceof Error ? describeError(reason, reason.message) : t("replay.picker.catalogFailed"));
     });
   };
 
@@ -137,7 +138,7 @@ export default function ReplayInitialMarketPicker({
       .then(setCatalog)
       .catch((reason: unknown) => {
         if (abort.signal.aborted) return;
-        setError(reason instanceof Error ? reason.message : t("replay.picker.catalogFailed"));
+        setError(reason instanceof Error ? describeError(reason, reason.message) : t("replay.picker.catalogFailed"));
       });
     return () => abort.abort();
   }, [run.run_id]);
@@ -216,7 +217,7 @@ export default function ReplayInitialMarketPicker({
     } catch (reason) {
       const message = reason instanceof ReplayV2ApiError
         ? `${reason.code}: ${reason.message}`
-        : reason instanceof Error ? reason.message : t("replay.picker.initFailed");
+        : reason instanceof Error ? describeError(reason, reason.message) : t("replay.picker.initFailed");
       setError(message);
       setSelecting(null);
       if (reason instanceof ReplayV2ApiError && reason.code === "CATALOG_EPOCH_MISMATCH") {

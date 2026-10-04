@@ -2,6 +2,17 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const uk = {
+  "indicator.editor.pyneApiHint": "Pyne API:",
+  "indicator.editor.pineApiHint": "API Pine v5/v6 за закритими барами:",
+  "serverError.notFound": "Запитаний елемент не існує або його видалено",
+  "serverError.conflict": "Змінено в іншому місці. Оновіть і спробуйте ще раз",
+  "serverError.invalid": "Надіслані дані недійсні",
+  "serverError.unavailable": "Ця функція зараз недоступна",
+  "serverError.timeout": "Час очікування запиту минув. Спробуйте ще раз",
+  "serverError.forbidden": "Зараз у вас немає дозволу на цю дію",
+  "serverError.network": "Не вдається підключитися до локальної служби",
+  "serverError.generic": "Операцію не виконано",
+  "serverError.withDetail": "{summary} ({detail})",
   "replay.workspace.openNew": "Відкрити на новому графіку",
   "replay.workspace.splitUnavailable": "Розблокуйте макет або закрийте графік перед відкриттям нового.",
   "preparation.rateLimited": "Waiting for data-source rate limits. Scheduled to retry after {time}; the task is kept if you close this page.",

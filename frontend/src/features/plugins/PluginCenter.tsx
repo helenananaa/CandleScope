@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -53,7 +54,7 @@ export function PluginSettingsPanel({ runtime, onClose, initialSection = "instal
     void loadMarket().then((status) => {
       if (marketRequest.current === request) setMarketplaceStatus(status);
     }).catch((error: unknown) => {
-      if (marketRequest.current === request) setMarketplaceError(error instanceof Error ? error.message : String(error));
+      if (marketRequest.current === request) setMarketplaceError(error instanceof Error ? describeError(error, error.message) : String(error));
     });
     return () => { marketRequest.current += 1; };
   }, [section, platformEnabled, management, loadMarket]);
@@ -63,7 +64,7 @@ export function PluginSettingsPanel({ runtime, onClose, initialSection = "instal
     setMarketplaceBusy(key);
     setMarketplaceError(null);
     try { await operation(); setMarketplaceStatus(await loadMarket()); await detailState.reload(); }
-    catch (error) { setMarketplaceError(error instanceof Error ? error.message : String(error)); }
+    catch (error) { setMarketplaceError(error instanceof Error ? describeError(error, error.message) : String(error)); }
     finally { setMarketplaceBusy(null); }
   };
   const content = <div className="plugin-center" data-testid="plugin-manager" ref={panel} tabIndex={-1}

@@ -1,3 +1,4 @@
+import { describeError } from "../../../i18n/serverErrors.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../../i18n/index.js";
 import { defaultReplayV2Api } from "../replayV2Api.js";
@@ -30,7 +31,7 @@ export default function ReplayPortfolioCurve({ runId }: { readonly runId: string
       if (active.current === request) setData(result);
     } catch (cause) {
       if (!request.signal.aborted && active.current === request) {
-        setError(cause instanceof Error ? cause.message : t("replay.rt.integrityLoad"));
+        setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.integrityLoad"));
       }
     } finally {
       if (active.current === request) setBusy(false);

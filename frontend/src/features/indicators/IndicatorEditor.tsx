@@ -8,6 +8,7 @@
  *   - Custom dark theme optimized for trading scripts
  *   - Code snippet templates for common indicators
  */
+import { describeError } from "../../i18n/serverErrors.js";
 import { Icon } from "../../components/icons/Icon.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
@@ -164,7 +165,7 @@ export default function IndicatorEditor({
     }).catch((error: unknown) => {
       if (controller.signal.aborted) return;
       setRuntimeCatalogError(
-        error instanceof Error ? error.message : String(error),
+        error instanceof Error ? describeError(error, error.message) : String(error),
       );
     });
     return () => controller.abort();
@@ -526,9 +527,9 @@ export default function IndicatorEditor({
         ) : (
           <span style={{ color: 'var(--text-muted)' }}>
             {editorProfile?.pyneEnhancements
-              ? <>Pyne API: <code>ta.sma()</code> <code>ta.ema()</code> <code>ta.rsi()</code> <code>plot()</code> <code>input.int()</code></>
+              ? <>{t("indicator.editor.pyneApiHint")} <code>ta.sma()</code> <code>ta.ema()</code> <code>ta.rsi()</code> <code>plot()</code> <code>input.int()</code></>
               : editorProfile?.pineEnhancements
-                ? <>Pine v5/v6 closed-bar API: <code>ta.sma()</code> <code>plot()</code> <code>plotshape()</code> <code>input.int()</code></>
+                ? <>{t("indicator.editor.pineApiHint")} <code>ta.sma()</code> <code>plot()</code> <code>plotshape()</code> <code>input.int()</code></>
               : t("indicator.editor.communityRuntime", { language: selectedLanguage?.name || t("indicator.editor.fallbackLanguage"), runtime: selectedRuntime?.name || "plugin" })}
           </span>
         )}

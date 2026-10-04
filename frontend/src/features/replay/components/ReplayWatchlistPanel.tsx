@@ -1,3 +1,4 @@
+import { describeError } from "../../../i18n/serverErrors.js";
 import React, { useEffect, useMemo, useState } from "react";
 import { Icon } from "../../../components/icons/Icon.js";
 import { t } from "../../../i18n/index.js";
@@ -42,7 +43,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
     setCatalogError(null);
     void defaultReplayV2Api.marketCatalog(runId, controller.signal).then(setCatalog).catch((reason: unknown) => {
       if (reason instanceof DOMException && reason.name === "AbortError") return;
-      setCatalogError(reason instanceof Error ? reason.message : t("replay.watchlist.catalogFailed"));
+      setCatalogError(reason instanceof Error ? describeError(reason, reason.message) : t("replay.watchlist.catalogFailed"));
     });
     return () => controller.abort();
   }, [catalogAttempt, runId]);
@@ -89,7 +90,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
       } else await viewer.actions.addAndSelectTrack(identity);
       setMarketQuery("");
     } catch (reason) {
-      setCatalogError(reason instanceof Error ? reason.message : t("replay.watchlist.addFailed"));
+      setCatalogError(reason instanceof Error ? describeError(reason, reason.message) : t("replay.watchlist.addFailed"));
     } finally {
       setAddingMarket(null);
     }
@@ -183,7 +184,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
         : viewer.actions.openTrack
           ? viewer.actions.openTrack(track.track_id, "current")
           : viewer.actions.selectTrack(track.track_id);
-      void action.catch((reason: unknown) => setCatalogError(reason instanceof Error ? reason.message : String(reason)));
+      void action.catch((reason: unknown) => setCatalogError(reason instanceof Error ? describeError(reason, reason.message) : String(reason)));
     };
     return (
       <div

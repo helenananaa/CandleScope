@@ -6,6 +6,7 @@
  * - View & manage active indicators (toggle visibility, remove, edit params)
  * - Open code editor for custom indicators
  */
+import { describeError } from "../../i18n/serverErrors.js";
 import { Icon } from "../../components/icons/Icon.js";
 import { useCallback, useState } from "react";
 import { t, type MessageKey } from "../../i18n/index.js";
@@ -476,7 +477,7 @@ export default function IndicatorPanel({
       }
     } catch (err: unknown) {
       console.error("Failed to delete custom indicator:", err);
-      window.alert(t("indicator.deleteFailed", { error: err instanceof Error ? err.message : String(err) }));
+      window.alert(t("indicator.deleteFailed", { error: err instanceof Error ? describeError(err, err.message) : String(err) }));
     }
   }, [activeIndicators, deleteCustomIndicator, onRemoveIndicator]);
 

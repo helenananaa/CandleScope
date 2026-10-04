@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import {
   Component,
   lazy,
@@ -365,7 +366,7 @@ export default function StrategyResearchApp({
     }).then((href) => {
       window.location.assign(href);
     }).catch((reason: unknown) => {
-      setAdvancedError(reason instanceof Error ? reason.message : String(reason));
+      setAdvancedError(reason instanceof Error ? describeError(reason, reason.message) : String(reason));
     });
   }, [researchRun.result, researchRun.session, source, state.script.draftId, state.script.configuration]);
 

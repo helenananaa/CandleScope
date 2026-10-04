@@ -2,6 +2,17 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const tr = {
+  "indicator.editor.pyneApiHint": "Pyne API:",
+  "indicator.editor.pineApiHint": "Kapanmış mumlar için Pine v5/v6 API:",
+  "serverError.notFound": "İstenen öğe yok veya silinmiş",
+  "serverError.conflict": "Başka bir yerde değiştirildi. Yenileyip tekrar deneyin",
+  "serverError.invalid": "Gönderilen veriler geçersiz",
+  "serverError.unavailable": "Bu özellik şu anda kullanılamıyor",
+  "serverError.timeout": "İstek zaman aşımına uğradı. Tekrar deneyin",
+  "serverError.forbidden": "Şu anda bunu yapma izniniz yok",
+  "serverError.network": "Yerel hizmete ulaşılamıyor",
+  "serverError.generic": "İşlem başarısız oldu",
+  "serverError.withDetail": "{summary} ({detail})",
   "replay.workspace.openNew": "Yeni grafikte aç",
   "replay.workspace.splitUnavailable": "Başka bir grafik açmadan önce düzenin kilidini açın veya bir grafiği kapatın.",
   "preparation.rateLimited": "Waiting for data-source rate limits. Scheduled to retry after {time}; the task is kept if you close this page.",

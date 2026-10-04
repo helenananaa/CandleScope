@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import { useEffect, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 
@@ -103,7 +104,7 @@ export function useReplayTradeFlow({
         cvd: "0",
         pageDelta: "0",
         fidelity: "CLEARED_FAIL_CLOSED",
-        error: cause instanceof Error ? cause.message : t("replay.dock.flowFail"),
+        error: cause instanceof Error ? describeError(cause, cause.message) : t("replay.dock.flowFail"),
       });
     });
     return () => abort.abort();

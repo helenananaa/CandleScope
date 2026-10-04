@@ -1,3 +1,4 @@
+import { describeError } from "../../../i18n/serverErrors.js";
 import type { NativeStrategyCollection } from "../native/nativeStrategyCollection.js";
 import type { StrategyTradeFocus } from "./strategyTradeReview.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -305,7 +306,7 @@ export default function ChartStrategyTesterCellBridge({
       })
       .catch((reason: unknown) => {
         if (cancelled || controller.signal.aborted) return;
-        setResultError(reason instanceof Error ? reason.message : t("chartTester.result.unavailable"));
+        setResultError(reason instanceof Error ? describeError(reason, reason.message) : t("chartTester.result.unavailable"));
       })
       .finally(() => {
         if (!cancelled) setResultLoading(false);
@@ -716,14 +717,14 @@ export default function ChartStrategyTesterCellBridge({
         entryTask,
       });
     } catch (reason) {
-      setResultError(reason instanceof Error ? reason.message : String(reason));
+      setResultError(reason instanceof Error ? describeError(reason, reason.message) : String(reason));
       setAdvancedOpening(false);
       return;
     }
     void defaultBacktestApi.createResearchLaunchContext(payload).then((context) => {
       window.location.assign(backtestResearchContextHref(context.context_id));
     }).catch((reason: unknown) => {
-      setResultError(reason instanceof Error ? reason.message : String(reason));
+      setResultError(reason instanceof Error ? describeError(reason, reason.message) : String(reason));
       setAdvancedOpening(false);
     });
   }, [
@@ -780,7 +781,7 @@ export default function ChartStrategyTesterCellBridge({
       onOpenWorkspace={() => {
         if (!attachment) return;
         try { window.location.assign(saveResearchHandoff({ session, workspaceId, cellId, attachment, runId: result?.run.run_id ?? null })); }
-        catch (reason) { setResultError(reason instanceof Error ? reason.message : String(reason)); }
+        catch (reason) { setResultError(reason instanceof Error ? describeError(reason, reason.message) : String(reason)); }
       }}
       onOpenBatchStudy={handleOpenBatchStudy}
       onClose={onClosePanel}

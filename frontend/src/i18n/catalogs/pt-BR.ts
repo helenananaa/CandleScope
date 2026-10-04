@@ -1,6 +1,17 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
+  "indicator.editor.pyneApiHint": "Pyne API:",
+  "indicator.editor.pineApiHint": "API Pine v5/v6 de barras fechadas:",
+  "serverError.notFound": "O item solicitado não existe ou foi excluído",
+  "serverError.conflict": "Foi alterado em outro lugar. Atualize e tente novamente",
+  "serverError.invalid": "Os dados enviados são inválidos",
+  "serverError.unavailable": "Este recurso não está disponível no momento",
+  "serverError.timeout": "A solicitação expirou. Tente novamente",
+  "serverError.forbidden": "Você não tem permissão para fazer isso agora",
+  "serverError.network": "Não foi possível acessar o serviço local",
+  "serverError.generic": "A operação falhou",
+  "serverError.withDetail": "{summary} ({detail})",
   "report.more": "Mais",
   "report.return": "Retorno acumulado",
   "report.equity": "Patrimônio da conta",

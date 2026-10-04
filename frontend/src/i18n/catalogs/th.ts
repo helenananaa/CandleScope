@@ -2,6 +2,17 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const th = {
+  "indicator.editor.pyneApiHint": "Pyne API:",
+  "indicator.editor.pineApiHint": "Pine v5/v6 closed-bar API:",
+  "serverError.notFound": "ไม่พบรายการที่ขอ หรือถูกลบไปแล้ว",
+  "serverError.conflict": "มีการเปลี่ยนแปลงจากที่อื่น โปรดรีเฟรชแล้วลองอีกครั้ง",
+  "serverError.invalid": "ข้อมูลที่ส่งไม่ถูกต้อง",
+  "serverError.unavailable": "ฟีเจอร์นี้ไม่พร้อมใช้งานในขณะนี้",
+  "serverError.timeout": "คำขอหมดเวลา โปรดลองอีกครั้ง",
+  "serverError.forbidden": "ขณะนี้คุณไม่มีสิทธิ์ดำเนินการนี้",
+  "serverError.network": "ไม่สามารถเชื่อมต่อบริการภายในเครื่อง",
+  "serverError.generic": "การดำเนินการล้มเหลว",
+  "serverError.withDetail": "{summary} ({detail})",
   "replay.workspace.openNew": "เปิดในกราฟใหม่",
   "replay.workspace.splitUnavailable": "ปลดล็อกเค้าโครงหรือปิดกราฟก่อนเปิดกราฟใหม่",
   "preparation.rateLimited": "Waiting for data-source rate limits. Scheduled to retry after {time}; the task is kept if you close this page.",

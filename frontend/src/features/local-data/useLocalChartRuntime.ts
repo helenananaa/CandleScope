@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { SeriesDataFeed } from "../market-data/feed/seriesDataFeed.js";
@@ -104,7 +105,7 @@ export function useLocalChartRuntime(
       setHasMoreLeft(resultHasMore(result));
     }).catch((reason: unknown) => {
       if (controller.signal.aborted) return;
-      setError(reason instanceof Error ? reason.message : t("local.err.readFailed"));
+      setError(reason instanceof Error ? describeError(reason, reason.message) : t("local.err.readFailed"));
     }).finally(() => {
       if (!controller.signal.aborted) setLoading(false);
     });
@@ -129,7 +130,7 @@ export function useLocalChartRuntime(
       });
       setHasMoreLeft(resultHasMore(result));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t("local.err.readOlderFailed"));
+      setError(reason instanceof Error ? describeError(reason, reason.message) : t("local.err.readOlderFailed"));
     } finally {
       setLoadingMore(false);
     }
@@ -159,7 +160,7 @@ export function useLocalChartRuntime(
       }
       return true;
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t("local.err.markerLocate"));
+      setError(reason instanceof Error ? describeError(reason, reason.message) : t("local.err.markerLocate"));
       return false;
     } finally {
       setLoadingMore(false);

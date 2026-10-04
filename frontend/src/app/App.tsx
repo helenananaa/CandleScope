@@ -1,3 +1,4 @@
+import { describeError } from "../i18n/serverErrors.js";
 import {
   lazy,
   Suspense,
@@ -126,7 +127,7 @@ function LiveWorkspaceApp() {
     void desktopWindowManager.getBootstrap().then((bootstrap) => {
       if (!cancelled) setDesktopBootstrap(bootstrap);
     }).catch((error: unknown) => {
-      if (!cancelled) setDesktopError(error instanceof Error ? error.message : t("shell.desktopHandshake", {}, locale));
+      if (!cancelled) setDesktopError(error instanceof Error ? describeError(error, error.message) : t("shell.desktopHandshake", {}, locale));
     });
     return () => {
       cancelled = true;
@@ -146,7 +147,7 @@ function LiveWorkspaceApp() {
       setDesktopBootstrap(desktopWindowManager.cachedBootstrap);
       setDesktopError(result.ok ? null : `${result.code}: ${result.message || t("shell.topologyRejected", {}, locale)}`);
     }).catch((error: unknown) => {
-      if (!cancelled) setDesktopError(error instanceof Error ? error.message : t("shell.topologySync", {}, locale));
+      if (!cancelled) setDesktopError(error instanceof Error ? describeError(error, error.message) : t("shell.topologySync", {}, locale));
     });
     return () => {
       cancelled = true;
