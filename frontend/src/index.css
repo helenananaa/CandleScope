@@ -1146,10 +1146,10 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 .ob-controls select {
   width: 100%;
   height: 28px;
-  padding: 0 14px 0 4px;
+  padding: 0 16px 0 6px;
   border: 1px solid var(--border-color);
   border-radius: 5px;
-  background: var(--bg-tertiary);
+  background-color: var(--bg-tertiary);
   color: var(--text-secondary);
   font: inherit;
   font-size: var(--font-size-xs);
@@ -1365,10 +1365,10 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   width: 100%;
   min-width: 0;
   height: 28px;
-  padding: 0 13px 0 4px;
+  padding: 0 16px 0 6px;
   border: 1px solid var(--border-color);
   border-radius: 5px;
-  background: var(--bg-tertiary);
+  background-color: var(--bg-tertiary);
   color: var(--text-secondary);
   font: inherit;
   font-size: var(--font-size-xs);
@@ -15164,7 +15164,7 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 .ob-range-controls label { display: inline-flex; align-items: center; gap: 4px; }
 .ob-range-controls select {
   max-width: 100px;
-  background: var(--bg-tertiary);
+  background-color: var(--bg-tertiary);
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
   border-radius: 4px;

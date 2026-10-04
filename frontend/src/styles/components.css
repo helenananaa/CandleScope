@@ -106,6 +106,20 @@
   cursor: not-allowed;
 }
 
+/* Select with a fixed-size chevron, so compact selects keep their text width.
+ * Native arrows add space outside the padding and clip short labels. */
+.ui-select,
+.ob-controls select,
+.ob-range-controls select,
+.tf-controls select {
+  appearance: none;
+  padding-right: 16px;
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 5px center;
+  background-size: 10px 6px;
+}
+
 /* Square icon-only button */
 .ui-icon-btn {
   display: inline-flex;

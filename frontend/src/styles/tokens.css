@@ -81,6 +81,9 @@
   --radius-lg: 12px;      /* dialogs */
   --radius-full: 999px;
 
+  /* Select chevron; an SVG url cannot read CSS variables, so each theme sets its own */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+
   /* Legacy names kept so existing rules keep working; prefer the names above */
   --bg-primary: var(--surface-0);
   --bg-secondary: var(--surface-1);
@@ -109,6 +112,8 @@
   --text-success: #15803d;
   --text-danger: #be123c;
   --text-warning: #92400e;
+
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23475569' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 
   --text-up: color-mix(in srgb, var(--candle-up) 55%, var(--text-primary));
   --text-down: color-mix(in srgb, var(--candle-down) 55%, var(--text-primary));
