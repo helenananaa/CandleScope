@@ -1028,6 +1028,41 @@ export default function ReplayTrainingPageShell({
       formatTime={publicTimeRuntime.formatTime}
     />
   ) : null;
+  const replayIntervalSelector = (
+    <IntervalSelector
+      interval={displayedInterval}
+      capabilityReady={review === null
+        && config !== null
+        && viewer.viewerState !== null
+        && !viewer.viewerPending
+        && intervalViewportTransfer === null
+        && replayIntervalCatalog.nativeIntervals.length > 0}
+      capabilityLoading={config === null
+        || viewer.loading
+        || viewer.viewerPending
+        || intervalViewportTransfer !== null}
+      nativeIntervals={replayIntervalCatalog.nativeIntervals}
+      intervalGroups={replayIntervalCatalog.intervalGroups}
+      customIntervalRecords={customIntervalRecords}
+      savedCustomIntervals={savedCustomIntervals}
+      onSelectInterval={selectReplayInterval}
+      onCreateCustomInterval={createReplayCustomInterval}
+      onRemoveCustomInterval={removeReplayCustomInterval}
+      onRestoreCustomInterval={restoreReplayCustomInterval}
+      onTogglePinCustomInterval={togglePinCustomInterval}
+      onClearCustomIntervals={clearReplayCustomIntervals}
+      intervalAvailability={intervalAvailability}
+      unavailableIntervalMessage={unavailableIntervalMessage}
+      readOnlyReason={review === null ? null : t("replay.shell.intervalReadonly")}
+      intervalNotice={intervalNotice ?? {
+        type: viewer.error ? "error" : "info",
+        text: review === null
+          ? viewer.error ?? viewer.eventStopMessage ?? `ViewerState r${viewer.viewerState?.semantic_view_revision ?? "--"} · ${publicTime}`
+          : `Review ViewerState r${String(review.projection.viewer_state.semantic_view_revision ?? "--")} · ${review.events.find((event) => event.event_id === review.selected_event_id)?.public_time.label ?? "--"}`,
+      }}
+      variant="compact"
+    />
+  );
   return (
     <PageFrame
       toolbar={drawingToolbar}
@@ -1049,6 +1084,7 @@ export default function ReplayTrainingPageShell({
                 })}
             </button>
           )}
+          intervals={replayIntervalSelector}
           controls={<>
             {cell?.controls}
             <button
@@ -1121,40 +1157,7 @@ export default function ReplayTrainingPageShell({
           </>}
         />
       )}
-      intervalSelector={(
-        <IntervalSelector
-          interval={displayedInterval}
-          capabilityReady={review === null
-            && config !== null
-            && viewer.viewerState !== null
-            && !viewer.viewerPending
-            && intervalViewportTransfer === null
-            && replayIntervalCatalog.nativeIntervals.length > 0}
-          capabilityLoading={config === null
-            || viewer.loading
-            || viewer.viewerPending
-            || intervalViewportTransfer !== null}
-          nativeIntervals={replayIntervalCatalog.nativeIntervals}
-          intervalGroups={replayIntervalCatalog.intervalGroups}
-          customIntervalRecords={customIntervalRecords}
-          savedCustomIntervals={savedCustomIntervals}
-          onSelectInterval={selectReplayInterval}
-          onCreateCustomInterval={createReplayCustomInterval}
-          onRemoveCustomInterval={removeReplayCustomInterval}
-          onRestoreCustomInterval={restoreReplayCustomInterval}
-          onTogglePinCustomInterval={togglePinCustomInterval}
-          onClearCustomIntervals={clearReplayCustomIntervals}
-          intervalAvailability={intervalAvailability}
-          unavailableIntervalMessage={unavailableIntervalMessage}
-          readOnlyReason={review === null ? null : t("replay.shell.intervalReadonly")}
-          intervalNotice={intervalNotice ?? {
-            type: viewer.error ? "error" : "info",
-            text: review === null
-              ? viewer.error ?? viewer.eventStopMessage ?? `ViewerState r${viewer.viewerState?.semantic_view_revision ?? "--"} · ${publicTime}`
-              : `Review ViewerState r${String(review.projection.viewer_state.semantic_view_revision ?? "--")} · ${review.events.find((event) => event.event_id === review.selected_event_id)?.public_time.label ?? "--"}`,
-          }}
-        />
-      )}
+      intervalSelector={null}
       workspace={cell ? chart : (
         <MarketChartWorkspace
           toolbar={drawingToolbar}
