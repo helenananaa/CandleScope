@@ -80,3 +80,25 @@ test("raw color literals outside tokens.css do not grow", () => {
   assert.ok(hex <= MAX_RAW_HEX, `${hex} raw hex colors (max ${MAX_RAW_HEX}); use a token from src/styles/tokens.css`);
   assert.ok(rgb <= MAX_RAW_RGB, `${rgb} raw rgb()/rgba() colors (max ${MAX_RAW_RGB}); use a token or color-mix() with one`);
 });
+
+test("component inline styles use tokens instead of hard-coded colors", () => {
+  const sources = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return entry.name === "__tests__" ? [] : sources(path);
+    return entry.name.endsWith(".tsx") && !entry.name.endsWith("Styles.tsx") ? [path] : [];
+  });
+  const offenders = sources(SRC).flatMap((path) => [...readFileSync(path, "utf8").matchAll(
+    /\b(?:color|background|backgroundColor|borderColor|border)\s*:\s*["'](?:#[0-9a-fA-F]{3,8}|rgba?\()/g,
+  )].map((match) => `${relative(SRC, path)}: ${match[0]}`));
+  assert.deepEqual(offenders, [], "use var(--token) in inline styles; SVG presentation attributes are exempt");
+});
+
+test("app-level stacking uses the z-index layer tokens", () => {
+  const offenders = styleSources().flatMap((path) => {
+    const css = readFileSync(path, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    return [...css.matchAll(/z-index:\s*(-?\d+)/g)]
+      .filter(([, value]) => Number(value) >= 50)
+      .map(([declaration]) => `${relative(SRC, path)}: ${declaration}`);
+  });
+  assert.deepEqual(offenders, [], "use var(--z-rail|topbar|panel|overlay|modal|toast|menu), optionally with calc() offsets");
+});

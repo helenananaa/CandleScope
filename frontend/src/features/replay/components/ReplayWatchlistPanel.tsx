@@ -131,7 +131,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
       values.unshift({
         id: "replay_primary",
         name: t("replay.watchlist.primary", {}, locale),
-        color: "#8b5cf6",
+        color: "var(--accent-purple)",
         rows: [{ key: primaryKey, track: tracksByKey.get(primaryKey) ?? null }],
       });
     }
@@ -149,7 +149,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
       values.push({
         id: "replay_tracks",
         name: t("replay.watchlist.addedGroup", {}, locale),
-        color: "#22c55e",
+        color: "var(--color-success)",
         rows: additional,
       });
     }
@@ -262,7 +262,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
         <div className="replay-watchlist-rows">
           <section className="replay-watchlist-group replay-market-search">
             <header>
-              <i style={{ background: "#38bdf8" }} />
+              <i style={{ background: "var(--accent-cyan)" }} />
               <span>{t("replay.watchlist.add")}</span>
               <button
                 type="button"

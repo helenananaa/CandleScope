@@ -343,7 +343,7 @@ export default function IndicatorEditor({
                   ...(editorProfile.pyneEnhancements ? { securityMode } : {}),
                 });
               }}
-              style={{ background: 'var(--accent-blue)', color: '#fff', border: 'none', padding: '6px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '13px', boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)', transition: 'all 0.2s ease', marginLeft: '8px' }}
+              style={{ background: 'var(--accent-blue)', color: 'var(--text-on-accent)', border: 'none', padding: '6px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '13px', boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)', transition: 'all 0.2s ease', marginLeft: '8px' }}
             >
               {t("indicator.editor.fork")}
             </button>
@@ -361,7 +361,7 @@ export default function IndicatorEditor({
                 className="indicator-editor-save"
                 disabled={!languageReady}
                 onClick={handleSave}
-                style={{ background: 'var(--accent-blue)', color: '#fff', border: 'none', padding: '6px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '13px', boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)', transition: 'all 0.2s ease', marginLeft: '8px' }}
+                style={{ background: 'var(--accent-blue)', color: 'var(--text-on-accent)', border: 'none', padding: '6px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '13px', boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)', transition: 'all 0.2s ease', marginLeft: '8px' }}
               >
                 {t("indicator.editor.save")}
               </button>
@@ -470,7 +470,7 @@ export default function IndicatorEditor({
           </div>
         )}
         {editorProfile?.pyneEnhancements && securityMode === "unsafe" && (
-          <div style={{ marginBottom: '8px', padding: '8px 10px', border: '1px solid rgba(239, 68, 68, 0.35)', borderRadius: '6px', color: 'var(--text-danger)', background: 'rgba(239, 68, 68, 0.08)', fontSize: '12px' }}>
+          <div style={{ marginBottom: '8px', padding: '8px 10px', border: '1px solid rgba(239, 68, 68, 0.35)', borderRadius: '6px', color: 'var(--text-danger)', background: 'color-mix(in srgb, var(--color-danger) 8%, transparent)', fontSize: '12px' }}>
             {t("indicator.editor.unsafeHint")}
           </div>
         )}

@@ -80,6 +80,15 @@
   --shadow-lg: 0 24px 48px rgba(0, 0, 0, 0.45);
   --backdrop: rgba(0, 0, 0, 0.6);
 
+  /* Stacking layers (app level; values below 50 stay local to a component) */
+  --z-rail: 50;
+  --z-topbar: 100;
+  --z-panel: 150;
+  --z-overlay: 500;
+  --z-modal: 1000;
+  --z-toast: 1600;
+  --z-menu: 10000;
+
   /* Radius */
   --radius-xs: 3px;
   --radius-sm: 4px;

@@ -122,15 +122,15 @@ export default function ChartAppearancePanel({ settings, onUpdate }: ChartAppear
                         className="st-preset-btn"
                         onClick={() => onUpdate({ ...settings, upColor: '#22c55e', downColor: '#ef4444' })}
                     >
-                        <span style={{ color: '#22c55e', fontWeight: 700 }}>● {t("settings.appearance.greenUp")}</span>
-                        <span style={{ color: '#ef4444', fontWeight: 700 }}>● {t("settings.appearance.redDown")}</span>
+                        <span style={{ color: 'var(--text-success)', fontWeight: 700 }}>● {t("settings.appearance.greenUp")}</span>
+                        <span style={{ color: 'var(--text-danger)', fontWeight: 700 }}>● {t("settings.appearance.redDown")}</span>
                     </button>
                     <button
                         className="st-preset-btn"
                         onClick={() => onUpdate({ ...settings, upColor: '#ef4444', downColor: '#22c55e' })}
                     >
-                        <span style={{ color: '#ef4444', fontWeight: 700 }}>● {t("settings.appearance.redUp")}</span>
-                        <span style={{ color: '#22c55e', fontWeight: 700 }}>● {t("settings.appearance.greenDown")}</span>
+                        <span style={{ color: 'var(--text-danger)', fontWeight: 700 }}>● {t("settings.appearance.redUp")}</span>
+                        <span style={{ color: 'var(--text-success)', fontWeight: 700 }}>● {t("settings.appearance.greenDown")}</span>
                     </button>
                 </div>
                 <div className="st-custom-colors">

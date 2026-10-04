@@ -192,24 +192,24 @@ function stripEngineMarker(script = ""): string {
 function IndicatorBadge({ children, tone = "neutral" }: IndicatorBadgeProps) {
   const palette = {
     builtin: {
-      background: "rgba(59, 130, 246, 0.15)",
-      color: "#3b82f6",
+      background: "color-mix(in srgb, var(--accent-blue) 15%, transparent)",
+      color: "var(--text-accent)",
     },
     custom: {
-      background: "rgba(20, 184, 166, 0.14)",
-      color: "#14b8a6",
+      background: "color-mix(in srgb, var(--accent-cyan) 14%, transparent)",
+      color: "var(--text-info)",
     },
     main: {
-      background: "rgba(34, 197, 94, 0.15)",
-      color: "#22c55e",
+      background: "color-mix(in srgb, var(--color-success) 15%, transparent)",
+      color: "var(--text-success)",
     },
     sub: {
-      background: "rgba(168, 85, 247, 0.15)",
-      color: "#a855f7",
+      background: "color-mix(in srgb, var(--accent-purple) 15%, transparent)",
+      color: "var(--text-purple)",
     },
     neutral: {
-      background: "rgba(148, 163, 184, 0.15)",
-      color: "#94a3b8",
+      background: "color-mix(in srgb, var(--text-secondary) 15%, transparent)",
+      color: "var(--text-secondary)",
     },
   };
   return (
@@ -840,7 +840,7 @@ plot(ma, "MA", color=line_color)
                               <span className="indicator-preset-desc">
                                 {preset.description}
                                 {!support.supported && support.reason && (
-                                  <span style={{ display: "block", color: "#f59e0b", marginTop: 3 }}>
+                                  <span style={{ display: "block", color: "var(--text-warning)", marginTop: 3 }}>
                                     {support.reason}
                                   </span>
                                 )}
@@ -895,7 +895,7 @@ plot(ma, "MA", color=line_color)
                                 <span className="indicator-preset-desc">
                                   {study.description}
                                   {!study.supported && (
-                                    <span style={{ display: "block", color: "#f59e0b", marginTop: 3 }}>
+                                    <span style={{ display: "block", color: "var(--text-warning)", marginTop: 3 }}>
                                       {disabledReason}
                                     </span>
                                   )}

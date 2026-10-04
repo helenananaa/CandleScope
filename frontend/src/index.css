@@ -95,7 +95,7 @@ body {
   flex-shrink: 0;
   overflow: hidden;
   transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  z-index: 50;
+  z-index: var(--z-rail);
   position: relative;
   /* Dynamic color vars set via inline style */
   --wl-up-color: var(--candle-up);
@@ -127,7 +127,7 @@ body {
   height: 100%;
   background: var(--bg-secondary);
   border-left: 1px solid var(--border-color);
-  z-index: 50;
+  z-index: var(--z-rail);
   position: relative;
   --wl-up-color: var(--candle-up);
   --wl-down-color: var(--candle-down);
@@ -848,7 +848,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   flex-shrink: 0;
   align-self: stretch;
   position: relative;
-  z-index: 51;
+  z-index: calc(var(--z-rail) + 1);
 }
 .right-market-rail > .wl-resize-handle {
   margin-right: -2px;
@@ -1535,7 +1535,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 /* ── Context menu ── */
 .wl-context-menu {
   position: fixed;
-  z-index: 10000;
+  z-index: var(--z-menu);
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
@@ -1628,7 +1628,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
    ═══════════════════════════════════════════════════════════════ */
 .sym-ctx-menu {
   position: fixed;
-  z-index: 10001;
+  z-index: calc(var(--z-menu) + 1);
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 10px;
@@ -1721,7 +1721,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   border-bottom: 1px solid var(--border-color);
   gap: 12px;
   flex-shrink: 0;
-  z-index: 100;
+  z-index: var(--z-topbar);
 }
 
 .logo {
@@ -1833,7 +1833,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 .sym-modal-overlay {
   position: fixed;
   inset: 0;
-  z-index: 9000;
+  z-index: calc(var(--z-menu) - 1000);
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -2544,7 +2544,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 .interval-toolbar-wrap {
   position: relative;
   flex-shrink: 0;
-  z-index: 80;
+  z-index: calc(var(--z-rail) + 30);
 }
 
 .toolbar-group-wrap {
@@ -3166,7 +3166,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   /* Lightweight Charts creates positioned children up to z-index: 50.
      Keep variant flyouts above the chart canvas, but leave this stacking
      context below the global indicator/alert backdrops (140+). */
-  z-index: 60;
+  z-index: calc(var(--z-rail) + 10);
 }
 .drawing-toolbar-loading {
   opacity: 0.65;
@@ -3257,7 +3257,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   width: min(980px, calc(100vw - 32px));
   max-height: calc(100dvh - 32px);
   overflow: hidden;
-  z-index: 90;
+  z-index: calc(var(--z-topbar) - 10);
   padding: 14px;
   background: color-mix(in srgb, var(--surface-0) 96%, transparent);
   border: 1px solid color-mix(in srgb, var(--text-secondary) 25%, transparent);
@@ -3944,7 +3944,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   position: absolute;
   top: 44px;
   right: 72px;
-  z-index: 110;
+  z-index: calc(var(--z-topbar) + 10);
   max-width: calc(100% - 24px);
   color: var(--text-primary);
   font: 12px var(--font-sans);
@@ -4216,7 +4216,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   padding: 4px;
-  z-index: 200;
+  z-index: calc(var(--z-panel) + 50);
   animation: flyout-in 0.12s ease-out;
 }
 
@@ -4323,7 +4323,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   padding: 0;
-  z-index: 200;
+  z-index: calc(var(--z-panel) + 50);
   animation: flyout-in 0.12s ease-out;
   max-height: 420px;
   display: flex;
@@ -4546,7 +4546,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   padding: 0;
-  z-index: 200;
+  z-index: calc(var(--z-panel) + 50);
   animation: flyout-in 0.12s ease-out;
 }
 
@@ -4657,7 +4657,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   align-items: center;
   justify-content: center;
   background: var(--bg-primary);
-  z-index: 50;
+  z-index: var(--z-rail);
   gap: 16px;
 }
 
@@ -4693,7 +4693,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   align-items: center;
   justify-content: center;
   background: var(--bg-primary);
-  z-index: 50;
+  z-index: var(--z-rail);
   gap: 12px;
 }
 
@@ -4835,7 +4835,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 .plugin-modal-overlay {
   position: fixed;
   inset: 0;
-  z-index: 1600;
+  z-index: var(--z-toast);
   display: grid;
   place-items: center;
   padding: 24px;
@@ -5087,7 +5087,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 
 .plugin-view-surface {
   position: fixed;
-  z-index: 850;
+  z-index: calc(var(--z-overlay) + 350);
   overflow: auto;
   border: 1px solid var(--border-color);
   background: var(--bg-secondary);
@@ -5181,7 +5181,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 .plugin-platform-notice,
 .plugin-ui-fallback {
   position: fixed;
-  z-index: 1800;
+  z-index: calc(var(--z-toast) + 200);
   right: 16px;
   bottom: 38px;
   max-width: min(480px, 90vw);
@@ -5578,7 +5578,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 
 .live-control-banner {
   position: fixed;
-  z-index: 2100;
+  z-index: calc(var(--z-toast) + 500);
   top: 54px;
   left: 50%;
   display: flex;
@@ -5643,7 +5643,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   color: #f87171 !important;
 }
 
-.live-host-modal-overlay { z-index: 2400; }
+.live-host-modal-overlay { z-index: calc(var(--z-toast) + 800); }
 .live-host-modal { width: min(880px, 94vw); }
 
 .live-control-summary,
@@ -5819,7 +5819,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.35);
-  z-index: 142;
+  z-index: calc(var(--z-panel) - 8);
   animation: fade-in 0.15s ease-out;
 }
 
@@ -5833,7 +5833,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   background: var(--bg-secondary);
   border-left: 1px solid var(--border-color);
   box-shadow: -8px 0 32px rgba(0, 0, 0, 0.3);
-  z-index: 152;
+  z-index: calc(var(--z-panel) + 2);
   display: flex;
   flex-direction: column;
   animation: slide-in-right 0.2s ease-out;
@@ -7623,7 +7623,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   background: var(--bg-secondary);
   border-left: 1px solid var(--border-color);
   box-shadow: -8px 0 32px rgba(0, 0, 0, 0.3);
-  z-index: 150;
+  z-index: var(--z-panel);
   display: flex;
   flex-direction: column;
   animation: slide-in-right 0.2s ease-out;
@@ -8078,7 +8078,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.35);
-  z-index: 140;
+  z-index: calc(var(--z-panel) - 10);
   animation: fade-in 0.15s ease-out;
 }
 
@@ -9075,7 +9075,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 @keyframes replay-spin { to { transform: rotate(360deg); } }
 
 .replay-control-stack { border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); background: var(--bg-secondary); }
-.replay-bottom-control-dock { z-index: 80; flex: 0 0 auto; min-width: 0; border-top: 1px solid var(--border-color); box-shadow: 0 -8px 28px rgba(2, 6, 23, .22); }
+.replay-bottom-control-dock { z-index: calc(var(--z-rail) + 30); flex: 0 0 auto; min-width: 0; border-top: 1px solid var(--border-color); box-shadow: 0 -8px 28px rgba(2, 6, 23, .22); }
 .replay-bottom-control-dock .replay-control-stack { border-top: 0; }
 .replay-recovery-banner, .replay-controller-banner { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 34px; padding: 4px 12px; color: var(--text-warning); background: color-mix(in srgb, var(--color-warning) 24%, transparent); font-size: 12px; }
 .replay-recovery-banner button, .replay-controller-banner button { padding: 3px 8px; border: 1px solid color-mix(in srgb, var(--color-warning) 60%, transparent); border-radius: 5px; color: var(--text-warning); background: color-mix(in srgb, var(--color-warning) 20%, transparent); }
@@ -9625,7 +9625,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 .replay-activity-summary small { color: var(--text-muted); }
 .replay-history-error { max-width: 280px; overflow: hidden; color: var(--text-danger); text-overflow: ellipsis; }
 
-.replay-modal-backdrop { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; background: color-mix(in srgb, var(--surface-0) 76%, transparent); }
+.replay-modal-backdrop { position: fixed; inset: 0; z-index: var(--z-menu); display: grid; place-items: center; background: color-mix(in srgb, var(--surface-0) 76%, transparent); }
 .replay-end-dialog { display: grid; gap: 14px; width: min(480px, calc(100vw - 30px)); padding: 22px; border: 1px solid var(--border-strong); border-radius: 10px; color: color-mix(in srgb, var(--text-primary) 50%, var(--text-secondary)); background: var(--surface-0); box-shadow: 0 24px 90px #000; }
 .replay-end-dialog h2, .replay-end-dialog p { margin: 0; }
 .replay-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
@@ -9687,7 +9687,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 
 .workspace-layout-leaf-maximized {
-  z-index: 110;
+  z-index: calc(var(--z-topbar) + 10);
 }
 
 .workspace-layout-leaf-obscured {
@@ -9697,7 +9697,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 
 .workspace-layout-leaf.drop-target::after {
   position: absolute;
-  z-index: 90;
+  z-index: calc(var(--z-topbar) - 10);
   inset: 4px;
   border: 2px solid var(--accent-blue);
   border-radius: 6px;
@@ -9717,13 +9717,13 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 
 .workspace-split-handle-layer {
-  z-index: 70;
+  z-index: calc(var(--z-rail) + 20);
   pointer-events: none;
 }
 
 .workspace-split-handle {
   position: absolute;
-  z-index: 70;
+  z-index: calc(var(--z-rail) + 20);
   border: 0;
   outline: 0;
   background: transparent;
@@ -9776,7 +9776,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 
 .workspace-layout-space-warning {
   position: absolute;
-  z-index: 160;
+  z-index: calc(var(--z-panel) + 10);
   right: 10px;
   bottom: 10px;
   max-width: min(430px, calc(100% - 20px));
@@ -9811,7 +9811,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 
 .multi-chart-cell-header {
   position: relative;
-  z-index: 55;
+  z-index: calc(var(--z-rail) + 5);
   display: flex;
   align-items: center;
   gap: 7px;
@@ -10052,7 +10052,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 
 .workspace-cell-layout-popover {
   position: absolute;
-  z-index: 180;
+  z-index: calc(var(--z-panel) + 30);
   top: calc(100% + 7px);
   right: 0;
   display: grid;
@@ -10251,7 +10251,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 
 .workspace-switcher-panel {
   position: absolute;
-  z-index: 720;
+  z-index: calc(var(--z-overlay) + 220);
   top: calc(100% + 9px);
   right: 6px;
   width: min(354px, calc(100vw - 24px));
@@ -10640,7 +10640,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 
 .workspace-link-popover {
   position: absolute;
-  z-index: 120;
+  z-index: calc(var(--z-topbar) + 20);
   top: calc(100% + 8px);
   right: 0;
   display: grid;
@@ -10891,7 +10891,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 .workspace-panel-overlay {
   position: fixed;
   inset: 0;
-  z-index: 144;
+  z-index: calc(var(--z-panel) - 6);
   background: color-mix(in srgb, var(--surface-0) 48%, transparent);
   backdrop-filter: blur(2px);
   animation: fade-in 0.15s ease-out;
@@ -10899,7 +10899,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 
 .workspace-panel {
   position: fixed;
-  z-index: 154;
+  z-index: calc(var(--z-panel) + 4);
   top: 48px;
   right: 0;
   bottom: 24px;
@@ -11717,7 +11717,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 .replay-return-hub { flex: 0 0 auto; }
 .replay-return-hub:disabled { opacity: .55; cursor: wait; }
 
-.replay-launcher-overlay { position: fixed; inset: 0; z-index: 10040; display: grid; place-items: center; overflow: hidden; padding: 24px; background: color-mix(in srgb, var(--surface-0) 78%, transparent); backdrop-filter: blur(8px); }
+.replay-launcher-overlay { position: fixed; inset: 0; z-index: calc(var(--z-menu) + 40); display: grid; place-items: center; overflow: hidden; padding: 24px; background: color-mix(in srgb, var(--surface-0) 78%, transparent); backdrop-filter: blur(8px); }
 .replay-launcher-overlay:focus { outline: none; }
 .replay-launcher-popup-blocked { position: absolute; z-index: 1; top: 34px; right: 42px; display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid color-mix(in srgb, var(--color-warning) 60%, transparent); border-radius: 8px; color: var(--text-warning); background: color-mix(in srgb, var(--color-warning) 18%, var(--surface-1)); box-shadow: 0 12px 30px rgba(0, 0, 0, .35); }
 .replay-launcher-popup-blocked a { color: var(--text-info); }
@@ -11735,7 +11735,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 .replay-integrity-drawer {
   position: fixed;
-  z-index: 600;
+  z-index: calc(var(--z-overlay) + 100);
   top: 48px;
   right: 0;
   bottom: 24px;
@@ -11748,7 +11748,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 .replay-indicator-panel-layer {
   position: fixed;
-  z-index: 560;
+  z-index: calc(var(--z-overlay) + 60);
   top: 48px;
   right: 0;
   bottom: 24px;
@@ -11758,7 +11758,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   box-shadow: -18px 0 56px rgba(2, 6, 23, .34);
 }
 .replay-shared-indicator-panel .indicator-panel-overlay {
-  z-index: 620;
+  z-index: calc(var(--z-overlay) + 120);
 }
 .replay-indicator-panel {
   display: flex;
@@ -11817,7 +11817,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 .replay-indicator-unsupported p, .replay-indicator-unsupported small { margin: 4px 0 0; color: var(--text-warning); font-size: var(--font-size-xs); line-height: 1.45; }
 .replay-history-boundary-notice {
   position: fixed;
-  z-index: 540;
+  z-index: calc(var(--z-overlay) + 40);
   right: 370px;
   bottom: 108px;
   left: 58px;
@@ -12236,7 +12236,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 /* ── Price scale context menu ──────────────────────────────── */
 .price-scale-context-menu {
   position: fixed;
-  z-index: 10000;
+  z-index: var(--z-menu);
   width: 220px;
   min-width: 220px;
   background: color-mix(in srgb, var(--surface-0) 96%, transparent);
@@ -12770,7 +12770,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 .replay-trade-notice[data-tone="error"] { color: var(--trade-negative); }
 
 .replay-trading-workbench {
-  z-index: 75;
+  z-index: calc(var(--z-rail) + 25);
   display: flex;
   flex: 0 0 232px;
   min-width: 0;
@@ -14124,7 +14124,7 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
   position: fixed;
   top: 72px;
   right: 20px;
-  z-index: 1600;
+  z-index: var(--z-toast);
   display: grid;
   width: min(380px, calc(100vw - 32px));
   gap: 10px;
@@ -14540,7 +14540,7 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 
 .training-hub-create-overlay {
   position: fixed;
-  z-index: 850;
+  z-index: calc(var(--z-overlay) + 350);
   inset: 0;
   display: grid;
   place-items: center;
@@ -15108,7 +15108,7 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 .replay-chart-cell > .chart-area { flex: 1; min-height: 0; }
 .replay-chart-cell.active { outline: 1px solid var(--accent-blue); outline-offset: -1px; }
 .drawing-font-size { width: 52px; min-width: 0; padding: 5px; border: 1px solid var(--border-color); border-radius: 5px; background: var(--bg-primary); color: var(--text-primary); font: inherit; }
-.drawing-history-bar { position: absolute; right: 205px; z-index: 109; display: flex; gap: 2px; padding: 3px; border: 1px solid var(--border-color); border-radius: 7px; background: var(--bg-secondary); box-shadow: 0 2px 8px #0001; }
+.drawing-history-bar { position: absolute; right: 205px; z-index: calc(var(--z-topbar) + 9); display: flex; gap: 2px; padding: 3px; border: 1px solid var(--border-color); border-radius: 7px; background: var(--bg-secondary); box-shadow: 0 2px 8px #0001; }
 .drawing-history-bar button { display: grid; place-items: center; width: 28px; height: 26px; border: 0; border-radius: 4px; color: var(--text-primary); background: transparent; cursor: pointer; }
 .drawing-history-bar button:hover:not(:disabled) { background: var(--bg-hover); }
 .drawing-history-bar button:disabled { opacity: .3; cursor: default; }
@@ -15143,7 +15143,7 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 .drawing-visibility-fields input[type="checkbox"] { width: 14px; height: 14px; margin: 0; accent-color: var(--accent-blue); }
 .drawing-visibility-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px 8px; margin-top: 8px; }
 
-.drawing-object-list { position: absolute; top: 8px; right: 282px; z-index: 109; color: var(--text-primary); --drawing-surface: var(--bg-secondary); --drawing-border: var(--border-color); }
+.drawing-object-list { position: absolute; top: 8px; right: 282px; z-index: calc(var(--z-topbar) + 9); color: var(--text-primary); --drawing-surface: var(--bg-secondary); --drawing-border: var(--border-color); }
 .drawing-object-list button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; height: 30px; min-width: 30px; padding: 0 6px; color: inherit; background: transparent; border: 0; border-radius: 5px; cursor: pointer; }
 .drawing-object-list button:hover:not(:disabled) { background: var(--bg-hover); }
 .drawing-object-list button:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; }

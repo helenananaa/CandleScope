@@ -131,7 +131,7 @@
 .research-data-drawer {
   position: fixed;
   inset: 12px 12px 12px auto;
-  z-index: 1200;
+  z-index: calc(var(--z-modal) + 200);
   width: min(560px, calc(100vw - 24px));
   max-width: none;
   max-height: none;

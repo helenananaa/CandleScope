@@ -17,7 +17,7 @@ export default function SettingsModalStyles(props: SettingsModalStylesProps) {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-modal);
   backdrop-filter: blur(6px);
   animation: st-fade-in 0.18s ease-out;
 }
@@ -2088,7 +2088,7 @@ a.st-btn {
 .st-db-dialog-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1002;
+  z-index: calc(var(--z-modal) + 2);
   display: flex;
   align-items: center;
   justify-content: center;

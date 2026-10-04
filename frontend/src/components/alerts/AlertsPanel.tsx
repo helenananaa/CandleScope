@@ -968,7 +968,7 @@ export default function AlertsPanel({
         exchange: target.exchange || "binance",
         key,
         listNames: [t("alert.existingRules", {}, locale)],
-        color: "#64748b",
+        color: "var(--text-muted)",
       });
     }
 

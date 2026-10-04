@@ -24,7 +24,7 @@ export default function DataWorkbenchStyles() {
   --dw-scroll: color-mix(in srgb, var(--dw-ink) 22%, transparent);
   position: fixed;
   inset: 0;
-  z-index: 1100;
+  z-index: calc(var(--z-modal) + 100);
   display: flex;
   align-items: center;
   justify-content: center;
