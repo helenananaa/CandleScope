@@ -1,4 +1,7 @@
 import { t, type LocaleId, type MessageKey } from "../i18n/index.js";
+import { requestAlertPanelOpen } from "../features/alerts/alertDeliveryClient.js";
+import { formatPrice, formatPriceDiff } from "../features/market-data/marketDataView.js";
+import { Icon } from "./icons/Icon.js";
 import type { usePanePriceScaleMenu } from "./usePanePriceScaleMenu.js";
 
 const PRICE_SCALE_MODES: readonly {
@@ -28,6 +31,24 @@ export default function PanePriceScaleMenu({
       style={{ left: contextMenu.x, top: contextMenu.y }}
       onMouseDown={(event) => event.stopPropagation()}
     >
+      {contextMenu.price !== null && (
+        <>
+          <button
+            type="button"
+            className="price-scale-menu-item price-scale-menu-alert"
+            onClick={() => {
+              // Same precision as the label, not the raw pointer coordinate.
+              requestAlertPanelOpen({ price: Number(formatPriceDiff(contextMenu.price)) });
+              menu.close();
+            }}
+          >
+            <span className="price-scale-menu-check" aria-hidden="true"><Icon name="bell" size={12} /></span>
+            <span>{t("alert.addAlert", {}, locale)}</span>
+            <span className="price-scale-menu-price">{formatPrice(contextMenu.price)}</span>
+          </button>
+          <div className="price-scale-menu-divider" role="separator" />
+        </>
+      )}
       <button
         type="button"
         className={`price-scale-menu-item${contextMenu.autoScale ? " active" : ""}`}

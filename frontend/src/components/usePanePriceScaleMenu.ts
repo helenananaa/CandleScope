@@ -15,11 +15,12 @@ interface PanePriceScaleMenuOptions {
   activePaneIdsRef: RefObject<readonly string[]>;
   panePointerLayoutRef: RefObject<PanePointerLayout | null>;
   onScaleChanged: () => void;
+  priceAtPaneY?: (paneIndex: number, y: number) => number | null;
 }
 
 /** Owns menu selection and document listeners; chart operations resolve the live pane id. */
 export function usePanePriceScaleMenu({
-  chartRef, containerRef, activePaneIdsRef, panePointerLayoutRef, onScaleChanged,
+  chartRef, containerRef, activePaneIdsRef, panePointerLayoutRef, onScaleChanged, priceAtPaneY,
 }: PanePriceScaleMenuOptions) {
   const [contextMenu, setContextMenu] = useState<PriceScaleContextMenuState | null>(null);
   const close = useCallback(() => setContextMenu(null), []);
@@ -33,12 +34,13 @@ export function usePanePriceScaleMenu({
       rect,
       clientX: event.clientX,
       clientY: event.clientY,
+      priceAtPaneY,
     });
     if (!next) return;
     event.preventDefault();
     event.stopPropagation();
     setContextMenu(next);
-  }, [activePaneIdsRef, chartRef, containerRef, panePointerLayoutRef]);
+  }, [activePaneIdsRef, chartRef, containerRef, panePointerLayoutRef, priceAtPaneY]);
   const applyOptions = useCallback((options: PriceScaleOptionsPatch) => {
     if (!contextMenu || !applyPanePriceScaleOptions(
       chartRef.current, activePaneIdsRef.current, contextMenu.paneId, options,

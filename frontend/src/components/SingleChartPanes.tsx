@@ -1570,12 +1570,18 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       if (adapter !== chartAdapter) adapter.notifyDrawingFrameInvalidation();
     }
   }, [chartAdapter]);
+  const priceAtPaneY = useCallback((paneIndex: number, y: number): number | null => {
+    if (paneIndex !== 0) return null;
+    const price = mainSeriesRef.current?.coordinateToPrice(y);
+    return typeof price === "number" && Number.isFinite(price) ? price : null;
+  }, []);
   const priceScaleMenu = usePanePriceScaleMenu({
     chartRef,
     containerRef,
     activePaneIdsRef,
     panePointerLayoutRef,
     onScaleChanged: notifyDrawingFrameInvalidation,
+    priceAtPaneY,
   });
 
   const reportCrosshairMove = useEffectEvent((value: MainSeriesCrosshairValue | null) => {

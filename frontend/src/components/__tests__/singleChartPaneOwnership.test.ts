@@ -97,9 +97,20 @@ test("price scale menu uses the pointed pane and keeps its menu inside chart bou
     clientY: 550,
   };
   assert.deepEqual(resolvePanePriceScaleMenu(options), {
-    x: 782, y: 366, paneId: "rsi", paneIndex: 1,
-    autoScale: true, invertScale: true, mode: 0,
+    x: 782, y: 330, paneId: "rsi", paneIndex: 1,
+    autoScale: true, invertScale: true, mode: 0, price: null,
   });
+  const pointed: Array<[number, number]> = [];
+  const mainMenu = resolvePanePriceScaleMenu({
+    ...options,
+    clientY: 110,
+    priceAtPaneY: (paneIndex, y) => {
+      pointed.push([paneIndex, y]);
+      return paneIndex === 0 ? 123.5 : null;
+    },
+  });
+  assert.equal(mainMenu?.price, 123.5);
+  assert.deepEqual(pointed, [[0, 100]], "price lookup uses the y offset inside the pointed pane");
   assert.equal(resolvePanePriceScaleMenu({ ...options, clientX: 800 }), null);
   assert.equal(resolvePanePriceScaleMenu({ ...options, activePaneIds: ["rsi", "main"] }), null);
 });
