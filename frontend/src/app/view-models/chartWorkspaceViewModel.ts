@@ -2,11 +2,16 @@ import type { ChartWorkspaceProps } from "../ChartWorkspace.js";
 import type { AppShellViewModelContext } from "../appShellContracts.js";
 import { isMarketMetricId } from "../../features/advanced-market-data/marketMetricSelectionTypes.js";
 import { isTradeFlowIndicatorId } from "../../features/trade-flow/tradeFlowTypes.js";
+import { requestAlertPanelOpen } from "../../features/alerts/alertDeliveryClient.js";
 
 function errorMessage(error: unknown): string | null {
   if (error == null) return null;
   if (error instanceof Error) return error.message;
   return typeof error === "string" ? error : String(error);
+}
+
+function addAlertAtPrice(price: number): void {
+  requestAlertPanelOpen({ price });
 }
 
 export function buildChartWorkspaceViewModel({
@@ -189,6 +194,7 @@ export function buildChartWorkspaceViewModel({
         onInvertScaleChange: priceScaleActions.setInvertScale,
         priceScaleMode: priceScaleView.priceScaleMode,
         onPriceScaleModeChange: priceScaleActions.setPriceScaleMode,
+        onAddAlertAtPrice: addAlertAtPrice,
       },
     },
     watchlist: {

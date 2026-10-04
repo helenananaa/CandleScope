@@ -346,6 +346,8 @@ export interface SingleChartPanesProps {
   onInvertScaleChange?: ((value: boolean) => void) | null;
   priceScaleMode?: number;
   onPriceScaleModeChange?: ((mode: number) => void) | null;
+  /** Live pages only: offers "Add alert" at the pointed price. */
+  onAddAlertAtPrice?: ((price: number) => void) | null;
 }
 
 type AdapterChart = Parameters<typeof createMainSeries>[0];
@@ -885,6 +887,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   onInvertScaleChange,
   priceScaleMode = 0,
   onPriceScaleModeChange,
+  onAddAlertAtPrice = null,
 }: SingleChartPanesProps, ref) {
   const locale = useLocale();
   const drawingFontMetricRevision = useDrawingFontMetricRevision();
@@ -4969,6 +4972,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         locale={locale}
         onInvertScaleChange={onInvertScaleChange}
         onPriceScaleModeChange={onPriceScaleModeChange}
+        onAddAlertAtPrice={onAddAlertAtPrice}
       />
 
       {shouldMountDrawingEngine && <DrawingObjectList apis={drawingObjectApis} currentInterval={interval} panes={activeSubPanes} onSelectPane={publishHoveredPaneId} />}
