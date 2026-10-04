@@ -27,6 +27,7 @@ import type {
   NativeInterval,
 } from "../features/chart-session/chartSessionTypes.js";
 import { getEffectiveCustomIntervalRecords } from "../features/chart-session/intervalPolicy.js";
+import { searchKeyboardBlocked } from "../features/symbol-search/symbolSearchShortcut.js";
 import {
   toggleFavoriteInterval,
   useFavoriteIntervals,
@@ -174,6 +175,12 @@ function createStatusForValue(
   return { ok: true, kind: "new", text: t("interval.willAdd", { desc: formatIntervalDescription(normalized) }, locale) };
 }
 
+/** A bare number means minutes, so "15" selects 15m and "240" selects 4h. */
+function searchIntervalValue(search: string): string {
+  const trimmed = search.trim();
+  return /^\d+$/.test(trimmed) ? `${trimmed}m` : search;
+}
+
 function chipTitle(
   item: IntervalItem,
   record: CustomIntervalRecord | undefined,
@@ -318,10 +325,10 @@ function IntervalSelector({
     [intervalGroups],
   );
 
-  const normalizedSearch = canonicalizeIntervalValue(search);
+  const normalizedSearch = canonicalizeIntervalValue(searchIntervalValue(search));
   const searchCreateStatus = useMemo(
     () => createStatusForValue(
-      search,
+      searchIntervalValue(search),
       nativeValueSet,
       customValueSet,
       nativeValues,
@@ -483,7 +490,12 @@ function IntervalSelector({
 
   useEffect(() => {
     if (!open) return;
-    const timer = setTimeout(() => searchInputRef.current?.focus(), 30);
+    const timer = setTimeout(() => {
+      const input = searchInputRef.current;
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    }, 30);
     return () => clearTimeout(timer);
   }, [open]);
 
@@ -497,6 +509,31 @@ function IntervalSelector({
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [open]);
+
+  // Typing a digit anywhere on the page opens the picker with that digit, like
+  // TradingView. Capture phase runs before the symbol-search letter shortcut.
+  useEffect(() => {
+    if (!compact || readOnlyReason !== null) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey
+        || event.isComposing || event.repeat || !/^[0-9]$/.test(event.key)) return;
+      if (open) {
+        // Keep keystrokes typed before the search input takes focus.
+        if (document.activeElement === searchInputRef.current) return;
+        event.preventDefault();
+        setSearch((value) => value + event.key);
+        return;
+      }
+      if (searchKeyboardBlocked(document, event)) return;
+      event.preventDefault();
+      setActiveTab("all");
+      setSearch(event.key);
+      setHighlightIndex(0);
+      setOpen(true);
+    };
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [compact, open, readOnlyReason]);
 
   const closePanel = useCallback(() => {
     setOpen(false);
