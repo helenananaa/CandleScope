@@ -1,0 +1,200 @@
+/* ── Shared UI primitives ──────────────────────────────────────
+ * Built only from tokens.css. Feature styles may add layout
+ * (margins, widths, grid placement) but should not restyle the
+ * box, color or type of these primitives.
+ * ──────────────────────────────────────────────────────────── */
+
+/* Toolbar control: pills, pickers and toggles in bars and headers */
+.ui-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font: 500 var(--font-size-sm)/1 var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.ui-control:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.ui-control[aria-expanded='true'],
+.ui-control.is-active {
+  border-color: var(--accent-blue);
+  color: var(--text-primary);
+}
+
+.ui-control-sm {
+  height: 24px;
+  padding: 0 8px;
+  font-size: var(--font-size-xs);
+}
+
+/* Buttons */
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font: 600 var(--font-size-md)/1 var(--font-sans);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.ui-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.ui-btn-sm {
+  height: 28px;
+  padding: 0 10px;
+  font-size: var(--font-size-sm);
+}
+
+.ui-btn-primary {
+  border-color: var(--accent-solid);
+  background: var(--accent-solid);
+  color: var(--text-on-accent);
+}
+
+.ui-btn-primary:hover:not(:disabled) {
+  border-color: var(--accent-solid-hover);
+  background: var(--accent-solid-hover);
+}
+
+.ui-btn-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.ui-btn-ghost:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.ui-btn-danger {
+  border-color: color-mix(in srgb, var(--color-danger) 45%, transparent);
+  background: transparent;
+  color: var(--text-danger);
+}
+
+.ui-btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+}
+
+.ui-btn:disabled {
+  border-color: var(--border-subtle);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+/* Square icon-only button */
+.ui-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.ui-icon-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+:is(.ui-control, .ui-btn, .ui-icon-btn):focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+/* Empty / waiting / error state inside a panel */
+.ui-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* "safe" keeps content inside short panels instead of spilling past both edges */
+  justify-content: safe center;
+  min-height: 0;
+  overflow: auto;
+  gap: 6px;
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+}
+
+.ui-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-bottom: 2px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  color: var(--text-muted);
+}
+
+.ui-empty[data-tone='accent'] .ui-empty-icon { color: var(--text-accent); }
+.ui-empty[data-tone='warning'] .ui-empty-icon { color: var(--text-warning); }
+.ui-empty[data-tone='danger'] .ui-empty-icon { color: var(--text-danger); }
+
+/* Rails and docks */
+.ui-empty-compact {
+  gap: 4px;
+  padding: var(--space-3);
+}
+
+.ui-empty-compact .ui-empty-icon {
+  width: 28px;
+  height: 28px;
+}
+
+.ui-empty-compact .ui-empty-title {
+  font-size: var(--font-size-sm);
+}
+
+.ui-empty-compact .ui-empty-description {
+  font-size: var(--font-size-xs);
+}
+
+.ui-empty-compact .ui-empty-action {
+  margin-top: var(--space-1);
+}
+
+.ui-empty-title {
+  color: var(--text-primary);
+  font: 600 var(--font-size-md)/1.4 var(--font-sans);
+}
+
+.ui-empty-description {
+  max-width: 32ch;
+  color: var(--text-muted);
+  font: var(--font-size-sm)/1.5 var(--font-sans);
+}
+
+.ui-empty-action {
+  margin-top: var(--space-2);
+}

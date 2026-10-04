@@ -1,4 +1,5 @@
 @import "./styles/tokens.css";
+@import "./styles/components.css";
 @import "./features/plugins/pluginCenter.css";
 /* ── CandleScope 全局样式与主题 ───────────────────────────── */
 
@@ -938,6 +939,16 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
   contain: layout paint style;
+  container: rail-dock / size;
+}
+
+/* Short docks lay the empty state out as one row so title, detail and retry stay visible. */
+@container rail-dock (max-height: 300px) {
+  .ui-empty-compact { flex-direction: row; justify-content: flex-start; gap: 8px; padding: 8px 12px; text-align: left; }
+  .ui-empty-compact .ui-empty-icon { display: none; }
+  .ui-empty-compact .ui-empty-title { flex: 0 0 auto; }
+  .ui-empty-compact .ui-empty-description { flex: 1 1 auto; min-width: 0; max-width: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ui-empty-compact .ui-empty-action { flex: 0 0 auto; margin: 0; }
 }
 
 .order-book-dock.collapsed {
@@ -1250,52 +1261,9 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   font-weight: 700;
 }
 
+/* Box and type come from .ui-empty (src/components/ui/EmptyState) */
 .ob-empty-state {
-  display: flex;
   flex: 1 1 auto;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 0;
-  padding: 18px;
-  gap: 6px;
-  color: var(--text-muted);
-  text-align: center;
-  font-size: 11px;
-}
-
-.ob-empty-state strong {
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.ob-empty-glyph {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  margin-bottom: 2px;
-  border: 1px solid var(--border-color);
-  border-radius: 50%;
-  color: var(--text-accent);
-  font-size: 18px;
-}
-
-.ob-empty-state button {
-  margin-top: 4px;
-  padding: 4px 9px;
-  border: 1px solid var(--border-color);
-  border-radius: 5px;
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-}
-
-.ob-empty-state button:hover {
-  border-color: var(--accent-blue);
-  color: var(--text-accent);
 }
 
 /* ── TradeFlow: bounded tape and throttled profile ── */
@@ -1304,7 +1272,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   --tf-sell: var(--wl-down-color);
   --tf-buy-text: var(--wl-up-text);
   --tf-sell-text: var(--wl-down-text);
-  container: trade-flow / inline-size;
+  container: trade-flow rail-dock / size;
 }
 
 .tf-header .market-dock-tabs {
@@ -1492,33 +1460,10 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   font-weight: 650;
 }
 
+/* Box and type come from .ui-empty (src/components/ui/EmptyState) */
 .tf-empty {
-  display: flex;
   flex: 1 1 auto;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 0;
-  padding: 16px;
-  gap: 6px;
-  color: var(--text-muted);
-  text-align: center;
-  font-size: var(--font-size-xs);
 }
-
-.tf-empty strong { color: var(--text-secondary); font-size: 12px; }
-.tf-empty-gap strong,
-.tf-empty-error strong { color: #f59e0b; }
-.tf-empty button {
-  padding: 4px 9px;
-  border: 1px solid var(--border-color);
-  border-radius: 5px;
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-}
-.tf-empty button:hover { border-color: var(--accent-blue); color: var(--text-accent); }
 
 .tf-profile-caption {
   display: flex;
@@ -1820,24 +1765,12 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 
 /* ── 交易对选择器（触发按钮） ────────────────────────────── */
+/* Box, color and type come from .ui-control */
 .symbol-selector {
   min-width: 120px;
   max-width: 280px;
-  display: flex;
-  align-items: center;
   gap: 8px;
-  padding: 6px 14px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.symbol-selector:hover {
-  border-color: var(--accent-blue);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
-  background: var(--bg-hover);
+  padding: 0 12px;
 }
 
 .symbol-name {
@@ -2692,29 +2625,14 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   box-shadow: 0 0 8px rgba(6, 182, 212, 0.5);
 }
 
+/* Box, color and type come from .ui-control */
 .interval-more-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 10px;
-  border: 1px solid var(--border-color);
-  border-radius: 14px;
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 12px;
-  font-family: var(--font-sans);
-  white-space: nowrap;
-  transition: all 0.18s ease;
   flex-shrink: 0;
 }
 
-.interval-more-btn:hover,
 .interval-more-btn.active {
+  border-color: var(--accent-blue);
   color: var(--text-primary);
-  border-color: rgba(59, 130, 246, 0.45);
-  background: rgba(59, 130, 246, 0.12);
 }
 
 .interval-more-label {
@@ -14963,11 +14881,10 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
   min-height: 38px;
   padding: 8px 16px;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   justify-self: end;
-  color: #fff;
-  background: linear-gradient(135deg, #7c6cff 0%, #5b8cff 55%, #22d3ee 140%);
-  box-shadow: 0 10px 28px rgba(124, 108, 255, .3);
+  color: var(--text-on-accent);
+  background: var(--accent-solid);
   cursor: pointer;
 }
 .replay-market-picker-reason {

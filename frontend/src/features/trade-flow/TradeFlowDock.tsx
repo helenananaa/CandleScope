@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { Button } from "../../components/ui/Button.js";
+import { EmptyState } from "../../components/ui/EmptyState.js";
 import { getDateTimeLocale, t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { isTradeFlowQuiet, latestTradeTime } from "./tradeFlowFreshness.js";
@@ -153,11 +155,14 @@ function TradeFlowEmpty({
 }) {
   const retryable = status === "gap" || status === "error" || status === "reconnecting";
   return (
-    <div className={`tf-empty tf-empty-${status}`}>
-      <strong>{tradeStatusLabel(status)}</strong>
-      <span>{runtime.view.supportMessage || message || t("trade.waitFirst")}</span>
-      {retryable && <button type="button" onClick={runtime.actions.retry}>{t("trade.resync")}</button>}
-    </div>
+    <EmptyState
+      compact
+      className={`tf-empty tf-empty-${status}`}
+      tone={status === "gap" || status === "error" ? "warning" : "neutral"}
+      title={tradeStatusLabel(status)}
+      description={runtime.view.supportMessage || message || t("trade.waitFirst")}
+      action={retryable ? <Button size="sm" onClick={runtime.actions.retry}>{t("trade.resync")}</Button> : null}
+    />
   );
 }
 

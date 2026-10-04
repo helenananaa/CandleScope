@@ -71,7 +71,7 @@ function render(overrides: Partial<IntervalSelectorProps> = {}): string {
 
 test("closed interval picker keeps the compact toolbar without the management table", () => {
   const html = render({ defaultOpen: false });
-  assert.match(html, /class="interval-more-btn"/);
+  assert.match(html, /class="interval-more-btn ui-control"/);
   assert.match(html, /id="interval-1m"/);
   assert.match(html, /class="interval-btn active custom-interval-btn/);
   assert.doesNotMatch(html, /class="interval-panel"/);

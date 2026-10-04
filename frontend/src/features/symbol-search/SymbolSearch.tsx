@@ -91,7 +91,7 @@ export default function SymbolSearch({
   return (
     <>
       <button
-        className="symbol-selector"
+        className="symbol-selector ui-control"
         id="symbol-selector"
         onPointerEnter={loadSymbolSearchModal}
         onMouseOver={loadSymbolSearchModal}

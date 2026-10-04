@@ -694,7 +694,7 @@ function IntervalSelector({
         <button
           ref={moreBtnRef}
           type="button"
-          className={clsx("interval-more-btn", open && "active")}
+          className={clsx("interval-more-btn ui-control", open && "active")}
           onClick={() => {
             if (open) {
               closePanel();

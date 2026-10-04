@@ -261,7 +261,7 @@ function LiveChartCell({
     <button
       ref={strategyEntryRef}
       type="button"
-      className="chart-strategy-entry-button"
+      className="chart-strategy-entry-button ui-control"
       data-chart-strategy-entry={cell.id}
       title={t("chartTester.entryHint")}
       data-state={strategyEntryState}

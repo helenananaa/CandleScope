@@ -27,11 +27,11 @@ test("dock renders stream failure detail and retry instead of generic support te
     store.publishStatus(status, { message: "检测到序列缺口，正在重新同步" });
     const html = renderToStaticMarkup(<OrderBookDock runtime={runtime} height={300} />);
     assert.match(html, /title="检测到序列缺口，正在重新同步"/);
-    assert.match(html, /<span>检测到序列缺口，正在重新同步<\/span>/);
-    assert.match(html, /<button type="button">/);
+    assert.match(html, /<div class="ui-empty-description">检测到序列缺口，正在重新同步<\/div>/);
+    assert.match(html, /<button type="button" class="ui-btn ui-btn-sm">/);
   }
   store.publishStatus("error", { error: "Subscription timed out" });
-  assert.match(renderToStaticMarkup(<OrderBookDock runtime={runtime} height={300} />), /<span>Subscription timed out<\/span>/);
+  assert.match(renderToStaticMarkup(<OrderBookDock runtime={runtime} height={300} />), /<div class="ui-empty-description">Subscription timed out<\/div>/);
   store.destroy();
 });
 

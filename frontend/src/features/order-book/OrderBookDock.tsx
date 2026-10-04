@@ -25,6 +25,9 @@ import {
 import { buildOrderBookRows } from "./orderBookRows.js";
 import type { DisplayOrderBookLevel } from "./orderBookRows.js";
 import { fixedRowWindow } from "./orderBookVirtualization.js";
+import { Button } from "../../components/ui/Button.js";
+import { EmptyState as SharedEmptyState } from "../../components/ui/EmptyState.js";
+import { SettingsIcon } from "../../components/icons/settingsIcons.js";
 import {
   FULL_OUTPUT_LIMITS,
   FULL_PRICE_GROUPINGS,
@@ -259,14 +262,17 @@ function EmptyState({
 }) {
   const canRetry = status === "error" || status === "reconnecting" || status === "stale";
   return (
-    <div className={`ob-empty-state ob-empty-${status}`}>
-      <span className="ob-empty-glyph" aria-hidden="true">
-        {status === "stale" ? "↻" : status === "unsupported" ? "—" : "⋯"}
-      </span>
-      <strong>{orderBookStatusLabel(status)}</strong>
-      <span>{orderBookStatusDetail(status, message)}</span>
-      {canRetry && <button type="button" onClick={onRetry}>{t("orderBook.retry")}</button>}
-    </div>
+    <SharedEmptyState
+      compact
+      className={`ob-empty-state ob-empty-${status}`}
+      tone={status === "error" || status === "stale" ? "warning" : "accent"}
+      icon={status === "stale" || status === "reconnecting"
+        ? <SettingsIcon name="refresh" size={16} />
+        : status === "unsupported" ? <SettingsIcon name="ban" size={16} /> : "⋯"}
+      title={orderBookStatusLabel(status)}
+      description={orderBookStatusDetail(status, message)}
+      action={canRetry ? <Button size="sm" onClick={onRetry}>{t("orderBook.retry")}</Button> : null}
+    />
   );
 }
 
