@@ -13,7 +13,7 @@ export default function SettingsModalStyles(props: SettingsModalStylesProps) {
 .st-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
+  background: var(--backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -42,8 +42,8 @@ export default function SettingsModalStyles(props: SettingsModalStylesProps) {
   border-radius: 16px;
   overflow: hidden;
   box-shadow:
-    0 24px 48px rgba(0, 0, 0, 0.45),
-    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+    var(--shadow-lg),
+    0 0 0 1px color-mix(in srgb, var(--text-primary) 4%, transparent) inset;
   animation: st-slide-up 0.22s ease-out;
 }
 
@@ -91,12 +91,12 @@ export default function SettingsModalStyles(props: SettingsModalStylesProps) {
 }
 
 .st-nav-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
   color: var(--text-primary);
 }
 
 .st-nav-item.active {
-  background: rgba(59, 130, 246, 0.12);
+  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
   color: var(--text-accent);
 }
 
@@ -172,7 +172,7 @@ export default function SettingsModalStyles(props: SettingsModalStylesProps) {
   transition: all 0.15s;
 }
 .st-close-x:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
   color: var(--text-primary);
 }
 
@@ -190,18 +190,18 @@ export default function SettingsModalStyles(props: SettingsModalStylesProps) {
   background: transparent;
 }
 .st-content-body::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
   border-radius: 3px;
 }
 .st-content-body::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: color-mix(in srgb, var(--text-primary) 18%, transparent);
 }
 
 /* ── Groups ─────────────────────────────────────────────── */
 .st-group {
   margin-bottom: 28px;
   padding-bottom: 24px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 5%, transparent);
 }
 .st-group:last-child {
   border-bottom: none;
@@ -256,15 +256,15 @@ html[lang="ru"] .st-preset-btn {
 }
 
 .st-theme-card:hover {
-  border-color: rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.04);
+  border-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
   transform: translateY(-1px);
 }
 
 .st-theme-card.active {
   border-color: var(--accent-blue);
-  background: rgba(59, 130, 246, 0.1);
-  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3);
+  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-blue) 30%, transparent);
 }
 
 .st-theme-icon {
@@ -304,8 +304,8 @@ html[lang="ru"] .st-preset-btn {
 }
 
 .st-preset-btn:hover {
-  border-color: rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.04);
+  border-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
 }
 
 /* ── Colors ─────────────────────────────────────────────── */
@@ -333,7 +333,7 @@ html[lang="ru"] .st-preset-btn {
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
   font-size: 11.5px;
   color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
   padding: 3px 8px;
   border-radius: 4px;
 }
@@ -405,8 +405,8 @@ input[type="color"] {
   margin-top: 10px;
   padding: 10px 14px;
   border-radius: 8px;
-  background: rgba(59, 130, 246, 0.06);
-  border: 1px solid rgba(59, 130, 246, 0.15);
+  background: color-mix(in srgb, var(--accent-blue) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 15%, transparent);
   font-size: 12.5px;
   color: var(--text-secondary);
   display: flex;
@@ -417,9 +417,9 @@ input[type="color"] {
 }
 
 .st-info-warn {
-  background: rgba(234, 179, 8, 0.06);
-  border-color: rgba(234, 179, 8, 0.2);
-  color: #eab308;
+  background: color-mix(in srgb, var(--color-warning) 6%, transparent);
+  border-color: color-mix(in srgb, var(--color-warning) 20%, transparent);
+  color: var(--text-warning);
 }
 
 .st-info-label {
@@ -429,7 +429,7 @@ input[type="color"] {
 .st-info-value {
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
   font-size: 11.5px;
-  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
   padding: 2px 8px;
   border-radius: 4px;
 }
@@ -490,23 +490,23 @@ a.st-btn {
 }
 
 .st-btn-warn {
-  background: rgba(245, 158, 11, 0.1);
-  color: #f59e0b;
-  border-color: rgba(245, 158, 11, 0.3);
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+  color: var(--text-warning);
+  border-color: color-mix(in srgb, var(--color-warning) 30%, transparent);
 }
 .st-btn-warn:hover:not(:disabled) {
-  background: rgba(245, 158, 11, 0.16);
-  border-color: rgba(245, 158, 11, 0.5);
+  background: color-mix(in srgb, var(--color-warning) 16%, transparent);
+  border-color: color-mix(in srgb, var(--color-warning) 50%, transparent);
 }
 
 .st-btn-accent {
-  background: rgba(59, 130, 246, 0.1);
+  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
   color: var(--text-accent);
-  border-color: rgba(59, 130, 246, 0.3);
+  border-color: color-mix(in srgb, var(--accent-blue) 30%, transparent);
 }
 .st-btn-accent:hover:not(:disabled) {
-  background: rgba(59, 130, 246, 0.16);
-  border-color: rgba(59, 130, 246, 0.5);
+  background: color-mix(in srgb, var(--accent-blue) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent-blue) 50%, transparent);
 }
 
 /* ── Preset cards (storage strategy) ────────────────────── */
@@ -530,14 +530,14 @@ a.st-btn {
 }
 
 .st-preset-card:hover {
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
   transform: translateY(-1px);
 }
 
 .st-preset-card.active {
   border-color: var(--accent-blue);
-  background: rgba(59, 130, 246, 0.08);
-  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25);
+  background: color-mix(in srgb, var(--accent-blue) 8%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-blue) 25%, transparent);
 }
 
 .st-preset-level {
@@ -592,38 +592,26 @@ a.st-btn {
 }
 
 .st-badge-memory {
-  background: rgba(168, 85, 247, 0.15);
-  color: #c084fc;
-  border: 1px solid rgba(168, 85, 247, 0.25);
+  background: color-mix(in srgb, var(--accent-purple) 15%, transparent);
+  color: var(--text-purple);
+  border: 1px solid color-mix(in srgb, var(--accent-purple) 30%, transparent);
 }
 
 .st-badge-db {
-  background: rgba(59, 130, 246, 0.12);
-  color: #93c5fd;
-  border: 1px solid rgba(59, 130, 246, 0.25);
-}
-
-[data-theme='light'] .st-badge-memory {
-  background: #f5f3ff;
-  color: #6d28d9;
-  border-color: #ddd6fe;
-}
-
-[data-theme='light'] .st-badge-db {
-  background: #eff6ff;
-  color: #1d4ed8;
-  border-color: #bfdbfe;
+  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
+  color: var(--text-accent);
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 25%, transparent);
 }
 
 [data-theme='light'] .st-btn-accent {
-  background: #2563eb;
-  color: #ffffff;
-  border-color: #2563eb;
+  background: var(--accent-solid);
+  color: var(--text-on-accent);
+  border-color: var(--accent-solid);
 }
 
 [data-theme='light'] .st-btn-accent:hover:not(:disabled) {
-  background: #1d4ed8;
-  border-color: #1d4ed8;
+  background: var(--accent-solid-hover);
+  border-color: var(--accent-solid-hover);
 }
 
 /* ── Ephemeral cache option cards ───────────────────────── */
@@ -647,14 +635,14 @@ a.st-btn {
 }
 
 .st-ephemeral-card:hover {
-  border-color: rgba(168, 85, 247, 0.35);
+  border-color: color-mix(in srgb, var(--accent-purple) 35%, transparent);
   transform: translateY(-1px);
 }
 
 .st-ephemeral-card.active {
-  border-color: #a855f7;
-  background: rgba(168, 85, 247, 0.08);
-  box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.2);
+  border-color: var(--accent-purple);
+  background: color-mix(in srgb, var(--accent-purple) 8%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-purple) 20%, transparent);
 }
 
 .st-ephemeral-label {
@@ -674,8 +662,8 @@ a.st-btn {
   gap: 18px;
   padding: 10px 14px;
   margin-top: 10px;
-  background: rgba(168, 85, 247, 0.05);
-  border: 1px solid rgba(168, 85, 247, 0.12);
+  background: color-mix(in srgb, var(--accent-purple) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-purple) 12%, transparent);
   border-radius: 8px;
   flex-wrap: wrap;
 }
@@ -701,8 +689,8 @@ a.st-btn {
 .st-gc-scope-card {
   min-width: 0;
   padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid color-mix(in srgb, var(--text-primary) 7%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
   border-radius: 8px;
   display: flex;
   flex-direction: column;
@@ -770,7 +758,7 @@ a.st-btn {
 
 .st-diagnostics-list {
   margin-top: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid color-mix(in srgb, var(--text-primary) 5%, transparent);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -782,7 +770,7 @@ a.st-btn {
   padding: 7px 10px;
   font-size: 11.5px;
   color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.015);
+  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
 }
 
 .st-diagnostics-row-wide {
@@ -794,7 +782,7 @@ a.st-btn {
 }
 
 .st-diagnostics-row + .st-diagnostics-row {
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  border-top: 1px solid color-mix(in srgb, var(--text-primary) 4%, transparent);
 }
 
 .st-diagnostics-row-key {
@@ -808,7 +796,7 @@ a.st-btn {
 .st-diagnostics-empty {
   margin-top: 8px;
   padding: 9px 10px;
-  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border: 1px dashed color-mix(in srgb, var(--text-primary) 8%, transparent);
   border-radius: 8px;
   font-size: 12px;
   color: var(--text-muted);
@@ -817,8 +805,8 @@ a.st-btn {
 .st-diagnostics-plan {
   margin-top: 12px;
   padding: 12px;
-  border: 1px solid rgba(59, 130, 246, 0.14);
-  background: rgba(59, 130, 246, 0.04);
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 14%, transparent);
+  background: color-mix(in srgb, var(--accent-blue) 4%, transparent);
   border-radius: 8px;
 }
 .st-group-title-row {
@@ -841,14 +829,14 @@ a.st-btn {
 }
 
 .st-advanced-toggle:hover {
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
   color: var(--text-secondary);
 }
 
 .st-advanced-toggle.active {
   border-color: var(--accent-blue);
   color: var(--text-accent);
-  background: rgba(59, 130, 246, 0.06);
+  background: color-mix(in srgb, var(--accent-blue) 6%, transparent);
 }
 
 /* ── Tier table ─────────────────────────────────────────── */
@@ -863,7 +851,7 @@ a.st-btn {
   grid-template-columns: 2fr 1.5fr 1.2fr 1.2fr;
   gap: 8px;
   padding: 9px 14px;
-  background: rgba(255, 255, 255, 0.02);
+  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
   border-bottom: 1px solid var(--border-color);
   font-size: 11px;
   font-weight: 600;
@@ -883,11 +871,11 @@ a.st-btn {
 }
 
 .st-tier-row + .st-tier-row {
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  border-top: 1px solid color-mix(in srgb, var(--text-primary) 4%, transparent);
 }
 
 .st-tier-row:hover {
-  background: rgba(255, 255, 255, 0.02);
+  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
 }
 
 .st-tier-col-name {
@@ -962,8 +950,8 @@ a.st-btn {
   margin-top: 12px;
   padding: 10px 14px;
   border-radius: 8px;
-  background: rgba(59, 130, 246, 0.05);
-  border: 1px solid rgba(59, 130, 246, 0.12);
+  background: color-mix(in srgb, var(--accent-blue) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 12%, transparent);
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.5;
@@ -986,52 +974,40 @@ a.st-btn {
 /* ── Exchange capability directory ─────────────────────── */
 .st-exchange-directory {
   --ex-ink: var(--text-primary);
-  --ex-label: #cbd5e1;
-  --ex-subtle: #94a3b8;
-  --ex-card-bg: var(--bg-tertiary);
-  --ex-card-border: color-mix(in srgb, var(--border-color) 72%, #94a3b8);
-  --ex-inset-bg: color-mix(in srgb, var(--bg-primary) 70%, var(--bg-tertiary));
+  --ex-label: color-mix(in srgb, var(--text-primary) 50%, var(--text-secondary));
+  --ex-subtle: var(--text-secondary);
+  --ex-card-bg: var(--surface-2);
+  --ex-card-border: color-mix(in srgb, var(--border-subtle) 72%, var(--text-secondary));
+  --ex-inset-bg: color-mix(in srgb, var(--surface-0) 70%, var(--surface-2));
   --ex-chip-bg: color-mix(in srgb, var(--accent-blue) 20%, transparent);
-  --ex-chip-fg: #bfdbfe;
-  --ex-ok: #34d399;
-  --ex-ok-bg: rgba(52, 211, 153, 0.16);
-  --ex-warn: #fbbf24;
-  --ex-warn-bg: rgba(251, 191, 36, 0.14);
-  --ex-pending: #fb923c;
-  --ex-pending-bg: rgba(251, 146, 60, 0.16);
-  --ex-fail: #f87171;
-  --ex-fail-bg: rgba(248, 113, 113, 0.16);
-  --ex-info: #93c5fd;
-  --ex-info-bg: rgba(59, 130, 246, 0.16);
+  --ex-chip-fg: var(--text-accent);
+  --ex-ok: var(--text-success);
+  --ex-ok-bg: color-mix(in srgb, var(--color-success) 14%, transparent);
+  --ex-warn: var(--text-warning);
+  --ex-warn-bg: color-mix(in srgb, var(--color-warning) 14%, transparent);
+  --ex-pending: #fb923c; /* orange: distinct from warn, no global token */
+  --ex-pending-bg: color-mix(in srgb, var(--ex-pending) 16%, transparent);
+  --ex-fail: var(--text-danger);
+  --ex-fail-bg: color-mix(in srgb, var(--color-danger) 14%, transparent);
+  --ex-info: var(--text-accent);
+  --ex-info-bg: color-mix(in srgb, var(--accent-blue) 16%, transparent);
   --ex-filter-active-bg: color-mix(in srgb, var(--accent-blue) 24%, transparent);
-  --ex-filter-active-fg: #dbeafe;
+  --ex-filter-active-fg: var(--text-primary);
   --ex-refresh-bg: color-mix(in srgb, var(--accent-blue) 16%, transparent);
-  --ex-refresh-fg: #bfdbfe;
+  --ex-refresh-fg: var(--text-accent);
 }
 
+/* Light theme uses opaque cards and solid accent buttons */
 [data-theme='light'] .st-exchange-directory {
-  --ex-ink: #0f172a;
-  --ex-label: #334155;
-  --ex-subtle: #475569;
-  --ex-card-bg: #ffffff;
-  --ex-card-border: #d8e0ea;
-  --ex-inset-bg: #f8fafc;
-  --ex-chip-bg: #eff6ff;
-  --ex-chip-fg: #1d4ed8;
-  --ex-ok: #047857;
-  --ex-ok-bg: #ecfdf5;
-  --ex-warn: #b45309;
-  --ex-warn-bg: #fffbeb;
+  --ex-card-bg: var(--surface-0);
+  --ex-card-border: var(--border-subtle);
+  --ex-inset-bg: var(--surface-1);
+  --ex-chip-bg: color-mix(in srgb, var(--accent-blue) 8%, var(--surface-0));
   --ex-pending: #c2410c;
-  --ex-pending-bg: #fff7ed;
-  --ex-fail: #b91c1c;
-  --ex-fail-bg: #fef2f2;
-  --ex-info: #1d4ed8;
-  --ex-info-bg: #eff6ff;
-  --ex-filter-active-bg: #2563eb;
-  --ex-filter-active-fg: #ffffff;
-  --ex-refresh-bg: #2563eb;
-  --ex-refresh-fg: #ffffff;
+  --ex-filter-active-bg: var(--accent-solid);
+  --ex-filter-active-fg: var(--text-on-accent);
+  --ex-refresh-bg: var(--accent-solid);
+  --ex-refresh-fg: var(--text-on-accent);
 }
 
 .st-exchange-directory .st-group-title-row {
@@ -1094,7 +1070,7 @@ a.st-btn {
   border: 1px solid var(--ex-card-border);
   border-radius: 10px;
   background: var(--ex-card-bg);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--shadow-sm);
 }
 
 .st-exchange-stat span,
@@ -1198,14 +1174,14 @@ a.st-btn {
   border: 1px solid var(--ex-card-border);
   border-radius: 12px;
   background: var(--ex-card-bg);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--shadow-sm);
 }
 
 .st-exchange-card.expanded {
   border-color: color-mix(in srgb, var(--accent-blue) 55%, var(--ex-card-border));
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--accent-blue) 28%, transparent),
-    0 8px 24px rgba(15, 23, 42, 0.12);
+    var(--shadow-md);
 }
 
 .st-exchange-card.current {
@@ -1216,7 +1192,7 @@ a.st-btn {
   box-shadow:
     inset 3px 0 0 var(--accent-blue),
     0 0 0 1px color-mix(in srgb, var(--accent-blue) 28%, transparent),
-    0 8px 24px rgba(15, 23, 42, 0.12);
+    var(--shadow-md);
 }
 
 .st-exchange-card.unroutable {
@@ -1730,20 +1706,20 @@ a.st-btn {
 }
 
 [data-theme='light'] .st-tool-card {
-  background: #ffffff;
-  border-color: #d8e0ea;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  background: var(--surface-0);
+  border-color: var(--border-subtle);
+  box-shadow: var(--shadow-sm);
 }
 
 [data-theme='light'] .st-tool-desc {
-  color: #475569;
+  color: var(--text-secondary);
 }
 
 [data-theme='light'] .st-gc-scope-card,
 [data-theme='light'] .st-diagnostics-card,
 [data-theme='light'] .st-db-summary-card {
-  background: #ffffff;
-  border-color: #d8e0ea;
+  background: var(--surface-0);
+  border-color: var(--border-subtle);
 }
 
 [data-theme='light'] .st-gc-scope-title,
@@ -1751,7 +1727,7 @@ a.st-btn {
 [data-theme='light'] .st-diagnostics-label,
 [data-theme='light'] .st-diagnostics-detail,
 [data-theme='light'] .st-db-summary-card span {
-  color: #475569;
+  color: var(--text-secondary);
 }
 
 .st-tool-header {
@@ -1796,21 +1772,21 @@ a.st-btn {
 }
 
 .st-result-ok {
-  background: rgba(34, 197, 94, 0.06);
-  border: 1px solid rgba(34, 197, 94, 0.2);
-  color: #22c55e;
+  background: color-mix(in srgb, var(--color-success) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-success) 20%, transparent);
+  color: var(--text-success);
 }
 
 .st-result-warn {
-  background: rgba(245, 158, 11, 0.06);
-  border: 1px solid rgba(245, 158, 11, 0.2);
-  color: #f59e0b;
+  background: color-mix(in srgb, var(--color-warning) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 20%, transparent);
+  color: var(--text-warning);
 }
 
 .st-result-fail {
-  background: rgba(239, 68, 68, 0.06);
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  color: #ef4444;
+  background: color-mix(in srgb, var(--color-danger) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 20%, transparent);
+  color: var(--text-danger);
 }
 
 .st-result-head {
@@ -1842,7 +1818,7 @@ a.st-btn {
 
 .st-series-item {
   padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 
 .st-series-line {
@@ -1873,15 +1849,15 @@ a.st-btn {
 }
 
 .st-badge-ok {
-  background: rgba(34, 197, 94, 0.12);
-  color: #22c55e;
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
+  color: var(--text-success);
 }
 .st-badge-fail {
-  background: rgba(239, 68, 68, 0.12);
-  color: #ef4444;
+  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+  color: var(--text-danger);
 }
 .st-badge-info {
-  background: rgba(59, 130, 246, 0.12);
+  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
   color: var(--text-accent);
 }
 
@@ -1970,7 +1946,7 @@ a.st-btn {
   text-align: center;
   color: var(--text-muted);
   font-size: 12.5px;
-  background: rgba(255, 255, 255, 0.02);
+  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
 }
 
 .st-db-symbol-card {
@@ -1996,7 +1972,7 @@ a.st-btn {
 }
 
 .st-db-symbol-head:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
 }
 
 .st-db-expand {
@@ -2015,7 +1991,7 @@ a.st-btn {
 .st-db-chip {
   padding: 3px 8px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
   font-weight: 700;
@@ -2030,7 +2006,7 @@ a.st-btn {
 }
 
 .st-db-symbol-body {
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid color-mix(in srgb, var(--text-primary) 5%, transparent);
   padding: 10px;
   display: flex;
   flex-direction: column;
@@ -2058,7 +2034,7 @@ a.st-btn {
   align-items: center;
   padding: 10px;
   border-radius: 8px;
-  background: rgba(15, 23, 42, 0.42);
+  background: color-mix(in srgb, var(--surface-0) 42%, transparent);
 }
 
 .st-db-series-main {
@@ -2117,7 +2093,7 @@ a.st-btn {
   align-items: center;
   justify-content: center;
   padding: 18px;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--backdrop);
 }
 
 .st-db-dialog {
@@ -2126,7 +2102,7 @@ a.st-btn {
   border-radius: 12px;
   border: 1px solid var(--border-color);
   background: var(--bg-secondary);
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-lg);
 }
 
 .st-db-dialog-title {
@@ -2156,7 +2132,7 @@ a.st-btn {
   gap: 16px;
   padding: 9px 12px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
   font-size: 12px;
 }
 
@@ -2276,7 +2252,7 @@ a.st-btn {
 
 .st-about-logo {
   margin-bottom: 12px;
-  filter: drop-shadow(0 4px 12px rgba(59, 130, 246, 0.3));
+  filter: drop-shadow(0 4px 12px color-mix(in srgb, var(--accent-blue) 30%, transparent));
 }
 
 .st-about-name {
@@ -2296,7 +2272,7 @@ a.st-btn {
   color: var(--text-accent);
   font-weight: 600;
   padding: 2px 12px;
-  background: rgba(59, 130, 246, 0.1);
+  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
   border-radius: 999px;
 }
 
@@ -2325,7 +2301,7 @@ a.st-btn {
 }
 
 .st-stack-item + .st-stack-item {
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  border-top: 1px solid color-mix(in srgb, var(--text-primary) 4%, transparent);
 }
 
 .st-stack-label {
@@ -2372,11 +2348,11 @@ a.st-btn {
 }
 
 .st-exchange-result-item.ok {
-  background: rgba(34, 197, 94, 0.06);
+  background: color-mix(in srgb, var(--color-success) 6%, transparent);
 }
 
 .st-exchange-result-item.fail {
-  background: rgba(239, 68, 68, 0.06);
+  background: color-mix(in srgb, var(--color-danger) 6%, transparent);
 }
 
 .st-exchange-result-icon {
@@ -2384,8 +2360,8 @@ a.st-btn {
   flex-shrink: 0;
 }
 
-.st-exchange-result-item.ok .st-exchange-result-icon { color: #22c55e; }
-.st-exchange-result-item.fail .st-exchange-result-icon { color: #ef4444; }
+.st-exchange-result-item.ok .st-exchange-result-icon { color: var(--text-success); }
+.st-exchange-result-item.fail .st-exchange-result-icon { color: var(--text-danger); }
 
 .st-exchange-result-label {
   font-weight: 600;

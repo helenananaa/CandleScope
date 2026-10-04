@@ -9,8 +9,8 @@ const TOKENS = join(SRC, "styles", "tokens.css");
 
 // Ratchet: raw color literals outside tokens.css may only go down.
 // When a migration lowers the count, lower these numbers in the same change.
-const MAX_RAW_HEX = 577;
-const MAX_RAW_RGB = 799;
+const MAX_RAW_HEX = 517;
+const MAX_RAW_RGB = 710;
 
 function styleSources(dir = SRC) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -39,7 +39,7 @@ function contrast(a, b) {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-const TEXT_TOKENS = ["--text-primary", "--text-secondary", "--text-muted", "--text-accent", "--text-success", "--text-danger", "--text-warning", "--text-info"];
+const TEXT_TOKENS = ["--text-primary", "--text-secondary", "--text-muted", "--text-accent", "--text-success", "--text-danger", "--text-warning", "--text-info", "--text-purple"];
 const SURFACES = ["--surface-0", "--surface-1", "--surface-2"];
 
 test("every text token reaches WCAG AA on every surface in both themes", () => {
