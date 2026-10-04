@@ -7,7 +7,6 @@ export function buildTopBarViewModel({
   alertsView,
   indicatorActions,
   indicatorView,
-  marketDisplay,
   sessionActions,
   sessionView,
   settingsActions,
@@ -23,12 +22,6 @@ export function buildTopBarViewModel({
     marketType,
     exchangeCatalog,
   } = sessionView;
-  const {
-    displayData,
-    priceChange,
-    isUp,
-    amplitude,
-  } = marketDisplay;
 
   return {
     symbolSearch: {
@@ -51,7 +44,6 @@ export function buildTopBarViewModel({
         + Object.values(tradeFlowView.preferences.indicators)
           .filter((indicator) => indicator.added).length,
     },
-    marketSummary: { displayData, isUp, priceChange, amplitude },
     advancedMarketData: advancedMarketView,
     replayEntry,
     onOpenReplayLauncher,

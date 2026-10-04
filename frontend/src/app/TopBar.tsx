@@ -6,12 +6,7 @@ import {
   loadReplayLauncherDialog,
   loadSettingsModal,
 } from "./lazySurfaceLoaders.js";
-import {
-  buildMarketSummary,
-  formatPrice,
-} from "../features/market-data/marketDataView";
-import type { MarketSummary } from "../features/market-data/klineContracts.js";
-import type { MarketDisplayData } from "../features/market-data/marketDataView.js";
+import { formatPrice } from "../features/market-data/marketDataView";
 import type { SymbolSearchProps } from "../features/symbol-search/SymbolSearch.js";
 import type { AdvancedMarketRuntimeView } from "../features/advanced-market-data/advancedMarketDataTypes.js";
 import type { ReplayEntryCapabilityView } from "../features/replay/useReplayEntryCapability.js";
@@ -39,9 +34,6 @@ export interface TopBarControlsModel {
 export interface TopBarProps {
   symbolSearch: TopBarSymbolSearchModel;
   controls: TopBarControlsModel;
-  marketSummary: Omit<MarketSummary, "displayData"> & {
-    displayData: MarketDisplayData | null;
-  };
   advancedMarketData: AdvancedMarketRuntimeView;
   replayEntry: ReplayEntryCapabilityView;
   onOpenReplayLauncher(): void;
@@ -53,7 +45,6 @@ export interface TopBarProps {
 function TopBar({
   symbolSearch,
   controls,
-  marketSummary,
   advancedMarketData,
   replayEntry,
   onOpenReplayLauncher,
@@ -78,7 +69,6 @@ function TopBar({
     onToggleAlertPanel,
     activeIndicatorCount,
   } = controls;
-  const { displayData, isUp, priceChange } = buildMarketSummary(marketSummary.displayData);
   const advancedSummary = useAdvancedMarketSummary(advancedMarketData);
   const backtestEntryEnabled = isBacktestEntryEnabled();
   useLocale();
@@ -169,16 +159,6 @@ function TopBar({
         </button>
         {extensionControls}
       </>}
-      quote={displayData && (
-        <div className="price-info">
-          <span className={`current-price ${isUp ? "price-up" : "price-down"}`}>
-            {formatPrice(displayData.close)}
-          </span>
-          <span className={`price-change ${isUp ? "change-positive" : "change-negative"}`}>
-            {isUp ? "▲" : "▼"} {Math.abs(priceChange).toFixed(2)}%
-          </span>
-        </div>
-      )}
       marketMetrics={advancedMarketData.summaryEnabled && (
         <>
           <div className="live-market-metrics-inline">{marketMetrics}</div>
