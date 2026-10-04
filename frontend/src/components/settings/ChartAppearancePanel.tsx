@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
-import { SettingsIcon } from "../icons/settingsIcons.js";
-import type { SettingsIconName } from "../icons/settingsIcons.js";
+import { Icon } from "../icons/Icon.js";
+import type { IconName } from "../icons/Icon.js";
 import type {
     ChartSettings,
     ChartTheme,
@@ -18,7 +18,7 @@ import { useLocale } from "../../i18n/useLocale.js";
 
 interface ThemeOption {
     value: ChartTheme;
-    icon: SettingsIconName;
+    icon: IconName;
     labelKey: MessageKey;
 }
 
@@ -93,7 +93,7 @@ export default function ChartAppearancePanel({ settings, onUpdate }: ChartAppear
                             className={`st-theme-card ${settings.theme === theme.value ? 'active' : ''}`}
                             onClick={() => handleUpdate('theme', theme.value)}
                         >
-                            <span className="st-theme-icon"><SettingsIcon name={theme.icon} size={22} /></span>
+                            <span className="st-theme-icon"><Icon name={theme.icon} size={22} /></span>
                             <span className="st-theme-label">{t(theme.labelKey)}</span>
                         </button>
                     ))}

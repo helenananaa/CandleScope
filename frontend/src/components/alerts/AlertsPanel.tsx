@@ -800,7 +800,7 @@ function RuleListCard({ title, symbol, summary, status, expiry, channels, enable
   return (
     <div className="alert-rule-card detailed">
       <div className="alert-rule-main">
-        <span className="alert-rule-icon">🔔</span>
+        <span className="alert-rule-icon" aria-hidden="true" />
         <div className="alert-rule-copy">
           <div className="alert-rule-title">{title}</div>
           <div className="alert-rule-desc">{symbol} · {summary}</div>

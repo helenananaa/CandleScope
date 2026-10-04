@@ -4,7 +4,7 @@ import DataWorkbenchModal from '../data-workbench/DataWorkbenchModal.js';
 import { t } from '../../i18n/index.js';
 import { useLocale } from '../../i18n/useLocale.js';
 import SettingsPanelHost from './SettingsPanelHost.js';
-import { SettingsIcon } from '../../components/icons/settingsIcons.js';
+import { Icon } from '../../components/icons/Icon.js';
 import SettingsModalStyles from './SettingsModalStyles.js';
 import { buildSettingsPanelViewModel } from './settingsPanelViewModel.js';
 import { SETTINGS_CATEGORIES, resolveSettingsTab } from './settingsTabRegistry.js';
@@ -82,7 +82,7 @@ export default function SettingsModal({
                                 className={`st-nav-item ${activeCategory === cat.key ? 'active' : ''}`}
                                 onClick={() => { if (cat.key === "plugins" && plugins) setPluginCenterOpen(true); else setActiveCategory(cat.key); }}
                             >
-                                <span className="st-nav-icon" aria-hidden="true"><SettingsIcon name={cat.icon} /></span>
+                                <span className="st-nav-icon" aria-hidden="true"><Icon name={cat.icon} /></span>
                                 <span className="st-nav-label">{t(cat.labelKey)}</span>
                             </button>
                         ))}
@@ -98,7 +98,7 @@ export default function SettingsModal({
                 <main className="st-content">
                     <div className="st-content-header">
                         <h2 className="st-content-title">
-                            <span className="st-content-title-icon" aria-hidden="true"><SettingsIcon name={activeCatObj.icon} size={20} /></span>
+                            <span className="st-content-title-icon" aria-hidden="true"><Icon name={activeCatObj.icon} size={20} /></span>
                             {t(activeCatObj.labelKey)}
                         </h2>
                         <button className="st-close-x" aria-label={t("settings.close")} onClick={onClose}>✕</button>

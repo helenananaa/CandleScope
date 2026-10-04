@@ -1,7 +1,7 @@
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
-import { SettingsIcon } from "../icons/settingsIcons.js";
-import type { SettingsIconName } from "../icons/settingsIcons.js";
+import { Icon } from "../icons/Icon.js";
+import type { IconName } from "../icons/Icon.js";
 import type {
     ProxyMode,
     ProxySaveMessage,
@@ -10,7 +10,7 @@ import type {
 
 interface ProxyModeOption {
     value: ProxyMode;
-    icon: SettingsIconName;
+    icon: IconName;
     labelKey: "settings.proxy.system" | "settings.proxy.custom" | "settings.proxy.none";
 }
 
@@ -59,7 +59,7 @@ export default function ProxySettingsPanel({
                         className={`st-theme-card ${proxyMode === mode.value ? 'active' : ''}`}
                         onClick={() => onProxyModeChange(mode.value)}
                     >
-                        <span className="st-theme-icon"><SettingsIcon name={mode.icon} size={22} /></span>
+                        <span className="st-theme-icon"><Icon name={mode.icon} size={22} /></span>
                         <span className="st-theme-label">{t(mode.labelKey)}</span>
                     </button>
                 ))}
@@ -117,7 +117,7 @@ export default function ProxySettingsPanel({
                 <>
                 <div className={`st-result ${proxyTestResult.success ? 'st-result-ok' : proxyTestResult.partial ? 'st-result-warn' : 'st-result-fail'}`}>
                     <strong>{t("settings.proxy.exchangeNetwork")}</strong><br />
-                    <span className="st-result-message"><SettingsIcon name={proxyTestResult.success ? "check" : proxyTestResult.partial ? "warning" : "error"} size={14} /> {proxyTestResult.message}</span>
+                    <span className="st-result-message"><Icon name={proxyTestResult.success ? "check" : proxyTestResult.partial ? "warning" : "error"} size={14} /> {proxyTestResult.message}</span>
                     {proxyTestResult.proxy_used && (
                         <div className="st-result-detail">{t("settings.proxy.used", { proxy: proxyTestResult.proxy_used })}</div>
                     )}
@@ -125,7 +125,7 @@ export default function ProxySettingsPanel({
                         <div className="st-exchange-results">
                             {proxyTestResult.results.map((result) => (
                                 <div key={result.exchange} className={`st-exchange-result-item ${result.success ? 'ok' : 'fail'}`}>
-                                    <span className="st-exchange-result-icon"><SettingsIcon name={result.success ? "check" : "error"} size={14} /></span>
+                                    <span className="st-exchange-result-icon"><Icon name={result.success ? "check" : "error"} size={14} /></span>
                                     <span className="st-exchange-result-label">{result.label}</span>
                                     <span className="st-exchange-result-msg">{result.message}</span>
                                 </div>

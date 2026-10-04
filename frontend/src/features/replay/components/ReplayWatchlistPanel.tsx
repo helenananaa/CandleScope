@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Icon } from "../../../components/icons/Icon.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { parseSymbolKey, symbolKey } from "../../../utils/symbolKey.js";
@@ -217,7 +218,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
           onClick={() => void viewer.actions.openTrack?.(track.track_id, "new").catch((reason: unknown) => setCatalogError(String(reason)))}
         >{t("replay.workspace.openNew")}</button>}
         {!viewer.actions.openTrack && <code>{tier}</code>}
-        {!viewer.actions.openTrack && forced.length > 0 && <small className="replay-track-force" title={forced.join(", ")}>🔒 {forced.join(" · ")}</small>}
+        {!viewer.actions.openTrack && forced.length > 0 && <small className="replay-track-force" title={forced.join(", ")}><Icon name="lock" size={12} /> {forced.join(" · ")}</small>}
         {!viewer.actions.openTrack && track !== null && !selected && (
           <select
             aria-label={t("replay.watchlist.tierAria", { symbol: identity.symbol })}

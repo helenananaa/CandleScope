@@ -27,7 +27,7 @@ import type { DisplayOrderBookLevel } from "./orderBookRows.js";
 import { fixedRowWindow } from "./orderBookVirtualization.js";
 import { Button } from "../../components/ui/Button.js";
 import { EmptyState as SharedEmptyState } from "../../components/ui/EmptyState.js";
-import { SettingsIcon } from "../../components/icons/settingsIcons.js";
+import { Icon } from "../../components/icons/Icon.js";
 import {
   FULL_OUTPUT_LIMITS,
   FULL_PRICE_GROUPINGS,
@@ -267,8 +267,8 @@ function EmptyState({
       className={`ob-empty-state ob-empty-${status}`}
       tone={status === "error" || status === "stale" ? "warning" : "accent"}
       icon={status === "stale" || status === "reconnecting"
-        ? <SettingsIcon name="refresh" size={16} />
-        : status === "unsupported" ? <SettingsIcon name="ban" size={16} /> : "⋯"}
+        ? <Icon name="refresh" size={16} />
+        : status === "unsupported" ? <Icon name="ban" size={16} /> : "⋯"}
       title={orderBookStatusLabel(status)}
       description={orderBookStatusDetail(status, message)}
       action={canRetry ? <Button size="sm" onClick={onRetry}>{t("orderBook.retry")}</Button> : null}

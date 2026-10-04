@@ -8,6 +8,7 @@
  *   - Custom dark theme optimized for trading scripts
  *   - Code snippet templates for common indicators
  */
+import { Icon } from "../../components/icons/Icon.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -321,8 +322,9 @@ export default function IndicatorEditor({
               }}
               style={{ background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'all 0.15s' }}
               title={previewState.visible ? t("indicator.editor.hideOnChart") : t("indicator.editor.showOnChart")}
+              aria-label={previewState.visible ? t("indicator.editor.hideOnChart") : t("indicator.editor.showOnChart")}
             >
-              {previewState.visible ? "👁" : "👁‍🗨"}
+              <Icon name={previewState.visible ? "eye" : "eye-off"} size={16} />
             </button>
           )}
           {readOnly ? (
@@ -516,7 +518,7 @@ export default function IndicatorEditor({
                   : t("indicator.editor.discovering")}
           </span>
         ) : previewState?.error ? (
-          <span style={{ color: 'var(--text-danger)', whiteSpace: 'pre-wrap' }}>❌ {previewState.error}</span>
+          <span style={{ color: 'var(--text-danger)', whiteSpace: 'pre-wrap' }}>{previewState.error}</span>
         ) : previewState?.isComputing ? (
           <span style={{ color: 'var(--accent-blue)' }}>{t("indicator.editor.computingData")}</span>
         ) : previewState?.id ? (
@@ -524,9 +526,9 @@ export default function IndicatorEditor({
         ) : (
           <span style={{ color: 'var(--text-muted)' }}>
             {editorProfile?.pyneEnhancements
-              ? <>💡 Pyne API: <code>ta.sma()</code> <code>ta.ema()</code> <code>ta.rsi()</code> <code>plot()</code> <code>input.int()</code></>
+              ? <>Pyne API: <code>ta.sma()</code> <code>ta.ema()</code> <code>ta.rsi()</code> <code>plot()</code> <code>input.int()</code></>
               : editorProfile?.pineEnhancements
-                ? <>💡 Pine v5/v6 closed-bar API: <code>ta.sma()</code> <code>plot()</code> <code>plotshape()</code> <code>input.int()</code></>
+                ? <>Pine v5/v6 closed-bar API: <code>ta.sma()</code> <code>plot()</code> <code>plotshape()</code> <code>input.int()</code></>
               : t("indicator.editor.communityRuntime", { language: selectedLanguage?.name || t("indicator.editor.fallbackLanguage"), runtime: selectedRuntime?.name || "plugin" })}
           </span>
         )}

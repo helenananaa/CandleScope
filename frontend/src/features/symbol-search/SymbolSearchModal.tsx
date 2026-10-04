@@ -1,4 +1,5 @@
 import { watchlistDisplayName } from "../watchlist/watchlistDisplayName.js";
+import { Icon } from "../../components/icons/Icon.js";
 import { shortcutModifier } from "../../shared/shortcutModifier.js";
 import { t, tKey, translateMarketType } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -188,7 +189,7 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
           ) : filteredSymbols.length === 0 ? (
             <div className="sym-modal-empty">
               <span className="sym-modal-empty-icon">
-                {scope === "favorites" ? "⭐" : "🔍"}
+                <Icon name={scope === "favorites" ? "star" : "search"} size={28} />
               </span>
               <span>
                 {scope === "favorites" && favorites.length === 0

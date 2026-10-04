@@ -1,4 +1,5 @@
 import { shortcutModifier } from "../../shared/shortcutModifier.js";
+import { Icon } from "../../components/icons/Icon.js";
 import {
   useEffect,
   useState,
@@ -595,7 +596,7 @@ export default function WorkspacePanel({
                     aria-pressed={view.layoutLocked}
                     onClick={() => actions.setLayoutLocked(!view.layoutLocked)}
                   >
-                    <span aria-hidden="true">{view.layoutLocked ? "🔒" : "🔓"}</span>
+                    <span aria-hidden="true" style={{ display: "inline-flex" }}><Icon name={view.layoutLocked ? "lock" : "unlock"} size={14} /></span>
                     {view.layoutLocked ? t("workspace.unlock") : t("workspace.lock")}
                   </button>
                 </div>

@@ -6,6 +6,7 @@
  * - View & manage active indicators (toggle visibility, remove, edit params)
  * - Open code editor for custom indicators
  */
+import { Icon } from "../../components/icons/Icon.js";
 import { useCallback, useState } from "react";
 import { t, type MessageKey } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -860,8 +861,9 @@ plot(ma, "MA", color=line_color)
                                   className="indicator-preset-delete-btn"
                                   onClick={() => handleDeleteCustomPreset(preset)}
                                   title={t("indicator.deleteCustom")}
+                                  aria-label={t("indicator.deleteCustom")}
                                 >
-                                  🗑
+                                  <Icon name="trash" size={14} />
                                 </button>
                               )}
                             </div>
@@ -931,7 +933,7 @@ plot(ma, "MA", color=line_color)
                 <div className="indicator-active-list">
                   {activeItemCount === 0 ? (
                     <div className="indicator-empty">
-                      <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
+                      <div style={{ display: "flex", justifyContent: "center", marginBottom: 8, color: "var(--text-muted)" }}><Icon name="inbox" size={32} /></div>
                       <div>{t("indicator.emptyActive")}</div>
                       <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
                         {t("indicator.emptyActiveHint")}
@@ -946,8 +948,9 @@ plot(ma, "MA", color=line_color)
                             className={`indicator-visibility-btn ${ind.visible ? "" : "hidden"}`}
                             onClick={() => onToggleVisibility(ind.id)}
                             title={ind.visible ? t("indicator.hide") : t("indicator.show")}
+                            aria-label={ind.visible ? t("indicator.hide") : t("indicator.show")}
                           >
-                            {ind.visible ? "👁" : "👁‍🗨"}
+                            <Icon name={ind.visible ? "eye" : "eye-off"} size={14} />
                           </button>
                           <span className="indicator-active-name">
                             {indicatorDisplayName(ind)}
@@ -959,22 +962,24 @@ plot(ma, "MA", color=line_color)
                             </IndicatorBadge>
                           </span>
                           {ind.error && (
-                            <span className="indicator-error-badge" title={ind.error}>⚠️</span>
+                            <span className="indicator-error-badge" title={ind.error} role="img" aria-label={ind.error}><Icon name="warning" size={14} /></span>
                           )}
                           <div className="indicator-active-actions">
                             <button
                               className="indicator-action-btn"
                               onClick={() => handleEditIndicator(ind)}
                               title={isBuiltinIndicator(ind) ? t("indicator.viewReference") : t("indicator.editCode")}
+                              aria-label={isBuiltinIndicator(ind) ? t("indicator.viewReference") : t("indicator.editCode")}
                             >
-                              {isBuiltinIndicator(ind) ? "📖" : "✏️"}
+                              <Icon name={isBuiltinIndicator(ind) ? "book" : "pencil"} size={14} />
                             </button>
                             <button
                               className="indicator-action-btn indicator-remove-btn"
                               onClick={() => onRemoveIndicator(ind.id)}
                               title={t("indicator.remove")}
+                              aria-label={t("indicator.remove")}
                             >
-                              🗑
+                              <Icon name="trash" size={14} />
                             </button>
                           </div>
                         </div>
@@ -1057,8 +1062,9 @@ plot(ma, "MA", color=line_color)
                                 onClick={() => onToggleMarketStudyVisibility?.(study.id)}
                                 disabled={!onToggleMarketStudyVisibility}
                                 title={study.visible ? t("indicator.hide") : t("indicator.show")}
+                                aria-label={study.visible ? t("indicator.hide") : t("indicator.show")}
                               >
-                                {study.visible ? "👁" : "👁‍🗨"}
+                                <Icon name={study.visible ? "eye" : "eye-off"} size={14} />
                               </button>
                               <span className="indicator-active-name">
                                 {study.name}
@@ -1069,8 +1075,8 @@ plot(ma, "MA", color=line_color)
                                 )}
                               </span>
                               {hasError && (
-                                <span className="indicator-error-badge" title={statusMessage || t("indicator.marketError")}>
-                                  ⚠️
+                                <span className="indicator-error-badge" title={statusMessage || t("indicator.marketError")} role="img" aria-label={statusMessage || t("indicator.marketError")}>
+                                  <Icon name="warning" size={14} />
                                 </span>
                               )}
                               <div className="indicator-active-actions">
@@ -1079,8 +1085,9 @@ plot(ma, "MA", color=line_color)
                                   onClick={() => onRemoveMarketStudy?.(study.id)}
                                   disabled={!onRemoveMarketStudy}
                                   title={t("indicator.remove")}
+                                  aria-label={t("indicator.remove")}
                                 >
-                                  🗑
+                                  <Icon name="trash" size={14} />
                                 </button>
                               </div>
                             </div>
