@@ -9,8 +9,8 @@ const TOKENS = join(SRC, "styles", "tokens.css");
 
 // Ratchet: raw color literals outside tokens.css may only go down.
 // When a migration lowers the count, lower these numbers in the same change.
-const MAX_RAW_HEX = 517;
-const MAX_RAW_RGB = 710;
+const MAX_RAW_HEX = 451;
+const MAX_RAW_RGB = 414;
 
 function styleSources(dir = SRC) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

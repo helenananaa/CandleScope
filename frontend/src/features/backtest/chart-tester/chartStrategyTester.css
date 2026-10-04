@@ -148,7 +148,7 @@
 }
 
 .chart-strategy-run-button:hover,
-.chart-strategy-run-button:focus-visible { filter: brightness(1.12); outline: 2px solid rgba(59, 130, 246, 0.35); }
+.chart-strategy-run-button:focus-visible { filter: brightness(1.12); outline: 2px solid color-mix(in srgb, var(--accent-blue) 35%, transparent); }
 .chart-strategy-run-button:disabled { cursor: progress; filter: saturate(0.72); opacity: 0.78; }
 
 .chart-strategy-close-button,
@@ -180,9 +180,9 @@
   margin: 8px 16px 0;
   padding: 0 11px;
   overflow: hidden;
-  border: 1px solid rgba(34, 197, 94, 0.28);
+  border: 1px solid color-mix(in srgb, var(--color-success) 28%, transparent);
   border-radius: 6px;
-  background: rgba(34, 197, 94, 0.06);
+  background: color-mix(in srgb, var(--color-success) 6%, transparent);
   font-size: var(--font-size-xs);
   white-space: nowrap;
 }
@@ -194,8 +194,8 @@
 .chart-strategy-result-context a:hover,
 .chart-strategy-result-context a:focus-visible { text-decoration: underline; outline: 0; }
 .chart-strategy-result-context.stale {
-  border-color: rgba(245, 158, 11, 0.38);
-  background: rgba(245, 158, 11, 0.08);
+  border-color: color-mix(in srgb, var(--color-warning) 38%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 8%, transparent);
 }
 .chart-strategy-result-context.stale strong { color: var(--strategy-warning); }
 
@@ -208,10 +208,10 @@
   margin: 6px 16px 0;
   padding: 0 10px;
   overflow: hidden;
-  border: 1px solid rgba(245, 158, 11, 0.28);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 28%, transparent);
   border-radius: 6px;
   color: var(--text-secondary);
-  background: rgba(245, 158, 11, 0.06);
+  background: color-mix(in srgb, var(--color-warning) 6%, transparent);
   font-size: var(--font-size-xs);
   white-space: nowrap;
 }
@@ -232,7 +232,7 @@
   background: var(--bg-secondary);
   font-size: var(--font-size-xs);
 }
-.chart-strategy-result-load-error { border-color: rgba(239, 68, 68, 0.35); }
+.chart-strategy-result-load-error { border-color: color-mix(in srgb, var(--color-danger) 35%, transparent); }
 .chart-strategy-result-load-error strong { color: var(--strategy-error); }
 
 .chart-strategy-first-copy,
@@ -357,7 +357,7 @@
 .chart-strategy-problems-body { padding: 12px; overflow: auto; }
 .chart-strategy-no-problems { color: var(--text-muted); font-size: var(--font-size-xs); line-height: 1.5; }
 .chart-strategy-problem-count { color: var(--strategy-error); font-size: 11px; }
-.chart-strategy-problem { margin-top: 12px; padding: 10px; border-left: 2px solid var(--candle-down); background: rgba(239, 68, 68, 0.08); }
+.chart-strategy-problem { margin-top: 12px; padding: 10px; border-left: 2px solid var(--candle-down); background: color-mix(in srgb, var(--color-danger) 8%, transparent); }
 .chart-strategy-problem strong { display: block; font-size: 11px; }
 .chart-strategy-problem p { margin: 6px 0 0; color: var(--text-secondary); font-size: var(--font-size-xs); line-height: 1.5; }
 .chart-strategy-problem button { margin-top: 8px; padding: 0; border: 0; color: var(--strategy-link); background: transparent; font-size: var(--font-size-xs); cursor: pointer; }
@@ -365,7 +365,7 @@
 .chart-strategy-run-status {
   margin-bottom: 12px;
   padding: 10px;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 30%, transparent);
   border-radius: 6px;
   background: rgba(37, 99, 235, 0.08);
 }
@@ -377,10 +377,10 @@
 .chart-strategy-run-status p { margin: 6px 0 0; color: var(--text-secondary); font-size: var(--font-size-xs); line-height: 1.45; }
 .chart-strategy-run-status small { margin-top: 6px; color: var(--strategy-link); font-size: var(--font-size-xs); }
 .chart-strategy-run-status.status-failed,
-.chart-strategy-run-status.status-unsupported { border-color: rgba(239, 68, 68, 0.38); background: rgba(239, 68, 68, 0.08); }
+.chart-strategy-run-status.status-unsupported { border-color: color-mix(in srgb, var(--color-danger) 38%, transparent); background: color-mix(in srgb, var(--color-danger) 8%, transparent); }
 .chart-strategy-run-status.status-failed strong,
 .chart-strategy-run-status.status-unsupported strong { color: var(--strategy-error); }
-.chart-strategy-run-status.status-completed { border-color: rgba(34, 197, 94, 0.32); background: rgba(34, 197, 94, 0.08); }
+.chart-strategy-run-status.status-completed { border-color: color-mix(in srgb, var(--color-success) 32%, transparent); background: color-mix(in srgb, var(--color-success) 8%, transparent); }
 .chart-strategy-run-status.status-completed strong { color: var(--strategy-success); }
 
 .chart-strategy-run-overview {
@@ -401,9 +401,9 @@
   align-items: center;
   gap: 12px;
   padding: 9px 11px;
-  border-left: 3px solid #f59e0b;
+  border-left: 3px solid var(--color-warning);
   color: var(--text-secondary);
-  background: rgba(245, 158, 11, 0.07);
+  background: color-mix(in srgb, var(--color-warning) 7%, transparent);
   font-size: var(--font-size-xs);
 }
 .chart-strategy-stale-guidance strong { color: var(--strategy-warning); }
@@ -480,8 +480,8 @@
 .chart-strategy-explain-scroll article + article { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-color); }
 .chart-strategy-explain-summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .chart-strategy-explain-summary strong { font-size: 11px; }
-.chart-strategy-explain-summary span { padding: 3px 6px; border-radius: 999px; color: var(--strategy-success); background: rgba(34, 197, 94, 0.1); font: var(--font-size-xs)/1 var(--font-mono); }
-.chart-strategy-explain-summary span.state-partial { color: var(--strategy-warning); background: rgba(245, 158, 11, 0.1); }
+.chart-strategy-explain-summary span { padding: 3px 6px; border-radius: 999px; color: var(--strategy-success); background: color-mix(in srgb, var(--color-success) 10%, transparent); font: var(--font-size-xs)/1 var(--font-mono); }
+.chart-strategy-explain-summary span.state-partial { color: var(--strategy-warning); background: color-mix(in srgb, var(--color-warning) 10%, transparent); }
 .chart-strategy-explain-summary span.state-unavailable { color: var(--text-secondary); background: rgba(148, 163, 184, 0.1); }
 .chart-strategy-explain-unavailable { margin: 10px 0 0; padding: 9px; border-left: 2px solid #64748b; color: var(--text-secondary); background: rgba(100, 116, 139, 0.08); font-size: var(--font-size-xs); line-height: 1.5; }
 .chart-strategy-explain-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin: 10px 0; }
@@ -597,7 +597,7 @@
   margin-top: 18px;
   padding: 13px;
   border-left: 3px solid var(--candle-down);
-  background: rgba(239, 68, 68, 0.08);
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
 }
 .chart-strategy-actionable-error strong { color: var(--strategy-error); font-size: 11px; }
 .chart-strategy-actionable-error span { color: var(--text-secondary); font-size: var(--font-size-xs); }

@@ -16,7 +16,7 @@ export default function DataWorkbenchStyles() {
   --dw-fail: #f87171;
   --dw-fail-bg: rgba(248, 113, 113, 0.16);
   --dw-info: #93c5fd;
-  --dw-info-bg: rgba(59, 130, 246, 0.16);
+  --dw-info-bg: color-mix(in srgb, var(--accent-blue) 16%, transparent);
   --dw-accent: #93c5fd;
   --dw-filter-bg: color-mix(in srgb, var(--accent-blue) 12%, var(--bg-tertiary));
   --dw-hover: color-mix(in srgb, var(--accent-blue) 8%, transparent);

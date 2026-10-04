@@ -1,5 +1,5 @@
 .plugin-trust-install-card {
-  border-color: color-mix(in srgb, #f59e0b 42%, var(--border-color));
+  border-color: color-mix(in srgb, var(--color-warning) 42%, var(--border-color));
 }
 
 .plugin-trust-review,
@@ -9,9 +9,9 @@
   gap: 12px;
   margin-top: 14px;
   padding: 14px;
-  border: 1px solid color-mix(in srgb, #f59e0b 30%, var(--border-color));
+  border: 1px solid color-mix(in srgb, var(--color-warning) 30%, var(--border-color));
   border-radius: 10px;
-  background: color-mix(in srgb, #111827 94%, #f59e0b 6%);
+  background: color-mix(in srgb, #111827 94%, var(--color-warning) 6%);
 }
 
 .plugin-trust-source,
@@ -31,7 +31,7 @@
 .plugin-trust-warning {
   margin: 0;
   padding: 10px 12px;
-  border-left: 3px solid #f59e0b;
+  border-left: 3px solid var(--color-warning);
   background: rgb(245 158 11 / 10%);
   color: #fde68a;
 }
@@ -98,7 +98,7 @@
 }
 
 .plugin-trust-confirmations .is-danger {
-  border-color: #ef4444;
+  border-color: var(--color-danger);
   color: #fecaca;
 }
 

@@ -43,10 +43,10 @@
   align-items: center;
   min-height: 22px;
   padding: 0 8px;
-  border: 1px solid rgba(59, 130, 246, 0.45);
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 45%, transparent);
   border-radius: 4px;
   color: #93c5fd;
-  background: rgba(59, 130, 246, 0.12);
+  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
   font: 700 var(--font-size-2xs)/1 var(--font-mono);
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -81,9 +81,9 @@
   flex-shrink: 0;
   max-width: 220px;
   padding: 5px 8px;
-  border: 1px solid rgba(245, 158, 11, 0.35);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
   border-radius: 6px;
-  background: rgba(245, 158, 11, 0.08);
+  background: color-mix(in srgb, var(--color-warning) 8%, transparent);
 }
 
 .backtest-credibility strong {
@@ -109,14 +109,14 @@
 
 .backtest-message.error {
   color: #fecaca;
-  border-bottom: 1px solid rgba(239, 68, 68, 0.35);
-  background: rgba(239, 68, 68, 0.12);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
+  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
 }
 
 .backtest-message.notice {
   color: #bfdbfe;
-  border-bottom: 1px solid rgba(59, 130, 246, 0.35);
-  background: rgba(59, 130, 246, 0.12);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent-blue) 35%, transparent);
+  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
 }
 
 .backtest-message button {
@@ -493,12 +493,12 @@
 
 .backtest-snapshot .ready {
   color: #86efac;
-  background: rgba(34, 197, 94, 0.15);
+  background: color-mix(in srgb, var(--color-success) 15%, transparent);
 }
 
 .backtest-snapshot .pending {
   color: #fde68a;
-  background: rgba(245, 158, 11, 0.15);
+  background: color-mix(in srgb, var(--color-warning) 15%, transparent);
 }
 
 .backtest-snapshot div {
@@ -541,7 +541,7 @@
 
 .backtest-run.active {
   border-color: var(--accent-blue);
-  background: rgba(59, 130, 246, 0.09);
+  background: color-mix(in srgb, var(--accent-blue) 9%, transparent);
 }
 
 .backtest-run strong {
@@ -560,20 +560,20 @@
   padding: 2px 5px;
   border-radius: 3px;
   color: #93c5fd;
-  background: rgba(59, 130, 246, 0.15);
+  background: color-mix(in srgb, var(--accent-blue) 15%, transparent);
   font: 700 var(--font-size-xs)/1 var(--font-mono);
 }
 
 .backtest-state.completed,
 .backtest-state.completed_holdout_revealed {
   color: #86efac;
-  background: rgba(34, 197, 94, 0.15);
+  background: color-mix(in srgb, var(--color-success) 15%, transparent);
 }
 
 .backtest-state.failed,
 .backtest-state.cancelled {
   color: #fca5a5;
-  background: rgba(239, 68, 68, 0.15);
+  background: color-mix(in srgb, var(--color-danger) 15%, transparent);
 }
 
 .backtest-run-actions {
@@ -665,11 +665,11 @@
 }
 
 .backtest-monthly-heatmap .positive {
-  background: rgba(34, 197, 94, 0.16);
+  background: color-mix(in srgb, var(--color-success) 16%, transparent);
 }
 
 .backtest-monthly-heatmap .negative {
-  background: rgba(239, 68, 68, 0.16);
+  background: color-mix(in srgb, var(--color-danger) 16%, transparent);
 }
 
 .backtest-trade-filters {
@@ -902,7 +902,7 @@
 
 [data-theme="light"] .backtest-mode-badge {
   color: #1d4ed8;
-  background: rgba(59, 130, 246, 0.1);
+  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
 }
 
 [data-theme="light"] .backtest-strategy-evidence {
@@ -910,7 +910,7 @@
 }
 
 [data-theme="light"] .python-studio {
-  background: rgba(139, 92, 246, 0.08);
+  background: color-mix(in srgb, var(--accent-purple) 8%, transparent);
 }
 
 @media (max-width: 1180px) {
