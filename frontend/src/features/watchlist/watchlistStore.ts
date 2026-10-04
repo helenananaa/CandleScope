@@ -62,9 +62,27 @@ export function getDefaultWatchlists(): WatchlistGroup[] {
   return [{ id: "default", name: "Watchlist", symbols: [], color: "#3b82f6" }];
 }
 
+/** Liquid Binance spot pairs so a first launch has something to watch. */
+export const STARTER_WATCHLIST_SYMBOLS: readonly string[] = Object.freeze([
+  "BTCUSDT",
+  "ETHUSDT",
+  "SOLUSDT",
+  "BNBUSDT",
+  "XRPUSDT",
+  "DOGEUSDT",
+  "ADAUSDT",
+  "LINKUSDT",
+].map((symbol) => symbolKey(symbol, "spot", "binance")));
+
+export function getStarterWatchlists(): WatchlistGroup[] {
+  return getDefaultWatchlists().map((list) => ({ ...list, symbols: [...STARTER_WATCHLIST_SYMBOLS] }));
+}
+
 export function loadWatchlists(): WatchlistGroup[] {
   try {
     const raw = localStorage.getItem(WATCHLISTS_KEY);
+    // Only a first launch is seeded; a list the user emptied stays empty.
+    if (raw === null) return getStarterWatchlists();
     if (raw) {
       const parsed: unknown = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
