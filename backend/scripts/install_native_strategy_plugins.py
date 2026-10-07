@@ -19,13 +19,16 @@ def main():
     parser.add_argument("--wheelhouse", required=True, type=Path)
     parser.add_argument("--root", type=Path, default=Path(os.environ.get("LOCALAPPDATA", Path.home() / ".local/share")) / "CandleScope/plugins")
     parser.add_argument("--activate", action="store_true")
-    parser.add_argument("--runtime", choices=("all", "pyne"), default="all",
-                        help="Select Pyne alone when the Pine release lacks required strategy APIs.")
+    parser.add_argument("--runtime", choices=("all", "pine", "pyne"), default="all",
+                        help="Select one runtime to preserve the other native registry entry.")
     args = parser.parse_args()
     wheels = sorted(args.wheelhouse.resolve().glob("*.whl"))
     required = ("candlescope_plugin_sdk-", "candlescope_plugin_pyne-", "candlescope_plugin_pine_compat-", "pyne_runtime-", "pine_compat_runtime-", "numpy-", "tzdata-")
-    if args.runtime == "pyne":
-        required = tuple(prefix for prefix in required if "pine_compat" not in prefix)
+    if args.runtime != "all":
+        if args.runtime == "pyne":
+            required = tuple(prefix for prefix in required if "pine_compat" not in prefix)
+        else:
+            required = ("candlescope_plugin_sdk-", "candlescope_plugin_pine_compat-", "pine_compat_runtime-")
         wheels = [path for path in wheels if any(path.name.startswith(prefix) for prefix in required)]
     if len(wheels) != len(required) or any(sum(p.name.startswith(prefix) for p in wheels) != 1 for prefix in required):
         parser.error("wheelhouse must contain exactly one wheel for each selected plugin, SDK, engine, numpy and tzdata")
@@ -41,7 +44,7 @@ def main():
     plugins, identities = [], {}
     for suffix, runtime_id, package in (("pine_compat", "candlescope.pine-compat", "candlescope-plugin-pine-compat"),
                                         ("pyne", "candlescope.pyne", "candlescope-plugin-pyne")):
-        if args.runtime == "pyne" and suffix != "pyne":
+        if args.runtime != "all" and suffix != {"pine": "pine_compat", "pyne": "pyne"}[args.runtime]:
             continue
         command = [str(executable), "-I", "-m", f"candlescope_plugin_{suffix}.native_strategy"]
         probe = subprocess.run(command, input='{"operation":"describe"}', text=True, encoding="utf-8", capture_output=True, check=True, timeout=30)

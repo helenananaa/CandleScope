@@ -19,11 +19,11 @@
     {
       "runtimeId": "candlescope.pine-compat",
       "package": "candlescope-plugin-pine-compat",
-      "version": "0.3.0",
-      "filename": "candlescope-pine-compat-0.3.0-cp312-win_amd64.cspkg",
-      "url": "https://github.com/helenananaa/CandleScope/releases/download/candlescope-plugin-pine-compat-v0.3.0/candlescope-pine-compat-0.3.0-cp312-win_amd64.cspkg",
-      "sha256": "sha256:29312559e0f29a2c9eed4c1bd1491c360266294155cc37c6763ba1dce0c1380c",
-      "size": 4061522,
+      "version": "0.3.1",
+      "filename": "candlescope-pine-compat-0.3.1-cp312-win_amd64.cspkg",
+      "url": "https://github.com/helenananaa/CandleScope/releases/download/candlescope-plugin-pine-compat-v0.3.1/candlescope-pine-compat-0.3.1-cp312-win_amd64.cspkg",
+      "sha256": "sha256:692999ad97dc79bc21c35d352f85e4491efa113fde4641b0bbbae12b0f74b7c4",
+      "size": 4141031,
       "platform": {
         "system": "Windows",
         "machine": "AMD64",

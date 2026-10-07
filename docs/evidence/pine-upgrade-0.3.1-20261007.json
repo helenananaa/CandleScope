@@ -1,0 +1,58 @@
+{
+  "date": "2026-10-07",
+  "platform": "Windows AMD64 CPython 3.12",
+  "engine": {
+    "version": "0.3.1",
+    "source": "github-release",
+    "artifactFilename": "pine_compat_runtime-0.3.1-cp310-abi3-win_amd64.whl",
+    "sha256": "sha256:2cc616d6d24dc7cf84c499c74bfabddbaf3b0134e1380f9be2afbaada6fbd599",
+    "size": 4005214,
+    "releaseTag": "v0.3.1",
+    "releaseUrl": "https://github.com/helenananaa/pine-compat-runtime/releases/download/v0.3.1/pine_compat_runtime-0.3.1-cp310-abi3-win_amd64.whl",
+    "releaseCommit": "14a2ab89c08a85a76d769e9fbe2f13f9c958342d",
+    "manifestUrl": "https://github.com/helenananaa/pine-compat-runtime/releases/download/v0.3.1/manifest.json",
+    "manifestSha256": "sha256:285768cc6b38596f47e80b4702eb4f28cc9df9d9336f923acf33338cce0189ac"
+  },
+  "adapterVersion": "0.3.1",
+  "assets": {
+    "candlescope-pine-compat-0.3.1-cp312-win_amd64.cspkg": {
+      "sha256": "sha256:692999ad97dc79bc21c35d352f85e4491efa113fde4641b0bbbae12b0f74b7c4",
+      "size": 4141031
+    },
+    "candlescope_plugin_pine_compat-0.3.1-py3-none-any.whl": {
+      "sha256": "sha256:56a400e8505201878be30d4aad89b6ec0d482d0dc62bfe465a4412ff8d544fa7",
+      "size": 22671
+    },
+    "candlescope_plugin_sdk-0.2.0-py3-none-any.whl": {
+      "sha256": "sha256:a6036881f0b3b1a77dc1460a13a79aefb8c2042d379003b33bedb3a22b86c4b0",
+      "size": 110326
+    },
+    "pine_compat_runtime-0.3.1-cp310-abi3-win_amd64.whl": {
+      "sha256": "sha256:2cc616d6d24dc7cf84c499c74bfabddbaf3b0134e1380f9be2afbaada6fbd599",
+      "size": 4005214
+    }
+  },
+  "tests": {
+    "source": 21,
+    "installed": 12,
+    "bootstrap": 12,
+    "nativeExternalReplay": 107
+  },
+  "sidecar": {
+    "engineVersion": "0.3.1",
+    "formingReplacementConfirmation": true,
+    "independentSubscription": true,
+    "restartReseed": true
+  },
+  "nativeInterfaces": [
+    "Program.run_external",
+    "Program.historical_session"
+  ],
+  "nativeInstalledFromOfficialWheel": true,
+  "pyneVersionUnchanged": "0.4.1",
+  "limits": [
+    "no complete browser UI gate",
+    "no new long-session resource gate",
+    "no other OS/Python host gate"
+  ]
+}

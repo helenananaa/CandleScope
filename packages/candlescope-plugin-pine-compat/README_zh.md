@@ -5,9 +5,9 @@
 桥接到公开的 `candlescope.script-runtime/1` SDK。包内只有适配代码，不包含 Pine
 引擎源码快照，也不导入 CandleScope 后端私有模块。
 
-适配器 `0.3.0` 使用官方 `pine-compat-runtime==0.3.0` Windows wheel；
+适配器 `0.3.1` 使用官方 `pine-compat-runtime==0.3.1` Windows wheel；
 `release/release-lock.json` 锁定引擎、SDK 和 bridge 的内容哈希，旧发布锁
-保存在 `release-lock.0.2.0.json`。分析/输出/增量协议为 6/9/4。
+保存在 `release-lock.0.2.0.json` 和 `release-lock.0.3.0.json`。分析/输出/增量协议为 6/9/4。
 渐变填充因 Render IR v1 无法表达而明确拒绝；纯色填充继续支持。资源超限
 以 `E_RESOURCE_BUDGET` 诊断返回。
 
@@ -21,12 +21,12 @@ Render IR 快照。HTTP 计算保持独立。分析结果的 `meta.hostRequireme
 接入处理，无法恢复此前的 tick/varip 状态。尚未提供跨进程会话恢复或无限历史保留。
 
 `request.*` 数据供应、imports、策略以及未映射的原生绘图对象仍明确拒绝。
-旧策略 provider 仅接受原样的 Long Flat 示例；独立原生回测入口有单独的安装边界。
+策略通过独立原生或宿主撮合入口执行，使用单独的注册表。
 
 本地运行：
 
 ```powershell
-python -m pip install --no-index --find-links <候选wheel目录> candlescope-plugin-pine-compat==0.3.0
+python -m pip install --no-index --find-links <候选wheel目录> candlescope-plugin-pine-compat==0.3.1
 python -m candlescope_plugin_pine_compat
 ```
 
@@ -36,6 +36,7 @@ python -m candlescope_plugin_pine_compat
 
 ## 回测安装边界
 
-官方 0.3.0 wheel 缺少 `Program.run_external` 和 `Program.historical_session`，
-不能覆盖已验证的 Pine 原生回测环境。指标插件可独立升级；Pyne 回测通过
-`install_native_strategy_plugins.py --runtime pyne` 单独升级，保留 Pine 注册项。
+官方 0.3.1 wheel 已补齐 `Program.run_external` 和 `Program.historical_session`，
+解决 0.3.0 的回测升级阻塞。冻结 bridge、SDK 和引擎 wheel 并验收后，通过
+`install_native_strategy_plugins.py --runtime pine --activate` 仅升级 Pine 回测，
+保留 Pyne 注册项。安装指标 CSPKG 不会自动注册原生策略回测。

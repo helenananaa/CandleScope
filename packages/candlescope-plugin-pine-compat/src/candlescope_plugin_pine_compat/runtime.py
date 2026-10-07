@@ -37,10 +37,10 @@ from candlescope_plugin_sdk import (
 RUNTIME_ID = "candlescope.pine-compat"
 PLUGIN_NAME = "Pine Compatibility Runtime"
 PLUGIN_PACKAGE = "candlescope-plugin-pine-compat"
-PLUGIN_VERSION = "0.3.0"
+PLUGIN_VERSION = "0.3.1"
 ENGINE_PACKAGE = "pine-compat-runtime"
 ENGINE_MODULE = "pine_compat"
-EXPECTED_ENGINE_VERSION = "0.3.0"
+EXPECTED_ENGINE_VERSION = "0.3.1"
 UNKNOWN_SOURCE_VERSION = "0.0.0+unknown"
 
 PINE_ANALYSIS_SCHEMA_VERSION = 6
