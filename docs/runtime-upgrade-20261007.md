@@ -73,3 +73,21 @@ history，支持 `PluginInstaller.rollback(runtime_id)`。恢复注册表后重�
 本轮原始产物、安装收据、日志和 JUnit 位于 `output/runtime-upgrade-20261007/`；
 可移植摘要见 [验收记录](evidence/runtime-upgrade-20261007.json)。正式默认下载目录为
 `backend/app/official-plugin-releases.json`，资产、URL、大小及外层摘要须作为同一交付更新。
+
+## 本轮交付
+
+两个适配器的 `0.3.0` release 已公开：
+[Pyne](https://github.com/helenananaa/CandleScope/releases/tag/candlescope-plugin-pyne-v0.3.0)、
+[Pine](https://github.com/helenananaa/CandleScope/releases/tag/candlescope-plugin-pine-compat-v0.3.0)。
+发布前核验了全部远端资产的大小和摘要；发布后重新下载两个 CSPKG，与正式下载目录
+匹配后安装到本机默认插件目录。两个指标 sidecar 的引擎版本和 SMA 实际计算通过，
+默认 bootstrap 返回 `ready`。本机 Pyne 原生回测已升级到 `0.4.1`，原 Pine 回测
+注册项逐字段保持一致。收据为 `output/runtime-upgrade-20261007/production-verification.json`。
+
+发布源码身份为 `f7b0729cde68d3cdbfbc74ed79ddb6cb22bf1688`。独立 Git checkout 重建的
+wheel 与交付 wheel 存在既有 CRLF/LF 差异；除自动生成的 RECORD 外，各成员在换行
+归一化后相同。这是源码一致性核验，不是字节级可重复构建证明。
+
+改动及交付记录在 [草稿 PR #7](https://github.com/helenananaa/CandleScope/pull/7)，尚未合并。
+主工作区已有的无关本地提交没有推送到远端 main。上述激活验收使用实际插件进程，
+仍不代表浏览器完整 UI 或长时运行验收。

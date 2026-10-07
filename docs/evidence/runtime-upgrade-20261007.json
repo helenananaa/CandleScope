@@ -70,5 +70,26 @@
     "no new long-session qualification",
     "no other OS/Python host qualification"
   ],
-  "lint": "no new diagnostics; 3 preexisting native observer diagnostics"
+  "lint": "no new diagnostics; 3 preexisting native observer diagnostics",
+  "delivery": {
+    "releaseSourceCommit": "f7b0729cde68d3cdbfbc74ed79ddb6cb22bf1688",
+    "pullRequest": "https://github.com/helenananaa/CandleScope/pull/7",
+    "pullRequestStatus": "draft-unmerged",
+    "releases": {
+      "candlescope.pyne": "https://github.com/helenananaa/CandleScope/releases/tag/candlescope-plugin-pyne-v0.3.0",
+      "candlescope.pine-compat": "https://github.com/helenananaa/CandleScope/releases/tag/candlescope-plugin-pine-compat-v0.3.0"
+    },
+    "publicBundlesDownloadedAndVerified": true,
+    "sourceComparison": "wheel members except generated RECORD agree after CRLF/LF normalization; not a byte-identical rebuild"
+  },
+  "localActivation": {
+    "indicatorAdapters": "0.3.0",
+    "indicatorPineEngine": "0.3.0",
+    "indicatorPyneEngine": "0.4.1",
+    "nativePyneEngine": "0.4.1",
+    "nativePineRegistryPreservedExactly": true,
+    "defaultBootstrapStatus": "ready",
+    "indicatorSidecarSmaOracle": "both returned 15 for closes [10, 20] and period 2",
+    "receipt": "output/runtime-upgrade-20261007/production-verification.json"
+  }
 }
