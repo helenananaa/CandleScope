@@ -74,7 +74,7 @@ def load_release_lock(path: Path = DEFAULT_LOCK_PATH) -> dict[str, Any]:
         raise ReleaseLockError("release lock sections are invalid")
     if (plugin.get("id") != "candlescope.pine-compat"
         or plugin.get("package") != "candlescope-plugin-pine-compat"
-        or plugin.get("version") not in {"0.2.0", "0.3.0.dev1"}):
+        or plugin.get("version") not in {"0.2.0", "0.3.0.dev1", "0.3.0"}):
         raise ReleaseLockError("release lock plugin identity is unsupported")
     assert isinstance(wheels, dict)
     if tuple(wheels) != EXPECTED_WHEEL_ORDER:
@@ -85,7 +85,9 @@ def load_release_lock(path: Path = DEFAULT_LOCK_PATH) -> dict[str, Any]:
         if not isinstance(expected, dict) or not isinstance(expected.get("version"), str):
             raise ReleaseLockError(f"release lock wheel {package!r} is invalid")
     engine = wheels["pine-compat-runtime"]
-    expected_engine = "0.2.0" if plugin["version"] == "0.2.0" else "0.3.0rc1"
+    expected_engine = {
+        "0.2.0": "0.2.0", "0.3.0.dev1": "0.3.0rc1", "0.3.0": "0.3.0",
+    }[plugin["version"]]
     if (engine["version"] != expected_engine
         or wheels["candlescope-plugin-pine-compat"]["version"] != plugin["version"]):
         raise ReleaseLockError("release lock bridge and engine versions disagree")

@@ -30,7 +30,7 @@ def test_package_metadata_pins_only_public_runtime_contracts() -> None:
     assert project["version"] == candlescope_plugin_pine_compat.__version__
     assert project["dependencies"] == [
         "candlescope-plugin-sdk==0.2.0",
-        "pine-compat-runtime==0.3.0rc1",
+        "pine-compat-runtime==0.3.0",
     ]
 
 
@@ -47,7 +47,7 @@ def test_bridge_never_imports_candlescope_private_packages_or_vendored_engine() 
 
 
 def test_release_lock_tracks_the_exact_public_engine_asset() -> None:
-    lock = json.loads((ROOT / "release" / "release-lock.json").read_text(encoding="utf-8"))
+    lock = json.loads((ROOT / "release" / "release-lock.0.2.0.json").read_text(encoding="utf-8"))
     engine = lock["wheels"]["pine-compat-runtime"]
 
     assert lock["plugin"] == {
@@ -67,3 +67,14 @@ def test_release_lock_tracks_the_exact_public_engine_asset() -> None:
         "sha256:4f38c25a92261a8594d346c858c43f2a675afaac789bb1f75458c8a568c43c3e"
     )
     assert engine["size"] == 2_961_677
+
+
+def test_current_release_uses_the_official_stable_engine() -> None:
+    lock = json.loads((ROOT / "release/release-lock.json").read_text(encoding="utf-8"))
+    assert lock["plugin"]["version"] == candlescope_plugin_pine_compat.__version__
+    engine = lock["wheels"]["pine-compat-runtime"]
+    assert engine["version"] == "0.3.0"
+    assert engine["releaseCommit"] == "390e93afd87df6ac5a2aa64b940d612b9d49bab9"
+    assert engine["sha256"] == (
+        "sha256:1c40598c456ac1d4048b3dc699549b3f09ae43daea8923b0ae86d3cd5d59fe36"
+    )

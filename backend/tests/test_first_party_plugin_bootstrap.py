@@ -24,10 +24,10 @@ from tests.plugin_runtime_bundle_testkit import build_hello_bundle
 
 
 OFFICIAL_SHA256 = (
-    "sha256:a1812e0e2b43670e75858b5f57d59f71a403350360ea58bf2822efba7d34a216"
+    "sha256:889ffeb4a70b330c1cf529b66422fe0c11c303b781968b12e8156fbb854f3918"
 )
 OFFICIAL_PINE_SHA256 = (
-    "sha256:f14094a6243485d198814464d359ae05711b6cbec34adb7030998caad2c1a378"
+    "sha256:29312559e0f29a2c9eed4c1bd1491c360266294155cc37c6763ba1dce0c1380c"
 )
 
 
@@ -131,26 +131,26 @@ def _single_pyne_environment(tmp_path: Path, **values: str) -> dict[str, str]:
     }
 
 
-def test_checked_in_release_lock_pins_the_public_development_asset() -> None:
+def test_checked_in_release_lock_pins_the_stable_adapter_assets() -> None:
     releases = load_official_plugin_releases(DEFAULT_RELEASE_LOCK_PATH)
 
     assert len(releases) == 2
     by_runtime = {release.runtime_id: release for release in releases}
     pyne = by_runtime["candlescope.pyne"]
-    assert pyne.version == "0.2.0"
+    assert pyne.version == "0.3.0"
     assert pyne.sha256 == OFFICIAL_SHA256
-    assert pyne.size == 13_006_218
+    assert pyne.size == 13_588_457
     assert pyne.url.endswith(
-        "/candlescope-plugin-pyne-v0.2.0-dev.1/"
-        "candlescope-pyne-0.2.0-cp312-win_amd64.cspkg"
+        "/candlescope-plugin-pyne-v0.3.0/"
+        "candlescope-pyne-0.3.0-cp312-win_amd64.cspkg"
     )
     pine = by_runtime["candlescope.pine-compat"]
-    assert pine.version == "0.2.0"
+    assert pine.version == "0.3.0"
     assert pine.sha256 == OFFICIAL_PINE_SHA256
-    assert pine.size == 2_997_572
+    assert pine.size == 4_061_522
     assert pine.url.endswith(
-        "/candlescope-plugin-pine-compat-v0.2.0-dev.1/"
-        "candlescope-pine-compat-0.2.0-cp312-win_amd64.cspkg"
+        "/candlescope-plugin-pine-compat-v0.3.0/"
+        "candlescope-pine-compat-0.3.0-cp312-win_amd64.cspkg"
     )
 
 

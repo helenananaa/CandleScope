@@ -67,7 +67,7 @@ def test_stateless_forming_and_changed_parameters_do_not_reuse_state():
     source = '//@version=6\nindicator("x")\nx=input.int(2)\nplot(close*x)\n'
     plugin = PineCompatRuntimePlugin()
     analysis = plugin.analyze(AnalyzeRequest(source=source, context=CONTEXT))
-    assert analysis.ok and analysis.meta["hostRequirements"]["schemaVersion"] == 1
+    assert analysis.ok and analysis.meta["hostRequirements"]["schemaVersion"] == 2
     key = str(analysis.inputs[0]["callSiteId"])
     bars = [bar(0, 10), bar(1, 20, False)]
     first = execute(plugin, bars, source=source)
@@ -97,3 +97,29 @@ def test_engine_version_drift_is_rejected(monkeypatch):
     monkeypatch.setattr(runtime, "_engine_version", lambda: "0.2.0")
     with pytest.raises(RuntimeError, match="requires"):
         PineCompatRuntimePlugin().describe()
+
+
+def test_gradient_fill_fails_explicitly_instead_of_losing_visual_information():
+    source = ('//@version=6\nindicator("gradient")\n'
+              'a=plot(close+2)\nb=plot(close-2)\n'
+              'fill(a,b,close+1,close-1,color.green,color.red)\n')
+    plugin = PineCompatRuntimePlugin()
+    result = plugin.execute_batch(ExecuteBatchRequest(
+        source=source, context=CONTEXT, bars=(bar(0, 10),),
+        options={"pineSessionId": "gradient"}))
+    assert not result.ok
+    assert any(d.code == "PINE_HOST_CAPABILITY_UNSUPPORTED" for d in result.diagnostics)
+    assert "gradient" not in plugin._sessions.entries
+
+
+def test_time_close_uses_chart_interval_and_resource_errors_are_reported():
+    plugin = PineCompatRuntimePlugin()
+    result = execute(plugin, [bar(0, 10)], source=(
+        '//@version=6\nindicator("close time")\nplot(time_close-time)\n'))
+    assert values(result) == [60_000]
+    large = plugin.execute_batch(ExecuteBatchRequest(
+        source=('//@version=6\nindicator("budget")\na=array.new_float(100000,1.0)\n'
+                'for i=0 to 99\n    b=array.copy(a)\nplot(close)\n'),
+        context=CONTEXT, bars=(bar(0, 10),)))
+    assert not large.ok
+    assert any(d.code == "E_RESOURCE_BUDGET" for d in large.diagnostics)
