@@ -54,5 +54,63 @@
     "no complete browser UI gate",
     "no new long-session resource gate",
     "no other OS/Python host gate"
-  ]
+  ],
+  "delivery": {
+    "releaseUrl": "https://github.com/helenananaa/CandleScope/releases/tag/candlescope-plugin-pine-compat-v0.3.1",
+    "publishedAt": "2026-10-07T10:56:20Z",
+    "sourceCommit": "6c2d30755be478d118ca1f8b66c5644efdcaa181",
+    "allPublicAssetDigestsVerified": true,
+    "publicBundleDownloadedAndVerified": true,
+    "pullRequest": "https://github.com/helenananaa/CandleScope/pull/7",
+    "pullRequestStatus": "draft-unmerged"
+  },
+  "localActivation": {
+    "indicator": {
+      "engineVersion": "0.3.1",
+      "smaLast": 15
+    },
+    "native": {
+      "protocol": "candlescope.native-strategy/1",
+      "adapter": "pine-native/2",
+      "plugin": {
+        "package": "candlescope-plugin-pine-compat",
+        "version": "0.3.1",
+        "code_sha256": "a1604951524e67bb272c233297c2e2d876a549c69ea39600c8f0b19ac88a4156"
+      },
+      "engine": {
+        "package": "pine-compat-runtime",
+        "version": "0.3.1",
+        "code_sha256": "7778d942d34d9d7528670e698f1c0d987c24af3840ad008b7bed93ce9e0d0fdf"
+      },
+      "transport": {
+        "package": "candlescope-plugin-sdk",
+        "version": "0.2.0",
+        "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6"
+      },
+      "historical_session": "fixed-history/1"
+    },
+    "external": {
+      "protocol": "candlescope.native-strategy/1",
+      "adapter": "pine-external/5",
+      "plugin": {
+        "package": "candlescope-plugin-pine-compat",
+        "version": "0.3.1",
+        "code_sha256": "a1604951524e67bb272c233297c2e2d876a549c69ea39600c8f0b19ac88a4156"
+      },
+      "engine": {
+        "package": "pine-compat-runtime",
+        "version": "0.3.1",
+        "code_sha256": "7778d942d34d9d7528670e698f1c0d987c24af3840ad008b7bed93ce9e0d0fdf"
+      },
+      "transport": {
+        "package": "candlescope-plugin-sdk",
+        "version": "0.2.0",
+        "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6"
+      }
+    },
+    "nativeTrades": 1,
+    "pyneRegistriesPreservedExactly": true,
+    "defaultBootstrapStatus": "ready",
+    "receipt": "output/pine-upgrade-031-20261007/production-verification.json"
+  }
 }

@@ -37,3 +37,18 @@ CandleScope 提供权威账户反馈，Pine 仅产生订单意图；原生 broke
   真实指标计算、forming 替换和确认、订阅隔离与进程重启重建均通过。
 
 可移植收据见 [验收摘要](evidence/pine-upgrade-0.3.1-20261007.json)。
+
+## 交付与本机激活
+
+[Pine 插件 0.3.1](https://github.com/helenananaa/CandleScope/releases/tag/candlescope-plugin-pine-compat-v0.3.1)
+已公开发布。发布前校验远端五个资产的大小与摘要，发布后重新下载 CSPKG 并核对
+正式下载目录。发布源码为 `6c2d30755be478d118ca1f8b66c5644efdcaa181`，旧资产没有覆盖。
+
+本机默认指标和原生回测注册表中的 Pine 均已激活官方 `0.3.1`。默认指标 sidecar
+的 SMA 计算返回 15（输入 close 为 10、20，周期为 2）；原生入口实际运行策略并
+产生交易；原生与宿主撮合入口均报告引擎 `0.3.1`。默认 bootstrap 为 `ready`。
+Pyne 指标和回测注册项逐字段保持一致，仍使用引擎 `0.4.1`。
+
+源代码和交付记录已进入 [草稿 PR #7](https://github.com/helenananaa/CandleScope/pull/7)，
+尚未合并。主工作区仅同步本任务文件，代理池和其他已有改动保留；没有推送本地
+无关提交到远端 main。实际插件进程验收不代表浏览器完整 UI 或长时运行验收。
