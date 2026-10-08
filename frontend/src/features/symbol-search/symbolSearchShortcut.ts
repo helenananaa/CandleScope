@@ -6,11 +6,16 @@ export function quickSearchCharacter(event: SearchKey, blocked: boolean): string
   return /^[a-z0-9]$/i.test(event.key) ? event.key : null;
 }
 
-export function searchKeyboardBlocked(document: Document, event: KeyboardEvent): boolean {
+export function searchKeyboardBlocked(
+  document: Document,
+  event: KeyboardEvent,
+  shortcutDialog: HTMLElement | null = null,
+): boolean {
   const editing = "input, textarea, select, [contenteditable]:not([contenteditable=false]), [role=textbox], [role=combobox], [role=spinbutton], .monaco-editor";
   if (document.activeElement?.closest(editing)) return true;
   if (event.composedPath().some((target) => target instanceof Element && target.closest(editing))) return true;
   return Array.from(document.querySelectorAll<HTMLElement>(
     '[role="dialog"], [aria-modal="true"], dialog[open], [class*="modal-overlay"], .st-overlay, .dw-overlay, .workspace-panel-overlay, .replay-launcher-overlay',
-  )).some((element) => element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden");
+  )).some((element) => element !== shortcutDialog
+    && element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden");
 }

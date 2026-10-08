@@ -13,10 +13,10 @@
 .native-mode-switch button:hover,
 .native-strategy-panel button:hover:not(:disabled) { background:var(--bg-tertiary); }
 .native-strategy-panel :is(button, select, input):disabled { opacity:.55; cursor:not-allowed; }
-.native-strategy-panel button[aria-pressed=true] { color:var(--accent-blue); border-color:currentColor; }
+.native-strategy-panel button[aria-pressed=true] { color:var(--text-accent); border-color:currentColor; }
 .native-strategy-panel :is(button, select, input, textarea):focus-visible,
 .native-mode-switch button:focus-visible { outline:2px solid var(--accent-blue); outline-offset:2px; }
-.native-mode-switch button[aria-pressed=true] { color:var(--accent-blue); border-color:currentColor; }
+.native-mode-switch button[aria-pressed=true] { color:var(--text-accent); border-color:currentColor; }
 .strategy-research-script > [data-strategy-draft] { flex-direction:column; }
 .strategy-research-script .native-mode-switch { flex-shrink:0; padding:8px 0; }
 .strategy-research-script .native-strategy-panel { padding:8px 0; width:100%; box-sizing:border-box; }
@@ -26,12 +26,12 @@
 .native-replay-controls input { width:80px; }
 .native-strategy-report { padding:16px; overflow:auto; min-width:0; }
 .native-strategy-report pre { max-height:320px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
-.native-strategy-panel { padding:16px; height:min(65vh, 760px); overflow:auto; background:var(--bg-secondary); color:var(--text-primary, #dbe5f0); font-size:13px; }
+.native-strategy-panel { padding:16px; height:min(65vh, 760px); overflow:auto; background:var(--bg-secondary); color:var(--text-primary); font-size:13px; }
 .native-strategy-panel header,.native-toolbar { display:flex; align-items:center; gap:12px; }
 .native-strategy-panel header button { margin-left:auto; }
-.native-strategy-panel p { color:var(--text-secondary, #a4b3c5); }
+.native-strategy-panel p { color:var(--text-secondary); }
 .native-editor { display:grid; grid-template-columns:3fr 1fr; gap:12px; margin:12px 0; }
-.native-editor textarea { width:100%; box-sizing:border-box; min-height:200px; padding:12px; color:inherit; background:var(--bg-primary, #0c111b); border:1px solid var(--border-color); border-radius:6px; font-family:monospace; }
+.native-editor textarea { width:100%; box-sizing:border-box; min-height:200px; padding:12px; color:inherit; background:var(--bg-primary); border:1px solid var(--border-color); border-radius:6px; font-family:monospace; }
 .native-editor label textarea { min-height:160px; }
 .native-strategy-panel button,.native-strategy-panel select { padding:6px 10px; cursor:pointer; }
 .native-strategy-panel pre { max-height:320px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
@@ -49,7 +49,7 @@
 .native-advanced-inputs { margin:12px 0; }
 .native-advanced-inputs label { display:block; margin:10px 0; }
 .native-advanced-inputs select,.native-advanced-inputs input,.native-advanced-inputs textarea { width:100%; box-sizing:border-box; }
-.native-advanced-inputs textarea { min-height:140px; padding:10px; color:inherit; background:var(--bg-primary, #0c111b); border:1px solid var(--border-color); font-family:monospace; }
+.native-advanced-inputs textarea { min-height:140px; padding:10px; color:inherit; background:var(--bg-primary); border:1px solid var(--border-color); font-family:monospace; }
 .native-advanced-inputs fieldset { margin:10px 0; border:1px solid var(--border-color); min-width:0; }
 
 .native-strategy-docked { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto minmax(0, 1fr); padding: 0; overflow: hidden; background: var(--bg-primary); }
@@ -59,7 +59,7 @@
 .native-strategy-docked .native-dock-actions { grid-column: 2; grid-row: 1; padding: 6px 14px; border-bottom: 1px solid var(--border-color); }
 .native-strategy-docked .native-dock-actions .native-toolbar { gap: 8px; }
 .native-strategy-docked .native-dock-actions p { margin: 4px 0; }
-.native-strategy-docked .native-dock-actions button:first-of-type { background: var(--accent-blue); color: #fff; border-color: transparent; }
+.native-strategy-docked .native-dock-actions button:first-of-type { background: var(--accent-solid); color: var(--text-on-accent); border-color: transparent; }
 .native-strategy-docked .native-dock-scroll { grid-column: 1 / -1; grid-row: 2; min-height: 0; flex: 1; overflow: auto; padding: 0 14px 12px; }
 .native-strategy-docked .native-editor { margin: 10px 0 0; gap: 16px; }
 .native-strategy-docked .native-editor textarea { min-height: 160px; resize: vertical; line-height: 1.6; border-radius: 3px; }
@@ -81,11 +81,11 @@
 .native-report-metrics > div:last-child { border: 0; }
 .native-report-metrics span { display: block; font-size: 12px; color: var(--text-secondary); }
 .native-report-metrics strong { display: block; font: 600 20px/1.5 var(--font-mono); font-variant-numeric: tabular-nums; }
-.native-report-metrics small { font-size: 10px; color: var(--text-secondary); }
+.native-report-metrics small { font-size: var(--font-size-xs); color: var(--text-secondary); }
 
 .native-report-toolbar { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 18px; font-size: 11px; }
 .native-report-toolbar details[open] { flex-basis: 100%; }
-.native-report-toolbar a { margin-left: auto; color: var(--accent-blue); }
+.native-report-toolbar a { margin-left: auto; color: var(--text-accent); }
 .native-strategy-docked .native-replay-controls > strong { margin-right: 12px; }
 .native-strategy-docked .native-report-toolbar .native-replay-controls { border: 0; padding: 0; }
 .native-strategy-docked .native-report-toolbar { padding: 6px 0; }
@@ -95,7 +95,7 @@
 /* Keep review controls outside the table's scroll area, even in a short dock. */
 .native-trade-controls, .native-trade-sections, .native-trade-pages, .native-trade-jump { display: flex; align-items: center; gap: 6px; }
 .native-trade-controls { flex-wrap: wrap; gap: 6px 16px; padding: 6px 0; flex-shrink: 0; }
-.native-trade-sections button[aria-pressed=true] { color: var(--accent-blue); border-color: var(--accent-blue); }
+.native-trade-sections button[aria-pressed=true] { color: var(--text-accent); border-color: var(--accent-blue); }
 .native-trade-controls .strategy-trade-navigation { padding: 0; gap: 6px; }
 .native-trade-pages { margin-left: auto; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .native-trade-jump input { width: 56px; box-sizing: border-box; padding: 5px; font: inherit; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 3px; }
@@ -130,7 +130,7 @@
 .native-strategy-collection { display: flex; align-items: center; gap: 4px; flex: 0 0 36px; min-width: 0; padding: 0 10px; border-bottom: 1px solid var(--border-color); background: var(--bg-primary); }
 .native-strategy-switcher { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 80px; overflow-x: auto; }
 .native-strategy-collection :is(button, select) { font: inherit; color: var(--text-secondary); background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 4px 8px; cursor: pointer; white-space: nowrap; }
-.native-strategy-collection button[aria-pressed="true"] { color: var(--accent-blue); border-color: var(--accent-blue); background: color-mix(in srgb, var(--accent-blue) 10%, transparent); }
+.native-strategy-collection button[aria-pressed="true"] { color: var(--text-accent); border-color: var(--accent-blue); background: color-mix(in srgb, var(--accent-blue) 10%, transparent); }
 .native-strategy-collection button:hover { background: var(--bg-hover); }
 .native-strategy-collection button:disabled { opacity: .4; cursor: default; }
 .native-strategy-switcher button { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
@@ -145,7 +145,7 @@
 .native-comparison-picker label { display: inline-flex; align-items: center; gap: 5px; }
 .native-comparison button { background: var(--bg-primary); color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px; cursor: pointer; }
 .native-comparison button:disabled { opacity: .45; cursor: default; }
-.native-comparison button[aria-pressed="true"] { color: var(--accent-blue); border-color: var(--accent-blue); }
+.native-comparison button[aria-pressed="true"] { color: var(--text-accent); border-color: var(--accent-blue); }
 .native-comparison-note { color: var(--text-secondary); font-size: 11px; line-height: 1.5; margin: 6px 0; }
 .native-comparison-run { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 0; font-size: 11px; }
 .native-comparison-run code { max-width: 240px; overflow: hidden; text-overflow: ellipsis; color: var(--text-secondary); }
@@ -154,10 +154,10 @@
 .native-comparison-table :is(th, td) { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--border-color); min-width: 120px; max-width: 280px; overflow-wrap: anywhere; }
 .native-comparison-table th:first-child { text-align: left; color: var(--text-secondary); }
 .native-comparison-chart-actions { display: flex; gap: 6px; }
-.native-comparison-chart { display: block; width: 100%; min-width: 360px; height: 205px; color: var(--text-secondary); font: 10px var(--font-sans); }
+.native-comparison-chart { display: block; width: 100%; min-width: 360px; height: 205px; color: var(--text-secondary); font: var(--font-size-xs) var(--font-sans); }
 
-.native-report .positive { color: #26a69a; }
-.native-report .negative { color: #ef5350; }
+.native-report .positive { color: var(--text-up); }
+.native-report .negative { color: var(--text-down); }
 .native-report-view-switch { display:flex; align-items:center; gap:12px; padding:8px 0 0; color:var(--text-secondary); font-size:11px; }
 .native-report-view-switch button { font-size:11px; padding:3px 8px; }
 .native-report-context { display:flex; flex-wrap:wrap; gap:8px 24px; color:var(--text-secondary); padding:12px 0; font-size:11px; border-bottom:1px solid var(--border-color); }
@@ -166,7 +166,7 @@
 .native-report-metrics { margin:20px 0 12px; }
 .native-report-metrics strong { font:600 23px/1.8 var(--font-sans); letter-spacing:-.5px; }
 .native-report-metrics strong em { font:500 12px var(--font-sans); letter-spacing:0; white-space:nowrap; }
-.native-report-metrics small { display:block; line-height:1.6; font-size:10px; }
+.native-report-metrics small { display:block; line-height:1.6; font-size:var(--font-size-xs); }
 .native-performance { min-width:0; margin:20px 0 10px; }
 .native-performance-heading { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; }
 .native-performance-heading label { display:flex; gap:6px; align-items:center; font-size:11px; color:var(--text-secondary); }
@@ -176,15 +176,15 @@
 .native-performance-readout { display:flex; flex-wrap:wrap; align-items:center; gap:16px; min-height:28px; font-size:11px; color:var(--text-secondary); font-variant-numeric:tabular-nums; }
 .native-performance-readout strong { color:var(--text-primary); }
 .native-performance svg { display:block; width:100%; height:auto; min-height:180px; color:var(--text-primary); }
-.native-performance svg text { fill:var(--text-secondary); font:10px var(--font-sans); }
+.native-performance svg text { fill:var(--text-secondary); font:var(--font-size-xs) var(--font-sans); }
 .native-chart-grid { stroke:var(--border-color); stroke-width:.6; stroke-dasharray:3 4; }
 .native-performance-line,.native-drawdown-line,.native-benchmark-line { fill:none; stroke-width:1.8; vector-effect:non-scaling-stroke; }
-.native-performance-line { stroke:#26a69a; }
-.native-drawdown-line { stroke:#ef5350; }
-.native-benchmark-line { stroke:#8794b0; stroke-dasharray:5 3; stroke-width:1.3; }
-.native-benchmark-value { color:#8794b0; }
+.native-performance-line { stroke:var(--candle-up); }
+.native-drawdown-line { stroke:var(--candle-down); }
+.native-benchmark-line { stroke:var(--text-muted); stroke-dasharray:5 3; stroke-width:1.3; }
+.native-benchmark-value { color:var(--text-muted); }
 .native-chart-cursor { stroke:var(--text-secondary); stroke-dasharray:3 3; }
-.native-report-caption { color:var(--text-secondary); font-size:10px; line-height:1.5; margin:6px 0; }
+.native-report-caption { color:var(--text-secondary); font-size:var(--font-size-xs); line-height:1.5; margin:6px 0; }
 .native-table td { padding:12px 10px; font-size:12px; }
 .native-table td small { display:block; margin-top:5px; font-size:11px; opacity:.8; }
 .native-table th { font-size:11px; color:var(--text-secondary); font-weight:500; padding:10px; }

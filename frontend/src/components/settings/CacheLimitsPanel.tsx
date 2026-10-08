@@ -20,7 +20,7 @@ interface CachePreset {
     key: string;
     labelKey: "settings.cache.compact" | "settings.cache.standard" | "settings.cache.generous" | "settings.cache.unlimited";
     descKey: "settings.cache.compactDesc" | "settings.cache.standardDesc" | "settings.cache.generousDesc" | "settings.cache.unlimitedDesc";
-    icon: string;
+    level: 1 | 2 | 3 | 4;
     limits: CacheRowLimits;
 }
 
@@ -60,28 +60,28 @@ const DB_PRESETS: CachePreset[] = [
         key: 'compact',
         labelKey: 'settings.cache.compact',
         descKey: 'settings.cache.compactDesc',
-        icon: '🟢',
+        level: 1,
         limits: { minutes: 50000, hours: 20000, daily: 0 },
     },
     {
         key: 'standard',
         labelKey: 'settings.cache.standard',
         descKey: 'settings.cache.standardDesc',
-        icon: '🔵',
+        level: 2,
         limits: { minutes: 200000, hours: 50000, daily: 0 },
     },
     {
         key: 'generous',
         labelKey: 'settings.cache.generous',
         descKey: 'settings.cache.generousDesc',
-        icon: '🟡',
+        level: 3,
         limits: { minutes: 500000, hours: 100000, daily: 0 },
     },
     {
         key: 'unlimited',
         labelKey: 'settings.cache.unlimited',
         descKey: 'settings.cache.unlimitedDesc',
-        icon: '⚪',
+        level: 4,
         limits: { minutes: 0, hours: 0, daily: 0 },
     },
 ];
@@ -258,13 +258,13 @@ export default function CacheLimitsPanel({
 
                 <div className="st-ephemeral-summary">
                     <span className="st-ephemeral-stat">
-                        📊 {t("settings.cache.capacity")} <strong>{currentEphemeralBars.toLocaleString(locale)}</strong>
+                        {t("settings.cache.capacity")} <strong>{currentEphemeralBars.toLocaleString(locale)}</strong>
                     </span>
                     <span className="st-ephemeral-stat">
-                        ⏱ {t("settings.cache.coverage")} <strong>{barsToHumanTime(currentEphemeralBars, 1).replace('≈ ', '')}</strong>
+                        {t("settings.cache.coverage")} <strong>{barsToHumanTime(currentEphemeralBars, 1).replace('≈ ', '')}</strong>
                     </span>
                     <span className="st-ephemeral-stat">
-                        💾 {t("settings.cache.memoryUse")} <strong>{barsToMemorySize(currentEphemeralBars)}</strong> {t("settings.cache.perSymbol")}
+                        {t("settings.cache.memoryUse")} <strong>{barsToMemorySize(currentEphemeralBars)}</strong> {t("settings.cache.perSymbol")}
                     </span>
                 </div>
             </div>
@@ -345,7 +345,7 @@ export default function CacheLimitsPanel({
                             className={`st-preset-card ${currentPreset === preset.key ? 'active' : ''}`}
                             onClick={() => handlePresetChange(preset.key)}
                         >
-                            <span className="st-preset-icon">{preset.icon}</span>
+                            <span className="st-preset-icon st-preset-level" aria-hidden="true">{[1, 2, 3, 4].map((step) => <span key={step} className={step <= preset.level ? "on" : undefined} />)}</span>
                             <span className="st-preset-name">{t(preset.labelKey)}</span>
                             <span className="st-preset-desc">{t(preset.descKey)}</span>
                         </button>
@@ -354,7 +354,7 @@ export default function CacheLimitsPanel({
 
                 {isCustomPreset && (
                     <div className="st-info-box" style={{ marginTop: 12 }}>
-                        <span>🔧 {t("settings.cache.custom")}</span>
+                        <span>{t("settings.cache.custom")}</span>
                     </div>
                 )}
             </div>

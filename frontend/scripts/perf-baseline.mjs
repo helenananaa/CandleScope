@@ -433,7 +433,22 @@ async function readPerfSample(cdp) {
   }
 }
 
+// The live top bar only shows pinned intervals; others are reached through the picker.
 async function clickInterval(cdp, interval) {
+  const direct = await clickIntervalButton(cdp, interval);
+  if (direct?.ok || direct?.reason !== "button-not-found") return direct;
+  await evaluate(cdp, `document.querySelector('.interval-more-btn:not([aria-expanded="true"])')?.click()`);
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  return evaluateJson(cdp, `() => {
+    const interval = ${JSON.stringify(interval)};
+    const chip = document.querySelector('[data-interval-chip="' + interval + '"]');
+    if (!chip || chip.disabled) return { ok: false, interval, reason: 'button-not-found' };
+    chip.click();
+    return { ok: true, interval, text: interval, via: 'picker' };
+  }`);
+}
+
+async function clickIntervalButton(cdp, interval) {
   return evaluateJson(cdp, `() => {
     const interval = ${JSON.stringify(interval)};
     const direct = document.getElementById('interval-' + interval);

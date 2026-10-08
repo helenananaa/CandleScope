@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -253,7 +254,7 @@ function CommandPalette({ runtime }: { runtime: PluginPlatformRuntime }) {
                           setInput((current) => ({ ...current, [fileInput.field]: selection.handle }));
                           setFileStatus((current) => ({ ...current, [fileInput.field]: t("plugin.host.fileSelectedRead", { name: selection.name }) }));
                         } catch (error) {
-                          setFileStatus((current) => ({ ...current, [fileInput.field]: error instanceof Error ? error.message : t("plugin.host.fileSelectionFailed") }));
+                          setFileStatus((current) => ({ ...current, [fileInput.field]: error instanceof Error ? describeError(error, error.message) : t("plugin.host.fileSelectionFailed") }));
                         } finally {
                           setFileBusy(null);
                         }
@@ -277,7 +278,7 @@ function CommandPalette({ runtime }: { runtime: PluginPlatformRuntime }) {
                           setInput((current) => ({ ...current, [fileInput.field]: selection.handle }));
                           setFileStatus((current) => ({ ...current, [fileInput.field]: t("plugin.host.fileSelectedWrite", { name: selection.name }) }));
                         } catch (error) {
-                          setFileStatus((current) => ({ ...current, [fileInput.field]: error instanceof Error ? error.message : t("plugin.host.saveNotSelected") }));
+                          setFileStatus((current) => ({ ...current, [fileInput.field]: error instanceof Error ? describeError(error, error.message) : t("plugin.host.saveNotSelected") }));
                         } finally {
                           setFileBusy(null);
                         }

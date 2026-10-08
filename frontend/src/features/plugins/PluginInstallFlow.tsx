@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import { useEffect, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -22,7 +23,7 @@ export default function PluginInstallFlow({ runtime, onDone, onPendingChange }: 
           if (!file || pending) return;
           setPending(true); setError(null); setInstalled(false);
           try { await runtime.actions.installBundle(file); setInstalled(true); }
-          catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+          catch (cause) { setError(cause instanceof Error ? describeError(cause, cause.message) : String(cause)); }
           finally { setPending(false); }
         }} />
       {pending && <p role="status">{t("pc.working")}</p>}

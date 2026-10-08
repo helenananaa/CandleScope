@@ -8,6 +8,8 @@
  *   - Custom dark theme optimized for trading scripts
  *   - Code snippet templates for common indicators
  */
+import { describeError } from "../../i18n/serverErrors.js";
+import { Icon } from "../../components/icons/Icon.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -163,7 +165,7 @@ export default function IndicatorEditor({
     }).catch((error: unknown) => {
       if (controller.signal.aborted) return;
       setRuntimeCatalogError(
-        error instanceof Error ? error.message : String(error),
+        error instanceof Error ? describeError(error, error.message) : String(error),
       );
     });
     return () => controller.abort();
@@ -321,8 +323,9 @@ export default function IndicatorEditor({
               }}
               style={{ background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'all 0.15s' }}
               title={previewState.visible ? t("indicator.editor.hideOnChart") : t("indicator.editor.showOnChart")}
+              aria-label={previewState.visible ? t("indicator.editor.hideOnChart") : t("indicator.editor.showOnChart")}
             >
-              {previewState.visible ? "👁" : "👁‍🗨"}
+              <Icon name={previewState.visible ? "eye" : "eye-off"} size={16} />
             </button>
           )}
           {readOnly ? (
@@ -340,7 +343,7 @@ export default function IndicatorEditor({
                   ...(editorProfile.pyneEnhancements ? { securityMode } : {}),
                 });
               }}
-              style={{ background: 'var(--accent-blue)', color: '#fff', border: 'none', padding: '6px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '13px', boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)', transition: 'all 0.2s ease', marginLeft: '8px' }}
+              style={{ background: 'var(--accent-blue)', color: 'var(--text-on-accent)', border: 'none', padding: '6px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '13px', boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)', transition: 'all 0.2s ease', marginLeft: '8px' }}
             >
               {t("indicator.editor.fork")}
             </button>
@@ -358,7 +361,7 @@ export default function IndicatorEditor({
                 className="indicator-editor-save"
                 disabled={!languageReady}
                 onClick={handleSave}
-                style={{ background: 'var(--accent-blue)', color: '#fff', border: 'none', padding: '6px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '13px', boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)', transition: 'all 0.2s ease', marginLeft: '8px' }}
+                style={{ background: 'var(--accent-blue)', color: 'var(--text-on-accent)', border: 'none', padding: '6px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '13px', boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)', transition: 'all 0.2s ease', marginLeft: '8px' }}
               >
                 {t("indicator.editor.save")}
               </button>
@@ -453,7 +456,7 @@ export default function IndicatorEditor({
               : editorProfile?.pineEnhancements
                 ? <>{t("indicator.editor.hintPine")} <code>ta.</code> <code>timeframe.</code> {t("indicator.editor.hintComplete")} </>
               : <>{t("indicator.editor.hintPlugin")} </>}
-            <kbd style={{ background: 'var(--bg-tertiary)', padding: '1px 5px', borderRadius: '3px', fontSize: '10px', border: '1px solid var(--border-color)' }}>Ctrl+Enter</kbd> {t("indicator.editor.runKbd")}
+            <kbd style={{ background: 'var(--bg-tertiary)', padding: '1px 5px', borderRadius: '3px', fontSize: 'var(--font-size-2xs)', border: '1px solid var(--border-color)' }}>Ctrl+Enter</kbd> {t("indicator.editor.runKbd")}
           </span>
         </div>
         {!readOnly && allowedRuntimeCatalog && !languageReady && (
@@ -462,12 +465,12 @@ export default function IndicatorEditor({
           </div>
         )}
         {runtimeCatalogError && (
-          <div style={{ marginBottom: '8px', color: 'var(--candle-down)', fontSize: '12px' }}>
+          <div style={{ marginBottom: '8px', color: 'var(--text-danger)', fontSize: '12px' }}>
             {t("indicator.editor.runtimeMissing", { error: runtimeCatalogError })}
           </div>
         )}
         {editorProfile?.pyneEnhancements && securityMode === "unsafe" && (
-          <div style={{ marginBottom: '8px', padding: '8px 10px', border: '1px solid rgba(239, 68, 68, 0.35)', borderRadius: '6px', color: 'var(--candle-down)', background: 'rgba(239, 68, 68, 0.08)', fontSize: '12px' }}>
+          <div style={{ marginBottom: '8px', padding: '8px 10px', border: '1px solid rgba(239, 68, 68, 0.35)', borderRadius: '6px', color: 'var(--text-danger)', background: 'color-mix(in srgb, var(--color-danger) 8%, transparent)', fontSize: '12px' }}>
             {t("indicator.editor.unsafeHint")}
           </div>
         )}
@@ -506,7 +509,7 @@ export default function IndicatorEditor({
         {readOnly ? (
           <span style={{ color: 'var(--text-muted)' }}>{t("indicator.editor.builtinHint")}</span>
         ) : !languageReady ? (
-          <span style={{ color: 'var(--candle-down)' }}>
+          <span style={{ color: 'var(--text-danger)' }}>
             {runtimeCatalogError
               ? t("indicator.editor.noRuntime")
               : allowedRuntimeCatalog && requestedLanguageId
@@ -516,17 +519,17 @@ export default function IndicatorEditor({
                   : t("indicator.editor.discovering")}
           </span>
         ) : previewState?.error ? (
-          <span style={{ color: 'var(--candle-down)', whiteSpace: 'pre-wrap' }}>❌ {previewState.error}</span>
+          <span style={{ color: 'var(--text-danger)', whiteSpace: 'pre-wrap' }}>{previewState.error}</span>
         ) : previewState?.isComputing ? (
           <span style={{ color: 'var(--accent-blue)' }}>{t("indicator.editor.computingData")}</span>
         ) : previewState?.id ? (
-          <span style={{ color: 'var(--candle-up)' }}>{t("indicator.editor.runOk")}</span>
+          <span style={{ color: 'var(--text-success)' }}>{t("indicator.editor.runOk")}</span>
         ) : (
           <span style={{ color: 'var(--text-muted)' }}>
             {editorProfile?.pyneEnhancements
-              ? <>💡 Pyne API: <code>ta.sma()</code> <code>ta.ema()</code> <code>ta.rsi()</code> <code>plot()</code> <code>input.int()</code></>
+              ? <>{t("indicator.editor.pyneApiHint")} <code>ta.sma()</code> <code>ta.ema()</code> <code>ta.rsi()</code> <code>plot()</code> <code>input.int()</code></>
               : editorProfile?.pineEnhancements
-                ? <>💡 Pine v5/v6 closed-bar API: <code>ta.sma()</code> <code>plot()</code> <code>plotshape()</code> <code>input.int()</code></>
+                ? <>{t("indicator.editor.pineApiHint")} <code>ta.sma()</code> <code>plot()</code> <code>plotshape()</code> <code>input.int()</code></>
               : t("indicator.editor.communityRuntime", { language: selectedLanguage?.name || t("indicator.editor.fallbackLanguage"), runtime: selectedRuntime?.name || "plugin" })}
           </span>
         )}

@@ -229,7 +229,8 @@ test("paper trading dock owns a complete readable surface in both app themes", (
   assert.match(marketRail, /data-active-dock=\{dockAttr\}/);
   assert.match(styles, /\[data-theme='light'\] \.replay-paper-trading/);
   assert.match(styles, /grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
-  assert.match(styles, /--replay-rail-text-muted: #5f7086/);
+  assert.match(styles, /--replay-rail-text-muted: var\(--trade-muted\)/);
+  assert.match(styles, /--trade-muted: var\(--text-muted\)/);
 });
 
 test("order-size capacity is independent from draft preview failures", () => {

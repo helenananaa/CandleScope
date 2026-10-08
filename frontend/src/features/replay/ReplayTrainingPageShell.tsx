@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TickMarkType } from "../../chart-adapter/chartAdapterTypes.js";
 import MarketChartWorkspace from "../../app/MarketChartWorkspace.js";
@@ -361,7 +362,7 @@ export default function ReplayTrainingPageShell({
     try {
       await returnToTrainingHub(runId, defaultReplayV2Api);
     } catch (cause) {
-      setReturnToHubError(cause instanceof Error ? cause.message : t("replay.shell.returnFailed", {}, locale));
+      setReturnToHubError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.shell.returnFailed", {}, locale));
       setReturningToHub(false);
     }
   }, [locale, returningToHub, viewer.viewerState?.run_id]);
@@ -387,7 +388,7 @@ export default function ReplayTrainingPageShell({
       drawingDocumentSessionRegistry.markLoaded(scopeKey, store);
     } catch (cause) {
       setLiveDrawingError(
-        cause instanceof Error ? cause.message : t("replay.shell.drawingRestoreFailed", {}, locale),
+        cause instanceof Error ? describeError(cause, cause.message) : t("replay.shell.drawingRestoreFailed", {}, locale),
       );
     }
   }, [
@@ -469,7 +470,7 @@ export default function ReplayTrainingPageShell({
       drawingDocumentSessionRegistry.markLoaded(scopeKey, store);
     } catch (cause) {
       setReviewDrawingError(
-        cause instanceof Error ? cause.message : t("replay.shell.reviewRestoreFailed", {}, locale),
+        cause instanceof Error ? describeError(cause, cause.message) : t("replay.shell.reviewRestoreFailed", {}, locale),
       );
     }
   }, [
@@ -561,7 +562,7 @@ export default function ReplayTrainingPageShell({
       if (cause instanceof DOMException && cause.name === "AbortError") return;
       reviewSeriesStore.replace([], { source: "replay-review-fail-closed" });
       setReviewChartError(
-        cause instanceof Error ? cause.message : t("replay.shell.reviewPrefixFailed", {}, locale),
+        cause instanceof Error ? describeError(cause, cause.message) : t("replay.shell.reviewPrefixFailed", {}, locale),
       );
     }).finally(() => {
       if (!abort.signal.aborted) setReviewChartLoading(false);
@@ -1027,6 +1028,41 @@ export default function ReplayTrainingPageShell({
       formatTime={publicTimeRuntime.formatTime}
     />
   ) : null;
+  const replayIntervalSelector = (
+    <IntervalSelector
+      interval={displayedInterval}
+      capabilityReady={review === null
+        && config !== null
+        && viewer.viewerState !== null
+        && !viewer.viewerPending
+        && intervalViewportTransfer === null
+        && replayIntervalCatalog.nativeIntervals.length > 0}
+      capabilityLoading={config === null
+        || viewer.loading
+        || viewer.viewerPending
+        || intervalViewportTransfer !== null}
+      nativeIntervals={replayIntervalCatalog.nativeIntervals}
+      intervalGroups={replayIntervalCatalog.intervalGroups}
+      customIntervalRecords={customIntervalRecords}
+      savedCustomIntervals={savedCustomIntervals}
+      onSelectInterval={selectReplayInterval}
+      onCreateCustomInterval={createReplayCustomInterval}
+      onRemoveCustomInterval={removeReplayCustomInterval}
+      onRestoreCustomInterval={restoreReplayCustomInterval}
+      onTogglePinCustomInterval={togglePinCustomInterval}
+      onClearCustomIntervals={clearReplayCustomIntervals}
+      intervalAvailability={intervalAvailability}
+      unavailableIntervalMessage={unavailableIntervalMessage}
+      readOnlyReason={review === null ? null : t("replay.shell.intervalReadonly")}
+      intervalNotice={intervalNotice ?? {
+        type: viewer.error ? "error" : "info",
+        text: review === null
+          ? viewer.error ?? viewer.eventStopMessage ?? `ViewerState r${viewer.viewerState?.semantic_view_revision ?? "--"} · ${publicTime}`
+          : `Review ViewerState r${String(review.projection.viewer_state.semantic_view_revision ?? "--")} · ${review.events.find((event) => event.event_id === review.selected_event_id)?.public_time.label ?? "--"}`,
+      }}
+      variant="compact"
+    />
+  );
   return (
     <PageFrame
       toolbar={drawingToolbar}
@@ -1035,8 +1071,6 @@ export default function ReplayTrainingPageShell({
         <MarketTopBarFrame
           source="replay"
           className="replay-top-bar"
-          brandIcon="◀"
-          brandText="CandleScope"
           navigation={<span className="replay-mode-badge">{t("replay.kicker.training")}</span>}
           identity={config && (
             <button className="replay-identity-readonly" type="button" title={t("replay.shell.identityImmutable")}>
@@ -1050,6 +1084,7 @@ export default function ReplayTrainingPageShell({
                 })}
             </button>
           )}
+          intervals={replayIntervalSelector}
           controls={<>
             {cell?.controls}
             <button
@@ -1090,7 +1125,7 @@ export default function ReplayTrainingPageShell({
             {active && (
               <button
                 ref={integrityToggleRef}
-                className="replay-integrity-toggle"
+                className="replay-integrity-toggle ui-control"
                 type="button"
                 data-replay-action="toggle-integrity"
                 data-review-active={review === null ? "false" : "true"}
@@ -1106,7 +1141,7 @@ export default function ReplayTrainingPageShell({
             )}
             {active && integrityRuntime.runId !== null && (
               <button
-                className="replay-integrity-toggle"
+                className="replay-integrity-toggle ui-control"
                 type="button"
                 data-replay-action="toggle-training-results"
                 aria-controls="replay-training-results-drawer"
@@ -1117,45 +1152,12 @@ export default function ReplayTrainingPageShell({
                 }}
               >{t("replay.shell.results")}</button>
             )}
-            {active && viewer.viewerState?.run_id !== undefined && <button className="replay-return-hub" type="button" disabled={returningToHub || review !== null} title={review !== null ? t("replay.shell.exitReviewFirst") : returnToHubError ?? t("replay.shell.returnHubHint")} onClick={() => void returnToHub()}>{returningToHub ? t("replay.shell.saving") : t("replay.shell.hub")}</button>}
-            <a className="replay-live-link" href="/" target="_blank" rel="noopener noreferrer">{t("replay.shell.liveLink")}</a>
+            {active && viewer.viewerState?.run_id !== undefined && <button className="replay-return-hub ui-control" type="button" disabled={returningToHub || review !== null} title={review !== null ? t("replay.shell.exitReviewFirst") : returnToHubError ?? t("replay.shell.returnHubHint")} onClick={() => void returnToHub()}>{returningToHub ? t("replay.shell.saving") : t("replay.shell.hub")}</button>}
+            <a className="replay-live-link ui-control" href="/" target="_blank" rel="noopener noreferrer">{t("replay.shell.liveLink")}</a>
           </>}
         />
       )}
-      intervalSelector={(
-        <IntervalSelector
-          interval={displayedInterval}
-          capabilityReady={review === null
-            && config !== null
-            && viewer.viewerState !== null
-            && !viewer.viewerPending
-            && intervalViewportTransfer === null
-            && replayIntervalCatalog.nativeIntervals.length > 0}
-          capabilityLoading={config === null
-            || viewer.loading
-            || viewer.viewerPending
-            || intervalViewportTransfer !== null}
-          nativeIntervals={replayIntervalCatalog.nativeIntervals}
-          intervalGroups={replayIntervalCatalog.intervalGroups}
-          customIntervalRecords={customIntervalRecords}
-          savedCustomIntervals={savedCustomIntervals}
-          onSelectInterval={selectReplayInterval}
-          onCreateCustomInterval={createReplayCustomInterval}
-          onRemoveCustomInterval={removeReplayCustomInterval}
-          onRestoreCustomInterval={restoreReplayCustomInterval}
-          onTogglePinCustomInterval={togglePinCustomInterval}
-          onClearCustomIntervals={clearReplayCustomIntervals}
-          intervalAvailability={intervalAvailability}
-          unavailableIntervalMessage={unavailableIntervalMessage}
-          readOnlyReason={review === null ? null : t("replay.shell.intervalReadonly")}
-          intervalNotice={intervalNotice ?? {
-            type: viewer.error ? "error" : "info",
-            text: review === null
-              ? viewer.error ?? viewer.eventStopMessage ?? `ViewerState r${viewer.viewerState?.semantic_view_revision ?? "--"} · ${publicTime}`
-              : `Review ViewerState r${String(review.projection.viewer_state.semantic_view_revision ?? "--")} · ${review.events.find((event) => event.event_id === review.selected_event_id)?.public_time.label ?? "--"}`,
-          }}
-        />
-      )}
+      intervalSelector={null}
       workspace={cell ? chart : (
         <MarketChartWorkspace
           toolbar={drawingToolbar}

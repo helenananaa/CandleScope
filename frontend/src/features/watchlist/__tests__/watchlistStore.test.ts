@@ -6,6 +6,7 @@ import {
   WATCHLISTS_KEY,
   loadCollapsedLists,
   loadWatchlists,
+  STARTER_WATCHLIST_SYMBOLS,
   loadSidebarWidth,
   SIDEBAR_WIDTH_KEY,
 } from "../watchlistStore.js";
@@ -43,6 +44,21 @@ test("watchlist storage rejects damaged and malformed groups", () => {
 
   withStorage({ [WATCHLISTS_KEY]: JSON.stringify([null, {}, { id: 2, name: [] }]) }, () => {
     assert.equal(mustBeDefined(loadWatchlists()[0]).id, "default");
+  });
+});
+
+test("first launch seeds a starter watchlist but an emptied list stays empty", () => {
+  withStorage({}, () => {
+    const [list] = loadWatchlists();
+    assert.equal(mustBeDefined(list).id, "default");
+    assert.deepEqual(mustBeDefined(list).symbols, [...STARTER_WATCHLIST_SYMBOLS]);
+    assert.ok(STARTER_WATCHLIST_SYMBOLS.length > 0);
+  });
+
+  withStorage({
+    [WATCHLISTS_KEY]: JSON.stringify([{ id: "default", name: "Watchlist", color: "#3b82f6", symbols: [] }]),
+  }, () => {
+    assert.deepEqual(mustBeDefined(loadWatchlists()[0]).symbols, []);
   });
 });
 

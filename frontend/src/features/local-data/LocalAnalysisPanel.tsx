@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import { useMemo, useState } from "react";
 import { t, getLocale } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -112,7 +113,7 @@ export default function LocalAnalysisPanel({
       else eventStore.update(editingId, draft);
       resetForm();
     } catch (reason) {
-      onError(reason instanceof Error ? reason.message : t("local.saveFailed"));
+      onError(reason instanceof Error ? describeError(reason, reason.message) : t("local.saveFailed"));
     }
   };
 
@@ -133,7 +134,7 @@ export default function LocalAnalysisPanel({
             type="button"
             onClick={() => {
               try { eventStore.resetCorruptDocument(); }
-              catch (reason) { onError(reason instanceof Error ? reason.message : t("local.resetFailed")); }
+              catch (reason) { onError(reason instanceof Error ? describeError(reason, reason.message) : t("local.resetFailed")); }
             }}
           >
             {t("local.resetFile")}
@@ -244,7 +245,7 @@ export default function LocalAnalysisPanel({
                     eventStore.delete(event.id);
                     if (editingId === event.id) resetForm();
                   } catch (reason) {
-                    onError(reason instanceof Error ? reason.message : t("local.deleteMarkerFailed"));
+                    onError(reason instanceof Error ? describeError(reason, reason.message) : t("local.deleteMarkerFailed"));
                   }
                 }}
               >

@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import { useState } from "react";
 import { t, type MessageKey } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -94,7 +95,7 @@ export default function LocalAnalysisCsvImport({
     } catch (reason) {
       setLoaded(null);
       setMapping(EMPTY_MAPPING);
-      onError(reason instanceof Error ? reason.message : t("local.csvReadFailed"));
+      onError(reason instanceof Error ? describeError(reason, reason.message) : t("local.csvReadFailed"));
     } finally {
       setBusy(false);
     }
@@ -142,7 +143,7 @@ export default function LocalAnalysisCsvImport({
       const result = eventStore.importBatch(drafts);
       setReport({ imported: result.imported, skipped: result.skipped, rejected });
     } catch (reason) {
-      onError(reason instanceof Error ? reason.message : t("local.csvImportFailed"));
+      onError(reason instanceof Error ? describeError(reason, reason.message) : t("local.csvImportFailed"));
     } finally {
       setBusy(false);
     }

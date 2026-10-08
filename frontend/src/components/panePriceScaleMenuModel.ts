@@ -14,16 +14,19 @@ export interface PriceScaleContextMenuState {
   autoScale: boolean;
   invertScale: boolean;
   mode: number;
+  /** Price under the pointer on the main pane, for "add alert here". */
+  price: number | null;
 }
 
 const PRICE_SCALE_CONTEXT_HIT_WIDTH = 96;
 const PRICE_SCALE_CONTEXT_MENU_WIDTH = 220;
-const PRICE_SCALE_CONTEXT_MENU_HEIGHT = 236;
+const PRICE_SCALE_CONTEXT_MENU_HEIGHT = 272;
 const PRICE_SCALE_CONTEXT_MENU_MARGIN = 8;
 
 export function resolvePanePriceScaleMenu({
-  chart, activePaneIds, layout, rect, clientX, clientY,
+  chart, activePaneIds, layout, rect, clientX, clientY, priceAtPaneY,
 }: {
+  priceAtPaneY?: ((paneIndex: number, y: number) => number | null) | undefined;
   chart: AdapterChart | null;
   activePaneIds: readonly string[];
   layout: PanePointerLayout | null;
@@ -53,6 +56,10 @@ export function resolvePanePriceScaleMenu({
     autoScale: scaleOptions.autoScale,
     invertScale: scaleOptions.invertScale,
     mode: scaleOptions.mode,
+    price: priceAtPaneY?.(
+      target.paneIndex,
+      clientY - (layout?.boundaries[target.paneIndex]?.top ?? rect.top),
+    ) ?? null,
   };
 }
 

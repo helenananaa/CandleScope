@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ChartSession } from "../chart-session/chartSessionTypes.js";
@@ -81,7 +82,7 @@ export function useStrategyResearchRun(input: {
       return chartStrategyResultCache.load(defaultBacktestApi, runId, controller.signal);
     }).then((bundle) => {
       if (!controller.signal.aborted) setResult(bundle);
-    }).catch((reason: unknown) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason)); })
+    }).catch((reason: unknown) => { if (!controller.signal.aborted) setError(reason instanceof Error ? describeError(reason, reason.message) : String(reason)); })
       .finally(() => { if (!controller.signal.aborted) setRestoringRun(false); });
     return () => controller.abort();
   }, [input.restoreRunId, tester]);

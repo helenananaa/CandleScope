@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import type { NativeStrategyCollection } from "../backtest/native/nativeStrategyCollection.js";
 import {
   useCallback,
@@ -422,7 +423,7 @@ export function useChartWorkspaceRuntime(
         saveState: "error",
         persistenceMode: null,
         lastSavedAt: null,
-        error: error instanceof Error ? error.message : t("core.error.workspaceRestore"),
+        error: error instanceof Error ? describeError(error, error.message) : t("core.error.workspaceRestore"),
       });
     });
     return () => {
@@ -459,7 +460,7 @@ export function useChartWorkspaceRuntime(
       setPersistence((current) => ({
         ...current,
         saveState: "error",
-        error: error instanceof Error ? error.message : t("core.error.workspaceSave"),
+        error: error instanceof Error ? describeError(error, error.message) : t("core.error.workspaceSave"),
       }));
     }
   }, [services]);

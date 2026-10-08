@@ -1,3 +1,4 @@
+import { describeError } from "../i18n/serverErrors.js";
 import PanePriceScaleMenu from "./PanePriceScaleMenu.js";
 import { usePanePriceScaleMenu } from "./usePanePriceScaleMenu.js";
 import NativePaneDrawingHost from "./NativePaneDrawingHost.js";
@@ -345,6 +346,8 @@ export interface SingleChartPanesProps {
   onInvertScaleChange?: ((value: boolean) => void) | null;
   priceScaleMode?: number;
   onPriceScaleModeChange?: ((mode: number) => void) | null;
+  /** Live pages only: offers "Add alert" at the pointed price. */
+  onAddAlertAtPrice?: ((price: number) => void) | null;
 }
 
 type AdapterChart = Parameters<typeof createMainSeries>[0];
@@ -884,6 +887,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   onInvertScaleChange,
   priceScaleMode = 0,
   onPriceScaleModeChange,
+  onAddAlertAtPrice = null,
 }: SingleChartPanesProps, ref) {
   const locale = useLocale();
   const drawingFontMetricRevision = useDrawingFontMetricRevision();
@@ -1129,7 +1133,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     } catch (error) {
       cleared = false;
       recordPerfEvent("chart.futureTimeAxis.renderError", {
-        message: error instanceof Error ? error.message : String(error),
+        message: error instanceof Error ? describeError(error, error.message) : String(error),
         phase: "clear",
       });
     } finally {
@@ -1220,7 +1224,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         futureTimeAxisPointCountRef.current = previousCount;
         try { clearFutureTimeAxis({ force: true }); } catch { /* best-effort carrier cleanup */ }
         recordPerfEvent("chart.futureTimeAxis.renderError", {
-          message: error instanceof Error ? error.message : String(error),
+          message: error instanceof Error ? describeError(error, error.message) : String(error),
           phase: "viewport-extend",
         });
       } finally {
@@ -1569,12 +1573,18 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       if (adapter !== chartAdapter) adapter.notifyDrawingFrameInvalidation();
     }
   }, [chartAdapter]);
+  const priceAtPaneY = useCallback((paneIndex: number, y: number): number | null => {
+    if (paneIndex !== 0) return null;
+    const price = mainSeriesRef.current?.coordinateToPrice(y);
+    return typeof price === "number" && Number.isFinite(price) ? price : null;
+  }, []);
   const priceScaleMenu = usePanePriceScaleMenu({
     chartRef,
     containerRef,
     activePaneIdsRef,
     panePointerLayoutRef,
     onScaleChanged: notifyDrawingFrameInvalidation,
+    priceAtPaneY,
   });
 
   const reportCrosshairMove = useEffectEvent((value: MainSeriesCrosshairValue | null) => {
@@ -3069,7 +3079,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         }
       } catch (error) {
         recordPerfEvent("chart.intervalTransition.reindexError", {
-          message: error instanceof Error ? error.message : String(error),
+          message: error instanceof Error ? describeError(error, error.message) : String(error),
           paneId: "single-chart",
         });
       } finally {
@@ -3593,7 +3603,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         renderedMainSeriesGenerationRef.current += 1;
         committedProjectionGenerationRef.current = -1;
         recordPerfEvent("chart.candleSeries.renderError", {
-          message: error instanceof Error ? error.message : String(error),
+          message: error instanceof Error ? describeError(error, error.message) : String(error),
           paneId: "main",
           phase: "sync",
         });
@@ -3604,7 +3614,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         } catch (error) {
           try { clearFutureTimeAxis({ force: true }); } catch { /* best-effort carrier cleanup */ }
           recordPerfEvent("chart.futureTimeAxis.renderError", {
-            message: error instanceof Error ? error.message : String(error),
+            message: error instanceof Error ? describeError(error, error.message) : String(error),
             phase: "projection-sync",
           });
         }
@@ -3764,7 +3774,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           renderedMainSeriesGenerationRef.current += 1;
           committedProjectionGenerationRef.current = -1;
           recordPerfEvent("chart.candleSeries.renderError", {
-            message: error instanceof Error ? error.message : String(error),
+            message: error instanceof Error ? describeError(error, error.message) : String(error),
             paneId: "main",
             phase: "delta",
           });
@@ -3775,7 +3785,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           } catch (error) {
             try { clearFutureTimeAxis({ force: true }); } catch { /* best-effort carrier cleanup */ }
             recordPerfEvent("chart.futureTimeAxis.renderError", {
-              message: error instanceof Error ? error.message : String(error),
+              message: error instanceof Error ? describeError(error, error.message) : String(error),
               phase: "projection-delta",
             });
           }
@@ -4962,6 +4972,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         locale={locale}
         onInvertScaleChange={onInvertScaleChange}
         onPriceScaleModeChange={onPriceScaleModeChange}
+        onAddAlertAtPrice={onAddAlertAtPrice}
       />
 
       {shouldMountDrawingEngine && <DrawingObjectList apis={drawingObjectApis} currentInterval={interval} panes={activeSubPanes} onSelectPane={publishHoveredPaneId} />}

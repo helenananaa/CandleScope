@@ -6,6 +6,8 @@
  * - View & manage active indicators (toggle visibility, remove, edit params)
  * - Open code editor for custom indicators
  */
+import { describeError } from "../../i18n/serverErrors.js";
+import { Icon } from "../../components/icons/Icon.js";
 import { useCallback, useState } from "react";
 import { t, type MessageKey } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -190,29 +192,29 @@ function stripEngineMarker(script = ""): string {
 function IndicatorBadge({ children, tone = "neutral" }: IndicatorBadgeProps) {
   const palette = {
     builtin: {
-      background: "rgba(59, 130, 246, 0.15)",
-      color: "#3b82f6",
+      background: "color-mix(in srgb, var(--accent-blue) 15%, transparent)",
+      color: "var(--text-accent)",
     },
     custom: {
-      background: "rgba(20, 184, 166, 0.14)",
-      color: "#14b8a6",
+      background: "color-mix(in srgb, var(--accent-cyan) 14%, transparent)",
+      color: "var(--text-info)",
     },
     main: {
-      background: "rgba(34, 197, 94, 0.15)",
-      color: "#22c55e",
+      background: "color-mix(in srgb, var(--color-success) 15%, transparent)",
+      color: "var(--text-success)",
     },
     sub: {
-      background: "rgba(168, 85, 247, 0.15)",
-      color: "#a855f7",
+      background: "color-mix(in srgb, var(--accent-purple) 15%, transparent)",
+      color: "var(--text-purple)",
     },
     neutral: {
-      background: "rgba(148, 163, 184, 0.15)",
-      color: "#94a3b8",
+      background: "color-mix(in srgb, var(--text-secondary) 15%, transparent)",
+      color: "var(--text-secondary)",
     },
   };
   return (
     <span style={{
-      fontSize: 9,
+      fontSize: "var(--font-size-2xs)",
       marginLeft: 6,
       padding: "1px 5px",
       borderRadius: 3,
@@ -475,7 +477,7 @@ export default function IndicatorPanel({
       }
     } catch (err: unknown) {
       console.error("Failed to delete custom indicator:", err);
-      window.alert(t("indicator.deleteFailed", { error: err instanceof Error ? err.message : String(err) }));
+      window.alert(t("indicator.deleteFailed", { error: err instanceof Error ? describeError(err, err.message) : String(err) }));
     }
   }, [activeIndicators, deleteCustomIndicator, onRemoveIndicator]);
 
@@ -838,7 +840,7 @@ plot(ma, "MA", color=line_color)
                               <span className="indicator-preset-desc">
                                 {preset.description}
                                 {!support.supported && support.reason && (
-                                  <span style={{ display: "block", color: "#f59e0b", marginTop: 3 }}>
+                                  <span style={{ display: "block", color: "var(--text-warning)", marginTop: 3 }}>
                                     {support.reason}
                                   </span>
                                 )}
@@ -860,8 +862,9 @@ plot(ma, "MA", color=line_color)
                                   className="indicator-preset-delete-btn"
                                   onClick={() => handleDeleteCustomPreset(preset)}
                                   title={t("indicator.deleteCustom")}
+                                  aria-label={t("indicator.deleteCustom")}
                                 >
-                                  🗑
+                                  <Icon name="trash" size={14} />
                                 </button>
                               )}
                             </div>
@@ -892,7 +895,7 @@ plot(ma, "MA", color=line_color)
                                 <span className="indicator-preset-desc">
                                   {study.description}
                                   {!study.supported && (
-                                    <span style={{ display: "block", color: "#f59e0b", marginTop: 3 }}>
+                                    <span style={{ display: "block", color: "var(--text-warning)", marginTop: 3 }}>
                                       {disabledReason}
                                     </span>
                                   )}
@@ -931,7 +934,7 @@ plot(ma, "MA", color=line_color)
                 <div className="indicator-active-list">
                   {activeItemCount === 0 ? (
                     <div className="indicator-empty">
-                      <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
+                      <div style={{ display: "flex", justifyContent: "center", marginBottom: 8, color: "var(--text-muted)" }}><Icon name="inbox" size={32} /></div>
                       <div>{t("indicator.emptyActive")}</div>
                       <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
                         {t("indicator.emptyActiveHint")}
@@ -946,8 +949,9 @@ plot(ma, "MA", color=line_color)
                             className={`indicator-visibility-btn ${ind.visible ? "" : "hidden"}`}
                             onClick={() => onToggleVisibility(ind.id)}
                             title={ind.visible ? t("indicator.hide") : t("indicator.show")}
+                            aria-label={ind.visible ? t("indicator.hide") : t("indicator.show")}
                           >
-                            {ind.visible ? "👁" : "👁‍🗨"}
+                            <Icon name={ind.visible ? "eye" : "eye-off"} size={14} />
                           </button>
                           <span className="indicator-active-name">
                             {indicatorDisplayName(ind)}
@@ -959,22 +963,24 @@ plot(ma, "MA", color=line_color)
                             </IndicatorBadge>
                           </span>
                           {ind.error && (
-                            <span className="indicator-error-badge" title={ind.error}>⚠️</span>
+                            <span className="indicator-error-badge" title={ind.error} role="img" aria-label={ind.error}><Icon name="warning" size={14} /></span>
                           )}
                           <div className="indicator-active-actions">
                             <button
                               className="indicator-action-btn"
                               onClick={() => handleEditIndicator(ind)}
                               title={isBuiltinIndicator(ind) ? t("indicator.viewReference") : t("indicator.editCode")}
+                              aria-label={isBuiltinIndicator(ind) ? t("indicator.viewReference") : t("indicator.editCode")}
                             >
-                              {isBuiltinIndicator(ind) ? "📖" : "✏️"}
+                              <Icon name={isBuiltinIndicator(ind) ? "book" : "pencil"} size={14} />
                             </button>
                             <button
                               className="indicator-action-btn indicator-remove-btn"
                               onClick={() => onRemoveIndicator(ind.id)}
                               title={t("indicator.remove")}
+                              aria-label={t("indicator.remove")}
                             >
-                              🗑
+                              <Icon name="trash" size={14} />
                             </button>
                           </div>
                         </div>
@@ -1057,8 +1063,9 @@ plot(ma, "MA", color=line_color)
                                 onClick={() => onToggleMarketStudyVisibility?.(study.id)}
                                 disabled={!onToggleMarketStudyVisibility}
                                 title={study.visible ? t("indicator.hide") : t("indicator.show")}
+                                aria-label={study.visible ? t("indicator.hide") : t("indicator.show")}
                               >
-                                {study.visible ? "👁" : "👁‍🗨"}
+                                <Icon name={study.visible ? "eye" : "eye-off"} size={14} />
                               </button>
                               <span className="indicator-active-name">
                                 {study.name}
@@ -1069,8 +1076,8 @@ plot(ma, "MA", color=line_color)
                                 )}
                               </span>
                               {hasError && (
-                                <span className="indicator-error-badge" title={statusMessage || t("indicator.marketError")}>
-                                  ⚠️
+                                <span className="indicator-error-badge" title={statusMessage || t("indicator.marketError")} role="img" aria-label={statusMessage || t("indicator.marketError")}>
+                                  <Icon name="warning" size={14} />
                                 </span>
                               )}
                               <div className="indicator-active-actions">
@@ -1079,8 +1086,9 @@ plot(ma, "MA", color=line_color)
                                   onClick={() => onRemoveMarketStudy?.(study.id)}
                                   disabled={!onRemoveMarketStudy}
                                   title={t("indicator.remove")}
+                                  aria-label={t("indicator.remove")}
                                 >
-                                  🗑
+                                  <Icon name="trash" size={14} />
                                 </button>
                               </div>
                             </div>

@@ -1,6 +1,8 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import { Profiler, useEffect, useState } from "react";
 import type { ProfilerOnRenderCallback } from "react";
 import { recordPerfEvent } from "../../runtime/performance/perfMarks.js";
+import AppPageShell from "../../app/AppPageShell.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import {
@@ -31,7 +33,7 @@ const recordReplayCommit: ProfilerOnRenderCallback = (id, phase, actualDuration,
 
 function ReplayTrainingHubApp() {
   const runtime = useTrainingHub();
-  return <TrainingHubDialog runtime={runtime} />;
+  return <AppPageShell source="replay"><TrainingHubDialog runtime={runtime} /></AppPageShell>;
 }
 
 function ReplayStatusSurface({
@@ -44,6 +46,7 @@ function ReplayStatusSurface({
   retry?: () => void;
 }) {
   return (
+    <AppPageShell source="replay">
     <main className="training-hub-page">
       <section className="training-hub-shell">
         <header className="training-hub-heading">
@@ -59,6 +62,7 @@ function ReplayStatusSurface({
         </header>
       </section>
     </main>
+    </AppPageShell>
   );
 }
 
@@ -110,7 +114,7 @@ function ReplayTrainingRunApp({
       setRun(loaded);
     }).catch((reason: unknown) => {
       if (reason instanceof DOMException && reason.name === "AbortError") return;
-      setError(reason instanceof Error ? reason.message : t("replay.runLoadFailed"));
+      setError(reason instanceof Error ? describeError(reason, reason.message) : t("replay.runLoadFailed"));
     });
     return () => controller.abort();
   }, [attempt, runId]);
@@ -126,12 +130,12 @@ function ReplayTrainingRunApp({
     return <ReplayStatusSurface title={t("replay.opening")} message={t("replay.openingMessage", { runId })} />;
   }
   if (run.state === "AWAITING_MARKET" || run.resume_action === "SELECT_MARKET") {
-    return <ReplayInitialMarketPicker run={run} onInitialized={(initialized) => {
+    return <AppPageShell source="replay"><ReplayInitialMarketPicker run={run} onInitialized={(initialized) => {
       setRun(null);
       void defaultReplayV2Api.prepareIndex(runId, undefined, getReplayControllerClientInstanceId(runId)).then(() => setRun(initialized)).catch((reason: unknown) => {
-        setError(reason instanceof Error ? reason.message : t("replay.runLoadFailed"));
+        setError(reason instanceof Error ? describeError(reason, reason.message) : t("replay.runLoadFailed"));
       });
-    }} />;
+    }} /></AppPageShell>;
   }
   if (run.adapter_session_id === null) {
     return <ReplayStatusSurface title={t("replay.incomplete")} message={t("replay.incompleteMessage")} />;

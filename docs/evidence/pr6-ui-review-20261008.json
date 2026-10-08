@@ -1,0 +1,88 @@
+{
+  "date": "2026-10-08",
+  "pullRequest": "https://github.com/helenananaa/CandleScope/pull/6",
+  "reviewedOriginalHead": "0dcdf6cd5ecbbc2d141f3cdcffdcca1bc30717b8",
+  "changes": {
+    "dataAge": "deferred; component, model, tests, header integration and fading CSS removed",
+    "intervalShortcut": "protect editors and other dialogs, preserve rapid digits before autofocus, reuse shared IME/modifier guards"
+  },
+  "fullCheck": {
+    "command": "npm run check",
+    "unitTestsPassed": 3951,
+    "desktopTestsPassed": 83,
+    "failures": 0,
+    "skipped": 0,
+    "architecture": true,
+    "pluginArchitecture": true,
+    "i18n": true,
+    "typecheck": true,
+    "lint": true,
+    "build": true,
+    "multiChart16Flag": true
+  },
+  "finalChangedFilesRecheck": {
+    "typecheck": true,
+    "targetedLint": true,
+    "keyboardUnitTestsPassed": 9,
+    "note": "Targeted tests include the added dialog/editor regression; counts overlap the full suite."
+  },
+  "browser": {
+    "passed": 9,
+    "results": [
+      "16-chart layout remains available and applies",
+      "custom amount keeps digit 2; search stays empty",
+      "search keeps normal numeric typing without changing custom amount",
+      "another focused editor keeps digits while interval picker is open",
+      "another visible dialog blocks interval digit capture",
+      "IME keyCode 229 is ignored",
+      "rapid 15 before search autofocus preserves both digits",
+      "data-age badge and whole-chart fading are absent",
+      "top bar fits 1440 and 1100 widths in dark and light themes"
+    ],
+    "themes": [
+      {
+        "theme": "dark",
+        "viewportWidth": 1440,
+        "width": 1440,
+        "scrollWidth": 1440,
+        "background": "rgb(17, 24, 39)"
+      },
+      {
+        "theme": "dark",
+        "viewportWidth": 1100,
+        "width": 1100,
+        "scrollWidth": 1100,
+        "background": "rgb(17, 24, 39)"
+      },
+      {
+        "theme": "light",
+        "viewportWidth": 1440,
+        "width": 1440,
+        "scrollWidth": 1440,
+        "background": "rgb(248, 250, 252)"
+      },
+      {
+        "theme": "light",
+        "viewportWidth": 1100,
+        "width": 1100,
+        "scrollWidth": 1100,
+        "background": "rgb(248, 250, 252)"
+      }
+    ],
+    "scope": "Actual frontend shell with unavailable backend; no live feed, native backtest or replay-session qualification."
+  },
+  "sourceSha256": {
+    "frontend/src/app/LiveChartCell.tsx": "c8fa266e2dee503fb4e29d175bac59972e3601b0b5b72d1d9e6a94e3a59092b0",
+    "frontend/src/components/IntervalSelector.tsx": "0a12607e63f1afebf1d79be827b203e5eb18425c99205be749b7a9511679de41",
+    "frontend/src/features/symbol-search/symbolSearchShortcut.ts": "9ed85ee9ab0e1be33f45bfad3d3546f1579121543a0344b8d9985eddcd151cb4",
+    "frontend/src/features/symbol-search/__tests__/symbolSearchShortcut.test.ts": "82fe7981b14337a6cd52c85ee9f4cba9f43e6ae0ee10ba6b67c300a49470dba2",
+    "frontend/src/index.css": "e3d3e6b2caa1fb532d17d82f9c158f34d0d33056d20cec6cf5842c07d91fa4dd"
+  },
+  "localLogs": "output/pr6-review-20261008/",
+  "limits": [
+    "browser backend unavailable; transport failures expected",
+    "no new live exchange feed qualification",
+    "no complete active replay-session smoke",
+    "no new long-duration or other-platform gate"
+  ]
+}

@@ -1,0 +1,137 @@
+/* ── CandleScope design tokens ─────────────────────────────────
+ * The single source for color, type, spacing and radius.
+ * Text colors are chosen to reach WCAG AA (4.5:1) on every
+ * --surface-* level of their theme; check before changing them.
+ * Feature-local variables (--strategy-*, --trade-*, …) should
+ * alias these rather than introduce new literals.
+ * ──────────────────────────────────────────────────────────── */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces, darkest to most raised */
+  --surface-0: #0a0e17;      /* app + chart background */
+  --surface-1: #111827;      /* panels, bars */
+  --surface-2: #1a2332;      /* cards, inputs, raised controls */
+  --surface-hover: #253247;  /* hover / pressed on any surface */
+
+  /* Lines */
+  --border-subtle: #1e293b;
+  --border-strong: #334155;
+
+  /* Text */
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #8794a8;
+  --text-on-accent: #ffffff;
+
+  /* Semantic foregrounds (text and icons on surfaces) */
+  --text-accent: #60a5fa;
+  --text-info: #67e8f9;
+  --text-success: #86efac;
+  --text-danger: #fda4af;
+  --text-warning: #fcd34d;
+  --text-purple: #d8b4fe;
+
+  /* Accent fills and outlines */
+  --accent-blue: #3b82f6;     /* outlines, indicators, focus */
+  --accent-solid: #2563eb;    /* filled controls with --text-on-accent */
+  --accent-solid-hover: #1d4ed8;
+  --accent-purple: #8b5cf6;
+  --accent-cyan: #06b6d4;
+
+  /* Status fills */
+  --color-success: #22c55e;
+  --color-danger: #ef4444;
+  --color-warning: #f59e0b;
+
+  /* Market colors; overridden at runtime from user settings */
+  --candle-up: #22c55e;
+  --candle-down: #ef4444;
+  /* Price text derived from the user's candle colors so custom choices stay legible */
+  --text-up: var(--candle-up);
+  --text-down: var(--candle-down);
+
+  /* Type */
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Noto Sans', 'Liberation Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-size-2xs: 10px;  /* count badges and key caps only */
+  --font-size-xs: 11px;   /* smallest running text */
+  --font-size-sm: 12px;
+  --font-size-md: 13px;
+  --font-size-base: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 28px;
+
+  /* Spacing (4px grid) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.12);
+  --shadow-lg: 0 24px 48px rgba(0, 0, 0, 0.45);
+  --backdrop: rgba(0, 0, 0, 0.6);
+
+  /* Stacking layers (app level; values below 50 stay local to a component) */
+  --z-rail: 50;
+  --z-topbar: 100;
+  --z-panel: 150;
+  --z-overlay: 500;
+  --z-modal: 1000;
+  --z-toast: 1600;
+  --z-menu: 10000;
+
+  /* Radius */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-control: 6px;  /* buttons, inputs, chips */
+  --radius-md: 8px;       /* cards, panels */
+  --radius-lg: 12px;      /* dialogs */
+  --radius-full: 999px;
+
+  /* Select chevron; an SVG url cannot read CSS variables, so each theme sets its own */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+
+  /* Legacy names kept so existing rules keep working; prefer the names above */
+  --bg-primary: var(--surface-0);
+  --bg-secondary: var(--surface-1);
+  --bg-tertiary: var(--surface-2);
+  --bg-hover: var(--surface-hover);
+  --border-color: var(--border-subtle);
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+
+  --surface-0: #ffffff;
+  --surface-1: #f8fafc;
+  --surface-2: #f1f5f9;
+  --surface-hover: #e2e8f0;
+
+  --border-subtle: #d9e0ea;
+  --border-strong: #cbd5e1;
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #56657a;
+
+  --text-accent: #1d4ed8;
+  --text-info: #0e7490;
+  --text-success: #15803d;
+  --text-danger: #be123c;
+  --text-warning: #92400e;
+  --text-purple: #6d28d9;
+
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23475569' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+
+  --text-up: color-mix(in srgb, var(--candle-up) 55%, var(--text-primary));
+  --text-down: color-mix(in srgb, var(--candle-down) 55%, var(--text-primary));
+}

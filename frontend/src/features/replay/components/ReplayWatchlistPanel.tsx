@@ -1,4 +1,6 @@
+import { describeError } from "../../../i18n/serverErrors.js";
 import React, { useEffect, useMemo, useState } from "react";
+import { Icon } from "../../../components/icons/Icon.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { parseSymbolKey, symbolKey } from "../../../utils/symbolKey.js";
@@ -41,7 +43,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
     setCatalogError(null);
     void defaultReplayV2Api.marketCatalog(runId, controller.signal).then(setCatalog).catch((reason: unknown) => {
       if (reason instanceof DOMException && reason.name === "AbortError") return;
-      setCatalogError(reason instanceof Error ? reason.message : t("replay.watchlist.catalogFailed"));
+      setCatalogError(reason instanceof Error ? describeError(reason, reason.message) : t("replay.watchlist.catalogFailed"));
     });
     return () => controller.abort();
   }, [catalogAttempt, runId]);
@@ -88,7 +90,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
       } else await viewer.actions.addAndSelectTrack(identity);
       setMarketQuery("");
     } catch (reason) {
-      setCatalogError(reason instanceof Error ? reason.message : t("replay.watchlist.addFailed"));
+      setCatalogError(reason instanceof Error ? describeError(reason, reason.message) : t("replay.watchlist.addFailed"));
     } finally {
       setAddingMarket(null);
     }
@@ -129,7 +131,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
       values.unshift({
         id: "replay_primary",
         name: t("replay.watchlist.primary", {}, locale),
-        color: "#8b5cf6",
+        color: "var(--accent-purple)",
         rows: [{ key: primaryKey, track: tracksByKey.get(primaryKey) ?? null }],
       });
     }
@@ -147,7 +149,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
       values.push({
         id: "replay_tracks",
         name: t("replay.watchlist.addedGroup", {}, locale),
-        color: "#22c55e",
+        color: "var(--color-success)",
         rows: additional,
       });
     }
@@ -182,7 +184,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
         : viewer.actions.openTrack
           ? viewer.actions.openTrack(track.track_id, "current")
           : viewer.actions.selectTrack(track.track_id);
-      void action.catch((reason: unknown) => setCatalogError(reason instanceof Error ? reason.message : String(reason)));
+      void action.catch((reason: unknown) => setCatalogError(reason instanceof Error ? describeError(reason, reason.message) : String(reason)));
     };
     return (
       <div
@@ -217,7 +219,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
           onClick={() => void viewer.actions.openTrack?.(track.track_id, "new").catch((reason: unknown) => setCatalogError(String(reason)))}
         >{t("replay.workspace.openNew")}</button>}
         {!viewer.actions.openTrack && <code>{tier}</code>}
-        {!viewer.actions.openTrack && forced.length > 0 && <small className="replay-track-force" title={forced.join(", ")}>🔒 {forced.join(" · ")}</small>}
+        {!viewer.actions.openTrack && forced.length > 0 && <small className="replay-track-force" title={forced.join(", ")}><Icon name="lock" size={12} /> {forced.join(" · ")}</small>}
         {!viewer.actions.openTrack && track !== null && !selected && (
           <select
             aria-label={t("replay.watchlist.tierAria", { symbol: identity.symbol })}
@@ -260,7 +262,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
         <div className="replay-watchlist-rows">
           <section className="replay-watchlist-group replay-market-search">
             <header>
-              <i style={{ background: "#38bdf8" }} />
+              <i style={{ background: "var(--accent-cyan)" }} />
               <span>{t("replay.watchlist.add")}</span>
               <button
                 type="button"

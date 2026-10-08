@@ -1,4 +1,6 @@
 import { useRef, useState } from "react";
+import { Icon } from "../icons/Icon.js";
+import type { IconName } from "../icons/Icon.js";
 import type {
     ChartSettings,
     ChartTheme,
@@ -16,15 +18,15 @@ import { useLocale } from "../../i18n/useLocale.js";
 
 interface ThemeOption {
     value: ChartTheme;
-    icon: string;
+    icon: IconName;
     labelKey: MessageKey;
 }
 
 const THEME_OPTIONS: ThemeOption[] = [
-    { value: "dark", icon: "🌙", labelKey: "settings.appearance.theme.dark" },
-    { value: "light", icon: "☀️", labelKey: "settings.appearance.theme.light" },
-    { value: "system", icon: "🌓", labelKey: "settings.appearance.theme.system" },
-    { value: "custom", icon: "🎨", labelKey: "settings.appearance.theme.custom" },
+    { value: "dark", icon: "moon", labelKey: "settings.appearance.theme.dark" },
+    { value: "light", icon: "sun", labelKey: "settings.appearance.theme.light" },
+    { value: "system", icon: "contrast", labelKey: "settings.appearance.theme.system" },
+    { value: "custom", icon: "palette", labelKey: "settings.appearance.theme.custom" },
 ];
 
 function priceBoxSizeMode(value: string): PriceBoxSizeMode {
@@ -91,7 +93,7 @@ export default function ChartAppearancePanel({ settings, onUpdate }: ChartAppear
                             className={`st-theme-card ${settings.theme === theme.value ? 'active' : ''}`}
                             onClick={() => handleUpdate('theme', theme.value)}
                         >
-                            <span className="st-theme-icon">{theme.icon}</span>
+                            <span className="st-theme-icon"><Icon name={theme.icon} size={22} /></span>
                             <span className="st-theme-label">{t(theme.labelKey)}</span>
                         </button>
                     ))}
@@ -120,15 +122,15 @@ export default function ChartAppearancePanel({ settings, onUpdate }: ChartAppear
                         className="st-preset-btn"
                         onClick={() => onUpdate({ ...settings, upColor: '#22c55e', downColor: '#ef4444' })}
                     >
-                        <span style={{ color: '#22c55e', fontWeight: 700 }}>● {t("settings.appearance.greenUp")}</span>
-                        <span style={{ color: '#ef4444', fontWeight: 700 }}>● {t("settings.appearance.redDown")}</span>
+                        <span style={{ color: 'var(--text-success)', fontWeight: 700 }}>● {t("settings.appearance.greenUp")}</span>
+                        <span style={{ color: 'var(--text-danger)', fontWeight: 700 }}>● {t("settings.appearance.redDown")}</span>
                     </button>
                     <button
                         className="st-preset-btn"
                         onClick={() => onUpdate({ ...settings, upColor: '#ef4444', downColor: '#22c55e' })}
                     >
-                        <span style={{ color: '#ef4444', fontWeight: 700 }}>● {t("settings.appearance.redUp")}</span>
-                        <span style={{ color: '#22c55e', fontWeight: 700 }}>● {t("settings.appearance.greenDown")}</span>
+                        <span style={{ color: 'var(--text-danger)', fontWeight: 700 }}>● {t("settings.appearance.redUp")}</span>
+                        <span style={{ color: 'var(--text-success)', fontWeight: 700 }}>● {t("settings.appearance.greenDown")}</span>
                     </button>
                 </div>
                 <div className="st-custom-colors">

@@ -1,4 +1,5 @@
 import { watchlistDisplayName } from "../watchlist/watchlistDisplayName.js";
+import { Icon } from "../../components/icons/Icon.js";
 import { shortcutModifier } from "../../shared/shortcutModifier.js";
 import { t, tKey, translateMarketType } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -188,7 +189,7 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
           ) : filteredSymbols.length === 0 ? (
             <div className="sym-modal-empty">
               <span className="sym-modal-empty-icon">
-                {scope === "favorites" ? "⭐" : "🔍"}
+                <Icon name={scope === "favorites" ? "star" : "search"} size={28} />
               </span>
               <span>
                 {scope === "favorites" && favorites.length === 0
@@ -246,7 +247,7 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
                               <span
                                 key={watchlist.id}
                                 className="sym-modal-wl-dot"
-                                style={{ background: watchlist.color || "#3b82f6" }}
+                                style={{ background: watchlist.color || "var(--accent-blue)" }}
                                 title={t("search.inList", { name: watchlistDisplayName(watchlist) })}
                               />
                             ))}
@@ -319,7 +320,7 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
                   }}
                   disabled={alreadyIn}
                 >
-                  <span className="sym-ctx-dot" style={{ background: watchlist.color || "#3b82f6" }} />
+                  <span className="sym-ctx-dot" style={{ background: watchlist.color || "var(--accent-blue)" }} />
                   <span className="sym-ctx-name">{watchlistDisplayName(watchlist)}</span>
                   {alreadyIn ? (
                     <span className="sym-ctx-check">✓</span>

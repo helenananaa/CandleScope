@@ -32,7 +32,7 @@
 .strategy-dock .chart-strategy-tester-head { flex-basis: 40px; gap: 10px; padding-top: 0; background: var(--bg-primary); overflow-x: auto; }
 .strategy-dock .chart-strategy-result-metric { border: 0; border-right: 1px solid var(--border-color); border-radius: 0; background: transparent; }
 .strategy-dock .chart-strategy-result-metric span { font-size: 11px; }
-.strategy-dock .chart-strategy-result-metric small { font-size: 10px; }
+.strategy-dock .chart-strategy-result-metric small { font-size: var(--font-size-xs); }
 .strategy-dock :is(button, select):focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; }
 @media (max-width: 700px) {
   .strategy-dock-bar { gap: 4px; padding: 0 6px; }
@@ -46,8 +46,8 @@
 .strategy-trade-navigation span { min-width: 80px; text-align: center; font-variant-numeric: tabular-nums; }
 .native-table tr[data-selected="true"] { background: color-mix(in srgb, var(--accent-blue) 16%, transparent); outline: 1px solid var(--accent-blue); outline-offset: -1px; }
 .native-table tr:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; }
-.native-table .positive { color: #22c55e; }
-.native-table .negative { color: #fb7185; }
+.native-table .positive { color: var(--text-up); }
+.native-table .negative { color: var(--text-down); }
 .native-run-status { color: var(--text-secondary); font-size: 11px; white-space: nowrap; }
 
 .strategy-panel-slot { display: contents; }

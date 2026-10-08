@@ -271,11 +271,11 @@ export function useChartSettingsRuntime(): ChartSettingsRuntime {
     const root = document.documentElement;
     root.setAttribute("data-theme", resolvedTheme);
     if (settings.theme === "custom") {
-      root.style.setProperty("--bg-primary", settings.customBg);
-      root.style.setProperty("--bg-secondary", settings.customBg);
+      root.style.setProperty("--surface-0", settings.customBg);
+      root.style.setProperty("--surface-1", settings.customBg);
     } else {
-      root.style.removeProperty("--bg-primary");
-      root.style.removeProperty("--bg-secondary");
+      root.style.removeProperty("--surface-0");
+      root.style.removeProperty("--surface-1");
     }
     root.style.setProperty("--candle-up", settings.upColor);
     root.style.setProperty("--candle-down", settings.downColor);

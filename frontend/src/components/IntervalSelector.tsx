@@ -27,6 +27,11 @@ import type {
   NativeInterval,
 } from "../features/chart-session/chartSessionTypes.js";
 import { getEffectiveCustomIntervalRecords } from "../features/chart-session/intervalPolicy.js";
+import { quickSearchCharacter, searchKeyboardBlocked } from "../features/symbol-search/symbolSearchShortcut.js";
+import {
+  toggleFavoriteInterval,
+  useFavoriteIntervals,
+} from "../features/chart-session/intervalFavoritesStore.js";
 
 type IntervalTab = "common" | "custom" | "all";
 type IntervalStatusKind = "invalid" | "native" | "exists" | "new";
@@ -170,6 +175,12 @@ function createStatusForValue(
   return { ok: true, kind: "new", text: t("interval.willAdd", { desc: formatIntervalDescription(normalized) }, locale) };
 }
 
+/** A bare number means minutes, so "15" selects 15m and "240" selects 4h. */
+function searchIntervalValue(search: string): string {
+  const trimmed = search.trim();
+  return /^\d+$/.test(trimmed) ? `${trimmed}m` : search;
+}
+
 function chipTitle(
   item: IntervalItem,
   record: CustomIntervalRecord | undefined,
@@ -211,6 +222,12 @@ export interface IntervalSelectorProps {
   intervalAvailability?: (interval: IntervalString) => boolean;
   unavailableIntervalMessage?: (interval: IntervalString) => string;
   defaultOpen?: boolean;
+  /**
+   * "row" renders every native interval as its own toolbar row.
+   * "compact" renders only pinned intervals plus the active one, for
+   * placement inside the top bar; the picker can pin any interval.
+   */
+  variant?: "row" | "compact";
 }
 
 function IntervalSelector({
@@ -232,10 +249,13 @@ function IntervalSelector({
   intervalAvailability,
   unavailableIntervalMessage: unavailableIntervalMessageOverride,
   defaultOpen = false,
+  variant = "row",
 }: IntervalSelectorProps) {
   const locale = useLocale();
+  const compact = variant === "compact";
+  const favoriteIntervals = useFavoriteIntervals();
   const [open, setOpen] = useState(defaultOpen);
-  const [activeTab, setActiveTab] = useState<IntervalTab>("common");
+  const [activeTab, setActiveTab] = useState<IntervalTab>(variant === "compact" ? "all" : "common");
   const [search, setSearch] = useState("");
   const [amount, setAmount] = useState("45");
   const [unit, setUnit] = useState<IntervalUnit>("m");
@@ -278,6 +298,24 @@ function IntervalSelector({
     () => groupIntervalsByDuration(toolbarCustomRecords.map(buildItemFromRecord)),
     [toolbarCustomRecords],
   );
+  const favoriteSignatures = useMemo(
+    () => new Set(favoriteIntervals.map(intervalSemanticSignature)),
+    [favoriteIntervals],
+  );
+  const compactToolbarItems = useMemo((): IntervalItem[] => {
+    if (!compact) return [];
+    const natives = nativeIntervals
+      .filter((item) => (
+        favoriteSignatures.has(intervalSemanticSignature(item.value))
+        || intervalsSemanticallyEquivalent(item.value, interval)
+      ))
+      .map((item) => ({ ...item, isCustom: false }));
+    const customs = effectiveCustomRecords
+      .filter((record) => record.pinned || intervalsSemanticallyEquivalent(record.value, interval))
+      .map(buildItemFromRecord);
+    return dedupeItems([...natives, ...customs])
+      .sort((a, b) => (a.seconds || parseIntervalSeconds(a.value) || 0) - (b.seconds || parseIntervalSeconds(b.value) || 0));
+  }, [compact, effectiveCustomRecords, favoriteSignatures, interval, nativeIntervals]);
   const sortedCustomRecords = useMemo(
     () => sortCustomRecords(effectiveCustomRecords),
     [effectiveCustomRecords],
@@ -287,10 +325,10 @@ function IntervalSelector({
     [intervalGroups],
   );
 
-  const normalizedSearch = canonicalizeIntervalValue(search);
+  const normalizedSearch = canonicalizeIntervalValue(searchIntervalValue(search));
   const searchCreateStatus = useMemo(
     () => createStatusForValue(
-      search,
+      searchIntervalValue(search),
       nativeValueSet,
       customValueSet,
       nativeValues,
@@ -452,7 +490,12 @@ function IntervalSelector({
 
   useEffect(() => {
     if (!open) return;
-    const timer = setTimeout(() => searchInputRef.current?.focus(), 30);
+    const timer = setTimeout(() => {
+      const input = searchInputRef.current;
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    }, 30);
     return () => clearTimeout(timer);
   }, [open]);
 
@@ -466,6 +509,31 @@ function IntervalSelector({
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [open]);
+
+  // Typing a digit anywhere on the page opens the picker with that digit, like
+  // TradingView. Capture phase runs before the symbol-search letter shortcut.
+  useEffect(() => {
+    if (!compact || readOnlyReason !== null) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const character = quickSearchCharacter(event, searchKeyboardBlocked(
+        document, event, open ? panelRef.current : null,
+      ));
+      if (character === null || !/^[0-9]$/.test(character)) return;
+      if (open) {
+        // Keep keystrokes typed before the search input takes focus.
+        event.preventDefault();
+        setSearch((value) => value + character);
+        return;
+      }
+      event.preventDefault();
+      setActiveTab("all");
+      setSearch(character);
+      setHighlightIndex(0);
+      setOpen(true);
+    };
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [compact, open, readOnlyReason]);
 
   const closePanel = useCallback(() => {
     setOpen(false);
@@ -614,10 +682,18 @@ function IntervalSelector({
     const highlighted = index === clampedHighlightIndex;
     const available = isIntervalAvailable(item.value);
     const active = intervalsSemanticallyEquivalent(interval, item.value);
+    const pinned = item.isCustom
+      ? Boolean(record?.pinned)
+      : compact && favoriteSignatures.has(intervalSemanticSignature(item.value));
+    const pinOnly = compact && !(manage && item.isCustom);
+    const togglePinned = () => {
+      if (item.isCustom) onTogglePinCustomInterval(item.value);
+      else toggleFavoriteInterval(item.value);
+    };
     return (
       <div
         key={item.value}
-        className={clsx("interval-chip-wrap", manage && item.isCustom && "manage")}
+        className={clsx("interval-chip-wrap", manage && item.isCustom && "manage", pinOnly && "manage pin-only")}
       >
         <button
           type="button"
@@ -636,8 +712,22 @@ function IntervalSelector({
         >
           {item.isCustom && <span className="interval-custom-dot" />}
           {item.label || item.value}
-          {record?.pinned && <span className="interval-chip-star" aria-hidden="true">★</span>}
+          {pinned && <span className="interval-chip-star" aria-hidden="true">★</span>}
         </button>
+        {pinOnly && (
+          <div className="interval-chip-actions">
+            <button
+              type="button"
+              className={clsx("interval-chip-action", pinned && "active")}
+              onClick={togglePinned}
+              title={pinned ? t("interval.unpin", {}, locale) : t("interval.pin", {}, locale)}
+              aria-label={`${item.value} ${pinned ? t("interval.unpin", {}, locale) : t("interval.pin", {}, locale)}`}
+              aria-pressed={pinned}
+            >
+              {pinned ? "★" : "☆"}
+            </button>
+          </div>
+        )}
         {manage && item.isCustom && (
           <div className="interval-chip-actions">
             <button
@@ -671,8 +761,14 @@ function IntervalSelector({
       data-readonly={readOnlyReason === null ? "false" : "true"}
       title={readOnlyReason ?? undefined}
     >
-      <nav ref={toolbarRef} className="toolbar" id="toolbar" aria-label={t("interval.toolbar", {}, locale)}>
-        {nativeGroups.map((group, gi) => (
+      <nav ref={toolbarRef} className={clsx("toolbar", compact && "toolbar-compact")} id="toolbar" aria-label={t("interval.toolbar", {}, locale)}>
+        {compact && (
+          <div className="toolbar-group">
+            {compactToolbarItems.map((item) => renderIntervalButton(item))}
+          </div>
+        )}
+
+        {!compact && nativeGroups.map((group, gi) => (
           <div key={group.label} className="toolbar-group-wrap">
             {gi > 0 && <div className="toolbar-divider" />}
             <div className="toolbar-group">
@@ -681,7 +777,7 @@ function IntervalSelector({
           </div>
         ))}
 
-        {toolbarCustomGroups.length > 0 && (
+        {!compact && toolbarCustomGroups.length > 0 && (
           <>
             <div className="toolbar-divider" />
             <div className="toolbar-group custom-toolbar-group">
@@ -690,11 +786,11 @@ function IntervalSelector({
           </>
         )}
 
-        <div className="toolbar-divider" />
+        {!compact && <div className="toolbar-divider" />}
         <button
           ref={moreBtnRef}
           type="button"
-          className={clsx("interval-more-btn", open && "active")}
+          className={clsx("interval-more-btn ui-control", open && "active")}
           onClick={() => {
             if (open) {
               closePanel();
@@ -705,10 +801,11 @@ function IntervalSelector({
           disabled={readOnlyReason !== null}
           aria-expanded={open}
           aria-haspopup="dialog"
+          aria-label={compact ? t("interval.openPicker", {}, locale) : undefined}
           title={readOnlyReason ?? t("interval.openPicker", {}, locale)}
         >
-          <span className="interval-more-label">{t("interval.label", {}, locale)}</span>
-          <span className="interval-more-value">{interval}</span>
+          {!compact && <span className="interval-more-label">{t("interval.label", {}, locale)}</span>}
+          {!compact && <span className="interval-more-value">{interval}</span>}
           <span className="interval-more-caret">▾</span>
         </button>
       </nav>

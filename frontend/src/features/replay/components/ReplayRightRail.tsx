@@ -1,3 +1,4 @@
+import { describeError } from "../../../i18n/serverErrors.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { getNumberLocale, t } from "../../../i18n/index.js";
@@ -344,7 +345,7 @@ function commandErrorMessage(error: unknown): string {
     if (error.code === "RISK_LIMIT_EXCEEDED") return t("replay.paper.riskLimit", { message: error.message });
     if (error.code === "ORDER_REJECTED") return t("replay.paper.rejected", { message: error.message });
   }
-  return error instanceof Error ? error.message : t("replay.paper.submitFailed");
+  return error instanceof Error ? describeError(error, error.message) : t("replay.paper.submitFailed");
 }
 
 function useTradeNoticeAutoDismiss(

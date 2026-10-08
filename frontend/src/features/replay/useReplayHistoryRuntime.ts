@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import type { LoadMoreLeft } from "../market-data/useChartLoadMoreLeft.js";
@@ -342,7 +343,7 @@ export function useReplayHistoryRuntime(
       if (cause instanceof DOMException && cause.name === "AbortError") return;
       setHistoryState((current) => current.key === historyKey ? {
         ...current,
-        error: cause instanceof Error ? cause.message : t("replay.history.loadFailed"),
+        error: cause instanceof Error ? describeError(cause, cause.message) : t("replay.history.loadFailed"),
         hasMore: false,
         viewportTransferUnavailable: pendingViewportBeforeMs !== null,
       } : current);

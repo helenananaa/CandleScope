@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import { useEffect, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { nativeApi, nativeTerminal, type NativeRun } from "../backtest/native/nativeBacktestApi.js";
@@ -22,7 +23,7 @@ export default function PreparedNativeRun({ initial, onClose }: { initial: Nativ
         setRun(current);
         if (!nativeTerminal(current.state)) timer = setTimeout(() => void refresh(), 1000);
       } catch (cause) {
-        if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause));
+        if (!controller.signal.aborted) setError(cause instanceof Error ? describeError(cause, cause.message) : String(cause));
       }
     };
     void refresh();

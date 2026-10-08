@@ -103,7 +103,7 @@ export function NativeDrawingScene({ result }: { result: NativeResult }) {
               const span=drawingCellSpan(r,c,merges); if (span.hidden) return null;
               const cell=byCell.get(`${r}:${c}`) ?? {};
               return <td key={c} rowSpan={span.rowSpan} colSpan={span.colSpan} title={text(cell.tooltip)}
-                style={{color:color(cell.textcolor,"#e2e8f0"),background:color(cell.bgcolor,"transparent"),fontSize:size(cell.textsize),whiteSpace:"pre-wrap"}}>{text(cell.text)}</td>;
+                style={{color:color(cell.textcolor,"var(--text-primary)"),background:color(cell.bgcolor,"transparent"),fontSize:size(cell.textsize),whiteSpace:"pre-wrap"}}>{text(cell.text)}</td>;
             })}</tr>)}</tbody></table></div>;
         })}
       </div>;

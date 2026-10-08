@@ -4,9 +4,26 @@ import type { AlertNotificationMessage } from "./alertTypes.js";
 export const ALERT_RULE_STATE_CHANGED_EVENT = "candlescope:alert-rule-state-changed";
 export const ALERT_PANEL_OPEN_REQUEST_EVENT = "candlescope:alert-panel-open-request";
 
-export function requestAlertPanelOpen(): void {
+export interface AlertDraftRequest {
+  price: number;
+}
+
+let pendingAlertDraft: AlertDraftRequest | null = null;
+
+/**
+ * Opens the alert panel. With a draft, the panel starts a new alert from it;
+ * the draft waits here until the lazily loaded panel takes it.
+ */
+export function requestAlertPanelOpen(draft?: AlertDraftRequest): void {
   if (typeof window === "undefined") return;
+  pendingAlertDraft = draft && Number.isFinite(draft.price) ? { ...draft } : null;
   window.dispatchEvent(new Event(ALERT_PANEL_OPEN_REQUEST_EVENT));
+}
+
+export function takePendingAlertDraft(): AlertDraftRequest | null {
+  const draft = pendingAlertDraft;
+  pendingAlertDraft = null;
+  return draft;
 }
 
 export type AlertDeliveryReceiptStatus = "delivered" | "denied" | "unsupported" | "error";

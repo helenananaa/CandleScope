@@ -25,6 +25,9 @@ import {
 import { buildOrderBookRows } from "./orderBookRows.js";
 import type { DisplayOrderBookLevel } from "./orderBookRows.js";
 import { fixedRowWindow } from "./orderBookVirtualization.js";
+import { Button } from "../../components/ui/Button.js";
+import { EmptyState as SharedEmptyState } from "../../components/ui/EmptyState.js";
+import { Icon } from "../../components/icons/Icon.js";
 import {
   FULL_OUTPUT_LIMITS,
   FULL_PRICE_GROUPINGS,
@@ -123,7 +126,7 @@ const BookRow = React.memo(function BookRow({
   const width = maxCumulative > 0 ? Math.min(100, row.cumulative / maxCumulative * 100) : 0;
   return (
     <div className={`ob-level-row ob-${side}`} style={{ transform: `translateY(${offsetPx}px)` }}>
-      <span className="ob-depth-bar" style={{ width: `${width}%` }} aria-hidden="true" />
+      <span className={`ob-depth-bar${row.cumulativeIncomplete ? " ob-depth-bar-partial" : ""}`} style={{ width: `${width}%` }} aria-hidden="true" />
       <span className="ob-price" title={row.interval ? t(
         side === "bid" ? "orderBook.bidPriceRange" : "orderBook.askPriceRange",
         { min: formatPrice(row.interval[0]), max: formatPrice(row.interval[1]) },
@@ -259,14 +262,17 @@ function EmptyState({
 }) {
   const canRetry = status === "error" || status === "reconnecting" || status === "stale";
   return (
-    <div className={`ob-empty-state ob-empty-${status}`}>
-      <span className="ob-empty-glyph" aria-hidden="true">
-        {status === "stale" ? "↻" : status === "unsupported" ? "—" : "⋯"}
-      </span>
-      <strong>{orderBookStatusLabel(status)}</strong>
-      <span>{orderBookStatusDetail(status, message)}</span>
-      {canRetry && <button type="button" onClick={onRetry}>{t("orderBook.retry")}</button>}
-    </div>
+    <SharedEmptyState
+      compact
+      className={`ob-empty-state ob-empty-${status}`}
+      tone={status === "error" || status === "stale" ? "warning" : "accent"}
+      icon={status === "stale" || status === "reconnecting"
+        ? <Icon name="refresh" size={16} />
+        : status === "unsupported" ? <Icon name="ban" size={16} /> : "⋯"}
+      title={orderBookStatusLabel(status)}
+      description={orderBookStatusDetail(status, message)}
+      action={canRetry ? <Button size="sm" onClick={onRetry}>{t("orderBook.retry")}</Button> : null}
+    />
   );
 }
 
@@ -312,6 +318,17 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
     : Math.max(presentation.coverageBidMin, presentation.bids.at(-1)?.[0] ?? presentation.coverageBidMin);
   const coveredAsk = presentation?.coverageAskMax == null ? null
     : Math.min(presentation.coverageAskMax, presentation.asks.at(-1)?.[0] ?? presentation.coverageAskMax);
+  const coverageIncomplete = Boolean(
+    rows?.bids.some((row) => row.cumulativeIncomplete) || rows?.asks.some((row) => row.cumulativeIncomplete),
+  );
+  const coverageNote = presentation
+    ? [
+        presentation.coverageBidMin !== null && presentation.coverageAskMax !== null
+          ? t("orderBook.knownRange", { min: formatPrice(presentation.coverageBidMin), max: formatPrice(presentation.coverageAskMax) })
+          : t("orderBook.unknownRange"),
+        coverageIncomplete ? t("orderBook.partialAmount") : null,
+      ].filter(Boolean).join("\n")
+    : "";
   const symbol = view.identity.symbol.replace(/USDT$|USDC$/, "");
   const deliveryLabel = snapshotDeliveryLabel(view.preferences.mode, view.snapshotMode, snapshot.book?.source);
 
@@ -342,20 +359,17 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
         </span>
         <span
           className={`ob-status ob-status-${snapshot.status}`}
-          title={orderBookStatusDetail(snapshot.status, snapshot.message || snapshot.error || view.supportMessage)}
+          title={[
+            orderBookStatusDetail(snapshot.status, snapshot.message || snapshot.error || view.supportMessage),
+            snapshot.lastReceivedAtMs === null
+              ? null
+              : `${t("orderBook.lastReceived")} ${new Date(snapshot.lastReceivedAtMs).toLocaleString(getDateTimeLocale(), { hour12: false })}`,
+          ].filter(Boolean).join("\n")}
         >
           <span className="ob-status-dot" aria-hidden="true" />
           {orderBookStatusLabel(snapshot.status)}
         </span>
       </header>
-      {snapshot.lastReceivedAtMs !== null && (
-        <div className="ob-last-update">
-          {t("orderBook.lastReceived")} {" "}
-          <time dateTime={new Date(snapshot.lastReceivedAtMs).toISOString()}>
-            {new Date(snapshot.lastReceivedAtMs).toLocaleString(getDateTimeLocale(), { hour12: false })}
-          </time>
-        </div>
-      )}
 
       <>
           <div className="ob-controls">
@@ -458,15 +472,20 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
             {activeGrouping === "auto" && autoFrozen && <span>{t("orderBook.autoFrozen")}</span>}
           </div>
 
-          {presentation && <div className="ob-coverage-note" title={t("orderBook.partialAmount")}>
-            {presentation.coverageBidMin !== null && presentation.coverageAskMax !== null
-              ? t("orderBook.knownRange", { min: formatPrice(presentation.coverageBidMin), max: formatPrice(presentation.coverageAskMax) })
-              : t("orderBook.unknownRange")}
-            {(rows?.bids.some(row => row.cumulativeIncomplete) || rows?.asks.some(row => row.cumulativeIncomplete)) && <div className="ob-incomplete-note">{t("orderBook.partialAmount")}</div>}
-          </div>}
-          <div className="ob-column-header" aria-hidden="true">
+          <div className="ob-column-header">
             <span>
               {t("orderBook.price")}{presentation?.priceStep ? ` · ${formatPrice(presentation.priceStep)}` : ""}
+              {coverageNote && (
+                <span
+                  className={`ob-coverage-info${coverageIncomplete ? " is-partial" : ""}`}
+                  role="img"
+                  tabIndex={0}
+                  title={coverageNote}
+                  aria-label={coverageNote}
+                >
+                  <Icon name="info" size={12} />
+                </span>
+              )}
             </span>
             <span>{t("orderBook.qty")}</span>
             <span>{t("orderBook.cumulative")}</span>

@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "../../services/api.js";
 import { fetchSymbolDiscovery, type DiscoveryQuery, type DiscoveryResult } from "./symbolDiscoveryApi.js";
@@ -35,7 +36,7 @@ export function useSymbolDiscovery(query: DiscoveryQuery, open: boolean) {
       }).catch((error: unknown) => {
         if (!abort.signal.aborted) setState((previous) => ({ key,
           result: previous.key === key ? previous.result : null, loading: false,
-          error: error instanceof Error ? error.message : String(error) }));
+          error: error instanceof Error ? describeError(error, error.message) : String(error) }));
       });
     }, query.search ? 250 : 0);
     return () => { clearTimeout(timer); abort.abort(); controller.current?.abort(); };
@@ -64,7 +65,7 @@ export function useSymbolDiscovery(query: DiscoveryQuery, open: boolean) {
     } catch (error) {
       if (abort.signal.aborted || active.current !== key) return;
       if (error instanceof ApiError && error.status === 409) { setEpoch((value) => value + 1); return; }
-      setState((previous) => ({ ...previous, loading: false, error: error instanceof Error ? error.message : String(error) }));
+      setState((previous) => ({ ...previous, loading: false, error: error instanceof Error ? describeError(error, error.message) : String(error) }));
     }
   }, [key, result, stale, state.loading]);
   return {

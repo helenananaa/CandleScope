@@ -1,5 +1,5 @@
 .plugin-trust-install-card {
-  border-color: color-mix(in srgb, #f59e0b 42%, var(--border-color, #263142));
+  border-color: color-mix(in srgb, var(--color-warning) 42%, var(--border-color));
 }
 
 .plugin-trust-review,
@@ -9,9 +9,9 @@
   gap: 12px;
   margin-top: 14px;
   padding: 14px;
-  border: 1px solid color-mix(in srgb, #f59e0b 30%, var(--border-color, #263142));
+  border: 1px solid color-mix(in srgb, var(--color-warning) 30%, var(--border-color));
   border-radius: 10px;
-  background: color-mix(in srgb, #111827 94%, #f59e0b 6%);
+  background: color-mix(in srgb, var(--surface-1) 94%, var(--color-warning) 6%);
 }
 
 .plugin-trust-source,
@@ -24,16 +24,16 @@
 .plugin-trust-source code,
 .plugin-trust-runtime code {
   overflow-wrap: anywhere;
-  color: #a5b4fc;
+  color: var(--text-accent);
   font-size: 11px;
 }
 
 .plugin-trust-warning {
   margin: 0;
   padding: 10px 12px;
-  border-left: 3px solid #f59e0b;
-  background: rgb(245 158 11 / 10%);
-  color: #fde68a;
+  border-left: 3px solid var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+  color: var(--text-warning);
 }
 
 .plugin-trust-risk-grid,
@@ -48,13 +48,13 @@
   display: grid;
   gap: 4px;
   padding: 9px 10px;
-  border: 1px solid var(--border-color, #263142);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
-  background: rgb(15 23 42 / 60%);
+  background: color-mix(in srgb, var(--surface-0) 60%, transparent);
 }
 
 .plugin-trust-risk-grid > div[data-requested="true"] {
-  border-color: rgb(245 158 11 / 55%);
+  border-color: color-mix(in srgb, var(--color-warning) 55%, transparent);
 }
 
 .plugin-trust-risk-grid span,
@@ -63,7 +63,7 @@
 .plugin-trust-runtime span,
 .plugin-trust-runtime small {
   overflow-wrap: anywhere;
-  color: var(--text-secondary, #a8b0bf);
+  color: var(--text-secondary);
 }
 
 .plugin-trust-reason {
@@ -75,10 +75,10 @@
   min-height: 74px;
   resize: vertical;
   padding: 9px 10px;
-  border: 1px solid var(--border-color, #263142);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
-  background: var(--surface-raised, #111827);
-  color: var(--text-primary, #f4f7fb);
+  background: var(--surface-2);
+  color: var(--text-primary);
 }
 
 .plugin-trust-acknowledgements {
@@ -86,7 +86,7 @@
   gap: 8px;
   margin: 0;
   padding: 12px;
-  border: 1px solid var(--border-color, #263142);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
 }
 
@@ -98,13 +98,13 @@
 }
 
 .plugin-trust-confirmations .is-danger {
-  border-color: #ef4444;
-  color: #fecaca;
+  border-color: var(--color-danger);
+  color: var(--text-danger);
 }
 
 .plugin-state-pill.is-warn {
-  border-color: rgb(245 158 11 / 45%);
-  color: #fbbf24;
+  border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
+  color: var(--text-warning);
 }
 
 @media (max-width: 720px) {

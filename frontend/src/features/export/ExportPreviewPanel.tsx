@@ -1,4 +1,5 @@
 import { memo, useMemo, useState } from "react";
+import { Icon } from "../../components/icons/Icon.js";
 import { getDateTimeLocale, t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import type { CSSProperties } from "react";
@@ -132,7 +133,7 @@ const ExportPreviewPanel = memo(function ExportPreviewPanel({
 
         {!hasPreview && loading && (
           <div className="export-preview-skeleton">
-            <div className="export-preview-skeleton-icon">📸</div>
+            <div className="export-preview-skeleton-icon" aria-hidden="true"><Icon name="camera" size={28} /></div>
             <div>{t("export.firstPreview")}</div>
           </div>
         )}

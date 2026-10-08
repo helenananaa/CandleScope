@@ -1,3 +1,4 @@
+import { describeError } from "../../../i18n/serverErrors.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChartSession } from "../../chart-session/chartSessionTypes.js";
 import { t } from "../../../i18n/index.js";
@@ -66,7 +67,7 @@ async function loadRunBundle(
 }
 
 function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return error instanceof Error ? describeError(error, error.message) : String(error);
 }
 
 async function loadHostRuntimeMode(signal: AbortSignal): Promise<"LIVE" | "LOCAL_OFFLINE" | null> {

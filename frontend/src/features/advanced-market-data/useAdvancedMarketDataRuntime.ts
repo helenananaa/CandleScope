@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import {
   useCallback,
   useEffect,
@@ -615,7 +616,7 @@ export function useAdvancedMarketDataRuntime({
               historyContextKey: expectedHistoryContextKey,
               errors: {
                 ...errors,
-                [descriptor.channel]: error instanceof Error ? error.message : String(error),
+                [descriptor.channel]: error instanceof Error ? describeError(error, error.message) : String(error),
               },
             };
           });
@@ -701,7 +702,7 @@ export function useAdvancedMarketDataRuntime({
           console.warn("Advanced market stream error:", error);
           setStreamErrorState({
             identityKey,
-            error: error instanceof Error ? error.message : String(error),
+            error: error instanceof Error ? describeError(error, error.message) : String(error),
           });
         }
       },

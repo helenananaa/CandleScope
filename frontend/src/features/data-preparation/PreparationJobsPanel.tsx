@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import { replayPreparationActivity, replayPreparationCompleted } from "./preparationActivity.js";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
@@ -62,7 +63,7 @@ export default function PreparationJobsPanel({ summary = false, onReady }: {
     try {
       const updated = await preparationRequest<PreparationJob>(`/${job.id}/${command}`, { method: "POST" });
       if (command !== "release-cache") setJobs((current) => current.map((item) => item.id === job.id ? updated : item));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    } catch (cause) { setError(cause instanceof Error ? describeError(cause, cause.message) : String(cause)); }
   };
   const cacheAction = async (command: "cleanup" | "settings", prefetch = cache?.prefetch_enabled ?? false, saveBudget = false) => {
     if (!cache || busy) return;
@@ -75,7 +76,7 @@ export default function PreparationJobsPanel({ summary = false, onReady }: {
       });
       setCache(await preparationRequest<CacheInventory>("/cache"));
       if (saveBudget) setBudgetMiB(null);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    } catch (cause) { setError(cause instanceof Error ? describeError(cause, cause.message) : String(cause)); }
     finally { setBusy(false); }
   };
   const { pending, failed } = replayPreparationActivity(jobs);

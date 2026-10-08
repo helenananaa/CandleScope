@@ -71,18 +71,18 @@ function StatusBar({ status, extensions }: StatusBarProps) {
           {t("status.klineScope")} {connectionLabel(status)}
         </span>
         <span data-live-bar-count={barCount}>{tPlural("status.barCount", barCount)}</span>
-        {loadingMoreLeft && <span style={{ color: "#3b82f6" }}>{t("status.loadingOlder")}</span>}
-        {!hasMoreLeft && !loadingMoreLeft && <span style={{ color: "#94a3b8" }}>{t("status.noMoreHistory")}</span>}
+        {loadingMoreLeft && <span style={{ color: "var(--text-accent)" }}>{t("status.loadingOlder")}</span>}
+        {!hasMoreLeft && !loadingMoreLeft && <span style={{ color: "var(--text-muted)" }}>{t("status.noMoreHistory")}</span>}
         {dataSource === "mock" && (
-          <span style={{ color: "#f59e0b" }}>
+          <span style={{ color: "var(--text-warning)" }}>
             {t("status.mockUnavailable", { exchange: exchangeLabel })}
           </span>
         )}
         {exchangeCatalogStatus === "fallback" && (
-          <span style={{ color: "#f59e0b" }}>{t("status.exchangeCapabilitiesFallback")}</span>
+          <span style={{ color: "var(--text-warning)" }}>{t("status.exchangeCapabilitiesFallback")}</span>
         )}
         {exchangeLimitations.length > 0 && (
-          <span title={exchangeLimitations.join(" | ")} style={{ color: "#94a3b8" }}>
+          <span title={exchangeLimitations.join(" | ")} style={{ color: "var(--text-muted)" }}>
             {tPlural("status.exchangeLimitationCount", exchangeLimitations.length)}
           </span>
         )}

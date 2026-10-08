@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import { useEffect, useMemo, useState } from "react";
 import { useLocale } from "../../i18n/useLocale.js";
 import {
@@ -163,7 +164,7 @@ export function ManualHistoryDownloadPanel({
       });
       setPlan(next);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(reason instanceof Error ? describeError(reason, reason.message) : String(reason));
     }
   }
 
@@ -185,7 +186,7 @@ export function ManualHistoryDownloadPanel({
       setJob(nextJob);
       setRecentJobs((current) => [nextJob, ...current]);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(reason instanceof Error ? describeError(reason, reason.message) : String(reason));
     }
   }
 
@@ -197,7 +198,7 @@ export function ManualHistoryDownloadPanel({
       const nextJob = (next.job || next) as Record<string, unknown>;
       setJob(nextJob);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(reason instanceof Error ? describeError(reason, reason.message) : String(reason));
     }
   }
 
@@ -212,7 +213,7 @@ export function ManualHistoryDownloadPanel({
       }) }));
     } catch (reason) {
       setArchiveResult((current) => ({ ...current, [id]: text("archiveFailed", {
-        reason: reason instanceof Error ? reason.message : String(reason),
+        reason: reason instanceof Error ? describeError(reason, reason.message) : String(reason),
       }) }));
     } finally {
       setArchivingJob("");
@@ -246,7 +247,7 @@ export function ManualHistoryDownloadPanel({
           : item
       )));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(reason instanceof Error ? describeError(reason, reason.message) : String(reason));
     }
   }
 

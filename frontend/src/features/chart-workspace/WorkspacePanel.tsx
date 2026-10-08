@@ -1,4 +1,5 @@
 import { shortcutModifier } from "../../shared/shortcutModifier.js";
+import { Icon } from "../../components/icons/Icon.js";
 import {
   useEffect,
   useState,
@@ -22,7 +23,7 @@ import {
   chartLinkGroupDepth,
   isChartLinkGroupDescendant,
 } from "./chartWorkspaceLinkModel.js";
-import { chartLinkGroupDisplayName } from "./chartWorkspaceI18n.js";
+import { chartLinkGroupDisplayName, chartWorkspaceLayoutLabel } from "./chartWorkspaceI18n.js";
 import type { ChartLinkGroupSettingsPatch } from "./chartWorkspaceLinkModel.js";
 import type { ChartWorkspacePersistenceMode } from "./chartWorkspaceRepository.js";
 import {
@@ -69,20 +70,6 @@ const TEMPLATE_OPTIONS: ReadonlyArray<{
   { id: "grid-12", labelKey: "workspace.template.grid12", descriptionKey: "workspace.template.grid12Desc", glyph: "3×4" },
   { id: "grid-16", labelKey: "workspace.template.grid16", descriptionKey: "workspace.template.grid16Desc", glyph: "4×4" },
 ];
-
-const LAYOUT_LABELS: Record<ChartWorkspaceSummary["layout"], MessageKey> = {
-  single: "workspace.template.single",
-  "split-vertical": "workspace.template.splitVertical",
-  "split-horizontal": "workspace.template.splitHorizontal",
-  "main-confirmation": "workspace.template.mainConfirm",
-  quad: "workspace.template.quad",
-  "grid-6": "workspace.template.grid6",
-  "grid-8": "workspace.template.grid8",
-  "grid-9": "workspace.template.grid9",
-  "grid-12": "workspace.template.grid12",
-  "grid-16": "workspace.template.grid16",
-  custom: "workspace.layout.custom",
-};
 
 const LINK_SETTING_OPTIONS: ReadonlyArray<{
   key: Exclude<keyof ChartLinkGroupSettings, "indicators">;
@@ -414,7 +401,7 @@ export default function WorkspacePanel({
                       </span>
                       <span>
                         <strong>{workspace.name}</strong>
-                        <small>{t(LAYOUT_LABELS[workspace.layout])}</small>
+                        <small>{chartWorkspaceLayoutLabel(workspace.layout)}</small>
                       </span>
                     </button>
                   ))}
@@ -595,7 +582,7 @@ export default function WorkspacePanel({
                     aria-pressed={view.layoutLocked}
                     onClick={() => actions.setLayoutLocked(!view.layoutLocked)}
                   >
-                    <span aria-hidden="true">{view.layoutLocked ? "🔒" : "🔓"}</span>
+                    <span aria-hidden="true" style={{ display: "inline-flex" }}><Icon name={view.layoutLocked ? "lock" : "unlock"} size={14} /></span>
                     {view.layoutLocked ? t("workspace.unlock") : t("workspace.lock")}
                   </button>
                 </div>

@@ -209,7 +209,9 @@ test("timeout aborts the active callback, restores presentation, and unlocks", a
     observedSignal = context.signal;
     return originalAwaitScene(context);
   };
-  const barrier = createDrawingExportBarrier(harness.dependencies, { defaultTimeoutMs: 20 });
+  // The timeout must outlast the stages before the scene wait even when the full
+  // suite runs files in parallel; 20ms occasionally fired before awaitExactScene.
+  const barrier = createDrawingExportBarrier(harness.dependencies, { defaultTimeoutMs: 250 });
 
   await assert.rejects(
     barrier.prepare(),

@@ -1,3 +1,4 @@
+import { describeError } from "../../i18n/serverErrors.js";
 import { useEffect, useMemo, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -488,7 +489,7 @@ export function LocalTrustInstallPanel({ runtime, onPendingChange }: { runtime: 
     setReason("");
     setAccepted(new Set());
     setReview(null);
-    try { setCandidate(await runtime.actions.prepareLocalInstall(file)); } catch (error) { setInstallError(error instanceof Error ? error.message : String(error)); }
+    try { setCandidate(await runtime.actions.prepareLocalInstall(file)); } catch (error) { setInstallError(error instanceof Error ? describeError(error, error.message) : String(error)); }
     finally { setBusy(null); }
   };
   const required = candidate?.preview.requiredAcknowledgements ?? [];
@@ -504,7 +505,7 @@ export function LocalTrustInstallPanel({ runtime, onPendingChange }: { runtime: 
         reason.trim(),
         [...accepted].sort(),
       ));
-    } catch (error) { setReview(null); setInstallError(error instanceof Error ? error.message : String(error)); }
+    } catch (error) { setReview(null); setInstallError(error instanceof Error ? describeError(error, error.message) : String(error)); }
     finally { setBusy(null); }
   };
   const secondConfirmation = async () => {
@@ -522,7 +523,7 @@ export function LocalTrustInstallPanel({ runtime, onPendingChange }: { runtime: 
       setReview(null);
       setAccepted(new Set());
       setReason("");
-    } catch (error) { setReview(null); setInstallError(error instanceof Error ? error.message : String(error)); }
+    } catch (error) { setReview(null); setInstallError(error instanceof Error ? describeError(error, error.message) : String(error)); }
     finally { setBusy(null); }
   };
 

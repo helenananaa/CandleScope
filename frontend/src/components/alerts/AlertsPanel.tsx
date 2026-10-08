@@ -31,8 +31,10 @@ import {
   labelForSource,
 } from "../../features/alerts/alertRuleModel";
 import {
+  ALERT_PANEL_OPEN_REQUEST_EVENT,
   ALERT_RULE_STATE_CHANGED_EVENT,
   primeAlertSound,
+  takePendingAlertDraft,
   requestBrowserAlertPermission,
 } from "../../features/alerts/alertDeliveryClient.js";
 import { parseSymbolKey } from "../../utils/symbolKey";
@@ -800,7 +802,7 @@ function RuleListCard({ title, symbol, summary, status, expiry, channels, enable
   return (
     <div className="alert-rule-card detailed">
       <div className="alert-rule-main">
-        <span className="alert-rule-icon">🔔</span>
+        <span className="alert-rule-icon" aria-hidden="true" />
         <div className="alert-rule-copy">
           <div className="alert-rule-title">{title}</div>
           <div className="alert-rule-desc">{symbol} · {summary}</div>
@@ -968,7 +970,7 @@ export default function AlertsPanel({
         exchange: target.exchange || "binance",
         key,
         listNames: [t("alert.existingRules", {}, locale)],
-        color: "#64748b",
+        color: "var(--text-muted)",
       });
     }
 
@@ -1100,6 +1102,27 @@ export default function AlertsPanel({
     setTestResult(null);
     setTab("add");
   }, [currentSymbol, displayPrice, effectiveInterval, selectedProduct]);
+
+  // "Add alert at price" from the chart: start a fresh draft at that price.
+  useEffect(() => {
+    const applyPendingDraft = () => {
+      const request = takePendingAlertDraft();
+      if (!request) return;
+      setEditingRuleId("");
+      setDraft(createDefaultAlertDraft({
+        ...((selectedProduct?.symbol || currentSymbol) === undefined
+          ? {}
+          : { symbol: selectedProduct?.symbol || currentSymbol }),
+        interval: effectiveInterval,
+        price: request.price,
+      }));
+      setTestResult(null);
+      setTab("add");
+    };
+    applyPendingDraft();
+    window.addEventListener(ALERT_PANEL_OPEN_REQUEST_EVENT, applyPendingDraft);
+    return () => window.removeEventListener(ALERT_PANEL_OPEN_REQUEST_EVENT, applyPendingDraft);
+  }, [currentSymbol, effectiveInterval, selectedProduct]);
 
   const applyExpressionAction = useCallback((action: AlertExpressionDraftAction) => {
     setDraft((prev) => ({
