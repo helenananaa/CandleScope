@@ -13,7 +13,7 @@ import pytest
 
 from scripts.build_bundle import (
     CANDIDATE_LOCK_PATH,
-    DEFAULT_LOCK_PATH,
+    DEFAULT_LOCK_PATH as CURRENT_LOCK_PATH,
     ReleaseLockError,
     build_locked_bundle,
     collect_locked_wheels,
@@ -22,6 +22,8 @@ from scripts.build_bundle import (
     main,
 )
 
+
+DEFAULT_LOCK_PATH = CURRENT_LOCK_PATH.with_name("release-lock.0.2.0.json")
 
 def _zip_info(name: str) -> zipfile.ZipInfo:
     info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
@@ -83,10 +85,11 @@ def _wheelhouse(tmp_path: Path) -> tuple[Path, ...]:
 def _candidate_wheelhouse(tmp_path: Path) -> tuple[Path, ...]:
     tmp_path.mkdir(parents=True, exist_ok=True)
     return (
-        _fake_wheel(tmp_path, "candlescope-plugin-pyne", "0.3.0.dev1"),
+        _fake_wheel(tmp_path, "candlescope-plugin-pyne", "0.3.0"),
         _fake_wheel(tmp_path, "candlescope-plugin-sdk", "0.2.0"),
-        _fake_wheel(tmp_path, "pyne-runtime", "0.4.0"),
+        _fake_wheel(tmp_path, "pyne-runtime", "0.4.1"),
         _fake_wheel(tmp_path, "numpy", "2.3.3"),
+        _fake_wheel(tmp_path, "tzdata", "2026.2"),
     )
 
 
@@ -108,7 +111,7 @@ def test_default_lock_rejects_a_same_version_but_different_pyne_wheel(
     wheels = _wheelhouse(tmp_path)
 
     with pytest.raises(ReleaseLockError, match="pinned GitHub Release artifact"):
-        collect_locked_wheels(wheels, load_release_lock())
+        collect_locked_wheels(wheels, load_release_lock(DEFAULT_LOCK_PATH))
 
 
 def test_builder_generates_audited_platform_bundle_from_one_locked_wheel_set(
@@ -141,22 +144,25 @@ def test_builder_generates_audited_platform_bundle_from_one_locked_wheel_set(
 def test_builder_accepts_the_explicit_local_candidate_lock(tmp_path: Path) -> None:
     wheels = _candidate_wheelhouse(tmp_path / "wheelhouse")
     lock = json.loads(CANDIDATE_LOCK_PATH.read_text(encoding="utf-8"))
-    lock["wheels"]["pyne-runtime"]["sha256"] = inspect_wheel(wheels[2]).sha256
+    for wheel in wheels:
+        record = inspect_wheel(wheel)
+        lock["wheels"][record.package]["sha256"] = record.sha256
     lock_path = tmp_path / "release-lock.candidate.json"
     lock_path.write_text(json.dumps(lock, indent=2), encoding="utf-8")
 
     bundle = build_locked_bundle(
         wheels,
-        tmp_path / "candlescope-pyne-0.3.0.dev1.cspkg",
+        tmp_path / "candlescope-pyne-0.3.0.cspkg",
         lock_path=lock_path,
     )
 
-    assert bundle.manifest.version == "0.3.0.dev1"
+    assert bundle.manifest.version == "0.3.0"
     assert [wheel.version for wheel in bundle.manifest.wheels] == [
-        "0.3.0.dev1",
+        "0.3.0",
         "0.2.0",
-        "0.4.0",
+        "0.4.1",
         "2.3.3",
+        "2026.2",
     ]
 
 
@@ -169,7 +175,7 @@ def test_cli_reports_lock_failures_without_a_traceback(
     argv: list[str] = []
     for wheel in wheels:
         argv.extend(("--wheel", str(wheel)))
-    argv.extend(("--output", str(output), "--json"))
+    argv.extend(("--lock", str(DEFAULT_LOCK_PATH), "--output", str(output), "--json"))
 
     assert main(argv) == 1
     captured = capsys.readouterr()
@@ -179,3 +185,25 @@ def test_cli_reports_lock_failures_without_a_traceback(
     assert payload["error"]["code"] == "PYNE_BUNDLE_BUILD_FAILED"
     assert "pinned GitHub Release artifact" in payload["error"]["message"]
     assert not output.exists()
+
+
+def test_stable_bundle_requires_timezone_data_and_pins_its_content(tmp_path: Path) -> None:
+    wheels = _candidate_wheelhouse(tmp_path / "wheels")
+    lock = json.loads(CANDIDATE_LOCK_PATH.read_text(encoding="utf-8"))
+    for wheel in wheels:
+        record = inspect_wheel(wheel)
+        lock["wheels"][record.package]["sha256"] = record.sha256
+    with pytest.raises(ReleaseLockError, match="missing=.*tzdata"):
+        collect_locked_wheels(wheels[:-1], lock)
+    lock["wheels"]["tzdata"]["sha256"] = "sha256:" + "0" * 64
+    with pytest.raises(ReleaseLockError, match="tzdata wheel SHA-256"):
+        collect_locked_wheels(wheels, lock)
+
+
+def test_malformed_engine_record_is_a_lock_error(tmp_path: Path) -> None:
+    lock = json.loads(CANDIDATE_LOCK_PATH.read_text(encoding="utf-8"))
+    lock["wheels"]["pyne-runtime"] = []
+    path = tmp_path / "invalid.json"
+    path.write_text(json.dumps(lock), encoding="utf-8")
+    with pytest.raises(ReleaseLockError, match="wheel 'pyne-runtime' is invalid"):
+        load_release_lock(path)

@@ -76,7 +76,7 @@ def test_direct_strategy_execution_uses_explicit_safe_policy(monkeypatch):
     monkeypatch.setattr(pyne_runtime, "execute_pyne_script", execute)
     provider = PyneStrategyProvider()
     provider.prepare({"source": SMA_CROSS_SOURCE})
-    assert provider.identity()["expectedEngineVersion"] == "0.4.0"
+    assert provider.identity()["expectedEngineVersion"] == "0.4.1"
     provider._run_engine()
     assert observed[0].security_mode == "safe"
     assert observed[0].max_bars == 50_000

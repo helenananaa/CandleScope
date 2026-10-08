@@ -32,7 +32,7 @@ def test_package_metadata_pins_only_public_runtime_contracts() -> None:
     assert project["requires-python"] == ">=3.11,<3.14"
     assert project["dependencies"] == [
         "candlescope-plugin-sdk==0.2.0",
-        "pyne-runtime==0.4.0",
+        "pyne-runtime==0.4.1",
     ]
     assert project["scripts"]["candlescope-pyne-runtime"].endswith(":main")
 
@@ -53,7 +53,7 @@ def test_bridge_never_imports_candlescope_private_packages_or_vendored_engines()
 
 
 def test_release_lock_tracks_the_exact_external_engine_artifact() -> None:
-    lock = json.loads((ROOT / "release" / "release-lock.json").read_text(encoding="utf-8"))
+    lock = json.loads((ROOT / "release" / "release-lock.0.2.0.json").read_text(encoding="utf-8"))
 
     assert lock["schemaVersion"] == 1
     assert lock["plugin"] == {
@@ -77,13 +77,25 @@ def test_candidate_lock_is_local_and_does_not_rewrite_the_published_lock() -> No
     )
 
     assert candidate["releaseStatus"] == "local-candidate"
-    assert candidate["plugin"]["version"] == "0.3.0.dev1"
+    assert candidate["plugin"]["version"] == "0.3.0"
     pyne = candidate["wheels"]["pyne-runtime"]
-    assert pyne == {
-        "version": "0.4.0",
+    assert {key: pyne[key] for key in (
+        "version", "source", "artifactFilename", "releaseUrl", "sha256",
+    )} == {
+        "version": "0.4.1",
         "source": "github-release",
-        "artifactFilename": "pyne_runtime-0.4.0-py3-none-any.whl",
-        "releaseUrl": "https://github.com/helenananaa/pyne-runtime/releases/download/v0.4.0/"
-        "pyne_runtime-0.4.0-py3-none-any.whl",
-        "sha256": "sha256:8cd1759ab0e3f77fd635e0e0f38d29a2da28913bb8165888e89788213b32a6c7",
+        "artifactFilename": "pyne_runtime-0.4.1-py3-none-any.whl",
+        "releaseUrl": "https://github.com/helenananaa/pyne-runtime/releases/download/v0.4.1/"
+        "pyne_runtime-0.4.1-py3-none-any.whl",
+        "sha256": "sha256:b080536dc9e371eaf161f01e5a3103c7c8c58f3d418ca87a933ac3364bce636a",
     }
+
+
+def test_current_release_lock_matches_the_adapter_and_offline_dependencies() -> None:
+    lock = json.loads((ROOT / "release/release-lock.json").read_text(encoding="utf-8"))
+    assert lock["plugin"]["version"] == candlescope_plugin_pyne.__version__
+    assert lock["wheels"]["pyne-runtime"]["version"] == "0.4.1"
+    assert tuple(lock["wheels"]) == (
+        "candlescope-plugin-pyne", "candlescope-plugin-sdk", "pyne-runtime", "numpy", "tzdata",
+    )
+    assert all(record["sha256"].startswith("sha256:") for record in lock["wheels"].values())

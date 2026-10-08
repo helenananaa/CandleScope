@@ -19,7 +19,7 @@ from candlescope_plugin_pine_compat import runtime as runtime_module
 
 def _analysis(*features: str) -> dict[str, Any]:
     return {
-        "schemaVersion": 5,
+        "schemaVersion": 6,
         "languageVersion": 5,
         "languageVersionOrigin": "explicit",
         "dialect": "v5",
@@ -39,7 +39,7 @@ def _analysis(*features: str) -> dict[str, Any]:
 
 def _output(**updates: Any) -> dict[str, Any]:
     value = {
-        "schemaVersion": 8,
+        "schemaVersion": 9,
         "renderMetadataVersion": 1,
         "plots": [{"id": 2, "values": [None, 2.0, 3.0]}],
         "plotChars": [],
@@ -65,11 +65,11 @@ def _output(**updates: Any) -> dict[str, Any]:
 
 
 class FakeEngine:
-    ANALYSIS_SCHEMA_VERSION = 5
-    RUNTIME_SCHEMA_VERSION = 8
+    ANALYSIS_SCHEMA_VERSION = 6
+    RUNTIME_SCHEMA_VERSION = 9
     RENDER_METADATA_VERSION = 1
     REALTIME_SESSION_SCHEMA_VERSION = 1
-    RUNTIME_CHANGES_SCHEMA_VERSION = 3
+    RUNTIME_CHANGES_SCHEMA_VERSION = 4
 
     def create_realtime_session(self, *args, **kwargs):
         raise AssertionError("fake batch engine must not receive session work")
@@ -108,7 +108,7 @@ def _bars(*, closed: bool = True) -> tuple[Bar, ...]:
 
 def _install_fake(monkeypatch: pytest.MonkeyPatch, engine: FakeEngine) -> None:
     monkeypatch.setattr(runtime_module, "_load_engine", lambda: engine)
-    monkeypatch.setattr(runtime_module, "_engine_version", lambda: "0.3.0rc1")
+    monkeypatch.setattr(runtime_module, "_engine_version", lambda: "0.3.1")
 
 
 def test_descriptor_advertises_pine_without_source_snapshot(

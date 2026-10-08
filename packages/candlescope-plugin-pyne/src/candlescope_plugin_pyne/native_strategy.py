@@ -1,6 +1,6 @@
 """Full native Pyne reports; no signal extraction or host rematching.
 
-Pyne 0.4.0 has public equity accessors but no batch report equity array. The
+Pyne 0.4.1 has public equity accessors but no batch report equity array. The
 version-pinned observer below reads those accessors without modifying source,
 orders or execution order. Keep this seam covered by native parity tests.
 """
@@ -16,8 +16,8 @@ from .host_policy import host_settings
 
 def describe():
     result = identity("candlescope-plugin-pyne", "pyne-runtime", adapter="pyne-native/1")
-    if result["engine"]["version"] != "0.4.0":
-        raise ValueError("NATIVE_VERSION_UNSUPPORTED: Pyne observer requires 0.4.0")
+    if result["engine"]["version"] != "0.4.1":
+        raise ValueError("NATIVE_VERSION_UNSUPPORTED: Pyne observer requires 0.4.1")
     result["historical_session"] = "fixed-history/1"
     return result
 
@@ -96,7 +96,7 @@ def pack(result, equity, declared):
             "graphics": result.lines, "parameter_schema": result.param_schema,
             "diagnostics": [*result.meta.get("requestDiagnostics", []), *([] if strategy else [{
                 "severity": "warning", "code": "PYNE_EMPTY_NATIVE_REPORT",
-                "message": "Pyne 0.4.0 emitted no strategy report for this no-order run; equity is its unmodified native series."}])]}
+                "message": "Pyne 0.4.1 emitted no strategy report for this no-order run; equity is its unmodified native series."}])]}
 
 
 if __name__ == "__main__":

@@ -30,7 +30,8 @@ plot(close, "Close")
 
 def plugin(language):
     package = "pine_compat" if language == "pine" else "pyne"
-    return {"command": [PYTHON, "-I", "-m", f"candlescope_plugin_{package}.native_strategy"],
+    python = os.environ.get(f"NATIVE_TEST_{language.upper()}_PYTHON", PYTHON)
+    return {"command": [python, "-I", "-m", f"candlescope_plugin_{package}.native_strategy"],
             "plugin_id": "candlescope.pine-compat" if language == "pine" else "candlescope.pyne"}
 
 
@@ -144,7 +145,7 @@ result=pn.run(r["source"],r["bars"],settings=settings)
 assert result.ok, result.error
 print(json.dumps(result.output))
 '''
-    direct = subprocess.run([PYTHON, "-I", "-c", code], input=json.dumps({"source": source, "bars": BARS}),
+    direct = subprocess.run([plugin("pyne")["command"][0], "-I", "-c", code], input=json.dumps({"source": source, "bars": BARS}),
                             text=True, encoding="utf-8", capture_output=True, check=True)
     assert result["raw_output"] == json.loads(direct.stdout)
 

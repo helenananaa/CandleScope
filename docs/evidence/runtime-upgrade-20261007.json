@@ -1,0 +1,95 @@
+{
+  "date": "2026-10-07",
+  "platform": "Windows AMD64 CPython 3.12",
+  "engines": {
+    "pyne-runtime": {
+      "version": "0.4.1",
+      "source": "github-release",
+      "artifactFilename": "pyne_runtime-0.4.1-py3-none-any.whl",
+      "sha256": "sha256:b080536dc9e371eaf161f01e5a3103c7c8c58f3d418ca87a933ac3364bce636a",
+      "size": 313478,
+      "releaseTag": "v0.4.1",
+      "releaseUrl": "https://github.com/helenananaa/pyne-runtime/releases/download/v0.4.1/pyne_runtime-0.4.1-py3-none-any.whl"
+    },
+    "pine-compat-runtime": {
+      "version": "0.3.0",
+      "source": "github-release",
+      "artifactFilename": "pine_compat_runtime-0.3.0-cp310-abi3-win_amd64.whl",
+      "sha256": "sha256:1c40598c456ac1d4048b3dc699549b3f09ae43daea8923b0ae86d3cd5d59fe36",
+      "size": 3925706,
+      "releaseTag": "v0.3.0",
+      "releaseUrl": "https://github.com/helenananaa/pine-compat-runtime/releases/download/v0.3.0/pine_compat_runtime-0.3.0-cp310-abi3-win_amd64.whl",
+      "releaseCommit": "390e93afd87df6ac5a2aa64b940d612b9d49bab9",
+      "manifestUrl": "https://github.com/helenananaa/pine-compat-runtime/releases/download/v0.3.0/manifest.json",
+      "manifestSha256": "sha256:0ab15c8cd7a87849c0f51158df53557ab8664b3eadddb4618958d27417bfdd3e"
+    }
+  },
+  "bundles": {
+    "candlescope.pyne": {
+      "bundle": "candlescope-pyne-0.3.0-cp312-win_amd64.cspkg",
+      "sha256": "sha256:889ffeb4a70b330c1cf529b66422fe0c11c303b781968b12e8156fbb854f3918",
+      "size": 13588457,
+      "lock": "packages\\candlescope-plugin-pyne\\release\\release-lock.json"
+    },
+    "candlescope.pine-compat": {
+      "bundle": "candlescope-pine-compat-0.3.0-cp312-win_amd64.cspkg",
+      "sha256": "sha256:29312559e0f29a2c9eed4c1bd1491c360266294155cc37c6763ba1dce0c1380c",
+      "size": 4061522,
+      "lock": "packages\\candlescope-plugin-pine-compat\\release\\release-lock.json"
+    }
+  },
+  "tests": {
+    "pyneSource": 41,
+    "pineSource": 21,
+    "workbenchSource": 38,
+    "installedPyneWorkbench": 67,
+    "installedPine": 12,
+    "backendRouting": 42,
+    "bootstrap": 12,
+    "nativeMixed": 107
+  },
+  "nativePine": {
+    "action": "preserve-qualified-0.3.0rc1-extension-installation",
+    "officialStableMissingAPIs": [
+      "Program.run_external",
+      "Program.historical_session"
+    ],
+    "officialStableTrial": {
+      "passed": 67,
+      "failed": 40
+    }
+  },
+  "snapshotUpgrade": {
+    "oldEngine": "0.4.0",
+    "newEngine": "0.4.1",
+    "rejected": true,
+    "message": "PYNE_SNAPSHOT_SEMANTICS_MISMATCH: snapshot semantics 5 do not match runtime semantics 42; rebuild the session from authoritative OHLCV under the current runtime. Do not relabel or reuse old state."
+  },
+  "limits": [
+    "no complete browser UI gate",
+    "no new long-session qualification",
+    "no other OS/Python host qualification"
+  ],
+  "lint": "no new diagnostics; 3 preexisting native observer diagnostics",
+  "delivery": {
+    "releaseSourceCommit": "f7b0729cde68d3cdbfbc74ed79ddb6cb22bf1688",
+    "pullRequest": "https://github.com/helenananaa/CandleScope/pull/7",
+    "pullRequestStatus": "draft-unmerged",
+    "releases": {
+      "candlescope.pyne": "https://github.com/helenananaa/CandleScope/releases/tag/candlescope-plugin-pyne-v0.3.0",
+      "candlescope.pine-compat": "https://github.com/helenananaa/CandleScope/releases/tag/candlescope-plugin-pine-compat-v0.3.0"
+    },
+    "publicBundlesDownloadedAndVerified": true,
+    "sourceComparison": "wheel members except generated RECORD agree after CRLF/LF normalization; not a byte-identical rebuild"
+  },
+  "localActivation": {
+    "indicatorAdapters": "0.3.0",
+    "indicatorPineEngine": "0.3.0",
+    "indicatorPyneEngine": "0.4.1",
+    "nativePyneEngine": "0.4.1",
+    "nativePineRegistryPreservedExactly": true,
+    "defaultBootstrapStatus": "ready",
+    "indicatorSidecarSmaOracle": "both returned 15 for closes [10, 20] and period 2",
+    "receipt": "output/runtime-upgrade-20261007/production-verification.json"
+  }
+}

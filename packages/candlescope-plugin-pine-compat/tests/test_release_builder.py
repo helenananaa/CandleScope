@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from scripts.build_bundle import (
-    DEFAULT_LOCK_PATH,
+    DEFAULT_LOCK_PATH as CURRENT_LOCK_PATH,
     ReleaseLockError,
     build_locked_bundle,
     collect_locked_wheels,
@@ -21,6 +21,8 @@ from scripts.build_bundle import (
     main,
 )
 
+
+DEFAULT_LOCK_PATH = CURRENT_LOCK_PATH.with_name("release-lock.0.2.0.json")
 
 def _zip_info(name: str) -> zipfile.ZipInfo:
     info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
@@ -76,7 +78,7 @@ def _wheelhouse(path: Path) -> tuple[Path, ...]:
 
 def test_builder_rejects_same_version_unpinned_engine_wheel(tmp_path: Path) -> None:
     with pytest.raises(ReleaseLockError, match="pinned GitHub Release asset"):
-        collect_locked_wheels(_wheelhouse(tmp_path), load_release_lock())
+        collect_locked_wheels(_wheelhouse(tmp_path), load_release_lock(DEFAULT_LOCK_PATH))
 
 
 def test_candidate_lock_rejects_mixed_bridge_engine_versions(tmp_path: Path) -> None:
@@ -91,7 +93,7 @@ def test_candidate_lock_rejects_mixed_bridge_engine_versions(tmp_path: Path) -> 
 
 def test_builder_checks_bridge_hash_when_pinned(tmp_path: Path) -> None:
     wheels = _wheelhouse(tmp_path)
-    lock = load_release_lock()
+    lock = load_release_lock(DEFAULT_LOCK_PATH)
     lock["wheels"]["pine-compat-runtime"]["sha256"] = inspect_wheel(wheels[2]).sha256
     lock["wheels"]["candlescope-plugin-pine-compat"]["sha256"] = "sha256:" + "0" * 64
     with pytest.raises(ReleaseLockError, match="candlescope-plugin-pine-compat wheel SHA"):
@@ -129,7 +131,7 @@ def test_cli_reports_lock_failure_without_traceback(
     argv: list[str] = []
     for wheel in wheels:
         argv.extend(("--wheel", str(wheel)))
-    argv.extend(("--output", str(tmp_path / "bad.cspkg"), "--json"))
+    argv.extend(("--lock", str(DEFAULT_LOCK_PATH), "--output", str(tmp_path / "bad.cspkg"), "--json"))
 
     assert main(argv) == 1
     payload = json.loads(capsys.readouterr().out)

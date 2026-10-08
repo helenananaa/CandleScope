@@ -4,7 +4,7 @@
   "plugin": {
     "id": "candlescope.pine-compat",
     "package": "candlescope-plugin-pine-compat",
-    "version": "0.3.0.dev1"
+    "version": "0.3.1"
   },
   "python": {
     "requires": ">=3.11,<3.14",
@@ -12,26 +12,30 @@
   },
   "wheels": {
     "candlescope-plugin-pine-compat": {
-      "version": "0.3.0.dev1",
-      "source": "local-candidate-build",
-      "artifactFilename": "candlescope_plugin_pine_compat-0.3.0.dev1-py3-none-any.whl",
-      "sha256": "sha256:004a6b5f66d494680c53c0341d8c153cfe35cd074f1660a8e1ba8ed3e0940dbc",
-      "size": 17702
+      "version": "0.3.1",
+      "source": "local-release-build",
+      "artifactFilename": "candlescope_plugin_pine_compat-0.3.1-py3-none-any.whl",
+      "sha256": "sha256:56a400e8505201878be30d4aad89b6ec0d482d0dc62bfe465a4412ff8d544fa7",
+      "size": 22671
     },
     "candlescope-plugin-sdk": {
       "version": "0.2.0",
-      "source": "local-candidate-build",
+      "source": "local-release-build",
       "artifactFilename": "candlescope_plugin_sdk-0.2.0-py3-none-any.whl",
-      "sha256": "sha256:9667dc198b1d6c65b9d6b0d43d6e32a6f969efe6f3ad0d3a0adec4f773d26d51",
-      "size": 108589
+      "sha256": "sha256:a6036881f0b3b1a77dc1460a13a79aefb8c2042d379003b33bedb3a22b86c4b0",
+      "size": 110326
     },
     "pine-compat-runtime": {
-      "version": "0.3.0rc1",
-      "source": "local-candidate-build",
-      "artifactFilename": "pine_compat_runtime-0.3.0rc1-cp310-abi3-win_amd64.whl",
-      "sha256": "sha256:da4523dabf08f39211c38ba8b8b6ff9e48f22f0e618058cb9df9ba307a4fa621",
-      "size": 3486735,
-      "sourceCommit": "a481b4644c142badcf9e1bc5430bc3a5f7f2a733"
+      "version": "0.3.1",
+      "source": "github-release",
+      "artifactFilename": "pine_compat_runtime-0.3.1-cp310-abi3-win_amd64.whl",
+      "sha256": "sha256:2cc616d6d24dc7cf84c499c74bfabddbaf3b0134e1380f9be2afbaada6fbd599",
+      "size": 4005214,
+      "releaseTag": "v0.3.1",
+      "releaseUrl": "https://github.com/helenananaa/pine-compat-runtime/releases/download/v0.3.1/pine_compat_runtime-0.3.1-cp310-abi3-win_amd64.whl",
+      "releaseCommit": "14a2ab89c08a85a76d769e9fbe2f13f9c958342d",
+      "manifestUrl": "https://github.com/helenananaa/pine-compat-runtime/releases/download/v0.3.1/manifest.json",
+      "manifestSha256": "sha256:285768cc6b38596f47e80b4702eb4f28cc9df9d9336f923acf33338cce0189ac"
     }
   },
   "probe": {
@@ -64,7 +68,7 @@
     ],
     "params": {},
     "options": {},
-    "analysisSha256": "sha256:432056ce2875728be5acc37e651393670d68f622bfbf38b4494e3ed13aba890c",
-    "executionSha256": "sha256:554323f93aef95f8acf196c9b84b11b7f011c40ec759c3d558b1e25b71dd5901"
+    "analysisSha256": "sha256:993bec84af0e0631ca6b07ce69e44733646f124d1ac3b4bb4551e83f9e797fa2",
+    "executionSha256": "sha256:2ed443cb6b0d449eeb7d160f1899a176a213eb5b3c2b2c33d3dbe34365b5bea3"
   }
 }

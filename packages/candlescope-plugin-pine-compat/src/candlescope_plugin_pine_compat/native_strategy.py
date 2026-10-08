@@ -7,6 +7,11 @@ from candlescope_plugin_sdk.native_strategy import identity, serve
 
 
 def describe():
+    if not callable(getattr(pine_compat.Program, "historical_session", None)):
+        raise ValueError(
+            "NATIVE_CAPABILITY_UNSUPPORTED: this Pine wheel lacks fixed-history replay; "
+            "retain the qualified native installation separately from the indicator plugin"
+        )
     result = identity("candlescope-plugin-pine-compat", "pine-compat-runtime",
                     adapter="pine-native/2")
     result["historical_session"] = "fixed-history/1"

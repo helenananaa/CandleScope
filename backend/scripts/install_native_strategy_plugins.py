@@ -19,11 +19,19 @@ def main():
     parser.add_argument("--wheelhouse", required=True, type=Path)
     parser.add_argument("--root", type=Path, default=Path(os.environ.get("LOCALAPPDATA", Path.home() / ".local/share")) / "CandleScope/plugins")
     parser.add_argument("--activate", action="store_true")
+    parser.add_argument("--runtime", choices=("all", "pine", "pyne"), default="all",
+                        help="Select one runtime to preserve the other native registry entry.")
     args = parser.parse_args()
     wheels = sorted(args.wheelhouse.resolve().glob("*.whl"))
-    required = ("candlescope_plugin_sdk-", "candlescope_plugin_pyne-", "candlescope_plugin_pine_compat-", "pyne_runtime-", "pine_compat_runtime-", "numpy-")
+    required = ("candlescope_plugin_sdk-", "candlescope_plugin_pyne-", "candlescope_plugin_pine_compat-", "pyne_runtime-", "pine_compat_runtime-", "numpy-", "tzdata-")
+    if args.runtime != "all":
+        if args.runtime == "pyne":
+            required = tuple(prefix for prefix in required if "pine_compat" not in prefix)
+        else:
+            required = ("candlescope_plugin_sdk-", "candlescope_plugin_pine_compat-", "pine_compat_runtime-")
+        wheels = [path for path in wheels if any(path.name.startswith(prefix) for prefix in required)]
     if len(wheels) != len(required) or any(sum(p.name.startswith(prefix) for p in wheels) != 1 for prefix in required):
-        parser.error("wheelhouse must contain exactly one wheel for each plugin, SDK, engine and numpy")
+        parser.error("wheelhouse must contain exactly one wheel for each selected plugin, SDK, engine, numpy and tzdata")
     manifest = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in wheels}
     bundle = hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()
     installation = args.root.resolve() / "native-installs" / bundle
@@ -36,6 +44,8 @@ def main():
     plugins, identities = [], {}
     for suffix, runtime_id, package in (("pine_compat", "candlescope.pine-compat", "candlescope-plugin-pine-compat"),
                                         ("pyne", "candlescope.pyne", "candlescope-plugin-pyne")):
+        if args.runtime != "all" and suffix != {"pine": "pine_compat", "pyne": "pyne"}[args.runtime]:
+            continue
         command = [str(executable), "-I", "-m", f"candlescope_plugin_{suffix}.native_strategy"]
         probe = subprocess.run(command, input='{"operation":"describe"}', text=True, encoding="utf-8", capture_output=True, check=True, timeout=30)
         result = json.loads(probe.stdout)
@@ -59,6 +69,11 @@ def main():
         registry = args.root.resolve() / "native-strategy-registry.json"
         if registry.exists():
             (installation / "previous-native-registry.json").write_bytes(registry.read_bytes())
+            existing = json.loads(registry.read_text(encoding="utf-8"))
+            if existing.get("schemaVersion") != 1 or not isinstance(existing.get("plugins"), list):
+                raise ValueError("existing native registry is invalid")
+            replaced = {plugin["id"] for plugin in plugins}
+            plugins = [plugin for plugin in existing["plugins"] if plugin["id"] not in replaced] + plugins
         temporary = registry.with_suffix(".tmp-" + uuid.uuid4().hex)
         temporary.write_text(json.dumps({"schemaVersion": 1, "plugins": plugins}, indent=2), encoding="utf-8")
         os.replace(temporary, registry)

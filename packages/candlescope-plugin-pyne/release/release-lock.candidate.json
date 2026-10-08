@@ -4,7 +4,7 @@
   "plugin": {
     "id": "candlescope.pyne",
     "package": "candlescope-plugin-pyne",
-    "version": "0.3.0.dev1"
+    "version": "0.3.0"
   },
   "python": {
     "requires": ">=3.11,<3.14",
@@ -12,23 +12,41 @@
   },
   "wheels": {
     "candlescope-plugin-pyne": {
-      "version": "0.3.0.dev1",
-      "source": "local-candidate-build"
+      "version": "0.3.0",
+      "source": "local-release-build",
+      "artifactFilename": "candlescope_plugin_pyne-0.3.0-py3-none-any.whl",
+      "sha256": "sha256:50562ff2f1f6a5cb1b95d4fe72b1c26b688759f9862615f029357be2777e17e8",
+      "size": 25172
     },
     "candlescope-plugin-sdk": {
       "version": "0.2.0",
-      "source": "local-release-build"
+      "source": "local-release-build",
+      "artifactFilename": "candlescope_plugin_sdk-0.2.0-py3-none-any.whl",
+      "sha256": "sha256:a6036881f0b3b1a77dc1460a13a79aefb8c2042d379003b33bedb3a22b86c4b0",
+      "size": 110326
     },
     "pyne-runtime": {
-      "version": "0.4.0",
+      "version": "0.4.1",
       "source": "github-release",
-      "artifactFilename": "pyne_runtime-0.4.0-py3-none-any.whl",
-      "releaseUrl": "https://github.com/helenananaa/pyne-runtime/releases/download/v0.4.0/pyne_runtime-0.4.0-py3-none-any.whl",
-      "sha256": "sha256:8cd1759ab0e3f77fd635e0e0f38d29a2da28913bb8165888e89788213b32a6c7"
+      "artifactFilename": "pyne_runtime-0.4.1-py3-none-any.whl",
+      "sha256": "sha256:b080536dc9e371eaf161f01e5a3103c7c8c58f3d418ca87a933ac3364bce636a",
+      "size": 313478,
+      "releaseTag": "v0.4.1",
+      "releaseUrl": "https://github.com/helenananaa/pyne-runtime/releases/download/v0.4.1/pyne_runtime-0.4.1-py3-none-any.whl"
     },
     "numpy": {
       "version": "2.3.3",
-      "source": "pypi-wheel-for-target-platform"
+      "source": "pypi-wheel-for-target-platform",
+      "artifactFilename": "numpy-2.3.3-cp312-cp312-win_amd64.whl",
+      "sha256": "sha256:497d7cad08e7092dba36e3d296fe4c97708c93daf26643a1ae4b03f6294d30eb",
+      "size": 12786615
+    },
+    "tzdata": {
+      "version": "2026.2",
+      "source": "pypi-wheel-for-target-platform",
+      "artifactFilename": "tzdata-2026.2-py2.py3-none-any.whl",
+      "sha256": "sha256:bbe9af844f658da81a5f95019480da3a89415801f6cc966806612cc7169bffe7",
+      "size": 349321
     }
   },
   "probe": {

@@ -1,4 +1,4 @@
-"""Build the platform-specific Pyne plugin bundle from four locked wheels."""
+"""Build the platform-specific Pyne plugin bundle from its locked wheel set."""
 
 from __future__ import annotations
 
@@ -27,6 +27,7 @@ EXPECTED_WHEEL_ORDER = (
     "pyne-runtime",
     "numpy",
 )
+STABLE_WHEEL_ORDER = (*EXPECTED_WHEEL_ORDER, "tzdata")
 _SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 for source_root in (SDK_SOURCE_ROOT, BACKEND_ROOT):
@@ -93,13 +94,18 @@ def load_release_lock(path: Path = DEFAULT_LOCK_PATH) -> dict[str, Any]:
     plugin_version = plugin.get("version")
     if not isinstance(plugin_version, str) or not plugin_version.strip():
         raise ReleaseLockError("release lock plugin version is invalid")
-    if tuple(wheels) != EXPECTED_WHEEL_ORDER:
-        raise ReleaseLockError(
-            "release lock wheels must be ordered as bridge, SDK, Pyne Runtime, NumPy"
-        )
     for package, expected in wheels.items():
         if not isinstance(expected, dict) or not isinstance(expected.get("version"), str):
             raise ReleaseLockError(f"release lock wheel {package!r} is invalid")
+    required_order = (
+        STABLE_WHEEL_ORDER if wheels.get("pyne-runtime", {}).get("version") == "0.4.1"
+        else EXPECTED_WHEEL_ORDER
+    )
+    if tuple(wheels) != required_order:
+        raise ReleaseLockError(
+            "release lock wheels must be ordered as bridge, SDK, Pyne Runtime, NumPy "
+            "and (for Pyne 0.4.1) tzdata"
+        )
     if wheels["candlescope-plugin-pyne"]["version"] != plugin_version:
         raise ReleaseLockError("release lock plugin and bridge wheel versions differ")
     pyne_sha256 = wheels["pyne-runtime"].get("sha256")
@@ -154,12 +160,13 @@ def collect_locked_wheels(
         if record.package in records:
             raise ReleaseLockError(f"duplicate wheel package: {record.package}")
         records[record.package] = record
-    missing = sorted(set(EXPECTED_WHEEL_ORDER) - set(records))
-    extra = sorted(set(records) - set(EXPECTED_WHEEL_ORDER))
+    wheel_order = tuple(lock["wheels"])
+    missing = sorted(set(wheel_order) - set(records))
+    extra = sorted(set(records) - set(wheel_order))
     if missing or extra:
         raise ReleaseLockError(f"wheel set mismatch: missing={missing}, extra={extra}")
     locked_wheels = lock["wheels"]
-    for package in EXPECTED_WHEEL_ORDER:
+    for package in wheel_order:
         record = records[package]
         expected_version = locked_wheels[package]["version"]
         if record.version != expected_version:
@@ -171,7 +178,11 @@ def collect_locked_wheels(
         raise ReleaseLockError(
             "pyne-runtime wheel SHA-256 does not match the pinned GitHub Release artifact"
         )
-    return tuple(records[package] for package in EXPECTED_WHEEL_ORDER)
+    for package in wheel_order:
+        pinned = locked_wheels[package].get("sha256")
+        if pinned is not None and records[package].sha256 != pinned:
+            raise ReleaseLockError(f"{package} wheel SHA-256 does not match the release lock")
+    return tuple(records[package] for package in wheel_order)
 
 
 def _manifest(lock: dict[str, Any], wheels: tuple[WheelRecord, ...]) -> dict[str, Any]:
@@ -230,14 +241,14 @@ def main(argv: list[str] | None = None) -> int:
         action="append",
         required=True,
         type=Path,
-        help="Repeat exactly four times: bridge, SDK, Pyne Runtime, and NumPy wheels.",
+        help="Repeat for every locked wheel: bridge, SDK, Pyne Runtime, NumPy and tzdata.",
     )
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument(
         "--lock",
         type=Path,
         default=DEFAULT_LOCK_PATH,
-        help="Release lock to validate; defaults to the published 0.2 lock.",
+        help="Release lock to validate; defaults to release/release-lock.json.",
     )
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--json", action="store_true")

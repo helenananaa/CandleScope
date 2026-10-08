@@ -47,10 +47,10 @@ Binance/OKX, spot/perpetual, BTCUSDT/ETHUSDT/SOLUSDT, and six common intervals.
 Expand those scopes intentionally; they are authorization ceilings, not market
 discovery.
 
-This source package depends on the `0.3.0.dev1` bridge and official Pyne `0.4.0`
+This source package depends on the `0.3.0` bridge and official Pyne `0.4.1`
 runtime. The already published `0.2.0` bridge and
 `0.2.0rc1` runtime do not contain the native-v2 methods used here. Local
-cross-repository and installed-wheel acceptance use the unpublished
-`0.3.0.dev1` bridge candidate lock, which pins the official `0.4.0` wheel;
-publishing the updated bridge and workbench remains
-a separate decision.
+cross-repository and installed-wheel acceptance use the `0.3.0` bridge release
+lock, which includes official `0.4.1`, NumPy and tzdata wheels.
+Workbench `0.1.2` is a separate Plugin Platform v2 package; installing the script
+runtime CSPKG alone does not install or activate its workbench UI.

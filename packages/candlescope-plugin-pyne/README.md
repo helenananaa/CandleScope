@@ -7,16 +7,16 @@ virtual environment through `candlescope.script-runtime/1`.
 
 ## Source candidate compatibility
 
-- Plugin: `candlescope-plugin-pyne==0.3.0.dev1`
+- Plugin: `candlescope-plugin-pyne==0.3.0`
 - SDK: `candlescope-plugin-sdk==0.2.0`
-- Engine: `pyne-runtime==0.4.0`
+- Engine: `pyne-runtime==0.4.1`
 - Python: `>=3.11,<3.14`
 - Runtime ID: `candlescope.pyne`
 
-The unpublished bridge candidate is pinned by `release/release-lock.candidate.json`
-to the official Pyne 0.4.0 wheel and its verified SHA-256. The immutable
-`release/release-lock.json` continues to describe the previously published 0.2.0
-bridge and 0.2.0rc1 engine. Version or artifact mismatches fail closed.
+`release/release-lock.json` pins the qualified 0.3.0 bridge and official
+Pyne 0.4.1 wheel, with all five wheel hashes. The previous published lock is
+archived as `release-lock.0.2.0.json`. The candidate lock selects the same
+artifacts. Version or artifact mismatches fail closed.
 
 ## Host policy and upgrading from 0.3
 
@@ -31,7 +31,7 @@ mode only, never the budgets. Direct strategy-provider execution explicitly uses
 not an OS sandbox. The surrounding host owns hard process termination; an inline
 runtime cannot promise a hard timeout.
 
-Pyne 0.4 uses computation semantics 5. Restart the plugin and reseed sessions from
+Pyne 0.4.1 uses computation semantics 42 (0.4.0 used 5). Restart the plugin and reseed sessions from
 authoritative OHLCV when upgrading; never relabel or restore older Pyne state
 snapshots. The adapter's reconnect snapshots are current in-process result views,
 not portable checkpoints. Its strategy provider records bars and recalculates on
@@ -102,7 +102,7 @@ python -m ruff format --check src tests scripts
 python -m build
 ```
 
-Use `scripts/build_bundle.py` with the four locked wheels to build a platform-specific
+Use `scripts/build_bundle.py` with the five locked wheels to build a platform-specific
 `.cspkg`. See [README_zh.md](README_zh.md) for the complete release flow.
 
 From this directory, a Windows target can be assembled with:
@@ -113,19 +113,20 @@ New-Item -ItemType Directory -Force $wheelhouse | Out-Null
 python -m build --wheel --outdir $wheelhouse .
 python -m build --wheel --outdir $wheelhouse ..\candlescope-plugin-sdk
 Invoke-WebRequest `
-  -Uri 'https://github.com/helenananaa/pyne-runtime/releases/download/v0.4.0/pyne_runtime-0.4.0-py3-none-any.whl' `
-  -OutFile "$wheelhouse\pyne_runtime-0.4.0-py3-none-any.whl"
+  -Uri 'https://github.com/helenananaa/pyne-runtime/releases/download/v0.4.1/pyne_runtime-0.4.1-py3-none-any.whl' `
+  -OutFile "$wheelhouse\pyne_runtime-0.4.1-py3-none-any.whl"
 python -m pip download --only-binary=:all: --no-deps `
-  --dest $wheelhouse numpy==2.3.3
+  --dest $wheelhouse numpy==2.3.3 tzdata==2026.2
 
-$bridge = (Get-ChildItem "$wheelhouse\candlescope_plugin_pyne-0.3.0.dev1-*.whl").FullName
+$bridge = (Get-ChildItem "$wheelhouse\candlescope_plugin_pyne-0.3.0-*.whl").FullName
 $sdk = (Get-ChildItem "$wheelhouse\candlescope_plugin_sdk-0.2.0-*.whl").FullName
-$pyne = (Get-ChildItem "$wheelhouse\pyne_runtime-0.4.0-*.whl").FullName
+$pyne = (Get-ChildItem "$wheelhouse\pyne_runtime-0.4.1-*.whl").FullName
 $numpy = (Get-ChildItem "$wheelhouse\numpy-2.3.3-*.whl").FullName
+$tzdata = (Get-ChildItem "$wheelhouse\tzdata-2026.2-*.whl").FullName
 python scripts\build_bundle.py `
   --lock release\release-lock.candidate.json `
-  --wheel $bridge --wheel $sdk --wheel $pyne --wheel $numpy `
-  --output C:\release\candlescope-pyne\candlescope-pyne-0.3.0.dev1.cspkg `
+  --wheel $bridge --wheel $sdk --wheel $pyne --wheel $numpy --wheel $tzdata `
+  --output C:\release\candlescope-pyne\candlescope-pyne-0.3.0.cspkg `
   --json
 ```
 

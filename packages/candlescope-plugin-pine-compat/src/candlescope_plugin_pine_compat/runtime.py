@@ -37,14 +37,14 @@ from candlescope_plugin_sdk import (
 RUNTIME_ID = "candlescope.pine-compat"
 PLUGIN_NAME = "Pine Compatibility Runtime"
 PLUGIN_PACKAGE = "candlescope-plugin-pine-compat"
-PLUGIN_VERSION = "0.3.0.dev1"
+PLUGIN_VERSION = "0.3.1"
 ENGINE_PACKAGE = "pine-compat-runtime"
 ENGINE_MODULE = "pine_compat"
-EXPECTED_ENGINE_VERSION = "0.3.0rc1"
+EXPECTED_ENGINE_VERSION = "0.3.1"
 UNKNOWN_SOURCE_VERSION = "0.0.0+unknown"
 
-PINE_ANALYSIS_SCHEMA_VERSION = 5
-PINE_RUNTIME_SCHEMA_VERSION = 8
+PINE_ANALYSIS_SCHEMA_VERSION = 6
+PINE_RUNTIME_SCHEMA_VERSION = 9
 PINE_RENDER_METADATA_VERSION = 1
 MAX_BARS = 100_000
 MAX_OUTPUT_SERIES = 1_024
@@ -166,7 +166,7 @@ def _engine_contract() -> tuple[Any, str]:
         "RUNTIME_SCHEMA_VERSION": PINE_RUNTIME_SCHEMA_VERSION,
         "RENDER_METADATA_VERSION": PINE_RENDER_METADATA_VERSION,
         "REALTIME_SESSION_SCHEMA_VERSION": 1,
-        "RUNTIME_CHANGES_SCHEMA_VERSION": 3,
+        "RUNTIME_CHANGES_SCHEMA_VERSION": 4,
     }
     drift = [
         f"{name}={getattr(engine, name, None)!r} (expected {value})"
@@ -1099,6 +1099,12 @@ def _normalize_output(
     for index, item in enumerate(raw.get("fills") or []):
         if not isinstance(item, Mapping):
             raise BridgeError("PINE_RUNTIME_OUTPUT_INVALID", "Pine fill must be an object")
+        if item.get("gradient"):
+            raise BridgeError(
+                "PINE_HOST_CAPABILITY_UNSUPPORTED",
+                "CandleScope Render IR v1 does not support Pine gradient fills.",
+                hint="Use a solid fill color for this indicator.",
+            )
         item_id = item.get("id", index)
         settings = _render_settings(item, base_pane=pane, fallback_title=f"Fill {item_id}")
         if not settings["paneVisible"]:
@@ -1383,6 +1389,13 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
             return ExecuteBatchResult(ok=False, diagnostics=(exc.diagnostic(),))
         except (ProtocolError, TypeError, ValueError) as exc:
             self._sessions.entries.pop(str(request.options.get("pineSessionId")), None)
+            if isinstance(exc, ValueError) and str(exc).startswith("E_RESOURCE_BUDGET:"):
+                return ExecuteBatchResult(ok=False, diagnostics=(Diagnostic(
+                    code="E_RESOURCE_BUDGET",
+                    severity="error",
+                    message=str(exc),
+                    hint="Reduce collection copies or matrix work per bar.",
+                ),))
             return ExecuteBatchResult(
                 ok=False,
                 diagnostics=(
