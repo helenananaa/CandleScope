@@ -16,7 +16,7 @@
 .strategy-dock-divider { position: absolute; top: -4px; left: 0; right: 0; height: 8px; z-index: 10; cursor: row-resize; touch-action: none; }
 .strategy-dock-divider:hover, .strategy-dock-divider:focus-visible { background: color-mix(in srgb, var(--accent-blue) 35%, transparent); outline: none; }
 .strategy-dock-bar { display: flex; align-items: center; flex: 0 0 35px; gap: 12px; padding: 0 12px; min-width: 0; border-bottom: 1px solid var(--border-color); }
-.strategy-dock-bar button, .strategy-dock-bar select { font: inherit; color: var(--text-secondary); background: transparent; border: 0; cursor: pointer; padding: 5px 6px; white-space: nowrap; border-radius: 3px; }
+.strategy-dock-bar button, .strategy-dock-bar select { font: inherit; color: var(--text-secondary); background: transparent; border: 0; cursor: pointer; padding: 5px 6px; white-space: nowrap; border-radius: var(--radius-xs); }
 .strategy-dock-bar select { max-width: 210px; background: var(--bg-primary); }
 .strategy-dock-bar button:hover { background: var(--bg-hover); color: var(--text-primary); }
 .strategy-dock-bar .strategy-dock-title { color: var(--text-primary); font-weight: 600; }

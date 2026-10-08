@@ -6,17 +6,18 @@ import type { usePanePriceScaleMenu } from "./usePanePriceScaleMenu.js";
 const PRICE_SCALE_MODES: readonly {
   value: number;
   labelKey: MessageKey;
-  labelEn: string;
 }[] = [
-  { value: 0, labelKey: "scale.regular", labelEn: "Regular" },
-  { value: 1, labelKey: "scale.log", labelEn: "Logarithmic" },
-  { value: 2, labelKey: "scale.percent", labelEn: "Percentage" },
-  { value: 3, labelKey: "scale.indexed", labelEn: "Indexed to 100" },
+  { value: 0, labelKey: "scale.regular" },
+  { value: 1, labelKey: "scale.log" },
+  { value: 2, labelKey: "scale.percent" },
+  { value: 3, labelKey: "scale.indexed" },
 ];
 
 export default function PanePriceScaleMenu({
-  menu, locale, onInvertScaleChange, onPriceScaleModeChange, onAddAlertAtPrice,
+  menu, locale, onInvertScaleChange, onPriceScaleModeChange, onAddAlertAtPrice, onReturnToLatest,
 }: {
+  /** Shown while the latest bar is scrolled out of view. */
+  onReturnToLatest?: (() => void) | null | undefined;
   onAddAlertAtPrice?: ((price: number) => void) | null | undefined;
   menu: ReturnType<typeof usePanePriceScaleMenu>;
   locale: LocaleId;
@@ -31,6 +32,22 @@ export default function PanePriceScaleMenu({
       style={{ left: contextMenu.x, top: contextMenu.y }}
       onMouseDown={(event) => event.stopPropagation()}
     >
+      {onReturnToLatest && (
+        <>
+          <button
+            type="button"
+            className="price-scale-menu-item"
+            onClick={() => {
+              onReturnToLatest();
+              menu.close();
+            }}
+          >
+            <span className="price-scale-menu-check" aria-hidden="true" />
+            <span>{t("status.returnToRealtime", {}, locale)}</span>
+          </button>
+          <div className="price-scale-menu-divider" role="separator" />
+        </>
+      )}
       {contextMenu.price !== null && onAddAlertAtPrice && (
         <>
           <button
@@ -57,9 +74,8 @@ export default function PanePriceScaleMenu({
           menu.close();
         }}
       >
-        <span className="price-scale-menu-check">{contextMenu.autoScale ? "✓" : ""}</span>
+        <span className="price-scale-menu-check">{contextMenu.autoScale ? <Icon name="check" size={12} /> : null}</span>
         <span>{t("scale.auto", {}, locale)}</span>
-        {locale === "en" ? null : <span className="price-scale-menu-label-en">{t("scale.auto", {}, "en")}</span>}
       </button>
       {(contextMenu.paneId !== "main" || onInvertScaleChange) && (
         <button
@@ -75,9 +91,8 @@ export default function PanePriceScaleMenu({
             menu.close();
           }}
         >
-          <span className="price-scale-menu-check">{contextMenu.invertScale ? "✓" : ""}</span>
+          <span className="price-scale-menu-check">{contextMenu.invertScale ? <Icon name="check" size={12} /> : null}</span>
           <span>{t("scale.invert", {}, locale)}</span>
-          {locale === "en" ? null : <span className="price-scale-menu-label-en">{t("scale.invert", {}, "en")}</span>}
         </button>
       )}
       <div className="price-scale-menu-divider" />
@@ -95,9 +110,8 @@ export default function PanePriceScaleMenu({
             menu.close();
           }}
         >
-          <span className="price-scale-menu-check">{contextMenu.mode === mode.value ? "✓" : ""}</span>
+          <span className="price-scale-menu-check">{contextMenu.mode === mode.value ? <Icon name="check" size={12} /> : null}</span>
           <span>{t(mode.labelKey, {}, locale)}</span>
-          {locale === "en" ? null : <span className="price-scale-menu-label-en">{mode.labelEn}</span>}
         </button>
       ))}
     </div>

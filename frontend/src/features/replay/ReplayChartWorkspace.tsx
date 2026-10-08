@@ -35,6 +35,7 @@ import { defaultReplayV2Api } from "./replayV2Api.js";
 import { useReplayCellViewport } from "./useReplayCellViewport.js";
 import { useReplayWorkspacePreferences } from "./replayWorkspacePreferences.js";
 import { replayWorkspaceDrawingCharts, useReplayWorkspaceDrawings } from "./useReplayWorkspaceDrawings.js";
+import { Icon } from "../../components/icons/Icon.js";
 
 type HostName = "topBar" | "intervalSelector" | "toolbar" | "rightRail" | "featureSurfaces" | "statusBar";
 const HOST_NAMES: HostName[] = ["topBar", "intervalSelector", "toolbar", "rightRail", "featureSurfaces", "statusBar"];
@@ -314,7 +315,7 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
               <header className="multi-chart-cell-header" draggable={!workspace.view.layoutLocked}
                 onDragStart={(event) => writeChartCellDragData(event.dataTransfer, id)}>
                 <strong>{cell.session.symbol}</strong><span>{cell.session.interval}</span>
-                <button type="button" onClick={() => workspace.actions.toggleMaximize(id)} aria-label={t("workspace.tab.layout")}>↗</button>
+                <button type="button" onClick={() => workspace.actions.toggleMaximize(id)} aria-label={t("workspace.tab.layout")}><Icon name="maximize" size={14} /></button>
                 <WorkspaceCellLayoutMenu portal cellId={id} layoutCellIds={workspace.view.layoutCellIds}
                   maxCellsPerWindow={workspace.view.maxCellsPerWindow} disabled={workspace.view.layoutLocked}
                   onSplit={workspace.actions.splitCell} onClose={workspace.actions.closeCell} onSwap={workspace.actions.swapCells} />

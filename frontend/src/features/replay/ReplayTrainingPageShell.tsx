@@ -80,6 +80,7 @@ import {
 import type { ReplayReviewResponse } from "./replayIntegrityModel.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
+import { Icon } from "../../components/icons/Icon.js";
 
 
 export interface ReplayTrainingPageShellProps {
@@ -1170,7 +1171,7 @@ export default function ReplayTrainingPageShell({
         {review === null && history.notice !== null && (
           <div className="replay-history-boundary-notice" role="status">
             <span>{history.notice}</span>
-            <button type="button" onClick={history.dismissNotice} aria-label={t("replay.shell.dismissHistory")}>×</button>
+            <button type="button" onClick={history.dismissNotice} aria-label={t("replay.shell.dismissHistory")}><Icon name="close" size={14} /></button>
           </div>
         )}
         {review === null && <ReplayBottomControlDock runtime={runtime} viewer={cell?.controlViewer ?? viewer} publicTimeLabel={publicTime} independentCharts={cell !== undefined} />}

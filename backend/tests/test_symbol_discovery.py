@@ -168,7 +168,7 @@ async def test_global_discovery_does_not_fan_out_catalog_downloads(monkeypatch):
     adapters = [SimpleNamespace(id=f"source{index}", capabilities=lambda: SimpleNamespace(markets=[SimpleNamespace(market_type="spot")])) for index in range(30)]
     monkeypatch.setattr(discovery.catalog, "bootstrap_default_adapters", lambda: None)
     monkeypatch.setattr(discovery.catalog, "get_exchange_registry", lambda: SimpleNamespace(list=lambda: adapters))
-    monkeypatch.setattr(discovery.catalog, "list_cached_symbols", lambda: ([row("source0")], 0))
+    monkeypatch.setattr(discovery.catalog, "cached_symbol_refs", lambda: [row("source0")])
     monkeypatch.setattr(discovery.catalog, "catalog_status", lambda **kwargs: {"stale": False})
     calls = []
 
@@ -190,7 +190,7 @@ async def test_failure_does_not_become_empty_success_or_hide_other_sources(monke
                 SimpleNamespace(id="provider", search_symbols=lambda: None, capabilities=lambda: SimpleNamespace(markets=[1]))]
     monkeypatch.setattr(discovery.catalog, "bootstrap_default_adapters", lambda: None)
     monkeypatch.setattr(discovery.catalog, "get_exchange_registry", lambda: SimpleNamespace(list=lambda: adapters))
-    monkeypatch.setattr(discovery.catalog, "list_cached_symbols", lambda: ([row()], 0))
+    monkeypatch.setattr(discovery.catalog, "cached_symbol_refs", lambda: [row()])
     monkeypatch.setattr(discovery.catalog, "catalog_status", lambda **kwargs: {"stale": False})
 
     async def fail(**kwargs):

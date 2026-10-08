@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { loadSourcePreferences, saveSourcePreferences } from "./sourcePreferences.js";
+import { Icon } from "../../components/icons/Icon.js";
 
 interface SourceOption { key: string; label: string; disabled: boolean }
 
@@ -69,13 +70,13 @@ export function SourcePicker({ sources, selected, onSelect }: {
                 if (detailsRef.current) { detailsRef.current.open = false; detailsRef.current.querySelector("summary")?.focus(); }
               }}>
               <span>{source.label}</span><small>{source.key}{source.disabled ? ` · ${t("search.unroutable")}` : ""}</small>
-              {selected === source.key && <span aria-hidden="true">✓</span>}
+              {selected === source.key && <span aria-hidden="true"><Icon name="check" size={12} /></span>}
             </button>
             <button type="button" className="sym-source-star" aria-pressed={preferences.favorites.includes(source.key)}
               aria-label={`${preferences.favorites.includes(source.key) ? t("search.unfavorite") : t("search.favorite")} ${source.label}`}
               onClick={() => update({ ...preferences, favorites: preferences.favorites.includes(source.key)
                 ? preferences.favorites.filter((key) => key !== source.key) : [...preferences.favorites, source.key] })}>
-              {preferences.favorites.includes(source.key) ? "★" : "☆"}
+              <Icon name="star" size={12} filled={preferences.favorites.includes(source.key)} />
             </button>
           </div>)}
         </section>)}

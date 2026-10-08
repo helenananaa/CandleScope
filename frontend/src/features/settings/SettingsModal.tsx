@@ -133,7 +133,7 @@ export default function SettingsModal({
                             <span className="st-content-title-icon" aria-hidden="true"><Icon name={activeCatObj.icon} size={20} /></span>
                             {t(activeCatObj.labelKey)}
                         </h2>
-                        <button className="st-close-x" aria-label={t("settings.close")} onClick={onClose}>✕</button>
+                        <button className="st-close-x" aria-label={t("settings.close")} onClick={onClose}><Icon name="close" size={14} /></button>
                     </div>
                     <div className="st-content-body">
                         <SettingsPanelHost

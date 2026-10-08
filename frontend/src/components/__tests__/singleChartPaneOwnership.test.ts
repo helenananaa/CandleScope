@@ -112,6 +112,8 @@ test("price scale menu uses the pointed pane and keeps its menu inside chart bou
   assert.equal(mainMenu?.price, 123.5);
   assert.deepEqual(pointed, [[0, 100]], "price lookup uses the y offset inside the pointed pane");
   assert.equal(resolvePanePriceScaleMenu({ ...options, clientX: 800 }), null);
+  assert.equal(resolvePanePriceScaleMenu({ ...options, clientX: 300, anywhere: true })?.paneId, "rsi",
+    "the chart's right-click menu opens anywhere in the pane");
   assert.equal(resolvePanePriceScaleMenu({ ...options, activePaneIds: ["rsi", "main"] }), null);
 });
 

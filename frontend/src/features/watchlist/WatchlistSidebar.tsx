@@ -20,6 +20,7 @@ import {
   createWatchlistId,
   WATCHLIST_COLORS,
 } from "./watchlistStore";
+import { Icon } from "../../components/icons/Icon.js";
 
 /** Remove trailing zeros after decimal point: "1.2000" → "1.2", "3.00" → "3" */
 /** Fixed decimals per magnitude, so a live value keeps its width as it ticks */
@@ -228,7 +229,7 @@ export default function WatchlistSidebar({
     const direction = lastSort?.column === column && lastSort.direction === "asc" ? "desc" : "asc";
     const description = `${label} · ${t(direction === "asc" ? "watchlist.sortAscending" : "watchlist.sortDescending")}`;
     return <button type="button" className={className} title={description} aria-label={description} onClick={() => sortBy(column)}>
-      {label}<span aria-hidden="true">{lastSort?.column === column ? (lastSort.direction === "asc" ? " ↑" : " ↓") : " ↕"}</span>
+      {label}<span className="wl-sort-icon" aria-hidden="true"><Icon name={lastSort?.column === column ? (lastSort.direction === "asc" ? "chevron-up" : "chevron-down") : "sort"} size={11} /></span>
     </button>;
   };
 

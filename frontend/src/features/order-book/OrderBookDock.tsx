@@ -268,7 +268,7 @@ function EmptyState({
       tone={status === "error" || status === "stale" ? "warning" : "accent"}
       icon={status === "stale" || status === "reconnecting"
         ? <Icon name="refresh" size={16} />
-        : status === "unsupported" ? <Icon name="ban" size={16} /> : "⋯"}
+        : status === "unsupported" ? <Icon name="ban" size={16} /> : <Icon name="more" size={16} />}
       title={orderBookStatusLabel(status)}
       description={orderBookStatusDetail(status, message)}
       action={canRetry ? <Button size="sm" onClick={onRetry}>{t("orderBook.retry")}</Button> : null}

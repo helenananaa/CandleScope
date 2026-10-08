@@ -1019,6 +1019,14 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   // The latest bar is loaded but scrolled out of view: offer a jump back to it.
   const scrolledAwayFromLatestRef = useRef(false);
   const [scrolledAwayFromLatest, setScrolledAwayFromLatest] = useState(false);
+  const jumpToLatest = useCallback(() => {
+    const lastIndex = displayRowsRef.current.length - 1;
+    if (lastIndex < 0) return;
+    const rawPosition = Number(latestBarPositionRef.current);
+    viewportControllerRef.current?.followLatest(lastIndex, {
+      position: Number.isFinite(rawPosition) ? Math.min(1, Math.max(0, rawPosition)) : 0.5,
+    });
+  }, []);
   const loadingRef = useRef(loading);
   const leftHistoryDemandDatasetRef = useRef<string | null>(null);
   const leftHistoryInteractionGenerationRef = useRef(0);
@@ -4929,12 +4937,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
-            const lastIndex = displayRowsRef.current.length - 1;
-            if (lastIndex < 0) return;
-            const rawPosition = Number(latestBarPositionRef.current);
-            viewportControllerRef.current?.followLatest(lastIndex, {
-              position: Number.isFinite(rawPosition) ? Math.min(1, Math.max(0, rawPosition)) : 0.5,
-            });
+            jumpToLatest();
           }}
         >
           {t("status.returnToRealtime", {}, locale)}
@@ -5004,6 +5007,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       <PanePriceScaleMenu
         menu={priceScaleMenu}
         locale={locale}
+        onReturnToLatest={scrolledAwayFromLatest ? jumpToLatest : null}
         onInvertScaleChange={onInvertScaleChange}
         onPriceScaleModeChange={onPriceScaleModeChange}
         onAddAlertAtPrice={onAddAlertAtPrice}

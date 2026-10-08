@@ -23,7 +23,7 @@ export const MARKET_TABS: MarketTab[] = [
   { key: "futures", label: "合约", icon: "📄" },
 ];
 
-export const ROW_HEIGHT = 58;
+export const ROW_HEIGHT = 40;
 export const VISIBLE_ROWS = 14;
 
 export function formatExchangeLabel(

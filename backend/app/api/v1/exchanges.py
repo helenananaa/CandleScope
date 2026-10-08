@@ -20,8 +20,11 @@ def _serialize_plugin_capabilities(registry: object, plugin: object) -> dict:
     return payload
 
 
+# Plain ``def`` handlers: the catalog work is synchronous (adapter bootstrap,
+# capability serialisation), so FastAPI runs it in the thread pool instead of
+# stalling every other request on the event loop.
 @router.get("/")
-async def list_exchanges() -> dict:
+def list_exchanges() -> dict:
     """List all registered exchanges and their capabilities."""
     bootstrap_default_adapters()
     registry = get_exchange_registry()
@@ -37,14 +40,14 @@ async def list_exchanges() -> dict:
 
 
 @router.get("/diagnostics")
-async def get_exchange_diagnostics() -> dict:
+def get_exchange_diagnostics() -> dict:
     """Return exchange plugin load status and compatibility diagnostics."""
     bootstrap_default_adapters()
     return get_exchange_registry().diagnostics()
 
 
 @router.get("/{exchange}/capabilities")
-async def get_exchange_capabilities(exchange: str) -> dict:
+def get_exchange_capabilities(exchange: str) -> dict:
     """Return capabilities for a single registered exchange."""
     bootstrap_default_adapters()
     registry = get_exchange_registry()

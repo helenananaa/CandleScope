@@ -14,8 +14,14 @@ ALIASES = {
 }
 
 
+_SEPARATORS = re.compile(r"[\s/_-]+")
+_WORDS = re.compile(r"\w+")
+
+
+# Called for every catalog row on every search; the same strings repeat constantly.
+@lru_cache(maxsize=200_000)
 def compact(value: str) -> str:
-    return re.sub(r"[\s/_-]+", "", unicodedata.normalize("NFKC", value)).casefold()
+    return _SEPARATORS.sub("", unicodedata.normalize("NFKC", value)).casefold()
 
 
 def one_edit(left: str, right: str) -> bool:
@@ -38,7 +44,7 @@ def prepared(symbol: str, base: str, quote: str, name: str, venue: str, mic: str
     aliases = ALIASES.get(compact(base), ())
     names = tuple(compact(value) for value in (name, *aliases, *(alias + quote for alias in aliases)) if value)
     fields = (*codes, *names, compact(quote), compact(venue), compact(mic))
-    words = tuple(set(re.findall(r"\w+", name.casefold()) + list(names) + [compact(base)]))
+    words = tuple(set(_WORDS.findall(name.casefold()) + list(names) + [compact(base)]))
     return codes, names, fields, words
 
 

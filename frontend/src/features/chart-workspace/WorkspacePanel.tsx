@@ -352,7 +352,7 @@ export default function WorkspacePanel({
               onClick={onClose}
               aria-label={t("workspace.close")}
             >
-              ✕
+              <Icon name="close" size={14} />
             </button>
           </div>
         </header>
@@ -399,7 +399,7 @@ export default function WorkspacePanel({
                       }}
                     >
                       <span className="workspace-panel-option-check" aria-hidden="true">
-                        {workspace.id === view.activeWorkspaceId ? "✓" : ""}
+                        {workspace.id === view.activeWorkspaceId ? <Icon name="check" size={12} /> : null}
                       </span>
                       <span>
                         <strong>{workspace.name}</strong>

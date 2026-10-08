@@ -3,6 +3,7 @@ import { shortcutModifier } from "../../shared/shortcutModifier.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import BrandMark from "../brand/BrandMark.js";
+import { Icon } from "../icons/Icon.js";
 import { APP_BUILD, APP_VERSION, SUPPORT_REPOSITORY, createSupportBundle, downloadSupportBundle,
     environmentInfo, fetchBackendSupport, issueUrl, type BackendSupport } from "../../features/settings/supportDiagnostics.js";
 
@@ -92,7 +93,7 @@ export default function AboutSettingsPanel(props: AboutSettingsPanelProps) {
                 {[
                     ["#readme", t("settings.support.docs")], ["/releases", t("settings.support.releases")],
                     ["", t("settings.support.source")], ["/blob/main/LICENSE", t("settings.support.license")],
-                ].map(([path, label]) => <a key={label} href={`${SUPPORT_REPOSITORY}${path}`} target="_blank" rel="noopener noreferrer">{label}<span aria-hidden="true"> ↗</span></a>)}
+                ].map(([path, label]) => <a key={label} href={`${SUPPORT_REPOSITORY}${path}`} target="_blank" rel="noopener noreferrer">{label}<span aria-hidden="true" className="st-external-icon"><Icon name="external" size={12} /></span></a>)}
             </div>
             <details className="st-support-export">
                 <summary>{t("settings.support.help")}</summary>

@@ -127,6 +127,7 @@ async def lifespan(_app):
 
 
 router = APIRouter(prefix="/symbols", tags=["symbols"], lifespan=lifespan)
+_result_cache: OrderedDict[tuple, tuple[dict, list]] = OrderedDict()
 
 
 def text(row: dict, key: str) -> str:
@@ -156,79 +157,109 @@ def identity_key(row: dict) -> str:
     )], ensure_ascii=False, separators=(",", ":"))
 
 
-def group_key(row: dict) -> str:
+def group_parts(row: dict) -> tuple:
     # Presentation grouping only. Never infer equivalence from a stock ticker
     # across unknown venues, or merge option expiries/strikes/series semantics.
     asset = asset_class(row)
     base = text(row, "baseAsset") or text(row, "symbol")
     venue = text(row, "venue") or text(row, "venueMic")
-    return json.dumps([
+    return (
         asset, base.upper(), text(row, "quoteAsset").upper(), text(row, "marketType"),
         "" if asset == "crypto" else (venue or text(row, "exchange")).upper(),
         *[row.get(key) for key in ("contractType", "expiryAtMs", "optionStrike", "optionRight",
                                   "seriesVariant", "priceAdjustment", "sessionVariant", "volumeSemantics")],
-    ], ensure_ascii=False, separators=(",", ":"))
+    )
+
+
+def group_key(row: dict) -> str:
+    return json.dumps(list(group_parts(row)), ensure_ascii=False, separators=(",", ":"))
+
+
+IDENTITY_FIELDS = (
+    "exchange", "marketType", "symbol", "providerId", "venue", "assetClass",
+    "seriesVariant", "priceAdjustment", "sessionVariant", "volumeSemantics",
+    "contractType", "expiryAtMs", "optionStrike", "optionRight",
+)
 
 
 def build_result(rows: list[dict], query: DiscoveryQuery, sources: list[dict]) -> dict:
-    unique = {identity_key(row): row for row in rows if row.get("active", True) is True}
+    """Filter, facet, group and page a catalog snapshot.
+
+    Runs over the whole catalog (tens of thousands of rows), so each row's derived
+    values are computed once, internal keys are tuples, and output dicts are built
+    only for the requested page. Input rows are read, never mutated.
+    """
+    unique: dict[tuple, dict] = {}
+    for row in rows:
+        if row.get("active", True) is True:
+            unique[tuple(row.get(key) for key in IDENTITY_FIELDS)] = row
     scores = {key: relevance(row, query.search) for key, row in unique.items()
               if not query.source or row["exchange"] == query.source}
-    matched = [unique[key] for key, score in scores.items() if score is not None]
+    matched = [key for key, score in scores.items() if score is not None]
     favorites, recent = set(query.favorites), set(query.recent)
     if query.scope != "all":
         wanted = favorites if query.scope == "favorites" else recent
-        matched = [row for row in matched if symbol_key(row) in wanted]
+        matched = [key for key in matched if symbol_key(unique[key]) in wanted]
 
-    def matches(row: dict, exclude: str = "") -> bool:
-        fields = {"assetClasses": (query.asset_class, asset_class(row)),
-                  "markets": (query.market_type, text(row, "marketType")),
-                  "venues": (query.venue, text(row, "venue") or text(row, "venueMic") or text(row, "exchange")),
-                  "quotes": (query.quote, text(row, "quoteAsset"))}
-        return all(key == exclude or not selected or selected.casefold() == value.casefold()
-                   for key, (selected, value) in fields.items())
+    fields = ("assetClasses", "markets", "venues", "quotes")
+    selected = [(value or "").casefold() for value in (query.asset_class, query.market_type, query.venue, query.quote)]
+    values: dict[tuple, tuple[str, str, str, str]] = {}
+    passes: dict[tuple, tuple[bool, bool, bool, bool]] = {}
+    for key in matched:
+        row = unique[key]
+        row_values = (
+            asset_class(row),
+            text(row, "marketType"),
+            text(row, "venue") or text(row, "venueMic") or text(row, "exchange"),
+            text(row, "quoteAsset"),
+        )
+        values[key] = row_values
+        passes[key] = tuple(not want or want == value.casefold() for want, value in zip(selected, row_values))
 
     facets = {}
-    for field, accessor in {
-        "assetClasses": asset_class, "markets": lambda row: text(row, "marketType"),
-        "venues": lambda row: text(row, "venue") or text(row, "venueMic") or text(row, "exchange"),
-        "quotes": lambda row: text(row, "quoteAsset"),
-    }.items():
-        counts = Counter(accessor(row) for row in matched if matches(row, field) and accessor(row))
+    for index, field in enumerate(fields):
+        # A facet's counts ignore its own selection, so every option stays visible.
+        counts = Counter(
+            row_values[index] for key, row_values in values.items()
+            if row_values[index] and all(ok for other, ok in enumerate(passes[key]) if other != index)
+        )
         facets[field] = [{"key": key, "count": count} for key, count in sorted(counts.items())]
 
-    groups: dict[str, list[dict]] = {}
-    for row in matched:
-        if matches(row):
-            groups.setdefault(group_key(row), []).append(row)
+    groups: dict[tuple, list[tuple]] = {}
+    for key in matched:
+        if all(passes[key]):
+            groups.setdefault(group_parts(unique[key]), []).append(key)
 
     recent_order = {key: index for index, key in enumerate(query.recent)}
+    ranks: dict[tuple, tuple] = {}
+    for items in groups.values():
+        for identity in items:
+            row = unique[identity]
+            key = symbol_key(row)
+            ranks[identity] = (scores[identity], key not in favorites, recent_order.get(key, 1000),
+                    {"BTC": 0, "ETH": 1, "SOL": 2}.get(text(row, "baseAsset").upper(), 3) if not query.search.strip() else 0,
+                    contract_rank(row), {"USDT": 0, "USD": 1, "USDC": 2, "BTC": 3, "ETH": 4}.get(text(row, "quoteAsset").upper(), 5),
+                    row["exchange"] != query.preferred_source,
+                    text(row, "symbol"), repr(identity))
 
-    ranks = {}
-    for identity, row in unique.items():
-        if identity not in scores or scores[identity] is None:
-            continue
-        key = symbol_key(row)
-        ranks[id(row)] = (scores[identity], key not in favorites, recent_order.get(key, 1000),
-                {"BTC": 0, "ETH": 1, "SOL": 2}.get(text(row, "baseAsset").upper(), 3) if not query.search.strip() else 0,
-                contract_rank(row), {"USDT": 0, "USD": 1, "USDC": 2, "BTC": 3, "ETH": 4}.get(text(row, "quoteAsset").upper(), 5),
-                row["exchange"] != query.preferred_source,
-                text(row, "symbol"), identity)
-
-    def rank(row: dict) -> tuple:
-        return ranks[id(row)]
-
-    ordered = []
-    for key, items in sorted(groups.items(), key=lambda item: min(rank(row) for row in item[1])):
-        count = len({row["exchange"] for row in items})
-        for index, row in enumerate(sorted(items, key=rank)):
-            ordered.append({**row, "seriesKey": identity_key(row), "groupKey": key,
-                            "groupStart": index == 0, "groupSourceCount": count})
-    revision = hashlib.sha256(json.dumps([row["seriesKey"] for row in ordered]).encode()).hexdigest()[:24]
+    ordered: list[tuple[tuple, tuple, bool, int]] = []
+    for group, items in sorted(groups.items(), key=lambda item: min(ranks[key] for key in item[1])):
+        count = len({unique[key]["exchange"] for key in items})
+        for index, key in enumerate(sorted(items, key=ranks.__getitem__)):
+            ordered.append((key, group, index == 0, count))
+    revision = hashlib.sha256(
+        json.dumps([list(key) for key, *_ in ordered], ensure_ascii=False, default=str).encode()
+    ).hexdigest()[:24]
     if query.offset and query.revision and query.revision != revision:
         raise HTTPException(409, detail="symbol_search_revision_changed")
     end = query.offset + query.limit
-    return {"symbols": ordered[query.offset:end], "total": len(ordered), "revision": revision,
+    page = [
+        {**unique[key], "seriesKey": identity_key(unique[key]),
+         "groupKey": json.dumps(list(group), ensure_ascii=False, separators=(",", ":")),
+         "groupStart": start, "groupSourceCount": count}
+        for key, group, start, count in ordered[query.offset:end]
+    ]
+    return {"symbols": page, "total": len(ordered), "revision": revision,
             "nextOffset": end if end < len(ordered) else None, "facets": facets, "sources": sources,
             "partial": any(source["status"] not in {"ready", "query_required"} for source in sources)}
 
@@ -259,10 +290,13 @@ async def search_symbols(query: DiscoveryQuery) -> dict:
             pass  # Coverage below distinguishes unavailable catalogs from zero matches.
 
     await asyncio.gather(*(warm(source) for source in warm_sources))
-    rows, _ = catalog.list_cached_symbols()
+    # Take only references on the event loop; detaching ~30k rows with deepcopy
+    # here used to stall charts and streams for seconds per search.
+    rows = catalog.cached_symbol_refs()
     if not query.search.strip() or query.scope != "all":
         rows.extend(provider_queries.known.values())
-    rows = [row for row in rows if row["exchange"] in selected]
+    selected_set = set(selected)
+    rows = [row for row in rows if row["exchange"] in selected_set]
     statuses = []
     cached_sources = {row["exchange"] for row in rows}
     provider_results = {}
@@ -289,4 +323,26 @@ async def search_symbols(query: DiscoveryQuery) -> dict:
         statuses.append({"id": source, "status": status})
     # Matching/sorting large snapshots must not occupy the API event loop used
     # by charts and streaming. Rows here are detached catalog snapshots.
-    return await asyncio.to_thread(build_result, rows, query, statuses)
+    # Reopening the dialog repeats the same query over the same catalog, so the ranked
+    # rows are reused until the catalog changes. Provider answers are cached by
+    # ``provider_queries`` and return the same list object while fresh; that identity
+    # joins the key, and the entry keeps those lists alive so an id cannot be reused.
+    # Source statuses change on their own (catalogs warm in the background), so they
+    # are attached per response rather than cached.
+    found_lists = [found for _, (found, _) in sorted(provider_results.items())]
+    cache_key = (
+        catalog.cache_generation(), len(rows), len(provider_queries.known), query.model_dump_json(),
+        tuple((source, id(found), status) for source, (found, status) in sorted(provider_results.items())),
+    )
+    cached = _result_cache.get(cache_key)
+    if cached is None:
+        # build_result only reads rows and returns new dicts, so no detached copy is needed.
+        result = await asyncio.to_thread(build_result, rows, query, [])
+        _result_cache[cache_key] = (result, found_lists)
+        while len(_result_cache) > 16:
+            _result_cache.popitem(last=False)
+    else:
+        result = cached[0]
+        _result_cache.move_to_end(cache_key)
+    return {**result, "sources": statuses,
+            "partial": any(source["status"] not in {"ready", "query_required"} for source in statuses)}

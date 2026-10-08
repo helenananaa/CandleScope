@@ -32,6 +32,7 @@ import {
   toggleFavoriteInterval,
   useFavoriteIntervals,
 } from "../features/chart-session/intervalFavoritesStore.js";
+import { Icon } from "./icons/Icon.js";
 
 type IntervalTab = "common" | "custom" | "all";
 type IntervalStatusKind = "invalid" | "native" | "exists" | "new";
@@ -262,6 +263,9 @@ function IntervalSelector({
   const [composerOpen, setComposerOpen] = useState(false);
   const [inlineMessage, setInlineMessage] = useState<InlineMessage | null>(null);
   const [highlightIndex, setHighlightIndex] = useState(0);
+  // The keyboard cursor appears once the user navigates or searches, so the first
+  // chip ("1s") does not look selected next to the real active interval.
+  const [keyboardNavigated, setKeyboardNavigated] = useState(false);
 
   const rootRef = useRef<HTMLDivElement | null>(null);
   const toolbarRef = useRef<HTMLElement | null>(null);
@@ -539,6 +543,8 @@ function IntervalSelector({
     setOpen(false);
     setComposerOpen(false);
     setSearch("");
+    setKeyboardNavigated(false);
+    setHighlightIndex(0);
   }, []);
 
   const selectInterval = useCallback((value: IntervalString) => {
@@ -605,12 +611,14 @@ function IntervalSelector({
     const lastIndex = Math.max(visibleItemsInRenderOrder.length - 1, 0);
     if (event.key === "ArrowDown" || event.key === "ArrowRight") {
       event.preventDefault();
-      setHighlightIndex((prev) => Math.min(prev + 1, lastIndex));
+      if (keyboardNavigated) setHighlightIndex((prev) => Math.min(prev + 1, lastIndex));
+      setKeyboardNavigated(true);
       return;
     }
     if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
       event.preventDefault();
-      setHighlightIndex((prev) => Math.max(prev - 1, 0));
+      if (keyboardNavigated) setHighlightIndex((prev) => Math.max(prev - 1, 0));
+      setKeyboardNavigated(true);
       return;
     }
     if (event.key === "Enter") {
@@ -626,11 +634,13 @@ function IntervalSelector({
         createOrSelectInterval(normalizedSearch);
         return;
       }
+      if (!keyboardNavigated) return;
       const highlighted = visibleItemsInRenderOrder[clampedHighlightIndex];
       if (highlighted) selectInterval(highlighted.value);
     }
   }, [
     clampedHighlightIndex,
+    keyboardNavigated,
     closePanel,
     createOrSelectInterval,
     normalizedSearch,
@@ -679,7 +689,7 @@ function IntervalSelector({
     const record = item.record || customIntervalRecords.find((custom) => (
       intervalsSemanticallyEquivalent(custom.value, item.value)
     ));
-    const highlighted = index === clampedHighlightIndex;
+    const highlighted = (keyboardNavigated || Boolean(normalizedSearch)) && index === clampedHighlightIndex;
     const available = isIntervalAvailable(item.value);
     const active = intervalsSemanticallyEquivalent(interval, item.value);
     const pinned = item.isCustom
@@ -712,7 +722,7 @@ function IntervalSelector({
         >
           {item.isCustom && <span className="interval-custom-dot" />}
           {item.label || item.value}
-          {pinned && <span className="interval-chip-star" aria-hidden="true">★</span>}
+          {pinned && <span className="interval-chip-star" aria-hidden="true"><Icon name="star" size={10} filled /></span>}
         </button>
         {pinOnly && (
           <div className="interval-chip-actions">
@@ -724,7 +734,7 @@ function IntervalSelector({
               aria-label={`${item.value} ${pinned ? t("interval.unpin", {}, locale) : t("interval.pin", {}, locale)}`}
               aria-pressed={pinned}
             >
-              {pinned ? "★" : "☆"}
+              <Icon name="star" size={12} filled={pinned} />
             </button>
           </div>
         )}
@@ -737,7 +747,7 @@ function IntervalSelector({
               title={record?.pinned ? t("interval.unpin", {}, locale) : t("interval.pin", {}, locale)}
               aria-label={record?.pinned ? t("interval.unpin", {}, locale) : t("interval.pin", {}, locale)}
             >
-              {record?.pinned ? "★" : "☆"}
+              <Icon name="star" size={12} filled={Boolean(record?.pinned)} />
             </button>
             <button
               type="button"
@@ -746,7 +756,7 @@ function IntervalSelector({
               title={t("interval.deleteNamed", { value: item.value }, locale)}
               aria-label={t("interval.deleteNamed", { value: item.value }, locale)}
             >
-              ×
+              <Icon name="close" size={14} />
             </button>
           </div>
         )}
@@ -806,7 +816,7 @@ function IntervalSelector({
         >
           {!compact && <span className="interval-more-label">{t("interval.label", {}, locale)}</span>}
           {!compact && <span className="interval-more-value">{interval}</span>}
-          <span className="interval-more-caret">▾</span>
+          <span className="interval-more-caret" aria-hidden="true"><Icon name="chevron-down" size={12} /></span>
         </button>
       </nav>
 
@@ -842,7 +852,7 @@ function IntervalSelector({
               onClick={closePanel}
               aria-label={t("interval.closePanel", {}, locale)}
             >
-              ×
+              <Icon name="close" size={14} />
             </button>
           </div>
 
