@@ -315,7 +315,9 @@ export default function WorkspacePanel({
   };
 
   return (
-    <div className={`workspace-panel-overlay right-drawer-overlay ${isResizing ? "is-resizing" : ""}`}>
+    <div className={`workspace-panel-overlay right-drawer-overlay ${isResizing ? "is-resizing" : ""}`}
+      onClick={(event) => { if (event.target === event.currentTarget && !isResizing) onClose(); }}
+    >
       <aside
         className="workspace-panel"
         onKeyDown={handleHistoryKeyDown}

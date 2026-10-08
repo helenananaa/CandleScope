@@ -72,6 +72,19 @@ test("planVisibleRangeRestore uses a single anchor mode", () => {
   });
 });
 
+test("planVisibleRangeRestore reopens a scrolled-back view at the latest bar", () => {
+  assert.deepEqual(planVisibleRangeRestore({
+    barSpacing: 2.5,
+    rightOffset: -997,
+    rightmostTime: 1787850000,
+  }, [], null), {
+    mode: "anchor",
+    barSpacing: 2.5,
+    rightOffset: 0,
+    rightmostTime: 1787850000,
+  });
+});
+
 test("corrupt visible-range storage fails closed", () => {
   for (const raw of ["{broken", "null", "[]"]) {
     withLocalStorage({ [VISIBLE_RANGE_KEY]: raw }, () => {

@@ -38,6 +38,10 @@ export interface ChartAppearancePanelProps {
     onUpdate(settings: ChartSettings): void;
 }
 
+const GREEN = '#22c55e';
+const RED = '#ef4444';
+const sameColor = (a: string | undefined, b: string) => String(a || '').toLowerCase() === b;
+
 export default function ChartAppearancePanel({ settings, onUpdate }: ChartAppearancePanelProps) {
     useLocale();
     const [loadingLocale, setLoadingLocale] = useState(false);
@@ -56,6 +60,8 @@ export default function ChartAppearancePanel({ settings, onUpdate }: ChartAppear
             }
         }).catch(() => setLocaleError(true)).finally(() => setLoadingLocale(false));
     };
+    const greenUpActive = sameColor(settings.upColor, GREEN) && sameColor(settings.downColor, RED);
+    const redUpActive = sameColor(settings.upColor, RED) && sameColor(settings.downColor, GREEN);
 
     return (
         <>
@@ -119,15 +125,19 @@ export default function ChartAppearancePanel({ settings, onUpdate }: ChartAppear
                 <div className="st-group-desc">{t("settings.appearance.colorSchemeDescription")}</div>
                 <div className="st-preset-row">
                     <button
-                        className="st-preset-btn"
-                        onClick={() => onUpdate({ ...settings, upColor: '#22c55e', downColor: '#ef4444' })}
+                        type="button"
+                        className={`st-preset-btn ${greenUpActive ? 'active' : ''}`}
+                        aria-pressed={greenUpActive}
+                        onClick={() => onUpdate({ ...settings, upColor: GREEN, downColor: RED })}
                     >
                         <span style={{ color: 'var(--text-success)', fontWeight: 700 }}>● {t("settings.appearance.greenUp")}</span>
                         <span style={{ color: 'var(--text-danger)', fontWeight: 700 }}>● {t("settings.appearance.redDown")}</span>
                     </button>
                     <button
-                        className="st-preset-btn"
-                        onClick={() => onUpdate({ ...settings, upColor: '#ef4444', downColor: '#22c55e' })}
+                        type="button"
+                        className={`st-preset-btn ${redUpActive ? 'active' : ''}`}
+                        aria-pressed={redUpActive}
+                        onClick={() => onUpdate({ ...settings, upColor: RED, downColor: GREEN })}
                     >
                         <span style={{ color: 'var(--text-danger)', fontWeight: 700 }}>● {t("settings.appearance.redUp")}</span>
                         <span style={{ color: 'var(--text-success)', fontWeight: 700 }}>● {t("settings.appearance.greenDown")}</span>

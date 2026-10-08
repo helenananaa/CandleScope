@@ -418,8 +418,10 @@ export class OrderBookStreamController {
       this.staleTimer = null;
       if (this.stopped || !this.subscribed) return;
       this.partialAuto.reset();
+      // Keep the last book on screen (dimmed by the dock) instead of blanking the
+      // panel every time the feed goes quiet for a few seconds.
       this.store.publishStatus("stale", {
-        clearBook: true,
+        clearBook: false,
         message: t("orderBook.rt.staleSnapshot"),
       });
     }, this.staleAfterMs);

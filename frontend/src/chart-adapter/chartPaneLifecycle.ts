@@ -68,9 +68,12 @@ export function buildLocalizationOptions(
   const timeZoneOpt = timezone && timezone !== "Local" ? timezone : undefined;
   try {
     const showSeconds = /^\d+s$/.test(String(interval));
+    // "1M" is a month; minutes are lower-case "m".
+    const showClock = !/^\d+([dDwW]|M)$/.test(String(interval));
     const tooltipFormatOptions: Intl.DateTimeFormatOptions = {
       year: "numeric", month: "2-digit", day: "2-digit",
-      hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+      ...(showClock ? { hour: "2-digit", minute: "2-digit", hour12: false } : {}),
+      ...(showSeconds ? { second: "2-digit" } : {}),
     };
     const datePartsOptions: Intl.DateTimeFormatOptions = {
       year: "numeric", month: "short", day: "numeric",
@@ -80,17 +83,27 @@ export function buildLocalizationOptions(
       tooltipFormatOptions.timeZone = timeZoneOpt;
       datePartsOptions.timeZone = timeZoneOpt;
     }
+    const dayTickOptions: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+    const monthTickOptions: Intl.DateTimeFormatOptions = { year: "numeric", month: "short" };
+    if (timeZoneOpt) {
+      dayTickOptions.timeZone = timeZoneOpt;
+      monthTickOptions.timeZone = timeZoneOpt;
+    }
     let formatterLocale = "";
     let tooltipFormatter: Intl.DateTimeFormat;
     let partsFormatter: Intl.DateTimeFormat;
+    let dayTickFormatter: Intl.DateTimeFormat;
+    let monthTickFormatter: Intl.DateTimeFormat;
     const formatters = () => {
       const locale = getDateTimeLocale();
       if (locale !== formatterLocale) {
         formatterLocale = locale;
         tooltipFormatter = new Intl.DateTimeFormat(locale, tooltipFormatOptions);
         partsFormatter = new Intl.DateTimeFormat(locale, datePartsOptions);
+        dayTickFormatter = new Intl.DateTimeFormat(locale, dayTickOptions);
+        monthTickFormatter = new Intl.DateTimeFormat(locale, monthTickOptions);
       }
-      return { tooltipFormatter, partsFormatter };
+      return { tooltipFormatter, partsFormatter, dayTickFormatter, monthTickFormatter };
     };
 
     return {
@@ -109,6 +122,14 @@ export function buildLocalizationOptions(
           );
           const year = get("year");
           const month = get("month");
+          // CJK locales return a numeric month ("8"), which would read as "15 8";
+          // let the locale write its own short date ("8月15日", "2026年8月") instead.
+          if (/^\d+$/.test(month)) {
+            const date = new Date(formatterSourceTime(ts) * 1000);
+            const type = Number(tickMarkType);
+            if (type === 1) return formatters().monthTickFormatter.format(date);
+            if (type === 2 || type > 4) return formatters().dayTickFormatter.format(date);
+          }
           const day = get("day");
           const hour = get("hour");
           const min = get("minute");

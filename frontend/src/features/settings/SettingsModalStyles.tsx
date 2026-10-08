@@ -32,6 +32,14 @@ export default function SettingsModalStyles(props: SettingsModalStylesProps) {
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+.st-overlay[hidden] {
+  display: none;
+}
+
+.st-panel:focus {
+  outline: none;
+}
+
 .st-panel {
   display: flex;
   width: min(960px, 92vw);
@@ -301,6 +309,12 @@ html[lang="ru"] .st-preset-btn {
   align-items: center;
   font-size: 13px;
   transition: all 0.15s;
+}
+
+.st-preset-btn.active {
+  border-color: var(--accent-blue);
+  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-blue) 30%, transparent);
 }
 
 .st-preset-btn:hover {

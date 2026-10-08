@@ -491,8 +491,14 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
             <span>{t("orderBook.cumulative")}</span>
           </div>
 
+          {snapshot.book && presentation && rows && snapshot.status === "stale" && (
+            <div className="ob-stale-bar" role="status">
+              <span>{snapshot.message || t("orderBook.rt.staleSnapshot")}</span>
+              <button type="button" onClick={actions.retry}>{t("orderBook.retry")}</button>
+            </div>
+          )}
           {snapshot.book && presentation && rows ? (
-            <div className="ob-book-scroll">
+            <div className={`ob-book-scroll${snapshot.status === "stale" ? " is-stale" : ""}`}>
               <BookLevels key={`${view.identity.exchange}:${view.identity.marketType}:${view.identity.symbol}:${view.preferences.mode}:asks`} onViewport={onViewport} rows={rows.asks} side="ask" maxCumulative={rows.maxCumulative} />
               <div className="ob-spread-row">
                 <span className="ob-mid-price">{formatPrice(snapshot.book.midPrice)}</span>

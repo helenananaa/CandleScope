@@ -401,7 +401,7 @@ for (const mode of ["partial", "full"] as const) {
   });
 }
 
-test("P3 controller clears a snapshot when its client freshness watchdog expires", () => {
+test("P3 controller marks a snapshot stale, keeping the last book, when its freshness watchdog expires", () => {
   const socket = new FakeSocket();
   const { store, flush } = flushableStore();
   const timers = new Map<number, { callback: () => void; delay: number }>();
@@ -445,7 +445,7 @@ test("P3 controller clears a snapshot when its client freshness watchdog expires
   assert.ok(watchdog);
   watchdog.callback();
   assert.equal(store.getSnapshot().status, "stale");
-  assert.equal(store.getSnapshot().book, null);
+  assert.notEqual(store.getSnapshot().book, null);
   controller.close();
 });
 

@@ -6,6 +6,7 @@ import {
   buildLocalizationOptions,
 } from "../chartPaneLifecycle.js";
 import { structuralMock } from "../../test/testHelpers.js";
+import { getLocale, setLocale } from "../../i18n/locale.js";
 
 test("localization formatters resolve public and internal ordinal source time", () => {
   const options = buildLocalizationOptions("UTC", "1h");
@@ -41,4 +42,22 @@ test("chart pane forwards the custom tick-label width budget", () => {
   });
 
   assert.equal(options.timeScale?.tickMarkMaxCharacterLength, 12);
+});
+
+test("CJK date ticks use the locale's own short date instead of day-number pairs", () => {
+  const previous = getLocale();
+  setLocale("zh-CN");
+  try {
+    const options = buildLocalizationOptions("UTC", "1h");
+    const formatters = structuralMock<{
+      localization: { timeFormatter: (time: unknown) => string };
+      timeScale: { tickMarkFormatter: (time: unknown, weight: number) => string };
+    }>(options);
+    const aug15 = Date.UTC(2026, 7, 15, 2) / 1000;
+    assert.equal(formatters.timeScale.tickMarkFormatter(aug15, 2), "8月15日");
+    assert.equal(formatters.timeScale.tickMarkFormatter(aug15, 1), "2026年8月");
+    assert.doesNotMatch(formatters.localization.timeFormatter(aug15), /:\d\d:\d\d/);
+  } finally {
+    setLocale(previous);
+  }
 });

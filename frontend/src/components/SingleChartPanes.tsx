@@ -1016,6 +1016,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   const canLoadMoreRightRef = useRef(canLoadMoreRight ?? canRestoreLatestWindow);
   const canRestoreLatestWindowRef = useRef(canRestoreLatestWindow);
   const rightWindowTruncatedRef = useRef(rightWindowTruncated);
+  // The latest bar is loaded but scrolled out of view: offer a jump back to it.
+  const scrolledAwayFromLatestRef = useRef(false);
+  const [scrolledAwayFromLatest, setScrolledAwayFromLatest] = useState(false);
   const loadingRef = useRef(loading);
   const leftHistoryDemandDatasetRef = useRef<string | null>(null);
   const leftHistoryInteractionGenerationRef = useRef(0);
@@ -2623,6 +2626,12 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
 
     const handleVisibleLogicalRangeChange = (range: VisibleLogicalRange) => {
       scheduleFutureTimeAxisCoverage();
+      const lastIndex = displayRowsRef.current.length - 1;
+      const awayFromLatest = Boolean(range && lastIndex > 0 && range.to < lastIndex - 2);
+      if (awayFromLatest !== scrolledAwayFromLatestRef.current) {
+        scrolledAwayFromLatestRef.current = awayFromLatest;
+        setScrolledAwayFromLatest(awayFromLatest);
+      }
       if (isChartPointerActiveRef.current && range) {
         chartPointerLogicalRangeChangedRef.current = true;
         markViewportRangeInteracted();
@@ -3089,14 +3098,19 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     return () => cancelAnimationFrame(frameId);
   }, [chartAdapter, customBg, dataMeta?.optimistic, dataMeta?.targetSeriesKey, interval, notifyDrawingFrameInvalidation, theme, tickMarkFormatter, tickMarkMaxCharacterLength, timeFormatter, timezone]);
 
+  // When the loaded window stops short of the newest bars, its last bar is not the
+  // current price, so the axis price tag and price line would show a stale value.
+  const latestBarLoaded = !(rightWindowTruncated ?? Boolean(seriesStore?.rightTruncated));
   useEffect(() => {
     const activeType = mainSeriesTypeRef.current || resolvedChartType;
     mainSeriesRef.current?.applyOptions({
       ...buildMainSeriesStyleOptions(activeType, { upColor, downColor }),
       crosshairMarkerVisible: showCrosshairDetails && !drawingEngineToolActive,
+      lastValueVisible: latestBarLoaded,
+      priceLineVisible: latestBarLoaded,
     });
     notifyDrawingFrameInvalidation();
-  }, [downColor, drawingEngineToolActive, notifyDrawingFrameInvalidation, resolvedChartType, seriesReady, showCrosshairDetails, upColor]);
+  }, [downColor, drawingEngineToolActive, latestBarLoaded, notifyDrawingFrameInvalidation, resolvedChartType, seriesReady, showCrosshairDetails, upColor]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -4904,6 +4918,26 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           {t(latestWindowRestorePending
             ? "status.returningRealtime"
             : "status.returnToRealtime", {}, locale)}
+        </button>
+      )}
+
+      {scrolledAwayFromLatest && !(onRestoreLatestWindow
+        && (rightWindowTruncated ?? Boolean(seriesStore?.rightTruncated))) && (
+        <button
+          type="button"
+          className="chart-return-to-realtime"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            const lastIndex = displayRowsRef.current.length - 1;
+            if (lastIndex < 0) return;
+            const rawPosition = Number(latestBarPositionRef.current);
+            viewportControllerRef.current?.followLatest(lastIndex, {
+              position: Number.isFinite(rawPosition) ? Math.min(1, Math.max(0, rawPosition)) : 0.5,
+            });
+          }}
+        >
+          {t("status.returnToRealtime", {}, locale)}
         </button>
       )}
 

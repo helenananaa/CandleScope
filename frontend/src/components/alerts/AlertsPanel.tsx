@@ -1340,7 +1340,9 @@ export default function AlertsPanel({
   if (!isOpen) return null;
 
   return (
-    <div className={`alert-panel-overlay right-drawer-overlay ${isResizing ? "is-resizing" : ""}`}>
+    <div className={`alert-panel-overlay right-drawer-overlay ${isResizing ? "is-resizing" : ""}`}
+      onClick={(event) => { if (event.target === event.currentTarget && !isResizing) onClose(); }}
+    >
       <aside
         className="alert-panel"
         style={{ width: `${panelWidth}px` }}

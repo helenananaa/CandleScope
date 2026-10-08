@@ -678,7 +678,9 @@ plot(ma, "MA", color=line_color)
   if (!isOpen) return null;
 
   return (
-    <div className={`indicator-panel-overlay right-drawer-overlay ${isResizing ? "is-resizing" : ""}`}>
+    <div className={`indicator-panel-overlay right-drawer-overlay ${isResizing ? "is-resizing" : ""}`}
+      onClick={(event) => { if (event.target === event.currentTarget && !isResizing) onClose(); }}
+    >
       <div
         className="indicator-panel"
         style={{ width: `${panelWidth}px` }}

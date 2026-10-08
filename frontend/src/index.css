@@ -54,12 +54,16 @@ body {
   height: 6px;
 }
 
-::-webkit-scrollbar-track {
-  background: var(--bg-primary);
+/* One scrollbar style everywhere. Do not set scrollbar-color or scrollbar-width: thin:
+ * scrollbar-color is inherited and makes Chromium ignore these rules for the whole
+ * subtree, which brings back the platform scrollbar with arrow buttons. */
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--bg-tertiary);
+  background: color-mix(in srgb, var(--text-muted) 40%, transparent);
   border-radius: 3px;
 }
 
@@ -148,6 +152,7 @@ body {
 }
 
 .market-rail-panel {
+  container: rail / inline-size;
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
@@ -156,8 +161,6 @@ body {
   height: 100%;
   overflow-x: hidden;
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--text-muted) 55%, transparent) transparent;
   scrollbar-gutter: stable;
   overscroll-behavior-y: contain;
   box-shadow:
@@ -536,8 +539,6 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
 }
 .wl-accordion-scroll::-webkit-scrollbar { width: 4px; }
 .wl-accordion-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -799,6 +800,13 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 @container watchlist (max-width: 360px) {
   .wl-th-change,
   .wl-col-change { display: none; }
+}
+
+/* Very narrow rail (small windows): ticker and last price only */
+@container watchlist (max-width: 260px) {
+  .wl-th-changepct,
+  .wl-col-changepct,
+  .wl-exchange-badge { display: none; }
 }
 
 /* Value colors (up/down for change and change%) */
@@ -2201,8 +2209,6 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
 }
 
 .sym-modal-list::-webkit-scrollbar {
@@ -2843,8 +2849,6 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
 }
 
 .interval-panel-body::-webkit-scrollbar { width: 6px; }
@@ -3366,8 +3370,6 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   max-height: calc(100vh - 156px);
   overflow-y: auto;
   padding-right: 4px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
 }
 
 .export-settings-panel::-webkit-scrollbar { width: 6px; }
@@ -5969,6 +5971,12 @@ button.plugin-platform-notice:focus-visible { outline: 2px solid var(--accent-bl
 .right-drawer-overlay.is-resizing {
   cursor: col-resize;
   user-select: none;
+}
+
+/* Drawers open below the top bar, so its toggle buttons stay clickable
+ * (element-qualified to win over each drawer's own inset: 0) */
+div.right-drawer-overlay {
+  top: 48px;
 }
 
 .alert-panel-header {
@@ -8847,7 +8855,8 @@ button.plugin-platform-notice:focus-visible { outline: 2px solid var(--accent-bl
   left: 10px;
   z-index: 10;
   display: flex;
-  max-width: calc(100% - 250px);
+  /* clears the pane controls and the drawing-object button to their right */
+  max-width: calc(100% - 330px);
   flex-direction: column;
   gap: 3px;
   color: var(--text-secondary);
@@ -9172,7 +9181,7 @@ button.plugin-platform-notice:focus-visible { outline: 2px solid var(--accent-bl
 .replay-recovery-banner, .replay-controller-banner { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 34px; padding: 4px 12px; color: var(--text-warning); background: color-mix(in srgb, var(--color-warning) 24%, transparent); font-size: var(--font-size-sm); }
 .replay-recovery-banner button, .replay-controller-banner button { padding: 3px 8px; border: 1px solid color-mix(in srgb, var(--color-warning) 60%, transparent); border-radius: 5px; color: var(--text-warning); background: color-mix(in srgb, var(--color-warning) 20%, transparent); }
 .replay-control-stack > .replay-command-error { margin: 6px 10px; }
-.replay-control-bar { display: flex; flex-wrap: nowrap; align-items: center; gap: 7px; min-height: 48px; padding: 6px 10px; overflow-x: auto; scrollbar-width: thin; }
+.replay-control-bar { display: flex; flex-wrap: nowrap; align-items: center; gap: 7px; min-height: 48px; padding: 6px 10px; overflow-x: auto; }
 .replay-control-bar::-webkit-scrollbar { height: 5px; }
 .replay-control-bar::-webkit-scrollbar-track { background: var(--bg-secondary); }
 .replay-control-bar::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--border-color); }
@@ -12523,7 +12532,6 @@ button.plugin-platform-notice:focus-visible { outline: 2px solid var(--accent-bl
   height: 100%;
   min-height: 0;
   overflow: auto;
-  scrollbar-width: thin;
 }
 
 .replay-ticket-account {
@@ -13420,7 +13428,6 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
   gap: 0;
   padding: 4px 10px 12px;
   overflow: auto;
-  scrollbar-width: thin;
 }
 
 .replay-account-empty {
@@ -15167,7 +15174,14 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 
 .chart-main-legend[data-pane-width='medium'],
 .chart-main-legend[data-pane-width='narrow'] {
-  max-width: calc(100% - 90px);
+  max-width: calc(100% - 220px);
+}
+
+/* On medium/narrow panes the drawing-object button drops below the pane controls
+ * instead of sitting on top of the legend row. */
+.chart-area:has(> .chart-main-legend:is([data-pane-width='medium'], [data-pane-width='narrow'])) .drawing-object-list {
+  top: 40px;
+  right: 92px;
 }
 
 .chart-main-legend[data-pane-width='medium'] .chart-main-secondary,
@@ -15378,3 +15392,108 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 .preparation-job-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
 .preparation-job-actions > :is(button, a) { width: auto; padding: 6px 10px; }
 .training-hub-preparation summary:focus-visible { outline: 2px solid var(--hub-text); outline-offset: 2px; }
+
+/* Order book kept on screen while its feed is stale */
+.ob-book-scroll.is-stale {
+  opacity: 0.45;
+  filter: grayscale(0.6);
+}
+
+.ob-stale-bar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 4px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-warning) 40%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 10%, var(--surface-1));
+  color: var(--text-warning);
+  font-size: var(--font-size-xs);
+}
+
+.ob-stale-bar span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ob-stale-bar button {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ── Top bar at narrow widths ─────────────────────────────────
+ * The symbol never truncates; lower-priority items give way first.
+ * Hidden intervals stay reachable from the interval picker (▾). */
+.top-bar .symbol-selector {
+  flex-shrink: 0;
+  min-width: max-content;
+}
+
+.top-bar .symbol-name {
+  max-width: none;
+  overflow: visible;
+}
+
+@media (max-width: 1180px) {
+  .top-bar .symbol-shortcut-badge { display: none; }
+}
+
+@media (max-width: 1080px) {
+  .top-bar .symbol-exchange,
+  .top-bar .chart-strategy-entry-button > span { display: none; }
+}
+
+@media (max-width: 980px) {
+  .top-bar .interval-btn:not(.active) { display: none; }
+}
+
+@media (max-width: 760px) {
+  .top-bar { gap: 6px; padding: 0 8px; }
+  .top-bar .chart-strategy-entry-button { display: none; }
+}
+
+/* Order book in a narrow rail: keep the title on one line, drop the delivery
+ * label, and put the four controls on two rows instead of truncating them. */
+.ob-title,
+.ob-status {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+@container rail (max-width: 280px) {
+  .ob-delivery-mode { display: none; }
+  .ob-controls {
+    flex-basis: auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Short windows: compact the drawing toolbar so every tool stays visible
+ * (it cannot scroll, because its flyouts are positioned inside it). */
+.drawing-toolbar > * {
+  flex-shrink: 0;
+}
+
+@media (max-height: 560px) {
+  .drawing-toolbar {
+    gap: 1px;
+    padding: 4px 0;
+  }
+
+  .drawing-toolbar .drawing-tool-btn {
+    width: 28px;
+    height: 22px;
+  }
+
+  .drawing-toolbar-divider {
+    margin: 1px 0;
+  }
+}

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { PluginSettingsPanel } from '../plugins/PluginCenter.js';
 import DataWorkbenchModal from '../data-workbench/DataWorkbenchModal.js';
 import { t } from '../../i18n/index.js';
@@ -55,6 +55,28 @@ export default function SettingsModal({
         trimChartDataCacheEntries,
     });
   const { view, actions } = settingsRuntime;
+    const panelRef = useRef<HTMLDivElement>(null);
+    const nestedOpen = pluginCenterOpen || dataWorkbenchOpen;
+
+    // Move focus into the dialog on open and give it back to the opener on close.
+    useEffect(() => {
+        if (!isOpen) return undefined;
+        const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        panelRef.current?.focus();
+        return () => { opener?.focus(); };
+    }, [isOpen]);
+
+    // Escape closes Settings; nested surfaces handle their own Escape first.
+    useEffect(() => {
+        if (!isOpen || nestedOpen) return undefined;
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape' || event.defaultPrevented) return;
+            event.preventDefault();
+            onClose();
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [isOpen, nestedOpen, onClose]);
 
     if (!isOpen) return null;
 
@@ -70,16 +92,26 @@ export default function SettingsModal({
 
     return (
       <>
-        <div className="st-overlay" inert={pluginCenterOpen} aria-hidden={pluginCenterOpen || undefined} onClick={onClose}>
-            <div className="st-panel" onClick={(event: MouseEvent<HTMLDivElement>) => event.stopPropagation()}>
+        {/* Hidden, not unmounted, while the plugin center is open so 返回 restores this state */}
+        <div className="st-overlay" hidden={pluginCenterOpen} inert={pluginCenterOpen} onClick={onClose}>
+            <div
+                ref={panelRef}
+                className="st-panel"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="settings-dialog-title"
+                tabIndex={-1}
+                onClick={(event: MouseEvent<HTMLDivElement>) => event.stopPropagation()}
+            >
                 {/* Sidebar */}
                 <nav className="st-sidebar">
-                    <div className="st-sidebar-title">{t("settings.title")}</div>
+                    <div className="st-sidebar-title" id="settings-dialog-title">{t("settings.title")}</div>
                     <div className="st-sidebar-nav">
                         {visibleCategories.map(cat => (
                             <button
                                 key={cat.key}
                                 className={`st-nav-item ${activeCategory === cat.key ? 'active' : ''}`}
+                                aria-current={activeCategory === cat.key ? 'page' : undefined}
                                 onClick={() => { if (cat.key === "plugins" && plugins) setPluginCenterOpen(true); else setActiveCategory(cat.key); }}
                             >
                                 <span className="st-nav-icon" aria-hidden="true"><Icon name={cat.icon} /></span>
