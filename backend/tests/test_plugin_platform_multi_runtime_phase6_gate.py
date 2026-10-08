@@ -30,11 +30,31 @@ def test_phase6_previous_v2_fixture_is_not_rewritten() -> None:
     )
 
 
-def test_phase6_v3_only_migrates_ui_contract() -> None:
-    previous = phase6.validate_previous_contract_v2()
+def test_phase6_previous_v3_fixture_is_not_rewritten() -> None:
+    previous = phase6.validate_previous_ui_contract_v3()
+    assert previous["schemaVersion"].endswith("/3")
+    assert previous["previousContractSha256"] == (
+        "sha256:" + phase6.PREVIOUS_CONTRACT_FILE_SHA256
+    )
+
+
+def test_phase6_v4_only_migrates_ui_contract() -> None:
+    previous = phase6.validate_previous_ui_contract_v3()
     current = phase6.validate_contract()
     changed = {key for key in previous.keys() | current.keys() if previous.get(key) != current.get(key)}
     assert changed == {"schemaVersion", "migratedOn", "previousContractSha256", "ui"}
+
+
+def test_phase6_rejects_rewritten_v3_history(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    previous = phase6.validate_previous_ui_contract_v3()
+    previous["ui"]["itemizedDoubleConfirmation"] = False
+    path = tmp_path / "phase6-rewritten-v3.json"
+    path.write_text(json.dumps(previous), encoding="utf-8")
+    monkeypatch.setattr(phase6, "PREVIOUS_UI_CONTRACT_PATH", path)
+    with pytest.raises(phase6.Phase6GateError, match="v3 was rewritten"):
+        phase6.validate_contract()
 
 
 def test_phase6_rejects_rewritten_v2_history(
@@ -54,7 +74,7 @@ def test_phase6_contract_freezes_trust_grants_sandbox_and_jre_migration() -> Non
 
     assert contract["schemaVersion"] == phase6.CONTRACT_SCHEMA_VERSION
     assert contract["previousContractSha256"] == (
-        "sha256:" + phase6.PREVIOUS_CONTRACT_FILE_SHA256
+        "sha256:" + phase6.PREVIOUS_UI_CONTRACT_FILE_SHA256
     )
     assert contract["realGateEvidenceContractSha256"] == (
         phase6._canonical_sha256(phase6.validate_historical_contract_v1())
@@ -102,6 +122,7 @@ def test_phase6_contract_freezes_trust_grants_sandbox_and_jre_migration() -> Non
     assert contract["rollout"]["liveDefaults"] == [False] * 5
     assert contract["ui"]["runtimeAndPermissionDiff"] is True
     assert contract["ui"]["verifiedPublisherNotSafeOrOfficial"] is True
+    assert contract["ui"]["readOnlyInstallActionsHidden"] is True
     assert contract["ui"]["catalogScope"] == ["plugin.", "pc."]
     assert set(contract["ui"]["managementSurfaceSha256"]) == {
         "PluginCenter.tsx",
@@ -157,6 +178,20 @@ def test_phase6_rejects_disconnected_install_flow(monkeypatch: pytest.MonkeyPatc
         "<PluginInstallFlow ",
         "<DisconnectedInstallFlow ",
     )
+    with pytest.raises(phase6.Phase6GateError, match="contract drift"):
+        phase6.validate_contract()
+
+
+def test_phase6_rejects_install_actions_exposed_on_read_only_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _replace_source(
+        monkeypatch,
+        "frontend/src/features/plugins/PluginCenter.tsx",
+        "platformEnabled && management && <button",
+        "platformEnabled && <button",
+    )
+    assert phase6.capture_contract()["ui"]["readOnlyInstallActionsHidden"] is False
     with pytest.raises(phase6.Phase6GateError, match="contract drift"):
         phase6.validate_contract()
 
