@@ -20,7 +20,6 @@ import React, {
 import { createPortal } from "react-dom";
 import "../features/backtest/chart-tester/chartStrategyEntry.css";
 import IntervalSelector from "../components/IntervalSelector.js";
-import CellDataAge from "../features/market-data/CellDataAge.js";
 import { useChartSurfaceRuntime } from "../chart-adapter/useChartSurfaceRuntime.js";
 import type { ChartSurfaceVisibleRange } from "../chart-adapter/useChartSurfaceRuntime.js";
 import type { MainSeriesCrosshairValue } from "../chart-adapter/chartAdapterTypes.js";
@@ -826,7 +825,6 @@ function LiveChartCell({
           <span className="multi-chart-cell-market">
             {chartSession.view.exchange} · {chartSession.view.marketType}
           </span>
-          <CellDataAge store={sourceMarketData.view.seriesStore} />
           {linkGroupControl ?? (linkGroup && (
             <span
               className="multi-chart-cell-link"

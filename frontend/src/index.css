@@ -10030,26 +10030,6 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   box-shadow: 0 0 0 1px var(--chart-link-group-color);
 }
 
-/* Time since live data last arrived; shown only once a cell falls behind */
-.cell-data-age {
-  flex-shrink: 0;
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-xs);
-  color: var(--text-muted);
-  font: 500 var(--font-size-2xs)/16px var(--font-mono);
-}
-
-.cell-data-age.is-stale {
-  background: color-mix(in srgb, var(--color-warning) 14%, transparent);
-  color: var(--text-warning);
-}
-
-/* A stale cell desaturates so it cannot be mistaken for a live one */
-.multi-chart-cell:has(.cell-data-age.is-stale) .multi-chart-cell-canvas {
-  filter: saturate(0.35);
-  opacity: 0.85;
-}
-
 .multi-chart-cell-status {
   width: 6px;
   height: 6px;
