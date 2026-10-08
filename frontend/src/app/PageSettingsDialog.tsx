@@ -24,16 +24,17 @@ export default function PageSettingsDialog({
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     panelRef.current?.focus();
+    return () => { opener?.focus(); };
+  }, []);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
       event.preventDefault();
       onClose();
     };
     window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      opener?.focus();
-    };
+    return () => { window.removeEventListener("keydown", onKeyDown); };
   }, [onClose]);
 
   return (

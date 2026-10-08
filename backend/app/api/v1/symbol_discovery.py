@@ -46,7 +46,18 @@ class ProviderQueries:
         self.tasks: dict[tuple, asyncio.Task] = {}
         self.gate = asyncio.Semaphore(3)
         self.known: OrderedDict[str, dict] = OrderedDict()
+        self.generation = 0
         self.store_path: Path | None = None
+
+    def _remember(self, rows: list[dict]) -> None:
+        if not rows:
+            return
+        for row in rows:
+            self.known[identity_key(row)] = row
+        while len(self.known) > 3000:
+            self.known.popitem(last=False)
+        # Replacements and evictions can change results without changing counts.
+        self.generation += 1
 
     async def restore(self) -> None:
         snapshot = Path(catalog.SYMBOL_CATALOG_SNAPSHOT_PATH)
@@ -54,10 +65,9 @@ class ProviderQueries:
             return
         self.store_path = snapshot.with_name("symbol_discovery.providers.sqlite3")
         rows = await asyncio.to_thread(exchange_rows, self.store_path)
-        for row in rows:
-            if isinstance(row, dict) and all(isinstance(row.get(key), str) and row[key]
-                                             for key in ("exchange", "symbol", "marketType")):
-                self.known[identity_key(row)] = row
+        self._remember([row for row in rows
+                        if isinstance(row, dict) and all(isinstance(row.get(key), str) and row[key]
+                                                        for key in ("exchange", "symbol", "marketType"))])
 
     async def get(self, adapter: Any, query: str, market: str) -> tuple[list, str]:
         key = (id(adapter), query.casefold(), market)
@@ -90,12 +100,9 @@ class ProviderQueries:
         finally:
             self.tasks.pop(key, None)
         self.cache[key] = (time.monotonic() + (60 if status in {"ready", "limited"} else 10), rows, status)
-        for row in rows:
-            self.known[identity_key(row)] = row
+        self._remember(rows)
         if rows and self.store_path:
             await asyncio.to_thread(exchange_rows, self.store_path, [(identity_key(row), row) for row in rows])
-        while len(self.known) > 3000:
-            self.known.popitem(last=False)
         while len(self.cache) > 128:
             self.cache.popitem(last=False)
         return rows, status
@@ -107,6 +114,8 @@ class ProviderQueries:
         await asyncio.gather(*tasks, return_exceptions=True)
         self.tasks.clear()
         self.cache.clear()
+        if self.known:
+            self.generation += 1
         self.known.clear()
 
 
@@ -293,8 +302,7 @@ async def search_symbols(query: DiscoveryQuery) -> dict:
     # Take only references on the event loop; detaching ~30k rows with deepcopy
     # here used to stall charts and streams for seconds per search.
     rows = catalog.cached_symbol_refs()
-    if not query.search.strip() or query.scope != "all":
-        rows.extend(provider_queries.known.values())
+    catalog_generation = catalog.cache_generation()
     selected_set = set(selected)
     rows = [row for row in rows if row["exchange"] in selected_set]
     statuses = []
@@ -307,6 +315,10 @@ async def search_symbols(query: DiscoveryQuery) -> dict:
         results = await asyncio.gather(*(provider_queries.get(adapters[source], provider_search_text(query.search), query.market_type)
                                          for source in queried))
         provider_results = dict(zip(queried, results, strict=True))
+    # Collect provider rows and their version together, after upstream awaits.
+    provider_generation = provider_queries.generation
+    if not query.search.strip() or query.scope != "all":
+        rows.extend(row for row in provider_queries.known.values() if row["exchange"] in selected_set)
     for source in selected:
         if source in query_sources:
             found, status = provider_results.get(source, ([], "not_queried" if query.search.strip() else "query_required"))
@@ -322,7 +334,7 @@ async def search_symbols(query: DiscoveryQuery) -> dict:
             status = "unavailable" if source in requested or failed else "not_loaded"
         statuses.append({"id": source, "status": status})
     # Matching/sorting large snapshots must not occupy the API event loop used
-    # by charts and streaming. Rows here are detached catalog snapshots.
+    # by charts and streaming. Rows here reference immutable catalog snapshots.
     # Reopening the dialog repeats the same query over the same catalog, so the ranked
     # rows are reused until the catalog changes. Provider answers are cached by
     # ``provider_queries`` and return the same list object while fresh; that identity
@@ -331,7 +343,7 @@ async def search_symbols(query: DiscoveryQuery) -> dict:
     # are attached per response rather than cached.
     found_lists = [found for _, (found, _) in sorted(provider_results.items())]
     cache_key = (
-        catalog.cache_generation(), len(rows), len(provider_queries.known), query.model_dump_json(),
+        catalog_generation, provider_generation, len(rows), query.model_dump_json(),
         tuple((source, id(found), status) for source, (found, status) in sorted(provider_results.items())),
     )
     cached = _result_cache.get(cache_key)

@@ -15,9 +15,12 @@ const PRICE_SCALE_MODES: readonly {
 
 export default function PanePriceScaleMenu({
   menu, locale, onInvertScaleChange, onPriceScaleModeChange, onAddAlertAtPrice, onReturnToLatest,
+  returnToLatestDisabled = false, returnToLatestPending = false,
 }: {
-  /** Shown while the latest bar is scrolled out of view. */
+  /** Shown while the latest bar is scrolled out of view or not loaded. */
   onReturnToLatest?: (() => void) | null | undefined;
+  returnToLatestDisabled?: boolean;
+  returnToLatestPending?: boolean;
   onAddAlertAtPrice?: ((price: number) => void) | null | undefined;
   menu: ReturnType<typeof usePanePriceScaleMenu>;
   locale: LocaleId;
@@ -37,13 +40,14 @@ export default function PanePriceScaleMenu({
           <button
             type="button"
             className="price-scale-menu-item"
+            disabled={returnToLatestDisabled}
             onClick={() => {
               onReturnToLatest();
               menu.close();
             }}
           >
             <span className="price-scale-menu-check" aria-hidden="true" />
-            <span>{t("status.returnToRealtime", {}, locale)}</span>
+            <span>{t(returnToLatestPending ? "status.returningRealtime" : "status.returnToRealtime", {}, locale)}</span>
           </button>
           <div className="price-scale-menu-divider" role="separator" />
         </>

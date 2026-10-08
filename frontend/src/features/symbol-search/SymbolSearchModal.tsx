@@ -3,7 +3,7 @@ import { Icon } from "../../components/icons/Icon.js";
 import { shortcutModifier } from "../../shared/shortcutModifier.js";
 import { t, tKey, translateMarketType } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
-import { formatExchangeLabel } from "./symbolSearchFilter";
+import { formatExchangeLabel, formatSymbolLabel } from "./symbolSearchFilter";
 import { SourcePicker } from "./SourcePicker";
 import { useSymbolSearchRuntime } from "./useSymbolSearchRuntime";
 import type { UseSymbolSearchRuntimeOptions } from "./useSymbolSearchRuntime.js";
@@ -239,7 +239,7 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
                         <Icon name="star" size={14} filled={isFavorite} />
                       </button>
                       <span className="sym-modal-col-pair sym-modal-row-pair" title={symbol.symbol}>
-                        {symbol.baseAsset && symbol.quoteAsset ? `${symbol.baseAsset}/${symbol.quoteAsset}` : symbol.symbol}
+                  {formatSymbolLabel(symbol)}
                         {isCurrent && <span className="sym-modal-current-tag">{t("search.current")}</span>}
                         {hasWatchlists && inWatchlists.length > 0 && (
                           <span className="sym-modal-wl-indicators">
