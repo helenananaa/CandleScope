@@ -27,7 +27,7 @@ import type {
   NativeInterval,
 } from "../features/chart-session/chartSessionTypes.js";
 import { getEffectiveCustomIntervalRecords } from "../features/chart-session/intervalPolicy.js";
-import { searchKeyboardBlocked } from "../features/symbol-search/symbolSearchShortcut.js";
+import { quickSearchCharacter, searchKeyboardBlocked } from "../features/symbol-search/symbolSearchShortcut.js";
 import {
   toggleFavoriteInterval,
   useFavoriteIntervals,
@@ -515,19 +515,19 @@ function IntervalSelector({
   useEffect(() => {
     if (!compact || readOnlyReason !== null) return undefined;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey
-        || event.isComposing || event.repeat || !/^[0-9]$/.test(event.key)) return;
+      const character = quickSearchCharacter(event, searchKeyboardBlocked(
+        document, event, open ? panelRef.current : null,
+      ));
+      if (character === null || !/^[0-9]$/.test(character)) return;
       if (open) {
         // Keep keystrokes typed before the search input takes focus.
-        if (document.activeElement === searchInputRef.current) return;
         event.preventDefault();
-        setSearch((value) => value + event.key);
+        setSearch((value) => value + character);
         return;
       }
-      if (searchKeyboardBlocked(document, event)) return;
       event.preventDefault();
       setActiveTab("all");
-      setSearch(event.key);
+      setSearch(character);
       setHighlightIndex(0);
       setOpen(true);
     };
