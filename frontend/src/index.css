@@ -379,6 +379,7 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 
 .watchlist-pane {
+  container: watchlist / inline-size;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -716,12 +717,18 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   color: var(--text-primary);
   flex: 1;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+/* The ticker owns the ellipsis so badges never hide it */
+.wl-sym-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .wl-market-badge {
@@ -786,6 +793,12 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 }
 .wl-col-empty {
   color: var(--text-muted);
+}
+
+/* Narrow rail: drop the absolute change so the ticker keeps its room (change % stays) */
+@container watchlist (max-width: 360px) {
+  .wl-th-change,
+  .wl-col-change { display: none; }
 }
 
 /* Value colors (up/down for change and change%) */
@@ -5229,10 +5242,9 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
 .plugin-permissions pre,
 .plugin-manager-detail pre { max-height: 160px; overflow: auto; white-space: pre-wrap; color: var(--text-muted); background: var(--bg-primary); padding: 8px; border-radius: 6px; }
 
-.plugin-platform-notice,
 .plugin-ui-fallback {
   position: fixed;
-  z-index: calc(var(--z-toast) + 200);
+  z-index: var(--z-toast);
   right: 16px;
   bottom: 38px;
   max-width: min(480px, 90vw);
@@ -5244,7 +5256,34 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 
-.plugin-platform-error { border-color: var(--candle-down); }
+/* Platform notices sit in their own row above the status bar, like the live-control strip,
+ * so a lasting error never covers the right rail. */
+.plugin-platform-notice {
+  display: block;
+  flex-shrink: 0;
+  width: 100%;
+  min-height: 28px;
+  overflow: hidden;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  padding: 6px 12px;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font: var(--font-size-xs)/1.4 var(--font-sans);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.plugin-platform-notice { cursor: pointer; }
+button.plugin-platform-notice:hover { background: var(--surface-hover); }
+button.plugin-platform-notice:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; }
+
+.plugin-platform-error {
+  border-top-color: color-mix(in srgb, var(--color-danger) 70%, transparent);
+  background: color-mix(in srgb, var(--color-danger) 10%, var(--surface-1));
+  color: var(--text-danger);
+}
 
 /* ── Plugin center inside Settings ───────────────────────── */
 .plugin-settings-page {
@@ -5627,58 +5666,62 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   }
 }
 
+/* Full-width strip above the status bar: it takes its own row in .app-layout
+ * (the feature-surface host is display: contents), so it never covers chart controls. */
 .live-control-banner {
-  position: fixed;
-  z-index: calc(var(--z-toast) + 500);
-  top: 54px;
-  left: 50%;
+  --live-banner-tone: var(--color-warning);
+  --live-banner-text: var(--text-warning);
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 12px;
-  max-width: min(720px, calc(100vw - 32px));
-  transform: translateX(-50%);
-  border: 1px solid color-mix(in srgb, var(--color-warning) 78%, transparent);
-  border-radius: 999px;
-  padding: 8px 16px;
-  background: color-mix(in srgb, var(--color-warning) 22%, var(--surface-1));
-  color: #fff7ed;
-  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.48);
+  width: 100%;
+  min-height: 28px;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--live-banner-tone) 70%, transparent);
+  padding: 4px 12px;
+  background: color-mix(in srgb, var(--live-banner-tone) 14%, var(--surface-1));
+  color: var(--text-primary);
   font: inherit;
+  text-align: left;
   cursor: pointer;
+}
+
+.live-control-banner:hover {
+  background: color-mix(in srgb, var(--live-banner-tone) 20%, var(--surface-1));
+}
+
+.live-control-banner:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: -2px;
 }
 
 .live-control-banner strong {
   flex: 0 0 auto;
+  color: var(--live-banner-text);
   font-size: var(--font-size-xs);
   letter-spacing: 0.08em;
 }
 
 .live-control-banner span {
+  min-width: 0;
   overflow: hidden;
-  color: rgba(255, 247, 237, 0.84);
+  color: var(--text-secondary);
   font-size: var(--font-size-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.live-control-banner.live-control-armed {
-  border-color: color-mix(in srgb, var(--color-danger) 92%, transparent);
-  background: color-mix(in srgb, var(--color-danger) 22%, var(--surface-1));
-}
-
-.live-control-banner.live-control-killed {
-  border-color: color-mix(in srgb, var(--color-danger) 90%, transparent);
-  background: color-mix(in srgb, var(--color-danger) 22%, var(--surface-1));
+.live-control-banner:is(.live-control-armed, .live-control-killed, .live-control-unavailable) {
+  --live-banner-tone: var(--color-danger);
+  --live-banner-text: var(--text-danger);
 }
 
 .live-control-banner.live-control-unavailable {
-  border-color: color-mix(in srgb, var(--color-danger) 92%, transparent);
   background: repeating-linear-gradient(
     135deg,
-    color-mix(in srgb, var(--color-danger) 22%, var(--surface-1)) 0,
-    color-mix(in srgb, var(--color-danger) 22%, var(--surface-1)) 10px,
-    color-mix(in srgb, var(--color-danger) 22%, var(--surface-1)) 10px,
-    color-mix(in srgb, var(--color-danger) 22%, var(--surface-1)) 20px
+    color-mix(in srgb, var(--color-danger) 10%, var(--surface-1)) 0 10px,
+    color-mix(in srgb, var(--color-danger) 16%, var(--surface-1)) 10px 20px
   );
 }
 
@@ -5805,8 +5848,6 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   .plugin-command-layout nav,
   .plugin-manager-layout nav { max-height: 180px; border-right: 0; border-bottom: 1px solid var(--border-color); padding: 0 0 10px; }
   .plugin-toolbar { max-width: 32vw; }
-  .live-control-banner { top: 48px; }
-  .live-control-banner span { display: none; }
   .live-revoke-grid { grid-template-columns: 1fr; }
   .live-intent-facts { grid-template-columns: 1fr; }
   .live-intent-facts dd { margin-bottom: 5px; }

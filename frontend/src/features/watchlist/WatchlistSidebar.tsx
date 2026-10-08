@@ -156,7 +156,7 @@ const WatchlistSymbolLiveColumns = memo(function WatchlistSymbolLiveColumns({
     <>
       {tierDot && <span className={`wl-tier-dot ${tierDot}`} title={tierTitle}/>}
       <span className="wl-sym-name">
-        {symbol}
+        <span className="wl-sym-text">{symbol}</span>
         {marketType === "futures" && <span className="wl-market-badge futures">{translateMarketType("futures")}</span>}
         <span className={`wl-exchange-badge ${exchange}`}>
           {translateExchangeName(exchange)}

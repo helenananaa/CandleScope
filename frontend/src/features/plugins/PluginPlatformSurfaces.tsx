@@ -511,14 +511,15 @@ export default function PluginPlatformSurfaces({ runtime }: { runtime: PluginPla
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [runtime.actions, runtime.view.registries.commandPalette.length]);
+  const platformError = runtime.view.error ? t("plugin.host.platformUnavailable", { error: runtime.view.error }) : null;
   return (
     <PluginUiErrorBoundary>
       <CommandPalette runtime={runtime} />
       {openSettings && <SettingsSurface runtime={runtime} contribution={openSettings} />}
       {openView && <ViewSurface key={openView.id} runtime={runtime} contribution={openView} />}
-      {runtime.view.error && <div className="plugin-platform-notice plugin-platform-error" role="alert">{t("plugin.host.platformUnavailable", { error: runtime.view.error })}</div>}
+      {platformError && <div className="plugin-platform-notice plugin-platform-error" role="alert" title={platformError}>{platformError}</div>}
       {runtime.view.notice && (
-        <button type="button" className="plugin-platform-notice" onClick={runtime.actions.clearNotice}>{runtime.view.notice}</button>
+        <button type="button" className="plugin-platform-notice" title={runtime.view.notice} onClick={runtime.actions.clearNotice}>{runtime.view.notice}</button>
       )}
     </PluginUiErrorBoundary>
   );
