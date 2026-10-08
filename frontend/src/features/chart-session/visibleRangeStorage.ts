@@ -179,8 +179,11 @@ export function planVisibleRangeRestore(
   const barSpacing = finiteNumber(normalized?.barSpacing)
     ? normalized.barSpacing
     : null;
+  // A reopened chart starts at the latest bar: keep the saved zoom and any
+  // right-edge whitespace, but never land back inside old history, where the
+  // bar-count offset no longer points at the same time once new bars arrive.
   const rightOffset = finiteNumber(normalized?.rightOffset)
-    ? normalized.rightOffset
+    ? Math.max(0, normalized.rightOffset)
     : null;
   const rightmostTime = finiteNumber(normalized?.rightmostTime)
     ? normalized.rightmostTime

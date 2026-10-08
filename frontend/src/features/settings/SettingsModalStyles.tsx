@@ -32,6 +32,19 @@ export default function SettingsModalStyles(props: SettingsModalStylesProps) {
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* Appearance-only dialog (pages without the live runtime) */
+.st-panel.st-panel-single {
+  width: min(640px, 92vw);
+}
+
+.st-overlay[hidden] {
+  display: none;
+}
+
+.st-panel:focus {
+  outline: none;
+}
+
 .st-panel {
   display: flex;
   width: min(960px, 92vw);
@@ -39,7 +52,7 @@ export default function SettingsModalStyles(props: SettingsModalStylesProps) {
   background: var(--bg-secondary);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow:
     var(--shadow-lg),
@@ -85,7 +98,7 @@ export default function SettingsModalStyles(props: SettingsModalStylesProps) {
   font-size: 13.5px;
   font-weight: 500;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   transition: all 0.15s ease;
   text-align: left;
 }
@@ -168,7 +181,7 @@ export default function SettingsModalStyles(props: SettingsModalStylesProps) {
   font-size: 18px;
   cursor: pointer;
   padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   transition: all 0.15s;
 }
 .st-close-x:hover {
@@ -191,7 +204,7 @@ export default function SettingsModalStyles(props: SettingsModalStylesProps) {
 }
 .st-content-body::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--text-primary) 10%, transparent);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 .st-content-body::-webkit-scrollbar-thumb:hover {
   background: color-mix(in srgb, var(--text-primary) 18%, transparent);
@@ -216,7 +229,7 @@ export default function SettingsModalStyles(props: SettingsModalStylesProps) {
 }
 
 .st-group-desc {
-  font-size: 12.5px;
+  font-size: var(--font-size-md);
   line-height: 1.6;
   color: var(--text-secondary);
   margin-bottom: 14px;
@@ -250,7 +263,7 @@ html[lang="ru"] .st-preset-btn {
   border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
   color: var(--text-primary);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   transition: all 0.18s ease;
 }
@@ -277,7 +290,7 @@ html[lang="ru"] .st-preset-btn {
 }
 
 .st-theme-label {
-  font-size: 12.5px;
+  font-size: var(--font-size-md);
   font-weight: 500;
 }
 
@@ -293,7 +306,7 @@ html[lang="ru"] .st-preset-btn {
   padding: 10px 14px;
   border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   display: flex;
   gap: 12px;
@@ -301,6 +314,12 @@ html[lang="ru"] .st-preset-btn {
   align-items: center;
   font-size: 13px;
   transition: all 0.15s;
+}
+
+.st-preset-btn.active {
+  border-color: var(--accent-blue);
+  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-blue) 30%, transparent);
 }
 
 .st-preset-btn:hover {
@@ -331,11 +350,11 @@ html[lang="ru"] .st-preset-btn {
 
 .st-color-code {
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   color: var(--text-muted);
   background: color-mix(in srgb, var(--text-primary) 4%, transparent);
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 input[type="color"] {
@@ -344,7 +363,7 @@ input[type="color"] {
   height: 32px;
   cursor: pointer;
   background: none;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
 }
 
 .st-field {
@@ -363,7 +382,7 @@ input[type="color"] {
   border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
   color: var(--text-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   outline: none;
   font-size: 13px;
@@ -385,7 +404,7 @@ input[type="color"] {
   border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
   color: var(--text-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
   font-size: 13px;
   outline: none;
@@ -404,10 +423,10 @@ input[type="color"] {
 .st-info-box {
   margin-top: 10px;
   padding: 10px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--accent-blue) 6%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent-blue) 15%, transparent);
-  font-size: 12.5px;
+  font-size: var(--font-size-md);
   color: var(--text-secondary);
   display: flex;
   flex-wrap: wrap;
@@ -428,10 +447,10 @@ input[type="color"] {
 
 .st-info-value {
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 /* ── Buttons ────────────────────────────────────────────── */
@@ -447,7 +466,7 @@ input[type="color"] {
   justify-content: center;
   gap: 6px;
   padding: 9px 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -524,7 +543,7 @@ a.st-btn {
   padding: 14px 8px 12px;
   border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   transition: all 0.18s ease;
 }
@@ -549,7 +568,7 @@ a.st-btn {
 
 .st-preset-level > span {
   width: 4px;
-  border-radius: 1px;
+  border-radius: var(--radius-xs);
   background: var(--border-color);
 }
 
@@ -585,7 +604,7 @@ a.st-btn {
   font-size: var(--font-size-2xs);
   font-weight: 600;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   margin-left: 8px;
   letter-spacing: 0.03em;
   vertical-align: middle;
@@ -629,7 +648,7 @@ a.st-btn {
   padding: 12px 8px 10px;
   border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 0.18s ease;
 }
@@ -664,7 +683,7 @@ a.st-btn {
   margin-top: 10px;
   background: color-mix(in srgb, var(--accent-purple) 5%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent-purple) 12%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   flex-wrap: wrap;
 }
 
@@ -691,7 +710,7 @@ a.st-btn {
   padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--text-primary) 7%, transparent);
   background: color-mix(in srgb, var(--text-primary) 2%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -737,7 +756,7 @@ a.st-btn {
   padding: 10px 12px;
   border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -759,7 +778,7 @@ a.st-btn {
 .st-diagnostics-list {
   margin-top: 8px;
   border: 1px solid color-mix(in srgb, var(--text-primary) 5%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -768,7 +787,7 @@ a.st-btn {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   padding: 7px 10px;
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--text-primary) 2%, transparent);
 }
@@ -797,7 +816,7 @@ a.st-btn {
   margin-top: 8px;
   padding: 9px 10px;
   border: 1px dashed color-mix(in srgb, var(--text-primary) 8%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 12px;
   color: var(--text-muted);
 }
@@ -807,7 +826,7 @@ a.st-btn {
   padding: 12px;
   border: 1px solid color-mix(in srgb, var(--accent-blue) 14%, transparent);
   background: color-mix(in srgb, var(--accent-blue) 4%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 .st-group-title-row {
   display: flex;
@@ -820,10 +839,10 @@ a.st-btn {
   background: none;
   border: 1px solid var(--border-color);
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   padding: 4px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -842,7 +861,7 @@ a.st-btn {
 /* ── Tier table ─────────────────────────────────────────── */
 .st-tier-table {
   border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
@@ -919,9 +938,9 @@ a.st-btn {
   border: 1px solid var(--border-color);
   background: var(--bg-primary);
   color: var(--text-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   font-family: var(--font-mono, monospace);
-  font-size: 12.5px;
+  font-size: var(--font-size-md);
   outline: none;
   transition: border-color 0.15s;
 }
@@ -949,7 +968,7 @@ a.st-btn {
 .st-advanced-hint {
   margin-top: 12px;
   padding: 10px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--accent-blue) 5%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent-blue) 12%, transparent);
   font-size: 12px;
@@ -1030,7 +1049,7 @@ a.st-btn {
   flex-shrink: 0;
   padding: 7px 12px;
   border: 1px solid color-mix(in srgb, var(--accent-blue) 45%, var(--ex-card-border));
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--ex-refresh-bg);
   color: var(--ex-refresh-fg);
   font-size: 12px;
@@ -1064,11 +1083,35 @@ a.st-btn {
   margin: 16px 0 14px;
 }
 
+.st-exchange-tech {
+  grid-column: 1 / -1;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.st-exchange-tech summary {
+  width: max-content;
+  cursor: pointer;
+}
+
+.st-exchange-tech dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 8px 0 0;
+}
+
+.st-exchange-tech dd {
+  margin: 0;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
 .st-exchange-stat {
   min-width: 0;
   padding: 12px 14px;
   border: 1px solid var(--ex-card-border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--ex-card-bg);
   box-shadow: var(--shadow-sm);
 }
@@ -1082,7 +1125,7 @@ a.st-btn {
   margin-bottom: 6px;
   color: var(--ex-label);
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1.35;
 }
@@ -1119,7 +1162,7 @@ a.st-btn {
   height: 38px;
   padding: 0 12px;
   border: 1px solid var(--ex-card-border);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   outline: none;
   background: var(--ex-card-bg);
   color: var(--ex-ink);
@@ -1143,7 +1186,7 @@ a.st-btn {
 .st-exchange-filter {
   padding: 6px 11px;
   border: 1px solid var(--ex-card-border);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--ex-card-bg);
   color: var(--ex-label);
   font-size: 12px;
@@ -1172,7 +1215,7 @@ a.st-btn {
 .st-exchange-card {
   overflow: hidden;
   border: 1px solid var(--ex-card-border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--ex-card-bg);
   box-shadow: var(--shadow-sm);
 }
@@ -1228,7 +1271,7 @@ a.st-btn {
   width: 24px;
   height: 24px;
   margin-top: 1px;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--ex-ink) 8%, transparent);
   color: var(--ex-label);
 }
@@ -1328,11 +1371,11 @@ a.st-btn {
 
 .st-exchange-chip {
   padding: 3px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--ex-chip-bg);
   color: var(--ex-chip-fg);
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 700;
   line-height: 1.3;
 }
 
@@ -1372,7 +1415,7 @@ a.st-btn {
 .st-exchange-surface {
   padding: 10px 12px;
   border: 1px solid var(--ex-card-border);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: var(--ex-card-bg);
 }
 
@@ -1384,7 +1427,7 @@ a.st-btn {
 .st-exchange-surface span {
   color: var(--ex-label);
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 700;
 }
 
 .st-exchange-surface strong {
@@ -1417,7 +1460,7 @@ a.st-btn {
   margin-top: 12px;
   padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--ex-ok) 32%, var(--ex-card-border));
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: var(--ex-ok-bg);
   color: var(--ex-label);
   font-size: 12px;
@@ -1431,7 +1474,7 @@ a.st-btn {
 .st-exchange-market-detail {
   margin-top: 12px;
   border: 1px solid var(--ex-card-border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--ex-card-bg);
   overflow: hidden;
 }
@@ -1466,7 +1509,7 @@ a.st-btn {
   flex-shrink: 0;
   padding: 7px 11px;
   border: 1px solid color-mix(in srgb, var(--accent-blue) 40%, var(--ex-card-border));
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--ex-refresh-bg);
   color: var(--ex-refresh-fg);
   font-size: 12px;
@@ -1527,7 +1570,7 @@ a.st-btn {
 
 .st-exchange-capability-row > div > strong {
   color: var(--ex-ink);
-  font-size: 12.5px;
+  font-size: var(--font-size-md);
 }
 
 .st-exchange-inline-chips {
@@ -1539,7 +1582,7 @@ a.st-btn {
 
 .st-exchange-inline-chips span {
   padding: 2px 6px;
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   background: var(--ex-chip-bg);
   color: var(--ex-chip-fg);
   font-family: var(--font-mono, monospace);
@@ -1568,7 +1611,7 @@ a.st-btn {
   margin-top: 12px;
   padding: 12px 14px;
   border: 1px solid color-mix(in srgb, var(--ex-warn) 35%, var(--ex-card-border));
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: var(--ex-warn-bg);
   color: var(--ex-label);
   font-size: 12px;
@@ -1624,7 +1667,7 @@ a.st-btn {
   .st-nav-item {
     padding: 8px 12px;
     white-space: nowrap;
-    font-size: 12.5px;
+    font-size: var(--font-size-md);
   }
 
   .st-nav-label {
@@ -1700,7 +1743,7 @@ a.st-btn {
 }
 .st-tool-card {
   padding: 16px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
 }
@@ -1766,8 +1809,8 @@ a.st-btn {
 .st-result {
   margin-top: 12px;
   padding: 14px;
-  border-radius: 10px;
-  font-size: 12.5px;
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-md);
   line-height: 1.5;
 }
 
@@ -1798,7 +1841,7 @@ a.st-btn {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 14px;
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
 }
 
 .st-result-detail {
@@ -1830,7 +1873,7 @@ a.st-btn {
 
 .st-series-name {
   font-family: var(--font-mono, monospace);
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   color: var(--text-primary);
 }
 
@@ -1842,7 +1885,7 @@ a.st-btn {
 
 .st-series-badge {
   padding: 2px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   font-size: var(--font-size-2xs);
   font-weight: 600;
   white-space: nowrap;
@@ -1885,7 +1928,7 @@ a.st-btn {
   padding: 12px 14px;
   border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -1942,17 +1985,17 @@ a.st-btn {
 .st-db-empty {
   padding: 24px 16px;
   border: 1px dashed var(--border-color);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   text-align: center;
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: var(--font-size-md);
   background: color-mix(in srgb, var(--text-primary) 2%, transparent);
 }
 
 .st-db-symbol-card {
   border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
@@ -1990,7 +2033,7 @@ a.st-btn {
 
 .st-db-chip {
   padding: 3px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
@@ -2033,7 +2076,7 @@ a.st-btn {
   gap: 10px;
   align-items: center;
   padding: 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--surface-0) 42%, transparent);
 }
 
@@ -2067,7 +2110,7 @@ a.st-btn {
 
 .st-db-series-stat strong {
   color: var(--text-secondary);
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -2082,7 +2125,7 @@ a.st-btn {
   flex: none;
   min-height: 32px;
   padding: 6px 8px;
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
 }
 
 .st-db-dialog-backdrop {
@@ -2099,7 +2142,7 @@ a.st-btn {
 .st-db-dialog {
   width: min(460px, 100%);
   padding: 18px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
   background: var(--bg-secondary);
   box-shadow: var(--shadow-lg);
@@ -2115,7 +2158,7 @@ a.st-btn {
 .st-db-dialog-subtitle {
   color: var(--text-secondary);
   font-family: var(--font-mono, monospace);
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   line-height: 1.5;
   margin-bottom: 14px;
   overflow-wrap: anywhere;
@@ -2131,7 +2174,7 @@ a.st-btn {
   justify-content: space-between;
   gap: 16px;
   padding: 9px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--text-primary) 4%, transparent);
   font-size: 12px;
 }
@@ -2228,17 +2271,17 @@ a.st-btn {
 }
 
 /* ── About section ──────────────────────────────────────── */
-.st-support-card { border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; }
+.st-support-card { border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 20px; }
 .st-support-description { color: var(--text-primary); font-size: 13px; line-height: 1.7; }
 .st-support-hint { color: var(--text-secondary); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
 .st-support-actions, .st-support-links { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .st-support-actions a { text-decoration: none; }
 .st-support-actions label { color: var(--text-secondary); font-size: 13px; }
-.st-support-actions select { color: var(--text-primary); background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; padding: 7px; }
+.st-support-actions select { color: var(--text-primary); background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: var(--radius-control); padding: 7px; }
 .st-support-links a { color: var(--text-accent); font-size: 13px; text-underline-offset: 4px; }
 .st-support-export { margin-top: 16px; }
 .st-support-export summary { cursor: pointer; color: var(--text-primary); font-size: 13px; padding: 6px 0; }
-.st-support-manual { width: 100%; min-height: 180px; box-sizing: border-box; color: var(--text-primary); background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; }
+.st-support-manual { width: 100%; min-height: 180px; box-sizing: border-box; color: var(--text-primary); background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: var(--radius-control); padding: 10px; }
 .st-support-card :focus-visible, .st-support-links a:focus-visible, .st-support-export summary:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 3px; }
 .st-about-stack .st-stack-item { gap: 16px; }
 .st-about-stack .st-stack-value { overflow-wrap: anywhere; text-align: right; min-width: 0; }
@@ -2273,7 +2316,7 @@ a.st-btn {
   font-weight: 600;
   padding: 2px 12px;
   background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
 }
 
 .st-about-tagline {
@@ -2286,7 +2329,7 @@ a.st-btn {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   border: 1px solid var(--border-color);
 }
@@ -2342,7 +2385,7 @@ a.st-btn {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 12px;
   transition: background 0.15s;
 }
@@ -2371,7 +2414,7 @@ a.st-btn {
 
 .st-exchange-result-msg {
   color: var(--text-secondary);
-  font-size: 11.5px;
+  font-size: var(--font-size-sm);
   flex: 1;
   text-align: right;
 }

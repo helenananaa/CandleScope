@@ -82,7 +82,7 @@ export function PluginSettingsPanel({ runtime, onClose, initialSection = "instal
     <header className="pc-header">
       <div>{onClose && <button className="pc-return" type="button" disabled={installBusy} onClick={onClose}>{t("pc.back")}</button>}<h2>{t("plugin.title")}</h2></div>
       <div className="pc-header-actions"><button type="button" disabled={runtime.view.loading || installBusy} onClick={() => void runtime.actions.refresh().then(() => detailState.reload()).catch(() => undefined)}>{t("alert.refresh")}</button>
-        {platformEnabled && <button type="button" className="pc-primary" disabled={installBusy} onClick={() => navigate("install")}>{t("pc.install")}</button>}
+        {platformEnabled && management && <button type="button" className="pc-primary" disabled={installBusy} onClick={() => navigate("install")}>{t("pc.install")}</button>}
         {onClose && <button type="button" disabled={installBusy} onClick={onClose}>{t("export.closeBtn")}</button>}
       </div>
     </header>
@@ -106,7 +106,7 @@ export function PluginSettingsPanel({ runtime, onClose, initialSection = "instal
             {selected && <PluginDetail key={selected.id} selected={selected} {...detailState} runtime={runtime} onBack={() => setMobileDetail(false)} onDiscover={() => navigate("discover")} />}
           </> : <div className="pc-empty"><h3>{query || filter !== "all" ? t("pc.noResults") : t("plugin.empty")}</h3>
             <p>{query || filter !== "all" ? t("pc.search") : t("pc.emptyHint")}</p>
-            {query || filter !== "all" ? <button type="button" onClick={() => { setQuery(""); setFilter("all"); }}>{t("interval.clear")}</button> : platformEnabled && <button type="button" onClick={() => navigate("install")}>{t("pc.install")}</button>}
+            {query || filter !== "all" ? <button type="button" onClick={() => { setQuery(""); setFilter("all"); }}>{t("interval.clear")}</button> : platformEnabled && management && <button type="button" onClick={() => navigate("install")}>{t("pc.install")}</button>}
           </div>}
         </div>
         {engines.length > 0 && filter === "all" && <section className="pc-engines"><header><div><h3>{t("plugin.scriptRuntimes")}</h3><p>{t("pc.enginesHint")}</p></div><span>{engines.length}</span></header>

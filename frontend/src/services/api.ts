@@ -414,7 +414,7 @@ export async function fetchExchangeInfo(
 }
 
 export async function fetchSupportedExchanges(): Promise<ExchangeListPayload> {
-  return sharedControlRead("control:exchanges", 5_000, async () => {
+  return sharedControlRead("control:chart-exchanges", 5_000, async () => {
     const payload = await request(`${API_BASE}/exchanges/`);
     return parseExchangeListResponse(payload, "GET /exchanges/");
   });

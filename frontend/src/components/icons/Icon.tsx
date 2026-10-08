@@ -36,7 +36,18 @@ export type IconName =
   | "unlock"
   | "inbox"
   | "star"
-  | "lightbulb";
+  | "lightbulb"
+  | "chevron-down"
+  | "chevron-right"
+  | "close"
+  | "plus"
+  | "more"
+  | "external"
+  | "grip"
+  | "sort"
+  | "chevron-up"
+  | "maximize"
+  | "minimize";
 
 const PATHS: Record<IconName, ReactNode> = {
   palette: (
@@ -219,15 +230,47 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M8.5 14.5A6 6 0 1 1 15.5 14.5c-.9.8-1.5 1.8-1.5 3V18h-4v-.5c0-1.2-.6-2.2-1.5-3Z" />
     </>
   ),
+  "chevron-down": <path d="m6 9 6 6 6-6" />,
+  "chevron-right": <path d="m9 6 6 6-6 6" />,
+  close: <path d="M6 6l12 12M18 6 6 18" />,
+  plus: <path d="M12 5v14M5 12h14" />,
+  more: (
+    <>
+      <circle cx="5" cy="12" r="1" />
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="19" cy="12" r="1" />
+    </>
+  ),
+  external: (
+    <>
+      <path d="M14 4h6v6" />
+      <path d="M20 4 11 13" />
+      <path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+    </>
+  ),
+  grip: (
+    <>
+      <circle cx="9" cy="6" r="1" />
+      <circle cx="15" cy="6" r="1" />
+      <circle cx="9" cy="12" r="1" />
+      <circle cx="15" cy="12" r="1" />
+      <circle cx="9" cy="18" r="1" />
+      <circle cx="15" cy="18" r="1" />
+    </>
+  ),
+  sort: <path d="m8 9 4-4 4 4M8 15l4 4 4-4" />,
+  "chevron-up": <path d="m6 15 6-6 6 6" />,
+  maximize: <path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" />,
+  minimize: <path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7" />,
 };
 
-export function Icon({ name, size = 18 }: { name: IconName; size?: number }): ReactNode {
+export function Icon({ name, size = 18, filled = false }: { name: IconName; size?: number; filled?: boolean }): ReactNode {
   return (
     <svg
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      fill="none"
+      fill={filled ? "currentColor" : "none"}
       stroke="currentColor"
       strokeWidth={1.8}
       strokeLinecap="round"

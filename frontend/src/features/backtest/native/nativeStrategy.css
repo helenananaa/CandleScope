@@ -4,7 +4,7 @@
   box-sizing:border-box;
   padding:6px 10px;
   border:1px solid var(--border-color);
-  border-radius:6px;
+  border-radius:var(--radius-control);
   color:var(--text-primary);
   background:var(--bg-primary);
   font:inherit;
@@ -22,7 +22,7 @@
 .strategy-research-script .native-strategy-panel { padding:8px 0; width:100%; box-sizing:border-box; }
 .strategy-research-script .native-editor { grid-template-columns:1fr; }
 .native-toolbar { flex-wrap:wrap; }
-.native-replay-controls { padding:12px; margin-bottom:12px; border:1px solid var(--border-color); border-radius:6px; }
+.native-replay-controls { padding:12px; margin-bottom:12px; border:1px solid var(--border-color); border-radius:var(--radius-control); }
 .native-replay-controls input { width:80px; }
 .native-strategy-report { padding:16px; overflow:auto; min-width:0; }
 .native-strategy-report pre { max-height:320px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
@@ -31,18 +31,18 @@
 .native-strategy-panel header button { margin-left:auto; }
 .native-strategy-panel p { color:var(--text-secondary); }
 .native-editor { display:grid; grid-template-columns:3fr 1fr; gap:12px; margin:12px 0; }
-.native-editor textarea { width:100%; box-sizing:border-box; min-height:200px; padding:12px; color:inherit; background:var(--bg-primary); border:1px solid var(--border-color); border-radius:6px; font-family:monospace; }
+.native-editor textarea { width:100%; box-sizing:border-box; min-height:200px; padding:12px; color:inherit; background:var(--bg-primary); border:1px solid var(--border-color); border-radius:var(--radius-control); font-family:monospace; }
 .native-editor label textarea { min-height:160px; }
 .native-strategy-panel button,.native-strategy-panel select { padding:6px 10px; cursor:pointer; }
 .native-strategy-panel pre { max-height:320px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
 .native-strategy-panel [role=alert] { color:var(--strategy-error); }
-.native-curve { margin:16px 0; border:1px solid var(--border-color); padding:10px; border-radius:6px; }
+.native-curve { margin:16px 0; border:1px solid var(--border-color); padding:10px; border-radius:var(--radius-control); }
 .native-curve svg { width:100%; max-height:220px; }
 .native-table { overflow:auto; max-height:350px; margin:12px 0; }
 .native-table table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
 .native-table td,.native-table th { padding:6px 10px; border-bottom:1px solid var(--border-color); white-space:nowrap; text-align:left; }
 .native-table tr:hover { background:var(--bg-tertiary); cursor:pointer; }
-.native-drawing-pane { margin:16px 0; padding:10px; border:1px solid var(--border-color); border-radius:6px; }
+.native-drawing-pane { margin:16px 0; padding:10px; border:1px solid var(--border-color); border-radius:var(--radius-control); }
 .native-drawing-pane svg { display:block; width:100%; min-height:180px; }
 @media(max-width:700px) { .native-editor { grid-template-columns:1fr; } }
 
@@ -62,7 +62,7 @@
 .native-strategy-docked .native-dock-actions button:first-of-type { background: var(--accent-solid); color: var(--text-on-accent); border-color: transparent; }
 .native-strategy-docked .native-dock-scroll { grid-column: 1 / -1; grid-row: 2; min-height: 0; flex: 1; overflow: auto; padding: 0 14px 12px; }
 .native-strategy-docked .native-editor { margin: 10px 0 0; gap: 16px; }
-.native-strategy-docked .native-editor textarea { min-height: 160px; resize: vertical; line-height: 1.6; border-radius: 3px; }
+.native-strategy-docked .native-editor textarea { min-height: 160px; resize: vertical; line-height: 1.6; border-radius: var(--radius-xs); }
 .native-strategy-docked .native-editor label { color: var(--text-secondary); display: flex; flex-direction: column; gap: 6px; }
 .native-strategy-docked .native-dock-settings { padding-top: 12px; }
 .native-strategy-docked .native-dock-settings label { display: flex; flex-direction: column; gap: 6px; }
@@ -98,7 +98,7 @@
 .native-trade-sections button[aria-pressed=true] { color: var(--text-accent); border-color: var(--accent-blue); }
 .native-trade-controls .strategy-trade-navigation { padding: 0; gap: 6px; }
 .native-trade-pages { margin-left: auto; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-.native-trade-jump input { width: 56px; box-sizing: border-box; padding: 5px; font: inherit; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 3px; }
+.native-trade-jump input { width: 56px; box-sizing: border-box; padding: 5px; font: inherit; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-xs); }
 .native-trade-jump span { min-width: 0; white-space: nowrap; }
 .native-trade-controls button { white-space: nowrap; }
 .native-strategy-docked .native-dock-scroll:has(> .native-dock-report[data-view=trades]:not([hidden])) { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; }
@@ -129,7 +129,7 @@
 
 .native-strategy-collection { display: flex; align-items: center; gap: 4px; flex: 0 0 36px; min-width: 0; padding: 0 10px; border-bottom: 1px solid var(--border-color); background: var(--bg-primary); }
 .native-strategy-switcher { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 80px; overflow-x: auto; }
-.native-strategy-collection :is(button, select) { font: inherit; color: var(--text-secondary); background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 4px 8px; cursor: pointer; white-space: nowrap; }
+.native-strategy-collection :is(button, select) { font: inherit; color: var(--text-secondary); background: transparent; border: 1px solid transparent; border-radius: var(--radius-sm); padding: 4px 8px; cursor: pointer; white-space: nowrap; }
 .native-strategy-collection button[aria-pressed="true"] { color: var(--text-accent); border-color: var(--accent-blue); background: color-mix(in srgb, var(--accent-blue) 10%, transparent); }
 .native-strategy-collection button:hover { background: var(--bg-hover); }
 .native-strategy-collection button:disabled { opacity: .4; cursor: default; }
@@ -143,7 +143,7 @@
 .native-comparison-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; border: 0; padding: 0; margin: 0 0 8px; }
 .native-comparison-picker legend { padding: 0 0 6px; font-weight: 600; }
 .native-comparison-picker label { display: inline-flex; align-items: center; gap: 5px; }
-.native-comparison button { background: var(--bg-primary); color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px; cursor: pointer; }
+.native-comparison button { background: var(--bg-primary); color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 4px 8px; cursor: pointer; }
 .native-comparison button:disabled { opacity: .45; cursor: default; }
 .native-comparison button[aria-pressed="true"] { color: var(--text-accent); border-color: var(--accent-blue); }
 .native-comparison-note { color: var(--text-secondary); font-size: 11px; line-height: 1.5; margin: 6px 0; }
@@ -191,7 +191,7 @@
 .native-table tr[data-selected=true] { background:color-mix(in srgb,var(--accent-blue) 12%,transparent); }
 .native-actions-menu { position:relative; align-self:center; font-size:12px; }
 .native-actions-menu > summary { padding:5px 8px; cursor:pointer; color:var(--text-secondary); white-space:nowrap; }
-.native-actions-menu > div { position:absolute; right:0; top:100%; z-index:20; display:flex; flex-direction:column; min-width:150px; padding:6px; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-secondary); box-shadow:0 8px 24px #0005; }
+.native-actions-menu > div { position:absolute; right:0; top:100%; z-index:20; display:flex; flex-direction:column; min-width:150px; padding:6px; border:1px solid var(--border-color); border-radius:var(--radius-control); background:var(--bg-secondary); box-shadow:0 8px 24px #0005; }
 .native-actions-menu > div button { text-align:left; padding:8px 10px; }
 .native-dock-tabs { overflow:visible; gap:16px; }
 @container strategy-dock (max-width:720px) { .native-report-metrics strong { font-size:20px; } .native-report-context { gap:6px 14px; } .native-performance { margin-top:14px; } }

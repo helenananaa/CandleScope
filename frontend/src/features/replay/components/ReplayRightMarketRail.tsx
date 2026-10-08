@@ -35,6 +35,7 @@ import type { ReplayRuntime } from "../useReplayRuntime.js";
 import type { ReplayViewerRuntime } from "../useReplayViewerRuntime.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
+import { Icon } from "../../../components/icons/Icon.js";
 
 export interface ReplayRightMarketRailProps {
   readonly runtime: ReplayRuntime;
@@ -184,7 +185,7 @@ function ReplayRightMarketRail({
             className="replay-market-dock-collapse"
             onClick={() => closeView(viewId)}
             aria-label={t("replay.rail.collapse", { title }, locale)}
-          >×</button>
+          ><Icon name="close" size={14} /></button>
         </header>
         <div className="replay-market-dock-body">
           {viewId === REPLAY_RAIL_VIEW_IDS.capabilities && (

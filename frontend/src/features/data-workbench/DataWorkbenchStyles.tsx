@@ -51,7 +51,7 @@ export default function DataWorkbenchStyles() {
   height: min(800px, 92vh);
   overflow: hidden;
   border: 1px solid var(--dw-card-border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   background: var(--bg-secondary);
   color: var(--dw-ink);
   box-shadow: 0 28px 72px rgba(15, 23, 42, 0.42);
@@ -91,7 +91,7 @@ export default function DataWorkbenchStyles() {
 
 .dw-close {
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--dw-subtle);
   cursor: pointer;
@@ -124,7 +124,7 @@ export default function DataWorkbenchStyles() {
 .dw-body::-webkit-scrollbar { width: 7px; }
 .dw-body::-webkit-scrollbar-thumb {
   background: var(--dw-scroll);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .dw-section,
@@ -132,7 +132,7 @@ export default function DataWorkbenchStyles() {
   margin-bottom: 14px;
   padding: 16px;
   border: 1px solid var(--dw-card-border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--dw-card-bg);
   box-shadow: var(--shadow-sm);
 }
@@ -167,7 +167,7 @@ export default function DataWorkbenchStyles() {
   min-width: 0;
   padding: 10px 12px;
   border: 1px solid var(--dw-card-border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--dw-card-bg);
   box-shadow: var(--shadow-sm);
 }
@@ -181,7 +181,7 @@ export default function DataWorkbenchStyles() {
   margin-bottom: 4px;
   color: var(--dw-label);
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 700;
 }
 
 .dw-summary-chip strong {
@@ -221,7 +221,7 @@ export default function DataWorkbenchStyles() {
   place-items: center;
   width: 22px;
   height: 22px;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: color-mix(in srgb, var(--dw-ink) 8%, transparent);
   color: var(--dw-label);
 }
@@ -273,7 +273,7 @@ export default function DataWorkbenchStyles() {
 .dw-fold-hint {
   color: var(--dw-subtle);
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 700;
 }
 
 .dw-fold-body {
@@ -319,7 +319,7 @@ export default function DataWorkbenchStyles() {
   align-items: center;
   white-space: nowrap;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   padding: 4px 9px;
   font-size: 11px;
   font-weight: 700;
@@ -375,7 +375,7 @@ export default function DataWorkbenchStyles() {
   width: 100%;
   min-width: 0;
   border: 1px solid var(--dw-card-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--dw-card-bg);
   color: var(--dw-ink);
   font: inherit;
@@ -398,9 +398,9 @@ export default function DataWorkbenchStyles() {
 
 .dw-button {
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: var(--font-size-md);
   font-weight: 700;
   padding: 8px 12px;
 }
@@ -445,7 +445,7 @@ export default function DataWorkbenchStyles() {
   gap: 4px;
   padding: 12px;
   border: 1px solid var(--dw-card-border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--dw-inset-bg);
 }
 
@@ -467,9 +467,9 @@ export default function DataWorkbenchStyles() {
 .dw-notice,
 .dw-empty {
   margin-top: 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 10px 12px;
-  font-size: 12.5px;
+  font-size: var(--font-size-md);
   line-height: 1.5;
 }
 
@@ -504,14 +504,14 @@ export default function DataWorkbenchStyles() {
   min-width: 0;
   padding: 12px;
   border: 1px solid var(--dw-card-border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--dw-inset-bg);
 }
 
 .dw-integrity-grid span {
   color: var(--dw-label);
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 700;
 }
 
 .dw-integrity-grid strong {
@@ -526,7 +526,7 @@ export default function DataWorkbenchStyles() {
   margin-top: 12px;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--dw-warn) 32%, var(--dw-card-border));
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--dw-card-bg);
 }
 
@@ -584,7 +584,7 @@ export default function DataWorkbenchStyles() {
 .dw-instrument {
   overflow: hidden;
   border: 1px solid var(--dw-card-border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--dw-inset-bg);
 }
 
@@ -642,12 +642,12 @@ export default function DataWorkbenchStyles() {
 
 .dw-chip {
   padding: 2px 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--dw-chip-bg);
   color: var(--dw-chip-fg);
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 700;
   line-height: 1.3;
 }
 
@@ -696,7 +696,7 @@ export default function DataWorkbenchStyles() {
   overflow-wrap: anywhere;
   color: var(--dw-ink);
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
-  font-size: 12.5px;
+  font-size: var(--font-size-md);
 }
 
 .dw-series-name small {
@@ -707,7 +707,7 @@ export default function DataWorkbenchStyles() {
 .dw-mono {
   color: var(--dw-chip-fg);
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
-  font-weight: 650;
+  font-weight: 700;
 }
 
 .dw-manual {
@@ -717,7 +717,7 @@ export default function DataWorkbenchStyles() {
   margin: 0 0 14px;
   padding: 18px;
   border: 1px solid color-mix(in srgb, var(--accent-blue) 38%, var(--dw-card-border));
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: linear-gradient(145deg, var(--dw-filter-bg), var(--dw-card-bg));
 }
 
@@ -751,7 +751,7 @@ export default function DataWorkbenchStyles() {
   gap: 7px;
   color: var(--dw-label);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 700;
 }
 
 .dw-manual textarea,
@@ -760,7 +760,7 @@ export default function DataWorkbenchStyles() {
   width: 100%;
   box-sizing: border-box;
   border: 1px solid var(--dw-card-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--dw-inset-bg);
   color: var(--dw-ink);
   font: inherit;
@@ -779,7 +779,7 @@ export default function DataWorkbenchStyles() {
   margin: 0;
   padding: 10px 12px 12px;
   border: 1px solid var(--dw-card-border);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   color: var(--dw-label);
 }
 
@@ -806,7 +806,7 @@ export default function DataWorkbenchStyles() {
 
 .dw-manual li {
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--dw-inset-bg);
   color: var(--dw-label);
   font-size: 12px;

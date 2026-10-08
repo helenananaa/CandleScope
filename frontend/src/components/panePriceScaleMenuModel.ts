@@ -24,8 +24,10 @@ const PRICE_SCALE_CONTEXT_MENU_HEIGHT = 272;
 const PRICE_SCALE_CONTEXT_MENU_MARGIN = 8;
 
 export function resolvePanePriceScaleMenu({
-  chart, activePaneIds, layout, rect, clientX, clientY, priceAtPaneY,
+  chart, activePaneIds, layout, rect, clientX, clientY, priceAtPaneY, anywhere = false,
 }: {
+  /** Open for a right-click anywhere in the pane, not only over the price axis. */
+  anywhere?: boolean;
   priceAtPaneY?: ((paneIndex: number, y: number) => number | null) | undefined;
   chart: AdapterChart | null;
   activePaneIds: readonly string[];
@@ -34,7 +36,7 @@ export function resolvePanePriceScaleMenu({
   clientX: number;
   clientY: number;
 }): PriceScaleContextMenuState | null {
-  if (clientX < rect.right - PRICE_SCALE_CONTEXT_HIT_WIDTH) return null;
+  if (!anywhere && clientX < rect.right - PRICE_SCALE_CONTEXT_HIT_WIDTH) return null;
   const target = paneTargetAtClientY(layout, clientY);
   if (!target || !chart
     || target.paneIndex >= chart.panes().length

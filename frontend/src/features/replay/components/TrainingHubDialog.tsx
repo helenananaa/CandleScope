@@ -766,6 +766,9 @@ export default function TrainingHubDialog({
         </section>}
         <PreparationJobsPanel summary onReady={runtime.actions.refresh} />
 
+        {/* With no runs and no filter applied, filters and counts have nothing to act on */}
+        {(runtime.items.length > 0 || runtime.phase === "LOADING"
+          || runtime.filters.state !== null || runtime.filters.sourceKind !== null || runtime.filters.compatibility !== null) && (
         <div className="training-hub-toolbar">
           <div className="training-hub-filters" aria-label={t("replay.hub.filterStatus")}>
             <div className="training-hub-filter-chips" role="group" aria-label={t("replay.hub.filterStatus")}>
@@ -821,6 +824,7 @@ export default function TrainingHubDialog({
             {t("replay.hub.loaded", { count: loadedRunCount })}{runtime.nextCursor !== null ? t("replay.hub.hasNext") : t("replay.hub.endOfList")}
           </span>
         </div>
+        )}
 
         {runtime.error !== null && (
           <div className="replay-error-summary" role="alert">
@@ -904,12 +908,12 @@ export default function TrainingHubDialog({
             </button>
           </div>
         )}
-        <section className="training-hub-stats" aria-label={t("replay.hub.overview")}>
+        {loadedRunCount > 0 && <section className="training-hub-stats" aria-label={t("replay.hub.overview")}>
           <article><span>{t("replay.hub.statsAll")}</span><strong>{loadedRunCount}</strong></article>
           <article><span>{t("replay.hub.statsResume")}</span><strong>{resumableRunCount}</strong></article>
           <article><span>{t("replay.hub.statsActive")}</span><strong>{activeRunCount}</strong></article>
           <article><span>{t("replay.hub.statsEnded")}</span><strong>{completedRunCount}</strong></article>
-        </section>
+        </section>}
         <TrainingRunCreatePanel key={runtime.createOpen ? "open" : "closed"} runtime={runtime} {...(launchLabel ? { launchLabel } : {})} {...(onPrepareData ? { onPrepareData } : {})} />
       </section>
       {deleteCandidate !== null && (

@@ -13,6 +13,7 @@ import type {
   ChartWorkspaceLayoutNode,
   ChartWorkspaceTemplateId,
 } from "./chartWorkspaceTypes.js";
+import { Icon } from "../../components/icons/Icon.js";
 
 interface LayoutRect {
   x: number;
@@ -163,7 +164,7 @@ function WorkspaceLayoutPicker({
         title={`${t("workspace.currentLayout")} · ${currentLabel}`}
       >
         <LayoutThumbnail tree={tree} />
-        <span className="workspace-layout-caret" aria-hidden="true">▾</span>
+        <span className="workspace-layout-caret" aria-hidden="true"><Icon name="chevron-down" size={12} /></span>
       </button>
 
       {open && (

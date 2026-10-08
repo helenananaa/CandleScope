@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import OrderedDict
 from functools import wraps
 from types import SimpleNamespace
 
@@ -168,7 +169,7 @@ async def test_global_discovery_does_not_fan_out_catalog_downloads(monkeypatch):
     adapters = [SimpleNamespace(id=f"source{index}", capabilities=lambda: SimpleNamespace(markets=[SimpleNamespace(market_type="spot")])) for index in range(30)]
     monkeypatch.setattr(discovery.catalog, "bootstrap_default_adapters", lambda: None)
     monkeypatch.setattr(discovery.catalog, "get_exchange_registry", lambda: SimpleNamespace(list=lambda: adapters))
-    monkeypatch.setattr(discovery.catalog, "list_cached_symbols", lambda: ([row("source0")], 0))
+    monkeypatch.setattr(discovery.catalog, "cached_symbol_refs", lambda: [row("source0")])
     monkeypatch.setattr(discovery.catalog, "catalog_status", lambda **kwargs: {"stale": False})
     calls = []
 
@@ -190,7 +191,7 @@ async def test_failure_does_not_become_empty_success_or_hide_other_sources(monke
                 SimpleNamespace(id="provider", search_symbols=lambda: None, capabilities=lambda: SimpleNamespace(markets=[1]))]
     monkeypatch.setattr(discovery.catalog, "bootstrap_default_adapters", lambda: None)
     monkeypatch.setattr(discovery.catalog, "get_exchange_registry", lambda: SimpleNamespace(list=lambda: adapters))
-    monkeypatch.setattr(discovery.catalog, "list_cached_symbols", lambda: ([row()], 0))
+    monkeypatch.setattr(discovery.catalog, "cached_symbol_refs", lambda: [row()])
     monkeypatch.setattr(discovery.catalog, "catalog_status", lambda **kwargs: {"stale": False})
 
     async def fail(**kwargs):
@@ -202,4 +203,96 @@ async def test_failure_does_not_become_empty_success_or_hide_other_sources(monke
     result = await discovery.search_symbols(discovery.DiscoveryQuery(search="btc"))
     assert result["total"] == 1 and result["partial"]
     assert result["sources"][1] == {"id": "provider", "status": "rate_limited"}
+    await cache.close()
+
+
+def provider_discovery_fixture(monkeypatch):
+    cache = discovery.ProviderQueries()
+    adapter = SimpleNamespace(id="provider", search_symbols=lambda: None,
+                              capabilities=lambda: SimpleNamespace(markets=[1]))
+    monkeypatch.setattr(discovery, "provider_queries", cache)
+    monkeypatch.setattr(discovery, "_result_cache", OrderedDict())
+    monkeypatch.setattr(discovery.catalog, "bootstrap_default_adapters", lambda: None)
+    monkeypatch.setattr(discovery.catalog, "get_exchange_registry", lambda: SimpleNamespace(list=lambda: [adapter]))
+    monkeypatch.setattr(discovery.catalog, "cached_symbol_refs", lambda: [])
+    return cache, adapter
+
+
+@async_test
+async def test_cached_results_refresh_after_provider_metadata_replacement(monkeypatch):
+    cache, adapter = provider_discovery_fixture(monkeypatch)
+    stock = row("provider", "AAPL", "stock", displayName="Old name")
+
+    async def search(**_kwargs):
+        return [dict(stock)]
+
+    monkeypatch.setattr(discovery.catalog, "search_provider_symbols", search)
+    await cache.get(adapter, "initial", "")
+    query = discovery.DiscoveryQuery(source="provider")
+    first = await discovery.search_symbols(query)
+    # An unchanged snapshot should still reuse the expensive ranked result.
+    assert (await discovery.search_symbols(query))["symbols"] is first["symbols"]
+    stock["displayName"] = "Updated name"
+    await cache.get(adapter, "refresh", "")
+    assert len(cache.known) == 1
+    updated = await discovery.search_symbols(query)
+    assert updated["symbols"][0]["displayName"] == "Updated name"
+    await cache.close()
+    assert (await discovery.search_symbols(query))["total"] == 0
+
+
+@async_test
+async def test_cached_results_refresh_after_bounded_provider_eviction(monkeypatch):
+    cache, adapter = provider_discovery_fixture(monkeypatch)
+    cache._remember([row("provider", f"OLD{index:04d}") for index in range(3000)])
+    query = discovery.DiscoveryQuery(source="provider", scope="favorites",
+                                     favorites=["provider:spot:OLD0000", "provider:spot:NEW"])
+    assert (await discovery.search_symbols(query))["symbols"][0]["symbol"] == "OLD0000"
+
+    async def search(**_kwargs):
+        return [row("provider", "NEW")]
+
+    monkeypatch.setattr(discovery.catalog, "search_provider_symbols", search)
+    await cache.get(adapter, "new", "")
+    assert len(cache.known) == 3000
+    assert [item["symbol"] for item in (await discovery.search_symbols(query))["symbols"]] == ["NEW"]
+    await cache.close()
+
+
+@async_test
+async def test_cached_results_refresh_after_provider_snapshot_restore(monkeypatch, tmp_path):
+    cache, _adapter = provider_discovery_fixture(monkeypatch)
+    stock = row("provider", "AAPL", "stock", displayName="Before restore")
+    cache._remember([stock])
+    query = discovery.DiscoveryQuery(source="provider")
+    assert (await discovery.search_symbols(query))["symbols"][0]["displayName"] == "Before restore"
+    monkeypatch.setattr(discovery.catalog, "SYMBOL_CATALOG_SNAPSHOT_PATH", tmp_path / "catalog.json")
+    monkeypatch.setattr(discovery.catalog, "snapshot_persistence_enabled", lambda _path: True)
+    monkeypatch.setattr(discovery, "exchange_rows", lambda _path: [{**stock, "displayName": "Restored"}])
+    await cache.restore()
+    assert (await discovery.search_symbols(query))["symbols"][0]["displayName"] == "Restored"
+    await cache.close()
+
+
+@async_test
+async def test_result_cache_version_belongs_to_catalog_snapshot_before_provider_await(monkeypatch):
+    cache, _adapter = provider_discovery_fixture(monkeypatch)
+    generation, rows = 1, [row("binance", "BTC-OLD")]
+    adapter = SimpleNamespace(id="binance", capabilities=lambda: SimpleNamespace(markets=[1]))
+    monkeypatch.setattr(discovery.catalog, "get_exchange_registry",
+                        lambda: SimpleNamespace(list=lambda: [adapter, _adapter]))
+    monkeypatch.setattr(discovery.catalog, "cached_symbol_refs", lambda: list(rows))
+    monkeypatch.setattr(discovery.catalog, "cache_generation", lambda: generation)
+    monkeypatch.setattr(discovery.catalog, "catalog_status", lambda **_kwargs: {"stale": False})
+
+    async def search(**_kwargs):
+        nonlocal generation, rows
+        await asyncio.sleep(0)
+        generation, rows = 2, [row("binance", "BTC-NEW")]
+        return []
+
+    monkeypatch.setattr(discovery.catalog, "search_provider_symbols", search)
+    query = discovery.DiscoveryQuery(search="BTC")
+    assert (await discovery.search_symbols(query))["symbols"][0]["symbol"] == "BTC-OLD"
+    assert (await discovery.search_symbols(query))["symbols"][0]["symbol"] == "BTC-NEW"
     await cache.close()

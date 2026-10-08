@@ -7,6 +7,7 @@ import {
   buildQuoteOptions,
   buildMarketTabs,
   filterSymbols,
+  formatSymbolLabel,
   resolveExchangeMarketType,
 } from "../symbolSearchFilter.js";
 import { loadSourcePreferences, saveSourcePreferences } from "../sourcePreferences.js";
@@ -16,6 +17,25 @@ import {
   symbolCatalogRetryDelayMs,
 } from "../symbolCatalogRuntime.js";
 import { SymbolCatalogClientCache } from "../symbolCatalogClientCache.js";
+
+test("display labels keep expiries, strikes, settlements and stock venues visible", () => {
+  const spot = { symbol: "BTCUSDT", baseAsset: "BTC", quoteAsset: "USDT", exchange: "bybit", marketType: "spot", _key: "spot:BTCUSDT" };
+  assert.equal(formatSymbolLabel(spot), "BTC/USDT");
+  assert.equal(formatSymbolLabel({ ...spot, symbol: "BTC/USDT" }), "BTC/USDT");
+  for (const [marketType, symbol] of [
+    ["linear_future", "BTC/USDT:USDT-261225"],
+    ["linear_future", "BTC/USDT:USDT-270326"],
+    ["option", "BTC/USD:BTC-261225-100000-C"],
+    ["option", "BTC/USD:BTC-261225-110000-C"],
+    ["swap.linear", "BTC/USDT:USDT"],
+    ["swap.inverse", "BTC/USDT:BTC"],
+    ["stock", "AAPL:NASDAQ"],
+    ["spot", "BTC/USDT:SPECIAL"],
+  ]) {
+    assert.equal(formatSymbolLabel({ ...spot, marketType: marketType!, symbol: symbol! }), symbol);
+  }
+  assert.equal(formatSymbolLabel({ ...spot, expiryAtMs: 1798156800000 }), "BTCUSDT");
+});
 
 function withFavoritesStorage(raw: string, run: () => void): void {
   const previous = Object.getOwnPropertyDescriptor(globalThis, "localStorage");

@@ -1016,6 +1016,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   const canLoadMoreRightRef = useRef(canLoadMoreRight ?? canRestoreLatestWindow);
   const canRestoreLatestWindowRef = useRef(canRestoreLatestWindow);
   const rightWindowTruncatedRef = useRef(rightWindowTruncated);
+  // The latest bar is loaded but scrolled out of view: offer a jump back to it.
+  const scrolledAwayFromLatestRef = useRef(false);
+  const [scrolledAwayFromLatest, setScrolledAwayFromLatest] = useState(false);
   const loadingRef = useRef(loading);
   const leftHistoryDemandDatasetRef = useRef<string | null>(null);
   const leftHistoryInteractionGenerationRef = useRef(0);
@@ -1998,6 +2001,19 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     });
   }, [flushLeftHistoryDemand]);
 
+  const jumpToLatest = useCallback(() => {
+    const lastIndex = displayRowsRef.current.length - 1;
+    if (lastIndex < 0) return;
+    pendingSurfaceViewportRef.current = null;
+    boundSurfaceViewportAnchorRef.current = null;
+    settleDatasetViewportTransfer("interrupted");
+    followLatestDisabledRef.current = false;
+    const rawPosition = Number(latestBarPositionRef.current);
+    viewportControllerRef.current?.followLatest(lastIndex, {
+      position: Number.isFinite(rawPosition) ? Math.min(1, Math.max(0, rawPosition)) : 0.5,
+    });
+  }, [settleDatasetViewportTransfer]);
+
   const scheduleLatestWindowScroll = useCallback((requestedDatasetKey: string) => {
     if (rightWindowRestoreScrollFrameRef.current != null) {
       cancelAnimationFrame(rightWindowRestoreScrollFrameRef.current);
@@ -2006,20 +2022,12 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       rightWindowRestoreScrollFrameRef.current = null;
       if (datasetKeyRef.current !== requestedDatasetKey) return;
       if (followLatestRef.current && displayRowsRef.current.length > 0) {
-        followLatestDisabledRef.current = false;
-        const rawPosition = Number(latestBarPositionRef.current);
-        const position = Number.isFinite(rawPosition)
-          ? Math.min(1, Math.max(0, rawPosition))
-          : 0.5;
-        viewportControllerRef.current?.followLatest(
-          displayRowsRef.current.length - 1,
-          { position },
-        );
+        jumpToLatest();
       } else {
         chartRef.current?.timeScale().scrollToRealTime?.();
       }
     });
-  }, []);
+  }, [jumpToLatest]);
 
   const requestRightWindowRestore = useCallback((range: VisibleLogicalRange): boolean => {
     const store = seriesStoreRef.current;
@@ -2035,6 +2043,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       logicalBarCount,
       canLoad: canLoadMoreRightRef.current
         && !loadingRef.current
+        && explicitLatestWindowRestoreRef.current == null
         && rightWindowRestoreRef.current == null,
       consumedInteractionGeneration: leftHistoryConsumedGenerationRef.current,
       hasHandler: Boolean(restore),
@@ -2078,11 +2087,12 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   }, [scheduleLatestWindowScroll]);
 
   const handleRestoreLatestWindow = useCallback(() => {
-    const restore = onRestoreLatestWindowRef.current;
+    const restore = onRestoreLatestWindowRef.current ?? onNeedMoreRightRef.current;
     if (
       !restore
       || !canRestoreLatestWindowRef.current
       || explicitLatestWindowRestoreRef.current != null
+      || rightWindowRestoreRef.current != null
     ) return;
 
     const requestedDatasetKey = datasetKeyRef.current;
@@ -2105,6 +2115,14 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       });
     explicitLatestWindowRestoreRef.current = promise;
   }, [scheduleLatestWindowScroll]);
+
+  const returnToLatest = useCallback(() => {
+    if (rightWindowTruncatedRef.current ?? Boolean(seriesStoreRef.current?.rightTruncated)) {
+      handleRestoreLatestWindow();
+    } else {
+      jumpToLatest();
+    }
+  }, [handleRestoreLatestWindow, jumpToLatest]);
 
   const evaluateHistoryEdgeGesture = useCallback((
     range: VisibleLogicalRange,
@@ -2623,6 +2641,12 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
 
     const handleVisibleLogicalRangeChange = (range: VisibleLogicalRange) => {
       scheduleFutureTimeAxisCoverage();
+      const lastIndex = displayRowsRef.current.length - 1;
+      const awayFromLatest = Boolean(range && lastIndex > 0 && range.to < lastIndex - 2);
+      if (awayFromLatest !== scrolledAwayFromLatestRef.current) {
+        scrolledAwayFromLatestRef.current = awayFromLatest;
+        setScrolledAwayFromLatest(awayFromLatest);
+      }
       if (isChartPointerActiveRef.current && range) {
         chartPointerLogicalRangeChangedRef.current = true;
         markViewportRangeInteracted();
@@ -3089,14 +3113,19 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     return () => cancelAnimationFrame(frameId);
   }, [chartAdapter, customBg, dataMeta?.optimistic, dataMeta?.targetSeriesKey, interval, notifyDrawingFrameInvalidation, theme, tickMarkFormatter, tickMarkMaxCharacterLength, timeFormatter, timezone]);
 
+  // When the loaded window stops short of the newest bars, its last bar is not the
+  // current price, so the axis price tag and price line would show a stale value.
+  const latestBarLoaded = !(rightWindowTruncated ?? Boolean(seriesStore?.rightTruncated));
   useEffect(() => {
     const activeType = mainSeriesTypeRef.current || resolvedChartType;
     mainSeriesRef.current?.applyOptions({
       ...buildMainSeriesStyleOptions(activeType, { upColor, downColor }),
       crosshairMarkerVisible: showCrosshairDetails && !drawingEngineToolActive,
+      lastValueVisible: latestBarLoaded,
+      priceLineVisible: latestBarLoaded,
     });
     notifyDrawingFrameInvalidation();
-  }, [downColor, drawingEngineToolActive, notifyDrawingFrameInvalidation, resolvedChartType, seriesReady, showCrosshairDetails, upColor]);
+  }, [downColor, drawingEngineToolActive, latestBarLoaded, notifyDrawingFrameInvalidation, resolvedChartType, seriesReady, showCrosshairDetails, upColor]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -4862,6 +4891,12 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     updateSelectedDrawingStyle,
   ]);
 
+  const latestWindowMissing = rightWindowTruncated ?? Boolean(seriesStore?.rightTruncated);
+  const showReturnToLatest = scrolledAwayFromLatest
+    || (latestWindowMissing && Boolean(onRestoreLatestWindow || onNeedMoreRight));
+  const returnToLatestDisabled = latestWindowRestorePending
+    || (latestWindowMissing && (!(onRestoreLatestWindow || onNeedMoreRight) || !canRestoreLatestWindow));
+
   return (
     <div className="chart-area chart-pane-scroll-viewport">
       {usesDerivedAxis && (
@@ -4888,17 +4923,16 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         style={{ cursor: cursorStyleForDrawingTool(effectiveDrawingTool) }}
       />
 
-      {onRestoreLatestWindow
-        && (rightWindowTruncated ?? Boolean(seriesStore?.rightTruncated)) && (
+      {showReturnToLatest && (
         <button
           type="button"
           className="chart-return-to-realtime"
-          disabled={!canRestoreLatestWindow || latestWindowRestorePending}
+          disabled={returnToLatestDisabled}
           data-pending={latestWindowRestorePending ? "true" : "false"}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
-            handleRestoreLatestWindow();
+            returnToLatest();
           }}
         >
           {t(latestWindowRestorePending
@@ -4970,6 +5004,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       <PanePriceScaleMenu
         menu={priceScaleMenu}
         locale={locale}
+        onReturnToLatest={showReturnToLatest ? returnToLatest : null}
+        returnToLatestDisabled={returnToLatestDisabled}
+        returnToLatestPending={latestWindowRestorePending}
         onInvertScaleChange={onInvertScaleChange}
         onPriceScaleModeChange={onPriceScaleModeChange}
         onAddAlertAtPrice={onAddAlertAtPrice}

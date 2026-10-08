@@ -25,6 +25,8 @@ export function usePanePriceScaleMenu({
   const [contextMenu, setContextMenu] = useState<PriceScaleContextMenuState | null>(null);
   const close = useCallback(() => setContextMenu(null), []);
   const handleContextMenu = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    // A drawing in progress uses right-click to cancel itself and marks the event handled.
+    if (event.defaultPrevented) return;
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const next = resolvePanePriceScaleMenu({
@@ -35,6 +37,7 @@ export function usePanePriceScaleMenu({
       clientX: event.clientX,
       clientY: event.clientY,
       priceAtPaneY,
+      anywhere: true,
     });
     if (!next) return;
     event.preventDefault();

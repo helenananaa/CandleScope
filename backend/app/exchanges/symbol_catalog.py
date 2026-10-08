@@ -56,6 +56,8 @@ _symbol_cache: dict[tuple[str, str], list[dict[str, Any]]] = {}
 _cache_loaded_at: float = 0.0
 _SNAPSHOT_VERSION = 1
 _snapshot_revision = 0
+# Bumped on every change to ``_symbol_cache`` so readers can cache derived results.
+_cache_generation = 0
 _last_persisted_revision = 0
 _snapshot_write_lock = threading.Lock()
 _catalog_stopping = False
@@ -157,7 +159,7 @@ def get_cached_symbol_metadata(
 def evict_exchange_metadata(exchange: str) -> int:
     """Remove Host-owned symbol cache rows for one unregistered exchange."""
 
-    global _cache_loaded_at
+    global _cache_loaded_at, _cache_generation
 
     normalized_exchange = exchange.strip().lower()
     if not normalized_exchange:
@@ -186,6 +188,7 @@ def evict_exchange_metadata(exchange: str) -> int:
             automatic_task.cancel()
     if keys:
         _cache_loaded_at = time.time()
+        _cache_generation += 1
         try:
             asyncio.get_running_loop().create_task(
                 _persist_exchange_metadata_snapshot(),
@@ -236,7 +239,7 @@ def _catalog_foreground_is_quiet() -> bool:
 def load_exchange_metadata_snapshot(path: Path | None = None) -> bool:
     """Atomically publish one fully validated last-known-good snapshot."""
 
-    global _cache_loaded_at, _snapshot_revision, _last_persisted_revision
+    global _cache_loaded_at, _snapshot_revision, _last_persisted_revision, _cache_generation
     snapshot_path = Path(path or SYMBOL_CATALOG_SNAPSHOT_PATH)
     if path is None and not snapshot_persistence_enabled(snapshot_path):
         return False
@@ -257,6 +260,7 @@ def load_exchange_metadata_snapshot(path: Path | None = None) -> bool:
 
     _symbol_cache.clear()
     _symbol_cache.update(restored_cache)
+    _cache_generation += 1
     _market_refresh_state.clear()
     _market_refresh_state.update(restored_states)
     _cache_loaded_at = saved_at
@@ -649,7 +653,7 @@ async def _run_market_refresh(
     *,
     attempted_at: float,
 ) -> int:
-    global _cache_loaded_at
+    global _cache_loaded_at, _cache_generation
 
     key = _market_cache_key(adapter.id, market_type)
     state = _market_refresh_state.setdefault(key, _MarketRefreshState())
@@ -732,6 +736,7 @@ async def _run_market_refresh(
         else None
     )
     # Publish only after a complete non-empty response has been normalized.
+    _cache_generation += 1
     _symbol_cache[key] = _merge_symbol_snapshot(
         _symbol_cache.get(key, []),
         current,
@@ -794,6 +799,31 @@ def _iter_cached_symbols(
             if include_inactive or item.get("active", True) is True
         )
     return results
+
+
+def cache_generation() -> int:
+    """Changes whenever the cached symbol rows change."""
+
+    return _cache_generation
+
+
+def cached_symbol_refs(
+    exchange: str = "",
+    market_type: str = "",
+    *,
+    include_inactive: bool = False,
+) -> list[dict[str, Any]]:
+    """Cheap, non-detached view of cached rows for callers that copy them off the event loop.
+
+    Callers must not mutate the returned rows; ``list_cached_symbols`` is the
+    detached form.
+    """
+
+    return _iter_cached_symbols(
+        exchange=exchange,
+        market_type=market_type,
+        include_inactive=include_inactive,
+    )
 
 
 def list_cached_symbols(
