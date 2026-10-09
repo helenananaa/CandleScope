@@ -24,7 +24,9 @@ test("packaged smoke waits for initial load before navigating on both launches",
         const page = {
           setDefaultTimeout() {}, setDefaultNavigationTimeout() {},
           async waitForURL(predicate, options) {
+            assert.equal(predicate(new URL("http://127.0.0.1:12345/")), true);
             assert.equal(predicate(new URL("http://127.0.0.1:12345/index.html")), true);
+            assert.equal(predicate(new URL("about:blank")), false);
             assert.equal(options.waitUntil, "load");
             loaded = true;
           },

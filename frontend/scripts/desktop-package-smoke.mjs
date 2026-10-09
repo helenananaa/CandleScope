@@ -51,7 +51,8 @@ try {
     // Navigating earlier aborts boot and opens a startup-error dialog, especially
     // on slower Intel runners and when restoring an existing window profile.
     await phase("initial-page-loaded", () => page.waitForURL(
-      url => url.protocol === "http:" && url.hostname === "127.0.0.1" && url.pathname.endsWith(".html"),
+      url => url.protocol === "http:" && url.hostname === "127.0.0.1"
+        && (url.pathname === "/" || url.pathname.endsWith(".html")),
       { waitUntil: "load", timeout: 90_000 },
     ), 95_000);
     const identity = await phase("app-identity", () => app.evaluate(({ app }) => ({ packaged: app.isPackaged, userData: app.getPath("userData"), resources: process.resourcesPath })));
