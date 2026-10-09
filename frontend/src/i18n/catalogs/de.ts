@@ -2,6 +2,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const de = {
+  "native.platformHelp": "Die offiziellen Pine / Pyne-Plugins unterstützen derzeit nur Windows mit CPython 3.12. Lernvorlagen und integrierte Indikatoren bleiben ohne kompatible Laufzeit verfügbar.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "Pine-v5/v6-API für abgeschlossene Kerzen:",
   "serverError.notFound": "Das angeforderte Element existiert nicht oder wurde gelöscht",

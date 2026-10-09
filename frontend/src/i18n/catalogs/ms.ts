@@ -2,6 +2,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ms = {
+  "native.platformHelp": "Pemalam rasmi Pine / Pyne kini hanya menyokong Windows dengan CPython 3.12. Templat pembelajaran dan penunjuk terbina dalam masih tersedia tanpa masa jalan yang serasi.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "Pine v5/v6 closed-bar API:",
   "serverError.notFound": "Item yang diminta tidak wujud atau telah dipadam",

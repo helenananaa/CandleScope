@@ -1,6 +1,7 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
+  "native.platformHelp": "Official Pine / Pyne plugins currently support Windows with CPython 3.12 only. Teaching templates and built-in indicators remain available without a compatible runtime.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "Pine v5/v6 closed-bar API:",
   "serverError.notFound": "The requested item doesn't exist or was deleted",

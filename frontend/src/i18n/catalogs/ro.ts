@@ -2,6 +2,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ro = {
+  "native.platformHelp": "Pluginurile oficiale Pine / Pyne acceptă momentan doar Windows cu CPython 3.12. Șabloanele educaționale și indicatorii integrați rămân disponibili fără un mediu de execuție compatibil.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "Pine v5/v6 closed-bar API:",
   "serverError.notFound": "Elementul solicitat nu există sau a fost șters",

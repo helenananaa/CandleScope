@@ -1,6 +1,7 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
+  "native.platformHelp": "Os plugins oficiais Pine / Pyne oferecem suporte apenas ao Windows com CPython 3.12. Modelos didáticos e indicadores integrados continuam disponíveis sem um ambiente compatível.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "API Pine v5/v6 de barras fechadas:",
   "serverError.notFound": "O item solicitado não existe ou foi excluído",

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import sys
 from typing import Any
 
 import aiohttp
@@ -689,7 +688,9 @@ def test_generic_exchange_uses_threaded_dns_and_owns_cleanup_on_windows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def run() -> None:
-        monkeypatch.setattr(sys, "platform", "win32")
+        from types import SimpleNamespace
+        from app.exchanges.ccxt_ext import generic
+        monkeypatch.setattr(generic, "sys", SimpleNamespace(platform="win32"))
         exchange = _create_exchange(
             get_ccxt_catalog_entry("binance"),
             IngestionConfig(proxy_mode="none"),

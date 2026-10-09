@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import sys
 from pathlib import Path
@@ -54,9 +53,7 @@ def _manifest_with_permissions(*, required: list[dict[str, object]]) -> PluginMa
 
 
 def _python_executable() -> Path:
-    executable = Path(sys.base_prefix) / (
-        "python.exe" if os.name == "nt" else "bin/python"
-    )
+    executable = Path(getattr(sys, "_base_executable", sys.executable))
     assert executable.is_file()
     return executable
 

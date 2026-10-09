@@ -2,6 +2,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhHant = {
+  "native.platformHelp": "官方 Pine / Pyne 外掛目前僅支援 Windows + CPython 3.12。沒有相容執行環境仍可使用教學範本和內建指標。",
   "indicator.editor.pyneApiHint": "Pyne API：",
   "indicator.editor.pineApiHint": "Pine v5/v6 收盤 K 線 API：",
   "serverError.notFound": "請求的內容不存在，可能已被刪除",

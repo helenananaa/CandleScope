@@ -2,6 +2,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const hi = {
+  "native.platformHelp": "आधिकारिक Pine / Pyne प्लगइन अभी केवल Windows और CPython 3.12 का समर्थन करते हैं। संगत रनटाइम के बिना भी शिक्षण टेम्पलेट और अंतर्निहित संकेतक उपलब्ध हैं।",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "Pine v5/v6 closed-bar API:",
   "serverError.notFound": "अनुरोधित आइटम मौजूद नहीं है या हटा दिया गया है",

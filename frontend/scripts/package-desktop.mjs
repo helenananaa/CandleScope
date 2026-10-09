@@ -1,5 +1,5 @@
 import path from "node:path";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, realpathSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 // Use the same physical root for Vite inputs and its working directory on
@@ -9,6 +9,12 @@ function run(script, args = [], env = process.env) {
   const result = spawnSync(process.execPath, [script, ...args], { cwd: frontend, stdio: "inherit", env });
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
+}
+const backendVersion = readFileSync(path.join(frontend, "../backend/app/core/version.py"), "utf8")
+  .match(/^APP_VERSION\s*=\s*["']([^"']+)["']/m)?.[1];
+const packageVersion = JSON.parse(readFileSync(path.join(frontend, "package.json"), "utf8")).version;
+if (!backendVersion || packageVersion !== backendVersion) {
+  throw new Error(`Desktop package version ${packageVersion} must match backend APP_VERSION ${backendVersion}`);
 }
 run("scripts/prepare-desktop-runtime.mjs");
 run("node_modules/vite/bin/vite.js", ["build"], { ...process.env, VITE_DESKTOP_BUILD: "1" });

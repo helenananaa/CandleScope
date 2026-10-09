@@ -140,6 +140,12 @@ async def test_shared_download_cancel_does_not_cancel_other_consumer(tmp_path):
         a = await service.submit(request().model_copy(update={"consumer": "REPLAY"}))
         b = await service.submit(request("request-0002").model_copy(update={"consumer": "REPLAY"}))
         await asyncio.wait_for(adapter.entered.wait(), 2)
+        # Wait for both consumers to join the acquisition. Adapter entry alone
+        # only proves the first worker started; cancelling then races the second.
+        async def both_consumers_joined():
+            while not any(owners == {a["id"], b["id"]} for _, owners in service._acquisitions.values()):
+                await asyncio.sleep(0)
+        await asyncio.wait_for(both_consumers_joined(), 2)
         await service.cancel(a["id"])
         adapter.release.set()
         assert (await terminal(service, a["id"]))["state"] == "CANCELLED"

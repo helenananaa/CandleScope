@@ -2,6 +2,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const he = {
+  "native.platformHelp": "התוספים הרשמיים של Pine / Pyne תומכים כרגע רק ב־Windows עם CPython 3.12. תבניות לימוד ואינדיקטורים מובנים זמינים גם ללא סביבת ריצה תואמת.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "Pine v5/v6 closed-bar API:",
   "serverError.notFound": "הפריט המבוקש אינו קיים או שנמחק",

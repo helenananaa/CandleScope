@@ -2,6 +2,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ru = {
+  "native.platformHelp": "Официальные плагины Pine / Pyne пока поддерживают только Windows с CPython 3.12. Учебные шаблоны и встроенные индикаторы доступны без совместимой среды выполнения.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "API Pine v5/v6 по закрытым барам:",
   "serverError.notFound": "Запрошенный элемент не существует или был удалён",

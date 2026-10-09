@@ -340,7 +340,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       <button disabled={busy || (mode === "CANDLESCOPE" && fidelity !== "BAR_APPROX" && executionDataState !== "ready") || !(mode === "NATIVE" ? available?.available : available?.external_available)} onClick={() => void start()}>{t(mode === "NATIVE" ? "native.run" : "native.external.run")}</button>
       {run && !nativeTerminal(run.state) && <button onClick={() => void nativeApi<NativeRun>(`${runPath}/${run.run_id}/cancel`, {}).then(receiveRun).catch((reason) => setError(String(reason)))}>{t("native.cancel")}</button>}
       <span role="status" className="native-run-status">{t(`strategyReview.status.${preparation?.state === "CANCELLED" || run?.state === "CANCELLED" ? "cancelled" : error || run?.state === "FAILED" || run?.state === "INTERRUPTED" ? "failed" : busy ? (run ? "running" : "preparing") : run?.state === "COMPLETED" ? "completed" : resolution && resolution.status !== "READY" ? "needsData" : "idle"}`)}</span></div>
-    {available && !(mode === "NATIVE" ? available.available : available.external_available) && <p role="alert">{t("native.unavailable")} {available.reason}</p>}
+    {capabilities && !(mode === "NATIVE" ? available?.available : available?.external_available) && <div role="status"><p>{t("indicator.editor.runtimeUnavailableHelp")}</p><p>{t("native.platformHelp")}</p>
+      {available?.reason && <details><summary>{t("plugin.techDetails")}</summary><p>{available.reason}</p></details>}</div>}
     </div>
     <div className="native-dock-scroll" ref={scrollPane} onScroll={(event) => { scrollPositions.current[tab] = event.currentTarget.scrollTop; }}>
     {preparation && !["READY", "CANCELLED"].includes(preparation.state) && <p role="status">{t("preparation.title")} · {preparation.completed}/{preparation.total}

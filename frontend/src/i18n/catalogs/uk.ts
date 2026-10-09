@@ -2,6 +2,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const uk = {
+  "native.platformHelp": "Офіційні плагіни Pine / Pyne наразі підтримують лише Windows із CPython 3.12. Навчальні шаблони та вбудовані індикатори доступні без сумісного середовища виконання.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "API Pine v5/v6 за закритими барами:",
   "serverError.notFound": "Запитаний елемент не існує або його видалено",

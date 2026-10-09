@@ -2,6 +2,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const tr = {
+  "native.platformHelp": "Resmî Pine / Pyne eklentileri şu anda yalnızca Windows ve CPython 3.12 destekler. Uyumlu çalışma ortamı olmadan da eğitim şablonları ve yerleşik göstergeler kullanılabilir.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "Kapanmış mumlar için Pine v5/v6 API:",
   "serverError.notFound": "İstenen öğe yok veya silinmiş",

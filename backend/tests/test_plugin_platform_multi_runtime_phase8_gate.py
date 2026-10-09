@@ -27,3 +27,13 @@ def test_phase8_release_gate_summary_is_fail_closed() -> None:
     assert result["result"] == "pass"
     assert result["defaultsRemainOff"] is True
     assert result["linuxSandboxClaim"] == "wasi-boundary-only"
+
+
+def test_phase8_contract_target_is_windows_on_every_audit_host():
+    from app.plugin_core_v2.runtime_providers.wasmtime_policy import wasmtime_fixed_arguments
+    windows = wasmtime_fixed_arguments("windows")
+    linux = wasmtime_fixed_arguments("linux")
+    assert windows[1] == "--config=NUL"
+    assert linux[1] == "--config=/dev/null"
+    assert windows[2:] == linux[2:]
+    assert phase8.capture_contract()["provider"]["fixedArguments"] == list(windows)

@@ -1,4 +1,5 @@
 export const zhCN = {
+  "native.platformHelp": "官方 Pine / Pyne 插件目前仅支持 Windows + CPython 3.12。没有兼容运行时也可使用教学模板和内置指标。",
   "indicator.editor.pyneApiHint": "Pyne API：",
   "indicator.editor.pineApiHint": "Pine v5/v6 收盘 K 线 API：",
   "serverError.notFound": "请求的内容不存在，可能已被删除",

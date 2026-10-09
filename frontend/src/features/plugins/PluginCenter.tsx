@@ -110,6 +110,7 @@ export function PluginSettingsPanel({ runtime, onClose, initialSection = "instal
           </div>}
         </div>
         {engines.length > 0 && filter === "all" && <section className="pc-engines"><header><div><h3>{t("plugin.scriptRuntimes")}</h3><p>{t("pc.enginesHint")}</p></div><span>{engines.length}</span></header>
+          {engines.some((engine) => !engine.available) && <p role="status">{t("indicator.editor.runtimeUnavailableHelp")} {t("native.platformHelp")}</p>}
           <div className="pc-engine-grid">{engines.map((engine) => <article key={engine.id} data-v1-runtime={engine.runtimeId}>
             <div><strong>{engine.title}</strong><span className={`plugin-state-pill ${engine.available ? "is-ready" : "is-muted"}`}>{engine.available ? t("plugin.available") : t("plugin.unavailable")}</span></div>
             <p>{engine.languages.map((item) => item.name).join(" · ")} · {engine.version}</p>

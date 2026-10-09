@@ -1,6 +1,7 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  "native.platformHelp": "공식 Pine / Pyne 플러그인은 현재 Windows + CPython 3.12만 지원합니다. 호환 런타임 없이도 학습 템플릿과 기본 지표를 사용할 수 있습니다.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "Pine v5/v6 마감 봉 API:",
   "serverError.notFound": "요청한 항목이 없거나 삭제되었습니다",

@@ -1,6 +1,7 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ja = {
+  "native.platformHelp": "公式 Pine / Pyne プラグインは現在 Windows + CPython 3.12 のみ対応しています。対応ランタイムがなくても学習用テンプレートと組み込み指標を利用できます。",
   "indicator.editor.pyneApiHint": "Pyne API：",
   "indicator.editor.pineApiHint": "Pine v5/v6 確定足 API：",
   "serverError.notFound": "要求された項目が存在しないか、削除されています",

@@ -2,6 +2,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const hu = {
+  "native.platformHelp": "A hivatalos Pine / Pyne bővítmények jelenleg csak a Windows és CPython 3.12 környezetet támogatják. Az oktatósablonok és beépített indikátorok kompatibilis futtatókörnyezet nélkül is elérhetők.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "Pine v5/v6 closed-bar API:",
   "serverError.notFound": "A kért elem nem létezik, vagy törölték",

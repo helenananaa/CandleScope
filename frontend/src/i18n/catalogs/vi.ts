@@ -2,6 +2,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const vi = {
+  "native.platformHelp": "Plugin Pine / Pyne chính thức hiện chỉ hỗ trợ Windows với CPython 3.12. Bạn vẫn có thể dùng mẫu học tập và chỉ báo tích hợp khi không có môi trường thực thi tương thích.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "API Pine v5/v6 theo nến đã đóng:",
   "serverError.notFound": "Mục được yêu cầu không tồn tại hoặc đã bị xóa",

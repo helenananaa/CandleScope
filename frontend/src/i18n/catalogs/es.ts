@@ -6,6 +6,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
  * libro de órdenes, tasa de financiación, prueba retrospectiva, reproducción.
  */
 export const es = {
+  "native.platformHelp": "Los plugins oficiales Pine / Pyne solo admiten Windows con CPython 3.12. Las plantillas didácticas y los indicadores integrados están disponibles sin un entorno compatible.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "API de Pine v5/v6 con barras cerradas:",
   "serverError.notFound": "El elemento solicitado no existe o se eliminó",

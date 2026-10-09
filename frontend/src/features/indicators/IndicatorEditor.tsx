@@ -462,7 +462,7 @@ export default function IndicatorEditor({
         </div>
         {!readOnly && allowedRuntimeCatalog && !languageReady && (
           <div role="status" style={{ marginBottom: 8, color: "var(--text-secondary)", fontSize: 12 }}>
-            {t("indicator.editor.runtimeUnavailableHelp")}
+            {t("indicator.editor.runtimeUnavailableHelp")} {t("native.platformHelp")}
           </div>
         )}
         {runtimeCatalogError && (

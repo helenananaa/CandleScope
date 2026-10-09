@@ -2,6 +2,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const th = {
+  "native.platformHelp": "ปลั๊กอิน Pine / Pyne ทางการรองรับเฉพาะ Windows กับ CPython 3.12 ในขณะนี้ หากไม่มีรันไทม์ที่เข้ากันได้ ยังใช้เทมเพลตการเรียนรู้และอินดิเคเตอร์ในตัวได้",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "Pine v5/v6 closed-bar API:",
   "serverError.notFound": "ไม่พบรายการที่ขอ หรือถูกลบไปแล้ว",
