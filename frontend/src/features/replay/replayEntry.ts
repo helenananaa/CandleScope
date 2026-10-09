@@ -21,9 +21,11 @@ export function resolveReplayEntry(location: ReplayEntryLocation): ReplayEntry {
   }
 
   const params = new URLSearchParams(location.search);
-  const unknown = [...params.keys()].filter((key) => key !== "run");
+  const unknown = [...params.keys()].filter((key) => key !== "run" && key !== "windowId");
   const runs = params.getAll("run");
-  if (unknown.length > 0 || runs.length > 1) {
+  const windows = params.getAll("windowId");
+  if (unknown.length > 0 || runs.length > 1 || windows.length > 1
+    || (windows.length === 1 && !/^app-window-[1-9]\d*$/.test(windows[0]!))) {
     return {
       kind: "error",
       code: "REPLAY_ENTRY_INVALID",
