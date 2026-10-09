@@ -143,6 +143,24 @@ def is_progressive_dataset(persisted):
     return manifest is not None and manifest.get("schema_version") == MANIFEST_SCHEMA
 
 
+def is_requested_horizon_dataset(persisted: Mapping[str, object]) -> bool:
+    """Prepared windows display only their pinned base history, at any interval."""
+    from app.replay.sources.bar_source import (
+        BAR_TERMINAL_REQUESTED_HORIZON,
+        PAGED_BAR_MANIFEST_SCHEMA_VERSION,
+    )
+
+    blob = persisted.get("snapshot_blob")
+    if not isinstance(blob, (bytes, bytearray)):
+        return False
+    manifest = _decode_bar_snapshot_blob(bytes(blob)).paging_manifest
+    return (
+        manifest is not None
+        and manifest.get("schema_version") == PAGED_BAR_MANIFEST_SCHEMA_VERSION
+        and manifest.get("terminal_kind") == BAR_TERMINAL_REQUESTED_HORIZON
+    )
+
+
 def _progressive_repository(persisted, repository, factory):
     if not is_progressive_dataset(persisted):
         return repository, False

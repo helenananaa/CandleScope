@@ -44,6 +44,7 @@ from .history import (
     build_display_projection,
     build_history_page,
     is_progressive_dataset,
+    is_requested_horizon_dataset,
 )
 from .models import (
     AdvanceBasis,
@@ -90,8 +91,15 @@ class TrainingDisplayService:
         *,
         display_interval: str | None,
         require_projection_grid: bool = False,
+        persisted: Mapping[str, object] | None = None,
     ) -> dict[str, object]:
         """Bind optional chart context without changing the execution snapshot."""
+
+        # Automatic preparation seals a finite base window, without downloading
+        # separate native intervals. Aggregate that same revision for charts and
+        # interval commands; unrelated native archives must not become required.
+        if persisted is not None and is_requested_horizon_dataset(persisted):
+            return dict(binding)
 
         requested_interval = (
             str(binding["display_interval"])
@@ -641,6 +649,7 @@ class TrainingDisplayService:
             binding = await self._attach_native_display_archive_pin(
                 binding,
                 display_interval=display_interval,
+                persisted=persisted,
             )
         return await asyncio.to_thread(
             build_history_page,
@@ -699,6 +708,7 @@ class TrainingDisplayService:
                 binding,
                 display_interval=display_interval,
                 require_projection_grid=True,
+                persisted=persisted,
             )
         return await self.replay_service.store.run_worker(
             "display_build",
@@ -869,6 +879,9 @@ class TrainingDisplayService:
             history_binding,
             display_interval=display_interval,
             require_projection_grid=True,
+            persisted=await self.replay_service.store.load_dataset(
+                str(binding["adapter_session_id"])
+            ),
         )
         raw_anchor = grid_binding.get("display_source_bucket_anchor_ms")
         if raw_anchor is None:

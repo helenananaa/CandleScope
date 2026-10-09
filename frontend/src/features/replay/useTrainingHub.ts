@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { type PreparationJob, type PreparationCapabilities, type prepareReplay } from "../data-preparation/api.js";
+import { PreparedReplayDeletedError } from "../data-preparation/api.js";
 import { t } from "../../i18n/index.js";
 import { ReplayApiError } from "./replayApi.js";
 import type { ReplayCapabilities, ReplayCatalog } from "./replayTypes.js";
@@ -533,13 +534,26 @@ export class TrainingHubLifecycle {
         }
         this.draft = draft;
         this.persistDraft();
-        const result = await this.api.prepareReplay(
-          setup,
-          market,
-          (job) => { if (this.accept(token)) { this.preparationJob = job; this.publish(); } },
-          this.abortController.signal,
-          this.automaticSubmission.key,
-        );
+        let result: TrainingRunMutationResponse;
+        for (let attempt = 0; ; attempt++) {
+          try {
+            result = await this.api.prepareReplay(
+              setup, market,
+              (job) => { if (this.accept(token)) { this.preparationJob = job; this.publish(); } },
+              this.abortController.signal, this.automaticSubmission!.key,
+            );
+            break;
+          } catch (error) {
+            if (!(error instanceof PreparedReplayDeletedError) || attempt !== 0 || !this.accept(token)) throw error;
+            // This click explicitly asks for a new training. Rotate only after
+            // the server confirms the old result is gone, and persist before
+            // submitting so closing/reopening cannot duplicate the new request.
+            this.automaticSubmission = { identity, key: crypto.randomUUID() };
+            this.preparationJob = null;
+            this.persistDraft();
+            this.publish();
+          }
+        }
         if (!this.accept(token)) return;
         this.automaticSubmission = null;
         this.persistDraft();
