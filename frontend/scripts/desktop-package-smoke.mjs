@@ -24,15 +24,34 @@ for (const key of ["ELECTRON_RUN_AS_NODE", "PYTHONPATH", "PYTHONHOME", "VIRTUAL_
   "CANDLESCOPE_DESKTOP_SIDECAR_COMMAND_JSON", "CANDLESCOPE_PYTHON"]) delete env[key];
 const report = { result: "running", executable, platform: process.platform, arch: process.arch, launches: [] };
 let app;
+const save = () => writeFile(path.join(output, "report.json"), JSON.stringify(report, null, 2) + "\n");
+async function phase(name, action, timeout = 60_000) {
+  report.phase = name;
+  await save();
+  console.log(`START ${name}`);
+  let timer;
+  try {
+    const value = await Promise.race([
+      action(),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`Timed out: ${name}`)), timeout); }),
+    ]);
+    console.log(`PASS ${name}`);
+    return value;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 try {
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    app = await _electron.launch({ executablePath: executable, env, timeout: 120_000 });
-    const page = await app.firstWindow({ timeout: 120_000 });
-    const identity = await app.evaluate(({ app }) => ({ packaged: app.isPackaged, userData: app.getPath("userData"), resources: process.resourcesPath }));
+    app = await phase(`launch-${attempt + 1}`, () => _electron.launch({ executablePath: executable, env, timeout: 120_000 }), 125_000);
+    const page = await phase("first-window", () => app.firstWindow({ timeout: 120_000 }), 125_000);
+    page.setDefaultTimeout(30_000);
+    page.setDefaultNavigationTimeout(60_000);
+    const identity = await phase("app-identity", () => app.evaluate(({ app }) => ({ packaged: app.isPackaged, userData: app.getPath("userData"), resources: process.resourcesPath })));
     assert.equal(identity.packaged, true);
     assert.equal(path.resolve(identity.userData), profile);
     await page.waitForFunction(() => Boolean(window.candlescopeDesktop), null, { timeout: 30_000 });
-    const bootstrap = await page.evaluate(() => window.candlescopeDesktop.getBootstrap());
+    const bootstrap = await phase("desktop-bootstrap", () => page.evaluate(() => window.candlescopeDesktop.getBootstrap()));
     assert.equal(bootstrap.sidecar.running, true);
     assert.ok(bootstrap.sidecar.command.startsWith(path.join(identity.resources, "python-runtime")));
     const health = await fetch(bootstrap.sidecar.healthUrl, { signal: AbortSignal.timeout(10_000) });
@@ -41,14 +60,16 @@ try {
     const pages = [];
     const origin = new URL(page.url()).origin;
     for (const entry of ["index.html", "replay.html", "strategy.html"]) {
-      await page.goto(`${origin}/${entry}`);
-      await page.waitForFunction(() => document.title.includes("CandleScope") && document.body.innerText.trim().length > 30);
+      await phase(`page-${entry}`, async () => {
+        await page.goto(`${origin}/${entry}`);
+        await page.waitForFunction(() => document.title.includes("CandleScope") && document.body.innerText.trim().length > 30);
+      }, 95_000);
       assert.equal(await page.locator("vite-error-overlay").count(), 0);
       pages.push({ entry, title: await page.title() });
     }
     await page.screenshot({ path: path.join(output, `launch-${attempt + 1}.png`) });
     report.launches.push({ identity, python: bootstrap.sidecar.command, health: "passed", pages });
-    await app.close();
+    await phase("graceful-close", () => app.close(), 45_000);
     app = null;
   }
   report.result = "passed";
@@ -57,7 +78,15 @@ try {
   report.error = error.stack;
   process.exitCode = 1;
 } finally {
-  if (app) await app.close().catch(() => {});
-  await writeFile(path.join(output, "report.json"), JSON.stringify(report, null, 2) + "\n");
+  // Save diagnostics before cleanup: a hung application must not hide its failure.
+  await save();
+  if (app) {
+    let timer;
+    await Promise.race([
+      app.close().catch(() => {}),
+      new Promise(resolve => { timer = setTimeout(() => { app.process().kill("SIGKILL"); resolve(); }, 10_000); }),
+    ]);
+    clearTimeout(timer);
+  }
   console.log(JSON.stringify(report, null, 2));
 }

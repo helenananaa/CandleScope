@@ -73,6 +73,7 @@ jobs:
       - name: Install isolated smoke test tooling
         run: npm install --prefix "$RUNNER_TEMP/desktop-smoke" --ignore-scripts --no-package-lock playwright-core@1.56.1
       - name: Launch relocated app and restart with bundled backend
+        timeout-minutes: 10
         run: >-
           node scripts/desktop-package-smoke.mjs
           --executable "$RUNNER_TEMP/CandleScope Relocated/CandleScope.app/Contents/MacOS/CandleScope"
