@@ -53,6 +53,8 @@ jobs:
       - name: Install locked frontend dependencies
         run: npm ci --ignore-scripts
       - name: Check frontend and desktop host
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: npm run check
       - name: Package native macOS app, DMG and ZIP
         env:
