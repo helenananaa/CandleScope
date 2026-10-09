@@ -63,10 +63,11 @@ jobs:
         env:
           EXPECTED_ARCH: ${{ matrix.arch }}
         run: |
+          version=$(node -p 'JSON.parse(require("fs").readFileSync("package.json")).version')
           mkdir -p "$RUNNER_TEMP/CandleScope Relocated"
-          ditto -x -k "desktop-dist/CandleScope-0.0.0-macos-${EXPECTED_ARCH}.zip" "$RUNNER_TEMP/CandleScope Relocated"
+          ditto -x -k "desktop-dist/CandleScope-${version}-macos-${EXPECTED_ARCH}.zip" "$RUNNER_TEMP/CandleScope Relocated"
           node scripts/verify-macos-package.mjs "$RUNNER_TEMP/CandleScope Relocated/CandleScope.app" "$EXPECTED_ARCH"
-          hdiutil verify "desktop-dist/CandleScope-0.0.0-macos-${EXPECTED_ARCH}.dmg"
+          hdiutil verify "desktop-dist/CandleScope-${version}-macos-${EXPECTED_ARCH}.dmg"
       - name: Install isolated smoke test tooling
         run: npm install --prefix "$RUNNER_TEMP/desktop-smoke" --ignore-scripts --no-package-lock playwright-core@1.56.1
       - name: Launch relocated app and restart with bundled backend
