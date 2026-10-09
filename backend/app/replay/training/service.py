@@ -499,6 +499,7 @@ class TrainingRunService:
         *,
         _progressive_feed_id: str | None = None,
         _progressive_initial_horizon_ms: int | None = None,
+        _prepared_bar_window: bool = False,
     ) -> dict[str, object]:
         if not isinstance(selection, TrainingRunMarketSelectionRequest):
             raise TypeError("selection must be TrainingRunMarketSelectionRequest")
@@ -538,6 +539,7 @@ class TrainingRunService:
                     _committed_start_ms=int(commitment["committed_start_ms"]),
                     _progressive_feed_id=_progressive_feed_id,
                     _progressive_initial_horizon_ms=_progressive_initial_horizon_ms,
+                    _prepared_bar_window=_prepared_bar_window,
                 )
             else:
                 status = str(preparation.get("status"))
@@ -1663,6 +1665,7 @@ class TrainingRunService:
         _committed_start_ms: int | None = None,
         _progressive_feed_id: str | None = None,
         _progressive_initial_horizon_ms: int | None = None,
+        _prepared_bar_window: bool = False,
     ) -> dict[str, object]:
         if not isinstance(request, TrainingRunCreateRequest):
             raise TypeError("request must be TrainingRunCreateRequest")
@@ -1696,6 +1699,7 @@ class TrainingRunService:
                     selection_config,
                     expected_catalog_epoch=request.catalog_epoch,
                     minimum_history_bars=self._selection_warmup_bars(request),
+                    _prepared_bar_window=_prepared_bar_window,
                 )
             except ReplayDomainError as exc:
                 if exc.details.get("reason") == "CATALOG_EPOCH_MISMATCH":

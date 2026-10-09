@@ -40,6 +40,7 @@ import {
 import { parseReplaySegmentPreparePlan } from "../replaySegmentTypes.js";
 import { parseReplayCapabilities, parseReplayCatalog } from "../replayParser.js";
 import { enabledCapabilities } from "./fixtures.js";
+import { PreparedReplayDeletedError } from "../../data-preparation/api.js";
 
 
 function runCard(overrides: Record<string, unknown> = {}) {
@@ -684,6 +685,45 @@ test("reloaded automatic preparation retains its draft and reuses an uncertain s
     await reopened.createRun(changed);
     assert.notEqual(keys[2], keys[0]);
   } finally { reopened.dispose(); }
+});
+
+test("a saved submission whose prepared run was deleted creates one fresh run", async () => {
+  const saved = new Map<string, string>();
+  const storage = { getItem: (key: string) => saved.get(key) ?? null,
+    setItem: (key: string, value: string) => { saved.set(key, value); } };
+  const keys: string[] = [];
+  const opened: string[] = [];
+  let outcome: "lost" | "deleted" | "ready" = "lost";
+  const api: TrainingHubApiBoundary = {
+    async listRuns() { return parseTrainingRunListResponse(listResponse([])); },
+    async capabilities() { return parseReplayCapabilities(enabledCapabilities()); },
+    async preparationCapabilities() { return { enabled: true, replay_sources: { BAR: true, AGG_TRADE: false } }; },
+    async catalog() { return { ...hedgeCatalog(), entries: [] }; },
+    async createRun() { throw new Error("unexpected manual creation"); },
+    async prepareReplay(_setup, _market, _progress, _signal, key) {
+      keys.push(key!);
+      assert.ok([...saved.values()].some(value => (JSON.parse(value) as { submission: { key: string } | null }).submission?.key === key));
+      if (outcome === "lost") throw new Error("connection lost after submission");
+      if (outcome === "deleted") { outcome = "ready"; throw new PreparedReplayDeletedError(); }
+      return parseTrainingRunMutationResponse(mutationResponse());
+    },
+  };
+  const first = new TrainingHubLifecycle({ api, draftStorage: storage });
+  await first.openCreate();
+  await first.createRun(first.getSnapshot().draft!);
+  first.dispose();
+  outcome = "deleted";
+  const next = new TrainingHubLifecycle({ api, draftStorage: storage, navigateToRun: id => opened.push(id) });
+  try {
+    await next.openCreate();
+    await next.createRun(next.getSnapshot().draft!);
+    assert.equal(keys.length, 3);
+    assert.equal(keys[0], keys[1]);
+    assert.notEqual(keys[1], keys[2]);
+    assert.deepEqual(opened, ["run-1"]);
+    assert.equal(next.getSnapshot().error, null);
+    assert.ok([...saved.values()].every(value => (JSON.parse(value) as { submission: unknown }).submission === null));
+  } finally { next.dispose(); }
 });
 
 test("advertised trade preparation accepts missing archives without querying an unavailable tape catalog", async (context) => {
@@ -1491,6 +1531,29 @@ test("return-to-hub preserves terminal durable states and still navigates", asyn
     checkpointed: true,
     released: true,
   }));
+});
+
+test("return-to-hub retries transient adapter leases and never retries storage failures", async () => {
+  let calls = 0;
+  const navigation: string[] = [];
+  await returnToTrainingHub("run-1", { async returnToHub() {
+    calls += 1;
+    if (calls === 1) throw new ReplayV2ApiError("TRAINING_RUN_BUSY", "busy", {
+      status: 409, details: { reason: "REVISION_CONFLICT" },
+    });
+    assert.equal(navigation.length, 0);
+    return { protocol: "replay.v3", run_id: "run-1", state: "PAUSED", checkpointed: true, released: true };
+  } }, url => navigation.push(url));
+  assert.equal(calls, 2);
+  assert.deepEqual(navigation, ["/replay.html"]);
+  calls = 0;
+  await assert.rejects(returnToTrainingHub("run-1", { async returnToHub() {
+    calls += 1;
+    throw new ReplayV2ApiError("TRAINING_RUN_BUSY", "storage failed", {
+      status: 409, details: { reason: "PERSISTENCE_DEGRADED" },
+    });
+  } }, () => assert.fail("unconfirmed release must not navigate")), /storage failed/);
+  assert.equal(calls, 1);
 });
 
 

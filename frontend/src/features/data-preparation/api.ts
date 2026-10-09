@@ -3,6 +3,11 @@ import type { TrainingRunCreatePayload, TrainingRunMutationResponse } from "../r
 import type { ChartContextResolution } from "../backtest/backtestApi.js";
 import type { BacktestRunRecord } from "../backtest/backtestTypes.js";
 import type { NativeRun } from "../backtest/native/nativeBacktestApi.js";
+import { ReplayV2ApiClient, ReplayV2ApiError } from "../replay/replayV2Api.js";
+
+export class PreparedReplayDeletedError extends Error {
+  constructor() { super("Prepared training was deleted"); }
+}
 
 export interface PreparationJob {
   id: string;
@@ -86,5 +91,20 @@ export async function prepareReplay(
   }, transport);
   const ready = await waitForPreparation(initial, onProgress, signal, transport, market.progressive === true);
   if (!ready.result?.run) throw new Error("Prepared training is missing its run");
-  return { protocol: "replay.v3", created: true, run: ready.result.run };
+  // READY is a historical preparation receipt. Its run can have been deleted
+  // while a closed observer retained the submission key in the saved draft.
+  const api = new ReplayV2ApiClient({
+    ...(transport.fetcher ? { fetcher: transport.fetcher } : {}),
+    ...(transport.basePath ? { basePath: transport.basePath.replace(/\/data-preparations\/?$/, "/replay") } : {}),
+  });
+  try {
+    const current = await api.getRun(ready.result.run.run_id, signal);
+    return { protocol: "replay.v3", created: true, run: current.run };
+  } catch (error) {
+    if (error instanceof ReplayV2ApiError && error.code === "TRAINING_RUN_NOT_FOUND") {
+      throw new PreparedReplayDeletedError();
+    }
+    // Transport errors keep the original key: the outcome is still uncertain.
+    throw error;
+  }
 }
