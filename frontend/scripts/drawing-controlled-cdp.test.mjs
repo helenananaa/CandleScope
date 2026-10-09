@@ -4639,9 +4639,12 @@ test("controlled runtime rejects preload injection and fingerprints native build
     nodePath: null,
     webSocketValid: true,
   };
+  // Native PowerShell ancestry is deliberately unsupported on macOS/Linux.
+  // Keep the rejection covered instead of treating a Windows fixture as native.
+  const launcherViolations = process.platform === "win32" ? [] : ["native-launcher-parent-invalid"];
   assert.deepEqual(assessControlledRunnerRuntimeEvidence(passingRuntime), {
-    valid: true,
-    violations: [],
+    valid: process.platform === "win32",
+    violations: launcherViolations,
     nativeEntrypoint: smokeEntrypoint,
     nativeLauncher: smokeLauncher,
   });
@@ -4654,7 +4657,7 @@ test("controlled runtime rejects preload injection and fingerprints native build
         arguments: [powershellPath, ...standardPowerShellArguments.slice(1, -1), smokeLauncher.toUpperCase()],
       },
     },
-  }).valid, true);
+  }).valid, process.platform === "win32");
   for (const parent of [
     {
       ...nativeInvocation.parent,
@@ -4694,7 +4697,7 @@ test("controlled runtime rejects preload injection and fingerprints native build
   }
   assert.deepEqual(
     assessControlledRunnerRuntimeEvidence({ ...passingRuntime, execArgv: ["--inspect"] }).violations,
-    ["node-exec-argv-not-empty"],
+    [...launcherViolations, "node-exec-argv-not-empty"],
   );
   assert.deepEqual(
     assessControlledRunnerRuntimeEvidence({

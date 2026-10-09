@@ -1,0 +1,110 @@
+name: macOS desktop
+
+on:
+  push:
+    branches: [main]
+    paths: ["frontend/**", "backend/**", "packages/**", ".github/workflows/macos-desktop.yml"]
+  pull_request:
+    paths: ["frontend/**", "backend/**", "packages/**", ".github/workflows/macos-desktop.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: package (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    defaults:
+      run:
+        shell: bash
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Build the PR head itself so checks and artifact receipts name the same commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.23"
+      - name: Verify native architecture
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: node -e 'if (process.platform !== "darwin" || process.arch !== process.env.EXPECTED_ARCH) throw Error("Wrong native runner architecture")'
+      - name: Install locked frontend dependencies
+        run: npm ci --ignore-scripts
+      - name: Check frontend and desktop host
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: npm run check
+      - name: Package native macOS app, DMG and ZIP
+        env:
+          # Only the explicit ad-hoc identity is used; no certificate secrets.
+          CSC_FOR_PULL_REQUEST: "true"
+        run: npm run desktop:package:mac -- --${{ matrix.arch }}
+      - name: Verify relocated ZIP and native runtime
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          version=$(node -p 'JSON.parse(require("fs").readFileSync("package.json")).version')
+          mkdir -p "$RUNNER_TEMP/CandleScope Relocated"
+          ditto -x -k "desktop-dist/CandleScope-${version}-macos-${EXPECTED_ARCH}.zip" "$RUNNER_TEMP/CandleScope Relocated"
+          node scripts/verify-macos-package.mjs "$RUNNER_TEMP/CandleScope Relocated/CandleScope.app" "$EXPECTED_ARCH"
+          hdiutil verify "desktop-dist/CandleScope-${version}-macos-${EXPECTED_ARCH}.dmg"
+      - name: Install isolated smoke test tooling
+        run: npm install --prefix "$RUNNER_TEMP/desktop-smoke" --ignore-scripts --no-package-lock playwright-core@1.56.1
+      - name: Launch relocated app and restart with bundled backend
+        timeout-minutes: 10
+        run: >-
+          node scripts/desktop-package-smoke.mjs
+          --executable "$RUNNER_TEMP/CandleScope Relocated/CandleScope.app/Contents/MacOS/CandleScope"
+          --playwright-module "$RUNNER_TEMP/desktop-smoke/node_modules/playwright-core"
+          --out ../output/macos-package-smoke
+      - name: Record checksums and source identity
+        env:
+          BUILD_ARCH: ${{ matrix.arch }}
+        run: |
+          node scripts/record-desktop-artifacts.mjs
+          cat desktop-dist/SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
+          echo 'Ad-hoc signed test packages. No Apple Developer ID signature or notarization; no Release publication.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload verified packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: CandleScope-macos-${{ matrix.arch }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            frontend/desktop-dist/*.dmg
+            frontend/desktop-dist/*.zip
+            frontend/desktop-dist/SHA256SUMS
+            frontend/desktop-dist/build-manifest.json
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macOS-evidence-${{ matrix.arch }}-${{ github.run_attempt }}
+          path: |
+            output/macos-package-smoke/**
+            frontend/desktop-dist/builder-debug.yml
+          if-no-files-found: ignore
+          retention-days: 14
