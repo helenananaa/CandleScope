@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
@@ -353,7 +354,16 @@ def get_exchange_registry() -> ExchangeRegistry:
     return _registry
 
 
+_bootstrap_lock = threading.Lock()
+
+
 def bootstrap_default_adapters() -> ExchangeRegistry:
+    """Register built-in adapters once; safe to call from request worker threads."""
+    with _bootstrap_lock:
+        return _bootstrap_default_adapters_unlocked()
+
+
+def _bootstrap_default_adapters_unlocked() -> ExchangeRegistry:
     if not _registry.has("twelvedata"):
         from .plugins.twelvedata import create_plugin as create_twelve_data_plugin
 

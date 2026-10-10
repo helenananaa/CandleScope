@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getLocale, t, translateMarketType } from "../../i18n/index.js";
+import { getLocale, t, tKey, translateMarketType } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
+import { watchlistDisplayName } from "../../features/watchlist/watchlistDisplayName.js";
 import { useRightDrawerResize } from "../../shared/useRightDrawerResize.js";
 import {
   createAlertRule,
@@ -62,6 +63,7 @@ import type {
   AlertTriggerOn,
 } from "../../features/alerts/alertTypes.js";
 import type { WatchlistGroup } from "../../features/watchlist/watchlistTypes.js";
+import { Icon } from "../icons/Icon.js";
 
 type AlertTab = "add" | "all" | "history";
 type AlertStatusFilter = "all" | "enabled" | "paused" | "expired";
@@ -157,13 +159,13 @@ function buildWatchlistProducts(watchlists: WatchlistGroup[] = [], locale = getL
       const key = buildProductKey(parsed);
       const existing = productMap.get(key);
       if (existing) {
-        existing.listNames.push(list.name || t("alert.watchlistFallback", {}, locale));
+        existing.listNames.push((list.name ? watchlistDisplayName(list) : t("alert.watchlistFallback", {}, locale)));
         continue;
       }
       productMap.set(key, {
         ...parsed,
         key,
-        listNames: [list.name || t("alert.watchlistFallback", {}, locale)],
+        listNames: [(list.name ? watchlistDisplayName(list) : t("alert.watchlistFallback", {}, locale))],
         color: list.color || "#3b82f6",
       });
     }
@@ -468,6 +470,22 @@ interface NestedLogicBuilderProps {
 }
 
 function NestedLogicBuilder({ expression, onAction }: NestedLogicBuilderProps) {
+  // Most alerts are one condition ("price crosses X"): show just that condition, and
+  // only bring in the AND / OR / NOT group editor once a second condition is added.
+  const only = expression.type === "group" && !expression.not && expression.children.length === 1
+    ? expression.children[0]
+    : undefined;
+  if (expression.type === "group" && only && only.type !== "group") {
+    const single = only;
+    return (
+      <div className="alert-logic-builder simple">
+        <ConditionCard node={single} index="1" onAction={onAction} canDelete={false} />
+        <div className="alert-logic-footer">
+          <button className="alert-btn alert-btn-secondary" type="button" onClick={() => onAction({ type: "add-condition", nodeId: expression.id })}>{t("alert.addCondition")}</button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="alert-logic-builder">
       {expression.type === "group" ? (
@@ -521,7 +539,7 @@ function ExpirationAndNotification({ draft, onDraftChange, availableChannels }: 
     <div className="alert-two-column">
       <section className="alert-settings-card">
         <SectionHeader
-          kicker={t("alert.step", { n: 4 })}
+          kicker={t("alert.step", { n: 3 })}
           title={t("alert.stepExpiry")}
           desc={t("alert.stepExpiryDesc")}
         />
@@ -576,7 +594,7 @@ function ExpirationAndNotification({ draft, onDraftChange, availableChannels }: 
 
       <section className="alert-settings-card">
         <SectionHeader
-          kicker={t("alert.step", { n: 5 })}
+          kicker={t("alert.step", { n: 4 })}
           title={t("alert.stepNotify")}
           desc={t("alert.stepNotifyDesc")}
         />
@@ -731,7 +749,7 @@ function RuleTestPanel({
   return (
     <section className="alert-editor-card alert-test-card">
       <SectionHeader
-        kicker={t("alert.step", { n: 6 })}
+        kicker={t("alert.step", { n: 5 })}
         title={t("alert.stepTest")}
         desc={t("alert.stepTestDesc")}
         action={<span className={`alert-chip ${testResult?.result ? "success" : ""}`}>{testResult ? (testResult.result ? t("alert.testHit") : t("alert.testMiss")) : t("alert.untested")}</span>}
@@ -1340,7 +1358,9 @@ export default function AlertsPanel({
   if (!isOpen) return null;
 
   return (
-    <div className={`alert-panel-overlay right-drawer-overlay ${isResizing ? "is-resizing" : ""}`}>
+    <div className={`alert-panel-overlay right-drawer-overlay ${isResizing ? "is-resizing" : ""}`}
+      onClick={(event) => { if (event.target === event.currentTarget && !isResizing) onClose(); }}
+    >
       <aside
         className="alert-panel"
         style={{ width: `${panelWidth}px` }}
@@ -1357,11 +1377,9 @@ export default function AlertsPanel({
               {t("alert.center")}
               <span className="alert-layout-pill">{t("alert.ruleCount", { count: rules.length })}</span>
             </h3>
-            <div className="alert-panel-subtitle">{t("alert.subtitle")}</div>
-            <div className={`alert-runtime-status status-${systemStatus?.runtime.status || "unknown"}`}>
+            <div className={`alert-runtime-status status-${systemStatus?.runtime.status || "unknown"}`} title={deliveryStatusLabel}>
               {runtimeStatusLabel}
             </div>
-            <div className="alert-panel-subtitle">{deliveryStatusLabel}</div>
           </div>
           <button
             className="alert-panel-close"
@@ -1369,7 +1387,7 @@ export default function AlertsPanel({
             type="button"
             aria-label={t("alert.closePanel")}
           >
-            ✕
+            <Icon name="close" size={14} />
           </button>
         </div>
 
@@ -1382,7 +1400,7 @@ export default function AlertsPanel({
             <ContextMetric label={t("alert.exchange")} value={normalizedExchange.toUpperCase()} />
             <ContextMetric label={t("alert.interval")} value={intervalLabel} />
             <ContextMetric label={t("alert.price")} value={formattedPrice} tone="price" />
-            <ContextMetric label={t("alert.realtime")} value={wsStatus || "idle"} />
+            <ContextMetric label={t("alert.realtime")} value={tKey(`status.ws.${wsStatus || "idle"}`)} />
           </div>
         </div>
 
@@ -1452,7 +1470,7 @@ export default function AlertsPanel({
                   </div>
                 ) : (
                   <div className="alert-empty-state compact">
-                    <div className="alert-empty-icon">☆</div>
+                    <div className="alert-empty-icon"><Icon name="star" size={22} /></div>
                     <div className="alert-empty-title">{t("alert.noProducts")}</div>
                     <div className="alert-empty-desc">{t("alert.noProductsDesc")}</div>
                   </div>
@@ -1472,10 +1490,9 @@ export default function AlertsPanel({
 
               <section className="alert-editor-card">
                 <SectionHeader
-                  kicker={t("alert.step", { n: "2-3" })}
+                  kicker={t("alert.step", { n: 2 })}
                   title={t("alert.stepLogic")}
                   desc={t("alert.stepLogicDesc")}
-                  action={<span className="alert-chip">{t("alert.tree")}</span>}
                 />
                 <NestedLogicBuilder expression={draft.expression} onAction={applyExpressionAction} />
               </section>
@@ -1504,7 +1521,6 @@ export default function AlertsPanel({
 
               <div className="alert-editor-actions sticky-actions">
                 <button className="alert-btn alert-btn-secondary" type="button" onClick={resetDraft} disabled={alertSaving}>{t("alert.newDraft")}</button>
-                <button className="alert-btn alert-btn-secondary" type="button" onClick={() => loadAlerts()} disabled={alertLoading || alertSaving}>{t("alert.refreshRules")}</button>
                 <button className="alert-btn alert-btn-primary" type="button" onClick={createCurrentAlert} disabled={!canCreateAlert}>
                   {alertSaving ? t("alert.saving") : editorModeLabel}
                 </button>

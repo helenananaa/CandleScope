@@ -678,7 +678,9 @@ plot(ma, "MA", color=line_color)
   if (!isOpen) return null;
 
   return (
-    <div className={`indicator-panel-overlay right-drawer-overlay ${isResizing ? "is-resizing" : ""}`}>
+    <div className={`indicator-panel-overlay right-drawer-overlay ${isResizing ? "is-resizing" : ""}`}
+      onClick={(event) => { if (event.target === event.currentTarget && !isResizing) onClose(); }}
+    >
       <div
         className="indicator-panel"
         style={{ width: `${panelWidth}px` }}
@@ -745,7 +747,7 @@ plot(ma, "MA", color=line_color)
                 type="button"
                 aria-label={t("indicator.closePanel")}
               >
-                ✕
+                <Icon name="close" size={14} />
               </button>
             </div>
 
@@ -855,7 +857,7 @@ plot(ma, "MA", color=line_color)
                                   ? t("indicator.removeFromChart")
                                   : support.reason || t("indicator.addToChart")}
                               >
-                                {isActive(preset.id) ? "✓" : "+"}
+                                <Icon name={isActive(preset.id) ? "check" : "plus"} size={14} />
                               </button>
                               {allowCustomIndicators && !isBuiltinIndicator(preset) && (
                                 <button
@@ -911,7 +913,7 @@ plot(ma, "MA", color=line_color)
                                     : study.added ? t("indicator.removeFromChart") : t("indicator.addToChart")}
                                   style={disabled ? { cursor: "not-allowed", opacity: 0.45 } : undefined}
                                 >
-                                  {study.added ? "✓" : "+"}
+                                  <Icon name={study.added ? "check" : "plus"} size={14} />
                                 </button>
                               </div>
                             </div>

@@ -18,6 +18,7 @@ import type {
   PluginViewContribution,
   PluginViewProjection,
 } from "./pluginPlatformTypes.js";
+import { Icon } from "../../components/icons/Icon.js";
 
 export { PluginSettingsPanel } from "./PluginCenter.js";
 
@@ -163,7 +164,7 @@ function Modal({ title, onClose, children, testId }: React.PropsWithChildren<{
         if (event.shiftKey && (document.activeElement === first || document.activeElement === element.current)) { event.preventDefault(); last?.focus(); }
         else if (!event.shiftKey && (document.activeElement === last || document.activeElement === element.current)) { event.preventDefault(); first?.focus(); }
       }}>
-        <header><h2>{title}</h2><button type="button" aria-label={t("plugin.host.close")} onClick={onClose}>×</button></header>
+        <header><h2>{title}</h2><button type="button" aria-label={t("plugin.host.close")} onClick={onClose}><Icon name="close" size={14} /></button></header>
         <div className="plugin-modal-body">{children}</div>
       </section>
     </div>
@@ -447,7 +448,7 @@ function ViewSurface({ runtime, contribution }: {
         data-plugin-renderer="sandbox"
         aria-label={contribution.title}
       >
-        <header><h2>{contribution.title}</h2><button type="button" aria-label={t("plugin.host.close")} onClick={runtime.actions.closeView}>×</button></header>
+        <header><h2>{contribution.title}</h2><button type="button" aria-label={t("plugin.host.close")} onClick={runtime.actions.closeView}><Icon name="close" size={14} /></button></header>
         <PluginUiErrorBoundary>
           <SandboxPluginFrame runtime={runtime} contribution={contribution} />
         </PluginUiErrorBoundary>
@@ -474,7 +475,7 @@ function ViewSurface({ runtime, contribution }: {
       data-plugin-view={contribution.id}
       aria-label={contribution.title}
     >
-      <header><h2>{contribution.title}</h2><button type="button" aria-label={t("plugin.host.close")} onClick={runtime.actions.closeView}>×</button></header>
+      <header><h2>{contribution.title}</h2><button type="button" aria-label={t("plugin.host.close")} onClick={runtime.actions.closeView}><Icon name="close" size={14} /></button></header>
       <PluginUiErrorBoundary>
         {projectionMismatch
           ? <p role="alert">{t("plugin.host.viewMetadataMismatch")}</p>
@@ -511,14 +512,15 @@ export default function PluginPlatformSurfaces({ runtime }: { runtime: PluginPla
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [runtime.actions, runtime.view.registries.commandPalette.length]);
+  const platformError = runtime.view.error ? t("plugin.host.platformUnavailable", { error: runtime.view.error }) : null;
   return (
     <PluginUiErrorBoundary>
       <CommandPalette runtime={runtime} />
       {openSettings && <SettingsSurface runtime={runtime} contribution={openSettings} />}
       {openView && <ViewSurface key={openView.id} runtime={runtime} contribution={openView} />}
-      {runtime.view.error && <div className="plugin-platform-notice plugin-platform-error" role="alert">{t("plugin.host.platformUnavailable", { error: runtime.view.error })}</div>}
+      {platformError && <div className="plugin-platform-notice plugin-platform-error" role="alert" title={platformError}>{platformError}</div>}
       {runtime.view.notice && (
-        <button type="button" className="plugin-platform-notice" onClick={runtime.actions.clearNotice}>{runtime.view.notice}</button>
+        <button type="button" className="plugin-platform-notice" title={runtime.view.notice} onClick={runtime.actions.clearNotice}>{runtime.view.notice}</button>
       )}
     </PluginUiErrorBoundary>
   );

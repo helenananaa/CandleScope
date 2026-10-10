@@ -14,6 +14,7 @@ import {
   parseAlertNotificationMessage,
 } from "../../features/alerts/alertTypes.js";
 import type { AlertNotificationMessage } from "../../features/alerts/alertTypes.js";
+import { Icon } from "../icons/Icon.js";
 
 interface AlertToast {
   id: string;
@@ -121,7 +122,7 @@ export default function AlertNotificationCenter({ onOpenAlerts }: AlertNotificat
               <strong>{notification.message || t("alert.toastDefault", { symbol })}</strong>
               {toast.deliveryError && <small>{toast.deliveryError}</small>}
             </button>
-            <button className="alert-toast-close" type="button" onClick={() => dismiss(toast.id)} aria-label={t("alert.toastClose")}>×</button>
+            <button className="alert-toast-close" type="button" onClick={() => dismiss(toast.id)} aria-label={t("alert.toastClose")}><Icon name="close" size={14} /></button>
           </div>
         );
       })}

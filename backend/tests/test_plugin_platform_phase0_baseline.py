@@ -46,6 +46,18 @@ def test_phase0_contract_drift_fails_closed(
         phase0.frozen_contracts()
 
 
+def test_phase0_current_release_lock_drift_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    changed = tmp_path / "changed-release-lock.json"
+    current = json.loads(phase0.CURRENT_OFFICIAL_RELEASE_LOCK.read_text(encoding="utf-8"))
+    current["plugins"][0]["sha256"] = "sha256:" + "0" * 64
+    changed.write_text(json.dumps(current), encoding="utf-8")
+    monkeypatch.setattr(phase0, "CURRENT_OFFICIAL_RELEASE_LOCK", changed)
+    with pytest.raises(phase0.BaselineError, match="current official release lock drift"):
+        phase0.frozen_contracts()
+
+
 def test_reference_plugin_contracts_are_complete_and_fail_closed() -> None:
     fixture = json.loads(REFERENCE_PLUGINS.read_text(encoding="utf-8"))
     plugins = fixture["plugins"]

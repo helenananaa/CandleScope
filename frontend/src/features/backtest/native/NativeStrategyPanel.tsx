@@ -14,6 +14,7 @@ import { restorePreparationContexts, restorePreparationDate, type NativePreparat
 import { emptyAdvancedInputs, executionInputs, freezeAdvancedInputs, type AdvancedInputs } from "./nativeInputs.js";
 import { preparationRequest, waitForPreparation, type PreparationJob, type PreparationCapabilities } from "../../data-preparation/api.js";
 import PreparationWaiting from "../../data-preparation/PreparationWaiting.js";
+import { Icon } from "../../../components/icons/Icon.js";
 
 const NATIVE_TEMPLATES = {
   pine: '//@version=6\nstrategy("Native SMA", overlay=true, initial_capital=10000)\nfast = ta.sma(close, 3)\nslow = ta.sma(close, 5)\nif ta.crossover(fast, slow)\n    strategy.entry("L", strategy.long)\nif ta.crossunder(fast, slow)\n    strategy.close("L")\nplot(fast)\nplot(slow)\n',
@@ -327,7 +328,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const resultStale = !!reportRun && (reportRun !== run || reportRun.config?.source !== source || reportRun.config?.language !== language || parametersChanged);
   const available = capabilities?.engines.find((item) => item.language === language);
   return <section className={`native-strategy-panel${props.docked ? " native-strategy-docked" : ""}`} aria-label={t("native.title")}>
-    {!props.docked && <header><strong>{t(mode === "NATIVE" ? "native.title" : "native.external.title")}</strong><span>{props.session.symbol} · {props.session.interval}</span><button onClick={props.onClose}>×</button></header>}
+    {!props.docked && <header><strong>{t(mode === "NATIVE" ? "native.title" : "native.external.title")}</strong><span>{props.session.symbol} · {props.session.interval}</span><button type="button" aria-label={t("backtest.close")} onClick={props.onClose}><Icon name="close" size={14} /></button></header>}
     {props.docked && <nav className="native-dock-tabs" aria-label={t("chartTester.tabsAria")}>
       {(["overview", "trades", "script", "settings"] as const).map((item) => <button key={item} aria-pressed={tab === item}
         onClick={() => selectTab(item)}>{t(`chartTester.tab.${item}`)}</button>)}

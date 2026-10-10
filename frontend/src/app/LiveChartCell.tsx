@@ -99,6 +99,7 @@ import TopBar from "./TopBar.js";
 import { CHART_STRATEGY_TESTER_ENABLED } from "../features/backtest/chart-tester/chartStrategyTesterFeature.js";
 import type { ChartStrategyTesterEntryState } from "../features/backtest/chart-tester/chartStrategyTesterUiModel.js";
 import type { ChartStrategyResultMarkerSource } from "../features/backtest/chart-tester/chartStrategyResultMarkerSource.js";
+import { Icon } from "../components/icons/Icon.js";
 
 const ExportPanel = lazy(() => import("../features/export/ExportPanel.js"));
 const DrawingToolbar = lazy(() => {
@@ -813,7 +814,7 @@ function LiveChartCell({
             }}
             onDoubleClick={(event) => event.stopPropagation()}
           >
-            ⠿
+            <Icon name="grip" size={14} />
           </button>
           {layoutRole && (
             <span className={`multi-chart-cell-role role-${layoutRole}`}>
@@ -860,7 +861,7 @@ function LiveChartCell({
             aria-label={maximized ? t("chart.restore") : t("chart.maximize")}
             title={maximized ? t("chart.restore") : t("chart.maximize")}
           >
-            {maximized ? "↙" : "↗"}
+            <Icon name={maximized ? "minimize" : "maximize"} size={14} />
           </button>
         </header>
         <div className="multi-chart-cell-canvas">

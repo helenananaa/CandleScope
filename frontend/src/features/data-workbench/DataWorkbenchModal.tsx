@@ -13,6 +13,7 @@ import {
   instrumentGroupKey,
 } from "./workbenchInventory.js";
 import { ManualHistoryDownloadPanel } from "./ManualHistoryDownloadPanel.js";
+import { Icon } from "../../components/icons/Icon.js";
 
 interface WorkbenchFilters {
   exchange: string;
@@ -106,7 +107,7 @@ function FoldSection({
         type="button"
       >
         <span aria-hidden="true" className="dw-fold-disclosure">
-          <span className="dw-fold-chevron">▸</span>
+          <span className="dw-fold-chevron"><Icon name="chevron-right" size={12} /></span>
         </span>
         <span className="dw-fold-copy">
           <h3>{title}</h3>
@@ -294,7 +295,7 @@ export default function DataWorkbenchModal({
             <h2 className="dw-title">{t("settings.workbench.name", {}, locale)}</h2>
             <p className="dw-subtitle">{t("workbench.subtitle", {}, locale)}</p>
           </div>
-          <button aria-label={t("workbench.close", {}, locale)} className="dw-close" onClick={onClose} type="button">✕</button>
+          <button aria-label={t("workbench.close", {}, locale)} className="dw-close" onClick={onClose} type="button"><Icon name="close" size={14} /></button>
         </header>
 
         <div className="dw-body">
@@ -426,7 +427,7 @@ export default function DataWorkbenchModal({
                               onClick={() => toggleGapGroup(group.key)}
                               type="button"
                             >
-                              <span aria-hidden="true" className="dw-fold-disclosure"><span className="dw-fold-chevron">▸</span></span>
+                              <span aria-hidden="true" className="dw-fold-disclosure"><span className="dw-fold-chevron"><Icon name="chevron-right" size={12} /></span></span>
                               <span className="dw-series-name">
                                 <strong>{group.symbol || t("workbench.unknownSymbol", {}, locale)}</strong>
                                 <small>{group.exchange || "--"} · {formatMarketType(group.marketType, locale)}</small>
@@ -507,7 +508,7 @@ export default function DataWorkbenchModal({
                         onClick={() => toggleSeriesGroup(group.key)}
                         type="button"
                       >
-                        <span aria-hidden="true" className="dw-fold-disclosure"><span className="dw-fold-chevron">▸</span></span>
+                        <span aria-hidden="true" className="dw-fold-disclosure"><span className="dw-fold-chevron"><Icon name="chevron-right" size={12} /></span></span>
                         <span className="dw-series-name">
                           <strong>{group.symbol}</strong>
                           <small>{group.exchange} · {formatMarketType(group.marketType, locale)}</small>

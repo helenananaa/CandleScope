@@ -12,6 +12,7 @@ import type {
   ChartCellId,
   ChartWorkspaceSplitDirection,
 } from "./chartWorkspaceTypes.js";
+import { Icon } from "../../components/icons/Icon.js";
 
 export interface WorkspaceCellLayoutMenuProps {
   cellId: ChartCellId;
@@ -104,7 +105,7 @@ export default function WorkspaceCellLayoutMenu({
           setOpen((value) => !value);
         }}
       >
-        ⋯
+        <Icon name="more" size={16} />
       </button>
       {menuOpen && renderPopover(
         <div

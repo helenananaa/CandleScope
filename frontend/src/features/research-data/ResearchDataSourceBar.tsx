@@ -23,7 +23,10 @@ export function ResearchDataSourceBar({
     : ordinarySourceLabel(source.kind);
   return (
     <div className="research-data-source-bar" data-testid="research-data-source-bar">
-      <span title={sourceLabel ?? label}>{sourceLabel ?? label}</span>
+      <span className="research-data-source-value" title={sourceLabel ?? label} data-empty={source === null ? "true" : undefined}>
+        <small>{t("research.drawer.title")}</small>
+        {sourceLabel ?? label}
+      </span>
       {source?.kind !== "CURRENT_CHART" && currentChartEnabled && onSelectCurrentChart ? (
         <button type="button" className="ui-control" data-testid="research-source-use-current-chart" onClick={onSelectCurrentChart}>
           {t("strategy.useCurrentChart")}

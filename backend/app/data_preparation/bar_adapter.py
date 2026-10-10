@@ -419,6 +419,7 @@ class BarPreparationAdapter:
 
     async def launch(self, request, result, job_id):
         from app.replay.storage.sqlite_store import dataset_object_write_budget
+        from app.replay.training.errors import TrainingRunError
         with dataset_object_write_budget(self.publication_repository):
             try:
                 return await self._launch(request, result, job_id)
@@ -432,6 +433,9 @@ class BarPreparationAdapter:
                     if isinstance(cause, PreparationError) and cause.code == "STORAGE_BUDGET":
                         raise PreparationError("STORAGE_BUDGET", "Insufficient storage space to attach prepared inputs") from exc
                     cause = cause.__cause__
+                if isinstance(exc, TrainingRunError):
+                    raise PreparationError(exc.code, exc.message,
+                        retryable=exc.status_code == 429 or exc.status_code >= 500) from exc
                 raise
 
     async def _launch(self, request, result, job_id):
@@ -482,7 +486,8 @@ class BarPreparationAdapter:
                     "account_history_ref": None, "hedge_public_history_ref": None, "simulation_manifest_ref": None,
                     **result.get("replay_dependencies", {}),
                 }), _progressive_feed_id=progressive["feed_id"] if progressive else None,
-                _progressive_initial_horizon_ms=prefix)
+                _progressive_initial_horizon_ms=prefix,
+                _prepared_bar_window=setup.to_dict()["source_kind"] == "BAR")
             created = selected
         return {**result, "run": created["run"]}
 
@@ -518,6 +523,16 @@ class BarPreparationAdapter:
                 for fragment in fragments:
                     rows = self.read(fragment)
                     current = writer.current_manifest(identity, interval)
+                    if fragment["receipt"]["origin"] == "replay_archive":
+                        # Acquisition already read these immutable archive rows.
+                        # Importing the requested slice again would partially
+                        # overlap the larger object that owns it.
+                        archived = self._archive_rows(Requirement.model_validate(fragment["requirement"]))
+                        if current is None or archived != rows:
+                            raise PreparationError("COVERAGE_INCOMPLETE",
+                                "Archived preparation input changed before publication", retryable=True)
+                        manifest = current
+                        continue
                     metadata_bytes = len(canonical(current.to_dict()).encode()) if current is not None else 0
                     with self._publication_space(rows, metadata_bytes=metadata_bytes) as reservation:
                         manifest = writer.import_batches(identity, interval, [ReplayHistoryImportBatch(

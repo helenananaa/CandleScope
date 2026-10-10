@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "releaseStatus": "pinned-official-engine",
+  "plugin": {
+    "id": "candlescope.pine-compat",
+    "package": "candlescope-plugin-pine-compat",
+    "version": "0.3.2"
+  },
+  "python": {
+    "requires": ">=3.11,<3.14",
+    "module": "candlescope_plugin_pine_compat"
+  },
+  "wheels": {
+    "candlescope-plugin-pine-compat": {
+      "version": "0.3.2",
+      "source": "local-release-build",
+      "artifactFilename": "candlescope_plugin_pine_compat-0.3.2-py3-none-any.whl",
+      "sha256": "sha256:4e1c642b50eef2e1a76d4fca7f6debfa5cb75b34fa2c5bef1451b7483cb36907",
+      "size": 76891
+    },
+    "candlescope-plugin-sdk": {
+      "version": "0.2.0",
+      "source": "local-release-build",
+      "artifactFilename": "candlescope_plugin_sdk-0.2.0-py3-none-any.whl",
+      "sha256": "sha256:a6036881f0b3b1a77dc1460a13a79aefb8c2042d379003b33bedb3a22b86c4b0",
+      "size": 110326,
+      "releaseUrl": "https://github.com/helenananaa/CandleScope/releases/download/candlescope-plugin-pine-compat-v0.3.1/candlescope_plugin_sdk-0.2.0-py3-none-any.whl"
+    },
+    "pine-compat-runtime": {
+      "version": "0.3.2",
+      "source": "github-release",
+      "artifactFilename": "pine_compat_runtime-0.3.2-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "sha256": "sha256:3f734b1814f7316302ee1760827d6b338bd774166e40ecc3b52b13f44629b30c",
+      "size": 4133328,
+      "releaseTag": "v0.3.2",
+      "releaseUrl": "https://github.com/helenananaa/pine-compat-runtime/releases/download/v0.3.2/pine_compat_runtime-0.3.2-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "releaseCommit": "28ecae3c645e9269e2099d27cc9abbb1f52ee9ea",
+      "manifestUrl": "https://github.com/helenananaa/pine-compat-runtime/releases/download/v0.3.2/manifest.json",
+      "manifestSha256": "sha256:4810a300f5309fddcb73f4d20f684dce11004edd273b0fa100d10477ce498efc"
+    }
+  },
+  "probe": {
+    "source": "//@version=5\nindicator(\"CSPKG Pine Probe\", overlay=false)\nplot(close * 2, \"Close x2\", color=color.green)\n",
+    "context": {
+      "exchange": "binance",
+      "marketType": "spot",
+      "symbol": "BTCUSDT",
+      "interval": "1m"
+    },
+    "bars": [
+      {
+        "time": 1700000000,
+        "open": 100,
+        "high": 102,
+        "low": 99,
+        "close": 101,
+        "volume": 10,
+        "isClosed": true
+      },
+      {
+        "time": 1700000060,
+        "open": 101,
+        "high": 103,
+        "low": 100,
+        "close": 102,
+        "volume": 11,
+        "isClosed": true
+      }
+    ],
+    "params": {},
+    "options": {},
+    "analysisSha256": "sha256:993bec84af0e0631ca6b07ce69e44733646f124d1ac3b4bb4551e83f9e797fa2",
+    "executionSha256": "sha256:2ed443cb6b0d449eeb7d160f1899a176a213eb5b3c2b2c33d3dbe34365b5bea3"
+  }
+}

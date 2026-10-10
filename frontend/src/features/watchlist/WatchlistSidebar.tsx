@@ -20,37 +20,29 @@ import {
   createWatchlistId,
   WATCHLIST_COLORS,
 } from "./watchlistStore";
+import { Icon } from "../../components/icons/Icon.js";
 
 /** Remove trailing zeros after decimal point: "1.2000" → "1.2", "3.00" → "3" */
-function stripZeros(s: string): string {
-  if (!s.includes(".")) return s;
-  return s.replace(/\.?0+$/, "");
+/** Fixed decimals per magnitude, so a live value keeps its width as it ticks */
+function decimalsFor(value: number): number {
+  const abs = Math.abs(value);
+  if (abs >= 100) return 2;
+  if (abs >= 1) return 4;
+  if (abs >= 0.01) return 6;
+  return 8;
 }
 
-/** Format price with appropriate decimal places, trailing zeros removed */
 function formatPrice(p: number): string {
-  let s;
-  if (p >= 1000) s = p.toFixed(2);
-  else if (p >= 1) s = p.toFixed(4);
-  else if (p >= 0.01) s = p.toFixed(6);
-  else s = p.toFixed(8);
-  return stripZeros(s);
+  return p.toFixed(decimalsFor(p));
 }
 
-/** Format change absolute value, trailing zeros removed */
-function formatChange(change: number): string {
-  const abs = Math.abs(change);
-  let s;
-  if (abs >= 1000) s = change.toFixed(2);
-  else if (abs >= 1) s = change.toFixed(4);
-  else if (abs >= 0.01) s = change.toFixed(6);
-  else s = change.toFixed(8);
-  return stripZeros(s);
+/** Change uses the price's decimals so both columns line up */
+function formatChange(change: number, price: number): string {
+  return change.toFixed(decimalsFor(price));
 }
 
-/** Format percentage, trailing zeros removed */
 function formatPct(pct: number): string {
-  return stripZeros(pct.toFixed(2));
+  return pct.toFixed(2);
 }
 
 const TIER_OPTIONS: ReadonlyArray<{
@@ -156,7 +148,7 @@ const WatchlistSymbolLiveColumns = memo(function WatchlistSymbolLiveColumns({
     <>
       {tierDot && <span className={`wl-tier-dot ${tierDot}`} title={tierTitle}/>}
       <span className="wl-sym-name">
-        {symbol}
+        <span className="wl-sym-text">{symbol}</span>
         {marketType === "futures" && <span className="wl-market-badge futures">{translateMarketType("futures")}</span>}
         <span className={`wl-exchange-badge ${exchange}`}>
           {translateExchangeName(exchange)}
@@ -168,7 +160,7 @@ const WatchlistSymbolLiveColumns = memo(function WatchlistSymbolLiveColumns({
             {formatPrice(price)}
           </span>
           <span className={`wl-col-change ${isUp ? "wl-val-up" : "wl-val-down"}`}>
-            {isUp ? "+" : ""}{formatChange(change ?? 0)}
+            {isUp ? "+" : ""}{formatChange(change ?? 0, price ?? 0)}
           </span>
           <span className={`wl-col-changepct ${isUp ? "wl-val-up" : "wl-val-down"}`}>
             {isUp ? "+" : ""}{formatPct(changePct ?? 0)}%
@@ -237,7 +229,7 @@ export default function WatchlistSidebar({
     const direction = lastSort?.column === column && lastSort.direction === "asc" ? "desc" : "asc";
     const description = `${label} · ${t(direction === "asc" ? "watchlist.sortAscending" : "watchlist.sortDescending")}`;
     return <button type="button" className={className} title={description} aria-label={description} onClick={() => sortBy(column)}>
-      {label}<span aria-hidden="true">{lastSort?.column === column ? (lastSort.direction === "asc" ? " ↑" : " ↓") : " ↕"}</span>
+      {label}<span className="wl-sort-icon" aria-hidden="true"><Icon name={lastSort?.column === column ? (lastSort.direction === "asc" ? "chevron-up" : "chevron-down") : "sort"} size={11} /></span>
     </button>;
   };
 

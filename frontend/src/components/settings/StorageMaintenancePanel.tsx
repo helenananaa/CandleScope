@@ -56,7 +56,7 @@ function renderGapScanDetails(result: MaintenanceResult): ReactNode {
                             {item.latest_data && <span className="st-series-meta"> · {item.latest_data}</span>}
                         </span>
                         <span className={`st-series-badge st-badge-${item.status === 'filled' ? 'ok' : item.status === 'ok' ? 'info' : 'fail'}`}>
-                            {item.status === 'ok' ? '✓' : item.status === 'filled' ? `+${item.bars_filled}` : '!'}
+                            {item.status === 'ok' ? <Icon name="check" size={12} /> : item.status === 'filled' ? `+${item.bars_filled}` : '!'}
                         </span>
                     </div>
                     <div className="st-series-msg">{item.message}</div>

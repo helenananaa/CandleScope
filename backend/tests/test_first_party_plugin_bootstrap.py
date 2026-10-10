@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import platform
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -27,7 +28,7 @@ OFFICIAL_SHA256 = (
     "sha256:889ffeb4a70b330c1cf529b66422fe0c11c303b781968b12e8156fbb854f3918"
 )
 OFFICIAL_PINE_SHA256 = (
-    "sha256:692999ad97dc79bc21c35d352f85e4491efa113fde4641b0bbbae12b0f74b7c4"
+    "sha256:b70f4e2bcf1dbf65ae3ce57ce3c28114e846d19f45b48898c025f923415d388a"
 )
 
 
@@ -134,8 +135,8 @@ def _single_pyne_environment(tmp_path: Path, **values: str) -> dict[str, str]:
 def test_checked_in_release_lock_pins_the_stable_adapter_assets() -> None:
     releases = load_official_plugin_releases(DEFAULT_RELEASE_LOCK_PATH)
 
-    assert len(releases) == 2
-    by_runtime = {release.runtime_id: release for release in releases}
+    assert len(releases) == 5
+    by_runtime = {release.runtime_id: release for release in releases if release.system == "Windows"}
     pyne = by_runtime["candlescope.pyne"]
     assert pyne.version == "0.3.0"
     assert pyne.sha256 == OFFICIAL_SHA256
@@ -145,13 +146,20 @@ def test_checked_in_release_lock_pins_the_stable_adapter_assets() -> None:
         "candlescope-pyne-0.3.0-cp312-win_amd64.cspkg"
     )
     pine = by_runtime["candlescope.pine-compat"]
-    assert pine.version == "0.3.1"
+    assert pine.version == "0.3.2"
     assert pine.sha256 == OFFICIAL_PINE_SHA256
-    assert pine.size == 4_141_031
+    assert pine.size == 4_195_533
     assert pine.url.endswith(
-        "/candlescope-plugin-pine-compat-v0.3.1/"
-        "candlescope-pine-compat-0.3.1-cp312-win_amd64.cspkg"
+        "/candlescope-plugin-pine-compat-v0.3.2/"
+        "candlescope-pine-compat-0.3.2-cp312-win_amd64.cspkg"
     )
+    pine_variants = [release for release in releases if release.runtime_id == pine.runtime_id]
+    assert {(item.system, item.machine) for item in pine_variants} == {
+        ("Windows", "AMD64"), ("Linux", "x86_64"),
+        ("Darwin", "arm64"), ("Darwin", "x86_64"),
+    }
+    assert all(item.version == "0.3.2" and item.python_version == "3.12"
+               and item.implementation == "CPython" for item in pine_variants)
 
 
 def test_download_verifies_before_committing_and_reuses_cache(tmp_path: Path) -> None:
@@ -181,6 +189,66 @@ def test_download_verifies_before_committing_and_reuses_cache(tmp_path: Path) ->
     assert path.read_bytes() == payload
     assert calls == [(release.url, 7.5)]
     assert list(tmp_path.glob("*.download")) == []
+
+
+@pytest.mark.parametrize("machine", ["arm64", "x86_64"])
+def test_bootstrap_selects_matching_mac_variant(tmp_path: Path, monkeypatch, machine: str) -> None:
+    payload = b"verified mac bundle"
+    base = _release(payload, runtime_id="candlescope.pine-compat")
+    variants = [
+        replace(base, system="Windows", machine="AMD64", python_version="3.12"),
+        replace(base, system="Darwin", machine="arm64", python_version="3.12",
+                filename="pine-arm64.cspkg"),
+        replace(base, system="Darwin", machine="x86_64", python_version="3.12",
+                filename="pine-x86_64.cspkg"),
+        replace(base, system="Darwin", machine=machine, python_version="3.13",
+                filename="pine-other-python.cspkg"),
+    ]
+    pyne = replace(_release(b"windows pyne"), system="Windows", machine="AMD64")
+    lock = _write_lock(tmp_path / "releases.json", pyne, *variants)
+    routes = _write_routes(tmp_path / "routes.json", ("pyne", "candlescope.pyne"),
+                           ("pine", "candlescope.pine-compat"))
+    monkeypatch.setattr("app.first_party_plugin_bootstrap._host_platform", lambda: {
+        "system": "Darwin", "machine": machine,
+        "implementation": "CPython", "pythonVersion": "3.12",
+    })
+    selected = next(item for item in variants if item.machine == machine)
+    bundle = tmp_path / selected.filename
+    bundle.write_bytes(payload)
+    installed = []
+
+    class Installer:
+        def __init__(self, **kwargs):
+            pass
+
+        def list_plugins(self):
+            return ()
+
+        def install_many(self, bundles, **kwargs):
+            installed.extend(path.name for path, digest in bundles)
+            return (SimpleNamespace(changed=True, installation_path=tmp_path / "installed"),)
+
+        def install(self, path, **kwargs):
+            installed.append(path.name)
+            return SimpleNamespace(changed=True, installation_path=tmp_path / "installed")
+
+    result = ensure_first_party_plugins_from_environment(
+        host_name="CandleScope", host_version="0.3.2",
+        environ={"CANDLESCOPE_INDICATOR_RUNTIME_ROUTES": str(routes),
+                 "CANDLESCOPE_RUNTIME_REGISTRY": str(tmp_path / "runtime-registry.json"),
+                 "CANDLESCOPE_OFFICIAL_PLUGIN_BUNDLE": str(bundle)},
+        release_lock_path=lock, installer_factory=Installer,
+        opener=lambda *args, **kwargs: pytest.fail("local matching bundle must not download"),
+    )
+    assert result.status == "installed"
+    assert installed == [selected.filename]
+
+
+def test_release_lock_rejects_duplicate_platform_targets(tmp_path: Path) -> None:
+    release = _release(b"bundle", runtime_id="candlescope.pine-compat")
+    lock = _write_lock(tmp_path / "releases.json", release, replace(release, version="0.9.0"))
+    with pytest.raises(FirstPartyPluginBootstrapError, match="duplicate runtime platform targets"):
+        load_official_plugin_releases(lock)
 
 
 def test_download_rejects_wrong_bytes_without_poisoning_cache(tmp_path: Path) -> None:

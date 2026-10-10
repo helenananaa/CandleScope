@@ -115,6 +115,8 @@ from .period_summary import (
 )
 from .source_chain import next_source_chain_hash
 from .sources.bar_source import (
+    BAR_TERMINAL_REQUESTED_HORIZON,
+    PAGED_BAR_MANIFEST_SCHEMA_VERSION,
     BAR_TERMINAL_SOURCE_LATEST_CLOSED,
     BarReplaySource,
     PagedBarReplaySource,
@@ -133,7 +135,6 @@ TRADE_SESSION_DATASET_SCHEMA_VERSION = "replay-trade-session-dataset.v1"
 TRADE_SESSION_REF_SCHEMA_VERSION = "replay-trade-session-ref.v1"
 PAGED_BAR_SESSION_DATASET_SCHEMA_VERSION = "replay-paged-bar-session-dataset.v1"
 PAGED_BAR_SESSION_REF_SCHEMA_VERSION = "replay-paged-bar-session-ref.v1"
-PAGED_BAR_MANIFEST_SCHEMA_VERSION = "replay-paged-bar-manifest.v3"
 BAR_REPLAY_RETAINED_TAIL_BARS = 2_048
 _TaskResult = TypeVar("_TaskResult")
 
@@ -568,6 +569,7 @@ class ReplayService:
         *,
         expected_catalog_epoch: str,
         minimum_history_bars: int | None = None,
+        _prepared_bar_window: bool = False,
     ) -> dict[str, object]:
         """Freeze the start choice before Phase 14 expands visible history.
 
@@ -578,6 +580,11 @@ class ReplayService:
 
         if not isinstance(config, ReplaySessionConfig):
             raise TypeError("config must be ReplaySessionConfig")
+        if _prepared_bar_window and (
+            config.source_kind is not SourceKind.BAR
+            or config.start_policy is not StartPolicy.MANUAL
+        ):
+            raise ValueError("prepared BAR windows require a committed manual start")
         required_history_bars = (
             config.warmup_bars if minimum_history_bars is None else minimum_history_bars
         )
@@ -651,6 +658,12 @@ class ReplayService:
                     config,
                     minimum_history_bars=required_history_bars,
                 )
+            elif _prepared_bar_window:
+                # Acquisition verified this bounded window. Unrelated archive
+                # fragments after it do not extend the requested training range.
+                window = self._catalog.select_manual(
+                    entry, start_ms=self._required_manual_start(config)
+                )
             else:
                 window, trade_catalog_epoch = await self._select_manual_window_bound(
                     self._catalog,
@@ -709,7 +722,7 @@ class ReplayService:
             + (selected_range.replay_bars - 1) * selected_range.interval_ms
         )
         verified_market_halts: list[ReplayBarHalt] = []
-        if config.source_kind is SourceKind.BAR:
+        if config.source_kind is SourceKind.BAR and not _prepared_bar_window:
             continuous_future_end_ms = entry.bounds.latest_closed_open_ms
             for gap in entry.gap_summary.gaps:
                 if gap.end_ms < window.replay_start_ms:
@@ -755,10 +768,16 @@ class ReplayService:
             "continuous_history_start_ms": continuous_start_ms,
             # Internal selection commitment only.  Blind public projections
             # never expose this boundary before an authorized reveal.
-            "continuous_future_end_ms": continuous_future_end_ms,
+            "continuous_future_end_ms": (
+                window.replay_end_open_ms if _prepared_bar_window
+                else continuous_future_end_ms
+            ),
             "interval_ms": window.interval_ms,
             **(
-                {"bar_terminal_kind": BAR_TERMINAL_SOURCE_LATEST_CLOSED}
+                {"bar_terminal_kind": (
+                    BAR_TERMINAL_REQUESTED_HORIZON if _prepared_bar_window
+                    else BAR_TERMINAL_SOURCE_LATEST_CLOSED
+                )}
                 if config.source_kind is SourceKind.BAR
                 else {}
             ),
@@ -997,13 +1016,16 @@ class ReplayService:
                 details={"reason": "SELECTION_COMMITMENT_INVALID"},
             ) from exc
         if (
-            terminal_kind != BAR_TERMINAL_SOURCE_LATEST_CLOSED
-            or terminal_open_ms != dataset.provenance.source_latest_closed_open_ms
+            terminal_kind not in {BAR_TERMINAL_SOURCE_LATEST_CLOSED, BAR_TERMINAL_REQUESTED_HORIZON}
+            or (terminal_kind == BAR_TERMINAL_SOURCE_LATEST_CLOSED
+                and terminal_open_ms != dataset.provenance.source_latest_closed_open_ms)
+            or (terminal_kind == BAR_TERMINAL_REQUESTED_HORIZON
+                and terminal_open_ms != dataset.replay_end_open_ms)
             or terminal_open_ms < dataset.replay_end_open_ms
         ):
             raise ReplayDomainError(
                 ReplayErrorCode.DATASET_MISMATCH,
-                "training BAR terminal is not the frozen source latest close",
+                "training BAR terminal does not match its frozen range",
                 details={"reason": "SELECTION_COMMITMENT_INVALID"},
             )
         digests = {
@@ -1134,8 +1156,11 @@ class ReplayService:
             isinstance(page_rows, bool)
             or not isinstance(page_rows, int)
             or page_rows < 1
-            or terminal_kind != BAR_TERMINAL_SOURCE_LATEST_CLOSED
-            or terminal_open_ms != dataset.provenance.source_latest_closed_open_ms
+            or terminal_kind not in {BAR_TERMINAL_SOURCE_LATEST_CLOSED, BAR_TERMINAL_REQUESTED_HORIZON}
+            or (terminal_kind == BAR_TERMINAL_SOURCE_LATEST_CLOSED
+                and terminal_open_ms != dataset.provenance.source_latest_closed_open_ms)
+            or (terminal_kind == BAR_TERMINAL_REQUESTED_HORIZON
+                and terminal_open_ms != dataset.replay_end_open_ms)
             or terminal_open_ms < dataset.replay_end_open_ms
         ):
             raise ReplayDomainError(

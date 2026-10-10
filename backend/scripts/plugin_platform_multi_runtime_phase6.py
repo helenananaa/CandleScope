@@ -24,7 +24,11 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = REPOSITORY_ROOT / "backend"
 SDK_SOURCE = REPOSITORY_ROOT / "packages" / "candlescope-plugin-sdk" / "src"
 FIXTURE_ROOT = BACKEND_ROOT / "tests" / "fixtures" / "plugin_platform_multi_runtime"
-CONTRACT_PATH = FIXTURE_ROOT / "phase6_contract_v3.json"
+CONTRACT_PATH = FIXTURE_ROOT / "phase6_contract_v4.json"
+PREVIOUS_UI_CONTRACT_PATH = FIXTURE_ROOT / "phase6_contract_v3.json"
+PREVIOUS_UI_CONTRACT_FILE_SHA256 = (
+    "b07a5fa8c511a17ab9a2d731fc96e6f0d956c90c231a77954752b24f09a516c8"
+)
 PREVIOUS_CONTRACT_PATH = FIXTURE_ROOT / "phase6_contract_v2.json"
 PREVIOUS_CONTRACT_FILE_SHA256 = (
     "33e52c3ea03db04f4037dbe80e556b12eb6542e688fdc722f3633f651aee4b1f"
@@ -49,7 +53,7 @@ REAL_EVIDENCE_PATH = (
     / "plugin-platform-v2"
     / "multi-runtime-phase6-2026-08-03-windows-amd64.json"
 )
-CONTRACT_SCHEMA_VERSION = "candlescope.plugin-platform.multi-runtime.phase6-contract/3"
+CONTRACT_SCHEMA_VERSION = "candlescope.plugin-platform.multi-runtime.phase6-contract/4"
 HISTORICAL_CONTRACT_SCHEMA_VERSION = (
     "candlescope.plugin-platform.multi-runtime.phase6-contract/1"
 )
@@ -249,8 +253,8 @@ def capture_contract() -> dict[str, Any]:
     return {
         "schemaVersion": CONTRACT_SCHEMA_VERSION,
         "implementedOn": "2026-08-03",
-        "migratedOn": "2026-10-02",
-        "previousContractSha256": "sha256:" + PREVIOUS_CONTRACT_FILE_SHA256,
+        "migratedOn": "2026-10-08",
+        "previousContractSha256": "sha256:" + PREVIOUS_UI_CONTRACT_FILE_SHA256,
         "phase5ContractSha256": _canonical_sha256(phase5_contract),
         # The recorded Windows AppContainer run predates both the i18n and
         # plugin-center migrations. It only qualifies the original v1 contract.
@@ -369,6 +373,11 @@ def capture_contract() -> dict[str, Any]:
                 name: _sha256_bytes(source.encode("utf-8"))
                 for name, source in management_sources.items()
             },
+            "readOnlyInstallActionsHidden": (
+                management_sources["PluginCenter.tsx"].count(
+                    "platformEnabled && management && <button"
+                ) == 2
+            ),
             "parserSha256": _sha256_bytes(parser_source.encode("utf-8")),
             "catalogScope": ["plugin.", "pc."],
             "englishCatalogSha256": _canonical_sha256(english_catalog),
@@ -465,6 +474,7 @@ def validate_historical_contract_v1() -> dict[str, Any]:
 def validate_contract() -> dict[str, Any]:
     validate_historical_contract_v1()
     validate_previous_contract_v2()
+    validate_previous_ui_contract_v3()
     fixture = _strict_json(CONTRACT_PATH)
     current = capture_contract()
     if fixture != current:
@@ -485,6 +495,19 @@ def validate_previous_contract_v2() -> dict[str, Any]:
         "candlescope.plugin-platform.multi-runtime.phase6-contract/2"
     ):
         raise Phase6GateError("historical Phase 6 contract lost schemaVersion /2")
+    return previous
+
+
+def validate_previous_ui_contract_v3() -> dict[str, Any]:
+    """Retain the reviewed plugin-center snapshot across the UI audit migration."""
+    raw = PREVIOUS_UI_CONTRACT_PATH.read_bytes().replace(b"\r\n", b"\n")
+    if hashlib.sha256(raw).hexdigest() != PREVIOUS_UI_CONTRACT_FILE_SHA256:
+        raise Phase6GateError("historical Phase 6 contract v3 was rewritten")
+    previous = _strict_json(PREVIOUS_UI_CONTRACT_PATH)
+    if previous.get("schemaVersion") != (
+        "candlescope.plugin-platform.multi-runtime.phase6-contract/3"
+    ):
+        raise Phase6GateError("historical Phase 6 contract lost schemaVersion /3")
     return previous
 
 

@@ -22,6 +22,7 @@ import {
     type ExchangeConnectionCheck,
     type ExchangeSupportFilter,
 } from "../../features/exchange-support/exchangeSupportModel.js";
+import { Icon } from "../icons/Icon.js";
 
 const CHANNEL_ORDER = [
     "kline",
@@ -374,25 +375,25 @@ export default function ExchangeSettingsPanel({
             {exchangeCatalogSummary && (
                 <div className="st-exchange-summary">
                     <div className="st-exchange-stat">
-                        <span>{t("settings.exchange.kernelVersion")}</span>
-                        <strong>CCXT {exchangeCatalogSummary.version}</strong>
-                    </div>
-                    <div className="st-exchange-stat">
-                        <span>{t("settings.exchange.adapterIds")}</span>
-                        <strong>{exchangeCatalogSummary.rest_exchange_ids}</strong>
-                    </div>
-                    <div className="st-exchange-stat">
                         <span>{t("settings.exchange.routable")}</span>
                         <strong>{routableCount}</strong>
-                    </div>
-                    <div className="st-exchange-stat">
-                        <span>{t("settings.exchange.proIds")}</span>
-                        <strong>{exchangeCatalogSummary.pro_exchange_ids}</strong>
                     </div>
                     <div className="st-exchange-stat">
                         <span>{t("settings.exchange.wsKline")}</span>
                         <strong>{streamCount}</strong>
                     </div>
+                    {/* Implementation figures stay available, folded away for the curious */}
+                    <details className="st-exchange-tech">
+                        <summary>{t("plugin.techDetails")}</summary>
+                        <dl>
+                            <dt>{t("settings.exchange.kernelVersion")}</dt>
+                            <dd>CCXT {exchangeCatalogSummary.version}</dd>
+                            <dt>{t("settings.exchange.adapterIds")}</dt>
+                            <dd>{exchangeCatalogSummary.rest_exchange_ids}</dd>
+                            <dt>{t("settings.exchange.proIds")}</dt>
+                            <dd>{exchangeCatalogSummary.pro_exchange_ids}</dd>
+                        </dl>
+                    </details>
                 </div>
             )}
 
@@ -461,7 +462,7 @@ export default function ExchangeSettingsPanel({
                                 aria-expanded={isExpanded}
                             >
                                 <span className="st-exchange-disclosure" aria-hidden="true">
-                                    <span className="st-exchange-chevron">▸</span>
+                                    <span className="st-exchange-chevron"><Icon name="chevron-right" size={12} /></span>
                                 </span>
                                 <span className="st-exchange-identity">
                                     <strong>{exchange.name || exchange.exchange}</strong>
@@ -505,6 +506,9 @@ export default function ExchangeSettingsPanel({
                                         <ProductSurfaceRow exchange={exchange} />
                                     </div>
 
+                                    {qualifications.length > 0 && (
+                                    <details className="st-exchange-tech">
+                                    <summary>{t("plugin.techDetails")}</summary>
                                     {qualifications.map((qualification) => (
                                         <div key={qualification.evidence_id} className="st-exchange-qualification">
                                             <strong>{verificationLabel(qualification.level)}</strong>
@@ -522,6 +526,8 @@ export default function ExchangeSettingsPanel({
                                             <span>{new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(qualification.verified_at))}</span>
                                         </div>
                                     ))}
+                                    </details>
+                                    )}
 
                                     {exchange.markets.map((market) => (
                                         <MarketCapabilityDetail

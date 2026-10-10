@@ -6,6 +6,7 @@ import ExportPreviewPanel from "./ExportPreviewPanel";
 import { buildExportFilename } from "../../utils/exportFilename.js";
 import type { ExportPreviewRuntime } from "./exportPreviewRuntime.js";
 import type { ExportMetadata, ExportOptions } from "./exportTypes.js";
+import { Icon } from "../../components/icons/Icon.js";
 
 const SCOPE_OPTIONS: ReadonlyArray<{
   value: ExportOptions["scope"];
@@ -103,7 +104,7 @@ const ExportPanel = memo(function ExportPanel({
           <div className="export-panel-title">{t("export.title")}</div>
           <div className="export-panel-subtitle">{t("export.subtitle")}</div>
         </div>
-        <button type="button" className="export-panel-close" onClick={onClose} aria-label={t("export.close")}>×</button>
+        <button type="button" className="export-panel-close" onClick={onClose} aria-label={t("export.close")}><Icon name="close" size={14} /></button>
       </div>
 
       <div className="export-workspace-body">

@@ -373,8 +373,9 @@ export default function IndicatorEditor({
             onClick={onBack}
             style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '4px', lineHeight: 1 }}
             title={t("indicator.editor.close")}
+            aria-label={t("indicator.editor.close")}
           >
-            ×
+            <Icon name="close" size={14} />
           </button>
         </div>
       </div>

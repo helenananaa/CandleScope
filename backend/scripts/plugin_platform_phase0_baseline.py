@@ -58,7 +58,8 @@ FROZEN_FILE_SHA256 = {
     "officialReleaseLock": "sha256:23e03c28a32b42a0d523aefc0bd19db34d33fb840b41cbf44e0348fc263249f2",
 }
 CURRENT_OFFICIAL_RELEASE_LOCK_SHA256 = (
-    "sha256:369c52cdd92a51f939bab295311715323cd6b6baf858ff1d6ff5691d0ea313d6"
+    # Current reviewed Pine 0.3.1 release (6c2d3075); Phase 0 history stays frozen.
+    "sha256:e0306cd67fdf8428279a4bee671f34116c16d4f78c7be67b4175d6749ec5d4f1"
 )
 FROZEN_WIRE_SHA256 = {
     "sdkTranscript": "sha256:021825fb264a63555e0eb331f24f6ea0632b0d2a0c962ef89a35673526391ba2",

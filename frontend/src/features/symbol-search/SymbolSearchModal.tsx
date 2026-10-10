@@ -3,12 +3,25 @@ import { Icon } from "../../components/icons/Icon.js";
 import { shortcutModifier } from "../../shared/shortcutModifier.js";
 import { t, tKey, translateMarketType } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
-import { formatExchangeLabel } from "./symbolSearchFilter";
+import { formatExchangeLabel, formatSymbolLabel } from "./symbolSearchFilter";
 import { SourcePicker } from "./SourcePicker";
 import { useSymbolSearchRuntime } from "./useSymbolSearchRuntime";
 import type { UseSymbolSearchRuntimeOptions } from "./useSymbolSearchRuntime.js";
+import type { SymbolSearchItem } from "./symbolSearchTypes.js";
 
 export type SymbolSearchModalProps = UseSymbolSearchRuntimeOptions;
+
+/** The venue line is shown only when it names something other than the source itself. */
+function distinctVenue(
+  symbol: SymbolSearchItem,
+  exchangeCatalog: Parameters<typeof formatExchangeLabel>[1],
+): boolean {
+  if (!symbol.venue) return false;
+  const venue = symbol.venue.toLowerCase();
+  const source = symbol.providerId || symbol.exchange || "binance";
+  const label = formatExchangeLabel(source, exchangeCatalog).toLowerCase().replace(/\s+/g, "");
+  return venue !== source.toLowerCase() && venue !== label;
+}
 
 function marketTabLabel(key: string, fallback: string): string {
   if (key === "favorites") return t("search.tab.favorites");
@@ -93,7 +106,7 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
             />
             {search && (
               <button className="sym-modal-search-clear" onClick={() => setSearch("")}>
-                ✕
+                <Icon name="close" size={14} />
               </button>
             )}
             <button className="sym-modal-close-btn" onClick={onClose} title={t("search.close")}>
@@ -116,16 +129,14 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
               </button>)}
             </div>
           </div>
-          <div className="sym-modal-filter-row">
-            <div className="sym-modal-market-tabs" aria-label={t("search.assetClass")}>
-              {["", "crypto", "stock", "etf", "forex", "commodity", "index"].map((key) => <button key={key}
-                className={`sym-modal-market-tab ${assetClass === key ? "active" : ""}`}
-                onClick={() => setAssetClass(key)} aria-pressed={assetClass === key}>
-                {key ? tKey(`search.asset.${key}`) : t("interval.tab.all")}
-              </button>)}
-            </div>
-          </div>
           <div className="sym-modal-filter-row sym-modal-filter-row-chips">
+            <label className="sym-modal-chip-group"><span className="sym-modal-chip-label">{t("search.assetClass")}</span>
+              <select className="sym-modal-exchange-select" value={assetClass} onChange={(event) => setAssetClass(event.target.value)}>
+                {["", "crypto", "stock", "etf", "forex", "commodity", "index"].map((key) => <option key={key} value={key}>
+                  {key ? tKey(`search.asset.${key}`) : t("interval.tab.all")}
+                </option>)}
+              </select>
+            </label>
             <SourcePicker sources={exchangeChips} selected={Array.from(exchangeFilter)[0] || ""} onSelect={selectExchange} />
             <label className="sym-modal-chip-group"><span className="sym-modal-chip-label">{t("search.exchange")}</span>
               <select className="sym-modal-exchange-select" value={venue} onChange={(event) => setVenue(event.target.value)}>
@@ -142,7 +153,7 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
                   Object.values(props.exchangeCatalog || {}).flatMap((entry) => entry.markets || []).find((market) => market.market_type === item.key)?.label || translateMarketType(item.key))}</option>)}
               </select>
             </label>
-            {(quoteOptions.length > 0 || quoteFilter !== "ALL") && <label className="sym-modal-chip-group">
+            {<label className="sym-modal-chip-group">
               <span className="sym-modal-chip-label">{t("search.quote")}</span>
               <select id="sym-modal-quote-select" className="sym-modal-exchange-select" value={quoteFilter} onChange={(event) => setQuoteFilter(event.target.value)}>
                 <option value="ALL">{t("interval.tab.all")}</option>
@@ -152,17 +163,6 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
             </label>}
           </div>
         </div>
-        {discovery && <div className="sym-discovery-status">
-          <details><summary>{t("search.coverage", { ready: discovery.sources.filter((source) => ["ready", "stale", "limited"].includes(source.status)).length, total: discovery.sources.length })}</summary>
-            <div className="sym-discovery-sources">
-              {discovery.sources.map((source) => <button key={source.id} onClick={() => selectExchange(source.id)}>
-                {formatExchangeLabel(source.id, props.exchangeCatalog)} · {tKey(`search.sourceStatus.${source.status}`)}
-              </button>)}
-            </div>
-          </details>
-          {discovery.partial && <span className="sym-discovery-partial">{t("search.partial")}</span>}
-          {status.refreshing && <span role="status">{t("search.refreshing")}</span>}
-        </div>}
         {status.error && <div className="sym-discovery-error" role="alert">{t("search.failed")} <button onClick={refreshSymbols}>{t("shell.retry")}</button></div>}
 
         <div className="sym-modal-table-header">
@@ -229,17 +229,17 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
                       onMouseEnter={() => setHighlightIndex(realIndex)}
                       onContextMenu={(event) => openContextMenu(event, symbol.symbol, symbol._key)}
                     >
-                      {symbol.groupStart && (symbol.groupSourceCount || 0) > 1 && <span className="sym-discovery-group-label">{symbol.baseAsset} / {symbol.quoteAsset} · {t("search.sourceCount", { count: symbol.groupSourceCount || 0 })}</span>}
+
                       <button
                         className={`sym-modal-fav-btn ${isFavorite ? "active" : ""}`}
                         disabled={status.stale}
                         onClick={(event) => toggleFavorite(symbol._key, event)}
                         title={isFavorite ? t("search.unfavorite") : t("search.favorite")}
                       >
-                        {isFavorite ? "★" : "☆"}
+                        <Icon name="star" size={14} filled={isFavorite} />
                       </button>
-                      <span className="sym-modal-col-pair sym-modal-row-pair">
-                        {symbol.symbol}
+                      <span className="sym-modal-col-pair sym-modal-row-pair" title={symbol.symbol}>
+                  {formatSymbolLabel(symbol)}
                         {isCurrent && <span className="sym-modal-current-tag">{t("search.current")}</span>}
                         {hasWatchlists && inWatchlists.length > 0 && (
                           <span className="sym-modal-wl-indicators">
@@ -254,7 +254,10 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
                           </span>
                         )}
                       </span>
-                      <span className="sym-modal-col-base sym-modal-row-base">{typeof symbol.displayName === "string" && symbol.displayName ? symbol.displayName : symbol.baseAsset}</span>
+                      <span className="sym-modal-col-base sym-modal-row-base">
+                        {typeof symbol.displayName === "string" && symbol.displayName ? symbol.displayName : symbol.baseAsset}
+                        {symbol.groupStart && (symbol.groupSourceCount || 0) > 1 && <small className="sym-discovery-group-count">{t("search.sourceCount", { count: symbol.groupSourceCount || 0 })}</small>}
+                      </span>
                       <span className="sym-modal-col-quote sym-modal-row-quote">{symbol.quoteAsset}</span>
                       <span className="sym-modal-col-type sym-modal-row-type">
                         <span className={`sym-modal-type-badge ${symbol.marketType}`}>
@@ -263,7 +266,7 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
                       </span>
                       <span className="sym-modal-col-exchange sym-modal-row-exchange">
                         <span>{formatExchangeLabel(symbol.providerId || symbol.exchange || "binance", props.exchangeCatalog)}</span>
-                        {symbol.venue && <small title={t("search.exchange")}>{symbol.venue}</small>}
+                        {distinctVenue(symbol, props.exchangeCatalog) && <small title={t("search.exchange")}>{symbol.venue}</small>}
                       </span>
                     </div>
                   );
@@ -275,13 +278,26 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
 
         <div className="sym-modal-footer">
           <div className="sym-modal-footer-left">
-            <span className="sym-modal-result-count">
+            <span
+              className="sym-modal-result-count"
+              title={`↑ ↓ · Enter · Esc ${t("search.shortcuts")}${hasWatchlists ? t("search.shortcutsWatchlist") : ""}`}
+            >
               {t("search.pairCount", { count: (discovery?.total || filteredSymbols.length).toLocaleString(locale) })}
             </span>
-            <span className="sym-modal-shortcut-hint">
-              <kbd>↑</kbd><kbd>↓</kbd> · <kbd>Enter</kbd> · <kbd>Esc</kbd> {t("search.shortcuts")}
-              {hasWatchlists && t("search.shortcutsWatchlist")}
-            </span>
+            {discovery && <div className="sym-discovery-status">
+              <details>
+                <summary title={discovery.partial ? t("search.partial") : undefined}>
+                  {discovery.partial && <span className="sym-discovery-partial-dot" aria-hidden="true" />}
+                  {t("search.coverage", { ready: discovery.sources.filter((source) => ["ready", "stale", "limited"].includes(source.status)).length, total: discovery.sources.length })}
+                </summary>
+                <div className="sym-discovery-sources">
+                  {discovery.partial && <p className="sym-discovery-partial">{t("search.partial")}</p>}
+                  {discovery.sources.map((source) => <button key={source.id} onClick={() => selectExchange(source.id)}>
+                    {formatExchangeLabel(source.id, props.exchangeCatalog)} · {tKey(`search.sourceStatus.${source.status}`)}
+                  </button>)}
+                </div>
+              </details>
+            </div>}
           </div>
           {discovery?.nextOffset != null && <button className="sym-modal-refresh-btn" disabled={status.refreshing} onClick={() => { void loadMore(); }}>{t("search.loadMore")}</button>}
           <button
@@ -290,7 +306,7 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
             disabled={status.refreshing}
             title={t("search.refreshTitle")}
           >
-            <span className={`sym-modal-refresh-icon ${status.refreshing ? "spinning" : ""}`}>⟳</span>
+            <span className={`sym-modal-refresh-icon ${status.refreshing ? "spinning" : ""}`}><Icon name="refresh" size={14} /></span>
             {status.refreshing ? t("search.refreshing") : t("search.refresh")}
           </button>
         </div>
@@ -323,7 +339,7 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
                   <span className="sym-ctx-dot" style={{ background: watchlist.color || "var(--accent-blue)" }} />
                   <span className="sym-ctx-name">{watchlistDisplayName(watchlist)}</span>
                   {alreadyIn ? (
-                    <span className="sym-ctx-check">✓</span>
+                    <span className="sym-ctx-check"><Icon name="check" size={12} /></span>
                   ) : (
                     <span className="sym-ctx-plus">+</span>
                   )}

@@ -23,8 +23,20 @@ export const MARKET_TABS: MarketTab[] = [
   { key: "futures", label: "合约", icon: "📄" },
 ];
 
-export const ROW_HEIGHT = 58;
+export const ROW_HEIGHT = 40;
 export const VISIBLE_ROWS = 14;
+
+export function formatSymbolLabel(symbol: SymbolSearchItem): string {
+  // Only a plain spot pair can be shortened without losing contract identity.
+  if (marketTypeFamily(symbol.marketType) === "spot"
+    && symbol.baseAsset && symbol.quoteAsset
+    && !symbol.contractType && !symbol.expiryAtMs && !symbol.optionStrike && !symbol.optionRight
+    && [symbol.baseAsset + symbol.quoteAsset, `${symbol.baseAsset}/${symbol.quoteAsset}`]
+      .some((pair) => pair.toUpperCase() === symbol.symbol.toUpperCase())) {
+    return `${symbol.baseAsset}/${symbol.quoteAsset}`;
+  }
+  return symbol.symbol;
+}
 
 export function formatExchangeLabel(
   exchangeKey: string,

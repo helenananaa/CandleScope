@@ -3,6 +3,7 @@ import { Profiler, useEffect, useState } from "react";
 import type { ProfilerOnRenderCallback } from "react";
 import { recordPerfEvent } from "../../runtime/performance/perfMarks.js";
 import AppPageShell from "../../app/AppPageShell.js";
+import { PageSettingsContext } from "../../app/pageSettingsContext.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import {
@@ -155,6 +156,14 @@ function ReplayTrainingRunApp({
 export default function ReplayApp({ entry }: ReplayAppProps) {
   useLocale();
   const chartSettingsRuntime = useChartSettingsRuntime();
+  return (
+    <PageSettingsContext.Provider value={chartSettingsRuntime}>
+      <ReplayEntrySurface entry={entry} chartSettingsRuntime={chartSettingsRuntime} />
+    </PageSettingsContext.Provider>
+  );
+}
+
+function ReplayEntrySurface({ entry, chartSettingsRuntime }: ReplayAppProps & { chartSettingsRuntime: ChartSettingsRuntime }) {
   if (entry.kind === "configure") return <ReplayTrainingHubApp />;
   if (entry.kind === "run") {
     const workspace = (

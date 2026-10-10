@@ -333,6 +333,18 @@ test("default plugin center prioritizes the library and keeps maintenance and in
   assert.doesNotMatch(manager, /data-v1-compatibility-preview|data-runtime-registry-revision|data-plugin-install-input/);
 });
 
+test("read-only connections hide both install actions while management connections keep them", () => {
+  const value = runtime(true);
+  if (!value.view.catalog) assert.fail("catalog missing");
+  value.view.catalog.plugins = [];
+  const writable = renderToStaticMarkup(<PluginSettingsPanel runtime={value} />);
+  assert.equal((writable.match(/>安装插件<\/button>/g) ?? []).length, 2);
+  value.view.managementAvailable = false;
+  const readOnly = renderToStaticMarkup(<PluginSettingsPanel runtime={value} />);
+  assert.match(readOnly, /当前连接仅支持查看/);
+  assert.doesNotMatch(readOnly, />安装插件<\/button>/);
+});
+
 test("twenty installed plugins render a searchable directory without mounting their protected details", () => {
   const value = runtime(true);
   if (!value.view.catalog) assert.fail("catalog missing");

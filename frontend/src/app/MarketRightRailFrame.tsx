@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
@@ -151,6 +151,32 @@ export default function MarketRightRailFrame({
   const widthBounds = marketRailWidthBounds(viewportWidth);
   const width = clamp(transientWidth ?? layout.width, widthBounds.min, widthBounds.max);
   const effectiveHeights = transientHeights ?? viewHeights;
+
+  // The last expanded view absorbs free space below the stack, so a short stack
+  // (e.g. order book above two collapsed rows) does not leave an empty band.
+  const fillViewId = useMemo(
+    () => sortedViews.filter((view) => openViewIds.includes(view.id)).at(-1)?.id ?? null,
+    [openViewIds, sortedViews],
+  );
+  const fillExtraRef = useRef(0);
+  const [fillExtra, setFillExtra] = useState(0);
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!panel || !panelOpen || fillViewId === null || heightResizingViewId !== null) return undefined;
+    const measure = () => {
+      let used = 0;
+      for (const child of Array.from(panel.children)) used += (child as HTMLElement).offsetHeight;
+      const extra = Math.max(0, Math.floor(panel.clientHeight - (used - fillExtraRef.current)));
+      if (Math.abs(extra - fillExtraRef.current) < 1) return;
+      fillExtraRef.current = extra;
+      setFillExtra(extra);
+    };
+    measure();
+    if (typeof ResizeObserver !== "function") return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, [effectiveHeights, fillViewId, heightResizingViewId, openViewIds, panelOpen]);
 
   const colorVars = useMemo<RailCssVars>(() => ({
     "--wl-up-color": upColor,
@@ -382,7 +408,8 @@ export default function MarketRightRailFrame({
           >
             {sortedViews.map((view, index) => {
               const expanded = openViewIds.includes(view.id);
-              const height = preferredViewHeight(view, effectiveHeights);
+              const height = preferredViewHeight(view, effectiveHeights)
+                + (view.id === fillViewId ? fillExtra : 0);
               return (
                 <section
                   key={view.id}

@@ -303,10 +303,14 @@ def load_official_plugin_releases(
                 ),
             )
         )
-    ids = [release.runtime_id for release in releases]
-    if len(ids) != len(set(ids)):
+    targets = [
+        (release.runtime_id, release.system, release.machine,
+         release.implementation, release.python_version)
+        for release in releases
+    ]
+    if len(targets) != len(set(targets)):
         raise FirstPartyPluginBootstrapError(
-            "official plugin release lock contains duplicate runtime IDs"
+            "official plugin release lock contains duplicate runtime platform targets"
         )
     return tuple(releases)
 
@@ -509,10 +513,9 @@ def ensure_first_party_plugins_from_environment(
         for route in routes.routes
         if route.mode != ROUTE_MODE_LEGACY and route.runtime_id is not None
     }
-    releases = {
-        release.runtime_id: release
-        for release in load_official_plugin_releases(release_lock_path)
-    }
+    releases: dict[str, list[OfficialPluginRelease]] = {}
+    for release in load_official_plugin_releases(release_lock_path):
+        releases.setdefault(release.runtime_id, []).append(release)
     missing_first_party = sorted(
         (required_runtime_ids & FIRST_PARTY_RUNTIME_IDS) - set(releases)
     )
@@ -522,7 +525,10 @@ def ensure_first_party_plugins_from_environment(
             + ", ".join(missing_first_party)
         )
     selected = [
-        releases[runtime_id]
+        next(
+            (release for release in releases[runtime_id] if _platform_matches(release)),
+            releases[runtime_id][0],
+        )
         for runtime_id in sorted(required_runtime_ids)
         if runtime_id in releases
     ]

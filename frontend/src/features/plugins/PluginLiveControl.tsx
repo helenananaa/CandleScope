@@ -7,6 +7,7 @@ import type {
   PluginLiveExecutionRecord,
   PluginPlatformRuntime,
 } from "./pluginPlatformTypes.js";
+import { Icon } from "../../components/icons/Icon.js";
 
 function HostModal({
   title,
@@ -35,7 +36,7 @@ function HostModal({
       >
         <header>
           <h2>{title}</h2>
-          <button type="button" aria-label={t("plugin.host.close")} onClick={onClose}>×</button>
+          <button type="button" aria-label={t("plugin.host.close")} onClick={onClose}><Icon name="close" size={14} /></button>
         </header>
         <div className="plugin-modal-body">{children}</div>
       </section>

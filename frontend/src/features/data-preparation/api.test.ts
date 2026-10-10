@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { waitForPreparation, type PreparationJob } from "./api.js";
+import { prepareReplay, PreparedReplayDeletedError, waitForPreparation, type PreparationJob } from "./api.js";
+import type { TrainingRunCreatePayload } from "../replay/replayV2Types.js";
 
 function running(): PreparationJob {
   return {
@@ -39,4 +40,25 @@ test("a failed tail is reported instead of accepting a stale run result", async 
   const job = { ...running(), state: "FAILED" as const,
     error: { code: "NETWORK", message: "Tail download failed", retryable: true } };
   await assert.rejects(waitForPreparation(job, () => {}, undefined, {}, true), /Tail download failed/);
+});
+
+test("READY preparation verifies the run before opening and distinguishes deletion from transport failure", async () => {
+  const job = { ...running(), state: "READY" as const };
+  const calls: string[] = [];
+  let unavailable = false;
+  const fetcher: typeof fetch = async input => {
+    calls.push(String(input));
+    if (String(input).endsWith("/data-preparations/replay")) return Response.json(job);
+    if (unavailable) throw new Error("network offline");
+    return Response.json({ protocol: "replay.v3", error: {
+      code: "TRAINING_RUN_NOT_FOUND", message: "training run does not exist", details: {},
+    } }, { status: 404 });
+  };
+  const submit = () => prepareReplay({} as TrainingRunCreatePayload,
+    { exchange: "binance", market_type: "spot", symbol: "BTCUSDT" }, () => {}, undefined,
+    "saved-submission", { fetcher, basePath: "http://fixture/api/v1/data-preparations" });
+  await assert.rejects(submit(), PreparedReplayDeletedError);
+  assert.deepEqual(calls, ["http://fixture/api/v1/data-preparations/replay", "http://fixture/api/v1/replay/runs/prepared-task"]);
+  unavailable = true;
+  await assert.rejects(submit(), error => !(error instanceof PreparedReplayDeletedError));
 });

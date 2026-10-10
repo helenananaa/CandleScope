@@ -236,3 +236,44 @@
   min-height: 0;
   overflow: visible;
 }
+
+/* Letter-spacing is for uppercase Latin labels; on CJK text it reads as broken
+ * spacing ("开 始 一 个"). Reset it for CJK interface languages. */
+html:is(:lang(zh), :lang(ja), :lang(ko)) * {
+  letter-spacing: normal !important;
+}
+
+/* Inline icons that sit next to text (external links, sort marks) */
+.st-external-icon,
+.wl-sort-icon {
+  display: inline-flex;
+  margin-left: 3px;
+  vertical-align: -1px;
+}
+
+/* Keyboard focus is always visible. Many older rules set outline: none for mouse
+ * clicks; :focus-visible only matches keyboard focus, so this does not affect them. */
+:is(button, a[href], summary, [role="tab"], [role="button"], [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--accent-blue) !important;
+  outline-offset: 1px;
+}
+
+/* Older button families (settings, alerts, plugin center) share the .ui-btn
+ * metrics and one primary colour, so dialogs and drawers stop looking like
+ * separate apps. `html` raises specificity over their own later rules. */
+html :is(.st-btn, .alert-btn, .pc-header-actions > button, .pc-empty button) {
+  min-height: 32px;
+  border-radius: var(--radius-control);
+  font: 600 var(--font-size-md)/1 var(--font-sans);
+}
+
+html :is(.st-btn-primary, .alert-btn-primary, .plugin-center .pc-primary) {
+  border-color: var(--accent-solid);
+  background: var(--accent-solid);
+  color: var(--text-on-accent);
+}
+
+html :is(.st-btn-primary, .alert-btn-primary, .plugin-center .pc-primary):hover:not(:disabled) {
+  border-color: var(--accent-solid-hover);
+  background: var(--accent-solid-hover);
+}

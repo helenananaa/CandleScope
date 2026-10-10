@@ -312,8 +312,13 @@ async def test_prepared_strategy_dataset_is_readable(tmp_path):
 
 
 @async_test
-@pytest.mark.parametrize("account_history,block_session_copy,random_by_market", [("proxy", False, False), ("exact", False, False), ("missing", False, False), ("proxy", True, False), ("proxy", False, True)])
-async def test_replay_api_empty_archive_downloads_and_creates_one_recoverable_run(tmp_path, account_history, block_session_copy, random_by_market, monkeypatch):
+@pytest.mark.parametrize("account_history,block_session_copy,random_by_market,later_archive,market_type", [
+    ("proxy", False, False, False, "futures"), ("exact", False, False, False, "futures"),
+    ("missing", False, False, False, "futures"), ("proxy", True, False, False, "futures"),
+    ("proxy", False, True, False, "futures"), ("proxy", False, True, True, "futures"),
+    ("proxy", False, True, True, "spot"),
+])
+async def test_replay_api_empty_archive_downloads_and_creates_one_recoverable_run(tmp_path, account_history, block_session_copy, random_by_market, later_archive, market_type, monkeypatch):
     from dataclasses import replace
     import httpx
     from fastapi import FastAPI
@@ -324,11 +329,22 @@ async def test_replay_api_empty_archive_downloads_and_creates_one_recoverable_ru
     from tests.fixtures.replay.service_fakes import replay_settings
     from tests.test_replay_v2_run_centric import _setup_payload
     archive = tmp_path / "archive"
+    warmup_bars = 240 if market_type == "spot" else 2
+    later_offset = 500 if market_type == "spot" else 100
+    if later_archive:
+        from app.replay.catalog import ReplaySeriesIdentity
+        from app.replay.history_archive import ReplayHistoryArchiveWriter, ReplayHistoryImportBatch
+        rows = [{**bars()[0], "open_time": START + (later_offset + i) * 60_000,
+                 "close_time": START + (later_offset + i + 1) * 60_000 - 1} for i in range(12)]
+        ReplayHistoryArchiveWriter(archive).import_batches(
+            ReplaySeriesIdentity("binance", market_type, "BTCUSDT"), "1m",
+            [ReplayHistoryImportBatch(rows=rows, source_provider="test",
+                source_object_key="later-history", source_period="later")])
     settings = replace(replay_settings(tmp_path / "replay.db"), replay_history_archive_dir=archive,
-                       replay_account_history_enabled=True)
+                       replay_account_history_enabled=True, max_warmup_bars=max(100, warmup_bars))
     replay = ReplayService(settings=settings, store=ReplaySQLiteStore(tmp_path / "replay.db"),
                            repository=ReplayHistoryRepository(archive),
-                           native_intervals=lambda _: ("1m",))
+                           native_intervals=lambda _: ("1m", "5m", "4h"))
     await replay.start()
     if account_history == "exact":
         from tests.fixtures.replay.account_history import build_account_history_archive
@@ -360,10 +376,13 @@ async def test_replay_api_empty_archive_downloads_and_creates_one_recoverable_ru
     app.include_router(router)
     try:
         setup = {**_setup_payload(), "requested_start_ms": START + 5 * 60_000, "forward_cache_ms": 5 * 60_000}
+        if market_type == "spot":
+            setup["visible_history_lookback"] = {"mode": "ALL_AVAILABLE", "duration_ms": None}
+            setup["indicator_warmup_bars"] = warmup_bars
         if account_history != "proxy":
             setup.update(account_data_mode="HISTORICAL_EXACT", funding_mode="HISTORICAL_EXACT")
         body = {"idempotency_key": "api-launch-1", "setup": setup,
-                "exchange": "binance", "market_type": "futures", "symbol": "BTCUSDT"}
+                "exchange": "binance", "market_type": market_type, "symbol": "BTCUSDT"}
         if random_by_market:
             from app.data_engine.ingestion.models import StreamType
             class Factory:
@@ -371,9 +390,9 @@ async def test_replay_api_empty_archive_downloads_and_creates_one_recoverable_ru
                 async def fetch_market(self, descriptor, **kwargs):
                     self.calls += 1
                     times = ([START] if kwargs.get("start_ms") == 0
-                        else [START + 11 * 60_000] if kwargs.get("start_ms") is None
+                        else [START + (warmup_bars + 9) * 60_000] if kwargs.get("start_ms") is None
                         else range(kwargs["start_ms"], kwargs["end_ms"] + 1, 60_000))
-                    return [NS(exchange="binance", market_type="futures", symbol="BTCUSDT",
+                    return [NS(exchange="binance", market_type=market_type, symbol="BTCUSDT",
                         event_type=StreamType.KLINE, data={"open_time": t}) for t in times]
             factory = Factory()
             app.state.data_engine_runtime = NS(ingestion_factory=factory)
@@ -424,9 +443,96 @@ async def test_replay_api_empty_archive_downloads_and_creates_one_recoverable_ru
             assert replayed["run"]["run_id"] == run_id
             runs = await replay.training.list_runs(limit=50, cursor=None, state=None, source_kind=None, compatibility=None)
             assert len(runs["items"]) == 1
+            if later_archive:
+                import json
+                from app.replay.constants import REPLAY_PROTOCOL, CommandType
+                from app.replay.models import ReplayCommand
+                session_id = job["result"]["run"]["adapter_session_id"]
+                stored = await replay.store.load_dataset(session_id)
+                bundle = json.loads(bytes(stored["snapshot_blob"]).decode())
+                manifest = bundle["paging_manifest"]
+                expected_end = frozen["random_range_start_ms"] + setup["forward_cache_ms"] - 60_000
+                assert manifest["terminal_kind"] == "REQUESTED_HORIZON"
+                assert manifest["terminal_open_ms"] == expected_end
+                # Recovery must retain the prepared boundary instead of binding
+                # to the newer island, or attempting to cross its missing bars.
+                await replay.shutdown()
+                replay = ReplayService(settings=settings, store=ReplaySQLiteStore(tmp_path / "replay.db"),
+                    repository=ReplayHistoryRepository(archive), native_intervals=lambda _: ("1m", "5m", "4h"))
+                await replay.start()
+                snapshot = (await replay.get_session(session_id))["snapshot"]
+                async def check_display(state, expected_volume):
+                    from decimal import Decimal
+                    boundary = state["cursor"]["virtual_time_ms"]
+                    base = await replay.training.history_page(session_id, track_id="track-1",
+                        before_ms=boundary + 1, revealed_boundary_ms=boundary, limit=1000,
+                        data_epoch=state["data_epoch"], history_epoch=None, display_interval="1m")
+                    assert sum(Decimal(bar["volume"]) for bar in base["bars"]) == expected_volume
+                    for interval in ("5m", "4h"):
+                        projection = await replay.training.display_projection(session_id,
+                            track_id="track-1", revealed_boundary_ms=boundary, limit=200,
+                            data_epoch=state["data_epoch"], display_interval=interval)
+                        if state["cursor"]["source_sequence"]:
+                            assert projection["bars"]
+                        for bar in projection["bars"]:
+                            assert bar["last_base_open_ms"] <= boundary
+                            assert not bar["is_closed"] or bar["close_time_ms"] <= boundary
+                            revealed_volume = sum(Decimal(row["volume"]) for row in base["bars"]
+                                if bar["open_time_ms"] <= row["open_time_ms"]
+                                and row["open_time_ms"] <= bar["last_base_open_ms"])
+                            assert Decimal(bar["volume"]) == revealed_volume
+                        history = await replay.training.history_page(session_id, track_id="track-1",
+                            before_ms=boundary, revealed_boundary_ms=boundary, limit=200,
+                            data_epoch=state["data_epoch"], history_epoch=None, display_interval=interval)
+                        assert all(bar["close_time_ms"] <= boundary for bar in history["bars"])
+                if market_type == "spot":
+                    await check_display(snapshot, warmup_bars * 3)
+                acquired = await replay.command(session_id, ReplayCommand(
+                    protocol=REPLAY_PROTOCOL, command_id="prepared-acquire", client_instance_id="prepared-test",
+                    expected_revision=snapshot["revision"], type=CommandType.ACQUIRE_CONTROLLER, payload={}))
+                if market_type == "spot":
+                    from tests.test_replay_v2_training_phase3 import _v2_command
+                    from app.replay.training.models import ReplayV2CommandType
+                    current = await replay.get_session(session_id)
+                    viewer = await replay.training.get_viewer_state(run_id)
+                    switched = await replay.training.command(run_id, _v2_command(
+                        run_id=run_id, command_id="prepared-4h", snapshot=current,
+                        command_type=ReplayV2CommandType.SET_DISPLAY_INTERVAL,
+                        client_instance_id="prepared-test",
+                        payload={"display_interval": "4h",
+                            "expected_viewer_revision": viewer["semantic_view_revision"]}))
+                    ended = await replay.training.command(run_id, _v2_command(
+                        run_id=run_id, command_id="prepared-end", snapshot=current,
+                        command_type=ReplayV2CommandType.STEP_DISPLAY,
+                        client_instance_id="prepared-test", payload={"count": 1,
+                            "display_interval": "4h",
+                            "viewer_revision": switched["viewer_state"]["semantic_view_revision"]}))
+                else:
+                    ended = await replay.command(session_id, ReplayCommand(
+                        protocol=REPLAY_PROTOCOL, command_id="prepared-end", client_instance_id="prepared-test",
+                        expected_revision=acquired["revision"], type=CommandType.STEP, payload={"count": 5}))
+                assert ended["state"] == "ENDED"
+                assert ended["cursor"]["at_end"] is True
+                assert ended["cursor"]["source_sequence"] == 5
+                if market_type == "spot":
+                    await check_display((await replay.get_session(session_id))["snapshot"], (warmup_bars + 5) * 3)
     finally:
         await service.shutdown()
         await replay.shutdown()
+
+
+@async_test
+async def test_replay_launch_domain_failure_preserves_code_without_generic_retry(tmp_path, monkeypatch):
+    from app.replay.training.errors import TrainingRunError
+    adapter = BarPreparationAdapter(tmp_path, coordinator=None)
+    async def fail(*args):
+        raise TrainingRunError("MARKET_UNSUPPORTED_AT_COMMITTED_START", "Selected market window is unavailable")
+    monkeypatch.setattr(adapter, "_launch", fail)
+    with pytest.raises(PreparationError) as failure:
+        await adapter.launch(request(), {}, "failed-launch")
+    assert failure.value.code == "MARKET_UNSUPPORTED_AT_COMMITTED_START"
+    assert str(failure.value) == "Selected market window is unavailable"
+    assert failure.value.retryable is False
 
 
 @async_test
@@ -589,10 +695,24 @@ async def test_existing_archive_is_reused_without_live_query_or_download(tmp_pat
     def forbidden(*a, **kw):
         raise AssertionError("complete archive must avoid live history reads")
     adapter = BarPreparationAdapter(tmp_path / "chunks", coordinator=None,
-        replay_service=NS(_repository=ReplayHistoryRepository(root)), query=forbidden)
+        replay_service=NS(_repository=ReplayHistoryRepository(root),
+            settings=NS(replay_history_archive_dir=root)), query=forbidden)
     receipt, size = await adapter.acquire(request().requirements[0], "known")
     assert receipt["origin"] == "replay_archive"
     assert size > 0
+
+    # Preparation often requests a slice of a larger immutable archive object.
+    # Reusing that slice must retain the catalog instead of importing overlaps.
+    identity = ReplaySeriesIdentity("binance", "spot", "BTCUSDT")
+    before = writer.current_manifest(identity, "1m")
+    req = request().model_copy(update={"consumer": "REPLAY", "requirements": [
+        request().requirements[0].model_copy(update={"end_ms": START + 60_000})]})
+    requirement = req.requirements[0]
+    receipt, _ = await adapter.acquire(requirement, "slice")
+    result = await adapter.publish(req, [{"key": "slice", "requirement": requirement.model_dump(),
+        "receipt": receipt}], "slice-job")
+    assert result["inputs"][0]["source_revision"] == before.catalog_epoch
+    assert writer.current_manifest(identity, "1m") == before
 
 
 @async_test

@@ -3,9 +3,16 @@ export const MARKET_RAIL_DEFAULT_WIDTH = 320;
 export const MARKET_RAIL_MIN_WIDTH = 260;
 export const MARKET_RAIL_MAX_WIDTH = Number.MAX_SAFE_INTEGER;
 
-/** Leave a small chart strip and the activity bar accessible at maximum width. */
+/** Left drawing toolbar beside the chart. */
+const CHART_TOOLBAR_WIDTH = 40;
+
+/**
+ * The chart keeps at least 55% of the window (up to 640px), so a saved rail width
+ * that suits a wide window cannot squeeze the chart on a small one.
+ */
 export function marketRailWidthBounds(viewportWidth: number): { min: number; max: number } {
-  const max = Math.max(0, viewportWidth - MARKET_ACTIVITY_BAR_WIDTH - 121);
+  const chartMin = Math.min(640, Math.round(viewportWidth * 0.55));
+  const max = Math.max(0, viewportWidth - MARKET_ACTIVITY_BAR_WIDTH - CHART_TOOLBAR_WIDTH - chartMin);
   return { min: Math.min(MARKET_RAIL_MIN_WIDTH, max), max };
 }
 

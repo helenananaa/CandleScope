@@ -163,7 +163,7 @@ export function createDefaultAlertDraft({
 }: { symbol?: string; interval?: string; price?: unknown } = {}): AlertDraft {
   return {
     name: t("alert.defaultName", { symbol: symbol || t("alert.unnamedSymbol") }),
-    description: t("alert.defaultDesc"),
+    description: "",
     enabled: true,
     triggerOn: "bar_close",
     expression: createDefaultExpressionDraft(price),
