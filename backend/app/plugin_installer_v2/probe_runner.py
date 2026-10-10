@@ -14,7 +14,10 @@ from typing import Any
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY_ROOT = BACKEND_ROOT.parent
 SDK_SOURCE = REPOSITORY_ROOT / "packages" / "candlescope-plugin-sdk" / "src"
-for candidate in (BACKEND_ROOT, SDK_SOURCE):
+HOST_DEPENDENCIES = REPOSITORY_ROOT / "python-runtime" / "site-packages"
+# -I ignores PYTHONPATH; the packaged Host ships dependencies beside its backend.
+# This fixed application path must never come from plugin content.
+for candidate in (HOST_DEPENDENCIES, BACKEND_ROOT, SDK_SOURCE):
     if candidate.is_dir() and str(candidate) not in sys.path:
         sys.path.insert(0, str(candidate))
 

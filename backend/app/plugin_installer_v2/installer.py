@@ -843,7 +843,7 @@ class PlatformPluginInstaller:
                 "v2 installer refuses the legacy runtime-registry.json path"
             )
         self.python_executable = (
-            Path(python_executable or sys.executable).expanduser().resolve(strict=False)
+            Path(os.path.abspath(Path(python_executable or sys.executable).expanduser()))
         )
         if not self.python_executable.is_file():
             raise PlatformInstallerError("installer Python executable does not exist")
@@ -1529,7 +1529,7 @@ class PlatformPluginInstaller:
     ) -> tuple[Path, str]:
         artifact_path = getattr(runtime, "artifact", None)
         if artifact_path is None:
-            return self._venv_python(installation).resolve(strict=False), bundle.sha256
+            return self._venv_python(installation).absolute(), bundle.sha256
         if not isinstance(artifact_path, str):
             raise PlatformInstallerError(
                 "runtime artifact descriptor is invalid",
@@ -2197,7 +2197,7 @@ class PlatformPluginInstaller:
                 arguments = item.runtime.interpreter_args
                 artifact = None
                 activation_sha256 = bundle.sha256
-                executable = self._venv_python(installation).resolve(strict=False)
+                executable = self._venv_python(installation).absolute()
                 runtime_supply = None
                 main_class = None
                 export_name = None

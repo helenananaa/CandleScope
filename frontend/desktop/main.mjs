@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 import { resolvePythonCommand } from "./python-runtime.mjs";
 import { desktopBackendEnvironment } from "./runtime-config.mjs";
-import { isTrustedAppUrl, startDesktopAssetServer } from "./app-origin.mjs";
+import { isTrustedAppUrl } from "./app-origin.mjs";
+import { startProfileAssetServer } from "./profile-origin.mjs";
 
 import { ElectronWindowManager } from "./electron-window-manager.mjs";
 import { AppWorkBudgetHub } from "./app-work-budget-hub.mjs";
@@ -142,7 +143,8 @@ function createSupervisor() {
 
 async function boot() {
   if (app.isPackaged && !process.env.CANDLESCOPE_DESKTOP_URL) {
-    assetServer = await startDesktopAssetServer(path.join(app.getAppPath(), "dist"), {
+    assetServer = await startProfileAssetServer(path.join(app.getAppPath(), "dist"), {
+      userData: app.getPath("userData"),
       port: Number(process.env.CANDLESCOPE_DESKTOP_UI_PORT || 18079),
     });
     appUrl = assetServer.appUrl;
@@ -336,10 +338,13 @@ if (!gotSingleInstanceLock) {
     }
     const chinese = app.getLocale().toLowerCase().startsWith("zh");
     const sidecarFailed = error?.code === "SIDECAR_STARTUP_FAILED";
+    const originFailed = error?.code === "DESKTOP_ORIGIN_UNAVAILABLE";
     dialog.showErrorBox(
       chinese ? "CandleScope 启动失败" : "CandleScope could not start",
       [
-        sidecarFailed
+        originFailed
+          ? (chinese ? `此配置使用的端口 ${error.port} 被占用。请关闭占用端口的其他应用后重试。配置与数据未被重置。` : `This profile's port ${error.port} is unavailable. Close the other application using it and try again. Your settings and data have not been reset.`)
+          : sidecarFailed
           ? (chinese ? "本地后端未能启动。请检查 Python 运行环境及后端依赖是否完整。" : "The local backend could not start. Check that the Python runtime and backend dependencies are installed.")
           : (chinese ? "应用初始化失败，请查看启动日志以确定原因。" : "Application initialization failed. Check the startup log for details."),
         `${chinese ? "原因" : "Reason"}: ${error instanceof Error ? error.message : String(error)}`,
