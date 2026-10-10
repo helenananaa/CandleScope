@@ -103,6 +103,7 @@ export interface ReplayTrainingPageShellProps {
     readonly preferences: ReturnType<typeof useReplayWorkspacePreferences>;
     readonly onCrosshairMove: (value: MainSeriesCrosshairValue | null) => void;
     readonly onVisibleRangeChange: (range: ChartSurfaceVisibleRange) => void;
+    readonly onUserViewportRangeChange: (range: ChartSurfaceVisibleRange) => void;
   };
 }
 
@@ -953,6 +954,7 @@ export default function ReplayTrainingPageShell({
       tickMarkMaxCharacterLength={replayTimeAxisMaxCharacterLength(publicTimePolicy)}
       dataMeta={viewerDataMeta}
       onVisibleRangeChange={handleVisibleRangeChange}
+      onUserViewportRangeChange={review === null ? cell?.onUserViewportRangeChange ?? null : null}
       drawingTool={review === null ? drawings.view.drawingTool : null}
       onDrawingToolChange={review === null ? drawings.actions.setDrawingTool : null}
       penColor={drawings.view.penColor}

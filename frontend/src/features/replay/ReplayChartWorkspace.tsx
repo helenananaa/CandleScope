@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import MarketPageFrame from "../../app/MarketPageFrame.js";
 import MarketChartWorkspace from "../../app/MarketChartWorkspace.js";
 import { useChartSurfaceRuntime } from "../../chart-adapter/useChartSurfaceRuntime.js";
-import type { ChartSurfaceVisibleRange } from "../../chart-adapter/useChartSurfaceRuntime.js";
 import type { MainSeriesCrosshairValue } from "../../chart-adapter/chartAdapterTypes.js";
 import type { ChartSession } from "../chart-session/chartSessionTypes.js";
 import { useChartWorkspaceRuntime } from "../chart-workspace/useChartWorkspaceRuntime.js";
@@ -12,6 +11,7 @@ import type { ChartWorkspaceRuntime } from "../chart-workspace/useChartWorkspace
 import WorkspaceLayoutTree from "../chart-workspace/WorkspaceLayoutTree.js";
 import WorkspacePanel from "../chart-workspace/WorkspacePanel.js";
 import WorkspaceCellLayoutMenu from "../chart-workspace/WorkspaceCellLayoutMenu.js";
+import { useChartViewportLink } from "../chart-workspace/useChartViewportLink.js";
 import { ChartLinkCoordinator } from "../chart-workspace/chartLinkCoordinator.js";
 import { chartCellDrawingScopeBase } from "../chart-workspace/chartWorkspaceDrawingLink.js";
 import { writeChartCellDragData } from "../chart-workspace/chartWorkspaceDrag.js";
@@ -147,6 +147,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
     },
   }), [integrity, track.track_id, cell.session.interval, cell.id, runId, workspace.view.activeWorkspaceId, workspace.view.document]);
   useEffect(() => links.register(cell.id, surface.actions), [cell.id, links, surface.actions]);
+  const linkUserViewport = useChartViewportLink(links, cell.id, scope);
   const cellOptions = useMemo(() => ({
     scope,
     drawingScope: chartCellDrawingScopeBase(`replay:${runId}:${workspace.view.activeWorkspaceId}`, workspace.view.document, cell.id),
@@ -157,13 +158,9 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
       runtime.marketData.actions.onCrosshairMove(value);
       if (active) links.publishCrosshair(cell.id, value === null ? null : Number(value.time));
     },
-    onVisibleRangeChange: (range: ChartSurfaceVisibleRange) => {
-      saveViewport(range);
-      if (!active) return;
-      if (range.time) links.publishDateRange(cell.id, range.time);
-      if (range.rightmostTime !== undefined) links.publishTimeAnchor(cell.id, range.rightmostTime);
-    },
-  }), [scope, runId, workspace.view.activeWorkspaceId, workspace.view.document, workspace.actions, cell.id, cell.priceScale, active, cellIntegrity, controls, controller, links, runtime.marketData.actions, saveViewport, preferences]);
+    onVisibleRangeChange: saveViewport,
+    onUserViewportRangeChange: linkUserViewport,
+  }), [scope, runId, workspace.view.activeWorkspaceId, workspace.view.document, workspace.actions, cell.id, cell.priceScale, active, cellIntegrity, controls, controller, links, runtime.marketData.actions, saveViewport, linkUserViewport, preferences]);
   const frame = useMemo(() => ({ active, hosts }), [active, hosts]);
   return <CellFrameContext.Provider value={frame}>
     <span hidden data-replay-cell-diagnostics={cell.id} data-replay-track-id={track.track_id}
