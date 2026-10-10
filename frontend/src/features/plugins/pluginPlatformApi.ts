@@ -517,7 +517,7 @@ export async function installPluginBundle(file: File): Promise<{ restartRequired
   });
   const result = await responseJson(response) as { kind?: string };
   invalidatePluginControlReads();
-  return { restartRequired: result.kind === "script-runtime" };
+  return { restartRequired: typeof result === "object" && result !== null && "kind" in result && result.kind === "script-runtime" };
 }
 
 async function pluginBundleUploadIdentity(file: File): Promise<string> {
@@ -564,12 +564,13 @@ export async function confirmLocalPluginInstall(
   candidateId: string,
   previewSha256: string,
   confirmationToken: string,
-): Promise<void> {
-  await managementRequest("/manage/install/confirm", {
+): Promise<{ restartRequired: boolean }> {
+  const result = await managementRequest("/manage/install/confirm", {
     method: "POST",
     action: "install-confirm",
     body: { candidateId, previewSha256, confirmationToken },
   });
+  return { restartRequired: typeof result === "object" && result !== null && "kind" in result && result.kind === "script-runtime" };
 }
 
 export async function reviewPluginTrustChange(

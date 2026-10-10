@@ -762,10 +762,13 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity): Plugin
       },
       prepareLocalInstall: prepareLocalPluginInstall,
       reviewLocalInstall: reviewLocalPluginInstall,
-      confirmLocalInstall: (candidateId, previewSha256, confirmationToken) => withRefresh(
-        () => confirmLocalPluginInstall(candidateId, previewSha256, confirmationToken),
-        { kind: "message", key: "plugin.notice.bundleInstalledConfirmed" },
-      ),
+      confirmLocalInstall: async (candidateId, previewSha256, confirmationToken) => {
+        try {
+          const result = await confirmLocalPluginInstall(candidateId, previewSha256, confirmationToken);
+          await refresh();
+          setNoticeState({ kind: "message", key: result.restartRequired ? "plugin.runtimeInstalled" : "plugin.notice.bundleInstalledConfirmed" });
+        } catch (cause) { setNoticeState({ kind: "error", cause }); throw cause; }
+      },
       reviewTrustChange: reviewPluginTrustChange,
       confirmTrustChange: (pluginId, changeId, previewSha256, confirmationToken) => withRefresh(
         () => confirmPluginTrustChange(pluginId, changeId, previewSha256, confirmationToken),

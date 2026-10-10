@@ -498,6 +498,10 @@ async def test_native_startup_faults_are_bounded_and_diagnosable(
     supervisor = _native_supervisor(
         native_reference_build,
         mode,
+        # macOS can spend >400 ms handling a freshly built process crash.
+        # Give diagnostic cases time to exit; keep the hang deadline short so
+        # this test still verifies bounded timeouts instead of accepting hangs.
+        startup_timeout_seconds=0.4 if mode == "hang-start" else 3.0,
         max_stderr_bytes=4 * 1024,
     )
     try:

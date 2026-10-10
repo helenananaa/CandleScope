@@ -891,7 +891,7 @@ def _extract_zip(release: RuntimeRelease, archive: Path, destination: Path) -> N
                     _copy_stream(source, output, expected_size=entry.file_size)
                     output.flush()
                     os.fsync(output.fileno())
-                if mode & stat.S_IXUSR and os.name != "nt":
+                if (entry.external_attr >> 16) & stat.S_IXUSR and os.name != "nt":
                     target.chmod(0o555)
     except RuntimeRegistryError:
         raise

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,8 @@ from scripts import plugin_platform_multi_runtime_phase3 as phase3
 
 @pytest.fixture(scope="module")
 def gate_result() -> dict[str, object]:
+    if os.name != "nt":
+        pytest.skip("Phase 3 release gate exercises Windows Job Objects and AppContainer")
     return phase3.run_gate()
 
 

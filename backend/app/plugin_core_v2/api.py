@@ -26,7 +26,7 @@ from app.plugin_security_v2.errors import PlatformSecurityError
 from app.plugin_security_v2.management import LocalManagementGuard
 
 from app.plugin_runtime.errors import PluginHostError
-from .runtime_install import is_runtime_bundle, install_runtime_bundle
+from .runtime_install import is_runtime_bundle, install_runtime_bundle, review_runtime_bundle
 from .errors import CorePluginError
 from .runtime import CorePluginPlatform, DisabledCorePluginPlatform
 
@@ -832,8 +832,9 @@ def create_core_plugin_router() -> APIRouter:
         upload = None
         try:
             upload, expected_sha256 = await _bundle_upload(request, platform)
+            runtime_bundle = await asyncio.to_thread(is_runtime_bundle, upload)
             bundle = await asyncio.to_thread(
-                verify_platform_bundle,
+                review_runtime_bundle if runtime_bundle else verify_platform_bundle,
                 upload,
                 expected_sha256=expected_sha256,
                 host_version=platform.installer.host_version,
