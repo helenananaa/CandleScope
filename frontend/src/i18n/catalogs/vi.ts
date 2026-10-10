@@ -3480,7 +3480,7 @@ export const vi = {
   "plugin.runtime.refs": "{count} tham chiếu",
   "plugin.runtime.probed": "đã xác minh thăm dò",
   "plugin.runtime.devLocal": "Lựa chọn nhà phát triển cục bộ không tái tạo được: {path}",
-  "plugin.ack.execute": "Tôi xác nhận thao tác này sẽ thực thi mã ứng dụng cục bộ với tư cách người dùng Windows hiện tại",
+  "plugin.ack.execute": "Tôi xác nhận thao tác này sẽ thực thi mã ứng dụng cục bộ với tư cách người dùng hiện tại",
   "plugin.ack.sandbox": "Tôi đã kiểm tra trạng thái sandbox phía trên thay vì chỉ tin tên nhà phát hành",
   "plugin.ack.authority": "Tôi xác nhận tài khoản, bí mật và quyền giao dịch thật không được mở bởi lựa chọn tin cậy này",
   "plugin.ack.runtime": "Tôi xác nhận runtime: {runtime}",

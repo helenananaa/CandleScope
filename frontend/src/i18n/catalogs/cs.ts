@@ -3480,7 +3480,7 @@ export const cs = {
   "plugin.runtime.refs": "{count} odkazů",
   "plugin.runtime.probed": "ověřeno sondou",
   "plugin.runtime.devLocal": "Nereprodukovatelná volba vývojáře místně: {path}",
-  "plugin.ack.execute": "Potvrzuji, že se spustí místní kód aplikace jako aktuální uživatel Windows",
+  "plugin.ack.execute": "Potvrzuji, že se spustí místní kód aplikace jako aktuální uživatel",
   "plugin.ack.sandbox": "Zkontroloval jsem stav sandboxu výše, místo abych důvěřoval jen názvu vydavatele",
   "plugin.ack.authority": "Potvrzuji, že účty, tajemství a autorita živého obchodování se touto volbou důvěry neotevírají",
   "plugin.ack.runtime": "Potvrzuji běhové prostředí: {runtime}",

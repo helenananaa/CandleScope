@@ -1,5 +1,6 @@
 import { supportEnglish } from "./supportEnglish.js";
 export const nativeEnglish = {
+  "plugin.trust.scriptRuntimeExecution": "The installer creates a separate Python environment and runs the package verification probe. After restart, script code runs as your current user without an OS sandbox. Files, network access and subprocesses are not restricted by the platform plugin permission summary.",
   "report.more": "More",
   "report.return": "Cumulative return",
   "report.equity": "Account equity",

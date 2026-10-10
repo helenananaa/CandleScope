@@ -3480,7 +3480,7 @@ export const nl = {
   "plugin.runtime.refs": "{count} refs",
   "plugin.runtime.probed": "door sonde geverifieerd",
   "plugin.runtime.devLocal": "Niet-reproduceerbare lokale ontwikkelaarskeuze: {path}",
-  "plugin.ack.execute": "Ik bevestig dat dit lokale toepassingscode uitvoert als de huidige Windows-gebruiker",
+  "plugin.ack.execute": "Ik bevestig dat dit lokale toepassingscode uitvoert als de huidige gebruiker",
   "plugin.ack.sandbox": "Ik heb de sandboxstatus hierboven gecontroleerd in plaats van alleen de uitgeversnaam te vertrouwen",
   "plugin.ack.authority": "Ik bevestig dat accounts, geheimen en live-tradingautoriteit niet door deze vertrouwenskeuze worden geopend",
   "plugin.ack.runtime": "Ik bevestig de runtime: {runtime}",

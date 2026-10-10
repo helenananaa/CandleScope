@@ -1,4 +1,5 @@
 export const zhCN = {
+  "plugin.trust.scriptRuntimeExecution": "安装器会创建独立 Python 环境并执行包校验探针。重启后，脚本以当前用户身份运行，没有操作系统沙箱；文件、网络和子进程访问不受平台插件权限摘要的限制。",
   "plugin.runtimeInstalled": "脚本运行时已安装并通过校验。请退出并重新打开 CandleScope，启用指标及受支持的原生策略。",
   "native.executionErrorHelp": "运行未完成。请检查脚本和输入参数，下方可查看具体原因。",
   "native.jumpToError": "定位到第 {line} 行，第 {column} 列",
@@ -3805,7 +3806,7 @@ export const zhCN = {
   "plugin.runtime.probed": "已探针验证",
   "plugin.runtime.devLocal": "不可复现的 developer-local 选择：{path}",
 
-  "plugin.ack.execute": "我确认这会以当前 Windows 用户身份执行本地应用代码",
+  "plugin.ack.execute": "我确认这会以当前用户身份执行本地应用代码",
   "plugin.ack.sandbox": "我已核对上方沙箱状态，而不是仅依据发布者名称判断安全性",
   "plugin.ack.authority": "我确认账户、密钥与实盘权限不会由本次信任选择自动开放",
   "plugin.ack.runtime": "我确认运行时：{runtime}",

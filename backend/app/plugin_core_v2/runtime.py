@@ -2288,6 +2288,7 @@ class CorePluginPlatform:
         )
         from .runtime_install import RuntimeReviewBundle
         if isinstance(bundle, RuntimeReviewBundle):
+            preview["executionModel"] = "script-runtime"
             preview["warning"] = (
                 "Unsigned script runtime: publisher identity is not verified. "
                 "Installation probes and runtime code execute as your current user, "

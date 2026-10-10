@@ -3480,7 +3480,7 @@ export const de = {
   "plugin.runtime.refs": "{count} Refs",
   "plugin.runtime.probed": "probe-geprüft",
   "plugin.runtime.devLocal": "Nicht reproduzierbare Entwickler-Lokalwahl: {path}",
-  "plugin.ack.execute": "Ich bestätige, dass dies lokalen Anwendungscode als aktueller Windows-Benutzer ausführt",
+  "plugin.ack.execute": "Ich bestätige, dass dies lokalen Anwendungscode als aktueller Benutzer ausführt",
   "plugin.ack.sandbox": "Ich habe den Sandbox-Status oben geprüft, statt dem Publisher-Namen allein zu vertrauen",
   "plugin.ack.authority": "Ich bestätige, dass Konten, Geheimnisse und Live-Handelsautorität durch diese Vertrauenswahl nicht geöffnet werden",
   "plugin.ack.runtime": "Ich bestätige die Laufzeit: {runtime}",

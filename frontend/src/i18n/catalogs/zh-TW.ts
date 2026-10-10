@@ -3516,7 +3516,7 @@ export const zhTW = {
   "plugin.runtime.refs": "引用 {count}",
   "plugin.runtime.probed": "已探針驗證",
   "plugin.runtime.devLocal": "不可復現的 developer-local 選擇：{path}",
-  "plugin.ack.execute": "我確認這會以當前 Windows 使用者身份執行本地應用程式碼",
+  "plugin.ack.execute": "我確認這會以當前使用者身份執行本地應用程式碼",
   "plugin.ack.sandbox": "我已核對上方沙箱狀態，而不是僅依據釋出者名稱判斷安全性",
   "plugin.ack.authority": "我確認帳戶、金鑰與實盤權限不會由本次信任選擇自動開放",
   "plugin.ack.runtime": "我確認執行時：{runtime}",

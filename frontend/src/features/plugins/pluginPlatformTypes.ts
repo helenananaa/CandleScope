@@ -866,6 +866,7 @@ export interface PluginRuntimeDiff {
 }
 
 export interface PluginLocalInstallPreview {
+  executionModel?: "script-runtime";
   schemaVersion: "candlescope.plugin-trust-preview/1";
   plugin: {
     id: string;

@@ -3480,7 +3480,7 @@ export const tr = {
   "plugin.runtime.refs": "{count} ref",
   "plugin.runtime.probed": "sınama doğrulamalı",
   "plugin.runtime.devLocal": "Yeniden üretilemeyen geliştirici-yerel seçim: {path}",
-  "plugin.ack.execute": "Bunun, geçerli Windows kullanıcısı olarak yerel uygulama kodunu çalıştıracağını onaylıyorum",
+  "plugin.ack.execute": "Bunun, geçerli kullanıcısı olarak yerel uygulama kodunu çalıştıracağını onaylıyorum",
   "plugin.ack.sandbox": "Yalnızca yayımcı adına güvenmek yerine yukarıdaki koruma alanı durumunu kontrol ettim",
   "plugin.ack.authority": "Hesapların, gizlerin ve canlı işlem yetkisinin bu güven seçimiyle açılmadığını onaylıyorum",
   "plugin.ack.runtime": "Çalışma zamanını onaylıyorum: {runtime}",

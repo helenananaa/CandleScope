@@ -105,6 +105,7 @@ async def test_runtime_trust_review_is_nonexecuting_bound_and_single_use(tmp_pat
         # A later candidate changed after review must fail without touching installation.
         prepared = await client.post(prefix + '/prepare', headers=_headers(guard, 'prepare-again', bundle_sha256=fixture.bundle.sha256), content=body)
         candidate = prepared.json()
+        assert candidate['preview']['executionModel'] == 'script-runtime'
         review_body.update({key: candidate[key] for key in ('candidateId', 'previewSha256')})
         review = await client.post(prefix + '/review', headers=_headers(guard, 'review-again'), json=review_body)
         confirmation = {key: candidate[key] for key in ('candidateId', 'previewSha256')}

@@ -3480,7 +3480,7 @@ export const sv = {
   "plugin.runtime.refs": "{count} refs",
   "plugin.runtime.probed": "probe-verifierad",
   "plugin.runtime.devLocal": "Icke-reproducerbart utvecklingslokalt val: {path}",
-  "plugin.ack.execute": "Jag bekräftar att detta kommer att köra lokal programkod som aktuell Windows-användare",
+  "plugin.ack.execute": "Jag bekräftar att detta kommer att köra lokal programkod som aktuell användare",
   "plugin.ack.sandbox": "Jag har kontrollerat sandbox-statusen ovan i stället för att bara lita på utgivarnamnet",
   "plugin.ack.authority": "Jag bekräftar att konton, hemligheter och live-handelsbehörighet inte öppnas av det här tillitsvalet",
   "plugin.ack.runtime": "Jag bekräftar runtime: {runtime}",

@@ -3480,7 +3480,7 @@ export const hu = {
   "plugin.runtime.refs": "{count} hivatkozás",
   "plugin.runtime.probed": "vizsgálattal igazolt",
   "plugin.runtime.devLocal": "Nem reprodukálható fejlesztői helyi választás: {path}",
-  "plugin.ack.execute": "Megerősítem, hogy ez a jelenlegi Windows-felhasználóként futtat helyi alkalmazáskódot",
+  "plugin.ack.execute": "Megerősítem, hogy ez a jelenlegi felhasználóként futtat helyi alkalmazáskódot",
   "plugin.ack.sandbox": "Ellenőriztem a fenti homokozóállapotot, ahelyett hogy csak a kiadó nevében bíznám",
   "plugin.ack.authority": "Megerősítem, hogy a számlák, titkok és az élő kereskedési hatáskör nem nyílik meg ettől a bizalmi választástól",
   "plugin.ack.runtime": "Megerősítem a futási környezetet: {runtime}",

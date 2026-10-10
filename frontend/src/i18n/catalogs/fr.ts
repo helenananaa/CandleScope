@@ -3481,7 +3481,7 @@ export const fr = {
   "plugin.runtime.refs": "{count} refs",
   "plugin.runtime.probed": "vérifié par sondage",
   "plugin.runtime.devLocal": "Choix développeur local non reproductible : {path}",
-  "plugin.ack.execute": "Je confirme que cela exécutera du code d’application local en tant qu’utilisateur Windows actuel",
+  "plugin.ack.execute": "Je confirme que cela exécutera du code d’application local en tant qu’utilisateur actuel",
   "plugin.ack.sandbox": "J’ai vérifié l’état du sandbox ci-dessus au lieu de me fier au nom de l’éditeur seul",
   "plugin.ack.authority": "Je confirme que les comptes, secrets et l’autorité de trading en direct ne sont pas ouverts par ce choix de confiance",
   "plugin.ack.runtime": "Je confirme le runtime : {runtime}",

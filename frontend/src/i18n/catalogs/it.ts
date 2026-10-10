@@ -3480,7 +3480,7 @@ export const it = {
   "plugin.runtime.refs": "{count} ref",
   "plugin.runtime.probed": "verificato con probe",
   "plugin.runtime.devLocal": "Scelta developer-local non riproducibile: {path}",
-  "plugin.ack.execute": "Confermo che questo eseguirà codice applicativo locale come utente Windows attuale",
+  "plugin.ack.execute": "Confermo che questo eseguirà codice applicativo locale come utente attuale",
   "plugin.ack.sandbox": "Ho controllato lo stato della sandbox sopra invece di fidarmi solo del nome del publisher",
   "plugin.ack.authority": "Confermo che conti, segreti e autorità di trading live non vengono aperti da questa scelta di fiducia",
   "plugin.ack.runtime": "Confermo il runtime: {runtime}",

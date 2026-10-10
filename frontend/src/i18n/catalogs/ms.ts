@@ -3480,7 +3480,7 @@ export const ms = {
   "plugin.runtime.refs": "{count} ruj",
   "plugin.runtime.probed": "disahkan siasatan",
   "plugin.runtime.devLocal": "Pilihan pembangun setempat tidak boleh dihasilkan semula: {path}",
-  "plugin.ack.execute": "Saya mengesahkan ini akan melaksanakan kod aplikasi setempat sebagai pengguna Windows semasa",
+  "plugin.ack.execute": "Saya mengesahkan ini akan melaksanakan kod aplikasi setempat sebagai pengguna semasa",
   "plugin.ack.sandbox": "Saya telah menyemak status kotak pasir di atas, bukan hanya mempercayai nama penerbit",
   "plugin.ack.authority": "Saya mengesahkan bahawa akaun, rahsia, dan autoriti dagangan langsung tidak dibuka oleh pilihan kepercayaan ini",
   "plugin.ack.runtime": "Saya mengesahkan runtime: {runtime}",

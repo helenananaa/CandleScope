@@ -1,6 +1,7 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ja = {
+  "plugin.trust.scriptRuntimeExecution": "インストーラーは独立した Python 環境を作成し、パッケージ検証プローブを実行します。再起動後、スクリプトは現在のユーザー権限で動作し、OS サンドボックスはありません。ファイル、ネットワーク、子プロセスへのアクセスは、プラットフォームプラグインの権限表示によって制限されません。",
   "plugin.runtimeInstalled": "スクリプト実行環境のインストールと検証が完了しました。CandleScopeを終了して開き直すと、指標と対応するネイティブ戦略が有効になります。",
   "native.executionErrorHelp": "実行を完了できませんでした。スクリプトと入力パラメータを確認してください。詳細は下に表示できます。",
   "native.jumpToError": "{line}行 {column}列へ移動",
@@ -3742,7 +3743,7 @@ export const ja = {
   "plugin.runtime.refs": "参照 {count}",
   "plugin.runtime.probed": "プローブ検証済み",
   "plugin.runtime.devLocal": "再現不可の developer-local 選択: {path}",
-  "plugin.ack.execute": "現在の Windows ユーザーとしてローカルアプリケーションコードを実行することを確認します",
+  "plugin.ack.execute": "現在のユーザーとしてローカルアプリケーションコードを実行することを確認します",
   "plugin.ack.sandbox": "パブリッシャー名だけで安全性を判断せず、上記のサンドボックス状態を確認しました",
   "plugin.ack.authority": "アカウント、シークレット、実取引権限が今回の信頼選択で自動開放されないことを確認します",
   "plugin.ack.runtime": "ランタイムを確認します: {runtime}",

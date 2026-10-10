@@ -1,6 +1,7 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
+  "plugin.trust.scriptRuntimeExecution": "The installer creates a separate Python environment and runs the package verification probe. After restart, script code runs as your current user without an OS sandbox. Files, network access and subprocesses are not restricted by the platform plugin permission summary.",
   "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
   "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",
   "native.jumpToError": "Go to line {line}, column {column}",
@@ -3806,7 +3807,7 @@ export const en = {
   "plugin.runtime.probed": "probe-verified",
   "plugin.runtime.devLocal": "Non-reproducible developer-local choice: {path}",
 
-  "plugin.ack.execute": "I confirm this will execute local application code as the current Windows user",
+  "plugin.ack.execute": "I confirm this will execute local application code as the current user",
   "plugin.ack.sandbox": "I have checked the sandbox status above instead of trusting the publisher name alone",
   "plugin.ack.authority": "I confirm that accounts, secrets, and live-trading authority are not opened by this trust choice",
   "plugin.ack.runtime": "I confirm the runtime: {runtime}",

@@ -1,6 +1,7 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
+  "plugin.trust.scriptRuntimeExecution": "O instalador cria um ambiente Python separado e executa a verificação do pacote. Após reiniciar, os scripts são executados como o usuário atual, sem sandbox do sistema operacional. O resumo de permissões dos plugins da plataforma não restringe arquivos, rede nem subprocessos.",
   "plugin.runtimeInstalled": "Runtime de scripts instalado e verificado. Feche e abra o CandleScope para ativar os indicadores e as estratégias nativas compatíveis.",
   "native.executionErrorHelp": "Não foi possível concluir a execução. Confira o script e os parâmetros; os detalhes técnicos estão abaixo.",
   "native.jumpToError": "Ir para a linha {line}, coluna {column}",
@@ -3810,7 +3811,7 @@ export const ptBR = {
   "plugin.runtime.probed": "verificado por sonda",
   "plugin.runtime.devLocal": "Escolha local de desenvolvedor não reproduzível: {path}",
 
-  "plugin.ack.execute": "Confirmo que isso executará código de aplicativo local como o usuário Windows atual",
+  "plugin.ack.execute": "Confirmo que isso executará código de aplicativo local como o usuário atual",
   "plugin.ack.sandbox": "Verifiquei o estado do sandbox acima em vez de confiar somente no nome do publicador",
   "plugin.ack.authority": "Confirmo que contas, segredos e autoridade de negociação ao vivo não são abertos por esta escolha de confiança",
   "plugin.ack.runtime": "Confirmo o runtime: {runtime}",

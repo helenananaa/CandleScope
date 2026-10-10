@@ -1,6 +1,7 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  "plugin.trust.scriptRuntimeExecution": "설치 프로그램은 별도의 Python 환경을 만들고 패키지 검증을 실행합니다. 재시작 후 스크립트는 OS 샌드박스 없이 현재 사용자 권한으로 실행됩니다. 파일, 네트워크 및 하위 프로세스 접근은 플랫폼 플러그인 권한 요약으로 제한되지 않습니다.",
   "plugin.runtimeInstalled": "스크립트 런타임을 설치하고 검증했습니다. CandleScope를 종료한 후 다시 열면 지표와 지원되는 네이티브 전략이 활성화됩니다.",
   "native.executionErrorHelp": "실행을 완료하지 못했습니다. 스크립트와 입력 매개변수를 확인하세요. 자세한 원인은 아래에서 확인할 수 있습니다.",
   "native.jumpToError": "{line}행 {column}열로 이동",
@@ -3742,7 +3743,7 @@ export const ko = {
   "plugin.runtime.refs": "참조 {count}",
   "plugin.runtime.probed": "프로브 검증됨",
   "plugin.runtime.devLocal": "재현 불가한 developer-local 선택: {path}",
-  "plugin.ack.execute": "현재 Windows 사용자로 로컬 앱 코드를 실행함을 확인",
+  "plugin.ack.execute": "현재 사용자로 로컬 앱 코드를 실행함을 확인",
   "plugin.ack.sandbox": "게시자 이름만 신뢰하지 않고 위 샌드박스 상태를 확인했음",
   "plugin.ack.authority": "이 신뢰 선택으로 계정, 시크릿, 실거래 권한이 열리지 않음을 확인",
   "plugin.ack.runtime": "런타임을 확인: {runtime}",

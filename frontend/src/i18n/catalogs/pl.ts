@@ -3480,7 +3480,7 @@ export const pl = {
   "plugin.runtime.refs": "{count} ref.",
   "plugin.runtime.probed": "zweryfikowane sondą",
   "plugin.runtime.devLocal": "Niereprodukowalny wybór lokalny dewelopera: {path}",
-  "plugin.ack.execute": "Potwierdzam, że spowoduje to wykonanie lokalnego kodu aplikacji jako bieżący użytkownik Windows",
+  "plugin.ack.execute": "Potwierdzam, że spowoduje to wykonanie lokalnego kodu aplikacji jako bieżący użytkownik",
   "plugin.ack.sandbox": "Sprawdziłem status piaskownicy powyżej, zamiast ufać wyłącznie nazwie wydawcy",
   "plugin.ack.authority": "Potwierdzam, że konta, sekrety i uprawnienia do handlu na żywo nie są otwierane przez ten wybór zaufania",
   "plugin.ack.runtime": "Potwierdzam środowisko wykonawcze: {runtime}",

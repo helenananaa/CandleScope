@@ -3480,7 +3480,7 @@ export const he = {
   "plugin.runtime.refs": "{count} הפניות",
   "plugin.runtime.probed": "אומת בבדיקה",
   "plugin.runtime.devLocal": "בחירת מפתח מקומית שאינה ניתנת לשחזור: {path}",
-  "plugin.ack.execute": "אני מאשר שזה יריץ קוד יישום מקומי כמשתמש Windows הנוכחי",
+  "plugin.ack.execute": "אני מאשר שזה יריץ קוד יישום מקומי כמשתמש הנוכחי",
   "plugin.ack.sandbox": "בדקתי את סטטוס ארגז החול למעלה במקום לסמוך על שם המפרסם בלבד",
   "plugin.ack.authority": "אני מאשר שחשבונות, סודות וסמכות מסחר חי אינם נפתחים בבחירת אמון זו",
   "plugin.ack.runtime": "אני מאשר את סביבת ההרצה: {runtime}",

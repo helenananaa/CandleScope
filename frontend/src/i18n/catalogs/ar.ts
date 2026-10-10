@@ -3480,7 +3480,7 @@ export const ar = {
   "plugin.runtime.refs": "{count} مراجع",
   "plugin.runtime.probed": "متحقق بالفحص",
   "plugin.runtime.devLocal": "اختيار مطوّر محلي غير قابل لإعادة الإنتاج: {path}",
-  "plugin.ack.execute": "أؤكد أن هذا سينفّذ شيفرة تطبيق محلية كمستخدم Windows الحالي",
+  "plugin.ack.execute": "أؤكد أن هذا سينفّذ شيفرة تطبيق محلية كمستخدم الحالي",
   "plugin.ack.sandbox": "تحققت من حالة الصندوق أعلاه بدل الثقة باسم الناشر وحده",
   "plugin.ack.authority": "أؤكد أن الحسابات والأسرار وسلطة التداول الحي لا تُفتح باختيار الثقة هذا",
   "plugin.ack.runtime": "أؤكد بيئة التشغيل: {runtime}",

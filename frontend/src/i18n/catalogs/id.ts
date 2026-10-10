@@ -3480,7 +3480,7 @@ export const id = {
   "plugin.runtime.refs": "{count} referensi",
   "plugin.runtime.probed": "terverifikasi probe",
   "plugin.runtime.devLocal": "Pilihan lokal pengembang yang tidak dapat direproduksi: {path}",
-  "plugin.ack.execute": "Saya mengonfirmasi ini akan mengeksekusi kode aplikasi lokal sebagai pengguna Windows saat ini",
+  "plugin.ack.execute": "Saya mengonfirmasi ini akan mengeksekusi kode aplikasi lokal sebagai pengguna saat ini",
   "plugin.ack.sandbox": "Saya telah memeriksa status sandbox di atas alih-alih mempercayai nama penerbit saja",
   "plugin.ack.authority": "Saya mengonfirmasi bahwa akun, rahasia, dan otoritas live-trading tidak dibuka oleh pilihan kepercayaan ini",
   "plugin.ack.runtime": "Saya mengonfirmasi runtime: {runtime}",
