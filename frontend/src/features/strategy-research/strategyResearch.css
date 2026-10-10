@@ -50,6 +50,15 @@
 
 .strategy-research-advanced {
   padding: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.strategy-research-advanced > .app-layout {
+  flex: 1;
+  width: 100%;
+  height: auto;
+  min-height: 0;
 }
 
 .strategy-research-imported-chart .tv-lightweight-charts,

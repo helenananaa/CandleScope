@@ -580,6 +580,9 @@ export default function StrategyResearchApp({
               : <BacktestResearchApp search={advancedSearch} />}
           </Suspense>
         </MarketDataWorkspaceProvider>
+        {(intent.page === "local" || intent.page === "backtest") && (
+          <StrategyResearchCompatNotice page={intent.page} />
+        )}
       </section>
     );
   }
