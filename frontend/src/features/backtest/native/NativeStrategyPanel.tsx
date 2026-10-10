@@ -30,7 +30,12 @@ type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | 
 };
 export default function NativeStrategyPanel(props: NativeStrategyPanelProps) {
   useLocale();
-  const [collection, setCollection] = useState(() => normalizeNativeStrategies(props.nativeStrategies));
+  const collectionKey = `candlescope.native-strategies:${props.cellScope}`;
+  const [collection, setCollection] = useState(() => {
+    if (props.nativeStrategies !== undefined) return normalizeNativeStrategies(props.nativeStrategies);
+    try { return normalizeNativeStrategies(JSON.parse(localStorage.getItem(collectionKey) ?? "null")); }
+    catch { return normalizeNativeStrategies(null); }
+  });
   const current = useRef(collection);
   const persist = useRef(props.onNativeStrategiesChange);
   persist.current = props.onNativeStrategiesChange;
@@ -40,8 +45,13 @@ export default function NativeStrategyPanel(props: NativeStrategyPanelProps) {
   const [storageError, setStorageError] = useState("");
   const update = useCallback((change: (value: NativeStrategyCollection) => NativeStrategyCollection) => {
     const next = change(current.current);
-    current.current = next; setCollection(next); persist.current?.(next);
-  }, []);
+    current.current = next; setCollection(next);
+    if (persist.current) persist.current(next);
+    else {
+      try { localStorage.setItem(collectionKey, JSON.stringify(next)); setStorageError(""); }
+      catch { setStorageError(t("native.saveFailed")); }
+    }
+  }, [collectionKey]);
   const updateInstance = useCallback((id: string, change: Partial<NativeStrategyInstance>) => {
     update((value) => ({ ...value, items: value.items.map((item) => item.id === id ? { ...item, ...change, drafts: { ...item.drafts, ...change.drafts }, runs: { ...item.runs, ...change.runs }, runHistory: { ...item.runHistory, ...change.runHistory } } : item) }));
   }, [update]);
