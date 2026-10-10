@@ -173,6 +173,10 @@ async function boot() {
     workspaceBus, appWorkBudget, seriesSnapshots, process,
   });
 
+  trustedIpc.on(DESKTOP_IPC.backendEndpoint, (event) => {
+    event.returnValue = { port: backendPort };
+  });
+
   trustedIpc.on(DESKTOP_IPC.managementSession, (event) => {
     event.returnValue = supervisor ? {
       apiBase: `http://127.0.0.1:${backendPort}/api/v2/plugins`,
