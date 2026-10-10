@@ -8,12 +8,6 @@ import {
   WatchlistRailIcon,
 } from "../../../app/marketRailIcons.js";
 import type { MarketRailViewDescriptor } from "../../../app/marketRailTypes.js";
-import {
-  MARKET_DOCK_DEFAULT_HEIGHT,
-  MARKET_DOCK_MAX_HEIGHT,
-  MARKET_DOCK_MIN_HEIGHT,
-  MARKET_RAIL_MIN_SIDEBAR_HEIGHT,
-} from "../../../shared/marketRailLayout.js";
 import ReplayCapabilitySurface from "./ReplayCapabilitySurface.js";
 import { buildReplayCapabilityModel } from "../replayCapabilityModel.js";
 import ReplayMarketDataDock from "./ReplayMarketDataDock.js";
@@ -67,48 +61,38 @@ function ReplayRightMarketRail({
     selectedTrack?.historical_book ?? null,
   ), [runtime.store.sessionConfig?.source_kind, selectedTrack?.historical_book]);
 
+  // One view at a time, ordered by how often a trader reaches for it.
   const views = useMemo<MarketRailViewDescriptor[]>(() => [
-    {
-      id: REPLAY_RAIL_VIEW_IDS.watchlist,
-      title: t("replay.rail.watchlist", {}, locale),
-      icon: <WatchlistRailIcon />,
-      order: 10,
-      sizing: "flex",
-      defaultHeight: 260,
-      minHeight: MARKET_RAIL_MIN_SIDEBAR_HEIGHT,
-      collapsedSummary: t("replay.rail.watchlistSummary", {}, locale),
-    },
     {
       id: REPLAY_RAIL_VIEW_IDS.paper,
       title: t("replay.rail.paper", {}, locale),
       icon: <PaperRailIcon />,
-      order: 20,
-      sizing: "fixed",
-      defaultHeight: MARKET_DOCK_DEFAULT_HEIGHT,
-      minHeight: MARKET_DOCK_MIN_HEIGHT,
-      maxHeight: MARKET_DOCK_MAX_HEIGHT,
+      order: 10,
+      sizing: "flex",
       collapsedSummary: t("replay.rail.paperSummary", {}, locale),
     },
     {
       id: REPLAY_RAIL_VIEW_IDS.account,
       title: t("replay.rail.account", {}, locale),
       icon: <AccountRailIcon />,
-      order: 30,
-      sizing: "fixed",
-      defaultHeight: MARKET_DOCK_DEFAULT_HEIGHT,
-      minHeight: 180,
-      maxHeight: MARKET_DOCK_MAX_HEIGHT,
+      order: 20,
+      sizing: "flex",
       collapsedSummary: t("replay.rail.accountSummary", {}, locale),
+    },
+    {
+      id: REPLAY_RAIL_VIEW_IDS.watchlist,
+      title: t("replay.rail.watchlist", {}, locale),
+      icon: <WatchlistRailIcon />,
+      order: 30,
+      sizing: "flex",
+      collapsedSummary: t("replay.rail.watchlistSummary", {}, locale),
     },
     {
       id: REPLAY_RAIL_VIEW_IDS.activity,
       title: t("replay.rail.activity", {}, locale),
       icon: <ActivityRailIcon />,
       order: 40,
-      sizing: "fixed",
-      defaultHeight: MARKET_DOCK_DEFAULT_HEIGHT,
-      minHeight: MARKET_DOCK_MIN_HEIGHT,
-      maxHeight: MARKET_DOCK_MAX_HEIGHT,
+      sizing: "flex",
       collapsedSummary: t("replay.rail.activitySummary", {}, locale),
     },
     {
@@ -116,30 +100,20 @@ function ReplayRightMarketRail({
       title: t("replay.rail.capabilities", {}, locale),
       icon: <CapabilityRailIcon />,
       order: 50,
-      sizing: "fixed",
-      defaultHeight: 280,
-      minHeight: 160,
-      maxHeight: MARKET_DOCK_MAX_HEIGHT,
+      sizing: "flex",
       collapsedSummary: t("replay.rail.capabilitiesSummary", {}, locale),
     },
   ], [locale]);
 
-  const onToggleView = useCallback((viewId: string) => {
-    actions.toggleView(viewId as ReplayRailViewId);
+  const onActivateView = useCallback((viewId: string) => {
+    actions.activateView(viewId as ReplayRailViewId);
   }, [actions]);
 
-  const effectiveRailWidth = preferences.openViewIds.includes(REPLAY_RAIL_VIEW_IDS.paper)
-    || preferences.openViewIds.includes(REPLAY_RAIL_VIEW_IDS.account)
-    ? Math.max(400, preferences.railWidth)
+  const tradingViewOpen = preferences.openViewIds[0] === REPLAY_RAIL_VIEW_IDS.paper
+    || preferences.openViewIds[0] === REPLAY_RAIL_VIEW_IDS.account;
+  const effectiveRailWidth = tradingViewOpen
+    ? Math.max(360, preferences.railWidth)
     : preferences.railWidth;
-
-  const onViewHeightChange = useCallback((viewId: string, height: number) => {
-    actions.setViewHeight(viewId as ReplayRailViewId, height);
-  }, [actions]);
-
-  const closeView = useCallback((viewId: string) => {
-    actions.closeView(viewId as ReplayRailViewId);
-  }, [actions]);
 
   const renderView = useCallback((viewId: string) => {
     if (viewId === REPLAY_RAIL_VIEW_IDS.watchlist) {
@@ -148,11 +122,9 @@ function ReplayRightMarketRail({
           runtime={runtime}
           viewer={viewer}
           collapsed={false}
+          embedded
           onCollapsedChange={(collapsed) => {
-            if (collapsed) closeView(REPLAY_RAIL_VIEW_IDS.watchlist);
-            else if (!preferences.openViewIds.includes(REPLAY_RAIL_VIEW_IDS.watchlist)) {
-              onToggleView(REPLAY_RAIL_VIEW_IDS.watchlist);
-            }
+            if (collapsed) actions.setPanelCollapsed(true);
           }}
         />
       );
@@ -177,15 +149,6 @@ function ReplayRightMarketRail({
         data-active-dock={dockAttr}
         aria-label={t("replay.rail.dockAria", { title }, locale)}
       >
-        <header className="replay-market-dock-tabs">
-          <span className="ob-title">{title}</span>
-          <button
-            type="button"
-            className="replay-market-dock-collapse"
-            onClick={() => closeView(viewId)}
-            aria-label={t("replay.rail.collapse", { title }, locale)}
-          >×</button>
-        </header>
         <div className="replay-market-dock-body">
           {viewId === REPLAY_RAIL_VIEW_IDS.capabilities && (
             <ReplayCapabilitySurface capabilities={capabilities} />
@@ -215,12 +178,10 @@ function ReplayRightMarketRail({
       </section>
     );
   }, [
+    actions,
     capabilities,
-    closeView,
     formatTime,
     indicators.status,
-    onToggleView,
-    preferences.openViewIds,
     runtime,
     locale,
     viewer,
@@ -229,19 +190,18 @@ function ReplayRightMarketRail({
   return (
     <MarketRightRailFrame
       source="replay"
+      layoutMode="single-view"
       ariaLabel={t("replay.rail.sidebarAria")}
       views={views}
       openViewIds={preferences.openViewIds}
       panelCollapsed={preferences.panelCollapsed}
-      onToggleView={onToggleView}
+      onToggleView={onActivateView}
       onTogglePanelCollapsed={actions.togglePanelCollapsed}
       renderView={renderView}
       layout={{
         width: effectiveRailWidth,
         onWidthChange: actions.setRailWidth,
       }}
-      viewHeights={preferences.viewHeights}
-      onViewHeightChange={onViewHeightChange}
       upColor={upColor}
       downColor={downColor}
     />

@@ -17,9 +17,14 @@ export interface ReplayWatchlistPanelProps {
   readonly viewer: ReplayViewerRuntime;
   readonly collapsed: boolean;
   readonly onCollapsedChange: (value: boolean) => void;
+  /**
+   * Hosted inside a rail that already titles the view: drop the inner header
+   * and only list catalog matches once the user starts searching.
+   */
+  readonly embedded?: boolean;
 }
 
-function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }: ReplayWatchlistPanelProps) {
+function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange, embedded = false }: ReplayWatchlistPanelProps) {
   const locale = useLocale();
   const config = runtime.store.sessionConfig;
   const runId = viewer.viewerState?.run_id ?? null;
@@ -60,6 +65,8 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
       )
     )).slice(0, 20);
   }, [catalog, config, marketQuery]);
+
+  const showCatalogResults = !embedded || marketQuery.trim().length > 0;
 
   const addCatalogMarket = async (entry: ReplayCatalogEntry, target: "watchlist" | "current" | "new" = "watchlist") => {
     if (config === null || addingMarket !== null || viewer.viewerPending || viewer.controlPending) return;
@@ -244,10 +251,11 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
   return (
     <div
       className={`watchlist-pane replay-watchlist-pane ${collapsed ? "collapsed" : ""}`}
+      data-embedded={embedded ? "true" : undefined}
       data-replay-local-tiers="false"
       data-replay-watchlist-source="run-archive"
     >
-      <div className="wl-header">
+      {!embedded && <div className="wl-header">
         <button
           className="wl-collapse-btn"
           type="button"
@@ -255,13 +263,13 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
           title={collapsed ? t("replay.watchlist.expand") : t("replay.watchlist.collapse")}
         >{collapsed ? "‹" : "›"}</button>
         {!collapsed && <><span className="wl-header-title">{t("replay.watchlist.title")}</span><small>{t("replay.watchlist.subtitle")}</small></>}
-      </div>
+      </div>}
       {collapsed ? (
         <div className="wl-collapsed-icons" title={t("replay.watchlist.primaryFull")}>R</div>
       ) : (
         <div className="replay-watchlist-rows">
           <section className="replay-watchlist-group replay-market-search">
-            <header>
+            {!embedded && <header>
               <i style={{ background: "var(--accent-cyan)" }} />
               <span>{t("replay.watchlist.add")}</span>
               <button
@@ -269,21 +277,30 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
                 disabled={runId === null || addingMarket !== null}
                 onClick={() => setCatalogAttempt((value) => value + 1)}
               >{t("replay.watchlist.refresh")}</button>
-            </header>
+            </header>}
             <label>
-              <span>{t("replay.watchlist.search")}</span>
+              {!embedded && <span>{t("replay.watchlist.search")}</span>}
               <input
+                type="search"
+                title={embedded ? t("replay.watchlist.hint") : undefined}
                 aria-label={t("replay.watchlist.search")}
                 value={marketQuery}
                 onChange={(event) => setMarketQuery(event.target.value)}
                 placeholder={t("replay.watchlist.searchPlaceholder")}
               />
             </label>
-            <small>{t("replay.watchlist.hint")}</small>
-            {catalogError !== null && <p role="alert">{catalogError}</p>}
-            {catalog === null && catalogError === null && <p>{t("replay.watchlist.loading")}</p>}
-            {catalog !== null && catalogEntries.length === 0 && <p>{t("replay.watchlist.noMatch")}</p>}
-            <div className="replay-market-search-results">
+            {!embedded && <small>{t("replay.watchlist.hint")}</small>}
+            {catalogError !== null && <p role="alert">
+              {catalogError}
+              {embedded && <button
+                type="button"
+                disabled={runId === null || addingMarket !== null}
+                onClick={() => setCatalogAttempt((value) => value + 1)}
+              >{t("replay.watchlist.refresh")}</button>}
+            </p>}
+            {showCatalogResults && catalog === null && catalogError === null && <p>{t("replay.watchlist.loading")}</p>}
+            {showCatalogResults && catalog !== null && catalogEntries.length === 0 && <p>{t("replay.watchlist.noMatch")}</p>}
+            {showCatalogResults && <div className="replay-market-search-results">
               {catalogEntries.map((entry) => {
                 const key = symbolKey(
                   entry.identity.symbol,
@@ -318,7 +335,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
                   </div>
                 );
               })}
-            </div>
+            </div>}
           </section>
           {groups.map((group) => (
             <section className="replay-watchlist-group" key={group.id}>

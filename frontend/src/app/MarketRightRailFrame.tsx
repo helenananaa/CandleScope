@@ -24,8 +24,16 @@ export interface MarketRightRailLayout {
   readonly onWidthChange?: (value: number) => void;
 }
 
+export type MarketRightRailLayoutMode = "scroll-accordion" | "single-view";
+
 export interface MarketRightRailFrameProps {
   readonly source?: "live" | "replay";
+  /**
+   * `scroll-accordion` stacks every view in one scrolling column.
+   * `single-view` shows only the first open view at full panel height; the
+   * activity bar is the only navigation and the owner decides selection.
+   */
+  readonly layoutMode?: MarketRightRailLayoutMode;
   readonly views: readonly MarketRailViewDescriptor[];
   /** Independently expanded accordion views. */
   readonly openViewIds: readonly string[];
@@ -91,6 +99,7 @@ function PanelCollapseIcon({ collapsed }: { collapsed: boolean }) {
 /** One shared free multi-open scroll accordion for live and replay runtimes. */
 export default function MarketRightRailFrame({
   source = "live",
+  layoutMode = "scroll-accordion",
   views,
   openViewIds,
   panelCollapsed = false,
@@ -124,7 +133,21 @@ export default function MarketRightRailFrame({
     () => views.slice().sort((left, right) => left.order - right.order || left.id.localeCompare(right.id)),
     [views],
   );
-  const panelOpen = sortedViews.length > 0 && !panelCollapsed;
+  const singleView = layoutMode === "single-view";
+  const activeView = singleView
+    ? sortedViews.find((view) => view.id === openViewIds[0]) ?? null
+    : null;
+  // Views stay mounted after their first visit so switching away and back
+  // keeps drafts (ticket inputs, selected tabs) intact.
+  const [visitedViewIds, setVisitedViewIds] = useState<readonly string[]>(
+    () => (activeView === null ? [] : [activeView.id]),
+  );
+  if (activeView !== null && !visitedViewIds.includes(activeView.id)) {
+    setVisitedViewIds([...visitedViewIds, activeView.id]);
+  }
+  const panelOpen = sortedViews.length > 0
+    && !panelCollapsed
+    && (!singleView || activeView !== null);
   const widthBounds = marketRailWidthBounds(viewportWidth);
   const width = clamp(transientWidth ?? layout.width, widthBounds.min, widthBounds.max);
   const effectiveHeights = transientHeights ?? viewHeights;
@@ -291,7 +314,7 @@ export default function MarketRightRailFrame({
       style={colorVars}
       aria-label={resolvedAriaLabel}
       data-runtime-source={source}
-      data-layout-mode="scroll-accordion"
+      data-layout-mode={layoutMode}
       data-market-shell-owner="right-rail"
       data-panel-open={panelOpen ? "true" : "false"}
       data-panel-collapsed={panelCollapsed ? "true" : "false"}
@@ -307,6 +330,49 @@ export default function MarketRightRailFrame({
               aria-orientation="vertical"
             />
           )}
+          {singleView ? (
+            <div
+              className="market-rail-panel market-rail-single"
+              style={{ width, display: panelOpen ? undefined : "none" }}
+              data-market-shell-owner="right-rail-panel"
+              aria-hidden={panelOpen ? undefined : true}
+            >
+              {activeView !== null && (
+                <header className="market-rail-single-header">
+                  <strong>{activeView.title}</strong>
+                  {activeView.collapsedSummary != null && (
+                    <span>{activeView.collapsedSummary}</span>
+                  )}
+                  {onTogglePanelCollapsed && (
+                    <button
+                      type="button"
+                      className="market-rail-single-hide"
+                      title={t("rail.hidePanel")}
+                      aria-label={t("rail.hidePanel")}
+                      onClick={onTogglePanelCollapsed}
+                    >
+                      <PanelCollapseIcon collapsed />
+                    </button>
+                  )}
+                </header>
+              )}
+              {sortedViews.filter((view) => visitedViewIds.includes(view.id)).map((view) => {
+                const active = view.id === activeView?.id;
+                return (
+                  <section
+                    key={view.id}
+                    id={`market-rail-view-${source}-${view.id}`}
+                    className="market-rail-single-body"
+                    data-rail-view={view.id}
+                    data-expanded={active ? "true" : "false"}
+                    hidden={!active}
+                  >
+                    {renderView(view.id, 0)}
+                  </section>
+                );
+              })}
+            </div>
+          ) : (
           <div
             ref={panelRef}
             className="market-rail-panel"
@@ -382,6 +448,7 @@ export default function MarketRightRailFrame({
               );
             })}
           </div>
+          )}
         </>
       )}
 
@@ -412,7 +479,7 @@ export default function MarketRightRailFrame({
             </button>
           );
         })}
-        {onTogglePanelCollapsed && (
+        {onTogglePanelCollapsed && !singleView && (
           <button
             type="button"
             className={`market-activity-item market-activity-collapse ${panelCollapsed ? "active" : ""}`}
