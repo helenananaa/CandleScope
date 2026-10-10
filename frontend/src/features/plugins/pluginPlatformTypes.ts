@@ -1271,7 +1271,7 @@ export interface PluginPlatformRuntime {
     applyV1CompatibilityImport(previewSha256: string): Promise<void>;
     previewV1CompatibilityRollback(): Promise<PluginV1CompatibilityPreview>;
     applyV1CompatibilityRollback(previewSha256: string): Promise<void>;
-    installBundle(file: File): Promise<void>;
+    installBundle(file: File): Promise<{ restartRequired: boolean } | void>;
     prepareLocalInstall(file: File): Promise<PluginLocalInstallCandidate>;
     reviewLocalInstall(
       candidateId: string,

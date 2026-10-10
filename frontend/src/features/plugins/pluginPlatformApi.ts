@@ -495,7 +495,7 @@ export async function activatePluginMarketplaceRelease(pluginId: string): Promis
   });
 }
 
-export async function installPluginBundle(file: File): Promise<void> {
+export async function installPluginBundle(file: File): Promise<{ restartRequired: boolean }> {
   const session = consumeManagementSession();
   if (!session) throw new PluginPlatformApiError("Plugin management requires a trusted desktop session", 403);
   if (!file.name.toLowerCase().endsWith(".cspkg") || file.size < 1 || file.size > 16 * 1024 * 1024) {
@@ -515,8 +515,9 @@ export async function installPluginBundle(file: File): Promise<void> {
     credentials: "omit",
     body: file,
   });
-  await responseJson(response);
+  const result = await responseJson(response) as { kind?: string };
   invalidatePluginControlReads();
+  return { restartRequired: result.kind === "script-runtime" };
 }
 
 async function pluginBundleUploadIdentity(file: File): Promise<string> {

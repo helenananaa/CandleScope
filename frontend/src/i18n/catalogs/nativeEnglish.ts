@@ -27,7 +27,7 @@ export const nativeEnglish = {
   "report.long": "Long",
   "report.short": "Short",
   "report.unknownSide": "Direction unavailable",
-  "report.tradeBasis": "P&L from engine report; return shown only when supplied. Select a trade to locate it on the chart.",
+  "report.tradeBasis": "P&L comes from the engine. Percentages use engine values or verified entry notional, not account return. Select a trade to locate it.",
   "report.sample": "First equity sample",
   "report.range": "Report period",
 

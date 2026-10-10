@@ -382,7 +382,7 @@ export default function IndicatorEditor({
 
       <div style={{ padding: '24px', flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
         {/* Name input */}
-        <div className="indicator-editor-field" style={{ marginBottom: '24px' }}>
+        <div className="indicator-editor-field" style={{ marginBottom: '8px' }}>
           <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: 500 }}>{t("indicator.editor.name")}</label>
           <input
             type="text"
@@ -397,8 +397,8 @@ export default function IndicatorEditor({
         </div>
 
         {/* Code editor */}
-        <div className="indicator-editor-code-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '8px', marginTop: '-8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div className="indicator-editor-code-label" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '8px', marginBottom: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>
               {t("indicator.editor.script", { language: displayedLanguage?.name || requestedLanguageId || t("indicator.editor.fallbackLanguage") })}
             </span>

@@ -1,5 +1,10 @@
 export const zhCN = {
-  "native.platformHelp": "官方 Pine / Pyne 插件目前仅支持 Windows + CPython 3.12。没有兼容运行时也可使用教学模板和内置指标。",
+  "plugin.runtimeInstalled": "脚本运行时已安装并通过校验。请退出并重新打开 CandleScope，启用指标及受支持的原生策略。",
+  "native.executionErrorHelp": "运行未完成。请检查脚本和输入参数，下方可查看具体原因。",
+  "native.jumpToError": "定位到第 {line} 行，第 {column} 列",
+  "report.notionalReturn": "盈亏 / 开仓名义金额（非账户收益率）",
+
+  "native.platformHelp": "Pine 0.3.2 提供 macOS（Apple Silicon / Intel）安装包；Pyne 运行时跨平台，但当前官方插件包仍为 Windows 版。请安装匹配系统和 Python 版本的包。",
   "indicator.editor.pyneApiHint": "Pyne API：",
   "indicator.editor.pineApiHint": "Pine v5/v6 收盘 K 线 API：",
   "serverError.notFound": "请求的内容不存在，可能已被删除",
@@ -38,7 +43,7 @@ export const zhCN = {
   "report.long": "多头",
   "report.short": "空头",
   "report.unknownSide": "方向未提供",
-  "report.tradeBasis": "盈亏取自引擎报告；收益率仅在引擎提供时显示。点击交易可定位主图。",
+  "report.tradeBasis": "盈亏取自引擎；百分比取引擎值，或在可核验开仓时按开仓名义金额计算（非账户收益率）。点击交易定位主图。",
   "report.sample": "首个权益采样",
   "report.range": "报告区间",
 

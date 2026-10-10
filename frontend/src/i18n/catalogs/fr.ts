@@ -2,7 +2,11 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const fr = {
-  "native.platformHelp": "Les plugins officiels Pine / Pyne prennent actuellement en charge uniquement Windows avec CPython 3.12. Les modèles pédagogiques et les indicateurs intégrés restent disponibles sans environnement compatible.",
+  "plugin.runtimeInstalled": "Moteur de scripts installé et vérifié. Fermez puis rouvrez CandleScope pour activer les indicateurs et les stratégies natives compatibles.",
+  "native.executionErrorHelp": "L’exécution n’a pas abouti. Vérifiez le script et les paramètres ; les détails techniques figurent ci-dessous.",
+  "native.jumpToError": "Aller à la ligne {line}, colonne {column}",
+  "report.notionalReturn": "Gain/perte / notionnel à l’entrée (pas le rendement du compte)",
+  "native.platformHelp": "Pine 0.3.2 fournit des paquets macOS Apple Silicon et Intel. Pyne est multiplateforme, mais son paquet de module officiel reste destiné à Windows. Choisissez le paquet adapté au système et à Python.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "API Pine v5/v6 sur barres clôturées :",
   "serverError.notFound": "L’élément demandé n’existe pas ou a été supprimé",

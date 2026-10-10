@@ -2,7 +2,11 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const th = {
-  "native.platformHelp": "ปลั๊กอิน Pine / Pyne ทางการรองรับเฉพาะ Windows กับ CPython 3.12 ในขณะนี้ หากไม่มีรันไทม์ที่เข้ากันได้ ยังใช้เทมเพลตการเรียนรู้และอินดิเคเตอร์ในตัวได้",
+  "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
+  "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",
+  "native.jumpToError": "Go to line {line}, column {column}",
+  "report.notionalReturn": "P&L / entry notional (not account return)",
+  "native.platformHelp": "Pine 0.3.2 provides macOS Apple Silicon and Intel bundles. Pyne is cross-platform, but its current official plugin bundle is Windows-only. Match the bundle to your system and Python version.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "Pine v5/v6 closed-bar API:",
   "serverError.notFound": "ไม่พบรายการที่ขอ หรือถูกลบไปแล้ว",

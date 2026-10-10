@@ -2,7 +2,11 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ru = {
-  "native.platformHelp": "Официальные плагины Pine / Pyne пока поддерживают только Windows с CPython 3.12. Учебные шаблоны и встроенные индикаторы доступны без совместимой среды выполнения.",
+  "plugin.runtimeInstalled": "Среда скриптов установлена и проверена. Закройте и снова откройте CandleScope, чтобы включить индикаторы и поддерживаемые нативные стратегии.",
+  "native.executionErrorHelp": "Не удалось завершить запуск. Проверьте скрипт и параметры; технические сведения приведены ниже.",
+  "native.jumpToError": "Перейти к строке {line}, столбцу {column}",
+  "report.notionalReturn": "Прибыль/убыток / номинал входа (не доходность счёта)",
+  "native.platformHelp": "Pine 0.3.2 предлагает пакеты для macOS Apple Silicon и Intel. Среда Pyne кроссплатформенная, но официальный пакет плагина пока предназначен для Windows. Выберите пакет для своей системы и версии Python.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "API Pine v5/v6 по закрытым барам:",
   "serverError.notFound": "Запрошенный элемент не существует или был удалён",

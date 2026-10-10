@@ -25,6 +25,8 @@ from app.plugin_paper_v2.errors import PaperTradingError
 from app.plugin_security_v2.errors import PlatformSecurityError
 from app.plugin_security_v2.management import LocalManagementGuard
 
+from app.plugin_runtime.errors import PluginHostError
+from .runtime_install import is_runtime_bundle, install_runtime_bundle
 from .errors import CorePluginError
 from .runtime import CorePluginPlatform, DisabledCorePluginPlatform
 
@@ -258,6 +260,7 @@ def _raise_api_error(exc: Exception) -> None:
         exc,
         (
             CorePluginError,
+            PluginHostError,
             PlatformInstallerBaseError,
             PlatformSecurityError,
             PaperTradingError,
@@ -791,6 +794,12 @@ def create_core_plugin_router() -> APIRouter:
         upload = None
         try:
             upload, expected_sha256 = await _bundle_upload(request, platform)
+            if await asyncio.to_thread(is_runtime_bundle, upload):
+                result = await asyncio.to_thread(
+                    install_runtime_bundle, upload, expected_sha256,
+                    platform.installer.host_version,
+                )
+                return {"kind": "script-runtime", "installation": result.to_wire()}
             bundle = await asyncio.to_thread(
                 verify_platform_bundle,
                 upload,

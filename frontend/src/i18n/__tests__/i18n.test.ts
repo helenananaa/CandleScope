@@ -410,6 +410,7 @@ function stripProtocol(text: string): string {
   return text
     .replace(/\{\{?[A-Za-z0-9_]+\}?\}/g, " ")
     .replace(/\b(?:React|Lightweight Charts)\b/g, " ")
+    .replace(/\b(?:Apple Silicon|Intel)\b/g, " ")
     .replace(/\bHome\b/g, " ") // Keyboard key label; lowercase English prose still counts.
     .replace(/\b[\w-]+\.(?:csv|json)\b/g, " ")
     .replace(/\b[a-z]+(?:_[a-z0-9]+)+=(?:true|false)\b/g, " ")

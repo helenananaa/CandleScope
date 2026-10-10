@@ -1,7 +1,11 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
-  "native.platformHelp": "Os plugins oficiais Pine / Pyne oferecem suporte apenas ao Windows com CPython 3.12. Modelos didáticos e indicadores integrados continuam disponíveis sem um ambiente compatível.",
+  "plugin.runtimeInstalled": "Runtime de scripts instalado e verificado. Feche e abra o CandleScope para ativar os indicadores e as estratégias nativas compatíveis.",
+  "native.executionErrorHelp": "Não foi possível concluir a execução. Confira o script e os parâmetros; os detalhes técnicos estão abaixo.",
+  "native.jumpToError": "Ir para a linha {line}, coluna {column}",
+  "report.notionalReturn": "Lucro/prejuízo / valor nocional de entrada (não é o retorno da conta)",
+  "native.platformHelp": "O Pine 0.3.2 oferece pacotes para macOS Apple Silicon e Intel. O runtime Pyne é multiplataforma, mas o pacote oficial do plugin ainda é para Windows. Instale o pacote compatível com seu sistema e sua versão do Python.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "API Pine v5/v6 de barras fechadas:",
   "serverError.notFound": "O item solicitado não existe ou foi excluído",
@@ -40,7 +44,7 @@ export const ptBR = {
   "report.long": "Comprado",
   "report.short": "Vendido",
   "report.unknownSide": "Direção não informada",
-  "report.tradeBasis": "Lucro e prejuízo conforme o relatório do mecanismo; o retorno só aparece quando informado. Selecione uma operação para localizá-la no gráfico.",
+  "report.tradeBasis": "O lucro/prejuízo vem do motor. O retorno usa valores do motor ou o valor nocional de entrada verificado, não o retorno da conta. Selecione uma operação para localizá-la no gráfico.",
   "report.sample": "Primeira amostra de patrimônio",
   "report.range": "Período do relatório",
 

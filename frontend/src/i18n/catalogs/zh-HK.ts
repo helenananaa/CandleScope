@@ -2,7 +2,11 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhHK = {
-  "native.platformHelp": "官方 Pine / Pyne 外掛目前僅支援 Windows + CPython 3.12。沒有相容執行環境仍可使用教學範本和內建指標。",
+  "plugin.runtimeInstalled": "指標執行環境已安裝並通過驗證。請退出並重新開啟 CandleScope，啟用指標及支援的原生策略。",
+  "native.executionErrorHelp": "執行未完成。請檢查程式碼和輸入參數，下方可查看具體原因。",
+  "native.jumpToError": "跳至第 {line} 行，第 {column} 欄",
+  "report.notionalReturn": "盈虧 / 開倉名目金額（非帳戶報酬率）",
+  "native.platformHelp": "Pine 0.3.2 提供 macOS（Apple Silicon / Intel）安裝包；Pyne 執行環境跨平台，但目前官方擴充套件仍為 Windows 版。請安裝符合系統及 Python 版本的套件。",
   "indicator.editor.pyneApiHint": "Pyne API：",
   "indicator.editor.pineApiHint": "Pine v5/v6 收市 K 線 API：",
   "serverError.notFound": "請求的內容不存在，可能已被刪除",

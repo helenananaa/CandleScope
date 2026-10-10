@@ -1,3 +1,4 @@
+import { diagnosticLocation } from "./nativeDiagnostics.js";
 import NativeStrategyComparison from "./NativeStrategyComparison.js";
 import { recordStrategyRun, strategyRunIds, normalizeNativeStrategies, copyNativeStrategy, strategyInstanceScope, type NativeStrategyInstance, type NativeStrategyCollection } from "./nativeStrategyCollection.js";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -154,6 +155,9 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const [historicalRun, setHistoricalRun] = useState<NativeRun | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const sourceEditor = useRef<HTMLTextAreaElement>(null);
+  const errorDetails = error || (run?.error ? `${run.error.message}\n${JSON.stringify(run.error.details ?? {}, null, 2)}` : "");
+  const errorLocation = diagnosticLocation(errorDetails, source);
   const [resolution, setResolution] = useState<ChartContextResolution | null>(null);
   const [automatic, setAutomatic] = useState(false);
   const [automaticContexts, setAutomaticContexts] = useState<NativePreparationContext[]>([]);
@@ -250,7 +254,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
     if (run?.result) setPreviousRun(run);
     setHistoricalRun(null); setBusy(true); setError(""); setRun(null); setPreparation(null); setResolution(null);
     try {
-      const params: unknown = JSON.parse(parameters);
+      let params: unknown;
+      try { params = JSON.parse(parameters); } catch { throw new Error(t("native.parametersInvalid")); }
       if (!params || Array.isArray(params) || typeof params !== "object") throw new Error(t("native.parametersInvalid"));
       const context = props.session;
       const execution = executionInputs(mode, hostSettings, fidelity, fillRecalculation, executionData);
@@ -349,9 +354,19 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       <button disabled={preparation.stage === "STARTING" || preparation.cancel_requested} onClick={() => void preparationRequest<PreparationJob>(`/${preparation.id}/cancel`, { method: "POST" }).then((value) => { preparationSubmission.current = null; setPreparation(value); }).catch((reason) => setError(String(reason)))}>{t("preparation.cancel")}</button>
     </p>}
     {resolution && resolution.status !== "READY" && <p>{resolution.status} <button disabled={busy} onClick={() => void start(true)}>{t("native.prepare")}</button></p>}
-    {(error || run?.error) && <pre role="alert">{error || `${run?.error?.message}\n${JSON.stringify(run?.error?.details ?? {}, null, 2)}`}</pre>}
+    {errorDetails && <div role="alert" className="native-error-help">
+      <p>{errorDetails.includes(t("native.parametersInvalid")) ? t("native.parametersInvalid") : t("native.executionErrorHelp")}</p>
+      {errorLocation && <button type="button" onClick={() => {
+        setTab("script");
+        requestAnimationFrame(() => {
+          const editor = sourceEditor.current;
+          if (editor) { editor.focus(); editor.setSelectionRange(errorLocation.offset, errorLocation.offset + 1); }
+        });
+      }}>{t("native.jumpToError", { line: errorLocation.line, column: errorLocation.column })}</button>}
+      <details><summary>{t("plugin.techDetails")}</summary><pre>{errorDetails}</pre></details>
+    </div>}
     <div hidden={props.docked && tab !== "script"}>
-    <div className="native-editor"><textarea aria-label={t("native.source")} value={source} disabled={busy} spellCheck={false} onChange={(event) => save(event.target.value, parameters)} />
+    <div className="native-editor"><textarea ref={sourceEditor} aria-label={t("native.source")} value={source} disabled={busy} spellCheck={false} onChange={(event) => save(event.target.value, parameters)} />
       <label>{t("native.parameters")}<textarea value={parameters} disabled={busy} onChange={(event) => save(source, event.target.value)} /></label></div>
     </div>
     <div hidden={props.docked && tab !== "settings"} className="native-dock-settings">

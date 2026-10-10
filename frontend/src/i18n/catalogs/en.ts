@@ -1,7 +1,11 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
-  "native.platformHelp": "Official Pine / Pyne plugins currently support Windows with CPython 3.12 only. Teaching templates and built-in indicators remain available without a compatible runtime.",
+  "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
+  "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",
+  "native.jumpToError": "Go to line {line}, column {column}",
+  "report.notionalReturn": "P&L / entry notional (not account return)",
+  "native.platformHelp": "Pine 0.3.2 provides macOS Apple Silicon and Intel bundles. Pyne is cross-platform, but its current official plugin bundle is Windows-only. Match the bundle to your system and Python version.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "Pine v5/v6 closed-bar API:",
   "serverError.notFound": "The requested item doesn't exist or was deleted",
@@ -40,7 +44,7 @@ export const en = {
   "report.long": "Long",
   "report.short": "Short",
   "report.unknownSide": "Direction unavailable",
-  "report.tradeBasis": "P&L from engine report; return shown only when supplied. Select a trade to locate it on the chart.",
+  "report.tradeBasis": "P&L comes from the engine. Percentages use engine values or verified entry notional, not account return. Select a trade to locate it.",
   "report.sample": "First equity sample",
   "report.range": "Report period",
 

@@ -9,6 +9,7 @@ export default function PluginInstallFlow({ runtime, onDone, onPendingChange }: 
   useLocale();
   const [pending, setPending] = useState(false);
   const [installed, setInstalled] = useState(false);
+  const [restartRequired, setRestartRequired] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => { onPendingChange?.(pending); }, [pending, onPendingChange]);
   useEffect(() => () => onPendingChange?.(false), [onPendingChange]);
@@ -22,13 +23,13 @@ export default function PluginInstallFlow({ runtime, onDone, onPendingChange }: 
           const file = event.target.files?.[0]; event.target.value = "";
           if (!file || pending) return;
           setPending(true); setError(null); setInstalled(false);
-          try { await runtime.actions.installBundle(file); setInstalled(true); }
+          try { const result = await runtime.actions.installBundle(file); setRestartRequired(result?.restartRequired ?? false); setInstalled(true); }
           catch (cause) { setError(cause instanceof Error ? describeError(cause, cause.message) : String(cause)); }
           finally { setPending(false); }
         }} />
       {pending && <p role="status">{t("pc.working")}</p>}
       {error && <p role="alert">{error}</p>}
-      {installed && <p role="status">{t("plugin.installedHint")}</p>}
+      {installed && <p role="status">{t(restartRequired ? "plugin.runtimeInstalled" : "plugin.installedHint")}</p>}
     </section>}
     <button type="button" disabled={pending} onClick={onDone}>{t("pc.installed")}</button>
   </section>;
