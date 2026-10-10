@@ -9,6 +9,7 @@ import sys
 import pytest
 
 from app.plugin_runtime.registry import RuntimeProcessSpec
+from app.plugin_host.process import SidecarProcessSpec
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX venv interpreter symlinks")
@@ -22,5 +23,9 @@ def test_process_spec_launch_preserves_venv_identity(tmp_path: Path) -> None:
         executable=executable,
         arguments=("-I", "-c", "import json,sys; print(json.dumps(sys.prefix))"),
     )
-    result = subprocess.run(spec.command, check=True, capture_output=True, text=True)
-    assert Path(json.loads(result.stdout)) == root
+    sidecar = SidecarProcessSpec(
+        identity=spec.runtime_id, executable=spec.executable, arguments=spec.arguments,
+    )
+    for command in (spec.command, sidecar.command):
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        assert Path(json.loads(result.stdout)) == root

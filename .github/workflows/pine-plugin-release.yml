@@ -11,6 +11,7 @@ on:
       - .github/workflows/pine-plugin-release.yml
       - backend/app/first_party_plugin_bootstrap.py
       - backend/app/plugin_runtime/registry.py
+      - backend/app/plugin_host/process.py
       - backend/tests/test_plugin_runtime_venv_launch.py
 
 permissions:
