@@ -108,7 +108,7 @@ def _bars(*, closed: bool = True) -> tuple[Bar, ...]:
 
 def _install_fake(monkeypatch: pytest.MonkeyPatch, engine: FakeEngine) -> None:
     monkeypatch.setattr(runtime_module, "_load_engine", lambda: engine)
-    monkeypatch.setattr(runtime_module, "_engine_version", lambda: "0.3.1")
+    monkeypatch.setattr(runtime_module, "_engine_version", lambda: "0.3.2")
 
 
 def test_descriptor_advertises_pine_without_source_snapshot(
