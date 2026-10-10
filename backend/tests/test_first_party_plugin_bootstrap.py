@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import platform
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -181,6 +182,66 @@ def test_download_verifies_before_committing_and_reuses_cache(tmp_path: Path) ->
     assert path.read_bytes() == payload
     assert calls == [(release.url, 7.5)]
     assert list(tmp_path.glob("*.download")) == []
+
+
+@pytest.mark.parametrize("machine", ["arm64", "x86_64"])
+def test_bootstrap_selects_matching_mac_variant(tmp_path: Path, monkeypatch, machine: str) -> None:
+    payload = b"verified mac bundle"
+    base = _release(payload, runtime_id="candlescope.pine-compat")
+    variants = [
+        replace(base, system="Windows", machine="AMD64", python_version="3.12"),
+        replace(base, system="Darwin", machine="arm64", python_version="3.12",
+                filename="pine-arm64.cspkg"),
+        replace(base, system="Darwin", machine="x86_64", python_version="3.12",
+                filename="pine-x86_64.cspkg"),
+        replace(base, system="Darwin", machine=machine, python_version="3.13",
+                filename="pine-other-python.cspkg"),
+    ]
+    pyne = replace(_release(b"windows pyne"), system="Windows", machine="AMD64")
+    lock = _write_lock(tmp_path / "releases.json", pyne, *variants)
+    routes = _write_routes(tmp_path / "routes.json", ("pyne", "candlescope.pyne"),
+                           ("pine", "candlescope.pine-compat"))
+    monkeypatch.setattr("app.first_party_plugin_bootstrap._host_platform", lambda: {
+        "system": "Darwin", "machine": machine,
+        "implementation": "CPython", "pythonVersion": "3.12",
+    })
+    selected = next(item for item in variants if item.machine == machine)
+    bundle = tmp_path / selected.filename
+    bundle.write_bytes(payload)
+    installed = []
+
+    class Installer:
+        def __init__(self, **kwargs):
+            pass
+
+        def list_plugins(self):
+            return ()
+
+        def install_many(self, bundles, **kwargs):
+            installed.extend(path.name for path, digest in bundles)
+            return (SimpleNamespace(changed=True, installation_path=tmp_path / "installed"),)
+
+        def install(self, path, **kwargs):
+            installed.append(path.name)
+            return SimpleNamespace(changed=True, installation_path=tmp_path / "installed")
+
+    result = ensure_first_party_plugins_from_environment(
+        host_name="CandleScope", host_version="0.3.2",
+        environ={"CANDLESCOPE_INDICATOR_RUNTIME_ROUTES": str(routes),
+                 "CANDLESCOPE_RUNTIME_REGISTRY": str(tmp_path / "runtime-registry.json"),
+                 "CANDLESCOPE_OFFICIAL_PLUGIN_BUNDLE": str(bundle)},
+        release_lock_path=lock, installer_factory=Installer,
+        opener=lambda *args, **kwargs: pytest.fail("local matching bundle must not download"),
+    )
+    assert result.status == "installed"
+    assert installed == [selected.filename]
+
+
+def test_release_lock_rejects_duplicate_platform_targets(tmp_path: Path) -> None:
+    release = _release(b"bundle", runtime_id="candlescope.pine-compat")
+    lock = _write_lock(tmp_path / "releases.json", release, replace(release, version="0.9.0"))
+    with pytest.raises(FirstPartyPluginBootstrapError, match="duplicate runtime platform targets"):
+        load_official_plugin_releases(lock)
 
 
 def test_download_rejects_wrong_bytes_without_poisoning_cache(tmp_path: Path) -> None:

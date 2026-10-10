@@ -5,7 +5,8 @@
 桥接到公开的 `candlescope.script-runtime/1` SDK。包内只有适配代码，不包含 Pine
 引擎源码快照，也不导入 CandleScope 后端私有模块。
 
-适配器 `0.3.1` 使用官方 `pine-compat-runtime==0.3.1` Windows wheel；
+适配器 `0.3.2` 使用官方 `pine-compat-runtime==0.3.2` 的 Windows、Linux、
+macOS Apple Silicon 和 Intel wheel；各平台发布锁分别固定真实文件和校验值。
 `release/release-lock.json` 锁定引擎、SDK 和 bridge 的内容哈希，旧发布锁
 保存在 `release-lock.0.2.0.json` 和 `release-lock.0.3.0.json`。分析/输出/增量协议为 6/9/4。
 渐变填充因 Render IR v1 无法表达而明确拒绝；纯色填充继续支持。资源超限
@@ -26,7 +27,7 @@ Render IR 快照。HTTP 计算保持独立。分析结果的 `meta.hostRequireme
 本地运行：
 
 ```powershell
-python -m pip install --no-index --find-links <候选wheel目录> candlescope-plugin-pine-compat==0.3.1
+python -m pip install --no-index --find-links <候选wheel目录> candlescope-plugin-pine-compat==0.3.2
 python -m candlescope_plugin_pine_compat
 ```
 
