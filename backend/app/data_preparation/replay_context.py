@@ -66,6 +66,46 @@ class ReplayHistoryContext:
             rows.extend(await service.storage(service.adapter.read, chunk))
         return sorted(rows, key=lambda row: row["open_time"])
 
+    async def complete_projection(self, *, page, binding, persisted, repository):
+        """Complete a coarse forming bucket whose prefix predates the warmup."""
+        config = ReplaySessionConfig.from_dict(binding["config"])
+        snapshot = _decode_bar_snapshot(persisted, config=config)
+        actual_start = int(binding["history_policy"]["actual_replay_start_ms"])
+        mapper = SourceBucketTimeMapper.create(interval=page["display_interval"],
+            actual_replay_start_ms=actual_start, public_replay_start_ms=snapshot.replay_start_ms,
+            source_bucket_anchor_ms=binding.get("display_source_bucket_anchor_ms"))
+        end = actual_start + ((page["revealed_boundary_ms"] + 1 - snapshot.replay_start_ms) // 60_000) * 60_000
+        start = mapper.actual_containing_bucket_open(end - 1)
+        public_start = mapper.public_from_actual(start)
+        if any(bar["open_time_ms"] == public_start for bar in page["bars"]):
+            return page
+        frozen_start, _ = await asyncio.to_thread(_bound_source_start_ms,
+            repository=repository, config=config, snapshot=snapshot,
+            actual_replay_start_ms=actual_start,
+            fallback_start_ms=int(binding["history_policy"]["actual_visible_history_start_ms"]),
+            interval_ms=60_000)
+        if start >= frozen_start or start < 0 or public_start < 0:
+            return page
+        identity = snapshot.identity
+        try:
+            rows = await self._rows(Requirement(exchange=identity.exchange,
+                market_type=identity.market_type, symbol=identity.symbol,
+                start_ms=start, end_ms=frozen_start))
+            rows.extend(await asyncio.to_thread(repository.query_bars_at_revision,
+                snapshot.provenance.source_revision, identity.symbol, config.base_interval,
+                exchange=identity.exchange, market_type=identity.market_type,
+                start_ms=frozen_start, end_ms=end - 1,
+                limit=(end - frozen_start) // 60_000, order="ASC"))
+            projected = await asyncio.to_thread(project_context, rows, start, end, mapper,
+                                               identity, include_active=True)
+        except (PreparationError, ReplayDomainError) as exc:
+            raise TrainingRunError(getattr(exc.code, "value", exc.code), str(exc), status_code=503,
+                                   details={"retryable": True}) from exc
+        bars = sorted([*page["bars"], *projected], key=lambda bar: bar["open_time_ms"])
+        return {**page, "bars": bars, "history_before_ms": bars[0]["open_time_ms"],
+                "projection_epoch": canonical_sha256({"frozen": page["projection_epoch"],
+                                                      "context_tail": projected})}
+
     async def extend(self, *, page, binding, persisted, repository,
                      before_ms, limit, expected_history_epoch):
         epoch = canonical_sha256({"contract": "prepared-replay-context.v1",
@@ -132,7 +172,7 @@ class ReplayHistoryContext:
         return result
 
 
-def project_context(rows, start, end, mapper, identity):
+def project_context(rows, start, end, mapper, identity, *, include_active=False):
     if len(rows) != (end - start) // 60_000:
         raise PreparationError("HISTORY_SOURCE_INCOMPLETE", "Earlier history contains missing bars", retryable=True)
     bars = tuple(validate_replay_repository_bar(row, identity=identity, interval="1m",
@@ -142,12 +182,12 @@ def project_context(rows, start, end, mapper, identity):
                               replay_start_ms=end, warmup_bars=bars,
                               max_closed_bars=max(1, len(bars)))
     result = []
-    for bar in builder.closed_bars:
+    for bar in (*builder.closed_bars, *((builder.active_bar,) if include_active and builder.active_bar else ())):
         public = mapper.public_from_actual(bar.open_time_ms)
         # Match the replay's source bucket mapping, including blind calendars.
         public_end = mapper.public_bucket_end(public)
         components = (public_end - public) // 60_000
         result.append(replace(bar, open_time_ms=public, close_time_ms=public_end - 1,
-            first_base_open_ms=public, last_base_open_ms=public_end - 60_000,
-            component_count=components, expected_components=components).to_dict())
+            first_base_open_ms=public, last_base_open_ms=(public_end - 60_000 if bar.is_closed else public + bar.last_base_open_ms - bar.open_time_ms),
+            component_count=(components if bar.is_closed else bar.component_count), expected_components=components).to_dict())
     return result

@@ -109,7 +109,11 @@ async def test_old_prepared_run_pages_older_context_without_changing_execution(t
             projection = await replay.training.display_projection(session, track_id="track-1",
                 revealed_boundary_ms=before, limit=10, data_epoch=state["data_epoch"],
                 display_interval=interval)
-            assert projection["bars"] == []
+            assert len(projection["bars"]) == 1
+            tail = projection["bars"][0]
+            assert not tail["is_closed"] and tail["last_base_open_ms"] < before
+            assert tail["component_count"] < tail["expected_components"]
+            assert tail["close"] == str(bars()[0]["close"])
             cursor = projection["history_before_ms"]
             assert cursor <= before
             bootstrap = await replay.training.history_page(session, before_ms=cursor,

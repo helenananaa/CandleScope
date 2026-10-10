@@ -724,7 +724,8 @@ class TrainingDisplayService:
                 require_projection_grid=True,
                 persisted=persisted,
             )
-        return await self.replay_service.store.run_worker(
+        repository = self.replay_service.prepared_history_repository(normalized_session, data_epoch)
+        page = await self.replay_service.store.run_worker(
             "display_build",
             build_display_projection,
             binding=binding,
@@ -733,11 +734,21 @@ class TrainingDisplayService:
             limit=limit,
             data_epoch=data_epoch,
             display_interval=display_interval,
-            repository=self.replay_service.prepared_history_repository(
-                normalized_session, data_epoch
-            ),
+            repository=repository,
             progressive_history_factory=lambda: self.replay_service.progressive_history,
         )
+
+        context = getattr(self.replay_service, "history_context", None)
+        lookback = binding.get("history_policy", {}).get("visible_history_lookback", {})
+        if (context is not None and context.preparation.enabled
+            and str(binding.get("base_interval")) == "1m"
+            and lookback.get("mode") == "ALL_AVAILABLE"
+            and (is_requested_horizon_dataset(persisted) or is_progressive_dataset(persisted))):
+            context_repository, _ = _progressive_repository(
+                persisted, repository, lambda: self.replay_service.progressive_history)
+            return await context.complete_projection(page=page, binding=binding,
+                persisted=persisted, repository=context_repository)
+        return page
 
     async def _set_display_interval(
         self,
