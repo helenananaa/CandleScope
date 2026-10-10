@@ -15,8 +15,8 @@
       "version": "0.3.2",
       "source": "local-release-build",
       "artifactFilename": "candlescope_plugin_pine_compat-0.3.2-py3-none-any.whl",
-      "sha256": "sha256:2072529db4327b36e079e90ccd986204bc034a872dffe04e42307ac0f335764a",
-      "size": 22709
+      "sha256": "sha256:fb9cb4077eeb3cfc14b6939f7fcbdc17bff3d7c8b3eac1a6853d0d243b62b602",
+      "size": 22654
     },
     "candlescope-plugin-sdk": {
       "version": "0.2.0",
