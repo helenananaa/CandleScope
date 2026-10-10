@@ -4148,4 +4148,7 @@ export const zhTW = {
   "common.listSeparator": "，",
   "editor.pyne.namespaceDetail": "{ns}.* — 輸入 \"{ns}.\" 檢視方法",
   "editor.pyne.namespaceDocumentation": "輸入 `{ns}.` 觸發自動補全",
+  "drawing.tool.eraser": "橡皮擦",
+  "drawing.tool.text": "文字註記",
+  "drawing.tool.fibonacci": "費波那契回撤（按右鍵或連按兩下開啟設定）",
 } as const satisfies MessageCatalog;

@@ -4217,4 +4217,7 @@ export const ptBR = {
   "common.listSeparator": ", ",
   "editor.pyne.namespaceDetail": "{ns}.* — digite \"{ns}.\" para listar os membros",
   "editor.pyne.namespaceDocumentation": "Digite `{ns}.` para acionar o autocomplete.",
+  "drawing.tool.eraser": "Borracha",
+  "drawing.tool.text": "Nota de texto",
+  "drawing.tool.fibonacci": "Retração de Fibonacci (clique direito ou duplo clique para configurar)",
 } as const satisfies MessageCatalog;

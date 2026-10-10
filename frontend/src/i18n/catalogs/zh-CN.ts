@@ -4210,6 +4210,9 @@ export const zhCN = {
   "common.listSeparator": "，",
   "editor.pyne.namespaceDetail": "{ns}.* — 输入 \"{ns}.\" 查看方法",
   "editor.pyne.namespaceDocumentation": "输入 `{ns}.` 触发自动补全",
+  "drawing.tool.eraser": "橡皮擦",
+  "drawing.tool.text": "文字注释",
+  "drawing.tool.fibonacci": "斐波那契回撤（右键或双击打开设置）",
 } as const;
 
 export type MessageKey = keyof typeof zhCN;

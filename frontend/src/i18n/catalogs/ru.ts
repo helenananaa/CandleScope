@@ -4158,4 +4158,7 @@ export const ru = {
   "pane.flow.missing.many": "{count} свечей недоступны",
   "pane.flow.gaps.few": "{count} временных разрыва",
   "pane.flow.gaps.many": "{count} временных разрывов",
+  "drawing.tool.eraser": "Ластик",
+  "drawing.tool.text": "Текстовая заметка",
+  "drawing.tool.fibonacci": "Уровни коррекции Фибоначчи (правая кнопка или двойной щелчок для настроек)",
 } as const satisfies MessageCatalog;

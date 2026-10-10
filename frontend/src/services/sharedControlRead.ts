@@ -66,6 +66,11 @@ export function sharedControlRead<T>(
   return withCallerAbort(entry.promise, signal);
 }
 
+/** Drop only this cached read; old promises never replace entries on completion. */
+export function invalidateSharedControlRead(key: string): void {
+  entries.delete(key);
+}
+
 export function resetSharedControlReadsForTests(): void {
   entries.clear();
 }

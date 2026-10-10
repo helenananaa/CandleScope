@@ -133,6 +133,18 @@ def test_sandbox_ui_owns_zh_cn_english_and_japanese_copy() -> None:
     assert "Executar Pyne no gráfico atual" in javascript
     assert "ru: {" in javascript
     assert "Верстак Pyne" in javascript
+    assert "de: {" in javascript
+    assert "Pyne-Werkbank" in javascript
+    assert "it: {" in javascript
+    assert "Banco di lavoro Pyne" in javascript
+    assert "id: {" in javascript
+    assert "Meja kerja Pyne" in javascript
+    assert "tr: {" in javascript
+    assert "Pyne çalışma tezgâhı" in javascript
+    assert "vi: {" in javascript
+    assert "Bàn làm việc Pyne" in javascript
+    assert "pl: {" in javascript
+    assert "Warsztat Pyne" in javascript
     assert "等待 CandleScope 連線" in javascript
     assert "applyLocale(payload.locale)" in javascript
     assert 'setStatus("statusRejected")' in javascript
@@ -224,6 +236,12 @@ def test_runtime_contract_errors_cover_every_manifest_locale() -> None:
         "pt-BR": "A sessão Pyne não está ativa",
         "ru": "Сессия Pyne не активна",
         "zh-TW": "Pyne 工作階段尚未啟用",
+        "de": "Die Pyne-Sitzung ist nicht aktiv",
+        "it": "La sessione Pyne non è attiva",
+        "id": "Sesi Pyne tidak aktif",
+        "tr": "Pyne oturumu etkin değil",
+        "vi": "Phiên Pyne không hoạt động",
+        "pl": "Sesja Pyne nie jest aktywna",
     }
     for locale, message in expected.items():
         translated = _localized_contract_error(error, locale)
@@ -234,6 +252,12 @@ def test_runtime_contract_errors_cover_every_manifest_locale() -> None:
     assert _localized_contract_error(error, "pt-br").message == expected["pt-BR"]
     assert _localized_contract_error(error, "ru-RU").message == expected["ru"]
     assert _localized_contract_error(error, "zh-tw").message == expected["zh-TW"]
+    assert _localized_contract_error(error, "de-DE").message == expected["de"]
+    assert _localized_contract_error(error, "it-IT").message == expected["it"]
+    assert _localized_contract_error(error, "id-ID").message == expected["id"]
+    assert _localized_contract_error(error, "tr-TR").message == expected["tr"]
+    assert _localized_contract_error(error, "vi-VN").message == expected["vi"]
+    assert _localized_contract_error(error, "pl-PL").message == expected["pl"]
 
 
 def test_manifest_owns_japanese_command_and_schema_copy() -> None:
@@ -395,3 +419,133 @@ def test_incremental_session_start_push_snapshot_and_close() -> None:
 
     closed = _invoke(plugin, "close-session", {"sessionId": "dev-one"})
     assert closed["closed"] is True
+
+
+NEW_HOST_LOCALES = ("de", "it", "id", "tr", "vi", "pl")
+
+NEW_HOST_REGIONAL = {
+    "de": "de-DE",
+    "it": "it-IT",
+    "id": "id-ID",
+    "tr": "tr-TR",
+    "vi": "vi-VN",
+    "pl": "pl-PL",
+}
+
+WORKBENCH_RUN_TITLES = {
+    "de": "Pyne auf dem aktuellen Chart ausführen",
+    "it": "Esegui Pyne sul grafico attuale",
+    "id": "Jalankan Pyne pada grafik saat ini",
+    "tr": "Geçerli grafikte Pyne çalıştır",
+    "vi": "Chạy Pyne trên biểu đồ hiện tại",
+    "pl": "Uruchom Pyne na bieżącym wykresie",
+}
+
+WORKBENCH_VIEW_TITLES = {
+    "de": "Pyne-Werkbank",
+    "it": "Banco di lavoro Pyne",
+    "id": "Meja kerja Pyne",
+    "tr": "Pyne çalışma tezgâhı",
+    "vi": "Bàn làm việc Pyne",
+    "pl": "Warsztat Pyne",
+}
+
+WORKBENCH_NOT_INVOKABLE = {
+    "de": "Der Beitrag der Pyne-Werkbank kann nicht aufgerufen werden",
+    "it": "Il contributo del banco di lavoro Pyne non è invocabile",
+    "id": "Kontribusi meja kerja Pyne tidak dapat dipanggil",
+    "tr": "Pyne çalışma tezgâhı katkısı çağrılamaz",
+    "vi": "Đóng góp bàn làm việc Pyne không thể gọi",
+    "pl": "Wkład warsztatu Pyne nie może zostać wywołany",
+}
+
+WORKBENCH_BOUNDED_STRING = {
+    "de": "source muss eine längenbeschränkte Zeichenkette sein",
+    "it": "source deve essere una stringa di lunghezza limitata",
+    "id": "source harus berupa string dengan panjang terbatas",
+    "tr": "source uzunluğu sınırlı bir dize olmalıdır",
+    "vi": "source phải là chuỗi có độ dài giới hạn",
+    "pl": "source musi być łańcuchem o ograniczonej długości",
+}
+
+WORKBENCH_SANDBOX_MARKERS = {
+    "de": "Pyne-Werkbank",
+    "it": "Banco di lavoro Pyne",
+    "id": "Meja kerja Pyne",
+    "tr": "Pyne çalışma tezgâhı",
+    "vi": "Bàn làm việc Pyne",
+    "pl": "Warsztat Pyne",
+}
+
+
+@pytest.mark.parametrize("locale", NEW_HOST_LOCALES)
+def test_new_host_locales_own_contribution_copy_and_plugin_errors(locale: str) -> None:
+    manifest = pyne_workbench_manifest()
+    localized = [item for item in manifest.contributions if item.localizations]
+    assert localized
+    for item in localized:
+        assert locale in item.localizations, item.id
+        copy = item.localizations[locale]
+        assert copy["title"]
+        chinese = item.localizations["zh-CN"]
+        if "schema" in chinese:
+            assert set(copy["schema"]["properties"]) == set(chinese["schema"]["properties"])
+            for key, value in chinese["schema"]["properties"].items():
+                assert copy["schema"]["properties"][key]["title"]
+                if "title" in value:
+                    assert copy["schema"]["properties"][key]["title"] != value["title"]
+    run = next(item for item in manifest.contributions if item.id == "run")
+    assert run.localizations[locale]["title"] == WORKBENCH_RUN_TITLES[locale]
+    view = next(item for item in manifest.contributions if item.id == "workbench-view")
+    assert view.localizations[locale]["title"] == WORKBENCH_VIEW_TITLES[locale]
+
+    error = PlatformContractError(
+        "INVALID_CONTRACT",
+        "Pyne workbench contribution is not invokable",
+        "invoke.unknown",
+    )
+    translated = _localized_contract_error(error, locale)
+    assert translated.message == WORKBENCH_NOT_INVOKABLE[locale]
+    regional = _localized_contract_error(error, NEW_HOST_REGIONAL[locale])
+    assert regional.message == WORKBENCH_NOT_INVOKABLE[locale]
+    assert (regional.code, regional.path) == (error.code, error.path)
+    bounded = PlatformContractError("INVALID_CONTRACT", "source must be a bounded string")
+    assert _localized_contract_error(bounded, locale).message == WORKBENCH_BOUNDED_STRING[locale]
+    capability = PlatformContractError(
+        "INVALID_CONTRACT", "chart.layer.publish capability is unavailable"
+    )
+    localized_capability = _localized_contract_error(capability, NEW_HOST_REGIONAL[locale])
+    assert "chart.layer.publish" in localized_capability.message
+    assert localized_capability.message != capability.message
+
+    plugin = _plugin()
+    with pytest.raises(PlatformContractError, match=WORKBENCH_NOT_INVOKABLE[locale]):
+        plugin.invoke(
+            InvokeRequest(
+                "not-a-contribution",
+                {},
+                RequestContext(
+                    "not-a-contribution",
+                    True,
+                    1,
+                    f"trace-{locale}",
+                    locale=NEW_HOST_REGIONAL[locale],
+                ),
+            )
+        )
+
+
+@pytest.mark.parametrize("locale", NEW_HOST_LOCALES)
+def test_sandbox_ui_owns_new_host_locale_catalogs(locale: str) -> None:
+    javascript = (
+        files("candlescope_plugin_pyne_workbench")
+        .joinpath("web")
+        .joinpath("app.js")
+        .read_text(encoding="utf-8")
+    )
+    assert f"{locale}: {{" in javascript or f'"{locale}": {{' in javascript
+    assert WORKBENCH_SANDBOX_MARKERS[locale] in javascript
+    assert "Render IR v2" in javascript
+    assert "candle" in javascript
+    assert "table" in javascript
+    assert "linefill" in javascript

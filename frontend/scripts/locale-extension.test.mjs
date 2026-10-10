@@ -15,12 +15,13 @@ test("registering an additional catalog enables normalization, switching, format
     const marker = "export const LOCALE_REGISTRY = {";
     assert.ok(registry.includes(marker));
     fs.writeFileSync(registryPath, registry.replace(marker, `${marker}
-      id: {
-        nativeLabel: "Bahasa Indonesia (fixture)",
+      qaa: {
+        nativeLabel: "Test language (fixture)",
         messages: {
           ...en,
           "shell.replay": "Pemutaran uji",
           "status.barCount": "{count} item",
+          "status.barCount.one": "{count} item",
           "workbench.manualHistory.title": "Riwayat uji",
         },
       },
@@ -34,19 +35,19 @@ test("registering an additional catalog enables normalization, switching, format
       globalThis.document = { documentElement: {} };
       let notifications = 0;
       const unsubscribe = subscribeLocale(() => { notifications++; });
-      assert.equal(isLocaleId("id"), true);
-      assert.equal(normalizeLocale("id-ID"), "id");
-      assert.ok(LOCALE_OPTIONS.some(option => option.id === "id"));
-      setLocale("id-ID");
-      assert.equal(getLocale(), "id");
-      assert.equal(document.documentElement.lang, "id");
+      assert.equal(isLocaleId("qaa"), true);
+      assert.equal(normalizeLocale("qaa-US"), "qaa");
+      assert.ok(LOCALE_OPTIONS.some(option => option.id === "qaa"));
+      setLocale("qaa-US");
+      assert.equal(getLocale(), "qaa");
+      assert.equal(document.documentElement.lang, "qaa");
       assert.equal(document.documentElement.dir, "ltr");
-      assert.equal(getDateTimeLocale(), "id");
-      assert.equal(getNumberLocale(), "id");
+      assert.equal(getDateTimeLocale(), "qaa");
+      assert.equal(getNumberLocale(), "qaa");
       assert.equal(t("shell.replay"), "Pemutaran uji");
       assert.equal(t("workbench.manualHistory.title"), "Riwayat uji");
       assert.equal(tPlural("status.barCount", 1), "1 item");
-      setLocale("id");
+      setLocale("qaa");
       assert.equal(notifications, 1);
       setLocale("en");
       assert.equal(t("shell.replay"), "Replay");

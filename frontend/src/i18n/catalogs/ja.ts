@@ -4148,4 +4148,7 @@ export const ja = {
   "common.listSeparator": "、",
   "editor.pyne.namespaceDetail": "{ns}.* — \"{ns}.\" と入力してメンバーを表示",
   "editor.pyne.namespaceDocumentation": "`{ns}.` と入力すると補完が始まります",
+  "drawing.tool.eraser": "消しゴム",
+  "drawing.tool.text": "テキスト注釈",
+  "drawing.tool.fibonacci": "フィボナッチ・リトレースメント（右クリックまたはダブルクリックで設定）",
 } as const satisfies MessageCatalog;

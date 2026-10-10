@@ -4153,4 +4153,7 @@ export const fr = {
   "workbench.intervalCount.many": "{count} d’intervalles",
   "pane.flow.missing.many": "{count} de barres indisponibles",
   "pane.flow.gaps.many": "{count} d’écarts temporels",
+  "drawing.tool.eraser": "Gomme",
+  "drawing.tool.text": "Note de texte",
+  "drawing.tool.fibonacci": "Retracement de Fibonacci (clic droit ou double-clic pour les réglages)",
 } as const satisfies MessageCatalog;

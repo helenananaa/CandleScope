@@ -4212,4 +4212,7 @@ export const en = {
   "common.listSeparator": ", ",
   "editor.pyne.namespaceDetail": "{ns}.* — type \"{ns}.\" to list members",
   "editor.pyne.namespaceDocumentation": "Type `{ns}.` to trigger completion.",
+  "drawing.tool.eraser": "Eraser",
+  "drawing.tool.text": "Text note",
+  "drawing.tool.fibonacci": "Fibonacci retracement (right-click or double-click for settings)",
 } as const satisfies MessageCatalog;

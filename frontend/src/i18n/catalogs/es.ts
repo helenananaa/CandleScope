@@ -4157,4 +4157,7 @@ export const es = {
   "common.listSeparator": ", ",
   "editor.pyne.namespaceDetail": "{ns}.* — escribe \"{ns}.\" para listar los miembros",
   "editor.pyne.namespaceDocumentation": "Escribe `{ns}.` para activar el autocompletado.",
+  "drawing.tool.eraser": "Borrador",
+  "drawing.tool.text": "Nota de texto",
+  "drawing.tool.fibonacci": "Retroceso de Fibonacci (clic derecho o doble clic para configurar)",
 } as const satisfies MessageCatalog;

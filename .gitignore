@@ -279,3 +279,7 @@ local_docs/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Generated local datasets and desktop Python runtime
+/backend/data/local-data/
+/frontend/.desktop-runtime/

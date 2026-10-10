@@ -4148,4 +4148,7 @@ export const ko = {
   "common.listSeparator": ", ",
   "editor.pyne.namespaceDetail": "{ns}.* — \"{ns}.\"를 입력하면 메서드 표시",
   "editor.pyne.namespaceDocumentation": "`{ns}.`를 입력하면 자동 완성",
+  "drawing.tool.eraser": "지우개",
+  "drawing.tool.text": "텍스트 메모",
+  "drawing.tool.fibonacci": "피보나치 되돌림(오른쪽 클릭 또는 두 번 클릭하여 설정)",
 } as const satisfies MessageCatalog;
