@@ -2,6 +2,11 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const cs = {
+  "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
+  "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",
+  "native.jumpToError": "Go to line {line}, column {column}",
+  "report.notionalReturn": "P&L / entry notional (not account return)",
+  "native.platformHelp": "Pine 0.3.2 provides macOS Apple Silicon and Intel bundles. Pyne is cross-platform, but its current official plugin bundle is Windows-only. Match the bundle to your system and Python version.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "Pine v5/v6 closed-bar API:",
   "serverError.notFound": "Požadovaná položka neexistuje nebo byla smazána",
@@ -3475,7 +3480,7 @@ export const cs = {
   "plugin.runtime.refs": "{count} odkazů",
   "plugin.runtime.probed": "ověřeno sondou",
   "plugin.runtime.devLocal": "Nereprodukovatelná volba vývojáře místně: {path}",
-  "plugin.ack.execute": "Potvrzuji, že se spustí místní kód aplikace jako aktuální uživatel Windows",
+  "plugin.ack.execute": "Potvrzuji, že se spustí místní kód aplikace jako aktuální uživatel",
   "plugin.ack.sandbox": "Zkontroloval jsem stav sandboxu výše, místo abych důvěřoval jen názvu vydavatele",
   "plugin.ack.authority": "Potvrzuji, že účty, tajemství a autorita živého obchodování se touto volbou důvěry neotevírají",
   "plugin.ack.runtime": "Potvrzuji běhové prostředí: {runtime}",

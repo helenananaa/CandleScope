@@ -1,3 +1,4 @@
+import { useNativeAvailability } from "../backtest/native/useNativeAvailability.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import {
   Component,
@@ -124,7 +125,9 @@ export default function StrategyResearchApp({
   libraryEnabled?: boolean;
 }) {
   const locale = useLocale();
-  const [nativeMode, setNativeMode] = useState(!["advanced", "deep-link", "handoff"].includes(intent.kind));
+  const availability = useNativeAvailability();
+  const [selectedNativeMode, setNativeMode] = useState<boolean | null>(["advanced", "deep-link", "handoff"].includes(intent.kind) ? false : null);
+  const nativeMode = selectedNativeMode ?? availability === "available";
   const [nativeRun, setNativeRun] = useState<import("../backtest/native/nativeBacktestApi.js").NativeRun | null>(null);
   const pageExportRef = useRef<HTMLDivElement | null>(null);
   const { settings, setSettings, resolvedTheme } = useChartSettingsRuntime();
@@ -314,6 +317,7 @@ export default function StrategyResearchApp({
     dispatch({ type: "result/setRun", runId });
   }, [dispatch]);
   const handleDraftId = useCallback((draftId: string | null) => {
+    setNativeMode(false);
     dispatch({ type: "script/setDraft", draftId });
   }, [dispatch]);
   const handleDraftRevision = useCallback((revision: number) => {
@@ -405,6 +409,8 @@ export default function StrategyResearchApp({
         <button aria-pressed={nativeMode} onClick={() => setNativeMode(true)}>{t("native.fullStrategies")}</button>
         <button aria-pressed={!nativeMode} onClick={() => setNativeMode(false)}>{t("native.hostMode")}</button>
       </nav>
+      {!nativeMode && availability === "error" && <p role="status">{t("indicator.editor.runtimeUnavailableHelp")}</p>}
+      {!nativeMode && availability === "unavailable" && <p role="status">{t("native.platformHelp")}</p>}
       {nativeMode ? researchRun.session ? <Suspense fallback={<p>{t("native.loading")}</p>}>
         <NativeStrategyPanel session={researchRun.session} cellScope="strategy-research-native" onClose={() => setNativeMode(false)}
           key={`${chartUiScope}:${researchRun.session.exchange}:${researchRun.session.marketType}:${researchRun.session.symbol}:${researchRun.session.interval}`} externalReport onRunChange={setNativeRun}
@@ -563,25 +569,21 @@ export default function StrategyResearchApp({
 
   if (advancedWorkspace) {
     const advancedSearch = strategyResearchDeepLinkSearch(intent);
+    // Advanced research owns its data, navigation and status. Nesting another
+    // workspace here both reports an unrelated empty source and constrains it.
     return (
-      <StrategyResearchShell
-        {...shellShared}
-        intervalSelector={null}
-        toolbar={null}
-        exportOverlay={null}
-        chart={(
-          <section className="strategy-research-advanced" data-testid="strategy-research-advanced">
-            <MarketDataWorkspaceProvider>
-              <Suspense fallback={<main className="research-status-page" data-state="loading" />}>
-                {advancedSearch === null
-                  ? <BacktestResearchApp />
-                  : <BacktestResearchApp search={advancedSearch} />}
-              </Suspense>
-            </MarketDataWorkspaceProvider>
-          </section>
+      <section className="strategy-research-advanced" data-testid="strategy-research-advanced">
+        <MarketDataWorkspaceProvider>
+          <Suspense fallback={<main className="research-status-page" data-state="loading" />}>
+            {advancedSearch === null
+              ? <BacktestResearchApp />
+              : <BacktestResearchApp search={advancedSearch} />}
+          </Suspense>
+        </MarketDataWorkspaceProvider>
+        {(intent.page === "local" || intent.page === "backtest") && (
+          <StrategyResearchCompatNotice page={intent.page} />
         )}
-        analysis={null}
-      />
+      </section>
     );
   }
 

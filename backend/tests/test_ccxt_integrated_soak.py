@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import sys
 from types import SimpleNamespace
 
 import aiohttp
@@ -178,7 +177,8 @@ def test_verdict_gate_requires_every_injected_disconnect_to_be_observed() -> Non
 
 def test_native_transport_uses_threaded_dns_on_windows(monkeypatch) -> None:
     async def run() -> None:
-        monkeypatch.setattr(sys, "platform", "win32")
+        from app.data_engine.ingestion import transport as transport_module
+        monkeypatch.setattr(transport_module, "sys", SimpleNamespace(platform="win32"))
         transport = TransportLayer(IngestionConfig())
         await transport.start()
         try:

@@ -1,6 +1,12 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
+  "plugin.trust.scriptRuntimeExecution": "O instalador cria um ambiente Python separado e executa a verificação do pacote. Após reiniciar, os scripts são executados como o usuário atual, sem sandbox do sistema operacional. O resumo de permissões dos plugins da plataforma não restringe arquivos, rede nem subprocessos.",
+  "plugin.runtimeInstalled": "Runtime de scripts instalado e verificado. Feche e abra o CandleScope para ativar os indicadores e as estratégias nativas compatíveis.",
+  "native.executionErrorHelp": "Não foi possível concluir a execução. Confira o script e os parâmetros; os detalhes técnicos estão abaixo.",
+  "native.jumpToError": "Ir para a linha {line}, coluna {column}",
+  "report.notionalReturn": "Lucro/prejuízo / valor nocional de entrada (não é o retorno da conta)",
+  "native.platformHelp": "O Pine 0.3.2 oferece pacotes para macOS Apple Silicon e Intel. O runtime Pyne é multiplataforma, mas o pacote oficial do plugin ainda é para Windows. Instale o pacote compatível com seu sistema e sua versão do Python.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "API Pine v5/v6 de barras fechadas:",
   "serverError.notFound": "O item solicitado não existe ou foi excluído",
@@ -39,7 +45,7 @@ export const ptBR = {
   "report.long": "Comprado",
   "report.short": "Vendido",
   "report.unknownSide": "Direção não informada",
-  "report.tradeBasis": "Lucro e prejuízo conforme o relatório do mecanismo; o retorno só aparece quando informado. Selecione uma operação para localizá-la no gráfico.",
+  "report.tradeBasis": "O lucro/prejuízo vem do motor. O retorno usa valores do motor ou o valor nocional de entrada verificado, não o retorno da conta. Selecione uma operação para localizá-la no gráfico.",
   "report.sample": "Primeira amostra de patrimônio",
   "report.range": "Período do relatório",
 
@@ -3805,7 +3811,7 @@ export const ptBR = {
   "plugin.runtime.probed": "verificado por sonda",
   "plugin.runtime.devLocal": "Escolha local de desenvolvedor não reproduzível: {path}",
 
-  "plugin.ack.execute": "Confirmo que isso executará código de aplicativo local como o usuário Windows atual",
+  "plugin.ack.execute": "Confirmo que isso executará código de aplicativo local como o usuário atual",
   "plugin.ack.sandbox": "Verifiquei o estado do sandbox acima em vez de confiar somente no nome do publicador",
   "plugin.ack.authority": "Confirmo que contas, segredos e autoridade de negociação ao vivo não são abertos por esta escolha de confiança",
   "plugin.ack.runtime": "Confirmo o runtime: {runtime}",

@@ -103,6 +103,7 @@ export interface ReplayTrainingPageShellProps {
     readonly preferences: ReturnType<typeof useReplayWorkspacePreferences>;
     readonly onCrosshairMove: (value: MainSeriesCrosshairValue | null) => void;
     readonly onVisibleRangeChange: (range: ChartSurfaceVisibleRange) => void;
+    readonly onUserViewportRangeChange: (range: ChartSurfaceVisibleRange) => void;
   };
 }
 
@@ -953,6 +954,7 @@ export default function ReplayTrainingPageShell({
       tickMarkMaxCharacterLength={replayTimeAxisMaxCharacterLength(publicTimePolicy)}
       dataMeta={viewerDataMeta}
       onVisibleRangeChange={handleVisibleRangeChange}
+      onUserViewportRangeChange={review === null ? cell?.onUserViewportRangeChange ?? null : null}
       drawingTool={review === null ? drawings.view.drawingTool : null}
       onDrawingToolChange={review === null ? drawings.actions.setDrawingTool : null}
       penColor={drawings.view.penColor}
@@ -979,7 +981,15 @@ export default function ReplayTrainingPageShell({
       onPriceScaleModeChange={cell ? (priceScaleMode) => cell.onPriceScaleChange({ ...cell.priceScale, priceScaleMode }) : null}
     />
   ) : active ? (
-    <div className="chart-area" data-replay-state="empty"><div className="error-overlay"><div className="error-message"><strong>{t("replay.shell.noBar")}</strong><br />{t("replay.shell.noBarHint")}</div></div></div>
+    <div className="chart-area" data-replay-state={history.loading ? "history-loading" : "empty"}>
+      <div className="error-overlay"><div className="error-message">
+        {history.loading ? <span role="status">{t("replay.loadingOlder")}</span>
+          : history.error ? <>
+            <span role="alert">{history.error}</span>
+            <button type="button" onClick={() => { void history.retryHistory(); }}>{t("replay.retry")}</button>
+          </> : <><strong>{t("replay.shell.noBar")}</strong><br />{t("replay.shell.noBarHint")}</>}
+      </div></div>
+    </div>
   ) : <ReplayStatePanel runtime={runtime} />;
 
   const drawingToolbar = review !== null ? (
@@ -1300,8 +1310,11 @@ export default function ReplayTrainingPageShell({
             <span>{review === null ? effectiveState ?? runtime.phase : `REVIEW ${review.playback_state}`}</span>
             <span>{t("replay.displayBars", { count: viewerBarCount })}</span>
             {review === null && history.loading && <span>{t("replay.loadingOlder")}</span>}
-            {review === null && history.historyEpoch !== null && !history.hasMore && !history.loading && <span>{t("replay.shell.historyStart")}</span>}
-            {review === null && history.error && <span className="replay-history-error">{history.error}</span>}
+            {review === null && history.historyEpoch !== null && !history.hasMore && !history.loading && !history.error && <span>{t("replay.shell.historyStart")}</span>}
+            {review === null && history.error && <>
+              <span className="replay-history-error">{history.error}</span>
+              <button type="button" disabled={history.loading} onClick={() => { void history.retryHistory(); }}>{t("replay.retry")}</button>
+            </>}
             {review !== null && <span>{t("replay.immutableEvent", { sequence: review.selected_timeline_sequence })}</span>}
             {review !== null && reviewChartBounded && <span>{t("replay.prefixBound")}</span>}
           </>}

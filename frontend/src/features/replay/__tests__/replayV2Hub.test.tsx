@@ -1597,3 +1597,18 @@ test("market-random creation needs no dates and freezes identity across retry un
   assert.equal(evaluateTrainingRunSetupDraft({ ...draft, symbol: "" }, parseReplayCapabilities(enabledCapabilities())).canSubmit, false);
   assert.equal(evaluateTrainingRunSetupDraft({ ...draft, randomScope: "RANGE" }, parseReplayCapabilities(enabledCapabilities())).canSubmit, false);
 });
+
+test("practice preset is submittable and challenge resets the mutation whitelist", async () => {
+  const { applyTrainingPreset } = await import("../trainingPresets.js");
+  const capabilities = parseReplayCapabilities(enabledCapabilities());
+  const catalog = hedgeCatalog();
+  const draft = createTrainingRunDraft(catalog);
+  const practice = applyTrainingPreset(draft, "practice", catalog);
+  assert.equal(practice.integrityMode, "PRACTICE");
+  assert.deepEqual(practice.allowedMutations, ["deposit", "withdraw"]);
+  assert.equal(evaluateTrainingRunSetupDraft(practice, capabilities).canSubmit, true);
+  const challenge = applyTrainingPreset(practice, "challenge", catalog);
+  assert.equal(challenge.integrityMode, "CHALLENGE");
+  assert.deepEqual(challenge.allowedMutations, []);
+  assert.equal(evaluateTrainingRunSetupDraft(challenge, capabilities).canSubmit, true);
+});

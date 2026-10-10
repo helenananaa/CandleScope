@@ -201,3 +201,8 @@
 .native-performance { margin-top:12px; }
 .native-performance svg { min-height:150px; }
 .native-report-disclosure { clear:both; }
+
+.native-error-help { padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; }
+.native-error-help p { margin: 0 0 8px; line-height: 1.5; }
+.native-error-help details { margin-top: 8px; }
+.native-error-help pre { max-height: 160px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }

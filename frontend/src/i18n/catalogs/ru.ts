@@ -2,6 +2,11 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ru = {
+  "plugin.runtimeInstalled": "Среда скриптов установлена и проверена. Закройте и снова откройте CandleScope, чтобы включить индикаторы и поддерживаемые нативные стратегии.",
+  "native.executionErrorHelp": "Не удалось завершить запуск. Проверьте скрипт и параметры; технические сведения приведены ниже.",
+  "native.jumpToError": "Перейти к строке {line}, столбцу {column}",
+  "report.notionalReturn": "Прибыль/убыток / номинал входа (не доходность счёта)",
+  "native.platformHelp": "Pine 0.3.2 предлагает пакеты для macOS Apple Silicon и Intel. Среда Pyne кроссплатформенная, но официальный пакет плагина пока предназначен для Windows. Выберите пакет для своей системы и версии Python.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "API Pine v5/v6 по закрытым барам:",
   "serverError.notFound": "Запрошенный элемент не существует или был удалён",
@@ -3476,7 +3481,7 @@ export const ru = {
   "plugin.runtime.refs": "{count} ссылок",
   "plugin.runtime.probed": "проверено зондом",
   "plugin.runtime.devLocal": "Невоспроизводимый выбор developer-local: {path}",
-  "plugin.ack.execute": "Подтверждаю, что локальный код приложения будет выполнен от имени текущего пользователя Windows",
+  "plugin.ack.execute": "Подтверждаю, что локальный код приложения будет выполнен от имени текущего пользователя",
   "plugin.ack.sandbox": "Я проверил состояние песочницы выше и не полагаюсь только на имя издателя",
   "plugin.ack.authority": "Подтверждаю, что счета, секреты и полномочия реальной торговли не открываются этим выбором доверия",
   "plugin.ack.runtime": "Подтверждаю среду выполнения: {runtime}",

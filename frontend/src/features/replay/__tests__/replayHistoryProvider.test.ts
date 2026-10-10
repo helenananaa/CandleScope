@@ -744,3 +744,38 @@ test("cancel aborts the active history request and a later epoch starts cleanly"
   assert.equal(captured.signal?.aborted, true);
   assert.equal(runtime.historyEpoch, null);
 });
+
+
+test("history download errors retain retry information and do not poison subsequent loads", async () => {
+  let attempts = 0;
+  const runtime = provider(async () => {
+    attempts += 1;
+    return attempts === 1
+      ? new Response(JSON.stringify({ protocol: "replay.v3", error: {
+        code: "HISTORY_DOWNLOAD_PENDING", message: "Earlier history is still downloading",
+      } }), { status: 503 })
+      : new Response(JSON.stringify(response()), { status: 200 });
+  });
+  const request = { beforeMs: BOUNDARY_MS, revealedBoundaryMs: BOUNDARY_MS, dataEpoch: DATA_EPOCH };
+  await assert.rejects(runtime.loadBefore(request), (error: unknown) => {
+    assert.ok(error instanceof ReplayHistoryProtocolError);
+    assert.equal(error.code, "HISTORY_DOWNLOAD_PENDING");
+    assert.match(error.message, /still downloading/);
+    return true;
+  });
+  assert.equal(runtime.historyEpoch, null);
+  assert.equal((await runtime.loadBefore(request)).bars.length, 2);
+  assert.equal(runtime.historyEpoch, HISTORY_EPOCH);
+  assert.equal(attempts, 2);
+});
+
+
+test("empty coarse charts bootstrap only from a server-provided source-grid cursor", () => {
+  const store = new SeriesWindowStore({ maxBars: 100, intervalSeconds: 86400 });
+  const cursor = 946_512_000_000;
+  assert.equal(replayHistoryFirstPageBeforeMs(store, 946_684_800_000, "3d", true), null);
+  assert.equal(replayHistoryFirstPageBeforeMs(store, 946_684_800_000, "3d", true, cursor), cursor);
+  assert.equal(replayHistoryFirstPageBeforeMs(store, 946_684_800_000, "3d", true, -1), null);
+  store.replace([{ time: 946_425_600, open: 100, high: 101, low: 99, close: 100, volume: 1 }]);
+  assert.equal(replayHistoryFirstPageBeforeMs(store, 946_684_800_000, "3d", true, cursor), 946_425_600_000);
+});

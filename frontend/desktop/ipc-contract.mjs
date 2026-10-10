@@ -1,4 +1,5 @@
 export const DESKTOP_IPC = Object.freeze({
+  backendEndpoint: "candlescope:desktop:backend-endpoint",
   managementSession: "candlescope:desktop:management-session",
   openAppPage: "candlescope:desktop:open-app-page",
   bootstrap: "candlescope:desktop:bootstrap",

@@ -752,16 +752,23 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity): Plugin
         () => applyV1CompatibilityRollback(previewSha256),
         { kind: "message", key: "plugin.notice.v1RolledBack" },
       ),
-      installBundle: (file) => withRefresh(
-        () => installPluginBundle(file),
-        { kind: "message", key: "plugin.notice.bundleInstalled" },
-      ),
+      installBundle: async (file) => {
+        try {
+          const result = await installPluginBundle(file);
+          await refresh();
+          setNoticeState({ kind: "message", key: result.restartRequired ? "plugin.runtimeInstalled" : "plugin.notice.bundleInstalled" });
+          return result;
+        } catch (cause) { setNoticeState({ kind: "error", cause }); throw cause; }
+      },
       prepareLocalInstall: prepareLocalPluginInstall,
       reviewLocalInstall: reviewLocalPluginInstall,
-      confirmLocalInstall: (candidateId, previewSha256, confirmationToken) => withRefresh(
-        () => confirmLocalPluginInstall(candidateId, previewSha256, confirmationToken),
-        { kind: "message", key: "plugin.notice.bundleInstalledConfirmed" },
-      ),
+      confirmLocalInstall: async (candidateId, previewSha256, confirmationToken) => {
+        try {
+          const result = await confirmLocalPluginInstall(candidateId, previewSha256, confirmationToken);
+          await refresh();
+          setNoticeState({ kind: "message", key: result.restartRequired ? "plugin.runtimeInstalled" : "plugin.notice.bundleInstalledConfirmed" });
+        } catch (cause) { setNoticeState({ kind: "error", cause }); throw cause; }
+      },
       reviewTrustChange: reviewPluginTrustChange,
       confirmTrustChange: (pluginId, changeId, previewSha256, confirmationToken) => withRefresh(
         () => confirmPluginTrustChange(pluginId, changeId, previewSha256, confirmationToken),

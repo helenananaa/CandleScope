@@ -134,10 +134,12 @@ def _runtime_executable() -> tuple[bytes, str, list[str], str, str]:
         arguments = [executable, "/d", "/c", f"echo {FIXTURE_OUTPUT}"]
         stdout_regex = rf"{FIXTURE_OUTPUT}\r?\n"
     else:
-        source = Path("/bin/sh")
         executable = "bin/runtime"
         arguments = [executable, "-c", f"printf '{FIXTURE_OUTPUT}\\n'"]
         stdout_regex = rf"{FIXTURE_OUTPUT}\n"
+        # Copying Apple's signed /bin/sh can be killed by macOS after relocation.
+        # Exercise the real launcher and argument forwarding without relocating it.
+        return b'#!/bin/sh\nexec /bin/sh "$@"\n', executable, arguments, stdout_regex, r"(?s)^$"
     return source.read_bytes(), executable, arguments, stdout_regex, r"(?s)^$"
 
 

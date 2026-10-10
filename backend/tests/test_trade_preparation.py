@@ -213,9 +213,16 @@ async def test_trade_replay_preparation_launches_engine_with_bar_and_tape_inputs
     from tests.fixtures.replay.trade_service_fakes import TRADE_REPLAY_START_MS
 
     replay = await _trade_service(tmp_path / "replay.db", tmp_path / "trades")
-    # This fixture's settings have no BAR archive output; supply a real archive
-    # so the preparation publishes BAR inputs through the production writer.
-    replay.settings = replace(replay.settings, replay_history_archive_dir=tmp_path / "bars")
+    # Preparation reuses immutable archive inputs and verifies their manifest.
+    # A fake query repository without a matching manifest is not an archive.
+    from app.replay.catalog import ReplaySeriesIdentity
+    from app.replay.history_archive import ReplayHistoryArchiveWriter, ReplayHistoryImportBatch, ReplayHistoryRepository
+    root = tmp_path / "bars"
+    rows = replay._repository.query_bars("BTCUSDT", "1m", exchange="binance", market_type="futures")
+    ReplayHistoryArchiveWriter(root).import_batches(ReplaySeriesIdentity("binance", "futures", "BTCUSDT"), "1m", [
+        ReplayHistoryImportBatch(rows=rows, source_provider="test", source_object_key="trade-bars", source_period="test")])
+    replay.settings = replace(replay.settings, replay_history_archive_dir=root)
+    replay._repository = ReplayHistoryRepository(root)
     adapter = BarPreparationAdapter(tmp_path / "cache", coordinator=None, replay_service=replay)
     service = PreparationService(PreparationRepository(tmp_path / "jobs.db"), adapter)
     await service.start()

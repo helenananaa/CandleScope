@@ -26,6 +26,7 @@ export interface ReplayDisplayProjectionResponse {
   readonly revealed_boundary_ms: number;
   readonly bars: readonly ReplayDisplayBar[];
   readonly has_more: boolean;
+  readonly history_before_ms?: number;
 }
 
 function record(value: unknown, field: string): Record<string, unknown> {
@@ -112,6 +113,7 @@ export function parseReplayDisplayProjection(
     "revealed_boundary_ms",
     "bars",
     "has_more",
+    ...(Object.hasOwn(source, "history_before_ms") ? ["history_before_ms"] : []),
   ], "display projection");
   if (source.protocol !== "replay.v3"
     || source.schema_version !== "replay.display-projection.v1") {
@@ -142,6 +144,11 @@ export function parseReplayDisplayProjection(
   if (typeof source.has_more !== "boolean") {
     throw new TypeError("display projection.has_more must be a boolean");
   }
+  const historyBeforeMs = source.history_before_ms === undefined ? undefined
+    : timestamp(source.history_before_ms, "display projection.history_before_ms");
+  if (historyBeforeMs !== undefined && historyBeforeMs > boundaryMs) {
+    throw new TypeError("display projection history cursor exceeds the public cursor");
+  }
   const identity = parseIdentity(source.identity);
   const displayInterval = text(
     source.display_interval,
@@ -151,6 +158,7 @@ export function parseReplayDisplayProjection(
     throw new TypeError("display projection interval identity is inconsistent");
   }
   return {
+    ...(historyBeforeMs === undefined ? {} : { history_before_ms: historyBeforeMs }),
     protocol: "replay.v3",
     schema_version: "replay.display-projection.v1",
     run_id: text(source.run_id, "display projection.run_id"),

@@ -1,6 +1,12 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
+  "plugin.trust.scriptRuntimeExecution": "The installer creates a separate Python environment and runs the package verification probe. After restart, script code runs as your current user without an OS sandbox. Files, network access and subprocesses are not restricted by the platform plugin permission summary.",
+  "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
+  "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",
+  "native.jumpToError": "Go to line {line}, column {column}",
+  "report.notionalReturn": "P&L / entry notional (not account return)",
+  "native.platformHelp": "Pine 0.3.2 provides macOS Apple Silicon and Intel bundles. Pyne is cross-platform, but its current official plugin bundle is Windows-only. Match the bundle to your system and Python version.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "Pine v5/v6 closed-bar API:",
   "serverError.notFound": "The requested item doesn't exist or was deleted",
@@ -39,7 +45,7 @@ export const en = {
   "report.long": "Long",
   "report.short": "Short",
   "report.unknownSide": "Direction unavailable",
-  "report.tradeBasis": "P&L from engine report; return shown only when supplied. Select a trade to locate it on the chart.",
+  "report.tradeBasis": "P&L comes from the engine. Percentages use engine values or verified entry notional, not account return. Select a trade to locate it.",
   "report.sample": "First equity sample",
   "report.range": "Report period",
 
@@ -3801,7 +3807,7 @@ export const en = {
   "plugin.runtime.probed": "probe-verified",
   "plugin.runtime.devLocal": "Non-reproducible developer-local choice: {path}",
 
-  "plugin.ack.execute": "I confirm this will execute local application code as the current Windows user",
+  "plugin.ack.execute": "I confirm this will execute local application code as the current user",
   "plugin.ack.sandbox": "I have checked the sandbox status above instead of trusting the publisher name alone",
   "plugin.ack.authority": "I confirm that accounts, secrets, and live-trading authority are not opened by this trust choice",
   "plugin.ack.runtime": "I confirm the runtime: {runtime}",

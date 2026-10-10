@@ -2,6 +2,11 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ar = {
+  "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
+  "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",
+  "native.jumpToError": "Go to line {line}, column {column}",
+  "report.notionalReturn": "P&L / entry notional (not account return)",
+  "native.platformHelp": "Pine 0.3.2 provides macOS Apple Silicon and Intel bundles. Pyne is cross-platform, but its current official plugin bundle is Windows-only. Match the bundle to your system and Python version.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "Pine v5/v6 closed-bar API:",
   "serverError.notFound": "العنصر المطلوب غير موجود أو تم حذفه",
@@ -3475,7 +3480,7 @@ export const ar = {
   "plugin.runtime.refs": "{count} مراجع",
   "plugin.runtime.probed": "متحقق بالفحص",
   "plugin.runtime.devLocal": "اختيار مطوّر محلي غير قابل لإعادة الإنتاج: {path}",
-  "plugin.ack.execute": "أؤكد أن هذا سينفّذ شيفرة تطبيق محلية كمستخدم Windows الحالي",
+  "plugin.ack.execute": "أؤكد أن هذا سينفّذ شيفرة تطبيق محلية كمستخدم الحالي",
   "plugin.ack.sandbox": "تحققت من حالة الصندوق أعلاه بدل الثقة باسم الناشر وحده",
   "plugin.ack.authority": "أؤكد أن الحسابات والأسرار وسلطة التداول الحي لا تُفتح باختيار الثقة هذا",
   "plugin.ack.runtime": "أؤكد بيئة التشغيل: {runtime}",

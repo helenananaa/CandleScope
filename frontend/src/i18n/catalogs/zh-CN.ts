@@ -1,4 +1,11 @@
 export const zhCN = {
+  "plugin.trust.scriptRuntimeExecution": "安装器会创建独立 Python 环境并执行包校验探针。重启后，脚本以当前用户身份运行，没有操作系统沙箱；文件、网络和子进程访问不受平台插件权限摘要的限制。",
+  "plugin.runtimeInstalled": "脚本运行时已安装并通过校验。请退出并重新打开 CandleScope，启用指标及受支持的原生策略。",
+  "native.executionErrorHelp": "运行未完成。请检查脚本和输入参数，下方可查看具体原因。",
+  "native.jumpToError": "定位到第 {line} 行，第 {column} 列",
+  "report.notionalReturn": "盈亏 / 开仓名义金额（非账户收益率）",
+
+  "native.platformHelp": "Pine 0.3.2 提供 macOS（Apple Silicon / Intel）安装包；Pyne 运行时跨平台，但当前官方插件包仍为 Windows 版。请安装匹配系统和 Python 版本的包。",
   "indicator.editor.pyneApiHint": "Pyne API：",
   "indicator.editor.pineApiHint": "Pine v5/v6 收盘 K 线 API：",
   "serverError.notFound": "请求的内容不存在，可能已被删除",
@@ -37,7 +44,7 @@ export const zhCN = {
   "report.long": "多头",
   "report.short": "空头",
   "report.unknownSide": "方向未提供",
-  "report.tradeBasis": "盈亏取自引擎报告；收益率仅在引擎提供时显示。点击交易可定位主图。",
+  "report.tradeBasis": "盈亏取自引擎；百分比取引擎值，或在可核验开仓时按开仓名义金额计算（非账户收益率）。点击交易定位主图。",
   "report.sample": "首个权益采样",
   "report.range": "报告区间",
 
@@ -3799,7 +3806,7 @@ export const zhCN = {
   "plugin.runtime.probed": "已探针验证",
   "plugin.runtime.devLocal": "不可复现的 developer-local 选择：{path}",
 
-  "plugin.ack.execute": "我确认这会以当前 Windows 用户身份执行本地应用代码",
+  "plugin.ack.execute": "我确认这会以当前用户身份执行本地应用代码",
   "plugin.ack.sandbox": "我已核对上方沙箱状态，而不是仅依据发布者名称判断安全性",
   "plugin.ack.authority": "我确认账户、密钥与实盘权限不会由本次信任选择自动开放",
   "plugin.ack.runtime": "我确认运行时：{runtime}",

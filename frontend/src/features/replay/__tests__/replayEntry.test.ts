@@ -29,3 +29,14 @@ test("unknown query parameters fail closed", () => {
   assert.equal(resolveReplayEntry({ pathname: "/replay.html", search: "?symbol=BTCUSDT" }).kind, "error");
   assert.equal(resolveReplayEntry({ pathname: "/replay.html", search: "?session=session-0001" }).kind, "error");
 });
+
+test("desktop-managed replay windows accept their exact window identity", () => {
+  assert.deepEqual(resolveReplayEntry({ pathname: "/replay.html", search: "?run=prepared-123&windowId=app-window-1" }),
+    { kind: "run", runId: "prepared-123" });
+  assert.deepEqual(resolveReplayEntry({ pathname: "/replay.html", search: "?windowId=app-window-12" }),
+    { kind: "configure" });
+  for (const search of ["?run=a&windowId=", "?run=a&windowId=../bad", "?windowId=app-window-0",
+    "?windowId=app-window-1&windowId=app-window-2", "?run=a&windowId=app-window-1&symbol=BTCUSDT"]) {
+    assert.equal(resolveReplayEntry({ pathname: "/replay.html", search }).kind, "error", search);
+  }
+});

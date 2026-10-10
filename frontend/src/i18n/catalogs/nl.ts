@@ -2,6 +2,11 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const nl = {
+  "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
+  "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",
+  "native.jumpToError": "Go to line {line}, column {column}",
+  "report.notionalReturn": "P&L / entry notional (not account return)",
+  "native.platformHelp": "Pine 0.3.2 provides macOS Apple Silicon and Intel bundles. Pyne is cross-platform, but its current official plugin bundle is Windows-only. Match the bundle to your system and Python version.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "Pine v5/v6-API voor gesloten candles:",
   "serverError.notFound": "Het gevraagde item bestaat niet of is verwijderd",
@@ -3475,7 +3480,7 @@ export const nl = {
   "plugin.runtime.refs": "{count} refs",
   "plugin.runtime.probed": "door sonde geverifieerd",
   "plugin.runtime.devLocal": "Niet-reproduceerbare lokale ontwikkelaarskeuze: {path}",
-  "plugin.ack.execute": "Ik bevestig dat dit lokale toepassingscode uitvoert als de huidige Windows-gebruiker",
+  "plugin.ack.execute": "Ik bevestig dat dit lokale toepassingscode uitvoert als de huidige gebruiker",
   "plugin.ack.sandbox": "Ik heb de sandboxstatus hierboven gecontroleerd in plaats van alleen de uitgeversnaam te vertrouwen",
   "plugin.ack.authority": "Ik bevestig dat accounts, geheimen en live-tradingautoriteit niet door deze vertrouwenskeuze worden geopend",
   "plugin.ack.runtime": "Ik bevestig de runtime: {runtime}",

@@ -6,6 +6,11 @@ import type { MessageCatalog } from "../messageCatalog.js";
  * libro de órdenes, tasa de financiación, prueba retrospectiva, reproducción.
  */
 export const es = {
+  "plugin.runtimeInstalled": "Motor de scripts instalado y verificado. Cierra y vuelve a abrir CandleScope para activar los indicadores y las estrategias nativas compatibles.",
+  "native.executionErrorHelp": "No se pudo completar la ejecución. Revisa el script y los parámetros; los detalles técnicos están abajo.",
+  "native.jumpToError": "Ir a la línea {line}, columna {column}",
+  "report.notionalReturn": "Beneficio/pérdida / importe nocional de entrada (no es rentabilidad de la cuenta)",
+  "native.platformHelp": "Pine 0.3.2 ofrece paquetes para macOS Apple Silicon e Intel. Pyne es multiplataforma, pero su paquete oficial de complemento sigue siendo para Windows. Elige el paquete de tu sistema y versión de Python.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "API de Pine v5/v6 con barras cerradas:",
   "serverError.notFound": "El elemento solicitado no existe o se eliminó",
@@ -3485,7 +3490,7 @@ export const es = {
   "plugin.runtime.refs": "{count} referencias",
   "plugin.runtime.probed": "verificado por sonda",
   "plugin.runtime.devLocal": "Elección developer-local no reproducible: {path}",
-  "plugin.ack.execute": "Confirmo que esto ejecutará código de aplicación local como el usuario de Windows actual",
+  "plugin.ack.execute": "Confirmo que esto ejecutará código de aplicación local como el usuario de actual",
   "plugin.ack.sandbox": "He comprobado el estado del entorno aislado de arriba en lugar de confiar solo en el nombre del publicador",
   "plugin.ack.authority": "Confirmo que las cuentas, los secretos y la autoridad de trading en vivo no se abren con esta elección de confianza",
   "plugin.ack.runtime": "Confirmo el runtime: {runtime}",

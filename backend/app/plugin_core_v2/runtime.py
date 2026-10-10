@@ -2286,6 +2286,16 @@ class CorePluginPlatform:
             permission_diff=permission_diff.to_wire(),
             previous_bundle=self._bundles.get(bundle.manifest.plugin.id),
         )
+        from .runtime_install import RuntimeReviewBundle
+        if isinstance(bundle, RuntimeReviewBundle):
+            preview["executionModel"] = "script-runtime"
+            preview["warning"] = (
+                "Unsigned script runtime: publisher identity is not verified. "
+                "Installation probes and runtime code execute as your current user, "
+                "without an OS sandbox or capability restrictions. Empty declared "
+                "permissions do not restrict file, network or subprocess access. "
+                "Restart CandleScope after installation."
+            )
         return self.trust_policy.prepare_local_install(
             upload_path=upload_path,
             bundle=bundle,
@@ -2330,8 +2340,12 @@ class CorePluginPlatform:
         authorized = False
         bundle: VerifiedPlatformBundle | None = None
         try:
+            from .runtime_install import (
+                is_runtime_bundle, install_runtime_bundle, review_runtime_bundle,
+            )
+            runtime_bundle = await asyncio.to_thread(is_runtime_bundle, claim.path)
             bundle = await asyncio.to_thread(
-                verify_platform_bundle,
+                review_runtime_bundle if runtime_bundle else verify_platform_bundle,
                 claim.path,
                 expected_sha256=claim.bundle_sha256,
                 host_version=self.installer.host_version,
@@ -2348,8 +2362,14 @@ class CorePluginPlatform:
                     "the claimed local bundle no longer matches its reviewed identity",
                     plugin_id=bundle.manifest.plugin.id,
                 )
-            await asyncio.to_thread(self.marketplace.record_local_bundle, bundle)
-            evidence = self._trust_evidence(bundle)
+            if runtime_bundle:
+                evidence = TrustEvidence(
+                    "local-developer", manifest_publisher_identity(bundle.manifest),
+                    "local-file", None,
+                )
+            else:
+                await asyncio.to_thread(self.marketplace.record_local_bundle, bundle)
+                evidence = self._trust_evidence(bundle)
             previous_decision = await asyncio.to_thread(
                 self.trust_policy.authorize_claimed_local_install,
                 bundle=bundle,
@@ -2357,19 +2377,28 @@ class CorePluginPlatform:
                 evidence=evidence,
             )
             authorized = True
-            result = await asyncio.to_thread(
-                self.installer.install,
-                claim.path,
-                expected_sha256=claim.bundle_sha256,
-                enabled=True,
-            )
-            await self.reconcile_plugin(result.plugin_id)
+            if runtime_bundle:
+                result = await asyncio.to_thread(
+                    install_runtime_bundle, claim.path, claim.bundle_sha256,
+                    self.installer.host_version,
+                )
+            else:
+                result = await asyncio.to_thread(
+                    self.installer.install,
+                    claim.path,
+                    expected_sha256=claim.bundle_sha256,
+                    enabled=True,
+                )
+                await self.reconcile_plugin(result.plugin_id)
             await asyncio.to_thread(
                 self.trust_policy.finalize_local_install,
                 claim=claim,
-                plugin_id=result.plugin_id,
+                plugin_id=bundle.manifest.plugin.id,
             )
-            return {"installation": result.to_wire()}
+            return {
+                "installation": result.to_wire(),
+                **({"kind": "script-runtime"} if runtime_bundle else {}),
+            }
         except BaseException as exc:
             if bundle is not None and authorized:
                 await asyncio.to_thread(

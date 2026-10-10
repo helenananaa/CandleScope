@@ -2,6 +2,11 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhHant = {
+  "plugin.runtimeInstalled": "指標執行環境已安裝並通過驗證。請退出並重新開啟 CandleScope，啟用指標及支援的原生策略。",
+  "native.executionErrorHelp": "執行未完成。請檢查程式碼和輸入參數，下方可查看具體原因。",
+  "native.jumpToError": "跳至第 {line} 行，第 {column} 欄",
+  "report.notionalReturn": "盈虧 / 開倉名目金額（非帳戶報酬率）",
+  "native.platformHelp": "Pine 0.3.2 提供 macOS（Apple Silicon / Intel）安裝包；Pyne 執行環境跨平台，但目前官方擴充套件仍為 Windows 版。請安裝符合系統及 Python 版本的套件。",
   "indicator.editor.pyneApiHint": "Pyne API：",
   "indicator.editor.pineApiHint": "Pine v5/v6 收盤 K 線 API：",
   "serverError.notFound": "請求的內容不存在，可能已被刪除",
@@ -3475,7 +3480,7 @@ export const zhHant = {
   "plugin.runtime.refs": "引用 {count}",
   "plugin.runtime.probed": "已探針驗證",
   "plugin.runtime.devLocal": "不可復現的 developer-local 選擇：{path}",
-  "plugin.ack.execute": "我確認這會以當前 Windows 使用者身份執行本地應用程式碼",
+  "plugin.ack.execute": "我確認這會以當前使用者身份執行本地應用程式碼",
   "plugin.ack.sandbox": "我已核對上方沙箱狀態，而不是僅依據釋出者名稱判斷安全性",
   "plugin.ack.authority": "我確認帳戶、金鑰與實盤權限不會由本次信任選擇自動開放",
   "plugin.ack.runtime": "我確認執行時：{runtime}",

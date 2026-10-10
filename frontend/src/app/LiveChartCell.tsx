@@ -39,6 +39,7 @@ import type {
 import { chartLinkGroupDisplayName } from "../features/chart-workspace/chartWorkspaceI18n.js";
 import { chartCellStorageScope } from "../features/chart-workspace/chartWorkspaceLibrary.js";
 import { chartCellDrawingScopeBaseFromCell } from "../features/chart-workspace/chartWorkspaceDrawingLink.js";
+import { useChartViewportLink } from "../features/chart-workspace/useChartViewportLink.js";
 import type { ChartLinkCoordinator } from "../features/chart-workspace/chartLinkCoordinator.js";
 import {
   recordMultiChartCellCommit,
@@ -644,23 +645,7 @@ function LiveChartCell({
       typeof value?.time === "number" ? value.time : null,
     );
   }, [cell.id, linkCoordinator]);
-  const pendingLinkedViewportRangeRef = useRef<ChartSurfaceVisibleRange | null>(null);
-  const linkedViewportFrameRef = useRef<number | null>(null);
-  const flushLinkedViewportRange = useCallback(() => {
-    linkedViewportFrameRef.current = null;
-    const range = pendingLinkedViewportRangeRef.current;
-    pendingLinkedViewportRangeRef.current = null;
-    if (!range) return;
-    if (typeof range.rightmostTime === "number") {
-      linkCoordinator.publishTimeAnchor(cell.id, range.rightmostTime);
-    }
-    if (range.time) linkCoordinator.publishDateRange(cell.id, range.time);
-  }, [cell.id, linkCoordinator]);
-  const handleLinkedViewportRangeChange = useCallback((range: ChartSurfaceVisibleRange) => {
-    pendingLinkedViewportRangeRef.current = range;
-    if (linkedViewportFrameRef.current !== null) return;
-    linkedViewportFrameRef.current = requestAnimationFrame(flushLinkedViewportRange);
-  }, [flushLinkedViewportRange]);
+  const handleLinkedViewportRangeChange = useChartViewportLink(linkCoordinator, cell.id, cellStorageScope);
   const [strategyPanelVisited, setStrategyPanelVisited] = useState(false);
   useEffect(() => { if (active && strategyPanelOpen) setStrategyPanelVisited(true); }, [active, strategyPanelOpen]);
   const strategyMarkerSourceRef = useRef<ChartStrategyResultMarkerSource | null>(null);
@@ -694,13 +679,7 @@ function LiveChartCell({
     chartSurface.actions.setLinkedVisibleTimeAnchor(timeSeconds);
     chartSurface.actions.setLinkedCrosshairTime(timeSeconds);
   }, [chartSurface.actions]);
-  useEffect(() => () => {
-    if (linkedViewportFrameRef.current !== null) {
-      cancelAnimationFrame(linkedViewportFrameRef.current);
-      linkedViewportFrameRef.current = null;
-    }
-    pendingLinkedViewportRangeRef.current = null;
-  }, [flushLinkedViewportRange]);
+
 
   const chartModel = useMemo(() => ({
     ...model.chartWorkspace.chart,

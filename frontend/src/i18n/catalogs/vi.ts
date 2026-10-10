@@ -2,6 +2,11 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const vi = {
+  "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
+  "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",
+  "native.jumpToError": "Go to line {line}, column {column}",
+  "report.notionalReturn": "P&L / entry notional (not account return)",
+  "native.platformHelp": "Pine 0.3.2 provides macOS Apple Silicon and Intel bundles. Pyne is cross-platform, but its current official plugin bundle is Windows-only. Match the bundle to your system and Python version.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "API Pine v5/v6 theo nến đã đóng:",
   "serverError.notFound": "Mục được yêu cầu không tồn tại hoặc đã bị xóa",
@@ -3475,7 +3480,7 @@ export const vi = {
   "plugin.runtime.refs": "{count} tham chiếu",
   "plugin.runtime.probed": "đã xác minh thăm dò",
   "plugin.runtime.devLocal": "Lựa chọn nhà phát triển cục bộ không tái tạo được: {path}",
-  "plugin.ack.execute": "Tôi xác nhận thao tác này sẽ thực thi mã ứng dụng cục bộ với tư cách người dùng Windows hiện tại",
+  "plugin.ack.execute": "Tôi xác nhận thao tác này sẽ thực thi mã ứng dụng cục bộ với tư cách người dùng hiện tại",
   "plugin.ack.sandbox": "Tôi đã kiểm tra trạng thái sandbox phía trên thay vì chỉ tin tên nhà phát hành",
   "plugin.ack.authority": "Tôi xác nhận tài khoản, bí mật và quyền giao dịch thật không được mở bởi lựa chọn tin cậy này",
   "plugin.ack.runtime": "Tôi xác nhận runtime: {runtime}",

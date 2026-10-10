@@ -1,5 +1,6 @@
 import { supportEnglish } from "./supportEnglish.js";
 export const nativeEnglish = {
+  "plugin.trust.scriptRuntimeExecution": "The installer creates a separate Python environment and runs the package verification probe. After restart, script code runs as your current user without an OS sandbox. Files, network access and subprocesses are not restricted by the platform plugin permission summary.",
   "report.more": "More",
   "report.return": "Cumulative return",
   "report.equity": "Account equity",
@@ -27,7 +28,7 @@ export const nativeEnglish = {
   "report.long": "Long",
   "report.short": "Short",
   "report.unknownSide": "Direction unavailable",
-  "report.tradeBasis": "P&L from engine report; return shown only when supplied. Select a trade to locate it on the chart.",
+  "report.tradeBasis": "P&L comes from the engine. Percentages use engine values or verified entry notional, not account return. Select a trade to locate it.",
   "report.sample": "First equity sample",
   "report.range": "Report period",
 

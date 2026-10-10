@@ -6,6 +6,7 @@ import type { SurfaceViewportSnapshot } from "../chart-representation/chartRepre
 import type { ReplayDigest } from "./replayTypes.js";
 import {
   ReplayHistoryProvider,
+  ReplayHistoryProtocolError,
   applyReplayHistoryPage,
   replayHistoryFirstPageBeforeMs,
   replayHistoryRevealRepairBeforeMs,
@@ -40,6 +41,7 @@ export interface ReplayHistoryRuntime {
   readonly viewportTransferUnavailable: boolean;
   readonly loadMoreLeft: LoadMoreLeft;
   readonly restoreLatestWindow: () => Promise<boolean>;
+  readonly retryHistory: () => Promise<void>;
   readonly dismissNotice: () => void;
 }
 
@@ -74,6 +76,7 @@ export function useReplayHistoryRuntime(
   viewer: ReplayViewerRuntime,
   viewportTransfer: SurfaceViewportSnapshot | null = null,
 ): ReplayHistoryRuntime {
+  const retryRequestedRef = useRef(false);
   const storeRef = useRef(runtime.store);
   storeRef.current = runtime.store;
   const config = runtime.store.sessionConfig;
@@ -156,6 +159,7 @@ export function useReplayHistoryRuntime(
   } = currentState;
 
   useEffect(() => {
+    retryRequestedRef.current = false;
     loadingRef.current = { key: historyKey, loading: false };
     repairAttemptsRef.current.clear();
     viewportAttemptsRef.current.clear();
@@ -193,7 +197,8 @@ export function useReplayHistoryRuntime(
   const initialContextPagePending = usesSourceBucketProjection
     && provider?.historyEpoch === null
     && runtime.store.replayStartMs !== null
-    && replayHistoryStoreBeforeMs(viewer.seriesStore) !== null;
+    && replayHistoryFirstPageBeforeMs(viewer.seriesStore, runtime.store.replayStartMs,
+      displayInterval, true, viewer.historyBootstrapBeforeMs ?? null) !== null;
   const viewportNeedsLatestRestore = replayHistoryViewportTransferNeedsLatestWindow(
     viewer.seriesStore,
     historyViewportTransfer,
@@ -229,11 +234,12 @@ export function useReplayHistoryRuntime(
       : null;
     if (provider === null
       || (loadingRef.current.key === historyKey && loadingRef.current.loading)
-      || (!hasMore
+      || (!hasMore && !retryRequestedRef.current
         && pendingViewportBeforeMs === null
         && pendingRepairBeforeMs === null)
       || store.dataEpoch === null || store.virtualTimeMs === null
     ) return;
+    retryRequestedRef.current = false;
     // Context history belongs only to the display store. The frozen base store
     // remains the execution/broker cursor and is never expanded by scrolling.
     const storeBeforeMs = replayHistoryStoreBeforeMs(
@@ -244,6 +250,7 @@ export function useReplayHistoryRuntime(
       store.replayStartMs,
       displayInterval,
       usesSourceBucketProjection,
+      viewer.historyBootstrapBeforeMs ?? null,
     );
     // Source-bucket pages connect to the authoritative projection's exact
     // source phase. Other first pages retain the replay seam so history can
@@ -343,7 +350,9 @@ export function useReplayHistoryRuntime(
       if (cause instanceof DOMException && cause.name === "AbortError") return;
       setHistoryState((current) => current.key === historyKey ? {
         ...current,
-        error: cause instanceof Error ? describeError(cause, cause.message) : t("replay.history.loadFailed"),
+        error: cause instanceof ReplayHistoryProtocolError && cause.code === "HISTORY_DOWNLOAD_PENDING"
+          ? t("replay.picker.downloading")
+          : cause instanceof Error ? describeError(cause, cause.message) : t("replay.history.loadFailed"),
         hasMore: false,
         viewportTransferUnavailable: pendingViewportBeforeMs !== null,
       } : current);
@@ -365,6 +374,7 @@ export function useReplayHistoryRuntime(
     sessionId,
     usesSourceBucketProjection,
     viewer.seriesStore,
+    viewer.historyBootstrapBeforeMs,
     historyViewportTransfer,
   ]);
 
@@ -465,6 +475,10 @@ export function useReplayHistoryRuntime(
     viewportTransferUnavailable: currentState.viewportTransferUnavailable,
     loadMoreLeft,
     restoreLatestWindow,
+    retryHistory: async () => {
+      retryRequestedRef.current = true;
+      await loadMoreLeft();
+    },
     dismissNotice: () => setHistoryState((current) => current.key === historyKey
       ? { ...current, notice: null }
       : current),

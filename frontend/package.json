@@ -3,7 +3,7 @@
   "description": "CandleScope native multi-chart desktop shell and web frontend",
   "author": "CandleScope Contributors",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.3.0",
   "type": "module",
   "main": "desktop/main.mjs",
   "build": {
@@ -50,13 +50,19 @@
       }
     ],
     "win": {
-      "icon": "public/brand/candlescope-mark-compact.svg",
+      "icon": "public/brand/candlescope-app-icon-1024.png",
       "target": [
         "dir"
       ]
     },
     "beforePack": "scripts/check-desktop-runtime.cjs",
-    "afterPack": "scripts/compile-desktop-python.cjs"
+    "afterPack": "scripts/compile-desktop-python.cjs",
+    "mac": {
+      "icon": "public/brand/candlescope-app-icon-1024.png",
+      "target": [
+        "dir"
+      ]
+    }
   },
   "overrides": {
     "dompurify": "3.4.13"

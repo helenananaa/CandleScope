@@ -2484,7 +2484,7 @@ function expectedTrustAcknowledgements(
 
 function localInstallPreview(value: unknown, path: string): PluginLocalInstallPreview {
   const data = record(value, path);
-  exact(data, ["schemaVersion", "plugin", "source", "authorization", "permissionDiff", "runtimeDiff", "requests", "requiredAcknowledgements", "warning"], [], path);
+  exact(data, ["schemaVersion", "plugin", "source", "authorization", "permissionDiff", "runtimeDiff", "requests", "requiredAcknowledgements", "warning"], ["executionModel"], path);
   if (data.schemaVersion !== "candlescope.plugin-trust-preview/1") fail(`${path}.schemaVersion`);
   const plugin = record(data.plugin, `${path}.plugin`);
   exact(plugin, ["id", "name", "version", "publisher", "bundleSha256", "manifestSha256"], [], `${path}.plugin`);
@@ -2522,6 +2522,7 @@ function localInstallPreview(value: unknown, path: string): PluginLocalInstallPr
     requests,
     requiredAcknowledgements,
     warning: string(data.warning, `${path}.warning`, 1024),
+    ...(data.executionModel === undefined ? {} : { executionModel: oneOf(data.executionModel, new Set(["script-runtime"] as const), `${path}.executionModel`) }),
   };
 }
 

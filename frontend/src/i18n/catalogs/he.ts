@@ -2,6 +2,11 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const he = {
+  "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
+  "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",
+  "native.jumpToError": "Go to line {line}, column {column}",
+  "report.notionalReturn": "P&L / entry notional (not account return)",
+  "native.platformHelp": "Pine 0.3.2 provides macOS Apple Silicon and Intel bundles. Pyne is cross-platform, but its current official plugin bundle is Windows-only. Match the bundle to your system and Python version.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "Pine v5/v6 closed-bar API:",
   "serverError.notFound": "הפריט המבוקש אינו קיים או שנמחק",
@@ -3475,7 +3480,7 @@ export const he = {
   "plugin.runtime.refs": "{count} הפניות",
   "plugin.runtime.probed": "אומת בבדיקה",
   "plugin.runtime.devLocal": "בחירת מפתח מקומית שאינה ניתנת לשחזור: {path}",
-  "plugin.ack.execute": "אני מאשר שזה יריץ קוד יישום מקומי כמשתמש Windows הנוכחי",
+  "plugin.ack.execute": "אני מאשר שזה יריץ קוד יישום מקומי כמשתמש הנוכחי",
   "plugin.ack.sandbox": "בדקתי את סטטוס ארגז החול למעלה במקום לסמוך על שם המפרסם בלבד",
   "plugin.ack.authority": "אני מאשר שחשבונות, סודות וסמכות מסחר חי אינם נפתחים בבחירת אמון זו",
   "plugin.ack.runtime": "אני מאשר את סביבת ההרצה: {runtime}",

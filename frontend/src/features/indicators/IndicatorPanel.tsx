@@ -16,7 +16,7 @@ import {
   shouldShowIndicatorCatalogLoading,
   useIndicatorCatalogRuntime,
 } from "./useIndicatorCatalogRuntime";
-import { indicatorDisplayName } from "./indicatorDisplayName.js";
+import { indicatorDisplayName, indicatorDisplayPanes } from "./indicatorDisplayName.js";
 import { ProfileRailIcon } from "../../app/marketRailIcons.js";
 import { IndicatorCategoryIcon } from "./IndicatorCategoryIcon.js";
 import { IndicatorNumberInput } from "./IndicatorNumberInput.js";
@@ -832,9 +832,11 @@ plot(ma, "MA", color=line_color)
                                 {("defaultEnabled" in preset && preset.defaultEnabled) && (
                                   <IndicatorBadge tone="neutral">{t("indicator.default")}</IndicatorBadge>
                                 )}
-                                <IndicatorBadge tone={preset.paneTarget === "main" ? "main" : "sub"}>
-                                  {preset.paneTarget === "main" ? t("indicator.mainPane") : t("indicator.subPane")}
-                                </IndicatorBadge>
+                                {indicatorDisplayPanes(preset, isBuiltinIndicator(preset)).map((pane) => (
+                              <IndicatorBadge key={pane} tone={pane}>
+                                {pane === "main" ? t("indicator.mainPane") : t("indicator.subPane")}
+                              </IndicatorBadge>
+                            ))}
                                 {!support.supported && (
                                   <IndicatorBadge tone="neutral">{t("indicator.replayUnavailable")}</IndicatorBadge>
                                 )}
@@ -960,9 +962,11 @@ plot(ma, "MA", color=line_color)
                             <IndicatorBadge tone={isBuiltinIndicator(ind) ? "builtin" : "custom"}>
                               {isBuiltinIndicator(ind) ? t("indicator.builtin") : t("indicator.customBadge")}
                             </IndicatorBadge>
-                            <IndicatorBadge tone={ind.paneTarget === "main" ? "main" : "sub"}>
-                              {ind.paneTarget === "main" ? t("indicator.mainPane") : t("indicator.subPane")}
-                            </IndicatorBadge>
+                            {indicatorDisplayPanes(ind, isBuiltinIndicator(ind)).map((pane) => (
+                              <IndicatorBadge key={pane} tone={pane}>
+                                {pane === "main" ? t("indicator.mainPane") : t("indicator.subPane")}
+                              </IndicatorBadge>
+                            ))}
                           </span>
                           {ind.error && (
                             <span className="indicator-error-badge" title={ind.error} role="img" aria-label={ind.error}><Icon name="warning" size={14} /></span>

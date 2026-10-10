@@ -44,3 +44,15 @@ test("trade view does not infer direction from IDs or manufacture percentage ret
   assert.equal(data.duration, 1000);
   assert.equal(reportTrade({ ...trade(5), direction: "strategy.short" }).side, "short");
 });
+
+test("Pine entry metadata requires a unique exact matching fill", () => {
+  const row = { id: "not-a-side", entryTime: 1, exitTime: 2, entryPrice: 100, exitPrice: 110, qty: 2, profit: 19 };
+  const fill = { id: "not-a-side", time: 1, price: 100, qty: 2, direction: "strategy.long" };
+  const resolved = reportTrade(row, [fill]);
+  assert.equal(resolved.side, "long");
+  assert.equal(resolved.returnPercent, 9.5);
+  assert.equal(resolved.derivedReturn, true);
+  assert.equal(reportTrade(row, [fill, fill]).side, null);
+  assert.equal(reportTrade(row, [{ ...fill, time: 3 }]).returnPercent, null);
+  assert.equal(reportTrade({ ...row, profit_percent: 4 }, [fill]).returnPercent, 4);
+});
