@@ -150,8 +150,8 @@ export function replayHistoryInitialBeforeMs(
  * the chart's left edge. Authoritative source-bucket projections preserve the
  * exchange candle phase, so their first bar can differ from the canonical
  * calendar bucket containing replayStartMs. In that mode the authoritative
- * store must exist before history paging starts and its first open is the only
- * valid connection cursor. Locally-derived projections retain the older seam
+ * store or its server-provided empty-projection cursor must exist before paging
+ * starts. The client must not guess the source grid from calendar intervals. Locally-derived projections retain the older seam
  * behavior so a complete history bucket can replace a partial warmup bucket.
  */
 export function replayHistoryFirstPageBeforeMs(
@@ -159,9 +159,14 @@ export function replayHistoryFirstPageBeforeMs(
   replayStartMs: number | null,
   displayInterval: string | null,
   usesSourceBucketProjection: boolean,
+  authoritativeBeforeMs: number | null = null,
 ): number | null {
   const storeBeforeMs = replayHistoryStoreBeforeMs(store);
-  if (usesSourceBucketProjection) return storeBeforeMs;
+  if (usesSourceBucketProjection) {
+    return storeBeforeMs ?? (authoritativeBeforeMs !== null
+      && Number.isSafeInteger(authoritativeBeforeMs) && authoritativeBeforeMs >= 0
+      ? authoritativeBeforeMs : null);
+  }
   return replayHistoryInitialBeforeMs(replayStartMs, displayInterval) ?? storeBeforeMs;
 }
 

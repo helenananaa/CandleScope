@@ -1,3 +1,4 @@
+import type { ReplayDigest } from "./replayTypes.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
@@ -352,6 +353,7 @@ export interface ReplayViewerRuntime {
   readonly viewerState: ReplayViewerState | null;
   readonly marketTracks: ReplayMarketTracksResponse | null;
   readonly seriesStore: SeriesWindowStore;
+  readonly historyBootstrapBeforeMs?: number | null;
   readonly loading: boolean;
   readonly error: string | null;
   readonly eventStopMessage?: string | null;
@@ -563,6 +565,9 @@ export function useReplayViewerRuntime(
     viewerSeriesCache,
   ]);
   const seriesStore = viewerSeriesBinding.store;
+  const [historyBootstrap, setHistoryBootstrap] = useState<{
+    store: SeriesWindowStore; dataEpoch: ReplayDigest; beforeMs: number;
+  } | null>(null);
 
   useEffect(() => {
     if (sessionId === null) {
@@ -782,6 +787,10 @@ export function useReplayViewerRuntime(
             sourceStore,
             response.revealed_boundary_ms,
           );
+          if (response.history_before_ms !== undefined) {
+            setHistoryBootstrap({ store: seriesStore, dataEpoch: activeDataEpoch,
+              beforeMs: response.history_before_ms });
+          }
           projectedBoundaryMs = response.revealed_boundary_ms;
           requestGate.commit(requestKey, request);
           setError(null);
@@ -1382,6 +1391,8 @@ export function useReplayViewerRuntime(
     viewerState,
     marketTracks,
     seriesStore,
+    historyBootstrapBeforeMs: historyBootstrap?.store === seriesStore
+      && historyBootstrap.dataEpoch === dataEpoch ? historyBootstrap.beforeMs : null,
     loading,
     error,
     eventStopMessage,

@@ -103,6 +103,21 @@ async def test_old_prepared_run_pages_older_context_without_changing_execution(t
         assert coarse["bars"] and len(coarse["bars"]) <= 3
         assert all(bar["is_closed"] and bar["component_count"] == 5 for bar in coarse["bars"])
         assert all(bar["close_time_ms"] <= before for bar in coarse["bars"])
+        # Multi-chart coarse cells can have no initial projected bar at all.
+        # Their server-owned public cursor must still connect to older context.
+        for interval, components in [("4h", 240), ("1d", 1440)]:
+            projection = await replay.training.display_projection(session, track_id="track-1",
+                revealed_boundary_ms=before, limit=10, data_epoch=state["data_epoch"],
+                display_interval=interval)
+            assert projection["bars"] == []
+            cursor = projection["history_before_ms"]
+            assert cursor <= before
+            bootstrap = await replay.training.history_page(session, before_ms=cursor,
+                **{**args, "history_epoch": None, "display_interval": interval, "limit": 2})
+            assert len(bootstrap["bars"]) == 2
+            assert bootstrap["bars"][-1]["close_time_ms"] + 1 == cursor
+            assert all(bar["is_closed"] and bar["component_count"] == components
+                       and bar["close_time_ms"] <= before for bar in bootstrap["bars"])
         assert await replay.store.load_dataset(session) == dataset
         after = await replay.get_session_state(session)
         assert after["cursor"] == baseline["cursor"]

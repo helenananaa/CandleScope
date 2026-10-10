@@ -197,7 +197,8 @@ export function useReplayHistoryRuntime(
   const initialContextPagePending = usesSourceBucketProjection
     && provider?.historyEpoch === null
     && runtime.store.replayStartMs !== null
-    && replayHistoryStoreBeforeMs(viewer.seriesStore) !== null;
+    && replayHistoryFirstPageBeforeMs(viewer.seriesStore, runtime.store.replayStartMs,
+      displayInterval, true, viewer.historyBootstrapBeforeMs ?? null) !== null;
   const viewportNeedsLatestRestore = replayHistoryViewportTransferNeedsLatestWindow(
     viewer.seriesStore,
     historyViewportTransfer,
@@ -249,6 +250,7 @@ export function useReplayHistoryRuntime(
       store.replayStartMs,
       displayInterval,
       usesSourceBucketProjection,
+      viewer.historyBootstrapBeforeMs ?? null,
     );
     // Source-bucket pages connect to the authoritative projection's exact
     // source phase. Other first pages retain the replay seam so history can
@@ -372,6 +374,7 @@ export function useReplayHistoryRuntime(
     sessionId,
     usesSourceBucketProjection,
     viewer.seriesStore,
+    viewer.historyBootstrapBeforeMs,
     historyViewportTransfer,
   ]);
 

@@ -979,7 +979,15 @@ export default function ReplayTrainingPageShell({
       onPriceScaleModeChange={cell ? (priceScaleMode) => cell.onPriceScaleChange({ ...cell.priceScale, priceScaleMode }) : null}
     />
   ) : active ? (
-    <div className="chart-area" data-replay-state="empty"><div className="error-overlay"><div className="error-message"><strong>{t("replay.shell.noBar")}</strong><br />{t("replay.shell.noBarHint")}</div></div></div>
+    <div className="chart-area" data-replay-state={history.loading ? "history-loading" : "empty"}>
+      <div className="error-overlay"><div className="error-message">
+        {history.loading ? <span role="status">{t("replay.loadingOlder")}</span>
+          : history.error ? <>
+            <span role="alert">{history.error}</span>
+            <button type="button" onClick={() => { void history.retryHistory(); }}>{t("replay.retry")}</button>
+          </> : <><strong>{t("replay.shell.noBar")}</strong><br />{t("replay.shell.noBarHint")}</>}
+      </div></div>
+    </div>
   ) : <ReplayStatePanel runtime={runtime} />;
 
   const drawingToolbar = review !== null ? (

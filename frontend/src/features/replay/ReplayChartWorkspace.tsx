@@ -99,6 +99,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
       ...controller.viewerState, selected_track_id: track.track_id, display_interval: cell.session.interval,
     },
     seriesStore: projection.seriesStore,
+    historyBootstrapBeforeMs: projection.historyBootstrapBeforeMs ?? null,
     loading: projection.loading,
     error: projection.error ?? controller.error,
     viewerPending: controller.viewerPending || (active && !bound),
@@ -115,7 +116,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
       previewOrder: (...args) => assertTradeAuthority().actions.previewOrder(...args),
       orderCapacity: (...args) => assertTradeAuthority().actions.orderCapacity(...args),
     },
-  }), [active, bound, cell, controller, onOpenTrack, projection.error, projection.loading, projection.seriesStore, track.track_id, workspace.actions, assertTradeAuthority]);
+  }), [active, bound, cell, controller, onOpenTrack, projection.error, projection.loading, projection.seriesStore, projection.historyBootstrapBeforeMs, track.track_id, workspace.actions, assertTradeAuthority]);
   const persistence = useMemo<ActiveIndicatorPersistence>(() => ({
     controlled: true,
     load: () => cell.indicators,

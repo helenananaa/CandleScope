@@ -768,3 +768,14 @@ test("history download errors retain retry information and do not poison subsequ
   assert.equal(runtime.historyEpoch, HISTORY_EPOCH);
   assert.equal(attempts, 2);
 });
+
+
+test("empty coarse charts bootstrap only from a server-provided source-grid cursor", () => {
+  const store = new SeriesWindowStore({ maxBars: 100, intervalSeconds: 86400 });
+  const cursor = 946_512_000_000;
+  assert.equal(replayHistoryFirstPageBeforeMs(store, 946_684_800_000, "3d", true), null);
+  assert.equal(replayHistoryFirstPageBeforeMs(store, 946_684_800_000, "3d", true, cursor), cursor);
+  assert.equal(replayHistoryFirstPageBeforeMs(store, 946_684_800_000, "3d", true, -1), null);
+  store.replace([{ time: 946_425_600, open: 100, high: 101, low: 99, close: 100, volume: 1 }]);
+  assert.equal(replayHistoryFirstPageBeforeMs(store, 946_684_800_000, "3d", true, cursor), 946_425_600_000);
+});
