@@ -180,7 +180,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const legacyStorageKey = `candlescope.native-draft:${props.cellScope}:${language}`;
   const storageKey = `${legacyStorageKey}:${mode}`;
   const onRunChange = props.onRunChange;
-  useEffect(() => { if (props.active !== false) onRunChange?.(run); }, [run, onRunChange, props.active]);
+  useEffect(() => { if (props.active !== false) onRunChange?.(historicalRun ?? run); }, [historicalRun, run, onRunChange, props.active]);
   const instanceRef = useRef(props.instance);
   instanceRef.current = props.instance;
   const patchInstance = useRef(props.onInstanceChange);
