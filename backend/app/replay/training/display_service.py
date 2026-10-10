@@ -43,6 +43,7 @@ from .errors import TrainingRunError
 from .history import (
     build_display_projection,
     build_history_page,
+    _progressive_repository,
     is_progressive_dataset,
     is_requested_horizon_dataset,
 )
@@ -651,7 +652,14 @@ class TrainingDisplayService:
                 display_interval=display_interval,
                 persisted=persisted,
             )
-        return await asyncio.to_thread(
+        context = getattr(self.replay_service, "history_context", None)
+        lookback = binding.get("history_policy", {}).get("visible_history_lookback", {})
+        extend_context = (context is not None and context.preparation.enabled
+                          and str(binding.get("base_interval")) == "1m"
+                          and lookback.get("mode") == "ALL_AVAILABLE"
+                          and (is_requested_horizon_dataset(persisted) or is_progressive_dataset(persisted)))
+        repository = self.replay_service.prepared_history_repository(normalized_session, data_epoch)
+        page = await asyncio.to_thread(
             build_history_page,
             binding=binding,
             persisted=persisted,
@@ -659,13 +667,19 @@ class TrainingDisplayService:
             revealed_boundary_ms=revealed_boundary_ms,
             limit=limit,
             data_epoch=data_epoch,
-            expected_history_epoch=history_epoch,
+            expected_history_epoch=None if extend_context else history_epoch,
             display_interval=display_interval,
-            repository=self.replay_service.prepared_history_repository(
-                normalized_session, data_epoch
-            ),
+            repository=repository,
             progressive_history_factory=lambda: self.replay_service.progressive_history,
         )
+        if extend_context:
+            context_repository, _ = _progressive_repository(
+                persisted, repository, lambda: self.replay_service.progressive_history)
+            return await context.extend(page=page, binding=binding, persisted=persisted,
+                                        repository=context_repository, before_ms=before_ms, limit=limit,
+                                        expected_history_epoch=history_epoch)
+        return page
+
 
     async def display_projection(
         self,

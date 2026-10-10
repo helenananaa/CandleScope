@@ -744,3 +744,27 @@ test("cancel aborts the active history request and a later epoch starts cleanly"
   assert.equal(captured.signal?.aborted, true);
   assert.equal(runtime.historyEpoch, null);
 });
+
+
+test("history download errors retain retry information and do not poison subsequent loads", async () => {
+  let attempts = 0;
+  const runtime = provider(async () => {
+    attempts += 1;
+    return attempts === 1
+      ? new Response(JSON.stringify({ protocol: "replay.v3", error: {
+        code: "HISTORY_DOWNLOAD_PENDING", message: "Earlier history is still downloading",
+      } }), { status: 503 })
+      : new Response(JSON.stringify(response()), { status: 200 });
+  });
+  const request = { beforeMs: BOUNDARY_MS, revealedBoundaryMs: BOUNDARY_MS, dataEpoch: DATA_EPOCH };
+  await assert.rejects(runtime.loadBefore(request), (error: unknown) => {
+    assert.ok(error instanceof ReplayHistoryProtocolError);
+    assert.equal(error.code, "HISTORY_DOWNLOAD_PENDING");
+    assert.match(error.message, /still downloading/);
+    return true;
+  });
+  assert.equal(runtime.historyEpoch, null);
+  assert.equal((await runtime.loadBefore(request)).bars.length, 2);
+  assert.equal(runtime.historyEpoch, HISTORY_EPOCH);
+  assert.equal(attempts, 2);
+});

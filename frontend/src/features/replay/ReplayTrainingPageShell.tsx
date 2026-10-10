@@ -1300,8 +1300,11 @@ export default function ReplayTrainingPageShell({
             <span>{review === null ? effectiveState ?? runtime.phase : `REVIEW ${review.playback_state}`}</span>
             <span>{t("replay.displayBars", { count: viewerBarCount })}</span>
             {review === null && history.loading && <span>{t("replay.loadingOlder")}</span>}
-            {review === null && history.historyEpoch !== null && !history.hasMore && !history.loading && <span>{t("replay.shell.historyStart")}</span>}
-            {review === null && history.error && <span className="replay-history-error">{history.error}</span>}
+            {review === null && history.historyEpoch !== null && !history.hasMore && !history.loading && !history.error && <span>{t("replay.shell.historyStart")}</span>}
+            {review === null && history.error && <>
+              <span className="replay-history-error">{history.error}</span>
+              <button type="button" disabled={history.loading} onClick={() => { void history.retryHistory(); }}>{t("replay.retry")}</button>
+            </>}
             {review !== null && <span>{t("replay.immutableEvent", { sequence: review.selected_timeline_sequence })}</span>}
             {review !== null && reviewChartBounded && <span>{t("replay.prefixBound")}</span>}
           </>}

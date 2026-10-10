@@ -75,8 +75,10 @@ export interface ReplayHistoryProviderOptions {
 }
 
 export class ReplayHistoryProtocolError extends Error {
-  constructor(message: string) {
+  readonly code: string | undefined;
+  constructor(message: string, code?: string) {
     super(message);
+    this.code = code;
     this.name = "ReplayHistoryProtocolError";
   }
 }
@@ -651,7 +653,13 @@ export class ReplayHistoryProvider {
       signal: controller.signal,
     }).then(async (response) => {
       if (!response.ok) {
-        throw new ReplayHistoryProtocolError(`history request failed with HTTP ${response.status}`);
+        type Failure = { message?: unknown; code?: unknown };
+        const body = await response.json().catch(() => null) as { detail?: Failure; error?: Failure } | null;
+        const failure = body?.error ?? body?.detail;
+        const message = failure?.message;
+        throw new ReplayHistoryProtocolError(typeof message === "string" && message.length > 0
+          ? message : `history request failed with HTTP ${response.status}`,
+        typeof failure?.code === "string" ? failure.code : undefined);
       }
       const page = parsePage(await response.json(), {
         sessionId: this.sessionId,
