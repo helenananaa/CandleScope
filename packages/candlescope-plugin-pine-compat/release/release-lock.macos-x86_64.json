@@ -29,11 +29,11 @@
     "pine-compat-runtime": {
       "version": "0.3.2",
       "source": "github-release",
-      "artifactFilename": "pine_compat_runtime-0.3.2-cp310-abi3-win_amd64.whl",
-      "sha256": "sha256:62f51d9b2d0662a6d58189afed84c38de425f04c1f2b44e68b9c5a72a18842a1",
-      "size": 4005496,
+      "artifactFilename": "pine_compat_runtime-0.3.2-cp310-abi3-macosx_10_12_x86_64.whl",
+      "sha256": "sha256:038604abfd93f4e02e25455813b3f41d944240e0b28a706e506053e85edf206d",
+      "size": 4027380,
       "releaseTag": "v0.3.2",
-      "releaseUrl": "https://github.com/helenananaa/pine-compat-runtime/releases/download/v0.3.2/pine_compat_runtime-0.3.2-cp310-abi3-win_amd64.whl",
+      "releaseUrl": "https://github.com/helenananaa/pine-compat-runtime/releases/download/v0.3.2/pine_compat_runtime-0.3.2-cp310-abi3-macosx_10_12_x86_64.whl",
       "releaseCommit": "28ecae3c645e9269e2099d27cc9abbb1f52ee9ea",
       "manifestUrl": "https://github.com/helenananaa/pine-compat-runtime/releases/download/v0.3.2/manifest.json",
       "manifestSha256": "sha256:4810a300f5309fddcb73f4d20f684dce11004edd273b0fa100d10477ce498efc"

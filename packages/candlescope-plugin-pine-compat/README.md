@@ -6,9 +6,11 @@ the public `candlescope.script-runtime/1` SDK. It contains adapter code only: no
 Pine engine source snapshot and no imports from CandleScope private backend
 packages.
 
-Bridge `0.3.1` targets the official `pine-compat-runtime==0.3.1` Windows
-wheel, from tag `v0.3.1` commit `14a2ab89c08a85a76d769e9fbe2f13f9c958342d`.
-`release/release-lock.json` pins the engine, SDK and bridge wheel hashes.
+Bridge `0.3.2` targets the official `pine-compat-runtime==0.3.2` wheels for
+Windows, Linux, macOS Apple Silicon and macOS Intel.
+`release/release-lock.json` pins Windows; the `release-lock.linux-x86_64.json`,
+`release-lock.macos-arm64.json` and `release-lock.macos-x86_64.json` locks pin
+the other targets, including engine release identity and all wheel hashes.
 Previous public locks are archived as `release-lock.0.2.0.json` and `release-lock.0.3.0.json`.
 The bridge selects analysis schema 6, runtime schema 9 and changes schema 4.
 Gradient fills fail explicitly because Render IR v1 cannot represent them;
@@ -32,7 +34,7 @@ external strategy entry point and its registry.
 Run locally:
 
 ```powershell
-python -m pip install --no-index --find-links <candidate-wheel-directory> candlescope-plugin-pine-compat==0.3.1
+python -m pip install --no-index --find-links <candidate-wheel-directory> candlescope-plugin-pine-compat==0.3.2
 python -m candlescope_plugin_pine_compat
 ```
 

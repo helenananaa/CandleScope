@@ -54,3 +54,8 @@ packages/candlescope-plugin-sdk-rust-wasm/src/** text eol=lf
 # source, schema, fixture, and official template checkout byte-stable on Windows.
 packages/candlescope-backtest-sdk/** text eol=lf
 backend/app/backtest/strategy/python_author_schemas/** text eol=lf
+
+# Pine bridge wheels are digest-pinned and rebuilt on all four native runners.
+packages/candlescope-plugin-pine-compat/**/*.py text eol=lf
+packages/candlescope-plugin-pine-compat/**/*.md text eol=lf
+packages/candlescope-plugin-pine-compat/**/*.toml text eol=lf

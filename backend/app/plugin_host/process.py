@@ -98,7 +98,9 @@ class SidecarProcessSpec:
             or len(self.identity) > 256
         ):
             raise ValueError("identity must be a non-empty string")
-        executable = Path(self.executable).resolve(strict=False)
+        # Preserve the venv symlink: Python discovers pyvenv.cfg from the
+        # invocation path, not the resolved base interpreter path.
+        executable = Path(self.executable).absolute()
         working_directory = (
             Path(self.working_directory).resolve(strict=False)
             if self.working_directory is not None

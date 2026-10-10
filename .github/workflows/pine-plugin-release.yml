@@ -1,0 +1,114 @@
+name: Pine plugin release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - candlescope-plugin-pine-compat-v0.3.2
+  pull_request:
+    paths:
+      - packages/candlescope-plugin-pine-compat/**
+      - .github/workflows/pine-plugin-release.yml
+      - backend/app/first_party_plugin_bootstrap.py
+      - backend/app/official-plugin-releases.json
+      - backend/tests/test_first_party_plugin_bootstrap.py
+      - backend/app/plugin_runtime/registry.py
+      - backend/app/plugin_host/process.py
+      - backend/tests/test_plugin_runtime_venv_launch.py
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    name: Pine plugin (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win_amd64
+            lock: release-lock.json
+          - os: ubuntu-latest
+            platform: manylinux_2_17_x86_64
+            lock: release-lock.linux-x86_64.json
+          - os: macos-15
+            platform: macos-arm64
+            lock: release-lock.macos-arm64.json
+          - os: macos-26-intel
+            platform: macos-x86_64
+            lock: release-lock.macos-x86_64.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install qualification tooling
+        run: python -m pip install build hatchling==1.32.4 pytest python-dotenv
+      - name: Build bridge wheel
+        run: python -m build --wheel --no-isolation --outdir dist packages/candlescope-plugin-pine-compat
+      - name: Freeze bridge archive metadata
+        run: python packages/candlescope-plugin-pine-compat/scripts/canonicalize_wheel.py dist/candlescope_plugin_pine_compat-0.3.2-py3-none-any.whl
+      - name: Verify virtual environment launch identity
+        env:
+          PYTHONPATH: backend:packages/candlescope-plugin-sdk/src
+        if: runner.os != 'Windows'
+        run: python -m pytest -o pythonpath= -q backend/tests/test_plugin_runtime_venv_launch.py
+      - name: Verify engine and offline plugin installation
+        run: >-
+          python packages/candlescope-plugin-pine-compat/scripts/qualify_release.py
+          --lock packages/candlescope-plugin-pine-compat/release/${{ matrix.lock }}
+          --platform ${{ matrix.platform }} --output dist
+      - name: Install host catalog test dependencies
+        run: |
+          python -c "from pathlib import Path; source = Path('backend/requirements.txt').read_text(); Path('dist/host-requirements.txt').write_text('\n'.join(line for line in source.splitlines() if not line.startswith('-e ')))"
+          python -m pip install -r dist/host-requirements.txt
+      - name: Verify official catalog and platform selection
+        env:
+          PYTHONPATH: backend
+        run: python -m pytest -o pythonpath= -q backend/tests/test_first_party_plugin_bootstrap.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pine-plugin-${{ matrix.platform }}
+          path: |
+            dist/*.cspkg
+            dist/*.whl
+            dist/*receipt.json
+            dist/*-stdout.txt
+            dist/*-stderr.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/candlescope-plugin-pine-compat-v')
+    needs: qualify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pine-plugin-*
+          path: dist
+          merge-multiple: true
+      - name: Build checksums
+        run: |
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          root = Path('dist')
+          bundles = list(root.glob('*.cspkg'))
+          assert len(bundles) == 4, bundles
+          assets = sorted([*bundles, *root.glob('*.whl')])
+          (root / 'SHA256SUMS').write_text(''.join(f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n' for p in assets))
+          PY
+      - name: Publish qualified assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME" dist/*.cspkg dist/*.whl dist/SHA256SUMS
+          --verify-tag --latest=false --title "CandleScope Pine plugin 0.3.2"
+          --notes-file packages/candlescope-plugin-pine-compat/release/release-0.3.2.md
