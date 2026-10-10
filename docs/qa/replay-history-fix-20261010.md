@@ -53,3 +53,5 @@
 - `frontend-check.log`、`backend-tests.log`、`build.log`、`original-run-before.json`、`original-run-after.json`、历史任务 JSON 和 evidence 截图。
 
 后续 [拖拽专项复测](replay-history-drag-20261010.md)：生产前端 Chrome 连续鼠标拖拽通过；原生拖拽工具限制单独保留。
+
+后续发现四图大周期空白及尾柱缺失，已另行修复并原生复测，见 [多图修复报告](replay-multichart-fix-20261010.md)。本报告的单图分页结论不代表此前多图已验收。
