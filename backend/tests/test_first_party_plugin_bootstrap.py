@@ -28,7 +28,7 @@ OFFICIAL_SHA256 = (
     "sha256:889ffeb4a70b330c1cf529b66422fe0c11c303b781968b12e8156fbb854f3918"
 )
 OFFICIAL_PINE_SHA256 = (
-    "sha256:692999ad97dc79bc21c35d352f85e4491efa113fde4641b0bbbae12b0f74b7c4"
+    "sha256:b70f4e2bcf1dbf65ae3ce57ce3c28114e846d19f45b48898c025f923415d388a"
 )
 
 
@@ -135,8 +135,8 @@ def _single_pyne_environment(tmp_path: Path, **values: str) -> dict[str, str]:
 def test_checked_in_release_lock_pins_the_stable_adapter_assets() -> None:
     releases = load_official_plugin_releases(DEFAULT_RELEASE_LOCK_PATH)
 
-    assert len(releases) == 2
-    by_runtime = {release.runtime_id: release for release in releases}
+    assert len(releases) == 5
+    by_runtime = {release.runtime_id: release for release in releases if release.system == "Windows"}
     pyne = by_runtime["candlescope.pyne"]
     assert pyne.version == "0.3.0"
     assert pyne.sha256 == OFFICIAL_SHA256
@@ -146,13 +146,20 @@ def test_checked_in_release_lock_pins_the_stable_adapter_assets() -> None:
         "candlescope-pyne-0.3.0-cp312-win_amd64.cspkg"
     )
     pine = by_runtime["candlescope.pine-compat"]
-    assert pine.version == "0.3.1"
+    assert pine.version == "0.3.2"
     assert pine.sha256 == OFFICIAL_PINE_SHA256
-    assert pine.size == 4_141_031
+    assert pine.size == 4_195_533
     assert pine.url.endswith(
-        "/candlescope-plugin-pine-compat-v0.3.1/"
-        "candlescope-pine-compat-0.3.1-cp312-win_amd64.cspkg"
+        "/candlescope-plugin-pine-compat-v0.3.2/"
+        "candlescope-pine-compat-0.3.2-cp312-win_amd64.cspkg"
     )
+    pine_variants = [release for release in releases if release.runtime_id == pine.runtime_id]
+    assert {(item.system, item.machine) for item in pine_variants} == {
+        ("Windows", "AMD64"), ("Linux", "x86_64"),
+        ("Darwin", "arm64"), ("Darwin", "x86_64"),
+    }
+    assert all(item.version == "0.3.2" and item.python_version == "3.12"
+               and item.implementation == "CPython" for item in pine_variants)
 
 
 def test_download_verifies_before_committing_and_reuses_cache(tmp_path: Path) -> None:

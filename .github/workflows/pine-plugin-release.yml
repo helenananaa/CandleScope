@@ -10,6 +10,8 @@ on:
       - packages/candlescope-plugin-pine-compat/**
       - .github/workflows/pine-plugin-release.yml
       - backend/app/first_party_plugin_bootstrap.py
+      - backend/app/official-plugin-releases.json
+      - backend/tests/test_first_party_plugin_bootstrap.py
       - backend/app/plugin_runtime/registry.py
       - backend/app/plugin_host/process.py
       - backend/tests/test_plugin_runtime_venv_launch.py
@@ -58,6 +60,10 @@ jobs:
           python packages/candlescope-plugin-pine-compat/scripts/qualify_release.py
           --lock packages/candlescope-plugin-pine-compat/release/${{ matrix.lock }}
           --platform ${{ matrix.platform }} --output dist
+      - name: Verify official catalog and platform selection
+        env:
+          PYTHONPATH: backend
+        run: python -m pytest -o pythonpath= -q backend/tests/test_first_party_plugin_bootstrap.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
