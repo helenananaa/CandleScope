@@ -43,12 +43,15 @@ jobs:
         run: python -m pip install build hatchling==1.32.4 pytest python-dotenv
       - name: Build bridge wheel
         run: python -m build --wheel --no-isolation --outdir dist packages/candlescope-plugin-pine-compat
+      - name: Freeze bridge archive metadata
+        run: python packages/candlescope-plugin-pine-compat/scripts/canonicalize_wheel.py dist/candlescope_plugin_pine_compat-0.3.2-py3-none-any.whl
       - name: Verify engine and offline plugin installation
         run: >-
           python packages/candlescope-plugin-pine-compat/scripts/qualify_release.py
           --lock packages/candlescope-plugin-pine-compat/release/${{ matrix.lock }}
           --platform ${{ matrix.platform }} --output dist
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: pine-plugin-${{ matrix.platform }}
           path: |
