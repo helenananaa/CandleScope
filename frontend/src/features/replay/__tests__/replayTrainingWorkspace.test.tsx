@@ -575,8 +575,8 @@ test("workspace preferences inherit live layout once and then persist only insid
   storage.setItem("candlescope-order-book-height", "430");
   const initial = loadReplayWorkspacePreferences("adapter-1", storage);
   assert.equal(initial.railWidth, 410);
-  // Legacy collapsed rail → hide panel while keeping open views restorable.
-  assert.deepEqual(initial.openViewIds, ["replay-watchlist", "replay-capabilities"]);
+  // Legacy collapsed rail → hide panel while keeping the order ticket restorable.
+  assert.deepEqual(initial.openViewIds, ["replay-paper"]);
   assert.equal(initial.panelCollapsed, true);
   assert.equal(initial.viewHeights["replay-paper"], 430);
 
@@ -631,7 +631,7 @@ test("workspace preferences migrate a legacy modular empty rail to restorable co
 
   const migrated = loadReplayWorkspacePreferences("legacy-empty", storage);
 
-  assert.deepEqual(migrated.openViewIds, ["replay-watchlist", "replay-capabilities"]);
+  assert.deepEqual(migrated.openViewIds, ["replay-paper"]);
   assert.equal(migrated.panelCollapsed, true);
   assert.equal(migrated.viewHeights["replay-capabilities"], 300);
   assert.match(
@@ -675,12 +675,15 @@ test("replay preserves whole-panel collapse after every accordion body is closed
   assert.equal(restored.viewHeights["replay-watchlist"], 286);
 });
 
-test("replay modular rail panels fill their host instead of overflowing stored heights", () => {
+test("replay rail shows one full-height view chosen from the activity bar", () => {
   const marketRail = source("src/features/replay/components/ReplayRightMarketRail.tsx");
   const styles = source("src/index.css");
+  assert.match(marketRail, /layoutMode="single-view"/);
+  assert.match(marketRail, /onToggleView=\{onActivateView\}/);
+  assert.match(marketRail, /actions\.activateView\(/);
   assert.match(marketRail, /style=\{\{ height: "100%" \}\}/);
   assert.doesNotMatch(marketRail, /style=\{\{ height \}\}/);
-  assert.match(marketRail, /viewHeights=\{preferences\.viewHeights\}/);
+  assert.doesNotMatch(marketRail, /viewHeights=/);
   assert.match(marketRail, /openViewIds=\{preferences\.openViewIds\}/);
   assert.match(marketRail, /panelCollapsed=\{preferences\.panelCollapsed\}/);
   assert.match(marketRail, /onTogglePanelCollapsed=\{actions\.togglePanelCollapsed\}/);

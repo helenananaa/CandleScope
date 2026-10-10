@@ -1155,224 +1155,250 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
     return [...new Set(presets)].sort((a, b) => a - b);
   }, [leverage, maxLeverage]);
 
+  const orderTypeTabs = [
+    ["MARKET", t("replay.paper.typeMarket")],
+    ["LIMIT", t("replay.paper.typeLimit")],
+    ["STOP_MARKET", t("replay.paper.stopMkt")],
+    ["TAKE_PROFIT_MARKET", t("replay.paper.tpMkt")],
+  ] as const;
+  const positionPnl = finiteNumber(selectedPosition?.position.unrealized_pnl);
+  // Silent while idle; only surface progress, a rejection, or a blocking reason.
+  const ticketMessage = notice?.message ?? reduceOnlyUnavailableMessage
+    ?? capacityValidationError
+    ?? capacityError
+    ?? previewError
+    ?? viewer.error
+    ?? null;
+  const ticketMessageTone = notice?.tone ?? (ticketMessage === null ? "idle" : "error");
+
   return (
     <div className="replay-paper-trading" data-replay-paper-surface="order-ticket">
     <div className="replay-order-surface">
-      <header className="replay-ticket-account">
-        <div>
-          <small>{symbol} · {isSpot ? t("replay.paper.spot") : t("replay.paper.futures")}</small>
-          <strong>{formatDecimal(portfolio?.equity ?? store.account?.equity, 4)} {settlementAsset}</strong>
-        </div>
-        <div className="replay-ticket-locks" aria-label={t("replay.paper.marginLev")}>
-          <span>{positionMode === "HEDGE" ? t("replay.paper.hedge") : t("replay.paper.oneWay")}</span>
-          <span>{contract?.margin_mode === "ISOLATED" ? t("replay.wb.isolated") : t("replay.wb.cross")}</span>
-          <label className="replay-leverage-control">
-            <span className="sr-only">{t("replay.paper.leverage")}</span>
-            <select
-              value={String(leverage)}
-              aria-label={t("replay.paper.leverageMax", { max: maxLeverage })}
-              onChange={(event) => setLeverage(Math.min(maxLeverage, Math.max(1, Number(event.target.value) || 1)))}
-            >
-              {leverageOptions.map((value) => (
-                <option key={value} value={value}>{value}x</option>
-              ))}
-            </select>
-          </label>
-          <span title={t("replay.paper.levCap")}>≤{maxLeverage}x</span>
-        </div>
-      </header>
-
-      <section className="replay-compact-ticket" data-replay-panel="order-ticket">
-        <div className="replay-mode-toggle" role="group" aria-label={t("replay.paper.openClose")}>
-          <button
-            type="button"
-            data-mode="open"
-            className={!reduceOnly ? "active" : ""}
-            onClick={() => setReduceOnly(false)}
-          >{t("replay.paper.open")}</button>
-          <button
-            type="button"
-            data-mode="close"
-            className={reduceOnly ? "active" : ""}
-            onClick={() => setReduceOnly(true)}
-          >{t("replay.paper.close")}</button>
-        </div>
-
-        <div className="replay-order-fidelity-row">
-          <span data-fidelity={contract?.execution_fidelity ?? "LOADING"}>
-            {contract?.execution_fidelity === "BOOK_ASSISTED_CONTINUITY_GATED_NO_QUEUE"
-              ? t("replay.paper.l2Assist")
-              : t("replay.paper.approxFill")}
-          </span>
-          <small>{t("replay.paper.available", { value: formatDecimal(portfolio?.available_equity ?? store.account?.available_equity, 4), asset: settlementAsset })}</small>
-        </div>
-
-        <label className="replay-ticket-type">{t("replay.paper.orderType")}
-          <select value={orderType} onChange={(event) => setOrderType(event.target.value as typeof orderType)}>
-            <option value="MARKET">{t("replay.paper.market")}</option>
-            <option value="LIMIT">{t("replay.paper.limit")}</option>
-            <option value="STOP_MARKET">{t("replay.paper.stopMkt")}</option>
-            <option value="TAKE_PROFIT_MARKET">{t("replay.paper.tpMkt")}</option>
-          </select>
-        </label>
-
-        <div className="replay-size-mode" role="group" aria-label={t("replay.paper.sizeMode")}>
-          {([
-            ["QUANTITY", t("replay.paper.qty")],
-            ["MARGIN", t("replay.paper.margin")],
-            ["NOTIONAL", t("replay.paper.notional")],
-          ] as const).map(([mode, label]) => (
-            <button
-              key={mode}
-              type="button"
-              className={sizeMode === mode ? "active" : ""}
-              onClick={() => setSizeMode(mode)}
-            >{label}</button>
-          ))}
-        </div>
-
-        <div className="replay-ticket-fields">
-          {orderType !== "MARKET" && (
-            <label>{orderType === "LIMIT" ? t("replay.paper.limitPrice") : t("replay.paper.triggerPrice")}
-              <span><input data-replay-field="order-price" value={price} inputMode="decimal" onChange={(event) => setPrice(event.target.value)} /><b>{settlementAsset}</b></span>
-            </label>
-          )}
-          <label>{sizeModeLabel}
+      <div className="replay-ticket-scroll">
+        <header className="replay-ticket-account">
+          <div className="replay-ticket-context">
+            <strong>{symbol}</strong>
+            <span>{isSpot ? t("replay.paper.spot") : t("replay.paper.futures")}</span>
+          </div>
+          <div className="replay-ticket-locks" aria-label={t("replay.paper.marginLev")}>
             <span>
-                 <input
-                   data-replay-field="order-quantity"
-                   value={resolvedSizeInput}
-                   inputMode="decimal"
-                   aria-invalid={quantityExceedsCapacity || undefined}
-                   aria-describedby="replay-order-size-feedback"
-                 onChange={(event) => {
-                   setSizeShareIntent(null);
-                   setSizeInput(event.target.value);
-                 }}
-              />
-              <b>{sizeUnit}</b>
+              {contract?.margin_mode === "ISOLATED" ? t("replay.wb.isolated") : t("replay.wb.cross")}
+              {" · "}
+              {positionMode === "HEDGE" ? t("replay.paper.hedge") : t("replay.paper.oneWay")}
             </span>
-          </label>
-        </div>
-        {sizeMode !== "QUANTITY" && (
-          <small className="replay-size-converted">
-            {t("replay.paper.approxQty", { qty: quantity || "--", asset: quantityAsset })}
-            {refForSize !== null ? t("replay.paper.refPrice", { price: formatDecimal(refForSize, 6) }) : ""}
-          </small>
-        )}
+            <label className="replay-leverage-control" title={t("replay.paper.levCap")}>
+              <span className="sr-only">{t("replay.paper.leverage")}</span>
+              <select
+                value={String(leverage)}
+                aria-label={t("replay.paper.leverageMax", { max: maxLeverage })}
+                onChange={(event) => setLeverage(Math.min(maxLeverage, Math.max(1, Number(event.target.value) || 1)))}
+              >
+                {leverageOptions.map((value) => (
+                  <option key={value} value={value}>{value}x</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <dl className="replay-ticket-balance">
+            <div><dt>{t("replay.wb.equity")}</dt><dd>{formatDecimal(portfolio?.equity ?? store.account?.equity, 2)} <small>{settlementAsset}</small></dd></div>
+            <div><dt>{t("replay.wb.available")}</dt><dd>{formatDecimal(portfolio?.available_equity ?? store.account?.available_equity, 2)} <small>{settlementAsset}</small></dd></div>
+          </dl>
+          {positionSide !== "flat" && (
+            <p className="replay-ticket-position" data-position-side={positionSide}>
+              <span>{positionSide === "long" ? t("replay.wb.long") : t("replay.wb.short")} {formatDecimal(Math.abs(positionQty))} {quantityAsset}</span>
+              <span>{t("replay.wb.floatPnl")} <b data-value-tone={(positionPnl ?? 0) >= 0 ? "positive" : "negative"}>{formatDecimal(positionPnl, 2)}</b></span>
+            </p>
+          )}
+        </header>
 
-        <div
-          className="replay-size-slider"
-          aria-label={t("replay.paper.posShare")}
-          style={{ ["--replay-size-pct" as string]: `${displaySizeShare}%` }}
-        >
-          <input
-            type="range"
-            aria-label={t("replay.paper.sizeQuick")}
-            min={0}
-            max={100}
-            step={1}
-            value={displaySizeShare}
-            disabled={sizingAvailability.sliderDisabled || maxSizeValue === null}
-            onPointerDown={() => {
-              setSliderDragging(true);
-              setSliderPct(displaySizeShare);
-            }}
-            onPointerUp={() => setSliderDragging(false)}
-            onPointerCancel={() => setSliderDragging(false)}
-            onLostPointerCapture={() => setSliderDragging(false)}
-            onBlur={() => setSliderDragging(false)}
-            onKeyUp={() => setSliderDragging(false)}
-            onInput={(event) => {
-              const pct = Number((event.target as HTMLInputElement).value);
-              setSliderDragging(true);
-              setSliderPct(pct);
-              setSizeShare(pct / 100);
-            }}
-            onChange={(event) => {
-              const pct = Number(event.target.value);
-              setSliderPct(pct);
-              setSizeShare(pct / 100);
-            }}
-          />
-          <div className="replay-size-slider-ticks">
-            {[0, 0.25, 0.5, 0.75, 1].map((share) => (
+        <section className="replay-compact-ticket" data-replay-panel="order-ticket">
+          <div className="replay-mode-toggle" role="group" aria-label={t("replay.paper.openClose")}>
+            <button
+              type="button"
+              data-mode="open"
+              className={!reduceOnly ? "active" : ""}
+              aria-pressed={!reduceOnly}
+              onClick={() => setReduceOnly(false)}
+            >{t("replay.paper.open")}</button>
+            <button
+              type="button"
+              data-mode="close"
+              className={reduceOnly ? "active" : ""}
+              aria-pressed={reduceOnly}
+              onClick={() => setReduceOnly(true)}
+            >{t("replay.paper.close")}</button>
+          </div>
+
+          <div className="replay-ticket-type" role="group" aria-label={t("replay.paper.orderType")}>
+            {orderTypeTabs.map(([value, label]) => (
               <button
-                key={share}
+                key={value}
                 type="button"
-                disabled={sizingAvailability.sliderDisabled || maxSizeValue === null}
-                onClick={() => setSizeShare(share)}
-              >{share * 100}%</button>
+                title={label}
+                className={orderType === value ? "active" : ""}
+                aria-pressed={orderType === value}
+                onClick={() => setOrderType(value)}
+              >{label}</button>
             ))}
           </div>
-          <div className="replay-size-slider-meta">
-            <span>
-              {t("replay.paper.refMax", {
-                value: maxSizeValue === null ? "--" : formatDecimal(maxSizeValue, sizeMode === "QUANTITY" ? 8 : 2),
-                unit: sizeUnit,
-              })}
-              {sizeMode !== "QUANTITY" && estimatedMaxQuantity !== null
-                ? ` · ${formatDecimal(estimatedMaxQuantity)} ${quantityAsset}`
-                : ""}
-            </span>
-            <span>{displaySizeShareLabel}%</span>
-          </div>
-        </div>
 
-        <details className="replay-trade-plan replay-disclosure" open={tradePlanEnabled && tradePlanEligible}>
-          <summary>
-            <label onClick={(event) => event.stopPropagation()}>
-              <input
-                type="checkbox"
-                checked={tradePlanEnabled && tradePlanEligible}
-                disabled={!tradePlanEligible}
-                onChange={(event) => setTradePlanEnabled(event.target.checked)}
-              />
-              {t("replay.paper.riskPlan")}
-            </label>
-          </summary>
-          {tradePlanEnabled && tradePlanEligible && (
-            <div className="replay-trade-plan-fields">
-              <label>{t("replay.paper.riskMode")}
+          <div className="replay-ticket-fields">
+            {orderType !== "MARKET" && (
+              <label>{orderType === "LIMIT" ? t("replay.paper.limitPrice") : t("replay.paper.triggerPrice")}
+                <span><input data-replay-field="order-price" value={price} inputMode="decimal" onChange={(event) => setPrice(event.target.value)} /><b>{settlementAsset}</b></span>
+              </label>
+            )}
+            <label>{sizeModeLabel}
+              <span>
+                <input
+                  data-replay-field="order-quantity"
+                  value={resolvedSizeInput}
+                  inputMode="decimal"
+                  aria-invalid={quantityExceedsCapacity || undefined}
+                  aria-describedby="replay-order-size-feedback"
+                  onChange={(event) => {
+                    setSizeShareIntent(null);
+                    setSizeInput(event.target.value);
+                  }}
+                />
                 <select
-                  value={riskSizingMode}
-                  onChange={(event) => setRiskSizingMode(event.target.value as typeof riskSizingMode)}
+                  className="replay-size-unit"
+                  aria-label={t("replay.paper.sizeMode")}
+                  value={sizeMode}
+                  onChange={(event) => setSizeMode(event.target.value as SizeMode)}
                 >
-                  <option value="ACCOUNT_RISK_PERCENT">{t("replay.paper.accountRiskPct")}</option>
-                  <option value="RISK_AMOUNT">{t("replay.paper.riskAmt")}</option>
+                  <option value="QUANTITY">{quantityAsset}</option>
+                  <option value="MARGIN">{t("replay.paper.margin")} · {settlementAsset}</option>
+                  <option value="NOTIONAL">{t("replay.paper.notional")} · {settlementAsset}</option>
                 </select>
-              </label>
-              <label>{riskSizingMode === "RISK_AMOUNT" ? t("replay.paper.maxLoss") : t("replay.paper.accountRisk")}
-                <span>
-                  <input value={riskValue} inputMode="decimal" onChange={(event) => setRiskValue(event.target.value)} />
-                  <b>{riskSizingMode === "RISK_AMOUNT" ? settlementAsset : "%"}</b>
-                </span>
-              </label>
-              <label>{t("replay.paper.invalidPx")}
-                <span><input value={invalidationPrice} inputMode="decimal" onChange={(event) => setInvalidationPrice(event.target.value)} /><b>{settlementAsset}</b></span>
-              </label>
-              <label>{t("replay.paper.targetPx")}
-                <span><input value={targetPrice} inputMode="decimal" onChange={(event) => setTargetPrice(event.target.value)} /><b>{settlementAsset}</b></span>
-              </label>
-              <label className="replay-trade-plan-reason">{t("replay.paper.reason")}
-                <textarea value={tradeReason} maxLength={500} onChange={(event) => setTradeReason(event.target.value)} placeholder={t("replay.paper.reasonPh")} />
-              </label>
-              <dl className="replay-order-preview" aria-label={t("replay.paper.planPreview")}>
-                <div><dt>{t("replay.paper.planQty")}</dt><dd>{preview?.trade_plan?.quantity ?? "--"} {quantityAsset}</dd></div>
-                <div><dt>{t("replay.paper.planRisk")}</dt><dd>{preview?.trade_plan?.risk_amount ?? "--"} {settlementAsset}</dd></div>
-                <div><dt>{t("replay.paper.planRR")}</dt><dd>{preview?.trade_plan?.reward_risk_ratio ?? "--"}</dd></div>
-              </dl>
-              <small>{t("replay.paper.planHint")}</small>
-            </div>
+              </span>
+            </label>
+          </div>
+          {sizeMode !== "QUANTITY" && (
+            <small className="replay-size-converted">
+              {t("replay.paper.approxQty", { qty: quantity || "--", asset: quantityAsset })}
+              {refForSize !== null ? t("replay.paper.refPrice", { price: formatDecimal(refForSize, 6) }) : ""}
+            </small>
           )}
-        </details>
 
-        <dl className="replay-order-preview" aria-label={t("replay.paper.orderPreview")}>
-          <div><dt>{t("replay.paper.notionalVal")}</dt><dd>{previewPending ? t("replay.paper.checking") : `${formatDecimal(preview?.estimated_notional, 2)} ${settlementAsset}`}</dd></div>
-          <div><dt>{t("replay.paper.marginAmt")}</dt><dd>{formatDecimal(preview?.reserved_margin, 2)} {settlementAsset}</dd></div>
-          <div><dt>{t("replay.paper.feeCap")}</dt><dd>{formatDecimal(preview?.estimated_fee, 4)} {settlementAsset}</dd></div>
-        </dl>
+          <div
+            className="replay-size-slider"
+            aria-label={t("replay.paper.posShare")}
+            style={{ ["--replay-size-pct" as string]: `${displaySizeShare}%` }}
+          >
+            <input
+              type="range"
+              aria-label={t("replay.paper.sizeQuick")}
+              min={0}
+              max={100}
+              step={1}
+              value={displaySizeShare}
+              disabled={sizingAvailability.sliderDisabled || maxSizeValue === null}
+              onPointerDown={() => {
+                setSliderDragging(true);
+                setSliderPct(displaySizeShare);
+              }}
+              onPointerUp={() => setSliderDragging(false)}
+              onPointerCancel={() => setSliderDragging(false)}
+              onLostPointerCapture={() => setSliderDragging(false)}
+              onBlur={() => setSliderDragging(false)}
+              onKeyUp={() => setSliderDragging(false)}
+              onInput={(event) => {
+                const pct = Number((event.target as HTMLInputElement).value);
+                setSliderDragging(true);
+                setSliderPct(pct);
+                setSizeShare(pct / 100);
+              }}
+              onChange={(event) => {
+                const pct = Number(event.target.value);
+                setSliderPct(pct);
+                setSizeShare(pct / 100);
+              }}
+            />
+            <div className="replay-size-slider-ticks">
+              {[0.25, 0.5, 0.75, 1].map((share) => (
+                <button
+                  key={share}
+                  type="button"
+                  disabled={sizingAvailability.sliderDisabled || maxSizeValue === null}
+                  onClick={() => setSizeShare(share)}
+                >{share * 100}%</button>
+              ))}
+            </div>
+            <div className="replay-size-slider-meta">
+              <span>
+                {t("replay.paper.refMax", {
+                  value: maxSizeValue === null ? "--" : formatDecimal(maxSizeValue, sizeMode === "QUANTITY" ? 8 : 2),
+                  unit: sizeUnit,
+                })}
+                {sizeMode !== "QUANTITY" && estimatedMaxQuantity !== null
+                  ? ` · ${formatDecimal(estimatedMaxQuantity)} ${quantityAsset}`
+                  : ""}
+              </span>
+              <span>{displaySizeShareLabel}%</span>
+            </div>
+          </div>
 
+          <dl className="replay-order-preview" aria-label={t("replay.paper.orderPreview")}>
+            <div><dt>{t("replay.paper.notionalVal")}</dt><dd>{previewPending ? t("replay.paper.checking") : `${formatDecimal(preview?.estimated_notional, 2)} ${settlementAsset}`}</dd></div>
+            <div><dt>{t("replay.paper.marginAmt")}</dt><dd>{formatDecimal(preview?.reserved_margin, 2)} {settlementAsset}</dd></div>
+            <div><dt>{t("replay.paper.feeCap")}</dt><dd>{formatDecimal(preview?.estimated_fee, 4)} {settlementAsset}</dd></div>
+          </dl>
+
+          <details className="replay-trade-plan replay-disclosure" open={tradePlanEnabled && tradePlanEligible}>
+            <summary>
+              <label onClick={(event) => event.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  checked={tradePlanEnabled && tradePlanEligible}
+                  disabled={!tradePlanEligible}
+                  onChange={(event) => setTradePlanEnabled(event.target.checked)}
+                />
+                {t("replay.paper.riskPlan")}
+              </label>
+            </summary>
+            {tradePlanEnabled && tradePlanEligible && (
+              <div className="replay-trade-plan-fields">
+                <label>{t("replay.paper.riskMode")}
+                  <select
+                    value={riskSizingMode}
+                    onChange={(event) => setRiskSizingMode(event.target.value as typeof riskSizingMode)}
+                  >
+                    <option value="ACCOUNT_RISK_PERCENT">{t("replay.paper.accountRiskPct")}</option>
+                    <option value="RISK_AMOUNT">{t("replay.paper.riskAmt")}</option>
+                  </select>
+                </label>
+                <label>{riskSizingMode === "RISK_AMOUNT" ? t("replay.paper.maxLoss") : t("replay.paper.accountRisk")}
+                  <span>
+                    <input value={riskValue} inputMode="decimal" onChange={(event) => setRiskValue(event.target.value)} />
+                    <b>{riskSizingMode === "RISK_AMOUNT" ? settlementAsset : "%"}</b>
+                  </span>
+                </label>
+                <label>{t("replay.paper.invalidPx")}
+                  <span><input value={invalidationPrice} inputMode="decimal" onChange={(event) => setInvalidationPrice(event.target.value)} /><b>{settlementAsset}</b></span>
+                </label>
+                <label>{t("replay.paper.targetPx")}
+                  <span><input value={targetPrice} inputMode="decimal" onChange={(event) => setTargetPrice(event.target.value)} /><b>{settlementAsset}</b></span>
+                </label>
+                <label className="replay-trade-plan-reason">{t("replay.paper.reason")}
+                  <textarea value={tradeReason} maxLength={500} onChange={(event) => setTradeReason(event.target.value)} placeholder={t("replay.paper.reasonPh")} />
+                </label>
+                <dl className="replay-order-preview" aria-label={t("replay.paper.planPreview")}>
+                  <div><dt>{t("replay.paper.planQty")}</dt><dd>{preview?.trade_plan?.quantity ?? "--"} {quantityAsset}</dd></div>
+                  <div><dt>{t("replay.paper.planRisk")}</dt><dd>{preview?.trade_plan?.risk_amount ?? "--"} {settlementAsset}</dd></div>
+                  <div><dt>{t("replay.paper.planRR")}</dt><dd>{preview?.trade_plan?.reward_risk_ratio ?? "--"}</dd></div>
+                </dl>
+                <small>{t("replay.paper.planHint")}</small>
+              </div>
+            )}
+          </details>
+        </section>
+      </div>
+
+      <footer className="replay-ticket-footer">
+        <div id="replay-order-size-feedback" className="replay-trade-notice" role={ticketMessageTone === "error" ? "alert" : "status"} aria-live="polite" data-tone={ticketMessageTone}>
+          {ticketMessage}
+        </div>
         <div className="replay-dual-cta">
           <button
             type="button"
@@ -1397,11 +1423,12 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
             onClick={() => void placeOrderWithSide("SELL")}
           >{tradeValidationSide === "SELL" ? t("replay.paper.submitting") : ctaLabel("SELL")}</button>
         </div>
-
-        <div id="replay-order-size-feedback" className="replay-trade-notice" role={notice?.tone === "error" || capacityValidationError !== null || reduceOnlyUnavailableMessage !== null ? "alert" : "status"} aria-live="polite" data-tone={notice?.tone ?? (capacityValidationError !== null || capacityError !== null || reduceOnlyUnavailableMessage !== null ? "error" : "idle")}>
-          {notice?.message ?? reduceOnlyUnavailableMessage ?? capacityValidationError ?? capacityError ?? previewError ?? viewer.error ?? t("replay.paper.submitHint")}
-        </div>
-      </section>
+        <small className="replay-order-fidelity" data-fidelity={contract?.execution_fidelity ?? "LOADING"} title={t("replay.paper.submitHint")}>
+          {contract?.execution_fidelity === "BOOK_ASSISTED_CONTINUITY_GATED_NO_QUEUE"
+            ? t("replay.paper.l2Assist")
+            : t("replay.paper.approxFill")}
+        </small>
+      </footer>
     </div>
     </div>
   );
@@ -1470,6 +1497,7 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
   const settlementAsset = selectedTrack?.settlement_asset ?? store.account?.quote_asset ?? "";
   const selectedSymbol = selectedTrack?.symbol ?? config?.symbol ?? "--";
   const portfolioPositions = portfolio?.positions ?? [];
+  const positionTrackCount = new Set(portfolioPositions.map((item) => item.track_id)).size;
   const visiblePositions = filterSelectedTrackOnly
     ? portfolioPositions.filter((item) => item.track_id === selectedTrackId)
     : portfolioPositions;
@@ -1659,6 +1687,10 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
             <small>{t("replay.wb.available")}</small>
             <strong>{formatDecimal(accountView?.available_equity, 2)}</strong>
           </span>
+          <span>
+            <small>{t("replay.wb.floatPnl")}</small>
+            <strong data-value-tone={pnlTone}>{formatDecimal(accountView?.unrealized_pnl, 2)}</strong>
+          </span>
           {warningCount > 0 && <span data-tone="warning">{t("replay.wb.execWarnings", { count: warningCount })}</span>}
         </div>
         <nav className="replay-workbench-tabs" aria-label={t("replay.wb.recordsAria")} role="tablist">
@@ -1693,7 +1725,7 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
 
         {activeTab === "positions" && (
           <div className="replay-rail-account-scroll" data-replay-panel="positions">
-            <div className="replay-account-toolbar">
+            {positionTrackCount > 1 && <div className="replay-account-toolbar">
               <label className="replay-checkbox-field">
                 <input
                   type="checkbox"
@@ -1703,7 +1735,7 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
                 {t("replay.wb.currentSymbol")}
               </label>
               <small>{selectedSymbol}</small>
-            </div>
+            </div>}
             {portfolioPositions.length === 0 ? (
               <div className="replay-account-empty calm"><strong>{t("replay.wb.noPos")}</strong><small>{t("replay.wb.noPosHint")}</small></div>
             ) : visiblePositions.length === 0 ? (
@@ -1916,22 +1948,6 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
                 </article>
               );
             })}
-
-            <section className="replay-asset-strip" data-replay-panel="account-assets" aria-label={t("replay.wb.accountAssets")}>
-              <header>
-                <strong><span className="replay-asset-icon" aria-hidden="true">{settlementAsset.slice(0, 1) || "U"}</span>{settlementAsset || t("replay.wb.assetFallback")}</strong>
-                <small>{t("replay.wb.trainAccount")}</small>
-              </header>
-              <dl className="replay-metric-flat">
-                <div><dt>{t("replay.wb.coinEquity")}</dt><dd>{formatDecimal(accountView?.equity, 4)}</dd></div>
-                <div><dt>{t("replay.wb.used")}</dt><dd>{formatDecimal(accountView?.margin_used, 4)}</dd></div>
-                <div><dt>{t("replay.wb.available")}</dt><dd>{formatDecimal(accountView?.available_equity, 4)}</dd></div>
-                <div><dt>{t("replay.wb.floatPnl")}</dt><dd data-value-tone={pnlTone}>{formatDecimal(accountView?.unrealized_pnl, 4)}</dd></div>
-                <div><dt>{t("replay.wb.riskCover")}</dt><dd>{contract?.risk_ratio == null ? "--" : `${formatDecimal(contract.risk_ratio, 2)}×`}</dd></div>
-                <div><dt>{t("replay.wb.levCap")}</dt><dd>{config?.max_leverage ?? "--"}x</dd></div>
-                <div className="wide"><dt>{t("replay.wb.balance")}</dt><dd>{formatDecimal(accountView?.cash_balance, 4)} {settlementAsset}</dd></div>
-              </dl>
-            </section>
 
             <details className="replay-closed-trades">
               <summary>
