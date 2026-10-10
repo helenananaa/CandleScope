@@ -52,7 +52,13 @@ def main() -> None:
                str(bundle_path), "--sha256", bundle.sha256]
     check = [sys.executable, str(cli), "--root", str(root), "--json", "check", "candlescope.pine-compat"]
     for name, command in (("install", install), ("check", check)):
-        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        result = subprocess.run(command, capture_output=True, text=True)
+        (args.output / f"{name}-stdout.txt").write_text(result.stdout)
+        (args.output / f"{name}-stderr.txt").write_text(result.stderr)
+        if result.returncode:
+            print(result.stdout, file=sys.stderr)
+            print(result.stderr, file=sys.stderr)
+            result.check_returncode()
         payload = json.loads(result.stdout)
         if payload.get("ok") is not True:
             raise ValueError(f"{name} failed: {payload}")

@@ -58,6 +58,8 @@ jobs:
             dist/*.cspkg
             dist/*.whl
             dist/*receipt.json
+            dist/*-stdout.txt
+            dist/*-stderr.txt
           if-no-files-found: error
           retention-days: 14
 
