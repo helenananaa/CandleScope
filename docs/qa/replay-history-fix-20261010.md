@@ -51,3 +51,5 @@
 - `启动历史加载修复版.command`：使用原验收 profile 启动新包。
 - `CandleScope.app`、`CandleScope-mac-arm64-history-fixed.zip`、`SHA256SUMS.txt`。
 - `frontend-check.log`、`backend-tests.log`、`build.log`、`original-run-before.json`、`original-run-after.json`、历史任务 JSON 和 evidence 截图。
+
+后续 [拖拽专项复测](replay-history-drag-20261010.md)：生产前端 Chrome 连续鼠标拖拽通过；原生拖拽工具限制单独保留。
