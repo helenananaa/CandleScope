@@ -167,7 +167,9 @@ class RuntimeProcessSpec:
             raise PluginRegistryError(
                 f"runtime {self.runtime_id!r} executable must be an absolute path"
             )
-        object.__setattr__(self, "executable", executable.resolve(strict=False))
+        # POSIX venv interpreters are symlinks. Resolving them selects the base
+        # interpreter instead, losing pyvenv.cfg and the installed sidecar.
+        object.__setattr__(self, "executable", executable)
 
         arguments = tuple(self.arguments)
         if len(arguments) > 64:

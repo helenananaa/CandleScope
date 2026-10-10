@@ -10,6 +10,8 @@ on:
       - packages/candlescope-plugin-pine-compat/**
       - .github/workflows/pine-plugin-release.yml
       - backend/app/first_party_plugin_bootstrap.py
+      - backend/app/plugin_runtime/registry.py
+      - backend/tests/test_plugin_runtime_venv_launch.py
 
 permissions:
   contents: read
@@ -45,6 +47,11 @@ jobs:
         run: python -m build --wheel --no-isolation --outdir dist packages/candlescope-plugin-pine-compat
       - name: Freeze bridge archive metadata
         run: python packages/candlescope-plugin-pine-compat/scripts/canonicalize_wheel.py dist/candlescope_plugin_pine_compat-0.3.2-py3-none-any.whl
+      - name: Verify virtual environment launch identity
+        env:
+          PYTHONPATH: backend:packages/candlescope-plugin-sdk/src
+        if: runner.os != 'Windows'
+        run: python -m pytest -o pythonpath= -q backend/tests/test_plugin_runtime_venv_launch.py
       - name: Verify engine and offline plugin installation
         run: >-
           python packages/candlescope-plugin-pine-compat/scripts/qualify_release.py
