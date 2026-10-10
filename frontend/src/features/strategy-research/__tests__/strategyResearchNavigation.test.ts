@@ -46,6 +46,7 @@ test("backtest.html remains a compatibility deep-link URL into the unified app",
     }),
   );
   assert.match(html, /strategy-research-advanced/);
+  assert.doesNotMatch(html, /research-data-source-bar|strategy-research-status/);
   assert.doesNotMatch(html, /monaco/i);
 });
 

@@ -569,25 +569,18 @@ export default function StrategyResearchApp({
 
   if (advancedWorkspace) {
     const advancedSearch = strategyResearchDeepLinkSearch(intent);
+    // Advanced research owns its data, navigation and status. Nesting another
+    // workspace here both reports an unrelated empty source and constrains it.
     return (
-      <StrategyResearchShell
-        {...shellShared}
-        intervalSelector={null}
-        toolbar={null}
-        exportOverlay={null}
-        chart={(
-          <section className="strategy-research-advanced" data-testid="strategy-research-advanced">
-            <MarketDataWorkspaceProvider>
-              <Suspense fallback={<main className="research-status-page" data-state="loading" />}>
-                {advancedSearch === null
-                  ? <BacktestResearchApp />
-                  : <BacktestResearchApp search={advancedSearch} />}
-              </Suspense>
-            </MarketDataWorkspaceProvider>
-          </section>
-        )}
-        analysis={null}
-      />
+      <section className="strategy-research-advanced" data-testid="strategy-research-advanced">
+        <MarketDataWorkspaceProvider>
+          <Suspense fallback={<main className="research-status-page" data-state="loading" />}>
+            {advancedSearch === null
+              ? <BacktestResearchApp />
+              : <BacktestResearchApp search={advancedSearch} />}
+          </Suspense>
+        </MarketDataWorkspaceProvider>
+      </section>
     );
   }
 
