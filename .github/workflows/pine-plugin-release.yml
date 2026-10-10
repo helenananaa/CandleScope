@@ -60,6 +60,10 @@ jobs:
           python packages/candlescope-plugin-pine-compat/scripts/qualify_release.py
           --lock packages/candlescope-plugin-pine-compat/release/${{ matrix.lock }}
           --platform ${{ matrix.platform }} --output dist
+      - name: Install host catalog test dependencies
+        run: |
+          python -c "from pathlib import Path; source = Path('backend/requirements.txt').read_text(); Path('dist/host-requirements.txt').write_text('\n'.join(line for line in source.splitlines() if not line.startswith('-e ')))"
+          python -m pip install -r dist/host-requirements.txt
       - name: Verify official catalog and platform selection
         env:
           PYTHONPATH: backend
