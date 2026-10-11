@@ -116,7 +116,9 @@ Open [http://127.0.0.1:15173/](http://127.0.0.1:15173/). The API runs at
 - The current first-party Pyne and Pine plugin bundles target Windows with
   CPython 3.12. Pine compatibility covers a supported subset.
 - The browser app runs on Windows, Linux, and macOS. The optional desktop shell
-  currently targets Windows.
+  supports Windows and native macOS test packages. See the
+  [macOS packaging guide](docs/MACOS_DESKTOP.md) for Apple Silicon/Intel artifacts
+  and signing limitations.
 
 ## Documentation
 

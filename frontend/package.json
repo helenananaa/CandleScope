@@ -56,7 +56,19 @@
       ]
     },
     "beforePack": "scripts/check-desktop-runtime.cjs",
-    "afterPack": "scripts/compile-desktop-python.cjs"
+    "afterPack": "scripts/compile-desktop-python.cjs",
+    "mac": {
+      "icon": "public/brand/candlescope-app-icon-1024.png",
+      "category": "public.app-category.finance",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "artifactName": "${productName}-${version}-macos-${arch}.${ext}",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "notarize": false
+    }
   },
   "overrides": {
     "dompurify": "3.4.13"
@@ -123,7 +135,8 @@
     "smoke:drawing:controlled": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/drawing-controlled-cdp-smoke.ps1",
     "check:drawing:rollback-drills:browser": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/drawing-rollback-drills-browser.ps1",
     "test:drawing": "tsx --test --test-concurrency=4 \"src/features/drawings/**/*.test.{ts,tsx}\"",
-    "desktop:runtime:prepare": "node scripts/prepare-desktop-runtime.mjs"
+    "desktop:runtime:prepare": "node scripts/prepare-desktop-runtime.mjs",
+    "desktop:package:mac": "node scripts/package-desktop.mjs --distributable --mac dmg zip --publish never"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
