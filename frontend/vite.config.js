@@ -76,6 +76,8 @@ export default defineConfig({
       },
       output: {
         manualChunks(id) {
+          // A shared dynamic-import helper must not pull the lazy editor into every entry page.
+          if (id.includes('vite/preload-helper') || id.includes('commonjsHelpers')) return 'vendor'
           if (!id.includes('node_modules')) return undefined
           // `@monaco-editor/react` also contains the word "react" in its path.
           // Keep this check before the generic React bucket so the editor stays

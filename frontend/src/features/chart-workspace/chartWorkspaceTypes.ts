@@ -94,7 +94,7 @@ export interface ChartStrategyAttachmentRecord {
   strategyDraftId: string | null;
   strategyRevisionId: string | null;
   displayName: string;
-  language: "pyne" | "pine";
+  language: "pyne" | "pine" | "python";
   parameters: Record<string, unknown>;
   rangeMode: "ALL_AVAILABLE" | "VISIBLE" | "CUSTOM";
   customRange: { startMs: number; endMs: number } | null;

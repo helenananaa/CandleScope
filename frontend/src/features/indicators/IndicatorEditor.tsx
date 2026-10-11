@@ -10,10 +10,9 @@
  */
 import { describeError } from "../../i18n/serverErrors.js";
 import { Icon } from "../../components/icons/Icon.js";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
-import Editor from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
 import {
   configurePineHostCapabilities,
@@ -36,6 +35,7 @@ import type {
 } from "./indicatorTypes.js";
 
 /** Track whether Pyne providers have been registered globally */
+const Editor = lazy(() => import("../../editor/LocalMonacoEditor.js"));
 let pyneRegistered = false;
 /** Track whether Pine providers have been registered globally */
 let pineRegistered = false;
@@ -476,7 +476,7 @@ export default function IndicatorEditor({
           </div>
         )}
         <div className="indicator-editor-monaco" style={{ flex: 1, minHeight: 0, border: "1px solid rgba(255, 255, 255, 0.1)", borderRadius: "10px", overflow: "hidden", boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2), inset 0 2px 4px rgba(0, 0, 0, 0.2)" }}>
-          <Editor
+          <Suspense fallback={null}><Editor
             height="100%"
             {...(
               editorProfile?.pyneEnhancements
@@ -500,7 +500,7 @@ export default function IndicatorEditor({
               suggestOnTriggerCharacters: false,
               cursorStyle: "line-thin",
             } : {})}
-          />
+          /></Suspense>
         </div>
 
       </div>

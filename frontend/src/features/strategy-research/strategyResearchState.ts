@@ -1,4 +1,5 @@
 import type { ResearchSourceRefV1 } from "../research-data/researchDataTypes.js";
+import { getStrategyStorage } from "../../shared/strategyStorage.js";
 import { validStrategyRunSettings, type StrategyRunSettings } from "../../shared/strategyRunSettings.js";
 import { parseResearchSourceRef, ResearchDataError } from "../research-data/researchDataSourceModel.js";
 
@@ -130,7 +131,7 @@ export function persistStrategyResearchWorkspace(state: StrategyResearchState): 
     runId: state.result.runId,
   };
   try {
-    window.localStorage.setItem(STRATEGY_RESEARCH_WORKSPACE_KEY, JSON.stringify(payload));
+    void Promise.resolve(getStrategyStorage()?.setItem(STRATEGY_RESEARCH_WORKSPACE_KEY, JSON.stringify(payload))).catch(() => {});
   } catch {
     // Persistence is optional; in-memory state remains.
   }
@@ -138,7 +139,7 @@ export function persistStrategyResearchWorkspace(state: StrategyResearchState): 
 
 export function loadStrategyResearchWorkspace(): StrategyResearchState {
   try {
-    const raw = window.localStorage.getItem(STRATEGY_RESEARCH_WORKSPACE_KEY);
+    const raw = getStrategyStorage()?.getItem(STRATEGY_RESEARCH_WORKSPACE_KEY);
     if (raw == null) return EMPTY_STRATEGY_RESEARCH_STATE;
     const parsed: unknown = JSON.parse(raw);
     if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {

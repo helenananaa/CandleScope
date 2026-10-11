@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { t } from "../../i18n/index.js";
+import { strategyLanguageLabel } from "../backtest/chart-tester/strategyLanguageLabel.js";
 import { CHART_STRATEGY_TEMPLATES } from "../backtest/chart-tester/chartStrategyTesterUiModel.js";
 import { getChartStrategyDraftStore } from "../backtest/chart-tester/chartStrategyTesterDrafts.js";
 import type { StrategyDraftRecord } from "../backtest/chart-tester/StrategyDraftStore.js";
@@ -53,7 +54,7 @@ export function StrategyResearchFirstOpen({
           >
             <strong>{t(template.nameKey)}</strong>
             <span>{t(template.descriptionKey)}</span>
-            <small>{t("chartTester.language.pyne")}</small>
+            <small>{strategyLanguageLabel(template.language)}</small>
           </button>
         ))}
       </div>

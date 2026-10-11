@@ -26,6 +26,7 @@ type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | 
   onRunChange?: (run: NativeRun | null) => void;
   externalReport?: boolean;
   docked?: boolean;
+  onSelectPython?(): void;
 };
 export default function NativeStrategyPanel(props: NativeStrategyPanelProps) {
   useLocale();
@@ -335,8 +336,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
     <details className="native-actions-menu"><summary>{t("report.more")}</summary><div><button aria-pressed={tab === "history"} onClick={(event) => { selectTab("history"); event.currentTarget.closest("details")?.removeAttribute("open"); }}>{t("native.history")}</button></div></details>
     </nav>}
     <div className="native-dock-actions">
-    <div className="native-toolbar"><select aria-label={t("native.language")} value={language} disabled={busy} onChange={(event) => setLanguage(event.target.value as "pine" | "pyne")}>
-      <option value="pine">{t("chartTester.language.pine")}</option><option value="pyne">{t("chartTester.language.pyne")}</option></select>
+    <div className="native-toolbar"><select aria-label={t("native.language")} value={language} disabled={busy} onChange={(event) => { if (event.target.value === "python") props.onSelectPython?.(); else setLanguage(event.target.value as "pine" | "pyne"); }}>
+      <option value="pine">{t("chartTester.language.pine")}</option><option value="pyne">{t("chartTester.language.pyne")}</option>{props.onSelectPython && <option value="python">Python</option>}</select>
       <button disabled={busy || (mode === "CANDLESCOPE" && fidelity !== "BAR_APPROX" && executionDataState !== "ready") || !(mode === "NATIVE" ? available?.available : available?.external_available)} onClick={() => void start()}>{t(mode === "NATIVE" ? "native.run" : "native.external.run")}</button>
       {run && !nativeTerminal(run.state) && <button onClick={() => void nativeApi<NativeRun>(`${runPath}/${run.run_id}/cancel`, {}).then(receiveRun).catch((reason) => setError(String(reason)))}>{t("native.cancel")}</button>}
       <span role="status" className="native-run-status">{t(`strategyReview.status.${preparation?.state === "CANCELLED" || run?.state === "CANCELLED" ? "cancelled" : error || run?.state === "FAILED" || run?.state === "INTERRUPTED" ? "failed" : busy ? (run ? "running" : "preparing") : run?.state === "COMPLETED" ? "completed" : resolution && resolution.status !== "READY" ? "needsData" : "idle"}`)}</span></div>

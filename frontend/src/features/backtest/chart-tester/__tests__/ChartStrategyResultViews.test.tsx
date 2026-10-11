@@ -191,7 +191,7 @@ test("drawdown card explains absent reports, insufficient samples and genuine ze
   assert.match(render({ max_drawdown: { value: null, reason: "UNSUPPORTED" } }), /报告标记该指标不可用/);
   const zero = render({ max_drawdown: { value: "0", reason: null } });
   assert.match(zero, /按报告权益采样统计/);
-  assert.match(zero, /title="0"[^>]*>0<\/strong>/);
+  assert.match(zero, /0\.00%/);
 });
 
 

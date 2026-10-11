@@ -270,6 +270,8 @@ class BacktestService:
         self, payload: Mapping[str, object], *, now_ms: int | None = None
     ) -> dict[str, object]:
         stamp = now_ms or _now_ms()
+        if payload.get("language") == "PYTHON_EDITOR":
+            return self.create_python_editor_revision(payload, now_ms=stamp)
         try:
             record = compile_revision(payload, now_ms=stamp)
         except StrategyProviderError as exc:
@@ -292,6 +294,31 @@ class BacktestService:
             "diagnostics": record["diagnostics"],
             "reused": not inserted,
         }
+
+    def create_python_editor_revision(self, payload: Mapping[str, object], *, now_ms: int) -> dict[str, object]:
+        """Freeze editor text using the same validated SDK bundle path as Studio."""
+        import io
+        import zipfile
+
+        manifest = {
+            "schemaVersion": "candlescope.python-strategy-bundle/1",
+            "name": str(payload["name"]),
+            "entrypoint": "strategy:Strategy",
+            "signalClock": "BAR_CLOSE",
+            "outputModes": ["TARGET_POSITION", "SIGNAL", "ORDER_INTENT"],
+            "requiredFeatures": ["open", "high", "low", "close", "volume"],
+            "warmup": {"kind": "FIXED_BARS", "bars": 0},
+            "parameters": payload.get("parameter_schema") or [],
+            "reproducibility": "BEST_EFFORT_LOCAL",
+        }
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("strategy.json", json.dumps(manifest, sort_keys=True))
+            archive.writestr("strategy.py", str(payload.get("source_text") or ""))
+            archive.writestr("candlescope-editor.json", json.dumps({"schemaVersion": "candlescope.python-editor/1"}))
+            archive.writestr("requirements.lock", "# CandleScope bundled SDK; no additional dependencies\n")
+        bundle = self.create_python_strategy_bundle(zip_bytes=buffer.getvalue(), now_ms=now_ms)
+        return self.create_python_strategy_revision(str(bundle["bundle_id"]), now_ms=now_ms)
 
     def inspect_python_strategy_bundle(
         self,
@@ -406,6 +433,7 @@ class BacktestService:
             mode=str(mode or "SANDBOXED_LOCAL"),
             trusted_confirmed=bool(trusted_confirmed),
             bound_transcript=self.settings.python_scale_v1_enabled,
+            editor_authorized=(Path(str(bundle["store_path"])) / "candlescope-editor.json").is_file(),
         )
 
     def get_python_runtime_receipt(self, revision_id: str) -> dict[str, object]:
