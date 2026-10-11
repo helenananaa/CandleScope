@@ -21,6 +21,8 @@ import type { ChartStrategyAttachmentRecord } from "../../chart-workspace/chartW
 import type { ChartContextResolution } from "../backtestApi.js";
 import type { RecentRunCompareV1 } from "../backtestTypes.js";
 import { t } from "../../../i18n/index.js";
+import { StrategyLanguageControls } from "./StrategyLanguageControls.js";
+import { strategyLanguageLabel } from "./strategyLanguageLabel.js";
 import { StrategyConditionsEditor } from "./StrategyConditionsEditor.js";
 import { StrategyParametersEditor } from "./StrategyParametersEditor.js";
 import { validStrategyRunSettings } from "../../../shared/strategyRunSettings.js";
@@ -33,6 +35,7 @@ import {
   type StrategyDraftStore,
 } from "./StrategyDraftStore.js";
 import {
+  openPythonStrategyDraft,
   createChartStrategyDraftId,
   strategyDraftContentRevision,
 } from "./chartStrategyTesterDrafts.js";
@@ -111,7 +114,7 @@ function attachmentForDraft(
     customRange: null,
     fidelityPreference: "FAST",
     quickPresetId: chartStrategyQuickPresetIdForMarket(session.marketType),
-    autoRun: true,
+    autoRun: record.language !== "python",
   };
 }
 
@@ -245,6 +248,12 @@ export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanel
     {(mode === "NATIVE" || visited.has("NATIVE")) && <StrategyDockPane hidden={mode !== "NATIVE"}>
       <Suspense fallback={<p className="strategy-dock-empty">{t("native.loading")}</p>}>
         <NativeStrategyPanel key={`${props.session.exchange}:${props.session.marketType}:${props.session.symbol}:${props.session.interval}`} {...props}
+          onSelectPython={() => {
+            void openPythonStrategyDraft(props.draftStore, props.attachment?.strategyDraftId ?? null).then((record) => {
+              props.onAttachmentChange(attachmentForDraft(record, props.session));
+              switchMode("CANDLESCOPE");
+            });
+          }}
           strategies={strategies} active={props.active !== false && mode === "NATIVE"} docked />
       </Suspense>
     </StrategyDockPane>}
@@ -298,6 +307,9 @@ export function CandleScopeStrategyTesterPanel({
   const [draft, setDraft] = useState<StrategyDraftRecord | null>(null);
   const activeDraft = draft?.id === currentAttachment?.strategyDraftId ? draft : null;
   const [source, setSource] = useState("");
+  const [pythonApproval, setPythonApproval] = useState<string | null>(null);
+  const approvalKey = JSON.stringify([draft?.id, source]);
+  const pythonTrustedConfirmed = pythonApproval === approvalKey;
   const [cursor, setCursor] = useState<StrategyDraftCursor | null>(null);
   const [saveState, setSaveState] = useState<StrategyDraftAutoSaveState>("IDLE");
   const [issues, setIssues] = useState<ChartStrategyDraftIssue[]>([]);
@@ -441,13 +453,14 @@ export function CandleScopeStrategyTesterPanel({
     displayName: string,
     sourceText: string,
     shouldFocus: boolean,
+    language: StrategyDraftRecord["language"] = "pyne",
   ) => {
     const id = createChartStrategyDraftId();
     try {
       const record = await draftStore.save({
         id,
         displayName,
-        language: "pyne",
+        language,
         source: sourceText,
         cursor: { line: 1, column: 1 },
       });
@@ -460,6 +473,7 @@ export function CandleScopeStrategyTesterPanel({
 
   const run = useCallback(() => {
     if (!activeDraft || !currentAttachment) return;
+    if (activeDraft.language === "python" && !pythonTrustedConfirmed) return;
     if (!validStrategyRunSettings({ ...currentAttachment, rangeMode: currentAttachment.rangeMode === "VISIBLE" ? "CUSTOM" : currentAttachment.rangeMode })) {
       setActiveTab("settings");
       return;
@@ -480,6 +494,7 @@ export function CandleScopeStrategyTesterPanel({
       draftContentRevision: strategyDraftContentRevision(source),
       displayName: activeDraft.displayName,
       language: activeDraft.language,
+      pythonTrustedConfirmed,
       source,
       attachment: {
         ...currentAttachment,
@@ -489,7 +504,7 @@ export function CandleScopeStrategyTesterPanel({
     });
     setRunReady(true);
     onEntryStateChange("ready");
-  }, [activeDraft, cellScope, currentAttachment, onEntryStateChange, onRunRequest, session, source]);
+  }, [activeDraft, cellScope, currentAttachment, onEntryStateChange, onRunRequest, session, source, pythonTrustedConfirmed]);
 
   const retrySave = useCallback(() => {
     if (!activeDraft) return;
@@ -685,7 +700,7 @@ export function CandleScopeStrategyTesterPanel({
             <button
               type="button"
               className="chart-strategy-run-button strategy-run-button"
-              disabled={runBusy}
+              disabled={runBusy || (activeDraft?.language === "python" && !pythonTrustedConfirmed)}
               data-run-status={runState.status}
               onClick={pendingDataMatchesSource ? onPrepareData : run}
             >
@@ -736,7 +751,7 @@ export function CandleScopeStrategyTesterPanel({
                 <h3>{t("chartTester.start.template")}</h3>
                 <div className="chart-strategy-start-list">
                   {CHART_STRATEGY_TEMPLATES.map((template) => (
-                    <button key={template.id} type="button" onClick={() => void createDraft(template.displayName, template.source, false)}>
+                    <button key={template.id} type="button" onClick={() => void createDraft(template.displayName, template.source, false, template.language)}>
                       <strong>{t(template.nameKey)}</strong>
                       <span>{t(template.descriptionKey)}</span>
                     </button>
@@ -753,7 +768,7 @@ export function CandleScopeStrategyTesterPanel({
                       <button key={record.id} type="button" onClick={() => attachRecord(record, false)}>
                         <strong>{record.displayName}</strong>
                         <span>
-                          {record.language === "pine" ? t("chartTester.language.pine") : t("chartTester.language.pyne")}
+                          {strategyLanguageLabel(record.language)}
                           {" · "}
                           <time dateTime={new Date(record.updatedAt).toISOString()}>{new Date(record.updatedAt).toLocaleString(locale)}</time>
                         </span>
@@ -799,6 +814,10 @@ export function CandleScopeStrategyTesterPanel({
               </Suspense>
             </section>
             <aside className="chart-strategy-problems" aria-label={t("chartTester.problemsAria")}>
+              <StrategyLanguageControls language={activeDraft.language} confirmed={pythonTrustedConfirmed} onConfirm={(value) => setPythonApproval(value ? approvalKey : null)} onLanguage={(language) => {
+                setPythonApproval(null);
+                void draftStore.save({ ...activeDraft, language, source, cursor }).then((record) => attachRecord(record, false));
+              }} />
               <StrategyParametersEditor source={source} onChange={(value) => { setSource(value); setRunReady(false); onSourceDirty(); }} />
               <div className="chart-strategy-problems-head">{t("chartTester.problems")}</div>
               <div className="chart-strategy-problems-body">

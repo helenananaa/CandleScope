@@ -85,6 +85,7 @@ class PythonHostProvider:
         mode: str | None = None,
         trusted_confirmed: bool | None = None,
         bound_transcript: bool | None = None,
+        editor_authorized: bool = False,
     ) -> None:
         if mode is None:
             mode = "TRUSTED_LOCAL"
@@ -101,6 +102,7 @@ class PythonHostProvider:
             entrypoint=entrypoint,
             mode=mode,
             trusted_confirmed=bool(trusted_confirmed),
+            editor_authorized=editor_authorized,
             step_timeout_s=5.0,
             bound_transcript=bound_transcript,
         )

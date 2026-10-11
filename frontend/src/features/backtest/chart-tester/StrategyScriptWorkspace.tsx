@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
+import "../../../editor/localMonaco.js";
 
 import { registerPineLanguageSupport } from "../../../editor/pineLanguage.js";
 import { registerPyneLanguageSupport } from "../../../editor/pyneLanguage.js";
@@ -108,7 +109,7 @@ export default function StrategyScriptWorkspace({
   const handleBeforeMount = useCallback((monaco: typeof Monaco) => {
     registerPyneTheme(monaco);
     if (language === "pine") registerPineLanguageSupport(monaco);
-    else if (!pyneCleanupRef.current) {
+    else if (language === "pyne" && !pyneCleanupRef.current) {
       pyneCleanupRef.current = registerPyneLanguageSupport(monaco);
     }
   }, [language]);
@@ -145,6 +146,7 @@ export default function StrategyScriptWorkspace({
       <Editor
         height="100%"
         language={language === "pine" ? "pine" : "python"}
+        path={`strategy-script.${language === "python" ? "py" : language}`}
         value={source}
         theme={editorTheme}
         beforeMount={handleBeforeMount}

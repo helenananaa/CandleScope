@@ -183,6 +183,8 @@ def create_strategy_revision(
     request: Request, payload: StrategyRevisionRequest
 ) -> dict[str, Any]:
     try:
+        if payload.language == "PYTHON_EDITOR" and not is_trusted_operator_origin(origin_from(request.headers)):
+            raise BacktestError("TRUSTED_ORIGIN_REQUIRED", "Python editor requires a trusted local application origin")
         return _service(request).create_strategy_revision(payload.model_dump())
     except BacktestError as exc:
         return _error(exc)

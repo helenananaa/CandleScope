@@ -49,6 +49,38 @@ const request: ChartStrategyRunRequest = {
   },
 };
 
+test("Python requires current-source consent before compilation and carries runtime mode through smoke and Run", async () => {
+  const python = { ...request, language: "python" as const, attachment: { ...request.attachment, language: "python" as const } };
+  const calls: string[] = [];
+  const api = apiWithResolutions([resolution(), resolution()], calls);
+  await assert.rejects(runChartStrategyBacktest({ api, request: python }), /Confirm local Python/);
+  assert.deepEqual(calls, []);
+  api.smokeStrategyRevision = async (_revision, body) => {
+    assert.equal(body.python_runtime_mode, "TRUSTED_LOCAL");
+    assert.equal(body.python_trusted_confirmed, true);
+    return { ok: true };
+  };
+  api.createRun = async (body) => {
+    assert.equal(body.python_runtime_mode, "TRUSTED_LOCAL");
+    assert.equal(body.python_trusted_confirmed, true);
+    return completed();
+  };
+  await runChartStrategyBacktest({ api, request: { ...python, pythonTrustedConfirmed: true } });
+  assert.equal(calls[0], "revision:PYTHON_EDITOR");
+});
+
+test("Python permissions reach automatic data preparation and its server-created Run", async () => {
+  const calls: string[] = [];
+  const api = apiWithResolutions([resolution("NEEDS_DATA")], calls);
+  api.prepareChartContext = async (_body, _signal, intent) => {
+    assert.equal(intent?.python_runtime_mode, "TRUSTED_LOCAL");
+    assert.equal(intent?.python_trusted_confirmed, true);
+    return { ...resolution(), prepared_run: completed() };
+  };
+  const result = await runChartStrategyBacktest({ api, request: { ...request, language: "python", pythonTrustedConfirmed: true, attachment: { ...request.attachment, language: "python" } } });
+  assert.equal(result.kind, "TERMINAL");
+});
+
 test("custom conditions are frozen into the actual request with explicit fee provenance", async () => {
   const executionOverrides = { initialBalance: "2000", equityPercent: "25", leverage: "2", feeBps: "7", slippageBps: "3" };
   const frozen = await freezeChartStrategyRunRequest({ ...request, attachment: { ...request.attachment, executionOverrides } });

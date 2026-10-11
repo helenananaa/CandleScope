@@ -380,6 +380,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         <div className="strategy-segmented" role="radiogroup" aria-label={t("native.language")}>
           {(["pine", "pyne"] as const).map((item) => <button key={item} type="button" role="radio" aria-checked={language === item} disabled={busy}
             onClick={() => setLanguage(item)}>{t(`chartTester.language.${item}`)}</button>)}
+          {props.onSelectPython && <button type="button" role="radio" aria-checked={false} disabled={busy} onClick={props.onSelectPython}>Python</button>}
         </div>
         <label>{t("native.parameters")}<textarea value={parameters} disabled={busy} spellCheck={false} onChange={(event) => save(source, event.target.value)} /></label>
       </aside>

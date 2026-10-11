@@ -9,7 +9,7 @@ test("template choice survives data selection and reopening without replacing ea
   const store = new StrategyDraftStore(adapter);
   const saved = [];
   for (const template of CHART_STRATEGY_TEMPLATES) saved.push(await saveResearchTemplate(store, template.id));
-  assert.equal(new Set(saved.map((draft) => draft.id)).size, 3);
+  assert.equal(new Set(saved.map((draft) => draft.id)).size, CHART_STRATEGY_TEMPLATES.length);
   const reopened = new StrategyDraftStore(adapter);
   for (const [index, template] of CHART_STRATEGY_TEMPLATES.entries()) {
     const view = await reopened.load(saved[index]!.id);

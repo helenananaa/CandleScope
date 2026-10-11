@@ -50,7 +50,7 @@ import {
 import { StrategyResearchRuntime } from "./StrategyResearchRuntime.js";
 import { StrategyResearchResultPanel } from "./StrategyResearchResultPanel.js";
 import { StrategyResearchScriptPanel } from "./StrategyResearchScriptPanel.js";
-import { getChartStrategyDraftStore } from "../backtest/chart-tester/chartStrategyTesterDrafts.js";
+import { openPythonStrategyDraft, getChartStrategyDraftStore } from "../backtest/chart-tester/chartStrategyTesterDrafts.js";
 import { saveResearchTemplate } from "./strategyTemplateDraft.js";
 import { readResearchHandoff } from "./strategyResearchHandoff.js";
 import { StrategyResearchShell } from "./StrategyResearchShell.js";
@@ -312,6 +312,13 @@ export default function StrategyResearchApp({
   );
 
   const scriptDraft = state.script.draftId;
+  useEffect(() => {
+    let cancelled = false;
+    if (scriptDraft) void getChartStrategyDraftStore().load(scriptDraft).then((view) => {
+      if (!cancelled && view.record?.language === "python") setNativeMode(false);
+    });
+    return () => { cancelled = true; };
+  }, [scriptDraft]);
   const analysisEvents = importedManifest === null ? [] : analysisSnapshot.events;
   const handleRunId = useCallback((runId: string | null) => {
     dispatch({ type: "result/setRun", runId });
@@ -331,6 +338,7 @@ export default function StrategyResearchApp({
     setSavingTemplate(true);
     void saveResearchTemplate(getChartStrategyDraftStore(), templateId).then((draft) => {
       dispatch({ type: "script/setDraft", draftId: draft.id });
+      setNativeMode(false);
       dispatch({ type: "source/libraryOpen", open: true });
     }).catch(() => library.setError(t("chartTester.autosave.error"))).finally(() => {
       selectingTemplateRef.current = false;
@@ -413,6 +421,12 @@ export default function StrategyResearchApp({
       {!nativeMode && availability === "unavailable" && <p role="status">{t("native.platformHelp")}</p>}
       {nativeMode ? researchRun.session ? <Suspense fallback={<p>{t("native.loading")}</p>}>
         <NativeStrategyPanel session={researchRun.session} cellScope="strategy-research-native" onClose={() => setNativeMode(false)}
+          onSelectPython={() => {
+            void openPythonStrategyDraft(getChartStrategyDraftStore(), scriptDraft).then((draft) => {
+              dispatch({ type: "script/setDraft", draftId: draft.id });
+              setNativeMode(false);
+            });
+          }}
           key={`${chartUiScope}:${researchRun.session.exchange}:${researchRun.session.marketType}:${researchRun.session.symbol}:${researchRun.session.interval}`} externalReport onRunChange={setNativeRun}
           dataset={importedManifest ? { datasetId: importedManifest.dataset_id, dataEpoch: importedManifest.data_epoch } : undefined}
           onLocateTrade={(timeMs) => setFocusedAnalysis((current) => ({ scope: chartUiScope, value: {

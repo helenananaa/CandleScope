@@ -1,4 +1,5 @@
 import { normalizeNativeStrategies } from "../backtest/native/nativeStrategyCollection.js";
+import { getStrategyStorage } from "../../shared/strategyStorage.js";
 import { canonicalizeIntervalValue } from "../../utils/intervals.js";
 import { t } from "../../i18n/index.js";
 import { validExecutionOverrides } from "../../shared/strategyRunSettings.js";
@@ -58,7 +59,7 @@ export const CHART_WORKSPACE_V7_STORAGE_KEY = "candlescope-chart-workspace-v7";
 
 export interface ChartWorkspaceStorageLike {
   getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
+  setItem(key: string, value: string): void | Promise<void>;
 }
 
 export interface ChartWorkspaceNormalizationDiagnostic {
@@ -96,7 +97,7 @@ const DEFAULT_CELL_INTERVALS = ["1h", "15m", "4h", "1d"] as const;
 
 function browserStorage(): ChartWorkspaceStorageLike | null {
   try {
-    return globalThis.localStorage ?? null;
+    return getStrategyStorage();
   } catch {
     return null;
   }
@@ -274,7 +275,7 @@ function normalizeAttachment(
   const displayName = typeof value.displayName === "string"
     ? value.displayName.trim().slice(0, 120)
     : "";
-  const language = value.language === "pyne" || value.language === "pine"
+  const language = value.language === "pyne" || value.language === "pine" || value.language === "python"
     ? value.language
     : null;
   const parameters = cloneJsonValue(value.parameters);
@@ -667,10 +668,10 @@ export function saveChartWorkspace(
 ): void {
   if (!storage) return;
   try {
-    storage.setItem(
+    void Promise.resolve(storage.setItem(
       CHART_WORKSPACE_V8_STORAGE_KEY,
       JSON.stringify(normalizeChartWorkspace(workspace)),
-    );
+    )).catch(() => {});
   } catch {
     // Workspace persistence is best effort and must not break live charts.
   }

@@ -11,8 +11,9 @@ import {
   strategyDraftContentRevision,
 } from "../chartStrategyTesterDrafts.js";
 
-test("ordinary mode exposes exactly three editable templates without internal object fields", () => {
+test("ordinary mode exposes Python and existing editable templates without internal object fields", () => {
   assert.deepEqual(CHART_STRATEGY_TEMPLATES.map((template) => template.id), [
+    "PYTHON_SMA",
     "SMA_CROSS",
     "RSI_REVERSAL",
     "DONCHIAN_BREAKOUT",

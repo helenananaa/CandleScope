@@ -2,7 +2,7 @@ export const STRATEGY_DRAFT_SCHEMA_VERSION = 1 as const;
 export const STRATEGY_DRAFT_STORE_SCHEMA_VERSION = 1 as const;
 export const STRATEGY_DRAFT_STORAGE_KEY = "candlescope-strategy-drafts-v1";
 
-export type StrategyDraftLanguage = "pyne" | "pine";
+export type StrategyDraftLanguage = "pyne" | "pine" | "python";
 export type StrategyDraftAutoSaveState = "IDLE" | "SAVING" | "SAVED" | "ERROR";
 
 export interface StrategyDraftCursor {
@@ -37,7 +37,7 @@ export interface StrategyDraftStoreAdapter {
 
 export interface StrategyDraftStorageLike {
   getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
+  setItem(key: string, value: string): void | Promise<void>;
 }
 
 const MAX_DRAFT_SOURCE_LENGTH = 2 * 1024 * 1024;
@@ -57,7 +57,7 @@ function normalizeRecord(value: unknown): StrategyDraftRecord | null {
   const displayName = typeof source.displayName === "string"
     ? source.displayName.trim().slice(0, 120)
     : "";
-  const language = source.language === "pyne" || source.language === "pine"
+  const language = source.language === "pyne" || source.language === "pine" || source.language === "python"
     ? source.language
     : null;
   const code = typeof source.source === "string" ? source.source : null;
@@ -145,12 +145,12 @@ export function createLocalStorageStrategyDraftAdapter(
       if (!normalized) throw new TypeError("invalid strategy draft record");
       const envelope = readEnvelope(storage);
       envelope.drafts[normalized.id] = normalized;
-      storage.setItem(STRATEGY_DRAFT_STORAGE_KEY, JSON.stringify(envelope));
+      await storage.setItem(STRATEGY_DRAFT_STORAGE_KEY, JSON.stringify(envelope));
     },
     async remove(id) {
       const envelope = readEnvelope(storage);
       delete envelope.drafts[id];
-      storage.setItem(STRATEGY_DRAFT_STORAGE_KEY, JSON.stringify(envelope));
+      await storage.setItem(STRATEGY_DRAFT_STORAGE_KEY, JSON.stringify(envelope));
     },
   };
 }

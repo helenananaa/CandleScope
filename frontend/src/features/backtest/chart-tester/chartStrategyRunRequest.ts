@@ -138,6 +138,9 @@ export async function freezeChartStrategyRunRequest(
   request: ChartStrategyRunRequest,
 ): Promise<ChartStrategyFrozenRunRequest> {
   const cloned = cloneFrozen(request);
+  if (cloned.language === "python" && !cloned.pythonTrustedConfirmed) {
+    throw new ChartStrategyRunError("TRUSTED_LOCAL_UNCONFIRMED", "Confirm local Python permissions before running");
+  }
   if (cloned.attachment.executionOverrides !== undefined && !validExecutionOverrides(cloned.attachment.executionOverrides)) {
     throw new ChartStrategyRunError("INVALID_EXECUTION_SETTINGS", "Invalid account or cost settings", { next_step: "check capital, position, leverage and costs" });
   }
@@ -182,7 +185,7 @@ export function chartContextRequestForFrozen(
 }
 
 function revisionLanguage(language: ChartStrategyFrozenRunRequest["language"]): string {
-  return language === "pine" ? "PINE_SUBSET" : "PYNE_CHART_V1";
+  return language === "python" ? "PYTHON_EDITOR" : language === "pine" ? "PINE_SUBSET" : "PYNE_CHART_V1";
 }
 
 function requireString(source: Record<string, string>, name: string): string {
@@ -258,6 +261,10 @@ export function buildChartStrategyRunBody(input: {
   }
   const overrides = input.frozen.attachment.executionOverrides;
   return {
+    ...(input.frozen.language === "python" ? {
+      python_runtime_mode: "TRUSTED_LOCAL",
+      python_trusted_confirmed: input.frozen.pythonTrustedConfirmed === true,
+    } : {}),
     strategy_revision_id: input.revision.revision_id,
     dataset_id: identity.datasetId,
     data_epoch: identity.dataEpoch,
@@ -620,6 +627,7 @@ export async function runResearchBacktest(options: {
       && (resolution.status === "NEEDS_DATA" || (resolution.status === "READY" && resolution.automatic_preparation_available))) {
       options.onStage?.("MATERIALIZING");
       const strategyIntent = {
+        ...(frozen.language === "python" ? { python_runtime_mode: "TRUSTED_LOCAL", python_trusted_confirmed: frozen.pythonTrustedConfirmed === true } : {}),
         strategy_revision_id: revision.revision_id,
         parameters: frozen.attachment.parameters,
         ...(frozen.attachment.executionOverrides ? { execution_overrides: frozen.attachment.executionOverrides } : {}),
@@ -654,6 +662,7 @@ export async function runResearchBacktest(options: {
   options.onStage?.("VALIDATING");
   if (!resolution.prepared_run) {
     await options.api.smokeStrategyRevision(revision.revision_id, {
+    ...(frozen.language === "python" ? { python_runtime_mode: "TRUSTED_LOCAL", python_trusted_confirmed: frozen.pythonTrustedConfirmed === true } : {}),
     dataset_id: resolution.dataset_id,
     snapshot_hash: resolution.snapshot_hash,
     start_time_ms: range.startTimeMs,

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { openPythonStrategyDraft } from "../chartStrategyTesterDrafts.js";
 import {
   STRATEGY_DRAFT_STORAGE_KEY,
   StrategyDraftStore,
@@ -150,4 +151,25 @@ test("pending draft flush captures unsaved source even before autosave fires", (
     source: "return close > open",
     cursor: { line: 2, column: 4 },
   });
+});
+
+
+test("Python draft source, language and cursor survive reopening", async () => {
+  const adapter = createMemoryStrategyDraftAdapter();
+  const store = new StrategyDraftStore(adapter);
+  const saved = await store.save({ ...draft("class Strategy: pass"), language: "python" });
+  const restored = (await new StrategyDraftStore(adapter).load(saved.id)).record;
+  assert.equal(restored?.language, "python");
+  assert.equal(restored?.source, saved.source);
+  assert.deepEqual(restored?.cursor, saved.cursor);
+});
+
+
+test("entering Python from the existing language menu preserves an edited Python draft", async () => {
+  const store = new StrategyDraftStore(createMemoryStrategyDraftAdapter());
+  const original = await openPythonStrategyDraft(store, null);
+  const changed = await store.save({ ...original, source: original.source.replace("self.fast = 3", "self.fast = 4") });
+  const reopened = await openPythonStrategyDraft(store, changed.id);
+  assert.equal(reopened.id, changed.id);
+  assert.equal(reopened.source, changed.source);
 });

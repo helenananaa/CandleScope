@@ -1,3 +1,5 @@
+import { CHART_STRATEGY_TEMPLATES } from "./chartStrategyTesterUiModel.js";
+import { getStrategyStorage } from "../../../shared/strategyStorage.js";
 import {
   StrategyDraftStore,
   createLocalStorageStrategyDraftAdapter,
@@ -11,7 +13,8 @@ export function getChartStrategyDraftStore(): StrategyDraftStore {
   let adapter = createMemoryStrategyDraftAdapter();
   if (typeof window !== "undefined") {
     try {
-      if (window.localStorage) adapter = createLocalStorageStrategyDraftAdapter(window.localStorage);
+      const storage = getStrategyStorage();
+      if (storage) adapter = createLocalStorageStrategyDraftAdapter(storage);
     } catch {
       // Some embedded/private browser contexts expose localStorage but reject access.
     }
@@ -35,4 +38,12 @@ export function strategyDraftContentRevision(source: string): number {
     hash = Math.imul(hash, 0x01000193);
   }
   return hash >>> 0;
+}
+
+/** Preserve an existing Python program when entering from the Pine/Pyne language menu. */
+export async function openPythonStrategyDraft(store: StrategyDraftStore, draftId: string | null) {
+  const existing = draftId ? (await store.load(draftId)).record : null;
+  if (existing?.language === "python") return existing;
+  const template = CHART_STRATEGY_TEMPLATES.find((item) => item.id === "PYTHON_SMA")!;
+  return store.save({ id: createChartStrategyDraftId(), displayName: template.displayName, language: "python", source: template.source, cursor: { line: 1, column: 1 } });
 }
