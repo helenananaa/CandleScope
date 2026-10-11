@@ -40,7 +40,7 @@ def test_phase6_previous_v3_fixture_is_not_rewritten() -> None:
 
 def test_phase6_v4_only_migrates_ui_contract() -> None:
     previous = phase6.validate_previous_ui_contract_v3()
-    current = phase6.validate_contract()
+    current = phase6.validate_previous_ui_contract_v4()
     changed = {key for key in previous.keys() | current.keys() if previous.get(key) != current.get(key)}
     assert changed == {"schemaVersion", "migratedOn", "previousContractSha256", "ui"}
 
@@ -74,7 +74,7 @@ def test_phase6_contract_freezes_trust_grants_sandbox_and_jre_migration() -> Non
 
     assert contract["schemaVersion"] == phase6.CONTRACT_SCHEMA_VERSION
     assert contract["previousContractSha256"] == (
-        "sha256:" + phase6.PREVIOUS_UI_CONTRACT_FILE_SHA256
+        "sha256:" + phase6.PREVIOUS_HELP_CONTRACT_FILE_SHA256
     )
     assert contract["realGateEvidenceContractSha256"] == (
         phase6._canonical_sha256(phase6.validate_historical_contract_v1())
@@ -324,3 +324,33 @@ def test_phase6_cli_prints_and_atomically_writes_contract(
     assert json.loads(captured.out) == phase6.capture_contract()
     assert json.loads(output.read_text(encoding="utf-8")) == phase6.capture_contract()
     assert list(output.parent.glob(f".{output.name}.*")) == []
+
+
+def test_phase6_v5_only_migrates_runtime_help_ui():
+    previous = phase6.validate_previous_ui_contract_v4()
+    current = phase6.validate_contract()
+    changed = {key for key in previous.keys() | current.keys() if previous.get(key) != current.get(key)}
+    assert changed == {"schemaVersion", "migratedOn", "previousContractSha256", "ui"}
+    assert current["realGateEvidenceContractSha256"] == previous["realGateEvidenceContractSha256"]
+    changed_ui = {key for key in previous["ui"] if previous["ui"][key] != current["ui"][key]}
+    assert changed_ui == {"managementSurfaceSha256"}
+
+
+def test_phase6_rejects_rewritten_v4_history(tmp_path, monkeypatch):
+    path = tmp_path / "changed-v4.json"
+    path.write_bytes(phase6.PREVIOUS_HELP_CONTRACT_PATH.read_bytes() + b" ")
+    monkeypatch.setattr(phase6, "PREVIOUS_HELP_CONTRACT_PATH", path)
+    with pytest.raises(phase6.Phase6GateError, match="v4 was rewritten"):
+        phase6.validate_contract()
+
+
+def test_phase6_probe_line_endings_are_portable_but_content_is_bound(monkeypatch):
+    original = Path.read_bytes
+    probe = original(phase6.NATIVE_PROBE).replace(b"\r\n", b"\n")
+    expected = phase6.validate_contract()
+    for payload in (probe, probe.replace(b"\n", b"\r\n")):
+        monkeypatch.setattr(Path, "read_bytes", lambda self, data=payload: data if self == phase6.NATIVE_PROBE else original(self))
+        assert phase6.validate_contract() == expected
+    monkeypatch.setattr(Path, "read_bytes", lambda self: probe + b"/* changed */" if self == phase6.NATIVE_PROBE else original(self))
+    with pytest.raises(phase6.Phase6GateError, match="contract drift"):
+        phase6.validate_contract()

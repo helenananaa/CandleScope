@@ -2,6 +2,13 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ro = {
+  "replay.hub.catalogSyncing": "Se caută piețe istorice în sursa oficială. Opțiunea se va activa automat când datele sunt pregătite.",
+  "replay.watchlist.preparing": "Se descarcă și se verifică datele istorice. Prima utilizare poate dura câteva minute.",
+  "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
+  "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",
+  "native.jumpToError": "Go to line {line}, column {column}",
+  "report.notionalReturn": "P&L / entry notional (not account return)",
+  "native.platformHelp": "Pine 0.3.2 provides macOS Apple Silicon and Intel bundles. Pyne is cross-platform, but its current official plugin bundle is Windows-only. Match the bundle to your system and Python version.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "Pine v5/v6 closed-bar API:",
   "serverError.notFound": "Elementul solicitat nu există sau a fost șters",
@@ -3475,7 +3482,7 @@ export const ro = {
   "plugin.runtime.refs": "{count} refs",
   "plugin.runtime.probed": "verificat prin sondă",
   "plugin.runtime.devLocal": "Alegere locală de dezvoltator nereproductibilă: {path}",
-  "plugin.ack.execute": "Confirm că aceasta va executa cod de aplicație local ca utilizatorul Windows curent",
+  "plugin.ack.execute": "Confirm că aceasta va executa cod de aplicație local ca utilizatorul curent",
   "plugin.ack.sandbox": "Am verificat starea sandbox-ului de mai sus, în loc să am încredere doar în numele editorului",
   "plugin.ack.authority": "Confirm că conturile, secretele și autoritatea de tranzacționare live nu sunt deschise de această alegere de încredere",
   "plugin.ack.runtime": "Confirm runtime-ul: {runtime}",

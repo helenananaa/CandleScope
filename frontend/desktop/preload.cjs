@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 const channels = {
+  backendEndpoint: "candlescope:desktop:backend-endpoint",
   managementSession: "candlescope:desktop:management-session",
   openAppPage: "candlescope:desktop:open-app-page",
   bootstrap: "candlescope:desktop:bootstrap",
@@ -30,7 +31,9 @@ function subscribe(channel, listener) {
   return () => ipcRenderer.removeListener(channel, handler);
 }
 
-const backendPort = Number(process.argv.find((value) => value.startsWith("--candlescope-backend-port="))?.split("=")[1]);
+// Query the host for every document, including newly opened application windows.
+// Renderer command-line arguments are not a reliable per-window bootstrap channel.
+const backendPort = ipcRenderer.sendSync(channels.backendEndpoint)?.port;
 if (!Number.isInteger(backendPort) || backendPort < 1 || backendPort > 65535) {
   throw new Error("Desktop backend endpoint was not configured by the host");
 }

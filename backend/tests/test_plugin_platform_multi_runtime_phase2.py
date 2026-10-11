@@ -93,7 +93,8 @@ def test_python_provider_preserves_v2_command_and_places_v3_args_before_module(
         artifact_sha256="sha256:" + "1" * 64,
     )
     launch = provider.build_runtime_launch(prepared)
-    assert launch.executable == Path(sys.executable).resolve(strict=False)
+    # Python needs the venv launcher path to discover pyvenv.cfg.
+    assert launch.executable == Path(sys.executable).absolute()
     assert launch.arguments == (
         "-I",
         "-u",

@@ -2,6 +2,11 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const fr = {
+  "plugin.runtimeInstalled": "Moteur de scripts installé et vérifié. Fermez puis rouvrez CandleScope pour activer les indicateurs et les stratégies natives compatibles.",
+  "native.executionErrorHelp": "L’exécution n’a pas abouti. Vérifiez le script et les paramètres ; les détails techniques figurent ci-dessous.",
+  "native.jumpToError": "Aller à la ligne {line}, colonne {column}",
+  "report.notionalReturn": "Gain/perte / notionnel à l’entrée (pas le rendement du compte)",
+  "native.platformHelp": "Pine 0.3.2 fournit des paquets macOS Apple Silicon et Intel. Pyne est multiplateforme, mais son paquet de module officiel reste destiné à Windows. Choisissez le paquet adapté au système et à Python.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "API Pine v5/v6 sur barres clôturées :",
   "serverError.notFound": "L’élément demandé n’existe pas ou a été supprimé",
@@ -1621,6 +1626,8 @@ export const fr = {
   "replay.hub.archiveName": "Nom de l’archive",
   "replay.hub.sourceKind": "Source historique",
   "replay.hub.barHint": "OHLCV exact, adapté à la plupart des entraînements de rythme.",
+  "replay.hub.catalogSyncing": "Synchronisation des marchés historiques. Activation automatique une fois prête.",
+  "replay.watchlist.preparing": "Téléchargement et vérification des données historiques. La première utilisation peut prendre quelques minutes.",
   "replay.hub.aggHint": "Télécharge et vérifie l’archive officielle aggTrade à la sélection.",
   "replay.hub.startMode": "Mode de départ",
   "replay.hub.randomWindow": "Fenêtre éligible aléatoire",
@@ -3476,7 +3483,7 @@ export const fr = {
   "plugin.runtime.refs": "{count} refs",
   "plugin.runtime.probed": "vérifié par sondage",
   "plugin.runtime.devLocal": "Choix développeur local non reproductible : {path}",
-  "plugin.ack.execute": "Je confirme que cela exécutera du code d’application local en tant qu’utilisateur Windows actuel",
+  "plugin.ack.execute": "Je confirme que cela exécutera du code d’application local en tant qu’utilisateur actuel",
   "plugin.ack.sandbox": "J’ai vérifié l’état du sandbox ci-dessus au lieu de me fier au nom de l’éditeur seul",
   "plugin.ack.authority": "Je confirme que les comptes, secrets et l’autorité de trading en direct ne sont pas ouverts par ce choix de confiance",
   "plugin.ack.runtime": "Je confirme le runtime : {runtime}",

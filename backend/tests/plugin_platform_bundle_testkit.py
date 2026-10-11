@@ -106,7 +106,9 @@ def build_platform_sdk_wheel(
         relative = source.relative_to(SDK_SOURCE).as_posix()
         if relative == "strategy_provider_v1" or relative.startswith(
             "strategy_provider_v1/"
-        ):
+        ) or relative == "native_strategy.py":
+            # Strategy transports are outside the frozen Platform v2 fixture.
+            # Adding the native transport must not change historical SDK bundles.
             continue
         data = source.read_bytes()
         if relative == "__init__.py":

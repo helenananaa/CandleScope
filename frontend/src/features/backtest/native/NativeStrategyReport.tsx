@@ -7,7 +7,7 @@ import { NativeReplayControls, type NativeReplayRecord } from "./NativeReplayCon
 import { NativeDrawingScene } from "./NativeDrawingScene.js";
 import { NativeSeriesScene } from "./NativeSeriesScene.js";
 
-import { reportAnalytics, reportTrade } from "./nativeReportAnalytics.js";
+import { reportAnalytics, reportTrade, formatReportPercent } from "./nativeReportAnalytics.js";
 import { NativePerformanceChart } from "./NativePerformanceChart.js";
 
 interface NativeMarker { time: number; value: number; kind: "entry" | "exit" | "fill" }
@@ -110,7 +110,7 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
   const analytics = reportAnalytics(result, run.execution_mode === "CANDLESCOPE");
   const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
   const display = (value: number | null) => value == null ? "—" : value === Infinity ? "∞" : number.format(value);
-  const percent = (value: number | null) => value == null ? "—" : `${display(value)}%`;
+  const percent = (value: number | null) => formatReportPercent(value, locale);
   const grouped = section === "trades" && run.execution_mode !== "CANDLESCOPE";
   const rows = result[section];
   const sourceColumns = [...new Set(rows.flatMap((row) => Object.keys(row)))].filter((column) => !["entryBarIndex", "exitBarIndex"].includes(column));
@@ -200,7 +200,7 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
     <div className="native-table" ref={table} onScroll={(event) => { if (active && view !== "overview") scrollPositions.current[section] = event.currentTarget.scrollTop; }}><table><thead><tr>{grouped ? <><th>{t("report.trade")}</th><th>{t("report.entryExit")}</th><th>{t("trade.price")}</th><th>{t("plugin.live.quantity")}</th><th>{t("report.pnl")}</th><th>{t("report.duration")}</th></> : columns.map((column) => <th key={column}>{labels[column] ?? column}</th>)}</tr></thead>
       <tbody>{rows.slice(page * 50, page * 50 + 50).map((row, index) => {
         const absolute = page * 50 + index;
-        const trade = reportTrade(row);
+        const trade = reportTrade(row, result.account_authority === "pine-compat-runtime" ? result.orders : []);
         const date = (time: number | null | undefined) => time == null ? "—" : new Date(time).toLocaleString(locale);
         const duration = trade.duration == null ? "—" : `${number.format(trade.duration / 3600000)} h`;
         return <tr key={absolute} tabIndex={0} aria-selected={selectedIndex === absolute} data-selected={selectedIndex === absolute}
@@ -212,7 +212,7 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
             <td><span>{t("native.entry")} · {date(trade.focus?.entryTimeMs)}</span><small>{t("native.exit")} · {date(trade.focus?.exitTimeMs)}</small></td>
             <td><span>{formatCell("price", trade.focus?.entryPrice)}</span><small>{formatCell("price", trade.focus?.exitPrice)}</small></td>
             <td>{formatCell("qty", trade.quantity)}</td>
-            <td className={trade.profit == null ? undefined : trade.profit < 0 ? "negative" : "positive"}><strong>{display(trade.profit)}</strong><small>{trade.returnPercent == null ? "—" : `${display(trade.returnPercent)}%`}</small></td>
+            <td className={trade.profit == null ? undefined : trade.profit < 0 ? "negative" : "positive"}><strong>{display(trade.profit)}</strong><small title={trade.derivedReturn ? t("report.notionalReturn") : undefined}>{percent(trade.returnPercent)}{trade.derivedReturn && "*"}</small></td>
             <td>{duration}</td>
           </> : columns.map((column) => <td key={column} className={["profit", "net_pnl"].includes(column) ? Number(row[column]) < 0 ? "negative" : "positive" : undefined}>{formatCell(column, row[column])}</td>)}</tr>;
       })}</tbody></table></div>

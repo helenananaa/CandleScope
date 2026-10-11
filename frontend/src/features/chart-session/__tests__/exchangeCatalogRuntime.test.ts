@@ -184,3 +184,20 @@ test("polling-only exchange never exposes WebSocket base intervals", () => {
   assert.deepEqual(getNativeIntervals("poll", catalog, "spot", "realtime").map((item) => item.value), ["1m"]);
   assert.deepEqual(getBaseWsIntervals("poll", catalog, "spot"), []);
 });
+
+test("disabled catalog keeps a stable reference across renders", async () => {
+  const { createElement } = await import("react");
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { useExchangeCatalog } = await import("../exchangeCatalogRuntime.js");
+  const catalogs: unknown[] = [];
+  function DisabledChart() {
+    const value = useExchangeCatalog(false);
+    catalogs.push(value.exchangeCatalog);
+    assert.equal(value.exchangeCatalogStatus, "fallback");
+    return null;
+  }
+  renderToStaticMarkup(createElement(DisabledChart));
+  renderToStaticMarkup(createElement(DisabledChart));
+  assert.strictEqual(catalogs[0], catalogs[1]);
+  assert.deepEqual(catalogs[0], {});
+});

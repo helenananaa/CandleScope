@@ -1,6 +1,12 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ja = {
+  "plugin.trust.scriptRuntimeExecution": "インストーラーは独立した Python 環境を作成し、パッケージ検証プローブを実行します。再起動後、スクリプトは現在のユーザー権限で動作し、OS サンドボックスはありません。ファイル、ネットワーク、子プロセスへのアクセスは、プラットフォームプラグインの権限表示によって制限されません。",
+  "plugin.runtimeInstalled": "スクリプト実行環境のインストールと検証が完了しました。CandleScopeを終了して開き直すと、指標と対応するネイティブ戦略が有効になります。",
+  "native.executionErrorHelp": "実行を完了できませんでした。スクリプトと入力パラメータを確認してください。詳細は下に表示できます。",
+  "native.jumpToError": "{line}行 {column}列へ移動",
+  "report.notionalReturn": "損益 / エントリー時の想定元本（口座収益率ではありません）",
+  "native.platformHelp": "Pine 0.3.2はmacOSのApple Silicon・Intel向けパッケージを提供しています。Pyne実行環境はクロスプラットフォームですが、現在の公式プラグインパッケージはWindows向けです。OSとPythonのバージョンに合うものを選んでください。",
   "indicator.editor.pyneApiHint": "Pyne API：",
   "indicator.editor.pineApiHint": "Pine v5/v6 確定足 API：",
   "serverError.notFound": "要求された項目が存在しないか、削除されています",
@@ -39,7 +45,7 @@ export const ja = {
   "report.long": "Long",
   "report.short": "Short",
   "report.unknownSide": "Direction unavailable",
-  "report.tradeBasis": "P&L from engine report; return shown only when supplied. Select a trade to locate it on the chart.",
+  "report.tradeBasis": "損益はエンジンの報告値です。収益率にはエンジンの値、または確認済みのエントリー想定元本を使用します。口座収益率ではありません。取引を選択するとチャート上の位置に移動します。",
   "report.sample": "First equity sample",
   "report.range": "Report period",
 
@@ -1882,6 +1888,8 @@ export const ja = {
   "replay.hub.archiveName": "アーカイブ名",
   "replay.hub.sourceKind": "履歴ソース",
   "replay.hub.barHint": "正確な OHLCV。ほとんどのリズム訓練に適しています。",
+  "replay.hub.catalogSyncing": "公式の履歴商品一覧を同期中です。完了後に自動で有効になります。",
+  "replay.watchlist.preparing": "履歴データをダウンロードして検証中です。初回は数分かかる場合があります。",
   "replay.hub.aggHint": "選択時に公式 aggTrade アーカイブをダウンロードして検証します。",
   "replay.hub.startMode": "開始方式",
   "replay.hub.randomWindow": "ランダム適格ウィンドウ",
@@ -3737,7 +3745,7 @@ export const ja = {
   "plugin.runtime.refs": "参照 {count}",
   "plugin.runtime.probed": "プローブ検証済み",
   "plugin.runtime.devLocal": "再現不可の developer-local 選択: {path}",
-  "plugin.ack.execute": "現在の Windows ユーザーとしてローカルアプリケーションコードを実行することを確認します",
+  "plugin.ack.execute": "現在のユーザーとしてローカルアプリケーションコードを実行することを確認します",
   "plugin.ack.sandbox": "パブリッシャー名だけで安全性を判断せず、上記のサンドボックス状態を確認しました",
   "plugin.ack.authority": "アカウント、シークレット、実取引権限が今回の信頼選択で自動開放されないことを確認します",
   "plugin.ack.runtime": "ランタイムを確認します: {runtime}",

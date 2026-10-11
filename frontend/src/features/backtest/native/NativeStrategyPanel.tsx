@@ -1,3 +1,4 @@
+import { diagnosticLocation } from "./nativeDiagnostics.js";
 import NativeStrategyComparison from "./NativeStrategyComparison.js";
 import { recordStrategyRun, strategyRunIds, normalizeNativeStrategies, copyNativeStrategy, strategyInstanceScope, type NativeStrategyInstance, type NativeStrategyCollection } from "./nativeStrategyCollection.js";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -29,7 +30,12 @@ type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | 
 };
 export default function NativeStrategyPanel(props: NativeStrategyPanelProps) {
   useLocale();
-  const [collection, setCollection] = useState(() => normalizeNativeStrategies(props.nativeStrategies));
+  const collectionKey = `candlescope.native-strategies:${props.cellScope}`;
+  const [collection, setCollection] = useState(() => {
+    if (props.nativeStrategies !== undefined) return normalizeNativeStrategies(props.nativeStrategies);
+    try { return normalizeNativeStrategies(JSON.parse(localStorage.getItem(collectionKey) ?? "null")); }
+    catch { return normalizeNativeStrategies(null); }
+  });
   const current = useRef(collection);
   const persist = useRef(props.onNativeStrategiesChange);
   persist.current = props.onNativeStrategiesChange;
@@ -39,8 +45,13 @@ export default function NativeStrategyPanel(props: NativeStrategyPanelProps) {
   const [storageError, setStorageError] = useState("");
   const update = useCallback((change: (value: NativeStrategyCollection) => NativeStrategyCollection) => {
     const next = change(current.current);
-    current.current = next; setCollection(next); persist.current?.(next);
-  }, []);
+    current.current = next; setCollection(next);
+    if (persist.current) persist.current(next);
+    else {
+      try { localStorage.setItem(collectionKey, JSON.stringify(next)); setStorageError(""); }
+      catch { setStorageError(t("native.saveFailed")); }
+    }
+  }, [collectionKey]);
   const updateInstance = useCallback((id: string, change: Partial<NativeStrategyInstance>) => {
     update((value) => ({ ...value, items: value.items.map((item) => item.id === id ? { ...item, ...change, drafts: { ...item.drafts, ...change.drafts }, runs: { ...item.runs, ...change.runs }, runHistory: { ...item.runHistory, ...change.runHistory } } : item) }));
   }, [update]);
@@ -154,6 +165,9 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const [historicalRun, setHistoricalRun] = useState<NativeRun | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const sourceEditor = useRef<HTMLTextAreaElement>(null);
+  const errorDetails = error || (run?.error ? `${run.error.message}\n${JSON.stringify(run.error.details ?? {}, null, 2)}` : "");
+  const errorLocation = diagnosticLocation(errorDetails, source);
   const [resolution, setResolution] = useState<ChartContextResolution | null>(null);
   const [automatic, setAutomatic] = useState(false);
   const [automaticContexts, setAutomaticContexts] = useState<NativePreparationContext[]>([]);
@@ -166,7 +180,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const legacyStorageKey = `candlescope.native-draft:${props.cellScope}:${language}`;
   const storageKey = `${legacyStorageKey}:${mode}`;
   const onRunChange = props.onRunChange;
-  useEffect(() => { if (props.active !== false) onRunChange?.(run); }, [run, onRunChange, props.active]);
+  useEffect(() => { if (props.active !== false) onRunChange?.(historicalRun ?? run); }, [historicalRun, run, onRunChange, props.active]);
   const instanceRef = useRef(props.instance);
   instanceRef.current = props.instance;
   const patchInstance = useRef(props.onInstanceChange);
@@ -250,7 +264,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
     if (run?.result) setPreviousRun(run);
     setHistoricalRun(null); setBusy(true); setError(""); setRun(null); setPreparation(null); setResolution(null);
     try {
-      const params: unknown = JSON.parse(parameters);
+      let params: unknown;
+      try { params = JSON.parse(parameters); } catch { throw new Error(t("native.parametersInvalid")); }
       if (!params || Array.isArray(params) || typeof params !== "object") throw new Error(t("native.parametersInvalid"));
       const context = props.session;
       const execution = executionInputs(mode, hostSettings, fidelity, fillRecalculation, executionData);
@@ -340,7 +355,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       <button disabled={busy || (mode === "CANDLESCOPE" && fidelity !== "BAR_APPROX" && executionDataState !== "ready") || !(mode === "NATIVE" ? available?.available : available?.external_available)} onClick={() => void start()}>{t(mode === "NATIVE" ? "native.run" : "native.external.run")}</button>
       {run && !nativeTerminal(run.state) && <button onClick={() => void nativeApi<NativeRun>(`${runPath}/${run.run_id}/cancel`, {}).then(receiveRun).catch((reason) => setError(String(reason)))}>{t("native.cancel")}</button>}
       <span role="status" className="native-run-status">{t(`strategyReview.status.${preparation?.state === "CANCELLED" || run?.state === "CANCELLED" ? "cancelled" : error || run?.state === "FAILED" || run?.state === "INTERRUPTED" ? "failed" : busy ? (run ? "running" : "preparing") : run?.state === "COMPLETED" ? "completed" : resolution && resolution.status !== "READY" ? "needsData" : "idle"}`)}</span></div>
-    {available && !(mode === "NATIVE" ? available.available : available.external_available) && <p role="alert">{t("native.unavailable")} {available.reason}</p>}
+    {capabilities && !(mode === "NATIVE" ? available?.available : available?.external_available) && <div role="status"><p>{t("indicator.editor.runtimeUnavailableHelp")}</p><p>{t("native.platformHelp")}</p>
+      {available?.reason && <details><summary>{t("plugin.techDetails")}</summary><p>{available.reason}</p></details>}</div>}
     </div>
     <div className="native-dock-scroll" ref={scrollPane} onScroll={(event) => { scrollPositions.current[tab] = event.currentTarget.scrollTop; }}>
     {preparation && !["READY", "CANCELLED"].includes(preparation.state) && <p role="status">{t("preparation.title")} · {preparation.completed}/{preparation.total}
@@ -348,9 +364,19 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       <button disabled={preparation.stage === "STARTING" || preparation.cancel_requested} onClick={() => void preparationRequest<PreparationJob>(`/${preparation.id}/cancel`, { method: "POST" }).then((value) => { preparationSubmission.current = null; setPreparation(value); }).catch((reason) => setError(String(reason)))}>{t("preparation.cancel")}</button>
     </p>}
     {resolution && resolution.status !== "READY" && <p>{resolution.status} <button disabled={busy} onClick={() => void start(true)}>{t("native.prepare")}</button></p>}
-    {(error || run?.error) && <pre role="alert">{error || `${run?.error?.message}\n${JSON.stringify(run?.error?.details ?? {}, null, 2)}`}</pre>}
+    {errorDetails && <div role="alert" className="native-error-help">
+      <p>{errorDetails.includes(t("native.parametersInvalid")) ? t("native.parametersInvalid") : t("native.executionErrorHelp")}</p>
+      {errorLocation && <button type="button" onClick={() => {
+        setTab("script");
+        requestAnimationFrame(() => {
+          const editor = sourceEditor.current;
+          if (editor) { editor.focus(); editor.setSelectionRange(errorLocation.offset, errorLocation.offset + 1); }
+        });
+      }}>{t("native.jumpToError", { line: errorLocation.line, column: errorLocation.column })}</button>}
+      <details><summary>{t("plugin.techDetails")}</summary><pre>{errorDetails}</pre></details>
+    </div>}
     <div hidden={props.docked && tab !== "script"}>
-    <div className="native-editor"><textarea aria-label={t("native.source")} value={source} disabled={busy} spellCheck={false} onChange={(event) => save(event.target.value, parameters)} />
+    <div className="native-editor"><textarea ref={sourceEditor} aria-label={t("native.source")} value={source} disabled={busy} spellCheck={false} onChange={(event) => save(event.target.value, parameters)} />
       <label>{t("native.parameters")}<textarea value={parameters} disabled={busy} onChange={(event) => save(source, event.target.value)} /></label></div>
     </div>
     <div hidden={props.docked && tab !== "settings"} className="native-dock-settings">

@@ -97,7 +97,7 @@ class TrainingAdmissionService:
             entry
             for entry in cast(list[Mapping[str, object]], catalog["entries"])
             if (_market_identity is None or admission_rules_ops.catalog_identity_key(entry) == _market_identity)
-            and admission_rules_ops.setup_market_compatibility(
+            and self._setup_market_compatibility(
                 settings,
                 entry,
                 capability_admission=capability_admission,
@@ -125,7 +125,7 @@ class TrainingAdmissionService:
                     entry, committed_start_ms
                 )["state"]
                 == "READY"
-                and admission_rules_ops.setup_market_compatibility(
+                and self._setup_market_compatibility(
                     settings,
                     entry,
                     capability_admission=capability_admission,
@@ -259,7 +259,7 @@ class TrainingAdmissionService:
                 internal_entry,
                 int(commitment["committed_start_ms"]),
             )
-            identity_compatibility = admission_rules_ops.setup_market_compatibility(
+            identity_compatibility = self._setup_market_compatibility(
                 settings,
                 internal_entry,
                 capability_admission=capability_admission,
@@ -426,6 +426,37 @@ class TrainingAdmissionService:
             },
             "expires_at_ms": plan.expires_at_ms,
         }
+
+    def _setup_market_compatibility(
+        self,
+        settings: Mapping[str, object],
+        entry: Mapping[str, object],
+        *,
+        capability_admission: Mapping[tuple[str, str, str], admission_rules_ops._MarketSetupAdmission],
+        committed_start_ms: int | None,
+    ) -> dict[str, object]:
+        compatibility = admission_rules_ops.setup_market_compatibility(
+            settings, entry, capability_admission=capability_admission,
+            committed_start_ms=committed_start_ms,
+        )
+        if compatibility["state"] != "READY" or self._instrument_metadata_resolver is None:
+            return compatibility
+        exchange, market_type, symbol = admission_rules_ops.catalog_identity_key(entry)
+        try:
+            instrument = self._authoritative_instrument_identity(
+                exchange=exchange, market_type=market_type, symbol=symbol,
+            )
+        except TrainingRunError as exc:
+            return {
+                "state": "UNSUPPORTED", "code": exc.code,
+                "message": "该历史商品的账户身份资料暂不可用。",
+            }
+        if instrument["settlement_asset"] != settings.get("settlement_asset"):
+            return {
+                "state": "UNSUPPORTED", "code": "MARKET_SCOPE_MISMATCH",
+                "message": "该商品的结算币种与本局账户不同，请使用相同结算币种或新建训练。",
+            }
+        return compatibility
 
     def _authoritative_instrument_identity(
         self,
@@ -624,7 +655,7 @@ class TrainingAdmissionService:
                 int(commitment["committed_start_ms"]),
             )
             if compatibility["state"] == "READY":
-                compatibility = admission_rules_ops.setup_market_compatibility(
+                compatibility = self._setup_market_compatibility(
                     settings,
                     entry,
                     capability_admission=await self._setup_capability_admission(

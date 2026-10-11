@@ -280,6 +280,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
               />
             </label>
             <small>{t("replay.watchlist.hint")}</small>
+            {addingMarket !== null && <p role="status">{t("replay.watchlist.preparing")}</p>}
             {catalogError !== null && <p role="alert">{catalogError}</p>}
             {catalog === null && catalogError === null && <p>{t("replay.watchlist.loading")}</p>}
             {catalog !== null && catalogEntries.length === 0 && <p>{t("replay.watchlist.noMatch")}</p>}
@@ -305,7 +306,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange }:
                     onClick={() => void addCatalogMarket(entry)}
                   >
                     <strong>{entry.identity.symbol}</strong>
-                    <small>{tracked ? t("replay.watchlist.added") : addingMarket === key ? t("replay.watchlist.adding") : available ? t("search.addToWatchlist") : t("replay.watchlist.unavailable")}</small>
+                    <small>{addingMarket === key ? t("replay.watchlist.adding") : tracked ? t("replay.watchlist.added") : available ? t("search.addToWatchlist") : t("replay.watchlist.unavailable")}</small>
                   </button>
                   {viewer.actions.openTrack && (tracked || available) && <div className="replay-market-open-actions">
                     <button type="button" disabled={addingMarket !== null || viewer.viewerPending || viewer.controlPending !== null}

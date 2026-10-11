@@ -334,6 +334,10 @@ export function isNativeIntervalSupported(
     .some((item) => intervalsSemanticallyEquivalent(item.value, interval));
 }
 
+// Disabled charts still render their hooks. Keep the fallback identity stable so
+// dependent interval/load effects do not restart on every render.
+const EMPTY_EXCHANGE_CATALOG: ExchangeCatalog = Object.freeze({});
+
 export function useExchangeCatalog(enabled = true): ExchangeCatalogRuntime {
   const [exchangeCatalog, setExchangeCatalog] = useState<ExchangeCatalog>({});
   const [exchangeCatalogStatus, setExchangeCatalogStatus] = useState<ExchangeCatalogStatus>(
@@ -360,5 +364,5 @@ export function useExchangeCatalog(enabled = true): ExchangeCatalogRuntime {
 
   return enabled
     ? { exchangeCatalog, exchangeCatalogStatus }
-    : { exchangeCatalog: {}, exchangeCatalogStatus: "fallback" };
+    : { exchangeCatalog: EMPTY_EXCHANGE_CATALOG, exchangeCatalogStatus: "fallback" };
 }

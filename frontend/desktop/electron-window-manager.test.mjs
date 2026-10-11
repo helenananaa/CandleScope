@@ -137,6 +137,15 @@ test("desktop authority rejects unknown windows, subframes and external navigati
   assert.equal(manager.appWindows.size, 0);
   const created = await manager.openAppPage("/replay.html?run=one");
   assert.ok(manager.appWindows.has(created.windowId));
+  const replay = manager.appWindows.get(created.windowId);
+  replay.webContents.mainFrame = {};
+  replay.webContents.getURL = () => replay.url;
+  assert.equal(manager.assertTrustedSender({
+    sender: replay.webContents, senderFrame: replay.webContents.mainFrame,
+  }), created.windowId);
+  assert.throws(() => manager.assertTrustedSender({
+    sender: replay.webContents, senderFrame: {},
+  }));
   assert.equal(new URL(manager.appWindows.get(created.windowId).url).searchParams.get("windowId"), created.windowId);
   assert.deepEqual(await manager.openAppPage("/"), { windowId: "main-window" });
   assert.equal(manager.appWindows.size, 1);

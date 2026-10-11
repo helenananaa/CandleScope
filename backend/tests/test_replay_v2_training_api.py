@@ -1396,3 +1396,27 @@ async def test_blind_selection_retry_keeps_frozen_start_after_inner_catalog_race
         assert await service.training.store.get_time_commitment(run_id) == commitment
     finally:
         await service.shutdown(step_timeout=1.0)
+
+
+async def test_multimarket_return_to_hub_keeps_public_acknowledgement_contract(tmp_path):
+    from tests.test_replay_v2_training_phase5 import (
+        _service as multi_service, _request as create_request, _add_track,
+    )
+    service = await multi_service(tmp_path / "multi-return.db")
+    try:
+        created = await service.training.create_run(await create_request(service))
+        run_id = created["run"]["run_id"]
+        session_id = created["run"]["adapter_session_id"]
+        await _add_track(service, run_id=run_id, selected_session_id=session_id,
+                         symbol="ETHUSDT", tier="WARM", command_id="add-eth-return")
+        response = await _request(_app(service), "POST", f"/api/v1/replay/runs/{run_id}/return-to-hub")
+        assert response.status_code == 200
+        assert response.json() == {
+            "protocol": "replay.v3", "run_id": run_id, "state": "PAUSED",
+            "checkpointed": True, "released": True,
+        }
+        for adapter in (session_id, "adapter-2"):
+            record = await service.store.get_session(adapter)
+            assert record["state"] == "PAUSED"
+    finally:
+        await service.shutdown(step_timeout=1.0)

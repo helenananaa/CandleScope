@@ -12,6 +12,7 @@ interface ProjectionState {
   readonly loading: boolean;
   readonly error: string | null;
   readonly boundaryMs: number | null;
+  readonly historyBootstrapBeforeMs?: number | null;
 }
 
 /** A cell owns its paged window; an old response can never replace a new dataset. */
@@ -40,7 +41,8 @@ export class ReplayChartProjection {
   };
   private publish(next: ProjectionState) {
     if (this.state.loading === next.loading && this.state.error === next.error
-      && this.state.boundaryMs === next.boundaryMs) return;
+      && this.state.boundaryMs === next.boundaryMs
+      && this.state.historyBootstrapBeforeMs === next.historyBootstrapBeforeMs) return;
     this.state = next;
     this.listeners.forEach((listener) => listener());
   }
@@ -131,7 +133,8 @@ export class ReplayChartProjection {
       }
       replaceReplayViewerSeriesFromServer(this.seriesStore, source, this.interval, response.bars, boundary);
       this.completedKey = key;
-      this.publish({ loading: false, error: null, boundaryMs: boundary });
+      this.publish({ loading: false, error: null, boundaryMs: boundary,
+        historyBootstrapBeforeMs: response.history_before_ms ?? null });
     }).catch((error: unknown) => {
       if (request.signal.aborted) return;
       this.seriesStore.clear({ source: "replay-cell-projection-error" });

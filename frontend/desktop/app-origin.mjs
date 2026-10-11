@@ -16,7 +16,7 @@ export function isTrustedAppUrl(value, appUrl) {
   } catch { return false; }
 }
 
-export async function startDesktopAssetServer(directory, { port = 18079 } = {}) {
+export async function startDesktopAssetServer(directory, { port = 18079, allowPortFallback = true } = {}) {
   const root = await realpath(directory);
   let origin;
   const server = http.createServer(async (request, response) => {
@@ -52,7 +52,7 @@ export async function startDesktopAssetServer(directory, { port = 18079 } = {}) 
   });
   try { await listen(port); }
   catch (error) {
-    if (port === 0 || !["EADDRINUSE", "EACCES"].includes(error.code)) throw error;
+    if (!allowPortFallback || port === 0 || !["EADDRINUSE", "EACCES"].includes(error.code)) throw error;
     await listen(0);
   }
   origin = `http://127.0.0.1:${server.address().port}`;

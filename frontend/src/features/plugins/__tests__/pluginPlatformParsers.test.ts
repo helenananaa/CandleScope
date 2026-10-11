@@ -1227,6 +1227,11 @@ test("UI snapshot accepts scalar projections and rejects executable-shaped extra
 test("Phase 6 local trust preview cannot understate risk, runtime, or acknowledgements", () => {
   const candidate = phase6LocalCandidate();
   const parsed = parsePluginLocalInstallCandidate(candidate);
+  const scriptRuntime = structuredClone(candidate);
+  Object.assign(scriptRuntime.preview, { executionModel: "script-runtime" });
+  assert.equal(parsePluginLocalInstallCandidate(scriptRuntime).preview.executionModel, "script-runtime");
+  Object.assign(scriptRuntime.preview, { executionModel: "unrestricted-other" });
+  assert.throws(() => parsePluginLocalInstallCandidate(scriptRuntime), /executionModel/);
   assert.equal(parsed.preview.authorization.mode, "trusted-local");
   assert.equal(parsed.preview.authorization.entrypoints[0]?.systemRuntimePath, "C:\\Python\\python.exe");
   assert.deepEqual(parsed.preview.requests.network.permissionIds, ["network.connect"]);

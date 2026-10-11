@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,24 @@ FIXTURE = (
 )
 SHA_A = "sha256:" + "1" * 64
 SHA_B = "sha256:" + "2" * 64
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX venv launcher uses a symlink")
+def test_python_launcher_symlink_survives_registry_round_trip(tmp_path: Path) -> None:
+    base = tmp_path / "base-python"
+    base.touch()
+    launcher = tmp_path / "venv" / "bin" / "python"
+    launcher.parent.mkdir(parents=True)
+    launcher.symlink_to(base)
+    entrypoint = EntrypointActivation(
+        "main", launcher, "fixture.runtime", tmp_path,
+        runtime_kind="python-module", runtime_id="python-v2-compat",
+        artifact_sha256=SHA_A,
+    )
+    registry = ActivationRegistry(plugins=(_activation(tmp_path, entrypoint),))
+    restored = ActivationRegistry.from_wire(registry.to_wire())
+    assert restored.plugins[0].entrypoints[0].executable == launcher
+    assert restored.plugins[0].entrypoints[0].executable != base
 
 
 def _activation(

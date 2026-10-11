@@ -2,6 +2,11 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const pl = {
+  "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
+  "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",
+  "native.jumpToError": "Go to line {line}, column {column}",
+  "report.notionalReturn": "P&L / entry notional (not account return)",
+  "native.platformHelp": "Pine 0.3.2 provides macOS Apple Silicon and Intel bundles. Pyne is cross-platform, but its current official plugin bundle is Windows-only. Match the bundle to your system and Python version.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "API Pine v5/v6 dla zamkniętych świec:",
   "serverError.notFound": "Żądany element nie istnieje lub został usunięty",
@@ -1621,6 +1626,8 @@ export const pl = {
   "replay.hub.archiveName": "Nazwa archiwum",
   "replay.hub.sourceKind": "Źródło historii",
   "replay.hub.barHint": "Dokładne OHLCV, dobre do większości treningu rytmu.",
+  "replay.hub.catalogSyncing": "Synchronizacja rynków historycznych. Funkcja włączy się automatycznie po zakończeniu.",
+  "replay.watchlist.preparing": "Pobieranie i weryfikacja danych historycznych. Pierwsze użycie może potrwać kilka minut.",
   "replay.hub.aggHint": "Przy wyborze pobiera i weryfikuje oficjalne archiwum aggTrade.",
   "replay.hub.startMode": "Tryb startu",
   "replay.hub.randomWindow": "Losowe kwalifikujące się okno",
@@ -3475,7 +3482,7 @@ export const pl = {
   "plugin.runtime.refs": "{count} ref.",
   "plugin.runtime.probed": "zweryfikowane sondą",
   "plugin.runtime.devLocal": "Niereprodukowalny wybór lokalny dewelopera: {path}",
-  "plugin.ack.execute": "Potwierdzam, że spowoduje to wykonanie lokalnego kodu aplikacji jako bieżący użytkownik Windows",
+  "plugin.ack.execute": "Potwierdzam, że spowoduje to wykonanie lokalnego kodu aplikacji jako bieżący użytkownik",
   "plugin.ack.sandbox": "Sprawdziłem status piaskownicy powyżej, zamiast ufać wyłącznie nazwie wydawcy",
   "plugin.ack.authority": "Potwierdzam, że konta, sekrety i uprawnienia do handlu na żywo nie są otwierane przez ten wybór zaufania",
   "plugin.ack.runtime": "Potwierdzam środowisko wykonawcze: {runtime}",

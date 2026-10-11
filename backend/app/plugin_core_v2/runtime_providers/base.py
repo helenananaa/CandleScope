@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -116,7 +117,7 @@ class RuntimeInstallationRequest:
 
     def __post_init__(self) -> None:
         installation = Path(self.installation).resolve(strict=False)
-        host_executable = Path(self.host_executable).resolve(strict=False)
+        host_executable = Path(os.path.abspath(self.host_executable))
         wheel_paths = tuple(
             Path(item).resolve(strict=False) for item in self.wheel_paths
         )
@@ -447,7 +448,11 @@ class PreparedRuntime:
             if self.runtime_supply.runtime_id != self.runtime_id:
                 raise ValueError("prepared runtime supply identity does not match")
         object.__setattr__(
-            self, "executable", Path(self.executable).resolve(strict=False)
+            self,
+            "executable",
+            Path(os.path.abspath(self.executable))
+            if self.runtime_kind == "python-module"
+            else Path(self.executable).resolve(strict=False),
         )
         object.__setattr__(
             self,

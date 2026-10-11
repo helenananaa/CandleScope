@@ -70,3 +70,33 @@ test("shared coarse charts serialize requests, invalidate old epochs and release
   releaseB();
   assert.equal(requests[2]!.signal?.aborted, true);
 });
+
+
+test("empty multi-chart projections publish independent bootstrap cursors and invalidate them on epoch changes", async () => {
+  const listeners = new Set<() => void>();
+  let store = { sessionConfig: { source_kind: "bar", base_interval: "1m", symbol: "BTCUSDT", exchange: "binance", market_type: "spot" },
+    virtualTimeMs: 1791545339999, dataEpoch: "epoch-1", sessionId: "session", generation: 1 };
+  const lifecycle = { store: { seriesStore: new SeriesWindowStore() }, getSnapshot: () => ({ store }),
+    subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
+  } as unknown as ReplayRuntimeLifecycle;
+  const cursors = { "4h": 1791532800000, "1d": 1791504000000 };
+  let offline = false;
+  const api = { displayProjectionBySession: async (_session: string, binding: { displayInterval: string }) => {
+    if (offline) throw new Error("offline");
+    return { session_id: store.sessionId, track_id: "track-1", data_epoch: store.dataEpoch,
+      display_interval: binding.displayInterval, revealed_boundary_ms: store.virtualTimeMs,
+      identity: { symbol: "BTCUSDT", exchange: "binance", market_type: "spot" }, bars: [],
+      history_before_ms: cursors[binding.displayInterval as keyof typeof cursors],
+    } as unknown as ReplayDisplayProjectionResponse;
+  } };
+  const cells = Object.keys(cursors).map(interval => new ReplayChartProjection(lifecycle, "track-1", interval, api));
+  const releases = cells.map(cell => cell.retain());
+  await settle();
+  assert.deepEqual(cells.map(cell => cell.getSnapshot().historyBootstrapBeforeMs), Object.values(cursors));
+  assert.ok(cells.every(cell => cell.seriesStore.isEmpty() && !cell.getSnapshot().loading));
+  offline = true;
+  store = { ...store, generation: 2, dataEpoch: "epoch-2" };
+  listeners.forEach(notify => notify()); await settle();
+  assert.ok(cells.every(cell => cell.getSnapshot().historyBootstrapBeforeMs == null));
+  releases.forEach(release => release());
+});

@@ -5031,15 +5031,15 @@ class TrainingRunService:
     ) -> dict[str, object]:
         return await self._admission_service._source_catalog_for_setup(settings)
 
-    @staticmethod
     def _setup_market_compatibility(
+        self,
         settings: Mapping[str, object],
         entry: Mapping[str, object],
         *,
         capability_admission: Mapping[tuple[str, str, str], admission_rules_ops._MarketSetupAdmission],
         committed_start_ms: int | None,
     ) -> dict[str, object]:
-        return admission_rules_ops.setup_market_compatibility(settings, entry, capability_admission=capability_admission, committed_start_ms=committed_start_ms)
+        return self._admission_service._setup_market_compatibility(settings, entry, capability_admission=capability_admission, committed_start_ms=committed_start_ms)
 
     async def _setup_capability_admission(
         self,

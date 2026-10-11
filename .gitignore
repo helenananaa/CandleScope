@@ -286,3 +286,9 @@ local_docs/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Generated local datasets and desktop Python runtime
+/backend/data/local-data/
+/backend/data/replay-agg-trade-origin/
+/backend/data/replay-agg-trades/
+/frontend/.desktop-runtime/

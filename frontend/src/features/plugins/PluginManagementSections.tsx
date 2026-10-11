@@ -575,6 +575,17 @@ export function LocalTrustInstallPanel({ runtime, onPendingChange }: { runtime: 
           </div>
           <p className="plugin-trust-warning">{candidate.preview.warning}</p>
           <h4>{t("plugin.trust.whatRuns")}</h4>
+          {candidate.preview.executionModel === "script-runtime" ? (
+            <div className="plugin-trust-runtime">
+              <p className="plugin-trust-warning">{t("plugin.trust.scriptRuntimeExecution")}</p>
+              {candidate.preview.authorization.entrypoints.map((entrypoint) => (
+                <div key={entrypoint.entrypointId}>
+                  <strong>{entrypoint.entrypointId} · {entrypoint.runtimeKind} · {entrypoint.runtimeId}</strong>
+                  {entrypoint.systemRuntimePath && <code>{entrypoint.systemRuntimePath}</code>}
+                </div>
+              ))}
+            </div>
+          ) : <>
           {candidate.preview.authorization.entrypoints.map((entrypoint) => (
             <div className="plugin-trust-runtime" key={entrypoint.entrypointId}>
               <strong>{entrypoint.entrypointId}</strong>
@@ -609,6 +620,7 @@ export function LocalTrustInstallPanel({ runtime, onPendingChange }: { runtime: 
               <small>{candidate.preview.permissionDiff.permissions.map((item) => `${item.permissionId}: ${item.change}`).join(" · ") || t("plugin.trust.noHostApi")}</small>
             </div>
           </div>
+          </>}
           <label className="plugin-trust-reason">
             <span>{t("plugin.trust.reason")}</span>
             <textarea
