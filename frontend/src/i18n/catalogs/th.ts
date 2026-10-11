@@ -2,6 +2,8 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const th = {
+  "replay.hub.catalogSyncing": "กำลังค้นหาตลาดย้อนหลังจากแหล่งทางการ ระบบจะเปิดใช้งานโดยอัตโนมัติเมื่อพร้อม",
+  "replay.watchlist.preparing": "กำลังดาวน์โหลดและตรวจสอบข้อมูลย้อนหลัง การใช้งานครั้งแรกอาจใช้เวลาสักครู่",
   "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
   "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",
   "native.jumpToError": "Go to line {line}, column {column}",

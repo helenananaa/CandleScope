@@ -2,6 +2,8 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const cs = {
+  "replay.hub.catalogSyncing": "Vyhledávají se historické trhy v oficiálním zdroji. Po dokončení se tato možnost automaticky povolí.",
+  "replay.watchlist.preparing": "Stahují se a ověřují historická data. První použití může trvat několik minut.",
   "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
   "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",
   "native.jumpToError": "Go to line {line}, column {column}",
