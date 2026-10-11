@@ -3,7 +3,7 @@ import type { ChartStrategyAttachmentRecord } from "../../chart-workspace/chartW
 import type { StrategyDraftLanguage } from "./StrategyDraftStore.js";
 
 export interface ChartStrategyTemplate {
-  id: "SMA_CROSS" | "RSI_REVERSAL" | "DONCHIAN_BREAKOUT";
+  id: "SMA_CROSS" | "RSI_REVERSAL" | "DONCHIAN_BREAKOUT" | "PYTHON_SMA";
   nameKey:
     | "chartTester.template.sma"
     | "chartTester.template.rsi"
@@ -17,7 +17,17 @@ export interface ChartStrategyTemplate {
   source: string;
 }
 
+export const PYTHON_SMA_SOURCE = "from candlescope_backtest_sdk import TargetPosition\n\n\nclass Strategy:\n    def prepare(self, context):\n        self.fast = 3\n        self.slow = 5\n        self.closes = []\n\n    def warmup(self, observation):\n        self.closes.append(float(observation.bar.close))\n        self.closes = self.closes[-self.slow:]\n\n    def step(self, observation):\n        self.warmup(observation)\n        if len(self.closes) < self.slow:\n            return TargetPosition(quantity=\"0\")\n        fast = sum(self.closes[-self.fast:]) / self.fast\n        slow = sum(self.closes) / len(self.closes)\n        return TargetPosition(quantity=\"1\" if fast > slow else \"0\")\n\n    def on_execution_report(self, report):\n        pass\n\n    def snapshot(self):\n        return {\"closes\": list(self.closes)}\n\n    def restore(self, payload):\n        self.closes = list(payload[\"closes\"])\n\n    def close(self):\n        pass\n";
+
 export const CHART_STRATEGY_TEMPLATES: readonly ChartStrategyTemplate[] = Object.freeze([
+  Object.freeze({
+    id: "PYTHON_SMA",
+    nameKey: "chartTester.template.sma",
+    descriptionKey: "chartTester.template.smaDescription",
+    displayName: "Python SMA Cross",
+    language: "python",
+    source: PYTHON_SMA_SOURCE,
+  }),
   Object.freeze({
     id: "SMA_CROSS",
     nameKey: "chartTester.template.sma",
@@ -202,6 +212,7 @@ export interface ChartStrategyRunRequest {
   displayName: string;
   language: StrategyDraftLanguage;
   source: string;
+  pythonTrustedConfirmed?: boolean;
   attachment: ChartStrategyAttachmentRecord;
 }
 

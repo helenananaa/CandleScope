@@ -24,7 +24,7 @@ def provider_spec(provider, *, fidelity="BAR_APPROX"):
     if type(provider) is IsolatedStrategyProvider and provider._process is None and not provider._terminated:
         return {"kind": "builtin", "revision": provider._revision_id,
                 "call_timeout": provider._step_timeout_s}
-    if type(provider) is PythonHostProvider and provider.runner.mode == "TRUSTED_LOCAL" and provider.runner._process is None:
+    if type(provider) is PythonHostProvider and provider.runner.mode == "TRUSTED_LOCAL" and provider.runner._process is None and not provider.runner.editor_authorized:
         return {"kind": "python", "bundle": provider.bundle_dir.resolve(),
                 "entrypoint": provider.entrypoint, "parameters": provider.parameters,
                 "call_timeout": provider.runner.step_timeout_s,

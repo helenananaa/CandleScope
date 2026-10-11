@@ -44,8 +44,8 @@ def _real_python() -> Path:
     return candidate
 
 
-def _require_trusted_local(*, confirmed: bool) -> None:
-    if app_getenv("BACKTEST_PYTHON_TRUSTED_LOCAL_ENABLED", "0").strip() != "1":
+def _require_trusted_local(*, confirmed: bool, editor_authorized: bool = False) -> None:
+    if not editor_authorized and app_getenv("BACKTEST_PYTHON_TRUSTED_LOCAL_ENABLED", "0").strip() != "1":
         raise PythonRunnerError(
             "TRUSTED_LOCAL_DISABLED",
             "TRUSTED_LOCAL requires BACKTEST_PYTHON_TRUSTED_LOCAL_ENABLED=1",
@@ -77,11 +77,12 @@ class IsolatedPythonRunner:
         entrypoint: str = "strategy:Strategy",
         mode: str = "SANDBOXED_LOCAL",
         trusted_confirmed: bool = False,
+        editor_authorized: bool = False,
         step_timeout_s: float = DEFAULT_CALL_TIMEOUT_S,
         bound_transcript: bool = False,
     ) -> None:
         if mode == "TRUSTED_LOCAL":
-            _require_trusted_local(confirmed=trusted_confirmed)
+            _require_trusted_local(confirmed=trusted_confirmed, editor_authorized=editor_authorized)
         elif mode == "SANDBOXED_LOCAL":
             if not sandbox_available():
                 raise PythonRunnerError(
@@ -93,6 +94,7 @@ class IsolatedPythonRunner:
         self.bundle_dir = Path(bundle_dir)
         self.entrypoint = entrypoint
         self.mode = mode
+        self.editor_authorized = editor_authorized
         self.step_timeout_s = step_timeout_s
         self._bound_transcript = bool(bound_transcript)
         self._process: subprocess.Popen[str] | None = None

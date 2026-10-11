@@ -10,6 +10,8 @@ import {
 } from "react";
 
 import { t } from "../../i18n/index.js";
+import { StrategyLanguageControls } from "../backtest/chart-tester/StrategyLanguageControls.js";
+import { strategyLanguageLabel } from "../backtest/chart-tester/strategyLanguageLabel.js";
 import { StrategyConditionsEditor } from "../backtest/chart-tester/StrategyConditionsEditor.js";
 import { StrategyParametersEditor } from "../backtest/chart-tester/StrategyParametersEditor.js";
 import { DEFAULT_STRATEGY_RUN_SETTINGS, validStrategyRunSettings, type StrategyRunSettings } from "../../shared/strategyRunSettings.js";
@@ -86,6 +88,9 @@ export function StrategyResearchScriptPanel({
   const draftStore = useMemo(() => getChartStrategyDraftStore(), []);
   const [draft, setDraft] = useState<StrategyDraftRecord | null>(null);
   const [source, setSource] = useState("");
+  const [pythonApproval, setPythonApproval] = useState<string | null>(null);
+  const approvalKey = JSON.stringify([draftId, source]);
+  const pythonTrustedConfirmed = pythonApproval === approvalKey;
   const [cursor, setCursor] = useState<StrategyDraftCursor | null>(null);
   const [openEditor, setOpenEditor] = useState(false);
   const [pane, setPane] = useState<"parameters" | "code" | "conditions">("parameters");
@@ -253,6 +258,7 @@ export function StrategyResearchScriptPanel({
       draftContentRevision: strategyDraftContentRevision(source),
       displayName: draft.displayName,
       language: draft.language,
+      pythonTrustedConfirmed,
       source,
       attachment: {
         schemaVersion: 1,
@@ -267,7 +273,7 @@ export function StrategyResearchScriptPanel({
         ...configuration,
       },
     });
-  }, [cellScope, configuration, draft, onRun, session, source]);
+  }, [cellScope, configuration, draft, onRun, session, source, pythonTrustedConfirmed]);
 
   if (session === null || sourceKind === null) {
     return <p data-testid="strategy-research-script-empty">{t("strategy.scriptSlot")}</p>;
@@ -296,7 +302,7 @@ export function StrategyResearchScriptPanel({
               data-testid={`strategy-research-template-${template.id}`}
               onClick={() => void startDraft(template.id)}
             >
-              {t(template.nameKey)}
+              {strategyLanguageLabel(template.language)} · {t(template.nameKey)}
             </button>
           ))}
           <button
@@ -310,6 +316,10 @@ export function StrategyResearchScriptPanel({
         </div>
       ) : (
         <>
+          <StrategyLanguageControls language={draft.language} confirmed={pythonTrustedConfirmed} onConfirm={(value) => setPythonApproval(value ? approvalKey : null)} onLanguage={(language) => {
+            setPythonApproval(null);
+            void saveDraft({ ...draft, language, source, cursor });
+          }} />
           <div className="research-library-tabs" role="tablist" aria-label={t("strategy.scriptSlot")}>
             {(["parameters", "code", "conditions"] as const).map((value) => <button type="button" role="tab" key={value} aria-selected={pane === value} onClick={() => setPane(value)}>{t(value === "parameters" ? "ux.parameters" : value === "code" ? "chartTester.tab.script" : "chartTester.tab.settings")}</button>)}
           </div>
@@ -334,7 +344,7 @@ export function StrategyResearchScriptPanel({
             type="button"
             data-testid="strategy-research-run"
             className="research-primary"
-            disabled={!validStrategyRunSettings(configuration) || runStatus === "RUNNING" || runStatus === "QUEUED" || runStatus === "RESOLVING"}
+            disabled={(draft.language === "python" && !pythonTrustedConfirmed) || !validStrategyRunSettings(configuration) || runStatus === "RUNNING" || runStatus === "QUEUED" || runStatus === "RESOLVING"}
             onClick={needsData ? onConfirmNeedsData : run}
           >
             {t(needsData ? "chartTester.prepareDataRun" : "chartTester.run")}

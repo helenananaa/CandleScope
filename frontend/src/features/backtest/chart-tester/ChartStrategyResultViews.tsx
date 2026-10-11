@@ -19,6 +19,7 @@ import {
   CHART_STRATEGY_TRADE_ROW_HEIGHT,
   chartStrategyMaxDrawdown,
   chartStrategyDrawdownDetailKey,
+  sampledReportDrawdown,
   chartStrategyMetricValue,
   formatChartStrategyNumber,
   chartStrategyTradeFocusTimeMs,
@@ -218,7 +219,7 @@ export function ChartStrategyResultOverview({
   const trades = report.trades ?? [];
   const latest = trades.at(-1) ?? null;
   const equity = report.performance?.equity_daily ?? chart.equity_curve;
-  const drawdown = report.performance?.drawdown_daily ?? [];
+  const drawdown = report.performance?.drawdown_daily ?? sampledReportDrawdown(report)?.curve ?? [];
   const credibility = report.credibility;
   const directComparison = comparison?.comparison?.directComparisonAllowed
     ? comparison.comparison

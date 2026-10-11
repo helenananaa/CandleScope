@@ -147,6 +147,8 @@ export interface ChartContextResolution {
 export interface BacktestApiClient {
   prepareChartContext?(body: ChartContextResolveRequest, signal?: AbortSignal, strategy?: {
     strategy_revision_id: string;
+    python_runtime_mode?: string;
+    python_trusted_confirmed?: boolean;
     parameters: Record<string, unknown>;
     execution_overrides?: import("../../shared/strategyRunSettings.js").StrategyExecutionOverrides;
     chart_cell_scope: string;

@@ -55,6 +55,7 @@ export interface DesktopTopologyResult {
 }
 
 interface NativeDesktopBridge {
+  strategyStorage?: { getItem(key: string): string | null; setItem(key: string, value: string): Promise<void> };
   readonly apiBase: string;
   getPluginManagementSession?(): { apiBase: string; sessionToken: string; csrfToken: string } | null;
   openAppPage?(url: string): Promise<{ windowId: string }>;

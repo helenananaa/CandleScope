@@ -16,6 +16,7 @@ import { createEvidenceSession } from "./evidence-harness-loader.mjs";
 import { SidecarSupervisor } from "./sidecar-supervisor.mjs";
 import { SeriesSnapshotHub } from "./series-snapshot-hub.mjs";
 import { DesktopShellStateStore } from "./shell-state-store.mjs";
+import { DesktopStrategyStorage } from "./strategy-storage.mjs";
 import { WorkspaceBusConflictError, WorkspaceBusHub } from "./workspace-bus-hub.mjs";
 
 const desktopDir = path.dirname(fileURLToPath(import.meta.url));
@@ -49,6 +50,7 @@ let manager = null;
 let supervisor = null;
 let shutdownComplete = false;
 let shutdownPromise = null;
+const strategyStorage = new DesktopStrategyStorage(path.join(app.getPath("userData"), "strategy-storage-v1.json"));
 const workspaceBus = new WorkspaceBusHub();
 const appWorkBudget = new AppWorkBudgetHub();
 const seriesSnapshots = new SeriesSnapshotHub();
@@ -147,6 +149,7 @@ function createSupervisor() {
 }
 
 async function boot() {
+  await strategyStorage.load();
   if (app.isPackaged && !process.env.CANDLESCOPE_DESKTOP_URL) {
     assetServer = await startProfileAssetServer(path.join(app.getAppPath(), "dist"), {
       userData: app.getPath("userData"),
@@ -188,6 +191,10 @@ async function boot() {
       ...managementSession,
     } : null;
   });
+  trustedIpc.on(DESKTOP_IPC.strategyStorageRead, (event, key) => {
+    event.returnValue = strategyStorage.getItem(key);
+  });
+  trustedIpc.handle(DESKTOP_IPC.strategyStorageWrite, (_event, key, value) => strategyStorage.setItem(key, value));
   trustedIpc.handle(DESKTOP_IPC.openAppPage, (_event, url) => manager.openAppPage(url));
 
   trustedIpc.handle(DESKTOP_IPC.bootstrap, (event) => {
@@ -376,7 +383,7 @@ app.on("before-quit", () => {
 app.on("will-quit", (event) => {
   if (shutdownComplete || (!supervisor && !assetServer)) return;
   event.preventDefault();
-  shutdownPromise ??= Promise.all([supervisor?.stop(), assetServer?.close()]).finally(() => {
+  shutdownPromise ??= Promise.all([supervisor?.stop(), assetServer?.close(), strategyStorage.flush()]).finally(() => {
     shutdownComplete = true;
     app.quit();
   });

@@ -59,14 +59,42 @@ export function chartStrategyWinRate(value: unknown, locale: string): string {
 
 export function chartStrategyMaxDrawdown(report: BacktestReport): string {
   const risk = report.performance?.risk ?? {};
-  return chartStrategyMetricValue(
-    risk.max_drawdown ?? risk.max_drawdown_percent ?? risk.maximum_drawdown,
-  );
+  const metric = risk.max_drawdown ?? risk.max_drawdown_percent ?? risk.maximum_drawdown;
+  const raw = metric === undefined || metric === null
+    ? sampledReportDrawdown(report)?.maximum
+    : chartStrategyMetricValue(metric);
+  if (raw === undefined || raw === "—") return "—";
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return "—";
+  return formatChartStrategyNumber(risk.max_drawdown_percent != null && risk.max_drawdown == null
+    ? value / 100 : value, "percent");
+}
+
+/** Older reports have sampled event equity but no v2 performance block. */
+export function sampledReportDrawdown(report: BacktestReport) {
+  const points = report.equity_curve ?? [];
+  if (points.length < 2) return null;
+  const values = points.map((point) => ({
+    equity: Number(point.equity), event_time_ms: Number(point.event_time_ms),
+  })).sort((a, b) => a.event_time_ms - b.event_time_ms);
+  if (values.some((point) => !Number.isFinite(point.equity) || !Number.isFinite(point.event_time_ms))) return null;
+  const initial = Number(report.account?.initial_balance);
+  let peak = Number.isFinite(initial) && initial > 0 ? Math.max(initial, values[0]!.equity) : values[0]!.equity;
+  if (peak <= 0) return null;
+  let maximum = 0;
+  const curve = values.map((point) => {
+    peak = Math.max(peak, point.equity);
+    const drawdown = (point.equity - peak) / peak;
+    maximum = Math.max(maximum, -drawdown);
+    return { event_time_ms: point.event_time_ms, drawdown: String(drawdown) };
+  });
+  return { maximum, curve };
 }
 
 export function chartStrategyDrawdownDetailKey(report: BacktestReport) {
   const risk = report.performance?.risk ?? {};
   const metric = risk.max_drawdown ?? risk.max_drawdown_percent ?? risk.maximum_drawdown;
+  if (metric == null && sampledReportDrawdown(report)) return "chartTester.result.drawdownBasis" as const;
   if (chartStrategyMetricValue(metric) !== "—") return "chartTester.result.drawdownBasis" as const;
   if (metric === null || metric === undefined) return "chartTester.result.drawdownMissing" as const;
   if (typeof metric === "object" && metric.reason === "INSUFFICIENT_EQUITY_SAMPLES") {

@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 const channels = {
   backendEndpoint: "candlescope:desktop:backend-endpoint",
+  strategyStorageRead: "candlescope:strategy-storage:read",
+  strategyStorageWrite: "candlescope:strategy-storage:write",
   managementSession: "candlescope:desktop:management-session",
   openAppPage: "candlescope:desktop:open-app-page",
   bootstrap: "candlescope:desktop:bootstrap",
@@ -39,6 +41,10 @@ if (!Number.isInteger(backendPort) || backendPort < 1 || backendPort > 65535) {
 }
 
 contextBridge.exposeInMainWorld("candlescopeDesktop", Object.freeze({
+  strategyStorage: Object.freeze({
+    getItem: (key) => ipcRenderer.sendSync(channels.strategyStorageRead, key),
+    setItem: (key, value) => ipcRenderer.invoke(channels.strategyStorageWrite, key, value),
+  }),
   apiBase: `http://127.0.0.1:${backendPort}/api/v1`,
   getBootstrap: () => ipcRenderer.invoke(channels.bootstrap),
   getPluginManagementSession: () => ipcRenderer.sendSync(channels.managementSession),

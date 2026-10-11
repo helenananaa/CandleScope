@@ -5,7 +5,7 @@ export function strategySourceParameters(source: string): StrategySourceParamete
   return source.split("\n").flatMap((original, line) => {
     const match = original.match(/^(\s*([A-Za-z_]\w*)\s*=\s*(sma|rsi|highest|lowest)\(\s*(?:close|high|low|open|volume)\s*,\s*)(\d+)(\s*\)\s*)$/);
     if (match) return [{ line, label: `${match[2]} · ${match[3]}`, prefix: match[1]!, value: match[4]!, suffix: match[5]!, original }];
-    const scalar = original.match(/^(\s*([A-Za-z_]\w*)\s*=\s*)(-?\d+(?:\.\d+)?)(\s*)$/);
+    const scalar = original.match(/^(\s*((?:self\.)?[A-Za-z_]\w*)\s*=\s*)(-?\d+(?:\.\d+)?)(\s*)$/);
     if (scalar) return [{ line, label: scalar[2]!, prefix: scalar[1]!, value: scalar[3]!, suffix: scalar[4]!, original }];
     const target = original.match(/^(\s*target_position\(\s*)(-?\d+(?:\.\d+)?)(\s*\)\s*)$/);
     if (target) return [{ line, label: "target_position", prefix: target[1]!, value: target[2]!, suffix: target[3]!, original }];
