@@ -20,6 +20,7 @@ import { reportAnalytics } from "./nativeReportAnalytics.js";
 import { useNativeStrategyCollection, nativeStrategySwitcherActions, nativeStrategySwitcherItems, type NativeStrategyController } from "./useNativeStrategyCollection.js";
 import { StrategyDockPane, StrategyDockSlot } from "../chart-tester/StrategyDockSlots.js";
 import { StrategySwitcher } from "../chart-tester/StrategySwitcher.js";
+import { strategyLanguageLabel } from "../chart-tester/strategyLanguageLabel.js";
 
 const StrategyScriptWorkspace = lazy(() => import("../chart-tester/StrategyScriptWorkspace.js"));
 
@@ -35,6 +36,7 @@ type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | 
   onRunChange?: (run: NativeRun | null) => void;
   externalReport?: boolean;
   docked?: boolean;
+  onSelectPython?(): void;
   /** Supplied by the chart dock, which shows the strategy list in its header. */
   strategies?: NativeStrategyController;
 };
@@ -380,7 +382,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         <div className="strategy-segmented" role="radiogroup" aria-label={t("native.language")}>
           {(["pine", "pyne"] as const).map((item) => <button key={item} type="button" role="radio" aria-checked={language === item} disabled={busy}
             onClick={() => setLanguage(item)}>{t(`chartTester.language.${item}`)}</button>)}
-          {props.onSelectPython && <button type="button" role="radio" aria-checked={false} disabled={busy} onClick={props.onSelectPython}>Python</button>}
+          {props.onSelectPython && <button type="button" role="radio" aria-checked={false} disabled={busy} onClick={props.onSelectPython}>{strategyLanguageLabel("python")}</button>}
         </div>
         <label>{t("native.parameters")}<textarea value={parameters} disabled={busy} spellCheck={false} onChange={(event) => save(source, event.target.value)} /></label>
       </aside>

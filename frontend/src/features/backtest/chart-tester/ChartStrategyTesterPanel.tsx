@@ -218,7 +218,6 @@ export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanel
   useLocale();
   const switchMode = (next: typeof mode) => {
     setModeChosen(true);
-    if (next === mode) return;
     setMode(next);
     props.onStrategyTesterModeChange?.(next);
     setVisited((items) => new Set([...items, mode, next]));
