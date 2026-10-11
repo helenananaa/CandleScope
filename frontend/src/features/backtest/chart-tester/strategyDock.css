@@ -45,7 +45,7 @@
 .strategy-switcher-trigger { display: flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; height: 30px; padding: 0 8px; border: 0; border-radius: var(--radius-sm); color: var(--text-primary); background: transparent; font: inherit; cursor: pointer; }
 .strategy-switcher-trigger:hover, .strategy-switcher-trigger[aria-expanded=true] { background: var(--bg-hover); }
 .strategy-switcher-trigger strong { min-width: 0; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.strategy-switcher-trigger small { flex-shrink: 0; padding: 1px 5px; border: 1px solid var(--border-color); border-radius: var(--radius-xs); color: var(--text-secondary); font: 500 10px/1.4 var(--font-mono); }
+.strategy-switcher-trigger small { flex-shrink: 0; padding: 1px 5px; border: 1px solid var(--border-color); border-radius: var(--radius-xs); color: var(--text-secondary); font: 500 var(--font-size-xs)/1.4 var(--font-mono); }
 .strategy-switcher-trigger svg { flex-shrink: 0; color: var(--text-secondary); }
 .strategy-switcher-rename { width: 200px; height: 28px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--accent-blue); border-radius: var(--radius-sm); color: var(--text-primary); background: var(--bg-primary); font: inherit; }
 .strategy-switcher-menu { position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; display: flex; flex-direction: column; width: max-content; min-width: 240px; max-width: 360px; max-height: 60vh; overflow: auto; padding: 4px; border: 1px solid var(--border-color); border-radius: var(--radius-control); background: var(--bg-secondary); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32); }
@@ -74,7 +74,7 @@
 .strategy-summary { display: flex; align-items: center; gap: 14px; height: 30px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); color: var(--text-primary); background: transparent; font: inherit; cursor: pointer; }
 .strategy-summary:hover { background: var(--bg-hover); }
 .strategy-summary > span { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; }
-.strategy-summary small { color: var(--text-secondary); font-size: 10px; white-space: nowrap; }
+.strategy-summary small { color: var(--text-secondary); font-size: var(--font-size-xs); white-space: nowrap; }
 .strategy-summary b { font: 600 12px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .strategy-summary .positive { color: var(--text-up); }
 .strategy-summary .negative { color: var(--text-down); }
@@ -109,7 +109,7 @@
 .strategy-notice { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; min-width: 0; padding: 6px 12px; border-left: 2px solid var(--accent-blue); background: color-mix(in srgb, var(--accent-blue) 8%, var(--bg-primary)); color: var(--text-secondary); font-size: 11px; }
 .strategy-notice strong { flex-shrink: 0; color: var(--text-primary); font-weight: 600; }
 .strategy-notice > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 200px; }
-.strategy-notice code { color: var(--text-secondary); font-size: 10px; }
+.strategy-notice code { color: var(--text-secondary); font-size: var(--font-size-xs); }
 :is(.strategy-dock, .native-strategy-panel) .strategy-notice button { margin-left: auto; padding: 3px 9px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary); background: var(--bg-primary); font: inherit; cursor: pointer; }
 .strategy-notice details { flex-basis: 100%; }
 .strategy-notice details pre { max-height: 160px; overflow: auto; margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
