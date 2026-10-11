@@ -42,6 +42,33 @@ test("legacy Chromium storage cannot silently switch origin when its port is occ
   assert.equal(await (await fetch(`http://127.0.0.1:${port}`)).text(), "other app");
 });
 
+test("port 0 allocates and persists a fresh profile origin for packaged smoke restarts", async t => {
+  const { root, dist } = await fixture(t);
+  const userData = path.join(root, "ephemeral");
+  const first = await startProfileAssetServer(dist, { userData, port: 0 });
+  const origin = first.appUrl;
+  await first.close();
+  const saved = JSON.parse(await readFile(path.join(userData, "desktop-origin-v1.json"), "utf8"));
+  assert.ok(saved.port > 0);
+  assert.equal(saved.port, Number(new URL(origin).port));
+  const restarted = await startProfileAssetServer(dist, { userData, port: 0 });
+  try {
+    assert.equal(restarted.appUrl, origin);
+    assert.equal(await (await fetch(restarted.appUrl)).text(), "app");
+    await assert.rejects(startProfileAssetServer(dist, { userData, port: 0 }), { code: "DESKTOP_ORIGIN_UNAVAILABLE" });
+  } finally { await restarted.close(); }
+});
+
+test("port 0 cannot change a legacy Chromium profile origin", async t => {
+  const { root, dist } = await fixture(t);
+  for (const storage of ["Local Storage", "IndexedDB"]) {
+    const userData = path.join(root, storage);
+    await mkdir(path.join(userData, storage), { recursive: true });
+    await assert.rejects(startProfileAssetServer(dist, { userData, port: 0 }), /port 0 requires a new profile/);
+    await assert.rejects(readFile(path.join(userData, "desktop-origin-v1.json")), { code: "ENOENT" });
+  }
+});
+
 test("corrupt origin metadata is rejected rather than replacing the profile origin", async t => {
   const { root, dist, port } = await fixture(t);
   const userData = path.join(root, "bad"); await mkdir(userData);

@@ -29,14 +29,17 @@ export async function startProfileAssetServer(directory, { userData, port = 1807
     || await exists(path.join(userData, "IndexedDB"))
   );
   const candidate = saved?.port ?? port;
-  if (!Number.isInteger(candidate) || candidate < 1 || candidate > 65535) {
-    throw new Error("Desktop UI port must be between 1 and 65535.");
+  const freshProfile = !saved && !legacy;
+  // Port 0 allocates an origin only on first boot. Persist the assigned port so
+  // restarts retain Chromium storage, even when the requested port remains 0.
+  if (!Number.isInteger(candidate) || candidate < (freshProfile ? 0 : 1) || candidate > 65535) {
+    throw new Error("Desktop UI port must be between 1 and 65535; port 0 requires a new profile.");
   }
   let server;
   try {
     server = await startDesktopAssetServer(directory, {
       port: candidate,
-      allowPortFallback: !saved && !legacy,
+      allowPortFallback: freshProfile,
     });
   } catch (error) {
     if (!["EADDRINUSE", "EACCES"].includes(error.code)) throw error;
