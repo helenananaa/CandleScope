@@ -21,6 +21,8 @@ export interface StrategyScriptWorkspaceProps {
   onSourceChange(source: string): void;
   onCursorChange(cursor: StrategyDraftCursor): void;
   onRun(): void;
+  readOnly?: boolean;
+  ariaLabel?: string;
 }
 
 function markerMessage(issue: ChartStrategyDraftIssue, locale: LocaleId): string {
@@ -41,6 +43,8 @@ export default function StrategyScriptWorkspace({
   onSourceChange,
   onCursorChange,
   onRun,
+  readOnly = false,
+  ariaLabel,
 }: StrategyScriptWorkspaceProps) {
   const locale = useLocale();
   const [editorTheme, setEditorTheme] = useState("pyne-dark");
@@ -145,6 +149,8 @@ export default function StrategyScriptWorkspace({
           padding: { top: 10, bottom: 10 },
           scrollBeyondLastLine: false,
           renderValidationDecorations: "on",
+          readOnly,
+          ...(ariaLabel ? { ariaLabel } : {}),
         })}
       />
     </div>

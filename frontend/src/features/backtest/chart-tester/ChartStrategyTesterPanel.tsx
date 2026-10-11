@@ -65,13 +65,28 @@ import {
   type ChartStrategyPanelTab,
 } from "./chartStrategyPanelPreferences.js";
 
+import {
+  chartStrategyMaxDrawdown,
+  chartStrategyMetricValue,
+  chartStrategyWinRate,
+  formatChartStrategyNumber,
+} from "./chartStrategyResultModel.js";
+import { Icon } from "../../../components/icons/Icon.js";
+import {
+  nativeStrategySwitcherActions,
+  nativeStrategySwitcherItems,
+  useNativeStrategyCollection,
+} from "../native/useNativeStrategyCollection.js";
+
 import StrategyDock from "./StrategyDock.js";
+import { StrategyDockPane, StrategyDockSlot } from "./StrategyDockSlots.js";
+import { StrategySwitcher, type StrategySwitcherItem } from "./StrategySwitcher.js";
 
 const StrategyScriptWorkspace = lazy(() => import("./StrategyScriptWorkspace.js"));
 const NativeStrategyPanel = lazy(() => import("../native/NativeStrategyPanel.js"));
 
 type PanelTab = ChartStrategyPanelTab;
-type StartView = "start" | "templates" | "recent" | "editor";
+const PANEL_TABS: readonly PanelTab[] = ["overview", "trades", "script", "settings"];
 
 const MIN_PANEL_HEIGHT = CHART_STRATEGY_MIN_PANEL_HEIGHT;
 const MAX_PANEL_HEIGHT = CHART_STRATEGY_MAX_PANEL_HEIGHT;
@@ -187,22 +202,51 @@ export interface ChartStrategyTesterPanelProps {
   onOpenWorkspace?(): void;
 }
 
+const HOST_STRATEGY_ID = "__candlescope_host__";
+
 export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanelProps) {
   const [localMode, setMode] = useState(() => resolveStrategyTesterMode(props.strategyTesterMode, !!props.attachment));
   const mode = props.strategyTesterMode ?? localMode;
-  const selectedName = mode === "NATIVE"
-    ? props.nativeStrategies?.items.find((item) => item.id === props.nativeStrategies?.activeId)?.name || t("strategyCollection.default")
-    : props.attachment?.displayName;
   const [visited, setVisited] = useState(() => new Set([mode]));
+  const strategies = useNativeStrategyCollection(props.nativeStrategies, props.onNativeStrategiesChange, props.cellScope);
   useLocale();
-  return <StrategyDock key={props.cellScope} scope={props.cellScope}
-    title={`${selectedName ? `${selectedName} · ` : ""}${props.session.symbol} · ${props.session.interval}`}
-    selector={<select aria-label={t("native.mode")} value={mode} onChange={(event) => { const next = event.target.value as typeof mode; setMode(next); props.onStrategyTesterModeChange?.(next); setVisited((items) => new Set([...items, next])); }}>
-      <option value="NATIVE">{t("native.fullStrategies")}</option>
-      <option value="CANDLESCOPE">{t("native.hostMode")}</option>
-    </select>}>
-    {(mode === "NATIVE" || visited.has("NATIVE")) && <div className="strategy-mode-pane" hidden={mode !== "NATIVE"}><Suspense fallback={<p>{t("native.loading")}</p>}><NativeStrategyPanel key={`${props.session.exchange}:${props.session.marketType}:${props.session.symbol}:${props.session.interval}`} {...props} active={props.active !== false && mode === "NATIVE"} docked /></Suspense></div>}
-    {(mode === "CANDLESCOPE" || visited.has("CANDLESCOPE")) && <div className="strategy-mode-pane" hidden={mode !== "CANDLESCOPE"}><CandleScopeStrategyTesterPanel {...props} active={props.active !== false && mode === "CANDLESCOPE"} /></div>}
+  const switchMode = (next: typeof mode) => {
+    if (next === mode) return;
+    setMode(next);
+    props.onStrategyTesterModeChange?.(next);
+    setVisited((items) => new Set([...items, next]));
+  };
+  // The host-matching tester is one more strategy on this chart, not a separate mode to learn.
+  const items: StrategySwitcherItem[] = [
+    ...nativeStrategySwitcherItems(strategies),
+    {
+      id: HOST_STRATEGY_ID,
+      name: props.attachment?.displayName ?? t("native.hostMode"),
+      meta: props.attachment ? t("native.hostMode") : "",
+      running: ["RESOLVING", "QUEUED", "RUNNING"].includes(props.runState.status),
+    },
+  ];
+  const actions = nativeStrategySwitcherActions(strategies)
+    .filter((action) => mode === "NATIVE" || action.id === "add" || action.id === "compare")
+    .map((action) => ({ ...action, onSelect: () => { switchMode("NATIVE"); action.onSelect(); } }));
+  const identity = <StrategySwitcher items={items} actions={actions}
+    activeId={mode === "NATIVE" ? strategies.collection.activeId : HOST_STRATEGY_ID}
+    onSelect={(id) => {
+      if (id === HOST_STRATEGY_ID) { switchMode("CANDLESCOPE"); return; }
+      strategies.select(id);
+      switchMode("NATIVE");
+    }}
+    renaming={mode === "NATIVE" && strategies.renaming} onRename={strategies.rename} />;
+  return <StrategyDock key={props.cellScope} scope={props.cellScope} identity={identity} onClose={props.onClose}>
+    {(mode === "NATIVE" || visited.has("NATIVE")) && <StrategyDockPane hidden={mode !== "NATIVE"}>
+      <Suspense fallback={<p className="strategy-dock-empty">{t("native.loading")}</p>}>
+        <NativeStrategyPanel key={`${props.session.exchange}:${props.session.marketType}:${props.session.symbol}:${props.session.interval}`} {...props}
+          strategies={strategies} active={props.active !== false && mode === "NATIVE"} docked />
+      </Suspense>
+    </StrategyDockPane>}
+    {(mode === "CANDLESCOPE" || visited.has("CANDLESCOPE")) && <StrategyDockPane hidden={mode !== "CANDLESCOPE"}>
+      <CandleScopeStrategyTesterPanel {...props} active={props.active !== false && mode === "CANDLESCOPE"} />
+    </StrategyDockPane>}
   </StrategyDock>;
 }
 
@@ -244,7 +288,6 @@ export function CandleScopeStrategyTesterPanel({
   const [activeTab, setActiveTab] = useState<PanelTab>(() => (
     attachment ? loadChartStrategyPanelPreferences(cellScope).activeTab : "script"
   ));
-  const [startView, setStartView] = useState<StartView>(attachment ? "editor" : "start");
   const currentAttachment = attachment;
   const [draft, setDraft] = useState<StrategyDraftRecord | null>(null);
   const activeDraft = draft?.id === currentAttachment?.strategyDraftId ? draft : null;
@@ -348,7 +391,6 @@ export function CandleScopeStrategyTesterPanel({
     if (!primaryServerIssue) return;
     const timer = window.setTimeout(() => {
       setActiveTab("script");
-      setStartView("editor");
       setFocusIssue(primaryServerIssue);
     }, 0);
     return () => window.clearTimeout(timer);
@@ -383,7 +425,6 @@ export function CandleScopeStrategyTesterPanel({
     setCursor(record.cursor);
     setIssues(diagnoseChartStrategyDraft(record.source));
     setSaveState(nextSaveState);
-    setStartView("editor");
     setActiveTab("script");
     setFocusOnMount(shouldFocus);
     setRunReady(false);
@@ -422,7 +463,6 @@ export function CandleScopeStrategyTesterPanel({
     setRunReady(false);
     if (nextIssues[0]) {
       setActiveTab("script");
-      setStartView("editor");
       setFocusIssue(nextIssues[0]);
       onEntryStateChange("error");
       return;
@@ -497,7 +537,7 @@ export function CandleScopeStrategyTesterPanel({
   }, [activeDraft, currentAttachment, saveState, source]);
 
   const panelStyle = { "--chart-strategy-panel-height": `${height}px` } as CSSProperties;
-  const showEditor = activeTab === "script" && startView === "editor" && activeDraft !== null;
+  const showEditor = activeTab === "script" && activeDraft !== null;
   const runBusy = ["RESOLVING", "QUEUED", "RUNNING"].includes(runState.status);
   const pendingDataMatchesSource = runState.status === "NEEDS_DATA"
     && pendingDataDraftRevision === strategyDraftContentRevision(source);
@@ -548,6 +588,17 @@ export function CandleScopeStrategyTesterPanel({
     return { message: t("chartTester.error.backend"), action: t("chartTester.error.action.retry") };
   }, [runState.actionableError?.code]);
 
+  const stale = runState.status === "STALE" || !runState.projectionVisible;
+  const saveVisible = currentAttachment !== null && (saveState === "ERROR" || saveState === "SAVING"
+    || (activeDraft !== null && activeDraft.source !== source));
+  const showStatus = !["READY", "DETACHED", "COMPLETED", "STALE"].includes(runState.status);
+  const netPnl = result ? chartStrategyMetricValue(result.report.metrics.realized_net_pnl) : "—";
+  const selectTab = (tab: PanelTab, event?: KeyboardEvent<HTMLButtonElement>) => {
+    setActiveTab(tab);
+    const list = event?.currentTarget.parentElement;
+    if (list) requestAnimationFrame(() => list.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus());
+  };
+
   return (
     <section
       id="chart-strategy-tester-panel"
@@ -575,206 +626,154 @@ export function CandleScopeStrategyTesterPanel({
         onPointerDown={beginResize}
         onKeyDown={handleResizeKey}
       />
-      <header className="chart-strategy-tester-head">
-        <div className="chart-strategy-tester-title">
-          <strong>{currentAttachment?.displayName ?? t("chartTester.title")}</strong>
-          <span>{t("chartTester.currentChart", { symbol: session.symbol, interval: session.interval })}</span>
-        </div>
-        <div className="chart-strategy-tabs" role="tablist" aria-label={t("chartTester.tabsAria")}>
-          {(["script", "overview", "trades", "settings"] as const).map((tab) => (
+      {currentAttachment && <StrategyDockSlot name="tabs">
+        <div className="strategy-tabs" role="tablist" aria-label={t("chartTester.tabsAria")}>
+          {PANEL_TABS.map((tab) => (
             <button
               key={tab}
               type="button"
               role="tab"
               aria-selected={activeTab === tab}
               tabIndex={activeTab === tab ? 0 : -1}
-              className={activeTab === tab ? "active" : ""}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => selectTab(tab)}
               onKeyDown={(event) => {
                 if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-                const tabs: PanelTab[] = ["script", "overview", "trades", "settings"];
+                event.preventDefault();
                 const direction = event.key === "ArrowRight" ? 1 : -1;
-                const next = tabs[(tabs.indexOf(tab) + direction + tabs.length) % tabs.length]!;
-                setActiveTab(next);
-                requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(
-                  `.chart-strategy-tabs [aria-selected="true"]`,
-                )?.focus());
+                selectTab(PANEL_TABS[(PANEL_TABS.indexOf(tab) + direction + PANEL_TABS.length) % PANEL_TABS.length]!, event);
               }}
             >
               {t(`chartTester.tab.${tab}`)}
             </button>
           ))}
         </div>
-        <div className="chart-strategy-head-spacer" />
-        {currentAttachment && onOpenWorkspace && <button type="button" className="chart-strategy-link-button" onClick={() => {
-          if (!activeDraft) return;
-          void draftStore.save({ id: activeDraft.id, displayName: activeDraft.displayName, language: activeDraft.language, source, cursor })
-            .then(onOpenWorkspace).catch(() => setSaveState("ERROR"));
-        }}>{t("ux.openWorkspace")}</button>}
-        <button type="button" className="chart-strategy-link-button" aria-pressed={focusMode}
-          onClick={() => setFocusMode((focused) => !focused)}>{t("chartTester.focusMode")}</button>
-        <span className={`chart-strategy-autosave state-${saveState.toLowerCase()}`}>{saveLabel}</span>
-        {saveState === "ERROR" && (
-          <button type="button" className="chart-strategy-link-button" onClick={retrySave}>
-            {t("chartTester.retrySave")}
-          </button>
-        )}
-        {currentAttachment && (
-          <button
-            type="button"
-            className="chart-strategy-run-button"
-            disabled={runBusy}
-            data-run-status={runState.status}
-            onClick={pendingDataMatchesSource ? onPrepareData : run}
-          >
-            {runLabel}
-          </button>
-        )}
-        {runBusy && runState.activeRunId && (
-          <button
-            type="button"
-            className="chart-strategy-link-button"
-            data-testid="chart-strategy-stop-observing"
-            onClick={onStopObserving}
-          >
-            {t("chartTester.stopObserving")}
-          </button>
-        )}
-        {canResume && (
-          <button type="button" className="chart-strategy-link-button" onClick={onResumeObserving}>
-            {t("chartTester.resumeObserving")}
-          </button>
-        )}
-        <button type="button" className="chart-strategy-close-button" onClick={onClose}>
-          {t("chartTester.close")}
-        </button>
-      </header>
-
-      {result && (
-        <ChartStrategyResultContextBar
-          result={result}
-          locale={locale}
-          stale={runState.status === "STALE" || !runState.projectionVisible}
-          {...(onOpenAdvanced ? { onOpenAdvanced } : {})}
-        />
-      )}
-      {currentAttachment && autoRunPauseReason && (
-        <div className="chart-strategy-auto-run-status" role="status" data-auto-run-pause={autoRunPauseReason}>
-          <strong>{t("chartTester.autoRun.paused")}</strong>
-          <span>{t(autoRunPauseKey(autoRunPauseReason))}</span>
-        </div>
-      )}
-      {!result && resultLoading && (
-        <div className="chart-strategy-result-loading" role="status">
-          {t("chartTester.result.loading")}
-        </div>
-      )}
-      {!result && resultError && (
-        <div className="chart-strategy-result-load-error" role="alert">
-          <strong>{t("chartTester.result.unavailable")}</strong>
-          <span>{resultError}</span>
-        </div>
-      )}
-
-      <div className="chart-strategy-tester-body" role="tabpanel">
-        {activeTab === "script" && startView === "start" && (
-          <div className="chart-strategy-start-view">
-            <div className="chart-strategy-first-copy">
-              <div>
-                <p className="chart-strategy-eyebrow">{t("chartTester.startEyebrow")}</p>
-                <h2>{t("chartTester.startTitle")}</h2>
-                <p>{t("chartTester.startLead", { symbol: session.symbol, interval: session.interval })}</p>
+      </StrategyDockSlot>}
+      <StrategyDockSlot name="actions">
+        <div className="strategy-dock-run">
+          {result && (
+            <button type="button" className="strategy-summary" data-stale={stale} onClick={() => setActiveTab("overview")}
+              title={stale ? t("chartTester.result.stale") : t("chartTester.tab.overview")}>
+              <span><small>{t("chartTester.result.netPnl")}</small><b className={Number(netPnl) < 0 ? "negative" : Number(netPnl) > 0 ? "positive" : undefined}>{formatChartStrategyNumber(result.report.metrics.realized_net_pnl)}</b></span>
+              <span><small>{t("chartTester.result.maxDrawdown")}</small><b>{chartStrategyMaxDrawdown(result.report)}</b></span>
+              <span><small>{t("chartTester.result.winRate")}</small><b>{chartStrategyWinRate(result.report.metrics.win_rate, locale)}</b></span>
+            </button>
+          )}
+          {saveVisible && <span className={`chart-strategy-autosave state-${saveState.toLowerCase()}`}>{saveLabel}</span>}
+          {saveState === "ERROR" && (
+            <button type="button" className="strategy-dock-button" onClick={retrySave}>{t("chartTester.retrySave")}</button>
+          )}
+          {currentAttachment && showStatus && (
+            <span role="status" className="strategy-run-status" data-status={runState.status.toLowerCase()} data-testid="chart-strategy-run-status">
+              <i aria-hidden="true" />{t(runStatusKey(runState.status))}
+            </span>
+          )}
+          {runBusy && runState.activeRunId && (
+            <button type="button" className="strategy-dock-button" data-testid="chart-strategy-stop-observing" onClick={onStopObserving}>
+              {t("chartTester.stopObserving")}
+            </button>
+          )}
+          {canResume && (
+            <button type="button" className="strategy-dock-button" onClick={onResumeObserving}>{t("chartTester.resumeObserving")}</button>
+          )}
+          {currentAttachment && (
+            <button
+              type="button"
+              className="chart-strategy-run-button strategy-run-button"
+              disabled={runBusy}
+              data-run-status={runState.status}
+              onClick={pendingDataMatchesSource ? onPrepareData : run}
+            >
+              <Icon name="play" size={11} filled />{runLabel}
+            </button>
+          )}
+          {currentAttachment && (
+            <details className="strategy-dock-more">
+              <summary aria-label={t("report.more")} title={t("report.more")}><Icon name="more" size={14} /></summary>
+              <div role="menu">
+                {onOpenWorkspace && <button type="button" role="menuitem" onClick={() => {
+                  if (!activeDraft) return;
+                  void draftStore.save({ id: activeDraft.id, displayName: activeDraft.displayName, language: activeDraft.language, source, cursor })
+                    .then(onOpenWorkspace).catch(() => setSaveState("ERROR"));
+                }}>{t("ux.openWorkspace")}</button>}
+                {onOpenAdvanced && <button type="button" role="menuitem" onClick={onOpenAdvanced}>{t("chartTester.openAdvanced")}</button>}
+                <button type="button" role="menuitemcheckbox" aria-checked={focusMode}
+                  onClick={() => setFocusMode((focused) => !focused)}>{t("chartTester.focusMode")}</button>
               </div>
+            </details>
+          )}
+        </div>
+      </StrategyDockSlot>
+      <StrategyDockSlot name="notice">
+        {currentAttachment && autoRunPauseReason && (
+          <div className="strategy-notice" data-tone="warning" role="status" data-auto-run-pause={autoRunPauseReason}>
+            <strong>{t("chartTester.autoRun.paused")}</strong>
+            <span>{t(autoRunPauseKey(autoRunPauseReason))}</span>
+          </div>
+        )}
+        {!result && resultLoading && (
+          <div className="strategy-notice" data-tone="info" role="status">{t("chartTester.result.loading")}</div>
+        )}
+        {!result && resultError && (
+          <div className="strategy-notice" data-tone="error" role="alert">
+            <strong>{t("chartTester.result.unavailable")}</strong>
+            <span>{resultError}</span>
+          </div>
+        )}
+      </StrategyDockSlot>
+
+      <div className="chart-strategy-tester-body" role={currentAttachment ? "tabpanel" : undefined}>
+        {!currentAttachment && (
+          <div className="chart-strategy-start">
+            <p className="chart-strategy-start-lead">{t("chartTester.startLead", { symbol: session.symbol, interval: session.interval })}</p>
+            <div className="chart-strategy-start-columns">
+              <section aria-label={t("chartTester.templateTitle")}>
+                <h3>{t("chartTester.start.template")}</h3>
+                <div className="chart-strategy-start-list">
+                  {CHART_STRATEGY_TEMPLATES.map((template) => (
+                    <button key={template.id} type="button" onClick={() => void createDraft(template.displayName, template.source, false)}>
+                      <strong>{t(template.nameKey)}</strong>
+                      <span>{t(template.descriptionKey)}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+              <section aria-label={t("chartTester.recentTitle")}>
+                <h3>{t("chartTester.start.recent")}</h3>
+                {recentDrafts.length === 0 ? (
+                  <p className="chart-strategy-start-empty">{t("chartTester.recentEmpty")}</p>
+                ) : (
+                  <div className="chart-strategy-start-list">
+                    {recentDrafts.map((record) => (
+                      <button key={record.id} type="button" onClick={() => attachRecord(record, false)}>
+                        <strong>{record.displayName}</strong>
+                        <span>
+                          {record.language === "pine" ? t("chartTester.language.pine") : t("chartTester.language.pyne")}
+                          {" · "}
+                          <time dateTime={new Date(record.updatedAt).toISOString()}>{new Date(record.updatedAt).toLocaleString(locale)}</time>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+            <footer className="chart-strategy-start-footer">
+              <button type="button" className="strategy-dock-button" onClick={() => void createDraft(t("chartTester.untitled"), "", true)}>
+                <Icon name="plus" size={12} />{t("chartTester.start.paste")}
+              </button>
+              <p className="chart-strategy-privacy">{t("chartTester.privacy")}</p>
               {onOpenAdvanced ? (
-                <button type="button" className="chart-strategy-advanced-link" onClick={onOpenAdvanced}>
-                  {t("chartTester.openAdvanced")}
-                </button>
+                <button type="button" className="chart-strategy-advanced-link" onClick={onOpenAdvanced}>{t("chartTester.openAdvanced")}</button>
               ) : (
-                <a href="/backtest.html" className="chart-strategy-advanced-link">
-                  {t("chartTester.openAdvanced")}
-                </a>
+                <a href="/backtest.html" className="chart-strategy-advanced-link">{t("chartTester.openAdvanced")}</a>
               )}
-            </div>
-            <div className="chart-strategy-start-grid">
-              <button type="button" onClick={() => setStartView("templates")}>
-                <span>01</span><strong>{t("chartTester.start.template")}</strong>
-                <small>{t("chartTester.start.templateDetail")}</small>
-              </button>
-              <button type="button" onClick={() => { refreshRecent(); setStartView("recent"); }}>
-                <span>02</span><strong>{t("chartTester.start.recent")}</strong>
-                <small>{t("chartTester.start.recentDetail")}</small>
-              </button>
-              <button
-                type="button"
-                onClick={() => void createDraft(t("chartTester.untitled"), "", true)}
-              >
-                <span>03</span><strong>{t("chartTester.start.paste")}</strong>
-                <small>{t("chartTester.start.pasteDetail")}</small>
-              </button>
-            </div>
-            <p className="chart-strategy-privacy">{t("chartTester.privacy")}</p>
-          </div>
-        )}
-
-        {activeTab === "script" && startView === "templates" && (
-          <div className="chart-strategy-picker-view">
-            <div className="chart-strategy-picker-heading">
-              <div><p className="chart-strategy-eyebrow">{t("chartTester.templateEyebrow")}</p><h2>{t("chartTester.templateTitle")}</h2></div>
-              <button type="button" onClick={() => setStartView("start")}>{t("chartTester.back")}</button>
-            </div>
-            <div className="chart-strategy-template-grid">
-              {CHART_STRATEGY_TEMPLATES.map((template) => (
-                <button
-                  key={template.id}
-                  type="button"
-                  onClick={() => void createDraft(template.displayName, template.source, false)}
-                >
-                  <strong>{t(template.nameKey)}</strong>
-                  <span>{t(template.descriptionKey)}</span>
-                  <small>{t("chartTester.language.pyne")}</small>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {activeTab === "script" && startView === "recent" && (
-          <div className="chart-strategy-picker-view">
-            <div className="chart-strategy-picker-heading">
-              <div><p className="chart-strategy-eyebrow">{t("chartTester.recentEyebrow")}</p><h2>{t("chartTester.recentTitle")}</h2></div>
-              <button type="button" onClick={() => setStartView("start")}>{t("chartTester.back")}</button>
-            </div>
-            {recentDrafts.length === 0 ? (
-              <div className="chart-strategy-empty-recent">{t("chartTester.recentEmpty")}</div>
-            ) : (
-              <div className="chart-strategy-recent-list">
-                {recentDrafts.map((record) => (
-                  <button key={record.id} type="button" onClick={() => attachRecord(record, false)}>
-                    <strong>{record.displayName}</strong>
-                    <span>{record.language === "pine"
-                      ? t("chartTester.language.pine")
-                      : t("chartTester.language.pyne")}</span>
-                    <time dateTime={new Date(record.updatedAt).toISOString()}>
-                      {new Date(record.updatedAt).toLocaleString(locale)}
-                    </time>
-                  </button>
-                ))}
-              </div>
-            )}
+            </footer>
           </div>
         )}
 
         {showEditor && activeDraft && (
           <div className="chart-strategy-editor-layout">
             <section className="chart-strategy-editor-shell" aria-label={t("chartTester.editorAria")}>
-              <div className="chart-strategy-editor-head">
-                {t("chartTester.editorHead", {
-                  name: activeDraft.displayName,
-                  language: activeDraft.language === "pine"
-                    ? t("chartTester.language.pine")
-                    : t("chartTester.language.pyne"),
-                })}
-              </div>
               <Suspense fallback={<div className="chart-strategy-editor-loading">{t("chartTester.editorLoading")}</div>}>
                 <StrategyScriptWorkspace
                   source={source}
@@ -797,18 +796,13 @@ export function CandleScopeStrategyTesterPanel({
               <StrategyParametersEditor source={source} onChange={(value) => { setSource(value); setRunReady(false); onSourceDirty(); }} />
               <div className="chart-strategy-problems-head">{t("chartTester.problems")}</div>
               <div className="chart-strategy-problems-body">
-                {runState.status !== "READY" && runState.status !== "DETACHED" && (
-                  <div className={`chart-strategy-run-status status-${runState.status.toLowerCase()}`} data-testid="chart-strategy-run-status">
-                    <strong>{t(runStatusKey(runState.status))}</strong>
-                    {runState.status === "NEEDS_DATA" && resolution && (
-                      <p>{t("chartTester.status.needsDataDetail", {
-                        bars: resolution.materialize.estimated_bars ?? t("chartTester.unknown"),
-                      })}</p>
-                    )}
-                    {actionableCopy && runState.status === "FAILED" && (
-                      <><p>{actionableCopy.message}</p><small>{actionableCopy.action}</small></>
-                    )}
-                  </div>
+                {runState.status === "NEEDS_DATA" && resolution && (
+                  <p className="chart-strategy-run-detail">{t("chartTester.status.needsDataDetail", {
+                    bars: resolution.materialize.estimated_bars ?? t("chartTester.unknown"),
+                  })}</p>
+                )}
+                {actionableCopy && runState.status === "FAILED" && (
+                  <p className="chart-strategy-run-detail" data-tone="error">{actionableCopy.message} <small>{actionableCopy.action}</small></p>
                 )}
                 {visibleIssues.length === 0 ? (
                   <p className="chart-strategy-no-problems">
@@ -838,18 +832,25 @@ export function CandleScopeStrategyTesterPanel({
           </div>
         )}
 
-        {activeTab === "overview" && (
+        {currentAttachment && activeTab === "overview" && (
           result ? (
-            <ChartStrategyResultOverview
-              result={result}
-              stale={runState.status === "STALE" || !runState.projectionVisible}
-              comparison={comparison}
-              onOpenTrades={() => setActiveTab("trades")}
-              {...(onOpenAdvanced ? { onOpenAdvanced } : {})}
-            />
+            <>
+              <ChartStrategyResultContextBar
+                result={result}
+                locale={locale}
+                stale={stale}
+                {...(onOpenAdvanced ? { onOpenAdvanced } : {})}
+              />
+              <ChartStrategyResultOverview
+                result={result}
+                stale={stale}
+                comparison={comparison}
+                onOpenTrades={() => setActiveTab("trades")}
+                {...(onOpenAdvanced ? { onOpenAdvanced } : {})}
+              />
+            </>
           ) : (
             <div className="chart-strategy-run-overview" data-testid="chart-strategy-run-overview">
-              <p className="chart-strategy-eyebrow">{t("chartTester.overviewEyebrow")}</p>
               <h2>{t(runStatusKey(runState.status))}</h2>
               <p>{runState.status === "COMPLETED"
                 ? t("chartTester.result.loading")
@@ -859,13 +860,13 @@ export function CandleScopeStrategyTesterPanel({
               {runState.status === "NEEDS_DATA" && (
                 <div className="chart-strategy-data-recovery">
                   <p>{t("chartTester.settings.date")}: {rangeText}</p>
-                  <button type="button" className="chart-strategy-run-button" onClick={onPrepareData} disabled={!pendingDataMatchesSource}>
+                  <button type="button" className="strategy-run-button" onClick={onPrepareData} disabled={!pendingDataMatchesSource}>
                     {t("chartTester.prepareDataRun")}
                   </button>
                 </div>
               )}
               {actionableCopy && (
-                <div className="chart-strategy-actionable-error">
+                <div className="strategy-notice" data-tone="error">
                   <strong>{actionableCopy.message}</strong>
                   <span>{actionableCopy.action}</span>
                   <details>
@@ -879,51 +880,55 @@ export function CandleScopeStrategyTesterPanel({
         )}
 
         {activeTab === "settings" && currentAttachment && (
-          <div data-testid="chart-strategy-quick-settings">
+          <div className="chart-strategy-settings" data-testid="chart-strategy-quick-settings">
             <StrategyConditionsEditor
               settings={{ ...currentAttachment, rangeMode: currentAttachment.rangeMode === "VISIBLE" ? "CUSTOM" : currentAttachment.rangeMode }}
               marketType={session.marketType}
               onChange={(settings) => { const { executionOverrides: _previous, ...base } = currentAttachment; void _previous; onAttachmentChange({ ...base, ...settings }); }}
             />
-            <details><summary>{t("ux.resolvedConditions")}</summary><div className="chart-strategy-quick-settings">
-            <label className="chart-strategy-auto-run-setting">
-              <input
-                type="checkbox"
-                checked={currentAttachment.autoRun}
-                onChange={(event) => onAttachmentChange({
-                  ...currentAttachment,
-                  autoRun: event.currentTarget.checked,
-                })}
-              />
-              <span>{t("chartTester.autoRun.label")}</span>
-              <strong>{currentAttachment.autoRun
-                ? t(currentAttachment.fidelityPreference === "FAST"
-                  ? "chartTester.autoRun.enabled"
-                  : "chartTester.autoRun.preciseManual")
-                : t("chartTester.autoRun.disabled")}</strong>
-            </label>
-            <div><span>{t("chartTester.settings.capital")}</span><strong>{accountPreset?.initial_cash ?? "10,000"} USDT</strong></div>
-            <div><span>{t("chartTester.settings.position")}</span><strong>{t("chartTester.settings.positionValue", {
-              percent: accountPreset?.equity_percent ?? "10",
-              leverage: accountPreset?.leverage ?? "1",
-            })}</strong></div>
-            <div><span>{t("chartTester.settings.fee")}</span><strong>{costPreset?.fee_bps
-              ? t("chartTester.settings.feeValue", { fee: costPreset.fee_bps, slippage: costPreset.slippage_bps ?? "—" })
-              : t("chartTester.settings.feePending")}</strong></div>
-            <div><span>{t("chartTester.settings.date")}</span><strong>{rangeText}</strong></div>
-            <div><span>{t("chartTester.settings.fidelity")}</span><strong>{currentAttachment.fidelityPreference === "FAST"
-              ? t("chartTester.settings.fast")
-              : t("chartTester.settings.precise")}</strong></div>
-            {onOpenBatchStudy && (
-              <button type="button" className="chart-strategy-advanced-link" onClick={onOpenBatchStudy}>
-                {t("chartTester.settings.batchStudy")}
-              </button>
-            )}
-            </div></details>
+            <section className="strategy-settings-section">
+              <label className="strategy-settings-check chart-strategy-auto-run-setting">
+                <input
+                  type="checkbox"
+                  checked={currentAttachment.autoRun}
+                  onChange={(event) => onAttachmentChange({
+                    ...currentAttachment,
+                    autoRun: event.currentTarget.checked,
+                  })}
+                />
+                <span>{t("chartTester.autoRun.label")}</span>
+                <small>{currentAttachment.autoRun
+                  ? t(currentAttachment.fidelityPreference === "FAST"
+                    ? "chartTester.autoRun.enabled"
+                    : "chartTester.autoRun.preciseManual")
+                  : t("chartTester.autoRun.disabled")}</small>
+              </label>
+            </section>
+            <details className="strategy-settings-section"><summary>{t("ux.resolvedConditions")}</summary>
+              <dl className="chart-strategy-quick-settings">
+                <div><dt>{t("chartTester.settings.capital")}</dt><dd>{accountPreset?.initial_cash ?? "10,000"} USDT</dd></div>
+                <div><dt>{t("chartTester.settings.position")}</dt><dd>{t("chartTester.settings.positionValue", {
+                  percent: accountPreset?.equity_percent ?? "10",
+                  leverage: accountPreset?.leverage ?? "1",
+                })}</dd></div>
+                <div><dt>{t("chartTester.settings.fee")}</dt><dd>{costPreset?.fee_bps
+                  ? t("chartTester.settings.feeValue", { fee: costPreset.fee_bps, slippage: costPreset.slippage_bps ?? "—" })
+                  : t("chartTester.settings.feePending")}</dd></div>
+                <div><dt>{t("chartTester.settings.date")}</dt><dd>{rangeText}</dd></div>
+                <div><dt>{t("chartTester.settings.fidelity")}</dt><dd>{currentAttachment.fidelityPreference === "FAST"
+                  ? t("chartTester.settings.fast")
+                  : t("chartTester.settings.precise")}</dd></div>
+              </dl>
+              {onOpenBatchStudy && (
+                <button type="button" className="chart-strategy-advanced-link" onClick={onOpenBatchStudy}>
+                  {t("chartTester.settings.batchStudy")}
+                </button>
+              )}
+            </details>
           </div>
         )}
 
-        <div hidden={activeTab !== "trades"}>{result
+        <div hidden={!currentAttachment || activeTab !== "trades"}>{result
             ? <ChartStrategyTradeList key={result.run.run_id} active={active && activeTab === "trades"}
               result={result}
               locale={locale}

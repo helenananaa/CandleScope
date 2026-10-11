@@ -10,6 +10,8 @@ import {
 } from "../chartStrategyPanelPreferences.js";
 import { StrategyDraftStore, createMemoryStrategyDraftAdapter } from "../StrategyDraftStore.js";
 import { createChartStrategyTesterState } from "../chartStrategyTesterState.js";
+import { CHART_STRATEGY_TEMPLATES } from "../chartStrategyTesterUiModel.js";
+import { t, type MessageKey } from "../../../../i18n/index.js";
 
 const attachment = {
   schemaVersion: 1 as const,
@@ -27,7 +29,7 @@ const attachment = {
 
 const session = { exchange: "binance", marketType: "spot", symbol: "BTCUSDT", interval: "1m" };
 
-test("first open renders three starts, no blank editor, and no premature Run button", () => {
+test("first open lists templates and recents on one screen, with no blank editor, tabs or premature Run button", () => {
   const html = renderToStaticMarkup(
     <ChartStrategyTesterPanel
       cellScope="workspace\u0000cell-1"
@@ -50,13 +52,40 @@ test("first open renders three starts, no blank editor, and no premature Run but
   );
 
   assert.match(html, /data-chart-strategy-panel="true"/);
-  assert.match(html, />01<.*>02<.*>03</s);
+  for (const template of CHART_STRATEGY_TEMPLATES) assert.ok(html.includes(t(template.nameKey)));
+  assert.match(html, /chart-strategy-start-footer"><button/);
   assert.match(html, /href="\/backtest\.html"/);
   assert.doesNotMatch(html, /data-chart-strategy-editor/);
   assert.doesNotMatch(html, /chart-strategy-run-button/);
   assert.doesNotMatch(html, /保存 revision|创建 Run/);
   assert.doesNotMatch(html, /<(?:input|select|textarea)[^>]+(?:dataset|snapshot|run|revision)/i);
-  assert.equal((html.match(/role="tab"/g) ?? []).length, 4);
+  assert.doesNotMatch(html, /role="tab"/);
+});
+
+test("an attached strategy offers the same four views in result-first order", () => {
+  const html = renderToStaticMarkup(
+    <ChartStrategyTesterPanel
+      cellScope="workspace\u0000cell-1"
+      session={session}
+      attachment={attachment}
+      draftStore={new StrategyDraftStore(createMemoryStrategyDraftAdapter())}
+      onAttachmentChange={() => undefined}
+      onEntryStateChange={() => undefined}
+      onRunRequest={() => undefined}
+      runState={createChartStrategyTesterState({ session, attachment, draftContentRevision: 1 }, "workspace\u0000cell-1")}
+      resolution={null}
+      sourceDiagnostics={[]}
+      pendingDataDraftRevision={null}
+      onPrepareData={() => undefined}
+      onStopObserving={() => undefined}
+      onResumeObserving={() => undefined}
+      onSourceDirty={() => undefined}
+      onClose={() => undefined}
+    />,
+  );
+  const tabs = [...html.matchAll(/role="tab"[^>]*>([^<]+)</g)].map((match) => match[1]);
+  assert.deepEqual(tabs, ["overview", "trades", "script", "settings"].map((tab) => t(`chartTester.tab.${tab}` as MessageKey)));
+  assert.match(html, /chart-strategy-run-button/);
 });
 
 test("stop observing appears only after a backend Run ID exists", () => {
