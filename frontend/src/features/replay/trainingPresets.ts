@@ -12,5 +12,5 @@ export function applyTrainingPreset(draft: TrainingRunDraft, mode: "practice" | 
     requestedStartMs: mode === "challenge" ? null : draft.requestedStartMs ?? latest,
     randomRangeStartMs: mode === "challenge" ? earliest : null, randomRangeEndMs: mode === "challenge" ? latest : null,
     timeDisclosurePolicy: mode === "challenge" ? "HIDE_ALL" : "NONE",
-    allowedMutations: [], bookMode: "OFF", fundingMode: "OFF" };
+    allowedMutations: mode === "practice" ? ["deposit", "withdraw"] : [], bookMode: "OFF", fundingMode: "OFF" };
 }

@@ -2,6 +2,11 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const de = {
+  "plugin.runtimeInstalled": "Skript-Laufzeit installiert und geprüft. Beenden und öffnen Sie CandleScope erneut, um Indikatoren und unterstützte native Strategien zu aktivieren.",
+  "native.executionErrorHelp": "Die Ausführung konnte nicht abgeschlossen werden. Prüfen Sie Skript und Parameter; technische Details stehen unten.",
+  "native.jumpToError": "Zu Zeile {line}, Spalte {column}",
+  "report.notionalReturn": "Gewinn/Verlust / Einstiegsnominalwert (keine Kontorendite)",
+  "native.platformHelp": "Pine 0.3.2 bietet Pakete für macOS Apple Silicon und Intel. Pyne ist plattformübergreifend, sein offizielles Plugin-Paket ist derzeit jedoch für Windows. Wählen Sie das Paket passend zu System und Python-Version.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "Pine-v5/v6-API für abgeschlossene Kerzen:",
   "serverError.notFound": "Das angeforderte Element existiert nicht oder wurde gelöscht",
@@ -1621,6 +1626,8 @@ export const de = {
   "replay.hub.archiveName": "Archivname",
   "replay.hub.sourceKind": "Historienquelle",
   "replay.hub.barHint": "Exaktes OHLCV, gut für die meisten Rhythmus-Trainings.",
+  "replay.hub.catalogSyncing": "Historische Märkte werden geladen. Nach Abschluss automatisch verfügbar.",
+  "replay.watchlist.preparing": "Historische Daten werden geladen und geprüft. Dies kann beim ersten Mal einige Minuten dauern.",
   "replay.hub.aggHint": "Lädt das offizielle aggTrade-Archiv beim Auswählen herunter und prüft es.",
   "replay.hub.startMode": "Startmodus",
   "replay.hub.randomWindow": "Zufälliges zulässiges Fenster",
@@ -3475,7 +3482,7 @@ export const de = {
   "plugin.runtime.refs": "{count} Refs",
   "plugin.runtime.probed": "probe-geprüft",
   "plugin.runtime.devLocal": "Nicht reproduzierbare Entwickler-Lokalwahl: {path}",
-  "plugin.ack.execute": "Ich bestätige, dass dies lokalen Anwendungscode als aktueller Windows-Benutzer ausführt",
+  "plugin.ack.execute": "Ich bestätige, dass dies lokalen Anwendungscode als aktueller Benutzer ausführt",
   "plugin.ack.sandbox": "Ich habe den Sandbox-Status oben geprüft, statt dem Publisher-Namen allein zu vertrauen",
   "plugin.ack.authority": "Ich bestätige, dass Konten, Geheimnisse und Live-Handelsautorität durch diese Vertrauenswahl nicht geöffnet werden",
   "plugin.ack.runtime": "Ich bestätige die Laufzeit: {runtime}",

@@ -359,3 +359,16 @@ test("twenty installed plugins render a searchable directory without mounting th
   assert.match(manager, /搜索插件、作者或功能/);
   assert.doesNotMatch(manager, /data-v1-compatibility-preview/);
 });
+
+
+test("mixed script runtime availability names only the unavailable engine", () => {
+  const value = runtime(false);
+  const contributions = value.view.catalog!.compatibility!.contributions;
+  const pyne = contributions[0]!;
+  pyne.available = false;
+  contributions.push({ ...pyne, id: "compat.pine", runtimeId: "pine", title: "Pine Runtime", available: true });
+  const html = renderToStaticMarkup(<PluginSettingsPanel runtime={value} />);
+  assert.match(html, /不可用: Pyne Runtime/);
+  assert.doesNotMatch(html, /脚本运行时当前不可用|不可用: Pine Runtime/);
+  assert.match(html, /Pine Runtime/);
+});

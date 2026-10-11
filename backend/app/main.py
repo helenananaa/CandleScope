@@ -622,6 +622,9 @@ async def startup_event() -> None:
         )
         app.state.data_preparation_service = preparation
         await preparation.start()
+        from app.data_preparation.replay_context import ReplayHistoryContext
+        if getattr(app.state, "replay_service", None) is not None:
+            app.state.replay_service.history_context = ReplayHistoryContext(preparation)
         data_manager = getattr(app.state, "data_manager", None)
         try:
             if data_manager is not None:

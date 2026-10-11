@@ -50,6 +50,15 @@
 
 .strategy-research-advanced {
   padding: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.strategy-research-advanced > .app-layout {
+  flex: 1;
+  width: 100%;
+  height: auto;
+  min-height: 0;
 }
 
 .strategy-research-imported-chart .tv-lightweight-charts,
@@ -200,7 +209,7 @@
 .strategy-research-resume strong, .strategy-research-resume small { display: block; }
 .strategy-research-resume small { color: var(--text-secondary); margin-bottom: 6px; }
 .strategy-research-right-rail { flex: 0 0 clamp(320px, 32vw, 500px); display: flex; flex-direction: column; min-height: 0; overflow: auto; border-left: 1px solid var(--border-color); background: var(--bg-secondary); }
-.strategy-research-script { display: flex; flex: 1; min-height: 360px; padding: 16px; }
+.strategy-research-script { display: flex; flex: 1 0 auto; min-height: 360px; padding: 16px; }
 .strategy-research-script > div { display: flex; flex: 1; min-width: 0; }
 .strategy-research-script-panel { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 12px; }
 .strategy-research-script-panel .strategy-conditions-editor, .strategy-research-script-panel .strategy-parameters-editor { flex: 1; align-content: start; overflow: auto; }
@@ -221,7 +230,7 @@
 .strategy-research-script-panel .chart-strategy-editor { min-height: 230px; }
 .strategy-research-script-panel .strategy-research-templates { flex-direction: column; }
 .strategy-research-script-panel .strategy-research-bar-only { color: var(--text-secondary); font-size: 12px; }
-.strategy-research-analysis { border-top: 1px solid var(--border-color); padding: 16px; font-size: 13px; }
+.strategy-research-analysis { flex-shrink: 0; border-top: 1px solid var(--border-color); padding: 16px; font-size: 13px; }
 .strategy-research-analysis summary { cursor: pointer; }
 .strategy-research-result-slot { flex: 0 0 auto; max-height: 42vh; overflow: auto; border-top: 1px solid var(--border-color); background: var(--bg-primary); padding: 16px; }
 .strategy-research-result-slot p { color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
@@ -302,3 +311,6 @@
 .strategy-research-shell .research-top-bar :is(.logo, .workspace-navigation) {
   display: none;
 }
+
+/* Runtime guidance participates in rail layout; controls must never overlap the analysis section. */
+.strategy-research-script > div > p[role="status"] { flex-shrink: 0; margin: 8px 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }

@@ -2078,6 +2078,12 @@ class ParquetRawAggTradeArchive:
             )
             manifests = [
                 self._file_manifest_from_object(item) for item in dataset_ref.objects
+                if not (
+                    (bounds[0] is not None and item.max_trade_time_ms < bounds[0])
+                    or (bounds[1] is not None and item.min_trade_time_ms > bounds[1])
+                    or (bounds[2] is not None and item.max_agg_trade_id < bounds[2])
+                    or (bounds[3] is not None and item.min_agg_trade_id > bounds[3])
+                )
             ]
             data_epoch = dataset_ref.data_epoch
         if len(manifests) > self.max_scan_files:
@@ -2128,6 +2134,31 @@ class ParquetRawAggTradeArchive:
                         "time/ID bounds",
                     )
                 cutoff = _row_cutoff(deduplicated, bounded_limit)
+                if dataset_ref is not None:
+                    # A revealed tape page can contain only a handful of IDs
+                    # in a multi-million-row day. Filter in Arrow before Python
+                    # conversion so these UI reads cannot monopolize the actor.
+                    import pyarrow.compute as pc
+
+                    mask = None
+                    for column, lower, upper in (
+                        ("trade_time_ms", bounds[0], bounds[1]),
+                        ("agg_trade_id", bounds[2], bounds[3]),
+                    ):
+                        for value, compare in ((lower, pc.greater_equal), (upper, pc.less_equal)):
+                            if value is not None:
+                                predicate = compare(batch.column(column), value)
+                                mask = predicate if mask is None else pc.and_(mask, predicate)
+                    if after is not None:
+                        times = batch.column("trade_time_ms")
+                        ids = batch.column("agg_trade_id")
+                        predicate = pc.or_(
+                            pc.greater(times, after.trade_time_ms),
+                            pc.and_(pc.equal(times, after.trade_time_ms), pc.greater(ids, after.agg_trade_id)),
+                        )
+                        mask = predicate if mask is None else pc.and_(mask, predicate)
+                    if mask is not None:
+                        batch = batch.filter(mask)
                 for raw in batch.to_pylist():
                     row = _raw_trade_payload(raw)
                     order_key = (row["trade_time_ms"], row["agg_trade_id"])

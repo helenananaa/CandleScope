@@ -632,7 +632,12 @@ async def return_replay_v2_run_to_hub(
     request: Request,
     run_id: str,
 ) -> dict[str, object]:
-    return await _training_service(request).return_to_hub(run_id)
+    result = await _training_service(request).return_to_hub(run_id)
+    # Multi-track checkpoint contents are internal persistence data. The public
+    # acknowledgement has the same strict contract for one or many markets.
+    return {key: result[key] for key in (
+        "protocol", "run_id", "state", "checkpointed", "released"
+    )}
 
 
 @router.get("/runs/session/{session_id}/history")

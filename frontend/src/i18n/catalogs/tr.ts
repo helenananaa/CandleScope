@@ -2,6 +2,11 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const tr = {
+  "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
+  "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",
+  "native.jumpToError": "Go to line {line}, column {column}",
+  "report.notionalReturn": "P&L / entry notional (not account return)",
+  "native.platformHelp": "Pine 0.3.2 provides macOS Apple Silicon and Intel bundles. Pyne is cross-platform, but its current official plugin bundle is Windows-only. Match the bundle to your system and Python version.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "Kapanmış mumlar için Pine v5/v6 API:",
   "serverError.notFound": "İstenen öğe yok veya silinmiş",
@@ -1621,6 +1626,8 @@ export const tr = {
   "replay.hub.archiveName": "Arşiv adı",
   "replay.hub.sourceKind": "Geçmiş kaynağı",
   "replay.hub.barHint": "Kesin OHLCV, çoğu ritim eğitimi için uygundur.",
+  "replay.hub.catalogSyncing": "Geçmiş piyasa kataloğu eşitleniyor. Hazır olduğunda otomatik etkinleşir.",
+  "replay.watchlist.preparing": "Geçmiş veriler indiriliyor ve doğrulanıyor. İlk kullanım birkaç dakika sürebilir.",
   "replay.hub.aggHint": "Seçimde resmi aggTrade arşivini indirir ve doğrular.",
   "replay.hub.startMode": "Başlangıç modu",
   "replay.hub.randomWindow": "Rastgele uygun pencere",
@@ -3475,7 +3482,7 @@ export const tr = {
   "plugin.runtime.refs": "{count} ref",
   "plugin.runtime.probed": "sınama doğrulamalı",
   "plugin.runtime.devLocal": "Yeniden üretilemeyen geliştirici-yerel seçim: {path}",
-  "plugin.ack.execute": "Bunun, geçerli Windows kullanıcısı olarak yerel uygulama kodunu çalıştıracağını onaylıyorum",
+  "plugin.ack.execute": "Bunun, geçerli kullanıcısı olarak yerel uygulama kodunu çalıştıracağını onaylıyorum",
   "plugin.ack.sandbox": "Yalnızca yayımcı adına güvenmek yerine yukarıdaki koruma alanı durumunu kontrol ettim",
   "plugin.ack.authority": "Hesapların, gizlerin ve canlı işlem yetkisinin bu güven seçimiyle açılmadığını onaylıyorum",
   "plugin.ack.runtime": "Çalışma zamanını onaylıyorum: {runtime}",

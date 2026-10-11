@@ -17,7 +17,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import BinaryIO, Callable
-from urllib.parse import urlencode, urlparse
+from urllib.parse import quote, urlencode, urlparse
 from uuid import uuid4
 from xml.etree import ElementTree
 
@@ -51,6 +51,10 @@ class ReplayTradeImportError(RuntimeError):
     """Official archive input failed validation and cannot be released."""
 
 
+class OfficialTradeHistoryEmpty(ReplayTradeImportError):
+    """The official prefix has no published complete daily archives yet."""
+
+
 def official_agg_trade_urls(
     *,
     market_type: str,
@@ -69,7 +73,7 @@ def official_agg_trade_urls(
     relative = (
         f"/data/futures/um/daily/aggTrades/{normalized_symbol}/{filename}"
     )
-    url = f"{BINANCE_PUBLIC_DATA_ORIGIN}{relative}"
+    url = f"{BINANCE_PUBLIC_DATA_ORIGIN}{quote(relative)}"
     return url, f"{url}.CHECKSUM", filename
 
 
@@ -84,6 +88,51 @@ def parse_official_checksum(payload: str, *, expected_filename: str) -> str:
     if len(digest) != 64 or any(value not in "0123456789abcdef" for value in digest):
         raise ReplayTradeImportError("official CHECKSUM digest is not SHA-256")
     return digest
+
+
+def list_official_agg_trade_symbols(
+    *, timeout_seconds: float = 60.0,
+    opener: Callable[..., BinaryIO] = urllib.request.urlopen,
+) -> tuple[str, ...]:
+    """Discover historical USD-M symbols, including delisted instruments."""
+    prefix = "data/futures/um/daily/aggTrades/"
+    symbols: set[str] = set()
+    marker = ""
+    seen: set[str] = set()
+    for _ in range(_MAX_LISTING_PAGES):
+        query = {"delimiter": "/", "prefix": prefix}
+        if marker:
+            query["marker"] = marker
+        url = f"{BINANCE_PUBLIC_DATA_LISTING_ORIGIN}?{urlencode(query)}"
+        with opener(url, timeout=timeout_seconds) as response:
+            root = ElementTree.fromstring(
+                _read_bounded(response, max_bytes=_MAX_LISTING_PAGE_BYTES)
+            )
+        page_prefixes = []
+        for item in root.findall(".//{*}CommonPrefixes"):
+            key = item.findtext("{*}Prefix") or ""
+            if not key.startswith(prefix) or not key.endswith("/"):
+                continue
+            page_prefixes.append(key)
+            symbol = key[len(prefix):-1]
+            # Perpetual instruments share the replay symbol contract. Dated
+            # delivery contracts are a separate instrument type.
+            if symbol.isalnum() and len(symbol) <= 64:
+                symbols.add(symbol)
+        if (root.findtext("{*}IsTruncated") or "").lower() != "true":
+            break
+        next_marker = root.findtext("{*}NextMarker") or (
+            page_prefixes[-1] if page_prefixes else ""
+        )
+        if not next_marker or next_marker in seen:
+            raise ReplayTradeImportError("official symbol pagination did not advance")
+        seen.add(next_marker)
+        marker = next_marker
+    else:
+        raise ReplayTradeImportError("official symbol listing exceeded its page limit")
+    if not symbols:
+        raise ReplayTradeImportError("official symbol listing is empty")
+    return tuple(sorted(symbols))
 
 
 def list_official_agg_trade_days(
@@ -184,7 +233,7 @@ def list_official_agg_trade_days(
         )
     complete = tuple(sorted(zip_days & checksum_days))
     if not complete:
-        raise ReplayTradeImportError(
+        raise OfficialTradeHistoryEmpty(
             "Binance official aggregate-trade listing has no complete daily objects"
         )
     return complete

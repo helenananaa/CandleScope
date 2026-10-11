@@ -65,3 +65,11 @@ test("source-bucket projection parser rejects a bar beyond the public cursor", (
     /exceeds the public cursor/,
   );
 });
+
+
+test("empty display projections preserve a public history bootstrap cursor", () => {
+  const empty = { ...response(), bars: [], history_before_ms: OPEN_MS };
+  assert.equal(parseReplayDisplayProjection(empty).history_before_ms, OPEN_MS);
+  assert.throws(() => parseReplayDisplayProjection({ ...empty, history_before_ms: CLOSE_MS + 1 }),
+    /exceeds the public cursor/);
+});

@@ -95,3 +95,36 @@ def test_paged_reader_rejects_unknown_or_inconsistent_expected_bounds() -> None:
     with pytest.raises(ReplayDomainError) as raised:
         reader.read_page()
     assert raised.value.code is ReplayErrorCode.DATA_GAP
+
+
+def test_revealed_prefix_reads_only_intersecting_objects_and_rows(tmp_path, monkeypatch):
+    import app.data_engine.storage.raw_trade_archive as raw_archive
+    from tests.fixtures.replay.trade_service_fakes import (
+        INTERVAL_MS,
+        TRADE_REPLAY_MINUTES,
+        TRADE_REPLAY_START_MS,
+        verified_trade_archive,
+    )
+
+    archive = verified_trade_archive(tmp_path)
+    ref = archive.freeze_dataset(
+        exchange="binance", market_type="futures", symbol="BTCUSDT",
+        start_time_ms=TRADE_REPLAY_START_MS,
+        end_time_ms=TRADE_REPLAY_START_MS + TRADE_REPLAY_MINUTES * INTERVAL_MS - 1,
+    )
+    converted = []
+    original = raw_archive._raw_trade_payload
+
+    def count_conversion(row):
+        converted.append(row["agg_trade_id"])
+        return original(row)
+
+    monkeypatch.setattr(raw_archive, "_raw_trade_payload", count_conversion)
+    # The full reference contains three files, but this revealed prefix needs
+    # only one. A one-file budget must still allow the bounded read.
+    archive.max_scan_files = 1
+    reader = PagedReplayTradeReader(archive, ref, page_rows=10, validate_generation=False)
+    page = reader.read_sequence_page(after_sequence=0, revealed_sequence=1, limit=10)
+    assert [trade.agg_trade_id for trade in page.trades] == [1000]
+    assert converted == [1000]
+    assert page.has_more is False

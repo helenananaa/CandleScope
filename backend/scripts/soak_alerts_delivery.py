@@ -140,6 +140,15 @@ def _git_metadata() -> dict[str, Any]:
 
 
 def _rss_bytes() -> int | None:
+    if sys.platform == "darwin":
+        try:
+            result = subprocess.run(
+                ["/bin/ps", "-o", "rss=", "-p", str(os.getpid())],
+                capture_output=True, text=True, check=True, timeout=1,
+            )
+            return int(result.stdout.strip()) * 1024
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return None
     if sys.platform == "win32":
         class ProcessMemoryCounters(ctypes.Structure):
             _fields_ = [

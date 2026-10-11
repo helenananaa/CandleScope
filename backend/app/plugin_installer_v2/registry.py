@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -101,7 +102,7 @@ def _absolute_path(value: Any, label: str) -> Path:
     path = Path(raw)
     if not path.is_absolute():
         raise PlatformInstallerError(f"{label} must be an absolute path")
-    return path.resolve(strict=False)
+    return Path(os.path.abspath(path))
 
 
 def _runtime_supply_from_wire(value: Any, label: str) -> RuntimeSupplyBinding:
@@ -138,7 +139,13 @@ class EntrypointActivation:
             self.artifact_sha256
         ):
             raise PlatformInstallerError("activation artifactSha256 is invalid")
-        executable = Path(self.executable).resolve(strict=False)
+        # Python locates pyvenv.cfg relative to its launcher, not the target of
+        # the symlink. Preserve that launcher across activation persistence.
+        executable = (
+            Path(os.path.abspath(self.executable))
+            if self.runtime_kind == "python-module"
+            else Path(self.executable).resolve(strict=False)
+        )
         working_directory = Path(self.working_directory).resolve(strict=False)
         artifact = (
             Path(self.artifact).resolve(strict=False)

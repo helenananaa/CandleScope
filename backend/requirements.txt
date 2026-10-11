@@ -5,6 +5,7 @@ requests==2.32.3
 numpy==2.2.1
 orjson==3.11.3
 pandas==2.2.3
+pyarrow==21.0.0
 exchange_calendars==4.13.2
 python-dotenv==1.0.1
 packaging==26.3

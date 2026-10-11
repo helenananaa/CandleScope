@@ -978,12 +978,12 @@ async def test_archive_forwarding_enqueues_without_waiting_for_debounce(
         lambda: service.diagnostics()["archive_forward_queue"]["pending"] == 0,
     )
 
-    # The first batch is still inside the debounce window while the second has
-    # already transferred to the bounded writer queue.
+    # Both batches transfer before the debounce expires. The writer may already
+    # have merged them into its internal buffer, so queue length is not durability.
     assert service.diagnostics()["archive_writer"]["batches_written"] == 0
-    assert service.diagnostics()["archive_writer"]["pending_batches"] == 1
     await service.shutdown()
     assert service.diagnostics()["archive_forwarded"] == 2
+    assert service.diagnostics()["archive_writer"]["rows_archived"] == 2
 
 
 @_async_test

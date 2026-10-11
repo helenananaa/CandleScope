@@ -35,6 +35,12 @@ def test_install_quick_repeat_upgrade_and_power_safe_rollback(tmp_path: Path) ->
     assert first.reused_installation is False
     assert first.state == "active"
     assert first.installation_path.is_dir()
+    # Keep the venv launcher, including after persisting/reloading the registry.
+    # Resolving its symlink would run base Python without the plugin's packages.
+    activation = load_activation_registry(installer.registry_path).plugins[0]
+    assert activation.entrypoints[0].executable == installer._venv_python(
+        first.installation_path
+    ).absolute()
     assert installer.registry_path.name == "platform-registry-v2.json"
     assert legacy_registry.read_bytes() == legacy_bytes
     receipt = json.loads(

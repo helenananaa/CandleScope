@@ -191,6 +191,7 @@ export class TrainingHubLifecycle {
   private createOpen = false;
   private capabilities: ReplayCapabilities | null = null;
   private preparationCapabilities: PreparationCapabilities | null = null;
+  private capabilityRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private catalog: ReplayCatalog | null = null;
   private draft: TrainingRunDraft | null = null;
   private evaluation: TrainingRunDraftEvaluation | null = null;
@@ -277,6 +278,7 @@ export class TrainingHubLifecycle {
       if (!this.accept(token)) return;
       this.capabilities = capabilities;
       this.preparationCapabilities = preparationCapabilities;
+      this.scheduleCapabilityRefresh();
       const seedDraft = preservedDraft ?? createTrainingRunDraft();
       const catalog = await this.api.catalog({
         warmupBars: seedDraft.indicatorWarmupBars,
@@ -300,6 +302,22 @@ export class TrainingHubLifecycle {
     } catch (error) {
       this.fail(token, error);
     }
+  }
+
+  private scheduleCapabilityRefresh(): void {
+    if (this.capabilityRefreshTimer !== null) clearTimeout(this.capabilityRefreshTimer);
+    const source = this.capabilities?.sources.agg_trade;
+    if (!this.createOpen || source?.enabled || source?.reason !== "OFFICIAL_CATALOG_SYNCING") return;
+    this.capabilityRefreshTimer = setTimeout(async () => {
+      this.capabilityRefreshTimer = null;
+      if (this.disposed || !this.createOpen) return;
+      try {
+        this.capabilities = await this.api.capabilities(this.abortController.signal);
+        if (this.disposed || !this.createOpen) return;
+        this.publish();
+      } catch { /* Keep the draft intact; the next refresh retries discovery. */ }
+      this.scheduleCapabilityRefresh();
+    }, 3_000);
   }
 
   closeCreate(): void {
@@ -637,6 +655,7 @@ export class TrainingHubLifecycle {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    if (this.capabilityRefreshTimer !== null) clearTimeout(this.capabilityRefreshTimer);
     this.abortController.abort();
     this.storageAbortController.abort();
     this.phase = "STOPPED";

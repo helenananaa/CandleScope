@@ -167,9 +167,9 @@ class RuntimeProcessSpec:
             raise PluginRegistryError(
                 f"runtime {self.runtime_id!r} executable must be an absolute path"
             )
-        # POSIX venv interpreters are symlinks. Resolving them selects the base
-        # interpreter instead, losing pyvenv.cfg and the installed sidecar.
-        object.__setattr__(self, "executable", executable)
+        # Resolving the final symlink changes Python venv discovery and loses
+        # site-packages. Keep the invocation path, normalizing only dot segments.
+        object.__setattr__(self, "executable", Path(os.path.abspath(executable)))
 
         arguments = tuple(self.arguments)
         if len(arguments) > 64:
@@ -288,6 +288,8 @@ def default_runtime_registry_path(
     environ: Mapping[str, str] | None = None,
 ) -> Path:
     env = runtime_environment() if environ is None else environ
+    if env.get("CANDLE_DATA_DIR"):
+        return Path(env["CANDLE_DATA_DIR"]).expanduser() / "plugins" / "runtime-registry.json"
     if os.name == "nt":
         base = env.get("LOCALAPPDATA")
         if base:

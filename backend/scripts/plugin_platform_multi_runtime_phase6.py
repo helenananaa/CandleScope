@@ -24,7 +24,9 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = REPOSITORY_ROOT / "backend"
 SDK_SOURCE = REPOSITORY_ROOT / "packages" / "candlescope-plugin-sdk" / "src"
 FIXTURE_ROOT = BACKEND_ROOT / "tests" / "fixtures" / "plugin_platform_multi_runtime"
-CONTRACT_PATH = FIXTURE_ROOT / "phase6_contract_v4.json"
+CONTRACT_PATH = FIXTURE_ROOT / "phase6_contract_v5.json"
+PREVIOUS_HELP_CONTRACT_PATH = FIXTURE_ROOT / "phase6_contract_v4.json"
+PREVIOUS_HELP_CONTRACT_FILE_SHA256 = "b3530818d716a5f0142ac47d2701c0233be10e954c3678e24f74e8c49ebc9b59"
 PREVIOUS_UI_CONTRACT_PATH = FIXTURE_ROOT / "phase6_contract_v3.json"
 PREVIOUS_UI_CONTRACT_FILE_SHA256 = (
     "b07a5fa8c511a17ab9a2d731fc96e6f0d956c90c231a77954752b24f09a516c8"
@@ -53,7 +55,7 @@ REAL_EVIDENCE_PATH = (
     / "plugin-platform-v2"
     / "multi-runtime-phase6-2026-08-03-windows-amd64.json"
 )
-CONTRACT_SCHEMA_VERSION = "candlescope.plugin-platform.multi-runtime.phase6-contract/4"
+CONTRACT_SCHEMA_VERSION = "candlescope.plugin-platform.multi-runtime.phase6-contract/5"
 HISTORICAL_CONTRACT_SCHEMA_VERSION = (
     "candlescope.plugin-platform.multi-runtime.phase6-contract/1"
 )
@@ -253,8 +255,8 @@ def capture_contract() -> dict[str, Any]:
     return {
         "schemaVersion": CONTRACT_SCHEMA_VERSION,
         "implementedOn": "2026-08-03",
-        "migratedOn": "2026-10-08",
-        "previousContractSha256": "sha256:" + PREVIOUS_UI_CONTRACT_FILE_SHA256,
+        "migratedOn": "2026-10-09",
+        "previousContractSha256": "sha256:" + PREVIOUS_HELP_CONTRACT_FILE_SHA256,
         "phase5ContractSha256": _canonical_sha256(phase5_contract),
         # The recorded Windows AppContainer run predates both the i18n and
         # plugin-center migrations. It only qualifies the original v1 contract.
@@ -427,7 +429,9 @@ def capture_contract() -> dict[str, Any]:
             },
             "native": {
                 "path": NATIVE_PROBE.relative_to(REPOSITORY_ROOT).as_posix(),
-                "sha256": _sha256_path(NATIVE_PROBE),
+                # The frozen Windows probe was captured with CRLF checkout bytes.
+                # Normalize only line endings, retaining every source byte otherwise.
+                "sha256": _sha256_bytes(NATIVE_PROBE.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")),
             },
             "expected": EXPECTED_ATTACK_RESULT,
         },
@@ -475,6 +479,7 @@ def validate_contract() -> dict[str, Any]:
     validate_historical_contract_v1()
     validate_previous_contract_v2()
     validate_previous_ui_contract_v3()
+    validate_previous_ui_contract_v4()
     fixture = _strict_json(CONTRACT_PATH)
     current = capture_contract()
     if fixture != current:
@@ -509,6 +514,14 @@ def validate_previous_ui_contract_v3() -> dict[str, Any]:
     ):
         raise Phase6GateError("historical Phase 6 contract lost schemaVersion /3")
     return previous
+
+
+def validate_previous_ui_contract_v4() -> dict[str, Any]:
+    """Preserve the pre-runtime-help UI snapshot and its historical evidence."""
+    raw = PREVIOUS_HELP_CONTRACT_PATH.read_bytes().replace(b"\r\n", b"\n")
+    if hashlib.sha256(raw).hexdigest() != PREVIOUS_HELP_CONTRACT_FILE_SHA256:
+        raise Phase6GateError("historical Phase 6 contract v4 was rewritten")
+    return _strict_json(PREVIOUS_HELP_CONTRACT_PATH)
 
 
 class _LocalEvidenceFetcher:

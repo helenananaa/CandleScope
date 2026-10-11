@@ -268,7 +268,11 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
                         }),
                       })}
                     >
-                      <small>AGG_TRADE</small><strong>{t("replay.source.agg")}</strong><span>{t("replay.hub.aggHint")}</span>
+                      <small>AGG_TRADE</small><strong>{t("replay.source.agg")}</strong><span>{t(
+                        !runtime.capabilities?.sources.agg_trade.enabled
+                          && runtime.capabilities?.sources.agg_trade.reason === "OFFICIAL_CATALOG_SYNCING"
+                          ? "replay.hub.catalogSyncing" : "replay.hub.aggHint",
+                      )}</span>
                     </button>
                   </div>
                 </div>
@@ -368,7 +372,7 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
               </div>
             </section>
 
-            <section className="training-hub-form-section" id="training-hub-create-rules" hidden={presetMode !== "custom"}>
+            <section className="training-hub-form-section" id="training-hub-create-rules">
               <header>
                 <div><h3>{t("replay.hub.sectionRules")}</h3><p>{t("replay.hub.rulesHint")}</p></div>
                 <span>02</span>

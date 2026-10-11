@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -297,12 +298,12 @@ def test_environment_bootstrap_is_enabled_by_default_and_can_be_disabled(
     enabled_by_default = build_core_plugin_platform_from_environment(
         host_name="CandleScope",
         host_version="0.4.0",
-        environ={"LOCALAPPDATA": str(tmp_path / "local")},
+        environ={"LOCALAPPDATA": str(tmp_path / "local"), "HOME": str(tmp_path / "home")},
     )
     assert isinstance(enabled_by_default, CorePluginPlatform)
     assert (
         enabled_by_default.root
-        == (tmp_path / "local" / "CandleScope" / "plugin-platform-v2").resolve()
+        == ((tmp_path / "local" / "CandleScope" / "plugin-platform-v2") if os.name == "nt" else (tmp_path / "home" / ".candlescope" / "plugin-platform-v2")).resolve()
     )
 
     disabled = build_core_plugin_platform_from_environment(

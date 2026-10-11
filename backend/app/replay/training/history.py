@@ -2477,7 +2477,14 @@ def build_history_page(
             config=history_config,
             snapshot=snapshot,
             actual_replay_start_ms=actual_replay_start_ms,
-            fallback_start_ms=actual_visible_history_start_ms,
+            # ALL_AVAILABLE is a Run-wide preference, but the first market's
+            # listing date is not a boundary for subsequently added markets.
+            # Each secondary source must still cover its frozen warmup.
+            fallback_start_ms=(
+                actual_replay_start_ms - snapshot.warmup_bars * interval_ms
+                if binding["session_id"] != binding["primary_adapter_session_id"]
+                else actual_visible_history_start_ms
+            ),
             interval_ms=interval_ms,
         )
     base_history_boundary_ms = (
@@ -2619,11 +2626,11 @@ def build_history_page(
                 first_actual_bucket_ms
             )
         if history_boundary_ms > snapshot.replay_start_ms:
-            raise _fail(
-                "HISTORY_POLICY_INVALID",
-                "training display history boundary is invalid",
-                status_code=503,
-            )
+            # A short warmup can contain no complete coarse bucket. This is
+            # an empty prefix, not a corrupt policy. Keep its public seam so
+            # prepared display context can page backwards without inventing
+            # a partial candle or crossing the revealed cursor.
+            history_boundary_ms = max(0, source_bucket_mapper.public_anchor_ms)
         native_context = None
         history_source = {
             "mode": "SOURCE_NATIVE_BUCKET_RECONSTRUCTION",
@@ -3131,6 +3138,10 @@ def build_display_projection(
         "display_interval": projection_config.display_interval,
         "revealed_boundary_ms": revealed_boundary_ms,
         "bars": [bar.to_dict() for bar in bars[-limit:]],
+        # An empty coarse projection still needs a public, source-aligned
+        # connection cursor so a chart can bootstrap older display context.
+        "history_before_ms": (bars[-limit:][0].open_time_ms if bars
+                              else mapper.public_anchor_ms),
         "has_more": has_more or len(bars) > limit,
     }
 

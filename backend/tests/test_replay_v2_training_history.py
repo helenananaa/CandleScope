@@ -486,3 +486,31 @@ async def test_agg_trade_training_all_available_history_uses_chart_only_bars(
         assert all(bar["close_time_ms"] <= boundary for bar in page["bars"])
     finally:
         await service.shutdown(step_timeout=1.0)
+
+
+async def test_secondary_all_history_uses_its_own_later_listing_boundary(tmp_path):
+    from tests.fixtures.replay.fakes import FixtureIdentity, make_bar
+    from tests.fixtures.replay.service_fakes import ROW_COUNT
+    from tests.test_replay_v2_training_phase5 import _add_track
+
+    service, repository = await _service(tmp_path / "later-listing.db")
+    repository.add_rows(
+        FixtureIdentity("binance", "spot", "SOLUSDT"), "1m",
+        [make_bar(START_MS + i * INTERVAL_MS) for i in range(4, ROW_COUNT)],
+    )
+    try:
+        created, _ = await _create_run(service, history_mode="ALL_AVAILABLE", requested_start_index=12)
+        run_id = created["run"]["run_id"]
+        await _add_track(service, run_id=run_id, selected_session_id="adapter-1",
+                         symbol="SOLUSDT", tier="WARM", command_id="add-later-listing")
+        snapshot = (await service.get_session("adapter-2"))["snapshot"]
+        page = await service.training.history_page(
+            "adapter-2", track_id="track-2",
+            before_ms=int(snapshot["cursor"]["virtual_time_ms"]) + 1,
+            revealed_boundary_ms=int(snapshot["cursor"]["virtual_time_ms"]),
+            limit=100, data_epoch=snapshot["data_epoch"], history_epoch=None,
+        )
+        assert page["history_boundary_ms"] == START_MS + 4 * INTERVAL_MS
+        assert min(b["open_time_ms"] for b in page["bars"]) == START_MS + 4 * INTERVAL_MS
+    finally:
+        await service.shutdown(step_timeout=1.0)

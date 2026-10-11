@@ -2001,3 +2001,24 @@ async def test_restart_restores_all_track_cursors_reasons_and_portfolio(
         assert payload["tracks"][0]["forced_full_reasons"] == ["OPEN_ORDER", "VIEWED"]
     finally:
         await restored.shutdown(step_timeout=1.0)
+
+
+async def test_market_catalog_rejects_other_settlement_before_add(tmp_path):
+    def metadata(exchange, market_type, symbol):
+        return {"exchange": exchange, "marketType": market_type, "symbol": symbol,
+                "baseAsset": "DOGE", "quoteAsset": "USDC" if symbol.endswith("USDC") else "USDT"}
+    service = await _service(tmp_path / "catalog-settlement.db", instrument_metadata_resolver=metadata)
+    try:
+        settings = {"settlement_asset": "USDT", "forward_cache_ms": INTERVAL_MS}
+        def entry(symbol):
+            return {"identity": {"exchange": "binance", "market_type": "futures", "symbol": symbol},
+                    "selected_base_interval": "1m"}
+        incompatible = service.training._setup_market_compatibility(
+            settings, entry("DOGEUSDC"), capability_admission={}, committed_start_ms=None)
+        assert incompatible["state"] == "UNSUPPORTED"
+        assert incompatible["code"] == "MARKET_SCOPE_MISMATCH"
+        compatible = service.training._setup_market_compatibility(
+            settings, entry("DOGEUSDT"), capability_admission={}, committed_start_ms=None)
+        assert compatible["state"] == "READY"
+    finally:
+        await service.shutdown(step_timeout=1.0)

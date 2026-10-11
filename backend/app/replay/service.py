@@ -56,6 +56,8 @@ from .broker.models import (
 )
 from .broker.risk import build_order_capacity, build_order_preview
 from .canonical import canonical_json_bytes, canonical_sha256
+from .official_trade_history import OfficialTradeHistoryRepository, TradeHistoryRouter
+from .remote_trade_archive import RemoteRawAggTradeArchive
 from .checkpoints import CheckpointCodec, CheckpointError
 from .catalog import (
     EMPTY_GAP_SUMMARY,
@@ -211,6 +213,23 @@ class ReplayService:
                 else ReplayHistoryRepository(settings.replay_history_archive_dir)
             )
         self._raw_trade_archive = raw_trade_archive or DisabledRawAggTradeArchive()
+        self._official_trade_catalog = None
+        if repository is None and isinstance(self._raw_trade_archive, RemoteRawAggTradeArchive):
+            official_history = OfficialTradeHistoryRepository(
+                settings.replay_agg_trade_archive_dir / "_chart_history",
+                self._raw_trade_archive,
+                timeout_seconds=settings.replay_history_download_timeout_seconds,
+            )
+            self._repository = TradeHistoryRouter(self._repository, official_history)
+            self._official_trade_catalog = ReplayCatalog(
+                official_history,
+                native_intervals=lambda _identity: ("1m",),
+                now_ms=now_ms,
+                max_scan_rows=settings.trade_page_rows,
+                max_warmup_bars=settings.max_bar_dataset_rows,
+                max_horizon_days=settings.max_horizon_days,
+                max_dataset_rows=settings.max_bar_dataset_rows,
+            )
         self._now_ms = now_ms
         self._session_id_factory = session_id_factory
         self.training = TrainingRunService(
@@ -400,7 +419,9 @@ class ReplayService:
         elif not exact_dataset_available:
             trade_capability = {
                 "enabled": False,
-                "reason": ReplayErrorCode.DATASET_INCOMPLETE.value,
+                "reason": ("OFFICIAL_CATALOG_SYNCING"
+                           if "catalog_refreshing" in archive_diagnostics
+                           else ReplayErrorCode.DATASET_INCOMPLETE.value),
             }
         else:
             trade_capability = {
@@ -518,6 +539,15 @@ class ReplayService:
     ) -> tuple[str, tuple[ReplayCatalogEntry, ...]]:
         if source_kind is SourceKind.BAR:
             return snapshot.catalog_epoch, snapshot.entries
+        if self._official_trade_catalog is not None:
+            # Selection is based on official availability, never on which
+            # daily bodies happened to be downloaded on this machine.
+            snapshot = await asyncio.to_thread(
+                self._official_trade_catalog.build,
+                warmup_bars=snapshot.warmup_bars,
+                horizon_ms=snapshot.horizon_ms,
+                quality_mode=snapshot.quality_mode,
+            )
         filtered: list[tuple[ReplayCatalogEntry, str | None]] = []
         for entry in snapshot.entries:
             trade_epoch, eligible_ranges = await self._trade_eligible_ranges(entry)

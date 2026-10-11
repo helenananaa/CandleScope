@@ -150,9 +150,9 @@ def capture_contract() -> dict[str, Any]:
         WASM_LINEAR_MEMORY_BYTES,
         WASM_PROCESS_FUEL,
         WASM_RUNTIME_ENABLED_ENV,
-        WASMTIME_FIXED_ARGUMENTS,
         default_runtime_provider_registry,
     )
+    from app.plugin_core_v2.runtime_providers.wasmtime_policy import wasmtime_fixed_arguments
     from app.plugin_installer_v2.installer import (
         MULTI_RUNTIME_ENABLED_ENV,
         RUNTIME_PROVIDER_SEAM_ENABLED_ENV,
@@ -266,7 +266,9 @@ def capture_contract() -> dict[str, Any]:
             "processFuel": WASM_PROCESS_FUEL,
             "requestWallSeconds": 10,
             "maxProcesses": 1,
-            "fixedArguments": list(WASMTIME_FIXED_ARGUMENTS),
+            # This fixture freezes the Windows launch policy, independent of
+            # the OS performing the contract audit.
+            "fixedArguments": list(wasmtime_fixed_arguments("windows")),
             "failureClassifier": "wasmtime-v1",
             "cancelTerminatesProcess": True,
             "pathFallback": False,

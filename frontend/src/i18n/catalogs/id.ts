@@ -2,6 +2,11 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const id = {
+  "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
+  "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",
+  "native.jumpToError": "Go to line {line}, column {column}",
+  "report.notionalReturn": "P&L / entry notional (not account return)",
+  "native.platformHelp": "Pine 0.3.2 provides macOS Apple Silicon and Intel bundles. Pyne is cross-platform, but its current official plugin bundle is Windows-only. Match the bundle to your system and Python version.",
   "indicator.editor.pyneApiHint": "Pyne API:",
   "indicator.editor.pineApiHint": "API Pine v5/v6 bar tertutup:",
   "serverError.notFound": "Item yang diminta tidak ada atau sudah dihapus",
@@ -1621,6 +1626,8 @@ export const id = {
   "replay.hub.archiveName": "Nama arsip",
   "replay.hub.sourceKind": "Sumber riwayat",
   "replay.hub.barHint": "OHLCV tepat, baik untuk sebagian besar pelatihan ritme.",
+  "replay.hub.catalogSyncing": "Menyinkronkan pasar historis. Aktif otomatis setelah selesai.",
+  "replay.watchlist.preparing": "Mengunduh dan memverifikasi data historis. Penggunaan pertama mungkin perlu beberapa menit.",
   "replay.hub.aggHint": "Mengunduh dan memverifikasi arsip aggTrade resmi saat memilih.",
   "replay.hub.startMode": "Mode mulai",
   "replay.hub.randomWindow": "Jendela layak acak",
@@ -3475,7 +3482,7 @@ export const id = {
   "plugin.runtime.refs": "{count} referensi",
   "plugin.runtime.probed": "terverifikasi probe",
   "plugin.runtime.devLocal": "Pilihan lokal pengembang yang tidak dapat direproduksi: {path}",
-  "plugin.ack.execute": "Saya mengonfirmasi ini akan mengeksekusi kode aplikasi lokal sebagai pengguna Windows saat ini",
+  "plugin.ack.execute": "Saya mengonfirmasi ini akan mengeksekusi kode aplikasi lokal sebagai pengguna saat ini",
   "plugin.ack.sandbox": "Saya telah memeriksa status sandbox di atas alih-alih mempercayai nama penerbit saja",
   "plugin.ack.authority": "Saya mengonfirmasi bahwa akun, rahasia, dan otoritas live-trading tidak dibuka oleh pilihan kepercayaan ini",
   "plugin.ack.runtime": "Saya mengonfirmasi runtime: {runtime}",
