@@ -109,7 +109,8 @@ npm run dev
 - 标准工作区最多支持四张图；更高容量的布局需要手动开启。
 - 当前首方 Pyne 与 Pine 插件包面向 Windows 和 CPython 3.12；Pine 兼容只覆盖
   明确支持的子集。
-- 浏览器版本支持 Windows、Linux 和 macOS；可选桌面壳目前面向 Windows。
+- 浏览器版本支持 Windows、Linux 和 macOS；可选桌面壳提供 Windows 与原生 macOS
+  测试包。Apple Silicon / Intel 下载及签名限制见 [macOS 打包指南](docs/MACOS_DESKTOP.md)。
 
 ## 文档
 
