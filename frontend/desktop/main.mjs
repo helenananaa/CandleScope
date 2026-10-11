@@ -23,6 +23,11 @@ const repoRoot = path.resolve(desktopDir, "../..");
 const runtimeRoot = app.isPackaged ? process.resourcesPath : repoRoot;
 const backendRoot = path.join(runtimeRoot, "backend");
 app.setName("CandleScope");
+// Keep this standalone replay distribution separate from development profiles
+// whose database schema may have been advanced by a different checkout.
+if (app.isPackaged) {
+  app.setPath("userData", path.join(app.getPath("appData"), "CandleScope Replay"));
+}
 if (process.env.CANDLESCOPE_DESKTOP_USER_DATA) {
   app.setPath("userData", path.resolve(process.env.CANDLESCOPE_DESKTOP_USER_DATA));
 }

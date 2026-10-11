@@ -1626,6 +1626,8 @@ export const id = {
   "replay.hub.archiveName": "Nama arsip",
   "replay.hub.sourceKind": "Sumber riwayat",
   "replay.hub.barHint": "OHLCV tepat, baik untuk sebagian besar pelatihan ritme.",
+  "replay.hub.catalogSyncing": "Menyinkronkan pasar historis. Aktif otomatis setelah selesai.",
+  "replay.watchlist.preparing": "Mengunduh dan memverifikasi data historis. Penggunaan pertama mungkin perlu beberapa menit.",
   "replay.hub.aggHint": "Mengunduh dan memverifikasi arsip aggTrade resmi saat memilih.",
   "replay.hub.startMode": "Mode mulai",
   "replay.hub.randomWindow": "Jendela layak acak",

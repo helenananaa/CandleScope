@@ -116,6 +116,7 @@ class ReplaySettings:
     replay_agg_trade_enabled: bool = False
     replay_agg_trade_archive_dir: Path = Path("data/replay-agg-trades")
     replay_agg_trade_origin_uri: str | None = None
+    replay_agg_trade_symbols: tuple[str, ...] = ()
 
 
 def _strict_replay_bool(
@@ -240,6 +241,16 @@ def load_replay_settings(
     replay_agg_trade_origin_uri = (
         environment.get("REPLAY_AGG_TRADE_ORIGIN_URI", "").strip() or None
     )
+    replay_agg_trade_symbols = tuple(dict.fromkeys(
+        symbol.strip().upper()
+        for symbol in environment.get("REPLAY_AGG_TRADE_SYMBOLS", "").split(",")
+        if symbol.strip()
+    ))
+    if any(
+        not symbol.isalnum() or len(symbol) > 64
+        for symbol in replay_agg_trade_symbols
+    ):
+        raise ValueError("REPLAY_AGG_TRADE_SYMBOLS must contain Binance symbol identifiers")
     live_agg_trade_archive_dir = Path(
         environment.get(
             "RAW_AGG_TRADE_ARCHIVE_DIR",
@@ -323,10 +334,11 @@ def load_replay_settings(
             replay_history_download_timeout_seconds
         ),
         replay_agg_trade_enabled=_strict_replay_bool(
-            environment, "REPLAY_AGG_TRADE_ENABLED", "0"
+            environment, "REPLAY_AGG_TRADE_ENABLED", "1"
         ),
         replay_agg_trade_archive_dir=replay_agg_trade_archive_dir,
         replay_agg_trade_origin_uri=replay_agg_trade_origin_uri,
+        replay_agg_trade_symbols=replay_agg_trade_symbols,
     )
 
 

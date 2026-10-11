@@ -1626,6 +1626,8 @@ export const ru = {
   "replay.hub.archiveName": "Имя архива",
   "replay.hub.sourceKind": "Источник истории",
   "replay.hub.barHint": "Точные OHLCV, подходит для большинства ритмических тренировок.",
+  "replay.hub.catalogSyncing": "Синхронизация исторических рынков. Включится автоматически после завершения.",
+  "replay.watchlist.preparing": "Загрузка и проверка исторических данных. В первый раз это может занять несколько минут.",
   "replay.hub.aggHint": "При выборе загружает и проверяет официальный архив aggTrade.",
   "replay.hub.startMode": "Режим старта",
   "replay.hub.randomWindow": "Случайное допустимое окно",

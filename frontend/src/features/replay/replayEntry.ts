@@ -21,6 +21,7 @@ export function resolveReplayEntry(location: ReplayEntryLocation): ReplayEntry {
   }
 
   const params = new URLSearchParams(location.search);
+  // The desktop window manager appends its window identity to app URLs.
   const unknown = [...params.keys()].filter((key) => key !== "run" && key !== "windowId");
   const runs = params.getAll("run");
   const windows = params.getAll("windowId");

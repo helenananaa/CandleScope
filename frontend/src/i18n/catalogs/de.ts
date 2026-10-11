@@ -1626,6 +1626,8 @@ export const de = {
   "replay.hub.archiveName": "Archivname",
   "replay.hub.sourceKind": "Historienquelle",
   "replay.hub.barHint": "Exaktes OHLCV, gut für die meisten Rhythmus-Trainings.",
+  "replay.hub.catalogSyncing": "Historische Märkte werden geladen. Nach Abschluss automatisch verfügbar.",
+  "replay.watchlist.preparing": "Historische Daten werden geladen und geprüft. Dies kann beim ersten Mal einige Minuten dauern.",
   "replay.hub.aggHint": "Lädt das offizielle aggTrade-Archiv beim Auswählen herunter und prüft es.",
   "replay.hub.startMode": "Startmodus",
   "replay.hub.randomWindow": "Zufälliges zulässiges Fenster",

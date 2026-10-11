@@ -1626,6 +1626,8 @@ export const vi = {
   "replay.hub.archiveName": "Tên kho",
   "replay.hub.sourceKind": "Nguồn lịch sử",
   "replay.hub.barHint": "OHLCV chính xác, phù hợp hầu hết luyện nhịp.",
+  "replay.hub.catalogSyncing": "Đang đồng bộ danh mục thị trường lịch sử. Tự động bật khi hoàn tất.",
+  "replay.watchlist.preparing": "Đang tải và xác minh dữ liệu lịch sử. Lần đầu có thể mất vài phút.",
   "replay.hub.aggHint": "Tải và xác minh kho aggTrade chính thức khi chọn.",
   "replay.hub.startMode": "Chế độ bắt đầu",
   "replay.hub.randomWindow": "Cửa sổ đủ điều kiện ngẫu nhiên",

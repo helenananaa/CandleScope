@@ -1888,6 +1888,8 @@ export const ja = {
   "replay.hub.archiveName": "アーカイブ名",
   "replay.hub.sourceKind": "履歴ソース",
   "replay.hub.barHint": "正確な OHLCV。ほとんどのリズム訓練に適しています。",
+  "replay.hub.catalogSyncing": "公式の履歴商品一覧を同期中です。完了後に自動で有効になります。",
+  "replay.watchlist.preparing": "履歴データをダウンロードして検証中です。初回は数分かかる場合があります。",
   "replay.hub.aggHint": "選択時に公式 aggTrade アーカイブをダウンロードして検証します。",
   "replay.hub.startMode": "開始方式",
   "replay.hub.randomWindow": "ランダム適格ウィンドウ",

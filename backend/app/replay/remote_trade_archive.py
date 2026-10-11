@@ -600,7 +600,13 @@ class RemoteRawAggTradeArchive:
                 market_type=record.market_type,
                 symbol=record.symbol,
             )
-            if relative_path != expected_path:
+            path_parts = relative_path.split("/")
+            canonical_path = relative_path
+            if (len(path_parts) > 2 and path_parts[0] == "generations"
+                and len(path_parts[1]) == 32
+                and all(char in "0123456789abcdef" for char in path_parts[1])):
+                canonical_path = "/".join(path_parts[2:])
+            if canonical_path != expected_path:
                 raise ReplayHistoryArchiveError(
                     "official aggTrade availability path does not match its identity"
                 )

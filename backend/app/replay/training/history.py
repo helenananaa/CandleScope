@@ -2477,7 +2477,14 @@ def build_history_page(
             config=history_config,
             snapshot=snapshot,
             actual_replay_start_ms=actual_replay_start_ms,
-            fallback_start_ms=actual_visible_history_start_ms,
+            # ALL_AVAILABLE is a Run-wide preference, but the first market's
+            # listing date is not a boundary for subsequently added markets.
+            # Each secondary source must still cover its frozen warmup.
+            fallback_start_ms=(
+                actual_replay_start_ms - snapshot.warmup_bars * interval_ms
+                if binding["session_id"] != binding["primary_adapter_session_id"]
+                else actual_visible_history_start_ms
+            ),
             interval_ms=interval_ms,
         )
     base_history_boundary_ms = (

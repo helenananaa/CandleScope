@@ -84,7 +84,7 @@ export class ElectronWindowManager {
     target.searchParams.set("windowId", id);
     const window = new this.options.BrowserWindow({
       width: 1280, height: 850, show: false, title: "CandleScope",
-      webPreferences: { preload: this.options.preloadPath, contextIsolation: true, nodeIntegration: false, sandbox: true,
+      webPreferences: { preload: this.options.preloadPath, contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false,
         additionalArguments: [`--candlescope-backend-port=${this.options.backendPort}`] },
     });
     this.appWindows.set(id, window);
@@ -159,6 +159,9 @@ export class ElectronWindowManager {
         sandbox: true,
         spellcheck: false,
         additionalArguments: [`--candlescope-backend-port=${this.options.backendPort}`],
+        // Replay controller heartbeats must continue while another window or
+        // application is in front, otherwise playback loses its lease.
+        backgroundThrottling: false,
       },
     });
     this.windows.set(saved.id, window);

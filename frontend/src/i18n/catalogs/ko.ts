@@ -1888,6 +1888,8 @@ export const ko = {
   "replay.hub.archiveName": "아카이브 이름",
   "replay.hub.sourceKind": "기록 소스",
   "replay.hub.barHint": "정확한 OHLCV, 대부분의 리듬 훈련에 적합.",
+  "replay.hub.catalogSyncing": "공식 과거 상품 목록 동기화 중입니다. 완료되면 자동으로 활성화됩니다.",
+  "replay.watchlist.preparing": "과거 데이터를 다운로드하고 검증 중입니다. 처음에는 몇 분 걸릴 수 있습니다.",
   "replay.hub.aggHint": "선택 시 공식 aggTrade 아카이브를 내려받고 검증.",
   "replay.hub.startMode": "시작 방식",
   "replay.hub.randomWindow": "무작위 적격 구간",

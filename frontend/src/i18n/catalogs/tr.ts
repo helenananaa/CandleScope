@@ -1626,6 +1626,8 @@ export const tr = {
   "replay.hub.archiveName": "Arşiv adı",
   "replay.hub.sourceKind": "Geçmiş kaynağı",
   "replay.hub.barHint": "Kesin OHLCV, çoğu ritim eğitimi için uygundur.",
+  "replay.hub.catalogSyncing": "Geçmiş piyasa kataloğu eşitleniyor. Hazır olduğunda otomatik etkinleşir.",
+  "replay.watchlist.preparing": "Geçmiş veriler indiriliyor ve doğrulanıyor. İlk kullanım birkaç dakika sürebilir.",
   "replay.hub.aggHint": "Seçimde resmi aggTrade arşivini indirir ve doğrular.",
   "replay.hub.startMode": "Başlangıç modu",
   "replay.hub.randomWindow": "Rastgele uygun pencere",

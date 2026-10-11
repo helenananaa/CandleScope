@@ -1661,6 +1661,8 @@ export const zhTW = {
   "replay.hub.archiveName": "存檔名稱",
   "replay.hub.sourceKind": "歷史源",
   "replay.hub.barHint": "精確 OHLCV，適合大多數節奏訓練。",
+  "replay.hub.catalogSyncing": "正在同步官方歷史商品目錄，完成後自動啟用。",
+  "replay.watchlist.preparing": "正在下載並校驗歷史資料，首次使用可能需要幾分鐘。",
   "replay.hub.aggHint": "選擇時下載並校驗官方成交歸檔。",
   "replay.hub.startMode": "開始方式",
   "replay.hub.randomWindow": "隨機合格視窗",

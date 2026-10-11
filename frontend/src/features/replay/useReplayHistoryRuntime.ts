@@ -84,7 +84,7 @@ export function useReplayHistoryRuntime(
   const dataEpoch = runtime.store.dataEpoch;
   const runtimeGeneration = runtime.store.generation;
   const displayInterval = viewer.viewerState?.display_interval ?? null;
-  const trackId = viewer.viewerState?.selected_track_id ?? "track-1";
+  const trackId = viewer.viewerState?.selected_track_id ?? null;
   const exchange = config?.exchange ?? null;
   const marketType = config?.market_type ?? null;
   const symbol = config?.symbol ?? null;
@@ -116,16 +116,17 @@ export function useReplayHistoryRuntime(
     display_interval: displayInterval,
   })), [baseInterval, displayInterval, exchange, marketType, sourceKind, symbol]);
   const provider = useMemo(() => (
-    sessionId === null || identity === null || dataEpoch === null
+    sessionId === null || identity === null || dataEpoch === null || trackId === null
       ? null
       : new ReplayHistoryProvider({ sessionId, trackId, identity })
   ), [dataEpoch, identity, sessionId, trackId]);
   const historyKey = useMemo(() => (
-    sessionId === null || identity === null || dataEpoch === null
+    sessionId === null || identity === null || dataEpoch === null || trackId === null
       ? null
       : JSON.stringify([
         runtimeGeneration,
         sessionId,
+        trackId,
         dataEpoch,
         identity.exchange,
         identity.market_type,
@@ -134,7 +135,7 @@ export function useReplayHistoryRuntime(
         identity.base_interval,
         identity.display_interval,
       ])
-  ), [dataEpoch, identity, runtimeGeneration, sessionId]);
+  ), [dataEpoch, identity, runtimeGeneration, sessionId, trackId]);
   const [historyState, setHistoryState] = useState<ReplayHistoryState>(() => (
     initialReplayHistoryState(historyKey)
   ));

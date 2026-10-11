@@ -10,12 +10,12 @@ from typing import Callable, TypeVar
 from app.core.config import REPLAY_SETTINGS, ReplaySettings
 from app.data_engine.storage.raw_trade_archive import (
     DisabledRawAggTradeArchive,
-    ParquetRawAggTradeArchive,
     RawAggTradeArchive,
 )
 
 from .history_archive import ReplayHistoryArchiveRuntimeLease
 from .remote_trade_archive import RemoteRawAggTradeArchive
+from .official_trade_catalog import OfficialAggTradeArchive
 from .service import ReplayService
 from .storage import ReplaySQLiteStore
 
@@ -35,12 +35,17 @@ class ReplayRuntime:
     settings: ReplaySettings
     service: ReplayService | None = None
     archive_lease: ReplayHistoryArchiveRuntimeLease | None = None
+    catalog_refresh_task: asyncio.Task | None = None
 
     @property
     def enabled(self) -> bool:
         return self.settings.enabled
 
     async def shutdown(self, *, step_timeout: float = 5.0) -> None:
+        if self.catalog_refresh_task is not None:
+            self.catalog_refresh_task.cancel()
+            await asyncio.gather(self.catalog_refresh_task, return_exceptions=True)
+            self.catalog_refresh_task = None
         service = self.service
         if service is None:
             if self.archive_lease is not None:
@@ -149,9 +154,12 @@ async def start_replay_runtime(
                         page_rows=settings.trade_page_rows,
                     )
                     if settings.replay_agg_trade_origin_uri is not None
-                    else ParquetRawAggTradeArchive(
+                    else await asyncio.to_thread(OfficialAggTradeArchive,
                         settings.replay_agg_trade_archive_dir,
-                        read_only=True,
+                        symbols=settings.replay_agg_trade_symbols,
+                        defer_refresh=True,
+                        download_timeout_seconds=settings.replay_history_download_timeout_seconds,
+                        page_rows=settings.trade_page_rows,
                     )
                 )
                 if settings.replay_agg_trade_enabled
@@ -159,6 +167,12 @@ async def start_replay_runtime(
             )
         if raw_trade_archive is not None:
             service_kwargs["raw_trade_archive"] = raw_trade_archive
+        if isinstance(raw_trade_archive, OfficialAggTradeArchive) and instrument_metadata_resolver is not None:
+            live_resolver = instrument_metadata_resolver
+            def resolve_instrument(exchange, market_type, symbol):
+                return (live_resolver(exchange, market_type, symbol)
+                        or raw_trade_archive.historical_instrument_metadata(exchange, market_type, symbol))
+            service_kwargs["instrument_metadata_resolver"] = resolve_instrument
         service = service_factory(**service_kwargs)
         await service.start()
     except asyncio.CancelledError:
@@ -173,6 +187,13 @@ async def start_replay_runtime(
         raise ReplayStartupError("enabled replay runtime failed to initialize") from exc
     runtime.service = service
     runtime.archive_lease = archive_lease
+    if isinstance(raw_trade_archive, OfficialAggTradeArchive):
+        async def refresh_catalog() -> None:
+            while True:
+                if raw_trade_archive.needs_catalog_refresh():
+                    await asyncio.to_thread(raw_trade_archive.refresh_official_catalog)
+                await asyncio.sleep(60)
+        runtime.catalog_refresh_task = asyncio.create_task(refresh_catalog(), name="replay-official-catalog-refresh")
     return runtime
 
 

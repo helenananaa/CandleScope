@@ -1914,6 +1914,8 @@ export const zhCN = {
   "replay.hub.archiveName": "存档名称",
   "replay.hub.sourceKind": "历史源",
   "replay.hub.barHint": "精确 OHLCV，适合大多数节奏训练。",
+  "replay.hub.catalogSyncing": "正在同步官方历史商品目录，完成后自动启用。",
+  "replay.watchlist.preparing": "正在下载并校验历史数据，首次使用可能需要几分钟。",
   "replay.hub.aggHint": "选择时下载并校验官方成交归档。",
   "replay.hub.startMode": "开始方式",
   "replay.hub.randomWindow": "指定范围随机",
