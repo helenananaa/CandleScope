@@ -258,6 +258,14 @@ function LiveChartCell({
   const handleStrategyAttachmentChange = useCallback((attachment: ChartStrategyAttachmentRecord | null) => {
     onStrategyAttachmentChange(cell.id, attachment);
   }, [cell.id, onStrategyAttachmentChange]);
+  // The entry names what is on this chart; an empty chart just says "Chart strategy".
+  const nativeEntryCount = cell.nativeStrategies?.items.length ?? 0;
+  const nativeEntryName = cell.nativeStrategies?.items.find((item) => item.id === cell.nativeStrategies?.activeId)?.name ?? "";
+  const strategyEntryLabel = resolveStrategyTesterMode(cell.strategyTesterMode, !!cell.strategyAttachment) === "CANDLESCOPE"
+    ? cell.strategyAttachment
+      ? strategyEntryState === "error" ? `${cell.strategyAttachment.displayName} · ${t("chartTester.entryState.error")}` : cell.strategyAttachment.displayName
+      : null
+    : [nativeEntryName, nativeEntryCount > 1 ? `+${nativeEntryCount - 1}` : ""].filter(Boolean).join(" ") || null;
   const strategyEntryControl = CHART_STRATEGY_TESTER_ENABLED ? (
     <button
       ref={strategyEntryRef}
@@ -273,14 +281,9 @@ function LiveChartCell({
       onFocus={() => { void loadChartStrategyTesterCellBridge(); }}
       onClick={() => onStrategyPanelOpenChange(!strategyPanelOpen)}
     >
+      <i className="chart-strategy-entry-dot" aria-hidden="true" />
       {t("chartTester.entry")}
-      <span>
-        {resolveStrategyTesterMode(cell.strategyTesterMode, !!cell.strategyAttachment) === "CANDLESCOPE"
-          ? cell.strategyAttachment ? `${cell.strategyAttachment.displayName} · ${t(`chartTester.entryState.${strategyEntryState}`)}` : t("chartTester.entryState.unattached")
-          : cell.nativeStrategies?.items.length
-            ? `${cell.nativeStrategies.items.find((item) => item.id === cell.nativeStrategies?.activeId)?.name || t("strategyCollection.default")} · ${cell.nativeStrategies.items.length}`
-            : t("chartTester.entryState.unattached")}
-      </span>
+      {strategyEntryLabel && <span>{strategyEntryLabel}</span>}
     </button>
   ) : null;
   useLayoutEffect(() => {

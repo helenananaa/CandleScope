@@ -47,7 +47,9 @@ export type IconName =
   | "sort"
   | "chevron-up"
   | "maximize"
-  | "minimize";
+  | "minimize"
+  | "play"
+  | "stop";
 
 const PATHS: Record<IconName, ReactNode> = {
   palette: (
@@ -262,6 +264,8 @@ const PATHS: Record<IconName, ReactNode> = {
   "chevron-up": <path d="m6 15 6-6 6 6" />,
   maximize: <path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" />,
   minimize: <path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7" />,
+  play: <path d="M7 5v14l11-7-11-7Z" />,
+  stop: <rect x="6" y="6" width="12" height="12" rx="1.5" />,
 };
 
 export function Icon({ name, size = 18, filled = false }: { name: IconName; size?: number; filled?: boolean }): ReactNode {

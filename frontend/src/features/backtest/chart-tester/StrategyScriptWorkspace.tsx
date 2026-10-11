@@ -21,6 +21,8 @@ export interface StrategyScriptWorkspaceProps {
   onSourceChange(source: string): void;
   onCursorChange(cursor: StrategyDraftCursor): void;
   onRun(): void;
+  readOnly?: boolean;
+  ariaLabel?: string;
 }
 
 function markerMessage(issue: ChartStrategyDraftIssue, locale: LocaleId): string {
@@ -41,6 +43,8 @@ export default function StrategyScriptWorkspace({
   onSourceChange,
   onCursorChange,
   onRun,
+  readOnly = false,
+  ariaLabel,
 }: StrategyScriptWorkspaceProps) {
   const locale = useLocale();
   const [editorTheme, setEditorTheme] = useState("pyne-dark");
@@ -87,6 +91,13 @@ export default function StrategyScriptWorkspace({
     editorRef.current.focus();
   }, [focusIssue]);
 
+  useEffect(() => {
+    if (!focusOnMount || !cursor || !editorRef.current) return;
+    editorRef.current.setPosition({ lineNumber: cursor.line, column: cursor.column });
+    editorRef.current.revealLineInCenter(cursor.line);
+    editorRef.current.focus();
+  }, [cursor, focusOnMount]);
+
   useEffect(() => () => {
     runActionCleanupRef.current?.dispose();
     runActionCleanupRef.current = null;
@@ -120,7 +131,10 @@ export default function StrategyScriptWorkspace({
       onCursorChange({ line: event.position.lineNumber, column: event.position.column });
     });
     publishMarkers();
-    if (focusOnMount) editor.focus();
+    if (focusOnMount) {
+      if (cursor) editor.revealLineInCenter(cursor.line);
+      editor.focus();
+    }
   }, [cursor, focusOnMount, onCursorChange, publishMarkers]);
 
   return (
@@ -145,6 +159,8 @@ export default function StrategyScriptWorkspace({
           padding: { top: 10, bottom: 10 },
           scrollBeyondLastLine: false,
           renderValidationDecorations: "on",
+          readOnly,
+          ...(ariaLabel ? { ariaLabel } : {}),
         })}
       />
     </div>

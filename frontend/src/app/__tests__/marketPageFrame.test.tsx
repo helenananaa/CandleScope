@@ -132,6 +132,48 @@ test("live and replay use the same free multi-open scroll accordion", () => {
   }
 });
 
+test("single-view rail renders only the selected view at full height with no accordion chrome", () => {
+  const html = renderToStaticMarkup(
+    <MarketRightRailFrame
+      source="replay"
+      layoutMode="single-view"
+      views={sampleViews}
+      openViewIds={["order-book"]}
+      onToggleView={() => undefined}
+      onTogglePanelCollapsed={() => undefined}
+      renderView={(viewId) => <div data-kept={viewId}>{viewId}</div>}
+      layout={{ width: 360 }}
+    />,
+  );
+  assert.match(html, /data-layout-mode="single-view"/);
+  assert.match(html, /data-panel-open="true"/);
+  assert.match(html, /class="market-rail-single-header"/);
+  assert.match(html, /data-kept="order-book"/);
+  assert.doesNotMatch(html, /data-kept="watchlist"/);
+  assert.doesNotMatch(html, /market-rail-accordion-trigger/);
+  assert.doesNotMatch(html, /market-rail-view-resizer/);
+  // The header hides the panel; the activity bar needs no separate collapse item.
+  assert.match(html, /class="market-rail-single-hide"/);
+  assert.doesNotMatch(html, /data-rail-action="toggle-panel"/);
+});
+
+test("single-view rail with nothing selected keeps only the activity bar", () => {
+  const html = renderToStaticMarkup(
+    <MarketRightRailFrame
+      source="replay"
+      layoutMode="single-view"
+      views={sampleViews}
+      openViewIds={[]}
+      onToggleView={() => undefined}
+      renderView={(viewId) => <div data-kept={viewId}>{viewId}</div>}
+      layout={{ width: 360 }}
+    />,
+  );
+  assert.match(html, /data-panel-open="false"/);
+  assert.doesNotMatch(html, /data-kept=/);
+  assert.match(html, /data-market-shell-owner="activity-bar"/);
+});
+
 test("all accordion bodies can close while useful headers and the outer panel remain", () => {
   const html = renderToStaticMarkup(
     <MarketRightRailFrame

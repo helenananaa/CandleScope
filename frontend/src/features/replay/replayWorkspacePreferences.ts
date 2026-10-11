@@ -36,6 +36,11 @@ export interface ReplayPreferenceStorage {
 export interface ReplayWorkspacePreferenceActions {
   setRailWidth(value: number): void;
   toggleView(viewId: ReplayRailViewId): void;
+  /**
+   * Single-view rail: show only this view, or hide the panel when it is
+   * already the visible view.
+   */
+  activateView(viewId: ReplayRailViewId): void;
   /** Close one view's content (does not only hide the panel). */
   closeView(viewId: ReplayRailViewId): void;
   setPanelCollapsed(collapsed: boolean): void;
@@ -46,7 +51,6 @@ export interface ReplayWorkspacePreferenceActions {
 const LIVE_RAIL_WIDTH_KEY = "candlescope-sidebar-width";
 const LIVE_RAIL_COLLAPSED_KEY = "candlescope-sidebar-collapsed";
 const LIVE_DOCK_HEIGHT_KEY = "candlescope-order-book-height";
-const LIVE_DOCK_COLLAPSED_KEY = "candlescope-order-book-collapsed";
 const SCOPED_PREFIX = "candlescope-replay-workspace:";
 const REPLAY_WORKSPACE_SCHEMA_VERSION = 2;
 const REPLAY_RAIL_VIEW_ID_SET = new Set<ReplayRailViewId>(Object.values(REPLAY_RAIL_VIEW_IDS));
@@ -143,25 +147,22 @@ function inherited(storage: ReplayPreferenceStorage | null): ReplayWorkspacePref
   if (storage === null) {
     return {
       railWidth: MARKET_RAIL_DEFAULT_WIDTH,
-      openViewIds: [REPLAY_RAIL_VIEW_IDS.watchlist, REPLAY_RAIL_VIEW_IDS.capabilities],
+      openViewIds: [REPLAY_RAIL_VIEW_IDS.paper],
       panelCollapsed: false,
       viewHeights: defaultViewHeights(MARKET_DOCK_DEFAULT_HEIGHT),
     };
   }
   const railCollapsed = bool(storage.getItem(LIVE_RAIL_COLLAPSED_KEY));
-  const dockCollapsed = bool(storage.getItem(LIVE_DOCK_COLLAPSED_KEY));
   const dockHeight = clamp(
     storage.getItem(LIVE_DOCK_HEIGHT_KEY),
     MARKET_DOCK_DEFAULT_HEIGHT,
     MARKET_DOCK_MIN_HEIGHT,
     MARKET_DOCK_MAX_HEIGHT,
   );
-  // Legacy live "sidebar collapsed" maps to hide-only panelCollapsed so expand
-  // can restore the default open set instead of permanently clearing it.
-  const openViewIds: ReplayRailViewId[] = [
-    REPLAY_RAIL_VIEW_IDS.watchlist,
-    ...(dockCollapsed ? [] : [REPLAY_RAIL_VIEW_IDS.capabilities]),
-  ];
+  // The rail shows one view at a time and opens on the order ticket. Legacy
+  // live "sidebar collapsed" maps to hide-only panelCollapsed so expand still
+  // restores that view instead of permanently clearing it.
+  const openViewIds: ReplayRailViewId[] = [REPLAY_RAIL_VIEW_IDS.paper];
   return {
     railWidth: clamp(
       storage.getItem(LIVE_RAIL_WIDTH_KEY),
@@ -169,9 +170,7 @@ function inherited(storage: ReplayPreferenceStorage | null): ReplayWorkspacePref
       MARKET_RAIL_MIN_WIDTH,
       MARKET_RAIL_MAX_WIDTH,
     ),
-    openViewIds: railCollapsed && openViewIds.length === 0
-      ? [REPLAY_RAIL_VIEW_IDS.watchlist, REPLAY_RAIL_VIEW_IDS.capabilities]
-      : openViewIds,
+    openViewIds,
     panelCollapsed: railCollapsed,
     viewHeights: defaultViewHeights(dockHeight),
   };
@@ -303,6 +302,17 @@ export function useReplayWorkspacePreferences(sessionId: string): {
         ...current,
         openViewIds,
       }, current);
+      saveReplayWorkspacePreferences(sessionId, next, storage);
+      return next;
+    }),
+    activateView: (viewId) => setPreferences((current) => {
+      const alreadyVisible = !current.panelCollapsed && current.openViewIds[0] === viewId;
+      const next = normalize(
+        alreadyVisible
+          ? { ...current, panelCollapsed: true }
+          : { ...current, openViewIds: [viewId], panelCollapsed: false },
+        current,
+      );
       saveReplayWorkspacePreferences(sessionId, next, storage);
       return next;
     }),
