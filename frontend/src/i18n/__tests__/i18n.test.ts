@@ -410,7 +410,6 @@ function stripProtocol(text: string): string {
   return text
     .replace(/\{\{?[A-Za-z0-9_]+\}?\}/g, " ")
     .replace(/\b(?:React|Lightweight Charts)\b/g, " ")
-    .replace(/\bStreamable HTTP\b/g, " ")
     .replace(/\b(?:Apple Silicon|Intel)\b/g, " ")
     .replace(/\bHome\b/g, " ") // Keyboard key label; lowercase English prose still counts.
     .replace(/\b[\w-]+\.(?:csv|json)\b/g, " ")
@@ -421,6 +420,7 @@ function stripProtocol(text: string): string {
     .replace(/\bPoint & Figure\b/g, " ")
     .replace(/\bTake profit\b/gi, " ")
     .replace(/\btake-profit\b/gi, " ")
+    .replace(/\bStreamable HTTP\b/g, " ")
     .replace(/\bJob Object\b/g, " ")
     .replace(/\bStop loss\b/gi, " ")
     .replace(/\bLine Break\b/g, " ")
@@ -460,7 +460,6 @@ function leftoverSourceTokens(english: string, portuguese: string): string[] {
 }
 
 test("Portuguese copy checks preserve product names and executable examples without allowing English prose", () => {
-  assert.deepEqual(leftoverSourceTokens("Use Streamable HTTP.", "Utilize Streamable HTTP."), []);
   assert.deepEqual(leftoverSourceTokens(
     "Use React and Lightweight Charts; import bars.csv and execution.json; use_bar_magnifier=true; init/on_bar/on_fill(ctx, bar).",
     "Utilize React e Lightweight Charts; importe bars.csv e execution.json; use_bar_magnifier=true; init/on_bar/on_fill(ctx, bar).",
@@ -1308,3 +1307,7 @@ test("new host locale chrome is translated and ar/he write rtl", () => {
   assert.notEqual(t("shell.replay", {}, "nl"), t("shell.replay", {}, "en"));
 });
 
+
+test("Portuguese copy preserves the Streamable HTTP protocol name", () => {
+  assert.deepEqual(leftoverSourceTokens("Use Streamable HTTP.", "Utilize Streamable HTTP."), []);
+});
