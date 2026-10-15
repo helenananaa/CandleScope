@@ -9,6 +9,7 @@ export const SETTINGS_CATEGORIES = [
   { key: "exchanges", labelKey: "settings.category.exchanges", icon: "exchange" },
   { key: "data", labelKey: "settings.category.data", icon: "database" },
   { key: "plugins", labelKey: "settings.category.plugins", icon: "puzzle" },
+  { key: "ai", labelKey: "settings.category.ai", icon: "globe" },
   { key: "about", labelKey: "settings.category.about", icon: "info" },
 ] as const satisfies readonly SettingsCategoryDescriptor[];
 
