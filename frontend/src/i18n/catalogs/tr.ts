@@ -2681,6 +2681,7 @@ export const tr = {
   "replay.paper.submitting": "Gönderiliyor…",
   "replay.paper.submitHint": "Göndermeden önce tıklanan taraf için imleç, marj ve miktar tavanı yeniden denetlenir.",
   "replay.paper.qtyAsset": "Miktar",
+  "replay.paper.orderBudget": "Ayrılan tutar (maliyetler dahil)",
   "replay.paper.marginAmt": "Marj",
   "replay.paper.notionalAmt": "Nominal",
   "replay.paper.noLong": "Kapatılacak long yok",

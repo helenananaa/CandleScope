@@ -2681,6 +2681,7 @@ export const vi = {
   "replay.paper.submitting": "Đang gửi…",
   "replay.paper.submitHint": "Trước khi gửi, con trỏ, ký quỹ và trần khối lượng được kiểm lại cho phía đã nhấp.",
   "replay.paper.qtyAsset": "Khối lượng",
+  "replay.paper.orderBudget": "Số tiền dự trữ (gồm chi phí)",
   "replay.paper.marginAmt": "Ký quỹ",
   "replay.paper.notionalAmt": "Danh nghĩa",
   "replay.paper.noLong": "Không có long để đóng",

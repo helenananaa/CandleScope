@@ -2680,6 +2680,7 @@ export const ms = {
   "replay.paper.submitting": "Menghantar…",
   "replay.paper.submitHint": "Sebelum hantar, kursor, margin, dan had kuantiti disemak semula untuk belah yang diklik.",
   "replay.paper.qtyAsset": "Kuantiti",
+  "replay.paper.orderBudget": "Amaun diperuntukkan (termasuk kos)",
   "replay.paper.marginAmt": "Margin",
   "replay.paper.notionalAmt": "Nosional",
   "replay.paper.noLong": "Tiada long untuk ditutup",

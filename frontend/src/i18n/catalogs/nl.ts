@@ -2680,6 +2680,7 @@ export const nl = {
   "replay.paper.submitting": "Indienen…",
   "replay.paper.submitHint": "Voor indienen worden cursor, marge en hoeveelheidslimiet opnieuw gecontroleerd voor de aangeklikte zijde.",
   "replay.paper.qtyAsset": "Hoeveelheid",
+  "replay.paper.orderBudget": "Gereserveerd bedrag (inclusief kosten)",
   "replay.paper.marginAmt": "Marge",
   "replay.paper.notionalAmt": "Notioneel",
   "replay.paper.noLong": "Geen long om te sluiten",

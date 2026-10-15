@@ -2680,6 +2680,7 @@ export const sv = {
   "replay.paper.submitting": "Skickar…",
   "replay.paper.submitHint": "Före inskick kontrolleras markör, marginal och kvantitetstak igen för den klickade sidan.",
   "replay.paper.qtyAsset": "Kvantitet",
+  "replay.paper.orderBudget": "Reserverat belopp (inklusive kostnader)",
   "replay.paper.marginAmt": "Marginal",
   "replay.paper.notionalAmt": "Nominellt",
   "replay.paper.noLong": "Ingen long att stänga",

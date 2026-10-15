@@ -2975,6 +2975,7 @@ export const en = {
   "replay.paper.submitting": "Submitting…",
   "replay.paper.submitHint": "Before submit, cursor, margin, and quantity cap are re-checked for the clicked side.",
   "replay.paper.qtyAsset": "Quantity",
+  "replay.paper.orderBudget": "Reserved amount (including costs)",
   "replay.paper.marginAmt": "Margin",
   "replay.paper.notionalAmt": "Notional",
   "replay.paper.noLong": "No long to close",

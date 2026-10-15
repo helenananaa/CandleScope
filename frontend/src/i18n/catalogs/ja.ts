@@ -2943,6 +2943,7 @@ export const ja = {
   "replay.paper.submitting": "送信中…",
   "replay.paper.submitHint": "送信前に、クリックした方向のカーソル、証拠金、数量上限を再検証します。",
   "replay.paper.qtyAsset": "数量",
+  "replay.paper.orderBudget": "確保額（コスト込み）",
   "replay.paper.marginAmt": "証拠金",
   "replay.paper.notionalAmt": "名目金額",
   "replay.paper.noLong": "決済できるロングはありません",

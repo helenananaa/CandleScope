@@ -2681,6 +2681,7 @@ export const id = {
   "replay.paper.submitting": "Mengirim…",
   "replay.paper.submitHint": "Sebelum kirim, kursor, margin, dan batas kuantitas dicek ulang untuk sisi yang diklik.",
   "replay.paper.qtyAsset": "Kuantitas",
+  "replay.paper.orderBudget": "Jumlah dicadangkan (termasuk biaya)",
   "replay.paper.marginAmt": "Margin",
   "replay.paper.notionalAmt": "Nominal",
   "replay.paper.noLong": "Tidak ada long untuk ditutup",

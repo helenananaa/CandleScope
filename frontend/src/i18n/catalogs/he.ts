@@ -2680,6 +2680,7 @@ export const he = {
   "replay.paper.submitting": "שולח…",
   "replay.paper.submitHint": "לפני שליחה, סמן, מרווח ותקרת כמות נבדקים מחדש לצד שנלחץ.",
   "replay.paper.qtyAsset": "כמות",
+  "replay.paper.orderBudget": "סכום שמור (כולל עלויות)",
   "replay.paper.marginAmt": "מרווח",
   "replay.paper.notionalAmt": "שווי נקוב",
   "replay.paper.noLong": "אין לונג לסגירה",

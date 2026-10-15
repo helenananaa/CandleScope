@@ -2687,6 +2687,7 @@ export const es = {
   "replay.paper.submitting": "Enviando…",
   "replay.paper.submitHint": "Antes de enviar, se vuelven a comprobar el cursor, el margen y el tope de cantidad del lado pulsado.",
   "replay.paper.qtyAsset": "Cantidad",
+  "replay.paper.orderBudget": "Importe reservado (con costes)",
   "replay.paper.marginAmt": "Margen",
   "replay.paper.notionalAmt": "Nocional",
   "replay.paper.noLong": "No hay largo para cerrar",

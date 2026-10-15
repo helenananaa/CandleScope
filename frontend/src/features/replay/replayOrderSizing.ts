@@ -1,5 +1,29 @@
 import { t } from "../../i18n/index.js";
 
+function decimalParts(text: string): { units: bigint; scale: number } | null {
+  const match = /^(\d+)(?:\.(\d*))?(?:e([+-]?\d+))?$/i.exec(text.trim());
+  if (!match) return null;
+  const scale = (match[2]?.length ?? 0) - Number(match[3] ?? 0);
+  if (!Number.isSafeInteger(scale) || Math.abs(scale) > 100) return null;
+  const units = BigInt(`${match[1]}${match[2] ?? ""}`);
+  return scale < 0 ? { units: units * 10n ** BigInt(-scale), scale: 0 } : { units, scale };
+}
+
+/** Keep an explicit percentage tied to the freshly quoted submission side. */
+export function replayQuantityForShare(maximum: string, share: number, step: string): string | null {
+  if (!Number.isFinite(share) || share < 0 || share > 1) return null;
+  const cap = decimalParts(maximum);
+  const ratio = decimalParts(String(share));
+  const tick = decimalParts(step);
+  if (!cap || !ratio || !tick || tick.units <= 0n) return null;
+  const steps = (cap.units * ratio.units * 10n ** BigInt(tick.scale))
+    / (tick.units * 10n ** BigInt(cap.scale + ratio.scale));
+  const units = steps * tick.units;
+  if (tick.scale === 0) return String(units);
+  const digits = String(units).padStart(tick.scale + 1, "0");
+  return `${digits.slice(0, -tick.scale)}.${digits.slice(-tick.scale)}`.replace(/\.?0+$/, "");
+}
+
 export interface ReplayMaxQuantityRebaseInput {
   readonly previousMaxQuantity: number | null;
   readonly previousReferencePrice: number | null;
@@ -14,6 +38,34 @@ export interface ReplayMaxQuantityRebaseInput {
 export interface ReplayOrderSizingAvailability {
   readonly sliderDisabled: boolean;
   readonly quantityExceedsCapacity: boolean;
+}
+
+/** A stale advisory must never offer more closing size than the remaining leg. */
+export function replayBoundClosingCapacity(
+  advisory: string | null, reduceOnly: boolean, positionQuantity: number,
+): string | null {
+  if (!reduceOnly) return advisory;
+  const remaining = Math.abs(positionQuantity);
+  if (remaining === 0) return "0";
+  if (advisory === null || advisory.trim() === "" || !Number.isFinite(Number(advisory))) return null;
+  return String(Math.max(0, Math.min(remaining, Number(advisory))));
+}
+
+/** A quote for one hedge leg must not disable the other leg's submit button. */
+export function replayOrderSideCapacity(
+  advisory: string | null,
+  advisorySide: "BUY" | "SELL",
+  requestedSide: "BUY" | "SELL",
+  reduceOnly: boolean,
+  targetPositionQuantity: number,
+): string | null {
+  const matching = advisorySide === requestedSide;
+  if (!reduceOnly) return matching ? advisory : null;
+  return replayBoundClosingCapacity(
+    matching ? advisory : String(Math.abs(targetPositionQuantity)),
+    true,
+    targetPositionQuantity,
+  );
 }
 
 export function replayReduceOnlyUnavailableMessage({

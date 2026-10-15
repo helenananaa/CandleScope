@@ -2681,6 +2681,7 @@ export const pl = {
   "replay.paper.submitting": "Składanie…",
   "replay.paper.submitHint": "Przed złożeniem kursor, depozyt i limit ilości są ponownie sprawdzane dla klikniętej strony.",
   "replay.paper.qtyAsset": "Ilość",
+  "replay.paper.orderBudget": "Zarezerwowana kwota (z kosztami)",
   "replay.paper.marginAmt": "Depozyt",
   "replay.paper.notionalAmt": "Wartość nominalna",
   "replay.paper.noLong": "Brak długiej do zamknięcia",

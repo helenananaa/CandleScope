@@ -2680,6 +2680,7 @@ export const cs = {
   "replay.paper.submitting": "Odesílání…",
   "replay.paper.submitHint": "Před odesláním se znovu zkontrolují kurzor, marže a strop množství pro kliknutou stranu.",
   "replay.paper.qtyAsset": "Množství",
+  "replay.paper.orderBudget": "Rezervovaná částka (včetně nákladů)",
   "replay.paper.marginAmt": "Marže",
   "replay.paper.notionalAmt": "Nominál",
   "replay.paper.noLong": "Žádný long k zavření",

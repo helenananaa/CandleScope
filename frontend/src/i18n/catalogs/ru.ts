@@ -2681,6 +2681,7 @@ export const ru = {
   "replay.paper.submitting": "Отправка…",
   "replay.paper.submitHint": "Перед отправкой курсор, маржа и потолок количества повторно проверяются для выбранной стороны.",
   "replay.paper.qtyAsset": "Количество",
+  "replay.paper.orderBudget": "Резерв (включая расходы)",
   "replay.paper.marginAmt": "Маржа",
   "replay.paper.notionalAmt": "Номинал",
   "replay.paper.noLong": "Нет лонга для закрытия",

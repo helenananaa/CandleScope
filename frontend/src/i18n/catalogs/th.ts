@@ -2680,6 +2680,7 @@ export const th = {
   "replay.paper.submitting": "กำลังส่ง…",
   "replay.paper.submitHint": "ก่อนส่ง เคอร์เซอร์ มาร์จิ้น และเพดานปริมาณจะถูกตรวจใหม่สำหรับฝั่งที่คลิก",
   "replay.paper.qtyAsset": "ปริมาณ",
+  "replay.paper.orderBudget": "จำนวนเงินสำรอง (รวมค่าใช้จ่าย)",
   "replay.paper.marginAmt": "มาร์จิ้น",
   "replay.paper.notionalAmt": "มูลค่า",
   "replay.paper.noLong": "ไม่มี LONG ให้ปิด",

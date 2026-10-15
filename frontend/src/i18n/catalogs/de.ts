@@ -2681,6 +2681,7 @@ export const de = {
   "replay.paper.submitting": "Absenden…",
   "replay.paper.submitHint": "Vor dem Absenden werden Cursor, Margin und Mengenkappe für die geklickte Seite erneut geprüft.",
   "replay.paper.qtyAsset": "Menge",
+  "replay.paper.orderBudget": "Reservierter Betrag (inkl. Kosten)",
   "replay.paper.marginAmt": "Marge",
   "replay.paper.notionalAmt": "Nominal",
   "replay.paper.noLong": "Kein Long zum Schließen",

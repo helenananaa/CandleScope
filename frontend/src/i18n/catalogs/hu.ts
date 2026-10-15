@@ -2680,6 +2680,7 @@ export const hu = {
   "replay.paper.submitting": "Küldés…",
   "replay.paper.submitHint": "Küldés előtt a kurzor, a fedezet és a mennyiségkorlát újraellenőrződik a kattintott oldalra.",
   "replay.paper.qtyAsset": "Mennyiség",
+  "replay.paper.orderBudget": "Lefoglalt összeg (költségekkel)",
   "replay.paper.marginAmt": "Fedezet",
   "replay.paper.notionalAmt": "Nominális",
   "replay.paper.noLong": "Nincs zárható long",

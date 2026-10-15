@@ -2680,6 +2680,7 @@ export const zhHK = {
   "replay.paper.submitting": "提交中…",
   "replay.paper.submitHint": "提交前會按點選方向重新校驗遊標、保證金與數量上限。",
   "replay.paper.qtyAsset": "商品數量",
+  "replay.paper.orderBudget": "預留金額（含費用）",
   "replay.paper.marginAmt": "保證金",
   "replay.paper.notionalAmt": "名義金額",
   "replay.paper.noLong": "無多倉可平",
