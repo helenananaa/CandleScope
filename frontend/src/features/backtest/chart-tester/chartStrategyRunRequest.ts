@@ -384,13 +384,13 @@ function importedSpotExecutionPresets(): {
     quick_preset_id: "CRYPTO_SPOT_STANDARD_V1",
     cost_preset: {
       preset_id: "CRYPTO_SPOT_STANDARD_V1",
-      preset_revision: "1",
+      preset_revision: "2",
       fee_source: "exchange-market-preset",
       fee_bps: "10",
       slippage_bps: "1",
     },
     account_execution_preset: {
-      account_model: "LINEAR_PERP_ONE_WAY_V1",
+      account_model: "SPOT_CASH_V1",
       sizing_policy: "EQUITY_PERCENT_V1",
       equity_percent: "10",
       initial_cash: "10000",

@@ -30,3 +30,22 @@ test("advanced results format ratios and amounts and collapse raw diagnostics", 
     assert.doesNotMatch(renderMetrics(6, null), />0%</);
   } finally { setLocale(previous); }
 });
+
+test("a restored zero-fill cash report explains rejected orders without opening raw JSON", () => {
+  const previous = getLocale();
+  setLocale("en");
+  try {
+    const html = renderToStaticMarkup(<ResearchResultsPanel runtime={structuralMock<BacktestResearchRuntime>({
+      view: { advancedEnabled: true, report: {
+        metrics: { realized_net_pnl: "0", trade_count: 0, rejected_order_count: 3 },
+        rejected_orders: [{ reason: "SPOT_INSUFFICIENT_CASH" }, { reason: "SPOT_INSUFFICIENT_CASH" }, { reason: "SPOT_INSUFFICIENT_BASE" }],
+        trades: [], equity_curve: [], fidelity_mode: "BAR_APPROX", hashes: {},
+      } },
+    })} />);
+    assert.match(html, /chart-strategy-rejections/);
+    assert.match(html, /3/);
+    assert.match(html, /2/);
+    assert.doesNotMatch(html, /SPOT_INSUFFICIENT/);
+    assert.match(html, /Realized/);
+  } finally { setLocale(previous); }
+});

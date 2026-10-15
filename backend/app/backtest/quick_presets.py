@@ -32,10 +32,10 @@ _QUICK_PRESETS: tuple[dict[str, Any], ...] = (
     },
     {
         "id": "CRYPTO_SPOT_STANDARD_V1",
-        "revision": "1",
+        "revision": "2",
         "label": "标准现货",
         "market_types": ["spot"],
-        "account_model": "LINEAR_PERP_ONE_WAY_V1",
+        "account_model": "SPOT_CASH_V1",
         "sizing_policy": "EQUITY_PERCENT_V1",
         "equity_percent": "10",
         "initial_cash": "10000",

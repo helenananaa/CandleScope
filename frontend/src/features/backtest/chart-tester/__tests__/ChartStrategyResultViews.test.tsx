@@ -11,6 +11,7 @@ import {
   ChartStrategyResultContextBar,
   ChartStrategyResultOverview,
   TradeExplanationPopover,
+  ChartStrategyTradeList,
 } from "../ChartStrategyResultViews.js";
 
 const result: ChartStrategyResultBundle = {
@@ -80,6 +81,21 @@ function explanation(): TradeExplanationV1 {
   ), "utf8")) as { payload: TradeExplanationV1 };
   return fixture.payload;
 }
+
+test("rejected orders show funding reasons in summary and empty trade list", () => {
+  const rejected = structuredClone(result);
+  rejected.report.metrics.rejected_order_count = 3;
+  rejected.report.rejected_orders = [{ reason: "SPOT_INSUFFICIENT_CASH" }, { reason: "SPOT_INSUFFICIENT_BASE" }, { reason: "OTHER" }];
+  const summary = renderToStaticMarkup(<ChartStrategyResultOverview result={rejected} stale={false} onOpenTrades={() => {}} />);
+  const empty = renderToStaticMarkup(<ChartStrategyTradeList result={rejected} locale="en-US" onLocateTrade={() => {}} />);
+  for (const html of [summary, empty]) {
+    assert.match(html, /chart-strategy-rejections/);
+    assert.match(html, /3/);
+    assert.doesNotMatch(html, /SPOT_INSUFFICIENT/);
+  }
+  const normal = renderToStaticMarkup(<ChartStrategyTradeList result={result} locale="en-US" onLocateTrade={() => {}} />);
+  assert.doesNotMatch(normal, /chart-strategy-rejections/);
+});
 
 function comparison(directComparisonAllowed: boolean): RecentRunCompareV1 {
   return {
