@@ -10,7 +10,7 @@
  */
 import { describeError } from "../../i18n/serverErrors.js";
 import { Icon } from "../../components/icons/Icon.js";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import type * as Monaco from "monaco-editor";
@@ -27,6 +27,7 @@ import {
   runtimeForScriptLanguage,
 } from "./scriptRuntimeCatalog.js";
 import { usePyneSecurityPolicy } from "./usePyneSecurityPolicy";
+import { createScriptEditorDraft, editScriptEditorSource, scriptEditorSource, switchScriptEditorLanguage } from "./scriptEditorDraft.js";
 import type { ChangeEvent } from "react";
 import type {
   IndicatorDefinition,
@@ -93,7 +94,8 @@ export default function IndicatorEditor({
 }: IndicatorEditorProps) {
   useLocale();
   const [name, setName] = useState(indicator?.name || "My Indicator");
-  const [script, setScript] = useState(indicator?.script || "");
+  const [draft, setDraft] = useState(() => createScriptEditorDraft(indicator.script, Boolean(indicator.id)));
+  const modelId = useId();
   const [language, setLanguage] = useState(indicator?.language || "");
   const [securityMode, setSecurityMode] = useState(() => {
     const requested = indicator?.securityMode || "safe";
@@ -142,6 +144,7 @@ export default function IndicatorEditor({
     [allowedRuntimeCatalog, selectedLanguage],
   );
   const languageReady = Boolean(selectedLanguage?.available && editorProfile);
+  const script = scriptEditorSource(draft, selectedLanguage?.id || language, editorProfile?.starterSource || "");
   const requestedLanguageId = (language || indicator?.language || "").trim();
   const requestedLanguage = allowedRuntimeCatalog?.languages.find(
     (candidate) => candidate.id === requestedLanguageId,
@@ -236,11 +239,12 @@ export default function IndicatorEditor({
       allowedRuntimeCatalog,
       nextLanguage,
     );
-    if (!script.trim() && nextProfile.starterSource) {
-      setScript(nextProfile.starterSource);
-    }
+    setDraft((current) => switchScriptEditorLanguage(
+      current, selectedLanguage?.id || language, script,
+      nextLanguage.id, nextProfile.starterSource,
+    ));
     setLanguage(nextLanguage.id);
-  }, [allowedRuntimeCatalog, script]);
+  }, [allowedRuntimeCatalog, language, script, selectedLanguage]);
 
   const handleSecurityModeChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
     const nextMode = event.target.value;
@@ -478,18 +482,12 @@ export default function IndicatorEditor({
         <div className="indicator-editor-monaco" style={{ flex: 1, minHeight: 0, border: "1px solid rgba(255, 255, 255, 0.1)", borderRadius: "10px", overflow: "hidden", boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2), inset 0 2px 4px rgba(0, 0, 0, 0.2)" }}>
           <Suspense fallback={null}><Editor
             height="100%"
-            {...(
-              editorProfile?.pyneEnhancements
-                ? { path: "candlescope-indicator.pyne" }
-                : editorProfile?.pineEnhancements
-                  ? { path: "candlescope-indicator.pine" }
-                  : {}
-            )}
+            path={`candlescope-indicator-${encodeURIComponent(modelId)}.${selectedLanguage?.id || "txt"}`}
             language={editorProfile?.monacoLanguage || "plaintext"}
             theme={editorProfile?.theme || "vs-dark"}
             value={script}
             onChange={(value) => {
-              if (!readOnly) setScript(value || "");
+              if (!readOnly) setDraft((current) => editScriptEditorSource(current, selectedLanguage?.id || language, value || ""));
             }}
             beforeMount={handleBeforeMount}
             onMount={handleEditorMount}

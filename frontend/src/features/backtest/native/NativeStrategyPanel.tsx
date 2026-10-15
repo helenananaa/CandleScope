@@ -103,7 +103,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   useLayoutEffect(() => {
     if (scrollPane.current) scrollPane.current.scrollTop = scrollPositions.current[tab] ?? 0;
   }, [tab]);
-  const [language, setLanguage] = useState<"pine" | "pyne">(props.instance.language);
+  // Both execution panes stay mounted and share one selected language.
+  const language = props.instance.language;
   const mode = props.executionMode;
   const [hostSettings, setHostSettings] = useState({ initial_balance: 10000, slippage_bps: 1, taker_fee_bps: 0, price_tick: 0.01 });
   const [fidelity, setFidelity] = useState("BAR_APPROX");
@@ -147,7 +148,6 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const { onInstanceBusy } = props;
   const instanceId = props.instance.id;
   useEffect(() => { onInstanceBusy(`${instanceId}:${mode}`, busy); return () => onInstanceBusy(`${instanceId}:${mode}`, false); }, [busy, onInstanceBusy, instanceId, mode]);
-  useEffect(() => { patchInstance.current(instanceRef.current.id, { language }); }, [language]);
   const receiveRun = useCallback((value: NativeRun) => {
     const item = instanceRef.current;
     if (item.runs[runContext] !== value.run_id || !item.runHistory?.[runContext]?.includes(value.run_id)) patchInstance.current(item.id, recordStrategyRun(item, runContext, value.run_id));
@@ -381,7 +381,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       <aside className="native-code-side">
         <div className="strategy-segmented" role="radiogroup" aria-label={t("native.language")}>
           {(["pine", "pyne"] as const).map((item) => <button key={item} type="button" role="radio" aria-checked={language === item} disabled={busy}
-            onClick={() => setLanguage(item)}>{t(`chartTester.language.${item}`)}</button>)}
+            onClick={() => props.onInstanceChange(props.instance.id, { language: item })}>{t(`chartTester.language.${item}`)}</button>)}
           {props.onSelectPython && <button type="button" role="radio" aria-checked={false} disabled={busy} onClick={props.onSelectPython}>{strategyLanguageLabel("python")}</button>}
         </div>
         <label>{t("native.parameters")}<textarea value={parameters} disabled={busy} spellCheck={false} onChange={(event) => save(source, event.target.value)} /></label>
