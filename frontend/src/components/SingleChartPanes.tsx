@@ -2332,9 +2332,16 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     const range = visibleRange || captureVisibleRange();
     if (!range) return;
     if (visibleRangeSaveTimerRef.current) clearTimeout(visibleRangeSaveTimerRef.current);
+    const chart = chartRef.current;
+    const key = datasetKeyRef.current;
     visibleRangeSaveTimerRef.current = setTimeout(() => {
       visibleRangeSaveTimerRef.current = null;
-      onVisibleRangeChangeRef.current?.(range);
+      // LWC applies a requested logical range during its next draw. Capturing
+      // immediately after restore can therefore persist the old window even
+      // though the next painted frame shows the requested source-time range.
+      if (chartRef.current !== chart || datasetKeyRef.current !== key) return;
+      const settled = captureVisibleRange();
+      if (settled) onVisibleRangeChangeRef.current?.(settled);
     }, VISIBLE_RANGE_SAVE_DEBOUNCE_MS);
   }, [captureVisibleRange]);
 
@@ -4096,9 +4103,10 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
             isRestoringViewportRef.current = false;
           }
         }
-        if (projectionRendered
-          && displayRows.length !== previousDisplayRows.length
-          && followLatestViewport(displayRows)) {
+        // Synthetic recalibration can remap the axis while retaining the same
+        // output count. Following depends on the committed projection, not on
+        // whether this tick happened to create an additional brick/column.
+        if (projectionRendered && followLatestViewport(displayRows)) {
           hasRestoredRangeRef.current = true;
           lastViewportRestoreSourceRef.current = "follow-latest";
         }
