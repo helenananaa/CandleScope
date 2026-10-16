@@ -649,9 +649,16 @@ async def test_hedge_tape_atomic_failure_or_restart_resumes_parent(
             ] == portfolio_before
             assert service._sessions[sid].actor._events.after(before["sequence"]) == ()
         else:
-            assert (
-                len(service._sessions[sid].actor._events.after(before["sequence"])) == 1
-            )
+            published = service._sessions[sid].actor._events.after(before["sequence"])
+            assert len(published) == 1
+            event = published[0]
+            assert event.type.value == "replay.snapshot"
+            emitted = event.data["snapshot"]
+            assert emitted["status_reason"] == "tape_cohort_batch_complete"
+            current = await service.get_session_state(sid)
+            assert emitted["sequence"] == event.sequence == current["sequence"]
+            for key in ("revision", "state_hash", "cursor"):
+                assert emitted[key] == current[key]
             await service.shutdown(step_timeout=5)
             service = await fixtures._trade_service(
                 root / "run.db", archive_root=root / "tape", symbols=("BTCUSDT",)
