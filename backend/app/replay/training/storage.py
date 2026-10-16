@@ -4630,6 +4630,16 @@ class TrainingRunStore:
                 InternalCommandType.MULTI_SHARED_INDEXED_INTERVAL.value,
             }
         )
+        if (str(track["position_mode"]) == "HEDGE" and not coordinated_hedge_mutation
+            and connection.execute(
+                "SELECT 1 FROM replay_hedge_input_binding WHERE run_id=? AND status='ACTIVE'", (run_id,),
+            ).fetchone() is not None):
+            # Adapter shutdown/pause exports its trade-price valuation even
+            # when the broker component hash did not change. Restore pinned
+            # marks before publishing the archive card's account summary.
+            account_marks_ops.apply_hedge_mark_projection(
+                connection, run_id=run_id, now_ms=now_ms, track_id=track_id,
+            )
         if component_projection_changed and not coordinated_hedge_mutation:
             account_marks_ops.settle_contract_funding(
                 connection,

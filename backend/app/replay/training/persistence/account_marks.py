@@ -255,6 +255,7 @@ def apply_hedge_mark_projection(
     *,
     run_id: str,
     now_ms: int,
+    track_id: str | None = None,
 ) -> None:
     """Overlay the pinned HEDGE mark on every leg before risk evaluation."""
 
@@ -290,9 +291,10 @@ def apply_hedge_mark_projection(
         """
         SELECT * FROM replay_training_market_track
         WHERE run_id = ? AND subscription_tier = 'FULL'
+          AND (? IS NULL OR track_id = ?)
         ORDER BY stable_ordinal, track_id
         """,
-        (run_id,),
+        (run_id, track_id, track_id),
     ).fetchall()
     projections = {
         row["track_id"]: row
