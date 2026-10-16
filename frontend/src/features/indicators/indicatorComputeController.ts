@@ -46,6 +46,8 @@ import type {
 export type IndicatorComputeBatchExecutor = (options: {
   jobs: IndicatorComputeBatchJob[];
   signal?: AbortSignal;
+  /** Independent results may publish before slower jobs in the same batch. */
+  onResults?: (results: IndicatorComputeBatchItem[]) => void;
 }) => Promise<IndicatorComputeBatchResponse>;
 
 export interface UseIndicatorComputeControllerOptions {

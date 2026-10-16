@@ -18,7 +18,8 @@ import type {
   ReplayHistoryIdentity,
   ReplayHistoryPage,
 } from "../replayHistoryProvider.js";
-import { replayUsesAuthoritativeSourceBucketProjection } from "../replayViewerProjection.js";
+import { replayUsesAuthoritativeSourceBucketProjection, rebuildReplayViewerSeries } from "../replayViewerProjection.js";
+import { loadReplayReviewPrefix, REVIEW_PREFIX_MAX_BARS } from "../replayReviewPrefix.js";
 
 
 const DATA_EPOCH = `sha256:${"a".repeat(64)}` as const;
@@ -88,14 +89,53 @@ function response(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function provider(fetcher: typeof fetch) {
+function provider(fetcher: typeof fetch, pendingRetryDelaysMs?: readonly number[]) {
   return new ReplayHistoryProvider({
     sessionId: "adapter-1",
     trackId: "track-1",
     identity: IDENTITY,
     fetcher,
+    ...(pendingRetryDelaysMs === undefined ? {} : { pendingRetryDelaysMs }),
   });
 }
+
+test("review retains its latest event through twenty older pages and mixed chart intervals", async () => {
+  const start = 1_800_000_000_000;
+  const end = start + 25_000 * 60_000;
+  let calls = 0;
+  const history = provider(async () => {
+    const last = end - calls++ * 1_000 * 60_000;
+    const first = last - 1_000 * 60_000;
+    return new Response(JSON.stringify(response({
+      bars: Array.from({ length: 1_000 }, (_, i) => ({ ...bar(first + i * 60_000), close: String(100 + (first - start) / 60_000 + i) })),
+      revealed_boundary_ms: end - 1, next_before_ms: first,
+    })), { status: 200 });
+  });
+  const { source, bounded } = await loadReplayReviewPrefix(history, DATA_EPOCH, end - 1, new AbortController().signal, REVIEW_PREFIX_MAX_BARS);
+  assert.equal(calls, 20);
+  assert.equal(bounded, true);
+  assert.equal(source.barCount, REVIEW_PREFIX_MAX_BARS);
+  assert.equal(Number(source.snapshot()[0]!.time) * 1_000, end - 20_000 * 60_000);
+  for (const interval of ["1m", "90m", "7m", "1d"]) {
+    const target = new SeriesWindowStore({ maxBars: REVIEW_PREFIX_MAX_BARS });
+    rebuildReplayViewerSeries(target, source, "1m", interval);
+    const tail = target.snapshot().at(-1)!;
+    assert.equal(tail.close, 25_099, interval);
+    assert.equal(tail.replayLastBaseOpenMs, end - 60_000, interval);
+    assert.ok(Number(tail.time) * 1_000 <= end - 1);
+    if (interval === "1m") assert.equal(target.barCount, 20_000);
+  }
+});
+
+test("review stops at a short terminal prefix and cancels stale selections", async () => {
+  const history = provider(async () => new Response(JSON.stringify(response({ has_more: false })), { status: 200 }));
+  const result = await loadReplayReviewPrefix(history, DATA_EPOCH, BOUNDARY_MS, new AbortController().signal);
+  assert.equal(result.bounded, false);
+  assert.equal(result.source.barCount, 2);
+  const abort = new AbortController();
+  const canceled = provider(async () => { abort.abort(); return new Response(JSON.stringify(response()), { status: 200 }); });
+  await assert.rejects(loadReplayReviewPrefix(canceled, DATA_EPOCH, BOUNDARY_MS, abort.signal), { name: "AbortError" });
+});
 
 test("history provider deduplicates an in-flight before-page and stays on replay routes", async () => {
   const urls: string[] = [];
@@ -146,6 +186,31 @@ test("history parser rejects source, epoch, unknown-field, and lookahead drift",
       ReplayHistoryProtocolError,
     );
   }
+});
+
+test("independent chart providers share transport but own validated page objects", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let requests = 0;
+  const fetcher: typeof fetch = async () => {
+    requests += 1;
+    await gate;
+    return Response.json(response());
+  };
+  const charts = [provider(fetcher), provider(fetcher), provider(fetcher), provider(fetcher)];
+  const pending = charts.map((chart) => chart.loadBefore({
+    beforeMs: BOUNDARY_MS, revealedBoundaryMs: BOUNDARY_MS, dataEpoch: DATA_EPOCH,
+  }));
+  assert.equal(requests, 1);
+  release();
+  const pages = await Promise.all(pending);
+  assert.deepEqual(pages[0], pages[1]);
+  assert.notEqual(pages[0], pages[1]);
+  assert.notEqual(pages[0]!.bars, pages[1]!.bars);
+  assert.notEqual(pages[0]!.bars[0], pages[1]!.bars[0]);
+  charts[0]!.cancel();
+  assert.equal(charts[0]!.historyEpoch, null);
+  assert.equal(charts[1]!.historyEpoch, HISTORY_EPOCH);
 });
 
 test("declared exchange gaps remain empty while history continues before them", async () => {
@@ -740,7 +805,7 @@ test("cancel aborts the active history request and a later epoch starts cleanly"
     limit: 250,
   });
   runtime.cancel();
-  await assert.rejects(pending, /aborted/i);
+  await assert.rejects(pending, { name: "AbortError" });
   assert.equal(captured.signal?.aborted, true);
   assert.equal(runtime.historyEpoch, null);
 });
@@ -752,21 +817,71 @@ test("history download errors retain retry information and do not poison subsequ
     attempts += 1;
     return attempts === 1
       ? new Response(JSON.stringify({ protocol: "replay.v3", error: {
-        code: "HISTORY_DOWNLOAD_PENDING", message: "Earlier history is still downloading",
+        code: "HISTORY_DOWNLOAD_FAILED", message: "Earlier history download failed",
       } }), { status: 503 })
       : new Response(JSON.stringify(response()), { status: 200 });
   });
   const request = { beforeMs: BOUNDARY_MS, revealedBoundaryMs: BOUNDARY_MS, dataEpoch: DATA_EPOCH };
   await assert.rejects(runtime.loadBefore(request), (error: unknown) => {
     assert.ok(error instanceof ReplayHistoryProtocolError);
-    assert.equal(error.code, "HISTORY_DOWNLOAD_PENDING");
-    assert.match(error.message, /still downloading/);
+    assert.equal(error.code, "HISTORY_DOWNLOAD_FAILED");
+    assert.match(error.message, /download failed/);
     return true;
   });
   assert.equal(runtime.historyEpoch, null);
   assert.equal((await runtime.loadBefore(request)).bars.length, 2);
   assert.equal(runtime.historyEpoch, HISTORY_EPOCH);
   assert.equal(attempts, 2);
+});
+
+test("pending preparation automatically resumes the same deduplicated history page", async () => {
+  const urls: string[] = [];
+  const runtime = provider(async (input) => {
+    urls.push(String(input));
+    return urls.length < 3
+      ? new Response(JSON.stringify({ protocol: "replay.v3", error: {
+          code: "HISTORY_DOWNLOAD_PENDING", message: "Still preparing",
+        } }), { status: 503 })
+      : new Response(JSON.stringify(response()), { status: 200 });
+  }, [1, 1]);
+  const request = { beforeMs: BOUNDARY_MS, revealedBoundaryMs: BOUNDARY_MS, dataEpoch: DATA_EPOCH };
+  const first = runtime.loadBefore(request);
+  assert.equal(runtime.loadBefore(request), first);
+  assert.equal((await first).bars.length, 2);
+  assert.equal(urls.length, 3);
+  assert.equal(new Set(urls).size, 1);
+  assert.equal(runtime.historyEpoch, HISTORY_EPOCH);
+});
+
+test("pending retries stop on cancellation and cannot publish an epoch", async () => {
+  let attempts = 0;
+  const runtime = provider(async () => {
+    attempts += 1;
+    return new Response(JSON.stringify({ protocol: "replay.v3", error: {
+      code: "HISTORY_DOWNLOAD_PENDING", message: "Still preparing",
+    } }), { status: 503 });
+  }, [30_000]);
+  const pending = runtime.loadBefore({ beforeMs: BOUNDARY_MS, revealedBoundaryMs: BOUNDARY_MS, dataEpoch: DATA_EPOCH });
+  const rejected = assert.rejects(pending, (error: unknown) => error instanceof DOMException && error.name === "AbortError");
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  runtime.cancel();
+  await rejected;
+  assert.equal(attempts, 1);
+  assert.equal(runtime.historyEpoch, null);
+});
+
+test("pending retries are finite and never retry a permanent failure", async () => {
+  let attempts = 0;
+  const runtime = provider(async () => {
+    attempts += 1;
+    return new Response(JSON.stringify({ protocol: "replay.v3", error: {
+      code: "HISTORY_DOWNLOAD_PENDING", message: "Still preparing",
+    } }), { status: 503 });
+  }, [1]);
+  await assert.rejects(runtime.loadBefore({ beforeMs: BOUNDARY_MS, revealedBoundaryMs: BOUNDARY_MS, dataEpoch: DATA_EPOCH }),
+    (error: unknown) => error instanceof ReplayHistoryProtocolError && error.code === "HISTORY_DOWNLOAD_PENDING");
+  assert.equal(attempts, 2);
+  assert.equal(runtime.historyEpoch, null);
 });
 
 
@@ -778,4 +893,22 @@ test("empty coarse charts bootstrap only from a server-provided source-grid curs
   assert.equal(replayHistoryFirstPageBeforeMs(store, 946_684_800_000, "3d", true, -1), null);
   store.replace([{ time: 946_425_600, open: 100, high: 101, low: 99, close: 100, volume: 1 }]);
   assert.equal(replayHistoryFirstPageBeforeMs(store, 946_684_800_000, "3d", true, cursor), 946_425_600_000);
+});
+
+test("temporary source transport keeps the page and retries twice; permanent source failures stop", async () => {
+  for (const retryable of [true, false]) {
+    const urls: string[] = [];
+    const runtime = provider(async input => {
+      urls.push(String(input));
+      return urls.length < 3 ? new Response(JSON.stringify({ protocol: "replay.v3", error: {
+        code: "HISTORY_SOURCE_UNAVAILABLE", message: "read failed", details: { retryable },
+      } }), { status: 503 }) : new Response(JSON.stringify(response()));
+    }, [0, 0, 0]);
+    const request = runtime.loadBefore({ beforeMs: BOUNDARY_MS, revealedBoundaryMs: BOUNDARY_MS, dataEpoch: DATA_EPOCH });
+    if (retryable) assert.equal((await request).bars.length, 2);
+    else await assert.rejects(request, /read failed/);
+    assert.equal(urls.length, retryable ? 3 : 1);
+    assert.equal(new Set(urls).size, 1);
+    runtime.cancel();
+  }
 });

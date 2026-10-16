@@ -6,10 +6,13 @@ import type { SurfaceViewportSnapshot } from "../chart-representation/chartRepre
 import { createIntervalTimeline } from "../../utils/intervalTimeline.js";
 import { replayDisplayBarToKline } from "./replaySeriesProjection.js";
 import type { ReplayDigest, ReplayDisplayBar } from "./replayTypes.js";
+import { readReplayHistory } from "./replayHistoryTransport.js";
+import { replayHistoryRetryDelay } from "./replayHistoryRetry.js";
 
 
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const HISTORY_PAGE_LIMIT = 1_000;
+const PENDING_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 5_000, 5_000, 5_000] as const;
 
 export interface ReplayHistoryIdentity {
   readonly exchange: string;
@@ -72,6 +75,23 @@ export interface ReplayHistoryProviderOptions {
   readonly identity: ReplayHistoryIdentity;
   readonly fetcher?: typeof fetch;
   readonly apiBase?: string;
+  readonly pendingRetryDelaysMs?: readonly number[];
+}
+
+function waitForPendingHistory(delayMs: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const aborted = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", aborted);
+      reject(new DOMException("history request canceled", "AbortError"));
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", aborted);
+      resolve();
+    }, delayMs);
+    signal.addEventListener("abort", aborted, { once: true });
+    if (signal.aborted) aborted();
+  });
 }
 
 export class ReplayHistoryProtocolError extends Error {
@@ -240,6 +260,7 @@ export function replayHistoryRevealRepairBeforeMs(
   replayStartMs: number | null,
   revealedBoundaryMs: number | null,
   displayInterval: string | null,
+  { allowInitialPartialRepair = false }: { allowInitialPartialRepair?: boolean } = {},
 ): number | null {
   if (
     replayStartMs === null
@@ -254,7 +275,7 @@ export function replayHistoryRevealRepairBeforeMs(
   // warmup-only partial bucket ending at the replay seam.  It is chart context,
   // not an elapsed replay bucket, so repairing it from the seam would skip the
   // projection's source-aligned left edge and fail continuity validation.
-  if (revealedBoundaryMs === replayStartMs) return null;
+  if (revealedBoundaryMs === replayStartMs && !allowInitialPartialRepair) return null;
   const timeline = createIntervalTimeline(displayInterval);
   const seamSeconds = timeline?.floor(Math.floor(replayStartMs / 1_000));
   if (seamSeconds === null || seamSeconds === undefined) return null;
@@ -279,6 +300,9 @@ export function replayHistoryRevealRepairBeforeMs(
   ) {
     return projectionCloseMs + 1;
   }
+  // Only locally aggregated, already elapsed partial warmup buckets opt in at
+  // a fork's initial cursor. Do not infer a missing replay interval at start.
+  if (revealedBoundaryMs === replayStartMs) return null;
   if (projectionOpenMs <= seamMs) return null;
 
   const previous = rows[projectionIndex - 1];
@@ -343,7 +367,7 @@ function optionalInteger(value: unknown, path: string): number | null {
   return value === null ? null : integer(value, path);
 }
 
-function parseIdentity(value: unknown, path: string): ReplayHistoryIdentity {
+export function parseIdentity(value: unknown, path: string): ReplayHistoryIdentity {
   const source = record(value, path);
   exact(source, [
     "exchange", "market_type", "symbol", "source_kind", "base_interval", "display_interval",
@@ -360,7 +384,7 @@ function parseIdentity(value: unknown, path: string): ReplayHistoryIdentity {
   };
 }
 
-function parseHistoryPolicy(value: unknown, path: string): ReplayHistoryPolicy {
+export function parseHistoryPolicy(value: unknown, path: string): ReplayHistoryPolicy {
   const source = record(value, path);
   exact(source, [
     "schema_version",
@@ -499,7 +523,7 @@ function sameIdentity(left: ReplayHistoryIdentity, right: ReplayHistoryIdentity)
     && left.display_interval === right.display_interval;
 }
 
-function parsePage(
+export function parsePage(
   value: unknown,
   {
     sessionId,
@@ -600,26 +624,43 @@ function parsePage(
   };
 }
 
+export type ReplayHistorySource = Pick<ReplayHistoryProvider,
+  "sessionId" | "trackId" | "identity" | "historyEpoch" | "adoptEpoch" | "loadBefore" | "cancel">;
+
 export class ReplayHistoryProvider {
   readonly sessionId: string;
   readonly trackId: string;
   readonly identity: ReplayHistoryIdentity;
   private readonly fetcher: typeof fetch;
   private readonly apiBase: string;
+  private readonly pendingRetryDelaysMs: readonly number[];
   private readonly inflight = new Map<string, { controller: AbortController; promise: Promise<ReplayHistoryPage> }>();
   private epoch: ReplayDigest | null = null;
   private generation = 0;
 
-  constructor({ sessionId, trackId, identity, fetcher = fetch, apiBase }: ReplayHistoryProviderOptions) {
+  constructor({ sessionId, trackId, identity, fetcher = fetch, apiBase,
+    pendingRetryDelaysMs = PENDING_RETRY_DELAYS_MS }: ReplayHistoryProviderOptions) {
     this.sessionId = sessionId;
     this.trackId = trackId;
     this.identity = identity;
     this.fetcher = fetcher;
+    if (pendingRetryDelaysMs.length > 20
+      || pendingRetryDelaysMs.some((delay) => !Number.isFinite(delay) || delay < 0 || delay > 30_000)) {
+      throw new ReplayHistoryProtocolError("history pending retry delays are invalid");
+    }
+    this.pendingRetryDelaysMs = [...pendingRetryDelaysMs];
     this.apiBase = apiBase === undefined ? API_BASE : `${apiBase.replace(/\/$/, "")}/api/v1`;
   }
 
   get historyEpoch(): ReplayDigest | null {
     return this.epoch;
+  }
+
+  adoptEpoch(epoch: ReplayDigest): void {
+    if (!DIGEST_PATTERN.test(epoch)) throw new ReplayHistoryProtocolError("history epoch is invalid");
+    if (this.epoch === epoch) return;
+    this.cancel();
+    this.epoch = epoch;
   }
 
   loadBefore(input: ReplayHistoryRequest): Promise<ReplayHistoryPage> {
@@ -651,22 +692,34 @@ export class ReplayHistoryProvider {
     const expectedEpoch = this.epoch;
     const generation = this.generation;
     const fetcher = this.fetcher;
-    const promise = fetcher(url, {
-      method: "GET",
-      headers: { Accept: "application/json" },
-      credentials: "same-origin",
-      signal: controller.signal,
-    }).then(async (response) => {
-      if (!response.ok) {
-        type Failure = { message?: unknown; code?: unknown };
-        const body = await response.json().catch(() => null) as { detail?: Failure; error?: Failure } | null;
+    const identityKey = JSON.stringify([
+      this.identity.exchange, this.identity.market_type, this.identity.symbol,
+      this.identity.source_kind, this.identity.base_interval, this.identity.display_interval,
+    ]);
+    const promise = (async () => {
+      let pendingAttempts = 0;
+      let response: Awaited<ReturnType<typeof readReplayHistory>>;
+      while (true) {
+        if (controller.signal.aborted || generation !== this.generation) {
+          throw new DOMException("history request canceled", "AbortError");
+        }
+        response = await readReplayHistory(fetcher, url, identityKey, controller.signal);
+        if (response.ok) break;
+        type Failure = { message?: unknown; code?: unknown; details?: unknown };
+        const body = response.payload as { detail?: Failure; error?: Failure } | null;
         const failure = body?.error ?? body?.detail;
+        const delay = replayHistoryRetryDelay(failure, pendingAttempts, this.pendingRetryDelaysMs);
+        if (delay !== undefined) {
+          pendingAttempts += 1;
+          await waitForPendingHistory(delay, controller.signal);
+          continue;
+        }
         const message = failure?.message;
         throw new ReplayHistoryProtocolError(typeof message === "string" && message.length > 0
           ? message : `history request failed with HTTP ${response.status}`,
         typeof failure?.code === "string" ? failure.code : undefined);
       }
-      const page = parsePage(await response.json(), {
+      const page = parsePage(response.payload, {
         sessionId: this.sessionId,
         trackId: this.trackId,
         identity: this.identity,
@@ -679,7 +732,7 @@ export class ReplayHistoryProvider {
       }
       this.epoch = page.history_epoch;
       return page;
-    }).finally(() => {
+    })().finally(() => {
       if (this.inflight.get(key)?.promise === promise) this.inflight.delete(key);
     });
     this.inflight.set(key, { controller, promise });

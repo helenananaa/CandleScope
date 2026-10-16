@@ -2234,6 +2234,12 @@ class TrainingRunService:
         """Return one revealed-only page through the replay-owned data boundary."""
         return await self._display_service.history_page(session_id, track_id=track_id, before_ms=before_ms, revealed_boundary_ms=revealed_boundary_ms, limit=limit, data_epoch=data_epoch, history_epoch=history_epoch, display_interval=display_interval)
 
+    async def canonical_indicator_compute(self, session_id: str, **kwargs) -> dict[str, object]:
+        return await self._display_service.canonical_indicator_compute(session_id, **kwargs)
+
+    async def tape_projection(self, session_id: str, **kwargs) -> dict[str, object]:
+        return await self._display_service.tape_projection(session_id, **kwargs)
+
     async def display_projection(
         self,
         session_id: str,

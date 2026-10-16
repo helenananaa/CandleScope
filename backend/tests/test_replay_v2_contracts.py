@@ -5,29 +5,27 @@ from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 
+import app.api.v1.replay as replay_api
 import httpx
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from starlette.websockets import WebSocketDisconnect
-
-import app.api.v1.replay as replay_api
 from app.api.v1.replay import router as replay_router
 from app.api.v1.stream import router as stream_router
 from app.core.config import load_replay_settings
 from app.replay.training.commands import ReplayV2Command
 from app.replay.training.events import ReplayV2Event
 from app.replay.training.models import (
+    ADAPTER_STORAGE_CONTRACT,
     REPLAY_V2_ENUMS,
     REPLAY_V2_PROTOCOL,
-    ADAPTER_STORAGE_CONTRACT,
     MarketTrackContract,
     TimeDisclosurePolicy,
     TrainingRunContract,
     ensure_time_disclosure_not_weakened,
     validate_track_source,
 )
-
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 ROOT = Path(__file__).parents[2]
 GOLDEN_PATH = Path(__file__).parent / "fixtures" / "replay" / "v2_contract_golden.json"
@@ -95,7 +93,6 @@ def test_replay_v2_phase8_package_keeps_optimization_inside_training() -> None:
         "portfolio_history.py",
         "portfolio_prices.py",
         "public_price_blocks.py",
-        "prepared_display.py",
         "review.py",
         "review_account.py",
         "review_fork_valuation.py",
@@ -112,6 +109,18 @@ def test_replay_v2_phase8_package_keeps_optimization_inside_training() -> None:
         "tape_phases.py",
         "terminal_cohort.py",
         "trade_flow.py",
+        "indexed_indicator_closes.py",
+        "indexed_tape_context.py",
+        "indicator_checkpoint.py",
+        "indicator_context.py",
+        "indicator_history.py",
+        "indicator_http.py",
+        "indicator_jobs.py",
+        "indicator_prefix.py",
+        "prepared_display.py",
+        "tape_chart_builder.py",
+        "tape_indicator_history.py",
+        "tape_projection.py",
     }
 
 
@@ -337,21 +346,20 @@ def test_training_websocket_path_fails_without_a_started_runtime(
             enabled=False,
         ),
     )
-    with TestClient(_app()) as client:
-        with client.websocket_connect(
-            "/api/v1/stream/replay/run-1?protocol=replay.v3"
-        ) as websocket:
-            assert websocket.receive_json() == {
-                "protocol": "replay.v3",
-                "error": {
-                    "code": "REPLAY_TRAINING_UNAVAILABLE",
-                    "message": "Replay training runtime is unavailable",
-                    "details": {},
-                },
-            }
-            with pytest.raises(WebSocketDisconnect) as closed:
-                websocket.receive_json()
-            assert closed.value.code == 1013
+    with TestClient(_app()) as client, client.websocket_connect(
+        "/api/v1/stream/replay/run-1?protocol=replay.v3"
+    ) as websocket:
+        assert websocket.receive_json() == {
+            "protocol": "replay.v3",
+            "error": {
+                "code": "REPLAY_TRAINING_UNAVAILABLE",
+                "message": "Replay training runtime is unavailable",
+                "details": {},
+            },
+        }
+        with pytest.raises(WebSocketDisconnect) as closed:
+            websocket.receive_json()
+        assert closed.value.code == 1013
 
 
 def test_training_run_projection_websocket_fails_without_a_started_runtime(
@@ -365,21 +373,20 @@ def test_training_run_projection_websocket_fails_without_a_started_runtime(
             enabled=False,
         ),
     )
-    with TestClient(_app()) as client:
-        with client.websocket_connect(
-            "/api/v1/stream/replay/runs/run-1?protocol=replay.v3"
-        ) as websocket:
-            assert websocket.receive_json() == {
-                "protocol": "replay.v3",
-                "error": {
-                    "code": "REPLAY_TRAINING_UNAVAILABLE",
-                    "message": "Replay training runtime is unavailable",
-                    "details": {},
-                },
-            }
-            with pytest.raises(WebSocketDisconnect) as closed:
-                websocket.receive_json()
-            assert closed.value.code == 1013
+    with TestClient(_app()) as client, client.websocket_connect(
+        "/api/v1/stream/replay/runs/run-1?protocol=replay.v3"
+    ) as websocket:
+        assert websocket.receive_json() == {
+            "protocol": "replay.v3",
+            "error": {
+                "code": "REPLAY_TRAINING_UNAVAILABLE",
+                "message": "Replay training runtime is unavailable",
+                "details": {},
+            },
+        }
+        with pytest.raises(WebSocketDisconnect) as closed:
+            websocket.receive_json()
+        assert closed.value.code == 1013
 
 
 def test_phase0_contract_does_not_freeze_retired_v1_product_assets() -> None:
