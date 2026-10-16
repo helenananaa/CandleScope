@@ -4686,7 +4686,9 @@ class TrainingRunStore:
                 connection,
                 run_id=run_id,
                 now_ms=now_ms,
-                summary_revision=int(state["revision"]),
+                # The archive version follows the selected adapter. Other
+                # tracks refresh shared valuation without replacing that clock.
+                summary_revision=int(state["revision"]) if selected else None,
             )
 
         if phase_summary is not None:

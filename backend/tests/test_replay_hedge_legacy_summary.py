@@ -154,3 +154,34 @@ async def test_exact_one_way_capital_receipt_remains_auditable(tmp_path, kind, d
         assert audit["status"] == "PASS", audit
     finally:
         await service.shutdown(step_timeout=1.0)
+
+
+@pytest.mark.parametrize("select_primary", [False, True])
+async def test_return_to_hub_keeps_shared_card_current_with_unequal_track_revisions(tmp_path, select_primary):
+    service = await _risk_service(tmp_path / "hub-card.db", symbols=("BTCUSDT", "ETHUSDT"))
+    try:
+        run, primary, selected = await _dormant_run(service, tmp_path)
+        if select_primary:
+            await _send(service, run_id=run, session_id=selected, command_id="select-primary",
+                        command_type=ReplayV2CommandType.SELECT_TRACK,
+                        payload={"track_id": "track-1", "expected_viewer_revision": 1})
+            selected = primary
+        await _send(service, run_id=run, session_id=selected, command_id="held-hub",
+                    command_type=ReplayV2CommandType.PLACE_ORDER, payload={
+                        "client_order_id": "held-hub", "position_side": "LONG", "side": "BUY",
+                        "order_type": "MARKET", "quantity": "0.001", "reduce_only": False,
+                        "limit_price": None, "stop_price": None})
+        before = await service.training.get_market_tracks(run)
+        assert len({track["cursor"]["revision"] for track in before["tracks"]}) > 1
+        await service.training.return_to_hub(run)
+        card = await service.training.get_run(run)
+        assert card["equity_status"] == "CURRENT"
+        assert card["equity"] == before["portfolio"]["equity"]
+        listing = await service.training.list_runs(limit=20, cursor=None, state=None,
+                                                   source_kind=None, compatibility=None)
+        assert next(item for item in listing["items"] if item["run_id"] == run) == card
+        after = await service.training.get_market_tracks(run)
+        for key in ("cash_balance", "equity", "available_equity", "fees_paid", "positions"):
+            assert after["portfolio"][key] == before["portfolio"][key]
+    finally:
+        await service.shutdown(step_timeout=1.0)
