@@ -2070,6 +2070,7 @@ export const ms = {
   "replay.shell.ordersFills": "Pesanan / isian",
   "replay.shell.ledger": "Lejar",
   "replay.shell.drawingRev": "Semakan lukisan",
+  "replay.shell.legacyAccountIncomplete": "Rekod lama ini tidak menyimpan penilaian margin portfolio. Ekuiti tersedia dan untung/rugi belum direalisasi tidak dapat dipulihkan dengan tepat.",
   "replay.shell.reviewSidebarHint": "Rel ini datang dari unjuran peristiwa terpilih dan tidak membaca portfolio Run aktif.",
   "replay.shell.unavailable": "Main semula lilin tidak tersedia",
   "replay.shell.failClosed": "Ruang kerja latihan gagal tertutup; ia tidak akan jatuh balik ke langsung, mock, atau pasaran lain yang dicache.",

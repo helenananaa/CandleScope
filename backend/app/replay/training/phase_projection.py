@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import sqlite3
 
 
-def load_track_rules(connection: sqlite3.Connection, run_id: str, *, effective: bool):
+def load_track_rules(connection: sqlite3.Connection, run_id: str, *, effective: bool, include_dormant: bool = False):
     """Resolve exactly the old per-track rule choice in one statement."""
     predicate = (
         "AND candidate.effective_virtual_time_ms <= COALESCE(track.virtual_time_ms, 0)"
@@ -22,7 +22,7 @@ def load_track_rules(connection: sqlite3.Connection, run_id: str, *, effective: 
         FROM replay_training_market_track AS track
         JOIN replay_training_instrument_rule AS rule
           ON rule.run_id = track.run_id AND rule.track_id = track.track_id
-        WHERE track.run_id = ? AND track.subscription_tier = 'FULL'
+        WHERE track.run_id = ? AND (track.subscription_tier = 'FULL' OR ?)
           AND rule.revision = (
             SELECT candidate.revision FROM replay_training_instrument_rule AS candidate
             WHERE candidate.run_id = track.run_id AND candidate.track_id = track.track_id
@@ -30,7 +30,7 @@ def load_track_rules(connection: sqlite3.Connection, run_id: str, *, effective: 
             ORDER BY {ordering} LIMIT 1
           )
         """,
-        (run_id,),
+        (run_id, include_dormant),
     ).fetchall()
     return {row["track_id"]: row for row in rows}
 

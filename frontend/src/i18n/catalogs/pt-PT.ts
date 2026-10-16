@@ -2070,6 +2070,7 @@ export const ptPT = {
   "replay.shell.ordersFills": "Ordens / execuções",
   "replay.shell.ledger": "Livro-razão",
   "replay.shell.drawingRev": "Revisão de desenho",
+  "replay.shell.legacyAccountIncomplete": "Este registo antigo não contém a avaliação da margem da carteira. O capital disponível e os ganhos ou perdas não realizados não podem ser recuperados com precisão.",
   "replay.shell.reviewSidebarHint": "Esta barra vem da projecção do evento seleccionado e não lê a carteira do Run activo.",
   "replay.shell.unavailable": "Replay de velas indisponível",
   "replay.shell.failClosed": "O espaço de treino fecha em falha; não recua para mercados em tempo real, simulados ou em cache de outros mercados.",

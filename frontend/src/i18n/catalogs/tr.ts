@@ -2071,6 +2071,7 @@ export const tr = {
   "replay.shell.ordersFills": "Emirler / gerçekleşmeler",
   "replay.shell.ledger": "Defter",
   "replay.shell.drawingRev": "Çizim revizyonu",
+  "replay.shell.legacyAccountIncomplete": "Bu eski kayıtta portföy teminat değerlemesi yok. Kullanılabilir özkaynak ve gerçekleşmemiş kâr/zarar doğru biçimde geri getirilemiyor.",
   "replay.shell.reviewSidebarHint": "Bu ray seçilen olay izdüşümünden gelir ve etkin Run portföyünü okumaz.",
   "replay.shell.unavailable": "Mum yeniden oynatma kullanılamıyor",
   "replay.shell.failClosed": "Eğitim çalışma alanı kapalı kalır; canlı, sahte veya önbellekteki diğer piyasalara düşmez.",

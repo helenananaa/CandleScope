@@ -586,6 +586,36 @@ async def test_review_ledger_prefix_reference_tamper_fails_closed(
         await service.shutdown(step_timeout=1.0)
 
 
+async def test_held_advance_records_ledger_prefix_without_hydrating_history(tmp_path, monkeypatch):
+    database = tmp_path / "review-prefix-cost.db"
+    service = await _risk_service(database)
+    try:
+        run, sid, _ = await _run_with_opposite_legs(service, tmp_path, prefix="prefix-cost")
+        with monkeypatch.context() as patch:
+            def unexpected_read(*args, **kwargs):
+                raise AssertionError("advance must not hydrate earlier ledger entries")
+            patch.setattr(ReviewRecorder, "_contract_ledger_projection", unexpected_read)
+            await _send(service, run_id=run, session_id=sid, command_id="advance-prefix",
+                        command_type=ReplayV2CommandType.STEP_BASE, payload={"count": 2})
+        with sqlite3.connect(database) as connection:
+            connection.row_factory = sqlite3.Row
+            event = dict(connection.execute("SELECT * FROM replay_review_timeline_event WHERE run_id=? ORDER BY timeline_sequence DESC LIMIT 1", (run,)).fetchone())
+            stored = json.loads(event["projection_json"])
+            assert stored["_review_descriptor_internal"]["ledger_commitment"] == "PREFIX_V1"
+            decoded = ReviewRecorder.decode_event_projection(connection, event=event)
+            assert len(decoded["ledger"]) == stored["ledger"]["count"] > 0
+            assert decoded["ledger"][-1]["entry_hash"] == stored["ledger"]["tail_hash"]
+            assert ReviewRecorder.projection_hash(decoded) == ReviewRecorder.projection_hash(stored)
+            # Old full-log commitments keep their original digest contract.
+            decoded["_review_descriptor_internal"].pop("ledger_commitment")
+            assert ReviewRecorder.projection_hash(decoded) == canonical_sha256(decoded)
+        review = await service.training.start_review(run, event_id=event["event_id"])
+        assert review["selected_event_id"] == event["event_id"]
+        assert (await service.training.audit_account(run))["status"] == "PASS"
+    finally:
+        await service.shutdown(step_timeout=1.0)
+
+
 async def test_account_auditor_names_tampered_hedge_funding_field(
     tmp_path: Path,
 ) -> None:

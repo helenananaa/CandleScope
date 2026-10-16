@@ -110,6 +110,8 @@ class TrainingRunStore:
 
         def migrate(connection: sqlite3.Connection) -> None:
             migrate_training_schema(connection, now_ms=now)
+            from .persistence.hedge_review_fork import repair_legacy_fork_viewed_reason
+            repair_legacy_fork_viewed_reason(connection)
             connection.execute(
                 """
                 CREATE INDEX IF NOT EXISTS
@@ -1234,6 +1236,7 @@ class TrainingRunStore:
                         active_fee = connection.execute(
                             """
                             SELECT policy.maker_fee_bps, policy.taker_fee_bps,
+                                   policy.effective_virtual_time_ms,
                                    extension.liquidation_fee_bps,
                                    extension.policy_version,
                                    extension.account_tier
@@ -1241,11 +1244,11 @@ class TrainingRunStore:
                             JOIN replay_training_fee_policy_extension AS extension
                               ON extension.run_id = policy.run_id
                              AND extension.revision = policy.revision
-                            WHERE policy.run_id = ?
+                            WHERE policy.run_id = ? AND policy.effective_virtual_time_ms <= ?
                             ORDER BY policy.effective_virtual_time_ms DESC,
                                      policy.revision DESC LIMIT 1
                             """,
-                            (run_id,),
+                            (run_id, virtual_time_ms),
                         ).fetchone()
                         expected_fee = (
                             str(event.payload["maker_fee_bps"]),
@@ -1265,6 +1268,20 @@ class TrainingRunStore:
                                 str(active_fee["account_tier"]),
                             )
                         )
+                        # Public source IDs determine same-phase ordering, not
+                        # which market owns the account fee. Compare with the
+                        # primary's effective event in this atomic phase even
+                        # when that source happens to sort after the secondary.
+                        for candidate, candidate_time in zip(materialized, applied_virtual_times, strict=True):
+                            if (candidate.source_kind == "PUBLIC"
+                                    and candidate.track_id == primary_track_id
+                                    and candidate.event_kind == "FEE_POLICY"
+                                    and candidate_time <= virtual_time_ms
+                                    and (active_fee is None or candidate_time >= int(active_fee["effective_virtual_time_ms"]))):
+                                actual_fee = tuple(str(candidate.payload[key]) for key in (
+                                    "maker_fee_bps", "taker_fee_bps", "liquidation_fee_bps",
+                                    "policy_version", "account_tier",
+                                ))
                         if actual_fee != expected_fee:
                             raise TrainingRunError(
                                 "HEDGE_TRACK_FEE_POLICY_MISMATCH",
@@ -1612,6 +1629,12 @@ class TrainingRunStore:
                      applied.track_id
                  AND global_event.source_sequence = applied.event_sequence
                 WHERE applied.run_id = ? AND global_event.global_sequence IS NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM replay_hedge_track_input_admission AS admission
+                      WHERE admission.run_id = applied.run_id
+                        AND admission.track_id = applied.track_id
+                        AND applied.event_sequence BETWEEN admission.first_sequence AND admission.last_sequence
+                  )
                 """,
                 (run_id,),
             ).fetchall()
@@ -2055,6 +2078,7 @@ class TrainingRunStore:
         run_id: str,
         *,
         authoritative_projections: (Mapping[str, Mapping[str, object]] | None) = None,
+        hedge_initial_projection: Mapping[str, object] | None = None,
     ) -> dict[str, object]:
         def write(connection: sqlite3.Connection) -> dict[str, object]:
             return account_audit_ops.write_account_audit(
@@ -2062,6 +2086,7 @@ class TrainingRunStore:
                 run_id=run_id,
                 now_ms=self.base_store._validated_now_ms(),
                 authoritative_projections=authoritative_projections,
+                hedge_initial_projection=hedge_initial_projection,
             )
 
         return await self.base_store.run_extension_write(write)
@@ -2157,6 +2182,7 @@ class TrainingRunStore:
         parent_checkpoint_id: int,
         parent_timeline_sequence: int | None = None,
         parent_anchor_set_hash: str | None = None,
+        hedge_input_snapshot: Mapping[str, object] | None = None,
     ) -> Callable[..., object]:
         """Build the v2 metadata half of an exact checkpoint fork."""
 
@@ -2196,6 +2222,17 @@ class TrainingRunStore:
                     "parent training run does not exist",
                     status_code=404,
                 )
+            # Hub summaries follow the selected market; the fork's root actor
+            # is always the immutable primary-track checkpoint.
+            primary_track = connection.execute(
+                "SELECT * FROM replay_training_market_track WHERE run_id=? AND track_id='track-1'",
+                (parent_run_id,),
+            ).fetchone()
+            parent = dict(parent)
+            parent.update({key: primary_track[key] for key in (
+                "source_kind", "exchange", "market_type", "settlement_asset", "dataset_epoch",
+            )})
+            parent["last_symbol"] = primary_track["symbol"]
             checkpoint = connection.execute(
                 """
                 SELECT state_hash FROM replay_review_actor_anchor
@@ -2344,11 +2381,17 @@ class TrainingRunStore:
                 now_ms=now_ms,
             )
             if str(parent["position_mode"]) == "HEDGE":
+                from .persistence.hedge_review_fork import reserve_review_tracks
+
+                reserve_review_tracks(connection, parent_run_id=parent_run_id,
+                                      child_run_id=child_run_id, event_id=parent_event_id, now_ms=now_ms)
                 fork_records_ops.copy_hedge_input_binding(
                     connection,
                     parent_run_id=parent_run_id,
                     child_run_id=child_run_id,
                     now_ms=now_ms,
+                    parent_event_id=parent_event_id,
+                    frozen=hedge_input_snapshot,
                 )
             if str(parent["book_mode"]) == "BOOK_ASSISTED_REQUIRED":
                 fork_records_ops.copy_review_book_inputs(
@@ -3585,8 +3628,16 @@ class TrainingRunStore:
         run_id: str,
         *,
         materialize_portfolio: bool = True,
+        restore_fork_valuation: bool = False,
     ) -> dict[str, object]:
         def write(connection: sqlite3.Connection) -> dict[str, object]:
+            if restore_fork_valuation:
+                now_ms = self.base_store._validated_now_ms()
+                account_marks_ops.apply_hedge_mark_projection(connection, run_id=run_id, now_ms=now_ms)
+                liquidation_ops.detect_contract_liquidations(
+                    connection, run_id=run_id, now_ms=now_ms,
+                    include_dormant=True, detect_new_cases=False, refresh_current_equity=True,
+                )
             result = portfolio_ops.insert_global_checkpoint(
                 connection,
                 run_id=run_id,
@@ -4382,46 +4433,10 @@ class TrainingRunStore:
         position, account_payload, open_orders, public_price = run_records_ops.track_components(
             component_state
         )
-        automatic_reasons = {
-            "VIEWED",
-            "OPEN_POSITION",
-            "OPEN_ORDER",
-            "CONDITIONAL_ORDER",
-            "LIQUIDATION_RISK",
-        }
-        try:
-            stored_reasons = json.loads(str(track["forced_full_reasons_json"]))
-        except json.JSONDecodeError as exc:
-            raise TypeError("track forced_full_reasons are invalid") from exc
-        if not isinstance(stored_reasons, list) or any(
-            not isinstance(reason, str) for reason in stored_reasons
-        ):
-            raise TypeError("track forced_full_reasons are invalid")
-        reasons = {
-            reason for reason in stored_reasons if reason not in automatic_reasons
-        }
-        if selected:
-            reasons.add("VIEWED")
-        quantity = position.get("quantity")
-        hedge_open = False
-        if position.get("position_mode") == "HEDGE":
-            for leg_name in ("long", "short"):
-                leg = position.get(leg_name)
-                if isinstance(leg, Mapping):
-                    leg_quantity = leg.get("quantity")
-                    if isinstance(leg_quantity, str) and Decimal(leg_quantity) != 0:
-                        hedge_open = True
-                        break
-        if (isinstance(quantity, str) and Decimal(quantity) != 0) or hedge_open:
-            reasons.update({"OPEN_POSITION", "LIQUIDATION_RISK"})
-        if open_orders:
-            reasons.add("OPEN_ORDER")
-            if any(
-                order.get("order_type") in {"STOP_MARKET", "TAKE_PROFIT_MARKET"}
-                for order in open_orders
-                if isinstance(order, Mapping)
-            ):
-                reasons.add("CONDITIONAL_ORDER")
+        reasons = portfolio_ops.derived_full_reasons(
+            stored_reasons=portfolio_ops.reason_list(track), selected=selected,
+            position=position, open_orders=open_orders,
+        )
         tier = "FULL" if reasons else str(track["subscription_tier"])
         track_state = (
             "ERROR"

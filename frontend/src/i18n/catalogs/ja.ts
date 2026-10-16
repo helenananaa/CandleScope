@@ -2333,6 +2333,7 @@ export const ja = {
   "replay.shell.ordersFills": "注文 / 約定",
   "replay.shell.ledger": "台帳",
   "replay.shell.drawingRev": "描画リビジョン",
+  "replay.shell.legacyAccountIncomplete": "この古い記録にはポートフォリオの証拠金評価が保存されていないため、利用可能資産と未実現損益を正確に復元できません。",
   "replay.shell.reviewSidebarHint": "このサイドバーは選択イベントのプロジェクション由来で、アクティブ Run の現在ポートフォリオは読み取りません。",
   "replay.shell.unavailable": "ローソク足リプレイは利用できません",
   "replay.shell.failClosed": "トレーニングワークスペースは fail closed です。live、mock、キャッシュ済みの他市場にはフォールバックしません。",

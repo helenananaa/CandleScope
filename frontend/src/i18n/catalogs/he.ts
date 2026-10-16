@@ -2070,6 +2070,7 @@ export const he = {
   "replay.shell.ordersFills": "פקודות / ביצועים",
   "replay.shell.ledger": "ספר חשבונות",
   "replay.shell.drawingRev": "גרסת ציור",
+  "replay.shell.legacyAccountIncomplete": "הרשומה הישנה אינה כוללת הערכת מרווח לתיק. לא ניתן לשחזר במדויק את ההון הזמין ואת הרווח או ההפסד שטרם מומשו.",
   "replay.shell.reviewSidebarHint": "סרגל זה מגיע מהשלכת האירוע שנבחר ואינו קורא את תיק ה־Run הפעיל.",
   "replay.shell.unavailable": "ריפליי נרות אינו זמין",
   "replay.shell.failClosed": "סביבת האימון נכשלת בסגירה; היא לא תיסוג לשוק חי, מדומה או מטמון של שווקים אחרים.",

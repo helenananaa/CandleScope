@@ -2070,6 +2070,7 @@ export const hu = {
   "replay.shell.ordersFills": "Megbízások / teljesítések",
   "replay.shell.ledger": "Főkönyv",
   "replay.shell.drawingRev": "Rajzrevízió",
+  "replay.shell.legacyAccountIncomplete": "Ez a régi rekord nem tartalmazza a portfólió fedezetértékelését. A rendelkezésre álló tőke és a nem realizált nyereség vagy veszteség nem állítható vissza pontosan.",
   "replay.shell.reviewSidebarHint": "Ez a sáv a kiválasztott esemény vetületéből jön, és nem olvassa az aktív futtatás portfólióját.",
   "replay.shell.unavailable": "A gyertyavisszajátszás nem érhető el",
   "replay.shell.failClosed": "A gyakorlási munkaterület zártan hibázik; nem esik vissza élő, szimulált vagy más piacok gyorsítótárazott adatára.",

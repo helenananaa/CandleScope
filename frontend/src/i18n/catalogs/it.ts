@@ -2071,6 +2071,7 @@ export const it = {
   "replay.shell.ordersFills": "Ordini / esecuzioni",
   "replay.shell.ledger": "Registro",
   "replay.shell.drawingRev": "Revisione disegni",
+  "replay.shell.legacyAccountIncomplete": "Questo vecchio record non contiene la valutazione del margine del portafoglio. Il capitale disponibile e i profitti o le perdite non realizzati non possono essere ricostruiti con precisione.",
   "replay.shell.reviewSidebarHint": "Questa barra proviene dalla proiezione dell’evento selezionato e non legge il portafoglio del Run attivo.",
   "replay.shell.unavailable": "Replay candele non disponibile",
   "replay.shell.failClosed": "L’area di lavoro di training fallisce in chiusura; non torna a live, mock o altri mercati in cache.",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import json
 import sqlite3
 from collections.abc import Mapping, Sequence
@@ -10,6 +11,7 @@ from decimal import Decimal, InvalidOperation
 from app.replay.broker.models import decimal_to_string
 from app.replay.canonical import canonical_json, canonical_sha256
 
+from ..hybrid_extensions import extension_rows
 from ..account import (
     CONFIGURED_FEE_FIDELITY,
     CONTRACT_ACCOUNT_MODEL,
@@ -59,6 +61,47 @@ def reason_list(row: Mapping[str, object]) -> list[str]:
             status_code=503,
         )
     return sorted(set(decoded))
+
+
+def derived_full_reasons(*, stored_reasons, selected, position, open_orders):
+    """Derive subscription requirements from the selected view and account state."""
+    automatic_reasons = {
+        "VIEWED",
+        "OPEN_POSITION",
+        "OPEN_ORDER",
+        "CONDITIONAL_ORDER",
+        "LIQUIDATION_RISK",
+    }
+    if not isinstance(stored_reasons, list) or any(
+        not isinstance(reason, str) for reason in stored_reasons
+    ):
+        raise TypeError("track forced_full_reasons are invalid")
+    reasons = {
+        reason for reason in stored_reasons if reason not in automatic_reasons
+    }
+    if selected:
+        reasons.add("VIEWED")
+    quantity = position.get("quantity")
+    hedge_open = False
+    if position.get("position_mode") == "HEDGE":
+        for leg_name in ("long", "short"):
+            leg = position.get(leg_name)
+            if isinstance(leg, Mapping):
+                leg_quantity = leg.get("quantity")
+                if isinstance(leg_quantity, str) and Decimal(leg_quantity) != 0:
+                    hedge_open = True
+                    break
+    if (isinstance(quantity, str) and Decimal(quantity) != 0) or hedge_open:
+        reasons.update({"OPEN_POSITION", "LIQUIDATION_RISK"})
+    if open_orders:
+        reasons.add("OPEN_ORDER")
+        if any(
+            order.get("order_type") in {"STOP_MARKET", "TAKE_PROFIT_MARKET"}
+            for order in open_orders
+            if isinstance(order, Mapping)
+        ):
+            reasons.add("CONDITIONAL_ORDER")
+    return sorted(reasons)
 
 
 def historical_book_projection(
@@ -581,6 +624,7 @@ def hedge_input_projection(
         },
         "projections": projections,
         "track_public": track_public,
+        **({"hybrid_extensions": extensions} if (extensions := extension_rows(connection, run_id)) else {}),
         "auditor": {
             "status": "NOT_RUN" if audit is None else str(audit["status"]),
             "proof_hash": None if audit is None else str(audit["proof_hash"]),
@@ -744,6 +788,15 @@ def public_contract_portfolio_projection(
             ],
         },
     }
+    if raw.get("hybrid_extensions"):
+        public_view["hybrid_extensions"] = []
+        for extension in raw["hybrid_extensions"]:
+            payload = json.loads(str(extension["payload_json"]))
+            public_view["hybrid_extensions"].append({
+                "track_id": extension["track_id"], "schema_version": payload["schema_version"],
+                "as_of_time_ms": public_time(payload["actual_time_ms"], payload["virtual_time_ms"]),
+                "time_domain": time_domain, "component_hash": extension["component_hash"],
+            })
     return {**portfolio, "hedge_inputs": public_view}
 
 
@@ -2024,6 +2077,9 @@ def contract_portfolio_checkpoint_commitment(
                    component_hash
             FROM replay_hedge_track_public_projection WHERE run_id = ?
             UNION ALL
+            SELECT 'HYBRID_ADL_EXTENSION', track_id, 1, component_hash
+            FROM replay_hedge_hybrid_extension WHERE run_id = ?
+            UNION ALL
             SELECT 'INSURANCE_FUND', asset, revision, ledger_tail_hash
             FROM replay_training_insurance_fund WHERE run_id = ?
             UNION ALL
@@ -2049,7 +2105,7 @@ def contract_portfolio_checkpoint_commitment(
         )
         ORDER BY component_kind, component_id
         """,
-        (run_id,) * 9,
+        (run_id,) * 10,
     ).fetchall()
     components = [
         {

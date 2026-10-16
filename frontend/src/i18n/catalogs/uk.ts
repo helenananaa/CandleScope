@@ -2070,6 +2070,7 @@ export const uk = {
   "replay.shell.ordersFills": "Ордери / виконання",
   "replay.shell.ledger": "Книга",
   "replay.shell.drawingRev": "Ревізія малюнків",
+  "replay.shell.legacyAccountIncomplete": "У старому записі немає оцінки маржі портфеля. Доступні кошти та нереалізований прибуток або збиток неможливо точно відновити.",
   "replay.shell.reviewSidebarHint": "Ця панель походить із проєкції вибраної події й не читає портфель активного Run.",
   "replay.shell.unavailable": "Реплей свічок недоступний",
   "replay.shell.failClosed": "Робочий простір тренування закривається fail-closed; він не відкотиться до живих, імітаційних чи кешованих інших ринків.",

@@ -2071,6 +2071,7 @@ export const id = {
   "replay.shell.ordersFills": "Order / fill",
   "replay.shell.ledger": "Buku besar",
   "replay.shell.drawingRev": "Revisi gambar",
+  "replay.shell.legacyAccountIncomplete": "Catatan lama ini tidak menyimpan penilaian margin portofolio. Ekuitas tersedia dan laba/rugi belum terealisasi tidak dapat dipulihkan secara akurat.",
   "replay.shell.reviewSidebarHint": "Rel ini berasal dari proyeksi peristiwa yang dipilih dan tidak membaca portofolio Run aktif.",
   "replay.shell.unavailable": "Replay lilin tidak tersedia",
   "replay.shell.failClosed": "Ruang kerja pelatihan gagal tertutup; tidak akan jatuh kembali ke live, mock, atau pasar lain yang di-cache.",

@@ -3946,7 +3946,11 @@ class TrainingOrderedPlayback:
                             step_sequence=step_sequence,
                         )
                     elif step_type in {"PARTIAL_LIQUIDATION", "FULL_LIQUIDATION"}:
-                        session_id = plan.get("adapter_session_id")
+                        # The frozen plan retains its original actor as evidence;
+                        # a review fork executes against its own track's actor.
+                        track = next((item for item in event.get("tracks", [])
+                                      if isinstance(item, Mapping) and item.get("track_id") == plan.get("track_id")), None)
+                        session_id = track.get("adapter_session_id") if track is not None else None
                         if not isinstance(session_id, str):
                             raise TrainingRunError(
                                 "LIQUIDATION_EXECUTION_FAILED",
@@ -4198,6 +4202,16 @@ class TrainingOrderedPlayback:
             client_instance_id=command.client_instance_id,
             command_id=command.command_id,
         )
+        if track.get("subscription_tier") != "FULL":
+            from .hedge_track_readmission import catch_up_public_marks
+
+            binding = await self.store.run_binding(command.run_id)
+            await catch_up_public_marks(
+                manager=self.hedge_inputs, binding=binding,
+                track_ids=(str(track["track_id"]),),
+                target_virtual_time_ms=target_virtual_time_ms,
+                store=self.store,
+            )
         await self._advance_adapter_to(
             session_id=session_id,
             target_virtual_time_ms=target_virtual_time_ms,

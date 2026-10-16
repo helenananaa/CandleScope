@@ -2359,6 +2359,7 @@ export const zhCN = {
   "replay.shell.ordersFills": "订单 / 成交",
   "replay.shell.ledger": "账本",
   "replay.shell.drawingRev": "绘图版本",
+  "replay.shell.legacyAccountIncomplete": "旧记录未保存组合保证金估值，可用权益和未实现盈亏无法准确恢复。",
   "replay.shell.reviewSidebarHint": "该侧栏来自选中事件投影，不读取活动 Run 的当前组合。",
   "replay.shell.unavailable": "K 线回放不可用",
   "replay.shell.failClosed": "训练工作区 fail closed；不会回退到 live、mock 或缓存中的其他市场。",

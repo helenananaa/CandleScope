@@ -2360,6 +2360,7 @@ export const en = {
   "replay.shell.ordersFills": "Orders / fills",
   "replay.shell.ledger": "Ledger",
   "replay.shell.drawingRev": "Drawing revision",
+  "replay.shell.legacyAccountIncomplete": "This older record lacks portfolio margin valuations. Available equity and unrealized P&L cannot be recovered accurately.",
   "replay.shell.reviewSidebarHint": "This rail comes from the selected-event projection and does not read the active Run portfolio.",
   "replay.shell.unavailable": "Candle replay unavailable",
   "replay.shell.failClosed": "The training workspace fails closed; it will not fall back to live, mock, or cached other markets.",

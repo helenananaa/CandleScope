@@ -17,6 +17,7 @@ from ..account import (
     isolated_margin_key,
 )
 from ..errors import TrainingRunError
+from ..review import ReviewRecorder
 from ..models import (
     validate_v2_counter,
 )
@@ -41,14 +42,14 @@ def copy_review_rule_policies(
 ) -> None:
     event = connection.execute(
         """
-        SELECT projection_json FROM replay_review_timeline_event
+        SELECT * FROM replay_review_timeline_event
         WHERE run_id = ? AND event_id = ?
         """,
         (parent_run_id, parent_event_id),
     ).fetchone()
     if event is None:
         raise TypeError("review fork projection is missing")
-    projection = json.loads(str(event["projection_json"]))
+    projection = ReviewRecorder.decode_event_projection(connection, event=event)
     if not isinstance(projection, Mapping):
         raise TypeError("review fork projection is invalid")
     rules = projection.get("rules")
@@ -200,14 +201,14 @@ def copy_review_book_inputs(
 ) -> None:
     event = connection.execute(
         """
-        SELECT projection_json FROM replay_review_timeline_event
+        SELECT * FROM replay_review_timeline_event
         WHERE run_id = ? AND event_id = ?
         """,
         (parent_run_id, parent_event_id),
     ).fetchone()
     if event is None:
         raise TypeError("book-assisted fork review projection is missing")
-    projection = json.loads(str(event["projection_json"]))
+    projection = ReviewRecorder.decode_event_projection(connection, event=event)
     if not isinstance(projection, Mapping):
         raise TypeError("book-assisted fork projection is invalid")
     internal = projection.get("_book_history_internal")
@@ -305,14 +306,14 @@ def copy_exact_review_fork_inputs(
 ) -> None:
     event = connection.execute(
         """
-        SELECT projection_json FROM replay_review_timeline_event
+        SELECT * FROM replay_review_timeline_event
         WHERE run_id = ? AND event_id = ?
         """,
         (parent_run_id, parent_event_id),
     ).fetchone()
     if event is None:
         raise TypeError("exact fork review projection is missing")
-    raw_projection = json.loads(str(event["projection_json"]))
+    raw_projection = ReviewRecorder.decode_event_projection(connection, event=event)
     if not isinstance(raw_projection, dict):
         raise TypeError("review projection must be an object")
     projection = raw_projection
@@ -511,13 +512,22 @@ def copy_hedge_input_binding(
     parent_run_id: str,
     child_run_id: str,
     now_ms: int,
+    parent_event_id: str,
+    frozen: Mapping[str, object] | None = None,
 ) -> None:
-    binding = connection.execute(
-        "SELECT * FROM replay_hedge_input_binding WHERE run_id = ?",
-        (parent_run_id,),
-    ).fetchone()
+    from .hedge_review_fork import selected_inputs
+
+    frozen = frozen or selected_inputs(connection, parent_run_id, parent_event_id)
+    binding = frozen["binding"]
     if binding is None or binding["status"] != "ACTIVE":
         raise TypeError("review fork HEDGE input binding is unavailable")
+    for fund in frozen["insurance_funds"]:
+        values = {**fund, "run_id": child_run_id, "updated_at_ms": now_ms}
+        columns = tuple(values)
+        connection.execute(
+            f"INSERT INTO replay_training_insurance_fund ({','.join(columns)}) "
+            f"VALUES ({','.join('?' for _ in columns)})", tuple(values.values()),
+        )
     connection.execute(
         """
         INSERT INTO replay_hedge_input_binding(
@@ -550,20 +560,14 @@ def copy_hedge_input_binding(
             now_ms,
         ),
     )
-    connection.execute(
-        """
-        INSERT INTO replay_hedge_input_projection(
-            run_id, source_kind, last_event_sequence,
-            as_of_actual_time_ms, as_of_virtual_time_ms, state_json,
-            input_chain_hash, component_hash, updated_at_ms
+    for projection_row in frozen["projections"]:
+        values = {**projection_row, "run_id": child_run_id, "updated_at_ms": now_ms}
+        columns = tuple(values)
+        connection.execute(
+            f"INSERT INTO replay_hedge_input_projection ({','.join(columns)}) VALUES ({','.join('?' for _ in columns)})",
+            tuple(values.values()),
         )
-        SELECT ?, source_kind, last_event_sequence,
-               as_of_actual_time_ms, as_of_virtual_time_ms, state_json,
-               input_chain_hash, component_hash, ?
-        FROM replay_hedge_input_projection WHERE run_id = ?
-        """,
-        (child_run_id, now_ms, parent_run_id),
-    )
+    cursors = {p["source_kind"]: p["last_event_sequence"] for p in frozen["projections"]}
     applied_rows = connection.execute(
         """
         SELECT * FROM replay_hedge_input_applied_event
@@ -576,6 +580,8 @@ def copy_hedge_input_binding(
         "SIMULATION": str(binding["simulation_manifest_id"]),
     }
     for row in applied_rows:
+        if row["event_sequence"] > cursors[row["source_kind"]]:
+            continue
         payload = json.loads(str(row["payload_json"]))
         applied_hash = canonical_sha256(
             {
@@ -631,16 +637,7 @@ def copy_hedge_input_binding(
         ).fetchall()
     }
     for parent_track_id, child_track_id in track_mapping.items():
-        track_binding = connection.execute(
-            """
-            SELECT track_binding.*, archive.proof_hash
-            FROM replay_hedge_track_public_binding AS track_binding
-            JOIN replay_hedge_public_archive AS archive
-              ON archive.archive_id = track_binding.public_archive_id
-            WHERE track_binding.run_id = ? AND track_binding.track_id = ?
-            """,
-            (parent_run_id, parent_track_id),
-        ).fetchone()
+        track_binding = next((row for row in frozen["track_bindings"] if row["track_id"] == parent_track_id), None)
         if track_binding is None:
             continue
         track_proof = canonical_sha256(
@@ -685,13 +682,12 @@ def copy_hedge_input_binding(
                 now_ms,
             ),
         )
-        projection = connection.execute(
-            """
-            SELECT * FROM replay_hedge_track_public_projection
-            WHERE run_id = ? AND track_id = ?
-            """,
-            (parent_run_id, parent_track_id),
-        ).fetchone()
+        connection.execute("UPDATE replay_hedge_track_public_binding SET initial_event_sequence=? WHERE run_id=? AND track_id=?",
+            (track_binding["initial_event_sequence"], child_run_id, child_track_id))
+        connection.execute("""INSERT INTO replay_hedge_hybrid_extension(run_id,track_id,payload_json,component_hash,created_at_ms)
+            SELECT ?,?,payload_json,component_hash,? FROM replay_hedge_hybrid_extension WHERE run_id=? AND track_id=?""",
+            (child_run_id, child_track_id, now_ms, parent_run_id, parent_track_id))
+        projection = next((row for row in frozen["track_projections"] if row["track_id"] == parent_track_id), None)
         if projection is None:
             raise TypeError("forked HEDGE track projection is missing")
         state = json.loads(str(projection["state_json"]))
@@ -733,17 +729,28 @@ def copy_hedge_input_binding(
             (parent_run_id, parent_track_id),
         ).fetchall()
         connection.execute(
-            "INSERT INTO replay_hedge_mark_span SELECT ?, ?, first_sequence,last_sequence,first_previous_hash,last_event_hash,archive_id "
-            "FROM replay_hedge_mark_span WHERE run_id=? AND track_id=? AND last_sequence<=?",
+            "INSERT INTO replay_hedge_mark_span SELECT ?, ?, first_sequence,MIN(last_sequence,?),first_previous_hash,"
+            "CASE WHEN last_sequence>? THEN ? ELSE last_event_hash END,archive_id "
+            "FROM replay_hedge_mark_span WHERE run_id=? AND track_id=? AND first_sequence<=?",
             (
                 child_run_id,
                 child_track_id,
+                projection["last_event_sequence"],
+                projection["last_event_sequence"],
+                projection["input_chain_hash"],
                 parent_run_id,
                 parent_track_id,
                 projection["last_event_sequence"],
             ),
         )
+        connection.execute(
+            "INSERT INTO replay_hedge_track_input_admission SELECT ?, ?, first_sequence,last_sequence,admitted_virtual_time_ms "
+            "FROM replay_hedge_track_input_admission WHERE run_id=? AND track_id=? AND last_sequence<=?",
+            (child_run_id, child_track_id, parent_run_id, parent_track_id, projection["last_event_sequence"]),
+        )
         for event_row in track_events:
+            if event_row["event_sequence"] > projection["last_event_sequence"]:
+                continue
             payload = json.loads(str(event_row["payload_json"]))
             event_hash = canonical_sha256(
                 {
@@ -814,9 +821,13 @@ def copy_hedge_relational_state(
     child_track_id: str,
     virtual_time_ms: int,
     source_sequence: int,
+    review_projection: Mapping[str, object],
     now_ms: int,
 ) -> bool:
     """Copy one fork-visible relational HEDGE snapshot without flattening legs."""
+    from .review_risk import ReviewRiskSnapshot
+
+    selected_risk = ReviewRiskSnapshot(review_projection["liquidations"])
 
     def insert_rows(
         table: str,
@@ -824,6 +835,7 @@ def copy_hedge_relational_state(
         *,
         track_columns: Sequence[str] = (),
     ) -> None:
+        rows = selected_risk.restore(table, rows)
         if not rows:
             return
         columns = tuple(rows[0].keys())
@@ -846,50 +858,20 @@ def copy_hedge_relational_state(
     # the selected actor checkpoint (below, via _detect_contract_liquidations)
     # is the only cursor-correct fork behavior; copying the parent's latest
     # rows would leak state from after the selected review event.
-    case_rows = tuple(
-        connection.execute(
-            """
-            SELECT DISTINCT case_row.*
-            FROM replay_training_liquidation_case AS case_row
-            JOIN replay_training_liquidation_leg AS leg
-              ON leg.run_id = case_row.run_id AND leg.case_id = case_row.case_id
-            WHERE case_row.run_id = ? AND leg.track_id = ? AND (
-                case_row.trigger_virtual_time_ms < ? OR (
-                    case_row.trigger_virtual_time_ms = ?
-                    AND case_row.trigger_source_sequence <= ?
-                )
-            )
-            ORDER BY case_row.case_sequence
-            """,
-            (
-                parent_run_id,
-                parent_track_id,
-                virtual_time_ms,
-                virtual_time_ms,
-                source_sequence,
-            ),
-        ).fetchall()
-    )
+    # Review owns the shared account boundary. A primary actor's source
+    # sequence cannot select secondary risk events or exclude future events
+    # at the same public time.
+    selected_cases = {item["case_id"]: item for item in review_projection["liquidations"]}
+    case_rows = tuple(row for row in connection.execute(
+        "SELECT * FROM replay_training_liquidation_case WHERE run_id=? ORDER BY case_sequence",
+        (parent_run_id,),
+    ) if row["case_id"] in selected_cases)
+    if len(case_rows) != len(selected_cases):
+        raise TrainingRunError("REVIEW_RISK_SNAPSHOT_UNAVAILABLE",
+                               "selected liquidation evidence is unavailable", status_code=409)
+    case_rows = selected_risk.restore("replay_training_liquidation_case", case_rows)
     case_ids = tuple(str(row["case_id"]) for row in case_rows)
-    risk_ids = {
-        str(value)
-        for row in case_rows
-        for value in (row["trigger_snapshot_id"], row["final_snapshot_id"])
-        if value is not None
-    }
-    if case_ids:
-        case_placeholders = ", ".join("?" for _ in case_ids)
-        for row in connection.execute(
-            f"""
-            SELECT before_snapshot_id, after_snapshot_id
-            FROM replay_training_liquidation_step
-            WHERE run_id = ? AND case_id IN ({case_placeholders})
-            """,
-            (parent_run_id, *case_ids),
-        ).fetchall():
-            risk_ids.add(str(row["before_snapshot_id"]))
-            if row["after_snapshot_id"] is not None:
-                risk_ids.add(str(row["after_snapshot_id"]))
+    risk_ids = selected_risk.risk_ids
     if risk_ids:
         placeholders = ", ".join("?" for _ in risk_ids)
         risk_rows = tuple(
@@ -1006,7 +988,12 @@ def copy_hedge_relational_state(
             (parent_run_id,),
         ).fetchall()
     )
-    insert_rows("replay_training_insurance_fund", fund_rows)
+    for fund in fund_rows:
+        if connection.execute(
+            "SELECT 1 FROM replay_training_insurance_fund WHERE run_id=? AND asset=?",
+            (child_run_id, fund["asset"]),
+        ).fetchone() is None:
+            insert_rows("replay_training_insurance_fund", (fund,))
     insurance_rows = tuple(
         connection.execute(
             f"""
@@ -1121,14 +1108,14 @@ def insert_fork_contract_account(
         raise TypeError("parent contract account is missing")
     event = connection.execute(
         """
-        SELECT projection_json FROM replay_review_timeline_event
+        SELECT * FROM replay_review_timeline_event
         WHERE run_id = ? AND event_id = ?
         """,
         (parent_run_id, parent_event_id),
     ).fetchone()
     if event is None:
         raise TypeError("review fork projection is missing")
-    review_projection = json.loads(str(event["projection_json"]))
+    review_projection = ReviewRecorder.decode_event_projection(connection, event=event)
     if not isinstance(review_projection, Mapping):
         raise TypeError("review fork projection is invalid")
     review_domain = review_projection.get("domain")
@@ -1140,6 +1127,7 @@ def insert_fork_contract_account(
         or not isinstance(review_rules, Mapping)
     ):
         raise TypeError("review fork account projection is incomplete")
+    virtual_time_ms = int(review_projection["cursor"]["virtual_time_ms"])
     ledger_count = validate_v2_counter(
         review_domain.get("ledger_count"),
         field_name="review ledger count",
@@ -1233,7 +1221,7 @@ def insert_fork_contract_account(
         ):
             position_side = metadata.get("position_side")
             allocation_key = isolated_margin_key(
-                "track-1",
+                str(track_id),
                 (
                     str(position_side)
                     if parent["position_mode"] == "HEDGE"
@@ -1287,47 +1275,29 @@ def insert_fork_contract_account(
     )
 
     rule_rows = tuple(
-        connection.execute(
-            """
-            SELECT * FROM replay_training_instrument_rule
-            WHERE run_id = ? AND track_id = 'track-1'
-              AND revision <= ?
-              AND effective_virtual_time_ms <= ?
-            ORDER BY revision
-            """,
-            (
-                parent_run_id,
-                instrument_revision_by_track.get("track-1", 1),
-                virtual_time_ms,
-            ),
+        row for track_id, revision in instrument_revision_by_track.items()
+        for row in connection.execute(
+            "SELECT * FROM replay_training_instrument_rule WHERE run_id=? AND track_id=? "
+            "AND revision<=? AND effective_virtual_time_ms<=? ORDER BY revision",
+            (parent_run_id, track_id, revision, virtual_time_ms),
         ).fetchall()
     )
-    if not rule_rows:
-        earliest_rule = connection.execute(
-            """
-            SELECT * FROM replay_training_instrument_rule
-            WHERE run_id = ? AND track_id = 'track-1'
-            ORDER BY revision LIMIT 1
-            """,
-            (parent_run_id,),
-        ).fetchone()
-        if earliest_rule is not None:
-            rule_rows = (earliest_rule,)
     for row in rule_rows:
         raw_rule = json.loads(str(row["rule_json"]))
         if not isinstance(raw_rule, dict):
             raise TypeError("parent instrument rule is invalid")
-        raw_rule["track_id"] = "track-1"
+        raw_rule["track_id"] = str(row["track_id"])
         rule = InstrumentRule.from_mapping(raw_rule)
         connection.execute(
             """
             INSERT INTO replay_training_instrument_rule(
                 run_id, track_id, revision, effective_virtual_time_ms,
                 rule_json, rule_hash, fidelity, created_at_ms
-            ) VALUES (?, 'track-1', ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 child_run_id,
+                row["track_id"],
                 int(row["revision"]),
                 min(int(row["effective_virtual_time_ms"]), virtual_time_ms),
                 canonical_json(rule.to_dict()),
@@ -1519,7 +1489,7 @@ def insert_fork_contract_account(
             connection,
             run_id=child_run_id,
             posting_id=f"fork:{parent_run_id}:{entry['posting_id']}",
-            track_id=(None if entry["track_id"] is None else "track-1"),
+            track_id=entry["track_id"],
             kind=str(entry["kind"]),
             cash_delta=Decimal(str(entry["cash_delta"])),
             asset=str(entry["asset"]),
@@ -1553,10 +1523,11 @@ def insert_fork_contract_account(
                         run_id, track_id, settlement_time_ms, position_quantity,
                         mark_price, funding_rate, cash_delta, fidelity,
                         ledger_sequence, created_at_ms
-                    ) VALUES (?, 'track-1', ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         child_run_id,
+                        settlement["track_id"],
                         settlement["settlement_time_ms"],
                         settlement["position_quantity"],
                         settlement["mark_price"],
@@ -1585,16 +1556,15 @@ def insert_fork_contract_account(
         child_track_id="track-1",
         virtual_time_ms=virtual_time_ms,
         source_sequence=source_sequence,
+        review_projection=review_projection,
         now_ms=now_ms,
     )
-    # Build the child-owned, content-addressed position and margin snapshot
-    # from the selected checkpoint.  The detector is idempotent against any
-    # copied liquidation case with the same public source sequence.
+    # Funding rows reference the child's legs. Build those rows before copying
+    # receipts, without creating new risk cases from a partly restored account.
     liquidation_ops.detect_contract_liquidations(
-        connection,
-        run_id=child_run_id,
-        now_ms=now_ms,
-        trigger_virtual_time_ms=virtual_time_ms,
+        connection, run_id=child_run_id, now_ms=now_ms,
+        trigger_virtual_time_ms=virtual_time_ms, include_dormant=True,
+        detect_new_cases=False,
     )
     if str(parent["position_mode"]) == "HEDGE":
         parent_settlements = tuple(
@@ -1613,7 +1583,6 @@ def insert_fork_contract_account(
                 (parent_run_id,),
             ).fetchall()
         )
-        copied_settlements = 0
         for settlement in parent_settlements:
             child_ledger = connection.execute(
                 """
@@ -1631,7 +1600,7 @@ def insert_fork_contract_account(
             component = {
                 "schema_version": ("replay.training.hedge-funding-settlement.v1"),
                 "run_id": child_run_id,
-                "track_id": "track-1",
+                "track_id": str(settlement["track_id"]),
                 "position_side": str(settlement["position_side"]),
                 "settlement_time_ms": int(settlement["settlement_time_ms"]),
                 "actual_settlement_time_ms": int(
@@ -1666,11 +1635,12 @@ def insert_fork_contract_account(
                     funding_rate, contract_size, cash_delta, rounding,
                     fidelity, rule_revision, ledger_sequence,
                     component_hash, created_at_ms
-                ) VALUES (?, 'track-1', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                           ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     child_run_id,
+                    settlement["track_id"],
                     settlement["position_side"],
                     settlement["settlement_time_ms"],
                     settlement["actual_settlement_time_ms"],
@@ -1691,17 +1661,6 @@ def insert_fork_contract_account(
                     canonical_sha256(component),
                     now_ms,
                 ),
-            )
-            copied_settlements += 1
-        if copied_settlements:
-            account_marks_ops.refresh_hedge_leg_accounting(
-                connection,
-                run_id=child_run_id,
-                track_id="track-1",
-                virtual_time_ms=virtual_time_ms,
-                source_sequence=source_sequence,
-                now_ms=now_ms,
-                reason="REVIEW_FORK",
             )
     has_pending_liquidation = (
         connection.execute(
@@ -1737,4 +1696,14 @@ def insert_fork_contract_account(
             now_ms,
             child_run_id,
         ),
+    )
+    # Revalue only after restoring all selected cash adjustments. In particular,
+    # bankruptcy prices must include the already-paid liquidation fees, and
+    # held HEDGE legs use the pinned mark rather than the broker's trade price.
+    if str(parent["position_mode"]) == "HEDGE":
+        account_marks_ops.apply_hedge_mark_projection(connection, run_id=child_run_id, now_ms=now_ms)
+    liquidation_ops.detect_contract_liquidations(
+        connection, run_id=child_run_id, now_ms=now_ms,
+        trigger_virtual_time_ms=virtual_time_ms, include_dormant=True,
+        detect_new_cases=False,
     )

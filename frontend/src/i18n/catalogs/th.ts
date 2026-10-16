@@ -2070,6 +2070,7 @@ export const th = {
   "replay.shell.ordersFills": "คำสั่ง / ฟิลล์",
   "replay.shell.ledger": "สมุดบัญชี",
   "replay.shell.drawingRev": "รีวิชันภาพวาด",
+  "replay.shell.legacyAccountIncomplete": "บันทึกเก่านี้ไม่มีการประเมินมาร์จินของพอร์ต จึงไม่สามารถกู้คืนส่วนทุนที่ใช้ได้และกำไรขาดทุนที่ยังไม่เกิดขึ้นจริงได้อย่างแม่นยำ",
   "replay.shell.reviewSidebarHint": "แถบนี้มาจากโปรเจกชันเหตุการณ์ที่เลือก และไม่อ่านพอร์ตของ Run ที่ใช้งาน",
   "replay.shell.unavailable": "รีเพลย์แท่งเทียนใช้ไม่ได้",
   "replay.shell.failClosed": "พื้นที่ทำงานฝึก fail-closed จะไม่ถอยไปตลาดสด จำลอง หรือตลาดอื่นในแคช",

@@ -2071,6 +2071,7 @@ export const vi = {
   "replay.shell.ordersFills": "Lệnh / khớp",
   "replay.shell.ledger": "Sổ cái",
   "replay.shell.drawingRev": "Phiên bản vẽ",
+  "replay.shell.legacyAccountIncomplete": "Bản ghi cũ này không lưu định giá ký quỹ danh mục. Không thể khôi phục chính xác vốn khả dụng và lãi/lỗ chưa thực hiện.",
   "replay.shell.reviewSidebarHint": "Thanh này đến từ hình chiếu sự kiện đã chọn và không đọc danh mục Run đang hoạt động.",
   "replay.shell.unavailable": "Phát lại nến không khả dụng",
   "replay.shell.failClosed": "Không gian luyện fail-closed; không rơi về thị trường trực tiếp, giả hay cache thị trường khác.",

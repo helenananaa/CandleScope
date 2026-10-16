@@ -2070,6 +2070,7 @@ export const cs = {
   "replay.shell.ordersFills": "Objednávky / plnění",
   "replay.shell.ledger": "Kniha",
   "replay.shell.drawingRev": "Revize kreslení",
+  "replay.shell.legacyAccountIncomplete": "Tento starší záznam neobsahuje ocenění marže portfolia. Dostupný kapitál a nerealizovaný zisk nebo ztrátu nelze přesně obnovit.",
   "replay.shell.reviewSidebarHint": "Tato lišta pochází z projekce zvolené události a nečte portfolio aktivního Run.",
   "replay.shell.unavailable": "Replay svíček není k dispozici",
   "replay.shell.failClosed": "Tréninkový pracovní prostor selže uzavřeně; nepadne na živý, mock ani mezipaměť jiných trhů.",
