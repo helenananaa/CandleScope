@@ -176,7 +176,11 @@ def apply_exact_mark_projection(
             reserved += (
                 abs(order_quantity) * Decimal(str(reference)) * contract_size / leverage
             )
-        cash = Decimal(str(run_row["initial_equity"])) + exact_realized - broker_fees
+        # Reprice only trading components. Broker cash also contains explicit
+        # deposits/withdrawals, which must survive mark overlays and reapplication.
+        cash = (Decimal(str(account["cash_balance"]))
+                + exact_realized - Decimal(str(account["realized_pnl"]))
+                + Decimal(str(account["fees_paid"])) - broker_fees)
         equity = cash + unrealized
         available = equity - margin_used - reserved
     except (InvalidOperation, KeyError, TypeError, ValueError) as exc:

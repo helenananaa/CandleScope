@@ -4686,7 +4686,9 @@ class TrainingRunStore:
                 connection,
                 run_id=run_id,
                 now_ms=now_ms,
-                summary_revision=int(state["revision"]),
+                # The archive version follows the selected adapter. Other
+                # tracks refresh shared valuation without replacing that clock.
+                summary_revision=int(state["revision"]) if selected else None,
             )
 
         if phase_summary is not None:
@@ -4895,8 +4897,15 @@ class TrainingRunStore:
             if kind not in {"deposit", "withdraw"}:
                 raise TypeError("capital adjustment kind is invalid")
             event_type = kind.upper()
-            old_value = {"equity": str(run["current_equity"])}
-            new_value = {"equity": str(account["equity"])}
+            # Mutation receipts run before the TrainingRun summary writer. Use
+            # the committed shared wallet, then apply only this capital delta;
+            # the selected adapter's equity omits peer PnL/fees and pinned marks.
+            previous_equity = portfolio_ops.current_hedge_card_equity(connection, str(run["run_id"]))
+            if previous_equity is None:
+                previous_equity = str(run["current_equity"])
+            delta = Decimal(str(payload["amount"])) * (1 if kind == "deposit" else -1)
+            old_value = {"equity": previous_equity}
+            new_value = {"equity": decimal_to_string(Decimal(previous_equity) + delta, field_name="equity")}
             reason = str(payload.get("reason", ""))
         else:
             event_type = "REVEAL_TIME"
