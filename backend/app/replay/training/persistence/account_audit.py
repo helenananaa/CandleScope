@@ -37,6 +37,32 @@ from . import account_marks as account_marks_ops
 from . import portfolio as portfolio_ops
 
 
+def _broker_capital_by_track(ledger_rows, differences, expected_postings=None):
+    """Reconcile explicit broker capital receipts separately from trading PnL."""
+    totals = {}
+    for row in ledger_rows:
+        if row["kind"] not in {"BROKER_DEPOSIT", "BROKER_WITHDRAW"}:
+            continue
+        field = f"ledger[{row['posting_id']}].capital_receipt"
+        if expected_postings is not None:
+            expected_postings.add(str(row["posting_id"]))
+        try:
+            metadata = json.loads(str(row["metadata_json"]))
+            amount = Decimal(str(metadata["broker_amount"]))
+            track_id = row["track_id"]
+            if (not amount.is_finite() or not isinstance(track_id, str)
+                    or row["reference_type"] != "BROKER_ENTRY"
+                    or (amount <= 0 if row["kind"] == "BROKER_DEPOSIT" else amount >= 0)):
+                raise ValueError("invalid broker capital receipt")
+        except (InvalidOperation, KeyError, TypeError, ValueError):
+            differences.append({"field": field, "expected": "VALID_SIGNED_BROKER_CAPITAL", "actual": "INVALID"})
+            continue
+        if Decimal(str(row["cash_delta"])) != amount:
+            differences.append({"field": field, "expected": str(amount), "actual": row["cash_delta"]})
+        totals[track_id] = totals.get(track_id, Decimal(0)) + amount
+    return totals
+
+
 def audit_exact_account_state(
     connection: sqlite3.Connection,
     *,
@@ -137,6 +163,7 @@ def audit_exact_account_state(
     ledger_by_posting = {str(row["posting_id"]): row for row in ledger_rows}
     ledger_by_sequence = {int(row["ledger_sequence"]): row for row in ledger_rows}
     expected_postings: set[str] = set()
+    capital_by_track = _broker_capital_by_track(ledger_rows, differences, expected_postings)
     initial = Decimal(str(run["initial_equity"]))
     settlement_asset = str(run["settlement_asset"])
     initial_posting = ledger_by_posting.get("initial-capital")
@@ -788,6 +815,7 @@ def audit_exact_account_state(
         expected_maintenance += maintenance
         expected_track_cash = (
             initial + realized - broker_fees_by_track.get(track_id, Decimal(0))
+            + capital_by_track.get(track_id, Decimal(0))
         )
         position = json.loads(str(track["position_json"]))
         track_account = json.loads(str(track["account_json"]))
@@ -893,6 +921,7 @@ def audit_exact_account_state(
 
     expected_cash = (
         initial + realized_total - configured_fees + funding_total + liquidation_total
+        + sum(capital_by_track.values(), Decimal(0))
     )
     expected_equity = expected_cash + expected_unrealized
     expected_available = (
@@ -1612,12 +1641,14 @@ def audit_hedge_account_state(
         )
 
     funding_total = sum(funding_by_leg.values(), Decimal(0))
+    capital_by_track = _broker_capital_by_track(ledger_rows, differences)
     expected_cash = (
         Decimal(str(run["initial_equity"]))
         + realized_total
         - configured_fee_total
         + funding_total
         - liquidation_total
+        + sum(capital_by_track.values(), Decimal(0))
     )
     expected_equity = expected_cash + expected_unrealized
     compare_decimal(
