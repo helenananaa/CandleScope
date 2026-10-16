@@ -3,6 +3,7 @@ import { t } from "../../../i18n/index.js";
 import type { BacktestResearchRuntime } from "./backtestResearchTypes.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { chartStrategyWinRate, formatChartStrategyNumber } from "../chart-tester/chartStrategyResultModel.js";
+import BacktestRejections from "../BacktestRejections.js";
 import ResearchPanelFrame from "./ResearchPanelFrame.js";
 
 type ResultTab = "SUMMARY" | "TRADES" | "TRACE" | "COMPARE" | "QUALITY";
@@ -16,11 +17,14 @@ export default function ResearchResultsPanel({ runtime }: { runtime: BacktestRes
       {report ? (
         <>
           <div className="research-result-metrics">
-            <div><span>{t("research.results.netPnl")}</span><strong>{formatChartStrategyNumber(report.metrics.realized_net_pnl)}</strong></div>
+            <div><span>{t("chartTester.result.realizedPnl")}</span><strong>{formatChartStrategyNumber(report.metrics.realized_net_pnl)}</strong></div>
             <div><span>{t("research.results.trades")}</span><strong>{report.metrics.trade_count}</strong></div>
             <div><span>{t("research.results.winRate")}</span><strong>{Number(report.metrics.trade_count) === 0 ? "—" : chartStrategyWinRate(report.metrics.win_rate, locale)}</strong></div>
             <div><span>{t("research.results.fidelity")}</span><strong>{activeRun?.fidelity_mode ?? report.fidelity_mode}</strong></div>
           </div>
+          <BacktestRejections report={report} />
+          {report.metrics.trade_count === 0 && <p>{t(report.metrics.rejected_order_count
+            ? "chartTester.result.rejectedNoTrades" : "chartTester.result.zeroTradesDetail")}</p>}
           {advancedEnabled && (
             <>
               <nav className="research-result-tabs" aria-label={t("research.aria.resultDetails")}>

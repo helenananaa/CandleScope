@@ -199,7 +199,7 @@ class BacktestService:
             "engine_version": ENGINE_VERSION,
             "schema_version": SCHEMA_VERSION,
             "account_model": "LINEAR_PERP_ONE_WAY_V1",
-            "account_models": ["LINEAR_PERP_ONE_WAY_V1", "LINEAR_PERP_ONE_WAY_V2"],
+            "account_models": ["LINEAR_PERP_ONE_WAY_V1", "LINEAR_PERP_ONE_WAY_V2", "SPOT_CASH_V1"],
             "funding_modes_v2": ["OFF", "FIXED_SCENARIO", "HISTORICAL_REQUIRED"],
             "host_policy_revision": HOST_POLICY_REVISION,
             "sizing_policies": [
@@ -4038,7 +4038,7 @@ class BacktestService:
         if missing:
             raise BacktestError("SCHEMA_UNKNOWN_FIELD", f"missing {missing}")
         account_model = str(payload.get("account_model") or "LINEAR_PERP_ONE_WAY_V1")
-        if account_model not in {"LINEAR_PERP_ONE_WAY_V1", "LINEAR_PERP_ONE_WAY_V2"}:
+        if account_model not in {"LINEAR_PERP_ONE_WAY_V1", "LINEAR_PERP_ONE_WAY_V2", "SPOT_CASH_V1"}:
             raise BacktestError("FIDELITY_UNSUPPORTED", "unsupported account model")
         if str(payload.get("gap_policy") or "REJECT") not in {
             "REJECT",
@@ -4080,6 +4080,11 @@ class BacktestService:
                     "SCHEMA_UNKNOWN_FIELD", f"{name} cannot be negative"
                 )
         funding_rate = _config_decimal(payload, "funding_rate", "0")
+        if account_model == "SPOT_CASH_V1" and (
+            str(payload.get("market_type") or "").lower() != "spot" or leverage != 1
+            or funding_mode != "OFF" or funding_rate != 0 or contract_data_mode != "LEGACY_FIXED_V1"
+        ):
+            raise BacktestError("SPOT_ACCOUNT_CONFIG_INVALID", "Spot cash requires a spot market, leverage 1, funding OFF and no contract multiplier")
         if abs(funding_rate) > Decimal("1"):
             raise BacktestError(
                 "SCHEMA_UNKNOWN_FIELD", "funding_rate must be between -1 and 1"

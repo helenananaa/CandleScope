@@ -7,6 +7,7 @@ import {
   type UIEvent,
 } from "react";
 
+import ResultRejections from "../BacktestRejections.js";
 import BacktestEquityCurve from "../BacktestEquityCurve.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
@@ -48,6 +49,7 @@ function fidelityLabel(value: string): string {
   if (value === "AGG_TRADE_EXECUTION") return t("chartTester.result.fidelityPrecise");
   return value;
 }
+
 
 export interface TradeExplanationSelection {
   id: string;
@@ -240,7 +242,7 @@ export function ChartStrategyResultOverview({
       )}
       <div className="chart-strategy-result-metrics">
         <ResultMetric
-          label={t("chartTester.result.netPnl")}
+          label={t("chartTester.result.realizedPnl")}
           value={`${formatChartStrategyNumber(report.metrics.realized_net_pnl)} USDT`}
           rawValue={chartStrategyMetricValue(report.metrics.realized_net_pnl)}
           detail={report.report_label === "APPROXIMATE" ? t("chartTester.result.fidelityFast") : report.report_label}
@@ -262,6 +264,7 @@ export function ChartStrategyResultOverview({
           detail={t("chartTester.result.runShort", { run: run.run_id.slice(-8) })}
         />
       </div>
+      <ResultRejections report={report} />
       {comparison && (
         <section className="chart-strategy-run-comparison" data-testid="chart-strategy-run-comparison">
           <div className="chart-strategy-run-comparison-head">
@@ -310,7 +313,7 @@ export function ChartStrategyResultOverview({
           }) : t("chartTester.result.zeroTrades")}</strong>
           <span>{latest
             ? t("chartTester.result.latestTradeDetail")
-            : t("chartTester.result.zeroTradesDetail")}</span>
+            : t(report.metrics.rejected_order_count ? "chartTester.result.rejectedNoTrades" : "chartTester.result.zeroTradesDetail")}</span>
           <button type="button" onClick={onOpenTrades} disabled={trades.length === 0}>
             {t("chartTester.result.openTrades")}
           </button>
@@ -347,7 +350,8 @@ export function ChartStrategyTradeList({
   onLocateTrade(timeMs: number): void;
   onSelectExplanation?(selection: TradeExplanationSelection): void;
 }) {
-  const trades = result.report.trades ?? [];
+  const { report } = result;
+  const trades = report.trades ?? [];
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(224);
@@ -389,7 +393,8 @@ export function ChartStrategyTradeList({
     return (
       <div className="chart-strategy-result-empty" data-testid="chart-strategy-zero-trades">
         <strong>{t("chartTester.result.zeroTrades")}</strong>
-        <span>{t("chartTester.result.zeroTradesDetail")}</span>
+        <ResultRejections report={report} />
+        <span>{t(report.metrics.rejected_order_count ? "chartTester.result.rejectedNoTrades" : "chartTester.result.zeroTradesDetail")}</span>
       </div>
     );
   }

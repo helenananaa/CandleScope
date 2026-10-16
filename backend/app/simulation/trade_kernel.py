@@ -10,6 +10,7 @@ from app.core.config import getenv
 from app.market_dataset.snapshot import MarketDatasetError, MarketEvent, sha256_hex
 from app.market_dataset.trades import assert_trade_stream
 from app.simulation.contract_accounting import ContractAccount
+from app.simulation.spot_cash_account import ACCOUNT_MODEL as SPOT_ACCOUNT_MODEL, SpotCashAccount, reserved_spot_order_reason, reject_spot_fill
 from app.simulation.linear_perp_account_v2 import (
     ACCOUNT_MODEL as ACCOUNT_MODEL_V2,
     LinearPerpetualAccountV2,
@@ -117,6 +118,8 @@ class TradeSimulationKernel:
         return self._active_orders.values()
 
     def __post_init__(self) -> None:
+        if self.account_model == SPOT_ACCOUNT_MODEL and (self.leverage != 1 or self.funding_mode != "OFF" or self.funding_rate != 0):
+            raise MarketDatasetError("Spot cash requires leverage 1 and funding OFF", code="SPOT_ACCOUNT_CONFIG_INVALID")
         if getenv("BACKTEST_FLAT_TRADE_RECORDS_ENABLED", "1").strip() == "1":
             self._record_encoder = _flat_record
         if self.execution_model_revision == EXECUTION_REALISM_V2:
@@ -138,6 +141,9 @@ class TradeSimulationKernel:
                 funding_mode=self.funding_mode,
                 taker_fee_bps=self.taker_fee_bps,
             )
+            return
+        if self.account_model == SPOT_ACCOUNT_MODEL:
+            self.account = SpotCashAccount(quote_balance=self.initial_balance, taker_fee_bps=self.taker_fee_bps)
             return
         self.account = ContractAccount(
             quote_balance=self.initial_balance,
@@ -230,7 +236,7 @@ class TradeSimulationKernel:
                     "leverage": str(self.leverage),
                     "market_event_count": self._market_event_count,
                 }
-                if isinstance(self.account, LinearPerpetualAccountV2)
+                if isinstance(self.account, (LinearPerpetualAccountV2, SpotCashAccount))
                 else {}
             ),
             "next_order_id": self._next_order_id,
@@ -683,6 +689,9 @@ class TradeSimulationKernel:
             ),
             allow_ioc=self.execution_model_revision == EXECUTION_REALISM_V2,
         )
+        if reason is None:
+            reason = reserved_spot_order_reason(self.account, intent, self._working_orders(), self.account.mark,
+                                               max(self.taker_fee_bps, self.maker_fee_bps))
         if reason is not None:
             rejected = {
                 "accepted": False,
@@ -822,12 +831,11 @@ class TradeSimulationKernel:
                 fill_qty = min(order.qty, remaining)
                 slip = price * self.slippage_bps / Decimal("10000")
                 fill_price = price + slip if order.side == "BUY" else price - slip
-                self._fill(order, event.sequence, fill_price, fill_qty, "NEXT_PRINT")
-                remaining -= fill_qty
+                remaining -= self._fill(order, event.sequence, fill_price, fill_qty, "NEXT_PRINT")
             elif order.type == "LIMIT" and _print_crosses_limit(order, price):
                 assert order.limit_price is not None
                 fill_qty = min(order.qty, remaining)
-                self._fill(
+                remaining -= self._fill(
                     order,
                     event.sequence,
                     order.limit_price,
@@ -835,13 +843,11 @@ class TradeSimulationKernel:
                     "PRINT_THROUGH",
                     maker=_print_makes_order_maker(order, event),
                 )
-                remaining -= fill_qty
             elif order.type == "STOP" and _print_triggers_stop(order, price):
                 fill_qty = min(order.qty, remaining)
                 slip = price * self.slippage_bps / Decimal("10000")
                 fill_price = price + slip if order.side == "BUY" else price - slip
-                self._fill(order, event.sequence, fill_price, fill_qty, "STOP_PRINT")
-                remaining -= fill_qty
+                remaining -= self._fill(order, event.sequence, fill_price, fill_qty, "STOP_PRINT")
             elif order.type == "STOP_LIMIT":
                 activated_now = False
                 if not order.activated and _print_triggers_stop(order, price):
@@ -850,7 +856,7 @@ class TradeSimulationKernel:
                 if order.activated and _print_crosses_limit(order, price):
                     assert order.limit_price is not None
                     fill_qty = min(order.qty, remaining)
-                    self._fill(
+                    remaining -= self._fill(
                         order,
                         event.sequence,
                         order.limit_price,
@@ -861,7 +867,6 @@ class TradeSimulationKernel:
                             and _print_makes_order_maker(order, event)
                         ),
                     )
-                    remaining -= fill_qty
         if self.execution_model_revision == EXECUTION_REALISM_V2:
             for order in open_orders:
                 if self._order_tif.get(order.order_id) == "IOC" and order.status in {
@@ -882,8 +887,10 @@ class TradeSimulationKernel:
         reason: str,
         *,
         maker: bool = False,
-    ) -> None:
+    ) -> Decimal:
         fill_qty = min(qty, order.qty)
+        if fill_qty <= 0:
+            return Decimal("0")
         reduce_only_complete = False
         if order.reduce_only:
             reducible = (
@@ -901,7 +908,7 @@ class TradeSimulationKernel:
                 self._lifecycle(order, order.status, reason="REDUCE_ONLY_ZERO")
                 if isinstance(self.account, LinearPerpetualAccountV2):
                     self.account.release_order_margin(order.order_id)
-                return
+                return Decimal("0")
             reduce_only_complete = fill_qty >= reducible
         fee_bps = (
             self.maker_fee_bps
@@ -912,9 +919,14 @@ class TradeSimulationKernel:
             else self.taker_fee_bps
         )
         fee = price * fill_qty * fee_bps / Decimal("10000")
+        if isinstance(self.account, SpotCashAccount):
+            rejection = self.account.fill_rejection(side=order.side, price=price, qty=fill_qty, fee=fee)
+            if rejection:
+                reject_spot_fill(self, order, sequence, rejection)
+                return Decimal("0")
         self.fee_total += fee
         order_qty_before = order.qty
-        if not isinstance(self.account, LinearPerpetualAccountV2):
+        if not isinstance(self.account, (LinearPerpetualAccountV2, SpotCashAccount)):
             self.account.mark = price
         position_before = self.account.position_qty
         if isinstance(self.account, LinearPerpetualAccountV2):
@@ -987,6 +999,7 @@ class TradeSimulationKernel:
                     "order_id": order.order_id,
                 }
             )
+        return fill_qty
 
     def _lifecycle(
         self,

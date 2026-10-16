@@ -11,6 +11,7 @@ from app.market_dataset.trades import assert_trade_stream
 from app.market_dataset.snapshot import sha256_hex
 from app.simulation.kernel import SimulationResult
 from app.simulation.trade_kernel import TradeSimulationKernel, _print_crosses_limit, _print_triggers_stop
+from app.simulation.spot_cash_account import SpotCashAccount
 
 BOOK_FILL_POLICY = "BOOK_ASSISTED_CONSERVATIVE_V1"
 StrategyFn = Callable[[tuple[MarketEvent, ...], MarketEvent], list[dict]]
@@ -59,6 +60,9 @@ class BookAssistedKernel(TradeSimulationKernel):
                 continue
             if event.role != "TRADES":
                 continue
+            if isinstance(self.account, SpotCashAccount):
+                self._last_event = event
+                self.account.mark = Decimal(str(event.payload["price"]))
             self._match(event)
             visible.append(event)
             intents = strategy(tuple(visible), event)
@@ -151,8 +155,7 @@ class BookAssistedKernel(TradeSimulationKernel):
                 slip = price * self.slippage_bps / Decimal("10000")
                 price = price + slip if order.side == "BUY" else price - slip
                 fill_qty = min(order.qty, remaining)
-                self._fill(order, event.sequence, price, fill_qty, "BOOK_ASSISTED_PRINT")
-                remaining -= fill_qty
+                remaining -= self._fill(order, event.sequence, price, fill_qty, "BOOK_ASSISTED_PRINT")
             elif (order.type == "LIMIT" or (order.type == "STOP_LIMIT" and order.activated)) and order.limit_price is not None:
                 opposite = ask if order.side == "BUY" else bid
                 crossed = (
@@ -162,11 +165,10 @@ class BookAssistedKernel(TradeSimulationKernel):
                 )
                 if crossed and _print_crosses_limit(order, print_price):
                     fill_qty = min(order.qty, remaining)
-                    self._fill(
+                    remaining -= self._fill(
                         order,
                         event.sequence,
                         order.limit_price,
                         fill_qty,
                         "BOOK_CONSERVATIVE_LIMIT",
                     )
-                    remaining -= fill_qty

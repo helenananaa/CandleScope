@@ -33,5 +33,9 @@ def test_capabilities_expose_versioned_quick_presets_and_default_on_flag(
         assert standard["equity_percent"] == "10"
         assert standard["fee_source"] == "exchange-market-preset"
         assert standard["execution_model_revision"] == "EXECUTION_REALISM_V2"
+        spot = presets["CRYPTO_SPOT_STANDARD_V1"]
+        assert spot["revision"] == "2"
+        assert spot["account_model"] == "SPOT_CASH_V1"
+        assert spot["leverage"] == "1" and spot["funding_mode"] == "OFF"
     finally:
         runtime.shutdown()
