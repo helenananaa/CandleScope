@@ -310,8 +310,26 @@ def test_release_wall_clock_metrics_are_measure_only_without_skip_flag() -> None
         assert forbidden not in combined
 
 
-def test_formal_fast_forward_refreshes_controller_lease_between_chunks() -> None:
+def test_formal_fast_forward_refreshes_controller_lease_between_chunks(monkeypatch) -> None:
+    from scripts import benchmark_replay_fast_forward as benchmark
+    from app.replay.internal_commands import InternalCommandType
+
     controller_ttl_seconds = 0.5
+    elapsed = 0.0
+
+    class ControlledClockActor(benchmark.ReplaySessionActor):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs, monotonic=lambda: elapsed)
+
+        async def submit(self, command):
+            nonlocal elapsed
+            if command.type == InternalCommandType.FAST_FORWARD_EMPTY_ACCOUNT:
+                # Each chunk fits within one lease, but two chunks do not.
+                # Missing inter-chunk heartbeats now fails deterministically.
+                elapsed += controller_ttl_seconds * 0.6
+            return await super().submit(command)
+
+    monkeypatch.setattr(benchmark, "ReplaySessionActor", ControlledClockActor)
     result = asyncio.run(
         _run_mode(
             optimized=True,
@@ -324,6 +342,6 @@ def test_formal_fast_forward_refreshes_controller_lease_between_chunks() -> None
         )
     )
     streaming = result["streaming"]
-    assert result["result"]["elapsed_seconds"] > controller_ttl_seconds
+    assert elapsed > controller_ttl_seconds
     assert streaming["chunks"] == 128
     assert streaming["controller_heartbeats"] == 127
