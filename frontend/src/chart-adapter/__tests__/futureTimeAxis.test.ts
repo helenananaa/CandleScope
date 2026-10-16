@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   canReuseFutureTimeAxisData,
+  futureTimeAxisRenderData,
   countFutureTimeAxisPointsAfter,
   FUTURE_TIME_AXIS_MAX_POINTS,
   FUTURE_TIME_AXIS_ORDINAL_ORDER_START,
@@ -12,6 +13,19 @@ import {
 import type { ChartTime } from "../chartAdapterTypes.js";
 import type { OrdinalAxisTime } from "../../features/chart-representation/chartRepresentationTypes.js";
 import { mustBeDefined, structuralMock } from "../../test/testHelpers.js";
+
+test("the invisible carrier anchor never mutates semantic whitespace or adds extra times", () => {
+  const plan = planFutureTimeAxis({ displayRows: [{ time: 60 }], sourceInterval: "1m", sourceIntervalSeconds: 60, sourceTimeHorizon: 60 });
+  const data = mustBeDefined(plan.data);
+  const original = JSON.stringify(data);
+  const rendered = futureTimeAxisRenderData(data);
+  assert.equal(JSON.stringify(data), original);
+  assert.deepEqual(rendered.map(row => row.time), data.map(row => row.time));
+  assert.equal(rendered.filter(row => row.value !== undefined).length, 1);
+  assert.equal(rendered.at(-1)?.value, 0);
+  assert.ok(data.every(row => row.value === undefined && row.close === undefined));
+  assert.deepEqual(futureTimeAxisRenderData([]), []);
+});
 
 function ordinalTime(value: ChartTime): OrdinalAxisTime {
   if (value === null || typeof value !== "object" || !("order" in value)) {

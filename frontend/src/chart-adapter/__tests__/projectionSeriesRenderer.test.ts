@@ -105,6 +105,22 @@ test("projection patches rebuild when rendered data has no reusable prefix", () 
   );
 });
 
+test("a dataset replacement with unknown rendered contents clears an empty projection", () => {
+  let visible: ChartSeriesInputRow[] = [...ROWS];
+  const patch = buildMainSeriesProjectionPatch({
+    displayRows: [],
+    projectionPatch: { fromOutputIndex: 0 },
+    renderOptions: { chartType: "renko" },
+  });
+  const result = renderMainSeriesProjectionPatch({
+    patch,
+    series: { setData: (rows) => { visible = [...rows]; } },
+  });
+  assert.equal(result.mode, "setData");
+  assert.deepEqual(visible, []);
+  assert.deepEqual(result.nextData, []);
+});
+
 test("projection renderer incrementally replaces the last point and appends", () => {
   const events: unknown[] = [];
   const series: Partial<ProjectionSeriesWriter<ChartSeriesInputRow>> = {

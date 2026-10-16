@@ -95,6 +95,7 @@ export class ViewportController {
   private unlockTimer: TimerHandle | null;
   private pendingIntent: ViewportIntent | null;
   private readonly fitSessionKeys: Set<string>;
+  private frozenOnNewBars = false;
 
   constructor({
     chartProvider,
@@ -141,6 +142,8 @@ export class ViewportController {
   }
 
   resetSession(): void {
+    if (this.frozenOnNewBars) this.getTimeScale()?.applyOptions?.({ shiftVisibleRangeOnNewBar: true });
+    this.frozenOnNewBars = false;
     if (this.unlockTimer != null) this.clearTimer(this.unlockTimer);
     this.unlockTimer = null;
     this.userInteracting = false;
@@ -272,9 +275,11 @@ export class ViewportController {
     {
       barSpacing = null,
       immediate = false,
+      freezeOnNewBars = false,
     }: {
       barSpacing?: number | null;
       immediate?: boolean;
+      freezeOnNewBars?: boolean;
     } = {},
   ): boolean {
     const apply = (timeScale: AdapterTimeScale) => {
@@ -282,6 +287,19 @@ export class ViewportController {
         timeScale.applyOptions?.({ barSpacing });
       }
       if (finiteNumber(logicalRange?.from) && finiteNumber(logicalRange?.to)) {
+        const span = logicalRange.to - logicalRange.from;
+        const requiredSpacing = Number(timeScale.width?.()) / span;
+        const minimumSpacing = Number(timeScale.options?.().minBarSpacing ?? 0.5);
+        // The default LWC minimum would silently widen a large source-time
+        // view when switching to a finer period. Lower it only as required.
+        if (span > 0 && Number.isFinite(requiredSpacing) && requiredSpacing > 0
+          && requiredSpacing < minimumSpacing) {
+          timeScale.applyOptions?.({ minBarSpacing: requiredSpacing });
+        }
+        if (freezeOnNewBars) {
+          timeScale.applyOptions?.({ shiftVisibleRangeOnNewBar: false });
+          this.frozenOnNewBars = true;
+        }
         timeScale.setVisibleLogicalRange?.(toLogicalRange(logicalRange));
         return true;
       }
@@ -308,6 +326,8 @@ export class ViewportController {
         width: safeCall(() => Number(timeScale.width?.()), Number.NaN),
       });
       if (!range) return false;
+      if (this.frozenOnNewBars) timeScale.applyOptions?.({ shiftVisibleRangeOnNewBar: true });
+      this.frozenOnNewBars = false;
       timeScale.setVisibleLogicalRange?.(toLogicalRange(range));
       return true;
     });

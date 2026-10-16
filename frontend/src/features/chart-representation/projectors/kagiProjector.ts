@@ -10,13 +10,13 @@ import type {
 } from "../chartRepresentationTypes.js";
 import { projectionSourceTimeRange } from "./projectorData.js";
 
-const KAGI_STATE_VERSION = 1;
+const KAGI_STATE_VERSION = 2;
 type KagiDirection = "up" | "down" | null;
 type KagiStyle = "yang" | "yin";
 type KagiReversalKind = "shoulder" | "waist" | null;
 
 interface KagiState extends ProjectionState {
-  version: 1;
+  version: 2;
   projectorId: "kagi";
   minTick: number;
   reversalTicks: number;
@@ -33,6 +33,7 @@ interface KagiState extends ProjectionState {
   legReversalKind: KagiReversalKind;
   legTurnTicks: number | null;
   legSourceFromTime: number | null;
+  legSourceTime: number | null;
   legSourceToTime: number | null;
   legCustomValues: ProjectionCustomValues;
   nextOrder: number;
@@ -106,6 +107,7 @@ function cloneState(state: Readonly<KagiState>): KagiState {
     legReversalKind: state.legReversalKind,
     legTurnTicks: state.legTurnTicks,
     legSourceFromTime: state.legSourceFromTime,
+    legSourceTime: state.legSourceTime,
     legSourceToTime: state.legSourceToTime,
     legCustomValues: cloneCustomValues(state.legCustomValues),
     nextOrder: state.nextOrder,
@@ -141,6 +143,7 @@ function initialState({
     legReversalKind: null,
     legTurnTicks: null,
     legSourceFromTime: null,
+    legSourceTime: null,
     legSourceToTime: null,
     legCustomValues: {},
     nextOrder: 0,
@@ -176,6 +179,8 @@ function validActiveLeg(state: Readonly<KagiState>): boolean {
     && safeIntegerOrNull(state.legTurnTicks)
     && typeof state.legSourceFromTime === "number"
     && Number.isFinite(state.legSourceFromTime)
+    && typeof state.legSourceTime === "number"
+    && Number.isFinite(state.legSourceTime)
     && typeof state.legSourceToTime === "number"
     && Number.isFinite(state.legSourceToTime)
     && (state.direction === "up"
@@ -338,7 +343,8 @@ export class KagiProjector implements Projector<KagiState, Record<string, unknow
     const hasRetainedSource = (rows || []).some((row) => row?.time != null);
     if (seedState != null && state.direction !== null && hasRetainedSource) {
       this._upsertActiveLeg(data, state, {
-        time: requiredSourceTime(state.legSourceToTime, "legSourceToTime"),
+        time: requiredSourceTime(state.legSourceTime, "legSourceTime"),
+        sourceToTime: state.legSourceToTime,
         customValues: state.legCustomValues,
       }, false);
     }
@@ -443,6 +449,7 @@ export class KagiProjector implements Projector<KagiState, Record<string, unknow
 
   _extendActiveLeg(data: KagiDisplayRow[], state: KagiState, row: SourceBar, closeTicks: number, provisional: boolean): void {
     state.legEndTicks = closeTicks;
+    state.legSourceTime = row.time;
     state.legSourceToTime = projectionSourceTimeRange(row).to;
     state.legCustomValues = cloneCustomValues(row.customValues);
     state.currentStyle = this._sectionsForState(state).tailStyle;
@@ -472,6 +479,7 @@ export class KagiProjector implements Projector<KagiState, Record<string, unknow
     state.legReversalKind = reversalKind;
     state.legTurnTicks = turnTicks;
     state.legSourceFromTime = sourceFromTime;
+    state.legSourceTime = row.time;
     state.legSourceToTime = projectionSourceTimeRange(row).to;
     state.legCustomValues = cloneCustomValues(row.customValues);
     state.nextOrder += 1;

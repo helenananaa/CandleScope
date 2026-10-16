@@ -33,7 +33,10 @@ test("refresh replaces shared source dates while retaining series data and viewp
   main.setData([row(0, 20)]);
   assert.equal(points.get(0), 10, "shared metadata remains stale before refresh");
   let range = { from: -2, to: 5 };
-  const scale = { getVisibleLogicalRange: () => ({ ...range }), setVisibleLogicalRange: (next: typeof range) => { range = next; } };
+  let shift = true;
+  const scale = { getVisibleLogicalRange: () => ({ ...range }), setVisibleLogicalRange: (next: typeof range) => { range = next; },
+    options: () => ({ shiftVisibleRangeOnNewBar: shift }),
+    applyOptions: (options: { shiftVisibleRangeOnNewBar: boolean }) => { shift = options.shiftVisibleRangeOnNewBar; } };
   const chart = structuralMock<NonNullable<Parameters<typeof refreshOrdinalTimeScale>[0]>>({
     panes: () => [{ getSeries: () => [overlay] }, { getSeries: () => [main] }],
     timeScale: () => scale,
@@ -43,4 +46,32 @@ test("refresh replaces shared source dates while retaining series data and viewp
   assert.deepEqual(main.data(), [row(0, 20)]);
   assert.deepEqual(overlay.data(), [row(0, 10)]);
   assert.deepEqual(range, { from: -2, to: 5 });
+  assert.equal(shift, true);
+});
+
+test("refresh uses owned whitespace snapshots and suppresses automatic scrolling throughout the rebuild", () => {
+  type Row = { time: ReturnType<typeof row>["time"]; value?: number };
+  type Series = Parameters<typeof refreshOrdinalTimeScale>[1];
+  let shift = true;
+  const writes: Row[][] = [];
+  const main = structuralMock<Series>({ data: () => [row(0, 10)], setData: () => { assert.equal(shift, false); } });
+  const fullCarrier: Row[] = [{ time: row(100, 20).time }, row(101, 30)];
+  const carrier = structuralMock<Series>({
+    data: () => fullCarrier.filter(item => item.value !== undefined),
+    setData: (data: Row[]) => { assert.equal(shift, false); writes.push(data); },
+  });
+  const visible = { from: 0.5, to: 2 };
+  const chart = structuralMock<NonNullable<Parameters<typeof refreshOrdinalTimeScale>[0]>>({
+    panes: () => [{ getSeries: () => [main, carrier] }],
+    timeScale: () => ({
+      options: () => ({ shiftVisibleRangeOnNewBar: shift }),
+      applyOptions: (options: { shiftVisibleRangeOnNewBar: boolean }) => { shift = options.shiftVisibleRangeOnNewBar; },
+      getVisibleLogicalRange: () => visible,
+      setVisibleLogicalRange: (range: typeof visible) => assert.deepEqual(range, visible),
+    }),
+  });
+  assert.equal(carrier.data().length, 1, "engine data omits whitespace");
+  refreshOrdinalTimeScale(chart, main, new Map([[carrier, fullCarrier]]));
+  assert.deepEqual(writes, [[], fullCarrier]);
+  assert.equal(shift, true);
 });

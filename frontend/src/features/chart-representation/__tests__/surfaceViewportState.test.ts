@@ -8,7 +8,10 @@ import {
   preserveBoundSurfaceViewportSourceAnchor,
   rememberSurfaceViewport,
   selectSurfaceViewportSnapshot,
+  selectPeriodViewportRestore,
+  surfaceViewportOwnsRestore,
   surfaceViewportHasAnchorCoverage,
+  sourceRangeFromLogicalRows,
   transferSurfaceViewportSnapshot,
 } from "../surfaceViewportState.js";
 import type {
@@ -23,6 +26,93 @@ import { mustBeDefined, partialMock } from "../../../test/testHelpers.js";
 function ordinal(order: number, sourceTime: number, sourceOrdinal = 0): OrdinalAxisTime {
   return { order, sourceTime, sourceOrdinal };
 }
+
+test("a period round trip with initially unloaded ordinal history preserves its real anchor and density", () => {
+  const rows = [1000, 10000, 11000].map((time, index) => ({ time: ordinal(index, time) }));
+  const original = mustBeDefined(buildSurfaceViewportSnapshot({ datasetKey: "7m", axisMode: "derived-ordinal",
+    surfaceConfigKey: "point-and-figure", displayRows: rows, barSpacing: 8,
+    logicalRange: { from: -3, to: 5 }, sourceRange: sourceRangeFromLogicalRows(rows, { from: -3, to: 5 }, "1m") }));
+  assert.equal(original.estimatedLeftEdge, true);
+  const incoming = { ...original, anchorTime: original.anchorSourceTime, transferredFromDatasetKey: "90m" };
+  const hydrated = [100, 1000, 10000, 11000].map((time, index) => ({ time: ordinal(index, time) }));
+  const options = { datasetKey: "7m", axisMode: "derived-ordinal", surfaceConfigKey: "point-and-figure", sourceInterval: "1m" };
+  const oldPlan = mustBeDefined(planSurfaceViewportRestore(hydrated, incoming, options));
+  assert.notEqual(oldPlan.logicalRange.to - oldPlan.logicalRange.from, 8,
+    "treating an estimated left-edge date as real history changes the zoom");
+  const selected = mustBeDefined(selectPeriodViewportRestore(incoming, original));
+  assert.equal(surfaceViewportOwnsRestore(selected), true, "geometry ownership must survive late main and auxiliary hydration");
+  const restored = mustBeDefined(planSurfaceViewportRestore(hydrated, selected, options));
+  assert.deepEqual(restored.logicalRange, { from: -2, to: 6 });
+  assert.equal(restored.barSpacing, 8);
+  const captured = mustBeDefined(buildSurfaceViewportSnapshot({ ...options, displayRows: hydrated,
+    logicalRange: restored.logicalRange, sourceRange: sourceRangeFromLogicalRows(hydrated, restored.logicalRange, "1m") }));
+  const bound = mustBeDefined(bindSurfaceViewportSourceAnchor(captured, selected));
+  assert.deepEqual(bound.sourceRange, captured.sourceRange,
+    "newly loaded history replaces an old estimated edge instead of reusing its guessed date");
+  const sparseCapture = { ...captured, anchorTime: ordinal(0, 100), anchorSourceTime: 100, screenOffset: -50 };
+  const sparseBound = mustBeDefined(bindSurfaceViewportSourceAnchor(sparseCapture, selected));
+  assert.equal(surfaceViewportOwnsRestore(sparseBound), true);
+  assert.deepEqual(planSurfaceViewportRestore(hydrated, sparseBound, options)?.logicalRange, restored.logicalRange,
+    "a sparse intermediate capture cannot replace the original real anchor or offset");
+  assert.equal(preserveBoundSurfaceViewportSourceAnchor(captured, sparseBound), captured,
+    "the next period command captures real dates after hydration");
+  const navigated = { ...incoming, sourceRange: { from: 1001, to: 12000 } };
+  assert.equal(selectPeriodViewportRestore(navigated, original), navigated, "new navigation must win over the cached view");
+  assert.equal(selectPeriodViewportRestore(incoming, { ...original, estimatedLeftEdge: false }), incoming,
+    "fully covered views still preserve elapsed dates");
+});
+
+test("an owned period window survives internal axis rebasing until navigation releases it", () => {
+  const bound: SurfaceViewportSnapshot = { anchorSourceTime: 1800, anchorTime: ordinal(18, 1800),
+    barSpacing: 20, datasetKey: "ltc-90m", surfaceConfigKey: "line-break", axisMode: "derived-ordinal",
+    logicalSpan: 8, screenOffset: -8, sourceRange: { from: 1600, to: 2400 }, transferredFromDatasetKey: "ltc-7m" };
+  const rebased: SurfaceViewportSnapshot = { ...bound, anchorTime: ordinal(1, 100), anchorSourceTime: 100,
+    logicalSpan: 4, screenOffset: 0, sourceRange: { from: 0, to: 400 } };
+  const retained = mustBeDefined(preserveBoundSurfaceViewportSourceAnchor(rebased, bound));
+  assert.deepEqual(retained.sourceRange, bound.sourceRange);
+  assert.equal(retained.anchorSourceTime, 1800);
+  assert.equal(retained.transferredFromDatasetKey, "ltc-7m");
+  assert.equal(preserveBoundSurfaceViewportSourceAnchor(rebased, null), rebased, "user navigation clears the owned bound");
+  assert.equal(preserveBoundSurfaceViewportSourceAnchor({ ...rebased, datasetKey: "sol-90m" }, bound)?.anchorSourceTime, 100,
+    "the bound must not cross a market/dataset boundary");
+});
+
+test("numeric viewport capture preserves fractional edges and whitespace across period round trips", () => {
+  const fine = Array.from({ length: 11 }, (_, index) => ({ time: index * 60 }));
+  const sourceRange = mustBeDefined(sourceRangeFromLogicalRows(fine, { from: 2.5, to: 12.25 }, "1m"));
+  assert.deepEqual(sourceRange, { from: 150, to: 735 });
+  const coarse = Array.from({ length: 4 }, (_, index) => ({ time: index * 300 }));
+  const snapshot = mustBeDefined(buildSurfaceViewportSnapshot({ axisMode: "time", datasetKey: "fine",
+    displayRows: fine, logicalRange: { from: 2.5, to: 12.25 }, sourceRange, surfaceConfigKey: "time" }));
+  const transferred = transferSurfaceViewportSnapshot(snapshot, { fromDatasetKey: "fine", toDatasetKey: "coarse" });
+  const plan = mustBeDefined(planSurfaceViewportRestore(coarse, transferred, { axisMode: "time", datasetKey: "coarse", surfaceConfigKey: "time" }));
+  assert.deepEqual(plan.logicalRange, { from: 0.5, to: 2.45 });
+  assert.deepEqual(sourceRangeFromLogicalRows(coarse, plan.logicalRange, "5m"), sourceRange);
+});
+
+test("calendar whitespace capture extrapolates actual month boundaries rather than February's length", () => {
+  const rows = [0, 1].map(month => ({ time: Date.UTC(2024, month, 1) / 1000 }));
+  const sourceRange = sourceRangeFromLogicalRows(rows, { from: -1, to: 3.5 }, "1M");
+  assert.deepEqual(sourceRangeFromLogicalRows(rows, { from: -1, to: 3 }, "1M"),
+    { from: Date.UTC(2023, 11, 1) / 1000, to: Date.UTC(2024, 3, 1) / 1000 });
+  const snapshot = mustBeDefined(buildSurfaceViewportSnapshot({ axisMode: "time", datasetKey: "old",
+    displayRows: rows, logicalRange: { from: -1, to: 3.5 }, sourceRange, surfaceConfigKey: "time" }));
+  const transferred = transferSurfaceViewportSnapshot(snapshot, { fromDatasetKey: "old", toDatasetKey: "new" });
+  assert.deepEqual(planSurfaceViewportRestore(rows, transferred,
+    { axisMode: "time", datasetKey: "new", surfaceConfigKey: "time", sourceInterval: "1M" })?.logicalRange,
+    { from: -1, to: 3.5 });
+});
+
+test("period transfer preserves absolute elapsed time instead of candle count", () => {
+  const initial = mustBeDefined(buildSurfaceViewportSnapshot({ axisMode: "time", datasetKey: "btc-1m",
+    displayRows: Array.from({ length: 61 }, (_, i) => ({ time: i * 60 })),
+    logicalRange: { from: 7, to: 56 }, sourceRange: { from: 420, to: 3360 }, surfaceConfigKey: "time" }));
+  const transfer = mustBeDefined(transferSurfaceViewportSnapshot(initial, { fromDatasetKey: "btc-1m", toDatasetKey: "btc-7m" }));
+  const plan = mustBeDefined(planSurfaceViewportRestore(Array.from({ length: 10 }, (_, i) => ({ time: i * 420 })), transfer,
+    { axisMode: "time", datasetKey: "btc-7m", surfaceConfigKey: "time" }));
+  assert.deepEqual(plan.logicalRange, { from: 1, to: 8 });
+  assert.equal(plan.barSpacing, null);
+});
 
 test("cross-surface restore bounds sparse synthetic density to available columns", () => {
   const sourceRows = Array.from({ length: 121 }, (_, index) => ({ time: index }));
@@ -325,6 +415,24 @@ test("viewport coverage rejects an anchor inside an internal source gap", () => 
     { time: 0, sourceFromTime: 0, sourceToTime: 10 },
     { time: 20, sourceFromTime: 20, sourceToTime: 30 },
   ], snapshot), false);
+});
+
+test("period transfer accepts an interior bucket anchor without bridging missing candles", () => {
+  const snapshot = partialMock<SurfaceViewportSnapshot>({ anchorSourceTime: 7 * 60 });
+  assert.equal(surfaceViewportHasAnchorCoverage([{ time: 5 * 60 }], snapshot, { sourceInterval: "5m" }), true);
+  assert.equal(surfaceViewportHasAnchorCoverage([{ time: 0 }, { time: 10 * 60 }], snapshot, { sourceInterval: "5m" }), false);
+  assert.equal(surfaceViewportHasAnchorCoverage([{ time: 5 * 60 }],
+    { ...snapshot, anchorSourceTime: 10 * 60 }, { sourceInterval: "5m" }), false);
+  assert.equal(surfaceViewportHasAnchorCoverage([{ time: 5 * 60 }], snapshot), false);
+});
+
+test("calendar coverage uses the actual leap-year month end and explicit lineage wins", () => {
+  const feb = Date.UTC(2024, 1, 1) / 1000;
+  const march = Date.UTC(2024, 2, 1) / 1000;
+  const snapshot = partialMock<SurfaceViewportSnapshot>({ anchorSourceTime: march - 60 });
+  assert.equal(surfaceViewportHasAnchorCoverage([{ time: feb }], snapshot, { sourceInterval: "1M" }), true);
+  assert.equal(surfaceViewportHasAnchorCoverage([{ time: feb }], { ...snapshot, anchorSourceTime: march }, { sourceInterval: "1M" }), false);
+  assert.equal(surfaceViewportHasAnchorCoverage([{ time: feb, sourceFromTime: feb, sourceToTime: feb + 60 }], snapshot, { sourceInterval: "1M" }), false);
 });
 
 

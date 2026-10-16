@@ -51,6 +51,7 @@ import {
   createMainSeries,
   removeSeriesEntries,
   replaceMainSeries,
+  replaceFutureTimeAxisData,
   resyncSeriesTimeScaleIndexes,
   selectIndicatorPaneAnnotationTarget,
   shouldPreferIndicatorSetData,
@@ -83,10 +84,12 @@ import {
   MainSeriesReferenceTracker,
 } from "../chart-adapter/mainSeriesModel";
 import type { MainSeriesReferenceDelta } from "../chart-adapter/mainSeriesModel";
+import { MainSeriesPriceFormatTracker } from "../chart-adapter/mainSeriesPriceFormat.js";
 import {
   canReuseFutureTimeAxisData,
   countFutureTimeAxisPointsAfter,
   FUTURE_TIME_AXIS_INITIAL_POINTS,
+  futureTimeAxisRenderData,
   planFutureTimeAxis,
   resolveFutureTimeAxisPointCount,
 } from "../chart-adapter/futureTimeAxis";
@@ -106,7 +109,7 @@ import {
   subscribeCursorOverlayGeometryRefresh,
 } from "./singleChartPaneGeometry";
 import { IndicatorPaneLabels, MainChartLegend } from "./ChartPaneLegends";
-import { shouldUseLatestChartPaneLegend } from "./chartPaneLegendModel";
+import { shouldUseLatestChartPaneLegend, resolveChartCrosshairSourceTime as resolveSourceTime } from "./chartPaneLegendModel";
 import MarketPaneLabels from "./MarketPaneLabels";
 import PaneControlBar from "./PaneControlBar";
 import { createPaneCrosshairStoreLifecycle } from "./paneCrosshairStore";
@@ -192,7 +195,6 @@ import {
   bindSurfaceViewportSourceAnchor,
   buildDisplaySourceTimeIndex,
   buildSurfaceViewportSnapshot,
-  createProjector,
   findDisplayIndexForAxisAnchor,
   findNumericDisplayIndexForTimeAnchor,
   getChartTypeDescriptor,
@@ -204,16 +206,17 @@ import {
   ProjectionStore,
   projectPaneDescriptorsToDisplay,
   rememberSurfaceViewport,
-  resolveKagiProjectorOptions,
-  resolveLineBreakProjectorOptions,
-  resolvePointFigureProjectorOptions,
-  resolveRenkoProjectorOptions,
   shouldPreserveProjectionViewport,
   selectSurfaceViewportSnapshot,
+  selectPeriodViewportRestore,
+  surfaceViewportOwnsRestore,
+  sourceRangeFromLogicalRows,
+  createViewportTimeScale,
   sourceTimeFromAxisTime,
   surfaceViewportHasAnchorCoverage,
   transferSurfaceViewportSnapshot,
 } from "../features/chart-representation/index.js";
+import { createConfiguredProjectionStore as createProjectionStore } from "../features/chart-representation/configuredProjectionStore.js";
 import { recordPerfEvent } from "../runtime/performance/perfMarks";
 import type {
   ChartSeriesInputRow,
@@ -263,6 +266,7 @@ import type {
 } from "../features/indicators/indicatorTypes.js";
 import type { ChartDataCommitMeta } from "../features/market-data/useChartDataRuntime.js";
 import type { LoadMoreLeft } from "../features/market-data/useChartLoadMoreLeft.js";
+import { TransferredViewportHistory } from "./transferredViewportHistory";
 import type { KlineBar } from "../features/market-data/marketDataTypes.js";
 import type { SeriesWindowStore } from "../features/market-data/window/seriesWindowStore.js";
 import type { PriceBoxSizeMode } from "../features/settings/chartAppearanceSettings.js";
@@ -442,6 +446,7 @@ interface ProjectionRenderContext {
 interface ActiveSurfaceOwner {
   chart: AdapterChart | null;
   datasetKey: string | null;
+  sourceInterval: IntervalString | null;
   paneHeightStorageKey: string | null;
   surfaceConfigKey: string | null;
 }
@@ -499,31 +504,6 @@ function latestFiniteSourceTime(rows: readonly SourceBar[] | null | undefined): 
   return null;
 }
 
-function resolveProjectionRuntime(
-  chartType: MainChartType,
-  rows: readonly SourceBar[],
-  settings: ProjectionSettings = {},
-) {
-  const descriptor = getChartTypeDescriptor(chartType);
-  if (descriptor.projectionId === "renko") {
-    const options = resolveRenkoProjectorOptions(rows, settings);
-    return { descriptor, options, configKey: options.configKey };
-  }
-  if (descriptor.projectionId === "point-and-figure") {
-    const options = resolvePointFigureProjectorOptions(rows, settings);
-    return { descriptor, options, configKey: options.configKey };
-  }
-  if (descriptor.projectionId === "kagi") {
-    const options = resolveKagiProjectorOptions(rows, settings);
-    return { descriptor, options, configKey: options.configKey };
-  }
-  if (descriptor.projectionId === "line-break") {
-    const options = resolveLineBreakProjectorOptions(rows, settings);
-    return { descriptor, options, configKey: options.configKey };
-  }
-  return { descriptor, options: {}, configKey: descriptor.projectionId };
-}
-
 function buildSyntheticChartNotice(
   chartType: MainChartType,
   settings: ProjectionSettings = {},
@@ -562,17 +542,6 @@ function buildSyntheticChartNotice(
     ? t("chart.fixedBrick", { size: String(settings.boxSize ?? "") }, locale)
     : t("chart.atrSize", { length: String(settings.atrLength ?? "") }, locale);
   return { title: "Renko · Close", detail: size };
-}
-
-function createProjectionStore(
-  chartType: MainChartType,
-  rows: readonly SourceBar[] = [],
-  settings: ProjectionSettings = {},
-): ProjectionStoreWithConfiguration {
-  const runtime = resolveProjectionRuntime(chartType, rows, settings);
-  return Object.assign(new ProjectionStore({
-    projector: createProjector(runtime.descriptor.projectionId, runtime.options),
-  }), { configurationKey: runtime.configKey });
 }
 
 function syncSourceDataRefsFromStore({
@@ -621,32 +590,22 @@ function syncDisplayDataRefsFromProjection({
   };
 }
 
-function resolveSourceTime(axisTime: AxisTime | null, displayRow: DisplayRow | null = null): number | null {
-  const displaySourceTime = Number(displayRow?.sourceTime);
-  if (Number.isFinite(displaySourceTime)) return displaySourceTime;
-  const lineageSourceTime = Number(
-    displayRow?.customValues?.chartProjection?.sourceToTime
-      ?? displayRow?.customValues?.chartProjection?.sourceFromTime,
-  );
-  if (Number.isFinite(lineageSourceTime)) return lineageSourceTime;
-  if (axisTime && typeof axisTime === "object") {
-    const axisSourceTime = Number(axisTime.sourceTime);
-    return Number.isFinite(axisSourceTime) ? axisSourceTime : null;
-  }
-  const numericTime = Number(axisTime);
-  return Number.isFinite(numericTime) ? numericTime : null;
-}
+
 
 function captureSurfaceViewport(chart: AdapterChart | null, {
   axisMode,
   datasetKey,
   displayRows,
   surfaceConfigKey,
+  sourceInterval,
+  axisCarrierRows,
 }: {
   axisMode?: string | null;
   datasetKey?: string | null;
   displayRows?: readonly DisplayRow[];
   surfaceConfigKey?: string | null;
+  sourceInterval?: unknown;
+  axisCarrierRows?: readonly { time?: unknown }[] | undefined;
 } = {}): SurfaceViewportSnapshot | null {
   try {
     const timeScale = chart?.timeScale?.();
@@ -655,9 +614,11 @@ function captureSurfaceViewport(chart: AdapterChart | null, {
     const barSpacing = timeScale?.options?.().barSpacing;
     const from = sourceTimeFromAxisTime(time?.from);
     const to = sourceTimeFromAxisTime(time?.to);
-    const sourceRange = from != null && to != null
+    const axisSourceRange = from != null && to != null
       ? (from <= to ? { from, to } : { from: to, to: from })
       : null;
+    const sourceRange = sourceRangeFromLogicalRows(displayRows ?? [], logical, sourceInterval, axisCarrierRows)
+      ?? axisSourceRange;
     return buildSurfaceViewportSnapshot({
       sourceRange,
       ...(axisMode === undefined ? {} : { axisMode }),
@@ -679,26 +640,40 @@ function restoreSurfaceViewport(
   {
   axisMode,
   datasetKey,
+  sourceInterval,
   surfaceConfigKey,
+  axisCarrierRows,
   }: {
     axisMode?: string | null;
     datasetKey?: string | null;
+    sourceInterval?: IntervalString | null;
     surfaceConfigKey?: string | null;
+    axisCarrierRows?: readonly { time?: unknown }[] | undefined;
   } = {},
 ): boolean {
   if (!viewportController || !transfer) return false;
+  if (transfer.transferredFromDatasetKey !== undefined && axisMode === "time" && displayRows.length < 2) return false;
   const plan = planSurfaceViewportRestore(displayRows, transfer, {
     axisMode,
     datasetKey,
+    sourceInterval,
     surfaceConfigKey,
+    axisCarrierRows,
   });
   if (!plan) return false;
+  recordPerfEvent("chart.viewport.restore", {
+    transferred: transfer.transferredFromDatasetKey !== undefined,
+    logicalSpan: plan.logicalRange ? plan.logicalRange.to - plan.logicalRange.from : null,
+    sourceSpan: transfer.sourceRange ? transfer.sourceRange.to - transfer.sourceRange.from : null,
+    sameSurface: plan.sameSurface,
+  });
   return viewportController.restoreProjectionRange(plan.logicalRange, {
     barSpacing: plan.barSpacing,
     // A dataset transfer is an explicit ownership hand-off. Applying it
     // immediately avoids leaving the transfer pending behind the controller's
     // short post-drag interaction lock.
     immediate: true,
+    freezeOnNewBars: transfer.transferredFromDatasetKey !== undefined,
   });
 }
 
@@ -963,10 +938,16 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   const mainSeriesTypeRef = useRef<MainChartType | null>(null);
   const mainSeriesReferenceRef = useRef<{ series: MainSeriesHandle | null; signature: string }>({ series: null, signature: "" });
   const mainSeriesReferenceTrackerRef = useRef<MainSeriesReferenceTracker | null>(null);
+  const mainSeriesPriceFormatTrackerRef = useRef<MainSeriesPriceFormatTracker | null>(null);
+  if (!mainSeriesPriceFormatTrackerRef.current) {
+    mainSeriesPriceFormatTrackerRef.current = new MainSeriesPriceFormatTracker();
+  }
   if (!mainSeriesReferenceTrackerRef.current) {
     mainSeriesReferenceTrackerRef.current = new MainSeriesReferenceTracker();
   }
   const requestedChartTypeRef = useRef(normalizeMainChartType(chartType));
+  useSyncExternalStore(drawingDocumentSessionRegistry.subscribeScopeLoads,
+    drawingDocumentSessionRegistry.getScopeRevision, drawingDocumentSessionRegistry.getScopeRevision);
   const requestedProjectionSettingsRef = useRef<ProjectionSettings | null>(null);
   const pendingSurfaceViewportRef = useRef<SurfaceViewportSnapshot | null>(null);
   const datasetViewportTransferRef = useRef<SurfaceViewportSnapshot | null>(datasetViewportTransfer);
@@ -984,6 +965,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   const activeSurfaceOwnerRef = useRef<ActiveSurfaceOwner>({
     chart: null,
     datasetKey: null,
+    sourceInterval: null,
     paneHeightStorageKey: null,
     surfaceConfigKey: null,
   });
@@ -1000,6 +982,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   const isRestoringViewportRef = useRef(false);
   const userInteractedRef = useRef(false);
   const followLatestDisabledRef = useRef(false);
+  const transferredHistoryRef = useRef<TransferredViewportHistory | null>(null);
+  const transferredHistoryFrameRef = useRef<number | null>(null);
   const hasRestoredRangeRef = useRef(false);
   const lastViewportRestoreSourceRef = useRef<string | null>(null);
   const visibleRangeSaveTimerRef = useRef<TimerHandle | null>(null);
@@ -1012,10 +996,10 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   const paneHeightStorageKeyRef = useRef<string | null>(null);
   const expandedPaneHeightsRef = useRef<Map<string, number>>(new Map());
   const paneLayoutControlledRef = useRef(false);
-  const prevSubPaneScopeRef = useRef<{
+  const explicitSubPaneRemovalRef = useRef<{
     base: string | null;
-    panes: Map<string, boolean>;
-  }>({ base: null, panes: new Map() });
+    ids: Set<string>;
+  }>({ base: null, ids: new Set() });
   const onNeedMoreLeftRef = useRef(onNeedMoreLeft);
   const onNeedMoreRightRef = useRef(onNeedMoreRight);
   const onRestoreLatestWindowRef = useRef(onRestoreLatestWindow);
@@ -1026,6 +1010,15 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   // The latest bar is loaded but scrolled out of view: offer a jump back to it.
   const scrolledAwayFromLatestRef = useRef(false);
   const [scrolledAwayFromLatest, setScrolledAwayFromLatest] = useState(false);
+  const refreshScrolledAwayFromLatest = useCallback(() => {
+    const range = chartRef.current?.timeScale().getVisibleLogicalRange();
+    const lastIndex = displayRowsRef.current.length - 1;
+    const away = Boolean(range && lastIndex > 0 && range.to < lastIndex - 2);
+    if (away !== scrolledAwayFromLatestRef.current) {
+      scrolledAwayFromLatestRef.current = away;
+      setScrolledAwayFromLatest(away);
+    }
+  }, []);
   const loadingRef = useRef(loading);
   const leftHistoryDemandDatasetRef = useRef<string | null>(null);
   const leftHistoryInteractionGenerationRef = useRef(0);
@@ -1138,7 +1131,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       if (series && (force
         || futureTimeAxisDataRef.current.length > 0
         || futureTimeAxisPlanKeyRef.current)) {
-        series.setData([]);
+        replaceFutureTimeAxisData(chartRef.current, series, []);
       }
     } catch (error) {
       cleared = false;
@@ -1156,6 +1149,15 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       }
     }
     return cleared;
+  }, []);
+  const refreshOrdinalSurfaceTimeScale = useCallback((main: MainSeriesHandle) => {
+    const renderData = new Map<MainSeriesHandle, readonly ChartSeriesInputRow[]>();
+    if (renderedMainSeriesDataRef.current) renderData.set(main, renderedMainSeriesDataRef.current);
+    for (const entry of indicatorSeriesRef.current) renderData.set(entry.series, entry.data);
+    if (futureTimeAxisSeriesRef.current) {
+      renderData.set(futureTimeAxisSeriesRef.current, futureTimeAxisRenderData(futureTimeAxisDataRef.current));
+    }
+    refreshOrdinalTimeScale(chartRef.current, main, renderData);
   }, []);
   const createFutureTimeAxisPlan = useCallback((
     displayRows: DisplayRow[] = displayRowsRef.current,
@@ -1188,7 +1190,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     if (!plan?.changed) return false;
     const series = futureTimeAxisSeriesRef.current;
     if (!series || !Array.isArray(plan.data) || plan.key == null) return false;
-    series.setData(plan.data);
+    replaceFutureTimeAxisData(chartRef.current, series, plan.data);
     futureTimeAxisDataRef.current = plan.data;
     futureTimeAxisPlanKeyRef.current = plan.key;
     recordPerfEvent("chart.futureTimeAxis.setData", {
@@ -1416,8 +1418,6 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     indicatorBarColorMap,
     upColor,
   }), [downColor, indicatorBarColorMap, upColor]);
-  useSyncExternalStore(drawingDocumentSessionRegistry.subscribeScopeLoads,
-    drawingDocumentSessionRegistry.getScopeRevision, drawingDocumentSessionRegistry.getScopeRevision);
   const drawingScopeBase = drawingKeyBase || symbol;
   const drawingKey = `${drawingScopeBase}__main`;
   const capturePaneDrawingFrame = useCallback((
@@ -1783,6 +1783,13 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         || nextWidth <= 0
         || Math.abs(nextWidth - observedWidth) < 0.5) return;
       observedWidth = nextWidth;
+      if (pendingSurfaceViewportRef.current === null) {
+        // A layout resize exposes a new elapsed range at the existing zoom.
+        // Subsequent period changes must capture that visible range, not an
+        // earlier transfer bound from the smaller/larger chart container.
+        boundSurfaceViewportAnchorRef.current = null;
+        transferredHistoryRef.current = null;
+      }
       frameLifecycle.cancel(followLatestResizeFrame);
       followLatestResizeFrame = frameLifecycle.schedule(() => {
         followLatestResizeFrame = null;
@@ -1918,6 +1925,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     const transfer = pendingDatasetViewportTransferRequestRef.current
       ?? datasetViewportTransferRef.current;
     if (transfer === null) return;
+    recordPerfEvent("chart.viewport.settled", { outcome });
     pendingDatasetViewportTransferRequestRef.current = null;
     if (datasetViewportTransferRef.current === transfer) {
       datasetViewportTransferRef.current = null;
@@ -1926,6 +1934,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   }, []);
 
   const markViewportRangeChanged = useCallback((userDriven: boolean) => {
+    transferredHistoryRef.current = null;
     pendingSurfaceViewportRef.current = null;
     boundSurfaceViewportAnchorRef.current = null;
     settleDatasetViewportTransfer("interrupted");
@@ -1944,9 +1953,84 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     markViewportRangeChanged(false);
   }, [markViewportRangeChanged]);
 
+  const scheduleTransferredHistoryFill = useCallback(() => {
+    function schedule() {
+      if (transferredHistoryFrameRef.current !== null || transferredHistoryRef.current === null) return;
+      transferredHistoryFrameRef.current = requestAnimationFrame(() => {
+        transferredHistoryFrameRef.current = null;
+        const fill = transferredHistoryRef.current;
+        const chart = chartRef.current;
+        const owner = activeSurfaceOwnerRef.current;
+        if (fill === null || chart === null || owner.chart !== chart) return;
+        const store = seriesStoreRef.current;
+        if (!store || store.seriesKey !== fill.datasetKey) return;
+        const load = onNeedMoreLeftRef.current;
+        if (!load) return;
+        void fill.loadPage({
+          datasetKey: owner.datasetKey,
+          firstTime: rowsFromStore(store)[0]?.time,
+          loading: loadingRef.current,
+          canLoad: canLoadMoreLeftRef.current,
+          hasHandler: Boolean(onNeedMoreLeftRef.current),
+        }, load).then((requested) => {
+          recordPerfEvent("chart.viewport.historyFill", { requested,
+            sourceSpan: Number(rowsFromStore(store)[0]?.time) - fill.targetFrom });
+          // The request belongs to its old dataset even if it finishes after
+          // another switch or user gesture. Never continue into the new view.
+          if (requested && transferredHistoryRef.current === fill && chartRef.current === chart) schedule();
+        });
+      });
+    }
+    schedule();
+  }, []);
+
+  const ensureTransferredHistoryFill = useCallback((snapshot: SurfaceViewportSnapshot | null) => {
+    // The captured range uses public axis identity, not a synthetic leg's
+    // cumulative lineage. Both numeric and ordinal views need this history.
+    if (!snapshot || snapshot.datasetKey !== datasetKeyRef.current
+      || !surfaceViewportOwnsRestore(snapshot)
+      || !snapshot.sourceRange || !Number.isFinite(snapshot.sourceRange.from)) return;
+    const current = transferredHistoryRef.current;
+    if (current?.datasetKey === snapshot.datasetKey) return;
+    transferredHistoryRef.current = new TransferredViewportHistory(snapshot.datasetKey, snapshot.sourceRange.from);
+    recordPerfEvent("chart.viewport.historyFill", { transferred: true });
+    scheduleTransferredHistoryFill();
+  }, [scheduleTransferredHistoryFill]);
+
+  const ensureLinkedHistoryFill = useCallback((range: ChartSurfaceLinkedTimeRange) => {
+    // Linked ranges use elapsed axis time, including synthetic charts.
+    if (!Number.isFinite(range.from)
+      || !Number.isFinite(range.to) || range.to <= range.from) return;
+    if (surfaceAxisModeRef.current === "derived-ordinal") {
+      const captured = captureSurfaceViewport(chartRef.current, {
+        axisMode: surfaceAxisModeRef.current,
+        datasetKey: datasetKeyRef.current,
+        displayRows: displayRowsRef.current,
+        surfaceConfigKey: surfaceConfigKeyRef.current,
+        sourceInterval: intervalRef.current,
+        axisCarrierRows: futureTimeAxisDataRef.current,
+      });
+      if (captured) boundSurfaceViewportAnchorRef.current = {
+        ...captured, sourceRange: { from: range.from, to: range.to }, preserveSourceRange: true,
+      };
+    }
+    transferredHistoryRef.current = new TransferredViewportHistory(datasetKeyRef.current, range.from);
+    recordPerfEvent("chart.viewport.historyFill", { transferred: false });
+    scheduleTransferredHistoryFill();
+  }, [scheduleTransferredHistoryFill]);
+
   useEffect(() => {
-    if (datasetViewportTransfer !== null
-      || pendingDatasetViewportTransferRequestRef.current === null) return;
+    scheduleTransferredHistoryFill();
+  }, [canLoadMoreLeft, dataMeta, loading, onNeedMoreLeft, scheduleTransferredHistoryFill, seriesReady]);
+
+  useEffect(() => {
+    if (datasetViewportTransfer !== null) {
+      // Explicitly retaining a source-time view also takes ownership away
+      // from replay's follow-latest updates, including after settlement.
+      followLatestDisabledRef.current = true;
+      return;
+    }
+    if (pendingDatasetViewportTransferRequestRef.current === null) return;
     pendingSurfaceViewportRef.current = null;
     boundSurfaceViewportAnchorRef.current = null;
     settleDatasetViewportTransfer("superseded");
@@ -2013,6 +2097,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   const jumpToLatest = useCallback(() => {
     const lastIndex = displayRowsRef.current.length - 1;
     if (lastIndex < 0) return;
+    transferredHistoryRef.current = null;
     pendingSurfaceViewportRef.current = null;
     boundSurfaceViewportAnchorRef.current = null;
     settleDatasetViewportTransfer("interrupted");
@@ -2167,9 +2252,10 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     if (!visibleRange) return null;
     const sourceFrom = sourceTimeFromAxisTime(visibleRange.time?.from);
     const sourceTo = sourceTimeFromAxisTime(visibleRange.time?.to);
-    const sourceTimeRange = sourceFrom != null && sourceTo != null
+    const sourceTimeRange = sourceRangeFromLogicalRows(displayRowsRef.current, visibleRange.logical,
+      intervalRef.current, futureTimeAxisDataRef.current) ?? (sourceFrom != null && sourceTo != null
       ? { from: Math.min(sourceFrom, sourceTo), to: Math.max(sourceFrom, sourceTo) }
-      : null;
+      : null);
     return buildVisibleRangeSnapshot({
       barSpacing: visibleRange.barSpacing,
       logicalRange: visibleRange.logical,
@@ -2190,11 +2276,28 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       datasetKey: committedOwner?.datasetKey ?? datasetKeyRef.current,
       displayRows: displayRowsRef.current,
       surfaceConfigKey: committedOwner?.surfaceConfigKey ?? surfaceConfigKeyRef.current,
+      sourceInterval: committedOwner?.sourceInterval ?? intervalRef.current,
+      axisCarrierRows: futureTimeAxisDataRef.current,
     });
     const snapshot = preserveBoundSurfaceViewportSourceAnchor(
       captured,
       boundSurfaceViewportAnchorRef.current,
     );
+    recordPerfEvent("chart.viewport.capture", {
+      captured: snapshot !== null,
+      bars: displayRowsRef.current.length,
+      logicalSpan: snapshot?.logicalSpan ?? null,
+      sourceSpan: snapshot?.sourceRange ? snapshot.sourceRange.to - snapshot.sourceRange.from : null,
+      transferred: snapshot?.transferredFromDatasetKey !== undefined,
+      rawSourceSpan: captured?.sourceRange ? captured.sourceRange.to - captured.sourceRange.from : null,
+      sourceIntervalSeconds: parseIntervalSeconds(committedOwner?.sourceInterval ?? intervalRef.current),
+      liveIntervalSeconds: parseIntervalSeconds(intervalRef.current),
+      carrierCount: futureTimeAxisDataRef.current.length,
+      carrierStepSeconds: futureTimeAxisDataRef.current.length > 1
+        ? Number(sourceTimeFromAxisTime(futureTimeAxisDataRef.current[1]?.time))
+          - Number(sourceTimeFromAxisTime(futureTimeAxisDataRef.current[0]?.time)) : null,
+      sourceMatches: committedOwner?.datasetKey === datasetKeyRef.current,
+    });
     if (snapshot !== null) {
       rememberSurfaceViewport(surfaceViewportCacheRef.current, snapshot);
     }
@@ -2343,21 +2446,20 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     hasRestoredRangeRef.current = true;
     lastViewportRestoreSourceRef.current = "linked-time-anchor";
     const visibleRange = captureVisibleRange();
+    if (visibleRange?.time) ensureLinkedHistoryFill(visibleRange.time);
     publishViewportRangeChange(visibleRange);
     scheduleVisibleRangeSave(visibleRange);
     return true;
-  }, [captureVisibleRange, markLinkedViewportApplied, publishViewportRangeChange, scheduleVisibleRangeSave]);
+  }, [captureVisibleRange, ensureLinkedHistoryFill, markLinkedViewportApplied, publishViewportRangeChange, scheduleVisibleRangeSave]);
 
   const setLinkedVisibleTimeRange = useCallback((
     range: ChartSurfaceLinkedTimeRange,
   ): boolean => {
     const chart = chartRef.current;
     if (!chart) return false;
-    const logicalRange = mapSourceTimeRangeToDisplayLogicalRange(
-      displayRowsRef.current,
-      range,
-      futureTimeAxisDataRef.current,
-    );
+    const logicalRange = surfaceAxisModeRef.current === "derived-ordinal"
+      ? createViewportTimeScale(displayRowsRef.current, intervalRef.current, futureTimeAxisDataRef.current)?.logicalRange(range)
+      : mapSourceTimeRangeToDisplayLogicalRange(displayRowsRef.current, range, futureTimeAxisDataRef.current);
     if (!logicalRange) return false;
     const previousSyncing = isSyncingRef.current;
     isSyncingRef.current = true;
@@ -2372,13 +2474,14 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       isSyncingRef.current = previousSyncing;
     }
     markLinkedViewportApplied();
+    ensureLinkedHistoryFill(range);
     hasRestoredRangeRef.current = true;
     lastViewportRestoreSourceRef.current = "linked-date-range";
     const visibleRange = captureVisibleRange();
     publishViewportRangeChange(visibleRange);
     scheduleVisibleRangeSave(visibleRange);
     return true;
-  }, [captureVisibleRange, markLinkedViewportApplied, publishViewportRangeChange, scheduleVisibleRangeSave]);
+  }, [captureVisibleRange, ensureLinkedHistoryFill, markLinkedViewportApplied, publishViewportRangeChange, scheduleVisibleRangeSave]);
 
   const linkedViewportIsReady = useCallback((): boolean => (
     hasRestoredRangeRef.current
@@ -2415,8 +2518,11 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     delta: MainSeriesReferenceDelta | null = null,
   ) => {
     if (!series || !nextChartType) return;
-    const options = mainSeriesReferenceTrackerRef.current?.resolve(nextChartType, rows, delta)
-      ?? buildMainSeriesReferenceOptions(nextChartType, rows);
+    const options = {
+      ...(mainSeriesReferenceTrackerRef.current?.resolve(nextChartType, rows, delta)
+        ?? buildMainSeriesReferenceOptions(nextChartType, rows)),
+      priceFormat: mainSeriesPriceFormatTrackerRef.current!.resolve(rows, delta),
+    };
     const signature = JSON.stringify(options);
     const previous = mainSeriesReferenceRef.current;
     if (previous.series === series && previous.signature === signature) return;
@@ -2456,6 +2562,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
 
     const initialChartType = requestedChartTypeRef.current;
     const initialDescriptor = getChartTypeDescriptor(initialChartType);
+    const initialSourceInterval = intervalRef.current;
     const initialDatasetKey = datasetKeyRef.current;
     const initialSurfaceConfigKey = surfaceConfigKey;
     const selectedViewport = selectSurfaceViewportSnapshot(
@@ -2521,6 +2628,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     activeSurfaceOwnerRef.current = {
       chart,
       datasetKey: initialDatasetKey,
+      sourceInterval: intervalRef.current,
       paneHeightStorageKey: initialPaneHeightStorageKey,
       surfaceConfigKey: initialSurfaceConfigKey,
     };
@@ -2574,6 +2682,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           {
             axisMode: initialDescriptor.axisMode,
             datasetKey: initialDatasetKey,
+            sourceInterval: initialSourceInterval,
+            axisCarrierRows: futureTimeAxisDataRef.current,
             surfaceConfigKey: initialSurfaceConfigKey,
           },
         );
@@ -2650,12 +2760,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
 
     const handleVisibleLogicalRangeChange = (range: VisibleLogicalRange) => {
       scheduleFutureTimeAxisCoverage();
-      const lastIndex = displayRowsRef.current.length - 1;
-      const awayFromLatest = Boolean(range && lastIndex > 0 && range.to < lastIndex - 2);
-      if (awayFromLatest !== scrolledAwayFromLatestRef.current) {
-        scrolledAwayFromLatestRef.current = awayFromLatest;
-        setScrolledAwayFromLatest(awayFromLatest);
-      }
+      // Prepend changes the chart's logical indices synchronously, before
+      // displayRowsRef is committed. Reconcile that state after the commit.
+      if (!isSyncingRef.current) refreshScrolledAwayFromLatest();
       if (isChartPointerActiveRef.current && range) {
         chartPointerLogicalRangeChangedRef.current = true;
         markViewportRangeInteracted();
@@ -2687,6 +2794,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         : {
             chart,
             datasetKey: initialDatasetKey,
+            sourceInterval: initialSourceInterval,
             paneHeightStorageKey: initialPaneHeightStorageKey,
             surfaceConfigKey: initialSurfaceConfigKey,
           };
@@ -2695,6 +2803,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         datasetKey: owner.datasetKey,
         displayRows: displayRowsRef.current,
         surfaceConfigKey: owner.surfaceConfigKey,
+        sourceInterval: owner.sourceInterval,
+        axisCarrierRows: futureTimeAxisDataRef.current,
       });
       if (outgoingViewport) {
         rememberSurfaceViewport(surfaceViewportCache, outgoingViewport);
@@ -2708,6 +2818,11 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       if (leftHistoryFlushFrameRef.current != null) {
         cancelAnimationFrame(leftHistoryFlushFrameRef.current);
         leftHistoryFlushFrameRef.current = null;
+      }
+      transferredHistoryRef.current = null;
+      if (transferredHistoryFrameRef.current !== null) {
+        cancelAnimationFrame(transferredHistoryFrameRef.current);
+        transferredHistoryFrameRef.current = null;
       }
       if (rightWindowRestoreScrollFrameRef.current != null) {
         cancelAnimationFrame(rightWindowRestoreScrollFrameRef.current);
@@ -2725,6 +2840,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       activeSurfaceOwnerRef.current = {
         chart: null,
         datasetKey: null,
+        sourceInterval: null,
         paneHeightStorageKey: null,
         surfaceConfigKey: null,
       };
@@ -2743,6 +2859,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       mainSeriesTypeRef.current = null;
       mainSeriesReferenceRef.current = { series: null, signature: "" };
       mainSeriesReferenceTrackerRef.current?.reset();
+      mainSeriesPriceFormatTrackerRef.current?.reset();
       sourceRowsRef.current = [];
       sourceRowMapRef.current = new Map();
       sourceRowIndexMapRef.current = new Map();
@@ -2799,7 +2916,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         console.warn("[drawing-engine] surface disposal continued after drawing teardown failed closed");
       }
     };
-  }, [captureVisibleRange, customBg, downColor, evaluateHistoryEdgeGesture, markViewportRangeInteracted, paneCrosshairStore, publishDrawingProjectionStore, publishMainLegendCrosshair, publishViewportRangeChange, saveCurrentPaneHeights, scheduleFutureTimeAxisCoverage, scheduleVisibleRangeSave, surfaceConfigKey, theme, timezone, upColor]);
+  }, [captureVisibleRange, customBg, downColor, evaluateHistoryEdgeGesture, markViewportRangeInteracted, paneCrosshairStore, publishDrawingProjectionStore, publishMainLegendCrosshair, publishViewportRangeChange, refreshScrolledAwayFromLatest, saveCurrentPaneHeights, scheduleFutureTimeAxisCoverage, scheduleVisibleRangeSave, surfaceConfigKey, theme, timezone, upColor]);
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
@@ -3065,7 +3182,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           });
           return;
         }
-        const futureTimeAxisPoints = resyncSeriesTimeScaleIndexes(
+        const futureTimeAxisPoints = replaceFutureTimeAxisData(
+          chartRef.current,
           futureTimeAxisSeriesRef.current,
           futureTimeAxisDataRef.current,
         );
@@ -3312,6 +3430,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         activeSurfaceOwnerRef.current = {
           ...activeSurfaceOwnerRef.current,
           datasetKey: datasetKeyRef.current,
+          sourceInterval: intervalRef.current,
           surfaceConfigKey: surfaceConfigKeyRef.current,
         };
       }
@@ -3420,7 +3539,20 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         toDatasetKey: datasetKey,
       },
     );
-    const pendingViewport = transferredViewport ?? rememberedViewport;
+    const pendingViewport = selectPeriodViewportRestore(transferredViewport, rememberedViewport);
+    const transferredFrom = transferredViewport?.sourceRange?.from;
+    // Axis source-time bounds retain the requested interval even if an ordinal
+    // projection first publishes only a sparse tail before its history arrives.
+    transferredHistoryRef.current = transferredFrom !== undefined && Number.isFinite(transferredFrom)
+      ? new TransferredViewportHistory(datasetKey, transferredFrom)
+      : null;
+    scheduleTransferredHistoryFill();
+    recordPerfEvent("chart.viewport.handoff", {
+      captured: datasetViewportTransferRef.current !== null,
+      sourceMatches: datasetViewportTransferRef.current?.datasetKey === outgoingDatasetKey,
+      transferred: transferredViewport !== null,
+      remembered: rememberedViewport !== null,
+    });
     boundSurfaceViewportAnchorRef.current = null;
     pendingDatasetViewportTransferRequestRef.current = transferredViewport !== null
       ? datasetViewportTransferRef.current
@@ -3519,7 +3651,12 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     followLatestDisabledRef.current = false;
     hasRestoredRangeRef.current = false;
     lastViewportRestoreSourceRef.current = null;
-    renderedMainSeriesDataRef.current = [];
+    // The mounted series still contains the outgoing dataset. An empty cache
+    // would turn an empty incoming synthetic projection into a no-op, leaving
+    // old bricks visible beneath the new interval label until history arrives.
+    // Unknown contents force the next projection to commit a full setData,
+    // including setData([]), while keeping the chart/viewport object alive.
+    renderedMainSeriesDataRef.current = null;
     drawingSourceTimeHorizonRef.current = null;
     displayRowsRef.current = [];
     displayRowMapRef.current = new Map();
@@ -3536,6 +3673,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     datasetKey,
     materializeRuntimePaneLayout,
     publishDrawingProjectionStore,
+    scheduleTransferredHistoryFill,
     settleDatasetViewportTransfer,
   ]);
 
@@ -3629,7 +3767,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         renderedMainSeriesDataRef.current = renderResult.nextData;
         if (axisMode === "derived-ordinal" && ordinalSourceTimesChanged(
           previousDisplayRows, displayRows, effectiveProjectionPatch.fromOutputIndex,
-        )) refreshOrdinalTimeScale(chartRef.current, series);
+        )) refreshOrdinalSurfaceTimeScale(series);
         renderedMainSeriesGenerationRef.current += 1;
         committedProjectionGenerationRef.current = generation;
         projectionRendered = true;
@@ -3667,6 +3805,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         activeSurfaceOwnerRef.current = {
           ...activeSurfaceOwnerRef.current,
           datasetKey: datasetKeyRef.current,
+          sourceInterval: intervalRef.current,
           surfaceConfigKey: surfaceConfigKeyRef.current,
         };
       }
@@ -3692,11 +3831,13 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         publishDrawingProjectionStore(projectionStore);
         chartAdapter.requestSeriesUpdate();
       }
+      if (projectionRendered) ensureTransferredHistoryFill(pendingSurfaceViewportRef.current);
       if (projectionRendered
         && pendingSurfaceViewportRef.current
         && surfaceViewportHasAnchorCoverage(
           sourceRowsRef.current,
           pendingSurfaceViewportRef.current,
+          { sourceInterval: intervalRef.current },
         )) {
         isRestoringViewportRef.current = true;
         try {
@@ -3707,6 +3848,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
             {
               axisMode: surfaceAxisModeRef.current,
               datasetKey: datasetKeyRef.current,
+              sourceInterval: intervalRef.current,
+              axisCarrierRows: futureTimeAxisDataRef.current,
               surfaceConfigKey: surfaceConfigKeyRef.current,
             },
           );
@@ -3728,6 +3871,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
                 datasetKey: datasetKeyRef.current,
                 displayRows,
                 surfaceConfigKey: surfaceConfigKeyRef.current,
+                sourceInterval: intervalRef.current,
+                axisCarrierRows: futureTimeAxisDataRef.current,
               }),
               restoredTransfer,
             );
@@ -3748,6 +3893,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     } finally {
       isSyncingRef.current = false;
     }
+    refreshScrolledAwayFromLatest();
     notifyLinkedViewportReady();
 
     const unsubscribe = store.subscribe((delta, currentStore) => {
@@ -3769,7 +3915,15 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         drawingSourceTimeHorizonRef.current = nextSourceTimeHorizon;
         const sourceTimeHorizonChanged = nextSourceTimeHorizon !== previousSourceTimeHorizon;
         const previousDisplayRows = projectionStore.displaySnapshot();
+        const previousConfigurationKey = projectionStore.configurationKey;
         const projectionPatch = projectionStore.applySourceDelta(delta, rows);
+        if (shouldAdvanceDrawingCoordinateGeneration({
+          axisMode: getChartTypeDescriptor(currentChartType).axisMode,
+          canReuseProjection: previousConfigurationKey === projectionStore.configurationKey,
+        })) {
+          drawingCoordinateGenerationRef.current += 1;
+          setDrawingCoordinateGeneration((previous) => previous + 1);
+        }
         const displayRows = projectionStore.displaySnapshot();
         const axisMode = getChartTypeDescriptor(currentChartType).axisMode;
         const futureTimeAxisPlan = createFutureTimeAxisPlan(displayRows);
@@ -3803,7 +3957,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           renderedMainSeriesDataRef.current = renderResult.nextData;
           if (axisMode === "derived-ordinal" && ordinalSourceTimesChanged(
             previousDisplayRows, displayRows, projectionPatch.fromOutputIndex,
-          )) refreshOrdinalTimeScale(chartRef.current, currentSeries);
+          )) refreshOrdinalSurfaceTimeScale(currentSeries);
           renderedMainSeriesGenerationRef.current += 1;
           committedProjectionGenerationRef.current = generation;
           projectionRendered = true;
@@ -3835,6 +3989,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           rowIndexMapRef: sourceRowIndexMapRef,
         });
         scheduleLeftHistoryDemandFlush();
+        scheduleTransferredHistoryFill();
         syncDisplayDataRefsFromProjection({
           store: projectionStore,
           rowsRef: displayRowsRef,
@@ -3876,13 +4031,24 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         if (directViewportTransfer !== null) {
           pendingSurfaceViewportRef.current = directViewportTransfer;
         }
+        // A later prepend can rebuild the ordinal projection with a different
+        // density. Keep the transferred elapsed range until a user/link gesture
+        // takes ownership, rather than retaining the sparse seed's brick count.
+        const bound = boundSurfaceViewportAnchorRef.current;
+        const retainedTransfer = axisMode === "derived-ordinal" && bound?.datasetKey === nextDatasetKey
+          && surfaceViewportOwnsRestore(bound)
+          && shouldPreserveProjectionViewport(delta, { hasDisplay: true, userInteracted: true })
+          ? bound : null;
         const pendingViewportTransfer = directViewportTransfer
           ?? (pendingSurfaceViewportRef.current?.datasetKey === nextDatasetKey
             ? pendingSurfaceViewportRef.current
-            : null);
+            : retainedTransfer);
+        if (projectionRendered) ensureTransferredHistoryFill(pendingViewportTransfer);
         if (projectionRendered
           && pendingViewportTransfer
-          && surfaceViewportHasAnchorCoverage(sourceRowsRef.current, pendingViewportTransfer)) {
+          && surfaceViewportHasAnchorCoverage(sourceRowsRef.current, pendingViewportTransfer, {
+            sourceInterval: intervalRef.current,
+          })) {
           isRestoringViewportRef.current = true;
           try {
             const restored = restoreSurfaceViewport(
@@ -3892,6 +4058,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
               {
                 axisMode: surfaceAxisModeRef.current,
                 datasetKey: nextDatasetKey,
+                sourceInterval: intervalRef.current,
+                axisCarrierRows: futureTimeAxisDataRef.current,
                 surfaceConfigKey: surfaceConfigKeyRef.current,
               },
             );
@@ -3913,6 +4081,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
                   datasetKey: nextDatasetKey,
                   displayRows,
                   surfaceConfigKey: surfaceConfigKeyRef.current,
+                  sourceInterval: intervalRef.current,
+                  axisCarrierRows: futureTimeAxisDataRef.current,
                 }),
                 restoredTransfer,
               );
@@ -3935,10 +4105,11 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       } finally {
         isSyncingRef.current = false;
       }
+      refreshScrolledAwayFromLatest();
       notifyLinkedViewportReady();
     });
     return () => { unsubscribe(); };
-  }, [chartAdapter, clearFutureTimeAxis, commitFutureTimeAxisPlan, createFutureTimeAxisPlan, followLatestViewport, mainSeriesRenderContext, materializeRuntimePaneLayout, notifyLinkedViewportReady, projectionSettings, publishDrawingProjectionStore, scheduleLeftHistoryDemandFlush, seriesReady, seriesStore, settleDatasetViewportTransfer, updateMainSeriesReference]);
+  }, [chartAdapter, clearFutureTimeAxis, commitFutureTimeAxisPlan, createFutureTimeAxisPlan, ensureTransferredHistoryFill, followLatestViewport, mainSeriesRenderContext, materializeRuntimePaneLayout, notifyLinkedViewportReady, projectionSettings, publishDrawingProjectionStore, refreshOrdinalSurfaceTimeScale, refreshScrolledAwayFromLatest, scheduleLeftHistoryDemandFlush, scheduleTransferredHistoryFill, seriesReady, seriesStore, settleDatasetViewportTransfer, updateMainSeriesReference]);
 
   useEffect(() => {
     const rows = rowsFromStore(seriesStore);
@@ -4282,11 +4453,17 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
 
   const handleDeletePane = useCallback((pane: IndicatorSubPane) => {
     if (!pane.owner || !onRemoveSubPane) return;
+    const removals = explicitSubPaneRemovalRef.current;
+    if (removals.base !== drawingScopeBase) {
+      removals.base = drawingScopeBase;
+      removals.ids.clear();
+    }
+    removals.ids.add(pane.id);
     setPaneOrder((previous) => previous.filter((paneId) => paneId !== pane.id));
     setCollapsedPaneIds((previous) => previous.filter((paneId) => paneId !== pane.id));
     setMaximizedPaneId((previous) => previous === pane.id ? null : previous);
     onRemoveSubPane(pane);
-  }, [onRemoveSubPane]);
+  }, [drawingScopeBase, onRemoveSubPane]);
 
   const publishHoveredPaneId = useCallback((paneId: string | null) => {
     if (hoveredPaneIdRef.current === paneId) return;
@@ -4435,27 +4612,46 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   }, [customBg, indicatorDatasetOwned, paneDescriptors, seriesReady, theme]);
 
   useEffect(() => {
-    const currentBase = drawingKeyBase || symbol;
-    const currentPanes = new Map(
-      subPanes.map((pane) => [pane.id, Boolean(pane.dataMarketPane)]),
-    );
-    const previous = prevSubPaneScopeRef.current;
-    const removablePreviousIds = new Set<string>();
-    for (const [paneId, preserveWhenHidden] of previous.panes) {
-      // Market-data studies can disappear temporarily when hidden or when the
-      // current product lacks the channel. Preserve their pane drawings so a
-      // later supported/visible session can restore the user's work.
-      if (!preserveWhenHidden) removablePreviousIds.add(paneId);
+    // Main data and indicators commit in separate React effects. Removing old
+    // ordinal indicator/fill points rebases LWC's shared axis even with
+    // shiftVisibleRangeOnNewBar=false. Restore the owned elapsed-time window
+    // after all auxiliary series have reconciled, not only after main setData.
+    const bound = boundSurfaceViewportAnchorRef.current;
+    if (!usesDerivedAxis || !indicatorDatasetOwned || !indicatorReconcileReady
+      || pendingSurfaceViewportRef.current !== null || !bound
+      || bound.datasetKey !== datasetKeyRef.current
+      || !surfaceViewportOwnsRestore(bound)) return;
+    isRestoringViewportRef.current = true;
+    try {
+      restoreSurfaceViewport(viewportControllerRef.current, displayRowsRef.current, bound, {
+        axisMode: surfaceAxisModeRef.current,
+        datasetKey: datasetKeyRef.current,
+        sourceInterval: intervalRef.current,
+        axisCarrierRows: futureTimeAxisDataRef.current,
+        surfaceConfigKey: surfaceConfigKeyRef.current,
+      });
+    } finally {
+      isRestoringViewportRef.current = false;
     }
+  }, [indicatorDatasetOwned, indicatorReconcileReady, paneDescriptors, seriesReady, usesDerivedAxis]);
+
+  useEffect(() => {
+    const currentBase = drawingKeyBase || symbol;
+    const removals = explicitSubPaneRemovalRef.current;
+    // Projection loading and hidden output can remove render panes without
+    // removing indicator definitions. Only an explicit pane deletion permits
+    // erasing the user's persisted drawing document.
     for (const scopeKey of removedDrawingSubPaneScopeKeys({
       currentBase,
-      currentIds: new Set(currentPanes.keys()),
-      previousBase: previous.base,
-      previousIds: removablePreviousIds,
+      currentIds: new Set(subPanes.map(pane => pane.id)),
+      previousBase: removals.base,
+      previousIds: removals.ids,
+      explicitlyRemovedIds: removals.ids,
     })) {
       clearDrawingScopeAuthoritatively(scopeKey);
+      removals.ids.delete(scopeKey.slice(currentBase.length + 2));
     }
-    prevSubPaneScopeRef.current = { base: currentBase, panes: currentPanes };
+    if (removals.base !== currentBase) { removals.base = currentBase; removals.ids.clear(); }
   }, [drawingKeyBase, subPanes, symbol]);
 
   const drawingPaneSurfaces = useMemo((): DrawingPaneSurface[] => {
