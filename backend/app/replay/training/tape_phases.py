@@ -1,27 +1,28 @@
 
-from . import control_rules as control_rules_ops
-from . import service_validation as service_validation_ops
-from app.replay.training.persistence import account_marks as account_marks_ops
-from app.replay.training.persistence import portfolio as portfolio_ops
+"""Bounded tape intervals sharing a durable publication barrier.
 
-"""Bounded exact tape cohorts sharing a durable publication barrier.
-
-Account projections, risk detection and review execute in their original cohort
-order. Dense same-time trades use candle and ordered-price summaries; a risk
-interaction aborts the unpublished batch and uses the scalar coordinator.
+ONE_WAY ranges prove a trade-price risk envelope. HEDGE ranges stop before the
+next pinned input and prove both legs at their unchanged public marks. Both
+retain exact source order, deferred curves and two complete-cohort review anchors;
+an account interaction aborts the unpublished batch for the scalar coordinator.
 """
 
-from bisect import bisect_right
 import json
+from bisect import bisect_right
 from decimal import Decimal
+
+from app.replay.training.persistence import account_marks as account_marks_ops
+from app.replay.training.persistence import portfolio as portfolio_ops
 
 from ..canonical import canonical_json
 from ..constants import CommandType, REPLAY_PROTOCOL
 from ..models import ReplayCommand
 from ..multi_phase_commit import commit_actor_phases
-from .multitrack import StableMarketEvent, stable_market_event_order, PreparedGlobalEventHashes
+from . import control_rules as control_rules_ops
+from . import service_validation as service_validation_ops
 from .account import InstrumentRule, isolated_margin_key
 from .multi_interval import IntervalLeg, safe_envelope
+from .multitrack import StableMarketEvent, stable_market_event_order, PreparedGlobalEventHashes
 
 MAX_COHORTS = 16
 MAX_EVENTS_PER_TRACK = 8192
@@ -153,13 +154,15 @@ def update_intent(store, connection, run_id):
         )
 
 
-async def try_advance(owner, *, command, binding, tracks, snapshots, target):
+async def try_advance(owner, *, command, binding, tracks, snapshots, target, runtime_snapshot=None, source_goal=None):
     service, store = owner.replay_service, owner.store
+    hedge = binding.get("position_mode") == "HEDGE"
     if (
         not service.settings.replay_fast_forward_optimization_enabled
         or binding.get("source_kind") != "AGG_TRADE"
-        or binding.get("position_mode") != "ONE_WAY"
-        or binding.get("funding_mode") != "OFF"
+        or binding.get("position_mode") not in {"ONE_WAY", "HEDGE"}
+        or (source_goal is not None and (not hedge or len(tracks) != 1))
+        or (not hedge and binding.get("funding_mode") != "OFF")
         or binding.get("book_mode", "OFF") != "OFF"
         or binding.get("account_data_mode") == "HISTORICAL_EXACT"
         or not 1 <= len(tracks) <= 8
@@ -178,6 +181,22 @@ async def try_advance(owner, *, command, binding, tracks, snapshots, target):
             for o in snapshot["components"]["orders"]
         ):
             return None
+    context = None
+    if hedge:
+        from .hedge_tape_interval import prepare_context
+        context = await prepare_context(
+            owner, run_id=command.run_id, binding=binding, tracks=tracks,
+            current=current, target=target, runtime_snapshot=runtime_snapshot,
+        )
+        if context is None:
+            return None
+    parent_target = target
+    if hedge:
+        target = context["target"]
+    if source_goal is not None:
+        # Keep the entire final timestamp on the exact-count path: the user's
+        # requested event may be in the middle of a same-time trade cohort.
+        target = min(target, source_goal.target_virtual_time_ms - 1)
     plans = {}
     blocks = {}
     prices = {}
@@ -220,9 +239,10 @@ async def try_advance(owner, *, command, binding, tracks, snapshots, target):
             for track, _ in snapshots
         }
         try:
-            context = await store.base_store.run_extension_read(
-                lambda c: require_safe_prices(store, c, command.run_id, planned_prices)
-            )
+            if not hedge:
+                context = await store.base_store.run_extension_read(
+                    lambda c: require_safe_prices(store, c, command.run_id, planned_prices)
+                )
             break
         except TapeRiskBoundary as error:
             if str(error) != "price envelope":
@@ -316,15 +336,23 @@ async def try_advance(owner, *, command, binding, tracks, snapshots, target):
                     connection, run_id=command.run_id
                 ):
                     raise TapeRiskBoundary()
-                require_safe_prices(store, connection, command.run_id, planned_prices)
+                if hedge:
+                    from .hedge_tape_interval import validate_input_cursors
+                    if not validate_input_cursors(connection, command.run_id, context["input_cursors"]):
+                        raise TapeRiskBoundary()
+                else:
+                    require_safe_prices(store, connection, command.run_id, planned_prices)
                 intent = store._advance_intent_writer(
                     run_id=command.run_id,
                     command_id=command.command_id,
                     command=command.to_dict(),
                     session_id=binding["adapter_session_id"],
                     initial_cursor=command.expected_cursor.to_dict(),
-                    target_virtual_time_ms=target,
-                    plan={"schema": "tape-cohort-advance.v1"},
+                    target_virtual_time_ms=parent_target,
+                    plan={"schema": "tape-cohort-advance.v1", **(
+                        {"target_source_sequence": source_goal.target_source_sequence}
+                        if source_goal is not None else {}
+                    )},
                     summary=None,
                 )(connection)
                 if intent["status"] != "RUNNING":
@@ -346,6 +374,13 @@ async def try_advance(owner, *, command, binding, tracks, snapshots, target):
                 (command.run_id,),
             ).fetchone():
                 raise TapeRiskBoundary()
+            if hedge:
+                fingerprint = store._finalize_hedge_inputs_in_transaction(
+                    connection, run_id=command.run_id, risk_virtual_time_ms=at,
+                    cached_fingerprint=context["fingerprint"],
+                )
+                if fingerprint != context["fingerprint"]:
+                    raise TapeRiskBoundary("fixed-mark account basis changed")
             store._record_global_events_in_transaction(
                 connection,
                 run_id=command.run_id,
@@ -361,6 +396,16 @@ async def try_advance(owner, *, command, binding, tracks, snapshots, target):
                 prepared=encoded["interval"],
                 interval=intervals[ordinal],
             )
+            if hedge:
+                # An unchanged public mark has no financial SOURCE_EVENT
+                # descriptor. Still retain each committed phase as a usable
+                # historical review/fork anchor, not only an invisible curve.
+                store._append_review_timeline_event(
+                    connection, run_id=command.run_id,
+                    session_id=binding["adapter_session_id"],
+                    context={"kind": "DIRECT", "category": "SYSTEM", "event_type": "HEDGE_TAPE_INTERVAL"},
+                    state=None, checkpoint=None, now_ms=store.base_store._validated_now_ms(),
+                )
 
         phases.append(
             dict(commands=commands, before=before, after=after, tape_summary=True, prepared_tape=prepared_tape,
@@ -389,4 +434,9 @@ async def try_advance(owner, *, command, binding, tracks, snapshots, target):
     if used is None:
         used = store._multi_interval_commands = set()
     used.add((command.run_id, command.command_id))
+    if hedge:
+        fingerprint = await store.base_store.run_extension_read(
+            lambda c: account_marks_ops.hedge_risk_fingerprint(c, run_id=command.run_id)
+        )
+        store._cache_committed_hedge_fingerprint(command.run_id, fingerprint)
     return tuple(stable), times[-1]
