@@ -281,7 +281,11 @@ export async function checkTapePlaybackBoundaries() {
     });
   };
   const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
-  function Probe() { latest = useReplaySharedIndicatorRuntime(runtime, viewer, "sampled-tape", empty); return null; }
+  function Probe() {
+    const value = useReplaySharedIndicatorRuntime(runtime, viewer, "sampled-tape", empty);
+    useLayoutEffect(() => { latest = value; });
+    return null;
+  }
   try {
     await act(async () => root.render(<Probe />));
     await act(async () => {
@@ -363,10 +367,14 @@ export async function checkColdTapePlayback(rewind = false) {
   const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
   function Probe() {
     const projection = useReplayChartProjection(runtime, "track-1", "1m");
-    store = projection.seriesStore; observation = projection.tapeObservation ?? null;
     assert(!projection.error, `production cell projection failed: ${projection.error}`);
-    latest = useReplaySharedIndicatorRuntime(runtime, structuralMock<ReplayViewerRuntime>({ seriesStore: store,
-      tapeObservation: observation, viewerState: { selected_track_id: "track-1", display_interval: "1m" } }), "cold-tape", persistence);
+    const value = useReplaySharedIndicatorRuntime(runtime, structuralMock<ReplayViewerRuntime>({ seriesStore: projection.seriesStore,
+      tapeObservation: projection.tapeObservation ?? null, viewerState: { selected_track_id: "track-1", display_interval: "1m" } }), "cold-tape", persistence);
+    useLayoutEffect(() => {
+      store = projection.seriesStore;
+      observation = projection.tapeObservation ?? null;
+      latest = value;
+    });
     return null;
   }
   const started = performance.now();
