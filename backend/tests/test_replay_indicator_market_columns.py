@@ -105,7 +105,9 @@ def test_cached_close_column_rechecks_changed_source_bytes(tmp_path):
 
 
 @pytest.mark.parametrize("name", ["RSI", "EMA", "MACD"])
-def test_whole_pinned_month_math_matches_live_full_history(prepared, tmp_path, name):
+@pytest.mark.parametrize("interval,width", [("5m", 5), ("7m", 7), ("90m", 90)])
+def test_whole_pinned_month_math_matches_live_full_history(prepared, tmp_path, name, interval, width):
+    from app.data_engine.interval_policy import compute_bucket_start_ms
     from app.replay.bars.builder import ReplayDisplayBar
     from app.replay.training.indicator_checkpoint import IndicatorCheckpointStore
     from app.replay.training.indicator_prefix import CanonicalReplayIndicators
@@ -116,18 +118,19 @@ def test_whole_pinned_month_math_matches_live_full_history(prepared, tmp_path, n
     context = history(repo, revision)
     context.snapshot.warmup_rows = ()
     context.revealed_boundary_ms = END
-    scalar = builder("5m"); scalar.capacity = 10_000; scalar.append_history(source_rows)
-    rows = [ReplayDisplayBar.from_dict(raw) for raw in scalar.replace_projection()["bars"]]
+    scalar = builder(interval); scalar.capacity = 10_000; scalar.append_history(source_rows)
+    rows = [ReplayDisplayBar.from_dict(raw) for raw in scalar.replace_projection()["bars"]
+            if raw["open_time_ms"] >= START]  # Incomplete listing bucket cannot seed recursion.
 
     class Prefix:
-        origin_ms = START
+        origin_ms = compute_bucket_start_ms(START, width * MINUTE, interval=interval)
         revealed_boundary_ms = END
         def __init__(self):
             self.identity = {"contract": "test-pinned-column-month", "identity": {
-                **IDENTITY.to_dict(), "display_interval": "5m"}}
+                **IDENTITY.to_dict(), "display_interval": interval}}
 
         def read_closes(self, start, stop):
-            return read_indexed_closes(context, start, stop, "5m", 5 * MINUTE, Event())
+            return read_indexed_closes(context, start, stop, interval, width * MINUTE, Event())
 
         def read(self, *_):
             pytest.fail("ordinary pinned month fell back to per-minute account index")
