@@ -2681,6 +2681,7 @@ export const fr = {
   "replay.paper.submitting": "Soumission…",
   "replay.paper.submitHint": "Avant la soumission, le curseur, la marge et le plafond de quantité sont revérifiés pour le côté cliqué.",
   "replay.paper.qtyAsset": "Quantité",
+  "replay.paper.orderBudget": "Montant réservé (frais inclus)",
   "replay.paper.marginAmt": "Marge",
   "replay.paper.notionalAmt": "Notionnel",
   "replay.paper.noLong": "Aucun long à clôturer",

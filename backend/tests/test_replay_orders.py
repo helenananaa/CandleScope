@@ -48,7 +48,7 @@ def test_order_state_machine_place_cancel_and_no_partial_failure_state() -> None
     assert order.status is OrderStatus.OPEN
     assert order.accepted_source_sequence == 0
     assert order.status_history == (OrderStatus.NEW, OrderStatus.OPEN)
-    assert broker.account.reserved_margin == "19"
+    assert broker.account.reserved_margin == "19.038"
 
     canceled = broker.cancel_order(order.order_id, command_id="cmd-cancel")
     assert canceled.status is OrderStatus.CANCELED

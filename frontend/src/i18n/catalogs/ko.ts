@@ -2943,6 +2943,7 @@ export const ko = {
   "replay.paper.submitting": "제출 중…",
   "replay.paper.submitHint": "제출 전 클릭한 방향에 대해 커서, 증거금, 수량 한도를 다시 확인.",
   "replay.paper.qtyAsset": "수량",
+  "replay.paper.orderBudget": "예약 금액 (비용 포함)",
   "replay.paper.marginAmt": "증거금",
   "replay.paper.notionalAmt": "명목 금액",
   "replay.paper.noLong": "청산할 롱 없음",

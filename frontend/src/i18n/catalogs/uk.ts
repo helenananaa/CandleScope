@@ -2680,6 +2680,7 @@ export const uk = {
   "replay.paper.submitting": "Подання…",
   "replay.paper.submitHint": "Перед поданням курсор, маржа й ліміт кількості повторно перевіряються для натиснутої сторони.",
   "replay.paper.qtyAsset": "Кількість",
+  "replay.paper.orderBudget": "Резерв (включно з витратами)",
   "replay.paper.marginAmt": "Маржа",
   "replay.paper.notionalAmt": "Номінал",
   "replay.paper.noLong": "Немає лонга для закриття",

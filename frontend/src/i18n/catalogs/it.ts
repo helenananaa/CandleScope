@@ -2681,6 +2681,7 @@ export const it = {
   "replay.paper.submitting": "Invio…",
   "replay.paper.submitHint": "Prima dell’invio, cursore, margine e tetto di quantità vengono ricontrollati per il lato cliccato.",
   "replay.paper.qtyAsset": "Quantità",
+  "replay.paper.orderBudget": "Importo riservato (costi inclusi)",
   "replay.paper.marginAmt": "Margine",
   "replay.paper.notionalAmt": "Nozionale",
   "replay.paper.noLong": "Nessun long da chiudere",

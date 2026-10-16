@@ -2976,6 +2976,7 @@ export const ptBR = {
   "replay.paper.submitting": "Enviando…",
   "replay.paper.submitHint": "Antes do envio, cursor, margem e teto de quantidade são revalidados para o lado clicado.",
   "replay.paper.qtyAsset": "Quantidade",
+  "replay.paper.orderBudget": "Valor reservado (com custos)",
   "replay.paper.marginAmt": "Margem",
   "replay.paper.notionalAmt": "Nocional",
   "replay.paper.noLong": "Nenhuma long para fechar",

@@ -1773,7 +1773,7 @@ async def test_cross_liquidation_cancels_opening_order_and_recovers_before_close
                 "stop_price": None,
             },
         )
-        assert pending["data"]["portfolio"]["reserved_margin"] == "953.33333334"
+        assert pending["data"]["portfolio"]["reserved_margin"] == "954.76333334"
         await _send(
             service,
             run_id=run_id,

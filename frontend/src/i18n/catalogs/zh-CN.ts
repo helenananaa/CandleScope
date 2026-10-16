@@ -2974,6 +2974,7 @@ export const zhCN = {
   "replay.paper.submitting": "提交中…",
   "replay.paper.submitHint": "提交前会按点击方向重新校验游标、保证金与数量上限。",
   "replay.paper.qtyAsset": "商品数量",
+  "replay.paper.orderBudget": "预留金额（含费用）",
   "replay.paper.marginAmt": "保证金",
   "replay.paper.notionalAmt": "名义金额",
   "replay.paper.noLong": "无多仓可平",

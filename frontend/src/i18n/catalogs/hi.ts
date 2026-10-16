@@ -2680,6 +2680,7 @@ export const hi = {
   "replay.paper.submitting": "सबमिट हो रहा है…",
   "replay.paper.submitHint": "सबमिट से पहले क्लिक किए पक्ष के लिए कर्सर, मार्जिन और मात्रा सीमा फिर जाँची जाती है।",
   "replay.paper.qtyAsset": "मात्रा",
+  "replay.paper.orderBudget": "आरक्षित राशि (लागत सहित)",
   "replay.paper.marginAmt": "मार्जिन",
   "replay.paper.notionalAmt": "नोशनल",
   "replay.paper.noLong": "बंद करने के लिए कोई लॉन्ग नहीं",

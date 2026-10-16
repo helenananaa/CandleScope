@@ -2680,6 +2680,7 @@ export const ar = {
   "replay.paper.submitting": "جارٍ الإرسال…",
   "replay.paper.submitHint": "قبل الإرسال يُعاد فحص المؤشر والهامش وحد الكمية للجهة المنقورة.",
   "replay.paper.qtyAsset": "الكمية",
+  "replay.paper.orderBudget": "المبلغ المحجوز (شامل التكاليف)",
   "replay.paper.marginAmt": "الهامش",
   "replay.paper.notionalAmt": "القيمة الاسمية",
   "replay.paper.noLong": "لا شراء لإغلاقه",

@@ -2680,6 +2680,7 @@ export const ptPT = {
   "replay.paper.submitting": "A submeter…",
   "replay.paper.submitHint": "Antes de submeter, o cursor, a margem e o tecto de quantidade são revalidados para o lado clicado.",
   "replay.paper.qtyAsset": "Quantidade",
+  "replay.paper.orderBudget": "Montante reservado (com custos)",
   "replay.paper.marginAmt": "Margem",
   "replay.paper.notionalAmt": "Nocional",
   "replay.paper.noLong": "Sem longa para fechar",

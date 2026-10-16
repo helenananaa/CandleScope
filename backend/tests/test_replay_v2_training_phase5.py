@@ -1682,7 +1682,7 @@ async def test_run_level_trade_commands_force_full_and_share_available_equity(
         )
         assert first["data"]["account_contract"] == "TOUCH_OR_TAPE_V2_CONTRACT_ACCOUNT"
         assert Decimal(str(first["data"]["portfolio"]["reserved_margin"])) == Decimal(
-            "6000"
+            "6009"
         )
 
         primary = await service.get_session(primary_id)
@@ -1703,7 +1703,7 @@ async def test_run_level_trade_commands_force_full_and_share_available_equity(
         )
         assert primary_track["subscription_tier"] == "FULL"
         assert primary_track["forced_full_reasons"] == ["OPEN_ORDER"]
-        assert tracks["portfolio"]["available_equity"] == "4000"
+        assert tracks["portfolio"]["available_equity"] == "3991"
 
         with pytest.raises(TrainingRunError) as insufficient:
             await _place_limit(
@@ -1717,8 +1717,8 @@ async def test_run_level_trade_commands_force_full_and_share_available_equity(
             )
         assert insufficient.value.code == "RUN_ACCOUNT_MARGIN_EXCEEDED"
         unchanged = await service.training.get_market_tracks(run_id)  # type: ignore[union-attr]
-        assert unchanged["portfolio"]["reserved_margin"] == "6000"
-        assert unchanged["portfolio"]["available_equity"] == "4000"
+        assert unchanged["portfolio"]["reserved_margin"] == "6009"
+        assert unchanged["portfolio"]["available_equity"] == "3991"
     finally:
         await service.shutdown(step_timeout=1.0)
 

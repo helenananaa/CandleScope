@@ -2680,6 +2680,7 @@ export const ro = {
   "replay.paper.submitting": "Se trimite…",
   "replay.paper.submitHint": "Înainte de trimitere, cursorul, marja și plafonul de cantitate sunt re-verificate pentru partea apăsată.",
   "replay.paper.qtyAsset": "Cantitate",
+  "replay.paper.orderBudget": "Sumă rezervată (cu costuri)",
   "replay.paper.marginAmt": "Marjă",
   "replay.paper.notionalAmt": "Noțional",
   "replay.paper.noLong": "Niciun long de închis",

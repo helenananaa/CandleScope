@@ -3911,6 +3911,9 @@ class TrainingRunService:
                     details={"order_id": payload.get("order_id")},
                 )
             replacement_payload = {
+                "side": existing.get("side"),
+                "position_side": existing.get("position_side"),
+                "leverage": existing.get("leverage"),
                 "quantity": payload.get("quantity"),
                 "reduce_only": existing.get("reduce_only"),
                 "limit_price": payload.get("limit_price"),
@@ -3934,6 +3937,7 @@ class TrainingRunService:
             intent = payload.get("intent")
             if intent in {"OPEN", "REVERSE"}:
                 opening_payload = {
+                    "side": payload.get("side"),
                     "quantity": payload.get("quantity"),
                     "reduce_only": False,
                     "limit_price": None,
