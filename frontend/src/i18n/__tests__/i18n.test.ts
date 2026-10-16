@@ -420,6 +420,7 @@ function stripProtocol(text: string): string {
     .replace(/\bPoint & Figure\b/g, " ")
     .replace(/\bTake profit\b/gi, " ")
     .replace(/\btake-profit\b/gi, " ")
+    .replace(/\bStreamable HTTP\b/g, " ")
     .replace(/\bJob Object\b/g, " ")
     .replace(/\bStop loss\b/gi, " ")
     .replace(/\bLine Break\b/g, " ")
@@ -1306,3 +1307,7 @@ test("new host locale chrome is translated and ar/he write rtl", () => {
   assert.notEqual(t("shell.replay", {}, "nl"), t("shell.replay", {}, "en"));
 });
 
+
+test("Portuguese copy preserves the Streamable HTTP protocol name", () => {
+  assert.deepEqual(leftoverSourceTokens("Use Streamable HTTP.", "Utilize Streamable HTTP."), []);
+});

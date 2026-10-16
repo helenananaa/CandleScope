@@ -9,6 +9,7 @@ import { desktopBackendEnvironment } from "./runtime-config.mjs";
 import { isTrustedAppUrl } from "./app-origin.mjs";
 import { startProfileAssetServer } from "./profile-origin.mjs";
 
+import { LocalMcpHost } from "./local-mcp-host.mjs";
 import { ElectronWindowManager } from "./electron-window-manager.mjs";
 import { AppWorkBudgetHub } from "./app-work-budget-hub.mjs";
 import { DESKTOP_IPC, validateTopologyPayload } from "./ipc-contract.mjs";
@@ -46,6 +47,8 @@ const evidenceSession = createEvidenceSession(process.env);
 evidenceSession?.configureApp(app);
 const gotSingleInstanceLock = app.requestSingleInstanceLock({ source: "desktop-shell" });
 
+const localMcp = new LocalMcpHost();
+const registeredControlContents = new WeakSet();
 let manager = null;
 let supervisor = null;
 let shutdownComplete = false;
@@ -179,6 +182,29 @@ async function boot() {
   await evidenceSession?.initialize({
     app, screen, manager, supervisor, backendPort, multiWindowEnabled,
     workspaceBus, appWorkBudget, seriesSnapshots, process,
+  });
+
+  trustedIpc.handle(DESKTOP_IPC.aiControlStatus, () => localMcp.status());
+  trustedIpc.handle(DESKTOP_IPC.aiControlMode, (_event, mode) => localMcp.setMode(mode));
+  trustedIpc.handle(DESKTOP_IPC.aiControlPublish, (event, views) => {
+    const windowId = manager.assertTrustedSender(event);
+    const sender = event.sender;
+    if (!registeredControlContents.has(sender)) {
+      registeredControlContents.add(sender);
+      sender.on("did-start-navigation", (_event, _url, isInPlace, isMainFrame) => {
+        if (isMainFrame && !isInPlace) localMcp.broker.remove(windowId);
+      });
+      sender.once("destroyed", () => localMcp.broker.remove(windowId));
+    }
+    if (!localMcp.broker.windows.has(windowId)) localMcp.broker.register(windowId, (value) => {
+      if (sender.isDestroyed()) throw new Error("CONTROL_WINDOW_CLOSED");
+      sender.send(DESKTOP_IPC.aiControlRequest, value);
+    });
+    localMcp.broker.publish(windowId, views);
+    return { ok: true };
+  });
+  trustedIpc.on(DESKTOP_IPC.aiControlReply, (event, value) => {
+    localMcp.broker.reply(manager.assertTrustedSender(event), value);
   });
 
   trustedIpc.on(DESKTOP_IPC.backendEndpoint, (event) => {
@@ -381,9 +407,9 @@ app.on("before-quit", () => {
 
 // Close renderer-owned streams before waiting for the backend to shut down.
 app.on("will-quit", (event) => {
-  if (shutdownComplete || (!supervisor && !assetServer)) return;
+  if (shutdownComplete || (!supervisor && !assetServer && !localMcp.server)) return;
   event.preventDefault();
-  shutdownPromise ??= Promise.all([supervisor?.stop(), assetServer?.close(), strategyStorage.flush()]).finally(() => {
+  shutdownPromise ??= Promise.all([supervisor?.stop(), assetServer?.close(), strategyStorage.flush(), localMcp.close()]).finally(() => {
     shutdownComplete = true;
     app.quit();
   });

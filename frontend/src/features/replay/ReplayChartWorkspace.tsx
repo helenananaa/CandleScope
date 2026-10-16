@@ -1,3 +1,6 @@
+import { useChartAiControl } from "../ai-control/useChartAiControl.js";
+import { replayEffectiveTrainingState, replayOwnsController } from "./replayUiModel.js";
+import { intervalsSemanticallyEquivalent } from "../../utils/intervals.js";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
@@ -233,6 +236,31 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
   const failedSelection = useRef<string | null>(null);
   const tracks = useMemo(() => controller.marketTracks?.tracks ?? [], [controller.marketTracks]);
   const activeTrack = tracks.find((track) => sameMarket(workspace.view.activeCell, track));
+  const controlClock = controller.marketTracks?.global_clock;
+  const controlState = replayEffectiveTrainingState(controlClock?.state, runtime.store.state, runtime.store.controllerClientId) ?? "UNAVAILABLE";
+  const aiControlBusy = controller.viewerPending || viewer.controlPending !== null || runtime.pendingCommand !== null
+    || integrity.review !== null || runtime.store.connectionState !== "connected" || !runtime.store.hasAuthoritativeSnapshot;
+  useChartAiControl(workspace, "replay", {
+    key: `${runId}:${runtime.store.sessionId}:${runtime.store.revision}:${controlState}:${aiControlBusy}:${controller.viewerState?.semantic_view_revision}`,
+    revision: runtime.store.revision, state: controlState, busy: aiControlBusy,
+    execute: async (viewId, action) => {
+      if (aiControlBusy || !replayOwnsController(runtime.store, runtime.clientInstanceId)) throw Object.assign(new Error("REPLAY_CONTROL_UNAVAILABLE"), { code: "REPLAY_CONTROL_UNAVAILABLE" });
+      if (workspace.view.activeCellId !== viewId || !activeTrack || controller.viewerState?.selected_track_id !== activeTrack.track_id
+        || !intervalsSemanticallyEquivalent(controller.viewerState.display_interval, workspace.view.activeCell.session.interval)) {
+        throw Object.assign(new Error("REPLAY_TARGET_NOT_ACTIVE"), { code: "REPLAY_TARGET_NOT_ACTIVE" });
+      }
+      if (action === "pause" && controlState === "PAUSED") return;
+      if (action === "next_bar" && (controlState !== "PAUSED" || !controlClock?.supported_bases.includes("DISPLAY_BAR"))) {
+        throw Object.assign(new Error("REPLAY_ADVANCE_UNAVAILABLE"), { code: "REPLAY_ADVANCE_UNAVAILABLE" });
+      }
+      const result = await viewer.actions.submitControl(action === "pause" ? "pause" : "advance",
+        action === "pause" ? {} : { basis: "DISPLAY_BAR", count: 1 });
+      const authority = runtime.replayStore.getAuthoritySnapshot();
+      if (authority.sessionId !== result.session_id || authority.revision < result.revision) {
+        throw Object.assign(new Error("CONTROL_OUTCOME_UNKNOWN_READ_VIEW"), { code: "CONTROL_OUTCOME_UNKNOWN_READ_VIEW" });
+      }
+    },
+  });
   useLayoutEffect(() => links.updateDocument(workspace.view.document,
     `replay:${runId}:${workspace.view.activeWorkspaceId}`), [links, runId, workspace.view.activeWorkspaceId, workspace.view.document]);
   useEffect(() => {
