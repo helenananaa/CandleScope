@@ -1131,12 +1131,14 @@ class ReplayHistoryArchiveWriter:
         root: str | Path,
         *,
         now_ms=lambda: int(time.time() * 1_000),
+        precompute_market_ranges: bool = True,
     ) -> None:
         self.root = Path(root).expanduser().resolve()
         self.objects_dir = self.root / "objects" / "sha256"
         self.catalogs_dir = self.root / "catalogs"
         self.tmp_dir = self.root / "tmp"
         self._now_ms = now_ms
+        self._precompute_market_ranges = precompute_market_ranges
         self.objects_dir.mkdir(parents=True, exist_ok=True)
         self.catalogs_dir.mkdir(parents=True, exist_ok=True)
         self.tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -1315,15 +1317,16 @@ class ReplayHistoryArchiveWriter:
             relative_path = destination.relative_to(self.root).as_posix()
             # Derive account-independent ranges while import already owns the
             # validated rows. Old objects are upgraded once when first used.
-            from .shared_market_index import MarketObject, build as build_market_index
-            from .errors import ReplayDomainError
-            try:
+            if self._precompute_market_ranges:
+                from .shared_market_index import MarketObject, build as build_market_index
+                from .errors import ReplayDomainError
                 try:
-                    MarketObject(destination, object_sha256)
-                except (ValueError, OSError, sqlite3.DatabaseError, zlib.error):
-                    build_market_index(destination, object_sha256, interval, identity, rows)
-            except (ValueError, OSError, sqlite3.DatabaseError, ReplayDomainError):
-                pass  # Optional derived data; the immutable object remains valid.
+                    try:
+                        MarketObject(destination, object_sha256)
+                    except (ValueError, OSError, sqlite3.DatabaseError, zlib.error):
+                        build_market_index(destination, object_sha256, interval, identity, rows)
+                except (ValueError, OSError, sqlite3.DatabaseError, ReplayDomainError):
+                    pass  # Optional derived data; the immutable object remains valid.
             return ReplayHistoryObject(
                 object_sha256=object_sha256,
                 relative_path=relative_path,

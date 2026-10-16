@@ -10,7 +10,11 @@ from app.data_engine.interval_policy import (
     compute_bucket_start_ms,
 )
 
-from .indexed_tape_context import MAX_CONTEXT_MINUTES, select_indexed_context
+from .indexed_tape_context import (
+    MAX_CONTEXT_MINUTES,
+    select_indexed_closes,
+    select_indexed_context,
+)
 from .indicator_history import IndicatorCloseBar, IndicatorCloseChunk, validate_chunk
 
 
@@ -50,23 +54,27 @@ def read_indexed_closes(context, start, before, interval, width, cancelled):
         cursor = end
     if not spans:
         return IndicatorCloseChunk(start, first, (), gaps) if gaps else None
-    selected = select_indexed_context(context, first, cursor, cancelled)
-    if selected is None:
-        return None
-    stop, market = selected
-    if stop != cursor:
-        raise ValueError("indicator close source changed its bounded range")
-    # Conservatively prove the same ordinary OHLCV domain as the chart path.
-    # This includes volumes/highs/lows even though close-source math omits them.
-    coverage = market.display_summary(0, market.count, include_auxiliary=False)
-    if any(
-        value.adjusted() > 18 or value.as_tuple().exponent < -18
-        for value in coverage[:5]
-    ):
-        return None
-    closes = market.indicator_closes_at(
-        [(end - first) // 60000 - 1 for _, end in spans], cancelled
+    closes = select_indexed_closes(
+        context, first, cursor, [end - 60000 for _, end in spans], cancelled,
     )
+    stop = cursor
+    if closes is None:
+        selected = select_indexed_context(context, first, cursor, cancelled)
+        if selected is None:
+            return None
+        stop, market = selected
+        if stop != cursor:
+            raise ValueError("indicator close source changed its bounded range")
+        # The ordinary indexed fallback retains its broader Decimal domain.
+        coverage = market.display_summary(0, market.count, include_auxiliary=False)
+        if any(
+            value.adjusted() > 18 or value.as_tuple().exponent < -18
+            for value in coverage[:5]
+        ):
+            return None
+        closes = market.indicator_closes_at(
+            [(end - first) // 60000 - 1 for _, end in spans], cancelled
+        )
     if cancelled.is_set():
         raise InterruptedError("indicator close preparation cancelled")
     chunk = IndicatorCloseChunk(

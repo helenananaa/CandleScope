@@ -128,6 +128,29 @@ def query(repo, revision, day, *, limit=3):
     )
 
 
+def test_monthly_close_seed_defers_range_tree_until_a_range_query(tmp_path, monkeypatch):
+    from threading import Event
+
+    repo, revision, http = source(tmp_path, monkeypatch)
+    selected = repo.tape_indicator_closes_at_revision(
+        revision, "BTCUSDT", "1m", start_ms=START + DAY, end_ms=START + 2 * DAY,
+        close_times=[START + DAY + 4 * MINUTE, START + 2 * DAY - MINUTE],
+        exchange="binance", market_type="futures", cancelled=Event(),
+    )
+    assert list(map(float, selected)) == [101.0, 101.0]
+    assert len(http.calls) == 2  # One real ZIP and its checksum.
+    assert not list(tmp_path.rglob("*.shared-market.v1.sqlite"))
+    market = repo.tape_context_market_at_revision(
+        revision, "BTCUSDT", "1m", start_ms=START + DAY, end_ms=START + 2 * DAY,
+        exchange="binance", market_type="futures", cancelled=Event(),
+    )
+    fields = market.display_summary(0, market.count)
+    assert fields[:5] == (100, 102, 99, 101, 2880)
+    assert market.count == 1440
+    assert list(tmp_path.rglob("*.shared-market.v1.sqlite"))
+    assert len(http.calls) == 2
+
+
 def test_month_is_downloaded_once_and_old_daily_binding_keeps_its_prices(
     tmp_path, monkeypatch
 ):

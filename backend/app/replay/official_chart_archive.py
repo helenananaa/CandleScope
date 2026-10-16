@@ -210,7 +210,9 @@ class OfficialChartArchive:
                     source_rejection_reasons=parsed.rejection_reasons,
                 )
                 await asyncio.to_thread(
-                    ReplayHistoryArchiveWriter(root).import_batches,
+                    # Display context/close seeds need no account extrema
+                    # tree. Account range queries build it lazily if requested.
+                    ReplayHistoryArchiveWriter(root, precompute_market_ranges=False).import_batches,
                     identity,
                     "1m",
                     [batch],

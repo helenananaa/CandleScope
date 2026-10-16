@@ -13,6 +13,30 @@ from .errors import TrainingRunError
 MAX_CONTEXT_MINUTES = 32_768
 
 
+def select_indexed_closes(history, start, stop, times, cancelled):
+    reader = getattr(history.arguments["repository"], "tape_indicator_closes_at_revision", None)
+    snapshot, config = history.snapshot, history.config
+    delta = int(history.arguments["binding"]["history_policy"]["actual_replay_start_ms"]) - snapshot.replay_start_ms
+    if (not callable(reader) or config.base_interval != "1m"
+        or not snapshot.provenance.source_revision or delta % 60_000
+        or start < history.origin_ms or stop > snapshot.replay_start_ms):
+        return None
+    try:
+        return reader(
+            snapshot.provenance.source_revision, config.symbol, config.base_interval,
+            start_ms=start + delta, end_ms=stop + delta,
+            close_times=[at + delta for at in times], exchange=config.exchange,
+            market_type=config.market_type, cancelled=cancelled,
+        )
+    except (InterruptedError, TrainingRunError):
+        raise
+    except Exception as error:
+        raise TrainingRunError(
+            "HISTORY_SOURCE_UNAVAILABLE", "replay indicator history could not be read",
+            status_code=503, details={"retryable": getattr(error, "retryable", False) is True},
+        ) from error
+
+
 def select_indexed_context(history, start, stop, cancelled):
     repository = history.arguments["repository"]
     reader = getattr(repository, "tape_context_market_at_revision", None)

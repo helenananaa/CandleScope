@@ -331,22 +331,11 @@ class OfficialTradeHistoryRepository:
     def _download_day(self, root, identity, day_start):
         return self._archives.ensure_day_source(root, identity, day_start)
 
-    def tape_context_market_at_revision(
-        self,
-        revision,
-        symbol,
-        interval,
-        *,
-        start_ms,
-        end_ms,
-        offset_ms=0,
-        exchange=None,
-        market_type=None,
-        cancelled,
+    def _tape_context_selections(
+        self, revision, symbol, interval, *, start_ms, end_ms,
+        exchange=None, market_type=None, cancelled,
     ):
-        """Select existing day pins, then share their immutable range indexes."""
-        from .shared_market_index import MarketRange
-
+        """One immutable day/month selection for display and indicator readers."""
         payload = self._load(revision, symbol, interval, exchange, market_type)
         bounds = self._bounds(payload, revision)
         if (
@@ -405,6 +394,50 @@ class OfficialTradeHistoryRepository:
                 selections[-1] = (root, pin, previous[2], last)
             else:
                 selections.append((root, pin, first, last))
+        return selections
+
+    def tape_indicator_closes_at_revision(
+        self, revision, symbol, interval, *, start_ms, end_ms, close_times,
+        exchange=None, market_type=None, cancelled,
+    ):
+        from .indicator_market_columns import read_pinned_closes
+
+        if close_times != sorted(set(close_times)) or any(
+            at < start_ms or at >= end_ms or at % MINUTE for at in close_times
+        ):
+            return None
+        selections = self._tape_context_selections(
+            revision, symbol, interval, start_ms=start_ms, end_ms=end_ms,
+            exchange=exchange, market_type=market_type, cancelled=cancelled,
+        )
+        if selections is None:
+            return None
+        identity = ReplaySeriesIdentity(exchange, market_type, symbol)
+        result = []
+        for root, pin, first, last in selections:
+            times = [at for at in close_times if first <= at < last]
+            values = read_pinned_closes(
+                self._archives.repository(root), pin, identity,
+                first, last, times, cancelled,
+            )
+            if values is None:
+                return None
+            result.extend(values)
+        return result if len(result) == len(close_times) else None
+
+    def tape_context_market_at_revision(
+        self, revision, symbol, interval, *, start_ms, end_ms, offset_ms=0,
+        exchange=None, market_type=None, cancelled,
+    ):
+        """Select existing day pins, then share their immutable range indexes."""
+        from .shared_market_index import MarketRange
+
+        selections = self._tape_context_selections(
+            revision, symbol, interval, start_ms=start_ms, end_ms=end_ms,
+            exchange=exchange, market_type=market_type, cancelled=cancelled,
+        )
+        if selections is None:
+            return None
         parts = []
         for root, pin, first, last in selections:
             if cancelled.is_set():
@@ -460,6 +493,11 @@ class TradeHistoryRouter:
     def query_bars_at_revision(self, revision, *args, **kwargs):
         repo = self.official if self.official.owns(revision) else self.local
         return repo.query_bars_at_revision(revision, *args, **kwargs)
+
+    def tape_indicator_closes_at_revision(self, revision, *args, **kwargs):
+        if not self.official.owns(revision):
+            return None
+        return self.official.tape_indicator_closes_at_revision(revision, *args, **kwargs)
 
     def tape_context_market_at_revision(self, revision, *args, **kwargs):
         if not self.official.owns(revision):
