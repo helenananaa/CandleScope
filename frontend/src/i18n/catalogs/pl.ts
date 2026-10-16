@@ -2071,6 +2071,7 @@ export const pl = {
   "replay.shell.ordersFills": "Zlecenia / realizacje",
   "replay.shell.ledger": "Księga",
   "replay.shell.drawingRev": "Rewizja rysunków",
+  "replay.shell.legacyAccountIncomplete": "Ten starszy zapis nie zawiera wyceny depozytu portfela. Nie można dokładnie odtworzyć dostępnego kapitału ani niezrealizowanego zysku lub straty.",
   "replay.shell.reviewSidebarHint": "Ta szyna pochodzi z projekcji wybranego zdarzenia i nie czyta portfela aktywnego Run.",
   "replay.shell.unavailable": "Odtwarzanie świec niedostępne",
   "replay.shell.failClosed": "Przestrzeń treningu zamyka się bezpiecznie; nie spadnie do rynku na żywo, danych testowych ani buforowanych innych rynków.",

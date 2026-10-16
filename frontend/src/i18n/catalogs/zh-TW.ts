@@ -2106,6 +2106,7 @@ export const zhTW = {
   "replay.shell.ordersFills": "訂單 / 成交",
   "replay.shell.ledger": "帳本",
   "replay.shell.drawingRev": "繪圖版本",
+  "replay.shell.legacyAccountIncomplete": "舊記錄未儲存組合保證金估值，可用權益和未實現盈虧無法準確還原。",
   "replay.shell.reviewSidebarHint": "該側欄來自選中事件投影，不讀取活動 Run 的當前組合。",
   "replay.shell.unavailable": "K 線回放不可用",
   "replay.shell.failClosed": "訓練工作區 fail closed；不會回退到 live、mock 或快取中的其他市場。",

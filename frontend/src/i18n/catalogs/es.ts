@@ -2077,6 +2077,7 @@ export const es = {
   "replay.shell.ordersFills": "Órdenes / ejecuciones",
   "replay.shell.ledger": "Libro mayor",
   "replay.shell.drawingRev": "Revisión de dibujos",
+  "replay.shell.legacyAccountIncomplete": "Este registro antiguo no conserva la valoración del margen de la cartera. No se pueden recuperar con precisión el capital disponible ni las ganancias y pérdidas no realizadas.",
   "replay.shell.reviewSidebarHint": "Esta barra proviene de la proyección del evento seleccionado y no lee la cartera del Run activo.",
   "replay.shell.unavailable": "Reproducción de velas no disponible",
   "replay.shell.failClosed": "El espacio de trabajo de entrenamiento se cierra ante el fallo; no usará como reserva mercados en vivo, simulados ni otros mercados en caché.",

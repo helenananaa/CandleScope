@@ -2070,6 +2070,7 @@ export const hi = {
   "replay.shell.ordersFills": "ऑर्डर / फ़िल",
   "replay.shell.ledger": "लेजर",
   "replay.shell.drawingRev": "ड्रॉइंग संशोधन",
+  "replay.shell.legacyAccountIncomplete": "इस पुराने रिकॉर्ड में पोर्टफ़ोलियो मार्जिन का मूल्यांकन नहीं है। उपलब्ध इक्विटी और अप्राप्त लाभ या हानि को सटीक रूप से बहाल नहीं किया जा सकता।",
   "replay.shell.reviewSidebarHint": "यह रेल चयनित-इवेंट प्रक्षेपण से आती है और सक्रिय Run पोर्टफ़ोलियो नहीं पढ़ती।",
   "replay.shell.unavailable": "कैंडल रीप्ले उपलब्ध नहीं",
   "replay.shell.failClosed": "प्रशिक्षण वर्कस्पेस फ़ेल-क्लोज्ड है; लाइव, मॉक या कैश्ड अन्य बाज़ार पर नहीं गिरेगा।",

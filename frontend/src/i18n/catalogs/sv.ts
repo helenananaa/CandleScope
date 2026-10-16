@@ -2070,6 +2070,7 @@ export const sv = {
   "replay.shell.ordersFills": "Ordrar / fyllnader",
   "replay.shell.ledger": "Ledger",
   "replay.shell.drawingRev": "Ritrevision",
+  "replay.shell.legacyAccountIncomplete": "Den äldre posten saknar portföljens marginalvärdering. Tillgängligt kapital och orealiserad vinst eller förlust kan inte återställas exakt.",
   "replay.shell.reviewSidebarHint": "Det här fältet kommer från den valda händelsens projektion och läser inte den aktiva Run-portföljen.",
   "replay.shell.unavailable": "Ljus-replay otillgänglig",
   "replay.shell.failClosed": "Träningsarbetsytan fail-closed; den faller inte tillbaka till live, simulerad data eller cachade andra marknader.",

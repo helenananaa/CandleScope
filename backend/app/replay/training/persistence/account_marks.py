@@ -410,9 +410,9 @@ def apply_hedge_mark_projection(
             Decimal(0),
         )
         cash = Decimal(str(account.get("cash_balance", run["initial_equity"])))
-        equity = (
-            cash + total_unrealized + Decimal(str(contract_account["overlay_cash"]))
-        )
+        # This is the actor-local valuation. Shared funding and fee adjustments
+        # are added once by the global account/risk reducer, never once per track.
+        equity = cash + total_unrealized
         account.update(
             {
                 "equity": decimal_to_string(equity, field_name="pinned hedge equity"),
@@ -737,14 +737,20 @@ def settle_hedge_funding_event(
         )
     track = connection.execute(
         """
-        SELECT track_id, source_sequence
+        SELECT track_id, source_sequence, subscription_tier
         FROM replay_training_market_track
-        WHERE run_id = ? AND track_id = ? AND subscription_tier = 'FULL'
+        WHERE run_id = ? AND track_id = ?
         """,
         (run_id, event.track_id),
     ).fetchone()
     if track is None:
-        raise TypeError("HEDGE funding FULL track is missing")
+        raise TypeError("HEDGE funding track is missing")
+    if track["subscription_tier"] != "FULL":
+        # Dormant inputs remain ordered, but must never settle today's holdings
+        # against historical funding. Admission also checks the whole gap.
+        from ..hedge_track_readmission import _assert_empty_since
+
+        _assert_empty_since(connection, run_id, str(track["track_id"]), virtual_time_ms)
     track_id = str(track["track_id"])
     existing = tuple(
         connection.execute(

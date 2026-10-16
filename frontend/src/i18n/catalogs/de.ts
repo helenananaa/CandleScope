@@ -2071,6 +2071,7 @@ export const de = {
   "replay.shell.ordersFills": "Orders / Fills",
   "replay.shell.ledger": "Hauptbuch",
   "replay.shell.drawingRev": "Zeichnungsrevision",
+  "replay.shell.legacyAccountIncomplete": "Dieser ältere Datensatz enthält keine Marginbewertung des Portfolios. Verfügbares Kapital und unrealisierter Gewinn oder Verlust lassen sich nicht genau wiederherstellen.",
   "replay.shell.reviewSidebarHint": "Diese Leiste stammt aus der Projektion des gewählten Ereignisses und liest nicht das aktive Run-Portfolio.",
   "replay.shell.unavailable": "Kerzen-Replay nicht verfügbar",
   "replay.shell.failClosed": "Der Trainingsarbeitsbereich ist fail-closed; er fällt nicht auf Live, Mock oder gecachte andere Märkte zurück.",

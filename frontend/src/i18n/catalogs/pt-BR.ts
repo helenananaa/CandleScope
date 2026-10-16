@@ -2361,6 +2361,7 @@ export const ptBR = {
   "replay.shell.ordersFills": "Ordens / preenchimentos",
   "replay.shell.ledger": "Ledger",
   "replay.shell.drawingRev": "Revisão de desenho",
+  "replay.shell.legacyAccountIncomplete": "Este registro antigo não contém a avaliação de margem da carteira. O patrimônio disponível e o lucro ou prejuízo não realizado não podem ser recuperados com precisão.",
   "replay.shell.reviewSidebarHint": "Esta barra vem da projeção do evento selecionado e não lê o portfólio do Run ativo.",
   "replay.shell.unavailable": "Candle replay indisponível",
   "replay.shell.failClosed": "A área de treino falha fechada; ela não recua para mercados ao vivo, simulados ou outros mercados em cache.",

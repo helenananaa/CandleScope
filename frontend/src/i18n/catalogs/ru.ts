@@ -2071,6 +2071,7 @@ export const ru = {
   "replay.shell.ordersFills": "Ордера / исполнения",
   "replay.shell.ledger": "Журнал",
   "replay.shell.drawingRev": "Ревизия рисунка",
+  "replay.shell.legacyAccountIncomplete": "В старой записи нет оценки маржи портфеля. Доступные средства и нереализованную прибыль или убыток нельзя точно восстановить.",
   "replay.shell.reviewSidebarHint": "Эта панель берётся из проекции выбранного события и не читает портфель активного Run.",
   "replay.shell.unavailable": "Воспроизведение свечей недоступен",
   "replay.shell.failClosed": "Рабочее пространство тренировки закрывается при сбое; оно не переключается на live, имитацию или кэш других рынков.",

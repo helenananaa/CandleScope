@@ -2070,6 +2070,7 @@ export const ro = {
   "replay.shell.ordersFills": "Ordine / execuții",
   "replay.shell.ledger": "Registru",
   "replay.shell.drawingRev": "Revizie desen",
+  "replay.shell.legacyAccountIncomplete": "Această înregistrare veche nu conține evaluarea marjei portofoliului. Capitalul disponibil și profitul sau pierderea nerealizată nu pot fi recuperate cu precizie.",
   "replay.shell.reviewSidebarHint": "Această bară vine din proiecția evenimentului selectat și nu citește portofoliul Run-ului activ.",
   "replay.shell.unavailable": "Replay-ul de lumânări este indisponibil",
   "replay.shell.failClosed": "Spațiul de antrenament eșuează închis; nu va reveni la live, simulat sau alte piețe din cache.",

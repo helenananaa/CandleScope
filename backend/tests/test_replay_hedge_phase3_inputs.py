@@ -457,6 +457,7 @@ async def test_runtime_checksum_guard_reuses_unchanged_owned_objects(
 
 async def test_pending_hedge_global_events_preserve_legacy_public_identity(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     database = tmp_path / "phase3-legacy-pending.db"
     service = await _risk_service(database)
@@ -497,12 +498,31 @@ async def test_pending_hedge_global_events_preserve_legacy_public_identity(
                 (run_id,),
             )
 
-        await training.store.base_store.run_extension_write(emulate_legacy_run)
-        pending = await training.store.pending_hedge_input_global_events(run_id)
+        async def read_legacy_shape(operation):
+            def read(connection):
+                # Exercise the legacy query against its old table shape, then
+                # restore the live actor's current bindings even on failure.
+                # Persistently deleting them is not a migrated legacy session
+                # and makes the unrelated shutdown valuation invalid.
+                connection.execute("SAVEPOINT legacy_pending_query")
+                try:
+                    emulate_legacy_run(connection)
+                    return operation(connection)
+                finally:
+                    connection.execute("ROLLBACK TO legacy_pending_query")
+                    connection.execute("RELEASE legacy_pending_query")
+
+            return await training.store.base_store.run_extension_write(read)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(training.store.base_store, "run_extension_read", read_legacy_shape)
+            pending = await training.store.pending_hedge_input_global_events(run_id)
         assert [event.event_phase for event in pending] == [30, 40]
         assert {event.market_track_stable_id for event in pending} == {
             f"hedge-public:{public_ref.archive_id}"
         }
+        assert await training.store.pending_hedge_input_global_events(run_id) == ()
+        assert (await training.audit_account(run_id))["status"] == "PASS"
     finally:
         await service.shutdown(step_timeout=1.0)
 

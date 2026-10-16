@@ -1304,6 +1304,18 @@ class TrainingRunRepository:
                     "DELETE FROM replay_training_hedge_funding_settlement WHERE run_id=?",
                     (run_id,),
                 )
+                # Risk receipts have RESTRICT edges in addition to run-owned
+                # cascades. Remove the dependants first so failed fork cleanup
+                # (and ordinary archive deletion) cannot strand a partial run.
+                for table in (
+                    "replay_training_adl_selection",
+                    "replay_training_adl_counterparty_ledger",
+                    "replay_training_adl_event",
+                    "replay_training_insurance_posting",
+                    "replay_training_liquidation_order",
+                    "replay_training_liquidation_case",
+                ):
+                    connection.execute(f"DELETE FROM {table} WHERE run_id=?", (run_id,))
                 deleted = connection.execute(
                     "DELETE FROM replay_training_run WHERE run_id = ?",
                     (run_id,),

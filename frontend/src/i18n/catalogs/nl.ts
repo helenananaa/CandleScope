@@ -2070,6 +2070,7 @@ export const nl = {
   "replay.shell.ordersFills": "Orders / fills",
   "replay.shell.ledger": "Grootboek",
   "replay.shell.drawingRev": "Tekenrevisie",
+  "replay.shell.legacyAccountIncomplete": "Dit oudere record bevat geen margeberekening van de portefeuille. Beschikbaar vermogen en ongerealiseerde winst of verlies kunnen niet nauwkeurig worden hersteld.",
   "replay.shell.reviewSidebarHint": "Deze rail komt uit de projectie van de geselecteerde gebeurtenis en leest niet de actieve Run-portefeuille.",
   "replay.shell.unavailable": "Kaarsreplay niet beschikbaar",
   "replay.shell.failClosed": "De trainingswerkruimte faalt gesloten; er is geen terugval naar live, mock of gecachte andere markten.",

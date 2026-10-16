@@ -2071,6 +2071,7 @@ export const fr = {
   "replay.shell.ordersFills": "Ordres / exécutions",
   "replay.shell.ledger": "Grand livre",
   "replay.shell.drawingRev": "Révision de dessin",
+  "replay.shell.legacyAccountIncomplete": "Cet ancien enregistrement ne contient pas la valorisation de la marge du portefeuille. Les fonds disponibles et les gains et pertes latents ne peuvent pas être reconstitués précisément.",
   "replay.shell.reviewSidebarHint": "Ce rail provient de la projection de l’événement sélectionné et ne lit pas le portefeuille du Run actif.",
   "replay.shell.unavailable": "Relecture de chandeliers indisponible",
   "replay.shell.failClosed": "L’espace de travail d’entraînement échoue fermé ; il ne bascule pas vers le live, des mocks ou d’autres marchés en cache.",

@@ -2333,6 +2333,7 @@ export const ko = {
   "replay.shell.ordersFills": "주문 / 체결",
   "replay.shell.ledger": "원장",
   "replay.shell.drawingRev": "그리기 버전",
+  "replay.shell.legacyAccountIncomplete": "이전 기록에는 포트폴리오 증거금 평가가 저장되어 있지 않아 가용 자산과 미실현 손익을 정확히 복원할 수 없습니다.",
   "replay.shell.reviewSidebarHint": "이 사이드바는 선택 이벤트 프로젝션에서 오며 활성 Run 포트폴리오를 읽지 않음.",
   "replay.shell.unavailable": "캔들 리플레이 사용 불가",
   "replay.shell.failClosed": "훈련 워크스페이스는 fail closed. live, mock, 캐시된 다른 시장으로 폴백하지 않음.",

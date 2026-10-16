@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import json
 import sqlite3
 from collections.abc import Mapping, Sequence
@@ -12,6 +13,7 @@ from app.replay.broker.models import decimal_to_string
 from app.replay.canonical import canonical_json, canonical_sha256
 from app.replay.storage.sqlite_store import ReplaySQLiteStore
 
+from ..hybrid_extensions import extension_snapshot
 from ..account import (
     InstrumentRule,
     ledger_chain_hash,
@@ -28,6 +30,7 @@ from ..historical_book import (
     HISTORICAL_L2_LIQUIDATION_FIDELITY,
 )
 from ..persistence import account_math as account_math_ops
+from ..persistence import account_marks as account_marks_ops
 from ..persistence import ledger as ledger_ops
 from ..persistence import liquidation as liquidation_ops
 from ..review import (
@@ -204,6 +207,8 @@ class TrainingLiquidationRepository:
                 if isinstance(snapshots, Mapping)
                 else None
             )
+            if not isinstance(raw_snapshot, Mapping):
+                raw_snapshot = extension_snapshot(connection, run_id=run_id, symbol=str(plan["symbol"]))
             if not isinstance(raw_snapshot, Mapping):
                 raise TrainingRunError(
                     "LIQUIDATION_ADL_INPUT_MISSING",
@@ -1587,6 +1592,8 @@ class TrainingLiquidationRepository:
                     plan["liquidation_leg_id"],
                 ),
             )
+            if hedge_execution:
+                account_marks_ops.apply_hedge_mark_projection(connection, run_id=run_id, now_ms=now_ms)
             liquidation_ops.detect_contract_liquidations(
                 connection, run_id=run_id, now_ms=now_ms
             )

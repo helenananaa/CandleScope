@@ -945,12 +945,20 @@ class ReviewRecorder:
         domain = projection.get("domain")
         account = projection.get("account")
         if (
-            not isinstance(ledger, list)
+            not isinstance(ledger, (list, Mapping))
             or not isinstance(domain, Mapping)
             or not isinstance(account, Mapping)
         ):
             raise TypeError("review projection ledger contract is incomplete")
         ledger_count = int(domain.get("ledger_count", -1))
+        if isinstance(ledger, Mapping):
+            if not cls._uses_ledger_prefix_commitment(projection) or dict(ledger) != {
+                "schema_version": REVIEW_LEDGER_PREFIX_REF_SCHEMA_VERSION,
+                "count": ledger_count,
+                "tail_hash": account.get("ledger_tail_hash"),
+            }:
+                raise TypeError("review projection ledger prefix does not match")
+            return canonical_json(projection)
         if ledger_count != len(ledger):
             raise TypeError("review projection ledger count does not match")
         ledger_tail_hash = account.get("ledger_tail_hash")
@@ -965,6 +973,19 @@ class ReviewRecorder:
             "tail_hash": ledger_tail_hash,
         }
         return canonical_json(stored)
+
+    @staticmethod
+    def _uses_ledger_prefix_commitment(projection: Mapping[str, object]) -> bool:
+        internal = projection.get("_review_descriptor_internal")
+        return isinstance(internal, Mapping) and internal.get("ledger_commitment") == "PREFIX_V1"
+
+    @classmethod
+    def projection_hash(cls, projection: Mapping[str, object]) -> str:
+        # Legacy events committed to the full logical ledger. New events commit
+        # to its immutable count/tail, hydrated only at review/export/fork reads.
+        if cls._uses_ledger_prefix_commitment(projection):
+            return canonical_sha256(json.loads(cls.encode_projection(projection)))
+        return canonical_sha256(projection)
 
     @classmethod
     def decode_projection(
@@ -1097,7 +1118,7 @@ class ReviewRecorder:
             "ledger_tail_hash": str(event["ledger_tail_hash"]),
             "viewer_revision": int(event["viewer_revision"]),
             "public_time": json.loads(str(event["public_time_json"])),
-            "projection_hash": canonical_sha256(projection),
+            "projection_hash": cls.projection_hash(projection),
             "anchor_set_hash": str(event["anchor_set_hash"]),
             "previous_event_hash": str(event["previous_event_hash"]),
         }
@@ -1107,6 +1128,11 @@ class ReviewRecorder:
                 "review event projection no longer matches its hash chain",
                 status_code=503,
             )
+        from .review_lifecycle import legacy_shutdown_peer
+        peer = legacy_shutdown_peer(connection, event)
+        if peer is not None:
+            aligned = cls.decode_event_projection(connection, event=peer)
+            projection = {**projection, "cursor": aligned["cursor"], "rules": aligned["rules"]}
         return projection
 
     @staticmethod
@@ -1297,6 +1323,7 @@ class ReviewRecorder:
         run_id: str,
         virtual_time_ms: int,
         source_sequence: int,
+        ledger_prefix: bool = False,
     ) -> dict[str, object]:
         viewer = connection.execute(
             "SELECT * FROM replay_training_viewer_state WHERE run_id = ?",
@@ -1334,6 +1361,7 @@ class ReviewRecorder:
                     "source_kind": str(row["source_kind"]),
                     "subscription_tier": str(row["subscription_tier"]),
                     "state": str(row["state"]),
+                    "cursor": {key: row[key] for key in ("virtual_time_ms", "source_sequence", "revision")},
                     "state_hash": (
                         None if row["state_hash"] is None else str(row["state_hash"])
                     ),
@@ -1366,10 +1394,21 @@ class ReviewRecorder:
                 (run_id,),
             ).fetchall()
         ]
-        ledger = self._contract_ledger_projection(connection, run_id=run_id)
-        critical_ledger_count = sum(
-            entry["kind"] not in _REVIEW_AUDIT_ONLY_LEDGER_KINDS for entry in ledger
-        )
+        if ledger_prefix:
+            counts = connection.execute("""
+                SELECT COUNT(*), COALESCE(SUM(kind NOT IN (
+                    'POSITION_MUTATION', 'POSITION_ACCOUNTING_MUTATION', 'MARGIN_MUTATION'
+                )), 0) FROM replay_training_contract_ledger WHERE run_id=?
+                """, (run_id,)).fetchone()
+            ledger_count, critical_ledger_count = int(counts[0]), int(counts[1])
+            ledger = {"schema_version": REVIEW_LEDGER_PREFIX_REF_SCHEMA_VERSION,
+                      "count": ledger_count, "tail_hash": str(account["ledger_tail_hash"])}
+        else:
+            ledger = self._contract_ledger_projection(connection, run_id=run_id)
+            ledger_count = len(ledger)
+            critical_ledger_count = sum(
+                entry["kind"] not in _REVIEW_AUDIT_ONLY_LEDGER_KINDS for entry in ledger
+            )
         markers = [
             {
                 "marker_id": str(row["marker_id"]),
@@ -1424,13 +1463,7 @@ class ReviewRecorder:
                     (run_id,),
                 ).fetchone()[0]
             ),
-            "ledger_count": int(
-                connection.execute(
-                    "SELECT COUNT(*) FROM replay_training_contract_ledger "
-                    "WHERE run_id = ?",
-                    (run_id,),
-                ).fetchone()[0]
-            ),
+            "ledger_count": ledger_count,
             "critical_ledger_count": critical_ledger_count,
             "funding_count": int(
                 connection.execute(
@@ -1560,6 +1593,10 @@ class ReviewRecorder:
             "fidelity": str(account["fidelity"]),
             "ledger_tail_hash": str(account["ledger_tail_hash"]),
         }
+        from .persistence.hedge_review_fork import input_snapshot
+        from .review_account import capture_account
+        domain["portfolio"] = capture_account(connection, run_id)
+
         return {
             "schema_version": REVIEW_TIMELINE_SCHEMA_VERSION,
             "run_id": run_id,
@@ -1595,9 +1632,11 @@ class ReviewRecorder:
             # Stored for exact Fork reconstruction. API projections remove
             # actual archive timestamps before crossing the disclosure boundary.
             "_account_history_internal": history_inputs,
+            "_hedge_history_internal": input_snapshot(connection, run_id),
             "_book_history_internal": book_inputs,
             "_review_descriptor_internal": {
                 "critical_ledger_count": critical_ledger_count,
+                **({"ledger_commitment": "PREFIX_V1"} if ledger_prefix else {}),
             },
         }
 
@@ -1928,6 +1967,10 @@ class ReviewRecorder:
             if isinstance(decoded, Mapping):
                 previous = decoded
         context_kind = str(context.get("kind", ""))
+        from .review_lifecycle import lifecycle_clock
+        virtual_time_ms, source_sequence = lifecycle_clock(
+            context_kind, full_times, run, virtual_time_ms, source_sequence,
+        )
         preliminary_descriptors: list[tuple[str, str]] | None = None
         preliminary_domain: Mapping[str, object] | None = None
         if len(full_times) > 1 or context_kind == "SOURCE_EVENT":
@@ -1981,6 +2024,7 @@ class ReviewRecorder:
             run_id=run_id,
             virtual_time_ms=virtual_time_ms,
             source_sequence=source_sequence,
+            ledger_prefix=True,
         )
         descriptors = self.descriptors(context, previous, projection)
         if any(category == "EQUITY" for category, _ in descriptors):
@@ -2069,8 +2113,11 @@ class ReviewRecorder:
         if primary_track is None:
             raise TypeError("review primary track is missing")
         anchors = {str(primary_track["track_id"]): primary_anchor}
+        hedge_run = connection.execute(
+            "SELECT position_mode FROM replay_training_run WHERE run_id=?", (run_id,),
+        ).fetchone()[0] == "HEDGE"
         for track in anchor_batch.tracks.values():
-            if track["subscription_tier"] != "FULL":
+            if track["subscription_tier"] != "FULL" and not hedge_run:
                 continue
             track_id = str(track["track_id"])
             if track_id not in anchors:
@@ -2102,7 +2149,7 @@ class ReviewRecorder:
         if command_id is None and isinstance(command, Mapping):
             command_id = command.get("command_id")
         created: list[str] = []
-        projection_hash = canonical_sha256(projection)
+        projection_hash = self.projection_hash(projection)
         public_time_json = canonical_json(public_time)
         for category, event_type in descriptors:
             tail = connection.execute(

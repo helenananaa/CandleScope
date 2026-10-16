@@ -15,6 +15,7 @@ from ..anchor_codec import (
     decode_anchor_payload,
 )
 from ..errors import TrainingRunError
+from ..review_lifecycle import event_clock
 from ..models import (
     REPLAY_V2_PROTOCOL,
     ViewerState,
@@ -593,7 +594,7 @@ class TrainingReviewRepository:
                     "category": str(row["category"]),
                     "timeline_sequence": int(row["timeline_sequence"]),
                     "checkpoint_id": int(row["checkpoint_id"]),
-                    "source_sequence": int(row["source_sequence"]),
+                    "source_sequence": int(event_clock(connection, row)["source_sequence"]),
                     "event_sequence": int(row["event_sequence"]),
                     "state_hash": str(row["state_hash"]),
                     "account_hash": str(row["account_hash"]),
@@ -601,12 +602,20 @@ class TrainingReviewRepository:
                     "viewer_revision": int(row["viewer_revision"]),
                     "anchor_set_hash": str(row["anchor_set_hash"]),
                     "event_hash": str(row["event_hash"]),
-                    "public_time": json.loads(str(row["public_time_json"])),
+                    "public_time": json.loads(str(event_clock(connection, row)["public_time_json"])),
                     "detail": review_records_ops.review_event_detail(connection, row),
                 }
                 for row in rows
             ]
-            selected: dict[str, object] | None = events[-1]
+            selected: dict[str, object] | None = None
+            if event_id is None:
+                for row in reversed(rows):
+                    try:
+                        event_clock(connection, row, strict=True)
+                    except TrainingRunError:
+                        continue
+                    selected = next(item for item in events if item["event_id"] == row["event_id"])
+                    break
             if event_id is not None:
                 selected = next(
                     (item for item in events if item["event_id"] == event_id),
@@ -868,6 +877,29 @@ class TrainingReviewRepository:
                 connection,
                 event=event,
             )
+            # Older HEDGE review events linked only FULL actors. A dormant
+            # actor's frozen state hash identifies its exact anchor even when
+            # that unchanged state was archived later. The hash binds the data
+            # epoch, cursor, event chain and components; wall-clock save time
+            # does not indicate a different market/account state.
+            mode = connection.execute(
+                "SELECT position_mode FROM replay_training_run WHERE run_id=?", (run_id,),
+            ).fetchone()[0]
+            if mode == "HEDGE":
+                by_track = {row["track_id"]: row for row in anchors}
+                for track in projection["tracks"]:
+                    if track["track_id"] in by_track or track.get("state_hash") is None:
+                        continue
+                    exact = connection.execute(
+                        "SELECT * FROM replay_review_actor_anchor WHERE run_id=? AND track_id=? "
+                        "AND state_hash=? ORDER BY checkpoint_id DESC LIMIT 1",
+                        (run_id, track["track_id"], track["state_hash"]),
+                    ).fetchone()
+                    if exact is None:
+                        raise TrainingRunError("REVIEW_ANCHOR_UNAVAILABLE",
+                                               "dormant review track lacks its exact actor anchor", status_code=409)
+                    by_track[track["track_id"]] = exact
+                anchors = tuple(by_track[key] for key in sorted(by_track))
             return event, anchors, projection
 
         result = await self.base_store.run_extension_read(read)
@@ -1156,7 +1188,7 @@ class TrainingReviewRepository:
                     "event_type": str(selected["event_type"]),
                     "category": str(selected["category"]),
                     "timeline_sequence": int(selected["timeline_sequence"]),
-                    "public_time": json.loads(str(selected["public_time_json"])),
+                    "public_time": json.loads(str(event_clock(connection, selected)["public_time_json"])),
                     "detail": review_records_ops.review_event_detail(
                         connection, selected
                     ),
@@ -1362,12 +1394,13 @@ class TrainingReviewRepository:
                         * quantity
                         * Decimal(rule.contract_size)
                     )
-            initial, overlay = (
-                Decimal(row["initial_equity"]),
-                Decimal(row["overlay_cash"]),
-            )
+            overlay = Decimal(row["overlay_cash"])
             cash = Decimal(json.loads(row["account_json"])["cash_balance"])
-            equity = (initial + overlay) + (cash + pnl + overlay - initial)
+            # The contract overlay corrects the broker cash once (for example
+            # different contract fees). Applying it to both the base and P&L
+            # invents a lower minimum after every negative fee correction, or
+            # hides a real minimum when the correction is positive.
+            equity = cash + pnl + overlay
             return prior is None or equity < prior
 
         return await self.base_store.run_extension_read(read)

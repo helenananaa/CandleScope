@@ -221,6 +221,29 @@ function reviewPayload() {
   };
 }
 
+test("persisted internal training events open and navigate in review without relaxing resource IDs", () => {
+  const payload = reviewPayload();
+  const eventType = "_TRAINING_STEP_DEFER_TERMINAL";
+  payload.events[0]!.event_type = eventType;
+  payload.jump_targets[0]!.event_type = eventType;
+  assert.equal(parseReplayReviewResponse(payload).events[0]?.event_type, eventType);
+  const control = parseReplayReviewControlResponse({
+    protocol: "replay.v3", schema_version: "replay.review.timeline.v1", review_id: payload.review_id,
+    run_id: payload.run_id, read_only: true, selected_event_id: payload.selected_event_id,
+    selected_timeline_sequence: payload.selected_timeline_sequence, selected_state_hash: payload.selected_state_hash,
+    original_state_hash: payload.original_state_hash, cursor_revision: 2, playback_state: "PAUSED", playback_rate: "1",
+    selected_event: {event_id: payload.selected_event_id, event_type: eventType, category: "COMMAND",
+      timeline_sequence: payload.selected_timeline_sequence, public_time: publicTime, detail: null},
+    projection: payload.projection, drawing_document: null, immutability_proof: payload.immutability_proof,
+    budget: payload.budget,
+  });
+  assert.equal(control.selected_event.event_type, eventType);
+  assert.throws(() => parseReplayReviewResponse({...payload, run_id: "_unsafe-id"}), /identifier/);
+  for (const invalid of ["_unrecognized", "_TRAINING_<script>", "_TRAINING_" + "A".repeat(128)]) {
+    assert.throws(() => parseReplayReviewResponse({...payload, events: [{...payload.events[0], event_type: invalid}]}));
+  }
+});
+
 test("Phase 17 rules keep exchange instruments immutable and overlays independent", () => {
   const rules = parseReplayRunRulesResponse(rulesPayload());
   assert.equal(rules.instrument_rules[0]?.immutable_exchange_rule, true);

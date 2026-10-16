@@ -2070,6 +2070,7 @@ export const ar = {
   "replay.shell.ordersFills": "أوامر / تنفيذات",
   "replay.shell.ledger": "الدفتر",
   "replay.shell.drawingRev": "مراجعة الرسم",
+  "replay.shell.legacyAccountIncomplete": "لا يتضمن هذا السجل القديم تقييم هامش المحفظة. لا يمكن استعادة حقوق الملكية المتاحة والأرباح أو الخسائر غير المحققة بدقة.",
   "replay.shell.reviewSidebarHint": "هذا الشريط يأتي من إسقاط الحدث المحدد ولا يقرأ محفظة التشغيل النشط.",
   "replay.shell.unavailable": "إعادة تشغيل الشموع غير متاحة",
   "replay.shell.failClosed": "تفشل مساحة التدريب مغلقة؛ لن تسقط إلى حي أو وهمي أو أسواق أخرى مخزَّنة.",
