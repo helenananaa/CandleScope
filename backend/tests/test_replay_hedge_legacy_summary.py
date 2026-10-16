@@ -1,5 +1,6 @@
 """Upgrade persisted pre-fix summaries without changing financial history."""
 
+import json
 from dataclasses import replace
 from decimal import Decimal
 
@@ -90,6 +91,12 @@ async def test_shared_capital_change_matches_live_wallet_and_rest(tmp_path, monk
         assert (await service.training.get_run(run))["equity"] == rest["equity"]
         assert live["funding_cashflow"] == rest["funding_cashflow"]
         assert live["fees_paid"] == rest["fees_paid"]
+        action = await service.training.hedge_inputs.store.run_extension_read(lambda c: c.execute(
+            "SELECT old_value_json,new_value_json FROM replay_run_action_event WHERE run_id=? AND command_id='capital'",
+            (run,),
+        ).fetchone())
+        assert json.loads(action[0])["equity"] == before["equity"]
+        assert json.loads(action[1])["equity"] == rest["equity"]
         audit = await service.training.audit_account(run)
         assert audit["status"] == "PASS", audit
         # Audit metadata changes NOT_RUN→PASS; compare the parent after that
