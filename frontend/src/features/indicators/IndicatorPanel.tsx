@@ -329,6 +329,9 @@ export default function IndicatorPanel({
   });
   const [searchQuery, setSearchQuery] = useState("");
   const [editingIndicator, setEditingIndicator] = useState<IndicatorEditorSource | null>(null);
+  // Preview assigns an id and can change the saved language. Neither starts a
+  // new editing session: remounting here would discard other language drafts.
+  const [editorSession, setEditorSession] = useState(0);
   const activeMarketStudies = marketStudies.filter((study) => study.added);
   const activeItemCount = activeIndicators.length + activeMarketStudies.length;
 
@@ -482,18 +485,12 @@ export default function IndicatorPanel({
   }, [activeIndicators, deleteCustomIndicator, onRemoveIndicator]);
 
   const handleCreateCustom = useCallback(() => {
+    setEditorSession((session) => session + 1);
     setEditingIndicator({
       id: null,
       name: "My Indicator",
-      script: `indicator("My Indicator", overlay=True)
-
-length = input.int(20, "Length", minval=1)
-src = input.source(close, "Source")
-line_color = input.color(color.orange, "Color")
-
-ma = ta.sma(src, length)
-plot(ma, "MA", color=line_color)
-`,
+      // The runtime catalog chooses both the language and its starter source.
+      script: "",
       params: {},
       description: "",
       securityMode: "safe",
@@ -504,6 +501,7 @@ plot(ma, "MA", color=line_color)
   }, []);
 
   const handleEditIndicator = useCallback((indicator: IndicatorDefinition) => {
+    setEditorSession((session) => session + 1);
     setEditingIndicator({ ...indicator });
     setTab("editor");
   }, []);
@@ -522,6 +520,7 @@ plot(ma, "MA", color=line_color)
   }), []);
 
   const handleForkBuiltin = useCallback((indicator: IndicatorEditorValue) => {
+    setEditorSession((session) => session + 1);
     const draft = toCustomDraft({
       ...indicator,
       id: null,
@@ -699,7 +698,7 @@ plot(ma, "MA", color=line_color)
             {...(allowedSecurityModes === undefined
               ? {}
               : { allowedSecurityModes })}
-            key={`${editingIndicator.id || "new"}:${isBuiltinIndicator(editingIndicator) ? "builtin" : editingIndicator.language || "descriptor-default"}`}
+            key={editorSession}
             indicator={editingIndicator}
             onSave={handleEditorSave}
             onBack={handleEditorBack}
