@@ -236,10 +236,10 @@ async def test_final_ack_is_atomic_and_unobserved_tracks_require_snapshot(
             C.ADVANCE_TO,
             {"virtual_time_ms": at + 90 * 60000, "stop_on_event": False},
         )
-        assert (
-            service.store._metrics["transactions"] - writes
-            == await service.store.run_extension_read(count_intervals) - count
-        )
+        # The trough and endpoint retain distinct review ranges, while the
+        # complete prepared command and its final ACK share one transaction.
+        assert await service.store.run_extension_read(count_intervals) - count == 2
+        assert service.store._metrics["transactions"] - writes == 1
         stored = await service.store.run_extension_read(
             lambda c: c.execute(
                 "SELECT status,result_json FROM replay_training_advance_intent WHERE run_id=? AND command_id='atomic-ack'",

@@ -55,7 +55,7 @@ async def test_dormant_primary_funding_rules_fees_restart_and_future_order(tmp_p
         run_id, primary, other = await _dormant_run(service, tmp_path, initial_count=0,
                                                    legacy=legacy, time_disclosure_policy=time_policy)
         global_before = await _rows(service, run_id, "replay_training_global_event")
-        selected = await _send(service, run_id=run_id, session_id=other, command_id="readmit-primary",
+        await _send(service, run_id=run_id, session_id=other, command_id="readmit-primary",
                               command_type=ReplayV2CommandType.SELECT_TRACK,
                               payload={"track_id": "track-1", "expected_viewer_revision": 1})
         global_after = await _rows(service, run_id, "replay_training_global_event")

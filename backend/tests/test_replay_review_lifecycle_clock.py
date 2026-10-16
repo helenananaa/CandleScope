@@ -28,9 +28,12 @@ async def test_legacy_clock_never_borrows_another_account_or_decision(mismatch):
                   "tracks": [{"track_id": "track-2", "subscription_tier": "FULL", "cursor": {"virtual_time_ms": 20},
                               "position": {"quantity": "0", "mark_price": "10"}}]}
     connection.execute("INSERT INTO replay_review_timeline_event VALUES(?,?,?,?,?,?,?,?)", ("run", "old", "SYSTEM", "SHUTDOWN", 10, 1, 1, json.dumps(projection)))
-    if mismatch == "cash": projection["account"]["overlay_cash"] = "1"
-    if mismatch == "position": projection["tracks"][0]["position"]["quantity"] = "1"
-    if mismatch == "view": projection["viewer_state"]["selected_track_id"] = "track-1"
+    if mismatch == "cash":
+        projection["account"]["overlay_cash"] = "1"
+    if mismatch == "position":
+        projection["tracks"][0]["position"]["quantity"] = "1"
+    if mismatch == "view":
+        projection["viewer_state"]["selected_track_id"] = "track-1"
     if mismatch == "intervening_command":
         connection.execute("INSERT INTO replay_review_timeline_event VALUES(?,?,?,?,?,?,?,?)", ("run", "decision", "COMMAND", "CHANGE_FEE_POLICY", 20, 2, 1, json.dumps(projection)))
     connection.execute("INSERT INTO replay_review_timeline_event VALUES(?,?,?,?,?,?,?,?)", ("run", "peer", "SYSTEM", "SHUTDOWN", 20, 3, 1, json.dumps(projection)))
