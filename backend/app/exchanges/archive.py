@@ -19,6 +19,21 @@ class ArchiveCompatibilityError(ArchiveDataError):
     """Provider website/schema contract drifted; disable this capability."""
 
 
+class ArchiveHttpStatusError(ArchiveDataError):
+    """Keep transport status separate from checksum/schema corruption."""
+
+    def __init__(self, status: int, operation: str):
+        self.status = status
+        self.retryable = status in {408, 425, 429} or 500 <= status < 600
+        super().__init__(f"archive {operation} returned HTTP {status}")
+
+
+class ArchiveTransportError(ArchiveDataError):
+    """A bounded archive read can be retried after a transport interruption."""
+
+    retryable = True
+
+
 class ArchiveGranularity(str, enum.Enum):
     DAILY = "daily"
     MONTHLY = "monthly"

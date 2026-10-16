@@ -145,6 +145,10 @@ class PreparationService:
             total = len(plan(request)[1])
         if total > 4096:
             raise PreparationError("PLAN_TOO_LARGE", "Preparation exceeds 4096 data fragments")
+        if request.consumer == "PREFETCH" and request.intent == {"purpose": "replay_display_history"}:
+            cached = await self.storage(self.repository.cached_replay_context, request)
+            if cached is not None:
+                return cached
         result = await self.storage(self.repository.create, request, total)
         self._wake.set()
         return result

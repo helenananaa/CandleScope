@@ -5,20 +5,22 @@ partial 256-row blocks, rather than decoding the whole future replay window.
 This is a disposable index; original content-addressed Parquet remains authority.
 """
 
+import hashlib
+import json
+import os
+import sqlite3
+import threading
+import time
+import weakref
+import zlib
 from bisect import bisect_left, bisect_right
 from collections import OrderedDict, deque
 from contextlib import closing
 from decimal import Decimal, localcontext
-import json
-import hashlib
-import os
 from pathlib import Path
-import sqlite3
-import threading
-import time
 from uuid import uuid4
-import weakref
-import zlib
+
+from .shared_market_display import merge_display, summarize_display
 
 VERSION = "shared-market.v1"
 BLOCK = 256
@@ -301,8 +303,8 @@ def index_path(source_path):
 
 def repair_object(path, digest, *, stop=None):
     """Reconstruct missing/corrupt derived data from the pinned original."""
-    from .history_archive import _load_pyarrow, _PARQUET_COLUMNS
     from .catalog import ReplaySeriesIdentity
+    from .history_archive import _PARQUET_COLUMNS, _load_pyarrow
 
     path = Path(path)
     with path.open("rb") as stream:
@@ -321,8 +323,9 @@ def repair_object(path, digest, *, stop=None):
 
 
 def build(source_path, object_hash, interval, identity, raw_rows, *, stop=None):
+    from app.data_engine.interval_policy import is_monthly_interval, parse_interval_ms
+
     from .dataset import validate_replay_repository_bar
-    from app.data_engine.interval_policy import parse_interval_ms, is_monthly_interval
 
     base_ms = parse_interval_ms(interval)
     if base_ms is None or is_monthly_interval(interval):
@@ -503,6 +506,14 @@ class MarketObject:
         block = bisect_left(self.lasts, time)
         if block == len(self.lasts):
             return self.count
+        # The immutable directory already determines endpoints and gaps
+        # between blocks. Only an interior time needs the source row block.
+        # This matters for many whole-day objects selected by a long prefix.
+        first = block * BLOCK
+        if time <= self.firsts[block]:
+            return first + int(right and time == self.firsts[block])
+        if time == self.lasts[block]:
+            return min(first + BLOCK, self.count) - int(not right)
         opens = [row[0] for row in self.block(block)]
         return block * BLOCK + (
             bisect_right(opens, time) if right else bisect_left(opens, time)
@@ -554,10 +565,19 @@ class MarketObject:
             return unpack(self._fetch(table, key))
 
     def summary(self, start, end, *, prices_only=False):
+        return self._cached_summary(start, end, prices_only=prices_only)
+
+    def display_summary(self, start, end, *, include_auxiliary=True):
+        return self._cached_summary(
+            start, end, display_only=True, include_auxiliary=include_auxiliary
+        )
+
+    def _cached_summary(self, start, end, *, prices_only=False, display_only=False,
+                        include_auxiliary=True):
         # Valuation and trade-result projection query the same immutable range
         # during a coordinated commit. Cache the bounded market-only result,
         # never account state or a mutable run-specific price view.
-        key = (start, end, prices_only)
+        key = (start, end, prices_only, display_only, include_auxiliary)
         with self._lock:
             cache = getattr(self, "_summaries", None)
             if cache is None:
@@ -565,25 +585,39 @@ class MarketObject:
             if key in cache:
                 cache.move_to_end(key)
                 return cache[key]
-        result = self._summary_uncached(start, end, prices_only=prices_only)
+        result = self._summary_uncached(
+            start, end, prices_only=prices_only, display_only=display_only,
+            include_auxiliary=include_auxiliary,
+        )
         with self._lock:
             cache[key] = result
             if len(cache) > 128:
                 cache.popitem(last=False)
         return result
 
-    def _summary_uncached(self, start, end, *, prices_only=False):
+    def _summary_uncached(self, start, end, *, prices_only=False, display_only=False,
+                          include_auxiliary=True):
         summarize_range = summarize_prices if prices_only else summarize
         merge_range = merge_prices if prices_only else merge
+        node = self.node
+        if display_only:
+            merge_range = merge_display
+
+            def summarize_range(rows, base_ms):
+                return summarize_display(rows, base_ms, include_auxiliary=include_auxiliary)
+
+            def node(number):
+                value = self.node(number)[0]
+                return value if include_auxiliary else (*value[:5], None, None, None, None, *value[9:])
         if not 0 <= start <= end <= self.count:
             raise ValueError("shared market range is outside the object")
         if start == end:
             return None
         if start == 0 and end == self.count:
-            return self.node(1)
+            return node(1)
         if start // BLOCK == (end - 1) // BLOCK:
             if start % BLOCK == 0 and (end - start == BLOCK or end == self.count):
-                return self.node(self.metadata["size"] + start // BLOCK)
+                return node(self.metadata["size"] + start // BLOCK)
             return summarize_range(
                 self.block(start // BLOCK)[start % BLOCK : (end - 1) % BLOCK + 1],
                 self.base_ms,
@@ -596,7 +630,7 @@ class MarketObject:
             start = (start // BLOCK + 1) * BLOCK
         if end % BLOCK:
             tail = (
-                self.node(self.metadata["size"] + end // BLOCK)
+                node(self.metadata["size"] + end // BLOCK)
                 if end == self.count
                 else summarize_range(self.block(end // BLOCK)[: end % BLOCK], self.base_ms)
             )
@@ -608,11 +642,11 @@ class MarketObject:
         after = None
         while left < right:
             if left & 1:
-                result = merge_range(result, self.node(left), self.base_ms)
+                result = merge_range(result, node(left), self.base_ms)
                 left += 1
             if right & 1:
                 right -= 1
-                after = merge_range(self.node(right), after, self.base_ms)
+                after = merge_range(node(right), after, self.base_ms)
             left //= 2
             right //= 2
         return merge_range(merge_range(result, after, self.base_ms), tail, self.base_ms)
@@ -807,6 +841,29 @@ class MarketRange:
             result.append(row[5])
         return result
 
+    def indicator_closes_at(self, offsets, cancelled):
+        """Select bounded source columns without changing financial range reads."""
+        from .shared_market_columns import selected_closes
+
+        grouped = {}
+        result = [None] * len(offsets)
+        for position, index in enumerate(offsets):
+            if not 0 <= index < self.count:
+                raise IndexError(index)
+            part = bisect_right(self.ends, index)
+            obj, first, _ = self.parts[part]
+            before = 0 if part == 0 else self.ends[part - 1]
+            grouped.setdefault(obj, []).append((position, index, first + index - before))
+        for obj, entries in grouped.items():
+            if cancelled.is_set():
+                raise InterruptedError("indicator column read cancelled")
+            values = selected_closes(obj, [local for _, _, local in entries], cancelled)
+            if values is None:
+                values = self.closes_at([index for _, index, _ in entries])
+            for (position, _, _), value in zip(entries, values, strict=True):
+                result[position] = value
+        return result
+
     def summary(self, start, end, *, prices_only=False):
         if not 0 <= start <= end <= self.count:
             raise ValueError("shared market range is outside its view")
@@ -839,3 +896,27 @@ class MarketRange:
             return hit if hit != end else find(middle, b)
 
         return find(start, end)
+
+    def display_summary(self, start, end, *, include_auxiliary=True):
+        if not 0 <= start <= end <= self.count:
+            raise ValueError("shared market range is outside its view")
+        result = None
+        part = bisect_right(self.ends, start)
+        before = self.ends[part - 1] if part else 0
+        while part < len(self.parts) and before < end:
+            obj, first, _ = self.parts[part]
+            after = self.ends[part]
+            a, b = max(start, before), min(end, after)
+            if a < b:
+                result = merge_display(
+                    result,
+                    obj.display_summary(first + a - before, first + b - before,
+                                        include_auxiliary=include_auxiliary),
+                    self.base_ms,
+                )
+            before = after
+            part += 1
+        if result is not None and self.offset_ms:
+            result = (*result[:10], result[10] + self.offset_ms,
+                      result[11] + self.offset_ms, result[12])
+        return result

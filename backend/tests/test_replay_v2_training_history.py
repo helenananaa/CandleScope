@@ -6,13 +6,14 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
+from app.exchanges.archive import ArchiveHttpStatusError
+from app.replay.history_archive import SOURCE_BUCKET_ALIGNMENT_CALENDAR_MONTH
 from app.replay.service import ReplayService
 from app.replay.storage import ReplaySQLiteStore
-from app.replay.history_archive import SOURCE_BUCKET_ALIGNMENT_CALENDAR_MONTH
 from app.replay.training.errors import TrainingRunError
 from app.replay.training.history import _resolve_native_display_context
 from app.replay.training.models import TrainingRunCreateRequest
+
 from tests.fixtures.replay.service_fakes import (
     INTERVAL_MS,
     NOW_MS,
@@ -28,7 +29,6 @@ from tests.fixtures.replay.trade_service_fakes import (
     trade_replay_repository,
     verified_trade_archive,
 )
-
 
 pytestmark = pytest.mark.anyio
 
@@ -295,7 +295,7 @@ async def test_all_available_run_fails_closed_when_bound_archive_is_unavailable(
             (type(repository),),
             {},
         )
-        service._repository = replacement_type()  # noqa: SLF001
+        service._repository = replacement_type()
         training = service.training
         assert training is not None
         boundary = int(snapshot["cursor"]["virtual_time_ms"])  # type: ignore[index]
@@ -312,6 +312,51 @@ async def test_all_available_run_fails_closed_when_bound_archive_is_unavailable(
             )
         assert captured.value.code == "HISTORY_SOURCE_UNAVAILABLE"
         assert captured.value.status_code == 503
+    finally:
+        await service.shutdown(step_timeout=1.0)
+
+
+@pytest.mark.parametrize("reader", ["get_bounds_at_revision", "query_bars_at_revision"])
+@pytest.mark.parametrize("temporary", [True, False])
+async def test_history_preserves_temporary_source_failure_and_can_recover(
+    tmp_path, monkeypatch, reader, temporary
+):
+    service, repository = await _service(tmp_path / "temporary-source.db")
+    try:
+        _created, snapshot = await _create_run(
+            service, history_mode="ALL_AVAILABLE", requested_start_index=12
+        )
+        training = service.training
+        boundary = int(snapshot["cursor"]["virtual_time_ms"])
+        request = {
+            "track_id": "track-1",
+            "before_ms": boundary - 3 * INTERVAL_MS,
+            "revealed_boundary_ms": boundary,
+            "limit": 3,
+            "data_epoch": str(snapshot["data_epoch"]),
+            "history_epoch": None,
+        }
+        expected = await training.history_page("adapter-1", **request)
+        error = (
+            ArchiveHttpStatusError(503, "checksum")
+            if temporary
+            else ValueError("corrupt archive")
+        )
+        original = getattr(repository, reader)
+
+        def unavailable(*_args, **_kwargs):
+            raise error
+
+        monkeypatch.setattr(repository, reader, unavailable)
+        with pytest.raises(TrainingRunError) as failure:
+            await training.history_page("adapter-1", **request)
+        assert failure.value.code == "HISTORY_SOURCE_UNAVAILABLE"
+        assert failure.value.status_code == 503
+        assert failure.value.details == {"retryable": temporary}
+        assert failure.value.__cause__ is error
+        monkeypatch.setattr(repository, reader, original)
+        assert await training.history_page("adapter-1", **request) == expected
+        assert (await service.get_session("adapter-1"))["snapshot"] == snapshot
     finally:
         await service.shutdown(step_timeout=1.0)
 
@@ -495,22 +540,36 @@ async def test_secondary_all_history_uses_its_own_later_listing_boundary(tmp_pat
 
     service, repository = await _service(tmp_path / "later-listing.db")
     repository.add_rows(
-        FixtureIdentity("binance", "spot", "SOLUSDT"), "1m",
+        FixtureIdentity("binance", "spot", "SOLUSDT"),
+        "1m",
         [make_bar(START_MS + i * INTERVAL_MS) for i in range(4, ROW_COUNT)],
     )
     try:
-        created, _ = await _create_run(service, history_mode="ALL_AVAILABLE", requested_start_index=12)
+        created, _ = await _create_run(
+            service, history_mode="ALL_AVAILABLE", requested_start_index=12
+        )
         run_id = created["run"]["run_id"]
-        await _add_track(service, run_id=run_id, selected_session_id="adapter-1",
-                         symbol="SOLUSDT", tier="WARM", command_id="add-later-listing")
+        await _add_track(
+            service,
+            run_id=run_id,
+            selected_session_id="adapter-1",
+            symbol="SOLUSDT",
+            tier="WARM",
+            command_id="add-later-listing",
+        )
         snapshot = (await service.get_session("adapter-2"))["snapshot"]
         page = await service.training.history_page(
-            "adapter-2", track_id="track-2",
+            "adapter-2",
+            track_id="track-2",
             before_ms=int(snapshot["cursor"]["virtual_time_ms"]) + 1,
             revealed_boundary_ms=int(snapshot["cursor"]["virtual_time_ms"]),
-            limit=100, data_epoch=snapshot["data_epoch"], history_epoch=None,
+            limit=100,
+            data_epoch=snapshot["data_epoch"],
+            history_epoch=None,
         )
         assert page["history_boundary_ms"] == START_MS + 4 * INTERVAL_MS
-        assert min(b["open_time_ms"] for b in page["bars"]) == START_MS + 4 * INTERVAL_MS
+        assert (
+            min(b["open_time_ms"] for b in page["bars"]) == START_MS + 4 * INTERVAL_MS
+        )
     finally:
         await service.shutdown(step_timeout=1.0)

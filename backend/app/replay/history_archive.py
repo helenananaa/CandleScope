@@ -1939,7 +1939,7 @@ class ReplayHistoryRepository:
 
     supports_unbounded_indexed_gap_scan = True
 
-    def __init__(self, root: str | Path) -> None:
+    def __init__(self, root: str | Path, *, discover_current: bool = True) -> None:
         self.root = Path(root).expanduser().resolve()
         self.objects_dir = self.root / "objects" / "sha256"
         self.catalogs_dir = self.root / "catalogs"
@@ -1963,7 +1963,11 @@ class ReplayHistoryRepository:
             "aggregate_cache_hits": 0,
             "aggregate_cache_writes": 0,
         }
-        self._refresh()
+        # Pinned archive owners already know their revision. Avoid scanning the
+        # mutable catalog when creating those short-lived readers; all current
+        # catalog queries still refresh at their own entry point.
+        if discover_current:
+            self._refresh()
 
     def list_all_series(self, custom_only: bool = False) -> list[dict[str, object]]:
         del custom_only
@@ -2158,7 +2162,11 @@ class ReplayHistoryRepository:
             first, last = obj.bound(start_ms), obj.bound(end_ms)
             if first < last:
                 parts.append((obj, first, last))
-        self._backfill_shared_market(manifest, end_ms)
+        # Every selected object above already has a usable index. A one-object
+        # official day/month needs no background lane to revisit that same
+        # object; retain prewarming when the manifest has other objects.
+        if len(parts) < len(manifest.objects):
+            self._backfill_shared_market(manifest, end_ms)
         return MarketRange(parts, offset_ms) if parts else None
 
     def _backfill_shared_market(self, manifest, next_time):
@@ -3222,6 +3230,10 @@ class ReplayHistoryRepository:
                         else None
                     )
                     if manifest is not None:
+                        if manifest.catalog_epoch != revision:
+                            raise ReplayHistoryArchiveError(
+                                "replay-history catalog revision does not match request"
+                            )
                         if _manifest_key(manifest) != key:
                             raise ReplayHistoryArchiveError(
                                 "replay-history revision identity does not match request"

@@ -51,6 +51,14 @@ class PreparationRepository:
                     PRIMARY KEY(owner, chunk_key),
                     FOREIGN KEY(chunk_key) REFERENCES preparation_chunks(key)
                 );
+                CREATE TABLE IF NOT EXISTS preparation_context_origins (
+                    key TEXT PRIMARY KEY, generation INTEGER NOT NULL,
+                    start_ms INTEGER NOT NULL, frozen_start_ms INTEGER NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS preparation_context_state (
+                    id INTEGER PRIMARY KEY CHECK(id=1), generation INTEGER NOT NULL
+                );
+                INSERT OR IGNORE INTO preparation_context_state VALUES (1,0);
                 CREATE TABLE IF NOT EXISTS preparation_pending_deletes (
                     receipt TEXT PRIMARY KEY, bytes INTEGER NOT NULL
                 );
@@ -191,6 +199,60 @@ class PreparationRepository:
 
     def get(self, job_id):
         with self.connect() as db:
+            return self.wire(db.execute("SELECT * FROM preparation_jobs WHERE id=?", (job_id,)).fetchone())
+
+    def cached_replay_context(self, request: PreparationRequest):
+        """Freeze already published BAR inputs without a new file publication.
+
+        This narrowly scoped display read can proceed during background inventory.
+        Cold acquisition, training launch and other consumers keep their budget
+        barrier. All coverage and retained references commit together.
+        """
+        if (request.consumer != "PREFETCH" or request.progressive
+                or request.intent != {"purpose": "replay_display_history"}
+                or any(item.role != "BARS" for item in request.requirements)):
+            return None
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            old = db.execute("SELECT * FROM preparation_jobs WHERE idempotency_key=?",
+                             (request.idempotency_key,)).fetchone()
+            if old is not None:
+                if old["fingerprint"] != request.identity():
+                    raise PreparationError("IDEMPOTENCY_CONFLICT", "Key belongs to a different preparation")
+                if old["state"] == "READY":
+                    return self.wire(old)
+                # A worker may already own any nonterminal job. Never replace
+                # its selected inputs or cancel/retry it from this read path.
+                return None
+            inputs = []
+            for requirement in request.requirements:
+                series = self.series_key(requirement.model_dump())
+                candidates = list(db.execute("""SELECT * FROM preparation_chunks
+                    WHERE series_key=? AND start_ms<? AND end_ms>?
+                    ORDER BY bytes,key""", (series, requirement.end_ms, requirement.start_ms)))
+                boundaries = {requirement.start_ms, requirement.end_ms}
+                for row in candidates:
+                    boundaries.add(max(requirement.start_ms, row["start_ms"]))
+                    boundaries.add(min(requirement.end_ms, row["end_ms"]))
+                ordered = sorted(boundaries)
+                for start, end in zip(ordered, ordered[1:]):
+                    row = next((row for row in candidates if row["start_ms"] <= start and row["end_ms"] >= end), None)
+                    if row is None:
+                        return None
+                    selected = requirement.model_copy(update={"start_ms": start, "end_ms": end})
+                    inputs.append({"key": row["key"], "requirement": selected.model_dump()})
+                    if len(inputs) > 4096:
+                        return None
+            job_id, now = uuid.uuid4().hex, self.now()
+            result = {"consumer": "PREFETCH", "inputs": inputs, "job_id": job_id}
+            db.execute("""INSERT INTO preparation_jobs
+                (id,idempotency_key,fingerprint,request,state,stage,total,completed,reserved_bytes,result,created_ms,updated_ms)
+                VALUES (?,?,?,?,'READY','READY',?,?,0,?,?,?)""",
+                (job_id, request.idempotency_key, request.identity(), canonical(request.model_dump()),
+                 len(inputs), len(inputs), canonical(result), now, now))
+            for item in inputs:
+                db.execute("INSERT OR IGNORE INTO preparation_refs VALUES (?,?)", (job_id, item["key"]))
+                db.execute("UPDATE preparation_chunks SET accessed_ms=? WHERE key=?", (now, item["key"]))
             return self.wire(db.execute("SELECT * FROM preparation_jobs WHERE id=?", (job_id,)).fetchone())
 
     def by_idempotency(self, key):
@@ -504,7 +566,12 @@ class PreparationRepository:
             job = self.wire(db.execute("SELECT * FROM preparation_jobs WHERE id=?", (job_id,)).fetchone())
             if job["state"] not in TERMINAL:
                 raise PreparationError("JOB_ACTIVE", "Active preparation inputs cannot be released")
-            db.execute("DELETE FROM preparation_refs WHERE owner=?", (job_id,))
+            released = db.execute("DELETE FROM preparation_refs WHERE owner=?", (job_id,)).rowcount
+            if released and job["request"].get("intent", {}).get("purpose") == "replay_display_history":
+                # Checkpoints must not outlive the immutable context selections
+                # they consumed. A later download may contain corrected prices.
+                db.execute("UPDATE preparation_context_state SET generation=generation+1 WHERE id=1")
+                db.execute("DELETE FROM preparation_context_origins")
 
     def evict_unreferenced(self, remove, *, max_chunks=32):
         removed = 0
