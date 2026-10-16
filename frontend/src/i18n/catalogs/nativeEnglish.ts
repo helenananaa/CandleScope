@@ -246,4 +246,6 @@ export const nativeEnglish = {
   "strategyReview.go": "Go",
   "strategyReview.previousPage": "Previous page",
   "strategyReview.nextPage": "Next page",
+  "replay.indicators.revealedPrefix": "Revealed replay data",
+  "replay.indicators.revealedPrefixHint": "Uses only prices revealed up to the replay clock, including the forming candle. Its indicator values may change as replay advances.",
 } as const;

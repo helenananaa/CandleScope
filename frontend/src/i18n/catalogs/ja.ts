@@ -4672,4 +4672,6 @@ export const ja = {
   "strategyReview.go": "移動",
   "strategyReview.previousPage": "前のページ",
   "strategyReview.nextPage": "次のページ",
+  "replay.indicators.revealedPrefix": "リプレイで開示済みの価格",
+  "replay.indicators.revealedPrefixHint": "リプレイ時刻までに開示された価格のみを使用します。形成中の足も含むため、その足の指標値はリプレイの進行に伴って更新されます。",
 } as const satisfies MessageCatalog;

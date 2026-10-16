@@ -267,12 +267,14 @@ export function createIndicatorComputeJobCoordinator({
     isResultComplete = () => true,
     jobs,
     lifecycleKey,
+    onResults,
   }: {
-    execute: (jobs: TJob[], signal: AbortSignal) => Promise<TResult[]>;
+    execute: (jobs: TJob[], signal: AbortSignal, publish: (results: TResult[]) => void) => Promise<TResult[]>;
     force?: boolean;
     isResultComplete?: (result: TResult) => boolean;
     jobs: readonly TJob[];
     lifecycleKey: string;
+    onResults?: (results: TResult[]) => void;
   }): Promise<IndicatorComputeScheduleResult<TResult>> {
     const taskEpoch = activate(lifecycleKey);
     const unique = new Map<string, TJob>();
@@ -306,9 +308,20 @@ export function createIndicatorComputeJobCoordinator({
       const batchId = nextBatchId;
       const controller = new AbortController();
       controllers.set(batchId, controller);
+      const queuedKeys = new Set(queued.map(job => job.jobKey));
+      const published = new Set<string>();
+      const publish = (results: TResult[]) => {
+        if (controller.signal.aborted || taskEpoch !== epoch || lifecycleKey !== activeLifecycleKey) return;
+        const fresh = results.filter(result => queuedKeys.has(result.jobKey) && !published.has(result.jobKey));
+        for (const result of fresh) {
+          published.add(result.jobKey);
+          if (isResultComplete(result)) rememberCompleted(result.jobKey);
+        }
+        if (fresh.length) onResults?.(fresh);
+      };
       const promise = Promise.resolve()
         .then(async (): Promise<PhysicalBatchOutcome> => {
-          const results = await execute(queued, controller.signal);
+          const results = await execute(queued, controller.signal, publish);
           if (
             controller.signal.aborted
             || taskEpoch !== epoch
@@ -328,9 +341,11 @@ export function createIndicatorComputeJobCoordinator({
             isResultComplete(result) ? [result.jobKey] : []
           ));
           for (const jobKey of completedKeys) rememberCompleted(jobKey);
+          publish(orderedResults);
           return { results: orderedResults, stale: false };
         })
         .finally(() => {
+          controller.abort();
           controllers.delete(batchId);
           for (const job of queued) {
             if (inFlight.get(job.jobKey)?.batchId === batchId) {
@@ -346,6 +361,11 @@ export function createIndicatorComputeJobCoordinator({
     if (ownedBatch) awaitedBatches.push(ownedBatch);
     const settled = await Promise.allSettled(awaitedBatches.map((batch) => batch.promise));
     const ownedSettlement = ownedBatch ? settled[settled.length - 1] : undefined;
+    // A source can leave and return to the same textual key while its old
+    // cancellation drains. Epoch ownership applies to rejections as well as
+    // successful output; an obsolete abort must not erase the successor.
+    const lifecycleStale = taskEpoch !== epoch || lifecycleKey !== activeLifecycleKey;
+    if (lifecycleStale) return { joined, queued: queued.length, results: [], skipped, stale: true };
     if (ownedSettlement?.status === "rejected") throw ownedSettlement.reason;
     if (!ownedBatch) {
       const joinedRejection = settled.find(
@@ -353,7 +373,6 @@ export function createIndicatorComputeJobCoordinator({
       );
       if (joinedRejection) throw joinedRejection.reason;
     }
-    const lifecycleStale = taskEpoch !== epoch || lifecycleKey !== activeLifecycleKey;
     const joinedOutcomes = ownedBatch
       ? []
       : settled.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);

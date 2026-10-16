@@ -4672,4 +4672,6 @@ export const ko = {
   "strategyReview.go": "이동",
   "strategyReview.previousPage": "이전 페이지",
   "strategyReview.nextPage": "다음 페이지",
+  "replay.indicators.revealedPrefix": "리플레이에서 공개된 시세",
+  "replay.indicators.revealedPrefixHint": "리플레이 시각까지 공개된 시세만 사용합니다. 형성 중인 봉도 포함되므로 해당 봉의 지표 값은 리플레이 진행에 따라 바뀔 수 있습니다.",
 } as const satisfies MessageCatalog;

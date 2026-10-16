@@ -5,7 +5,6 @@ import type { LoadMoreLeft } from "../market-data/useChartLoadMoreLeft.js";
 import type { SurfaceViewportSnapshot } from "../chart-representation/chartRepresentationTypes.js";
 import type { ReplayDigest } from "./replayTypes.js";
 import {
-  ReplayHistoryProvider,
   ReplayHistoryProtocolError,
   applyReplayHistoryPage,
   replayHistoryFirstPageBeforeMs,
@@ -15,6 +14,7 @@ import {
   replayHistoryViewportTransferUnavailable,
   replayHistoryViewportBeforeMs,
 } from "./replayHistoryProvider.js";
+import { createReplayHistoryProvider } from "./replayTapeHistoryProvider.js";
 import type {
   ReplayHistoryIdentity,
   ReplayHistoryPolicy,
@@ -27,6 +27,11 @@ import {
   replaceReplayViewerSeriesFromServer,
 } from "./replayViewerProjection.js";
 import type { ReplayViewerRuntime } from "./useReplayViewerRuntime.js";
+import { replayHistoryNeedsWarmup } from "./replayHistoryWarmup.js";
+import { ReplayHistoryLoadGate } from "./replayHistoryTransport.js";
+import { recordPerfEvent } from "../../runtime/performance/perfMarks.js";
+import { CANONICAL_HISTORY_REFRESH } from "./replayCanonicalIndicators.js";
+import { TAPE_VIEWER_COMMIT } from "./replayTapeViewer.js";
 
 
 export interface ReplayHistoryRuntime {
@@ -75,10 +80,17 @@ export function useReplayHistoryRuntime(
   runtime: ReplayRuntime,
   viewer: ReplayViewerRuntime,
   viewportTransfer: SurfaceViewportSnapshot | null = null,
+  warmupTargetBars = 0,
 ): ReplayHistoryRuntime {
   const retryRequestedRef = useRef(false);
-  const storeRef = useRef(runtime.store);
-  storeRef.current = runtime.store;
+  const [loadGate] = useState(() => new ReplayHistoryLoadGate());
+  const tapeObservation = viewer.tapeObservation;
+  const observedStore = tapeObservation === undefined ? runtime.store : { ...runtime.store,
+    virtualTimeMs: tapeObservation?.virtualTimeMs ?? null, sourceSequence: tapeObservation?.sourceSequence ?? 0 };
+  const storeRef = useRef(observedStore);
+  storeRef.current = observedStore;
+  const observedTimeMs = observedStore.virtualTimeMs;
+  const displayReady = tapeObservation !== null;
   const config = runtime.store.sessionConfig;
   const sessionId = runtime.store.sessionId;
   const dataEpoch = runtime.store.dataEpoch;
@@ -116,10 +128,10 @@ export function useReplayHistoryRuntime(
     display_interval: displayInterval,
   })), [baseInterval, displayInterval, exchange, marketType, sourceKind, symbol]);
   const provider = useMemo(() => (
-    sessionId === null || identity === null || dataEpoch === null || trackId === null
+    !displayReady || sessionId === null || identity === null || dataEpoch === null || trackId === null
       ? null
-      : new ReplayHistoryProvider({ sessionId, trackId, identity })
-  ), [dataEpoch, identity, sessionId, trackId]);
+      : createReplayHistoryProvider({ sessionId, trackId, identity, sourceSequence: () => storeRef.current.sourceSequence })
+  ), [dataEpoch, displayReady, identity, sessionId, trackId]);
   const historyKey = useMemo(() => (
     sessionId === null || identity === null || dataEpoch === null || trackId === null
       ? null
@@ -143,12 +155,15 @@ export function useReplayHistoryRuntime(
   const currentState = historyState.key === historyKey
     ? historyState
     : initialReplayHistoryState(historyKey);
+  const currentHistoryRef = useRef({ key: historyKey, state: currentState });
+  currentHistoryRef.current = { key: historyKey, state: currentState };
   const loadingRef = useRef<{ key: string | null; loading: boolean }>({
     key: historyKey,
     loading: false,
   });
   const repairAttemptsRef = useRef(new Set<number>());
   const viewportAttemptsRef = useRef(new Set<number>());
+  const olderCursorRef = useRef<{ oldest: number | null; next: number } | null>(null);
   const {
     loading,
     hasMore,
@@ -164,24 +179,51 @@ export function useReplayHistoryRuntime(
     loadingRef.current = { key: historyKey, loading: false };
     repairAttemptsRef.current.clear();
     viewportAttemptsRef.current.clear();
+    olderCursorRef.current = null;
     setHistoryState(initialReplayHistoryState(historyKey));
     return () => provider?.cancel();
   }, [historyKey, provider]);
 
   useEffect(() => {
+    if (!provider || !tapeObservation || provider.historyEpoch === tapeObservation.historyEpoch) return;
+    provider.adoptEpoch(tapeObservation.historyEpoch);
+    setHistoryState(current => current.key === historyKey ? { ...current,
+      historyEpoch: tapeObservation.historyEpoch, boundaryMs: tapeObservation.historyBoundaryMs,
+      policy: tapeObservation.historyPolicy, hasMore: tapeObservation.hasMore } : current);
+  }, [historyKey, provider, tapeObservation]);
+
+  useEffect(() => {
     const unsubscribe = viewer.seriesStore.subscribe((delta) => {
+      if ((delta.source === CANONICAL_HISTORY_REFRESH || delta.source === TAPE_VIEWER_COMMIT) && provider
+        && delta.sessionId === sessionId && delta.trackId === trackId && delta.dataEpoch === dataEpoch
+        && typeof delta.historyEpoch === "string" && /^sha256:[0-9a-f]{64}$/.test(delta.historyEpoch)) {
+        const reset = provider.historyEpoch !== delta.historyEpoch || delta.source === CANONICAL_HISTORY_REFRESH || delta.historyWindowReset === true;
+        provider.adoptEpoch(delta.historyEpoch as ReplayDigest);
+        if (reset) {
+          repairAttemptsRef.current.clear();
+          viewportAttemptsRef.current.clear();
+          olderCursorRef.current = null;
+        }
+        setHistoryState(current => current.key === historyKey ? { ...current, error: null,
+          historyEpoch: delta.historyEpoch as ReplayDigest,
+          boundaryMs: typeof delta.historyBoundaryMs === "number" ? delta.historyBoundaryMs : null,
+          policy: delta.historyPolicy as ReplayHistoryPolicy,
+          ...(reset ? { hasMore: delta.hasMore === true, notice: null, viewportTransferUnavailable: false } : {}),
+        } : current);
+      }
       if (delta.type === "replace" || delta.type === "clear") {
         setViewerSeriesRevision((current) => current + 1);
       }
     });
     return () => { unsubscribe(); };
-  }, [viewer.seriesStore]);
+  }, [dataEpoch, historyKey, provider, sessionId, trackId, viewer.seriesStore]);
 
   const revealRepairBeforeMs = replayHistoryRevealRepairBeforeMs(
     viewer.seriesStore,
     runtime.store.replayStartMs,
-    runtime.store.virtualTimeMs,
+    observedTimeMs,
     displayInterval,
+    { allowInitialPartialRepair: !usesSourceBucketProjection },
   );
   const revealRepairPending = revealRepairBeforeMs !== null
     && !repairAttemptsRef.current.has(revealRepairBeforeMs);
@@ -190,7 +232,7 @@ export function useReplayHistoryRuntime(
     ? replayHistoryViewportBeforeMs(viewer.seriesStore, {
         anchorSourceTime: historyViewportTransfer.anchorSourceTime,
         displayInterval,
-        revealedBoundaryMs: runtime.store.virtualTimeMs,
+        revealedBoundaryMs: observedTimeMs,
       })
     : null;
   const viewportPagePending = viewportBeforeMs !== null
@@ -200,17 +242,29 @@ export function useReplayHistoryRuntime(
     && runtime.store.replayStartMs !== null
     && replayHistoryFirstPageBeforeMs(viewer.seriesStore, runtime.store.replayStartMs,
       displayInterval, true, viewer.historyBootstrapBeforeMs ?? null) !== null;
+  const warmupPagePending = replayHistoryNeedsWarmup({
+    barCount: viewer.seriesStore.barCount,
+    targetBars: warmupTargetBars,
+    hasMore,
+    loading,
+    error,
+    rightTruncated: viewer.seriesStore.rightTruncated,
+  });
   const viewportNeedsLatestRestore = replayHistoryViewportTransferNeedsLatestWindow(
     viewer.seriesStore,
     historyViewportTransfer,
     {
       displayInterval,
-      revealedBoundaryMs: runtime.store.virtualTimeMs,
+      revealedBoundaryMs: observedTimeMs,
     },
   );
 
-  const loadMoreLeft = useCallback<LoadMoreLeft>(async () => {
+  const performLoadMoreLeft = useCallback(async (release: () => void, contiguous = false) => {
     const store = storeRef.current;
+    const startedAt = performance.now();
+    const recordPage = (outcome: string) => recordPerfEvent("chart.viewport.historyPage", {
+      outcome, bars: viewer.seriesStore.barCount, durationMs: performance.now() - startedAt,
+    });
     const targetViewportBeforeMs = historyViewportTransfer !== null
       && historyViewportTransfer.datasetKey !== viewer.seriesStore.seriesKey
       ? replayHistoryViewportBeforeMs(viewer.seriesStore, {
@@ -219,7 +273,7 @@ export function useReplayHistoryRuntime(
           revealedBoundaryMs: store.virtualTimeMs,
         })
       : null;
-    const pendingViewportBeforeMs = targetViewportBeforeMs !== null
+    const pendingViewportBeforeMs = !contiguous && targetViewportBeforeMs !== null
       && !viewportAttemptsRef.current.has(targetViewportBeforeMs)
       ? targetViewportBeforeMs
       : null;
@@ -228,8 +282,12 @@ export function useReplayHistoryRuntime(
       store.replayStartMs,
       store.virtualTimeMs,
       displayInterval,
+      { allowInitialPartialRepair: !usesSourceBucketProjection },
     );
-    const pendingRepairBeforeMs = repairBeforeMs !== null
+    // One page owns one purpose. A viewport page can end far before the
+    // projection seam; validating/retiring the repair alongside it would
+    // silently lose the independent tail-repair demand.
+    const pendingRepairBeforeMs = !contiguous && pendingViewportBeforeMs === null && repairBeforeMs !== null
       && !repairAttemptsRef.current.has(repairBeforeMs)
       ? repairBeforeMs
       : null;
@@ -239,7 +297,12 @@ export function useReplayHistoryRuntime(
         && pendingViewportBeforeMs === null
         && pendingRepairBeforeMs === null)
       || store.dataEpoch === null || store.virtualTimeMs === null
-    ) return;
+    ) {
+      recordPage(provider === null ? "no-provider"
+        : loadingRef.current.key === historyKey && loadingRef.current.loading ? "busy"
+          : !hasMore ? "exhausted" : "no-source");
+      return;
+    }
     retryRequestedRef.current = false;
     // Context history belongs only to the display store. The frozen base store
     // remains the execution/broker cursor and is never expanded by scrolling.
@@ -261,8 +324,8 @@ export function useReplayHistoryRuntime(
       ?? pendingRepairBeforeMs
       ?? (provider.historyEpoch === null && firstPageBeforeMs !== null
         ? firstPageBeforeMs
-        : storeBeforeMs);
-    if (beforeMs === null) return;
+        : olderCursorRef.current?.oldest === storeBeforeMs ? olderCursorRef.current.next : storeBeforeMs);
+    if (beforeMs === null) { recordPage("no-cursor"); return; }
     if (pendingViewportBeforeMs !== null) {
       viewportAttemptsRef.current.add(pendingViewportBeforeMs);
     }
@@ -284,7 +347,7 @@ export function useReplayHistoryRuntime(
         || latest.generation !== runtimeGeneration
         || latest.dataEpoch !== page.data_epoch
         || latest.virtualTimeMs === null
-        || page.revealed_boundary_ms > latest.virtualTimeMs) return;
+        || page.revealed_boundary_ms > latest.virtualTimeMs) { recordPage("stale-generation"); return; }
       // A display-interval switch can start a viewport/repair page while the
       // source-bucket projection is still in flight.  Once that authoritative
       // projection arrives it may already cover the requested anchor.  Do not
@@ -299,7 +362,7 @@ export function useReplayHistoryRuntime(
               revealedBoundaryMs: latest.virtualTimeMs,
             })
           : null;
-        if (latestViewportBeforeMs !== pendingViewportBeforeMs) return;
+        if (latestViewportBeforeMs !== pendingViewportBeforeMs) { recordPage("stale-viewport"); return; }
       }
       if (pendingRepairBeforeMs !== null) {
         const latestRepairBeforeMs = replayHistoryRevealRepairBeforeMs(
@@ -307,17 +370,23 @@ export function useReplayHistoryRuntime(
           latest.replayStartMs,
           latest.virtualTimeMs,
           displayInterval,
+          { allowInitialPartialRepair: !usesSourceBucketProjection },
         );
-        if (latestRepairBeforeMs !== pendingRepairBeforeMs) return;
+        if (latestRepairBeforeMs !== pendingRepairBeforeMs) { recordPage("stale-repair"); return; }
       }
       applyReplayHistoryPage(viewer.seriesStore, page, {
         expectedBeforeMs: beforeMs,
         contextHistory: true,
       });
+      recordPage("applied");
       if (pendingRepairBeforeMs !== null) {
         repairAttemptsRef.current.add(pendingRepairBeforeMs);
       }
-      const nextHasMore = page.has_more && page.bars.length > 0;
+      if (pendingViewportBeforeMs === null && pendingRepairBeforeMs === null) {
+        olderCursorRef.current = page.bars.length === 0 && page.has_more && page.next_before_ms < beforeMs
+          ? { oldest: storeBeforeMs, next: page.next_before_ms } : null;
+      }
+      const nextHasMore = page.has_more;
       // A gap can invalidate the whole target display bucket even when the
       // original fine-grained anchor itself is outside the excluded range.
       // The targeted page gets one attempt; actual post-apply coverage is the
@@ -348,6 +417,7 @@ export function useReplayHistoryRuntime(
         viewportTransferUnavailable,
       } : current);
     } catch (cause) {
+      recordPage(cause instanceof DOMException && cause.name === "AbortError" ? "aborted" : "error");
       if (cause instanceof DOMException && cause.name === "AbortError") return;
       setHistoryState((current) => current.key === historyKey ? {
         ...current,
@@ -358,6 +428,9 @@ export function useReplayHistoryRuntime(
         viewportTransferUnavailable: pendingViewportBeforeMs !== null,
       } : current);
     } finally {
+      // Release before publishing loading=false: React can flush its next
+      // warmup effect before this async function's promise has settled.
+      release();
       if (loadingRef.current.key === historyKey) {
         loadingRef.current = { key: historyKey, loading: false };
       }
@@ -379,26 +452,49 @@ export function useReplayHistoryRuntime(
     historyViewportTransfer,
   ]);
 
+  const performLoadRef = useRef(performLoadMoreLeft);
+  performLoadRef.current = performLoadMoreLeft;
+  const loadMoreLeft = useCallback<LoadMoreLeft>(async (oldestLoadedTime) => {
+    if (typeof oldestLoadedTime === "number" && Number.isFinite(oldestLoadedTime)) {
+      // An anchor/repair page may be correctly discarded after the source
+      // projection arrives. Await it, then fulfill this separate contiguous
+      // demand; joining that discarded page alone is not a successful fill.
+      await loadGate.runAfterCurrent(historyKey, () => {
+        const current = currentHistoryRef.current;
+        const first = viewer.seriesStore.first()?.time;
+        return current.key === historyKey && current.state.hasMore
+          && current.state.error === null && first !== undefined && first >= oldestLoadedTime;
+      }, (release) => performLoadRef.current(release, true));
+    } else {
+      await loadGate.run(historyKey, (release) => performLoadMoreLeft(release));
+    }
+  }, [historyKey, loadGate, performLoadMoreLeft, viewer.seriesStore]);
+
   useEffect(() => {
     if (
       provider === null
+      || loading
+      || error !== null
       || viewportNeedsLatestRestore
-      || (!initialContextPagePending && !viewportPagePending && !revealRepairPending)
+      || (!initialContextPagePending && !viewportPagePending && !revealRepairPending && !warmupPagePending)
       || runtime.store.dataEpoch === null
-      || runtime.store.virtualTimeMs === null
+      || observedTimeMs === null
     ) return;
     void loadMoreLeft();
   }, [
     loadMoreLeft,
+    loading,
+    error,
     initialContextPagePending,
     provider,
     revealRepairBeforeMs,
     revealRepairPending,
     runtime.store.dataEpoch,
-    runtime.store.virtualTimeMs,
+    observedTimeMs,
     viewportBeforeMs,
     viewportNeedsLatestRestore,
     viewportPagePending,
+    warmupPagePending,
   ]);
 
   const restoreLatestWindow = useCallback(async (): Promise<boolean> => {
@@ -409,6 +505,9 @@ export function useReplayHistoryRuntime(
       || !viewer.seriesStore.rightTruncated
     ) return false;
     provider?.cancel();
+    if (sourceKind === "agg_trade" && viewer.actions.restoreLatestProjection) {
+      return viewer.actions.restoreLatestProjection();
+    }
     if (usesSourceBucketProjection
       && runtime.store.sessionId !== null
       && runtime.store.dataEpoch !== null
@@ -452,6 +551,8 @@ export function useReplayHistoryRuntime(
     runtime.store.sessionId,
     runtime.store.virtualTimeMs,
     usesSourceBucketProjection,
+    sourceKind,
+    viewer.actions,
     viewer.seriesStore,
     viewer.viewerState,
   ]);

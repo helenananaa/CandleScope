@@ -4741,4 +4741,6 @@ export const ptBR = {
   "strategyReview.go": "Ir",
   "strategyReview.previousPage": "Página anterior",
   "strategyReview.nextPage": "Próxima página",
+  "replay.indicators.revealedPrefix": "Dados revelados do replay",
+  "replay.indicators.revealedPrefixHint": "Usa apenas preços revelados até o instante do replay, incluindo a vela em formação. Seus indicadores podem mudar conforme o replay avança.",
 } as const satisfies MessageCatalog;

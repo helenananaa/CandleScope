@@ -4736,6 +4736,8 @@ export const zhCN = {
   "strategyReview.go": "跳转",
   "strategyReview.previousPage": "上一页",
   "strategyReview.nextPage": "下一页",
+  "replay.indicators.revealedPrefix": "回放已揭示行情",
+  "replay.indicators.revealedPrefixHint": "只使用回放时刻及之前已揭示的行情，包含形成中的 K 线；该柱指标值会随回放推进更新。",
 } as const;
 
 export type MessageKey = keyof typeof zhCN;

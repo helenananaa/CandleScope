@@ -3,8 +3,28 @@ import test from "node:test";
 
 import {
   applyActiveIndicatorUpdate,
+  applyIndicatorScriptUpdate,
   reconcilePersistedIndicatorDefinitions,
 } from "../activeIndicatorStore.js";
+import { mergeIndicatorLines } from "../indicatorPayloadRuntime.js";
+import { buildIndicatorComputeJobKey, createIndicatorComputeJobCoordinator } from "../indicatorComputeJobRuntime.js";
+
+test("a changed program cannot retain removed plots when its first range patch arrives", () => {
+  const old = {
+    id: "custom", script: "plot(close, 'Old')", language: "pyne", error: "old error",
+    paramSchema: [{ key: "old", type: "int", default: 20 }],
+    lines: [{ id: "old", name: "Old", data: [{ time: 1, value: 10 }] }],
+  };
+  const updated = applyIndicatorScriptUpdate(old, "plot(close, 'New')", "pyne");
+  const incoming = [{ id: "new", name: "New", data: [{ time: 2, value: 11 }] }];
+  assert.deepEqual(mergeIndicatorLines(updated.lines, incoming), incoming);
+  assert.equal(updated.error, undefined);
+  assert.equal(updated.paramSchema, undefined);
+  assert.equal(old.lines.length, 1);
+  assert.equal(applyIndicatorScriptUpdate(old, old.script, old.language).lines, old.lines);
+  assert.deepEqual(applyIndicatorScriptUpdate(old, old.script, "pine").lines, []);
+  assert.equal(applyIndicatorScriptUpdate(old, "bad", "pine", undefined, () => null), old);
+});
 
 test("unchanged durable indicator definitions retain live runtime fields", () => {
   const current = [{
@@ -59,4 +79,26 @@ test("controlled definition edits are marked for workspace persistence", () => {
 
   assert.equal(update.durableChanged, true);
   assert.deepEqual(update.indicators[0]?.params, { period: 50 });
+});
+
+test("workspace metadata replacement recomputes an acknowledged job whose visible output was cleared", async () => {
+  const definition = { id: "rsi", engineName: "RSI", executionTarget: "local" as const, params: { period: 14 } };
+  const key = buildIndicatorComputeJobKey({ indicator: definition, lifecycleKey: "ltc-7m", params: definition.params });
+  const coordinator = createIndicatorComputeJobCoordinator();
+  const jobs = [{ jobKey: key }];
+  let calls = 0;
+  const execute = async () => { calls++; return [{ jobKey: key, value: 55.907 }]; };
+  await coordinator.schedule({ lifecycleKey: "ltc-7m", jobs, execute });
+  let force = false;
+  const current = [{ ...definition, lines: [{ name: "RSI", data: [{ time: 100, value: 55.907 }] }] }];
+  assert.equal(reconcilePersistedIndicatorDefinitions(current, [definition], undefined, () => { force = true; }), current);
+  assert.equal(force, false);
+  const incoming = { ...definition, bindingId: "linked-restored" };
+  const restored = reconcilePersistedIndicatorDefinitions(current, [incoming], undefined, () => { force = true; });
+  assert.equal(restored[0]!.lines, undefined);
+  assert.equal(buildIndicatorComputeJobKey({ indicator: incoming, lifecycleKey: "ltc-7m", params: incoming.params }), key);
+  const response = await coordinator.schedule({ lifecycleKey: "ltc-7m", jobs, execute, force });
+  assert.equal(calls, 2);
+  assert.equal(response.results[0]!.value, 55.907);
+  coordinator.dispose();
 });

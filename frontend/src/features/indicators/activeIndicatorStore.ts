@@ -103,14 +103,17 @@ export function reconcilePersistedIndicatorDefinitions(
   normalizeIndicator?: (
     indicator: IndicatorDefinition,
   ) => IndicatorDefinition | null,
+  onRequireCompute?: () => void,
 ): IndicatorDefinition[] {
   const prepared = persisted.flatMap((indicator) => {
     const normalized = normalizeIndicator ? normalizeIndicator(indicator) : indicator;
     return normalized === null ? [] : [normalized];
   });
-  return persistedIndicatorSignature(current) === persistedIndicatorSignature(prepared)
-    ? current
-    : prepared;
+  if (persistedIndicatorSignature(current) === persistedIndicatorSignature(prepared)) return current;
+  // External presentation metadata can change without changing the compute
+  // key. Replacing its result still invalidates that key's acknowledgement.
+  onRequireCompute?.();
+  return prepared;
 }
 
 export interface ActiveIndicatorUpdate {
@@ -160,6 +163,14 @@ export function applyIndicatorScriptUpdate(
     ...(language ? { language } : {}),
     ...(securityMode ? { securityMode } : {}),
   };
+  if (updated.script !== indicator.script || updated.language !== indicator.language
+    || updated.securityMode !== indicator.securityMode) {
+    // Output identity belongs to the old program. Range patches may merge
+    // points, but must not keep removed plot names from that program.
+    updated.lines = [];
+    delete updated.error;
+    delete updated.paramSchema;
+  }
   return normalizeIndicator?.(updated) ?? (
     normalizeIndicator ? indicator : updated
   );
@@ -230,11 +241,13 @@ export function useActiveIndicatorStore({
     const reconciled = reconcilePersistedIndicatorDefinitions(
       ownedIndicatorsRef.current,
       controlledIndicators,
+      undefined,
+      onRequireCompute,
     );
     if (reconciled === ownedIndicatorsRef.current) return;
     ownedIndicatorsRef.current = reconciled;
     setOwnedIndicators(reconciled);
-  }, [controlled, controlledIndicators]);
+  }, [controlled, controlledIndicators, onRequireCompute]);
 
   useEffect(() => {
     if (!controlled) persistence?.save(ownedIndicators.map(stripIndicatorRuntimeFields));
