@@ -3,12 +3,12 @@ import path from "node:path";
 import { once } from "node:events";
 import { run } from "node:test";
 import { spec } from "node:test/reporters";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 
 const DEFAULT_PATTERNS = ["scripts/*.test.mjs", "src/**/*.test.{ts,tsx}"];
 const PERFORMANCE_TEST = "src/features/drawings/core/__tests__/drawingCommandPerformance.test.ts";
 const TEST_IMPORTS = [
-  "--import", fileURLToPath(new URL("./monaco-esm-loader.mjs", import.meta.url)),
+  "--import", new URL("./monaco-esm-loader.mjs", import.meta.url).href,
   "--import", import.meta.resolve("tsx"),
 ];
 
