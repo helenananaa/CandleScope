@@ -231,7 +231,7 @@
         ],
         "checks": {
           "checkpoint_restored": true,
-          "checkpoint_sha256": "50c08758f20511afb342f113b3a3a7fe2ec294cb2735395aa8b28ebfadb8ff32"
+          "checkpoint_sha256": "098f4d11bc02208cda538a38f9ec0220744f300b2569c9bb3b65a14013ae5ee4"
         }
       },
       "restart": {
@@ -267,17 +267,17 @@
         ],
         "checks": {
           "checkpoint_restored": true,
-          "checkpoint_sha256": "50c08758f20511afb342f113b3a3a7fe2ec294cb2735395aa8b28ebfadb8ff32",
+          "checkpoint_sha256": "098f4d11bc02208cda538a38f9ec0220744f300b2569c9bb3b65a14013ae5ee4",
           "process_count": 2
         }
       }
     }
   },
   "final": {
-    "actor_state_hash": "sha256:fdbdbc7efa2b63bf76cd519e54d52da1c12519ea9391ffef87834b581380e3e8",
-    "broker_state_hash": "sha256:6113be4b19ff7f3753ab18acb5effd33a7a1b05c288cdd1e208c6708c080e12d",
-    "report_hash": "sha256:8ef1c0fd396268b27083dadaa8037b316949f8cd24707616a136e18316690a15",
-    "ledger_tail_hash": "sha256:c7a1ecd2da5f3da607c9dfba2b488f416d7019b2f7eaa1bcfc075e6e209acfe8",
+    "actor_state_hash": "sha256:1937e8ecaa5d0160000aeed0934f963eb07eb7ca322d08a830cd203c70a4386c",
+    "broker_state_hash": "sha256:403ffc050b8262c9438f01ab6e708fa57793f0411611d8d733416bf8a4b5fe3c",
+    "report_hash": "sha256:3f2427c04ed5ba3ced92cfeb39be0a62ecf18b1d62ae4b053780b911fcbcd9fa",
+    "ledger_tail_hash": "sha256:2374083587e07a21c57a015ccc10cf9c8cd1d1d7455c8509deec4e33f85742d3",
     "projection_hash": "sha256:07517a8e41cb72ec82d8a29ac843d4b9ac9a4fe449b571355a38d9025f5dd054",
     "cursor": {
       "virtual_time_ms": 1800057959999,
@@ -296,10 +296,10 @@
   "ledger_audit": {
     "balanced_transactions": 6,
     "entry_count": 12,
-    "ledger_tail_hash": "sha256:c7a1ecd2da5f3da607c9dfba2b488f416d7019b2f7eaa1bcfc075e6e209acfe8",
+    "ledger_tail_hash": "sha256:2374083587e07a21c57a015ccc10cf9c8cd1d1d7455c8509deec4e33f85742d3",
     "cash_total": "10000.71960",
     "closed_realized_pnl": "0.8",
-    "report_hash": "sha256:8ef1c0fd396268b27083dadaa8037b316949f8cd24707616a136e18316690a15",
+    "report_hash": "sha256:3f2427c04ed5ba3ced92cfeb39be0a62ecf18b1d62ae4b053780b911fcbcd9fa",
     "zero_difference": true
   },
   "equivalence": {
@@ -312,8 +312,8 @@
       "checkpoint",
       "restart"
     ],
-    "final_evidence_hash": "sha256:d5cc18051c417baaf5cc0e60f71bed4c84d4df992aae5794890c588cbba022e0",
-    "ledger_audit_hash": "sha256:7eeaecb3b501d61b7ef1cf94b24e6e62b348033bb2dde5846783c4ab700855de",
+    "final_evidence_hash": "sha256:d2e3c16fe909bfc423dc9723e09bee29c3cff1d452f18dbc853f02f4d2927d04",
+    "ledger_audit_hash": "sha256:fffcce06c192a1b2384caf087f0a202bd0db421a4c130c0d479719ec5ab98bc8",
     "cross_process_repetitions": 2,
     "all_equal": true
   }
