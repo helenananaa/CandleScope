@@ -14,7 +14,7 @@ from app.replay.models import (
 )
 
 from . import service_validation as service_validation_ops
-from .account import isolated_margin_key, round_to_step
+from .account import isolated_margin_key
 from .errors import TrainingRunError
 from .models import (
     AccountDataMode,
