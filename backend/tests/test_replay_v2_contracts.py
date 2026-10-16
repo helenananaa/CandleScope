@@ -96,6 +96,7 @@ def test_replay_v2_phase8_package_keeps_optimization_inside_training() -> None:
         "public_price_blocks.py",
         "review.py",
         "review_account.py",
+        "review_fork_valuation.py",
         "review_hedge_inputs.py",
         "review_lifecycle.py",
         "review_service.py",

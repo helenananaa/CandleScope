@@ -1602,6 +1602,11 @@ class TrainingRunService:
                         status_code=409,
                     )
             await self.store.checkpoint_market_tracks(child_run_id, restore_fork_valuation=hedge_fork)
+            if hedge_fork:
+                from .review_fork_valuation import assert_selected_valuation
+
+                recovered = await self.store.get_market_tracks(child_run_id)
+                assert_selected_valuation(event["projection"], recovered["portfolio"])
             portfolio = market_tracks.get("portfolio")
             history = (
                 portfolio.get("account_history")
