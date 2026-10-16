@@ -269,3 +269,58 @@ async def test_secondary_fork_failure_leaves_no_partial_run_or_adapter(tmp_path,
         assert (await service.training.audit_account(retried["run"]["run_id"]))["status"] == "PASS"
     finally:
         await service.shutdown(step_timeout=1.0)
+
+
+@pytest.mark.parametrize("missing_valuation", [False, True])
+async def test_legacy_fork_valuation_drift_is_rejected_and_child_is_removed(tmp_path, monkeypatch, missing_valuation):
+    """Old frozen frames can carry a broker mark instead of the pinned mark.
+
+    Model that saved derived valuation without altering cash or positions. An
+    internally consistent child audit alone must not certify an exact fork.
+    """
+    from app.replay.training import review_account
+    from app.replay.training.errors import TrainingRunError
+
+    service = await _risk_service(tmp_path / "legacy-valuation.db", symbols=("BTCUSDT", "ETHUSDT"))
+    try:
+        run, primary, _ = await _dormant_run(service, tmp_path, initial_count=0)
+        secondary = (await service.training.get_market_tracks(run))["tracks"][1]["adapter_session_id"]
+        await _send(service, run_id=run, session_id=secondary, command_id="valuation-select-primary",
+                    command_type=ReplayV2CommandType.SELECT_TRACK,
+                    payload={"track_id": "track-1", "expected_viewer_revision": 1})
+        await _order(service, run, primary, "held-for-valuation", "SHORT")
+        capture = review_account.capture_account
+
+        def legacy_valuation(connection, run_id):
+            from decimal import Decimal
+            result = capture(connection, run_id)
+            if missing_valuation:
+                return {**result, "status": "LEGACY_PARTIAL", "margin_used": None}
+            return {**result, "equity": str(Decimal(result["equity"]) - 8),
+                    "unrealized_pnl": str(Decimal(result["unrealized_pnl"]) - 8),
+                    "available_equity": str(Decimal(result["available_equity"]) - 8)}
+
+        with monkeypatch.context() as legacy:
+            legacy.setattr(review_account, "capture_account", legacy_valuation)
+            await service.training.record_review_marker(run, command_id="old-valuation", text="Legacy broker mark")
+        selected = await service.training.start_review(run, event_id=None)
+        before = await service.training.get_market_tracks(run)
+        base = service.training.hedge_inputs.store
+
+        async def inventory():
+            return await base.run_extension_read(lambda c: (
+                c.execute("SELECT run_id FROM replay_training_run ORDER BY run_id").fetchall(),
+                c.execute("SELECT session_id FROM replay_session ORDER BY session_id").fetchall(),
+            ))
+
+        rows = await inventory()
+        with pytest.raises(TrainingRunError) as failure:
+            await service.training.fork_run(run, event_id=selected["selected_event_id"])
+        assert failure.value.code == ("REVIEW_FORK_VALUATION_UNAVAILABLE" if missing_valuation else "REVIEW_FORK_VALUATION_MISMATCH")
+        assert failure.value.details["fallback_applied"] is False
+        if not missing_valuation:
+            assert "equity" in failure.value.details["differences"]
+        assert await inventory() == rows
+        assert await service.training.get_market_tracks(run) == before
+    finally:
+        await service.shutdown(step_timeout=1.0)
