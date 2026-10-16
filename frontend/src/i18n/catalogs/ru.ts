@@ -1,3 +1,4 @@
+import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
@@ -4405,4 +4406,5 @@ export const ru = {
   "pane.flow.missing.many": "{count} свечей недоступны",
   "pane.flow.gaps.few": "{count} временных разрыва",
   "pane.flow.gaps.many": "{count} временных разрывов",
+  ...tradingAccountsEn,
 } as const satisfies MessageCatalog;

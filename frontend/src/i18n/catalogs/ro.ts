@@ -1,3 +1,4 @@
+import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
@@ -4399,4 +4400,5 @@ export const ro = {
   "workbench.intervalCount.few": "{count} intervale",
   "pane.flow.missing.few": "{count} bare indisponibile",
   "pane.flow.gaps.few": "{count} goluri de timp",
+  ...tradingAccountsEn,
 } as const satisfies MessageCatalog;

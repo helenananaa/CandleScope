@@ -1,3 +1,4 @@
+import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
@@ -4394,5 +4395,6 @@ export const tr = {
   "common.listSeparator": ", ",
   "editor.pyne.namespaceDetail": "{ns}.* — üyeleri listelemek için \"{ns}.\" yazın",
   "editor.pyne.namespaceDocumentation": "Tamamlamayı tetiklemek için `{ns}.` yazın.",
+  ...tradingAccountsEn,
 } as const satisfies MessageCatalog;
 

@@ -1,3 +1,4 @@
+import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
@@ -4394,5 +4395,6 @@ export const vi = {
   "common.listSeparator": ", ",
   "editor.pyne.namespaceDetail": "{ns}.* — gõ \"{ns}.\" để liệt kê thành viên",
   "editor.pyne.namespaceDocumentation": "Gõ `{ns}.` để kích hoạt hoàn thành.",
+  ...tradingAccountsEn,
 } as const satisfies MessageCatalog;
 

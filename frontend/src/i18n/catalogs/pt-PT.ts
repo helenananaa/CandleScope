@@ -1,3 +1,4 @@
+import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
@@ -4399,4 +4400,5 @@ export const ptPT = {
   "workbench.intervalCount.many": "{count} de intervalos",
   "pane.flow.missing.many": "{count} de barras indisponíveis",
   "pane.flow.gaps.many": "{count} de lacunas de tempo",
+  ...tradingAccountsEn,
 } as const satisfies MessageCatalog;

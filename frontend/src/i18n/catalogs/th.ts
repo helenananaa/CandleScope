@@ -1,3 +1,4 @@
+import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
@@ -4394,4 +4395,5 @@ export const th = {
   "common.listSeparator": ", ",
   "editor.pyne.namespaceDetail": "{ns}.* — พิมพ์ \"{ns}.\" เพื่อดูสมาชิก",
   "editor.pyne.namespaceDocumentation": "พิมพ์ `{ns}.` เพื่อเรียกเติมข้อความอัตโนมัติ",
+  ...tradingAccountsEn,
 } as const satisfies MessageCatalog;

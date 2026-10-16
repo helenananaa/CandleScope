@@ -1,3 +1,4 @@
+import { tradingAccountsPtBR } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
@@ -4741,4 +4742,5 @@ export const ptBR = {
   "strategyReview.go": "Ir",
   "strategyReview.previousPage": "Página anterior",
   "strategyReview.nextPage": "Próxima página",
+  ...tradingAccountsPtBR,
 } as const satisfies MessageCatalog;

@@ -1,3 +1,4 @@
+import { tradingAccountsJa } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ja = {
@@ -4672,4 +4673,5 @@ export const ja = {
   "strategyReview.go": "移動",
   "strategyReview.previousPage": "前のページ",
   "strategyReview.nextPage": "次のページ",
+  ...tradingAccountsJa,
 } as const satisfies MessageCatalog;

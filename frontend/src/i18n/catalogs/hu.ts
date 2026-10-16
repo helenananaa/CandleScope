@@ -1,3 +1,4 @@
+import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
@@ -4394,4 +4395,5 @@ export const hu = {
   "common.listSeparator": ", ",
   "editor.pyne.namespaceDetail": "{ns}.* — írja be a \"{ns}.\" értéket a tagok listázásához",
   "editor.pyne.namespaceDocumentation": "Írja be a `{ns}.` értéket a kiegészítés indításához.",
+  ...tradingAccountsEn,
 } as const satisfies MessageCatalog;

@@ -1,3 +1,4 @@
+import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
@@ -4414,4 +4415,5 @@ export const ar = {
   "pane.flow.gaps.two": "{count} فجوتان زمنيتان",
   "pane.flow.gaps.few": "{count} فجوات زمنية",
   "pane.flow.gaps.many": "{count} فجوة زمنية",
+  ...tradingAccountsEn,
 } as const satisfies MessageCatalog;

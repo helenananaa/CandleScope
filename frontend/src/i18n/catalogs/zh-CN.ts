@@ -1,3 +1,4 @@
+import { tradingAccountsZhCN } from "./tradingAccountsMessages.js";
 export const zhCN = {
   "plugin.trust.scriptRuntimeExecution": "安装器会创建独立 Python 环境并执行包校验探针。重启后，脚本以当前用户身份运行，没有操作系统沙箱；文件、网络和子进程访问不受平台插件权限摘要的限制。",
   "plugin.runtimeInstalled": "脚本运行时已安装并通过校验。请退出并重新打开 CandleScope，启用指标及受支持的原生策略。",
@@ -4736,6 +4737,7 @@ export const zhCN = {
   "strategyReview.go": "跳转",
   "strategyReview.previousPage": "上一页",
   "strategyReview.nextPage": "下一页",
+  ...tradingAccountsZhCN,
 } as const;
 
 export type MessageKey = keyof typeof zhCN;

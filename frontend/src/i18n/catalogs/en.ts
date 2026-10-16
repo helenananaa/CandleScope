@@ -1,3 +1,4 @@
+import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
@@ -4737,4 +4738,5 @@ export const en = {
   "strategyReview.go": "Go",
   "strategyReview.previousPage": "Previous page",
   "strategyReview.nextPage": "Next page",
+  ...tradingAccountsEn,
 } as const satisfies MessageCatalog;

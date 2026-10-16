@@ -1,3 +1,4 @@
+import { tradingAccountsZhHant } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
@@ -4430,4 +4431,5 @@ export const zhTW = {
   "common.listSeparator": "，",
   "editor.pyne.namespaceDetail": "{ns}.* — 輸入 \"{ns}.\" 檢視方法",
   "editor.pyne.namespaceDocumentation": "輸入 `{ns}.` 觸發自動補全",
+  ...tradingAccountsZhHant,
 } as const satisfies MessageCatalog;

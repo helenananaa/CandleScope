@@ -92,6 +92,7 @@ if RUNTIME_MODE == "LIVE":
     from app.api.v1.symbols import router as symbols_router
     from app.api.v1.symbol_discovery import router as symbol_discovery_router
     from app.api.v1.trade_flow import router as trade_flow_router
+    from app.api.v1.trading_accounts import router as trading_accounts_router
     from app.api.v1.local_data import router as local_data_router
     from app.data_engine.data_manager.capacity import build_capacity_snapshot
     from app.plugin_core_v2 import create_core_plugin_router
@@ -154,6 +155,7 @@ else:
     app.include_router(subscriptions_router, prefix="/api/v1")
     app.include_router(price_ws_router, prefix="/api/v1")
     app.include_router(replay_router, prefix="/api/v1")
+    app.include_router(trading_accounts_router, prefix="/api/v1")
     app.include_router(create_core_plugin_router())
     if RESEARCH_DATA_LIBRARY_ENABLED:
         app.include_router(local_data_router, prefix="/api/v1")
@@ -250,6 +252,37 @@ async def _init_data_manager() -> None:
         logger.error("DataManager initialization failed: %s", exc, exc_info=True)
         print(f"[startup] DataManager init failed: {exc}")
         app.state.data_manager = None
+
+
+async def _init_trading_accounts() -> None:
+    """Open the local trading journal and start the practice matcher.
+
+    Best effort: a failure here never aborts startup; the HTTP adapter then
+    reports the feature as unavailable.
+    """
+    try:
+        from app.core.config import DATA_DIR
+        from app.core.executors import run_storage
+        from app.trading_accounts.practice_runtime import DataManagerMarket, PracticeRuntime
+        from app.trading_accounts.service import TradingAccountService
+        from app.trading_accounts.store import TradingStore
+
+        store = await run_storage(TradingStore, DATA_DIR / "trading-accounts.sqlite3")
+        data_manager = getattr(app.state, "data_manager", None)
+        service = TradingAccountService(
+            store,
+            snapshot_dir=DATA_DIR / "trading-snapshots",
+            market=DataManagerMarket(data_manager) if data_manager is not None else None,
+        )
+        app.state.trading_accounts = service
+        if data_manager is not None:
+            practice_runtime = PracticeRuntime(service, data_manager)
+            await practice_runtime.start()
+            app.state.trading_practice_runtime = practice_runtime
+        print("[startup] Trading accounts ready [ok]")
+    except Exception as exc:
+        logger.warning("Trading accounts unavailable: %s", exc, exc_info=True)
+        print(f"[startup] Trading accounts unavailable: {exc}")
 
 
 async def _init_replay_runtime() -> None:
@@ -684,6 +717,8 @@ async def startup_event() -> None:
         await lag_monitor.stop()
         raise
 
+    await _init_trading_accounts()
+
     from app.exchanges.symbol_catalog import configure_exchange_metadata_foreground_probe
 
     runtime = getattr(app.state, "data_engine_runtime", None)
@@ -823,6 +858,17 @@ async def shutdown_event() -> None:
     if indicator_range_service is not None:
         indicator_range_service.unbind_all()
         indicator_range_service.clear()
+
+    practice_runtime = getattr(app.state, "trading_practice_runtime", None)
+    if practice_runtime is not None:
+        try:
+            await practice_runtime.stop()
+            print("[shutdown] Practice runtime shut down [ok]")
+        except Exception as exc:
+            print(f"[shutdown] Practice runtime shutdown error: {exc}")
+    trading_accounts = getattr(app.state, "trading_accounts", None)
+    if trading_accounts is not None:
+        trading_accounts.store.close()
 
     alert_runtime = getattr(app.state, "alert_runtime", None)
     if alert_runtime is not None:

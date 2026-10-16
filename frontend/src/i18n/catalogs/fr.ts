@@ -1,3 +1,4 @@
+import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
@@ -4400,4 +4401,5 @@ export const fr = {
   "workbench.intervalCount.many": "{count} d’intervalles",
   "pane.flow.missing.many": "{count} de barres indisponibles",
   "pane.flow.gaps.many": "{count} d’écarts temporels",
+  ...tradingAccountsEn,
 } as const satisfies MessageCatalog;

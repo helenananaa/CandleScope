@@ -1,3 +1,4 @@
+import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
@@ -4404,5 +4405,6 @@ export const pl = {
   "status.exchangeLimitationCount.many": "{count} ograniczeń giełdy",
   "workbench.intervalCount.few": "{count} interwały",
   "workbench.intervalCount.many": "{count} interwałów",
+  ...tradingAccountsEn,
 } as const satisfies MessageCatalog;
 

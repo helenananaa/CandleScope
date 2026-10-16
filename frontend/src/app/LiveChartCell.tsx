@@ -18,6 +18,9 @@ import React, {
   type SetStateAction,
 } from "react";
 import { createPortal } from "react-dom";
+import { captureChartPng } from "../features/trading-accounts/chartCapture.js";
+import type { QuickReplayRequest } from "../features/trading-accounts/tradingTypes.js";
+import type { TradingRailBinding } from "./RightMarketRail.js";
 import "../features/backtest/chart-tester/chartStrategyEntry.css";
 import IntervalSelector from "../components/IntervalSelector.js";
 import { useChartSurfaceRuntime } from "../chart-adapter/useChartSurfaceRuntime.js";
@@ -108,6 +111,7 @@ const DrawingToolbar = lazy(() => {
   return import("../features/drawings/DrawingToolbar.js");
 });
 const RightMarketRail = lazy(() => import("./RightMarketRail.js"));
+const QuickReplayOverlay = lazy(() => import("../features/trading-accounts/QuickReplayOverlay.js"));
 const loadChartStrategyTesterCellBridge = () => import(
   "../features/backtest/chart-tester/ChartStrategyTesterCellBridge.js"
 );
@@ -684,6 +688,50 @@ function LiveChartCell({
   }, [chartSurface.actions]);
 
 
+  const [quickReplay, setQuickReplay] = useState<QuickReplayRequest | null>(null);
+  const exitQuickReplay = useCallback(() => setQuickReplay(null), []);
+  const lastClose = sourceMarketData.view.lastPrice?.close;
+  const tradingBinding = useMemo<TradingRailBinding>(() => ({
+    context: {
+      exchange: chartSession.view.exchange,
+      marketType: chartSession.view.marketType,
+      symbol: chartSession.view.symbol,
+      interval: chartSession.view.interval,
+      lastPrice: typeof lastClose === "number" && Number.isFinite(lastClose) ? lastClose : null,
+      captureImage: () => captureChartPng(chartSurface.actions.getExportSnapshot()),
+      describeChart: () => ({
+        visibleRange: chartSurface.actions.getVisibleRange(),
+        indicators: cell.indicators.map((indicator) => ({
+          id: indicator.id,
+          name: indicator.name,
+          params: indicator.params ?? {},
+        })),
+      }),
+    },
+    onOpenQuickReplay: setQuickReplay,
+  }), [
+    cell.indicators,
+    chartSession.view.exchange,
+    chartSession.view.interval,
+    chartSession.view.marketType,
+    chartSession.view.symbol,
+    chartSurface.actions,
+    lastClose,
+  ]);
+  const quickReplayStyle = useMemo(() => ({
+    upColor: combinedSettings.upColor,
+    downColor: combinedSettings.downColor,
+    chartType: combinedSettings.chartType,
+    theme: globalSettings.resolvedTheme,
+    customBg: combinedSettings.customBg,
+  }), [
+    combinedSettings.chartType,
+    combinedSettings.customBg,
+    combinedSettings.downColor,
+    combinedSettings.upColor,
+    globalSettings.resolvedTheme,
+  ]);
+
   const chartModel = useMemo(() => ({
     ...model.chartWorkspace.chart,
     chartProps: {
@@ -856,8 +904,19 @@ function LiveChartCell({
             pluginChartLayerSource={plugins.view.chartLayerSource}
             drawingInteractionReady={drawingInteractionReady}
             onDrawingInteractionReadyChange={setDrawingInteractionReady}
-            paused={obscured}
+            paused={obscured || quickReplay !== null}
           />
+          {quickReplay && (
+            <Suspense fallback={null}>
+              <QuickReplayOverlay
+                key={`${quickReplay.accountId}:${quickReplay.trade.id}:${quickReplay.interval}`}
+                request={quickReplay}
+                style={quickReplayStyle}
+                indicatorDefinitions={cell.indicators}
+                onExit={exitQuickReplay}
+              />
+            </Suspense>
+          )}
           {active && model.chartWorkspace.exportPanel.isOpen && (
             <Suspense fallback={null}>
               <ExportPanel {...model.chartWorkspace.exportPanel} />
@@ -933,6 +992,7 @@ function LiveChartCell({
               : { onTogglePanelCollapsed: marketRail.onTogglePanelCollapsed })}
             viewHeights={marketRail.viewHeights}
             onViewHeightChange={marketRail.onViewHeightChange}
+            trading={tradingBinding}
           />
         </Suspense>,
         portalHosts.rightRail,
