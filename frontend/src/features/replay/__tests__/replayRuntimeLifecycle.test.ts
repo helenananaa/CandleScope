@@ -20,6 +20,8 @@ import {
   ReplayRuntimeLifecycle,
 } from "../useReplayRuntime.js";
 import { ReplayStore } from "../replayStore.js";
+import { buildReplayViewerCommand, canAdmitReplayVisibleTrack } from "../replayViewerCommands.js";
+import { createReplayChartRuntimePool, retainReplayChartRuntime } from "../replayChartRuntimePool.js";
 import {
   BASE_TIME_MS,
   disabledCapabilities,
@@ -36,6 +38,96 @@ async function settle(): Promise<void> {
   await new Promise<void>((resolve) => setImmediate(resolve));
   await new Promise<void>((resolve) => setImmediate(resolve));
 }
+
+test("pooled chart observers never acquire or renew controller leases during admission and reconnect", async (context) => {
+  const harness = streamHarness();
+  const commands: string[] = [];
+  const pool = createReplayChartRuntimePool("browser-0001", {
+    api: {
+      async capabilities() { return parseReplayCapabilities(enabledCapabilities()); },
+      async getSession() { return parseReplaySessionResponse(replaySessionResponse()); },
+      async command(_id, command) {
+        commands.push(command.type);
+        throw new ReplayApiError("REVISION_CONFLICT", "admission advanced the adapter", { status: 409 });
+      },
+    },
+    streamFactory: (options) => harness.factory(options),
+  });
+  const releases = [pool.retain("session-0001"), pool.retain("session-0001"), pool.retain("session-0001")];
+  context.after(() => releases.forEach(release => release()));
+  const observer = pool.get("session-0001");
+  await settle();
+  assert.equal(harness.starts, 1, "three cells share one adapter stream");
+  const callbacks = harness.options[0]!;
+  const initial = parseReplaySessionResponse(replaySessionResponse()).snapshot;
+  callbacks.onGeneration?.({ generation: 1, reason: "initial", resetAuthoritativeState: true });
+  callbacks.onSnapshot?.(initial, 1);
+  await settle();
+  assert.deepEqual(commands, [], "observing a WARM adapter must not race its FULL admission");
+  const acquired = replayStatusEvent();
+  callbacks.onEvent?.(parseReplayEvent({ ...acquired,
+    data: { ...acquired.data, reason: "controller_acquired", controller_client_id: "browser-0001" } }), 1);
+  assert.equal(callbacks.shouldHeartbeat?.(), false, "only the controlling runtime renews its lease");
+  callbacks.onGeneration?.({ generation: 2, reason: "reconnect", resetAuthoritativeState: true });
+  callbacks.onSnapshot?.({ ...initial, revision: 1, sequence: 1 }, 2);
+  await settle();
+  assert.equal(observer.getSnapshot().phase, "ACTIVE");
+  assert.deepEqual(commands, [], "actor recovery cannot turn an observer into a command owner");
+  assert.equal(harness.resyncs, 0);
+  await assert.rejects(observer.submitCommand("acquire_controller"), /observer/);
+});
+
+test("fork startup cannot admit a visible WARM track until controller HTTP and stream agree", async (context) => {
+  const harness = streamHarness();
+  let acknowledge: (result: ReturnType<typeof parseReplayCommandResult>) => void = () => assert.fail("acquire was not sent");
+  let acquireId = "";
+  const lifecycle = new ReplayRuntimeLifecycle({
+    entry: { kind: "session", sessionId: "session-0001" }, clientInstanceId: "browser-0001",
+    api: {
+      async capabilities() { return parseReplayCapabilities(enabledCapabilities()); },
+      async getSession() { return parseReplaySessionResponse(replaySessionResponse()); },
+      async command(_id, command) {
+        acquireId = command.command_id;
+        return await new Promise<ReturnType<typeof parseReplayCommandResult>>(resolve => { acknowledge = resolve; });
+      },
+    },
+    streamFactory: (options) => harness.factory(options),
+  });
+  context.after(() => lifecycle.dispose());
+  const canAdmit = () => {
+    const current = lifecycle.getSnapshot();
+    return canAdmitReplayVisibleTrack({ ready: current.phase === "ACTIVE",
+      ownsController: lifecycle.store.getSnapshot().controllerClientId === "browser-0001",
+      runtimePending: current.pendingCommand !== null, viewerPending: false, controlPending: false,
+      selectionPending: false, admissionPending: false, reviewing: false });
+  };
+  lifecycle.start();
+  await settle();
+  const callbacks = harness.options[0]!;
+  callbacks.onGeneration?.({ generation: 1, reason: "initial", resetAuthoritativeState: true });
+  callbacks.onSnapshot?.(parseReplaySessionResponse(replaySessionResponse()).snapshot, 1);
+  await settle();
+  assert.ok(acquireId);
+  assert.equal(canAdmit(), false, "initial snapshot precedes automatic acquire");
+  acknowledge(parseReplayCommandResult({ protocol: "replay.v1", session_id: "session-0001",
+    command_id: acquireId, revision: 1, sequence: 1, state: "PAUSED", state_hash: `sha256:${"5".repeat(64)}`,
+    cursor: { virtual_time_ms: BASE_TIME_MS + 59_999, source_sequence: 0,
+      last_base_bar_open_ms: BASE_TIME_MS, last_trade_time_ms: null, last_agg_trade_id: null, at_end: false },
+    data: { controller: "browser-0001" } }));
+  await settle();
+  assert.equal(canAdmit(), false, "HTTP acknowledgement alone cannot authorize admission");
+  const acquired = replayStatusEvent();
+  callbacks.onEvent?.(parseReplayEvent({ ...acquired,
+    data: { ...acquired.data, reason: "controller_acquired", controller_client_id: "browser-0001" } }), 1);
+  await settle();
+  assert.equal(canAdmit(), true);
+  const command = buildReplayViewerCommand({ store: lifecycle.store, viewer: { run_id: "fork-1" },
+    clientInstanceId: "browser-0001", commandId: "admit-sol", type: "set_subscription_tier",
+    payload: { track_id: "sol", subscription_tier: "FULL" } });
+  assert.equal(command.expected_revision, 1, "admission must not send the pre-acquire revision 0");
+  assert.deepEqual(command.expected_cursor, { virtual_time_ms: BASE_TIME_MS + 59_999,
+    source_sequence: 0, revision: 1 });
+});
 
 function streamHarness() {
   const options: ReplayStreamControllerOptions[] = [];
@@ -57,6 +149,68 @@ function streamHarness() {
     },
   };
 }
+
+test("selected run controller shares its chart stream and transfers control duties between pooled adapters", async (context) => {
+  const harness = streamHarness();
+  const commands: Array<{ session: string; type: string }> = [];
+  const responseFor = (session: string) => {
+    const response = replaySessionResponse();
+    return parseReplaySessionResponse({ ...response, session_id: session,
+      snapshot: { ...response.snapshot, session_id: session } });
+  };
+  const pool = createReplayChartRuntimePool("browser-0001", {
+    api: {
+      async capabilities() { return parseReplayCapabilities(enabledCapabilities()); },
+      async getSession(session) { return responseFor(session); },
+      async command(session, command) {
+        commands.push({ session, type: command.type });
+        return parseReplayCommandResult({ protocol: "replay.v1", session_id: session,
+          command_id: command.command_id, revision: 1, sequence: 1, state: "PAUSED", state_hash: `sha256:${"5".repeat(64)}`,
+          cursor: { virtual_time_ms: BASE_TIME_MS + 59_999, source_sequence: 0,
+            last_base_bar_open_ms: BASE_TIME_MS, last_trade_time_ms: null, last_agg_trade_id: null, at_end: false },
+          data: { controller: "browser-0001" } });
+      },
+    },
+    streamFactory: options => harness.factory(options),
+  });
+  const releaseFirstController = retainReplayChartRuntime(pool, "session-0001", true);
+  const releases = [releaseFirstController,
+    retainReplayChartRuntime(pool, "session-0001"),
+    retainReplayChartRuntime(pool, "session-0002"), retainReplayChartRuntime(pool, "session-0002")];
+  context.after(() => releases.forEach(release => release()));
+  await settle();
+  assert.equal(harness.starts, 2, "control and charts use one connection per adapter");
+  for (const callbacks of harness.options) {
+    callbacks.onGeneration?.({ generation: 1, reason: "initial", resetAuthoritativeState: true });
+    callbacks.onSnapshot?.(responseFor(callbacks.sessionId).snapshot, 1);
+  }
+  await settle();
+  assert.deepEqual(commands, [{ session: "session-0001", type: "acquire_controller" }]);
+  const acknowledge = (session: string) => {
+    const status = replayStatusEvent();
+    harness.options.find(options => options.sessionId === session)!.onEvent?.(parseReplayEvent({ ...status,
+      session_id: session, data: { ...status.data, reason: "controller_acquired", controller_client_id: "browser-0001" } }), 1);
+  };
+  acknowledge("session-0001");
+  await settle();
+  assert.equal(pool.get("session-0001").getSnapshot().pendingCommand, null);
+  assert.equal(harness.options[0]!.shouldHeartbeat?.(), true);
+  assert.equal(harness.options[1]!.shouldHeartbeat?.(), false);
+  releaseFirstController(); releaseFirstController();
+  releases.push(retainReplayChartRuntime(pool, "session-0002", true));
+  await settle();
+  acknowledge("session-0002");
+  await settle();
+  assert.equal(harness.starts, 2, "selecting an already displayed market does not reconnect");
+  assert.equal(harness.options[0]!.shouldHeartbeat?.(), false);
+  assert.equal(harness.options[1]!.shouldHeartbeat?.(), true);
+  assert.deepEqual(commands, [
+    { session: "session-0001", type: "acquire_controller" },
+    { session: "session-0002", type: "acquire_controller" },
+  ]);
+  assert.equal(pool.get("session-0002").getSnapshot().pendingCommand, null);
+  await assert.rejects(pool.get("session-0001").submitCommand("acquire_controller"), /observer/);
+});
 
 test("React-facing replay store publishes coalesce to one asynchronous task", () => {
   const callbacks = new Map<number, () => void>();

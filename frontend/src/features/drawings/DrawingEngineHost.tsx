@@ -44,6 +44,7 @@ export interface DrawingEngineHostProps {
     chartContainerRef: MutableRefObject<HTMLElement | null>;
     activeTool: DrawingToolId | null;
     manageChartCursor?: boolean;
+    readOnly?: boolean;
     onToolChange?: ((tool: DrawingToolId | null) => void) | null;
     penColor: string;
     penSize: number;
@@ -72,6 +73,7 @@ function DrawingEngineHost({
     chartContainerRef,
     activeTool,
     manageChartCursor = true,
+    readOnly = false,
     onToolChange,
     penColor,
     penSize,
@@ -109,7 +111,8 @@ function DrawingEngineHost({
     const drawing = useDrawing({
         chartAdapter,
         chartContainerRef,
-        activeTool,
+        activeTool: readOnly ? null : activeTool,
+        readOnly,
         manageChartCursor,
         penColor,
         penSize,
@@ -246,7 +249,7 @@ function DrawingEngineHost({
                 />
             )}
 
-            {drawing.editingTextId && drawing.editingTextPos && (
+            {!readOnly && drawing.editingTextId && drawing.editingTextPos && (
                 <TextEditOverlay
                     box={drawing.editingTextPos}
                     value={drawing.editingTextValue}
@@ -270,7 +273,7 @@ function DrawingEngineHost({
                 />
             )}
 
-            {!drawing.editingTextId && drawing.selectedTextSnapshot && (
+            {!readOnly && !drawing.editingTextId && drawing.selectedTextSnapshot && (
                 <TextFormatBar
                     key={drawing.selectedPrimId}
                     snapshot={drawing.selectedTextSnapshot}
@@ -279,7 +282,7 @@ function DrawingEngineHost({
                     onDelete={drawing.deleteSelected}
                 />
             )}
-            {!drawing.editingTextId && selectedDrawingMeta && (
+            {!readOnly && !drawing.editingTextId && selectedDrawingMeta && (
                 <SelectedDrawingStyleBar
                     drawing={selectedDrawingMeta}
                     {...(interactionSurfaceMode === "overlay" ? { onSave: drawing.saveDrawingProperties, currentInterval: drawingInterval } : {})}
@@ -289,8 +292,8 @@ function DrawingEngineHost({
                     onDelete={drawing.deleteSelected}
                 />
             )}
-            {interactionSurfaceMode === "overlay" && <DrawingHistoryBar container={chartContainerRef} adapter={chartAdapter} scope={drawingKey}
-                canUndo={!drawing.editingTextId && drawing.canUndo} canRedo={!drawing.editingTextId && drawing.canRedo}
+            {!readOnly && interactionSurfaceMode === "overlay" && <DrawingHistoryBar container={chartContainerRef} adapter={chartAdapter} scope={drawingKey}
+                canUndo={!readOnly && !drawing.editingTextId && drawing.canUndo} canRedo={!readOnly && !drawing.editingTextId && drawing.canRedo}
                 replay={drawing.replayHistory} />}
         </>
     );

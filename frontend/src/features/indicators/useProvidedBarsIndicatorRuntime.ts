@@ -26,20 +26,14 @@ import {
 import { buildIndicatorPaneData } from "./indicatorPaneProjection.js";
 import type { IndicatorRuntime } from "./indicatorRuntimeContract.js";
 import type {
-  IndicatorAnnotationPoint,
-  IndicatorBarColor,
-  IndicatorBgColor,
   IndicatorDefinition,
-  IndicatorFill,
-  IndicatorHLine,
-  IndicatorLine,
-  IndicatorMarker,
-  IndicatorOutputState,
-  IndicatorSignal,
 } from "./indicatorTypes.js";
 import type { ChartDataCommitMeta } from "../market-data/useChartDataRuntime.js";
 import type { KlineBar } from "../market-data/marketDataTypes.js";
 import { MAX_SERIES_BARS } from "../market-data/phase1WindowPolicy.js";
+
+import { clampProvidedBarsIndicatorOutput } from "./providedBarsIndicatorOutput.js";
+export { clampProvidedBarsIndicatorOutput } from "./providedBarsIndicatorOutput.js";
 
 const EMPTY_RANGE_REQUEST = () => false;
 
@@ -50,6 +44,7 @@ export interface ProvidedBarsIndicatorSupport {
 
 export interface UseProvidedBarsIndicatorRuntimeOptions {
   bars: KlineBar[];
+  outputBarTimes?: readonly number[];
   candleDownColor?: string;
   candleUpColor?: string;
   chartDataMeta?: ChartDataCommitMeta | null;
@@ -144,154 +139,6 @@ export function prepareProvidedBarsIndicator(
       };
 }
 
-function clampAnnotationPoints(
-  points: readonly IndicatorAnnotationPoint[],
-  visibleThroughSeconds: number,
-): IndicatorAnnotationPoint[] {
-  return points.flatMap((point) => {
-    if (point.time !== undefined && point.time > visibleThroughSeconds) return [];
-    return [{
-      ...point,
-      ...(point.endTime !== undefined && point.endTime > visibleThroughSeconds
-        ? { endTime: visibleThroughSeconds }
-        : {}),
-    }];
-  });
-}
-
-function clampLine(
-  line: IndicatorLine,
-  visibleThroughSeconds: number,
-): IndicatorLine {
-  return {
-    ...line,
-    data: line.data.filter((point) => point.time <= visibleThroughSeconds),
-    ...(line.colorData === undefined || line.colorData === null
-      ? {}
-      : {
-          colorData: line.colorData.filter(
-            (point) => point.time <= visibleThroughSeconds,
-          ),
-        }),
-  };
-}
-
-function clampMarkers(
-  items: readonly IndicatorMarker[],
-  visibleThroughSeconds: number,
-): IndicatorMarker[] {
-  return items.map((item) => ({
-    ...item,
-    data: clampAnnotationPoints(item.data, visibleThroughSeconds),
-  }));
-}
-
-function clampFills(
-  items: readonly IndicatorFill[],
-  visibleThroughSeconds: number,
-): IndicatorFill[] {
-  return items.map((item) => ({
-    ...item,
-    ...(item.data === undefined
-      ? {}
-      : { data: clampAnnotationPoints(item.data, visibleThroughSeconds) }),
-  }));
-}
-
-function clampHlines(
-  items: readonly IndicatorHLine[],
-  visibleThroughSeconds: number,
-): IndicatorHLine[] {
-  return items.map((item) => ({
-    ...item,
-    ...(item.data === undefined
-      ? {}
-      : { data: clampAnnotationPoints(item.data, visibleThroughSeconds) }),
-  }));
-}
-
-function clampBgcolors(
-  items: readonly IndicatorBgColor[],
-  visibleThroughSeconds: number,
-): IndicatorBgColor[] {
-  return items.map((item) => ({
-    ...item,
-    ...(item.regions === undefined
-      ? {}
-      : { regions: clampAnnotationPoints(item.regions, visibleThroughSeconds) }),
-    ...(item.data === undefined
-      ? {}
-      : { data: clampAnnotationPoints(item.data, visibleThroughSeconds) }),
-  }));
-}
-
-function clampBarcolors(
-  items: readonly IndicatorBarColor[],
-  visibleThroughSeconds: number,
-): IndicatorBarColor[] {
-  return items.map((item) => ({
-    ...item,
-    data: item.data.filter((point) => point.time <= visibleThroughSeconds),
-  }));
-}
-
-function clampSignals(
-  items: readonly IndicatorSignal[],
-  visibleThroughSeconds: number,
-): IndicatorSignal[] {
-  return items.map((item) => ({
-    ...item,
-    data: clampAnnotationPoints(item.data, visibleThroughSeconds),
-  }));
-}
-
-export function clampProvidedBarsIndicatorOutput({
-  activeIndicators,
-  outputState,
-  visibleThroughSeconds,
-}: {
-  activeIndicators: readonly IndicatorDefinition[];
-  outputState: IndicatorOutputState;
-  visibleThroughSeconds: number | null;
-}): {
-  activeIndicators: IndicatorDefinition[];
-  outputState: IndicatorOutputState;
-} {
-  if (visibleThroughSeconds === null || !Number.isFinite(visibleThroughSeconds)) {
-    return {
-      activeIndicators: activeIndicators.map((indicator) => ({
-        ...indicator,
-        ...(indicator.lines === undefined ? {} : { lines: [] }),
-      })),
-      outputState: {
-        ...createIndicatorOutputState(),
-        paramSchemas: outputState.paramSchemas,
-      },
-    };
-  }
-  return {
-    activeIndicators: activeIndicators.map((indicator) => ({
-      ...indicator,
-      ...(indicator.lines === undefined
-        ? {}
-        : {
-            lines: indicator.lines.map(
-              (line) => clampLine(line, visibleThroughSeconds),
-            ),
-          }),
-    })),
-    outputState: {
-      markers: clampMarkers(outputState.markers, visibleThroughSeconds),
-      fills: clampFills(outputState.fills, visibleThroughSeconds),
-      hlines: clampHlines(outputState.hlines, visibleThroughSeconds),
-      bgcolors: clampBgcolors(outputState.bgcolors, visibleThroughSeconds),
-      barcolors: clampBarcolors(outputState.barcolors, visibleThroughSeconds),
-      signals: clampSignals(outputState.signals, visibleThroughSeconds),
-      paramSchemas: outputState.paramSchemas,
-    },
-  };
-}
-
 export function clearProvidedBarsIndicatorRuntimeFields(
   indicator: IndicatorDefinition,
 ): IndicatorDefinition {
@@ -312,6 +159,7 @@ export function clearProvidedBarsIndicatorRuntimeFields(
  */
 export function useProvidedBarsIndicatorRuntime({
   bars,
+  outputBarTimes,
   candleDownColor = "#ef4444",
   candleUpColor = "#22c55e",
   chartDataMeta = null,
@@ -427,7 +275,8 @@ export function useProvidedBarsIndicatorRuntime({
     activeIndicators,
     outputState,
     visibleThroughSeconds,
-  }), [activeIndicators, outputState, visibleThroughSeconds]);
+    ...(outputBarTimes === undefined ? {} : { outputBarTimes }),
+  }), [activeIndicators, outputState, visibleThroughSeconds, outputBarTimes]);
   const visibleOutputState = useMemo(
     () => filterIndicatorOutputStateByVisibility(
       clamped.outputState,

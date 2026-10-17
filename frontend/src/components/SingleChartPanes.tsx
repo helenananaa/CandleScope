@@ -1,3 +1,4 @@
+import { drawingDocumentSessionRegistry } from "../features/drawings/core/drawingDocumentStore.js";
 import { describeError } from "../i18n/serverErrors.js";
 import PanePriceScaleMenu from "./PanePriceScaleMenu.js";
 import { usePanePriceScaleMenu } from "./usePanePriceScaleMenu.js";
@@ -20,7 +21,7 @@ import { readablePaneMinimums, constrainReadablePaneHeights } from "./paneReadab
  * Uses one chart instance for the selected main price series and all indicator panes so every
  * series shares the same time scale.
  */
-import { forwardRef, memo, useCallback, useEffect, useEffectEvent, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, memo, useCallback, useEffect, useEffectEvent, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
   ComponentType,
   MutableRefObject,
@@ -273,9 +274,12 @@ export interface SingleChartPanesProps {
   seriesStore?: SeriesWindowStore | null;
   symbol: string;
   drawingKeyBase?: string;
+  drawingReadOnly?: boolean;
+  drawingDocumentGeneration?: number;
   paneLayoutScope?: string | null;
   interval: IntervalString;
   loading?: boolean;
+  indicatorStatusText?: string | null;
   onCrosshairMove?: ((value: MainSeriesCrosshairValue | null) => void) | null;
   onNeedMoreLeft?: LoadMoreLeft | null;
   onNeedMoreRight?: (() => Promise<boolean>) | null;
@@ -817,9 +821,12 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   seriesStore = null,
   symbol,
   drawingKeyBase = "",
+  drawingReadOnly = false,
+  drawingDocumentGeneration = 0,
   paneLayoutScope = null,
   interval,
   loading = false,
+  indicatorStatusText = null,
   onCrosshairMove,
   onNeedMoreLeft,
   onNeedMoreRight = null,
@@ -1409,6 +1416,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     indicatorBarColorMap,
     upColor,
   }), [downColor, indicatorBarColorMap, upColor]);
+  useSyncExternalStore(drawingDocumentSessionRegistry.subscribeScopeLoads,
+    drawingDocumentSessionRegistry.getScopeRevision, drawingDocumentSessionRegistry.getScopeRevision);
   const drawingScopeBase = drawingKeyBase || symbol;
   const drawingKey = `${drawingScopeBase}__main`;
   const capturePaneDrawingFrame = useCallback((
@@ -5012,13 +5021,13 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         onAddAlertAtPrice={onAddAlertAtPrice}
       />
 
-      {shouldMountDrawingEngine && <DrawingObjectList apis={drawingObjectApis} currentInterval={interval} panes={activeSubPanes} onSelectPane={publishHoveredPaneId} />}
+      {shouldMountDrawingEngine && <DrawingObjectList readOnly={drawingReadOnly} apis={drawingObjectApis} currentInterval={interval} panes={activeSubPanes} onSelectPane={publishHoveredPaneId} />}
 
       {DrawingEngineHost && shouldMountDrawingEngine && drawingPaneSurfaces
         .filter((surface) => drawingPaneMountKeys.has(surface.drawingKey))
         .map((surface) => (
           <NativePaneDrawingHost
-            key={`${surface.drawingKey}:${linkedDrawingRevisions[surface.drawingKey] ?? 0}`}
+            key={`${surface.drawingKey}:${linkedDrawingRevisions[surface.drawingKey] ?? 0}:${drawingDocumentGeneration}`}
             component={DrawingEngineHost}
             {...(surface.paneId === "main" ? { chartAdapter } : {})}
             paneId={surface.paneId}
@@ -5036,6 +5045,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
             }
             captureDrawingFrame={capturePaneDrawingFrame}
             hostProps={{
+              readOnly: drawingReadOnly,
               activeTool: drawingToolForPane(
                 effectiveDrawingTool,
                 drawingInteractionPaneId,
@@ -5069,6 +5079,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           />
         ))}
 
+      {indicatorStatusText && !loading && (
+        <div className="chart-indicator-status" role="status">{indicatorStatusText}</div>
+      )}
       {loading && (
         <div className="loading-overlay">
           <div className="loading-spinner" />

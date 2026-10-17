@@ -5,7 +5,7 @@ import {
 import type {
   DrawingDocumentRecordV1,
 } from "../drawings/persistence/drawingDocumentRepository.js";
-import type { DrawingDocument } from "../drawings/core/drawingDocument.js";
+import { createDrawingDocument, type DrawingDocument } from "../drawings/core/drawingDocument.js";
 import { replaySha256Hex } from "./replaySha256.js";
 
 const DECIMAL_WRAPPER = "$replay_decimal_v1";
@@ -120,4 +120,27 @@ export function replayReviewDrawingDocument(
   const document = decodeDrawingDocumentRecord(record, reviewScopeKey);
   if (document === null) throw new TypeError("review drawing document failed strict decoding");
   return document;
+}
+
+/** Materialize this cell's panes, clearing panes absent at an earlier event.
+ * Review stores have their own scope and must never overwrite live editors. */
+export function replayReviewPaneDocuments(
+  value: Readonly<Record<string, unknown>> | null,
+  sourceBase: string,
+  reviewBase: string,
+  previousScopes: readonly string[],
+): DrawingDocument[] {
+  const records = new Map<string, Readonly<Record<string, unknown>>>();
+  if (value?.documentSchemaVersion === 2 && value.charts && typeof value.charts === "object" && !Array.isArray(value.charts)) {
+    for (const [scope, record] of Object.entries(value.charts as Readonly<Record<string, unknown>>)) {
+      if (scope.startsWith(`${sourceBase}__`) && record && typeof record === "object" && !Array.isArray(record)) {
+        records.set(`${reviewBase}${scope.slice(sourceBase.length)}`, record as Readonly<Record<string, unknown>>);
+      }
+    }
+  } else if (value?.documentSchemaVersion === 1) records.set(`${reviewBase}__main`, value);
+  const targets = new Set([`${reviewBase}__main`, ...records.keys(),
+    ...previousScopes.filter(scope => scope.startsWith(`${reviewBase}__`))]);
+  return [...targets].map(scope => records.has(scope)
+    ? replayReviewDrawingDocument(records.get(scope)!, scope)
+    : createDrawingDocument({ scopeKey: scope }));
 }

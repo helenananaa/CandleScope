@@ -79,7 +79,7 @@ function ReplayInitializedRun({
   sessionId: string;
 }) {
   const [pool] = useState(() => createReplayChartRuntimePool(getReplayControllerClientInstanceId(runId)));
-  const replay = useSharedReplayChartRuntime(pool, sessionId);
+  const replay = useSharedReplayChartRuntime(pool, sessionId, true);
   const viewer = useReplayViewerRuntime(replay, { onSelectedSessionChange, controllerOnly: true });
   const [initialSession, setInitialSession] = useState<ChartSession | null>(null);
   useEffect(() => {

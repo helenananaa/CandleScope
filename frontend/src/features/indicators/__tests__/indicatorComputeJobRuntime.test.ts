@@ -416,3 +416,67 @@ test("a caller can acknowledge a durably cached result as completed", async () =
   assert.equal(reused.skipped, 1);
   assert.equal(reused.queued, 0);
 });
+
+test("independent results publish once before a slow sibling and are reusable immediately", async () => {
+  const coordinator = createIndicatorComputeJobCoordinator();
+  const seen: string[] = [];
+  let finish!: () => void, firstReady!: () => void;
+  const gate = new Promise<void>(resolve => { finish = resolve; });
+  const ready = new Promise<void>(resolve => { firstReady = resolve; });
+  const work = coordinator.schedule({
+    lifecycleKey: "A", jobs: [{ jobKey: "ma" }, { jobKey: "rsi" }],
+    onResults: results => seen.push(...results.map(result => result.jobKey)),
+    execute: async (jobs, _signal, publish) => {
+      publish([jobs[0]!, { jobKey: "unsubmitted" }]); firstReady();
+      await gate;
+      publish([jobs[0]!, jobs[1]!]);
+      return jobs;
+    },
+  });
+  await ready;
+  assert.deepEqual(seen, ["ma"]);
+  const cached = await coordinator.schedule({ lifecycleKey: "A", jobs: [{ jobKey: "ma" }], execute: async () => { throw new Error("duplicated"); } });
+  assert.equal(cached.skipped, 1);
+  finish();
+  await work;
+  assert.deepEqual(seen, ["ma", "rsi"]);
+});
+
+test("stale or failed batch callbacks cannot publish late results", async () => {
+  for (const mode of ["activate", "dispose", "failure"] as const) {
+    const coordinator = createIndicatorComputeJobCoordinator();
+    const seen: string[] = [];
+    let publish!: (results: { jobKey: string }[]) => void, finish!: () => void;
+    const gate = new Promise<void>(resolve => { finish = resolve; });
+    const work = coordinator.schedule({ lifecycleKey: "A", jobs: [{ jobKey: "fast" }, { jobKey: "slow" }],
+      onResults: results => seen.push(...results.map(result => result.jobKey)),
+      execute: async (jobs, _signal, emit) => {
+        publish = emit; emit([jobs[0]!]); await gate;
+        if (mode === "failure") throw new Error("network failed");
+        emit([jobs[1]!]); return jobs;
+      } });
+    await Promise.resolve();
+    if (mode === "activate") coordinator.activate("B");
+    if (mode === "dispose") coordinator.dispose();
+    finish();
+    if (mode === "failure") await assert.rejects(work, /network failed/); else assert.equal((await work).stale, true);
+    publish([{ jobKey: "slow" }]);
+    assert.deepEqual(seen, ["fast"]);
+  }
+});
+
+test("an old rejection cannot overwrite a successor that returned to the same lifecycle key", async () => {
+  const coordinator = createIndicatorComputeJobCoordinator();
+  let finish!: () => void;
+  const gate = new Promise<void>(resolve => { finish = resolve; });
+  const old = coordinator.schedule({ lifecycleKey: "A", jobs: [{ jobKey: "study" }],
+    execute: async () => { await gate; throw new DOMException("old source cancelled", "AbortError"); } });
+  await Promise.resolve();
+  coordinator.activate("B");
+  const current = await coordinator.schedule({ lifecycleKey: "A", jobs: [{ jobKey: "study" }], execute: async jobs => jobs });
+  assert.equal(current.results.length, 1);
+  finish();
+  const obsolete = await old;
+  assert.equal(obsolete.stale, true);
+  assert.deepEqual(obsolete.results, []);
+});

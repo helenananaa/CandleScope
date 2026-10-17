@@ -114,3 +114,25 @@ test("missing clears cached presence while invalid and unavailable probes reject
   }));
   await assert.rejects(fixture.policy.probe("scope"), /IDB denied/);
 });
+
+
+test("memory-only historical panes mount, and a rewind to empty overrides stale disk presence", async () => {
+  let count: number | null = null;
+  let reads = 0;
+  const policy = createDrawingEnginePresencePolicy({
+    readManifestHint() { reads++; return { status: "valid", hint: {
+      manifestSchemaVersion: 1, scopeKey: "review__rsi", count: 1, revision: 4,
+    } }; },
+    async probeAndRepairManifest() { reads++; return { status: "missing", source: "none", count: 0, revision: 0, manifestUpdated: true }; },
+  }, () => count);
+  count = 1;
+  assert.equal(policy.shouldLoad({ activeTool: null, drawingKey: "review__rsi" }), true);
+  assert.equal(await policy.probe("review__rsi"), true);
+  count = 0;
+  assert.equal(policy.shouldLoad({ activeTool: null, drawingKey: "review__rsi" }), false);
+  assert.equal(await policy.probe("review__rsi"), false);
+  assert.equal(reads, 0);
+  count = null;
+  assert.equal(policy.shouldLoad({ activeTool: null, drawingKey: "review__rsi" }), true);
+  assert.equal(reads, 1);
+});
