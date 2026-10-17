@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import http.client
 import importlib
 import json
 import os
+import shlex
 import socket
 import subprocess
 import sys
@@ -15,13 +17,13 @@ from pathlib import Path
 
 import pytest
 import uvicorn
-from fastapi import FastAPI
-
 from app.api.v1.backtests import router
 from app.backtest.external_provider.endpoint import publish
+from app.backtest.external_provider.wire import digest, encode
 from app.backtest.runtime import BacktestRuntime, BacktestWorker
 from app.core.config import load_backtest_settings
 from app.local_data.service import LocalDatasetService, LocalImportOptions
+from fastapi import FastAPI
 
 SDK = Path(__file__).resolve().parents[2] / "packages" / "candlescope-external-provider" / "src"
 
@@ -111,7 +113,9 @@ def select(host, fixture, **overrides):
 
 def launch_client(binding, tmp_path):
     environment = dict(os.environ, PYTHONPATH=str(SDK))
-    return subprocess.Popen([sys.executable, "-m", "candlescope_external_provider", "--connection", binding["connection_file"]],
+    command = shlex.split(binding["example_command"]) if os.name != "nt" and binding.get("example_command") else [
+        sys.executable, "-m", "candlescope_external_provider", "--connection", binding["connection_file"]]
+    return subprocess.Popen(command,
                             cwd=tmp_path, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
@@ -186,6 +190,31 @@ def test_independent_process_http_smoke_run_and_full_host_restart(fixture, tmp_p
         for name in ("fills", "orders", "ledger", "equity_curve"):
             assert second_result[name] == result[name]
         assert second_report["hashes"]["fill"] == report["hashes"]["fill"]
+        stop_client(client)
+        client = None
+        host.request("POST", "/provider-connections/" + binding["connection_id"] + "/revoke")
+        host.request("POST", "/strategy-revisions/" + selected["strategy_revision_id"] + "/archive")
+        cursor = 0
+        trace = []
+        while True:
+            page = host.request("GET", "/provider-connections/runs/" + first["run_id"] + f"/trace?after={cursor}&limit=3")
+            trace.extend(page["items"])
+            if not page["has_more"]:
+                break
+            assert page["next_after"] > cursor
+            cursor = page["next_after"]
+        assert sum(item["operation"] == "step" for item in trace) == 5
+        audit = hashlib.sha256()
+        for item in trace:
+            assert "model_state" not in item["reply"]
+            assert digest({key: item[key] for key in ("run_id", "cursor", "operation", "payload", "model_state_before_hash")}) == item["input_hash"]
+            assert digest(item["reply"]) == item["reply_hash"]
+            if item["operation"] != "close":
+                audit.update(encode({key: item[key] for key in ("cursor", "operation", "input_hash", "reply_hash")}).encode())
+                audit.update(b"\n")
+        assert "sha256:" + audit.hexdigest() == report["strategy"]["external_provider"]["trace_hash"]
+        assert token.decode() not in json.dumps(trace)
+        assert host.runtime.service.repository.get_run_by_id(first["run_id"]) == frozen
     finally:
         if client is not None:
             stop_client(client)

@@ -713,9 +713,9 @@ class BacktestRepository:
     @_locked
     def queued_provider_connections(self) -> list[tuple[str, str]]:
         rows = self.connection.execute(
-            """SELECT run_id, json_extract(config_json, '$.external_connection_id')
+            """SELECT run_id, json_extract(CASE WHEN json_valid(config_json) THEN config_json ELSE '{}' END, '$.external_connection_id')
                FROM backtest_runs WHERE state = 'QUEUED'
-               AND json_extract(config_json, '$.external_connection_id') IS NOT NULL"""
+               AND json_extract(CASE WHEN json_valid(config_json) THEN config_json ELSE '{}' END, '$.external_connection_id') IS NOT NULL"""
         ).fetchall()
         return [(str(row[0]), str(row[1])) for row in rows]
 
@@ -723,7 +723,7 @@ class BacktestRepository:
     def active_provider_runs(self, connection_id: str) -> list[str]:
         return [str(row[0]) for row in self.connection.execute(
             """SELECT run_id FROM backtest_runs WHERE state IN ('QUEUED', 'PREPARING', 'RUNNING', 'COMPLETING')
-               AND json_extract(config_json, '$.external_connection_id') = ?""", (connection_id,),
+               AND json_extract(CASE WHEN json_valid(config_json) THEN config_json ELSE '{}' END, '$.external_connection_id') = ?""", (connection_id,),
         )]
 
     @_locked

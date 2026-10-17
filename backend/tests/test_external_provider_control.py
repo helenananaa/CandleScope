@@ -4,12 +4,12 @@ import json
 from pathlib import Path
 
 import pytest
-
 from app.backtest.errors import BacktestError
 from app.backtest.service import BacktestService
 from app.backtest.strategy.protocol import StrategyProviderError
 from app.backtest.strategy.workspace import compile_revision
 from app.core.config import load_backtest_settings
+
 from tests.test_external_provider_contracts import manifest
 
 

@@ -4,9 +4,9 @@ import asyncio
 
 import httpx
 import pytest
+from app.api.v1.external_providers import router
 from fastapi import FastAPI
 
-from app.api.v1.external_providers import router
 from tests.test_external_provider_control import service
 
 

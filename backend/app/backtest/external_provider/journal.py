@@ -64,12 +64,14 @@ class ExternalCallJournal:
         if operation not in OPERATIONS or type(cursor) is not int or cursor < 1 or type(payload) is not dict:
             _fail("invalid external Host call")
         text = encode(payload)
-        input_hash = digest({"run_id": run_id, "cursor": cursor, "operation": operation, "payload": payload})
         with self.store._transaction() as connection:
             session = self._session(connection, run_id)
             self._generation(session, host_generation)
             self._available(connection, session)
             existing = self._call(connection, run_id, cursor)
+            state_before = existing["state_before_hash"] if existing is not None else session["state_hash"]
+            input_hash = digest({"run_id": run_id, "cursor": cursor, "operation": operation, "payload": payload,
+                                 "model_state_before_hash": state_before})
             if existing is not None:
                 if existing["input_hash"] != input_hash:
                     _fail("external call input changed during replay", "IDENTITY_MUTATION")
@@ -100,11 +102,11 @@ class ExternalCallJournal:
 
     def poll(self, connection_id: str, *, token: str, client_id: str,
              client_generation: int, now_ms: int) -> dict[str, Any] | None:
-        with self.store._transaction() as connection:
+        self.store.renew_if_due(connection_id, token=token, client_id=client_id,
+                                client_generation=client_generation, now_ms=now_ms)
+        with self.store._snapshot_read() as connection:
             binding = self.store._authorize(connection, connection_id, token)
             self.store._require_client(binding, client_id, client_generation, now_ms)
-            connection.execute("UPDATE external_provider_connections SET lease_deadline_ms = ? WHERE connection_id = ?",
-                               (now_ms + self.store.lease_ms, connection_id))
             row = connection.execute(
                 """SELECT c.*, s.host_generation, s.context_json FROM external_provider_calls c
                    JOIN external_provider_sessions s ON s.run_id = c.run_id
@@ -124,6 +126,16 @@ class ExternalCallJournal:
                                     "model_state_hash": row["state_before_hash"]}}
             encode(packet)  # Includes bootstrap; never emit an oversized delivery.
             return packet
+
+    def live_sessions(self, connection_id: str) -> list[dict[str, Any]]:
+        with self.store._read() as connection:
+            rows = connection.execute(
+                "SELECT run_id, host_generation FROM external_provider_sessions WHERE connection_id = ? AND status = 'ACTIVE' LIMIT 65",
+                (connection_id,),
+            ).fetchall()
+            if len(rows) > 64:
+                _fail("external active model ceiling reached", "BUDGET_EXCEEDED")
+            return [{"run_id": row["run_id"], "host_generation": row["host_generation"]} for row in rows]
 
     def submit(self, connection_id: str, *, token: str, client_id: str, client_generation: int,
                run_id: str, host_generation: int, cursor: int, call_id: str, input_hash: str,
@@ -248,6 +260,31 @@ class ExternalCallJournal:
             return {**self.manifest.identity(), "context_hash": session["context_hash"],
                     "call_count": count, "decision_count": decisions, "trace_hash": "sha256:" + trace.hexdigest()}
 
+    def trace(self, run_id: str, *, after: int = 0, limit: int = 200) -> dict[str, Any]:
+        if type(after) is not int or after < 0 or type(limit) is not int or not 1 <= limit <= 500:
+            _fail("invalid external trace pagination")
+        with self.store._read() as connection:
+            session = self._session(connection, run_id)
+            rows = connection.execute(
+                """SELECT * FROM external_provider_calls WHERE run_id = ? AND cursor > ? AND cursor <= ?
+                   ORDER BY cursor LIMIT ?""", (run_id, after, session["last_completed"], limit + 1),
+            ).fetchall()
+            items = []
+            for row in rows[:limit]:
+                record = self._record(row)
+                public_reply = record["reply"]
+                if public_reply is not None and "error" in public_reply:
+                    # External error text stays private. Its committed digest
+                    # still participates in the report's immutable trace hash.
+                    public_reply = {"error_code": public_reply["error"]["code"]}
+                items.append({**record, "reply": public_reply, "payload": decode(row["payload_json"]),
+                              "model_state_before_hash": row["state_before_hash"]})
+            result = {"run_id": run_id, "after": after, "next_after": items[-1]["cursor"] if items else after,
+                      "has_more": len(rows) > limit, "items": items, "provider_identity": self.manifest.identity(),
+                      "last_completed_cursor": session["last_completed"]}
+            encode(result)
+            return result
+
     def _reserve(self, connection: sqlite3.Connection, delta: int) -> None:
         used = connection.execute("SELECT logical_bytes FROM external_provider_usage WHERE singleton = 1").fetchone()[0]
         if delta >= 0 and used + delta > self.max_record_bytes:
@@ -313,12 +350,17 @@ class ExternalCallJournal:
     @staticmethod
     def _record(row: sqlite3.Row) -> dict[str, Any]:
         expected = digest({"run_id": row["run_id"], "cursor": row["cursor"],
-                           "operation": row["operation"], "payload": decode(row["payload_json"])})
+                           "operation": row["operation"], "payload": decode(row["payload_json"]),
+                           "model_state_before_hash": row["state_before_hash"]})
         if expected != row["input_hash"]:
             _fail("external recorded input integrity failed", "IDENTITY_MUTATION")
         reply = decode(row["reply_json"]) if row["reply_json"] is not None else None
         if reply is not None and digest(reply) != row["reply_hash"]:
             _fail("external recorded response integrity failed", "IDENTITY_MUTATION")
+        if reply is not None:
+            expected_state = row["state_before_hash"] if "error" in reply else reply.get("model_state_hash")
+            if row["state_after_hash"] != expected_state:
+                _fail("external recorded state transition integrity failed", "IDENTITY_MUTATION")
         return {"run_id": row["run_id"], "cursor": row["cursor"], "call_id": row["call_id"],
                 "operation": row["operation"], "input_hash": row["input_hash"],
                 "reply": reply, "reply_hash": row["reply_hash"]}

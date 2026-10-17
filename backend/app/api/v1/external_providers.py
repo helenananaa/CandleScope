@@ -6,7 +6,7 @@ import ipaddress
 import time
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
 
@@ -104,6 +104,24 @@ def endpoint(request: Request):
         return _error(exc)
 
 
+@router.get("/example")
+def example(request: Request):
+    try:
+        return _control(request).example()
+    except (BacktestError, StrategyProviderError) as exc:
+        return _error(exc)
+
+
+@router.get("/runs/{run_id}/trace")
+def trace(request: Request, run_id: str, after: int = Query(default=0, ge=0), limit: int = Query(default=200, ge=1, le=500)):
+    try:
+        control = _control(request)
+        request.app.state.backtest_service.get_run(run_id)
+        return control.trace(run_id, after=after, limit=limit)
+    except (BacktestError, StrategyProviderError) as exc:
+        return _error(exc)
+
+
 @router.post("/{connection_id}/revoke")
 def revoke_connection(request: Request, connection_id: str):
     try:
@@ -150,8 +168,9 @@ async def poll(request: Request, connection_id: str):
         control = _control(request)
         token = _token(request)
         payload = await _body(request, ClientPollRequest)
-        packet = control.journal(connection_id).poll(connection_id, token=token, now_ms=int(time.time() * 1000), **payload)
-        return {"call": packet}
+        journal = control.journal(connection_id)
+        packet = journal.poll(connection_id, token=token, now_ms=int(time.time() * 1000), **payload)
+        return {"call": packet, "active_sessions": journal.live_sessions(connection_id)}
     except (BacktestError, StrategyProviderError) as exc:
         return _error(exc)
 

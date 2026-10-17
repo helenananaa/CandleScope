@@ -15,6 +15,34 @@ import type {
 
 export type { SignalTracePage } from "./backtestTypes.js";
 
+export interface ExternalProviderIdentity {
+  manifest_hash: string;
+  provider_id: string;
+  provider_revision: string;
+  provider_kind: "MODEL" | "STRATEGY";
+  artifact_sha256: string;
+  runtime_lock: string;
+  reproducibility: "RECORDED_OUTPUT_ONLY";
+}
+
+export interface ExternalProviderConnection {
+  connection_id: string;
+  scope: { strategy_revision_id: string; dataset_id: string; data_epoch: string; snapshot_hash: string; manifest_hash: string };
+  scope_hash: string;
+  connection_file: string;
+  ready: boolean;
+  example_command: string | null;
+}
+
+export interface ExternalProviderApi {
+  example(signal?: AbortSignal): Promise<{ manifest: Record<string, unknown>; manifest_command: string }>;
+  list(signal?: AbortSignal): Promise<ExternalProviderConnection[]>;
+  create(body: Record<string, unknown>, signal?: AbortSignal): Promise<ExternalProviderConnection>;
+  revoke(connectionId: string, signal?: AbortSignal): Promise<Record<string, unknown>>;
+  smoke(connectionId: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>>;
+  trace(runId: string, after?: number, signal?: AbortSignal): Promise<{ items: Array<Record<string, unknown>>; next_after: number; has_more: boolean }>;
+}
+
 export interface BacktestStrategyDescriptor {
   revision_id: string;
   provider_kind: string;
@@ -32,6 +60,7 @@ export interface BacktestStrategyDescriptor {
   source_hash?: string;
   compiled_hash?: string;
   runtime_revision?: string;
+  external_provider?: ExternalProviderIdentity;
 }
 
 export interface StrategyRevisionRecord extends BacktestStrategyDescriptor {
@@ -145,6 +174,7 @@ export interface ChartContextResolution {
 }
 
 export interface BacktestApiClient {
+  externalProviders?: ExternalProviderApi;
   prepareChartContext?(body: ChartContextResolveRequest, signal?: AbortSignal, strategy?: {
     strategy_revision_id: string;
     python_runtime_mode?: string;
@@ -304,6 +334,33 @@ function requestOptions(options: RequestInit, signal?: AbortSignal): RequestInit
 
 export function createBacktestApi(base = `${API_BASE}/backtests`): BacktestApiClient {
   return {
+    externalProviders: {
+      async trace(runId, after = 0, signal) {
+        return readJson(await fetch(`${base}/provider-connections/runs/${encodeURIComponent(runId)}/trace?after=${after}&limit=200`, requestOptions({}, signal)));
+      },
+      async example(signal) {
+        return readJson(await fetch(`${base}/provider-connections/example`, requestOptions({}, signal)));
+      },
+      async list(signal) {
+        const payload = await readJson<{ connections: ExternalProviderConnection[] }>(
+          await fetch(`${base}/provider-connections`, requestOptions({}, signal)),
+        );
+        return payload.connections;
+      },
+      async create(body, signal) {
+        return readJson(await fetch(`${base}/provider-connections`, requestOptions({
+          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+        }, signal)));
+      },
+      async revoke(connectionId, signal) {
+        return readJson(await fetch(`${base}/provider-connections/${encodeURIComponent(connectionId)}/revoke`, requestOptions({ method: "POST" }, signal)));
+      },
+      async smoke(connectionId, body, signal) {
+        return readJson(await fetch(`${base}/provider-connections/${encodeURIComponent(connectionId)}/smoke`, requestOptions({
+          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+        }, signal)));
+      },
+    },
     async capabilities(signal) {
       return readJson(await fetch(`${base}/capabilities`, requestOptions({}, signal)));
     },

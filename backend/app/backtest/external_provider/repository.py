@@ -115,6 +115,19 @@ class ExternalConnectionRepository:
                 connection.rollback()
                 raise
 
+    @contextmanager
+    def _snapshot_read(self) -> Iterator[sqlite3.Connection]:
+        """Keep request/state reads consistent without taking a writer lease."""
+        with self._lock:
+            if self._connection is None:
+                raise RuntimeError("external connection store is not open")
+            connection = self._connection
+            connection.execute("BEGIN")
+            try:
+                yield connection
+            finally:
+                connection.rollback()
+
     def create(self, scope: dict[str, object], *, token: str, now_ms: int) -> str:
         scope_json = json.dumps(scope, sort_keys=True, separators=(",", ":"), allow_nan=False)
         if len(scope_json.encode("utf-8")) > 24_576:
@@ -185,6 +198,16 @@ class ExternalConnectionRepository:
                 "UPDATE external_provider_connections SET lease_deadline_ms = ? WHERE connection_id = ?",
                 (now_ms + self.lease_ms, connection_id),
             )
+
+    def renew_if_due(self, connection_id: str, *, token: str, client_id: str,
+                     client_generation: int, now_ms: int) -> None:
+        with self._read() as connection:
+            row = self._authorize(connection, connection_id, token)
+            self._require_client(row, client_id, client_generation, now_ms)
+            if row["lease_deadline_ms"] - now_ms > self.lease_ms // 2:
+                return
+        self.touch(connection_id, token=token, client_id=client_id,
+                   client_generation=client_generation, now_ms=now_ms)
 
     def revoke(self, connection_id: str, *, now_ms: int) -> None:
         with self._transaction() as connection:

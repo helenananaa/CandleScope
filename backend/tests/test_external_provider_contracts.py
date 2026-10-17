@@ -3,10 +3,9 @@ from __future__ import annotations
 import json
 
 import pytest
-from pydantic import ValidationError
-
 from app.backtest.external_provider.contracts import parse_manifest
 from app.backtest.strategy.protocol import StrategyProviderError
+from pydantic import ValidationError
 
 
 def manifest(**overrides: object) -> str:
@@ -93,3 +92,6 @@ def test_error_does_not_echo_a_misplaced_connection_credential() -> None:
     with pytest.raises(StrategyProviderError) as failure:
         parse_manifest(manifest(connection_token=secret))
     assert secret not in str(failure.value)
+    with pytest.raises(StrategyProviderError) as unknown_key:
+        parse_manifest(manifest(**{secret: "accidentally used as a field name"}))
+    assert secret not in str(unknown_key.value)

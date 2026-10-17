@@ -1310,8 +1310,15 @@ class BacktestService:
 
     def _connection_waiting(self, record: dict[str, Any]) -> dict[str, Any]:
         if record["state"] == "QUEUED":
-            connection_id = json.loads(str(record["config_json"])).get("external_connection_id")
-            if connection_id:
+            raw = str(record["config_json"])
+            if '"external_connection_id"' not in raw:
+                return record
+            try:
+                config = json.loads(raw)
+            except (TypeError, ValueError):
+                return record
+            connection_id = config.get("external_connection_id") if isinstance(config, dict) else None
+            if type(connection_id) is str and connection_id:
                 reason = self.external.waiting_reason(connection_id)
                 if reason:
                     return {**record, "waiting_for": reason}

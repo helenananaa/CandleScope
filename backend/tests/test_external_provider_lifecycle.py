@@ -6,7 +6,6 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 
 import pytest
-
 from app.backtest.external_provider.contracts import parse_manifest
 from app.backtest.external_provider.journal import ExternalCallJournal
 from app.backtest.external_provider.provider import ExternalDecisionProvider
@@ -16,6 +15,7 @@ from app.backtest.strategy.protocol import (
     StrategyProviderError,
     StrategyProviderSession,
 )
+
 from tests.test_external_provider_contracts import manifest
 from tests.test_external_provider_journal import TOKEN
 from tests.test_external_provider_messages import frame
