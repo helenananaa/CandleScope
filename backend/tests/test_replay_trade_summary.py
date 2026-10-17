@@ -1,10 +1,15 @@
-from dataclasses import replace
 import random
+from dataclasses import replace
 
 import pytest
-
 from app.replay import trade_summary
-from app.replay.broker.models import OrderSide
+from app.replay.broker.models import (
+    TOUCH_OR_TAPE_EXECUTION_MODE,
+    OrderSide,
+    PositionMode,
+    PositionSide,
+)
+
 from tests.fixtures.replay.broker_fakes import request
 from tests.test_replay_execution_tape import _broker, _trade
 
@@ -76,3 +81,25 @@ def test_market_summary_cache_is_bounded_and_shared_without_accounts():
     for i in range(20):
         trade_summary.prepare([_trade(i, price=str(100 + i))], broker._bar_builder)
     assert len(trade_summary._CACHE) == trade_summary.CACHE_BLOCKS
+
+
+@pytest.mark.parametrize("quantities", [("1", "0"), ("0", "2"), ("1", "1"), ("1", "2")])
+def test_hedge_summary_preserves_two_entries_and_gross_legs(quantities):
+    brokers = [_broker(minutes=10), _broker(minutes=10)]
+    for broker in brokers:
+        config = replace(broker.config, position_mode=PositionMode.HEDGE)
+        broker.__init__(config=config, bar_builder=broker._bar_builder, execution_mode=TOUCH_OR_TAPE_EXECUTION_MODE)
+        for i, (quantity, side, leg) in enumerate(zip(
+            quantities, (OrderSide.BUY, OrderSide.SELL), (PositionSide.LONG, PositionSide.SHORT), strict=True
+        )):
+            if quantity != "0":
+                broker.place_order(replace(request(client_order_id=str(i), side=side, quantity=quantity),
+                                           position_side=leg), command_id=str(i))
+            broker.apply_trade(_trade(i, price=str(100 + i * 10), quantity="10"))
+    scalar, summary = brokers
+    trades = [_trade(i, price=str(90 + (i * 17) % 45), time_offset_ms=i * 1000)
+              for i in range(2, 100)]
+    for trade in trades:
+        scalar.apply_source_event(trade)
+    assert trade_summary.apply(summary, trades)
+    assert summary.snapshot() == scalar.snapshot()

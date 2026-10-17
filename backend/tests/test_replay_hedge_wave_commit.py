@@ -16,6 +16,93 @@ from tests.test_replay_v2_training_phase6 import _risk_service, _sandbox_request
 pytestmark = pytest.mark.anyio
 
 
+@pytest.mark.parametrize("basis,count,coalesced", [
+    ("BASE_BAR", 3, False), ("BASE_BAR", 3, True), ("SOURCE_EVENT", 3, True),
+])
+async def test_tape_wave_matches_separate_commits_including_partial_cohorts(
+    tmp_path, monkeypatch, basis, count, coalesced,
+):
+    from tests import test_replay_v2_training_phase5 as tape
+    sources = tape._multi_trade_sources
+    monkeypatch.setattr(tape, "_multi_trade_sources", lambda *args, **kwargs:
+        sources(*args, coalesce_trade_timestamps=coalesced, **kwargs))
+    source = tmp_path / "tape-seed.db"
+    archive = tmp_path / "tape"
+    service = await tape._trade_service(source, archive_root=archive, symbols=("BTCUSDT",))
+    try:
+        request = await prepare_hedge_request(
+            service, replace(await tape._trade_request(service), integrity_mode="SANDBOX"),
+            root=tmp_path, prefix="tape-wave", book_mode="OFF", funding_event_offset_bars=2,
+            mark_prices=["100", "103", "99"] + ["110"] * (tape.TRADE_REPLAY_MINUTES - 2),
+        )
+        created = await service.training.create_run(request)
+        run_id, sid = created["run"]["run_id"], created["run"]["adapter_session_id"]
+        await _acquire(service, run_id=run_id, selected_session_id=sid, command_id="acquire")
+        for side, position_side in (("BUY", "LONG"), ("SELL", "SHORT")):
+            await _send(service, run_id=run_id, session_id=sid, command_id=f"open-{side}",
+                command_type=ReplayV2CommandType.PLACE_ORDER, payload={
+                    "client_order_id": f"open-{side}", "side": side, "position_side": position_side,
+                    "order_type": "MARKET", "quantity": "1" if side == "BUY" else "0.5",
+                    "reduce_only": False, "limit_price": None, "stop_price": None,
+                })
+    finally:
+        await service.shutdown(step_timeout=1)
+
+    results = []
+    for mode in ("separate", "merged"):
+        database = tmp_path / f"tape-{mode}.db"
+        copy_store(source, database)
+        service = await tape._trade_service(database, archive_root=archive, symbols=("BTCUSDT",))
+        try:
+            store = service.training.store
+            if mode == "separate":
+                async def separate_risk(run_id, *, risk_virtual_time_ms, events):
+                    await store.finalize_hedge_inputs(run_id, risk_virtual_time_ms=risk_virtual_time_ms)
+                    return False
+
+                async def separate_marks(run_id, *, risk_virtual_time_ms, input_events, events,
+                                         event_virtual_times_ms=None, checkpoint_market_wave=True):
+                    applied = await store.apply_hedge_input_events(run_id, events=input_events,
+                        virtual_time_ms=risk_virtual_time_ms, event_virtual_times_ms=event_virtual_times_ms)
+                    await store.finalize_hedge_inputs(run_id, risk_virtual_time_ms=risk_virtual_time_ms)
+                    return applied, False
+
+                monkeypatch.setattr(store, "finalize_hedge_inputs_and_checkpoint", separate_risk)
+                monkeypatch.setattr(store, "apply_hedge_inputs_and_checkpoint", separate_marks)
+            await _acquire(service, run_id=run_id, selected_session_id=sid, command_id="resume")
+            before = service.store._metrics["transactions"]
+            response = await _send(service, run_id=run_id, session_id=sid, command_id="advance",
+                command_type=ReplayV2CommandType.ADVANCE, payload={"basis": basis, "count": count})
+            # An odd source count cuts the second equal-time pair in half;
+            # the next command must finish it before applying later inputs.
+            if basis == "SOURCE_EVENT":
+                assert response["cursor"]["source_sequence"] == count
+                response = await _send(service, run_id=run_id, session_id=sid, command_id="finish-cohort",
+                    command_type=ReplayV2CommandType.ADVANCE, payload={"basis": basis, "count": 1})
+                assert response["cursor"]["source_sequence"] == count + 1
+            commits = service.store._metrics["transactions"] - before
+            state = await store.get_market_tracks(run_id)
+            events = await store.global_events(run_id)
+            review = await service.store.run_extension_read(lambda c: [tuple(row) for row in c.execute(
+                "SELECT timeline_sequence,event_hash,projection_json FROM replay_review_timeline_event WHERE run_id=? ORDER BY timeline_sequence",
+                (run_id,),
+            )])
+            assert (await service.training.audit_account(run_id))["status"] == "PASS"
+            results.append((response, state, events, review, commits))
+        finally:
+            await service.shutdown(step_timeout=1)
+        recovered = await tape._trade_service(database, archive_root=archive, symbols=("BTCUSDT",))
+        try:
+            restored = await recovered.training.get_market_tracks(run_id)
+            for field in ("equity", "cash_balance", "fees_paid", "funding_cashflow", "positions"):
+                assert restored["portfolio"][field] == state["portfolio"][field]
+            assert (await recovered.training.audit_account(run_id))["status"] == "PASS"
+        finally:
+            await recovered.shutdown(step_timeout=1)
+    assert results[0][:4] == results[1][:4]
+    assert results[1][4] < results[0][4]
+
+
 async def seed(path: Path, *, initial_equity: str | None = None, quantity: str = "0.1"):
     service = await _risk_service(path)
     request = await prepare_hedge_request(

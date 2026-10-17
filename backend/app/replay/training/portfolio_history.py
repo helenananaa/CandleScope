@@ -146,9 +146,11 @@ def export_intervals(snapshot, *, input_root):
     yield encode(
         dict(
             schema=(
-                "replay.portfolio-curve-export.v2"
+                "replay.portfolio-curve-export.v3"
+                if any(json.loads(row[4]).get("schema") == "multi-tape-interval.v2" for row in rows)
+                else "replay.portfolio-curve-export.v2"
                 if any(
-                    json.loads(row[4]).get("schema") == "multi-tape-interval.v1"
+                    json.loads(row[4]).get("schema") in {"multi-tape-interval.v1", "multi-tape-interval.v2"}
                     for row in rows
                 )
                 else "replay.portfolio-curve-export.v1"
@@ -168,10 +170,12 @@ def export_intervals(snapshot, *, input_root):
         basis = json.loads(row[4])
         summary = json.loads(row[3])
         summary.pop("trough_time_ms", None)
-        if basis["schema"] == "multi-tape-interval.v1":
+        if basis["schema"] in {"multi-tape-interval.v1", "multi-tape-interval.v2"}:
+            pinned = basis["schema"] == "multi-tape-interval.v2"
             yield encode(
                 dict(
-                    kind="tape_interval",
+                    kind="hedge_tape_interval" if pinned else "tape_interval",
+                    **({"valuation": "PINNED_HEDGE_MARK"} if pinned else {}),
                     index=index,
                     start_ms=row[1] - origin,
                     end_ms=row[2] - origin,
@@ -195,7 +199,7 @@ def export_intervals(snapshot, *, input_root):
                     raise ValueError("tape export crossed its committed range")
                 yield encode(
                     dict(
-                        kind="trade_mark",
+                        kind="pinned_hedge_mark" if pinned else "trade_mark",
                         interval=index,
                         offset_ms=at - origin,
                         event_phase=phase,

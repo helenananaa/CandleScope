@@ -78,6 +78,7 @@ def test_replay_v2_phase8_package_keeps_optimization_inside_training() -> None:
         "hedge_simulation_contract.py",
         "hedge_track_readmission.py",
         "hedge_timeline.py",
+        "hedge_tape_interval.py",
         "historical_book.py",
         "hybrid_extensions.py",
         "history.py",

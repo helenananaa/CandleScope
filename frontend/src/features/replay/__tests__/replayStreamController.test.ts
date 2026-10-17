@@ -761,6 +761,7 @@ test("a final-state reset may converge across hidden command revisions", () => {
     "fast_forward_final_state_complete",
     "fast_forward_final_state_cancelled",
     "fast_forward_final_state_interaction",
+    "tape_cohort_batch_complete",
   ]) {
     const timers = new FakeTimers();
     const socket = new FakeSocket();
@@ -1280,4 +1281,45 @@ test("controller heartbeat is exact, ownership-gated, and canceled on stop", () 
   }]);
   controller.stop();
   assert.equal(timers.tasks.size, 0);
+});
+
+
+test("tape cohort resets reject skipped transport and non-forward authority", () => {
+  const variants = [
+    { name: "transport gap", sequence: 12 },
+    { name: "same transport", sequence: 10 },
+    { name: "same revision", revision: 4 },
+    { name: "older revision", revision: 3 },
+    { name: "older source", sourceSequence: 3 },
+    { name: "older clock", virtualTimeMs: BASE_TIME_MS + 119_999 },
+    { name: "playing", state: "PLAYING" as const },
+    { name: "unknown reason", statusReason: "tape_unknown" },
+  ];
+  for (const { name, ...change } of variants) {
+    const timers = new FakeTimers();
+    const socket = new FakeSocket();
+    const snapshots: number[] = [];
+    const errors: string[] = [];
+    const controller = new ReplayStreamController({
+      sessionId: "session-0001", initialDataEpoch: replayDigest("c"),
+      baseUrl: "ws://example.test", timers, socketFactory: () => socket,
+      onSnapshot: (snapshot) => snapshots.push(snapshot.cursor.source_sequence),
+      onError: (error) => errors.push(error.code),
+    });
+    controller.start();
+    socket.open();
+    socket.message(replaySnapshotEvent({
+      sequence: 10, revision: 4, sourceSequence: 4,
+      virtualTimeMs: BASE_TIME_MS + 239_999,
+    }));
+    socket.message(replaySummaryJumpResetEvent({
+      sequence: 11, revision: 6, sourceSequence: 51,
+      virtualTimeMs: BASE_TIME_MS + 299_999,
+      statusReason: "tape_cohort_batch_complete", ...change,
+    }));
+    assert.deepEqual(snapshots, [4], name);
+    assert.equal(controller.diagnostics().state, "resyncing", name);
+    assert.ok(errors.includes("REPLAY_PROTOCOL_ERROR"), name);
+    controller.stop();
+  }
 });
