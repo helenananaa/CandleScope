@@ -261,6 +261,8 @@ export const ptBR = {
   "orderBook.bidPriceRange": "Compras agrupadas: preços a partir de {min} e abaixo de {max}. A quantidade é a soma do grupo.",
   "orderBook.askPriceRange": "Vendas agrupadas: preços acima de {min} e até {max}. A quantidade é a soma do grupo.",
   "native.external.sampledLabel": "Livro amostrado (profundidade limitada)",
+  "native.external.uploadMissing": "Esta estratégia usou anteriormente um arquivo de negócios ou de ofertas enviado. Selecione o arquivo novamente ou limpe a seleção explicitamente. Outra fonte de dados não será usada automaticamente.",
+  "native.external.clearUpload": "Limpar seleção de arquivo",
   "native.external.sampledHint": "Livro amostrado aproximado: consome apenas a profundidade visível; a quantidade excedente não é executada. Livros com mais de 2 segundos não permitem execução. Não se deduzem execuções na fila passiva; ordens limitadas em espera só executam quando negociáveis. Negócios no mesmo milissegundo precedem novas amostras. Importe bars.csv e envie execution.json do mesmo arquivo.",
   "native.series.title": "Gráficos das séries da estratégia",
   "native.series.hint": "Velas, barras OHLC, marcadores, cores e preenchimentos do motor. Esta visualização aproxima os formatos dos marcadores e usa uma faixa de preenchimento por barra; não reproduz o gráfico da plataforma pixel a pixel.",

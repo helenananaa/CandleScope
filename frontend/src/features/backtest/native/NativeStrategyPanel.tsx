@@ -21,6 +21,7 @@ import { useNativeStrategyCollection, nativeStrategySwitcherActions, nativeStrat
 import { StrategyDockPane, StrategyDockSlot } from "../chart-tester/StrategyDockSlots.js";
 import { StrategySwitcher } from "../chart-tester/StrategySwitcher.js";
 import { strategyLanguageLabel } from "../chart-tester/strategyLanguageLabel.js";
+import { defaultExecutionDraft, executionSettingsChanged, restoreExecutionDraft, sameExecutionData, type NativeExecutionDraft } from "./nativeExecutionSettings.js";
 
 const StrategyScriptWorkspace = lazy(() => import("../chart-tester/StrategyScriptWorkspace.js"));
 
@@ -106,12 +107,13 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   // Both execution panes stay mounted and share one selected language.
   const language = props.instance.language;
   const mode = props.executionMode;
-  const [hostSettings, setHostSettings] = useState({ initial_balance: 10000, slippage_bps: 1, taker_fee_bps: 0, price_tick: 0.01 });
+  const [hostSettings, setHostSettings] = useState(() => defaultExecutionDraft().hostSettings);
   const [fidelity, setFidelity] = useState("BAR_APPROX");
   const [fillRecalculation, setFillRecalculation] = useState(false);
   const [executionData, setExecutionData] = useState<unknown>(null);
-  const [executionDataState, setExecutionDataState] = useState<"ready" | "loading" | "invalid">("ready");
+  const [executionDataState, setExecutionDataState] = useState<"ready" | "loading" | "invalid" | "missing">("ready");
   const executionUpload = useRef(0);
+  const [executionInputKey, setExecutionInputKey] = useState(0);
   const runPath = mode === "NATIVE" ? "/native/runs" : "/external/runs";
   const [source, setSource] = useState(NATIVE_TEMPLATES.pine);
   const [advanced, setAdvanced] = useState<AdvancedInputs>(emptyAdvancedInputs);
@@ -138,12 +140,25 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const alive = useRef(true);
   const legacyStorageKey = `candlescope.native-draft:${props.cellScope}:${language}`;
   const storageKey = `${legacyStorageKey}:${mode}`;
+  const executionDraftKey = `execution:${language}:${mode}`;
   const onRunChange = props.onRunChange;
   useEffect(() => { if (props.active !== false) onRunChange?.(historicalRun ?? run); }, [historicalRun, run, onRunChange, props.active]);
   const instanceRef = useRef(props.instance);
   instanceRef.current = props.instance;
   const patchInstance = useRef(props.onInstanceChange);
   patchInstance.current = props.onInstanceChange;
+  useEffect(() => {
+    const draft = restoreExecutionDraft(instanceRef.current.drafts[executionDraftKey]);
+    setHostSettings(draft.hostSettings); setFidelity(draft.fidelity); setFillRecalculation(draft.fillRecalculation);
+    executionUpload.current += 1;
+    setExecutionInputKey((key) => key + 1);
+    setExecutionData(null); setExecutionDataState(draft.uploaded ? "missing" : "ready");
+  }, [executionDraftKey]);
+  const saveExecution = (change: Partial<NativeExecutionDraft>) => {
+    const draft: NativeExecutionDraft = { hostSettings, fidelity, fillRecalculation,
+      uploaded: executionData !== null || executionDataState !== "ready", ...change };
+    patchInstance.current(instanceRef.current.id, { drafts: { [executionDraftKey]: JSON.stringify(draft) } });
+  };
   const runContext = JSON.stringify([mode, props.session.exchange, props.session.marketType, props.session.symbol, props.session.interval]);
   const { onInstanceBusy } = props;
   const instanceId = props.instance.id;
@@ -204,7 +219,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
     setSource(text); setParameters(params);
     const draft = JSON.stringify({ source: text, parameters: params, automaticContexts: contexts, historyStart: start, historyEnd: end });
     const item = instanceRef.current;
-    patchInstance.current(item.id, { drafts: { ...item.drafts, [`${language}:${mode}`]: draft } });
+    patchInstance.current(item.id, { drafts: { [`${language}:${mode}`]: draft } });
     try { localStorage.setItem(storageKey, draft); } catch { setError(t("native.saveFailed")); }
   };
   useEffect(() => {
@@ -296,9 +311,13 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const ownedRunIds = strategyRunIds(props.instance, mode);
   const visibleHistory = allHistory ? history : history.filter((item) => ownedRunIds.has(item.run_id));
   const reportRun = historicalRun ?? (run?.result ? run : previousRun);
+  const executionDataMatches = useMemo(() => executionDataState === "ready"
+    && sameExecutionData(reportRun?.config?.execution_data, executionData), [executionDataState, reportRun?.config?.execution_data, executionData]);
   let parametersChanged = false;
   try { parametersChanged = JSON.stringify(reportRun?.config?.parameters ?? {}) !== JSON.stringify(JSON.parse(parameters)); } catch { parametersChanged = true; }
-  const resultStale = !!reportRun && (reportRun !== run || reportRun.config?.source !== source || reportRun.config?.language !== language || parametersChanged);
+  const resultStale = !!reportRun && (reportRun !== run || reportRun.config?.source !== source || reportRun.config?.language !== language || parametersChanged
+    || (mode === "CANDLESCOPE" && (!reportRun.config || executionSettingsChanged(reportRun.config,
+      { hostSettings, fidelity, fillRecalculation, uploaded: executionData !== null }, executionDataMatches))));
   const available = capabilities?.engines.find((item) => item.language === language);
   const engineReady = mode === "NATIVE" ? available?.available : available?.external_available;
   const runDisabled = busy || (mode === "CANDLESCOPE" && fidelity !== "BAR_APPROX" && executionDataState !== "ready") || !engineReady;
@@ -411,21 +430,24 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       {mode === "CANDLESCOPE" && <section className="strategy-settings-section">
         <h3>{t("chartTester.settings.fee")}</h3>
         <div className="strategy-settings-grid">{(["initial_balance", "slippage_bps", "taker_fee_bps", "price_tick"] as const).map((field) => <label key={field}>{t(`native.external.${field}`)}
-          <input type="number" min="0" step="any" disabled={busy} value={hostSettings[field]} onChange={(event) => setHostSettings((value) => ({ ...value, [field]: Number(event.target.value) }))} />
+          <input type="number" min="0" step="any" disabled={busy} value={hostSettings[field]} onChange={(event) => {
+            const next = { ...hostSettings, [field]: Number(event.target.value) }; setHostSettings(next); saveExecution({ hostSettings: next });
+          }} />
         </label>)}</div>
       </section>}
       {mode === "CANDLESCOPE" && <section className="strategy-settings-section">
         <h3>{t("native.external.fidelity")}</h3>
         <div className="strategy-settings-grid">
-          <label>{t("native.external.fidelity")}<select disabled={busy} value={fidelity} onChange={(event) => { setFidelity(event.target.value); setRun(null); setPreviousRun(null); }}>
+          <label>{t("native.external.fidelity")}<select disabled={busy} value={fidelity} onChange={(event) => { setFidelity(event.target.value); saveExecution({ fidelity: event.target.value }); }}>
             <option value="BAR_APPROX">BAR_APPROX</option><option value="TRADE_TAPE">TRADE_TAPE</option><option value="BOOK_ASSISTED">BOOK_ASSISTED</option><option value="BOOK_DEPTH">BOOK_DEPTH</option>
             <option value="BOOK_SAMPLED">{t("native.external.sampledLabel")}</option>
           </select></label>
-          {fidelity !== "BAR_APPROX" && <label>{t("native.external.executionData")}<input type="file" accept="application/json,.json" disabled={busy} onChange={(event) => {
+          {fidelity !== "BAR_APPROX" && <label>{t("native.external.executionData")}<input key={executionInputKey} type="file" accept="application/json,.json" disabled={busy} onChange={(event) => {
             const file = event.target.files?.[0];
             const upload = ++executionUpload.current;
             setExecutionData(null);
             setExecutionDataState(file ? "loading" : "ready");
+            saveExecution({ uploaded: !!file });
             if (file) void file.text().then((text) => {
               if (upload !== executionUpload.current) return;
               setExecutionData(JSON.parse(text)); setExecutionDataState("ready"); setError("");
@@ -435,9 +457,13 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
             });
           }} /></label>}
         </div>
+        {fidelity !== "BAR_APPROX" && executionDataState === "missing" && <p role="status">{t("native.external.uploadMissing")}</p>}
+        {fidelity !== "BAR_APPROX" && (executionData !== null || executionDataState !== "ready") && <button type="button" disabled={busy} onClick={() => {
+          executionUpload.current += 1; setExecutionInputKey((key) => key + 1); setExecutionData(null); setExecutionDataState("ready"); setError(""); saveExecution({ uploaded: false });
+        }}>{t("native.external.clearUpload")}</button>}
         {fidelity === "BOOK_DEPTH" && <p>{t("native.external.depthHint")}</p>}
         {fidelity === "BOOK_SAMPLED" && <p>{t("native.external.sampledHint")}</p>}
-        {fidelity !== "BAR_APPROX" && <><label className="strategy-settings-check"><input type="checkbox" disabled={busy} checked={fillRecalculation} onChange={(event) => setFillRecalculation(event.target.checked)} />{t("native.external.fillRecalculation")}</label><p>{t("native.external.fillHint")}</p>{fidelity !== "BOOK_SAMPLED" && <p>{t("native.external.dataHint")}</p>}</>}
+        {fidelity !== "BAR_APPROX" && <><label className="strategy-settings-check"><input type="checkbox" disabled={busy} checked={fillRecalculation} onChange={(event) => { setFillRecalculation(event.target.checked); saveExecution({ fillRecalculation: event.target.checked }); }} />{t("native.external.fillRecalculation")}</label><p>{t("native.external.fillHint")}</p>{fidelity !== "BOOK_SAMPLED" && <p>{t("native.external.dataHint")}</p>}</>}
       </section>}
       <details className="strategy-settings-section"><summary>{t("replay.hub.sectionAdvanced")}</summary>
         <NativeAdvancedInputs native={mode === "NATIVE"} value={advanced} onChange={setAdvanced} language={language} disabled={busy} exchange={props.session.exchange} />

@@ -261,6 +261,8 @@ export const ja = {
   "orderBook.bidPriceRange": "買い注文の集約: 価格は {min} 以上、{max} 未満。数量はこのグループの合計です。",
   "orderBook.askPriceRange": "売り注文の集約: 価格は {min} より高く、{max} 以下。数量はこのグループの合計です。",
   "native.external.sampledLabel": "サンプル板（深さに上限あり）",
+  "native.external.uploadMissing": "This strategy previously used an uploaded trade or book file. Select it again, or explicitly clear the file selection. Another data source will not be substituted automatically.",
+  "native.external.clearUpload": "Clear file selection",
   "native.external.sampledHint": "サンプル板による近似です。表示された深さのみを消費し、超過数量は未約定のまま残ります。2秒より古い板では約定しません。受動的な待ち行列での約定は推定せず、待機指値は即時約定可能になった場合のみ約定します。同一ミリ秒の約定は新しい板サンプルより先に処理します。同じアーカイブの bars.csv と execution.json を取り込んでください。",
   "native.series.title": "戦略系列のグラフ",
   "native.series.hint": "ランタイムのローソク足、OHLC バー、マーカー、色、塗りつぶしを表示します。このレポートではマーカー形状を近似し、バーごとに1つの塗りつぶし区間を使用します。元のチャートとピクセル単位で同一ではありません。",
