@@ -109,6 +109,8 @@ from .strategy.builtin import build_builtin_provider
 from .strategy.chart_pyne import CHART_PYNE_REVISION, ChartPyneStrategyProvider
 from .strategy.pine_adapter import PineStrategyProvider
 from .strategy.workspace import compile_revision
+from .external_provider.contracts import EXTERNAL_REVISION
+from .external_provider.control import ExternalProviderControl
 from .strategy.python_basket import (
     BASKET_PROTOCOL_V1,
     build_basket_robustness,
@@ -158,6 +160,7 @@ class BacktestService:
         # Test-only seam. Production construction never supplies an injector.
         self._fault_injector = fault_injector
         self._audit_ordinals: dict[str, int] = {}
+        self.external = ExternalProviderControl(settings, repository)
 
     @classmethod
     def start(
@@ -182,6 +185,7 @@ class BacktestService:
         )
 
     def shutdown(self) -> None:
+        self.external.close()
         self.repository.close()
 
     def capabilities(self) -> dict[str, object]:
@@ -216,6 +220,7 @@ class BacktestService:
                 "BACKTEST_TRADE_EXPLANATION_ENABLED": self.settings.trade_explanation_enabled,
                 "BACKTEST_TRADE_TAPE_ENABLED": self.settings.trade_tape_enabled,
                 "BACKTEST_STUDY_ENABLED": self.settings.study_enabled,
+                "BACKTEST_EXTERNAL_PROVIDER_ENABLED": self.settings.external_provider_enabled,
                 "BACKTEST_REPLAY_REVIEW_BRIDGE_ENABLED": self.settings.replay_review_bridge_enabled,
                 "BACKTEST_PYTHON_STRATEGY_ENABLED": app_getenv(
                     "BACKTEST_PYTHON_STRATEGY_ENABLED", "0"
@@ -264,6 +269,7 @@ class BacktestService:
             "compiled_hash": row["compiled_hash"],
             "runtime_revision": row["runtime_revision"],
             "archived_at_ms": row["archived_at_ms"],
+            **({"external_provider": capabilities["external_provider"]} if "external_provider" in capabilities else {}),
         }
 
     def create_strategy_revision(
@@ -273,6 +279,8 @@ class BacktestService:
         if payload.get("language") == "PYTHON_EDITOR":
             return self.create_python_editor_revision(payload, now_ms=stamp)
         try:
+            if str(payload.get("language") or "").upper() == "EXTERNAL_PROVIDER":
+                self.external.require_enabled()
             record = compile_revision(payload, now_ms=stamp)
         except StrategyProviderError as exc:
             raise BacktestError(
@@ -551,6 +559,8 @@ class BacktestService:
             raise BacktestError(
                 "SCHEMA_UNKNOWN_FIELD", "select an active compiled revision first"
             )
+        if row["base_revision_id"] == EXTERNAL_REVISION:
+            raise BacktestError("SMOKE_REQUIRED", "use the external connection smoke on an actual verified Host snapshot")
         start, end = (
             int(payload.get("start_time_ms") or 0),
             int(payload.get("end_time_ms") or 0),
@@ -1156,6 +1166,9 @@ class BacktestService:
             stored_payload["strategy_execution_revision"] = normalized_execution[
                 "strategy_execution_revision"
             ]
+        for name in ("external_connection_id", "external_scope_hash", "external_provider_identity"):
+            if name in normalized_execution:
+                stored_payload[name] = normalized_execution[name]
         if normalized_execution.get("signal_trace_mode"):
             stored_payload["signal_trace_mode"] = normalized_execution[
                 "signal_trace_mode"
@@ -1290,10 +1303,26 @@ class BacktestService:
         record = self.repository.get_run_by_id(run_id)
         if record is None:
             raise BacktestError("SCHEMA_UNKNOWN_FIELD", f"unknown run {run_id}")
-        return record
+        return self._connection_waiting(record)
 
     def list_runs(self) -> list[dict[str, object]]:
-        return self.repository.list_runs()
+        return [self._connection_waiting(record) for record in self.repository.list_runs()]
+
+    def _connection_waiting(self, record: dict[str, Any]) -> dict[str, Any]:
+        if record["state"] == "QUEUED":
+            raw = str(record["config_json"])
+            if '"external_connection_id"' not in raw:
+                return record
+            try:
+                config = json.loads(raw)
+            except (TypeError, ValueError):
+                return record
+            connection_id = config.get("external_connection_id") if isinstance(config, dict) else None
+            if type(connection_id) is str and connection_id:
+                reason = self.external.waiting_reason(connection_id)
+                if reason:
+                    return {**record, "waiting_for": reason}
+        return record
 
     def create_research_launch_context(
         self, payload: Mapping[str, object], *, now_ms: int | None = None
@@ -4137,12 +4166,12 @@ class BacktestService:
             raise BacktestError(
                 "BUDGET_EXCEEDED", "strategy_source exceeds 2000 characters"
             )
-        if self.enforce_registered_revisions:
+        persisted_revision = self.repository.get_strategy_revision(str(payload["strategy_revision_id"]))
+        if self.enforce_registered_revisions or (persisted_revision is not None and persisted_revision["base_revision_id"] == EXTERNAL_REVISION):
             try:
-                persisted_revision = self.repository.get_strategy_revision(
-                    str(payload["strategy_revision_id"])
-                )
                 if persisted_revision is not None:
+                    if persisted_revision["base_revision_id"] == EXTERNAL_REVISION:
+                        self.external.require_enabled()
                     if persisted_revision["archived_at_ms"] is not None:
                         raise StrategyProviderError(
                             "IDENTITY_MUTATION",
@@ -4166,7 +4195,18 @@ class BacktestService:
                         compiled_revision.get("executionSource")
                         or persisted_revision["source_text"]
                     )
-                    if base_revision == "python-source-v1":
+                    if base_revision == EXTERNAL_REVISION:
+                        manifest = self.external.manifest(str(payload["strategy_revision_id"]))
+                        capabilities = manifest.capabilities()
+                        probe = None
+                        if fidelity not in {"BAR_APPROX", "AGG_TRADE_EXECUTION"}:
+                            raise StrategyProviderError("FIDELITY_UNSUPPORTED", "external provider requires a closed BAR signal clock")
+                        if warmup_bars < manifest.warmup_bars:
+                            raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "external Run warmup is below the frozen manifest requirement")
+                        smoke_details = json.loads(str(smoke["details_json"]))
+                        if smoke_details.get("externalSmokeConfigHash") != self.external.smoke_config_hash(payload):
+                            raise StrategyProviderError("SMOKE_REQUIRED", "run actual external smoke for the selected connection, parameters and output mode")
+                    elif base_revision == "python-source-v1":
                         smoke_details = json.loads(str(smoke["details_json"]))
                         requested_mode = str(
                             payload.get("python_runtime_mode") or "SANDBOXED_LOCAL"
@@ -4390,6 +4430,13 @@ class BacktestService:
             execution_config["strategy_execution_revision"] = str(
                 persisted_execution["base_revision_id"]
             )
+        if persisted_execution is not None and persisted_execution["base_revision_id"] == EXTERNAL_REVISION:
+            try:
+                execution_config.update(self.external.validate_binding(payload))
+            except StrategyProviderError as exc:
+                raise BacktestError(exc.code, str(exc)) from exc
+        elif payload.get("external_connection_id") is not None:
+            raise BacktestError("SCHEMA_UNKNOWN_FIELD", "external_connection_id requires an external provider revision")
         if account_model == "LINEAR_PERP_ONE_WAY_V2":
             execution_config.update(
                 {

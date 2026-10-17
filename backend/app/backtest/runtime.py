@@ -41,6 +41,7 @@ from .chart_context import ChartBacktestContextResolver
 from .service import BacktestService
 from .strategy.isolated import IsolatedStrategyProvider
 from .strategy.registry import build_default_strategy_registry
+from .external_provider.provider import ExternalHostInterrupted
 
 logger = logging.getLogger("candlescope.backtest")
 HISTORICAL_CONTRACT_MODE = "HISTORICAL_CONTRACT_V1"
@@ -130,6 +131,9 @@ class BacktestRuntime:
             trade_archive_dir=trade_archive_dir,
         )
         try:
+            if settings.external_provider_enabled:
+                service.external.open()
+                service.external.store.reset_client_leases()
             runtime.worker.start()
         except BaseException:
             runtime.native.shutdown()
@@ -655,6 +659,9 @@ class BacktestWorker:
         )
         try:
             service.recover_expired_leases(now_ms=_now_ms())
+            # Default-off profiles without external jobs keep the original
+            # claim path; no repeated external JSON/status query while idle.
+            external_queue_guard = self.settings.external_provider_enabled or bool(service.repository.queued_provider_connections())
             next_study_reconcile = 0.0
             while not self._stop.is_set():
                 try:
@@ -667,6 +674,8 @@ class BacktestWorker:
                         owner=owner,
                         now_ms=_now_ms(),
                         lease_ms=self._lease_ms,
+                        excluded_run_ids=(service.external.waiting_runs(service.repository.queued_provider_connections())
+                                          if external_queue_guard else ()),
                     )
                     if record is None:
                         self._stop.wait(0.2)
@@ -764,7 +773,14 @@ class BacktestWorker:
             persisted = service.repository.get_strategy_revision(
                 str(record["strategy_revision_id"])
             )
-            if persisted is not None and persisted["base_revision_id"] == "python-source-v1":
+            if persisted is not None and persisted["base_revision_id"] == "external-decision-provider-v1":
+                def check_external_control():
+                    if self._stop.is_set():
+                        raise ExternalHostInterrupted("Host backtest worker is shutting down")
+                    service._assert_execution_control(run_id, deadline=float("inf"), expected_generation=int(record["generation"]))
+
+                provider = service.external.build_provider(record, config, check_control=check_external_control)
+            elif persisted is not None and persisted["base_revision_id"] == "python-source-v1":
                 provider = service.build_python_host_provider(
                     str(record["strategy_revision_id"]),
                     parameters=dict(config.get("parameters") or {}),

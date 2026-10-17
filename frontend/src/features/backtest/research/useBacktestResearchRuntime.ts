@@ -7,6 +7,7 @@ import {
   type BacktestApiClient,
   type BacktestDataset,
   type StrategyRevisionRecord,
+  type ExternalProviderConnection,
 } from "../backtestApi.js";
 import { parseBacktestResearchEntry } from "../backtestDeepLink.js";
 import { isBacktestResearchAdvancedEnabled } from "../backtestFlags.js";
@@ -41,6 +42,7 @@ import type {
   BacktestResearchRuntime,
   BacktestResearchTask,
 } from "./backtestResearchTypes.js";
+import { externalRunDraft, externalSnapshotRequest, isExternalRevision, matchingExternalConnections } from "./externalProviderModel.js";
 
 interface LoadedRunBundle {
   run: BacktestRunRecord;
@@ -145,12 +147,20 @@ export function useBacktestResearchRuntime(options: {
   const [signalTrace, setSignalTrace] = useState<BacktestResearchRuntime["view"]["signalTrace"]>([]);
   const [reviewBridge, setReviewBridge] = useState<Record<string, unknown> | null>(null);
   const [pythonGate, setPythonGate] = useState<PythonStudioGate | null>(null);
+  const [externalConnections, setExternalConnections] = useState<ExternalProviderConnection[]>([]);
+  const [externalTrace, setExternalTrace] = useState<Array<Record<string, unknown>>>([]);
+  const [externalTraceNext, setExternalTraceNext] = useState(0);
+  const [externalTraceHasMore, setExternalTraceHasMore] = useState(false);
+  const externalListRevision = useRef(0);
+  const externalMutation = useRef(false);
+  const inputSelectionRevision = useRef(0);
   const runSelectionRevisionRef = useRef(0);
   const runSelectionAbortRef = useRef<AbortController | null>(null);
   const studySelectionRevisionRef = useRef(0);
   const studySelectionAbortRef = useRef<AbortController | null>(null);
 
   const openRun = useCallback(async (runId: string) => {
+    inputSelectionRevision.current += 1;
     const revision = runSelectionRevisionRef.current + 1;
     runSelectionRevisionRef.current = revision;
     runSelectionAbortRef.current?.abort();
@@ -161,6 +171,9 @@ export function useBacktestResearchRuntime(options: {
     setChart(null);
     setRunComparison(null);
     setSignalTrace([]);
+    setExternalTrace([]);
+    setExternalTraceNext(0);
+    setExternalTraceHasMore(false);
     setOperationError(null);
     try {
       const bundle = await loadRunBundle(api, runId, controller.signal);
@@ -292,6 +305,7 @@ export function useBacktestResearchRuntime(options: {
         snapshot: null,
         revisionId: nextRevisionId,
         outputMode: nextRevisions.find((revision) => revision.revision_id === nextRevisionId)?.output_modes[0],
+        revision: nextRevisions.find((revision) => revision.revision_id === nextRevisionId),
         session: nextSession,
         startTimeMs: range.startTimeMs,
         endTimeMs: range.endTimeMs,
@@ -331,6 +345,38 @@ export function useBacktestResearchRuntime(options: {
     () => selectedDataset(datasets, selectedDatasetId),
     [datasets, selectedDatasetId],
   );
+  const selectedRevision = revisions.find((item) => item.revision_id === selectedRevisionId);
+  const externalEnabled = capabilities?.flags.BACKTEST_EXTERNAL_PROVIDER_ENABLED === true;
+  const selectedRunRequest = useMemo(() => {
+    if (!activeDataset || !snapshot || !selectedRevisionId) return null;
+    try {
+      return normalizeResearchRunDraft({ draft: parseResearchObjectJson(runDraftText, "Run draft"),
+        dataset: activeDataset, snapshot, revisionId: selectedRevisionId, session, startTimeMs, endTimeMs });
+    } catch { return null; }
+  }, [activeDataset, snapshot, selectedRevisionId, runDraftText, session, startTimeMs, endTimeMs]);
+  const matchingConnections = matchingExternalConnections(externalConnections, selectedRunRequest ?? {}, selectedRevision);
+  const externalConnection = matchingConnections.find((item) => item.connection_id === selectedRunRequest?.external_connection_id)
+    ?? matchingConnections[0] ?? null;
+
+  useEffect(() => {
+    if (!advancedEnabled || phase !== "READY" || !externalEnabled || !isExternalRevision(selectedRevision) || !api.externalProviders) return;
+    const controller = new AbortController();
+    let pending = false;
+    const refresh = async () => {
+      if (pending || externalMutation.current) return;
+      pending = true;
+      const revision = externalListRevision.current;
+      try {
+        const next = await api.externalProviders!.list(controller.signal);
+        if (!controller.signal.aborted && !externalMutation.current && externalListRevision.current === revision) setExternalConnections(next);
+      } catch (reason) {
+        if (!controller.signal.aborted && !externalMutation.current && externalListRevision.current === revision) setOperationError(message(reason));
+      } finally { pending = false; }
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 1_000);
+    return () => { controller.abort(); window.clearInterval(timer); };
+  }, [advancedEnabled, api, externalEnabled, phase, selectedRevision]);
 
   useEffect(() => {
     if (!advancedEnabled || phase !== "READY" || !activeDataset || endTimeMs <= startTimeMs) {
@@ -356,7 +402,9 @@ export function useBacktestResearchRuntime(options: {
           ? "LINEAR_PERP_ONE_WAY_V2"
           : String(draftConfig.account_model ?? "LINEAR_PERP_ONE_WAY_V1"),
         funding_mode: String(draftConfig.funding_mode ?? "OFF"),
-      }, controller.signal).then(setSnapshot).catch((reason: unknown) => {
+      }, controller.signal).then((next) => {
+        if (!controller.signal.aborted) setSnapshot(next);
+      }).catch((reason: unknown) => {
         if (!controller.signal.aborted) setOperationError(message(reason));
       });
     }, 200);
@@ -380,6 +428,7 @@ export function useBacktestResearchRuntime(options: {
 
   const activeRunId = activeRun?.run_id ?? null;
   const activeRunState = activeRun?.state ?? null;
+  const activeRunWaiting = activeRun?.waiting_for;
   const activeStudyId = activeStudy?.study_id ?? null;
   const shouldPoll = Boolean(
     (activeRun && researchRunIsActive(activeRun))
@@ -400,7 +449,7 @@ export function useBacktestResearchRuntime(options: {
       setStudies(nextStudies);
       if (activeRunId) {
         const next = nextRuns.find((run) => run.run_id === activeRunId);
-        if (next && next.state !== activeRunState) {
+        if (next && (next.state !== activeRunState || next.waiting_for !== activeRunWaiting)) {
           if (next.state === "COMPLETED") {
             const bundle = await loadRunBundle(api, next.run_id);
             if (!disposed) {
@@ -429,7 +478,7 @@ export function useBacktestResearchRuntime(options: {
       disposed = true;
       window.clearInterval(timer);
     };
-  }, [activeRunId, activeRunState, activeStudyId, advancedEnabled, api, shouldPoll]);
+  }, [activeRunId, activeRunState, activeRunWaiting, activeStudyId, advancedEnabled, api, shouldPoll]);
 
   const perform = useCallback(async (operation: () => Promise<void>) => {
     if (!advancedEnabled) {
@@ -439,10 +488,11 @@ export function useBacktestResearchRuntime(options: {
     setBusy(true);
     setOperationError(null);
     setNotice(null);
+    const owner = inputSelectionRevision.current;
     try {
       await operation();
     } catch (reason) {
-      setOperationError(message(reason));
+      if (inputSelectionRevision.current === owner) setOperationError(message(reason));
     } finally {
       setBusy(false);
     }
@@ -460,6 +510,7 @@ export function useBacktestResearchRuntime(options: {
   }, [api]);
 
   const resetRunDraft = useCallback(() => {
+    inputSelectionRevision.current += 1;
     setRunDraftText(researchObjectJson(composeResearchRunDraft({
       context: launchContext,
       run: activeRun,
@@ -467,6 +518,7 @@ export function useBacktestResearchRuntime(options: {
       snapshot,
       revisionId: selectedRevisionId,
       outputMode: revisions.find((revision) => revision.revision_id === selectedRevisionId)?.output_modes[0],
+      revision: revisions.find((revision) => revision.revision_id === selectedRevisionId),
       session,
       startTimeMs,
       endTimeMs,
@@ -485,8 +537,16 @@ export function useBacktestResearchRuntime(options: {
   }, [activeDataset, endTimeMs, launchContext, revisions, selectedRevisionId, snapshot, startTimeMs]);
 
   const acceptStrategyRevision = useCallback((revision: StrategyRevisionRecord) => {
+    inputSelectionRevision.current += 1;
     setRevisions((current) => [revision, ...current.filter((item) => item.revision_id !== revision.revision_id)]);
     setSelectedRevisionId(revision.revision_id);
+    if (isExternalRevision(revision)) {
+      setRunDraftText((text) => {
+        let config: Record<string, unknown> = {};
+        try { config = parseResearchObjectJson(text, "Run draft"); } catch { /* a newly selected revision starts a fresh valid draft */ }
+        return researchObjectJson(externalRunDraft(config, revision));
+      });
+    }
   }, []);
 
   const effectivePhase = entry.kind === "invalid" ? "ERROR" : phase;
@@ -516,6 +576,7 @@ export function useBacktestResearchRuntime(options: {
       notice,
       operationError,
       selectedDatasetId,
+      selectedRunRequest,
       selectedRevisionId,
       startTimeMs,
       endTimeMs,
@@ -527,9 +588,16 @@ export function useBacktestResearchRuntime(options: {
       signalTrace,
       reviewBridge,
       pythonGate,
+      externalConnections: matchingConnections,
+      externalConnection,
+      externalTrace,
+      externalTraceNext,
+      externalTraceHasMore,
     },
     actions: {
       selectTask: (task) => {
+        inputSelectionRevision.current += 1;
+        setNotice(null);
         setSnapshot(null);
         setSelectedTask(task);
       },
@@ -542,6 +610,8 @@ export function useBacktestResearchRuntime(options: {
         setRefreshRevision((value) => value + 1);
       },
       selectDataset: (datasetId) => {
+        inputSelectionRevision.current += 1;
+        setNotice(null);
         const next = selectedDataset(datasets, datasetId);
         setSelectedDatasetId(next?.dataset_id ?? "");
         setSnapshot(null);
@@ -551,6 +621,8 @@ export function useBacktestResearchRuntime(options: {
         }
       },
       selectRevision: (revisionId) => {
+        inputSelectionRevision.current += 1;
+        setNotice(null);
         const parameterSchema = revisions.find((revision) => revision.revision_id === revisionId)?.parameter_schema;
         setSelectedRevisionId(revisionId);
         setRunDraftText(researchObjectJson(composeResearchRunDraft({
@@ -560,6 +632,7 @@ export function useBacktestResearchRuntime(options: {
           snapshot,
           revisionId,
           outputMode: revisions.find((revision) => revision.revision_id === revisionId)?.output_modes[0],
+          revision: revisions.find((revision) => revision.revision_id === revisionId),
           session,
           startTimeMs,
           endTimeMs,
@@ -575,11 +648,15 @@ export function useBacktestResearchRuntime(options: {
         })));
       },
       setRange: (start, end) => {
+        inputSelectionRevision.current += 1;
+        setNotice(null);
         setSnapshot(null);
         setStartTimeMs(start);
         setEndTimeMs(end);
       },
       setRunDraftText: (text) => {
+        inputSelectionRevision.current += 1;
+        setNotice(null);
         setSnapshot(null);
         setRunDraftText(text);
       },
@@ -587,9 +664,12 @@ export function useBacktestResearchRuntime(options: {
       setStudyDraftText,
       resetStudyDraft,
       createStrategyRevision: async (body) => perform(async () => {
+        const owner = inputSelectionRevision.current;
         const revision = await api.createStrategyRevision(body);
-        acceptStrategyRevision(revision);
-        setNotice(`Revision ${revision.revision_id} compiled.`);
+        if (inputSelectionRevision.current === owner) {
+          acceptStrategyRevision(revision);
+          setNotice(`Revision ${revision.revision_id} compiled.`);
+        } else setRevisions((current) => [revision, ...current.filter((item) => item.revision_id !== revision.revision_id)]);
       }),
       copyStrategyRevision: async () => perform(async () => {
         if (!selectedRevisionId) throw new Error("Select a strategy revision first.");
@@ -618,6 +698,17 @@ export function useBacktestResearchRuntime(options: {
           throw new Error("Dataset snapshot and strategy revision are required.");
         }
         const config = parseResearchObjectJson(runDraftText, "Run draft");
+        if (isExternalRevision(selectedRevision)) {
+          if (!externalEnabled || !api.externalProviders || !externalConnection?.ready || !selectedRunRequest) {
+            throw new Error(t("research.external.needsConnection"));
+          }
+          const owner = inputSelectionRevision.current;
+          await api.externalProviders.smoke(externalConnection.connection_id, {
+            ...externalSnapshotRequest(selectedRunRequest), parameters: config.parameters ?? {}, output_mode: config.output_mode ?? "TARGET_POSITION",
+          });
+          if (inputSelectionRevision.current === owner) setNotice(t("research.external.smokePassed"));
+          return;
+        }
         await api.smokeStrategyRevision(selectedRevisionId, {
           dataset_id: activeDataset.dataset_id,
           snapshot_hash: snapshot.snapshot_hash,
@@ -630,6 +721,55 @@ export function useBacktestResearchRuntime(options: {
           } : {}),
         });
         setNotice("Strategy smoke test passed.");
+      }),
+      registerExternalExample: async () => perform(async () => {
+        if (!externalEnabled || !api.externalProviders) throw new Error(t("research.external.disabled"));
+        const owner = inputSelectionRevision.current;
+        const example = await api.externalProviders.example();
+        const revision = await api.createStrategyRevision({ name: t("research.external.exampleName"), language: "EXTERNAL_PROVIDER",
+          source_text: JSON.stringify(example.manifest), parameter_schema: [] });
+        if (inputSelectionRevision.current === owner) {
+          acceptStrategyRevision(revision);
+          setNotice(t("research.external.registered"));
+        } else setRevisions((current) => [revision, ...current.filter((item) => item.revision_id !== revision.revision_id)]);
+      }),
+      createExternalConnection: async () => perform(async () => {
+        if (!externalEnabled || !api.externalProviders || !selectedRunRequest || !isExternalRevision(selectedRevision)) {
+          throw new Error(t("research.external.selectInputs"));
+        }
+        externalListRevision.current += 1;
+        externalMutation.current = true;
+        const owner = inputSelectionRevision.current;
+        try {
+          const connection = await api.externalProviders.create(externalSnapshotRequest(selectedRunRequest));
+          setExternalConnections((current) => [connection, ...current.filter((item) => item.connection_id !== connection.connection_id)]);
+          if (inputSelectionRevision.current === owner) {
+            setRunDraftText(researchObjectJson({ ...parseResearchObjectJson(runDraftText, "Run draft"), external_connection_id: connection.connection_id }));
+            setNotice(t("research.external.created"));
+          }
+        } finally { externalMutation.current = false; }
+      }),
+      selectExternalConnection: (connectionId) => {
+        if (!matchingConnections.some((item) => item.connection_id === connectionId)) return;
+        try {
+          const config = parseResearchObjectJson(runDraftText, "Run draft");
+          inputSelectionRevision.current += 1;
+          setNotice(null);
+          setRunDraftText(researchObjectJson({ ...config, external_connection_id: connectionId }));
+        }
+        catch (reason) { setOperationError(message(reason)); }
+      },
+      revokeExternalConnection: async () => perform(async () => {
+        if (!api.externalProviders || !externalConnection) return;
+        externalListRevision.current += 1;
+        externalMutation.current = true;
+        const owner = inputSelectionRevision.current;
+        try {
+          await api.externalProviders.revoke(externalConnection.connection_id);
+          setExternalConnections((current) => current.filter((item) => item.connection_id !== externalConnection.connection_id));
+          await refreshRuns();
+          if (inputSelectionRevision.current === owner) setNotice(t("research.external.revoked"));
+        } finally { externalMutation.current = false; }
       }),
       createRun: async () => perform(async () => {
         if (!activeDataset || !snapshot || !selectedRevisionId) {
@@ -644,6 +784,10 @@ export function useBacktestResearchRuntime(options: {
           startTimeMs,
           endTimeMs,
         });
+        if (isExternalRevision(selectedRevision)) {
+          if (!externalEnabled || !externalConnection?.ready) throw new Error(t("research.external.needsConnection"));
+          body.external_connection_id = externalConnection.connection_id;
+        }
         await api.validate(body);
         const created = await api.createRun(body, idempotencyKey("research-run"));
         await refreshRuns();
@@ -682,8 +826,19 @@ export function useBacktestResearchRuntime(options: {
         downloadJson(`${activeRun.run_id}.backtest.json`, payload);
         setNotice(`Run ${activeRun.run_id} export generated by the server.`);
       }),
-      loadSignalTrace: async () => perform(async () => {
+      loadSignalTrace: async (after = 0) => perform(async () => {
         if (!activeRun) throw new Error("Select a Run first.");
+        if (report?.strategy?.external_provider) {
+          if (!externalEnabled || !api.externalProviders) throw new Error(t("research.external.disabled"));
+          const owner = runSelectionRevisionRef.current;
+          const page = await api.externalProviders.trace(activeRun.run_id, after);
+          if (runSelectionRevisionRef.current !== owner) return;
+          setExternalTrace(page.items);
+          setExternalTraceNext(page.next_after);
+          setExternalTraceHasMore(page.has_more);
+          setNotice(t("research.notice.traceLoaded", { count: page.items.length }));
+          return;
+        }
         const page = await api.getSignalTrace(activeRun.run_id, 0, 1_000);
         setSignalTrace(page.items);
         setNotice(t("research.notice.traceLoaded", { count: page.items.length }));

@@ -116,6 +116,16 @@ test("Run deep link derives session from immutable Run config and chart", () => 
   }), false);
 });
 
+test("a queued non-BTC Run keeps its matching frozen context identity before its chart arrives", () => {
+  const run: BacktestRunRecord = { run_id: "bt_queued", dataset_id: context.dataset_identity!.dataset_id,
+    data_epoch: context.dataset_identity!.data_epoch, state: "QUEUED", fidelity_mode: "BAR_APPROX", source_event_kind: "BAR",
+    config_hash: "sha256:queued", config_json: JSON.stringify({ exchange: "okx", market_type: "swap", interval: "1h" }) };
+  assert.equal(researchSessionFromAuthority({ context, run, chart: null }).symbol, "ETHUSDT");
+  assert.notEqual(researchSessionFromAuthority({ context, run: { ...run, data_epoch: "other_epoch" }, chart: null }).symbol, "ETHUSDT");
+  const chart = { run_id: run.run_id, chart_hash: "sha256:chart", symbol: "LTCUSDT", interval: "1m", bars: [], fills: [], equity_curve: [], truncated: false };
+  assert.equal(researchSessionFromAuthority({ context, run: { ...run, state: "COMPLETED" }, chart }).symbol, "LTCUSDT");
+});
+
 test("selected Run overrides a launch context from another chart", () => {
   const run: BacktestRunRecord = {
     run_id: "bt_result_btc_12345678",

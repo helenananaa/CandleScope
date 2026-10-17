@@ -96,6 +96,17 @@ test("changing revision does not leak the previous Run output contract", () => {
   assert.deepEqual(draft.parameters, {});
 });
 
+test("fresh spot research uses a cash account and reopening preserves an explicit frozen account", () => {
+  const input = { context: null, run: null, dataset, snapshot, revisionId: "srv_model",
+    session: { exchange: "local", marketType: "spot", symbol: "LTCUSDT", interval: "1m" } as const,
+    startTimeMs: 0, endTimeMs: 479999 };
+  assert.equal(composeResearchRunDraft(input).account_model, "SPOT_CASH_V1");
+  assert.equal(composeResearchRunDraft({ ...input, session: { ...input.session, marketType: "usdm" } }).account_model, "LINEAR_PERP_ONE_WAY_V1");
+  const run = { run_id: "bt_existing", state: "COMPLETED" as const, fidelity_mode: "BAR_APPROX" as const,
+    source_event_kind: "BAR" as const, config_hash: "sha256:old", config_json: JSON.stringify({ strategy_revision_id: "srv_model", account_model: "LINEAR_PERP_ONE_WAY_V1" }) };
+  assert.equal(composeResearchRunDraft({ ...input, run }).account_model, "LINEAR_PERP_ONE_WAY_V1");
+});
+
 test("Study draft remains a separate object and normalization never starts it", () => {
   const draft = composeResearchStudyDraft({
     context: null,

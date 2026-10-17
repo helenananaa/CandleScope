@@ -2,11 +2,13 @@ import type { ChartSession } from "../../chart-session/chartSessionTypes.js";
 import type {
   BacktestDataset,
   BacktestSnapshot,
+  StrategyRevisionRecord,
 } from "../backtestApi.js";
 import type {
   BacktestResearchLaunchContext,
   BacktestRunRecord,
 } from "../backtestTypes.js";
+import { editableResearchRunConfig, externalRunDraft, isExternalRevision } from "./externalProviderModel.js";
 
 const DAY_MS = 86_400_000;
 const SAFE_REPLAY_RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
@@ -66,15 +68,16 @@ export function composeResearchRunDraft(input: {
   snapshot: BacktestSnapshot | null;
   revisionId: string;
   outputMode?: string | undefined;
+  revision?: StrategyRevisionRecord | undefined;
   session: ChartSession;
   startTimeMs: number;
   endTimeMs: number;
 }): Record<string, unknown> {
   const parsed = parseResearchRunConfig(input.run);
-  const existing = parsed.strategy_revision_id === input.revisionId ? parsed : {};
+  const existing = parsed.strategy_revision_id === input.revisionId ? editableResearchRunConfig(parsed) : {};
   const fidelityMode = String(existing.fidelity_mode ?? input.run?.fidelity_mode ?? "BAR_APPROX");
   const overrides = input.context?.execution_overrides;
-  return {
+  const composed = {
     initial_balance: "10000",
     slippage_bps: "1",
     taker_fee_bps: "0",
@@ -98,7 +101,7 @@ export function composeResearchRunDraft(input: {
     max_drawdown_percent: "50",
     daily_loss_limit: null,
     cooldown_events: 0,
-    account_model: "LINEAR_PERP_ONE_WAY_V1",
+    account_model: input.session.marketType === "spot" ? "SPOT_CASH_V1" : "LINEAR_PERP_ONE_WAY_V1",
     contract_data_mode: "LEGACY_FIXED_V1",
     execution_model_revision: null,
     participation_rate: null,
@@ -119,7 +122,8 @@ export function composeResearchRunDraft(input: {
       taker_fee_bps: overrides.feeBps, maker_fee_bps: overrides.feeBps, slippage_bps: overrides.slippageBps,
       fee_source: "user-defined", sizing_policy: "EQUITY_PERCENT_V1",
     } : {}),
-    parameters: input.context?.parameters ?? existing.parameters ?? {},
+    parameters: isExternalRevision(input.revision) && input.context?.strategy_revision_id !== input.revisionId
+      ? existing.parameters ?? {} : input.context?.parameters ?? existing.parameters ?? {},
     strategy_revision_id: input.revisionId,
     dataset_id: input.dataset?.dataset_id ?? "",
     data_epoch: input.snapshot?.data_epoch ?? input.dataset?.data_epoch ?? "",
@@ -132,6 +136,7 @@ export function composeResearchRunDraft(input: {
     exchange: input.session.exchange,
     market_type: input.session.marketType,
   };
+  return input.revision && isExternalRevision(input.revision) ? externalRunDraft(composed, input.revision) : composed;
 }
 
 export function composeResearchStudyDraft(input: {
@@ -244,7 +249,7 @@ export function normalizeResearchRunDraft(input: {
 }): Record<string, unknown> {
   const fidelityMode = String(input.draft.fidelity_mode ?? "BAR_APPROX");
   return {
-    ...input.draft,
+    ...editableResearchRunConfig(input.draft),
     strategy_revision_id: input.revisionId,
     dataset_id: input.dataset.dataset_id,
     data_epoch: input.snapshot.data_epoch,

@@ -20,6 +20,11 @@
     ],
     "extraResources": [
       {
+        "from": "../packages/candlescope-external-provider",
+        "to": "packages/candlescope-external-provider",
+        "filter": ["src/**/*.py", "src/**/*.json", "run_example.py", "pyproject.toml", "README.md"]
+      },
+      {
         "from": "../packages/candlescope-backtest-sdk/src",
         "to": "packages/candlescope-backtest-sdk/src",
         "filter": [
