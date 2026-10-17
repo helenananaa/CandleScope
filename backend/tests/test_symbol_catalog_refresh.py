@@ -379,6 +379,103 @@ def test_failed_refresh_retries_automatically_and_shutdown_clears_timers(
     asyncio.run(run())
 
 
+def test_lazy_catalogs_do_not_arm_refresh_or_retry_timers(monkeypatch) -> None:
+    adapter = _Adapter()
+    adapter.eager_catalog_refresh = False
+    _install_registry(monkeypatch, adapter)
+
+    async def run() -> None:
+        await symbols_api.refresh_market_catalog(adapter, "spot", force=True)
+        assert symbols_api._active_symbol_count(("test", "spot")) == 1
+        assert symbols_api._market_refresh_timers == {}
+
+        adapter.empty = True
+        await symbols_api.refresh_market_catalog(adapter, "spot", force=True)
+        assert symbols_api._market_refresh_state[("test", "spot")].stale is True
+        assert symbols_api._market_refresh_timers == {}
+
+    asyncio.run(run())
+    assert adapter.calls == 2
+
+
+def test_eager_catalog_success_arms_ttl_timer(monkeypatch) -> None:
+    adapter = _Adapter()
+    _install_registry(monkeypatch, adapter)
+
+    async def run() -> None:
+        await symbols_api.refresh_market_catalog(adapter, "spot", force=True)
+        assert set(symbols_api._market_refresh_timers) == {("test", "spot")}
+        await symbols_api.cancel_exchange_metadata_refreshes()
+
+    asyncio.run(run())
+
+
+def test_discovery_max_age_attempts_each_catalog_once_per_interval(
+    monkeypatch,
+) -> None:
+    adapter = _Adapter()
+    adapter.eager_catalog_refresh = False
+    _install_registry(monkeypatch, adapter)
+    monkeypatch.setattr(symbols_api, "SYMBOL_CATALOG_TTL_SECONDS", 0.01)
+    monkeypatch.setattr(symbols_api, "SYMBOL_CATALOG_FAILURE_RETRY_SECONDS", 0.0)
+
+    async def run() -> None:
+        await symbols_api.refresh_market_catalog(
+            adapter, "spot", force=False, max_age_seconds=3600,
+        )
+        await asyncio.sleep(0.02)
+        # Past the TTL, a normal caller refreshes, but the sweep does not.
+        await symbols_api.refresh_market_catalog(
+            adapter, "spot", force=False, max_age_seconds=3600,
+        )
+        assert adapter.calls == 1
+        await symbols_api.refresh_market_catalog(adapter, "spot", force=False)
+        assert adapter.calls == 2
+
+        # A failed attempt also counts, so the sweep does not hammer a venue
+        # that keeps failing.
+        adapter.empty = True
+        await symbols_api.refresh_market_catalog(adapter, "spot", force=True)
+        assert adapter.calls == 3
+        await asyncio.sleep(0.02)
+        await symbols_api.refresh_market_catalog(
+            adapter, "spot", force=False, max_age_seconds=3600,
+        )
+        assert adapter.calls == 3
+
+        state = symbols_api._market_refresh_state[("test", "spot")]
+        state.last_attempt_at -= 7200
+        state.last_success_at -= 7200
+        await symbols_api.refresh_market_catalog(
+            adapter, "spot", force=False, max_age_seconds=3600,
+        )
+        assert adapter.calls == 4
+
+    asyncio.run(run())
+
+
+def test_snapshot_encoding_matches_one_compact_json_document() -> None:
+    import json
+
+    rows = [{"symbol": f"S{index}", "raw": {"n": index, "t": "é"}} for index in range(600)]
+    payload = {
+        "version": 1,
+        "revision": 7,
+        "saved_at": 1.5,
+        "markets": [
+            {"exchange": "a", "market_type": "spot", "last_success_at": 1.0, "symbols": rows},
+            {"exchange": "b", "market_type": "swap", "last_success_at": 2.0, "symbols": rows[:1]},
+        ],
+    }
+    expected = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    assert symbols_api._encode_snapshot(payload) == expected
+    assert symbols_api._encode_snapshot({**payload, "markets": []}) == json.dumps(
+        {**payload, "markets": []},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+
 def test_automatic_catalog_retry_yields_to_foreground(monkeypatch) -> None:
     adapter = _Adapter()
     adapter.empty = True
