@@ -78,6 +78,37 @@ test("semantic fit falls back when the content provider has no usable range", ()
   assert.deepEqual(calls, [["fitContent"]]);
 });
 
+test("session persistence anchors at real rows rather than a future carrier tail", () => {
+  const { chart, timeScale, calls } = createChart();
+  const controller = new ViewportController({
+    chartProvider: () => chart,
+    contentLogicalRangeProvider: () => ({ from: 0, to: 5 }),
+  });
+  timeScale.range = { from: -89, to: 10 };
+  assert.equal(controller.captureRightOffset(), 5);
+  controller.applySessionRestore({ mode: "anchor", rightOffset: 5 });
+  assert.deepEqual(timeScale.range, { from: -89, to: 10 });
+  assert.equal(calls.some(([name]) => name === "scrollToPosition"), false);
+  // Legacy saved negative engine offsets are normalized to zero by the
+  // persistence policy; zero still means the real final candle.
+  controller.applySessionRestore({ mode: "anchor", rightOffset: 0 });
+  assert.deepEqual(timeScale.range, { from: -94, to: 5 });
+});
+
+test("semantic default reset keeps default zoom and real-content padding", () => {
+  const { timeScale } = createChart();
+  const scale = { ...timeScale, resetTimeScale: () => { scale.range = { from: 100, to: 199 }; } };
+  scale.getVisibleLogicalRange = () => scale.range;
+  scale.setVisibleLogicalRange = (range) => { scale.range = range; };
+  const controller = new ViewportController({
+    chartProvider: () => structuralMock<AdapterChart>({ timeScale: () => scale }),
+    contentLogicalRangeProvider: () => ({ from: 0, to: 5 }),
+  });
+  controller.resetToDefault();
+  assert.deepEqual(scale.range, { from: -89, to: 10 });
+  assert.equal(controller.captureRightOffset(), 5);
+});
+
 test("interaction lock queues the highest priority intent", () => {
   const { chart, calls } = createChart();
   let unlock: (() => void) | undefined;
