@@ -6,13 +6,20 @@ API/worker calls; task execution never holds a database transaction across I/O.
 from __future__ import annotations
 
 import json
-from contextlib import contextmanager
-from pathlib import Path
+import os
 import sqlite3
 import time
 import uuid
+from contextlib import contextmanager
+from pathlib import Path
 
-from .models import PreparationError, PreparationRequest, Requirement, canonical, fingerprint
+from .models import (
+    PreparationError,
+    PreparationRequest,
+    Requirement,
+    canonical,
+    fingerprint,
+)
 
 TERMINAL = frozenset({"READY", "FAILED", "CANCELLED"})
 
@@ -80,6 +87,7 @@ class PreparationRepository:
                     PRIMARY KEY(receipt, path),
                     FOREIGN KEY(path) REFERENCES preparation_publications(path)
                 );
+                CREATE INDEX IF NOT EXISTS preparation_receipt_files_path ON preparation_receipt_files(path);
             """)
             # Coverage receipts can share a physical object. Pending deletion
             # may also overlap a freshly re-adopted receipt after a restart.
@@ -457,12 +465,24 @@ class PreparationRepository:
                     rows.append((str(Path(path).resolve()), kind, Path(path).stat().st_size, self.now()))
             except FileNotFoundError:
                 pass  # an atomic publication/cleanup moved the temporary file
+        self.register_inventoried_publications(rows, reservation=reservation)
+
+    def register_inventoried_publications(self, rows, *, reservation=None):
+        """Store file observations already stat'ed by the scope walker.
+
+        Only the inventory walker supplies these rows; publication callers use
+        register_publications so their paths are still resolved and inspected.
+        """
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             db.executemany("""INSERT INTO preparation_publications VALUES (?,?,?,?)
                 ON CONFLICT(path) DO UPDATE SET bytes=excluded.bytes,checked_ms=excluded.checked_ms""", rows)
             if reservation is not None:
                 db.execute("DELETE FROM preparation_publication_writes WHERE id=?", (reservation,))
+
+    def publication_paths(self):
+        with self.connect() as db:
+            return {row[0] for row in db.execute("SELECT path FROM preparation_publications")}
 
     def register_publication_scopes(self, scopes):
         with self.connect() as db:
@@ -541,18 +561,42 @@ class PreparationRepository:
             with self.connect() as db:
                 paths = [row[0] for row in db.execute("SELECT path FROM preparation_publications")]
         else:
-            paths = [str(Path(path).resolve()) for path in paths]
+            # Publication ledger and adapter paths are already absolute. Do not
+            # resolve every missing cache path component during startup GC.
+            paths = [str(path) if Path(path).is_absolute() else str(Path(path).resolve()) for path in paths]
         rows = []
+        missing = []
         for path in paths:
             if stop is not None and stop.is_set():
                 raise PreparationError("STORAGE_INVENTORY_INTERRUPTED", "Storage inventory was interrupted", retryable=True)
+            absent = False
             try:
                 size = Path(path).stat().st_size
             except FileNotFoundError:
                 size = 0
-            rows.append((size, self.now(), path))
+                absent = True
+            checked = self.now()
+            if absent:
+                missing.append((path, checked))
+            rows.append((size, checked, path))
         with self.connect() as db:
             db.executemany("UPDATE preparation_publications SET bytes=?,checked_ms=? WHERE path=?", rows)
+        return missing
+
+    def forget_missing_publications(self, missing):
+        """Drop absent, unreferenced ledger rows only inside inventoried scopes.
+
+        Recreated in-scope files are discovered by the next physical walk.
+        Receipt mappings and out-of-scope legacy paths must remain tracked.
+        A subsequent publication's observation must not be deleted by this pass.
+        """
+        scopes = [str(root) for root, _kind in self.publication_scopes()]
+        scoped = [(path, checked) for path, checked in missing
+                  if any(path == root or path.startswith(root + os.sep) for root in scopes)]
+        with self.connect() as db:
+            db.executemany("""DELETE FROM preparation_publications
+                WHERE path=? AND checked_ms=? AND bytes=0 AND NOT EXISTS
+                (SELECT 1 FROM preparation_receipt_files f WHERE f.path=preparation_publications.path)""", scoped)
 
     def check_physical_budget(self):
         with self.connect() as db:
