@@ -1,16 +1,93 @@
 import asyncio
-import threading
 import sqlite3
+import threading
 from pathlib import Path
 
 import pytest
 
+from app.data_preparation.bar_adapter import BarPreparationAdapter
 from app.data_preparation.models import PreparationError
 from app.data_preparation.repository import PreparationRepository
 from app.data_preparation.service import PreparationService
-from app.data_preparation.bar_adapter import BarPreparationAdapter
 from app.data_preparation.storage_inventory import reconcile
 from tests.test_data_preparation import Adapter, async_test, bars, request, terminal
+
+
+def test_inventory_tolerates_background_retirement_of_a_queued_directory(tmp_path, monkeypatch):
+    import os
+    import shutil
+    root = tmp_path / 'archive'
+    retired = root / 'old-generation'
+    retired.mkdir(parents=True)
+    (retired / 'availability.json').write_text('{}')
+    (root / 'current.json').write_text('{}')
+    repo = PreparationRepository(tmp_path / 'jobs.db')
+    repo.register_publication_scopes([(root, 'trade_archive')])
+    reconcile(repo, threading.Event())
+    original = os.scandir
+    def disappearing(path):
+        if str(path) == str(retired):
+            shutil.rmtree(retired)
+        return original(path)
+    monkeypatch.setattr(os, 'scandir', disappearing)
+    reconcile(repo, threading.Event())
+    assert repo.storage_bytes() == 2
+
+
+def test_inventory_observes_files_once_and_refreshes_missing_and_external_paths(tmp_path, monkeypatch):
+    root = tmp_path / "archive"
+    root.mkdir()
+    live, missing, external = root / "live", root / "missing", tmp_path / "external"
+    live.write_bytes(b"a" * 5)
+    missing.write_bytes(b"b" * 7)
+    external.write_bytes(b"c" * 11)
+    repo = PreparationRepository(tmp_path / "jobs.db")
+    repo.register_publication_scopes([(root, "trade_archive")])
+    repo.register_publications([(path, "trade_archive") for path in [live, missing, external]])
+    missing.unlink()
+    live.write_bytes(b"d" * 13)
+    external.write_bytes(b"e" * 17)
+    (root / "outside-link").symlink_to(external)
+    checked = []
+    refresh = repo.refresh_publications
+    def observed_refresh(*, stop=None, paths=None):
+        checked.extend(paths)
+        return refresh(stop=stop, paths=paths)
+    monkeypatch.setattr(repo, "refresh_publications", observed_refresh)
+    reconcile(repo, threading.Event())
+    assert set(checked) == {str(missing), str(external)}
+    assert repo.cache_inventory()["publication_bytes"] == 30
+    assert str(missing) not in repo.publication_paths()
+    assert str(root / "outside-link") not in repo.publication_paths()
+    assert repo.settings()["storage_inventory_state"] == "READY"
+
+
+def test_missing_ledger_cleanup_preserves_receipts_external_paths_and_late_publications(tmp_path):
+    root = tmp_path / 'cache'
+    root.mkdir()
+    repo = PreparationRepository(tmp_path / 'jobs.db')
+    repo.register_publication_scopes([(root, 'trade_archive')])
+    mapped, obsolete, late = (root / name for name in ['mapped', 'obsolete', 'late'])
+    external = tmp_path / 'external'
+    for path in [mapped, obsolete, late, external]:
+        path.write_bytes(b'abc')
+    repo.register_publications([(p, 'trade_archive') for p in [mapped, obsolete, late, external]])
+    with repo.connect() as db:
+        db.execute('INSERT INTO preparation_receipt_files VALUES (?,?)', ('frozen-receipt', str(mapped)))
+    for path in [mapped, obsolete, late, external]:
+        path.unlink()
+    missing = repo.refresh_publications()
+    late.write_bytes(b'new')
+    repo.register_publications([(late, 'trade_archive')])
+    repo.forget_missing_publications(missing)
+    assert repo.publication_paths() == {str(mapped), str(late), str(external)}
+    assert repo.storage_bytes() == 3
+    # Previously removed metadata is rediscovered if restored inside its scope.
+    obsolete.write_bytes(b'restored')
+    reconcile(repo, threading.Event())
+    assert str(obsolete) in repo.publication_paths()
+    assert repo.storage_bytes() == 11
+
 
 
 def test_adopted_unknown_cache_files_are_preserved_and_charged(tmp_path):
@@ -168,6 +245,9 @@ async def test_inventory_runs_in_background_and_gates_only_preparation(tmp_path,
         job = await service.submit(request())
         await asyncio.sleep(0.05)
         assert adapter.calls == 0
+        waiting = service.repository.get(job["id"])
+        assert waiting["state"] == "RUNNING"
+        assert waiting["stage"] == "CHECKING_STORAGE"
         if cancel:
             await service.cancel(job["id"])
             assert (await terminal(service, job["id"]))["state"] == "CANCELLED"

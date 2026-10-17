@@ -8,9 +8,15 @@ from typing import Protocol
 
 from app.core.bounded_executor import ExecutorBusyError
 
-from .models import PreparationError, PreparationRequest, Requirement, fingerprint, split_requirement
-from .repository import PreparationRepository
 from .lease import PreparationLease
+from .models import (
+    PreparationError,
+    PreparationRequest,
+    Requirement,
+    fingerprint,
+    split_requirement,
+)
+from .repository import PreparationRepository
 from .storage import finish_before_cancel, storage_call
 
 logger = logging.getLogger(__name__)
@@ -268,6 +274,9 @@ class PreparationService:
         try:
             await self._checkpoint(job_id)
             if self._inventory_task is not None:
+                waiting_job = await self._storage(self.repository.get, job_id)
+                if not self._inventory_task.done() and waiting_job["result"] is None:
+                    await self._storage(self.repository.update, job_id, state="RUNNING", stage="CHECKING_STORAGE")
                 while not self._inventory_task.done():
                     await self._checkpoint(job_id)
                     try:
