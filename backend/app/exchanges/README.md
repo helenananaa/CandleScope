@@ -71,6 +71,13 @@ retryable `503 symbol_catalog_unavailable` rather than a misleading empty
 speculative startup/TTL refreshes wait for foreground data work to remain
 quiet. On-demand catalog requests bypass that speculative dwell.
 
+Only eagerly refreshed catalogs (the primary Binance/OKX venues) arm TTL and
+failure-retry timers. Lazy catalogs, including every generic CCXT venue, are
+refreshed on demand under the same TTL and retry deadline, or by the
+background discovery sweep at most once per `SYMBOL_DISCOVERY_REFRESH_SECONDS`
+(default 6 h). One CCXT catalog load parses thousands of markets on the event
+loop, so ~200 self-renewing 5-minute refreshes would saturate it.
+
 Shared production rate-limit managers start conservatively: the first request
 for a newly created bucket is an exact-cost probe, so a process restart cannot
 turn unknown exchange state into a full-bucket burst. Startup initializes the

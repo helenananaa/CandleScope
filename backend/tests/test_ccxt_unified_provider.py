@@ -749,6 +749,39 @@ def test_primary_http_fallback_poll_reuses_one_market_bootstrap(
     assert created[0].close_calls == 1
 
 
+def test_rest_pool_memoizes_symbols_until_the_catalog_object_changes(
+    monkeypatch: Any,
+) -> None:
+    from app.exchanges.ccxt_ext import generic
+
+    created = _counting_exchange_factory(monkeypatch)
+    scans: list[str] = []
+    resolve = generic.resolve_ccxt_symbol
+
+    def counting_resolve(exchange: Any, descriptor: Any, **kwargs: Any) -> str:
+        scans.append(descriptor.symbol)
+        return resolve(exchange, descriptor, **kwargs)
+
+    monkeypatch.setattr(generic, "resolve_ccxt_symbol", counting_resolve)
+    plugin = CcxtUnifiedPlugin(get_ccxt_catalog_entry("bybit"))
+    config = IngestionConfig(proxy_mode="none")
+    request = TransportRequest(_descriptor(StreamType.TICKER), limit=1)
+
+    async def run() -> None:
+        for _poll in range(3):
+            await plugin.fetch_history_with_config(request, config)
+        assert scans == ["BTC/USDT"]
+        # A reload publishes a new markets mapping; cached answers must not
+        # outlive the catalog they were resolved against.
+        created[0].markets = dict(created[0].markets)
+        await plugin.fetch_history_with_config(request, config)
+        assert scans == ["BTC/USDT", "BTC/USDT"]
+        await plugin.close_history_transport(config)
+
+    asyncio.run(run())
+    assert created[0].ticker_calls == 4
+
+
 def test_binance_derivative_factory_does_not_bootstrap_spot_catalog() -> None:
     entry = get_ccxt_catalog_entry("binance")
     config = IngestionConfig(proxy_mode="none")

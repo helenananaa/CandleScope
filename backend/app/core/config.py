@@ -854,6 +854,14 @@ SYMBOL_CATALOG_MIN_RETAIN_RATIO = min(
     1.0,
     max(0.0, float(os.getenv("SYMBOL_CATALOG_MIN_RETAIN_RATIO", "0.5"))),
 )
+# The background discovery sweep visits every lazily loaded venue catalog
+# (~200 CCXT markets).  One CCXT catalog load costs seconds of event-loop CPU,
+# so the sweep re-downloads a lazy catalog only when it is older than this.
+# Explicitly selecting a venue still refreshes it with the normal TTL.
+SYMBOL_DISCOVERY_REFRESH_SECONDS = max(
+    0.0,
+    float(os.getenv("SYMBOL_DISCOVERY_REFRESH_SECONDS", "21600")),
+)
 SYMBOL_CATALOG_SNAPSHOT_PATH = Path(
     os.getenv(
         "SYMBOL_CATALOG_SNAPSHOT_PATH",

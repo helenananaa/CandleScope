@@ -63,6 +63,11 @@ singleflight，然后明确返回可重试的 `503 symbol_catalog_unavailable`�
 `200` 空列表。自动刷新失败会按有界 deadline 重试；启动和 TTL 投机刷新必须等前台
 行情任务持续安静，用户主动请求目录则不受这段 dwell 限制。
 
+只有主动刷新的目录（主 Binance/OKX 交易所）会挂 TTL 与失败重试定时器。惰性目录（包括
+所有通用 CCXT 交易所）只在被请求时按同样的 TTL 与重试 deadline 刷新，或由后台发现扫描
+每隔 `SYMBOL_DISCOVERY_REFRESH_SECONDS`（默认 6 小时）最多刷新一次。一次 CCXT 目录加载
+会在事件循环上解析数千个市场，约 200 个每 5 分钟自我续期的刷新会让事件循环饱和。
+
 生产共享限流器采用保守冷启动：新 bucket 第一次只放行一次精确 request-cost 探针，
 避免进程重启把未知的交易所预算状态误当成满桶。启动时先完成核心 DataManager 初始化，
 所有上游目录刷新任务在 shutdown 时都可取消并等待收口。

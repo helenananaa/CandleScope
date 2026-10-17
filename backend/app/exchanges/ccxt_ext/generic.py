@@ -118,6 +118,10 @@ class _RestExchangeEntry:
     borrowers: int
     idle: asyncio.Event
     reload_task: asyncio.Task[Any] | None = None
+    # Successful symbol resolutions for ``resolved_markets``.  A catalog reload
+    # replaces ``exchange.markets``, which invalidates every cached answer.
+    resolved_markets: Any = None
+    resolved_symbols: dict[tuple[str, str], str] = field(default_factory=dict)
 
 
 class _RestExchangePool:
@@ -246,7 +250,8 @@ class _RestExchangePool:
         """Resolve a symbol, refreshing a stale pooled catalog once on miss."""
 
         try:
-            return resolve_ccxt_symbol(
+            return self._resolve_cached_symbol(
+                selection,
                 exchange,
                 descriptor,
                 market_type=market_type,
@@ -288,11 +293,48 @@ class _RestExchangePool:
                     ):
                         current.reload_task = None
 
-        return resolve_ccxt_symbol(
+        return self._resolve_cached_symbol(
+            selection,
             exchange,
             descriptor,
             market_type=market_type,
         )
+
+    def _resolve_cached_symbol(
+        self,
+        selection: str,
+        exchange: Any,
+        descriptor: StreamDescriptor,
+        *,
+        market_type: str | None,
+    ) -> str:
+        # ``resolve_ccxt_symbol`` scans every market of the venue.  An HTTP
+        # fallback feed asks for the same symbol on every poll, so memoize
+        # successful answers for the client's current catalog object.
+        current = self._entries.get(selection)
+        if current is None or current.exchange is not exchange:
+            return resolve_ccxt_symbol(
+                exchange,
+                descriptor,
+                market_type=market_type,
+            )
+        markets = exchange.markets
+        if current.resolved_markets is not markets:
+            current.resolved_symbols.clear()
+            current.resolved_markets = markets
+        key = (
+            str(market_type or descriptor.market_type).strip().lower(),
+            str(descriptor.symbol or "").strip(),
+        )
+        symbol = current.resolved_symbols.get(key)
+        if symbol is None:
+            symbol = resolve_ccxt_symbol(
+                exchange,
+                descriptor,
+                market_type=market_type,
+            )
+            current.resolved_symbols[key] = symbol
+        return symbol
 
     def record_request(self, *, elapsed_ms: float, failed: bool) -> None:
         self._request_count += 1

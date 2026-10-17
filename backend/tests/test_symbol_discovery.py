@@ -130,11 +130,11 @@ async def test_background_sweep_includes_lazy_catalogs_but_never_query_providers
     monkeypatch.setattr(discovery.catalog, "get_exchange_registry", lambda: SimpleNamespace(list=lambda: adapters))
     monkeypatch.setattr(discovery.catalog, "_foreground_busy_probe", None)
     calls = []
-    async def refresh(adapter, market, force):
-        calls.append((adapter.id, market, force))
+    async def refresh(adapter, market, force, max_age_seconds=None):
+        calls.append((adapter.id, market, force, max_age_seconds))
     monkeypatch.setattr(discovery.catalog, "refresh_market_catalog", refresh)
     await discovery_catalog.refresh_discovery_catalogs()
-    assert calls == [("lazy", "spot", False)]
+    assert calls == [("lazy", "spot", False, discovery.catalog.SYMBOL_DISCOVERY_REFRESH_SECONDS)]
 
 
 @async_test
