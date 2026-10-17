@@ -55,11 +55,23 @@ jobs:
           PYTHONPATH: backend:packages/candlescope-plugin-sdk/src
         if: runner.os != 'Windows'
         run: python -m pytest -o pythonpath= -q backend/tests/test_plugin_runtime_venv_launch.py
-      - name: Verify engine and offline plugin installation
+      - name: Verify published release engine and offline installation
+        if: github.event_name != 'pull_request'
         run: >-
           python packages/candlescope-plugin-pine-compat/scripts/qualify_release.py
           --lock packages/candlescope-plugin-pine-compat/release/${{ matrix.lock }}
           --platform ${{ matrix.platform }} --output dist
+      - name: Verify current source compatibility against the pinned published engine
+        if: github.event_name == 'pull_request'
+        run: >-
+          python packages/candlescope-plugin-pine-compat/scripts/qualify_source_candidate.py
+          --lock packages/candlescope-plugin-pine-compat/release/${{ matrix.lock }}
+          --platform ${{ matrix.platform }} --output dist
+      - name: Verify causal generator and candidate lock boundaries
+        if: github.event_name == 'pull_request'
+        run: |
+          python -m pytest -o pythonpath= -q packages/candlescope-plugin-sdk/tests/test_synthetic_ohlcv.py
+          python -m pytest -q packages/candlescope-plugin-pine-compat/tests/test_source_candidate.py
       - name: Install host catalog test dependencies
         run: |
           python -c "from pathlib import Path; source = Path('backend/requirements.txt').read_text(); Path('dist/host-requirements.txt').write_text('\n'.join(line for line in source.splitlines() if not line.startswith('-e ')))"
