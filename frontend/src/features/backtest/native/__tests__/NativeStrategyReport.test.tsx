@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { NativeStrategyReport } from "../NativeStrategyReport.js";
 import type { NativeRun } from "../nativeBacktestApi.js";
 
-function report(values: number[], tradeCount = 0, view: "overview" | "trades" = "overview") {
+function report(values: number[], tradeCount = 0, view: "overview" | "trades" = "overview", stale = false) {
   const run: NativeRun = {
     execution_mode: "CANDLESCOPE", run_id: "layout-test", state: "COMPLETED", created_at_ms: 0,
     runtime_identity: { engine: { package: "test", version: "1", code_sha256: "test" } },
@@ -13,8 +13,16 @@ function report(values: number[], tradeCount = 0, view: "overview" | "trades" = 
       bars: [], graphics: [], raw_output: {}, diagnostics: [],
       equity: values.map((value, time) => ({ time, value })) },
   };
-  return renderToStaticMarkup(<NativeStrategyReport run={run} view={view} />);
+  return renderToStaticMarkup(<NativeStrategyReport run={run} view={view} stale={stale} />);
 }
+test("a report from a previous dataset revision remains readable with a visible stale status", () => {
+  const current = report([100, 200, 150, 190]);
+  const previous = report([100, 200, 150, 190], 0, "overview", true);
+  assert.doesNotMatch(current, /role="status"/);
+  assert.match(previous, /role="status"/);
+  assert.match(previous, /data-tone="warning"/);
+  assert.match(previous, /25%/);
+});
 test("report drawdown uses successive peaks, not the first or last equity", () => {
   assert.match(report([100, 200, 150, 190]), /25%/);
   assert.doesNotMatch(report([100, 200, 150, 190]), /NaN|Infinity/);

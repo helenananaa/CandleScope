@@ -49,11 +49,20 @@ function sameJson(left: unknown, right: unknown, depth = 0): boolean {
     && keys.every((key) => Object.hasOwn(b, key) && sameJson(a[key], b[key], depth + 1));
 }
 export type FrozenExecutionSettings = {
+  dataset_id?: string;
+  data_epoch?: string;
   execution_fidelity?: string;
   host_settings?: Record<string, number | null>;
   fill_recalculation?: boolean;
   execution_data?: unknown;
 };
+export function datasetIdentityChanged(
+  config: Pick<FrozenExecutionSettings, "dataset_id" | "data_epoch"> | undefined,
+  current: { datasetId: string; dataEpoch: string } | undefined,
+): boolean {
+  return current !== undefined
+    && (config?.dataset_id !== current.datasetId || config?.data_epoch !== current.dataEpoch);
+}
 export function executionSettingsChanged(config: FrozenExecutionSettings, current: NativeExecutionDraft, dataMatches: boolean): boolean {
   if ((config.execution_fidelity ?? "BAR_APPROX") !== current.fidelity) return true;
   const settings = config.host_settings;

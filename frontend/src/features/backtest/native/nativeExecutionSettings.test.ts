@@ -1,6 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { defaultExecutionDraft, executionSettingsChanged, restoreExecutionDraft, sameExecutionData } from "./nativeExecutionSettings.js";
+import { datasetIdentityChanged, defaultExecutionDraft, executionSettingsChanged, restoreExecutionDraft, sameExecutionData } from "./nativeExecutionSettings.js";
+
+test("an immutable report belongs to both its dataset and data revision", () => {
+  const config = Object.freeze({ dataset_id: "LTC-six-bars", data_epoch: "original-epoch" });
+  const original = { datasetId: config.dataset_id, dataEpoch: config.data_epoch };
+  assert.equal(datasetIdentityChanged(config, original), false);
+  assert.equal(datasetIdentityChanged(config, { ...original, dataEpoch: "changed-last-bar" }), true);
+  assert.equal(datasetIdentityChanged(config, { ...original, datasetId: "another-import" }), true);
+  assert.equal(datasetIdentityChanged({}, original), true);
+  assert.equal(datasetIdentityChanged(undefined, original), true);
+  assert.equal(datasetIdentityChanged(config, undefined), false);
+  assert.equal(datasetIdentityChanged(config, original), false); // returning to the original revision restores relevance.
+});
 
 test("host execution draft round-trips every financial setting and upload requirement", () => {
   const draft = { hostSettings: { initial_balance: 20000, slippage_bps: 3, taker_fee_bps: 2, price_tick: .005 },
