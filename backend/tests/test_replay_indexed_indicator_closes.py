@@ -133,6 +133,9 @@ def test_close_reader_cancels_and_never_crosses_frozen_warmup(prepared, monkeypa
         is None
     )
     cancel = Event()
+    # Exercise cancellation in the older indexed fallback independently of
+    # the new direct-column reader (covered by its own cancellation test).
+    monkeypatch.setattr(repo, "tape_indicator_closes_at_revision", lambda *a, **k: None)
     original = MarketRange.indicator_closes_at
 
     def cancelled(self, offsets, signal):
