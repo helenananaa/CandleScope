@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pine_compat
 from .strategy_time import engine_bars, engine_magnifier, chart_records
+from .event_requests import run_with_event_requests
 from candlescope_plugin_sdk.native_strategy import identity, serve
 
 
@@ -46,9 +47,10 @@ def execute(request):
     program, overrides, requirements, uses_magnifier = prepare(request)
     context = request["context"]
     supplied = {f"{item['symbol']}:{item['timeframe']}": engine_bars(item["bars"]) for item in request.get("contexts", [])}
-    output = program.run(engine_bars(request["bars"]), input_overrides=overrides or None,
+    output = run_with_event_requests(lambda request_bars: program.run(engine_bars(request["bars"]), input_overrides=overrides or None,
                          chart_symbol=context["symbol"], chart_timeframe=context["timeframe"],
-                         request_bars=supplied or None, magnifier_bars=engine_magnifier(request.get("magnifier")))
+                         request_bars=request_bars, magnifier_bars=engine_magnifier(request.get("magnifier"))),
+                         request, supplied, engine_bars, pine_compat)
     return pack(request, output, requirements, uses_magnifier)
 
 

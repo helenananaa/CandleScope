@@ -1,6 +1,7 @@
 """External broker adapter. Never evaluates the native broker ledger."""
 import pine_compat
 from .strategy_time import engine_bars
+from .event_requests import run_with_event_requests
 from candlescope_plugin_sdk.native_strategy import identity, serve, serve_evaluator
 from functools import lru_cache
 
@@ -38,9 +39,9 @@ def execute(request):
         if grid <= 0 or max(grid.numerator, grid.denominator) > 4294967295:
             raise ValueError("EXTERNAL_UNSUPPORTED: tick size exceeds the runtime price grid")
         supplied["$chart"] = {"minMove":grid.numerator, "priceScale":grid.denominator}
-    result = program.run_external(engine_bars(request["bars"]), accounts, input_overrides=parameters or None,
+    result = run_with_event_requests(lambda request_bars: program.run_external(engine_bars(request["bars"]), accounts, input_overrides=parameters or None,
                                   chart_symbol=request["context"]["symbol"], chart_timeframe=request["context"]["timeframe"], execution_passes=passes,
-                                  request_bars=supplied or None)
+                                  request_bars=request_bars), request, supplied, engine_bars, pine_compat)
     if result["output"].get("diagnostics"):
         raise ValueError(str(result["output"]["diagnostics"]))
     return {"contract": result["protocol"], "pyramiding": result.get("pyramiding", 1), "intents": result["intents"], "graphics": result["output"].get("plots", []),
