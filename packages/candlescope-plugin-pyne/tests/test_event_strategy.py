@@ -82,6 +82,25 @@ def test_calendar_boundaries_use_actual_month_and_year_lengths():
         closed_boundary({"time":1706745660}, "1M")
 
 
+def test_frozen_higher_timeframe_bricks_wait_for_the_source_close():
+    req = request()
+    req["bars"] = [dict(time=i*60, open=100, high=101, low=99, close=100, volume=10)
+                   for i in range(10)]
+    req["contexts"] = [{"symbol": "OTHER", "timeframe": "5", "bars": [
+        dict(time=i*300, open=c, high=c+1, low=c-1, close=c, volume=50)
+        for i, c in enumerate([100, 106])]}]
+    req["source"] = '''strategy("Frozen higher timeframe")
+r = ticker.renko("OTHER", "Traditional", 2)
+plot(request.security(r, "5", "close"), "Brick")
+plot(request.security(r, "5", "close[1]"), "Previous")
+'''
+    full = values(execute(req), req["bars"])
+    assert full == [[None]*9 + [106], [None]*9 + [104]]
+    for count in [4, 5, 9, 10]:
+        prefix = {**req, "bars": req["bars"][:count]}
+        assert values(execute(prefix), prefix["bars"]) == [series[:count] for series in full]
+
+
 def test_fixed_history_seek_matches_fresh_market_prefix():
     req = request()
     req["source"] = '''def init(ctx):

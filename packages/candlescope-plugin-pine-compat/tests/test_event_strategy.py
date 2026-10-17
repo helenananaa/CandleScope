@@ -110,6 +110,28 @@ def test_missing_frozen_source_and_old_runtime_fail_explicitly():
             req,{},engine_bars,SimpleNamespace())
 
 
+def test_frozen_higher_timeframe_bricks_wait_for_the_source_close():
+    req = request()
+    req["bars"] = [dict(time=i*60, open=100, high=101, low=99, close=100, volume=10)
+                   for i in range(10)]
+    req["contexts"] = [{"symbol": "OTHER", "timeframe": "5", "bars": [
+        dict(time=i*300, open=c, high=c+1, low=c-1, close=c, volume=50)
+        for i, c in enumerate([100, 106])]}]
+    req["source"] = '''//@version=6
+strategy("Frozen higher timeframe")
+r = ticker.renko("OTHER", "Traditional", 2)
+plot(request.security(r, "5", close))
+plot(request.security(r, "5", close[1]))
+'''
+    full = values(execute(req))
+    assert full == [[None]*9 + [106], [None]*9 + [104]]
+    # The provider has both complete5m bars from the start. The1m evaluation
+    # still cannot observe the second bar's bricks before its600s close.
+    for count in [4, 5, 9, 10]:
+        assert values(execute({**req, "bars": req["bars"][:count]})) == [
+            series[:count] for series in full]
+
+
 @pytest.mark.parametrize("parameter", [None,0,-1,"invalid",True])
 def test_invalid_parameters_do_not_generate_approximate_data(parameter):
     with pytest.raises(ValueError,match="SYNTHETIC_INPUT_INVALID"):
