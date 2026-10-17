@@ -980,6 +980,8 @@ export default function ReplayTrainingPageShell({
       fibInverted={drawings.view.fibInverted}
       positionSize={drawings.view.positionSize}
       drawingSnapEnabled={drawings.view.drawingSnapEnabled}
+      drawingContinuousEnabled={drawings.view.drawingContinuousEnabled}
+      drawingAutoSelectEnabled={drawings.view.drawingAutoSelectEnabled}
       onSelectedDrawingChange={drawings.actions.handleSelectedDrawingChange}
       mainOverlayLines={review === null ? indicators.view.mainOverlayLines : reviewIndicators.view.mainOverlayLines}
       subPanes={review === null ? indicators.view.subPanes : reviewIndicators.view.subPanes}
@@ -1029,7 +1031,11 @@ export default function ReplayTrainingPageShell({
       drawingsHidden={drawings.view.drawingsHidden}
       onToggleDrawingsHidden={drawings.actions.handleToggleDrawingsHidden}
       drawingSnapEnabled={drawings.view.drawingSnapEnabled}
+      drawingContinuousEnabled={drawings.view.drawingContinuousEnabled}
+      drawingAutoSelectEnabled={drawings.view.drawingAutoSelectEnabled}
       onDrawingSnapEnabledChange={drawings.actions.handleDrawingSnapEnabledChange}
+      onDrawingContinuousEnabledChange={drawings.actions.handleDrawingContinuousEnabledChange}
+      onDrawingAutoSelectEnabledChange={drawings.actions.handleDrawingAutoSelectEnabledChange}
       textFontSize={drawings.view.textFontSize}
       onTextFontSizeChange={drawings.actions.setTextFontSize}
       textBold={drawings.view.textBold}
