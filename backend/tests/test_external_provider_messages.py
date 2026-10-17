@@ -8,7 +8,11 @@ import pytest
 from app.backtest.external_provider.contracts import parse_manifest
 from app.backtest.external_provider.messages import observation_payload, validate_reply
 from app.backtest.external_provider.wire import decode, digest, encode
-from app.backtest.strategy.protocol import ObservationFrame, StrategyProviderError, canonical_hash
+from app.backtest.strategy.protocol import (
+    ObservationFrame,
+    StrategyProviderError,
+    canonical_hash,
+)
 from tests.test_external_provider_contracts import manifest
 
 

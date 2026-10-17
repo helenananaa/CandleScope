@@ -4,12 +4,23 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from contextlib import suppress
+from typing import Any
 
-from app.backtest.strategy.protocol import ObservationFrame, ProviderCapabilities, StrategyOutput, StrategyProviderError
+from app.backtest.strategy.protocol import (
+    ObservationFrame,
+    ProviderCapabilities,
+    StrategyOutput,
+    StrategyProviderError,
+)
 
 from .journal import ExternalCallJournal
 from .messages import decision_output, observation_payload
+
+
+class ExternalHostInterrupted(BaseException):
+    """Graceful Host shutdown requeues work instead of recording model failure."""
 
 
 class ExternalDecisionProvider:
@@ -129,8 +140,8 @@ class ExternalDecisionProvider:
                 raise StrategyProviderError(reply["error"]["code"], "external model reported a bounded execution failure")
             return reply
         except BaseException:
-            try:
+            # Cleanup cannot replace the primary Host/model failure, and must
+            # not log an external exception's potentially private message.
+            with suppress(Exception):
                 self.abort()
-            except Exception:
-                self._stopped.set()
             raise

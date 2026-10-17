@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-import re
 from typing import Any
 
-from app.backtest.strategy.protocol import ObservationFrame, StrategyOutput, StrategyProviderError
+from app.backtest.strategy.protocol import (
+    ObservationFrame,
+    StrategyOutput,
+    StrategyProviderError,
+)
 
 from .contracts import ExternalProviderManifest
 from .wire import decode, digest, encode

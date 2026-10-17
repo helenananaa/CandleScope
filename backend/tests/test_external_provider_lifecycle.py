@@ -7,14 +7,17 @@ from dataclasses import replace
 
 import pytest
 
-from app.backtest.external_provider.journal import ExternalCallJournal
 from app.backtest.external_provider.contracts import parse_manifest
+from app.backtest.external_provider.journal import ExternalCallJournal
 from app.backtest.external_provider.provider import ExternalDecisionProvider
 from app.backtest.external_provider.repository import ExternalConnectionRepository
 from app.backtest.strategy.host_adapter import StrategyHostAdapter
-from app.backtest.strategy.protocol import StrategyProviderError, StrategyProviderSession
-from tests.test_external_provider_journal import TOKEN
+from app.backtest.strategy.protocol import (
+    StrategyProviderError,
+    StrategyProviderSession,
+)
 from tests.test_external_provider_contracts import manifest
+from tests.test_external_provider_journal import TOKEN
 from tests.test_external_provider_messages import frame
 
 CONTEXT = {"runId": "run_one", "inputPlan": {"roles": ["BARS"]}}
@@ -85,7 +88,7 @@ class IndependentClient:
                                     client_generation=self.generation, now_ms=now,
                                     **{key: packet[key] for key in ("run_id", "host_generation", "cursor", "call_id", "input_hash")},
                                     result={"decision": decision, "model_state": state})
-        except BaseException as exc:
+        except BaseException as exc:  # noqa: BLE001 - propagate every client-thread failure to the test owner
             self.failure = exc
 
 
@@ -144,10 +147,16 @@ def test_recovery_replays_committed_steps_without_model_calls_then_bootstraps_cu
         recovered.prepare(CONTEXT)
         recovered.restore(checkpoint)
         assert recovered.step(replace(frame(), sequence=2)) == first
+        # The Host can persist a new checkpoint before it has replayed all
+        # committed calls; the model is not invoked to reconstruct old state.
+        replay_checkpoint = recovered.snapshot()
         assert recovered.step(replace(frame(), sequence=3)) == second
         assert len(client.calls) == count
         assert recovered.step(replace(frame(), sequence=4)).payload == {"targetExposure": "4"}
         assert client.calls[-1]["bootstrap"]["model_state"] == {"bars": 3, "reports": 0}
+        recovered.restore(replay_checkpoint)
+        assert recovered.step(replace(frame(), sequence=3)) == second
+        assert recovered.step(replace(frame(), sequence=4)).payload == {"targetExposure": "4"}
         recovered.close()
 
 
