@@ -222,6 +222,7 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
     <details className="native-report-disclosure"><summary>{t("report.details")}</summary><div className="native-report-toolbar">
     <details className="native-report-method"><summary>{t("native.mode")}</summary>
     <p><strong>{result.account_authority}</strong> · {run.execution_mode === "CANDLESCOPE" && run.runtime_identity.engine.package} {run.runtime_identity.engine.version} · {result.fill_model}{result.fidelity && <> · {result.fidelity}</>}</p>
+    {result.evaluation_contract && <p><code>{result.evaluation_contract}</code></p>}
     {run.config?.context && <p>{run.config.context.symbol} · {run.config.interval} · {JSON.stringify(run.config.parameters)}</p>}
     <p>{t(run.execution_mode === "CANDLESCOPE" ? "native.external.authority" : "native.authority")}</p>
     {result.fidelity === "BOOK_DEPTH" && <p>{t("native.external.depthHint")}</p>}

@@ -68,7 +68,7 @@ def test_descriptor_is_public_versioned_and_reports_the_engine_boundary() -> Non
 
     assert descriptor.id == RUNTIME_ID == "candlescope.pyne"
     assert descriptor.package == "candlescope-plugin-pyne"
-    assert descriptor.version == PLUGIN_VERSION == "0.3.0"
+    assert descriptor.version == PLUGIN_VERSION == "0.3.1"
     assert [language.id for language in descriptor.languages] == ["pyne"]
     assert descriptor.meta["expectedEngineVersion"] == EXPECTED_PYNE_VERSION
     assert descriptor.meta["executorBoundary"] == "sidecar-inline"

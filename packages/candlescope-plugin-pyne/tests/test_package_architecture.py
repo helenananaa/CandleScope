@@ -91,9 +91,14 @@ def test_candidate_lock_is_local_and_does_not_rewrite_the_published_lock() -> No
     }
 
 
-def test_current_release_lock_matches_the_adapter_and_offline_dependencies() -> None:
+def test_published_release_lock_remains_immutable_while_source_candidate_advances() -> None:
     lock = json.loads((ROOT / "release/release-lock.json").read_text(encoding="utf-8"))
-    assert lock["plugin"]["version"] == candlescope_plugin_pyne.__version__
+    # 0.3.1 is a source candidate, not a replacement published release.
+    assert lock["plugin"]["version"] == "0.3.0"
+    assert lock["wheels"]["candlescope-plugin-pyne"]["version"] == "0.3.0"
+    assert candlescope_plugin_pyne.__version__ == "0.3.1"
+    import hashlib
+    assert hashlib.sha256((ROOT / "release/release-lock.json").read_bytes()).hexdigest() == "dcc63847a96ebe101695ef8e9ce17ba182c4246b7ccdf77f8b9c0e73f8110b98"
     assert lock["wheels"]["pyne-runtime"]["version"] == "0.4.1"
     assert tuple(lock["wheels"]) == (
         "candlescope-plugin-pyne", "candlescope-plugin-sdk", "pyne-runtime", "numpy", "tzdata",

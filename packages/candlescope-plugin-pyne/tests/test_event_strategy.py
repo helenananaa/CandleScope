@@ -121,3 +121,17 @@ def on_bar(ctx, bar):
         stepped = session.advance(count)
         standalone = execute({**req, "bars": req["bars"][:count]})
         assert values(stepped, req["bars"][:count]) == values(standalone, req["bars"][:count])
+
+
+def test_incremental_strategy_with_no_orders_is_not_rejected_as_an_indicator():
+    req = request()
+    req["source"] = '''def init(ctx):
+    ctx.strategy.configure(initial_capital=4321)
+def on_bar(ctx, bar):
+    ctx.plot("Close", bar.close)
+'''
+    result = execute(req)
+    assert result["orders"] == result["trades"] == []
+    assert result["equity"] == [{"time": bar["time"], "value": 4321} for bar in req["bars"]]
+    with pytest.raises(ValueError, match="NATIVE_STRATEGY_REQUIRED"):
+        execute({**req, "source": 'def on_bar(ctx, bar):\n    ctx.plot("Close", bar.close)\n'})

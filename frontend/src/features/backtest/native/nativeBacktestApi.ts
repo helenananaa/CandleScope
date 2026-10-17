@@ -4,6 +4,7 @@ import type { FrozenExecutionSettings } from "./nativeExecutionSettings.js";
 export interface NativeResult {
   account_authority: string;
   account_model?: string;
+  evaluation_contract?: string;
   fill_model: string;
   fidelity?: string;
   report_hash: string;
