@@ -127,7 +127,10 @@ function createSupervisor() {
       ...(app.isPackaged ? desktopBackendEnvironment(JSON.parse(readFileSync(
         path.join(app.getAppPath(), "dist", "desktop-runtime-config.json"), "utf8",
       ))) : {}),
-      ...(app.isPackaged ? { PYTHONNOUSERSITE: "1", PYTHONDONTWRITEBYTECODE: "1" } : {}),
+      ...(app.isPackaged ? {
+        PYTHONNOUSERSITE: "1", PYTHONDONTWRITEBYTECODE: "1",
+        CANDLESCOPE_BUNDLED_PLUGIN_MANIFEST: path.join(runtimeRoot, "python-runtime", "plugins", "manifest.json"),
+      } : {}),
       CANDLE_HOST: "127.0.0.1",
       CANDLE_PORT: String(backendPort),
       CANDLE_DATA_DIR: process.env.CANDLE_DATA_DIR || path.join(app.getPath("userData"), "data"),
