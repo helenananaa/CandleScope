@@ -373,19 +373,31 @@ export function createIndicatorComputeJobCoordinator({
       );
       if (joinedRejection) throw joinedRejection.reason;
     }
-    const joinedOutcomes = ownedBatch
-      ? []
-      : settled.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+    const joinedOutcomes = !ownedBatch || force
+      ? settled.slice(0, joinedBatches.size).flatMap((result) => (
+          result.status === "fulfilled" ? [result.value] : []
+        ))
+      : [];
     const ownedOutcome = ownedSettlement?.status === "fulfilled"
       ? ownedSettlement.value
       : undefined;
     const stale = lifecycleStale
       || Boolean(ownedOutcome?.stale)
       || joinedOutcomes.some((outcome) => outcome.stale);
+    // A forced caller may have cleared its rendered output after an earlier
+    // partial publication. Joining the physical batch must restore those
+    // results too; ordinary joiners still avoid redundant publications.
+    const available = new Map([
+      ...(force ? joinedOutcomes.flatMap((outcome) => outcome.results) : []),
+      ...(ownedOutcome?.results || []),
+    ].map((result) => [result.jobKey, result]));
     return {
       joined,
       queued: queued.length,
-      results: stale ? [] : (ownedOutcome?.results || []) as TResult[],
+      results: stale ? [] : Array.from(unique.keys()).flatMap((key) => {
+        const result = available.get(key);
+        return result ? [result as TResult] : [];
+      }),
       skipped,
       stale,
     };
