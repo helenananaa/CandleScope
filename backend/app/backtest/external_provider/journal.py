@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import sqlite3
 import hashlib
+import sqlite3
 import uuid
 from typing import Any
 
 from app.backtest.strategy.protocol import StrategyProviderError
 
 from .contracts import ExternalProviderManifest
-from .messages import OPERATIONS, validate_reply
+from .messages import OPERATIONS, ValidatedReply, validate_reply
 from .repository import ExternalConnectionRepository
 from .wire import decode, digest, encode
 
@@ -73,6 +73,8 @@ class ExternalCallJournal:
             if existing is not None:
                 if existing["input_hash"] != input_hash:
                     _fail("external call input changed during replay", "IDENTITY_MUTATION")
+                if existing["reply_json"] is None and session["status"] == "INTERRUPTED":
+                    _fail("external Host session was interrupted", "PROVIDER_STALE_GENERATION")
                 return self._record(existing)
             if session["status"] != "ACTIVE" or cursor != session["last_completed"] + 1:
                 _fail("external calls must be serialized in Host order")
@@ -128,8 +130,7 @@ class ExternalCallJournal:
                result: object, now_ms: int) -> dict[str, Any]:
         # Credentials never become semantic model state, diagnostics or trace data.
         text = encode(result)
-        if type(token) is str and token in text:
-            _fail("external reply contains connection credentials", "PROVIDER_UNAUTHORIZED_WRITE")
+        contains_credential = type(token) is str and token in text
         with self.store._transaction() as connection:
             binding = self.store._authorize(connection, connection_id, token)
             self.store._require_client(binding, client_id, client_generation, now_ms)
@@ -141,8 +142,22 @@ class ExternalCallJournal:
             if row is None or row["call_id"] != call_id or row["input_hash"] != input_hash:
                 _fail("external response does not match the Host call")
             self._record(row)
-            validated = validate_reply(self.manifest, row["operation"], decode(row["payload_json"]),
-                                       result, max_state_bytes=self.max_state_bytes)
+            if row["reply_json"] is None and session["status"] == "INTERRUPTED":
+                _fail("external Host session was interrupted", "PROVIDER_STALE_GENERATION")
+            try:
+                if contains_credential:
+                    _fail("external reply contains connection credentials", "PROVIDER_UNAUTHORIZED_WRITE")
+                validated = validate_reply(self.manifest, row["operation"], decode(row["payload_json"]),
+                                           result, max_state_bytes=self.max_state_bytes)
+                selected = decode(session["context_json"])["context"].get("outputMode")
+                if validated.output is not None and selected is not None and validated.output.kind != selected:
+                    _fail("external decision differs from the selected Run output mode")
+            except StrategyProviderError as exc:
+                # Only an authorized response to this exact active call may
+                # fail it. Keep a digest for retry fencing, never raw rejected
+                # state, credentials, validation inputs or exception messages.
+                validated = ValidatedReply({"error": {"code": exc.code, "message": "external reply failed Host validation"},
+                                            "rejected_reply_hash": digest(result)}, None, None, None)
             reply_json = encode(validated.recorded)
             reply_hash = digest(validated.recorded)
             if row["reply_json"] is not None:
@@ -175,11 +190,25 @@ class ExternalCallJournal:
             if type(cursor) is not int or not 0 <= cursor <= session["last_completed"]:
                 _fail("external checkpoint cursor is not committed")
             call = self._call(connection, run_id, cursor) if cursor else None
+            if call is not None:
+                self._record(call)
             state_hash = call["state_after_hash"] if call is not None else None
-            self._state(connection, run_id, state_hash)
             if state_hash:
-                connection.execute("UPDATE external_provider_states SET pinned = 1 WHERE run_id = ? AND state_hash = ?",
-                                   (run_id, state_hash))
+                retained = connection.execute(
+                    "SELECT 1 FROM external_provider_states WHERE run_id = ? AND state_hash = ?", (run_id, state_hash)
+                ).fetchone()
+                if retained is not None:
+                    self._state(connection, run_id, state_hash)
+                    connection.execute("UPDATE external_provider_states SET pinned = 1 WHERE run_id = ? AND state_hash = ?",
+                                       (run_id, state_hash))
+                elif cursor < session["last_completed"]:
+                    # Recovery may checkpoint while replaying previously
+                    # committed decisions whose intermediate state was GC'd.
+                    # No model executes at that cursor: replay must catch up
+                    # before a new call can bootstrap the retained latest state.
+                    self._state(connection, run_id, session["state_hash"])
+                else:
+                    _fail("external checkpoint state is unavailable", "RECOVERY_NOT_ALLOWED")
             return {"schema_version": "candlescope.external-checkpoint/1", "run_id": run_id, "cursor": cursor,
                     "context_hash": session["context_hash"], "model_state_hash": state_hash,
                     "manifest_hash": self.manifest.identity()["manifest_hash"]}
@@ -264,7 +293,7 @@ class ExternalCallJournal:
     @staticmethod
     def _generation(session: sqlite3.Row, generation: int) -> None:
         if type(generation) is not int or generation != session["host_generation"]:
-            _fail("external Host generation is stale")
+            _fail("external Host generation is stale", "PROVIDER_STALE_GENERATION")
 
     def _available(self, connection: sqlite3.Connection, session: sqlite3.Row) -> None:
         binding = self.store._row(connection, session["connection_id"])

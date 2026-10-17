@@ -42,6 +42,7 @@ Host 无法证明外部进程实际采用何种训练资料、设备或算法。
 - JSON 使用排序键、紧凑分隔符、ASCII 转义、有限数值及 UTF-8，与 Host `canonical_hash` 一致。重复键、过深结构、不精确的大整数和超预算消息拒绝；金额及数量使用有界十进制字符串。外部输出不提供可覆盖 Host 的 output/state hash，由 Host 从校验后的内容计算。
 - 外部阶段沿用 Host 的 `WARMUP` / `EVALUATION`。`TARGET_POSITION.targetExposure` 沿用现有 Host 的绝对基础币数量含义；订单使用 Host 的 snake_case 价格字段，不接受外部 order ID 或生效序号。
 - 调用记录只保存决策和状态摘要。模型状态按摘要去重，保留每个 run 的当前状态及 checkpoint 固定状态，释放未固定的中间状态。逻辑字节预算与调用、响应、状态、游标在同一 SQLite 事务内更新，超限整笔回滚；该预算不是物理数据库文件大小保证。
+- 恢复重放途中也允许写 checkpoint：若该游标的中间模型状态已回收，checkpoint 仍固定已提交调用的状态摘要，继续回读不可变决策，追平日志后才从最新已保存模型状态执行新调用。不能截掉日志后直接让模型从已回收的旧状态重新推理。独立 Host 启动先挂起旧 ACTIVE 调用并清客户端租约；新 worker generation 接管前不继续交付旧调用。
 - 客户端掉线、超时、取消、应用退出和恢复失败必须有明确终态或等待状态。沿用 Host 单步及整局预算，不通过放宽既有全局限制来让样例通过。
 - 连接记录由单独的 Host SQLite owner 管理；默认关闭不创建文件，不修改旧账户/报告记录。取消或撤销只能关闭连接和未完成调用，不改写既有交易真值。
 
@@ -57,4 +58,16 @@ Host 无法证明外部进程实际采用何种训练资料、设备或算法。
 | 产品 | 模型版本与数据绑定可见、等待/失败明确、无夹具或表达式静默替代、源码或数据变化使旧结果不再冒充当前结果 |
 | 交付 | 相关组合回归后统一安装包；默认关闭门禁及启用范围的实际原生流程分别留证 |
 
-当前已完成 manifest、单客户端连接租约、严格观察/响应校验、持久调用/状态记录层及 `strategy-provider/1` 生命周期桥接。93 项定向检查、fatal Ruff 和后端架构门禁通过，包括独立 SQLite owner 竞争、重开回读、旧 generation 拒绝、不同响应重试拒绝、checkpoint 状态固定、预算回滚、真实 Host session 的 warmup/step/execution-report/close、超时与取消，以及从 checkpoint 重放记录决策后恢复模型状态。测试客户端使用独立 SQLite owner 的测试线程，尚不是公开 HTTP/独立进程或金融撮合端到端证明。证据为 `output/acceptance-delivery-20261016/batch-g/lifecycle.xml`（本地 QA 产物，不纳入源码提交）。尚未接通真实外部进程、Host Run 及 smoke、公开接口、SDK、工作台和完整应用恢复；未形成 G 安装包或原生验收结论。
+## 当前实施及证据
+
+已接通 `EXTERNAL_PROVIDER` 不可变修订、单客户端连接租约、严格观察/响应校验、持久调用/状态记录、Host `strategy-provider/1` 生命周期、实际 smoke 与 Run 队列。预检仅解析能力，不能落回内置表达式/夹具，也不能绕过实际 smoke。Run 固定连接、manifest、scope 与参数/输出模式；参数或连接变化要求重做实际 smoke。离线恢复任务等待连接并给其他任务让出 worker；撤销连接取消关联活动 Run，重试撤销幂等。合法调用中的无效输出直接记录明确失败；错误身份和旧 generation 不得终止当前有效调用。
+
+公开控制入口为 `/api/v1/backtests/provider-connections`：创建/列出、`/{id}/revoke`、`/{id}/smoke`；独立客户端使用 `/{id}/connect`、`/{id}/poll`、`/{id}/reply`。SDK 请求使用 Bearer 凭据，严格解析重复键和有界 JSON，错误不回显原输入。接口仅接受 loopback peer 及允许的浏览器 Origin。桌面 sidecar 在显式启用时发布无凭据的当前 endpoint，客户端先校验实例再发送凭据。客户端位于独立的 `packages/candlescope-external-provider`，只用标准库；原 `candlescope-backtest-sdk` 继续不含网络客户端。
+
+当前组合结果：190 项后端检查通过，1 项 Windows CRT descriptor 回归在本机 macOS 跳过；独立外部 SDK 15 项通过。新增模块完整 Ruff、既有改动文件 E9/F 检查及后端架构门禁通过。证据为 `output/acceptance-delivery-20261016/batch-g/http-runtime-integration.xml`、`external-sdk.xml`（本地 QA 产物，不纳入源码提交）。
+
+独立客户端进程通过真实本机 HTTP 完成 smoke 与 BAR Run：8 根测试 BAR、3 根 warmup、5 次 evaluation 决策，Host 在第 5/7 个事件产生 BUY/SELL，独立 Decimal 净现金流 `-0.0070019`。Host runtime 完整关闭并以新端口重开后，同一外部进程重连，原记录/凭据文件不变，再跑的 fills/orders/ledger/equity_curve 相等。另在模型处理第 5 根时中断 worker，再完整重开 runtime，generation 2 从 checkpoint 及同一调用恢复，最终仍只有两笔成交，现金流相同。
+
+聚合成交双时钟也通过独立 HTTP 进程：明确人工测试 fixture，CSV 最后价格 14，成交序列对应 BAR 最后价格 6；外部取得成交序列推导的 8 根完结 BAR，没有 raw trade/book 或未来值。Host 在后续第 5/7 条成交（241000/361000ms）按 NEXT_PRINT 成交，净现金流仍 `-0.0070019`，没有以导入 CSV 偷换信号源。这不是官方市场存档或原生包验收证明。
+
+尚未完成工作台连接操作、示例客户端的安装包交付、统一组合完整回归及实际原生安装包/全进程重启验收。上述 runtime 重开测试仍在同一个测试服务进程内，不能冒称桌面完整退出。无 G 安装包、PR 或 BT-05 完成结论；Study/训练/完整外部引擎不在此版本的已实现范围。

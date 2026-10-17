@@ -9,9 +9,9 @@ import os
 import sqlite3
 import threading
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
 
 from app.backtest.strategy.protocol import StrategyProviderError, canonical_hash
 
@@ -40,12 +40,14 @@ CREATE TABLE IF NOT EXISTS external_provider_connections (
 class ExternalConnectionRepository:
     """Only Host connection metadata; never opens a market/account database."""
 
-    def __init__(self, path: Path, *, lease_ms: int = 15_000, max_connections: int = 64) -> None:
-        if lease_ms <= 0 or max_connections <= 0:
+    def __init__(self, path: Path, *, lease_ms: int = 15_000, max_connections: int = 64,
+                 max_record_bytes: int = 268_435_456) -> None:
+        if lease_ms <= 0 or max_connections <= 0 or max_record_bytes <= 0:
             raise ValueError("external connection limits must be positive")
         self.path = Path(path)
         self.lease_ms = lease_ms
         self.max_connections = max_connections
+        self.max_record_bytes = max_record_bytes
         self._connection: sqlite3.Connection | None = None
         self._lock = threading.RLock()
 
@@ -125,12 +127,17 @@ class ExternalConnectionRepository:
             ).fetchone()[0]
             if active >= self.max_connections:
                 raise StrategyProviderError("BUDGET_EXCEEDED", "external connection ceiling reached")
+            size = len(scope_json.encode("utf-8")) + 512
+            used = connection.execute("SELECT logical_bytes FROM external_provider_usage WHERE singleton = 1").fetchone()[0]
+            if used + size > self.max_record_bytes:
+                raise StrategyProviderError("BUDGET_EXCEEDED", "external connection storage budget exceeded")
             connection.execute(
                 """INSERT INTO external_provider_connections
                    (connection_id, scope_json, scope_hash, token_hash, created_ms)
                    VALUES (?, ?, ?, ?, ?)""",
                 (connection_id, scope_json, canonical_hash(scope), token_hash, now_ms),
             )
+            connection.execute("UPDATE external_provider_usage SET logical_bytes = logical_bytes + ? WHERE singleton = 1", (size,))
         return connection_id
 
     def scope(self, connection_id: str) -> dict[str, object]:
@@ -147,13 +154,14 @@ class ExternalConnectionRepository:
                         and row["client_id"] and row["lease_deadline_ms"] > now_ms)
 
     def connect(self, connection_id: str, *, token: str, client_id: str, now_ms: int) -> dict[str, object]:
-        if not client_id or len(client_id) > 128 or client_id != client_id.strip():
+        if (type(client_id) is not str or not client_id or len(client_id) > 128 or client_id != client_id.strip()
+                or (type(token) is str and token in client_id)):
             raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "invalid external client identity")
         with self._transaction() as connection:
             row = self._authorize(connection, connection_id, token)
             active = row["client_id"] is not None and row["lease_deadline_ms"] > now_ms
             if active and row["client_id"] != client_id:
-                raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "another external client owns this connection")
+                raise StrategyProviderError("PROVIDER_CONNECTION_BUSY", "another external client owns this connection")
             generation = int(row["client_generation"])
             if not active:
                 generation += 1
@@ -197,6 +205,7 @@ class ExternalConnectionRepository:
                        client_generation = client_generation + 1
                    WHERE revoked_ms IS NULL"""
             )
+            connection.execute("UPDATE external_provider_sessions SET status = 'INTERRUPTED' WHERE status = 'ACTIVE'")
 
     @staticmethod
     def _row(connection: sqlite3.Connection, connection_id: str) -> sqlite3.Row | None:
@@ -222,4 +231,4 @@ class ExternalConnectionRepository:
     def _require_client(row: sqlite3.Row, client_id: str, generation: int, now_ms: int) -> None:
         if (type(generation) is not int or row["client_id"] != client_id
                 or row["client_generation"] != generation or row["lease_deadline_ms"] <= now_ms):
-            raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "external client lease is stale; reconnect first")
+            raise StrategyProviderError("PROVIDER_STALE_GENERATION", "external client lease is stale; reconnect first")

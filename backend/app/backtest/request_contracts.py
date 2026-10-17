@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 class RunCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     strategy_revision_id: str = Field(min_length=1, max_length=128)
+    external_connection_id: str | None = Field(default=None, pattern=r"^epc_[0-9a-f]{32}$")
     dataset_id: str = Field(min_length=1, max_length=80)
     data_epoch: str = Field(min_length=8, max_length=80)
     snapshot_hash: str = Field(min_length=8, max_length=80)

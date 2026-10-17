@@ -125,8 +125,10 @@ def test_checkpoint_state_is_pinned_but_unpinned_intermediate_states_are_collect
         assert connection.execute("SELECT COUNT(*) FROM external_provider_states").fetchone()[0] == 2
     assert journal.snapshot("run_one", 1, host_generation=1) == checkpoint
     assert journal.recorded("run_one", 5, host_generation=1)["reply"]["model_state_hash"]
-    with pytest.raises(StrategyProviderError, match="RECOVERY_NOT_ALLOWED"):
-        journal.snapshot("run_one", 5, host_generation=1)
+    replay_checkpoint = journal.snapshot("run_one", 5, host_generation=1)
+    assert replay_checkpoint["model_state_hash"] == journal.recorded("run_one", 5, host_generation=1)["reply"]["model_state_hash"]
+    with store._read() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM external_provider_states").fetchone()[0] == 2
 
 
 def test_storage_limit_rolls_back_state_response_and_cursor_together(connected):
@@ -162,11 +164,25 @@ def test_pending_calls_are_serial_and_runtime_identity_cannot_change(connected):
 def test_credential_never_enters_persistent_reply_or_state(connected):
     store, journal, _, _ = connected
     queue(journal)
-    with pytest.raises(StrategyProviderError, match="credentials"):
-        submit(connected, poll(connected), state={"accidental_secret": TOKEN})
+    result = submit(connected, poll(connected), state={"accidental_secret": TOKEN})
+    assert result["reply"]["error"]["code"] == "PROVIDER_UNAUTHORIZED_WRITE"
     for path in store.path.parent.iterdir():
         assert TOKEN.encode() not in path.read_bytes()
-    assert journal.recorded("run_one", 1, host_generation=1)["reply"] is None
+    assert journal.recorded("run_one", 1, host_generation=1) == result
+
+
+def test_authorized_invalid_output_fails_promptly_and_different_invalid_retry_is_rejected(connected):
+    _, journal, _, _ = connected
+    queue(journal, operation="step", payload={"observation": {"phase": "EVALUATION", "sequence": 7}})
+    packet = poll(connected)
+    invalid = {"sequence": 8, "kind": "TARGET_POSITION", "payload": {"targetExposure": "1"}}
+    result = submit(connected, packet, decision=invalid)
+    assert result["reply"]["error"]["code"] == "PROVIDER_PROTOCOL_VIOLATION"
+    assert "model_state" not in result["reply"]
+    assert submit(connected, packet, decision=invalid) == result
+    with pytest.raises(StrategyProviderError, match="IDENTITY_MUTATION"):
+        submit(connected, packet, decision={**invalid, "sequence": 9})
+    assert poll(connected) is None
 
 
 @pytest.mark.parametrize("operation,result", [("close", {"decision": None, "model_state": {}}),
