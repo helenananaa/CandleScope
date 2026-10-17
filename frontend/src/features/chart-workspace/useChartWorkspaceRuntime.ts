@@ -311,7 +311,7 @@ export function useChartWorkspaceRuntime(
     autosaveDelayMs: options.autosaveDelayMs ?? 350,
     windowId: options.windowId,
     workspaceBus: options.workspaceBus === undefined
-      ? CHART_WORKSPACE_FEATURE_FLAGS.multiChart64Enabled
+      ? CHART_WORKSPACE_FEATURE_FLAGS.multiWindowEnabled
         ? defaultWorkspaceBus(options.windowId ?? "main-window")
         : null
       : options.workspaceBus,
