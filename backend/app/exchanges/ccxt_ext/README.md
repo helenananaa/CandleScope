@@ -26,7 +26,12 @@ The generic lane projects pinned CCXT metadata and unified results for:
   interest/history, and public liquidations when CCXT advertises those
   methods;
 - runtime market-family and symbol validation after `load_markets()`;
-- pooled reconnecting CCXT Pro instances and deterministic cleanup.
+- pooled reconnecting CCXT Pro instances and deterministic cleanup;
+- transport-owned REST clients: each `TransportLayer` config keeps one CCXT
+  async client per market selection, so backfill pages and HTTP-fallback polls
+  reuse one `load_markets()` bootstrap and one HTTP session until
+  `close_history_transport()`.  Loading a venue catalog parses thousands of
+  markets synchronously on the event loop, so it must never run per request.
 
 Generic depth is explicitly a CCXT-managed bounded snapshot. Its local
 revision is not an exchange sequence number and it never claims strict

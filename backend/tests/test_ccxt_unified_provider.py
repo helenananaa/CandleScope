@@ -616,31 +616,57 @@ def test_provider_session_rebuilds_runtime_after_crossed_unified_book() -> None:
     asyncio.run(run())
 
 
-def test_generic_rest_fetch_closes_exchange_and_returns_unified_rows(
+class _CountingRestExchange(_UnifiedFakeExchange):
+    def __init__(self) -> None:
+        super().__init__()
+        self.load_calls = 0
+        self.ticker_calls = 0
+
+    async def load_markets(self, reload: bool = False) -> None:
+        del reload
+        self.load_calls += 1
+
+    async def fetch_ohlcv(
+        self,
+        symbol: str,
+        timeframe: str,
+        since: int | None,
+        limit: int,
+    ) -> list[list[Any]]:
+        assert (symbol, timeframe, since, limit) == (
+            "BTC/USDT",
+            "1m",
+            1_700_000_000_000,
+            2,
+        )
+        return [[1_700_000_000_000, 10, 12, 9, 11, 3]]
+
+    async def fetch_ticker(self, symbol: str) -> dict[str, Any]:
+        assert symbol == "BTC/USDT"
+        self.ticker_calls += 1
+        return {"symbol": symbol, "last": 11.0, "timestamp": 1_700_000_000_000}
+
+
+def _counting_exchange_factory(
+    monkeypatch: Any,
+) -> list[_CountingRestExchange]:
+    created: list[_CountingRestExchange] = []
+
+    def create(*_args: Any, **_kwargs: Any) -> _CountingRestExchange:
+        exchange = _CountingRestExchange()
+        created.append(exchange)
+        return exchange
+
+    monkeypatch.setattr("app.exchanges.ccxt_ext.generic._create_exchange", create)
+    return created
+
+
+def test_generic_rest_fetch_reuses_pooled_exchange_and_returns_unified_rows(
     monkeypatch: Any,
 ) -> None:
-    class FakeRestExchange(_UnifiedFakeExchange):
-        async def fetch_ohlcv(
-            self,
-            symbol: str,
-            timeframe: str,
-            since: int | None,
-            limit: int,
-        ) -> list[list[Any]]:
-            assert (symbol, timeframe, since, limit) == (
-                "BTC/USDT",
-                "1m",
-                1_700_000_000_000,
-                2,
-            )
-            return [[1_700_000_000_000, 10, 12, 9, 11, 3]]
-
-    fake = FakeRestExchange()
-    monkeypatch.setattr(
-        "app.exchanges.ccxt_ext.generic._create_exchange",
-        lambda *_args, **_kwargs: fake,
-    )
+    created = _counting_exchange_factory(monkeypatch)
     plugin = CcxtUnifiedPlugin(get_ccxt_catalog_entry("bybit"))
+    config = IngestionConfig(proxy_mode="none")
     request = TransportRequest(
         descriptor=_descriptor(StreamType.KLINE),
         limit=2,
@@ -648,17 +674,79 @@ def test_generic_rest_fetch_closes_exchange_and_returns_unified_rows(
         end_ms=1_700_000_060_000,
     )
 
-    rows = asyncio.run(
-        plugin.fetch_history_with_config(
-            request,
-            IngestionConfig(proxy_mode="none"),
-        )
-    )
+    async def run() -> list[RawMessage]:
+        assert plugin.history_transport_snapshot(config) is None
+        rows = await plugin.fetch_history_with_config(request, config)
+        await plugin.fetch_history_with_config(request, config)
+        snapshot = plugin.history_transport_snapshot(config)
+        assert snapshot is not None
+        assert snapshot["clients_created"] == 1
+        assert snapshot["client_reuses"] == 1
+        assert snapshot["requests"] == 2
+        assert created[0].close_calls == 0
+        await plugin.close_history_transport(config)
+        return rows
+
+    rows = asyncio.run(run())
 
     assert len(rows) == 1
     assert rows[0].source == DataSource.HTTP
     assert rows[0].payload["schema"] == "candlescope.ccxt.unified/1"
-    assert fake.close_calls == 1
+    assert len(created) == 1
+    assert created[0].load_calls == 1
+    assert created[0].close_calls == 1
+    assert plugin.history_transport_snapshot(config) is None
+
+
+def test_generic_one_shot_rest_fetch_closes_its_exchange(
+    monkeypatch: Any,
+) -> None:
+    created = _counting_exchange_factory(monkeypatch)
+    plugin = CcxtUnifiedPlugin(get_ccxt_catalog_entry("bybit"))
+
+    rows = asyncio.run(
+        plugin.fetch_history(TransportRequest(_descriptor(StreamType.TICKER), limit=1))
+    )
+
+    assert rows[0].payload["schema"] == "candlescope.ccxt.unified/1"
+    assert len(created) == 1
+    assert created[0].close_calls == 1
+
+
+def test_primary_http_fallback_poll_reuses_one_market_bootstrap(
+    monkeypatch: Any,
+) -> None:
+    """A WS-less ticker feed must not rebuild CCXT and reload markets per poll."""
+
+    created = _counting_exchange_factory(monkeypatch)
+    plugin = create_binance_ccxt_plugin()
+    config = IngestionConfig(proxy_mode="none")
+    descriptor = StreamDescriptor(
+        "BTC/USDT",
+        StreamType.MINI_TICKER,
+        exchange="binance",
+        market_type="spot",
+    )
+
+    async def run() -> None:
+        for _poll in range(5):
+            rows = await plugin.fetch_history_with_config(
+                TransportRequest(descriptor, limit=1),
+                config,
+            )
+            assert rows[0].payload["schema"] == "candlescope.ccxt.unified/1"
+        snapshot = plugin.history_transport_snapshot(config)
+        assert snapshot["rails"] == ["spot"]
+        assert snapshot["clients_created"] == 1
+        assert snapshot["requests"] == 5
+        await plugin.close_history_transport(config)
+
+    asyncio.run(run())
+
+    assert len(created) == 1
+    assert created[0].load_calls == 1
+    assert created[0].ticker_calls == 5
+    assert created[0].close_calls == 1
 
 
 def test_binance_derivative_factory_does_not_bootstrap_spot_catalog() -> None:
@@ -747,7 +835,7 @@ def test_binance_primary_kline_rest_uses_ccxt_implicit_method(
 
     exchange = Exchange()
     monkeypatch.setattr(
-        "app.exchanges.ccxt_ext.primary._create_exchange",
+        "app.exchanges.ccxt_ext.generic._create_exchange",
         lambda *_args, **_kwargs: exchange,
     )
     plugin = create_binance_ccxt_plugin()
@@ -840,7 +928,7 @@ def test_binance_primary_rest_pool_survives_creator_cancellation(
 
     exchange = Exchange()
     monkeypatch.setattr(
-        "app.exchanges.ccxt_ext.primary._create_exchange",
+        "app.exchanges.ccxt_ext.generic._create_exchange",
         lambda *_args, **_kwargs: exchange,
     )
     plugin = create_binance_ccxt_plugin()
@@ -933,7 +1021,7 @@ def test_binance_primary_rest_pool_drains_borrower_without_replacement_leak(
         return exchange
 
     monkeypatch.setattr(
-        "app.exchanges.ccxt_ext.primary._create_exchange",
+        "app.exchanges.ccxt_ext.generic._create_exchange",
         create_exchange,
     )
     plugin = create_binance_ccxt_plugin()
@@ -1018,7 +1106,7 @@ def test_binance_primary_rest_pool_reloads_stale_symbol_catalog_once(
 
     exchange = Exchange()
     monkeypatch.setattr(
-        "app.exchanges.ccxt_ext.primary._create_exchange",
+        "app.exchanges.ccxt_ext.generic._create_exchange",
         lambda *_args, **_kwargs: exchange,
     )
     plugin = create_binance_ccxt_plugin()
@@ -1092,7 +1180,7 @@ def test_binance_primary_rest_pool_releases_borrower_after_repeated_cancel(
 
     exchange = Exchange()
     monkeypatch.setattr(
-        "app.exchanges.ccxt_ext.primary._create_exchange",
+        "app.exchanges.ccxt_ext.generic._create_exchange",
         lambda *_args, **_kwargs: exchange,
     )
     plugin = create_binance_ccxt_plugin()
@@ -1148,7 +1236,7 @@ def test_binance_primary_rest_pool_tracks_reload_after_creator_cancel(
 
     exchange = Exchange()
     monkeypatch.setattr(
-        "app.exchanges.ccxt_ext.primary._create_exchange",
+        "app.exchanges.ccxt_ext.generic._create_exchange",
         lambda *_args, **_kwargs: exchange,
     )
     plugin = create_binance_ccxt_plugin()
@@ -1223,7 +1311,7 @@ def test_binance_primary_full_depth_rest_preserves_snapshot_limit(
 
     exchange = Exchange()
     monkeypatch.setattr(
-        "app.exchanges.ccxt_ext.primary._create_exchange",
+        "app.exchanges.ccxt_ext.generic._create_exchange",
         lambda *_args, **_kwargs: exchange,
     )
     plugin = create_binance_ccxt_plugin()
