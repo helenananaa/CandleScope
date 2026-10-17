@@ -2001,19 +2001,17 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     // Linked ranges use elapsed axis time, including synthetic charts.
     if (!Number.isFinite(range.from)
       || !Number.isFinite(range.to) || range.to <= range.from) return;
-    if (surfaceAxisModeRef.current === "derived-ordinal") {
-      const captured = captureSurfaceViewport(chartRef.current, {
-        axisMode: surfaceAxisModeRef.current,
-        datasetKey: datasetKeyRef.current,
-        displayRows: displayRowsRef.current,
-        surfaceConfigKey: surfaceConfigKeyRef.current,
-        sourceInterval: intervalRef.current,
-        axisCarrierRows: futureTimeAxisDataRef.current,
-      });
-      if (captured) boundSurfaceViewportAnchorRef.current = {
-        ...captured, sourceRange: { from: range.from, to: range.to }, preserveSourceRange: true,
-      };
-    }
+    const captured = captureSurfaceViewport(chartRef.current, {
+      axisMode: surfaceAxisModeRef.current,
+      datasetKey: datasetKeyRef.current,
+      displayRows: displayRowsRef.current,
+      surfaceConfigKey: surfaceConfigKeyRef.current,
+      sourceInterval: intervalRef.current,
+      axisCarrierRows: futureTimeAxisDataRef.current,
+    });
+    if (captured) boundSurfaceViewportAnchorRef.current = {
+      ...captured, sourceRange: { from: range.from, to: range.to }, preserveSourceRange: true,
+    };
     transferredHistoryRef.current = new TransferredViewportHistory(datasetKeyRef.current, range.from);
     recordPerfEvent("chart.viewport.historyFill", { transferred: false });
     scheduleTransferredHistoryFill();
@@ -3928,6 +3926,24 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         drawingSourceTimeHorizonRef.current = nextSourceTimeHorizon;
         const sourceTimeHorizonChanged = nextSourceTimeHorizon !== previousSourceTimeHorizon;
         const previousDisplayRows = projectionStore.displaySnapshot();
+        // A user-owned historical view must keep elapsed source coordinates
+        // through ATR recalibration, even when a normal tick rebuilds the
+        // complete ordinal grid. Capture before mutating that projection.
+        if (getChartTypeDescriptor(currentChartType).axisMode === "derived-ordinal"
+          && followLatestDisabledRef.current
+          && pendingSurfaceViewportRef.current === null
+          && boundSurfaceViewportAnchorRef.current === null
+          && activeSurfaceOwnerRef.current?.datasetKey === currentStore.seriesKey) {
+          const owned = captureSurfaceViewport(chartRef.current, {
+            axisMode: surfaceAxisModeRef.current,
+            datasetKey: datasetKeyRef.current,
+            displayRows: previousDisplayRows,
+            surfaceConfigKey: surfaceConfigKeyRef.current,
+            sourceInterval: intervalRef.current,
+            axisCarrierRows: futureTimeAxisDataRef.current,
+          });
+          if (owned) boundSurfaceViewportAnchorRef.current = { ...owned, preserveSourceRange: true };
+        }
         const previousConfigurationKey = projectionStore.configurationKey;
         const projectionPatch = projectionStore.applySourceDelta(delta, rows);
         if (shouldAdvanceDrawingCoordinateGeneration({
@@ -4044,13 +4060,12 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         if (directViewportTransfer !== null) {
           pendingSurfaceViewportRef.current = directViewportTransfer;
         }
-        // A later prepend can rebuild the ordinal projection with a different
-        // density. Keep the transferred elapsed range until a user/link gesture
-        // takes ownership, rather than retaining the sparse seed's brick count.
+        // Any recalibration can rebuild the ordinal projection with a different
+        // density. Keep the owned elapsed range through ordinary source ticks
+        // as well as prepends; a new gesture clears/replaces this bound.
         const bound = boundSurfaceViewportAnchorRef.current;
-        const retainedTransfer = axisMode === "derived-ordinal" && bound?.datasetKey === nextDatasetKey
+        const retainedTransfer = bound?.datasetKey === nextDatasetKey
           && surfaceViewportOwnsRestore(bound)
-          && shouldPreserveProjectionViewport(delta, { hasDisplay: true, userInteracted: true })
           ? bound : null;
         const pendingViewportTransfer = directViewportTransfer
           ?? (pendingSurfaceViewportRef.current?.datasetKey === nextDatasetKey

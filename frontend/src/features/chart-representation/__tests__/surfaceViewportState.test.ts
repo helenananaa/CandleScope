@@ -90,6 +90,20 @@ test("numeric viewport capture preserves fractional edges and whitespace across 
   assert.deepEqual(sourceRangeFromLogicalRows(coarse, plan.logicalRange, "5m"), sourceRange);
 });
 
+test("a linked numeric source window survives late history in the same dataset", () => {
+  const late = Array.from({ length: 128 }, (_, index) => ({ time: (512 + index) * 300 }));
+  const owned = mustBeDefined(buildSurfaceViewportSnapshot({ axisMode: "time", datasetKey: "ha-5m",
+    displayRows: late, logicalRange: { from: 0, to: 38 }, surfaceConfigKey: "heikin-ashi" }));
+  const sourceRange = { from: 440 * 300, to: 550 * 300 };
+  const snapshot = { ...owned, sourceRange, preserveSourceRange: true };
+  const options = { axisMode: "time", datasetKey: "ha-5m", surfaceConfigKey: "heikin-ashi", sourceInterval: "5m" };
+  assert.deepEqual(planSurfaceViewportRestore(late, snapshot, options)?.logicalRange, { from: -72, to: 38 });
+  const hydrated = Array.from({ length: 640 }, (_, index) => ({ time: index * 300 }));
+  const range = mustBeDefined(planSurfaceViewportRestore(hydrated, snapshot, options)).logicalRange;
+  assert.deepEqual(range, { from: 440, to: 550 });
+  assert.deepEqual(sourceRangeFromLogicalRows(hydrated, range, "5m"), sourceRange);
+});
+
 test("calendar whitespace capture extrapolates actual month boundaries rather than February's length", () => {
   const rows = [0, 1].map(month => ({ time: Date.UTC(2024, month, 1) / 1000 }));
   const sourceRange = sourceRangeFromLogicalRows(rows, { from: -1, to: 3.5 }, "1M");

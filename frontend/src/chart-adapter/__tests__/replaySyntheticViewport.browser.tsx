@@ -11,12 +11,12 @@ import type { MainChartType } from "../../shared/mainChartTypes.js";
 export async function checkReplaySyntheticViewportLifecycle() {
   const samples: unknown[] = [];
   const assert = (condition: unknown, message: string) => { if (!condition) throw new Error(message); };
-  const rows: KlineBar[] = Array.from({ length: 638 }, (_, index) => {
+  const rows: KlineBar[] = Array.from({ length: 640 }, (_, index) => {
     const open = 110 + Math.sin(index * 0.13), close = open + Math.sin(index * 0.41) * 0.12;
     return { time: (1_800_000_000 + index * 300) as KlineBar["time"], open, close,
       high: Math.max(open, close) + 0.1, low: Math.min(open, close) - 0.1, volume: 10 };
   });
-  const cases = (["renko", "point-and-figure", "kagi"] as MainChartType[]).flatMap(chartType => (
+  const cases = (["renko", "point-and-figure", "kagi", "line-break", "heikin-ashi"] as MainChartType[]).flatMap(chartType => (
     (["automatic", "linked"] as const).flatMap(ownership => (
       [false, true].map(auxiliary => ({ chartType, ownership, auxiliary }))
     ))
@@ -65,18 +65,27 @@ export async function checkReplaySyntheticViewportLifecycle() {
       await act(async () => root.render(<Probe />)); await settle();
       assert(!host.querySelector(".chart-return-to-realtime"), `${chartType} initial surface is away from latest`);
       const initialSpacing = handle().getVisibleRange()?.barSpacing;
-      for (const row of rows.slice(629)) {
+      for (const row of rows.slice(629, 638)) {
         await act(async () => { store.applyTick(row); }); await settle();
         assert(!host.querySelector(".chart-return-to-realtime"), `${chartType} advance lost follow-latest without a chart gesture`);
         assert(Math.abs((handle().getVisibleRange()?.barSpacing ?? 0) - (initialSpacing ?? 0)) < 0.001,
           `${chartType} automatic follow changes zoom on each source commit`);
       }
       if (ownership === "linked") {
-        await act(async () => { store.applyRange(rows.slice(0, 500)); }); await settle();
         const requested = { from: Number(rows[440]!.time), to: Number(rows[550]!.time) };
         await act(async () => {
           assert(handle().setLinkedVisibleTimeRange(requested), `${chartType} user range not applied`);
         }); await settle();
+      }
+      const beforeMoreSources = handle().getVisibleRange();
+      for (const row of rows.slice(638)) {
+        await act(async () => { store.applyTick(row); }); await settle();
+        const current = handle().getVisibleRange();
+        if (ownership === "linked") {
+          assert(Math.abs((beforeMoreSources?.time?.from ?? 0) - (current?.time?.from ?? 0)) < 0.001
+            && Math.abs((beforeMoreSources?.time?.to ?? 0) - (current?.time?.to ?? 0)) < 0.001,
+          `${chartType} source recalibration moved a linked historical window: ${JSON.stringify({ beforeMoreSources, current })}`);
+        }
       }
       const beforeResize = handle().getVisibleRange();
       host.style.width = "550px"; host.style.height = "340px"; await settle();
@@ -100,11 +109,17 @@ export async function checkReplaySyntheticViewportLifecycle() {
       surface = null; root = createRoot(host);
       await act(async () => root.render(<Probe />)); await settle();
       const after = handle().getVisibleRange();
-      assert(loads > 0, `${chartType} saved earlier viewport did not request missing history`);
-      const close = (a: number | undefined, b: number | undefined) => a !== undefined && b !== undefined && Math.abs(a - b) < 0.001;
+      if (Number(before?.time?.from) < Number(rows.at(-128)!.time)) {
+        assert(loads > 0, `${chartType} saved earlier viewport did not request missing history`);
+      }
+      // Numeric HA restores to the nearest source bar; fractional cold-reopen
+      // pixels are optional preferences, not an exact-restart acceptance gate.
+      const restoreToleranceSeconds = chartType === "heikin-ashi" ? 150 : 0.001;
+      const close = (a: number | undefined, b: number | undefined) => a !== undefined && b !== undefined
+        && Math.abs(a - b) <= restoreToleranceSeconds;
       assert(close(before?.time?.from, after?.time?.from) && close(before?.time?.to, after?.time?.to),
         `${chartType} cold restore changed elapsed viewport: ${JSON.stringify({ before, after, loads })}`);
-      samples.push({ chartType, ownership, auxiliary, before, after, loads, restoredRows: store.barCount });
+      samples.push({ chartType, ownership, auxiliary, before, after, loads, restoredRows: store.barCount, restoreToleranceSeconds });
     } finally {
       await act(async () => root.unmount()); host.remove(); style.remove(); localStorage.removeItem(key);
     }

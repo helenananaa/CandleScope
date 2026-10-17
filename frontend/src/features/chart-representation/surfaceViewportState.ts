@@ -226,7 +226,8 @@ export function planSurfaceViewportRestore(
   }
   // Across periods, retain elapsed market time rather than the old count of
   // candles. Interpolate on the target grid, including calendar intervals.
-  if (axisMode === "time" && snapshot.transferredFromDatasetKey !== undefined
+  if (axisMode === "time"
+    && (snapshot.transferredFromDatasetKey !== undefined || snapshot.preserveSourceRange)
     && snapshot.sourceRange && snapshot.sourceRange.to > snapshot.sourceRange.from
     && displayRows.length >= 2) {
     const timeline = createIntervalTimeline(sourceInterval);
