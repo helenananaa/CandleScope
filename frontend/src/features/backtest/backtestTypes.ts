@@ -9,6 +9,7 @@ export interface BacktestRunRecord {
   data_epoch?: string;
   snapshot_hash?: string;
   failure_code?: string | null;
+  waiting_for?: "EXTERNAL_CONNECTION" | "EXTERNAL_PROVIDER_DISABLED" | "EXTERNAL_CONNECTION_REVOKED";
   result?: {
     report_hash?: string;
     fill_hash?: string;
@@ -186,8 +187,13 @@ export interface BacktestReport {
     warmupRowsObserved?: number;
     reasonCodes?: Record<string, number>;
     decisionDebugTrace?: Array<Record<string, unknown>>;
+    external_provider?: import("./backtestApi.js").ExternalProviderIdentity & { trace_hash?: string; call_count?: number; decision_count?: number };
   };
   identity?: {
+    strategy_revision_id?: string;
+    dataset_id?: string;
+    data_epoch?: string;
+    snapshot_hash?: string;
     signal_clock?: string | null;
     signal_interval?: string | null;
     execution_clock?: string | null;

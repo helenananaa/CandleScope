@@ -4,11 +4,11 @@ import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-
 from app.backtest.external_provider.contracts import parse_manifest
 from app.backtest.external_provider.journal import ExternalCallJournal
 from app.backtest.external_provider.repository import ExternalConnectionRepository
 from app.backtest.strategy.protocol import StrategyProviderError
+
 from tests.test_external_provider_contracts import manifest
 
 TOKEN = "test-local-external-provider-private-token"
@@ -211,7 +211,8 @@ def test_revocation_fences_in_flight_response_and_host_reads(connected):
         poll(connected)
 
 
-@pytest.mark.parametrize("field,value", [("payload_json", '{"tampered":true}'), ("reply_json", '{"tampered":true}')])
+@pytest.mark.parametrize("field,value", [("payload_json", '{"tampered":true}'), ("reply_json", '{"tampered":true}'),
+                                       ("state_before_hash", "sha256:tampered"), ("state_after_hash", "sha256:tampered")])
 def test_recorded_input_and_response_corruption_are_detected(connected, field, value):
     store, journal, _, _ = connected
     queue(journal)
@@ -244,3 +245,19 @@ def test_two_owners_accept_identical_response_once_and_share_committed_record(co
             assert connection.execute("SELECT COUNT(*) FROM external_provider_states").fetchone()[0] == 1
     finally:
         second.close()
+
+
+def test_idle_delivery_poll_does_not_take_sqlite_writer_ownership(connected):
+    store, journal, _, _ = connected
+    queue(journal)
+    writer = sqlite3.connect(store.path)
+    try:
+        before = writer.execute("PRAGMA data_version").fetchone()[0]
+        for _ in range(10):
+            assert poll(connected)["cursor"] == 1
+        assert writer.execute("PRAGMA data_version").fetchone()[0] == before
+        writer.execute("BEGIN IMMEDIATE")
+        assert poll(connected)["cursor"] == 1
+    finally:
+        writer.rollback()
+        writer.close()

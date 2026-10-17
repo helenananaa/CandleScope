@@ -1,6 +1,7 @@
 """Small causal model for exercising the external connection, not investment advice."""
 
 import hashlib
+import json
 import platform
 from decimal import Decimal
 from pathlib import Path
@@ -10,13 +11,9 @@ from . import __version__
 
 
 def manifest() -> dict[str, Any]:
-    return {"schema_version": "candlescope.external-provider/1", "provider_id": "example.rolling_mean",
-            "provider_revision": "1", "provider_kind": "MODEL",
-            "artifact_sha256": "sha256:" + hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-            "runtime_lock": "python/" + platform.python_version() + ";candlescope-external-provider/" + __version__,
-            "input_modes": ["BAR_CLOSE"], "output_modes": ["TARGET_POSITION"],
-            "required_features": ["close"], "warmup_bars": 3, "snapshot_restore": True,
-            "reproducibility": "RECORDED_OUTPUT_ONLY"}
+    metadata = json.loads(Path(__file__).with_name("example_manifest.json").read_text(encoding="utf-8"))
+    return {**metadata, "artifact_sha256": "sha256:" + hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            "runtime_lock": "python/" + platform.python_version() + ";candlescope-external-provider/" + __version__}
 
 
 class RollingMeanModel:

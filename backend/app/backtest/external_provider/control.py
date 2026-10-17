@@ -23,6 +23,7 @@ from .contracts import (
 from .journal import ExternalCallJournal
 from .provider import ExternalDecisionProvider
 from .repository import ExternalConnectionRepository
+from .sample import command, descriptor
 from .wire import digest, encode
 
 
@@ -47,10 +48,10 @@ class ExternalProviderControl:
     def close(self) -> None:
         self.store.close()
 
-    def manifest(self, revision_id: str) -> ExternalProviderManifest:
+    def manifest(self, revision_id: str, *, require_active: bool = True) -> ExternalProviderManifest:
         self.require_enabled()
         row = self.revisions.get_strategy_revision(revision_id)
-        if row is None or row["archived_at_ms"] is not None or row["base_revision_id"] != EXTERNAL_REVISION:
+        if row is None or (require_active and row["archived_at_ms"] is not None) or row["base_revision_id"] != EXTERNAL_REVISION:
             raise StrategyProviderError("SCHEMA_UNKNOWN_FIELD", "select an active external provider revision")
         return parse_manifest(str(row["source_text"]))
 
@@ -78,7 +79,7 @@ class ExternalProviderControl:
                 path.unlink(missing_ok=True)
                 raise
         return {"connection_id": connection_id, "scope": scope, "scope_hash": digest(scope),
-                "connection_file": str(path), "ready": False}
+                "connection_file": str(path), "ready": False, "example_command": self._example_command(scope, path)}
 
     def list(self, *, now_ms: int | None = None) -> list[dict[str, Any]]:
         self.require_enabled()
@@ -90,9 +91,43 @@ class ExternalProviderControl:
             rows = connection.execute(
                 "SELECT connection_id FROM external_provider_connections WHERE revoked_ms IS NULL ORDER BY created_ms"
             ).fetchall()
-        return [{"connection_id": row[0], "scope": self.store.scope(row[0]),
-                 "scope_hash": digest(self.store.scope(row[0])), "ready": self.store.ready(row[0], now_ms=stamp),
-                 "connection_file": str(self.directory / (row[0] + ".json"))} for row in rows]
+        result = []
+        for row in rows:
+            scope = self.store.scope(row[0])
+            path = self.directory / (row[0] + ".json")
+            result.append({"connection_id": row[0], "scope": scope, "scope_hash": digest(scope),
+                           "ready": self.store.ready(row[0], now_ms=stamp), "connection_file": str(path),
+                           "example_command": self._example_command(scope, path)})
+        return result
+
+    def example(self) -> dict[str, Any]:
+        self.require_enabled()
+        sample = descriptor()
+        return {"manifest": sample["manifest"], "manifest_command": command(sample["argv"] + ["--manifest"])}
+
+    def trace(self, run_id: str, *, after: int = 0, limit: int = 200) -> dict[str, Any]:
+        self.open()
+        with self.store._read() as connection:
+            row = connection.execute(
+                """SELECT c.scope_json FROM external_provider_sessions s
+                   JOIN external_provider_connections c ON c.connection_id = s.connection_id WHERE s.run_id = ?""", (run_id,),
+            ).fetchone()
+        if row is None:
+            raise StrategyProviderError("SCHEMA_UNKNOWN_FIELD", "external decision trace is unavailable")
+        from .wire import decode
+        scope = decode(row[0])
+        parsed = self.manifest(str(scope["strategy_revision_id"]), require_active=False)
+        return ExternalCallJournal(self.store, parsed).trace(run_id, after=after, limit=limit)
+
+    @staticmethod
+    def _example_command(scope: dict[str, Any], path) -> str | None:
+        try:
+            sample = descriptor()
+        except StrategyProviderError:
+            return None
+        if sample["manifest_hash"] != scope.get("manifest_hash"):
+            return None
+        return command(sample["argv"] + ["--connection", str(path)])
 
     def revoke(self, connection_id: str, *, now_ms: int | None = None) -> None:
         self.open()

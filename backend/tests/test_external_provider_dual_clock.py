@@ -8,6 +8,7 @@ from app.data_engine.storage.raw_trade_archive import (
     ParquetRawAggTradeArchive,
     VerifiedRawAggTradeDay,
 )
+
 from tests.test_external_provider_http_runtime import (
     LocalHost,
     completed,

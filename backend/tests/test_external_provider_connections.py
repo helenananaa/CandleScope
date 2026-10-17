@@ -6,7 +6,6 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-
 from app.backtest.external_provider.repository import ExternalConnectionRepository
 from app.backtest.strategy.protocol import StrategyProviderError
 

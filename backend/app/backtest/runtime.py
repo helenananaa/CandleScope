@@ -659,6 +659,9 @@ class BacktestWorker:
         )
         try:
             service.recover_expired_leases(now_ms=_now_ms())
+            # Default-off profiles without external jobs keep the original
+            # claim path; no repeated external JSON/status query while idle.
+            external_queue_guard = self.settings.external_provider_enabled or bool(service.repository.queued_provider_connections())
             next_study_reconcile = 0.0
             while not self._stop.is_set():
                 try:
@@ -671,7 +674,8 @@ class BacktestWorker:
                         owner=owner,
                         now_ms=_now_ms(),
                         lease_ms=self._lease_ms,
-                        excluded_run_ids=service.external.waiting_runs(service.repository.queued_provider_connections()),
+                        excluded_run_ids=(service.external.waiting_runs(service.repository.queued_provider_connections())
+                                          if external_queue_guard else ()),
                     )
                     if record is None:
                         self._stop.wait(0.2)

@@ -47,6 +47,22 @@ actual example source file hash, and runtime identity includes this SDK and the
 running Python version. These are frozen declarations, not Host attestation of
 external code, training data, network behavior or hardware.
 
+The desktop bundle also carries `run_example.py`, the SDK source and the data-only
+example manifest under `Resources/packages/candlescope-external-provider`.
+The Research workbench can register that exact example, bind a connection to the
+selected dataset snapshot and show a quoted launch command. Run that command in
+a separate terminal; it uses the bundled Python with `-I -S -B` and needs no pip
+installation or Host imports. The Host only reads the example identity; it never
+imports or runs the model. Other models must load within the existing Host
+prepare/step budgets; pre-load large weights before connecting when appropriate.
+
+Each request hash binds run, cursor, operation, payload and the preceding model
+state hash. The Host exposes a paginated, read-only decision trace for completed
+Runs, including after connection revocation or revision archival. It omits raw
+model state and credentials. The SDK retires model instances whose Host sessions
+are no longer active. Idle delivery polling reads a consistent snapshot and only
+renews a lease when needed, instead of taking a SQLite writer on every poll.
+
 Wire JSON sorts object keys, uses compact separators, ASCII escaping and UTF-8,
 rejects duplicate keys, non-finite values and oversized/deep structures, and
 uses SHA-256. Host computes state/output hashes. No model may write an account,

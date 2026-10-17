@@ -156,7 +156,8 @@ class ExternalClient:
                     or type(packet["host_generation"]) is not int or packet["host_generation"] < 1
                     or type(packet["cursor"]) is not int or packet["cursor"] < 1 or type(packet["run_id"]) is not str):
                 _fail("invalid Host call generation or cursor")
-            expected = digest({key: packet[key] for key in ("run_id", "cursor", "operation", "payload")})
+            expected = digest({**{key: packet[key] for key in ("run_id", "cursor", "operation", "payload")},
+                               "model_state_before_hash": packet["bootstrap"]["model_state_hash"]})
             if expected != packet["input_hash"]:
                 _fail("Host call input hash is invalid")
             bootstrap = packet["bootstrap"]
@@ -225,10 +226,14 @@ class ExternalClient:
                     if self._generation is None:
                         self._connect()
                     if self._pending is None:
-                        packet = self._post("poll", {"client_id": self.client_id, "client_generation": self._generation}).get("call")
+                        delivery = self._post("poll", {"client_id": self.client_id, "client_generation": self._generation})
+                        live = self._reconcile_sessions(delivery.get("active_sessions"))
+                        packet = delivery.get("call")
                         if packet is None:
                             stopped.wait(self.poll_interval_s)
                             continue
+                        if (packet.get("run_id"), packet.get("host_generation")) not in live:
+                            continue  # Host retired it after selecting delivery.
                         self._pending = packet, self._dispatch(packet)
                     packet, result = self._pending
                     receipt = self._post("reply", {"client_id": self.client_id, "client_generation": self._generation,
@@ -269,6 +274,23 @@ class ExternalClient:
             with suppress(Exception):
                 entry["model"].close()
         self._models.clear()
+
+    def _reconcile_sessions(self, sessions: object) -> set[tuple[str, int]]:
+        if type(sessions) is not list or len(sessions) > 64:
+            _fail("invalid Host active model inventory")
+        live = set()
+        for entry in sessions:
+            if (type(entry) is not dict or set(entry) != {"run_id", "host_generation"}
+                    or type(entry["run_id"]) is not str or type(entry["host_generation"]) is not int
+                    or entry["host_generation"] < 1):
+                _fail("invalid Host active model identity")
+            live.add((entry["run_id"], entry["host_generation"]))
+        for run_id, entry in list(self._models.items()):
+            if (run_id, entry["generation"]) not in live:
+                with suppress(Exception):
+                    entry["model"].close()
+                del self._models[run_id]
+        return live
 
     def _disconnect(self) -> None:
         if self._http is not None:

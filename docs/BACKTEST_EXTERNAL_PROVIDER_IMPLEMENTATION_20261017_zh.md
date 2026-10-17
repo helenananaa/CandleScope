@@ -64,10 +64,14 @@ Host 无法证明外部进程实际采用何种训练资料、设备或算法。
 
 公开控制入口为 `/api/v1/backtests/provider-connections`：创建/列出、`/{id}/revoke`、`/{id}/smoke`；独立客户端使用 `/{id}/connect`、`/{id}/poll`、`/{id}/reply`。SDK 请求使用 Bearer 凭据，严格解析重复键和有界 JSON，错误不回显原输入。接口仅接受 loopback peer 及允许的浏览器 Origin。桌面 sidecar 在显式启用时发布无凭据的当前 endpoint，客户端先校验实例再发送凭据。客户端位于独立的 `packages/candlescope-external-provider`，只用标准库；原 `candlescope-backtest-sdk` 继续不含网络客户端。
 
-当前组合结果：190 项后端检查通过，1 项 Windows CRT descriptor 回归在本机 macOS 跳过；独立外部 SDK 15 项通过。新增模块完整 Ruff、既有改动文件 E9/F 检查及后端架构门禁通过。证据为 `output/acceptance-delivery-20261016/batch-g/http-runtime-integration.xml`、`external-sdk.xml`（本地 QA 产物，不纳入源码提交）。
+工作台已接通能力状态、示例注册、绑定数据创建/撤销连接、外部命令显示/复制、实际 smoke、Run 等待原因、结果身份与过期提示，以及分页只读决策审计。异步选择与连接操作有修订屏障，避免旧请求覆盖当前输入。安装包资源配置包含独立 SDK、数据 manifest 及隔离 Python 启动器；Host 仅读取其身份数据，不导入外部模型。取消或撤销后，SDK 清理已退出 Host 活动会话的模型实例。
+
+调用输入摘要同时绑定此前模型状态摘要；审计可以独立复算输入、响应和整条 trace 摘要，连接撤销或修订归档后仍可读取历史 Run。返回内容不含原始模型状态和凭据。空闲轮询使用一致读快照，并只在租约需续期时写库；默认关闭的 worker 不额外重复扫描外部队列。
+
+当前组合结果：195 项后端检查通过，1 项 Windows CRT descriptor 回归在本机 macOS 跳过；最终轮询/恢复/真实 HTTP/双时钟组合 29 项通过，独立外部 SDK 16 项通过。前端完整门禁包含 4,268 项功能用例、独立绘图性能门禁、90 项桌面检查、类型/lint/30 语言及生产构建，全部通过；绘图样本 median 0.091ms / p95 0.099ms，不作原生 UI 性能资格。初次语言回退检查失败的日志保留，补齐 ja/ko/pt-BR 翻译后全量重跑通过。新增模块完整 Ruff 通过。证据为 `output/acceptance-delivery-20261016/batch-g/workbench-backend-final.xml`、`poll-final.xml`、`external-sdk-final.xml`、`workbench-check.log`（本地 QA 产物，不纳入源码提交）。
 
 独立客户端进程通过真实本机 HTTP 完成 smoke 与 BAR Run：8 根测试 BAR、3 根 warmup、5 次 evaluation 决策，Host 在第 5/7 个事件产生 BUY/SELL，独立 Decimal 净现金流 `-0.0070019`。Host runtime 完整关闭并以新端口重开后，同一外部进程重连，原记录/凭据文件不变，再跑的 fills/orders/ledger/equity_curve 相等。另在模型处理第 5 根时中断 worker，再完整重开 runtime，generation 2 从 checkpoint 及同一调用恢复，最终仍只有两笔成交，现金流相同。
 
 聚合成交双时钟也通过独立 HTTP 进程：明确人工测试 fixture，CSV 最后价格 14，成交序列对应 BAR 最后价格 6；外部取得成交序列推导的 8 根完结 BAR，没有 raw trade/book 或未来值。Host 在后续第 5/7 条成交（241000/361000ms）按 NEXT_PRINT 成交，净现金流仍 `-0.0070019`，没有以导入 CSV 偷换信号源。这不是官方市场存档或原生包验收证明。
 
-尚未完成工作台连接操作、示例客户端的安装包交付、统一组合完整回归及实际原生安装包/全进程重启验收。上述 runtime 重开测试仍在同一个测试服务进程内，不能冒称桌面完整退出。无 G 安装包、PR 或 BT-05 完成结论；Study/训练/完整外部引擎不在此版本的已实现范围。
+尚未完成实际安装包交付、原生工作台交互及全进程重启验收。上述 runtime 重开测试仍在同一个测试服务进程内，不能冒称桌面完整退出。无 G 安装包、PR 或 BT-05 完成结论；Study/训练/完整外部引擎不在此版本的已实现范围。

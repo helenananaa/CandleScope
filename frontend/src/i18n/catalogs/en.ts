@@ -1,6 +1,8 @@
+import { externalProviderEnglish } from "./externalProviderEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
+  ...externalProviderEnglish,
   "plugin.trust.scriptRuntimeExecution": "The installer creates a separate Python environment and runs the package verification probe. After restart, script code runs as your current user without an OS sandbox. Files, network access and subprocesses are not restricted by the platform plugin permission summary.",
   "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
   "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",
@@ -4608,7 +4610,7 @@ export const en = {
   "research.strategy.smoke": "Smoke",
   "research.strategy.copy": "Copy",
   "research.strategy.archive": "Archive",
-  "research.strategy.create": "Create Pyne/Pine revision",
+  "research.strategy.create": "Create strategy or model revision",
   "research.strategy.name": "Name",
   "research.strategy.language": "Language",
   "research.strategy.source": "Source",

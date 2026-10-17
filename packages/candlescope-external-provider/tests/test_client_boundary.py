@@ -80,7 +80,8 @@ def packet(client, operation, cursor, *, state=None, observation=None):
             "call_id": "epcall_" + "b" * 32, "operation": operation, "payload": payload,
             "bootstrap": {"context": {"provider": {"manifest_hash": digest(client.manifest)}, "context": {"parameters": {}}},
                           "model_state": state, "model_state_hash": None if state is None else digest(state)}}
-    call["input_hash"] = digest({key: call[key] for key in ("run_id", "cursor", "operation", "payload")})
+    call["input_hash"] = digest({**{key: call[key] for key in ("run_id", "cursor", "operation", "payload")},
+                                 "model_state_before_hash": call["bootstrap"]["model_state_hash"]})
     return call
 
 
@@ -109,3 +110,20 @@ def test_client_package_has_no_host_database_or_plugin_dependency():
         for node in ast.walk(ast.parse(path.read_text())):
             modules = [item.name for item in node.names] if isinstance(node, ast.Import) else [node.module or ""] if isinstance(node, ast.ImportFrom) else []
             assert not any(module == item or module.startswith(item + ".") for module in modules for item in forbidden)
+
+
+def test_host_retirement_closes_only_the_retired_model_between_calls(tmp_path):
+    parsed = manifest()
+    client = ExternalClient(document(tmp_path, parsed), parsed, RollingMeanModel)
+
+    class TrackedModel:
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    cancelled, active = TrackedModel(), TrackedModel()
+    client._models = {"cancelled": {"model": cancelled, "generation": 1}, "active": {"model": active, "generation": 2}}
+    assert client._reconcile_sessions([{"run_id": "active", "host_generation": 2}]) == {("active", 2)}
+    assert cancelled.closed and not active.closed
+    assert set(client._models) == {"active"}

@@ -4,7 +4,6 @@ from dataclasses import replace
 from decimal import Decimal
 
 import pytest
-
 from app.backtest.external_provider.contracts import parse_manifest
 from app.backtest.external_provider.messages import observation_payload, validate_reply
 from app.backtest.external_provider.wire import decode, digest, encode
@@ -13,6 +12,7 @@ from app.backtest.strategy.protocol import (
     StrategyProviderError,
     canonical_hash,
 )
+
 from tests.test_external_provider_contracts import manifest
 
 

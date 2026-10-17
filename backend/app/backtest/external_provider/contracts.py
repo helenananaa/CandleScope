@@ -113,6 +113,11 @@ def parse_manifest(source: str) -> ExternalProviderManifest:
     except ValidationError as exc:
         # A misplaced credential must not be echoed in an error or support log.
         details = exc.errors(include_input=False, include_context=False, include_url=False)
+        for detail in details:
+            # Unknown JSON field names can themselves contain pasted private
+            # text. Keep known schema locations, never echo arbitrary keys.
+            if any(isinstance(part, str) and part not in ExternalProviderManifest.model_fields for part in detail["loc"]):
+                detail["loc"] = ("<unknown>",)
         raise StrategyProviderError(
             "PROVIDER_PROTOCOL_VIOLATION", f"invalid external provider manifest: {details}"
         ) from None
