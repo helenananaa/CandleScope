@@ -101,7 +101,7 @@ export function composeResearchRunDraft(input: {
     max_drawdown_percent: "50",
     daily_loss_limit: null,
     cooldown_events: 0,
-    account_model: "LINEAR_PERP_ONE_WAY_V1",
+    account_model: input.session.marketType === "spot" ? "SPOT_CASH_V1" : "LINEAR_PERP_ONE_WAY_V1",
     contract_data_mode: "LEGACY_FIXED_V1",
     execution_model_revision: null,
     participation_rate: null,

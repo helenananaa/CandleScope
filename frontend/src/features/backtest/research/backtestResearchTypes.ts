@@ -67,6 +67,7 @@ export interface BacktestResearchRuntimeView {
   endTimeMs: number;
   snapshot: BacktestSnapshot | null;
   runDraftText: string;
+  selectedRunRequest: Record<string, unknown> | null;
   studyDraftText: string;
   runComparison: RunCompareV3 | null;
   studyComparison: BacktestStudyComparison | null;

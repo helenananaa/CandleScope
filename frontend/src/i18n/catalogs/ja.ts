@@ -32,7 +32,7 @@ export const ja = {
   "research.external.waitingRun": "この実行は外部クライアントの再接続を待っています。",
   "research.external.disabledRun": "この実行は外部モデル接続が有効になるのを待っています。",
   "research.external.revokedRun": "この実行に関連する接続は取り消されています。",
-  "research.external.staleReport": "このレポートは別のモデルまたはデータのバージョンに属します。現在の選択で再実行してください。",
+  "research.external.staleReport": "このレポートのモデル、データ、または実行設定は現在の選択と異なります。再実行してください。",
   "plugin.trust.scriptRuntimeExecution": "インストーラーは独立した Python 環境を作成し、パッケージ検証プローブを実行します。再起動後、スクリプトは現在のユーザー権限で動作し、OS サンドボックスはありません。ファイル、ネットワーク、子プロセスへのアクセスは、プラットフォームプラグインの権限表示によって制限されません。",
   "plugin.runtimeInstalled": "スクリプト実行環境のインストールと検証が完了しました。CandleScopeを終了して開き直すと、指標と対応するネイティブ戦略が有効になります。",
   "native.executionErrorHelp": "実行を完了できませんでした。スクリプトと入力パラメータを確認してください。詳細は下に表示できます。",

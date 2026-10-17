@@ -30,5 +30,5 @@ export const externalProviderEnglish = {
   "research.external.waitingRun": "This run is waiting for its external client.",
   "research.external.disabledRun": "This run is waiting for external connections to be enabled.",
   "research.external.revokedRun": "This run belongs to a revoked connection.",
-  "research.external.staleReport": "This report belongs to a different model or data revision. Run again for the current selection.",
+  "research.external.staleReport": "This report uses different model, data or execution settings. Run again for the current selection.",
 } as const;

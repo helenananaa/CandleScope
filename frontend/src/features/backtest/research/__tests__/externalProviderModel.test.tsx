@@ -89,3 +89,22 @@ test("disabled model controls expose no launch action; an enabled matching conne
     assert.doesNotMatch(enabled, /Bearer|token/);
   } finally { setLocale(previous); }
 });
+
+test("report freshness follows the submitted account, cost, sizing, clock and risk settings", () => {
+  const original = { ...config, parameters: {}, warmup_bars: 3, output_mode: "TARGET_POSITION",
+    account_model: "SPOT_CASH_V1", initial_balance: "10000", slippage_bps: "1", taker_fee_bps: "0",
+    fixed_qty: "0.001", latency_events: 0, max_drawdown_percent: "50" };
+  const input = { report: structuralMock<BacktestReport>({ identity: config, strategy: { external_provider: revision.external_provider } }),
+    run: structuralMock<NonNullable<BacktestResearchRuntime["view"]["activeRun"]>>({ config_json: JSON.stringify(original) }),
+    revisionId: "srv_model", datasetId: "dataset_one", snapshot: { data_epoch: "epoch_one", snapshot_hash: "snapshot_one" },
+    draftText: JSON.stringify(original), request: original };
+  assert.equal(externalReportIsStale(input), false);
+  for (const changed of [{ account_model: "LINEAR_PERP_ONE_WAY_V1" }, { initial_balance: "4321" },
+    { slippage_bps: "2" }, { taker_fee_bps: "1" }, { fixed_qty: "0.002" }, { latency_events: 1 }, { max_drawdown_percent: "10" }]) {
+    assert.equal(externalReportIsStale({ ...input, request: { ...original, ...changed } }), true);
+  }
+  assert.equal(externalReportIsStale({ ...input, request: { ...original, external_connection_id: "new_connection" } }), false);
+  assert.equal(externalReportIsStale({ ...input, request: null }), true);
+  assert.equal(externalReportIsStale({ ...input, request: undefined, draftText: "{" }), true);
+  assert.equal(externalReportIsStale(input), false);
+});
