@@ -12,6 +12,7 @@ from pyne_runtime.runtime import PyneRuntime
 from pyne_runtime.incremental import PyneIncrementalSession, is_incremental_pyne_script
 from candlescope_plugin_sdk.native_strategy import identity, serve
 from .host_policy import host_settings
+from .event_requests import FrozenProvider, market_bars
 
 
 def describe():
@@ -20,16 +21,6 @@ def describe():
         raise ValueError("NATIVE_VERSION_UNSUPPORTED: Pyne observer requires 0.4.1")
     result["historical_session"] = "fixed-history/1"
     return result
-
-
-class FrozenProvider:
-    def __init__(self, contexts):
-        self.contexts = {(item["symbol"], item["timeframe"]): item["bars"] for item in contexts}
-
-    def get_ohlcv(self, symbol, timeframe, start, end):
-        if (symbol, timeframe) not in self.contexts:
-            raise ValueError(f"NATIVE_DATA_MISSING: {symbol}@{timeframe}")
-        return [bar for bar in self.contexts[symbol, timeframe] if start <= bar["time"] <= end]
 
 
 class ObservedBatch(PyneRuntime):
@@ -56,7 +47,7 @@ def settings_for(request):
     if request.get("libraries"):
         raise ValueError("NATIVE_INPUT_UNSUPPORTED: Pyne does not accept Pine library sources")
     settings = replace(host_settings(security_mode="safe"), timeout_seconds=None,
-                       data_provider=FrozenProvider(request.get("contexts", [])))
+                       data_provider=FrozenProvider(request.get("contexts", []), request))
     # Symbol/timeframe are provided explicitly, never inferred from engine defaults.
     from pyne_runtime.metadata import SymbolInfo, TimeframeInfo
     settings = replace(settings, syminfo=SymbolInfo.from_value(request["context"]["symbol"]),
@@ -66,7 +57,8 @@ def settings_for(request):
 
 def execute(request):
     settings = settings_for(request)
-    source, bars = request["source"], request["bars"]
+    source = request["source"]
+    bars = market_bars(request["bars"], request["context"]["timeframe"])
     if is_incremental_pyne_script(source):
         session = ObservedSession(script=source, params=request.get("parameters") or {}, settings=settings)
         result = session.seed(bars)

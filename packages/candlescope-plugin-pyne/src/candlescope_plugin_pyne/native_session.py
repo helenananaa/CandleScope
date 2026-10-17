@@ -3,6 +3,7 @@ from pyne_runtime.historical import HistoricalSession
 from pyne_runtime.incremental import is_incremental_pyne_script
 from candlescope_plugin_sdk.native_strategy import serve_session
 from .native_strategy import describe, settings_for, pack
+from .event_requests import market_bars
 
 
 class Session:
@@ -12,7 +13,7 @@ class Session:
         self.engine = self.new_engine()
 
     def new_engine(self):
-        return HistoricalSession(self.request["source"], self.request["bars"],
+        return HistoricalSession(self.request["source"], market_bars(self.request["bars"], self.request["context"]["timeframe"]),
             params=self.request.get("parameters"), settings=settings_for(self.request))
 
     def advance(self, target):
