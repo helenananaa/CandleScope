@@ -109,6 +109,19 @@ test("semantic default reset keeps default zoom and real-content padding", () =>
   assert.equal(controller.captureRightOffset(), 5);
 });
 
+test("reopen recovers a saved future-only window without changing zoom", () => {
+  const { chart, timeScale } = createChart();
+  const controller = new ViewportController({ chartProvider: () => chart,
+    contentLogicalRangeProvider: () => ({ from: 0, to: 49 }),
+  });
+  controller.applySessionRestore({ mode: "anchor", barSpacing: 6, rightOffset: 190 });
+  assert.deepEqual(timeScale.range, { from: -45, to: 54 });
+  assert.equal(controller.captureRightOffset(), 5);
+  // Intentional whitespace that still leaves market content visible survives.
+  controller.applySessionRestore({ mode: "anchor", barSpacing: 6, rightOffset: 75 });
+  assert.deepEqual(timeScale.range, { from: 25, to: 124 });
+});
+
 test("interaction lock queues the highest priority intent", () => {
   const { chart, calls } = createChart();
   let unlock: (() => void) | undefined;
