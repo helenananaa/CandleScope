@@ -66,6 +66,17 @@ export async function checkLiveSyntheticSession() {
       if(!before?.time || !after?.time || Math.abs(after.time.from-before.time.from)>.01
         || Math.abs(after.time.to-before.time.to)>.01)throw new Error(`linked view lost: ${JSON.stringify({before,after})}`);
       samples.push({auxiliary,stage:"linked ownership through tick",before,after});
+      const returnButton=host.querySelector<HTMLButtonElement>(".chart-return-to-realtime");
+      if(!returnButton)throw new Error("historical view has no return-to-live control");
+      await act(async()=>returnButton.click());await settle();const returned=view();
+      await act(async()=>store.applyTick({...rows.at(-1)!,close:109.9,high:112.5,low:107.5}));
+      await settle();const advanced=view();
+      if(!handle().captureViewportTransfer())throw new Error("return-to-live fixture produced no market bricks");
+      if(returned?.rightOffset == null || advanced?.rightOffset == null
+        || Math.abs(returned.rightOffset-advanced.rightOffset)>1e-5) {
+        throw new Error(`return-to-live lost tail: ${JSON.stringify({auxiliary,returned,advanced})}`);
+      }
+      samples.push({auxiliary,stage:"return-to-live through recalibration",returned,advanced});
     } finally {await act(async()=>root.unmount());host.remove();style.remove();}
   }
   return {name:"live synthetic session initialization and ticks",status:"PASS",samples};

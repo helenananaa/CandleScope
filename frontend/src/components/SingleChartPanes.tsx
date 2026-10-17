@@ -74,7 +74,7 @@ import {
   materializeMainSeriesProjectionPatch,
   renderMainSeriesProjectionPatch,
 } from "../chart-adapter/projectionSeriesRenderer";
-import { createViewportController } from "../chart-adapter/viewportController";
+import { createViewportController, logicalRangeForLatestBarPosition } from "../chart-adapter/viewportController";
 import { ordinalSourceTimesChanged, refreshOrdinalTimeScale } from "../chart-adapter/ordinalTimeScaleRefresh";
 import {
   buildMainSeriesCrosshairValue,
@@ -2102,12 +2102,24 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     transferredHistoryRef.current = null;
     pendingSurfaceViewportRef.current = null;
     boundSurfaceViewportAnchorRef.current = null;
+    liveSessionViewportRef.current = null;
     settleDatasetViewportTransfer("interrupted");
     followLatestDisabledRef.current = false;
     const rawPosition = Number(latestBarPositionRef.current);
-    viewportControllerRef.current?.followLatest(lastIndex, {
-      position: Number.isFinite(rawPosition) ? Math.min(1, Math.max(0, rawPosition)) : 0.5,
-    });
+    const position = Number.isFinite(rawPosition) ? Math.min(1, Math.max(0, rawPosition)) : 0.5;
+    viewportControllerRef.current?.followLatest(lastIndex, { position });
+    // Keep the requested anchor even when the controller queues this command
+    // behind the tail of a pointer gesture. A new navigation clears it.
+    if (!followLatestRef.current && surfaceAxisModeRef.current === "derived-ordinal") {
+      const scale = chartRef.current?.timeScale();
+      const barSpacing = scale?.options().barSpacing;
+      const range = logicalRangeForLatestBarPosition({
+        barSpacing, contentLastLogical: lastIndex, position, width: scale?.width(),
+      });
+      if (range && barSpacing !== undefined) {
+        liveSessionViewportRef.current = { barSpacing, rightOffset: range.to - lastIndex };
+      }
+    }
   }, [settleDatasetViewportTransfer]);
 
   const scheduleLatestWindowScroll = useCallback((requestedDatasetKey: string) => {
