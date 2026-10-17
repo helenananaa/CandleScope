@@ -218,6 +218,16 @@ export class ViewportController {
       width: timeScale.width(),
     });
     if (!range) return false;
+    // A reopened session starts at the market tail. Older shared-axis shifts
+    // may have persisted an offset that puts the entire view in the future.
+    // Keep its zoom, but recover usable default padding in that case.
+    if (range.from > content.to) {
+      const padding = Math.min(range.to - range.from,
+        Math.max(0, this.resetScaleOptions?.rightOffset ?? 0));
+      const shift = range.to - (content.to + padding);
+      range.from -= shift;
+      range.to -= shift;
+    }
     timeScale.setVisibleLogicalRange(toLogicalRange(range));
     return true;
   }

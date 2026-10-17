@@ -74,7 +74,7 @@ import {
   materializeMainSeriesProjectionPatch,
   renderMainSeriesProjectionPatch,
 } from "../chart-adapter/projectionSeriesRenderer";
-import { createViewportController } from "../chart-adapter/viewportController";
+import { createViewportController, logicalRangeForLatestBarPosition } from "../chart-adapter/viewportController";
 import { ordinalSourceTimesChanged, refreshOrdinalTimeScale } from "../chart-adapter/ordinalTimeScaleRefresh";
 import {
   buildMainSeriesCrosshairValue,
@@ -953,6 +953,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   const datasetViewportTransferRef = useRef<SurfaceViewportSnapshot | null>(datasetViewportTransfer);
   const pendingDatasetViewportTransferRequestRef = useRef<SurfaceViewportSnapshot | null>(null);
   const boundSurfaceViewportAnchorRef = useRef<SurfaceViewportSnapshot | null>(null);
+  // Live startup owns a market-tail anchor until navigation takes over. An
+  // ordinal indicator commit can rebase the shared axis after main setData.
+  const liveSessionViewportRef = useRef<SavedVisibleRangeSnapshot | null>(null);
   const onDatasetViewportTransferSettledRef = useRef(onDatasetViewportTransferSettled);
   const followLatestRef = useRef(followLatest);
   const latestBarPositionRef = useRef(latestBarPosition);
@@ -1934,6 +1937,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   }, []);
 
   const markViewportRangeChanged = useCallback((userDriven: boolean) => {
+    liveSessionViewportRef.current = null;
     transferredHistoryRef.current = null;
     pendingSurfaceViewportRef.current = null;
     boundSurfaceViewportAnchorRef.current = null;
@@ -2098,12 +2102,24 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     transferredHistoryRef.current = null;
     pendingSurfaceViewportRef.current = null;
     boundSurfaceViewportAnchorRef.current = null;
+    liveSessionViewportRef.current = null;
     settleDatasetViewportTransfer("interrupted");
     followLatestDisabledRef.current = false;
     const rawPosition = Number(latestBarPositionRef.current);
-    viewportControllerRef.current?.followLatest(lastIndex, {
-      position: Number.isFinite(rawPosition) ? Math.min(1, Math.max(0, rawPosition)) : 0.5,
-    });
+    const position = Number.isFinite(rawPosition) ? Math.min(1, Math.max(0, rawPosition)) : 0.5;
+    viewportControllerRef.current?.followLatest(lastIndex, { position });
+    // Keep the requested anchor even when the controller queues this command
+    // behind the tail of a pointer gesture. A new navigation clears it.
+    if (!followLatestRef.current && surfaceAxisModeRef.current === "derived-ordinal") {
+      const scale = chartRef.current?.timeScale();
+      const barSpacing = scale?.options().barSpacing;
+      const range = logicalRangeForLatestBarPosition({
+        barSpacing, contentLastLogical: lastIndex, position, width: scale?.width(),
+      });
+      if (range && barSpacing !== undefined) {
+        liveSessionViewportRef.current = { barSpacing, rightOffset: range.to - lastIndex };
+      }
+    }
   }, [settleDatasetViewportTransfer]);
 
   const scheduleLatestWindowScroll = useCallback((requestedDatasetKey: string) => {
@@ -3604,6 +3620,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     pendingDatasetViewportTransferRequestRef.current = transferredViewport !== null
       ? datasetViewportTransferRef.current
       : null;
+    liveSessionViewportRef.current = null;
     if (rememberedViewport === null
       && transferredViewport === null
       && datasetViewportTransferRef.current !== null
@@ -4209,6 +4226,13 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         restorePlan,
         { sessionKey: datasetKey },
       ) ?? false;
+      if (restored && !followLatestRef.current && surfaceAxisModeRef.current === "derived-ordinal") {
+        liveSessionViewportRef.current = {
+          ...(restorePlan.barSpacing == null ? {} : { barSpacing: restorePlan.barSpacing }),
+          rightOffset: restorePlan.rightOffset
+            ?? Math.max(0, chartRef.current?.timeScale().options().rightOffset ?? 0),
+        };
+      }
     } finally {
       isRestoringViewportRef.current = false;
     }
@@ -4684,9 +4708,22 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   useEffect(() => {
     // Main data and indicators commit in separate React effects. Removing old
     // ordinal indicator/fill points rebases LWC's shared axis even with
-    // shiftVisibleRangeOnNewBar=false. Restore the owned elapsed-time window
-    // after all auxiliary series have reconciled, not only after main setData.
+    // shiftVisibleRangeOnNewBar=false. Restore live startup's market-tail
+    // anchor or the owned elapsed-time window after all auxiliary series have
+    // reconciled, not only after main setData.
     const bound = boundSurfaceViewportAnchorRef.current;
+    const live = liveSessionViewportRef.current;
+    if (usesDerivedAxis && indicatorDatasetOwned && indicatorReconcileReady
+      && pendingSurfaceViewportRef.current === null && !bound && live
+      && !followLatestRef.current && !followLatestDisabledRef.current) {
+      isRestoringViewportRef.current = true;
+      try {
+        viewportControllerRef.current?.applySessionRestore({ mode: "anchor", ...live });
+      } finally {
+        isRestoringViewportRef.current = false;
+      }
+      return;
+    }
     if (!usesDerivedAxis || !indicatorDatasetOwned || !indicatorReconcileReady
       || pendingSurfaceViewportRef.current !== null || !bound
       || bound.datasetKey !== datasetKeyRef.current
