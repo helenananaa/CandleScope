@@ -15,6 +15,8 @@ from typing import Iterator
 
 from app.backtest.strategy.protocol import StrategyProviderError, canonical_hash
 
+from .journal_schema import SCHEMA as JOURNAL_SCHEMA
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS external_provider_meta (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -72,6 +74,7 @@ class ExternalConnectionRepository:
                 connection.execute("PRAGMA busy_timeout=250")
                 connection.execute("PRAGMA foreign_keys=ON")
                 connection.executescript(_SCHEMA)
+                connection.executescript(JOURNAL_SCHEMA)
                 version = connection.execute(
                     "SELECT schema_version FROM external_provider_meta WHERE singleton = 1"
                 ).fetchone()[0]
