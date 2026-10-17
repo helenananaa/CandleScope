@@ -285,3 +285,55 @@ test("cell persistence scopes preserve the migrated default workspace and isolat
   assert.equal(chartCellStorageScope("workspace-default", "cell-2"), "cell-2");
   assert.equal(chartCellStorageScope("workspace-research", "cell-2"), "workspace-research:cell-2");
 });
+
+test("a pending parent-window edit cannot discard a child's new strategy report from a bus snapshot", () => {
+  const stored = createDefaultChartWorkspaceRecord(100);
+  const context = JSON.stringify(["NATIVE", "binance", "spot", "BTCUSDT", "5m"]);
+  const parent = { activeId: "default", items: [{ id: "default", name: "Parent", language: "pine" as const,
+    drafts: {}, runs: { [context]: "parent-run" }, runHistory: { [context]: ["parent-run"] } }] };
+  chartWorkspaceCell(stored.document, "cell-1").nativeStrategies = structuredClone(parent);
+  chartWorkspaceCell(stored.document, "cell-2").nativeStrategies = structuredClone(parent);
+  const local = structuredClone(stored);
+  local.document.revision += 1;
+  chartWorkspaceCell(local.document, "cell-1").session.interval = "15m";
+  const remote = structuredClone(stored);
+  remote.document.revision += 1;
+  const child = chartWorkspaceCell(remote.document, "cell-2").nativeStrategies!.items[0]!;
+  child.name = "Child E";
+  child.runs[context] = "child-run";
+  child.runHistory = { [context]: ["child-run", "parent-run"] };
+  const snapshot = (record: typeof stored) => ({ activeWorkspaceId: record.id, workspaces: [record] });
+
+  const merged = mergeLoadedChartWorkspaceLibrary(snapshot(local), snapshot(remote), snapshot(stored));
+  const restored = normalizeChartWorkspaceLibrary(JSON.parse(JSON.stringify(merged)), remote);
+  const document = restored.workspaces[0]!.document;
+  assert.equal(chartWorkspaceCell(document, "cell-1").session.interval, "15m");
+  assert.equal(chartWorkspaceCell(document, "cell-1").nativeStrategies!.items[0]!.runs[context], "parent-run");
+  assert.equal(chartWorkspaceCell(document, "cell-2").nativeStrategies!.items[0]!.runs[context], "child-run");
+  assert.deepEqual(chartWorkspaceCell(document, "cell-2").nativeStrategies!.items[0]!.runHistory?.[context], ["child-run", "parent-run"]);
+  assert.ok(document.revision > local.document.revision && document.revision > remote.document.revision);
+  assert.equal(chartWorkspaceCell(stored.document, "cell-2").nativeStrategies!.items[0]!.runs[context], "parent-run");
+  assert.equal(chartWorkspaceCell(local.document, "cell-2").nativeStrategies!.items[0]!.runs[context], "parent-run");
+  const acknowledged = mergeLoadedChartWorkspaceLibrary(restored, structuredClone(restored), snapshot(remote));
+  assert.equal(acknowledged.workspaces[0]!.document.revision, document.revision);
+});
+
+test("a pending strategy removal survives a remote strategy addition on another chart", () => {
+  const stored = createDefaultChartWorkspaceRecord(100);
+  chartWorkspaceCell(stored.document, "cell-1").nativeStrategies = { activeId: "parent", items: [{
+    id: "parent", name: "Parent", language: "pine", drafts: {}, runs: {},
+  }] };
+  const local = structuredClone(stored);
+  local.document.revision += 1;
+  chartWorkspaceCell(local.document, "cell-1").nativeStrategies = { activeId: "", items: [] };
+  const remote = structuredClone(stored);
+  remote.document.revision += 1;
+  chartWorkspaceCell(remote.document, "cell-2").nativeStrategies = { activeId: "child", items: [{
+    id: "child", name: "Child", language: "pyne", drafts: {}, runs: { context: "child-run" },
+  }] };
+  const snapshot = (record: typeof stored) => ({ activeWorkspaceId: record.id, workspaces: [record] });
+  const merged = mergeLoadedChartWorkspaceLibrary(snapshot(local), snapshot(remote), snapshot(stored));
+  const document = merged.workspaces[0]!.document;
+  assert.deepEqual(chartWorkspaceCell(document, "cell-1").nativeStrategies!.items, []);
+  assert.equal(chartWorkspaceCell(document, "cell-2").nativeStrategies!.items[0]!.runs.context, "child-run");
+});
