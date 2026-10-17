@@ -7,6 +7,7 @@ export interface NativeResult {
   report_hash: string;
   equity: Array<{ time: number; value: number }>;
   trades: Array<Record<string, unknown>>;
+  closed_trades?: Array<Record<string, unknown>>;
   orders: Array<Record<string, unknown>>;
   bars: Array<{ time: number; open: number; high: number; low: number; close: number }>;
   graphics: Array<Record<string, unknown>>;

@@ -17,16 +17,17 @@ from app.simulation.kernel import SimulationKernel
 from app.data_engine.interval_policy import parse_interval_spec
 from .errors import BacktestError
 from .external_orders import ExternalOrders
+from .external_report import closed_trades
 
 
 def host_identity():
     import app.simulation.kernel as kernel_module
-    files = [Path(__file__), Path(__file__).with_name("native_session.py"), Path(__file__).with_name("external_orders.py"), Path(__file__).with_name("external_market.py"), Path(__file__).with_name("external_feedback.py"), *sorted(Path(kernel_module.__file__).parent.rglob("*.py"))]
+    files = [Path(__file__), Path(__file__).with_name("native_session.py"), Path(__file__).with_name("external_orders.py"), Path(__file__).with_name("external_report.py"), Path(__file__).with_name("external_market.py"), Path(__file__).with_name("external_feedback.py"), *sorted(Path(kernel_module.__file__).parent.rglob("*.py"))]
     checksum = hashlib.sha256()
     for path in files:
         checksum.update(path.name.encode())
         checksum.update(path.read_bytes())
-    return {"contract": "external-broker/1", "host_model": "SAMPLED_BOOK_VISIBLE_TAKER_V9", "code_sha256": checksum.hexdigest()}
+    return {"contract": "external-broker/1", "host_model": "SAMPLED_BOOK_VISIBLE_TAKER_V10_CLOSED_TRADES", "code_sha256": checksum.hexdigest()}
 
 
 def visible_contexts(wire, boundary_ms):
@@ -134,6 +135,7 @@ def _run_external_host(plugin, wire, runner, cancelled):
                         "script_order_id": orders.bindings[fill["order_id"]][0],
                         "closed_entries": allocation["closed"], "opened_entry": allocation["opened"]}
                        for fill, allocation in zip(report["fills"], orders.allocations, strict=True)],
+            "closed_trades": closed_trades(report["fills"]),
             "orders": [{**order,"script_order_id":orders.bindings[order["order_id"]][0]} for order in report["orders"]],
             "position": report["ledger"]["account"],
             "equity": [{"time": row["event_time_ms"] / 1000, "value": float(row["equity"])} for row in report["equity_curve"]],
