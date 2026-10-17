@@ -311,6 +311,18 @@ class ReplayReviewControlPayload(_StrictModel):
     playback_rate: str | None = Field(default=None, min_length=1, max_length=8)
 
 
+class ReplayCanonicalIndicatorPayload(_StrictModel):
+    track_id: str = Field(min_length=1, max_length=128)
+    display_interval: str = Field(min_length=1, max_length=32)
+    revealed_boundary_ms: int = Field(ge=0, le=MAX_TIMESTAMP_MS)
+    data_epoch: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    history_epoch: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
+    source_sequence: int | None = Field(default=None, ge=0)
+    name: Literal["MA", "EMA", "RSI", "ATR", "MACD", "BOLL", "VOL"]
+    params: dict = Field(default_factory=dict)
+    bars: list[dict] = Field(min_length=1, max_length=10_000)
+
+
 class ReplayPublicTimeBatchPayload(_StrictModel):
     timeline_ms: list[int] = Field(min_length=1, max_length=2_000)
 
