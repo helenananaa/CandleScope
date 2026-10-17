@@ -99,7 +99,9 @@ class TrainingDisplayService:
         # Automatic preparation seals a finite base window, without downloading
         # separate native intervals. Aggregate that same revision for charts and
         # interval commands; unrelated native archives must not become required.
-        if persisted is not None and is_requested_horizon_dataset(persisted):
+        if binding.get("prepared_base_history") is True or (
+            persisted is not None and is_requested_horizon_dataset(persisted)
+        ):
             return dict(binding)
 
         requested_interval = (
@@ -657,7 +659,8 @@ class TrainingDisplayService:
         extend_context = (context is not None and context.preparation.enabled
                           and str(binding.get("base_interval")) == "1m"
                           and lookback.get("mode") == "ALL_AVAILABLE"
-                          and (is_requested_horizon_dataset(persisted) or is_progressive_dataset(persisted)))
+                          and (binding.get("prepared_base_history") is True
+                               or is_requested_horizon_dataset(persisted) or is_progressive_dataset(persisted)))
         repository = self.replay_service.prepared_history_repository(normalized_session, data_epoch)
         page = await asyncio.to_thread(
             build_history_page,
@@ -743,7 +746,8 @@ class TrainingDisplayService:
         if (context is not None and context.preparation.enabled
             and str(binding.get("base_interval")) == "1m"
             and lookback.get("mode") == "ALL_AVAILABLE"
-            and (is_requested_horizon_dataset(persisted) or is_progressive_dataset(persisted))):
+            and (binding.get("prepared_base_history") is True
+                               or is_requested_horizon_dataset(persisted) or is_progressive_dataset(persisted))):
             context_repository, _ = _progressive_repository(
                 persisted, repository, lambda: self.replay_service.progressive_history)
             return await context.complete_projection(page=page, binding=binding,

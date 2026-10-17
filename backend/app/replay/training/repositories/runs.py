@@ -13,6 +13,7 @@ from app.replay.canonical import canonical_json, canonical_sha256
 from app.replay.storage.sqlite_store import ReplaySQLiteStore
 
 from ..errors import TrainingRunError
+from ..prepared_display import uses_prepared_base_history
 from ..models import (
     REPLAY_V2_PROTOCOL,
     TrainingRunCreateRequest,
@@ -1418,6 +1419,7 @@ class TrainingRunRepository:
                        i.strict_eligible, i.start_time_known, i.result_label,
                        dataset.actual_replay_start_ms,
                        dataset.actual_replay_end_ms,
+                       dataset.snapshot_ref_json AS primary_snapshot_ref_json,
                        dataset.synthetic_origin_ms
                 FROM replay_training_run AS r
                 JOIN replay_training_viewer_state AS viewer USING(run_id)
@@ -1453,6 +1455,9 @@ class TrainingRunRepository:
             "display_interval": str(row["display_interval"]),
             "compatibility": str(row["compatibility"]),
             "adapter_config": adapter_config,
+            "prepared_base_history": uses_prepared_base_history(
+                json.loads(str(row["primary_snapshot_ref_json"]))
+            ),
             "position_mode": str(row["position_mode"]),
             "exchange": str(row["exchange"]),
             "market_type": str(row["market_type"]),

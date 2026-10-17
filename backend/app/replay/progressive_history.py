@@ -292,67 +292,7 @@ class ProgressiveHistoryRepository:
         return {"gaps": [], "truncated": False, "source_revision": revision}
 
 
-    def query_source_bucket_bars_at_revision(self, revision, symbol, base_interval, display_interval, *,
-            actual_start_ms, actual_end_ms, actual_replay_start_ms, public_replay_start_ms, limit,
-            include_partial=False, source_bucket_anchor_ms=None, exchange=None, market_type=None):
-        from decimal import Decimal
-        from .models import normalize_decimal_string
-        from .display_time import SourceBucketTimeMapper
-        self._check(revision, symbol, base_interval, exchange, market_type)
-        mapper = SourceBucketTimeMapper.create(interval=display_interval,
-            actual_replay_start_ms=actual_replay_start_ms, public_replay_start_ms=public_replay_start_ms,
-            source_bucket_anchor_ms=source_bucket_anchor_ms)
-        last_bucket = mapper.actual_containing_bucket_open(actual_end_ms - 1)
-        first_bucket = mapper.actual_bucket_open(mapper.actual_bucket_ordinal(last_bucket) - limit - 2)
-        first = max(actual_start_ms, first_bucket)
-        groups = {}
-        cursor = first
-        optional = ("quote_volume", "trades", "taker_buy_base", "taker_buy_quote")
-        # Stream bounded base pages, retaining only bucket summaries. Calendar
-        # months use the mapper's actual exchange grid before time disclosure.
-        while cursor < actual_end_ms:
-            stop = min(actual_end_ms, cursor + 4096 * 60_000)
-            rows = self.query_bars_at_revision(revision, symbol, base_interval,
-                start_ms=cursor, end_ms=stop - 1, limit=4096, order="ASC",
-                exchange=exchange, market_type=market_type)
-            for row in rows:
-                timestamp = int(row["open_time"])
-                bucket = mapper.actual_containing_bucket_open(timestamp)
-                values = {key: None if row.get(key) is None else Decimal(str(row[key]))
-                          for key in ("open", "high", "low", "close", "volume", *optional)}
-                group = groups.get(bucket)
-                if group is None:
-                    group = {**values, "first": timestamp, "last": timestamp, "count": 1, "contiguous": True}
-                    groups[bucket] = group
-                else:
-                    group["contiguous"] = group["contiguous"] and timestamp == group["last"] + 60_000
-                    group["last"], group["count"] = timestamp, group["count"] + 1
-                    group["high"] = max(group["high"], values["high"])
-                    group["low"] = min(group["low"], values["low"])
-                    group["close"] = values["close"]
-                    group["volume"] += values["volume"]
-                    for key in optional:
-                        group[key] = None if group[key] is None or values[key] is None else group[key] + values[key]
-            cursor = stop
-        bars = []
-        public_revealed = public_replay_start_ms + actual_end_ms - actual_replay_start_ms - 1
-        for bucket, group in sorted(groups.items()):
-            bucket_end = mapper.actual_bucket_end(bucket)
-            expected = (bucket_end - bucket) // 60_000
-            complete = group["count"] == expected and group["last"] + 60_000 == bucket_end
-            partial = include_partial and group["count"] < expected and group["last"] + 60_000 == actual_end_ms
-            if not group["contiguous"] or group["first"] != bucket or not (complete or partial):
-                continue
-            public = mapper.public_from_actual(bucket)
-            public_end = mapper.public_bucket_end(public)
-            last_base = min(public_end - 60_000, public + (group["count"] - 1) * 60_000, public_revealed)
-            if public < 0 or last_base < public:
-                continue
-            result = {key: None if group[key] is None else normalize_decimal_string(format(group[key], "f"), field_name=key)
-                      for key in ("open", "high", "low", "close", "volume", *optional)}
-            result["trades"] = None if group["trades"] is None else int(group["trades"])
-            bars.append({**result, "open_time_ms": public, "close_time_ms": public_end - 1,
-                "first_base_open_ms": public, "last_base_open_ms": last_base,
-                "component_count": group["count"], "expected_components": expected,
-                "is_closed": complete, "synthetic": False})
-        return {"bars": bars[-(limit + 1):], "has_more": first > actual_start_ms or len(bars) > limit}
+    def query_source_bucket_bars_at_revision(self, revision, symbol, base_interval, display_interval, **kwargs):
+        from .source_bucket_projection import query_source_bucket_projection
+        self._check(revision, symbol, base_interval, kwargs.get("exchange"), kwargs.get("market_type"))
+        return query_source_bucket_projection(self, revision, symbol, base_interval, display_interval, **kwargs)
