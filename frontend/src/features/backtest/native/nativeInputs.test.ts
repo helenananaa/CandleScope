@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { emptyAdvancedInputs, executionInputs, freezeAdvancedInputs, type InputDataset } from "./nativeInputs.js";
+import { automaticHostExecution, emptyAdvancedInputs, executionInputs, freezeAdvancedInputs, type InputDataset } from "./nativeInputs.js";
 import { nativeApi } from "./nativeBacktestApi.js";
 
 const dataset: InputDataset = { dataset_id: "data", data_epoch: "epoch1", name: "ETH", symbol: "ETHUSDT",
@@ -52,4 +52,17 @@ test("shared execution payload preserves fill callback for both chart entry poin
   });
   assert.equal(executionInputs("CANDLESCOPE", settings, "BAR_APPROX", true, tape).fill_recalculation, false);
   assert.deepEqual(executionInputs("NATIVE", settings, "TRADE_TAPE", true, tape), {});
+});
+
+test("automatic execution keeps uploaded tapes authoritative and ignores stale uploads in BAR mode", () => {
+  const settings = { initial_balance: 3210, slippage_bps: 2 };
+  assert.equal(automaticHostExecution("NATIVE", settings, "TRADE_TAPE", true, {}), null);
+  assert.deepEqual(automaticHostExecution("CANDLESCOPE", settings, "BAR_APPROX", true, {}), {
+    execution_fidelity: "BAR_APPROX", host_settings: settings, fill_recalculation: false,
+  });
+  assert.deepEqual(automaticHostExecution("CANDLESCOPE", settings, "TRADE_TAPE", true, null), {
+    execution_fidelity: "TRADE_TAPE", host_settings: settings, fill_recalculation: true,
+  });
+  assert.equal(automaticHostExecution("CANDLESCOPE", settings, "TRADE_TAPE", true, {}), undefined);
+  assert.equal(automaticHostExecution("CANDLESCOPE", settings, "BOOK_DEPTH", false, null), undefined);
 });

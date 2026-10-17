@@ -463,7 +463,7 @@ def load_backtest_settings(
             environment, "BACKTEST_TRADE_EXPLANATION_ENABLED", "0"
         ),
         trade_tape_enabled=_strict_replay_bool(
-            environment, "BACKTEST_TRADE_TAPE_ENABLED", "0"
+            environment, "BACKTEST_TRADE_TAPE_ENABLED", "1"
         ),
         book_assisted_enabled=_strict_replay_bool(
             environment, "BACKTEST_BOOK_ASSISTED_ENABLED", "0"

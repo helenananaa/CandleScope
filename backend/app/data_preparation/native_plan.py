@@ -140,10 +140,42 @@ def freeze_bindings(runtime, bindings):
 
 
 def launch(runtime, intent, inputs, job_id):
-    from app.backtest.native_contracts import NativeRunRequest
+    from app.backtest.native_contracts import NativeRunRequest, ExternalRunRequest
+    if "frozen_payload" in intent:
+        payload = ExternalRunRequest.model_validate(intent["frozen_payload"]).model_dump()
+        return runtime.native.create(payload, f"preparation:{job_id}")
     main, *contexts = inputs
     payload = {key: value for key, value in main.items() if key not in {"symbol", "timeframe"}}
     payload.update(language=intent["language"], source=intent["source"], parameters=intent["parameters"],
         libraries=intent["libraries"], contexts=contexts,
         context={"symbol": main["symbol"], "timeframe": main["timeframe"]})
-    return runtime.native.create(NativeRunRequest.model_validate(payload).model_dump(), f"preparation:{job_id}")
+    contract = NativeRunRequest
+    if intent.get("execution") is not None:
+        contract = ExternalRunRequest
+        payload.update(intent["execution"], execution_mode="CANDLESCOPE")
+    return runtime.native.create(contract.model_validate(payload).model_dump(), f"preparation:{job_id}")
+
+
+def validate_frozen_external(runtime, payload):
+    """Reject stale or mismatched signal inputs before acquiring any prints."""
+    from app.backtest.errors import BacktestError
+    from app.market_dataset.snapshot import MarketDatasetError
+    if payload["execution_fidelity"] != "TRADE_TAPE" or payload.get("execution_data") is not None:
+        raise PreparationError("INPUT_UNSUPPORTED", "Automatic frozen execution requires archive TRADE_TAPE")
+    if payload.get("libraries") or payload.get("magnifier"):
+        raise PreparationError("EXTERNAL_UNSUPPORTED", "Host matching does not accept native libraries or Magnifier")
+    keys = set()
+    for index, item in enumerate([payload, *payload.get("contexts", [])]):
+        metadata = payload["context"] if index == 0 else item
+        pair = (metadata["symbol"], metadata["timeframe"])
+        if index and pair in keys:
+            raise PreparationError("INPUT_INVALID", "Duplicate requested context")
+        if index:
+            keys.add(pair)
+        try:
+            manifest = runtime._manifest(item["dataset_id"])
+            runtime.native._freeze(item)
+        except (BacktestError, MarketDatasetError) as exc:
+            raise PreparationError(exc.code, str(exc)) from exc
+        if pair[0].split(":")[-1] != manifest["symbol"] or pair[1] != timeframe(item["interval"]):
+            raise PreparationError("DATA_SNAPSHOT_MISMATCH", "Signal metadata differs from frozen dataset")

@@ -193,6 +193,12 @@ async def test_retry_repeats_failed_inventory_before_acquisition(tmp_path, monke
         reconcile(repository, stop)
     monkeypatch.setattr("app.data_preparation.storage_inventory.reconcile", flaky)
     adapter = Adapter()
+    acquisition_inventory_attempts = []
+    acquire = adapter.acquire
+    async def observed_acquire(requirement, key):
+        acquisition_inventory_attempts.append(attempts)
+        return await acquire(requirement, key)
+    adapter.acquire = observed_acquire
     adapter.publication_scopes = lambda: []
     adapter.release.set()
     service = PreparationService(PreparationRepository(tmp_path / "jobs.db"), adapter)
@@ -203,6 +209,9 @@ async def test_retry_repeats_failed_inventory_before_acquisition(tmp_path, monke
         assert adapter.calls == 0
         await service.retry(job["id"])
         assert (await terminal(service, job["id"]))["state"] == "READY"
-        assert attempts == 2 and adapter.calls == 1
+        # READY schedules a third background inventory. Its completion may
+        # race this observer; the acquisition barrier itself must be exact.
+        assert acquisition_inventory_attempts == [2] and adapter.calls == 1
+        assert 2 <= attempts <= 3
     finally:
         await service.shutdown()

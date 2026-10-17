@@ -74,9 +74,10 @@ def test_requested_history_bound_and_calendar_warmup():
 
 
 @async_test
+@pytest.mark.parametrize("mode", ["NATIVE", "CANDLESCOPE"])
 @pytest.mark.parametrize("expression,prior,declared", [("close", 1, None), ("ta.sma(close, 10)", 10, None),
     ("ta.sma(ta.sma(close, 3), 4)", 6, None), ("ta.ema(close, 10)", 20, 20)])
-async def test_native_api_freezes_multiple_symbols_and_timeframes_before_launch(tmp_path, expression, prior, declared):
+async def test_native_api_freezes_multiple_symbols_and_timeframes_before_launch(tmp_path, expression, prior, declared, mode):
     import httpx
     from fastapi import FastAPI
     from app.api.v1.data_preparation import router
@@ -103,6 +104,9 @@ async def test_native_api_freezes_multiple_symbols_and_timeframes_before_launch(
         if wire.get("operation") == "describe":
             return {"identity": identity}
         launched.append(wire)
+        if mode == "CANDLESCOPE":
+            return {"identity": identity, "execution_mode": mode, "account_authority": "candlescope",
+                "contract": "external-broker/1", "intents": []}
         return {"identity": identity, "execution_mode": "NATIVE", "account_authority": "pine-compat-runtime"}
 
     runtime.native.resolver = lambda language: {"plugin_id": "candlescope.pine-compat", "command": ["fixture"]}
@@ -122,6 +126,8 @@ async def test_native_api_freezes_multiple_symbols_and_timeframes_before_launch(
             "context": {"exchange": "binance", "market_type": "futures", "symbol": "BTCUSDT",
                 "interval": "5m", "range_mode": "CUSTOM", "fidelity_preference": "FAST",
                 "start_time_ms": START, "end_time_ms": START + 3_600_000 - 1}}
+        if mode == "CANDLESCOPE":
+            body["execution"] = {"execution_fidelity": "BAR_APPROX", "host_settings": {"initial_balance": 4321}}
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             if declared is not None:
                 rejected = await client.post("/data-preparations/native-strategy", json=body)
@@ -147,16 +153,20 @@ async def test_native_api_freezes_multiple_symbols_and_timeframes_before_launch(
         assert run["state"] == "COMPLETED", run
         resumed = await adapter.launch(PreparationRequest.model_validate(job["request"]), job["result"], job["id"])
         assert resumed["native_run"]["run_id"] == run_id
-        assert len(runtime.native.list()) == len(launched) == 1
+        assert len(runtime.native.list()) == 1
+        assert len(launched) == (1 if mode == "NATIVE" else 12)
         assert runtime.service.list_runs() == []
         payload = run["config"]
-        assert run["execution_mode"] == "NATIVE"
+        assert run["execution_mode"] == mode
+        if mode == "CANDLESCOPE":
+            assert run["result"]["account_authority"] == "candlescope"
+            assert {row["value"] for row in run["result"]["equity"]} == {4321}
         assert payload["interval"] == "5m"
         assert {(item["symbol"], item["timeframe"]) for item in payload["contexts"]} == {
             ("BINANCE:ETHUSDT", "60"), ("BINANCE:BTCUSDT", "60")}
         assert set(acquired) == {"BTCUSDT", "ETHUSDT"}
         assert len(job["request"]["requirements"]) == 2
-        eth = next(item for item in launched[0]["contexts"] if item["symbol"] == "BINANCE:ETHUSDT")
+        eth = next(item for item in launched[-1]["contexts"] if item["symbol"] == "BINANCE:ETHUSDT")
         assert eth["bars"][0]["time"] * 1000 == START - prior * 3_600_000
         assert len(eth["bars"]) == prior + 1
         assert launched[0]["bars"][0]["time"] * 1000 == START
