@@ -155,6 +155,7 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
   return <section className="native-report" data-view={view}>
     <div className="native-report-context"><span>{run.config?.context?.symbol ?? "—"} · {run.config?.interval ?? run.config?.context?.timeframe ?? "—"}</span><span>{t("report.range")} · {analytics.equity.length ? `${new Date(analytics.equity[0]!.time * 1000).toLocaleDateString(locale)} — ${new Date(analytics.equity.at(-1)!.time * 1000).toLocaleDateString(locale)}` : "—"}</span><span>{t("report.sample")} · {display(analytics.baseline)}</span></div>
     {controls && <div className="native-report-toolbar">{controls}</div>}
+    {result.account_model === "SPOT_CASH_V1" && <p className="native-report-caption">{t("ux.spotCashHint")}</p>}
 
     <div hidden={view === "trades"}>
     <div className="native-report-metrics">
