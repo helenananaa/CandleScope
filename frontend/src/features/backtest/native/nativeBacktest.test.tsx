@@ -90,6 +90,7 @@ test("host reports show cash constraints only for an explicitly frozen spot acco
     result: { account_authority: "candlescope", account_model: "SPOT_CASH_V1", fill_model: "BAR_NEXT_BAR_WORST_CASE_V1",
       report_hash: "hash", equity: [], trades: [], closed_trades: [], orders: [], bars: [], graphics: [], raw_output: {}, diagnostics: [] } };
   assert.ok(renderToStaticMarkup(<NativeStrategyReport run={run} />).includes(t("ux.spotCashHint")));
-  const legacy = { ...run, result: { ...run.result!, account_model: undefined } };
+  const legacy: NativeRun = { ...run, result: { ...run.result! } };
+  delete legacy.result!.account_model;
   assert.ok(!renderToStaticMarkup(<NativeStrategyReport run={legacy} />).includes(t("ux.spotCashHint")));
 });
