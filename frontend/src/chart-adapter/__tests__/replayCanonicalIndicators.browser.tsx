@@ -470,10 +470,12 @@ export async function checkControlledCanonicalRestoration() {
     function Workspace() {
         const [documents, setDocuments] = useState(() => Object.fromEntries(['cell-1', 'cell-2', 'cell-3', 'cell-4'].map(id => [id, structuredClone(defs)])));
         const [visible, setVisible] = useState(true);
-        show = setVisible;
         const [phase, setPhase] = useState(0);
-        change = setPhase;
-        edit = () => setDocuments(prev => Object.fromEntries(Object.entries(prev).map(([id, list]) => [id, list.map(i => ({ ...i, description: 'restored metadata' }))])));
+        useLayoutEffect(() => {
+            show = setVisible;
+            change = setPhase;
+            edit = () => setDocuments(prev => Object.fromEntries(Object.entries(prev).map(([id, list]) => [id, list.map(i => ({ ...i, description: 'restored metadata' }))])));
+        }, []);
         return <>{Object.entries(documents).filter(([id]) => visible || id !== 'cell-1').map(([id, definitions]) => <Cell key={id} id={id} phase={phase} definitions={definitions} save={v => setDocuments(prev => ({ ...prev, [id]: v }))}/>)}</>;
     }
     async function settle(label: string) {
