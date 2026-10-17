@@ -2774,6 +2774,11 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         chartPointerLogicalRangeChangedRef.current = true;
         markViewportRangeInteracted();
       }
+      // Programmatic follow/resize also changes the view a reopened replay
+      // must restore. Persist it without reporting it as a user/link gesture.
+      if (range && !isSyncingRef.current && !isRestoringViewportRef.current) {
+        scheduleVisibleRangeSave();
+      }
       if (!shouldPublishUserViewportRange({
         isProgrammatic: isRestoringViewportRef.current,
         isSyncing: isSyncingRef.current,
@@ -3902,6 +3907,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     }
     refreshScrolledAwayFromLatest();
     notifyLinkedViewportReady();
+    scheduleVisibleRangeSave();
 
     const unsubscribe = store.subscribe((delta, currentStore) => {
       if (projectionGenerationRef.current !== generation
@@ -4115,9 +4121,10 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       }
       refreshScrolledAwayFromLatest();
       notifyLinkedViewportReady();
+      scheduleVisibleRangeSave();
     });
     return () => { unsubscribe(); };
-  }, [chartAdapter, clearFutureTimeAxis, commitFutureTimeAxisPlan, createFutureTimeAxisPlan, ensureTransferredHistoryFill, followLatestViewport, mainSeriesRenderContext, materializeRuntimePaneLayout, notifyLinkedViewportReady, projectionSettings, publishDrawingProjectionStore, refreshOrdinalSurfaceTimeScale, refreshScrolledAwayFromLatest, scheduleLeftHistoryDemandFlush, scheduleTransferredHistoryFill, seriesReady, seriesStore, settleDatasetViewportTransfer, updateMainSeriesReference]);
+  }, [chartAdapter, clearFutureTimeAxis, commitFutureTimeAxisPlan, createFutureTimeAxisPlan, ensureTransferredHistoryFill, followLatestViewport, mainSeriesRenderContext, materializeRuntimePaneLayout, notifyLinkedViewportReady, projectionSettings, publishDrawingProjectionStore, refreshOrdinalSurfaceTimeScale, refreshScrolledAwayFromLatest, scheduleLeftHistoryDemandFlush, scheduleTransferredHistoryFill, scheduleVisibleRangeSave, seriesReady, seriesStore, settleDatasetViewportTransfer, updateMainSeriesReference]);
 
   useEffect(() => {
     const rows = rowsFromStore(seriesStore);

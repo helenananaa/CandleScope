@@ -274,12 +274,12 @@ test("followLatest keeps an underfilled latest bar centered without fitting", ()
     contentLastLogical: 9,
     position: 0.5,
     width: 600,
-  }), { from: -41, to: 59 });
+  }), { from: -40.5, to: 58.5 });
   assert.equal(controller.followLatest(9), true);
   assert.equal(controller.followLatest(10), true);
   assert.deepEqual(calls, [
-    ["setVisibleLogicalRange", { from: -41, to: 59 }],
-    ["setVisibleLogicalRange", { from: -40, to: 60 }],
+    ["setVisibleLogicalRange", { from: -40.5, to: 58.5 }],
+    ["setVisibleLogicalRange", { from: -39.5, to: 59.5 }],
   ]);
 });
 

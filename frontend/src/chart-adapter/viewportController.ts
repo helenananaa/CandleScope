@@ -79,7 +79,9 @@ export function logicalRangeForLatestBarPosition({
     || !Number.isFinite(scaleWidth) || scaleWidth <= 0
     || !Number.isFinite(normalizedPosition)
     || normalizedPosition < 0 || normalizedPosition > 1) return null;
-  const span = scaleWidth / spacing;
+  // LWC sets spacing to width / (to - from + 1). Using width / spacing
+  // as the endpoint difference zooms out by one bar on every follow intent.
+  const span = scaleWidth / spacing - 1;
   if (!Number.isFinite(span) || span <= 0) return null;
   const from = last - span * normalizedPosition;
   return { from, to: from + span };
