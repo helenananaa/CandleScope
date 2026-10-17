@@ -41,6 +41,15 @@ test("default-off and partially enabled flags can only tighten hard limits", () 
     maxCellsPerApp: LEGACY_VISIBLE_CELLS_PER_WINDOW,
   });
 
+  const legacyWithNativeWindows = resolveChartWorkspaceFeatureFlags({ MULTI_WINDOW_ENABLED: "1" });
+  assert.equal(legacyWithNativeWindows.multiWindowEnabled, true);
+  assert.equal(legacyWithNativeWindows.multiChart64Enabled, false);
+  assert.deepEqual(chartWorkspaceRuntimeLimits(legacyWithNativeWindows), {
+    maxCellsPerWindow: LEGACY_VISIBLE_CELLS_PER_WINDOW,
+    maxWindowsPerWorkspace: MAX_WINDOWS_PER_WORKSPACE,
+    maxCellsPerApp: LEGACY_VISIBLE_CELLS_PER_WINDOW,
+  });
+
   const partial = resolveChartWorkspaceFeatureFlags({
     MULTI_CHART_16_ENABLED: "1",
     MULTI_CHART_64_ENABLED: "1",
