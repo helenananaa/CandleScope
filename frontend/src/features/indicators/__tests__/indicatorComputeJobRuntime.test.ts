@@ -333,7 +333,7 @@ test("forced recompute bypasses completed work but still joins the same in-fligh
   const joinedResult = await joinedForce;
   assert.equal(joinedResult.joined, 1);
   assert.equal(joinedResult.queued, 0);
-  assert.deepEqual(joinedResult.results, []);
+  assert.deepEqual(joinedResult.results, [{ jobKey: "A:ma" }]);
   assert.equal((await forced).results.length, 1);
 });
 
@@ -479,4 +479,72 @@ test("an old rejection cannot overwrite a successor that returned to the same li
   const obsolete = await old;
   assert.equal(obsolete.stale, true);
   assert.deepEqual(obsolete.results, []);
+});
+
+
+test("forced restoration replays already published joined results and only its requested keys", async () => {
+  const coordinator = createIndicatorComputeJobCoordinator();
+  let release: (() => void) | undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const rendered = new Set<string>();
+  let physical = 0;
+  const original = coordinator.schedule({
+    lifecycleKey: "A", jobs: [{ jobKey: "ma" }, { jobKey: "rsi" }, { jobKey: "script" }],
+    isResultComplete: () => false,
+    onResults: results => {
+      for (const result of results) rendered.add(result.jobKey);
+      coordinator.complete(results.map(result => result.jobKey));
+    },
+    execute: async (jobs, _signal, publish) => {
+      physical++;
+      publish(jobs.slice(0, 2));
+      await gate;
+      publish(jobs.slice(2));
+      return jobs;
+    },
+  });
+  await Promise.resolve();
+  assert.deepEqual([...rendered], ["ma", "rsi"]);
+  // A workspace definition restore clears runtime output while scripts are pending.
+  rendered.clear();
+  const restored = coordinator.schedule({
+    lifecycleKey: "A", force: true,
+    jobs: [{ jobKey: "ma" }, { jobKey: "script" }, { jobKey: "new" }],
+    execute: async jobs => { physical++; return jobs; },
+  });
+  release?.();
+  const result = await restored;
+  await original;
+  assert.equal(physical, 2);
+  assert.equal(result.joined, 2);
+  assert.equal(result.queued, 1);
+  assert.deepEqual(result.results.map(item => item.jobKey), ["ma", "script", "new"]);
+  for (const item of result.results) rendered.add(item.jobKey);
+  assert.deepEqual([...rendered].sort(), ["ma", "new", "script"]);
+});
+
+test("forced joined restoration rejects an obsolete lifecycle even after returning to the same key", async () => {
+  const coordinator = createIndicatorComputeJobCoordinator();
+  let release: (() => void) | undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const jobs = [{ jobKey: "ma" }];
+  const original = coordinator.schedule({
+    lifecycleKey: "A", jobs,
+    execute: async () => { await gate; return [{ jobKey: "ma", value: "old-prefix" }]; },
+  });
+  const restored = coordinator.schedule({
+    lifecycleKey: "A", jobs, force: true,
+    execute: async () => { throw new Error("joined work must not execute twice"); },
+  });
+  coordinator.activate("B");
+  const successor = await coordinator.schedule({
+    lifecycleKey: "A", jobs,
+    execute: async () => [{ jobKey: "ma", value: "current-prefix" }],
+  });
+  release?.();
+  const obsolete = await restored;
+  await original;
+  assert.equal(obsolete.stale, true);
+  assert.deepEqual(obsolete.results, []);
+  assert.deepEqual(successor.results, [{ jobKey: "ma", value: "current-prefix" }]);
 });

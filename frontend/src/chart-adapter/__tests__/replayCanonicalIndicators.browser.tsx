@@ -1,7 +1,8 @@
-import { act, useLayoutEffect, useMemo, useSyncExternalStore } from "react";
+import { act, useLayoutEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { createChart, LineSeries, type UTCTimestamp } from "lightweight-charts";
 import { useProvidedBarsIndicatorRuntime } from "../../features/indicators/useProvidedBarsIndicatorRuntime.js";
+import type { IndicatorDefinition } from "../../features/indicators/indicatorTypes.js";
 import type { IndicatorRuntime } from "../../features/indicators/indicatorRuntimeContract.js";
 import type { ActiveIndicatorPersistence } from "../../features/indicators/activeIndicatorStore.js";
 import { SeriesWindowStore } from "../../features/market-data/window/seriesWindowStore.js";
@@ -415,3 +416,102 @@ export async function checkColdTapePlayback(rewind = false) {
 }
 
 export async function checkColdTapePlaybackRewind() { return checkColdTapePlayback(true); }
+
+
+/** Controlled workspace restore after early builtin output must recover every result. */
+export async function checkControlledCanonicalRestoration() {
+    const defs: IndicatorDefinition[] = [{ id: 'ma', engineName: 'MA', visible: true, params: {} }, { id: 'rsi', engineName: 'RSI', visible: true, params: {} }, ...['custom', 'pine', 'cleanup'].map(id => ({ id, script: 'plot(close)', language: 'pyne', visible: true, params: {} }))];
+    const old = globalThis.fetch;
+    const requests: unknown[] = [];
+    const samples: unknown[] = [];
+    let releaseScripts: (() => void) | undefined;
+    const scriptsPending = new Promise<void>(resolve => { releaseScripts = resolve; });
+    globalThis.fetch = async (input, options) => {
+        const url = new URL(String(input), location.href), body = JSON.parse(String(options?.body)) as { name: string; requests: { clientId: string; jobKey: string }[] };
+        requests.push({ path: url.pathname, name: body.name });
+        const example = (name: string) => fixture.cases.find(c => c.name === name && Object.keys(c.params).length === 0)!.canonical.find(c => c.prefix_count === 47)!.result;
+        if (url.pathname.endsWith('/indicator-compute')) {
+            await new Promise(r => setTimeout(r, body.name === 'MA' ? 5 : 15));
+            return Response.json({ ...example(body.name), protocol: 'replay.v3', status: 'ready', seed: { session_id: 'adapter', track_id: 'track-1', data_epoch: epoch, history_epoch: historyEpoch, identity } });
+        }
+        if (url.pathname.endsWith('/compute/batch')) {
+            await scriptsPending;
+            return Response.json({ ok: true, results: body.requests.map((j: {
+                    clientId: string;
+                    jobKey: string;
+                }) => ({ ...j, payload: example('MA').payload })) });
+        }
+        throw new Error(`unexpected ${url}`);
+    };
+    const store = new SeriesWindowStore({ seriesKey: 'known-epoch' });
+    store.replace(rows.slice(47, 50).map(replayDisplayBarToKline));
+    const host = document.createElement('div');
+    document.body.append(host);
+    const root = createRoot(host);
+    const latest = new Map<string, IndicatorRuntime>();
+    let show: (v: boolean) => void = () => { };
+    let change: (v: number) => void = () => { };
+    let edit: () => void = () => { };
+    const binding = { sessionId: 'adapter', trackId: 'track-1', dataEpoch: epoch, historyEpoch, revealedBoundaryMs: rows.at(-1)!.close_time_ms, identity };
+    function Cell({ id, phase, definitions, save }: {
+        id: string;
+        phase: number;
+        definitions: IndicatorDefinition[];
+        save: (v: IndicatorDefinition[]) => void;
+    }) {
+        const persistence = useMemo(() => ({ controlled: true, load: () => definitions, save }), [definitions, save]);
+        const canonical = useReplayCanonicalIndicatorCompute(`${id}-${phase}`, store, binding), key = `${id}-${phase}|${canonical.sourceKey}`;
+        const bars = useMemo(() => store.snapshot().map(r => ({ ...r })), []);
+        const meta = useMemo(() => ({ version: store.version, status: 'ready', committedAt: null, source: 'replay-indicator-revealed-prefix' }), []);
+        const runtime = useProvidedBarsIndicatorRuntime({ bars, computeBatch: canonical.compute, persistence, chartDataMeta: meta, datasetKey: key, sourceScopeKey: key, sourceOrdinal: binding.revealedBoundaryMs, seriesReady: store.version, visibleThroughSeconds: binding.revealedBoundaryMs / 1000, exchange: 'fixture', marketType: 'spot', symbol: 'FIXTURE', interval: '1m' });
+        useLayoutEffect(() => { latest.set(id, runtime); });
+        return <output>{id}:{runtime.view.activeIndicators.map(i => `${i.id}=${i.lines?.length ?? 0}/${i.error ?? ''}`).join(',')}</output>;
+    }
+    function Workspace() {
+        const [documents, setDocuments] = useState(() => Object.fromEntries(['cell-1', 'cell-2', 'cell-3', 'cell-4'].map(id => [id, structuredClone(defs)])));
+        const [visible, setVisible] = useState(true);
+        show = setVisible;
+        const [phase, setPhase] = useState(0);
+        change = setPhase;
+        edit = () => setDocuments(prev => Object.fromEntries(Object.entries(prev).map(([id, list]) => [id, list.map(i => ({ ...i, description: 'restored metadata' }))])));
+        return <>{Object.entries(documents).filter(([id]) => visible || id !== 'cell-1').map(([id, definitions]) => <Cell key={id} id={id} phase={phase} definitions={definitions} save={v => setDocuments(prev => ({ ...prev, [id]: v }))}/>)}</>;
+    }
+    async function settle(label: string) {
+        for (let i = 0; i < 100; i++)
+            await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        const state = [...latest].map(([id, r]) => ({ id, computing: r.status.computing, lines: r.view.activeIndicators.map(i => [i.id, i.lines?.length ?? 0, i.error]), panes: r.view.subPanes.map(p => p.statusText) }));
+        samples.push({ label, state });
+        if (state.some(s => s.lines.some(l => !l[1])) || [...latest.values()].some(r => r.view.activeIndicators.slice(0, 2).some(i => { const ref = fixture.cases.find(c => c.name === i.engineName && Object.keys(c.params).length === 0)!; return JSON.stringify(i.lines?.[0]?.data) !== JSON.stringify(ref.canonical.find(c => c.prefix_count === 47)!.result.payload.lines[0]!.data); })))
+            throw new Error(JSON.stringify({ label, state, requests }));
+    }
+    try {
+        await act(async () => root.render(<Workspace />));
+        for (let i = 0; i < 50; i++) {
+            await act(async () => { await new Promise(r => setTimeout(r, 5)); });
+            if ([...latest.values()].every(r => r.view.activeIndicators.slice(0, 2).every(i => i.lines?.length)))
+                break;
+        }
+        assert(latest.size === 4 && [...latest.values()].every(r => r.view.activeIndicators.slice(0, 2).every(i => i.lines?.length) && r.view.activeIndicators.slice(2).every(i => !i.lines?.length)), 'restore must occur after builtin publication while script work is still pending');
+        await act(async () => edit());
+        for (let i = 0; i < 2; i++) await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        releaseScripts?.();
+        await settle('metadata restored after builtin partial results');
+        await act(async () => show(false));
+        await act(async () => show(true));
+        await settle('close and restore');
+        for (let phase = 1; phase <= 5; phase++) {
+            await act(async () => change(phase));
+            await settle(`period ${phase}`);
+        }
+        return { name: 'four controlled replay cells restore early builtin results during an unfinished batch', status: 'PASS', samples, requests };
+    }
+    catch (error) {
+        throw new Error(`${String(error)}; samples=${JSON.stringify(samples)}`);
+    }
+    finally {
+        releaseScripts?.();
+        await act(async () => root.unmount());
+        host.remove();
+        globalThis.fetch = old;
+    }
+}
