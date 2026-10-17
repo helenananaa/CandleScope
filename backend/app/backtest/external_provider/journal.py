@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import hashlib
 import uuid
 from typing import Any
 
@@ -45,8 +46,11 @@ class ExternalCallJournal:
                     _fail("external session identity cannot change", "IDENTITY_MUTATION")
                 if host_generation < session["host_generation"]:
                     _fail("external Host generation is stale")
-                connection.execute("UPDATE external_provider_sessions SET host_generation = ? WHERE run_id = ?",
-                                   (host_generation, run_id))
+                status = session["status"]
+                if host_generation > session["host_generation"] and status == "INTERRUPTED":
+                    status = "ACTIVE"
+                connection.execute("UPDATE external_provider_sessions SET host_generation = ?, status = ? WHERE run_id = ?",
+                                   (host_generation, status, run_id))
                 return
             self._reserve(connection, len(text.encode("utf-8")) + 512)
             connection.execute(
@@ -180,6 +184,41 @@ class ExternalCallJournal:
                     "context_hash": session["context_hash"], "model_state_hash": state_hash,
                     "manifest_hash": self.manifest.identity()["manifest_hash"]}
 
+    def interrupt(self, run_id: str, *, host_generation: int) -> None:
+        """Fence unfinished delivery; only a newer Host owner may resume it."""
+        with self.store._transaction() as connection:
+            session = self._session(connection, run_id)
+            self._generation(session, host_generation)
+            connection.execute(
+                "UPDATE external_provider_sessions SET status = 'INTERRUPTED' WHERE run_id = ? AND status = 'ACTIVE'",
+                (run_id,),
+            )
+
+    def audit(self, run_id: str, cursor: int, *, host_generation: int) -> dict[str, Any]:
+        """Public provenance contains digests and decisions, never model state."""
+        with self.store._read() as connection:
+            session = self._session(connection, run_id)
+            self._generation(session, host_generation)
+            if type(cursor) is not int or not 0 <= cursor <= session["last_completed"]:
+                _fail("external audit cursor is not committed")
+            trace = hashlib.sha256()
+            count = decisions = 0
+            for row in connection.execute(
+                "SELECT * FROM external_provider_calls WHERE run_id = ? AND cursor <= ? ORDER BY cursor", (run_id, cursor)
+            ):
+                record = self._record(row)
+                if record["reply"] is None:
+                    _fail("external audit contains an unfinished call")
+                if row["operation"] == "close":
+                    continue
+                trace.update(encode({"cursor": row["cursor"], "operation": row["operation"],
+                                     "input_hash": row["input_hash"], "reply_hash": row["reply_hash"]}).encode("utf-8"))
+                trace.update(b"\n")
+                count += 1
+                decisions += record["reply"].get("decision") is not None
+            return {**self.manifest.identity(), "context_hash": session["context_hash"],
+                    "call_count": count, "decision_count": decisions, "trace_hash": "sha256:" + trace.hexdigest()}
+
     def _reserve(self, connection: sqlite3.Connection, delta: int) -> None:
         used = connection.execute("SELECT logical_bytes FROM external_provider_usage WHERE singleton = 1").fetchone()[0]
         if delta >= 0 and used + delta > self.max_record_bytes:
@@ -213,7 +252,8 @@ class ExternalCallJournal:
             _fail("external Host session is unavailable")
         if row is not None:
             frozen = decode(row["context_json"])
-            if digest(frozen) != row["context_hash"] or frozen.get("provider") != self.manifest.identity():
+            if (type(frozen) is not dict or digest(frozen) != row["context_hash"]
+                    or frozen.get("provider") != self.manifest.identity()):
                 _fail("external session identity integrity failed", "IDENTITY_MUTATION")
         return row
 

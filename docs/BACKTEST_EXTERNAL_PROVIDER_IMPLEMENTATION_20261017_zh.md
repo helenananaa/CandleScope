@@ -57,4 +57,4 @@ Host 无法证明外部进程实际采用何种训练资料、设备或算法。
 | 产品 | 模型版本与数据绑定可见、等待/失败明确、无夹具或表达式静默替代、源码或数据变化使旧结果不再冒充当前结果 |
 | 交付 | 相关组合回归后统一安装包；默认关闭门禁及启用范围的实际原生流程分别留证 |
 
-当前已完成 manifest、单客户端连接租约、严格观察/响应校验及持久调用/状态记录层。88 项定向检查、fatal Ruff 和后端架构门禁通过，包括独立 SQLite owner 竞争、重开回读、旧 generation 拒绝、不同响应重试拒绝、checkpoint 状态固定和预算回滚。证据为 `output/acceptance-delivery-20261016/batch-g/connection-journal.xml`（本地 QA 产物，不纳入源码提交）。尚未接通真实外部进程、Host 运行及 smoke、公开接口、SDK、工作台和完整恢复；未形成 G 安装包或原生验收结论。
+当前已完成 manifest、单客户端连接租约、严格观察/响应校验、持久调用/状态记录层及 `strategy-provider/1` 生命周期桥接。93 项定向检查、fatal Ruff 和后端架构门禁通过，包括独立 SQLite owner 竞争、重开回读、旧 generation 拒绝、不同响应重试拒绝、checkpoint 状态固定、预算回滚、真实 Host session 的 warmup/step/execution-report/close、超时与取消，以及从 checkpoint 重放记录决策后恢复模型状态。测试客户端使用独立 SQLite owner 的测试线程，尚不是公开 HTTP/独立进程或金融撮合端到端证明。证据为 `output/acceptance-delivery-20261016/batch-g/lifecycle.xml`（本地 QA 产物，不纳入源码提交）。尚未接通真实外部进程、Host Run 及 smoke、公开接口、SDK、工作台和完整应用恢复；未形成 G 安装包或原生验收结论。
