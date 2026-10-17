@@ -125,9 +125,24 @@ export interface JournalEntry {
   snapshots: JournalSnapshot[];
 }
 
+/** An unlinked plan near a trade, with its latest risk fields to tell plans apart. */
+export interface LinkSuggestion {
+  id: string;
+  kind: string;
+  createdAtMs: number;
+  symbol: string;
+  tradeId: string | null;
+  entryPrice: string | null;
+  stopPrice: string | null;
+  targetPrice: string | null;
+  riskUsdt: string | null;
+  /** Implied by stop/target around entry; null when unclear. */
+  direction: "long" | "short" | null;
+}
+
 export interface TradeDetail extends Trade {
   entries: JournalEntry[];
-  linkSuggestions: Array<{ id: string; kind: string; createdAtMs: number; symbol: string; tradeId: string | null }>;
+  linkSuggestions: LinkSuggestion[];
 }
 
 export interface PracticeOrder {
@@ -205,4 +220,76 @@ export interface QuickReplayRequest {
   accountId: string;
   trade: Trade;
   interval: string;
+}
+
+/** R figures cover only trades whose risk was locked at the first fill. */
+export interface TradingRStats {
+  count: number;
+  missing: number;
+  /** count / trades, 0–1; null without trades. */
+  coverage: string | null;
+  winRate: string | null;
+  /** Mean net R. */
+  expectancyR: string | null;
+  avgWinR: string | null;
+  avgLossR: string | null;
+  totalR: string | null;
+  lowSample: boolean;
+}
+
+export interface TradingStatsCore {
+  tradeCount: number;
+  wins: number;
+  losses: number;
+  breakeven: number;
+  winRate: string | null;
+  avgWin: string | null;
+  avgLoss: string | null;
+  avgPnl: string | null;
+  grossProfit: string;
+  grossLoss: string;
+  /** Null when there is no loss (∞ if there was profit) or no trade. */
+  profitFactor: string | null;
+  realizedPnl: string;
+  fees: string;
+  netPnl: string;
+  lowSample: boolean;
+  r: TradingRStats;
+}
+
+export type PlanTiming = "before" | "mixed" | "after" | "none";
+
+export interface TradingStatsGroup<K extends string | null = string | null> extends TradingStatsCore {
+  key: K;
+}
+
+export interface TradingRBucket {
+  /** Null for the open-ended lowest bucket. */
+  fromR: string | null;
+  /** Null for the open-ended highest bucket. */
+  toR: string | null;
+  count: number;
+}
+
+export interface TradingStats extends TradingStatsCore {
+  accountId: string;
+  accountKind: TradingAccountKind;
+  quoteCurrency: string;
+  filters: { fromMs: number | null; toMs: number | null; tags: string[] };
+  openTrades: number;
+  lowSampleThreshold: number;
+  maxDrawdown: { amount: string; peakAtMs: number | null; troughAtMs: number | null };
+  rDistribution: TradingRBucket[];
+  breakdowns: {
+    planTiming: TradingStatsGroup<PlanTiming>[];
+    direction: TradingStatsGroup<"long" | "short">[];
+    /** A trade with several tags is in each of their groups; null = untagged. */
+    tag: TradingStatsGroup<string | null>[];
+  };
+}
+
+export interface TradingStatsQuery {
+  fromMs?: number | null;
+  toMs?: number | null;
+  tags?: readonly string[];
 }

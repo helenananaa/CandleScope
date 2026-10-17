@@ -18,6 +18,18 @@ from .trades import Trade
 # across a phase boundary, so what existed before entry stays provable.
 COALESCE_WINDOW_MS = 120_000
 RISK_FIELDS = ("entryPrice", "stopPrice", "targetPrice", "riskUsdt")
+# Template fields that describe the plan; the same list drives the frontend's
+# "written after entry" badge (PRE_TRADE_FIELD_KEYS in journalTemplates.ts).
+PRE_TRADE_FIELDS = (
+    *RISK_FIELDS,
+    "timeframe",
+    "strategyTag",
+    "marketEnv",
+    "entryBasis",
+    "expectedPath",
+    "invalidation",
+)
+PLAN_TIMINGS = ("before", "mixed", "after", "none")
 
 
 def phase_at(ts_ms: int, trade: Trade | None) -> str:
@@ -45,6 +57,23 @@ def _decimal(value: Any) -> Decimal | None:
     return number if number.is_finite() else None
 
 
+def risk_fields(fields: dict[str, Any]) -> dict[str, Decimal | None]:
+    return {key: _decimal(fields.get(key)) for key in RISK_FIELDS}
+
+
+def plan_direction(plan: dict[str, Decimal | None]) -> str | None:
+    """Long/short implied by stop and target around entry; None if unclear."""
+    entry, stop, target = plan.get("entryPrice"), plan.get("stopPrice"), plan.get("targetPrice")
+    if entry is None:
+        return None
+    implied = set()
+    if stop is not None and stop != entry:
+        implied.add("long" if stop < entry else "short")
+    if target is not None and target != entry:
+        implied.add("long" if target > entry else "short")
+    return implied.pop() if len(implied) == 1 else None
+
+
 def locked_plan(revisions: list[dict[str, Any]], trade: Trade | None) -> dict[str, Any] | None:
     """Risk fields as they stood at the first fill; None if nothing was planned."""
     if trade is None:
@@ -52,8 +81,7 @@ def locked_plan(revisions: list[dict[str, Any]], trade: Trade | None) -> dict[st
     before = [rev for rev in revisions if int(rev["saved_at_ms"]) <= trade.opened_at_ms]
     if not before:
         return None
-    fields = before[-1]["fields"]
-    plan = {key: _decimal(fields.get(key)) for key in RISK_FIELDS}
+    plan = risk_fields(before[-1]["fields"])
     if all(value is None for value in plan.values()):
         return None
     return {
@@ -80,6 +108,28 @@ def field_timing(revisions: list[dict[str, Any]], trade: Trade | None) -> dict[s
     return timing
 
 
+def plan_timing(timing: dict[str, dict[str, Any]]) -> str:
+    """When the pre-trade fields were first written relative to the first fill.
+
+    ``before``: all of them before entry; ``after``: all of them after (the
+    "written after entry" label on every one); ``mixed``: some of each;
+    ``none``: no pre-trade field was ever written.
+    """
+    phases = [timing[key]["phase"] for key in PRE_TRADE_FIELDS if key in timing]
+    if not phases:
+        return "none"
+    early = sum(1 for phase in phases if phase == "pre")
+    if early == len(phases):
+        return "before"
+    return "after" if early == 0 else "mixed"
+
+
+def locked_risk(plan: dict[str, Any] | None) -> Decimal | None:
+    """The locked risk in quote currency when it can be an R denominator."""
+    risk = _decimal(plan.get("riskUsdt")) if plan else None
+    return risk if risk is not None and risk > 0 else None
+
+
 def trade_metrics(trade: Trade, plan: dict[str, Any] | None) -> dict[str, Any]:
     risk = _decimal(plan.get("riskUsdt")) if plan else None
     entry = _decimal(plan.get("entryPrice")) if plan else None
@@ -91,8 +141,9 @@ def trade_metrics(trade: Trade, plan: dict[str, Any] | None) -> dict[str, Any]:
         "plannedRewardRisk": None,
         "entrySlippage": None,
     }
-    if risk is not None and risk > 0 and trade.status == "closed":
-        metrics["netR"] = dec_str((trade.net_pnl / risk).quantize(Decimal("0.01")))
+    locked = locked_risk(plan)
+    if locked is not None and trade.status == "closed":
+        metrics["netR"] = dec_str((trade.net_pnl / locked).quantize(Decimal("0.01")))
     if entry is not None and stop is not None and target is not None and entry != stop:
         metrics["plannedRewardRisk"] = dec_str(
             (abs(target - entry) / abs(entry - stop)).quantize(Decimal("0.01"))

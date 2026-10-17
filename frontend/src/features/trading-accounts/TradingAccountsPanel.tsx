@@ -5,6 +5,7 @@ import AddAccountDialog from "./AddAccountDialog.js";
 import ManualFillForm from "./ManualFillForm.js";
 import PracticeOrderTicket, { type PlanDraft } from "./PracticeOrderTicket.js";
 import TradeJournalDrawer, { type JournalTarget } from "./TradeJournalDrawer.js";
+import TradingStatsView from "./TradingStatsView.js";
 import { tradingApi } from "./tradingApi.js";
 import {
   formatAmount,
@@ -18,7 +19,7 @@ import type { QuickReplayRequest, Trade, TradingChartContext } from "./tradingTy
 import { useTradingAccountsRuntime } from "./useTradingAccountsRuntime.js";
 import "./tradingAccounts.css";
 
-type Tab = "trade" | "positions" | "history" | "journal";
+type Tab = "trade" | "positions" | "history" | "journal" | "stats";
 
 export interface TradingAccountsPanelProps {
   context: TradingChartContext;
@@ -85,6 +86,9 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
 
   const closedTrades = trades.filter((trade) => trade.status === "closed");
   const feedsBehind = (summary?.feeds ?? []).filter((feed) => feed.status !== "live");
+  // Stats reload when a trade closes or a journal entry changes (tags, plan).
+  const statsRevision = `${summary?.closedTrades ?? 0}:${entries.length}:${
+    entries.reduce((latest, entry) => Math.max(latest, entry.updatedAtMs), 0)}`;
 
   return (
     <div className="trading-panel" data-account-kind={selected?.kind ?? "none"}>
@@ -144,7 +148,7 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
             </p>
           )}
           <nav className="trading-tabs" role="tablist" aria-label={t("trading.title")}>
-            {(["trade", "positions", "history", "journal"] as const).map((item) => (
+            {(["trade", "positions", "history", "journal", "stats"] as const).map((item) => (
               <button
                 key={item}
                 type="button"
@@ -281,6 +285,10 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
                   </article>
                 ))}
               </div>
+            )}
+
+            {tab === "stats" && (
+              <TradingStatsView key={selected.id} account={selected} revision={statsRevision} />
             )}
           </div>
         </>

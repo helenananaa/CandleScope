@@ -46,6 +46,16 @@ entry" badge. Entry, stop, target and risk (USDT) are locked at the first fill
 and are the only R denominator. `auto` template fields render from the ledger
 and are never stored as text.
 
+## Stats
+
+`TradingStatsView` (the Stats tab) shows the selected account's closed trades
+only, so practice and real results never mix. It reloads when a trade closes or
+a journal entry changes. R figures use only trades with a risk locked at the
+first fill and always show that coverage; breakdowns are by plan timing (when
+the pre-trade fields were first written), direction and tag (note tags plus the
+strategy tag). Figures from fewer than 20 trades are marked as low sample.
+Definitions live in `backend/app/trading_accounts/stats.py`.
+
 ## Quick replay
 
 `QuickReplayOverlay` covers the chart cell while the live source is paused. It

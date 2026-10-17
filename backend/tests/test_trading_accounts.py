@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.v1.trading_accounts import router as trading_router
-from app.trading_accounts.journal import locked_plan, phase_at, should_coalesce
+from app.trading_accounts.journal import locked_plan, phase_at, plan_direction, should_coalesce
 from app.trading_accounts.models import TradingAccountError
 from app.trading_accounts.practice import (
     Cursor,
@@ -26,6 +26,7 @@ from app.trading_accounts.practice import (
 from app.data_engine.data_manager.models import DataEvent, DataEventType, SeriesKey
 from app.trading_accounts.practice_runtime import PracticeRuntime, contiguous_bars
 from app.trading_accounts.service import CURSOR_FLUSH_MS, TradingAccountService
+from app.trading_accounts.stats import LOW_SAMPLE_TRADES, TradeFacts, compute_stats, journal_tags
 from app.trading_accounts.store import TradingStore
 from app.trading_accounts.trades import build_trades
 
@@ -274,6 +275,43 @@ def test_manual_journal_plan_link_and_hindsight_flags(service):
     assert detail["metrics"]["netR"] == "1.96"  # (100 - 2) / 50
 
 
+def test_link_suggestions_carry_plan_fields_so_same_minute_plans_differ(service):
+    clock = service.test_clock
+    account = service.create_account({"kind": "manual", "name": "Manual"})
+    long_plan = service.create_entry(account["id"], {
+        **INSTRUMENT, "kind": "note",
+        "fields": {"entryPrice": "82100", "stopPrice": "81000", "targetPrice": "84000", "riskUsdt": "25"},
+    })
+    clock.now += 5_000
+    short_plan = service.create_entry(account["id"], {
+        **INSTRUMENT, "kind": "note", "fields": {"entryPrice": "82100.50", "stopPrice": "83000"},
+    })
+    clock.now += 5_000
+    bare_plan = service.create_entry(account["id"], {
+        **INSTRUMENT, "kind": "note", "fields": {"entryBasis": "range", "riskUsdt": "a lot"},
+    })
+    service.create_entry(account["id"], {**INSTRUMENT, "kind": "quick", "body": "watching"})
+    clock.now += 150_000  # past the coalesce window: the next save is a new revision
+    service.save_entry(long_plan["id"], {"fields": {
+        "entryPrice": "82100", "stopPrice": "81000", "targetPrice": "84000", "riskUsdt": "30",
+    }})
+    clock.now += 60_000
+    service.add_fill(account["id"], {**INSTRUMENT, "side": "buy", "qty": "0.01", "price": "82150", "fee": "0"})
+    trade = service.list_trades(account["id"])["trades"][0]
+    suggestions = service.trade_detail(account["id"], trade["id"])["linkSuggestions"]
+
+    assert {item["createdAtMs"] // 60_000 for item in suggestions} == {T0 // 60_000}
+    keys = ("entryPrice", "stopPrice", "targetPrice", "riskUsdt", "direction")
+    by_id = {item["id"]: tuple(item[key] for key in keys) for item in suggestions}
+    assert by_id == {
+        long_plan["id"]: ("82100", "81000", "84000", "30", "long"),
+        short_plan["id"]: ("82100.5", "83000", None, None, "short"),
+        bare_plan["id"]: (None, None, None, None, None),
+    }
+    # Stop and target on the same side of entry imply no direction.
+    assert plan_direction({"entryPrice": D("100"), "stopPrice": D("95"), "targetPrice": D("90")}) is None
+
+
 def test_snapshot_requires_png(service):
     account = service.create_account({"kind": "manual", "name": "Manual"})
     note = service.create_entry(account["id"], {**INSTRUMENT, "kind": "quick", "body": "watching"})
@@ -486,3 +524,160 @@ def test_live_update_fills_limit_within_a_second_and_reports_lag(tmp_path):
         assert {"wakeMs", "queueMs", "queryMs", "applyMs"} <= timing.keys()
     finally:
         service.store.close()
+
+
+# ── statistics ─────────────────────────────────────────────────
+
+def closed_trade(tid: str, pnl: str, ts: int, *, direction: str = "long", fee: str = "0"):
+    """A one-unit round trip at 100 whose gross P&L is ``pnl``; net is pnl - fee."""
+    sides = ("buy", "sell") if direction == "long" else ("sell", "buy")
+    exit_price = D(100) + D(pnl) if direction == "long" else D(100) - D(pnl)
+    return build_trades("acc", [
+        fill(f"{tid}a", sides[0], "1", "100", ts, fee=fee),
+        fill(f"{tid}b", sides[1], "1", str(exit_price), ts + 1),
+    ])[0]
+
+
+def test_stats_wins_losses_profit_factor_and_drawdown():
+    facts = [
+        TradeFacts(closed_trade("t1", "11", 1_000, fee="1")),  # +10
+        TradeFacts(closed_trade("t2", "-5", 2_000)),
+        TradeFacts(closed_trade("t3", "-3", 3_000, direction="short")),
+        TradeFacts(closed_trade("t4", "20", 4_000)),
+        TradeFacts(closed_trade("t5", "0", 5_000)),
+    ]
+    stats = compute_stats(reversed(facts))  # order comes from close time, not input
+    assert (stats["tradeCount"], stats["wins"], stats["losses"], stats["breakeven"]) == (5, 2, 2, 1)
+    assert stats["winRate"] == "0.4"
+    assert stats["avgWin"] == "15" and stats["avgLoss"] == "-4"
+    assert stats["profitFactor"] == "3.75"  # 30 / 8
+    assert stats["netPnl"] == "22" and stats["fees"] == "1" and stats["realizedPnl"] == "23"
+    # Equity 10, 5, 2, 22, 22: the worst fall is 10 -> 2 after t1's close.
+    assert stats["maxDrawdown"] == {"amount": "8", "peakAtMs": 1_001, "troughAtMs": 3_001}
+
+
+def test_stats_profit_factor_without_losses_and_empty_account():
+    stats = compute_stats([TradeFacts(closed_trade("t1", "5", 1_000)), TradeFacts(closed_trade("t2", "0", 2_000))])
+    assert stats["profitFactor"] is None and stats["grossLoss"] == "0" and stats["grossProfit"] == "5"
+    assert stats["maxDrawdown"]["amount"] == "0" and stats["maxDrawdown"]["troughAtMs"] is None
+    empty = compute_stats([])
+    assert empty["tradeCount"] == 0 and empty["winRate"] is None and empty["profitFactor"] is None
+    assert empty["r"]["coverage"] is None and empty["r"]["expectancyR"] is None
+
+
+def test_stats_r_only_over_locked_risk_with_coverage_and_buckets():
+    facts = [
+        TradeFacts(closed_trade("t1", "-10", 1_000), risk=D("10")),  # exactly -1R
+        TradeFacts(closed_trade("t2", "20", 2_000), risk=D("10")),  # exactly +2R
+        TradeFacts(closed_trade("t3", "5", 3_000), risk=D("10")),  # 0.5R
+        TradeFacts(closed_trade("t4", "500", 4_000)),  # no locked plan: ignored by R
+    ]
+    r = compute_stats(facts)["r"]
+    assert (r["count"], r["missing"], r["coverage"]) == (3, 1, "0.75")
+    assert r["expectancyR"] == "0.5"  # (-1 + 2 + 0.5) / 3, not diluted or inflated by t4
+    assert r["avgWinR"] == "1.25" and r["avgLossR"] == "-1" and r["totalR"] == "1.5"
+    assert r["winRate"] == "0.6667"
+    buckets = {(b["fromR"], b["toR"]): b["count"] for b in compute_stats(facts)["rDistribution"]}
+    assert buckets[("-2", "-1")] == 1 and buckets[("-1", "0")] == 0
+    assert buckets[("0", "1")] == 1 and buckets[("2", "3")] == 1
+    assert sum(buckets.values()) == 3
+
+
+def test_stats_breakdowns_by_tag_direction_and_plan_timing():
+    facts = [
+        TradeFacts(closed_trade("t1", "10", 1_000), tags=("breakout", "trend"), plan_timing="before"),
+        TradeFacts(closed_trade("t2", "-4", 2_000, direction="short"), tags=("breakout",), plan_timing="after"),
+        TradeFacts(closed_trade("t3", "6", 3_000), plan_timing="before"),
+    ]
+    breakdowns = compute_stats(facts)["breakdowns"]
+    tags = {group["key"]: group for group in breakdowns["tag"]}
+    assert [group["key"] for group in breakdowns["tag"]] == ["breakout", "trend", None]
+    assert tags["breakout"]["tradeCount"] == 2 and tags["breakout"]["netPnl"] == "6"
+    assert tags["trend"]["tradeCount"] == 1 and tags[None]["netPnl"] == "6"
+    timing = {group["key"]: group for group in breakdowns["planTiming"]}
+    assert list(timing) == ["before", "mixed", "after", "none"]
+    assert timing["before"]["tradeCount"] == 2 and timing["before"]["winRate"] == "1"
+    assert timing["after"]["netPnl"] == "-4" and timing["mixed"]["tradeCount"] == 0
+    direction = {group["key"]: group["tradeCount"] for group in breakdowns["direction"]}
+    assert direction == {"long": 2, "short": 1}
+
+
+def test_stats_low_sample_flags():
+    few = [TradeFacts(closed_trade(f"t{i}", "1", i * 10), risk=D("1")) for i in range(LOW_SAMPLE_TRADES - 1)]
+    stats = compute_stats(few)
+    assert stats["lowSample"] and stats["r"]["lowSample"]
+    enough = [*few, TradeFacts(closed_trade("tx", "1", 10_000), tags=("a",))]
+    stats = compute_stats(enough)
+    assert not stats["lowSample"]
+    assert stats["r"]["lowSample"]  # only 19 of the 20 have a locked risk
+    assert all(group["lowSample"] for group in stats["breakdowns"]["tag"])
+    assert not next(g for g in stats["breakdowns"]["direction"] if g["key"] == "long")["lowSample"]
+
+
+def test_journal_tags_merge_entry_tags_and_strategy_tag():
+    entries = [{"tags": ["fomo", "a"]}, {"tags": []}]
+    assert journal_tags(entries, {"strategyTag": " breakout, a ，trend"}) == ("fomo", "a", "breakout", "trend")
+    assert journal_tags([], {}) == ()
+
+
+def manual_round_trip(service, account_id: str, *, buy: str, sell: str, fee: str = "0") -> dict[str, Any]:
+    """A 10-unit long entered by hand one minute apart; returns the closed trade."""
+    clock = service.test_clock
+    clock.now += 60_000
+    service.add_fill(account_id, {**INSTRUMENT, "side": "buy", "qty": "10", "price": buy, "fee": fee})
+    clock.now += 60_000
+    service.add_fill(account_id, {**INSTRUMENT, "side": "sell", "qty": "10", "price": sell, "fee": fee})
+    return service.list_trades(account_id)["trades"][0]
+
+
+def test_account_stats_use_locked_plan_timing_tags_and_filters(service):
+    account = service.create_account({"kind": "manual", "name": "Real"})
+    plan = service.create_entry(account["id"], {
+        **INSTRUMENT, "kind": "note",
+        "fields": {"entryPrice": "100", "stopPrice": "95", "riskUsdt": "50", "strategyTag": "breakout, trend"},
+    })
+    planned = manual_round_trip(service, account["id"], buy="100", sell="110", fee="1")  # net 98
+    service.link_entry(plan["id"], planned["id"])
+    chased = manual_round_trip(service, account["id"], buy="100", sell="97")  # net -30
+    service.test_clock.now += 60_000
+    service.create_entry(account["id"], {
+        **INSTRUMENT, "kind": "note", "tradeId": chased["id"], "tags": ["fomo"],
+        "fields": {"entryBasis": "chased the move", "riskUsdt": "20"},
+    })
+    manual_round_trip(service, account["id"], buy="100", sell="100.5")  # net 5, no note
+
+    stats = service.account_stats(account["id"])
+    assert stats["accountKind"] == "manual" and stats["openTrades"] == 0
+    assert stats["tradeCount"] == 3 and stats["netPnl"] == "73"
+    # Only the planned trade had risk locked at its first fill; risk typed afterwards is no denominator.
+    assert (stats["r"]["count"], stats["r"]["coverage"], stats["r"]["expectancyR"]) == (1, "0.3333", "1.96")
+    timing = {group["key"]: group for group in stats["breakdowns"]["planTiming"]}
+    assert timing["before"]["netPnl"] == "98" and timing["after"]["netPnl"] == "-30"
+    assert timing["none"]["tradeCount"] == 1 and timing["mixed"]["tradeCount"] == 0
+    assert [group["key"] for group in stats["breakdowns"]["tag"]] == ["breakout", "fomo", "trend", None]
+
+    tagged = service.account_stats(account["id"], tags=["breakout"])
+    assert tagged["tradeCount"] == 1 and tagged["filters"]["tags"] == ["breakout"]
+    assert service.account_stats(account["id"], from_ms=chased["closedAtMs"])["tradeCount"] == 2
+    assert service.account_stats(account["id"], to_ms=chased["closedAtMs"])["tradeCount"] == 1
+    with pytest.raises(TradingAccountError):
+        service.account_stats(account["id"], from_ms=10, to_ms=5)
+
+
+def test_http_account_stats_route(service):
+    app = FastAPI()
+    app.include_router(trading_router, prefix="/api/v1")
+    app.state.trading_accounts = service
+    client = TestClient(app)
+    account = service.create_account({"kind": "manual", "name": "M"})
+    manual_round_trip(service, account["id"], buy="100", sell="102")
+    url = f"/api/v1/trading/accounts/{account['id']}/stats"
+    body = client.get(url).json()
+    assert body["tradeCount"] == 1 and body["netPnl"] == "20" and body["lowSampleThreshold"] == LOW_SAMPLE_TRADES
+    filtered = client.get(url, params={"fromMs": 0, "tag": ["x", "y"]})
+    assert filtered.status_code == 200
+    assert filtered.json()["filters"] == {"fromMs": 0, "toMs": None, "tags": ["x", "y"]}
+    assert filtered.json()["tradeCount"] == 0
+    assert client.get(url, params={"fromMs": 10, "toMs": 5}).status_code == 422
+    assert client.get(url, params={"fromMs": -1}).status_code == 422
+    assert client.get("/api/v1/trading/accounts/acc_00000000000000000000/stats").status_code == 404

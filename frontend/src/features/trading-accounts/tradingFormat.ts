@@ -58,6 +58,38 @@ export function formatDuration(fromMs: number, toMs: number): string {
   return `${Math.floor(hours / 24)}d ${hours % 24}h`;
 }
 
+/** A 0–1 ratio as a whole percentage. */
+export function formatPercent(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "—";
+  return number.toLocaleString(getNumberLocale(), { style: "percent", maximumFractionDigits: 0 });
+}
+
+/** An R multiple with sign, e.g. +1.25R. */
+export function formatR(value: string | number | null | undefined): string {
+  const text = formatSigned(value);
+  return text === "—" ? text : `${text}R`;
+}
+
+/** The backend sends no profit factor without losses: ∞ if there was profit. */
+export function formatProfitFactor(stats: { profitFactor: string | null; grossProfit: string }): string {
+  if (stats.profitFactor !== null) return formatAmount(stats.profitFactor);
+  return Number(stats.grossProfit) > 0 ? "∞" : "—";
+}
+
+function rBound(value: string): string {
+  const number = Number(value);
+  return number < 0 ? `−${Math.abs(number)}` : String(number);
+}
+
+/** R bucket label; open-ended buckets have a null bound. */
+export function formatRBucket(bucket: { fromR: string | null; toR: string | null }): string {
+  if (bucket.fromR === null) return `≤ ${rBound(bucket.toR ?? "0")}R`;
+  if (bucket.toR === null) return `≥ ${rBound(bucket.fromR)}R`;
+  return `${rBound(bucket.fromR)} … ${rBound(bucket.toR)}R`;
+}
+
 export function pnlTone(value: string | number | null | undefined): "up" | "down" | "flat" {
   const number = Number(value);
   if (!Number.isFinite(number) || number === 0) return "flat";

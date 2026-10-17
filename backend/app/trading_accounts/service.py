@@ -9,7 +9,17 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
-from .journal import field_timing, locked_plan, phase_at, should_coalesce, trade_metrics
+from .journal import (
+    field_timing,
+    locked_plan,
+    locked_risk,
+    phase_at,
+    plan_direction,
+    plan_timing,
+    risk_fields,
+    should_coalesce,
+    trade_metrics,
+)
 from .models import (
     ACCOUNT_KINDS,
     DEFAULT_PRACTICE_SETTINGS,
@@ -41,6 +51,7 @@ from .practice import (
     advance_cursor,
     reachable,
 )
+from .stats import TradeFacts, compute_stats, journal_tags
 from .store import TradingStore
 from .trades import Trade, build_trades, signed_position
 
@@ -474,6 +485,53 @@ class TradingAccountService:
             out.append(view)
         return {"trades": out}
 
+    def account_stats(
+        self,
+        account_id: str,
+        *,
+        from_ms: int | None = None,
+        to_ms: int | None = None,
+        tags: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Closed-trade statistics of one account; the period filters on close time."""
+        account = self._account(account_id)
+        if from_ms is not None and to_ms is not None and from_ms >= to_ms:
+            raise invalid("from must be before to")
+        wanted = normalize_tags(tags)
+        trades = self._trades(account_id)
+        closed = [
+            trade for trade in trades
+            if trade.closed_at_ms is not None
+            and (from_ms is None or trade.closed_at_ms >= from_ms)
+            and (to_ms is None or trade.closed_at_ms < to_ms)
+        ]
+        by_trade, _ = self._entries_by_trade(account_id)
+        revisions = self.store.revisions_for(
+            [entry["id"] for trade in closed for entry in by_trade.get(trade.id, [])]
+        )
+        facts = []
+        for trade in closed:
+            entries = by_trade.get(trade.id, [])
+            note, plan = self._trade_note_and_plan(trade, entries, revisions)
+            note_revisions = revisions.get(note["id"], []) if note else []
+            latest = note_revisions[-1]["fields"] if note_revisions else {}
+            facts.append(TradeFacts(
+                trade=trade,
+                risk=locked_risk(plan),
+                tags=journal_tags(entries, latest),
+                plan_timing=plan_timing(field_timing(note_revisions, trade)),
+            ))
+        if wanted:
+            facts = [row for row in facts if all(tag in row.tags for tag in wanted)]
+        return {
+            "accountId": account_id,
+            "accountKind": account["kind"],
+            "quoteCurrency": account["quote_currency"],
+            "filters": {"fromMs": from_ms, "toMs": to_ms, "tags": wanted},
+            "openTrades": sum(1 for trade in trades if trade.status == "open"),
+            **compute_stats(facts),
+        }
+
     def _trade(self, account_id: str, trade_id: str) -> Trade:
         for trade in self._trades(account_id):
             if trade.id == trade_id:
@@ -494,13 +552,18 @@ class TradingAccountService:
         if trade.status == "open":
             mark = self._mark((trade.exchange, trade.market_type, trade.symbol))[0]
         upper = trade.closed_at_ms or self.clock()
-        suggestions = [
-            self._entry_summary(entry)
+        candidates = [
+            entry
             for entry in all_entries
             if entry["trade_id"] is None
             and entry["kind"] == "note"
             and _instrument_of(entry) == (trade.exchange, trade.market_type, trade.symbol)
             and trade.opened_at_ms - SUGGESTION_LOOKBACK_MS <= entry["created_at_ms"] <= upper
+        ]
+        candidate_revisions = self.store.revisions_for([entry["id"] for entry in candidates])
+        suggestions = [
+            self._link_suggestion(entry, candidate_revisions.get(entry["id"], []))
+            for entry in candidates
         ]
         view = trade.to_dict(mark=mark)
         view.update({
@@ -1097,6 +1160,16 @@ class TradingAccountService:
             "createdAtMs": entry["created_at_ms"],
             "symbol": entry["symbol"],
             "tradeId": entry["trade_id"],
+        }
+
+    @classmethod
+    def _link_suggestion(cls, entry: dict[str, Any], revisions: list[dict[str, Any]]) -> dict[str, Any]:
+        """Summary plus the plan's latest risk fields, so same-minute plans can be told apart."""
+        plan = risk_fields(revisions[-1]["fields"] if revisions else {})
+        return {
+            **cls._entry_summary(entry),
+            **{key: dec_str(value) for key, value in plan.items()},
+            "direction": plan_direction(plan),
         }
 
     def _entry_view(

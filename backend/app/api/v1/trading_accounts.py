@@ -65,6 +65,19 @@ async def account_summary(request: Request, account_id: str) -> dict:
     return await _call(_service(request).account_summary, account_id)
 
 
+@router.get("/accounts/{account_id}/stats")
+async def account_stats(
+    request: Request,
+    account_id: str,
+    from_ms: int | None = Query(default=None, alias="fromMs", ge=0),
+    to_ms: int | None = Query(default=None, alias="toMs", ge=0),
+    tag: list[str] | None = Query(default=None),
+) -> dict:
+    return await _call(
+        _service(request).account_stats, account_id, from_ms=from_ms, to_ms=to_ms, tags=tag,
+    )
+
+
 # ── trades ──────────────────────────────────────────────────────
 
 @router.get("/accounts/{account_id}/trades")

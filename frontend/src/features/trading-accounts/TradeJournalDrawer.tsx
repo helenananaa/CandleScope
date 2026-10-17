@@ -31,7 +31,7 @@ import type {
 } from "./tradingTypes.js";
 import { tradingErrorMessage } from "./useTradingAccountsRuntime.js";
 import type { PlanDraft } from "./PracticeOrderTicket.js";
-import { autoFieldText, journalMarkdown } from "./journalRender.js";
+import { autoFieldText, journalMarkdown, linkSuggestionLabel } from "./journalRender.js";
 
 export type JournalTarget =
   | { kind: "trade"; tradeId: string }
@@ -371,7 +371,7 @@ export default function TradeJournalDrawer({
             <span>{t("trading.journal.suggestions")}</span>
             {trade.linkSuggestions.map((item) => (
               <button key={item.id} type="button" className="trading-button" onClick={() => { void link(item.id); }}>
-                {t("trading.journal.linkPlan", { time: formatDateTime(item.createdAtMs) })}
+                {linkSuggestionLabel(item)}
               </button>
             ))}
           </div>

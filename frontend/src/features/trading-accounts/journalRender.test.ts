@@ -1,0 +1,33 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { getLocale, setLocale } from "../../i18n/index.js";
+import { linkSuggestionLabel } from "./journalRender.js";
+import { formatDateTime } from "./tradingFormat.js";
+import type { LinkSuggestion } from "./tradingTypes.js";
+
+const CREATED = Date.UTC(2026, 9, 17, 14, 32, 10);
+
+function suggestion(overrides: Partial<LinkSuggestion>): LinkSuggestion {
+  return {
+    id: "je_1", kind: "note", createdAtMs: CREATED, symbol: "BTCUSDT", tradeId: null,
+    entryPrice: null, stopPrice: null, targetPrice: null, riskUsdt: null, direction: null,
+    ...overrides,
+  };
+}
+
+test("link suggestions in the same minute differ by their planned levels", () => {
+  const previous = getLocale();
+  try {
+    setLocale("en");
+    const time = formatDateTime(CREATED);
+    const long = linkSuggestionLabel(suggestion({
+      entryPrice: "82100", stopPrice: "81000", targetPrice: "84000", riskUsdt: "25", direction: "long",
+    }));
+    const short = linkSuggestionLabel(suggestion({ id: "je_2", entryPrice: "82100.5", stopPrice: "83000", direction: "short" }));
+    assert.equal(long, `Link plan from ${time} · Long · entry 82,100 · stop 81,000 · target 84,000 · risk 25.00`);
+    assert.equal(short, `Link plan from ${time} · Short · entry 82,100.5 · stop 83,000`);
+    assert.equal(linkSuggestionLabel(suggestion({})), `Link plan from ${time}`);
+  } finally {
+    setLocale(previous);
+  }
+});

@@ -13,6 +13,9 @@ Local trading accounts, practice matching and the trade journal. Persistence is
 - `practice.py`: pure order matching over a candle price path.
 - `practice_runtime.py`: the loop that drives matching from DataManager 1m
   candles.
+- `stats.py`: pure closed-trade statistics for one account (definitions in its
+  docstring); `GET /trading/accounts/{id}/stats?fromMs&toMs&tag` filters on
+  close time and tags.
 - `service.py`: the transport-independent facade.
 
 ## Practice matching

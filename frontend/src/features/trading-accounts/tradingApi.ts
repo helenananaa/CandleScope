@@ -9,6 +9,8 @@ import type {
   Trade,
   TradeDetail,
   TradingAccount,
+  TradingStats,
+  TradingStatsQuery,
 } from "./tradingTypes.js";
 
 const BASE = `${API_BASE}/trading`;
@@ -19,6 +21,15 @@ function path(segment: string): string {
 
 function id(value: string): string {
   return encodeURIComponent(value);
+}
+
+function statsQuery(query: TradingStatsQuery): string {
+  const params = new URLSearchParams();
+  if (query.fromMs != null) params.set("fromMs", String(query.fromMs));
+  if (query.toMs != null) params.set("toMs", String(query.toMs));
+  for (const tag of query.tags ?? []) params.append("tag", tag);
+  const text = params.toString();
+  return text ? `?${text}` : "";
 }
 
 export const tradingApi = {
@@ -33,6 +44,8 @@ export const tradingApi = {
     request(path(`/accounts/${id(accountId)}/summary`), signal ? { signal } : {}) as Promise<AccountSummary>,
   trades: (accountId: string, signal?: AbortSignal) =>
     request(path(`/accounts/${id(accountId)}/trades`), signal ? { signal } : {}) as Promise<{ trades: Trade[] }>,
+  stats: (accountId: string, query: TradingStatsQuery = {}, signal?: AbortSignal) =>
+    request(path(`/accounts/${id(accountId)}/stats${statsQuery(query)}`), signal ? { signal } : {}) as Promise<TradingStats>,
   trade: (accountId: string, tradeId: string) =>
     request(path(`/accounts/${id(accountId)}/trades/${id(tradeId)}`)) as Promise<TradeDetail>,
   excursion: (accountId: string, tradeId: string) =>
