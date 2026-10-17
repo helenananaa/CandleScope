@@ -4345,6 +4345,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
 
     const staleEntries = indicatorSeriesRef.current.filter((entry) => !retainedEntries.has(entry));
     const drawingPanesWithReplacingAnchors = new Set(staleEntries
+      // Main-pane drawings belong to the price series, never an overlay.
+      // Replacing a computed overlay must not retire that unchanged surface.
+      .filter((entry) => entry.paneId !== "main")
       .filter((entry) => indicatorSeriesRef.current.find((candidate) => (
         candidate.paneId === entry.paneId
       ))?.series === entry.series)
