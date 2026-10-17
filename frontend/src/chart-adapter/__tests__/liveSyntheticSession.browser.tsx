@@ -27,7 +27,7 @@ export async function checkLiveSyntheticSession() {
       const value=useChartSurfaceRuntime();const source=useSyncExternalStore(listener=>store.subscribe(()=>listener()),()=>store.snapshot());
       useLayoutEffect(()=>{surface=value;});
       return <SingleChartPanes ref={value.ref} seriesStore={store} datasetKey={scope}
-        dataMeta={{seriesKey:scope,version:store.version,status:"ready",source:phase,committedAt:null}}
+        dataMeta={{seriesKey:store.seriesKey,version:store.version,status:"ready",source:phase,committedAt:null}}
         symbol="BTCUSDT" interval="5m" chartType="renko" theme="dark" customBg=""
         upColor="#00aa00" downColor="#aa0000" drawingReadOnly followLatest={false}
         savedVisibleRange={initial} onVisibleRangeChange={range=>{saved=range;}}
