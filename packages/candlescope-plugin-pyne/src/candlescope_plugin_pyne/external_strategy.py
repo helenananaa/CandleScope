@@ -8,18 +8,22 @@ from .event_requests import FrozenProvider, market_bars
 
 
 def describe():
-    return identity("candlescope-plugin-pyne", "pyne-runtime", adapter="pyne-external/4")
+    return identity("candlescope-plugin-pyne", "pyne-runtime", adapter="pyne-external/5")
 
 
-def execute(request):
+def settings_for(request, provider):
     symbol = SymbolInfo.from_value(request["context"]["symbol"])
     tick = request.get("host_settings", {}).get("price_tick")
     if tick is not None:
         symbol = replace(symbol, mintick=float(tick))
-    settings = replace(host_settings(security_mode="safe"), timeout_seconds=None,
-                       data_provider=FrozenProvider(request.get("contexts", []), request),
+    return replace(host_settings(security_mode="safe"), timeout_seconds=None,
+                       data_provider=provider,
                        syminfo=symbol,
                        timeframe=TimeframeInfo.from_value(request["context"]["timeframe"]))
+
+
+def execute(request):
+    settings = settings_for(request, FrozenProvider(request.get("contexts", []), request))
     bars = market_bars(request["bars"], request["context"]["timeframe"])
     result = run_external(request["source"], bars, request["accounts"], params=request.get("parameters"), settings=settings, execution_passes=request.get("execution_passes"), allow_requests=True)
     return {"contract": result["protocol"], "pyramiding": result.get("pyramiding", 1), "intents": result["intents"], "graphics": result["graphics"],
@@ -28,4 +32,7 @@ def execute(request):
 
 if __name__ == "__main__":
     import sys
-    raise SystemExit((serve_evaluator if "--worker" in sys.argv else serve)(describe, execute))
+    if "--worker" in sys.argv:
+        from .external_incremental import Evaluator
+        raise SystemExit(serve_evaluator(describe, Evaluator(execute, settings_for)))
+    raise SystemExit(serve(describe, execute))

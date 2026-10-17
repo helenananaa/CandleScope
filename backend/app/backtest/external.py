@@ -22,12 +22,12 @@ from .external_report import closed_trades
 
 def host_identity():
     import app.simulation.kernel as kernel_module
-    files = [Path(__file__), Path(__file__).with_name("native_session.py"), Path(__file__).with_name("external_orders.py"), Path(__file__).with_name("external_report.py"), Path(__file__).with_name("external_market.py"), Path(__file__).with_name("external_feedback.py"), *sorted(Path(kernel_module.__file__).parent.rglob("*.py"))]
+    files = [Path(__file__), Path(__file__).with_name("native_session.py"), Path(__file__).with_name("external_orders.py"), Path(__file__).with_name("external_report.py"), Path(__file__).with_name("external_market.py"), Path(__file__).with_name("external_feedback.py"), Path(__file__).with_name("external_incremental.py"), *sorted(Path(kernel_module.__file__).parent.rglob("*.py"))]
     checksum = hashlib.sha256()
     for path in files:
         checksum.update(path.name.encode())
         checksum.update(path.read_bytes())
-    return {"contract": "external-broker/1", "host_model": "SPOT_CASH_BINDING_V11_CLOSED_TRADES", "code_sha256": checksum.hexdigest()}
+    return {"contract": "external-broker/1", "host_model": "PYNE_FIXED_HISTORY_V12_CLOSED_TRADES", "code_sha256": checksum.hexdigest()}
 
 
 def account_feedback_profit(account, initial_balance):
@@ -60,11 +60,14 @@ def resolve_external(language):
 def run_external_host(plugin, wire, runner, cancelled):
     from .native import invoke
     from .native_session import SessionWorker
-    if runner is invoke and wire["identity"].get("adapter") in {"pine-external/5", "pyne-external/4"}:
+    if runner is invoke and wire["identity"].get("adapter") in {"pine-external/5", "pyne-external/4", "pyne-external/5"}:
         worker = SessionWorker(plugin, wire, cancelled, evaluator=True)
         try:
-            return _run_external_host(plugin, wire,
-                lambda _plugin, payload, **kwargs: worker.request(payload, **kwargs), cancelled)
+            evaluate = lambda _plugin, payload, **kwargs: worker.request(payload, **kwargs)
+            if wire["identity"].get("adapter") == "pyne-external/5":
+                from .external_incremental import IncrementalEvaluator
+                evaluate = IncrementalEvaluator(worker, len(wire["bars"]))
+            return _run_external_host(plugin, wire, evaluate, cancelled)
         finally:
             worker.close()
     return _run_external_host(plugin, wire, runner, cancelled)
@@ -137,6 +140,7 @@ def _run_external_host(plugin, wire, runner, cancelled):
     report = json.loads(json.dumps(asdict(kernel.result()), default=str))
     return {"execution_mode": "CANDLESCOPE", "account_authority": "candlescope", "identity": wire["identity"],
             "account_model": kernel.account_model,
+            "evaluation_contract": latest.get("evaluation_contract", "historical-prefix/1"),
             "host_runtime_identity": wire["host_runtime_identity"],
             "fill_model": kernel.fill_policy, "fidelity": ("AGG_TRADE_TAPE" if fidelity == "TRADE_TAPE" and kernel.source_kind == "AGG_TRADE" else fidelity),
             "trades": [{**fill, "time": fill["event_time_ms"] / 1000,

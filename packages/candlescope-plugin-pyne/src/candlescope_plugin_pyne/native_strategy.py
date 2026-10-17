@@ -7,6 +7,7 @@ orders or execution order. Keep this seam covered by native parity tests.
 from __future__ import annotations
 
 from dataclasses import replace
+from contextlib import contextmanager
 import pyne_runtime as pn
 from pyne_runtime.runtime import PyneRuntime
 from pyne_runtime.incremental import PyneIncrementalSession, is_incremental_pyne_script
@@ -36,9 +37,37 @@ class ObservedSession(PyneIncrementalSession):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.native_equity = []
+        self.strategy_declared = False
+
+    @contextmanager
+    def observe_configuration(self, ctx):
+        # In 0.4.1 configure() does not mark an otherwise empty strategy as
+        # touched. Observe the actual successful call, not source text or an
+        # invented order; restore the method before any engine snapshot.
+        original = ctx.strategy.configure
+        had_override = "configure" in vars(ctx.strategy)
+
+        def configure(**settings):
+            result = original(**settings)
+            self.strategy_declared = True
+            return result
+
+        ctx.strategy.configure = configure
+        try:
+            yield
+        finally:
+            if had_override:
+                ctx.strategy.configure = original
+            else:
+                del ctx.strategy.configure
+
+    def _call_optional(self, func, ctx):
+        with self.observe_configuration(ctx):
+            return super()._call_optional(func, ctx)
 
     def _run_bar(self, ctx, bar, **kwargs):
-        super()._run_bar(ctx, bar, **kwargs)
+        with self.observe_configuration(ctx):
+            super()._run_bar(ctx, bar, **kwargs)
         if not kwargs["preview"]:
             self.native_equity.append({"time": bar.time, "value": ctx.strategy.equity})
 
@@ -63,7 +92,7 @@ def execute(request):
         session = ObservedSession(script=source, params=request.get("parameters") or {}, settings=settings)
         result = session.seed(bars)
         equity = session.native_equity
-        declared = bool((result.output.get("strategy") or {}).get("summary"))
+        declared = session.strategy_declared or bool((result.output.get("strategy") or {}).get("summary"))
     else:
         runtime = ObservedBatch(settings=settings)
         result = runtime.execute(source, bars, request.get("parameters") or {})
