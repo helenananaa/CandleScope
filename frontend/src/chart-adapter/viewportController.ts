@@ -97,6 +97,7 @@ export class ViewportController {
   private unlockTimer: TimerHandle | null;
   private pendingIntent: ViewportIntent | null;
   private readonly fitSessionKeys: Set<string>;
+  private readonly resetScaleOptions: { barSpacing: number; rightOffset: number } | null;
   private frozenOnNewBars = false;
 
   constructor({
@@ -115,6 +116,10 @@ export class ViewportController {
     this.unlockTimer = null;
     this.pendingIntent = null;
     this.fitSessionKeys = new Set();
+    this.resetScaleOptions = safeCall(() => {
+      const options = this.getTimeScale()?.options();
+      return options ? { barSpacing: options.barSpacing, rightOffset: options.rightOffset } : null;
+    }, null);
   }
 
   getChart(): AdapterChart | null {
@@ -186,6 +191,48 @@ export class ViewportController {
     return this.applyIntent(intent.name, intent.priority, intent.apply);
   }
 
+  private contentRange(): ViewportLogicalRange | null {
+    const range = safeCall(() => this.contentLogicalRangeProvider?.() ?? null, null);
+    return finiteNumber(range?.from) && finiteNumber(range?.to) && range.from <= range.to
+      ? range : null;
+  }
+
+  /** Persist whitespace relative to market rows, excluding axis-only carriers. */
+  captureRightOffset(): number | null {
+    const timeScale = this.getTimeScale();
+    if (!timeScale) return null;
+    const content = this.contentRange();
+    const logical = safeCall(() => timeScale.getVisibleLogicalRange(), null);
+    return content && finiteNumber(logical?.to)
+      ? logical.to - content.to
+      : safeCall(() => timeScale.scrollPosition(), null);
+  }
+
+  private anchorContent(timeScale: AdapterTimeScale, offset: number, barSpacing?: number | null): boolean {
+    const content = this.contentRange();
+    if (!content) return false;
+    const range = logicalRangeForLatestBarPosition({
+      barSpacing: barSpacing ?? timeScale.options().barSpacing,
+      contentLastLogical: content.to + offset,
+      position: 1,
+      width: timeScale.width(),
+    });
+    if (!range) return false;
+    timeScale.setVisibleLogicalRange(toLogicalRange(range));
+    return true;
+  }
+
+  resetToDefault(): boolean {
+    return this.applyIntent("resetToDefault", PRIORITY.restore, (timeScale) => {
+      timeScale.resetTimeScale();
+      // The chart engine's default reset includes hidden future carriers.
+      // Retain its default zoom/padding around the real content instead.
+      const defaults = this.resetScaleOptions ?? timeScale.options();
+      this.anchorContent(timeScale, Math.max(0, defaults.rightOffset), defaults.barSpacing);
+      return true;
+    });
+  }
+
   fitSemanticContent(timeScale: AdapterTimeScale): boolean {
     const contentRangeProvider = this.contentLogicalRangeProvider;
     const contentRange = contentRangeProvider
@@ -238,11 +285,11 @@ export class ViewportController {
 
       let restored = false;
       if (plan.mode === "anchor") {
-        // plan.rightOffset carries timeScale.scrollPosition() semantics
-        // (bars from the right edge). It must be restored through
-        // scrollToPosition, never through the rightOffset option, which is
-        // a permanent whitespace setting with a different meaning.
-        if (finiteNumber(plan.rightOffset)) {
+        const offset = finiteNumber(plan.rightOffset)
+          ? plan.rightOffset : Math.max(0, timeScale.options().rightOffset);
+        if (!this.anchorContent(timeScale, offset, plan.barSpacing) && finiteNumber(plan.rightOffset)) {
+          // Generic charts without a semantic content provider retain the
+          // chart engine's scrollPosition contract.
           timeScale.scrollToPosition?.(plan.rightOffset, false);
         }
         restored = true;

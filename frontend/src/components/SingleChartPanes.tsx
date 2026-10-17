@@ -2257,7 +2257,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     return buildVisibleRangeSnapshot({
       barSpacing: visibleRange.barSpacing,
       logicalRange: visibleRange.logical,
-      rightOffset: visibleRange.scrollPosition,
+      rightOffset: viewportControllerRef.current?.captureRightOffset() ?? visibleRange.scrollPosition,
       timeRange: sourceTimeRange,
     });
   }, [chartAdapter]);
@@ -2629,6 +2629,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       paneIndex: 0,
     });
     const futureTimeAxisSeries = createFutureTimeAxisSeries(chart, { paneIndex: 0 });
+    // This surface resets around market rows; LWC's shared-axis reset also
+    // includes the hidden future drawing carriers.
+    chart.applyOptions({ handleScale: { axisDoubleClickReset: { time: false } } });
     chartRef.current = chart;
     activeSurfaceOwnerRef.current = {
       chart,
@@ -2941,6 +2944,36 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       gesture.startClientY = 0;
       gesture.touchIdentifier = null;
     };
+    const isTimeAxisPoint = (clientX: number, clientY: number) => {
+      const chart = chartRef.current;
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!chart || !rect) return false;
+      const scale = chart.timeScale();
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+      return x >= 0 && x <= scale.width() && y >= rect.height - scale.height() && y <= rect.height;
+    };
+    const resetTimeAxisAt = (clientX: number, clientY: number) => {
+      if (!isTimeAxisPoint(clientX, clientY)) return;
+      markViewportRangeInteracted();
+      viewportControllerRef.current?.resetToDefault();
+    };
+    const resetTimeAxis = (event: MouseEvent) => resetTimeAxisAt(event.clientX, event.clientY);
+    let lastTimeAxisTap: { x: number; y: number; time: number } | null = null;
+    const resetTimeAxisTap = (event: TouchEvent) => {
+      const touch = event.changedTouches[0];
+      if (!touch || event.touches.length || !isTimeAxisPoint(touch.clientX, touch.clientY)) {
+        lastTimeAxisTap = null;
+        return;
+      }
+      const prior = lastTimeAxisTap;
+      lastTimeAxisTap = { x: touch.clientX, y: touch.clientY, time: event.timeStamp };
+      if (prior && event.timeStamp - prior.time < 500
+        && Math.hypot(touch.clientX - prior.x, touch.clientY - prior.y) < 30) {
+        lastTimeAxisTap = null;
+        resetTimeAxisAt(touch.clientX, touch.clientY);
+      }
+    };
     const beginPointerGesture = (
       kind: ChartPointerGestureState["kind"],
       clientX: number,
@@ -3094,6 +3127,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       }, HISTORY_WHEEL_GESTURE_IDLE_MS);
     };
     wrapper.addEventListener("wheel", handleWheel, { capture: true, passive: true });
+    wrapper.addEventListener("dblclick", resetTimeAxis);
+    wrapper.addEventListener("touchend", resetTimeAxisTap, { passive: true });
     wrapper.addEventListener("mousedown", markMousePointerActive);
     wrapper.addEventListener("touchstart", markTouchPointerActive, { passive: true });
     window.addEventListener("mousemove", trackMouseMovement);
@@ -3104,6 +3139,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     window.addEventListener("blur", releasePointer);
     return () => {
       wrapper.removeEventListener("wheel", handleWheel, true);
+      wrapper.removeEventListener("dblclick", resetTimeAxis);
+      wrapper.removeEventListener("touchend", resetTimeAxisTap);
       wrapper.removeEventListener("mousedown", markMousePointerActive);
       wrapper.removeEventListener("touchstart", markTouchPointerActive);
       window.removeEventListener("mousemove", trackMouseMovement);
