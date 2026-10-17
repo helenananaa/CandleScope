@@ -30,7 +30,7 @@ export const zhCN = {
   "research.external.waitingRun": "此运行正在等待外部客户端重连。",
   "research.external.disabledRun": "此运行正在等待启用外部模型连接。",
   "research.external.revokedRun": "此运行关联的连接已撤销。",
-  "research.external.staleReport": "此报告属于其他模型或数据版本，请为当前选择重新运行。",
+  "research.external.staleReport": "此报告的模型、数据或执行设置与当前选择不同，请重新运行。",
   "plugin.trust.scriptRuntimeExecution": "安装器会创建独立 Python 环境并执行包校验探针。重启后，脚本以当前用户身份运行，没有操作系统沙箱；文件、网络和子进程访问不受平台插件权限摘要的限制。",
   "plugin.runtimeInstalled": "脚本运行时已安装并通过校验。请退出并重新打开 CandleScope，启用指标及受支持的原生策略。",
   "native.executionErrorHelp": "运行未完成。请检查脚本和输入参数，下方可查看具体原因。",

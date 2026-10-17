@@ -50,6 +50,7 @@ function canonical(value: unknown): string {
 export function externalReportIsStale(input: {
   report: BacktestReport | null; run: BacktestRunRecord | null; revisionId: string; datasetId: string;
   snapshot: { data_epoch: string; snapshot_hash: string } | null; draftText: string;
+  request?: Record<string, unknown> | null | undefined;
   externalSelected?: boolean;
 }): boolean {
   if (!input.report || (!input.report.strategy?.external_provider && !input.externalSelected)) return false;
@@ -59,9 +60,13 @@ export function externalReportIsStale(input: {
       || (input.snapshot && (identity?.data_epoch !== input.snapshot.data_epoch || identity?.snapshot_hash !== input.snapshot.snapshot_hash))) return true;
   try {
     const frozen = JSON.parse(input.run?.config_json ?? "{}") as Record<string, unknown>;
-    const draft = JSON.parse(input.draftText) as Record<string, unknown>;
-    return canonical(frozen.parameters ?? {}) !== canonical(draft.parameters ?? {})
-      || (draft.output_mode !== undefined && frozen.output_mode !== draft.output_mode)
-      || (draft.warmup_bars !== undefined && frozen.warmup_bars !== draft.warmup_bars);
-  } catch { return false; }
+    if (input.request === null) return true;
+    const draft = input.request ?? JSON.parse(input.draftText) as Record<string, unknown>;
+    // Compare the normalized request actually submitted, including account,
+    // costs, sizing, clocks and risk. Connection ownership is not report truth.
+    const metadata = new Set(["external_connection_id", "external_scope_hash", "external_provider_identity", "strategy_execution_revision"]);
+    return Object.entries(draft).some(([field, value]) => !metadata.has(field)
+      && !(field === "snapshot_hash" && value === "")
+      && canonical(frozen[field] ?? null) !== canonical(value ?? null));
+  } catch { return true; }
 }

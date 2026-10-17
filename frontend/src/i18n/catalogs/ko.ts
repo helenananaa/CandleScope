@@ -32,7 +32,7 @@ export const ko = {
   "research.external.waitingRun": "이 실행은 외부 클라이언트의 재연결을 기다리고 있습니다.",
   "research.external.disabledRun": "이 실행은 외부 모델 연결이 활성화되기를 기다리고 있습니다.",
   "research.external.revokedRun": "이 실행의 연결이 해제되었습니다.",
-  "research.external.staleReport": "이 보고서는 다른 모델 또는 데이터 버전에 속합니다. 현재 선택 항목으로 다시 실행하세요.",
+  "research.external.staleReport": "이 보고서의 모델, 데이터 또는 실행 설정이 현재 선택과 다릅니다. 다시 실행하세요.",
   "plugin.trust.scriptRuntimeExecution": "설치 프로그램은 별도의 Python 환경을 만들고 패키지 검증을 실행합니다. 재시작 후 스크립트는 OS 샌드박스 없이 현재 사용자 권한으로 실행됩니다. 파일, 네트워크 및 하위 프로세스 접근은 플랫폼 플러그인 권한 요약으로 제한되지 않습니다.",
   "plugin.runtimeInstalled": "스크립트 런타임을 설치하고 검증했습니다. CandleScope를 종료한 후 다시 열면 지표와 지원되는 네이티브 전략이 활성화됩니다.",
   "native.executionErrorHelp": "실행을 완료하지 못했습니다. 스크립트와 입력 매개변수를 확인하세요. 자세한 원인은 아래에서 확인할 수 있습니다.",

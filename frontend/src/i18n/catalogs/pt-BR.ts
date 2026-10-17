@@ -32,7 +32,7 @@ export const ptBR = {
   "research.external.waitingRun": "Esta execução está aguardando a reconexão do cliente externo.",
   "research.external.disabledRun": "Esta execução está aguardando a habilitação das conexões com modelos externos.",
   "research.external.revokedRun": "A conexão desta execução foi revogada.",
-  "research.external.staleReport": "Este relatório pertence a outra versão do modelo ou dos dados. Execute novamente para a seleção atual.",
+  "research.external.staleReport": "O modelo, os dados ou as configurações de execução deste relatório diferem da seleção atual. Execute novamente.",
   "plugin.trust.scriptRuntimeExecution": "O instalador cria um ambiente Python separado e executa a verificação do pacote. Após reiniciar, os scripts são executados como o usuário atual, sem sandbox do sistema operacional. O resumo de permissões dos plugins da plataforma não restringe arquivos, rede nem subprocessos.",
   "plugin.runtimeInstalled": "Runtime de scripts instalado e verificado. Feche e abra o CandleScope para ativar os indicadores e as estratégias nativas compatíveis.",
   "native.executionErrorHelp": "Não foi possível concluir a execução. Confira o script e os parâmetros; os detalhes técnicos estão abaixo.",

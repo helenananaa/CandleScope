@@ -17,6 +17,7 @@ export default function ResearchResultsPanel({ runtime }: { runtime: BacktestRes
   const staleExternal = externalReportIsStale({ report, run: activeRun,
     revisionId: runtime.view.selectedRevisionId, datasetId: runtime.view.selectedDatasetId,
     snapshot: runtime.view.snapshot, draftText: runtime.view.runDraftText,
+    request: runtime.view.selectedRunRequest,
     externalSelected: isExternalRevision(runtime.view.revisions?.find((item) => item.revision_id === runtime.view.selectedRevisionId)) });
   return (
     <ResearchPanelFrame eyebrow={t("research.panel.results")} title={report?.report_label ?? t("research.results.empty")} className="research-results-panel">

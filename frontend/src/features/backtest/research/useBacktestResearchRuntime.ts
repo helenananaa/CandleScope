@@ -576,6 +576,7 @@ export function useBacktestResearchRuntime(options: {
       notice,
       operationError,
       selectedDatasetId,
+      selectedRunRequest,
       selectedRevisionId,
       startTimeMs,
       endTimeMs,
