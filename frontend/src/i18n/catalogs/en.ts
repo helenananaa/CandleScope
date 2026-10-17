@@ -259,6 +259,8 @@ export const en = {
   "pc.enginesHint": "Separately discovered script engines for chart computation, excluded from the installed plugin count above.",
 
   "native.external.sampledLabel": "Sampled book (bounded depth)",
+  "native.external.uploadMissing": "This strategy previously used an uploaded trade or book file. Select it again, or explicitly clear the file selection. Another data source will not be substituted automatically.",
+  "native.external.clearUpload": "Clear file selection",
   "native.external.sampledHint": "Approximate sampled book: consume only visible depth; excess quantity stays unfilled. Books older than 2 seconds cannot fill. No inferred passive queue fills; resting limits fill only when marketable. Same-ms trades precede new book samples. Import paired bars.csv and upload execution.json from the same archive.",
   "native.series.title": "Strategy series graphics",
   "native.series.hint": "Candles, OHLC bars, markers, colors and fills from the runtime. This report view approximates marker shapes and uses one fill slice per bar; it is not a pixel-identical platform chart.",

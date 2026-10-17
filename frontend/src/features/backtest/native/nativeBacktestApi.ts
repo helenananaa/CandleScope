@@ -1,4 +1,5 @@
 import { API_BASE } from "../../../services/apiConfig.js";
+import type { FrozenExecutionSettings } from "./nativeExecutionSettings.js";
 
 export interface NativeResult {
   account_authority: string;
@@ -20,7 +21,7 @@ export interface NativeRun {
   state: string;
   created_at_ms: number;
   runtime_identity: { engine: { package: string; version: string; code_sha256: string } };
-  config?: { source: string; language: "pine" | "pyne"; parameters: Record<string, unknown>; context?: { symbol: string; timeframe: string }; interval?: string };
+  config?: FrozenExecutionSettings & { source: string; language: "pine" | "pyne"; parameters: Record<string, unknown>; context?: { symbol: string; timeframe: string }; interval?: string };
   result?: NativeResult | null;
   error?: { message: string; details?: unknown } | null;
 }

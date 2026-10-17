@@ -261,6 +261,8 @@ export const ko = {
   "orderBook.bidPriceRange": "매수 주문 그룹: 가격은 {min} 이상, {max} 미만입니다. 수량은 그룹의 합계입니다.",
   "orderBook.askPriceRange": "매도 주문 그룹: 가격은 {min} 초과, {max} 이하입니다. 수량은 그룹의 합계입니다.",
   "native.external.sampledLabel": "샘플 호가창 (제한된 깊이)",
+  "native.external.uploadMissing": "이 전략은 이전에 업로드한 체결 또는 호가 파일을 사용했습니다. 파일을 다시 선택하거나 파일 선택을 명시적으로 해제하세요. 다른 데이터 소스로 자동 대체하지 않습니다.",
+  "native.external.clearUpload": "파일 선택 해제",
   "native.external.sampledHint": "샘플 호가창에 따른 근사치입니다. 보이는 깊이만 소진하고 초과 수량은 미체결로 남습니다. 2초보다 오래된 호가창으로는 체결하지 않습니다. 수동 대기열 체결은 추정하지 않으며 대기 지정가는 즉시 체결 가능한 상태에서만 체결됩니다. 같은 밀리초의 체결은 새 호가 샘플보다 먼저 처리됩니다. 같은 아카이브의 bars.csv와 execution.json을 가져오세요.",
   "native.series.title": "전략 시계열 그래프",
   "native.series.hint": "런타임의 캔들, OHLC 봉, 마커, 색상 및 채우기를 표시합니다. 이 보고서는 마커 모양을 근사하고 봉마다 하나의 채우기 구간을 사용하므로 원래 플랫폼 차트와 픽셀 단위로 일치하지 않습니다.",
