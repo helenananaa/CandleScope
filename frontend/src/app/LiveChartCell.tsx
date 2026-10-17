@@ -20,6 +20,7 @@ import React, {
 import { createPortal } from "react-dom";
 import { captureChartPng } from "../features/trading-accounts/chartCapture.js";
 import type { QuickReplayRequest } from "../features/trading-accounts/tradingTypes.js";
+import { useTradingChartOverlay } from "../features/trading-accounts/useTradingChartOverlay.js";
 import type { TradingRailBinding } from "./RightMarketRail.js";
 import "../features/backtest/chart-tester/chartStrategyEntry.css";
 import IntervalSelector from "../components/IntervalSelector.js";
@@ -718,6 +719,17 @@ function LiveChartCell({
     chartSurface.actions,
     lastClose,
   ]);
+  const tradingOverlay = useTradingChartOverlay({
+    enabled: true,
+    exchange: chartSession.view.exchange,
+    marketType: chartSession.view.marketType,
+    symbol: chartSession.view.symbol,
+    interval: chartSession.view.interval,
+    seriesStore: sourceMarketData.view.seriesStore,
+    upColor: combinedSettings.upColor,
+    downColor: combinedSettings.downColor,
+    themeKey: globalSettings.resolvedTheme,
+  });
   const quickReplayStyle = useMemo(() => ({
     upColor: combinedSettings.upColor,
     downColor: combinedSettings.downColor,
@@ -901,6 +913,8 @@ function LiveChartCell({
             tradeFlow={tradeFlow}
             strategyMarkerSource={strategyMarkerSource}
             pluginMarkerSource={plugins.view.markerSource}
+            accountMarkerSource={tradingOverlay.markerSource}
+            accountPriceLineSource={tradingOverlay.priceLineSource}
             pluginChartLayerSource={plugins.view.chartLayerSource}
             drawingInteractionReady={drawingInteractionReady}
             onDrawingInteractionReadyChange={setDrawingInteractionReady}

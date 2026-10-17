@@ -192,6 +192,10 @@ export const tradingAccountsZhCN = {
   "trading.replay.buy": "买",
   "trading.replay.sell": "卖",
   "trading.replay.noteMarker": "记",
+  "trading.chart.long": "做多 {qty}",
+  "trading.chart.short": "做空 {qty}",
+  "trading.chart.stopLoss": "止损 {qty}",
+  "trading.chart.takeProfit": "止盈 {qty}",
 } as const;
 
 export const tradingAccountsEn = {
@@ -384,6 +388,10 @@ export const tradingAccountsEn = {
   "trading.replay.buy": "B",
   "trading.replay.sell": "S",
   "trading.replay.noteMarker": "N",
+  "trading.chart.long": "Long {qty}",
+  "trading.chart.short": "Short {qty}",
+  "trading.chart.stopLoss": "SL {qty}",
+  "trading.chart.takeProfit": "TP {qty}",
 } as const;
 
 export const tradingAccountsZhHant = {
@@ -576,6 +584,10 @@ export const tradingAccountsZhHant = {
   "trading.replay.buy": "買",
   "trading.replay.sell": "賣",
   "trading.replay.noteMarker": "記",
+  "trading.chart.long": "做多 {qty}",
+  "trading.chart.short": "做空 {qty}",
+  "trading.chart.stopLoss": "停損 {qty}",
+  "trading.chart.takeProfit": "停利 {qty}",
 } as const;
 
 export const tradingAccountsJa = {
@@ -768,6 +780,10 @@ export const tradingAccountsJa = {
   "trading.replay.buy": "買",
   "trading.replay.sell": "売",
   "trading.replay.noteMarker": "記",
+  "trading.chart.long": "ロング {qty}",
+  "trading.chart.short": "ショート {qty}",
+  "trading.chart.stopLoss": "損切り {qty}",
+  "trading.chart.takeProfit": "利確 {qty}",
 } as const;
 
 export const tradingAccountsKo = {
@@ -960,6 +976,10 @@ export const tradingAccountsKo = {
   "trading.replay.buy": "매수",
   "trading.replay.sell": "매도",
   "trading.replay.noteMarker": "메모",
+  "trading.chart.long": "롱 {qty}",
+  "trading.chart.short": "숏 {qty}",
+  "trading.chart.stopLoss": "손절 {qty}",
+  "trading.chart.takeProfit": "익절 {qty}",
 } as const;
 
 export const tradingAccountsPtBR = {
@@ -1152,4 +1172,8 @@ export const tradingAccountsPtBR = {
   "trading.replay.buy": "C",
   "trading.replay.sell": "V",
   "trading.replay.noteMarker": "N",
+  "trading.chart.long": "Comprado {qty}",
+  "trading.chart.short": "Vendido {qty}",
+  "trading.chart.stopLoss": "Proteção {qty}",
+  "trading.chart.takeProfit": "Alvo {qty}",
 } as const;

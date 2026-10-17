@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import base64
+import time
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -20,8 +23,9 @@ from app.trading_accounts.practice import (
     WorkingOrder,
     advance_cursor,
 )
-from app.trading_accounts.practice_runtime import contiguous_bars
-from app.trading_accounts.service import TradingAccountService
+from app.data_engine.data_manager.models import DataEvent, DataEventType, SeriesKey
+from app.trading_accounts.practice_runtime import PracticeRuntime, contiguous_bars
+from app.trading_accounts.service import CURSOR_FLUSH_MS, TradingAccountService
 from app.trading_accounts.store import TradingStore
 from app.trading_accounts.trades import build_trades
 
@@ -158,11 +162,13 @@ class FakeMarket:
     def __init__(self) -> None:
         self.bar: dict[str, Any] | None = None
         self.history: list[dict[str, Any]] = []
+        self.calls: list[str] = []
 
     def latest_bar(self, exchange, market_type, symbol):
         return self.bar
 
     def bars(self, exchange, market_type, symbol, interval, start_ms, end_ms, limit):
+        self.calls.append(symbol)
         return [bar for bar in self.history if start_ms // 1000 <= bar["time"]], True
 
 
@@ -292,3 +298,191 @@ def test_http_adapter_maps_domain_errors(service):
     assert rejected.status_code == 409
     assert rejected.json()["detail"]["code"] == "TRADING_ORDERS_UNSUPPORTED"
     assert client.get("/api/v1/trading/journal/je_00000000000000000000").status_code == 404
+
+
+# ── practice feed and runtime ─────────────────────────────────
+
+FUTURES = ("binance", "futures", "BTCUSDT")
+
+
+def test_cursor_stays_in_memory_until_candle_extremes_change(service):
+    market, clock = service.test_market, service.test_clock
+    minute = T0 // 1000
+    market.bar = bar(minute, "100", "101", "99", "100")
+    account = service.create_account({"kind": "practice", "name": "P", "settings": {"slippageBps": "0"}})
+    service.place_order(account["id"], {**INSTRUMENT, "side": "buy", "type": "limit", "qty": "1", "limitPrice": "90"})
+    seeded = service.store.cursor(*FUTURES)
+    loads: list[str] = []
+    load_trades = service._trades
+    service._trades = lambda account_id: loads.append(account_id) or load_trades(account_id)
+
+    # A new close inside the seen range: visible at once, not written, and
+    # far from the order so no ledger is loaded.
+    clock.now = T0 + 31_000
+    service.apply_market_bars(FUTURES, [bar(minute, "100", "101", "99", "100.4")], observed_ms=clock.now)
+    assert loads == []
+    assert service.store.cursor(*FUTURES)["updated_at_ms"] == seeded["updated_at_ms"]
+    feed = service.account_summary(account["id"])["feeds"][0]
+    assert feed["lastPrice"] == "100.4" and feed["observedMs"] == clock.now
+
+    # A new extreme is written immediately.
+    clock.now += 1_000
+    service.apply_market_bars(FUTURES, [bar(minute, "100", "101.5", "99", "101")], observed_ms=clock.now)
+    assert service.store.cursor(*FUTURES)["seen_high"] == D("101.5")
+
+    # Close-only drift is flushed after CURSOR_FLUSH_MS, and on shutdown.
+    clock.now += CURSOR_FLUSH_MS
+    service.apply_market_bars(FUTURES, [bar(minute, "100", "101.5", "99", "100.9")], observed_ms=clock.now)
+    assert service.store.cursor(*FUTURES)["last_close"] == D("100.9")
+    clock.now += 1_000
+    service.apply_market_bars(FUTURES, [bar(minute, "100", "101.5", "99", "100.7")], observed_ms=clock.now)
+    assert service.store.cursor(*FUTURES)["last_close"] == D("100.9")
+    service.flush_feeds()
+    assert service.store.cursor(*FUTURES)["last_close"] == D("100.7")
+
+    # Reaching the order loads the ledger and writes the fill with the cursor.
+    clock.now += 1_000
+    loads.clear()
+    fills = service.apply_market_bars(FUTURES, [bar(minute, "100", "101.5", "89.5", "89.8")], observed_ms=clock.now)
+    assert fills == 1 and loads == [account["id"]]
+    assert service.store.cursor(*FUTURES)["seen_low"] == D("89.5")
+    assert service.account_summary(account["id"])["positions"][0]["avgEntryPrice"] == "90"
+
+
+def test_status_change_is_written_but_repeats_are_not(service):
+    service.test_market.bar = bar(T0 // 1000, "100", "100", "100", "100")
+    account = service.create_account({"kind": "practice", "name": "P"})
+    service.place_order(account["id"], {**INSTRUMENT, "side": "buy", "type": "limit", "qty": "1", "limitPrice": "90"})
+    service.test_clock.now += 5_000
+    service.set_feed_status(FUTURES, "catching_up", "gap")
+    written = service.store.cursor(*FUTURES)
+    assert written["status"] == "catching_up"
+    service.test_clock.now += 5_000
+    service.set_feed_status(FUTURES, "catching_up", "gap")
+    assert service.store.cursor(*FUTURES)["updated_at_ms"] == written["updated_at_ms"]
+
+
+def test_account_summary_exposes_feed_lag(service):
+    service.test_market.bar = bar(T0 // 1000, "100", "100", "100", "100")
+    account = service.create_account({"kind": "practice", "name": "P"})
+    service.place_order(account["id"], {**INSTRUMENT, "side": "buy", "type": "limit", "qty": "1", "limitPrice": "90"})
+    service.record_feed_timing(FUTURES, {"lagMs": 120, "queueMs": 3, "queryMs": 5, "applyMs": 2})
+    feed = service.account_summary(account["id"])["feeds"][0]
+    assert feed["lagMs"] == 120 and feed["timing"]["queueMs"] == 3
+
+
+class FakeDataManager:
+    def __init__(self) -> None:
+        self.handles: dict[object, tuple[str, Any]] = {}
+        self.ensured: list[str] = []
+        self.released: list[str] = []
+
+    async def ensure_stream(self, symbol, interval, **_kwargs):
+        self.ensured.append(symbol)
+
+    async def release_stream(self, symbol, interval, **_kwargs):
+        self.released.append(symbol)
+
+    def subscribe(self, callback, symbol=None, interval=None, exchange="binance", market_type="spot",
+                  event_types=None, *, on_recovery=None):
+        assert DataEventType.BAR_UPDATED in event_types
+        handle = object()
+        self.handles[handle] = (symbol, callback)
+        return handle
+
+    def unsubscribe(self, handle):
+        self.handles.pop(handle, None)
+
+    async def emit(self, symbol: str, bar_time: int) -> None:
+        event = DataEvent(
+            event_type=DataEventType.BAR_UPDATED,
+            key=SeriesKey(symbol, "1m", market_type="futures"),
+            bar=SimpleNamespace(time=bar_time),
+        )
+        for subscribed, callback in list(self.handles.values()):
+            if subscribed == symbol:
+                await callback(event)
+
+
+def live_service(tmp_path: Path) -> tuple[TradingAccountService, FakeMarket]:
+    market = FakeMarket()
+    store = TradingStore(tmp_path / "live.sqlite3")
+    return TradingAccountService(store, snapshot_dir=tmp_path / "snaps", market=market), market
+
+
+def test_sweep_steps_only_instruments_without_live_updates(tmp_path):
+    service, market = live_service(tmp_path)
+    minute = int(time.time()) // 60 * 60
+    market.bar = bar(minute, "100", "100", "100", "100")
+    market.history = [market.bar]
+    account = service.create_account({"kind": "practice", "name": "P"})
+    for symbol in ("BTCUSDT", "ETHUSDT"):
+        service.place_order(account["id"], {
+            **INSTRUMENT, "symbol": symbol, "side": "buy", "type": "limit", "qty": "1", "limitPrice": "50",
+        })
+    dm = FakeDataManager()
+    runtime = PracticeRuntime(service, dm, tick_seconds=60, market=market)
+
+    async def scenario() -> None:
+        await runtime.tick()
+        assert sorted(dm.ensured) == ["BTCUSDT", "ETHUSDT"] and len(dm.handles) == 2
+        assert sorted(market.calls) == ["BTCUSDT", "ETHUSDT"]
+        market.calls.clear()
+        await dm.emit("BTCUSDT", minute)
+        await runtime.drain_events()
+        assert market.calls == ["BTCUSDT"]
+        market.calls.clear()
+        await runtime.tick()  # BTC was just stepped by its live update
+        assert market.calls == ["ETHUSDT"]
+        market.calls.clear()
+        await runtime.tick()
+        assert sorted(market.calls) == ["BTCUSDT", "ETHUSDT"]
+        await runtime.stop()
+        assert sorted(dm.released) == ["BTCUSDT", "ETHUSDT"] and dm.handles == {}
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        service.store.close()
+
+
+def test_live_update_fills_limit_within_a_second_and_reports_lag(tmp_path):
+    service, market = live_service(tmp_path)
+    minute = int(time.time()) // 60 * 60
+    market.bar = bar(minute, "100", "100", "100", "100")
+    market.history = [market.bar]
+    account = service.create_account({"kind": "practice", "name": "P", "settings": {"slippageBps": "0"}})
+    order = service.place_order(account["id"], {
+        **INSTRUMENT, "side": "buy", "type": "limit", "qty": "1", "limitPrice": "99",
+    })["order"]
+    dm = FakeDataManager()
+    # The sweep is a minute away: only the live update can fill the order.
+    runtime = PracticeRuntime(service, dm, tick_seconds=60, market=market)
+
+    async def wait_for(predicate, timeout: float) -> float:
+        started = time.perf_counter()
+        while not predicate():
+            assert time.perf_counter() - started < timeout, "timed out"
+            await asyncio.sleep(0.005)
+        return time.perf_counter() - started
+
+    async def scenario() -> float:
+        await runtime.start()
+        try:
+            await wait_for(lambda: dm.handles and market.calls, 2.0)
+            market.history = [bar(minute, "100", "100", "98.5", "98.7")]
+            await dm.emit("BTCUSDT", minute)
+            return await wait_for(lambda: service.store.order(order["id"])["status"] == "filled", 1.0)
+        finally:
+            await runtime.stop()
+
+    try:
+        elapsed = asyncio.run(scenario())
+        assert elapsed < 1.0
+        assert service.store.order(order["id"])["fill_price"] == D("99")
+        # The order is done, so the feed is no longer listed; read it directly.
+        timing = service._feed(FUTURES).timing
+        assert timing["fills"] == 1 and 0 <= timing["lagMs"] < 1_000
+        assert {"wakeMs", "queueMs", "queryMs", "applyMs"} <= timing.keys()
+    finally:
+        service.store.close()

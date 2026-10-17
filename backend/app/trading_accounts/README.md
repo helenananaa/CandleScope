@@ -11,16 +11,26 @@ Local trading accounts, practice matching and the trade journal. Persistence is
 - `journal.py`: phases, revision coalescing (never across a phase boundary),
   plan locking at the first fill, field timing for hindsight labels, R metrics.
 - `practice.py`: pure order matching over a candle price path.
-- `practice_runtime.py`: the poll loop that drives matching from DataManager 1m
+- `practice_runtime.py`: the loop that drives matching from DataManager 1m
   candles.
 - `service.py`: the transport-independent facade.
 
 ## Practice matching
 
-Every second the runtime replays the 1m candles of each instrument with working
-orders, from its cursor to now. Live matching and catch-up after the app was
-closed are the same walk. A history gap pauses the instrument (`catching_up`)
-rather than guessing.
+A step replays the 1m candles of one instrument with working orders, from its
+cursor to now, in one storage-executor job (query, match, persist). Live
+matching and catch-up after the app was closed are the same walk. A history gap
+pauses the instrument (`catching_up`) rather than guessing.
+
+- Each live 1m update (`BAR_CREATED/UPDATED/CLOSED`) wakes the loop and steps
+  that instrument; bursts coalesce into one step per 100 ms.
+- A sweep every second syncs streams with working orders and steps every
+  instrument that had no event-driven step since the previous sweep.
+- The cursor lives in memory. SQLite is written when the candle, its extremes or
+  the feed status change, when orders fill, and otherwise every 10 s.
+- `account_summary().feeds[]` reports `lagMs` (live update → matched) and
+  `timing` (`wakeMs` event loop, `queueMs` storage executor, `queryMs`,
+  `applyMs`) for the last event-driven step.
 
 - A new candle moves open → low → high → close when it closes up, otherwise
   open → high → low → close. Updates to a forming candle only add extremes not

@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Callable, Protocol
@@ -38,6 +39,7 @@ from .practice import (
     PracticeSettings,
     WorkingOrder,
     advance_cursor,
+    reachable,
 )
 from .store import TradingStore
 from .trades import Trade, build_trades, signed_position
@@ -48,6 +50,9 @@ MAX_SNAPSHOT_IMAGE_BYTES = 6 * 1024 * 1024
 MAX_SNAPSHOT_STATE_BYTES = 256 * 1024
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 SUGGESTION_LOOKBACK_MS = 24 * 3600 * 1000
+# A cursor whose candle, extremes and status are unchanged is written back at
+# most this often; only its last close and observation time are newer.
+CURSOR_FLUSH_MS = 10_000
 
 
 class MarketPort(Protocol):
@@ -150,6 +155,24 @@ def _cursor_from_row(row: dict[str, Any]) -> Cursor:
     )
 
 
+def _cursor_key(cursor: Cursor, status: str, detail: str) -> tuple[Any, ...]:
+    return (cursor.bar_time, cursor.seen_high, cursor.seen_low, cursor.closes_only, status, detail)
+
+
+@dataclass(slots=True)
+class _Feed:
+    """In-memory practice cursor of one instrument; SQLite holds the last flush."""
+
+    cursor: Cursor
+    status: str
+    detail: str
+    flushed: tuple[Any, ...]
+    flushed_at_ms: int
+    flushed_cursor: Cursor
+    # Last measured matcher step: live update -> applied (see practice_runtime).
+    timing: dict[str, int] = field(default_factory=dict)
+
+
 def _bar_decimal(bar: dict[str, Any], key: str) -> Decimal:
     value = bar[key]
     if isinstance(value, Decimal):
@@ -172,6 +195,7 @@ class TradingAccountService:
         self.market = market
         self.clock = clock
         self.new_id = id_factory
+        self._feeds: dict[Instrument, _Feed] = {}
 
     # ══════════════════════════════════════════════════════════
     #  Accounts
@@ -328,10 +352,11 @@ class TradingAccountService:
         return cash + realized
 
     def _mark(self, instrument: Instrument) -> tuple[Decimal | None, int | None, str]:
-        cursor = self.store.cursor(*instrument)
+        feed = self._feed(instrument)
+        cursor = feed.cursor if feed is not None else None
         now = self.clock()
-        if cursor is not None and now - int(cursor["observed_ms"]) <= FRESH_PRICE_MS:
-            return cursor["last_close"], int(cursor["observed_ms"]), "practice"
+        if cursor is not None and now - cursor.observed_ms <= FRESH_PRICE_MS:
+            return cursor.last_close, cursor.observed_ms, "practice"
         if self.market is not None:
             try:
                 bar = self.market.latest_bar(*instrument)
@@ -340,7 +365,7 @@ class TradingAccountService:
             if bar is not None:
                 return _bar_decimal(bar, "close"), int(bar["time"]) * 1000, "market"
         if cursor is not None:
-            return cursor["last_close"], int(cursor["observed_ms"]), "stale"
+            return cursor.last_close, cursor.observed_ms, "stale"
         return None, None, "none"
 
     def account_summary(self, account_id: str) -> dict[str, Any]:
@@ -370,15 +395,17 @@ class TradingAccountService:
         instruments = sorted({(row["exchange"], row["marketType"], row["symbol"]) for row in working})
         feeds = []
         for instrument in instruments:
-            cursor = self.store.cursor(*instrument)
+            feed = self._feed(instrument)
             feeds.append({
                 "exchange": instrument[0],
                 "marketType": instrument[1],
                 "symbol": instrument[2],
-                "status": cursor["status"] if cursor else "waiting",
-                "detail": cursor["detail"] if cursor else "",
-                "observedMs": cursor["observed_ms"] if cursor else None,
-                "lastPrice": dec_str(cursor["last_close"]) if cursor else None,
+                "status": feed.status if feed else "waiting",
+                "detail": feed.detail if feed else "",
+                "observedMs": feed.cursor.observed_ms if feed else None,
+                "lastPrice": dec_str(feed.cursor.last_close) if feed else None,
+                "lagMs": feed.timing.get("lagMs") if feed else None,
+                "timing": dict(feed.timing) if feed and feed.timing else None,
             })
         return {
             "account": self.account_view(account),
@@ -546,9 +573,9 @@ class TradingAccountService:
 
     def _reference_price(self, instrument: Instrument, client_price: Decimal | None) -> tuple[Decimal, str]:
         now = self.clock()
-        cursor = self.store.cursor(*instrument)
-        if cursor is not None and now - int(cursor["observed_ms"]) <= FRESH_PRICE_MS:
-            return cursor["last_close"], "practice_feed"
+        feed = self._feed(instrument)
+        if feed is not None and now - feed.cursor.observed_ms <= FRESH_PRICE_MS:
+            return feed.cursor.last_close, "practice_feed"
         if self.market is not None:
             try:
                 bar = self.market.latest_bar(*instrument)
@@ -709,6 +736,9 @@ class TradingAccountService:
                 )
                 matcher.execute(order, reference, now, liquidity="taker")
                 self._persist_match(conn, account, instrument, matcher, now)
+        if not working_rows:
+            # Reload the freshly seeded cursor on next use.
+            self._feeds.pop(instrument, None)
         stored = self.store.order(order_id)
         assert stored is not None
         return {"order": _order_view(stored), "priceSource": price_source, "referencePrice": dec_str(reference)}
@@ -800,39 +830,76 @@ class TradingAccountService:
                 "status": "cancelled", "reason": reason, "updated_at_ms": now,
             }, "id = ? AND status = 'working'", (order_id,))
 
+    # ── practice feeds ──────────────────────────────────────────
+    # The matcher advances a cursor per instrument several times a second.
+    # It lives in memory; SQLite is written when the candle, its extremes or
+    # the status change, when orders fill, and otherwise every
+    # CURSOR_FLUSH_MS. Losing the unflushed tail on a crash only replays a
+    # path that produced no fills (every fill is written with its cursor).
+
+    def _feed(self, instrument: Instrument) -> _Feed | None:
+        with self.store.locked():
+            feed = self._feeds.get(instrument)
+            if feed is None:
+                row = self.store.cursor(*instrument)
+                if row is None:
+                    return None
+                cursor = _cursor_from_row(row)
+                feed = _Feed(
+                    cursor=cursor,
+                    status=row["status"],
+                    detail=row["detail"],
+                    flushed=_cursor_key(cursor, row["status"], row["detail"]),
+                    flushed_at_ms=int(row["updated_at_ms"]),
+                    flushed_cursor=cursor,
+                )
+                self._feeds[instrument] = feed
+            return feed
+
+    def _write_feed(self, conn, instrument: Instrument, cursor: Cursor, status: str, detail: str, now: int) -> None:
+        self.store.upsert_cursor(conn, {
+            "exchange": instrument[0],
+            "market_type": instrument[1],
+            "symbol": instrument[2],
+            "bar_time": cursor.bar_time,
+            "seen_high": cursor.seen_high,
+            "seen_low": cursor.seen_low,
+            "last_close": cursor.last_close,
+            "closes_only": int(cursor.closes_only),
+            "observed_ms": cursor.observed_ms,
+            "status": status,
+            "detail": detail,
+            "updated_at_ms": now,
+        })
+
+    @staticmethod
+    def _mark_flushed(feed: _Feed, cursor: Cursor, status: str, detail: str, now: int) -> None:
+        feed.cursor, feed.status, feed.detail = cursor, status, detail
+        feed.flushed = _cursor_key(cursor, status, detail)
+        feed.flushed_at_ms = now
+        feed.flushed_cursor = cursor
+
     def apply_market_bars(
         self,
         instrument: Instrument,
         bars: list[dict[str, Any]],
         *,
         observed_ms: int,
+        status: str = "live",
+        detail: str = "",
     ) -> int:
         """Replay candles for one instrument through every practice account.
 
         ``bars`` are 1m candles in ascending time starting at or after the
         cursor; the caller guarantees there is no gap. Returns the fill count.
         """
+        detail = detail[:500]
         with self.store.locked():
-            cursor_row = self.store.cursor(*instrument)
-            if cursor_row is None:
+            feed = self._feed(instrument)
+            if feed is None:
                 return 0
-            cursor = _cursor_from_row(cursor_row)
-            rows = self.store.working_orders_for(*instrument)
-            by_account: dict[str, list[dict[str, Any]]] = {}
-            for row in rows:
-                by_account.setdefault(row["account_id"], []).append(row)
-            sessions: list[tuple[dict[str, Any], PracticeMatcher]] = []
-            for account_id, orders in by_account.items():
-                account = self.store.account(account_id)
-                if account is None or account["kind"] != "practice":
-                    continue
-                position = signed_position(self._trades(account_id), *instrument)
-                sessions.append((account, PracticeMatcher(
-                    [_working_order(row) for row in orders],
-                    position,
-                    self._settings(account, instrument[1]),
-                    new_order_id=lambda: self.new_id("ord"),
-                )))
+            cursor = feed.cursor
+            chunks = []
             for bar in bars:
                 bar_time = int(bar["time"])
                 bar_end_ms = bar_time * 1000 + BAR_MS - 1
@@ -845,49 +912,103 @@ class TradingAccountService:
                     _bar_decimal(bar, "close"),
                     observed_ms=min(observed_ms, bar_end_ms),
                 )
-                if chunk is None:
-                    continue
-                for _, matcher in sessions:
-                    matcher.run(chunk)
+                if chunk is not None and len(chunk.points) > 1:
+                    chunks.append(chunk)
+            if bars:
+                cursor = replace(cursor, observed_ms=max(cursor.observed_ms, observed_ms))
+
+            sessions: list[tuple[dict[str, Any], PracticeMatcher]] = []
+            if chunks:
+                low = min(min(chunk.points) for chunk in chunks)
+                high = max(max(chunk.points) for chunk in chunks)
+                rows = self.store.working_orders_for(*instrument)
+                # Most updates move price nowhere near an order; skip loading
+                # the ledgers unless one could trigger.
+                if any(reachable(_working_order(row), low, high) for row in rows):
+                    sessions = self._match_sessions(instrument, rows)
+                for chunk in chunks:
+                    for _, matcher in sessions:
+                        matcher.run(chunk)
+
             now = self.clock()
-            fills = 0
-            with self.store.transaction() as conn:
-                for account, matcher in sessions:
-                    fills += len(matcher.result.fills)
-                    self._persist_match(conn, account, instrument, matcher, now)
-                self.store.upsert_cursor(conn, {
-                    "exchange": instrument[0],
-                    "market_type": instrument[1],
-                    "symbol": instrument[2],
-                    "bar_time": cursor.bar_time,
-                    "seen_high": cursor.seen_high,
-                    "seen_low": cursor.seen_low,
-                    "last_close": cursor.last_close,
-                    "closes_only": int(cursor.closes_only),
-                    "observed_ms": max(cursor.observed_ms, observed_ms) if bars else cursor.observed_ms,
-                    "status": "live",
-                    "detail": "",
-                    "updated_at_ms": now,
-                })
+            fills = sum(len(matcher.result.fills) for _, matcher in sessions)
+            changed = any(
+                matcher.result.fills or matcher.result.cancelled or matcher.result.created
+                for _, matcher in sessions
+            )
+            due = cursor != feed.flushed_cursor and now - feed.flushed_at_ms >= CURSOR_FLUSH_MS
+            if changed or due or _cursor_key(cursor, status, detail) != feed.flushed:
+                with self.store.transaction() as conn:
+                    for account, matcher in sessions:
+                        self._persist_match(conn, account, instrument, matcher, now)
+                    self._write_feed(conn, instrument, cursor, status, detail, now)
+                self._mark_flushed(feed, cursor, status, detail, now)
+            else:
+                feed.cursor, feed.status, feed.detail = cursor, status, detail
             return fills
 
+    def _match_sessions(
+        self, instrument: Instrument, rows: list[dict[str, Any]],
+    ) -> list[tuple[dict[str, Any], PracticeMatcher]]:
+        by_account: dict[str, list[dict[str, Any]]] = {}
+        for row in rows:
+            by_account.setdefault(row["account_id"], []).append(row)
+        sessions: list[tuple[dict[str, Any], PracticeMatcher]] = []
+        for account_id, orders in by_account.items():
+            account = self.store.account(account_id)
+            if account is None or account["kind"] != "practice":
+                continue
+            position = signed_position(self._trades(account_id), *instrument)
+            sessions.append((account, PracticeMatcher(
+                [_working_order(row) for row in orders],
+                position,
+                self._settings(account, instrument[1]),
+                new_order_id=lambda: self.new_id("ord"),
+            )))
+        return sessions
+
     def set_feed_status(self, instrument: Instrument, status: str, detail: str = "") -> None:
-        now = self.clock()
-        with self.store.transaction() as conn:
-            self.store.update(
-                conn,
-                "practice_cursors",
-                {"status": status, "detail": detail[:500], "updated_at_ms": now},
-                "exchange = ? AND market_type = ? AND symbol = ?",
-                instrument,
-            )
+        detail = detail[:500]
+        with self.store.locked():
+            feed = self._feed(instrument)
+            if feed is None:
+                return
+            if _cursor_key(feed.cursor, status, detail) == feed.flushed:
+                feed.status, feed.detail = status, detail
+                return
+            now = self.clock()
+            with self.store.transaction() as conn:
+                self._write_feed(conn, instrument, feed.cursor, status, detail, now)
+            self._mark_flushed(feed, feed.cursor, status, detail, now)
+
+    def record_feed_timing(self, instrument: Instrument, timing: dict[str, int]) -> None:
+        with self.store.locked():
+            feed = self._feed(instrument)
+            if feed is not None:
+                feed.timing = dict(timing)
+
+    def flush_feeds(self) -> None:
+        """Write every cursor that changed since its last flush (shutdown)."""
+        with self.store.locked():
+            pending = [
+                (instrument, feed) for instrument, feed in self._feeds.items()
+                if feed.cursor != feed.flushed_cursor
+            ]
+            if not pending:
+                return
+            now = self.clock()
+            with self.store.transaction() as conn:
+                for instrument, feed in pending:
+                    self._write_feed(conn, instrument, feed.cursor, feed.status, feed.detail, now)
+            for _, feed in pending:
+                self._mark_flushed(feed, feed.cursor, feed.status, feed.detail, now)
 
     def working_instruments(self) -> list[Instrument]:
         return self.store.working_instruments()
 
     def cursor_start_ms(self, instrument: Instrument) -> int | None:
-        row = self.store.cursor(*instrument)
-        return int(row["bar_time"]) * 1000 if row else None
+        feed = self._feed(instrument)
+        return feed.cursor.bar_time * 1000 if feed is not None else None
 
     # ══════════════════════════════════════════════════════════
     #  Manual fills

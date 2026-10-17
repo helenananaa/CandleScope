@@ -183,6 +183,11 @@ def _trigger(order: WorkingOrder, a: Decimal, b: Decimal) -> Decimal | None:
     return None
 
 
+def reachable(order: WorkingOrder, low: Decimal, high: Decimal) -> bool:
+    """Whether a path spanning ``low``..``high`` could trigger ``order`` at all."""
+    return _trigger(order, low, high) is not None
+
+
 class PracticeMatcher:
     """Mutable matching session for one instrument of one account."""
 

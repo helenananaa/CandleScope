@@ -15,6 +15,28 @@ entry, the three-stage trade journal and quick replay. The backend owner is
 The Accounts view is host-owned (`hostOwned` in `marketRailTypes.ts`): plugin
 rail contributions cannot replace it, because it can place orders.
 
+`tradingAccountsStore.ts` holds the selected account's accounts, summary, trades
+and journal once per window. The rail panel (`useTradingAccountsRuntime`) and
+every live chart cell (`useTradingChartOverlay`) read it and keep it retained;
+polling runs while anything is retained, every 2 s after the previous response
+while a practice account has positions or working orders, else every 15 s.
+
+## Live chart overlay
+
+Each live chart cell draws the selected account's activity on its own
+exchange / market type / symbol, read-only (`liveChartOverlay.ts`):
+
+- fill markers (the quick replay marker source with a `trading-live` id prefix),
+  limited to fills whose candle is inside the loaded bars, because the chart
+  would otherwise pin them to the first or last bar. A reversal fill is drawn
+  once with its full quantity. Same-side fills in one candle share a marker
+  (summed quantity, fill count, volume-weighted price), here and in quick
+  replay, because the chart stacks markers on a bar.
+- native price lines (`chart-adapter/externalPriceLineSource.ts`) for each open
+  position's average entry and its working reduce-only stop-loss / take-profit
+  orders. Price lines do not widen autoscale, so a distant stop stays off-screen
+  instead of squashing the candles.
+
 ## Journal
 
 One template document per trade plus timestamped quick notes. The stage is not
