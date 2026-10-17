@@ -258,6 +258,9 @@ export const zhCN = {
   "pc.enginesHint": "单独发现的脚本引擎，可用于图表计算，不计入上方已安装插件。",
 
   "native.external.sampledLabel": "采样盘口（有限深度）",
+  "native.external.executionOrigin": "导入数据的撮合来源",
+  "native.external.binanceUsdm": "Binance USD-M",
+  "native.external.originRequired": "请选择与导入数据一致的交易所及市场",
   "native.external.uploadMissing": "此策略之前使用了上传的成交或盘口文件。请重新选择该文件，或明确清除文件选择；不会自动改用其他数据来源。",
   "native.external.clearUpload": "清除文件选择",
   "native.external.sampledHint": "采样盘口近似回测：只消耗已可见的有限深度；不足部分保持未成交，盘口超过 2 秒不撮合。被动挂单不推断排队成交，仅在后来可主动成交时执行。同毫秒成交先于新盘口。请导入同一归档生成的 bars.csv，并上传配套 execution.json。",

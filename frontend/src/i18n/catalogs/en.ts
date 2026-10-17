@@ -259,6 +259,9 @@ export const en = {
   "pc.enginesHint": "Separately discovered script engines for chart computation, excluded from the installed plugin count above.",
 
   "native.external.sampledLabel": "Sampled book (bounded depth)",
+  "native.external.executionOrigin": "Execution venue for imported data",
+  "native.external.binanceUsdm": "Binance USD-M",
+  "native.external.originRequired": "Select the venue and market matching this dataset",
   "native.external.uploadMissing": "This strategy previously used an uploaded trade or book file. Select it again, or explicitly clear the file selection. Another data source will not be substituted automatically.",
   "native.external.clearUpload": "Clear file selection",
   "native.external.sampledHint": "Approximate sampled book: consume only visible depth; excess quantity stays unfilled. Books older than 2 seconds cannot fill. No inferred passive queue fills; resting limits fill only when marketable. Same-ms trades precede new book samples. Import paired bars.csv and upload execution.json from the same archive.",

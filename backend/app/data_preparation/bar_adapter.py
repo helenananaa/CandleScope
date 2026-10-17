@@ -441,7 +441,12 @@ class BarPreparationAdapter:
     async def _launch(self, request, result, job_id):
         if "native_strategy" in request.intent:
             from .native_plan import launch
-            run = await storage_call(launch, self.backtest_runtime, request.intent["native_strategy"], result["native_inputs"], job_id)
+            from app.backtest.errors import BacktestError
+            try:
+                run = await storage_call(launch, self.backtest_runtime, request.intent["native_strategy"], result["native_inputs"], job_id)
+            except BacktestError as exc:
+                raise PreparationError(exc.code, exc.message,
+                    retryable=exc.code == "RUN_CAPACITY_EXCEEDED") from exc
             return {**result, "native_run": run}
         if request.consumer == "STRATEGY" and "chart_context" in request.intent:
             if self.backtest_runtime is None:
@@ -583,7 +588,14 @@ class BarPreparationAdapter:
                 resolution["preparation"] = request.intent["preparation"]
         if "native_strategy" in request.intent:
             from .native_plan import freeze_bindings
-            result["native_inputs"] = freeze_bindings(self.backtest_runtime, request.intent["native_strategy"]["bindings"])
+            intent = request.intent["native_strategy"]
+            if "frozen_payload" in intent:
+                from app.backtest.native_contracts import FrozenNativeData
+                payload = intent["frozen_payload"]
+                result["native_inputs"] = [{key: item[key] for key in FrozenNativeData.model_fields}
+                    for item in [payload, *payload["contexts"]]]
+            else:
+                result["native_inputs"] = freeze_bindings(self.backtest_runtime, intent["bindings"])
             for item in result["native_inputs"]:
                 self._record_dataset(item["dataset_id"])
         if self.publication_repository is not None:

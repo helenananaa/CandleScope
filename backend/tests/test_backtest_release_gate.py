@@ -7,7 +7,7 @@ from app.core.config import load_backtest_settings
 from app.main import app
 
 
-def test_chart_first_defaults_on_without_enabling_high_risk_fidelity(tmp_path: Path) -> None:
+def test_chart_defaults_enable_verified_tape_and_keep_other_fidelity_opt_in(tmp_path: Path) -> None:
     settings = load_backtest_settings(
         {},
         data_dir=tmp_path,
@@ -18,7 +18,10 @@ def test_chart_first_defaults_on_without_enabling_high_risk_fidelity(tmp_path: P
     assert settings.bar_effective is True
     assert settings.chart_context_effective is True
     assert settings.trade_explanation_effective is False
-    assert settings.trade_tape_effective is False
+    assert settings.trade_tape_effective is True
+    explicitly_disabled = load_backtest_settings({"BACKTEST_TRADE_TAPE_ENABLED": "0"},
+        data_dir=tmp_path, klines_db_path=tmp_path / "off.db", replay_db_path=tmp_path / "off-replay.db")
+    assert explicitly_disabled.trade_tape_effective is False
     assert settings.study_enabled is True
     assert settings.external_provider_enabled is False
     assert settings.book_assisted_enabled is False
