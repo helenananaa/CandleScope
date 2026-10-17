@@ -58,12 +58,13 @@ export function NativeCurve({ points, title, markers = [], onLocate }: { points:
     </svg></figure>;
 }
 
-export function NativeStrategyReport({ run, onLocate, onReviewTrade, active = true, view = "all" }: { active?: boolean; onReviewTrade?: ((trade: StrategyTradeFocus | null) => void) | undefined; view?: "all" | "overview" | "trades"; run: NativeRun; onLocate?: ((time: number) => void) | undefined }) {
+export function NativeStrategyReport({ run, onLocate, onReviewTrade, active = true, view = "all", stale = false }: { stale?: boolean; active?: boolean; onReviewTrade?: ((trade: StrategyTradeFocus | null) => void) | undefined; view?: "all" | "overview" | "trades"; run: NativeRun; onLocate?: ((time: number) => void) | undefined }) {
   const [replay, setReplay] = useState<NativeReplayRecord | null>(null);
   const [replayView, setReplayView] = useState(!run.result);
   return <>
+    {stale && <div className="strategy-notice" data-tone="warning" role="status"><strong>{t("chartTester.result.stale")}</strong> · {t("chartTester.result.staleGuidanceTitle")}</div>}
     {run.execution_mode !== "CANDLESCOPE" && <div className="native-report-view-switch"><button aria-pressed={replayView} onClick={() => setReplayView(!replayView)}>{t(replayView ? "report.analysis" : "report.replay")}</button>{replayView && <span>{t("native.replay.title")}</span>}</div>}
-    <NativeResultBody key={`${replayView ? replay?.replay_id ?? "replay" : "analysis"}:${run.run_id}`} run={replayView && replay ? { ...run, result: replay.result } : run} onLocate={onLocate} view={view} onReviewTrade={onReviewTrade} active={active}
+    <NativeResultBody key={`${replayView ? replay?.replay_id ?? "replay" : "analysis"}:${run.run_id}`} run={replayView && replay ? { ...run, result: replay.result } : run} onLocate={stale ? undefined : onLocate} view={view} onReviewTrade={stale ? undefined : onReviewTrade} active={active && !stale}
       controls={replayView && run.execution_mode !== "CANDLESCOPE" ? <NativeReplayControls runId={run.run_id} replay={replay} onChange={setReplay} /> : null}
       exportUrl={replayView && replay ? nativeExportUrl(run.run_id).replace(`/runs/${run.run_id}/`, `/replays/${replay.replay_id}/`) : nativeExportUrl(run.run_id, run.execution_mode)} /></>
 }

@@ -21,7 +21,7 @@ import { useNativeStrategyCollection, nativeStrategySwitcherActions, nativeStrat
 import { StrategyDockPane, StrategyDockSlot } from "../chart-tester/StrategyDockSlots.js";
 import { StrategySwitcher } from "../chart-tester/StrategySwitcher.js";
 import { strategyLanguageLabel } from "../chart-tester/strategyLanguageLabel.js";
-import { defaultExecutionDraft, executionSettingsChanged, restoreExecutionDraft, sameExecutionData, type NativeExecutionDraft } from "./nativeExecutionSettings.js";
+import { datasetIdentityChanged, defaultExecutionDraft, executionSettingsChanged, restoreExecutionDraft, sameExecutionData, type NativeExecutionDraft } from "./nativeExecutionSettings.js";
 
 const StrategyScriptWorkspace = lazy(() => import("../chart-tester/StrategyScriptWorkspace.js"));
 
@@ -339,6 +339,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   let parametersChanged = false;
   try { parametersChanged = JSON.stringify(reportRun?.config?.parameters ?? {}) !== JSON.stringify(JSON.parse(parameters)); } catch { parametersChanged = true; }
   const resultStale = !!reportRun && (reportRun !== run || reportRun.config?.source !== source || reportRun.config?.language !== language || parametersChanged
+    || datasetIdentityChanged(reportRun.config, props.dataset)
     || (mode === "CANDLESCOPE" && (!reportRun.config || executionSettingsChanged(reportRun.config,
       { hostSettings, fidelity, fillRecalculation, uploaded: executionData !== null }, executionDataMatches))));
   const available = capabilities?.engines.find((item) => item.language === language);
@@ -507,6 +508,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         <button type="button" className="strategy-run-button" disabled={runDisabled} onClick={runNow}><Icon name="play" size={11} filled />{t("chartTester.run")}</button>
       </div>}
       {reportRun?.result && !props.externalReport && <NativeStrategyReport key={reportRun.run_id} run={reportRun} onLocate={props.onLocateTrade} onReviewTrade={props.onReviewTrade} active={!historicalRun && props.active !== false && (!props.docked || tab === "trades")}
+        stale={(!historicalRun && resultStale) || datasetIdentityChanged(reportRun.config, props.dataset)}
         view={props.docked ? (tab === "trades" ? "trades" : "overview") : "all"} />}
     </div>
     <div hidden={props.docked && tab !== "history"} className="native-history">
