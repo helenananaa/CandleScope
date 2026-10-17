@@ -10,11 +10,11 @@ import type {
 } from "../chartRepresentationTypes.js";
 import { projectionSourceTimeRange } from "./projectorData.js";
 
-const POINT_FIGURE_STATE_VERSION = 1;
+const POINT_FIGURE_STATE_VERSION = 2;
 type PointFigureDirection = "x" | "o" | null;
 
 interface PointFigureState extends ProjectionState {
-  version: 1;
+  version: 2;
   projectorId: "point-and-figure";
   minTick: number;
   boxTicks: number;
@@ -26,6 +26,7 @@ interface PointFigureState extends ProjectionState {
   columnHighTicks: number | null;
   columnOrder: number | null;
   columnSourceFromTime: number | null;
+  columnSourceTime: number | null;
   columnSourceToTime: number | null;
   columnCustomValues: ProjectionCustomValues;
   nextOrder: number;
@@ -82,6 +83,7 @@ function cloneState(state: Readonly<PointFigureState>): PointFigureState {
     columnHighTicks: state.columnHighTicks,
     columnOrder: state.columnOrder,
     columnSourceFromTime: state.columnSourceFromTime,
+    columnSourceTime: state.columnSourceTime,
     columnSourceToTime: state.columnSourceToTime,
     columnCustomValues: cloneCustomValues(state.columnCustomValues),
     nextOrder: state.nextOrder,
@@ -113,6 +115,7 @@ function initialState({
     columnHighTicks: null,
     columnOrder: null,
     columnSourceFromTime: null,
+    columnSourceTime: null,
     columnSourceToTime: null,
     columnCustomValues: {},
     nextOrder: 0,
@@ -137,6 +140,8 @@ function validColumnState(state: Readonly<PointFigureState>): boolean {
     && state.columnOrder < state.nextOrder
     && typeof state.columnSourceFromTime === "number"
     && Number.isFinite(state.columnSourceFromTime)
+    && typeof state.columnSourceTime === "number"
+    && Number.isFinite(state.columnSourceTime)
     && typeof state.columnSourceToTime === "number"
     && Number.isFinite(state.columnSourceToTime);
 }
@@ -295,7 +300,8 @@ export class PointFigureProjector implements Projector<
     const hasRetainedSource = (rows || []).some((row) => row?.time != null);
     if (seedState != null && state.direction !== null && hasRetainedSource) {
       this._upsertCurrentColumn(data, state, {
-        time: requiredSourceTime(state.columnSourceToTime, "columnSourceToTime"),
+        time: requiredSourceTime(state.columnSourceTime, "columnSourceTime"),
+        sourceToTime: state.columnSourceToTime,
         customValues: state.columnCustomValues,
       }, false);
     }
@@ -379,6 +385,7 @@ export class PointFigureProjector implements Projector<
     if (closeTicks >= columnHighTicks + this.boxTicks) {
       const boxes = Math.floor((closeTicks - columnHighTicks) / this.boxTicks);
       state.columnHighTicks = columnHighTicks + boxes * this.boxTicks;
+      state.columnSourceTime = row.time;
       state.columnSourceToTime = projectionSourceTimeRange(row).to;
       state.columnCustomValues = cloneCustomValues(row.customValues);
       this._upsertCurrentColumn(data, state, row, provisional);
@@ -408,6 +415,7 @@ export class PointFigureProjector implements Projector<
     if (closeTicks <= columnLowTicks - this.boxTicks) {
       const boxes = Math.floor((columnLowTicks - closeTicks) / this.boxTicks);
       state.columnLowTicks = columnLowTicks - boxes * this.boxTicks;
+      state.columnSourceTime = row.time;
       state.columnSourceToTime = projectionSourceTimeRange(row).to;
       state.columnCustomValues = cloneCustomValues(row.customValues);
       this._upsertCurrentColumn(data, state, row, provisional);
@@ -443,6 +451,7 @@ export class PointFigureProjector implements Projector<
     state.columnHighTicks = highTicks;
     state.columnOrder = state.nextOrder;
     state.columnSourceFromTime = sourceFromTime;
+    state.columnSourceTime = row.time;
     state.columnSourceToTime = projectionSourceTimeRange(row).to;
     state.columnCustomValues = cloneCustomValues(row.customValues);
     state.nextOrder += 1;

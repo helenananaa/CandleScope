@@ -1,3 +1,5 @@
+import { HeikinAshiProjector } from "../../features/chart-representation/projectors/heikinAshiProjector.js";
+import { resolveChartCrosshairSourceTime } from "../chartPaneLegendModel.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -77,4 +79,17 @@ test("pane legend preserves indicator display names after adapter alignment", ()
   assert.deepEqual(values.map((value) => ({ id: value.id, label: value.label, overlay: value.overlay })), [
     { id: "basis", label: "Basis", overlay: true },
   ]);
+});
+
+
+test("aggregate HA and ordinal crosshairs use the indicator bucket time, not the last base component", () => {
+  const row = { time: 420, sourceFromTime: 420, sourceToTime: 780, open: 10, high: 12, low: 9, close: 11, volume: 70 };
+  const projected = new HeikinAshiProjector().project([row])[0]!;
+  assert.equal(projected.customValues?.chartProjection?.sourceToTime, 780);
+  const time = resolveChartCrosshairSourceTime(projected.time, projected);
+  assert.equal(time, 420);
+  const values = resolveChartPaneLegendValues([{ id: "rsi", data: [{ time: 420, value: 53 }, { time: 840, value: 61 }] }], time);
+  assert.equal(values[0]?.value, 53);
+  assert.equal(resolveChartCrosshairSourceTime({ order: 3, sourceTime: 420, sourceOrdinal: 1 }, projected), 420);
+  assert.equal(resolveChartCrosshairSourceTime(null), null);
 });

@@ -38,7 +38,7 @@ function clampTailStart(value: unknown, length: number): number {
 
 export function buildMainSeriesProjectionPatch({
   displayRows = [],
-  previousSeriesData = [],
+  previousSeriesData,
   projectionPatch,
   renderOptions = {},
 }: {
@@ -62,6 +62,7 @@ export function buildMainSeriesProjectionPatch({
 
   return {
     kind: "replace-tail",
+    ...(!Array.isArray(previousSeriesData) ? { forceFullReplace: true } : {}),
     fromOutputIndex,
     deleteCount: Math.max(0, previous.length - fromOutputIndex),
     insert,
@@ -228,6 +229,17 @@ export function renderMainSeriesProjectionPatch({
       "noop",
       retainedData,
     );
+  }
+  // Missing rendered state means the mounted series may contain another
+  // dataset. Even zero incoming points require a real clear, not an empty
+  // tail no-op. Ordinary known-empty series retain their no-op fast path.
+  if (patch.forceFullReplace) {
+    const nextData = materializeMainSeriesProjectionPatch(patch);
+    series.setData(nextData);
+    record(recordPerfEvent, "chart.candleSeries.setData", {
+      paneId, points: nextData.length, reason: "projection-unknown-contents",
+    });
+    return renderResult("setData", nextData);
   }
   if (!isValidTailPatchShape(patch)) {
     const nextData = patch.nextData;

@@ -85,7 +85,8 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
   const active = workspace.view.activeCellId === cell.id;
   const scope = `replay:${runId}:${workspace.view.activeWorkspaceId}:${cell.id}`;
   const surface = useChartSurfaceRuntime();
-  const saveViewport = useReplayCellViewport(`${scope}:${track.track_id}:${cell.session.interval}`, surface.actions);
+  const saveViewport = useReplayCellViewport(`${scope}:${track.track_id}:${cell.session.interval}`, surface.actions,
+    `${scope}:${track.track_id}`);
   const bound = controller.viewerState?.selected_track_id === track.track_id;
   const tradeAuthority = useRef({ active, bound, controller, reviewing: integrity.review !== null });
   tradeAuthority.current = { active, bound, controller, reviewing: integrity.review !== null };

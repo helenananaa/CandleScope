@@ -212,6 +212,29 @@ test("restoreProjectionRange owns logical writes and falls back to fit", () => {
   ]);
 });
 
+test("a fine-period transfer can retain more than the default half-pixel density", () => {
+  const { chart, calls } = createChart();
+  const controller = new ViewportController({ chartProvider: () => chart });
+  assert.equal(controller.restoreProjectionRange({ from: 0, to: 6000 }, { immediate: true }), true);
+  assert.deepEqual(calls, [
+    ["applyOptions", { minBarSpacing: 0.1 }],
+    ["setVisibleLogicalRange", { from: 0, to: 6000 }],
+  ]);
+});
+
+test("an explicit period hand-off freezes appended bars until the user returns to latest", () => {
+  const { chart, calls } = createChart();
+  const controller = new ViewportController({ chartProvider: () => chart });
+  assert.equal(controller.restoreProjectionRange({ from: 2, to: 12 }, { freezeOnNewBars: true, immediate: true }), true);
+  assert.deepEqual(calls[0], ["applyOptions", { shiftVisibleRangeOnNewBar: false }]);
+  assert.equal(controller.followLatest(20), true);
+  assert.deepEqual(calls[2], ["applyOptions", { shiftVisibleRangeOnNewBar: true }]);
+  calls.length = 0;
+  controller.restoreProjectionRange({ from: 2, to: 12 }, { freezeOnNewBars: true });
+  controller.resetSession();
+  assert.deepEqual(calls.at(-1), ["applyOptions", { shiftVisibleRangeOnNewBar: true }]);
+});
+
 test("immediate projection restore supersedes a queued outgoing-dataset intent", () => {
   const { chart, calls } = createChart();
   let unlock: (() => void) | undefined;
@@ -251,12 +274,12 @@ test("followLatest keeps an underfilled latest bar centered without fitting", ()
     contentLastLogical: 9,
     position: 0.5,
     width: 600,
-  }), { from: -41, to: 59 });
+  }), { from: -40.5, to: 58.5 });
   assert.equal(controller.followLatest(9), true);
   assert.equal(controller.followLatest(10), true);
   assert.deepEqual(calls, [
-    ["setVisibleLogicalRange", { from: -41, to: 59 }],
-    ["setVisibleLogicalRange", { from: -40, to: 60 }],
+    ["setVisibleLogicalRange", { from: -40.5, to: 58.5 }],
+    ["setVisibleLogicalRange", { from: -39.5, to: 59.5 }],
   ]);
 });
 
