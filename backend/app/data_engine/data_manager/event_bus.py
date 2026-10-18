@@ -60,6 +60,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Callable, Awaitable
 
+from app.core.async_cleanup import apply_thread_guard, finish_cleanup
 from app.data_engine.consumer_recovery import ConsumerRecoveryRequired, RecoveryCallback
 
 from .config import EventBusConfig
@@ -262,6 +263,11 @@ class DataEventBus:
         self._recovery_required = 0
         self._closed = False
         self._protection_lock = protection_lock or threading.RLock()
+        # Membership changes still serialize with physical GC deletion. Reads
+        # and event dispatch need only this short index lock, so a storage
+        # transaction holding the GC guard cannot stall the event loop.
+        # Writers always acquire the GC guard before the subscription lock.
+        self._subscription_lock = threading.RLock()
         self._worker_tasks: set[asyncio.Task] = set()
         self._on_subscription_change = on_subscription_change
 
@@ -328,7 +334,7 @@ class DataEventBus:
             maxsize=self._cfg.subscriber_queue_size,
         )
         sub = _CallbackSubscription(queue=queue, handle=handle, on_recovery=on_recovery)
-        with self._protection_lock:
+        with self._protection_lock, self._subscription_lock:
             self._subscriptions[handle.id] = handle
             self._callback_subs[handle.id] = sub
             self._index_subscription(
@@ -347,7 +353,7 @@ class DataEventBus:
 
     def unsubscribe(self, handle: SubscriptionHandle) -> None:
         """Remove a callback subscription."""
-        with self._protection_lock:
+        with self._protection_lock, self._subscription_lock:
             removed = self._subscriptions.pop(handle.id, None)
             callback_entry = self._callback_subs.pop(handle.id, None)
             entry = self._queue_subs.pop(handle.id, None)
@@ -417,15 +423,19 @@ class DataEventBus:
             event_types=event_types,
         )
         sub = _QueueSubscription(queue=queue, handle=handle)
-        with self._protection_lock:
-            self._queue_subs[handle.id] = sub
-            self._index_subscription(
-                handle,
-                keyed=self._queue_ids_by_key,
-                wildcard=self._queue_wildcard_ids,
-            )
-            if self._on_subscription_change is not None:
-                self._on_subscription_change()
+        def register() -> None:
+            if self._closed:
+                raise RuntimeError("event bus is closed")
+            with self._protection_lock, self._subscription_lock:
+                self._queue_subs[handle.id] = sub
+                self._index_subscription(
+                    handle,
+                    keyed=self._queue_ids_by_key,
+                    wildcard=self._queue_wildcard_ids,
+                )
+                if self._on_subscription_change is not None:
+                    self._on_subscription_change()
+        await apply_thread_guard(self._protection_lock, register)
         logger.debug(
             "Iterator subscription added: id=%s key=%s", handle.id, key,
         )
@@ -439,22 +449,24 @@ class DataEventBus:
                 yield deepcopy(item.event) if item.sequence else item.event
                 self._confirm(sub, item)
         finally:
-            removed = None
-            with self._protection_lock:
-                removed = self._queue_subs.pop(handle.id, None)
+            def remove() -> None:
+                removed = None
+                with self._protection_lock, self._subscription_lock:
+                    removed = self._queue_subs.pop(handle.id, None)
+                    if removed is not None:
+                        self._deindex_subscription(
+                            removed.handle,
+                            keyed=self._queue_ids_by_key,
+                            wildcard=self._queue_wildcard_ids,
+                        )
+                    if removed is not None and self._on_subscription_change is not None:
+                        self._on_subscription_change()
                 if removed is not None:
-                    self._deindex_subscription(
-                        removed.handle,
-                        keyed=self._queue_ids_by_key,
-                        wildcard=self._queue_wildcard_ids,
-                    )
-                if removed is not None and self._on_subscription_change is not None:
-                    self._on_subscription_change()
-            if removed is not None:
-                self._put_sentinel(removed.queue)
-            logger.debug(
-                "Iterator subscription removed: id=%s", handle.id,
-            )
+                    self._put_sentinel(removed.queue)
+                logger.debug(
+                    "Iterator subscription removed: id=%s", handle.id,
+                )
+            await finish_cleanup(apply_thread_guard(self._protection_lock, remove))
 
     # ── Public: Emit ─────────────────────────────────────────
 
@@ -572,38 +584,43 @@ class DataEventBus:
 
     async def close(self) -> None:
         """Send sentinel to all queue subscribers and clear everything."""
+        await finish_cleanup(self._close_owned(asyncio.current_task()))
+
+    async def _close_owned(self, caller: asyncio.Task | None) -> None:
         self._closed = True
         callback_tasks: list[asyncio.Task] = []
         for sub_id, sub in list(self._callback_subs.items()):
             self._put_sentinel(sub.queue)
             for task in (sub.task, sub.recovery_task):
-                if task is not None and task is not asyncio.current_task():
+                if task is not None and task is not caller and task is not asyncio.current_task():
                     task.cancel()
                     callback_tasks.append(task)
             logger.debug("Callback subscription closed: id=%s", sub_id)
         # A recovery hook can unsubscribe itself before awaiting snapshot work.
         # Its task still belongs to this bus and must be drained on shutdown.
         for task in tuple(self._worker_tasks):
-            if task is not asyncio.current_task() and task not in callback_tasks:
+            if task is not caller and task is not asyncio.current_task() and task not in callback_tasks:
                 task.cancel()
                 callback_tasks.append(task)
         if callback_tasks:
             await asyncio.gather(*callback_tasks, return_exceptions=True)
         for sub_id, sub in list(self._queue_subs.items()):
             self._put_sentinel(sub.queue)
-        with self._protection_lock:
-            changed = bool(
-                self._callback_subs or self._queue_subs or self._subscriptions
-            )
-            self._callback_subs.clear()
-            self._queue_subs.clear()
-            self._subscriptions.clear()
-            self._callback_ids_by_key.clear()
-            self._callback_wildcard_ids.clear()
-            self._queue_ids_by_key.clear()
-            self._queue_wildcard_ids.clear()
-            if changed and self._on_subscription_change is not None:
-                self._on_subscription_change()
+        def clear() -> None:
+            with self._protection_lock, self._subscription_lock:
+                changed = bool(
+                    self._callback_subs or self._queue_subs or self._subscriptions
+                )
+                self._callback_subs.clear()
+                self._queue_subs.clear()
+                self._subscriptions.clear()
+                self._callback_ids_by_key.clear()
+                self._callback_wildcard_ids.clear()
+                self._queue_ids_by_key.clear()
+                self._queue_wildcard_ids.clear()
+                if changed and self._on_subscription_change is not None:
+                    self._on_subscription_change()
+        await apply_thread_guard(self._protection_lock, clear)
         self._journal.clear()
         self._delivery_ids.clear()
         logger.info("Event bus closed")
@@ -612,7 +629,7 @@ class DataEventBus:
 
     def get_subscriber_count(self, key: SeriesKey | None = None) -> int:
         """Count active subscribers, optionally filtered by key."""
-        with self._protection_lock:
+        with self._subscription_lock:
             if key is None:
                 return len(self._callback_subs) + len(self._queue_subs)
             return (
@@ -629,21 +646,21 @@ class DataEventBus:
         events for every series, but they do not express lifecycle ownership
         of every cache entry or upstream stream.
         """
-        with self._protection_lock:
+        with self._subscription_lock:
             return len(self._callback_ids_by_key.get(key, ())) + len(
                 self._queue_ids_by_key.get(key, ())
             )
 
     def get_all_subscribed_keys(self) -> set[SeriesKey]:
         """Return all SeriesKeys that have at least one subscriber."""
-        with self._protection_lock:
+        with self._subscription_lock:
             return set(self._callback_ids_by_key) | set(self._queue_ids_by_key)
 
     # ── Public: Snapshot ─────────────────────────────────────
 
     def snapshot(self) -> dict:
         """JSON-serializable diagnostic snapshot."""
-        with self._protection_lock:
+        with self._subscription_lock:
             direct_subscriptions_by_key = {
                 str(key): len(self._callback_ids_by_key.get(key, ()))
                 + len(self._queue_ids_by_key.get(key, ()))
@@ -742,7 +759,7 @@ class DataEventBus:
         list[tuple[str, _QueueSubscription]],
     ]:
         """Snapshot only wildcard and exact-topic subscribers for one emit."""
-        with self._protection_lock:
+        with self._subscription_lock:
             callback_ids = (
                 self._callback_wildcard_ids
                 | self._callback_ids_by_key.get(key, set())
