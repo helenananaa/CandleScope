@@ -141,7 +141,7 @@ class _MultiStreamDataManager:
             "consumer_id": consumer_id,
         })
 
-    def subscribe(
+    async def subscribe_async(
         self,
         *,
         callback,
@@ -187,7 +187,7 @@ class _MultiStreamDataManager:
             asyncio.create_task(_emit())
         return object()
 
-    def unsubscribe(self, handle) -> None:
+    async def unsubscribe_async(self, handle) -> None:
         self.unsubscribed.append(handle)
 
 

@@ -13,7 +13,7 @@ import { partialMock } from "../../../test/testHelpers.js";
 test("settings registry owns the complete ordered category contract", () => {
   assert.deepEqual(
     SETTINGS_CATEGORIES.map((category) => category.key),
-    ["appearance", "network", "exchanges", "data", "plugins", "about"],
+    ["appearance", "network", "exchanges", "data", "plugins", "ai", "about"],
   );
   assert.equal(resolveSettingsTab("missing"), SETTINGS_CATEGORIES[0]);
 });

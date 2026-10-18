@@ -1044,6 +1044,8 @@ async def health_check() -> dict:
 @app.get("/debug/snapshot", tags=["system"])
 async def debug_snapshot() -> dict:
     """Full diagnostic snapshot of the DataManager (dev/debug only)."""
+    from app.exchanges.ccxt_ext.markets import get_shared_ccxt_market_tables
+
     dm = getattr(app.state, "data_manager", None)
     try:
         snapshot = (
@@ -1056,6 +1058,7 @@ async def debug_snapshot() -> dict:
             if lag_monitor is not None
             else None,
             "websocket": ws_runtime_metrics.snapshot(),
+            "ccxt_market_tables": get_shared_ccxt_market_tables().snapshot(),
         }
         replay_runtime = getattr(app.state, "replay_runtime", None)
         replay_service = getattr(app.state, "replay_service", None)

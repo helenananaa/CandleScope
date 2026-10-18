@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import threading
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+import app.data_engine.data_manager.backfill_coordinator as coordinator_module
+from app.core.bounded_executor import ExecutorBusyError
 from app.data_engine.data_manager.backfill_coordinator import (
     BackfillCoordinator,
     RepairRequest,
@@ -253,6 +257,115 @@ def test_authoritative_empty_range_confirms_after_repeated_attempt_evidence(
         assert len(engine.calls) == 2
 
     asyncio.run(_run())
+
+
+def test_boundary_evidence_is_written_off_the_loop_and_seen_by_the_next_plan(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    writers: list[threading.Thread] = []
+
+    async def _run() -> None:
+        loop_thread = threading.current_thread()
+        calendar = AlwaysOpenCalendar()
+        repository = HistoryBoundaryRepository(tmp_path / "history.sqlite3")
+        upsert = repository.upsert
+
+        def _recording_upsert(*args, **kwargs):
+            writers.append(threading.current_thread())
+            return upsert(*args, **kwargs)
+
+        monkeypatch.setattr(repository, "upsert", _recording_upsert)
+        service = HistoryAvailabilityService(boundaries=repository)
+        context = _context(
+            availability=HistoryAvailability(
+                calendar_id=calendar.calendar_id,
+                revision="cap-v1",
+            ),
+            calendar=calendar,
+            semantics=HistoryEmptyPageSemantics.AUTHORITATIVE_RANGE_EMPTY,
+        )
+        engine = _Engine(_report(source_complete=True))
+        coordinator = BackfillCoordinator(
+            storage=_Storage(earliest_ms=120_000),
+            bars_backfilled=_ignore,
+            emit_event=_ignore,
+            engine=engine,
+            loop=asyncio.get_running_loop(),
+            base_delay_seconds=0,
+            history_service=service,
+            history_policy_resolver=lambda request: context,
+        )
+
+        first = await coordinator.request_and_wait(
+            _request(0, 60_000, request_id="off-loop-evidence")
+        )
+        second = await coordinator.request_and_wait(
+            _request(0, 60_000, request_id="off-loop-planned")
+        )
+
+        # Two candidate writes and the promotion, each on a storage thread.
+        assert len(writers) == 3
+        assert loop_thread not in writers
+        assert all(thread.name.startswith("storage") for thread in writers)
+        assert first.terminal_reason == "provider_exhausted"
+        # The next plan, read on the loop, already sees the promoted boundary.
+        assert second.terminal_reason == BoundaryReason.SOURCE_EXHAUSTED.value
+        assert len(engine.calls) == 2
+
+    asyncio.run(_run())
+
+
+def test_busy_storage_executor_defers_boundary_evidence(
+    tmp_path,
+    monkeypatch,
+    caplog,
+) -> None:
+    calendar = AlwaysOpenCalendar()
+    service = HistoryAvailabilityService(
+        boundaries=HistoryBoundaryRepository(tmp_path / "history.sqlite3")
+    )
+    context = _context(
+        availability=HistoryAvailability(calendar_id=calendar.calendar_id),
+        calendar=calendar,
+        semantics=HistoryEmptyPageSemantics.TERMINAL_EXHAUSTION,
+    )
+    run_storage = coordinator_module.run_storage
+
+    async def _busy_for_boundaries(func, *args, **kwargs):
+        if func == service.record_boundary:
+            raise ExecutorBusyError("storage")
+        return await run_storage(func, *args, **kwargs)
+
+    monkeypatch.setattr(coordinator_module, "run_storage", _busy_for_boundaries)
+
+    async def _run():
+        coordinator = BackfillCoordinator(
+            storage=_Storage(earliest_ms=120_000),
+            bars_backfilled=_ignore,
+            emit_event=_ignore,
+            engine=_Engine(_report(source_complete=True)),
+            loop=asyncio.get_running_loop(),
+            base_delay_seconds=0,
+            history_service=service,
+            history_policy_resolver=lambda request: context,
+        )
+        return await coordinator.request_and_wait(
+            _request(0, 60_000, request_id="busy")
+        )
+
+    with caplog.at_level(logging.WARNING, logger=coordinator_module.logger.name):
+        outcome = asyncio.run(_run())
+
+    assert outcome.terminal_reason is None
+    assert outcome.retryable is True
+    assert service.get_boundary(
+        HistorySeriesKey("binance", "spot", "BTCUSDT", "kline", "1m"),
+        "left",
+        include_stale=True,
+    ) is None
+    assert "storage executor is busy" in caplog.text
+    assert "evidence rejected" not in caplog.text
 
 
 def test_terminal_empty_semantics_confirms_on_first_evidence(tmp_path) -> None:

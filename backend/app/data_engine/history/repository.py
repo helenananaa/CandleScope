@@ -143,6 +143,15 @@ class HistoryBoundaryRepository:
         self._cache = _shared_row_cache(self._db_path)
         self.init_storage()
 
+    @property
+    def write_lock(self) -> threading.RLock:
+        """Re-entrant lock every write holds; hold it to group several writes.
+
+        Reads served from the row cache never take it, so holding it on a
+        worker thread does not block reads on the event loop.
+        """
+        return self._cache.write_lock
+
     def _connect(self) -> sqlite3.Connection:
         return open_sqlite(self._db_path, logger=logger)
 

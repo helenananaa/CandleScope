@@ -1,3 +1,4 @@
+import type { AiControlBridge } from "../features/ai-control/aiControlTypes.js";
 import type {
   ChartWindowId,
   ChartWindowState,
@@ -54,7 +55,7 @@ export interface DesktopTopologyResult {
   message?: string;
 }
 
-interface NativeDesktopBridge {
+interface NativeDesktopBridge extends Partial<AiControlBridge> {
   strategyStorage?: { getItem(key: string): string | null; setItem(key: string, value: string): Promise<void> };
   readonly apiBase: string;
   getPluginManagementSession?(): { apiBase: string; sessionToken: string; csrfToken: string } | null;

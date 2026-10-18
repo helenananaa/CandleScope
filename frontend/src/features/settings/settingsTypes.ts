@@ -15,6 +15,7 @@ export type SettingsCategory =
   | "network"
   | "exchanges"
   | "data"
+  | "ai"
   | "plugins"
   | "about";
 

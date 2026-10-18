@@ -102,12 +102,53 @@ class _BatchDataManager:
     def unsubscribe(self, handle: object) -> None:
         self.unsubscribed.append(handle)
 
+    async def subscribe_async(self, **kwargs):
+        return self.subscribe(**kwargs)
+
+    async def unsubscribe_async(self, handle: object) -> None:
+        self.unsubscribe(handle)
+
 
 def _client(dm: _BatchDataManager) -> TestClient:
     app = FastAPI()
     app.include_router(stream_router, prefix="/api/v1")
     app.state.data_manager = dm
     return TestClient(app)
+
+
+def test_cancelled_asgi_scope_drains_all_streams_before_unregistering() -> None:
+    # Keep a cancellation regression bounded even if a future change spins at
+    # AnyIO's cancelled checkpoints instead of letting owned cleanup run.
+    script = '''
+import asyncio
+from types import SimpleNamespace
+import anyio
+from app.api.v1.stream_kline_batch import KlineBatchConnection, KlineBatchLimits, _BatchSubscription
+events = []
+class Manager:
+    async def unsubscribe_async(self, handle):
+        await asyncio.sleep(.01)
+        events.append(("unsubscribe", handle))
+    async def release_stream(self, symbol, interval, **kwargs):
+        await asyncio.sleep(.01)
+        events.append(("release", interval))
+async def main():
+    connection = KlineBatchConnection(SimpleNamespace(), Manager(), limits=KlineBatchLimits.from_config())
+    for index in range(2):
+        connection.subscriptions[str(index)] = _BatchSubscription(
+            client_id=str(index), exchange="binance", market_type="spot", symbol="BTCUSDT",
+            consumer_id=str(index), handles={"1m": index})
+    with anyio.CancelScope() as scope:
+        scope.cancel()
+        await connection.close()
+    assert scope.cancel_called and not connection.subscriptions
+    assert events == [("unsubscribe", 0), ("release", "1m"), ("unsubscribe", 1), ("release", "1m")], events
+asyncio.run(main())
+'''
+    subprocess.run(
+        [sys.executable, "-c", script], check=True, capture_output=True, text=True,
+        cwd=os.path.dirname(os.path.dirname(__file__)), timeout=5,
+    )
 
 
 def _item(client_id: str, symbol: str, intervals: list[str]) -> dict:
@@ -398,3 +439,62 @@ def test_batch_default_128_logical_subscription_boundary_is_fail_closed(
         assert rejected["ok"] is False
         assert rejected["code"] == "total_subscription_limit"
         assert len(dm.ensure_calls) == 128
+
+
+@pytest.mark.parametrize("transport", ["batch", "legacy"])
+def test_cancel_between_stream_claim_and_callback_registration_releases_claim(transport):
+    """A disconnected client owns a lease even before it owns a bus handle."""
+    import json
+
+    from app.api.v1.stream_kline_batch import KlineBatchConnection, KlineBatchLimits
+    from app.api.v1.stream_klines import stream_multi_kline
+
+    async def run():
+        registering = asyncio.Event()
+        cleanup_started = asyncio.Event()
+        finish_release = asyncio.Event()
+
+        class Manager:
+            claimed = False
+
+            async def ensure_stream(self, *args, **kwargs):
+                self.claimed = True
+
+            async def subscribe_async(self, **kwargs):
+                registering.set()
+                await asyncio.Event().wait()
+
+            async def release_stream(self, *args, **kwargs):
+                cleanup_started.set()
+                await finish_release.wait()
+                self.claimed = False
+
+        class Socket:
+            async def receive_text(self):
+                return json.dumps({"action": "subscribe", "intervals": ["1m"]})
+
+        dm, socket = Manager(), Socket()
+        if transport == "batch":
+            connection = KlineBatchConnection(socket, dm, limits=KlineBatchLimits.from_config())
+            subscription = connection._new_subscription({
+                "client_id": "cancelled", "exchange": "binance",
+                "market_type": "spot", "symbol": "BTCUSDT",
+            })
+            work = connection._add_intervals(subscription, ["1m"])
+        else:
+            work = stream_multi_kline(socket, dm, "BTCUSDT")
+        task = asyncio.create_task(work)
+        await asyncio.wait_for(registering.wait(), .5)
+        task.cancel()
+        try:
+            await asyncio.wait_for(cleanup_started.wait(), .5)
+            task.cancel()
+            await asyncio.sleep(0)
+            assert not task.done(), "cancellation abandoned an owned stream claim"
+        finally:
+            finish_release.set()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        assert not dm.claimed, "callback admission cancellation leaked a stream lease"
+
+    asyncio.run(run())
