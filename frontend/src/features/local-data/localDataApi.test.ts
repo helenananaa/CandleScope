@@ -61,6 +61,22 @@ test("local dataset library validates manifests", async (context) => {
   assert.equal(datasets[0]?.volume_available, true);
 });
 
+test("automatic host snapshots coexist with imported data and retain source identity", async (context) => {
+  const originalFetch = globalThis.fetch;
+  context.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async () => jsonResponse({ datasets: [
+    { ...manifest(), source: "host_chart_snapshot", dataset_id: "local-host-snapshot", name: "binance BTCUSDT 1m" },
+    manifest(),
+  ] });
+  const datasets = await listLocalDatasets();
+  assert.deepEqual(datasets.map((item) => item.source), ["host_chart_snapshot", "local_dataset"]);
+  assert.equal(datasets[1]?.name, "BTC sample");
+  for (const unsupported of [{ source: "unknown" }, { source: "host_chart_snapshot", timestamp_semantics: "bar_close" }]) {
+    globalThis.fetch = async () => jsonResponse({ datasets: [{ ...manifest(), ...unsupported }] });
+    await assert.rejects(listLocalDatasets(), /unsupported source semantics/);
+  }
+});
+
 test("local indicator catalog uses the shared preset wire contract", async (context) => {
   const originalFetch = globalThis.fetch;
   context.after(() => { globalThis.fetch = originalFetch; });

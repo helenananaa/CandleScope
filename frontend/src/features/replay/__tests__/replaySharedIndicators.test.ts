@@ -40,11 +40,27 @@ import {
   replayOrderFlowStorageKey,
   saveReplayOrderFlowPreferences,
   selectRevealedIndicatorBars,
+  excludeIncompleteReplayHistory,
 } from "../useReplaySharedIndicatorRuntime.js";
 import { epochSeconds } from "../../../test/testHelpers.js";
 
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const frontendRoot = resolve(testDirectory, "../../../..");
+
+test("partial historical buckets are excluded without hiding contradictory finality or a forming tail", () => {
+  const partial: KlineBar = { time: epochSeconds(600), open: 1, high: 1, low: 1, close: 1, volume: 1,
+    replayCloseTimeMs: 719999, replayLastBaseOpenMs: 660000, replayClosed: false, is_closed: false,
+    replayComponentCount: 1, replayExpectedComponents: 2 };
+  const closed = { ...partial, time: epochSeconds(720), replayCloseTimeMs: 839999,
+    replayLastBaseOpenMs: 780000, replayClosed: true, is_closed: true, replayComponentCount: 2 };
+  const forming = { ...partial, time: epochSeconds(840), replayCloseTimeMs: 959999, replayLastBaseOpenMs: 840000 };
+  assert.deepEqual(selectRevealedIndicatorBars(excludeIncompleteReplayHistory([partial, closed, forming], 850000), 850000),
+    [closed, forming]);
+  assert.deepEqual(selectRevealedIndicatorBars(excludeIncompleteReplayHistory([
+    { ...partial, is_closed: true }, closed, forming,
+  ], 850000), 850000), []);
+  assert.deepEqual(excludeIncompleteReplayHistory([forming], 850000), [forming]);
+});
 
 function source(path: string): string {
   return readFileSync(resolve(frontendRoot, path), "utf8");
@@ -154,6 +170,25 @@ test("replay indicator input resets at a chart history gap", () => {
   ], 1_300_000);
 
   assert.deepEqual(selected.map((item) => item.time), [1_180, 1_240]);
+});
+
+test("inclusive tape bucket end keeps the same revealed indicator tail after restore", () => {
+  const rows = Array.from({ length: 20 }, (_, index) => ({
+    ...bar(1_000 + index * 5_400, index < 19),
+    close: 100 + index,
+    replayCloseTimeMs: (1_000 + (index + 1) * 5_400) * 1_000 - 1,
+    replayLastBaseOpenMs: (1_000 + index * 5_400 + 5_340) * 1_000,
+    is_closed: index < 19,
+  }));
+  const end = rows.at(-1)!.replayCloseTimeMs;
+  const before = selectRevealedIndicatorBars(rows, end - 1);
+  const restored = selectRevealedIndicatorBars(rows, end);
+  assert.equal(before.length, 20);
+  assert.deepEqual(restored, before);
+  assert.equal(buildIndicatorOhlcv(restored).at(-1)!.is_closed, false);
+  assert.equal(restored.reduce((sum, row) => sum + Number(row.close), 0) / 20, 109.5);
+  // A stale forming tail strictly behind the clock still fails closed.
+  assert.equal(selectRevealedIndicatorBars(rows, end + 1).length, 19);
 });
 
 test("provided-bars policy forces local safe execution and rejects unknown runtimes", () => {
@@ -441,7 +476,7 @@ test("playing replay coalesces indicator boundaries and paused replay stays exac
   assert.match(adapter, /const usePlaybackSample = playing && wasPlayingRef\.current/);
   assert.match(adapter, /const indicatorRevision = usePlaybackSample[\s\S]*: seriesRevision/);
   assert.match(adapter, /const indicatorCursorMs = usePlaybackSample[\s\S]*: cursorMs/);
-  assert.match(adapter, /selectRevealedIndicatorBars\(seriesStore\.snapshot\(\), indicatorCursorMs\)/);
+  assert.match(adapter, /selectRevealedIndicatorBars\(excludeIncompleteReplayHistory\(seriesStore\.snapshot\(\), indicatorCursorMs\), indicatorCursorMs\)/);
   assert.match(adapter, /visibleThroughSeconds: indicatorCursorMs === null/);
 });
 
@@ -458,7 +493,7 @@ test("v2 composition reuses the shared indicator product without hosted/cache re
   assert.match(cells, /useReplaySharedIndicatorRuntime\(runtime, viewer, scope, persistence\)/);
   assert.match(cells, /controlled: true/);
   assert.match(workspace, /<IndicatorPanel/);
-  assert.match(workspace, /allowedScriptLanguages=\{\["pyne", "pine"\]\}/);
+  assert.match(workspace, /allowedScriptLanguages=\{\["pyne", "pine", "frontend-js"\]\}/);
   assert.doesNotMatch(workspace, /ReplayIndicatorPanel/);
   for (const prop of [
     "indicatorMarkers",

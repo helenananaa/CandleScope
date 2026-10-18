@@ -15,12 +15,14 @@ from .account import InstrumentRule
 
 
 def prepare_intervals(context, snapshots, plans, prices, times, *, current, binding):
+    pinned = context.get("valuation") == "PINNED_HEDGE_MARK"
     events = []
     for track, snapshot in snapshots:
         sid, tid = track["adapter_session_id"], track["track_id"]
         sequence = snapshot["cursor"]["source_sequence"]
         events.extend(
-            (at, 20, tid, sequence + i + 1, Decimal(prices[sid][i]))
+            (at, 20, tid, sequence + i + 1,
+             context["initial_prices"][tid] if pinned else Decimal(prices[sid][i]))
             for i, at in enumerate(plans[sid])
             if at <= times[-1]
         )
@@ -38,7 +40,7 @@ def prepare_intervals(context, snapshots, plans, prices, times, *, current, bind
         selected_events = [e for e in events if previous < e[0] <= end]
         summary = full["partitions"][ordinal]
         basis = dict(
-            schema="multi-tape-interval.v1",
+            schema="multi-tape-interval.v2" if pinned else "multi-tape-interval.v1",
             start_time_ms=previous,
             end_time_ms=end,
             cash=str(context["cash"]),
@@ -55,6 +57,9 @@ def prepare_intervals(context, snapshots, plans, prices, times, *, current, bind
             ],
             events=[[*e[:4], str(e[4])] for e in selected_events],
         )
+        if pinned:
+            basis["valuation"] = "PINNED_HEDGE_MARK"
+            basis["input_cursors"] = context["input_cursors"]
         curves = []
         for track, snapshot in snapshots:
             sid = track["adapter_session_id"]
@@ -65,6 +70,8 @@ def prepare_intervals(context, snapshots, plans, prices, times, *, current, bind
                 continue
             components = snapshot["components"]
             position = components["position"]
+            positions = ([position["long"], position["short"]]
+                         if position.get("position_mode") == "HEDGE" else [position])
             offsets = [bisect_right(plans[sid], at) for at in sample_times]
             sequences = [snapshot["cursor"]["source_sequence"] + i for i in offsets]
             curve = dict(
@@ -73,12 +80,12 @@ def prepare_intervals(context, snapshots, plans, prices, times, *, current, bind
                 times=sample_times,
                 sequences=sequences,
                 prices=[
-                    prices[sid][i - 1] if i else position.get("mark_price") or "0"
+                    prices[sid][i - 1] if i else positions[0].get("mark_price") or "0"
                     for i in offsets
                 ],
                 account=dict(
                     cash=components["account"]["cash_balance"],
-                    legs=[[position["quantity"], position["entry_price"] or "0"]],
+                    legs=[[leg["quantity"], leg["entry_price"] or "0"] for leg in positions],
                 ),
                 ledger_hash=components["ledger"]["tail_hash"],
             )
@@ -209,6 +216,11 @@ def sample_reference(value):
 
 def reconstruct(basis, *, limit, bucket_ms):
     events = basis["events"]
+    if basis.get("schema") == "multi-tape-interval.v2" and (
+        basis.get("valuation") != "PINNED_HEDGE_MARK"
+        or any(Decimal(e[4]) != Decimal(basis["initial_prices"][e[2]]) for e in events)
+    ):
+        raise ValueError("pinned HEDGE tape interval changed its financial mark")
     if len(events) > 65536 or any(
         not basis["start_time_ms"] < e[0] <= basis["end_time_ms"] for e in events
     ):

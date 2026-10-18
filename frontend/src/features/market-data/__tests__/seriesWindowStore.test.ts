@@ -17,6 +17,21 @@ function rows(times: number[]): KlineBar[] {
   }));
 }
 
+test("authoritative window corrections preserve historical following and reject outside rows", () => {
+  const store = new SeriesWindowStore({ maxBars: 3, seriesKey: "history" });
+  store.replace(rows([180, 240, 300]));
+  store.applyRange(rows([60, 120]));
+  assert.equal(store.rightTruncated, true);
+  const corrected = rows([60, 180]).map(row => ({ ...row, close: 25 }));
+  const delta = store.correctWindow(corrected);
+  assert.equal(delta.type, "mid-merge");
+  assert.equal(store.seriesKey, "history");
+  assert.equal(store.rightTruncated, true);
+  assert.deepEqual(store.snapshot().map(row => row.time), [60, 180]);
+  assert.throws(() => store.correctWindow(rows([240])), RangeError);
+  assert.deepEqual(store.snapshot(), corrected);
+});
+
 test("replace normalizes duplicate and unsorted rows", () => {
   const store = new SeriesWindowStore({ intervalSeconds: 60 });
   const delta = store.replace([

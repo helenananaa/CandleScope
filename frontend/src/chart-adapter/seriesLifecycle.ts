@@ -5,6 +5,7 @@ import { createPointFigureSeriesPaneView } from "./pointFigureSeries.js";
 import { buildMainSeriesData, buildMainSeriesOptions } from "./mainSeriesModel.js";
 import { getChartTypeDescriptor } from "../features/chart-representation/chartTypeRegistry.js";
 import { normalizeMainChartType } from "../shared/mainChartTypes.js";
+import { futureTimeAxisRenderData } from "./futureTimeAxis.js";
 import type {
   IChartApiBase,
   ISeriesApi,
@@ -12,6 +13,7 @@ import type {
 import type { MainChartType } from "../shared/mainChartTypes.js";
 import type {
   ChartSeriesInputRow,
+  ChartSeriesRow,
   ChartTime,
   IndicatorBarcolorGroup,
   IndicatorSeriesDefinition,
@@ -145,6 +147,26 @@ export function createFutureTimeAxisSeries(
     title: "",
     visible: false,
   }, paneIndex);
+}
+
+/** Carrier growth is axis capacity, never a new market bar or navigation. */
+export function replaceFutureTimeAxisData(
+  chart: AdapterChart | null,
+  series: FutureAxisSeries | null,
+  data: readonly ChartSeriesRow[],
+): number {
+  if (!chart || !series) return 0;
+  const scale = chart.timeScale();
+  const range = scale.getVisibleLogicalRange();
+  const shift = scale.options().shiftVisibleRangeOnNewBar;
+  scale.applyOptions({ shiftVisibleRangeOnNewBar: false });
+  try {
+    series.setData(futureTimeAxisRenderData(data));
+    if (range) scale.setVisibleLogicalRange(range);
+  } finally {
+    scale.applyOptions({ shiftVisibleRangeOnNewBar: shift });
+  }
+  return data.length;
 }
 
 export function replaceMainSeries(chart: AdapterChart, previousSeries: MainSeriesHandle, {

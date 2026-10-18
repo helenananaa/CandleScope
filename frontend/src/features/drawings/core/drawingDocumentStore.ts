@@ -45,6 +45,9 @@ export interface DrawingDocumentStore {
 }
 
 export interface DrawingDocumentSessionRegistry {
+  loadedScopes(): readonly string[];
+  getScopeRevision(): number;
+  subscribeScopeLoads(listener: () => void): () => void;
   getStore(scopeKey: string): DrawingDocumentStore;
   isLoaded(scopeKey: string): boolean;
   shouldLoadFromPersistence(scopeKey: string, store: DrawingDocumentStore): boolean;
@@ -223,7 +226,15 @@ export function createDrawingDocumentStore(
 export function createDrawingDocumentSessionRegistry(): DrawingDocumentSessionRegistry {
   const stores = new Map<string, DrawingDocumentStore>();
   const loadedScopes = new Set<string>();
+  let scopeRevision = 0;
+  const scopeListeners = new Set<() => void>();
   return Object.freeze({
+    loadedScopes() { return Object.freeze([...loadedScopes]); },
+    getScopeRevision() { return scopeRevision; },
+    subscribeScopeLoads(listener: () => void) {
+      scopeListeners.add(listener);
+      return () => { scopeListeners.delete(listener); };
+    },
     getStore(scopeKey: string) {
       let store = stores.get(scopeKey);
       if (!store) {
@@ -243,7 +254,13 @@ export function createDrawingDocumentSessionRegistry(): DrawingDocumentSessionRe
     },
     markLoaded(scopeKey: string, store: DrawingDocumentStore) {
       if (stores.get(scopeKey) !== store || store.getSnapshot().scopeKey !== scopeKey) return false;
-      loadedScopes.add(scopeKey);
+      if (!loadedScopes.has(scopeKey)) {
+        loadedScopes.add(scopeKey);
+        scopeRevision += 1;
+        for (const listener of [...scopeListeners]) {
+          try { listener(); } catch { /* Observers cannot undo a loaded editor. */ }
+        }
+      }
       return true;
     },
   });

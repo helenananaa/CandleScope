@@ -113,7 +113,7 @@ function expectManifest(value: unknown): LocalDatasetManifest {
   if (value.volume_available !== undefined && typeof value.volume_available !== "boolean") {
     throw new TypeError("Local dataset manifest field volume_available is invalid");
   }
-  if (value.source !== "local_dataset" || value.timestamp_semantics !== "bar_open") {
+  if ((value.source !== "local_dataset" && value.source !== "host_chart_snapshot") || value.timestamp_semantics !== "bar_open") {
     throw new TypeError("Local dataset manifest has unsupported source semantics");
   }
   return {

@@ -20,6 +20,11 @@
     ],
     "extraResources": [
       {
+        "from": "../packages/candlescope-external-provider",
+        "to": "packages/candlescope-external-provider",
+        "filter": ["src/**/*.py", "src/**/*.json", "run_example.py", "pyproject.toml", "README.md"]
+      },
+      {
         "from": "../packages/candlescope-backtest-sdk/src",
         "to": "packages/candlescope-backtest-sdk/src",
         "filter": [
@@ -108,6 +113,7 @@
     "desktop:validate:phase8": "node scripts/phase8-full-validation.mjs --out ../docs/perf-baselines/multi-chart-workspace/phase8-full-validation-20260807.json",
     "desktop:release:phase8": "node scripts/phase8-release.mjs --phase7 ../docs/perf-baselines/multi-chart-workspace/phase7-workspace-bus-20260807.json --w3 ../output/playwright/multi-chart-phase8/desktop-phase8-w3.json --soak ../output/playwright/multi-chart-phase8/desktop-phase8-soak.json --f1 ../output/playwright/multi-chart-phase8/desktop-phase8-f1.json --f2 ../output/playwright/multi-chart-phase8/desktop-phase8-f2.json --f3 ../output/playwright/multi-chart-phase8/desktop-phase8-f3.json --rollback ../docs/perf-baselines/multi-chart-workspace/phase8-flag-rollback-20260807.json --package ../docs/perf-baselines/multi-chart-workspace/phase8-package-fresh-process-20260807.json --validation ../docs/perf-baselines/multi-chart-workspace/phase8-full-validation-20260807.json --out ../docs/perf-baselines/multi-chart-workspace/phase8-release-20260807.json",
     "desktop:soak:phase8:4h": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/desktop-phase8-spike.ps1 -Mode SOAK -DurationMs 14400000 -SampleMs 60000",
+    "test:frontend-js:browser": "node scripts/frontend-script-integration.mjs",
     "test:desktop": "node --test \"desktop/*.test.mjs\"",
     "perf:baseline": "node scripts/perf-baseline.mjs",
     "perf:drawing": "node scripts/drawing-performance.mjs",

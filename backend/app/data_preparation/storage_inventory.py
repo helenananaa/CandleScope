@@ -1,42 +1,83 @@
-"""Cancellable background reconciliation of durable publication directories."""
-import os
-from pathlib import Path
+"""Cancellable physical inventory; inspect each regular file once.
 
-from .models import PreparationError
+Reuse DirEntry metadata while walking the scope. In-scope observations update
+one ledger in batches; missing and out-of-scope old paths are still rechecked.
+A failed or interrupted scan cannot certify capacity.
+"""
+
+import os
+import stat
+
+from app.data_preparation.models import PreparationError
 
 
 def reconcile(repository, stop):
     generation = repository.begin_inventory()
     try:
         abandoned = repository.abandoned_publications()
-        repository.refresh_publications(stop=stop)
+        unchecked = repository.publication_paths()
         batch = []
+
         def checkpoint():
             if stop.is_set():
-                raise PreparationError("STORAGE_INVENTORY_INTERRUPTED", "Storage inventory was interrupted", retryable=True)
-        def failed(error):
-            raise error
+                raise PreparationError(
+                    "STORAGE_INVENTORY_INTERRUPTED",
+                    "Storage inventory was interrupted",
+                    retryable=True,
+                )
+
+        def observe(name, kind, observed):
+            if not stat.S_ISREG(observed.st_mode):
+                return
+            unchecked.discard(name)
+            batch.append((name, kind, observed.st_size, repository.now()))
+            if len(batch) >= 2048:
+                repository.register_inventoried_publications(batch)
+                batch.clear()
+
         for root, kind in repository.publication_scopes():
             checkpoint()
-            if not root.exists():
+            try:
+                observed = root.stat(follow_symlinks=False)
+            except FileNotFoundError:
                 continue
-            if root.is_file():
-                repository.register_publications([(root, kind)])
+            if stat.S_ISREG(observed.st_mode):
+                observe(str(root), kind, observed)
                 continue
-            for directory, children, filenames in os.walk(root, followlinks=False, onerror=failed):
+            if not stat.S_ISDIR(observed.st_mode):
+                continue
+            pending = [str(root)]
+            while pending:
                 checkpoint()
-                children[:] = [name for name in children if not (Path(directory) / name).is_symlink()
-                    and not getattr(os.path, "isjunction", lambda _: False)(Path(directory) / name)]
-                for name in filenames:
-                    checkpoint()
-                    path = Path(directory) / name
-                    if path.is_symlink():
-                        continue
-                    batch.append((path, kind))
-                    if len(batch) >= 256:
-                        repository.register_publications(batch)
-                        batch.clear()
-        repository.register_publications(batch)
+                directory = pending.pop()
+                try:
+                    entries = os.scandir(directory)
+                except FileNotFoundError:
+                    # Background metadata retention may retire a directory
+                    # after its parent was visited. Missing paths are rechecked
+                    # against the publication ledger below.
+                    continue
+                with entries:
+                    for entry in entries:
+                        checkpoint()
+                        if entry.is_symlink():
+                            continue
+                        if entry.is_dir(follow_symlinks=False):
+                            if not getattr(os.path, "isjunction", lambda _: False)(
+                                entry.path
+                            ):
+                                pending.append(entry.path)
+                        elif entry.is_file(follow_symlinks=False):
+                            try:
+                                observe(
+                                    entry.path, kind, entry.stat(follow_symlinks=False)
+                                )
+                            except FileNotFoundError:
+                                pass
+        repository.register_inventoried_publications(batch)
+        checkpoint()
+        missing = repository.refresh_publications(stop=stop, paths=unchecked)
+        repository.forget_missing_publications(missing)
         repository.reconcile_trade_receipts(stop=stop)
         repository.reconcile_abandoned_publications(abandoned)
         repository.finish_inventory(generation, "READY")

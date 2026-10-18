@@ -9,7 +9,7 @@ import type {
 } from "../chartRepresentationTypes.js";
 import { projectionSourceTimeRange } from "./projectorData.js";
 
-const LINE_BREAK_STATE_VERSION = 1;
+const LINE_BREAK_STATE_VERSION = 2;
 type LineBreakDirection = "up" | "down";
 
 interface LineBreakLine {
@@ -19,6 +19,7 @@ interface LineBreakLine {
   lowTicks: number;
   closeTicks: number;
   order: number;
+  sourceTime: number;
   sourceFromTime: number;
   sourceToTime: number;
   referenceHighTicks: number;
@@ -27,7 +28,7 @@ interface LineBreakLine {
 }
 
 interface LineBreakState extends ProjectionState {
-  version: 1;
+  version: 2;
   projectorId: "line-break";
   minTick: number;
   numberOfLines: number;
@@ -91,6 +92,7 @@ function cloneLine(line: Readonly<LineBreakLine>): LineBreakLine {
     lowTicks: line.lowTicks,
     closeTicks: line.closeTicks,
     order: line.order,
+    sourceTime: line.sourceTime,
     sourceFromTime: line.sourceFromTime,
     sourceToTime: line.sourceToTime,
     referenceHighTicks: line.referenceHighTicks,
@@ -164,6 +166,7 @@ function validLine(line: Readonly<LineBreakLine> | null, nextOrder: number): boo
     && Number.isSafeInteger(line.order)
     && line.order >= 0
     && line.order < nextOrder
+    && Number.isFinite(line.sourceTime)
     && line.sourceFromTime != null
     && line.sourceToTime != null
     && Number.isSafeInteger(line.referenceHighTicks)
@@ -405,6 +408,7 @@ export class LineBreakProjector implements Projector<
       lowTicks: Math.min(openTicks, closeTicks),
       closeTicks,
       order: state.nextOrder,
+      sourceTime: row.time,
       sourceFromTime,
       sourceToTime: projectionSourceTimeRange(row).to,
       referenceHighTicks,
@@ -431,7 +435,7 @@ export class LineBreakProjector implements Projector<
     data.push({
       time: {
         order: line.order,
-        sourceTime: line.sourceToTime,
+        sourceTime: line.sourceTime,
         sourceOrdinal: 0,
       },
       open,

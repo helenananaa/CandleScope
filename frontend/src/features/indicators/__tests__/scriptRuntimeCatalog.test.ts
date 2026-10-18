@@ -152,6 +152,25 @@ test("runtime catalog defaults only when no language was requested", () => {
 
   assert.equal(language?.id, "pyne");
   assert.equal(resolveScriptEditorProfile(catalog, language!).monacoLanguage, "python");
+  assert.match(resolveScriptEditorProfile(catalog, language!).starterSource, /overlay=True/);
+  assert.doesNotMatch(resolveScriptEditorProfile(catalog, language!).starterSource, /\/\/@version/);
+});
+
+test("unavailable Pyne falls back to the available Pine language and its own template", () => {
+  const onlyPine = structuredClone(payload);
+  onlyPine.languages[0]!.available = false;
+  const catalog = parseScriptRuntimeCatalog(onlyPine);
+  const language = resolveAvailableScriptLanguage(catalog);
+  assert.equal(language?.id, "pine");
+  assert.match(resolveScriptEditorProfile(catalog, language!).starterSource, /^\/\/@version=6/);
+});
+
+test("community languages without a declared starter never inherit a first-party script", () => {
+  const community = structuredClone(payload);
+  community.runtimes[2]!.meta = {};
+  const catalog = parseScriptRuntimeCatalog(community);
+  const language = resolveAvailableScriptLanguage(catalog, "community-lang");
+  assert.equal(resolveScriptEditorProfile(catalog, language!).starterSource, "");
 });
 
 test("runtime catalog fails closed for a missing saved language", () => {

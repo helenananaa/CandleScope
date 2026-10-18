@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import json
 import sqlite3
 from collections.abc import Mapping, Sequence
@@ -11,6 +12,7 @@ from typing import cast
 from app.replay.broker.models import decimal_to_string
 from app.replay.canonical import canonical_json, canonical_sha256
 
+from ..hybrid_extensions import extension_rows, validate_extension
 from ..account import (
     InstrumentRule,
     fee_for_notional,
@@ -33,6 +35,32 @@ from ..historical_book import (
 )
 from . import account_marks as account_marks_ops
 from . import portfolio as portfolio_ops
+
+
+def _broker_capital_by_track(ledger_rows, differences, expected_postings=None):
+    """Reconcile explicit broker capital receipts separately from trading PnL."""
+    totals = {}
+    for row in ledger_rows:
+        if row["kind"] not in {"BROKER_DEPOSIT", "BROKER_WITHDRAW"}:
+            continue
+        field = f"ledger[{row['posting_id']}].capital_receipt"
+        if expected_postings is not None:
+            expected_postings.add(str(row["posting_id"]))
+        try:
+            metadata = json.loads(str(row["metadata_json"]))
+            amount = Decimal(str(metadata["broker_amount"]))
+            track_id = row["track_id"]
+            if (not amount.is_finite() or not isinstance(track_id, str)
+                    or row["reference_type"] != "BROKER_ENTRY"
+                    or (amount <= 0 if row["kind"] == "BROKER_DEPOSIT" else amount >= 0)):
+                raise ValueError("invalid broker capital receipt")
+        except (InvalidOperation, KeyError, TypeError, ValueError):
+            differences.append({"field": field, "expected": "VALID_SIGNED_BROKER_CAPITAL", "actual": "INVALID"})
+            continue
+        if Decimal(str(row["cash_delta"])) != amount:
+            differences.append({"field": field, "expected": str(amount), "actual": row["cash_delta"]})
+        totals[track_id] = totals.get(track_id, Decimal(0)) + amount
+    return totals
 
 
 def audit_exact_account_state(
@@ -135,6 +163,7 @@ def audit_exact_account_state(
     ledger_by_posting = {str(row["posting_id"]): row for row in ledger_rows}
     ledger_by_sequence = {int(row["ledger_sequence"]): row for row in ledger_rows}
     expected_postings: set[str] = set()
+    capital_by_track = _broker_capital_by_track(ledger_rows, differences, expected_postings)
     initial = Decimal(str(run["initial_equity"]))
     settlement_asset = str(run["settlement_asset"])
     initial_posting = ledger_by_posting.get("initial-capital")
@@ -786,6 +815,7 @@ def audit_exact_account_state(
         expected_maintenance += maintenance
         expected_track_cash = (
             initial + realized - broker_fees_by_track.get(track_id, Decimal(0))
+            + capital_by_track.get(track_id, Decimal(0))
         )
         position = json.loads(str(track["position_json"]))
         track_account = json.loads(str(track["account_json"]))
@@ -891,6 +921,7 @@ def audit_exact_account_state(
 
     expected_cash = (
         initial + realized_total - configured_fees + funding_total + liquidation_total
+        + sum(capital_by_track.values(), Decimal(0))
     )
     expected_equity = expected_cash + expected_unrealized
     expected_available = (
@@ -1127,11 +1158,12 @@ def audit_hedge_account_state(
     def causal_ledger_sequence(
         ledger: sqlite3.Row,
         metadata: Mapping[str, object],
-    ) -> int:
+        ancestry: tuple[str, ...] = (),
+    ) -> tuple[int, ...]:
         child_sequence = int(ledger["ledger_sequence"])
         raw_parent_sequence = metadata.get("fork_parent_ledger_sequence")
         if raw_parent_sequence is None:
-            return child_sequence
+            return (1, child_sequence)
         parent_run_id = metadata.get("fork_parent_run_id")
         field = f"ledger[{ledger['posting_id']}].fork_parent_ledger_sequence"
         if (
@@ -1142,10 +1174,13 @@ def audit_hedge_account_state(
             or not parent_run_id
         ):
             add_difference(field, "VALID_PARENT_SEQUENCE", raw_parent_sequence)
-            return child_sequence
+            return (1, child_sequence)
+        if parent_run_id in ancestry or len(ancestry) >= 64:
+            add_difference(field, "ACYCLIC_FORK_LINEAGE", "CYCLE_OR_EXCESSIVE_DEPTH")
+            return (1, child_sequence)
         parent = connection.execute(
             """
-            SELECT kind, reference_type, reference_id
+            SELECT *
             FROM replay_training_contract_ledger
             WHERE run_id = ? AND ledger_sequence = ?
             """,
@@ -1158,11 +1193,16 @@ def audit_hedge_account_state(
             or parent["reference_id"] != ledger["reference_id"]
         ):
             add_difference(field, "MATCHING_IMMUTABLE_PARENT_POSTING", "MISSING")
-        return raw_parent_sequence
+            return (1, child_sequence)
+        # Parent and child ledger counters are different number spaces. Every
+        # inherited event precedes the child's new trading, even when rebuilding
+        # the child used fewer postings than the parent's original prefix.
+        return (0, *causal_ledger_sequence(parent, json.loads(parent["metadata_json"]),
+                                          (*ancestry, str(ledger["run_id"]))))
 
     fill_events: dict[
         int,
-        tuple[sqlite3.Row, Mapping[str, object], int],
+        tuple[sqlite3.Row, Mapping[str, object], tuple[int, ...]],
     ] = {}
     configured_fee_by_leg: dict[tuple[str, str], Decimal] = {}
     broker_fee_total = Decimal(0)
@@ -1601,12 +1641,14 @@ def audit_hedge_account_state(
         )
 
     funding_total = sum(funding_by_leg.values(), Decimal(0))
+    capital_by_track = _broker_capital_by_track(ledger_rows, differences)
     expected_cash = (
         Decimal(str(run["initial_equity"]))
         + realized_total
         - configured_fee_total
         + funding_total
         - liquidation_total
+        + sum(capital_by_track.values(), Decimal(0))
     )
     expected_equity = expected_cash + expected_unrealized
     compare_decimal(
@@ -1679,6 +1721,7 @@ def audit_hedge_insurance_and_adl(
     *,
     run_id: str,
     differences: list[dict[str, object]],
+    initial_simulation: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Independently rebuild simulated insurance and ADL evidence chains."""
 
@@ -1913,6 +1956,9 @@ def audit_hedge_insurance_and_adl(
                 if str(row["case_id"]) == str(step["case_id"])
                 and int(row["step_sequence"]) == int(step["step_sequence"])
             )
+            if step["state"] == "PENDING":
+                compare(f"{step_prefix}.pending_postings", 0, len(step_postings))
+                continue
             fee_rows = connection.execute(
                 """
                 SELECT liquidation_fee
@@ -1988,6 +2034,14 @@ def audit_hedge_insurance_and_adl(
     ).fetchone()
     raw_snapshots: dict[str, Mapping[str, object]] = {}
     input_chain_hashes: set[str] = set()
+    if initial_simulation is not None:
+        input_chain_hashes.add(str(initial_simulation["input_chain_hash"]))
+        initial_state = initial_simulation["state"]
+        initial_snapshots = initial_state.get("adl_snapshots") if isinstance(initial_state, Mapping) else None
+        if isinstance(initial_snapshots, Mapping):
+            for raw in initial_snapshots.values():
+                if isinstance(raw, Mapping) and isinstance(raw.get("snapshot_hash"), str):
+                    raw_snapshots[str(raw["snapshot_hash"])] = raw
     if projection is not None:
         input_chain_hashes.add(str(projection["input_chain_hash"]))
         try:
@@ -2001,6 +2055,12 @@ def audit_hedge_insurance_and_adl(
                     raw.get("snapshot_hash"), str
                 ):
                     raw_snapshots[str(raw["snapshot_hash"])] = raw
+    for extension in extension_rows(connection, run_id):
+        try:
+            raw = validate_extension(extension)["snapshot"]
+            raw_snapshots[str(raw["snapshot_hash"])] = raw
+        except (KeyError, TypeError, ValueError) as exc:
+            difference(f"hybrid_extension[{extension['track_id']}]", "VALID_INPUT", str(exc))
     for row in connection.execute(
         """
         SELECT * FROM replay_hedge_input_applied_event
@@ -2637,6 +2697,7 @@ def write_account_audit(
     run_id: str,
     now_ms: int,
     authoritative_projections: (Mapping[str, Mapping[str, object]] | None) = None,
+    hedge_initial_projection: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     run = connection.execute(
         """
@@ -2767,6 +2828,7 @@ def write_account_audit(
             connection,
             run_id=run_id,
             differences=differences,
+            initial_simulation=hedge_initial_projection,
         )
         independent_state["historical_l2_liquidation_proof_count"] = (
             audit_historical_book_liquidations(

@@ -180,3 +180,24 @@ test("bulk detach preserves sessions and invalid targets do not detach members",
   assert.equal(assignCellsLinkGroup(document, ["cell-1"], "missing"), document);
   assert.equal(assignCellsLinkGroup(document, [], null), document);
 });
+
+
+test("mixed-market replay layouts link changed session channels without rebroadcasting unchanged fields", () => {
+  const document = hierarchicalWorkspace();
+  document.linkGroups["group-child"]!.peerPolicy.interval = true;
+  const ltc = chartWorkspaceCell(document, "cell-3");
+  ltc.session = { ...ltc.session, symbol: "LTCUSDT", interval: "7m" };
+  const sol = chartWorkspaceCell(document, "cell-4");
+  sol.session = { ...sol.session, symbol: "SOLUSDT", interval: "90m" };
+  const afterPeriod = applyLinkedSessionUpdate(document, "cell-3", { ...ltc.session, interval: "5m" });
+  assert.equal(chartWorkspaceCell(afterPeriod, "cell-3").session.interval, "5m");
+  assert.equal(chartWorkspaceCell(afterPeriod, "cell-4").session.interval, "5m");
+  assert.equal(chartWorkspaceCell(afterPeriod, "cell-4").session.symbol, "SOLUSDT");
+  assert.equal(chartWorkspaceCell(afterPeriod, "cell-1").session.interval, chartWorkspaceCell(document, "cell-1").session.interval);
+  const afterMarket = applyLinkedSessionUpdate(document, "cell-3", { ...ltc.session, symbol: "ETHUSDT" });
+  assert.equal(chartWorkspaceCell(afterMarket, "cell-4").session.symbol, "ETHUSDT");
+  assert.equal(chartWorkspaceCell(afterMarket, "cell-4").session.interval, "90m");
+  assert.equal(applyLinkedSessionUpdate(document, "cell-3", ltc.session), document);
+  const synchronized = applyLinkedSessionUpdate(document, "cell-3", ltc.session, true);
+  assert.deepEqual(chartWorkspaceCell(synchronized, "cell-4").session, ltc.session);
+});

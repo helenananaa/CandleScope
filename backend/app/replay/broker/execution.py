@@ -2998,6 +2998,23 @@ class ConservativeBarBroker:
             maker=liquidity is LiquidityRole.MAKER,
             config=self.config,
         )
+        if not order.reduce_only and not skip_trigger_risk:
+            reduces_only = (
+                self._reduces_position(order, working.position)
+                and fill_quantity <= abs(Decimal(target_position.quantity))
+            )
+            candidate_account = self._account_from(working.ledger or self._ledger, candidate_position)
+            released = Decimal(order.reserved_margin) * fill_quantity / requested_quantity
+            available_after_fill = (Decimal(candidate_account.available_equity)
+                                    + Decimal(position_result.realized_pnl) - Decimal(fee) + released)
+            if not reduces_only and available_after_fill < 0:
+                self._terminal_order(
+                    working, order,
+                    OrderStatus.CANCELED if order.status is OrderStatus.PARTIALLY_FILLED else OrderStatus.REJECTED,
+                    reason="TRIGGER_RISK_REJECTED", source_sequence=source_sequence,
+                    event_time_ms=event_time_ms,
+                )
+                return False
         fill = ReplayFill(
             fill_id=fill_id,
             order_id=order.order_id,

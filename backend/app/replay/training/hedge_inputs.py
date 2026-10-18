@@ -31,10 +31,13 @@ from .hedge_simulation_contract import (
     validate_simulation_manifest,
 )
 from .historical_book import PreparedHistoricalBookBinding
+from .hybrid_extensions import build_extension, bind_extension, extension_rows, validate_extension
 from .models import (
     REPLAY_HEDGE_PUBLIC_HISTORY_REF_SCHEMA_VERSION,
     REPLAY_HEDGE_SIMULATION_MANIFEST_REF_SCHEMA_VERSION,
     TrainingRunCreateRequest,
+    PositionMode,
+    BookMode,
 )
 
 
@@ -579,6 +582,22 @@ class PreparedHedgeInputBinding:
 
 
 @dataclass(frozen=True, slots=True)
+class HybridInputSpec:
+    exchange: str
+    market_type: str
+    symbol: str
+    settlement_asset: str
+    requested_start_ms: int
+    forward_cache_ms: int
+    maker_fee_bps: str
+    taker_fee_bps: str
+    max_leverage: str
+    initial_equity: str
+    position_mode: PositionMode = PositionMode.HEDGE
+    book_mode: BookMode = BookMode.OFF
+
+
+@dataclass(frozen=True, slots=True)
 class PreparedHedgeTrackPublicBinding:
     public: HedgePublicArchiveDescriptor
     public_generation: int
@@ -586,6 +605,7 @@ class PreparedHedgeTrackPublicBinding:
     bound_range_start_ms: int
     bound_range_end_ms: int
     input_proof_hash: str
+    hybrid_extension: Mapping[str, object] | None = None
 
 
 def runtime_hedge_rule(
@@ -772,13 +792,15 @@ def bind_hedge_track_public_input(
             now_ms,
         ),
     )
+    connection.execute("UPDATE replay_hedge_track_public_binding SET initial_event_sequence=? WHERE run_id=? AND track_id=?",
+                       (binding.public_projection.last_event_sequence, run_id, track_id))
     projection_payload = {
         "schema_version": "replay.hedge-track-public-projection.v1",
         "run_id": run_id,
         "track_id": track_id,
         "last_event_sequence": binding.public_projection.last_event_sequence,
         "as_of_actual_time_ms": binding.public_projection.as_of_actual_time_ms,
-        "as_of_virtual_time_ms": virtual_time_ms,
+        "as_of_virtual_time_ms": binding.public_projection.as_of_virtual_time_ms,
         "state": dict(binding.public_projection.state),
         "input_chain_hash": binding.public_projection.input_chain_hash,
     }
@@ -795,7 +817,7 @@ def bind_hedge_track_public_input(
             track_id,
             binding.public_projection.last_event_sequence,
             binding.public_projection.as_of_actual_time_ms,
-            virtual_time_ms,
+            binding.public_projection.as_of_virtual_time_ms,
             canonical_json(binding.public_projection.state),
             binding.public_projection.input_chain_hash,
             canonical_sha256(projection_payload),
@@ -887,6 +909,10 @@ def bind_hedge_track_public_input(
         """,
         (now_ms, now_ms, binding.public.archive_id),
     )
+
+    if binding.hybrid_extension is not None:
+        bind_extension(connection, run_id=run_id, track_id=track_id,
+                       payload=binding.hybrid_extension, now_ms=now_ms)
 
 
 def bind_hedge_inputs(
@@ -1642,8 +1668,9 @@ class HedgeInputArchiveManager:
 
     async def ensure_hybrid_inputs(
         self,
-        request: TrainingRunCreateRequest,
+        request: TrainingRunCreateRequest | HybridInputSpec,
         seed: Mapping[str, object],
+        *, public_only: bool = False,
     ) -> dict[str, object]:
         """Build deterministic, pinned HEDGE inputs from revealed local prices.
 
@@ -1843,6 +1870,9 @@ class HedgeInputArchiveManager:
                 historical_l2_ref=None,
                 events=events,
             )
+            if public_only:
+                return {"public": await self.import_public(public_path),
+                        "public_fidelity": HYBRID_PUBLIC_INPUT_FIDELITY}
             await asyncio.to_thread(
                 build_hedge_simulation_manifest,
                 simulation_path,
@@ -2591,6 +2621,19 @@ class HedgeInputArchiveManager:
             input_proof_hash=proof,
         )
 
+    async def hybrid_track_policy(self, run_id: str) -> Mapping[str, object] | None:
+        """Only extend a run that already chose modelled public inputs."""
+        return await self.store.run_extension_read(lambda connection: connection.execute(
+            """SELECT fee.maker_fee_bps, fee.taker_fee_bps
+            FROM replay_hedge_input_binding binding
+            JOIN replay_hedge_public_archive archive ON archive.archive_id=binding.public_archive_id
+            JOIN replay_training_run run USING(run_id)
+            JOIN replay_training_fee_policy fee USING(run_id)
+            WHERE binding.run_id=? AND binding.status='ACTIVE' AND run.book_mode='OFF'
+              AND json_extract(archive.metadata_json, '$.source_identity')=?
+            ORDER BY fee.revision DESC LIMIT 1""", (run_id, HYBRID_PUBLIC_SOURCE_IDENTITY)
+        ).fetchone())
+
     async def prepare_track_public_binding(
         self,
         *,
@@ -2605,6 +2648,7 @@ class HedgeInputArchiveManager:
         actual_time_ms: int,
         virtual_time_ms: int,
         historical_book_binding: PreparedHistoricalBookBinding | None,
+        public_archive_id: str | None = None,
     ) -> PreparedHedgeTrackPublicBinding | None:
         """Resolve and pin the exact public archive for one added HEDGE track."""
 
@@ -2680,6 +2724,11 @@ class HedgeInputArchiveManager:
                 "existing": existing,
                 "run_binding": run_binding,
                 "simulation": simulation,
+                "hybrid": bool(run_binding is not None and connection.execute(
+                    "SELECT 1 FROM replay_hedge_public_archive WHERE archive_id=? "
+                    "AND json_extract(metadata_json, '$.source_identity')=?",
+                    (run_binding["public_archive_id"], HYBRID_PUBLIC_SOURCE_IDENTITY),
+                ).fetchone()),
                 "candidates": candidates,
             }
 
@@ -2713,7 +2762,7 @@ class HedgeInputArchiveManager:
         )
         if (
             simulation.settlement_asset != settlement_asset
-            or symbol not in simulation.required_symbols
+            or (symbol not in simulation.required_symbols and not rows["hybrid"])
             or bound_range_start_ms < simulation.range_start_ms
             or bound_range_end_ms > simulation.range_end_ms
         ):
@@ -2728,6 +2777,10 @@ class HedgeInputArchiveManager:
                 },
             )
         candidates = rows["candidates"]
+        if isinstance(candidates, tuple) and public_archive_id is not None:
+            # The generated input is pinned to the current seed and fee policy.
+            # Never replace it with another catalog archive that sorts first.
+            candidates = tuple(row for row in candidates if row["archive_id"] == public_archive_id)
         if not isinstance(candidates, tuple) or not candidates:
             raise TrainingRunError(
                 "HEDGE_TRACK_PUBLIC_INPUT_UNAVAILABLE",
@@ -2791,11 +2844,23 @@ class HedgeInputArchiveManager:
                 status_code=409,
                 details={"track_id": track_id, "fallback_applied": False},
             )
+        extension = None
+        if symbol not in simulation.required_symbols:
+            if public_input_fidelity(public) != HYBRID_PUBLIC_INPUT_FIDELITY:
+                raise TrainingRunError("HEDGE_TRACK_SIMULATION_COVERAGE_MISMATCH",
+                    "a modelled extension requires the same modelled public input policy", status_code=409)
+            extension = build_extension(symbol=symbol, settlement_asset=settlement_asset,
+                base_manifest_id=simulation.manifest_id, base_checksum=simulation.checksum_sha256,
+                public_archive_id=public.archive_id, public_checksum=public.checksum_sha256,
+                actual_time_ms=actual_time_ms, virtual_time_ms=virtual_time_ms,
+                end_time_ms=min(simulation.range_end_ms, public.range_end_ms), price=str(projection.state["mark_index"]["mark_price"]),
+                leverage=str(projection.state["rule"]["max_leverage"]))
         generation = int(public_row["generation"])
         return PreparedHedgeTrackPublicBinding(
             public=public,
             public_generation=generation,
             public_projection=projection,
+            hybrid_extension=extension,
             bound_range_start_ms=bound_range_start_ms,
             bound_range_end_ms=bound_range_end_ms,
             input_proof_hash=hedge_track_public_proof_hash(
@@ -2963,7 +3028,6 @@ class HedgeInputArchiveManager:
                             JOIN replay_hedge_public_archive AS archive
                               ON archive.archive_id = track_binding.public_archive_id
                             WHERE track_binding.run_id = ?
-                              AND track.subscription_tier = 'FULL'
                             ORDER BY track_binding.track_id
                             """,
                             (run_id,),
@@ -2983,7 +3047,9 @@ class HedgeInputArchiveManager:
                 )
             )
             bound_ids = tuple(str(row["track_id"]) for row in track_rows)
-            if bound_ids != full_track_ids:
+            # Public account inputs outlive a market subscription. In particular,
+            # the primary lane owns the shared fee policy even while it is WARM.
+            if not set(full_track_ids).issubset(bound_ids):
                 raise ValueError("every HEDGE FULL track must have one public binding")
             verified_tracks = []
             for row in track_rows:
@@ -3227,6 +3293,9 @@ class HedgeInputArchiveManager:
 
         spans = await self.store.run_extension_read(lambda connection: [dict(row) for row in connection.execute(
             "SELECT * FROM replay_hedge_mark_span WHERE run_id=? ORDER BY track_id,first_sequence", (run_id,)
+        )])
+        admissions = await self.store.run_extension_read(lambda connection: [dict(row) for row in connection.execute(
+            "SELECT * FROM replay_hedge_track_input_admission WHERE run_id=? ORDER BY track_id,first_sequence", (run_id,)
         )])
 
         def covered_marks(events, track_id, last_sequence):
@@ -3527,7 +3596,6 @@ class HedgeInputArchiveManager:
                         JOIN replay_hedge_public_archive AS archive
                           ON archive.archive_id = track_binding.public_archive_id
                         WHERE track_binding.run_id = ?
-                          AND track.subscription_tier = 'FULL'
                         ORDER BY track_binding.track_id
                         """,
                         (run_id,),
@@ -3553,8 +3621,24 @@ class HedgeInputArchiveManager:
                 ),
             }
         )
+        extensions = await self.store.run_extension_read(lambda connection: extension_rows(connection, run_id))
+        for row in extensions:
+            try:
+                payload = validate_extension(row)
+                if (payload["base_manifest_id"] != binding["simulation_manifest_id"]
+                        or payload["base_checksum"] != binding["simulation_checksum_sha256"]):
+                    raise ValueError("hybrid extension root binding differs")
+                track = next((item for item in track_inputs["bindings"] if item["track_id"] == row["track_id"]), None)
+                # Non-FULL tracks retain their immutable input for future admission.
+                if track is not None and (payload["public_archive_id"] != track["public_archive_id"]
+                        or payload["public_checksum"] != track["public_checksum_sha256"]):
+                    raise ValueError("hybrid extension public binding differs")
+            except (KeyError, TypeError, ValueError) as exc:
+                difference(f"hybrid_extension.{row['track_id']}", "VALID_ADMISSION_INPUT", str(exc))
         track_bindings = {str(row["track_id"]): row for row in track_inputs["bindings"]}
-        if tuple(sorted(track_bindings)) != track_inputs["full_track_ids"]:
+        if any(row["track_id"] not in track_bindings for row in admissions):
+            difference("input_admission.track", "BOUND_TRACK", "MISSING")
+        if not set(track_inputs["full_track_ids"]).issubset(track_bindings):
             difference(
                 "track_public_bindings",
                 list(track_inputs["full_track_ids"]),
@@ -3655,6 +3739,10 @@ class HedgeInputArchiveManager:
                     ),
                     default=0,
                 )
+                if track_binding["initial_event_sequence"] is not None:
+                    initial_sequence = int(track_binding["initial_event_sequence"])
+                    if not 0 <= initial_sequence <= int(projection_row["last_event_sequence"]):
+                        raise ValueError("track admission cursor exceeds its projection")
                 expected_events = [
                     event
                     for event in events
@@ -3663,6 +3751,19 @@ class HedgeInputArchiveManager:
                     <= int(projection_row["last_event_sequence"])
                 ]
                 receipts = track_applied.get(track_id, [])
+                by_receipt = {int(row["event_sequence"]): row for row in receipts}
+                admitted_through = 0
+                for admission in admissions:
+                    if admission["track_id"] != track_id:
+                        continue
+                    first, last = admission["first_sequence"], admission["last_sequence"]
+                    if not admitted_through < first <= last <= int(projection_row["last_event_sequence"]):
+                        raise ValueError("input admission overlaps or exceeds its cursor")
+                    for sequence in range(first, last + 1):
+                        receipt = by_receipt.get(sequence)
+                        if receipt is None or receipt["applied_virtual_time_ms"] > admission["admitted_virtual_time_ms"]:
+                            raise ValueError("input admission lacks a historical event receipt")
+                    admitted_through = last
                 covered = covered_marks(events, track_id, int(projection_row["last_event_sequence"]))
                 if [event.event_sequence for event in expected_events if event.event_sequence not in covered] != [
                     int(row["event_sequence"]) for row in receipts if int(row["event_sequence"]) not in covered
@@ -3787,12 +3888,26 @@ class HedgeInputArchiveManager:
         await self.store.run_extension_write(write_audit)
         if status == "FAIL":
             await self.pause_run(run_id, reason="HEDGE_INPUT_AUDIT_FAILED")
+        initial_simulation = None
+        if status == "PASS":
+            initial = _projection(
+                sources["SIMULATION"], source_kind="SIMULATION",
+                actual_time_ms=int(binding["bound_range_start_ms"]), virtual_time_ms=0,
+            )
+            # Initial events are consumed at binding and have no applied-event
+            # receipts. Preserve their independently validated provenance for
+            # historical ADL audits after the live input projection moves on.
+            initial_simulation = {
+                "input_chain_hash": initial.input_chain_hash,
+                "state": dict(initial.state),
+            }
         return {
             "schema_version": HEDGE_INPUT_AUDIT_SCHEMA_VERSION,
             "status": status,
             "proof_hash": proof_hash,
             "differences": differences,
             "snapshot": snapshot,
+            "_initial_simulation": initial_simulation,
         }
 
     async def rehydrate(self, *, source_kind: str, object_id: str) -> dict[str, object]:

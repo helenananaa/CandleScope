@@ -7,13 +7,14 @@ from decimal import ROUND_FLOOR, Decimal, InvalidOperation
 from typing import cast
 
 from app.replay.broker.models import decimal_to_string
+from app.replay.broker.affordability import opening_budget
 from app.replay.canonical import canonical_sha256
 from app.replay.models import (
     normalize_decimal_string,
 )
 
 from . import service_validation as service_validation_ops
-from .account import isolated_margin_key, round_to_step
+from .account import isolated_margin_key
 from .errors import TrainingRunError
 from .models import (
     AccountDataMode,
@@ -30,6 +31,21 @@ def _position_is_open(value: object) -> bool:
             for leg in ("long", "short")
         )
     return value.get("quantity") not in {None, "0", 0}
+
+
+def _opening_budget(payload, config, portfolio, rule, price, leverage, contract_size):
+    policy = portfolio.get("active_fee_policy")
+    policy = policy if isinstance(policy, Mapping) else config
+    return opening_budget(
+        reference=price, leverage=leverage, side=str(payload.get("side", "BUY")),
+        limit=payload.get("limit_price") is not None,
+        slippage_bps=Decimal(str(config.get("market_slippage_bps", "0"))),
+        fee_bps=max(Decimal(str(policy.get("maker_fee_bps", "0"))),
+                    Decimal(str(policy.get("taker_fee_bps", "0")))),
+        price_tick=Decimal(str(rule.get("price_tick", "0.00000001"))),
+        quote_step=Decimal(str(rule.get("quote_step", "0.00000001"))),
+        contract_size=contract_size,
+    )
 
 
 def _position_leg(
@@ -660,6 +676,7 @@ def shared_order_capacity_quantity(
         quantity_step: Decimal | None = None
         minimum_quantity = Decimal(0)
         minimum_notional = Decimal(0)
+        rule: Mapping[str, object] = {}
         rules = portfolio.get("instrument_rules")
         active = (
             next(
@@ -756,7 +773,8 @@ def shared_order_capacity_quantity(
                 available = Decimal(0)
         else:
             available = Decimal(str(portfolio["available_equity"]))
-        shared_maximum = max(Decimal(0), available) * leverage / (price * contract_size)
+        shared_maximum = _opening_budget(payload, config, portfolio, rule, price, leverage, contract_size).capacity(
+            available, quantity_step or Decimal("0.00000001"))
         maximum = min(maximum, shared_maximum)
         if quantity_step is not None:
             maximum = (maximum / quantity_step).to_integral_value(
@@ -771,7 +789,7 @@ def shared_order_capacity_quantity(
         return decimal_to_string(maximum, field_name="max_quantity")
     except TrainingRunError:
         raise
-    except (InvalidOperation, KeyError, TypeError, ZeroDivisionError) as exc:
+    except (InvalidOperation, KeyError, TypeError, ValueError, ZeroDivisionError) as exc:
         raise TrainingRunError(
             "REPLAY_CONTROL_INVALID",
             "order capacity cannot be valued against the shared settlement account",
@@ -853,6 +871,7 @@ def assert_shared_settlement_reservation(
                 )
         contract_size = Decimal(1)
         quote_step = Decimal("0.00000001")
+        active_rule: Mapping[str, object] = {}
         rules = portfolio.get("instrument_rules")
         active = next(
             (
@@ -993,12 +1012,8 @@ def assert_shared_settlement_reservation(
                     raise TypeError("selected track account is invalid")
                 available += Decimal(str(track_account.get("margin_used", "0")))
             available += release_order_reservation
-        reservation = round_to_step(
-            quantity * price * contract_size / leverage,
-            quote_step,
-            upward=True,
-        )
-    except (InvalidOperation, KeyError, TypeError, ZeroDivisionError) as exc:
+        reservation = _opening_budget(payload, config, portfolio, active_rule, price, leverage, contract_size).required(quantity)
+    except (InvalidOperation, KeyError, TypeError, ValueError, ZeroDivisionError) as exc:
         raise TrainingRunError(
             "REPLAY_CONTROL_INVALID",
             "order cannot be valued against the shared settlement account",

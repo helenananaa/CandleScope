@@ -280,5 +280,11 @@ export interface SurfaceViewportSnapshot extends Record<string, unknown> {
   logicalSpan: number;
   screenOffset: number;
   sourceRange: LogicalRange | null;
+  /** An explicit linked/restored time window retains its dates through hydration. */
+  preserveSourceRange?: boolean;
+  /** The ordinal left edge precedes loaded geometry; its date is extrapolated. */
+  estimatedLeftEdge?: boolean;
+  /** Own the real anchor and zoom while a same-period history window hydrates. */
+  preserveGeometry?: boolean;
   surfaceConfigKey?: unknown;
 }

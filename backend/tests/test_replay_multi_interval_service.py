@@ -175,7 +175,7 @@ async def test_multi_interval_matches_scalar_finances_and_curve(
 
 
 @pytest.mark.anyio
-async def test_group_failure_never_commits_partial_actor_state(tmp_path, monkeypatch):
+async def test_group_failure_never_commits_partial_actor_state(tmp_path, monkeypatch, record_property):
     install_shared_market(monkeypatch, tmp_path / "market")
     s, run, session, send = await make_multi(tmp_path / "run")
     try:
@@ -185,16 +185,31 @@ async def test_group_failure_never_commits_partial_actor_state(tmp_path, monkeyp
                 "SELECT COUNT(*) FROM replay_multi_bar_interval"
             ).fetchone()[0]
         )
+        injected = {"group": 0, "phases": 0}
         original = s.store.commit_command_group
 
         async def fail_after_staging(commands, *, before, after):
             def fail(connection):
                 after(connection)
+                injected["group"] += 1
                 raise RuntimeError("injected group write failure")
 
             return await original(commands, before=before, after=fail)
 
         monkeypatch.setattr(s.store, "commit_command_group", fail_after_staging)
+        original_phases = s.store.commit_command_phases
+
+        async def fail_after_last_phase(phases):
+            rows, pre, post = phases[-1]
+
+            def fail(connection):
+                post(connection)
+                injected["phases"] += 1
+                raise RuntimeError("injected group write failure")
+
+            return await original_phases([*phases[:-1], (rows, pre, fail)])
+
+        monkeypatch.setattr(s.store, "commit_command_phases", fail_after_last_phase)
         at = (await s.get_session_state(session))["cursor"]["virtual_time_ms"]
         with pytest.raises(Exception):
             await send(
@@ -202,6 +217,8 @@ async def test_group_failure_never_commits_partial_actor_state(tmp_path, monkeyp
                 C.ADVANCE_TO,
                 dict(virtual_time_ms=at + 90 * 60000, stop_on_event=False),
             )
+        assert sum(injected.values()) >= 1
+        record_property("injected_commit_paths", json.dumps(injected))
         persisted = await s.training.store.get_market_track_heads(run)
         assert [(t["cursor"], t["position"], t["account"]) for t in persisted] == [
             (t["cursor"], t["position"], t["account"]) for t in before
@@ -731,14 +748,14 @@ async def main():
  batched=sys.argv[3]=='batched_before_ack'
  service,run,session,send=await make_multi(root/'run',horizon=100,marks=(["100"]*5+["80"]+["110"]*95) if batched else None)
  if sys.argv[3] in ('before_ack','batched_before_ack'):
-  method='commit_command_phases' if batched else 'commit_command_group'
-  original_commit=getattr(service.store,method)
-  async def crash_final(*args,**kwargs):
-   result=await original_commit(*args,**kwargs)
-   terminal=await service.store.run_extension_read(lambda c:c.execute("SELECT 1 FROM replay_training_advance_intent WHERE command_id='crash-advance' AND status='COMPLETED'").fetchone())
-   if terminal:os._exit(93)
-   return result
-  setattr(service.store,method,crash_final)
+  for method in ('commit_command_group','commit_command_phases'):
+   original_commit=getattr(service.store,method)
+   async def crash_final(*args,_original=original_commit,**kwargs):
+    result=await _original(*args,**kwargs)
+    terminal=await service.store.run_extension_read(lambda c:c.execute("SELECT 1 FROM replay_training_advance_intent WHERE command_id='crash-advance' AND status='COMPLETED'").fetchone())
+    if terminal:os._exit(93)
+    return result
+   setattr(service.store,method,crash_final)
  elif sys.argv[3]=='terminal_group':
   from app.replay.training import terminal_cohort
   original=terminal_cohort.commit_actor_commands
@@ -747,12 +764,12 @@ async def main():
    os._exit(93)
   terminal_cohort.commit_actor_commands=crash_terminal
  else:
-  from app.replay.training import multi_interval_advance
-  original=multi_interval_advance.commit_actor_commands
-  async def crash_group(*args,**kwargs):
-   await original(*args,**kwargs)
-   os._exit(93)
-  multi_interval_advance.commit_actor_commands=crash_group
+  for method in ('commit_command_group','commit_command_phases'):
+   original=getattr(service.store,method)
+   async def crash_group(*args,_original=original,**kwargs):
+    await _original(*args,**kwargs)
+    os._exit(93)
+   setattr(service.store,method,crash_group)
  at=(await service.get_session_state(session))['cursor']['virtual_time_ms']
  target=at+90*60000
  if sys.argv[3]=='terminal_group':

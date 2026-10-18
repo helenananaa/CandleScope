@@ -16,6 +16,9 @@ import {
   replayOrderContextSide,
   replayOrderSizingAvailability,
   replayReduceOnlyUnavailableMessage,
+  replayBoundClosingCapacity,
+  replayOrderSideCapacity,
+  replayQuantityForShare,
 } from "../replayOrderSizing.js";
 import { replayOrderCtaState } from "../replayOrderCtaState.js";
 import { createReplayOrderAdvisoryScheduler } from "../replayOrderAdvisoryScheduler.js";
@@ -301,7 +304,8 @@ function quantityForStep(value: number, stepText: string): string {
   const step = finiteNumber(stepText) ?? 0;
   const digits = Math.min(12, decimalPlaces(stepText));
   const floored = step > 0 ? Math.floor((value + step * 1e-8) / step) * step : value;
-  return floored.toFixed(digits).replace(/\.?0+$/, "") || "0";
+  const formatted = floored.toFixed(digits);
+  return (digits > 0 ? formatted.replace(/\.?0+$/, "") : formatted) || "0";
 }
 
 function sideLabel(value: string): string {
@@ -586,6 +590,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
     store.virtualTimeMs,
   ]);
   const previewKey = JSON.stringify([
+    cursorAdvisoryEpoch,
     selectedTrackId,
     previewPositionIntent,
     clientOrderId,
@@ -606,6 +611,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
     reduceOnly,
     price,
     leverage,
+    reduceOnly ? positionQty : null,
   ]);
   useEffect(() => {
     if (
@@ -719,19 +725,19 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
   const capacityReadyKey = currentCapacityState?.status === "ready"
     ? currentCapacityState.key
     : null;
-  const estimatedMaxQuantity = rebasedMaxQuantity !== null
+  const estimatedMaxQuantity = replayBoundClosingCapacity(rebasedMaxQuantity !== null
     ? quantityForStep(rebasedMaxQuantity, quantityStep)
     : capacity?.max_quantity
       ?? (maxQuantitySnapshot?.key === maxQuantityContextKey
         ? maxQuantitySnapshot.value
-        : null);
+        : null), reduceOnly, positionQty);
   const sizingAvailability = replayOrderSizingAvailability(estimatedMaxQuantity, quantity);
   const quantityExceedsCapacity = sizingAvailability.quantityExceedsCapacity;
   useEffect(() => {
     // A server preview describes one exact replay boundary. Keep the
     // conservative, locally rebased capacity estimate, but never display a
-    // stale fill/margin preview after the cursor moves. Editing the draft will
-    // request a new advisory; submission always revalidates the exact cursor.
+    // stale fill/margin preview after the cursor moves. The new key requests
+    // one preview once the paused cursor is quiet; submission still revalidates.
     setPreviewState((current) => current === null ? current : null);
   }, [cursorAdvisoryEpoch]);
   useEffect(() => {
@@ -742,6 +748,8 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
       || !cursorReady
       || tradeValidationSide !== null
       || capacityReadyKey !== maxQuantityContextKey
+      || viewer.controlPending
+      || runtime.pendingCommand !== null
       || !quantity.trim()
       || quantityExceedsCapacity
       || (orderType !== "MARKET" && !price.trim())
@@ -814,13 +822,14 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
       }
       if (scheduled && !settled) previewScheduler.forget(previewKey);
     };
-  // `quantity` may move with a market-priced size intent while the cursor
-  // advances. That movement clears the preview above, but intentionally does
-  // not create a new HTTP advisory until the user changes the draft.
+  // Derived quantity is sampled by the cursor/draft key. Rapid cursor movement
+  // cancels the pending timer; playing never requests advisory previews.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     clientOrderId,
     capacityReadyKey,
+    viewer.controlPending,
+    runtime.pendingCommand,
     cursorReady,
     leverage,
     orderType,
@@ -866,8 +875,10 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
       : "flat";
   const refForSize = referencePrice ?? finiteNumber(preview?.estimated_fill_price) ?? finiteNumber(preview?.reference_price);
   const maxSizeValue = useMemo(() => {
+    if (estimatedMaxQuantity === null || estimatedMaxQuantity.trim() === "") return null;
     const maxQty = finiteNumber(estimatedMaxQuantity);
-    if (maxQty === null || maxQty <= 0) return null;
+    if (maxQty === null || maxQty < 0) return null;
+    if (maxQty === 0) return 0;
     if (sizeMode === "QUANTITY") return maxQty;
     if (refForSize === null || refForSize <= 0) return null;
     if (sizeMode === "NOTIONAL") return maxQty * refForSize;
@@ -880,12 +891,13 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
     if (maximum === null || maximum <= 0 || current === null) return 0;
     return Math.max(0, Math.min(100, Math.round((current / maximum) * 100)));
   }, [maxSizeValue, resolvedSizeInput]);
-  const displaySizeShare = sliderDragging
+  const displaySizeShare = maxSizeValue === 0 ? 0 : sliderDragging
     ? sliderPct
     : sizeShareIntent === null
       ? derivedSizeShare
       : Math.round(sizeShareIntent * 100);
-  const displaySizeShareLabel = quantityExceedsCapacity ? ">100" : String(displaySizeShare);
+  const displaySizeShareLabel = maxSizeValue === 0 ? "0"
+    : quantityExceedsCapacity ? ">100" : String(displaySizeShare);
 
   const setSizeShare = (share: number) => {
     const maximum = maxSizeValue;
@@ -914,7 +926,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
       const target = portfolio?.positions.find((item) => (
         item.track_id === selectedTrackId && item.position_side === targetSide
       ));
-      return target === undefined
+      return target === undefined || (finiteNumber(target.position.quantity) ?? 0) === 0
         ? { enabled: false, title: targetSide === "LONG" ? t("replay.paper.noLong") : t("replay.paper.noShort") }
         : { enabled: true, title: "" };
     }
@@ -968,7 +980,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
     const targetPositionSide: "LONG" | "SHORT" = reduceOnly
       ? nextSide === "BUY" ? "SHORT" : "LONG"
       : nextSide === "BUY" ? "LONG" : "SHORT";
-    const order: ReplayOrderRequest = {
+    let order: ReplayOrderRequest = {
       client_order_id: clientOrderId,
       side: nextSide,
       order_type: orderType,
@@ -986,6 +998,11 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
     const sideForContext = positionMode === "HEDGE"
       ? nextSide
       : replayOrderContextSide(positionQty, nextSide, reduceOnly);
+    const targetPositionQty = positionMode === "HEDGE"
+      ? finiteNumber(portfolio?.positions.find((item) => (
+        item.track_id === selectedTrackId && item.position_side === targetPositionSide
+      ))?.position.quantity) ?? 0
+      : positionQty;
     const sideContext: ReplayOrderCapacityContext = {
       side: sideForContext,
       order_type: orderType,
@@ -1002,18 +1019,16 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
       sideForContext,
       orderType,
       reduceOnly,
-      reduceOnly ? positionQty : null,
+      reduceOnly ? targetPositionQty : null,
     ]);
     const sideContextKey = JSON.stringify([
       selectedTrackId,
-      store.revision,
-      store.sourceSequence,
-      store.virtualTimeMs,
       sideForContext,
       orderType,
       reduceOnly,
       price,
       leverage,
+      reduceOnly ? targetPositionQty : null,
     ]);
     capacityScheduler.cancel();
     previewScheduler.cancel();
@@ -1051,6 +1066,12 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
         leverage,
       });
       setSide(nextSide);
+      if (sizeShareIntent !== null && planForSide === null) {
+        const freshQuantity = replayQuantityForShare(
+          sideCapacity.max_quantity, sizeShareIntent, quantityStep,
+        );
+        if (freshQuantity !== null) order = { ...order, quantity: freshQuantity };
+      }
       const requestedQuantity = finiteNumber(order.quantity);
       const maximumQuantity = finiteNumber(sideCapacity.max_quantity);
       if (
@@ -1095,7 +1116,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
         await viewer.actions.submitTrade("execute_position_intent", {
           intent: "OPEN",
           side: nextSide,
-          quantity,
+          quantity: order.quantity,
           leverage: String(leverage),
           ...(positionMode === "HEDGE" ? { position_side: targetPositionSide } : {}),
         });
@@ -1131,16 +1152,26 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
   // pointer or keyboard activation while its response is in flight.
   const transientOrderBlock = !commandReady;
   const commonPermanentOrderBlock = !commandAvailable
-    || quantityExceedsCapacity
     || !quantity.trim()
     || (orderType !== "MARKET" && !price.trim());
+  const sideExceedsCapacity = (nextSide: "BUY" | "SELL") => {
+    const targetPositionSide = nextSide === "BUY" ? "SHORT" : "LONG";
+    const targetQuantity = positionMode === "HEDGE"
+      ? finiteNumber(portfolio?.positions.find((item) => (
+        item.track_id === selectedTrackId && item.position_side === targetPositionSide
+      ))?.position.quantity) ?? 0
+      : positionQty;
+    return replayOrderSizingAvailability(replayOrderSideCapacity(
+      estimatedMaxQuantity, previewSide, nextSide, reduceOnly, targetQuantity,
+    ), quantity).quantityExceedsCapacity;
+  };
   const buyCtaState = replayOrderCtaState({
-    permanentlyUnavailable: commonPermanentOrderBlock || !buyGate.enabled,
+    permanentlyUnavailable: commonPermanentOrderBlock || !buyGate.enabled || sideExceedsCapacity("BUY"),
     transientlyBlocked: transientOrderBlock,
     submitting: orderSubmitting,
   });
   const sellCtaState = replayOrderCtaState({
-    permanentlyUnavailable: commonPermanentOrderBlock || !sellGate.enabled,
+    permanentlyUnavailable: commonPermanentOrderBlock || !sellGate.enabled || sideExceedsCapacity("SELL"),
     transientlyBlocked: transientOrderBlock,
     submitting: orderSubmitting,
   });
@@ -1218,14 +1249,20 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
               data-mode="open"
               className={!reduceOnly ? "active" : ""}
               aria-pressed={!reduceOnly}
-              onClick={() => setReduceOnly(false)}
+              onClick={() => {
+                if (reduceOnly) setSide(side === "BUY" ? "SELL" : "BUY");
+                setReduceOnly(false);
+              }}
             >{t("replay.paper.open")}</button>
             <button
               type="button"
               data-mode="close"
               className={reduceOnly ? "active" : ""}
               aria-pressed={reduceOnly}
-              onClick={() => setReduceOnly(true)}
+              onClick={() => {
+                if (!reduceOnly) setSide(side === "BUY" ? "SELL" : "BUY");
+                setReduceOnly(true);
+              }}
             >{t("replay.paper.close")}</button>
           </div>
 
@@ -1341,7 +1378,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
 
           <dl className="replay-order-preview" aria-label={t("replay.paper.orderPreview")}>
             <div><dt>{t("replay.paper.notionalVal")}</dt><dd>{previewPending ? t("replay.paper.checking") : `${formatDecimal(preview?.estimated_notional, 2)} ${settlementAsset}`}</dd></div>
-            <div><dt>{t("replay.paper.marginAmt")}</dt><dd>{formatDecimal(preview?.reserved_margin, 2)} {settlementAsset}</dd></div>
+            <div><dt>{t("replay.paper.orderBudget")}</dt><dd>{formatDecimal(preview?.reserved_margin, 2)} {settlementAsset}</dd></div>
             <div><dt>{t("replay.paper.feeCap")}</dt><dd>{formatDecimal(preview?.estimated_fee, 4)} {settlementAsset}</dd></div>
           </dl>
 

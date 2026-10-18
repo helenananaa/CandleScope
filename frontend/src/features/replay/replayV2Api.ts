@@ -32,6 +32,7 @@ import {
   parseReplayDisplayProjection,
   type ReplayDisplayProjectionResponse,
 } from "./replayDisplayProjection.js";
+import { parseReplayTapeProjection, type ReplayTapeProjectionRequest } from "./replayTapeProjection.js";
 import {
   parseTrainingRunListResponse,
   parseTrainingRunMarketSelectionResponse,
@@ -510,6 +511,30 @@ export class ReplayV2ApiClient {
       parseReplayViewerStateResponse,
       signal ? { signal } : {},
     );
+  }
+
+  tapeProjectionBySession(sessionId: string, request: ReplayTapeProjectionRequest, signal?: AbortSignal) {
+    const { trackId, displayInterval, dataEpoch, revealedBoundaryMs, sourceSequence, limit, beforeMs, historyEpoch } = request;
+    if (![revealedBoundaryMs, sourceSequence, limit].every(Number.isSafeInteger) || revealedBoundaryMs < 0
+      || sourceSequence < 0 || limit < 1 || limit > 500 || !/^sha256:[0-9a-f]{64}$/.test(dataEpoch)
+      || (beforeMs !== undefined && (!Number.isSafeInteger(beforeMs) || beforeMs < 0 || beforeMs > revealedBoundaryMs + 1))
+      || (historyEpoch !== undefined && !/^sha256:[0-9a-f]{64}$/.test(historyEpoch))) {
+      return Promise.reject(new TypeError("invalid tape projection request"));
+    }
+    const params = new URLSearchParams({ track_id: safeIdentifier(trackId, "track id"),
+      display_interval: safeIdentifier(displayInterval, "display interval"), data_epoch: dataEpoch,
+      revealed_boundary_ms: String(revealedBoundaryMs), source_sequence: String(sourceSequence), limit: String(limit) });
+    if (beforeMs !== undefined) params.set("before_ms", String(beforeMs));
+    if (historyEpoch !== undefined) params.set("history_epoch", historyEpoch);
+    return this.request(`/runs/session/${safeSegment(sessionId, "session id")}/tape-projection?${params}`, value => {
+      const result = parseReplayTapeProjection(value);
+      if (result.session_id !== sessionId || result.track_id !== trackId || result.data_epoch !== dataEpoch
+        || result.display_interval !== displayInterval || result.revealed_boundary_ms !== revealedBoundaryMs
+        || result.source_sequence !== sourceSequence || result.before_ms !== (beforeMs ?? null)
+        || (historyEpoch !== undefined && result.history_epoch !== historyEpoch)
+        || result.bars.length > limit) throw new TypeError("tape projection source changed");
+      return result;
+    }, signal ? { signal } : {});
   }
 
   displayProjectionBySession(

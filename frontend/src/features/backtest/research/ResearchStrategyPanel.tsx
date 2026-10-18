@@ -5,6 +5,7 @@ import { isPythonStrategyEntryEnabled } from "../backtestFlags.js";
 import { restorePythonStudioState } from "../pythonStudio.js";
 import type { BacktestResearchRuntime } from "./backtestResearchTypes.js";
 import ResearchPanelFrame from "./ResearchPanelFrame.js";
+import ResearchExternalProviderPanel from "./ResearchExternalProviderPanel.js";
 
 const PythonStudioPanel = lazy(() => import("../PythonStudioPanel.js"));
 
@@ -61,6 +62,7 @@ export default function ResearchStrategyPanel({ runtime }: { runtime: BacktestRe
               {revisions.map((revision) => <option key={revision.revision_id} value={revision.revision_id}>{revision.label}</option>)}
             </select>
           </label>
+          <ResearchExternalProviderPanel runtime={runtime} />
           <div className="research-button-row">
             <button type="button" disabled={busy || !snapshot} onClick={() => void runtime.actions.smokeStrategyRevision()}>{t("research.strategy.smoke")}</button>
             <button type="button" disabled={busy || !selectedRevisionId} onClick={() => void runtime.actions.copyStrategyRevision()}>{t("research.strategy.copy")}</button>
@@ -69,8 +71,8 @@ export default function ResearchStrategyPanel({ runtime }: { runtime: BacktestRe
           <details className="research-advanced-details">
             <summary>{t("research.strategy.create")}</summary>
             <label className="research-field"><span>{t("research.strategy.name")}</span><input value={revisionName} onChange={(event) => setRevisionName(event.target.value)} /></label>
-            <label className="research-field"><span>{t("research.strategy.language")}</span><select value={revisionLanguage} onChange={(event) => setRevisionLanguage(event.target.value)}><option value="BUILTIN_TEMPLATE">{t("research.strategy.template")}</option><option value="PYNE">{t("research.strategy.pyne")}</option><option value="PINE">{t("research.strategy.pine")}</option></select></label>
-            <label className="research-field"><span>{t("research.strategy.source")}</span><textarea rows={6} value={revisionSource} onChange={(event) => setRevisionSource(event.target.value)} /></label>
+            <label className="research-field"><span>{t("research.strategy.language")}</span><select value={revisionLanguage} onChange={(event) => setRevisionLanguage(event.target.value)}><option value="BUILTIN_TEMPLATE">{t("research.strategy.template")}</option><option value="PYNE">{t("research.strategy.pyne")}</option><option value="PINE">{t("research.strategy.pine")}</option>{runtime.view.capabilities?.flags.BACKTEST_EXTERNAL_PROVIDER_ENABLED && <option value="EXTERNAL_PROVIDER">{t("research.external.title")}</option>}</select></label>
+            <label className="research-field"><span>{t(revisionLanguage === "EXTERNAL_PROVIDER" ? "research.external.manifest" : "research.strategy.source")}</span><textarea rows={6} value={revisionSource} onChange={(event) => setRevisionSource(event.target.value)} /></label>
             <button type="button" disabled={busy || !revisionName.trim()} onClick={() => void runtime.actions.createStrategyRevision({
               name: revisionName,
               language: revisionLanguage,

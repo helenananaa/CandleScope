@@ -176,7 +176,11 @@ def apply_exact_mark_projection(
             reserved += (
                 abs(order_quantity) * Decimal(str(reference)) * contract_size / leverage
             )
-        cash = Decimal(str(run_row["initial_equity"])) + exact_realized - broker_fees
+        # Reprice only trading components. Broker cash also contains explicit
+        # deposits/withdrawals, which must survive mark overlays and reapplication.
+        cash = (Decimal(str(account["cash_balance"]))
+                + exact_realized - Decimal(str(account["realized_pnl"]))
+                + Decimal(str(account["fees_paid"])) - broker_fees)
         equity = cash + unrealized
         available = equity - margin_used - reserved
     except (InvalidOperation, KeyError, TypeError, ValueError) as exc:
@@ -255,6 +259,7 @@ def apply_hedge_mark_projection(
     *,
     run_id: str,
     now_ms: int,
+    track_id: str | None = None,
 ) -> None:
     """Overlay the pinned HEDGE mark on every leg before risk evaluation."""
 
@@ -290,9 +295,10 @@ def apply_hedge_mark_projection(
         """
         SELECT * FROM replay_training_market_track
         WHERE run_id = ? AND subscription_tier = 'FULL'
+          AND (? IS NULL OR track_id = ?)
         ORDER BY stable_ordinal, track_id
         """,
-        (run_id,),
+        (run_id, track_id, track_id),
     ).fetchall()
     projections = {
         row["track_id"]: row
@@ -408,9 +414,9 @@ def apply_hedge_mark_projection(
             Decimal(0),
         )
         cash = Decimal(str(account.get("cash_balance", run["initial_equity"])))
-        equity = (
-            cash + total_unrealized + Decimal(str(contract_account["overlay_cash"]))
-        )
+        # This is the actor-local valuation. Shared funding and fee adjustments
+        # are added once by the global account/risk reducer, never once per track.
+        equity = cash + total_unrealized
         account.update(
             {
                 "equity": decimal_to_string(equity, field_name="pinned hedge equity"),
@@ -735,14 +741,20 @@ def settle_hedge_funding_event(
         )
     track = connection.execute(
         """
-        SELECT track_id, source_sequence
+        SELECT track_id, source_sequence, subscription_tier
         FROM replay_training_market_track
-        WHERE run_id = ? AND track_id = ? AND subscription_tier = 'FULL'
+        WHERE run_id = ? AND track_id = ?
         """,
         (run_id, event.track_id),
     ).fetchone()
     if track is None:
-        raise TypeError("HEDGE funding FULL track is missing")
+        raise TypeError("HEDGE funding track is missing")
+    if track["subscription_tier"] != "FULL":
+        # Dormant inputs remain ordered, but must never settle today's holdings
+        # against historical funding. Admission also checks the whole gap.
+        from ..hedge_track_readmission import _assert_empty_since
+
+        _assert_empty_since(connection, run_id, str(track["track_id"]), virtual_time_ms)
     track_id = str(track["track_id"])
     existing = tuple(
         connection.execute(

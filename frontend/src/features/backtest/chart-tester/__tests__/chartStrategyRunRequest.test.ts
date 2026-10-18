@@ -451,6 +451,8 @@ test("imported dataset previews and freezes without materialize or online resolv
   assert.equal(outcome.kind === "TERMINAL" ? outcome.identity.frozenContextHash : "", outcome.frozenContext?.contextHash);
   assert.equal(outcome.resolution.fidelity.mode, "BAR_APPROX");
   assert.equal(outcome.resolution.materialize.required, false);
+  assert.equal(outcome.resolution.cost_preset?.preset_revision, "2");
+  assert.equal(outcome.resolution.account_execution_preset?.account_model, "SPOT_CASH_V1");
   assert.deepEqual(calls, [
     "revision:PYNE_CHART_V1",
     "preview",

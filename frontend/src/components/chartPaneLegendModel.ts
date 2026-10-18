@@ -1,3 +1,4 @@
+import type { AxisTime, DisplayRow } from "../features/chart-representation/chartRepresentationTypes.js";
 import { sourceTimeFromChartTime } from "../chart-adapter/chartTime.js";
 import { t } from "../i18n/index.js";
 import type { IndicatorDataEntry, IndicatorLine } from "../chart-adapter/chartAdapterTypes.js";
@@ -34,6 +35,15 @@ export function shouldUseLatestChartPaneLegend(
   sourceRow: unknown | null,
 ): boolean {
   return sourceTime === null || (displayRow === null && sourceRow === null);
+}
+
+/** The axis identifies the aggregate source bar; lineage may end at a later base bar. */
+export function resolveChartCrosshairSourceTime(axisTime: AxisTime | null, row: DisplayRow | null = null): number | null {
+  const source = sourceTimeFromChartTime(axisTime) ?? sourceTimeFromChartTime(row?.time);
+  if (source !== null) return source;
+  const fallback = row?.sourceTime ?? row?.customValues?.chartProjection?.sourceToTime
+    ?? row?.customValues?.chartProjection?.sourceFromTime;
+  return typeof fallback === "number" && Number.isFinite(fallback) ? fallback : null;
 }
 
 function finitePoint(point: IndicatorDataEntry | null | undefined): IndicatorDataEntry | null {

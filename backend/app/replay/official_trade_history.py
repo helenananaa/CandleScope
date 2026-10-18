@@ -1,36 +1,31 @@
 """Lazy, revision-bound chart history for official aggregate-trade replay.
 
 Availability is metadata, not a claim that bars have already been validated.
-Every requested daily body is checksum checked and every execution window is
+Every selected archive body is checksum checked and every execution window is
 validated by BarDatasetBuilder before a session can become playable.
 """
 
 from __future__ import annotations
 
-import asyncio
+import json
 import threading
+from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
-
-from app.data_engine.backfill.archive_cache import (
-    AiohttpArchiveHttpClient,
-    HistoricalArchiveCache,
-)
-from app.exchanges.archive import ArchiveGranularity
-from app.exchanges.plugins.binance.archive import BinanceKlineArchiveProvider
 
 from .canonical import canonical_sha256
 from .catalog import ReplaySeriesIdentity
 from .history_archive import (
     ReplayHistoryArchiveError,
     ReplayHistoryArchiveWriter,
-    ReplayHistoryImportBatch,
-    ReplayHistoryRepository,
     _atomic_write_json,
 )
+from .official_chart_archive import OfficialChartArchive
 
 MINUTE = 60_000
 DAY = 86_400_000
+DISPLAY_PAGE_BASE_ROWS = 8192
+DAY_ROW_CACHE_SIZE = 64
 
 
 class OfficialTradeHistoryRepository:
@@ -41,7 +36,8 @@ class OfficialTradeHistoryRepository:
         self.trade_archive = trade_archive
         self.timeout_seconds = timeout_seconds
         self._guard = threading.RLock()
-        self._day_locks = {}
+        self._archives = OfficialChartArchive(self.root, timeout_seconds)
+        self._day_rows = OrderedDict()
         self._day_loader = day_loader or self._download_day
 
     def _path(self, revision):
@@ -58,8 +54,6 @@ class OfficialTradeHistoryRepository:
         return self._path(revision).is_file()
 
     def _load(self, revision, symbol, interval, exchange=None, market_type=None):
-        import json
-
         payload = json.loads(self._path(revision).read_text())
         if (
             canonical_sha256(payload) != revision
@@ -124,6 +118,39 @@ class OfficialTradeHistoryRepository:
         return self._bounds(
             self._load(revision, symbol, interval, exchange, market_type), revision
         )
+
+    def get_history_bounds_at_revision(
+        self, revision, symbol, interval, exchange=None, market_type=None
+    ):
+        bounds = self.get_bounds_at_revision(
+            revision, symbol, interval, exchange, market_type
+        )
+        # Availability catalogs are day-granular. The first archive can begin
+        # partway through its day; only its pinned, verified body proves the
+        # first available minute. Keep catalog discovery lazy, but resolve this
+        # exact origin before a bound history/indicator calculation starts.
+        start = bounds["earliest_open_time"]
+        rows = self.query_bars_at_revision(
+            revision,
+            symbol,
+            interval,
+            exchange=exchange,
+            market_type=market_type,
+            start_ms=start,
+            end_ms=(start // DAY + 1) * DAY - MINUTE,
+            limit=1440,
+            order="ASC",
+        )
+        if not rows:
+            raise ReplayHistoryArchiveError(
+                "official first history day contains no bars"
+            )
+        return {
+            **bounds,
+            "listing_boundary_ms": rows[0]["open_time"],
+            "listing_boundary_source": "verified_official_first_bar",
+            "history_origin_complete": True,
+        }
 
     def get_bounds(self, symbol, interval, exchange=None, market_type=None):
         for s in self.list_all_series():
@@ -226,90 +253,208 @@ class OfficialTradeHistoryRepository:
             )
             identity = ReplaySeriesIdentity(exchange, market_type, symbol)
             root = self.root / "days" / exchange / market_type / symbol / day
-            with self._guard:
-                lock = self._day_locks.setdefault(str(root), threading.Lock())
-            with lock:
-                writer = ReplayHistoryArchiveWriter(root)
-                manifest = writer.current_manifest(identity, "1m")
-                if manifest is None:
-                    self._day_loader(root, identity, day_start)
-                    manifest = writer.current_manifest(identity, "1m")
-                if manifest is None:
-                    raise ReplayHistoryArchiveError(
-                        "official daily K-lines did not materialize"
+            with self._archives.own(root):
+                cache_key = (revision, exchange, market_type, symbol, day_start)
+                with self._guard:
+                    cached_rows = self._day_rows.get(cache_key)
+                    if cached_rows is not None:
+                        self._day_rows.move_to_end(cache_key)
+                if cached_rows is not None:
+                    rows.extend(
+                        dict(row)
+                        for row in cached_rows
+                        if start <= row["open_time"] <= end
                     )
-                # Freeze the first observed checksum-bound day. Never silently
-                # replace a day already used by this catalog revision.
+                    continue
                 binding = self.root / "bindings" / revision[7:] / (day + ".json")
-                import json
-
-                if binding.exists():
-                    pinned = json.loads(binding.read_text())["catalog_epoch"]
+                publish = None
+                selected = self._archives.day_binding(binding, day)
+                if selected is not None:
+                    pinned, month = selected
+                    if month is not None:
+                        root = self._archives.month_root(identity, month)
                 else:
+                    # Existing daily objects win over a new monthly transport.
+                    # Already-bound days above never download or change source.
+                    manifest = ReplayHistoryArchiveWriter(root).current_manifest(
+                        identity, "1m"
+                    )
+                    if manifest is None:
+                        selected_root = self._day_loader(root, identity, day_start)
+                        if selected_root is not None:
+                            root = Path(selected_root)
+                        manifest = ReplayHistoryArchiveWriter(root).current_manifest(
+                            identity, "1m"
+                        )
+                    if manifest is None:
+                        raise ReplayHistoryArchiveError(
+                            "official chart K-lines did not materialize"
+                        )
                     pinned = manifest.catalog_epoch
-                    _atomic_write_json(binding, {"catalog_epoch": pinned})
-                repo = ReplayHistoryRepository(root)
-                rows.extend(
-                    repo.query_bars_at_revision(
+                    publish = {"catalog_epoch": pinned}
+                    if root == self._archives.month_root(identity, day[:7]):
+                        publish["month"] = day[:7]
+                repo = self._archives.repository(root)
+                day_rows = tuple(
+                    dict(row)
+                    for row in repo.query_bars_at_revision(
                         pinned,
                         symbol,
                         "1m",
-                        start_ms=max(start, day_start),
-                        end_ms=min(end, day_start + DAY - MINUTE),
+                        start_ms=day_start,
+                        end_ms=day_start + DAY - MINUTE,
                         limit=1440,
                         exchange=exchange,
                         market_type=market_type,
                     )
                 )
+                if not day_rows:
+                    raise ReplayHistoryArchiveError(
+                        "official available history day contains no bars"
+                    )
+                if publish is not None:
+                    _atomic_write_json(binding, publish)
+                # The revision's first checksum-bound day stays immutable.
+                # Keep private rows; callers receive copies filtered to their
+                # own revealed boundary, including after a future page read.
+                with self._guard:
+                    self._day_rows[cache_key] = day_rows
+                    self._day_rows.move_to_end(cache_key)
+                    while len(self._day_rows) > DAY_ROW_CACHE_SIZE:
+                        self._day_rows.popitem(last=False)
+                rows.extend(
+                    dict(row) for row in day_rows if start <= row["open_time"] <= end
+                )
         rows.sort(key=lambda row: row["open_time"], reverse=order == "DESC")
         return rows[:limit]
 
     def _download_day(self, root, identity, day_start):
-        async def download():
-            provider = BinanceKlineArchiveProvider()
-            refs = provider.plan_objects(
-                market_type=identity.market_type,
-                symbol=identity.symbol,
-                interval="1m",
-                start_ms=day_start,
-                end_ms=day_start + DAY - 1,
-                now_ms=int(datetime.now(timezone.utc).timestamp() * 1000),
-            )
-            ref = next(
-                r
-                for r in refs
-                if r.granularity is ArchiveGranularity.DAILY and r.start_ms == day_start
-            )
-            cache = HistoricalArchiveCache(
-                self.root / "downloads", max_bytes=512 * 1024**2
-            )
-            http = AiohttpArchiveHttpClient(timeout_seconds=self.timeout_seconds)
-            async with cache.materialize(ref, provider, http) as cached:
-                if cached.provider_checksum is None:
-                    raise ReplayHistoryArchiveError(
-                        "official K-lines require checksum verification"
-                    )
-                parsed = await asyncio.to_thread(
-                    provider.parse_bars_for_replay, cached.path, ref
-                )
-                batch = ReplayHistoryImportBatch(
-                    rows=parsed.bars,
-                    source_provider=ref.provider_id,
-                    source_object_key=ref.object_key,
-                    source_period=ref.period,
-                    source_url=ref.url,
-                    source_content_sha256="sha256:" + cached.content_sha256,
-                    source_provider_checksum="sha256:" + cached.provider_checksum,
-                    source_row_count=parsed.source_row_count,
-                    source_rejected_rows=parsed.rejected_row_count,
-                    source_normalized_rows=parsed.normalized_row_count,
-                    source_filter_policy="binance_checksum_utc_grid_v2",
-                    source_rejection_reasons=parsed.rejection_reasons,
-                )
-                writer = ReplayHistoryArchiveWriter(root)
-                writer.import_batches(identity, "1m", [batch])
+        return self._archives.ensure_day_source(root, identity, day_start)
 
-        asyncio.run(download())
+    def _tape_context_selections(
+        self, revision, symbol, interval, *, start_ms, end_ms,
+        exchange=None, market_type=None, cancelled,
+    ):
+        """One immutable day/month selection for display and indicator readers."""
+        payload = self._load(revision, symbol, interval, exchange, market_type)
+        bounds = self._bounds(payload, revision)
+        if (
+            interval != "1m"
+            or start_ms < bounds["earliest_open_time"]
+            or end_ms > bounds["latest_open_time"] + MINUTE
+            or not 0 < end_ms - start_ms <= 32_768 * MINUTE
+        ):
+            return None
+        identity = ReplaySeriesIdentity(exchange, market_type, symbol)
+        selections = []
+        for day_start in range(
+            start_ms // DAY * DAY, (end_ms - 1) // DAY * DAY + 1, DAY
+        ):
+            if cancelled.is_set():
+                raise InterruptedError("official indexed context cancelled")
+            if not any(
+                a <= day_start and day_start + DAY - 1 <= b
+                for a, b in payload["ranges"]
+            ):
+                return None
+            day = (
+                datetime.fromtimestamp(day_start / 1000, timezone.utc)
+                .date()
+                .isoformat()
+            )
+            binding = self.root / "bindings" / revision[7:] / (day + ".json")
+            selected = self._archives.day_binding(binding, day)
+            if selected is None:
+                # The normal source selection owns validation/publication. A
+                # one-row request binds only this day, never future day pins.
+                self.query_bars_at_revision(
+                    revision,
+                    symbol,
+                    interval,
+                    start_ms=max(start_ms, day_start),
+                    end_ms=min(end_ms, day_start + DAY) - 1,
+                    limit=1,
+                    exchange=exchange,
+                    market_type=market_type,
+                )
+                selected = self._archives.day_binding(binding, day)
+            if selected is None:
+                return None
+            pin, month = selected
+            root = self.root / "days" / exchange / market_type / symbol / day
+            if month is not None:
+                root = self._archives.month_root(identity, month)
+            first, last = max(start_ms, day_start), min(end_ms, day_start + DAY)
+            if (
+                selections
+                and selections[-1][:2] == (root, pin)
+                and selections[-1][3] == first
+            ):
+                previous = selections[-1]
+                selections[-1] = (root, pin, previous[2], last)
+            else:
+                selections.append((root, pin, first, last))
+        return selections
+
+    def tape_indicator_closes_at_revision(
+        self, revision, symbol, interval, *, start_ms, end_ms, close_times,
+        exchange=None, market_type=None, cancelled,
+    ):
+        from .indicator_market_columns import read_pinned_closes
+
+        if close_times != sorted(set(close_times)) or any(
+            at < start_ms or at >= end_ms or at % MINUTE for at in close_times
+        ):
+            return None
+        selections = self._tape_context_selections(
+            revision, symbol, interval, start_ms=start_ms, end_ms=end_ms,
+            exchange=exchange, market_type=market_type, cancelled=cancelled,
+        )
+        if selections is None:
+            return None
+        identity = ReplaySeriesIdentity(exchange, market_type, symbol)
+        result = []
+        for root, pin, first, last in selections:
+            times = [at for at in close_times if first <= at < last]
+            values = read_pinned_closes(
+                self._archives.repository(root), pin, identity,
+                first, last, times, cancelled,
+            )
+            if values is None:
+                return None
+            result.extend(values)
+        return result if len(result) == len(close_times) else None
+
+    def tape_context_market_at_revision(
+        self, revision, symbol, interval, *, start_ms, end_ms, offset_ms=0,
+        exchange=None, market_type=None, cancelled,
+    ):
+        """Select existing day pins, then share their immutable range indexes."""
+        from .shared_market_index import MarketRange
+
+        selections = self._tape_context_selections(
+            revision, symbol, interval, start_ms=start_ms, end_ms=end_ms,
+            exchange=exchange, market_type=market_type, cancelled=cancelled,
+        )
+        if selections is None:
+            return None
+        parts = []
+        for root, pin, first, last in selections:
+            if cancelled.is_set():
+                raise InterruptedError("official indexed context cancelled")
+            market = self._archives.repository(root).shared_market_at_revision(
+                pin,
+                symbol,
+                interval,
+                start_ms=first,
+                end_ms=last,
+                exchange=exchange,
+                market_type=market_type,
+            )
+            if market is None:
+                return None
+            parts.extend(market.parts)
+        return MarketRange(parts, offset_ms) if parts else None
 
 
 class TradeHistoryRouter:
@@ -334,6 +479,13 @@ class TradeHistoryRouter:
         repo = self.official if self.official.owns(revision) else self.local
         return repo.get_bounds_at_revision(revision, *args, **kwargs)
 
+    def get_history_bounds_at_revision(self, revision, *args, **kwargs):
+        repo = self.official if self.official.owns(revision) else self.local
+        reader = getattr(
+            repo, "get_history_bounds_at_revision", repo.get_bounds_at_revision
+        )
+        return reader(revision, *args, **kwargs)
+
     def scan_gaps_at_revision(self, revision, *args, **kwargs):
         repo = self.official if self.official.owns(revision) else self.local
         return repo.scan_gaps_at_revision(revision, *args, **kwargs)
@@ -341,3 +493,32 @@ class TradeHistoryRouter:
     def query_bars_at_revision(self, revision, *args, **kwargs):
         repo = self.official if self.official.owns(revision) else self.local
         return repo.query_bars_at_revision(revision, *args, **kwargs)
+
+    def tape_indicator_closes_at_revision(self, revision, *args, **kwargs):
+        if not self.official.owns(revision):
+            return None
+        return self.official.tape_indicator_closes_at_revision(revision, *args, **kwargs)
+
+    def tape_context_market_at_revision(self, revision, *args, **kwargs):
+        if not self.official.owns(revision):
+            return None
+        return self.official.tape_context_market_at_revision(revision, *args, **kwargs)
+
+    def query_source_bucket_bars_at_revision(self, revision, *args, **kwargs):
+        # A mixed trade/BAR deployment must retain local BAR projections. The
+        # official daily source cannot use the local Parquet implementation;
+        # aggregate its bounded, immutable minute reads through the same
+        # revealed-only reducer used for progressive history instead.
+        if not self.official.owns(revision):
+            return self.local.query_source_bucket_bars_at_revision(
+                revision, *args, **kwargs
+            )
+        from .source_bucket_projection import query_source_bucket_projection
+
+        return query_source_bucket_projection(
+            self.official,
+            revision,
+            *args,
+            **kwargs,
+            max_base_rows=DISPLAY_PAGE_BASE_ROWS,
+        )

@@ -136,7 +136,7 @@ def reconstruct_portfolio_interval(basis, *, input_root, limit=5000, bucket_ms=6
         or bucket_ms < 0
     ):
         raise ValueError("invalid portfolio interval query")
-    if basis.get("schema") == "multi-tape-interval.v1":
+    if basis.get("schema") in {"multi-tape-interval.v1", "multi-tape-interval.v2"}:
         from .tape_interval import reconstruct
         return reconstruct(basis, limit=limit, bucket_ms=bucket_ms)
     if basis.get("schema") == "portfolio-point.v1":

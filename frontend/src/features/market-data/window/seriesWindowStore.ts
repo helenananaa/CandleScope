@@ -342,6 +342,28 @@ export class SeriesWindowStore {
     return this._applyRange(rows, meta, false);
   }
 
+  /** Replace authoritative prices inside the current window without resuming
+   * live following or changing the series identity. Missing rows are removed. */
+  correctWindow(rows: readonly KlineBarInput[], meta: WindowDeltaDetail = {}): WindowDelta {
+    const first = this.first()?.time;
+    const last = this.last()?.time;
+    const incoming = normalizeRows(rows);
+    if (first === undefined || last === undefined || incoming.length > this.maxBars
+      || incoming.some(row => row.time < first || row.time > last)) {
+      throw new RangeError("corrected rows must belong to the existing chart window");
+    }
+    const originalBars = this.barCount;
+    this._replaceRows(incoming);
+    this._version += 1;
+    this._axisRevision += 1;
+    const delta = createWindowDelta(WINDOW_DELTA_TYPES.MID_MERGE, {
+      bars: this.barCount, originalBars, incomingBars: incoming.length,
+      changedRanges: [{ start: first, end: last, type: "mid-merge" }], ...meta,
+    });
+    this._emit(delta);
+    return delta;
+  }
+
   /**
    * Merge one explicitly requested chronological page to the right of a
    * bounded historical window. Ordinary range/tick writers remain fenced so

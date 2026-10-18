@@ -1,4 +1,5 @@
 import { LineType } from "lightweight-charts";
+import { MainSeriesPriceFormatTracker } from "./mainSeriesPriceFormat.js";
 import {
   isOhlcMainChartType,
   normalizeMainChartType,
@@ -564,6 +565,7 @@ export function buildMainSeriesOptions(
   rows: ChartSeriesInputRow[] = [],
 ): Record<string, unknown> {
   return {
+    priceFormat: new MainSeriesPriceFormatTracker().resolve(rows),
     ...buildMainSeriesStyleOptions(chartType, options),
     ...buildMainSeriesReferenceOptions(chartType, rows),
   };

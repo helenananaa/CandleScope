@@ -4,7 +4,9 @@ import type { PreparationJob } from "./api.js";
 
 export default function PreparationWaiting({ job }: { job: PreparationJob }) {
   const locale = useLocale();
-  if (job.state !== "RUNNING" || job.waiting?.reason !== "RATE_LIMIT") return null;
+  if (job.state !== "RUNNING") return null;
+  if (job.stage === "CHECKING_STORAGE") return <span role="status">{t("preparation.inventoryScanning")}</span>;
+  if (job.waiting?.reason !== "RATE_LIMIT") return null;
   return <span role="status">{t("preparation.rateLimited", {
     time: new Date(job.waiting.retry_at_ms).toLocaleString(locale),
   })}</span>;

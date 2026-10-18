@@ -135,3 +135,21 @@ bundle. Consumers must pass that published digest to the generic installer; hash
 an untrusted local bundle on demand does not establish publisher identity. A changed
 wheel or probe requires a new plugin version and must never overwrite an existing
 release artifact.
+
+### 0.3.1 host incremental history
+
+`pyne-external/5` evaluates `init/on_bar` scripts without fill recalculation under
+`pyne.host-fixed-history/1`. Each closed source bar runs once. `last_bar_index` is
+fixed at the frozen dataset endpoint; only that final bar has `islast` and
+`islastconfirmedhistory`. All callbacks are historical, confirmed, and not realtime.
+This intentionally differs from the legacy prefix evaluator's moving endpoint.
+Reports disclose the contract and historical reports remain unchanged.
+
+Only the horizon count is known upfront, never future prices/account feedback or
+unclosed requested bars. CandleScope still owns matching and cash accounting;
+Renko observations cannot supply execution prices. Errors, cancellation and host
+deadlines terminate the worker. Reruns rebuild from frozen inputs. Batch scripts
+and fill-recalculation callbacks retain `historical-prefix/1`; their large-history
+performance remains a separate qualification. The published 0.3.0 lock remains unchanged. Building the 0.3.1 source requires
+an explicit platform-specific candidate lock with the actual wheel digests.
+No new event-engine release is published by this change.

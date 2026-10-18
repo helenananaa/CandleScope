@@ -410,6 +410,7 @@ function stripProtocol(text: string): string {
   return text
     .replace(/\{\{?[A-Za-z0-9_]+\}?\}/g, " ")
     .replace(/\b(?:React|Lightweight Charts)\b/g, " ")
+    .replace(/\b\d+(?:\.\d+)?x\b/g, " ")
     .replace(/\b(?:Apple Silicon|Intel)\b/g, " ")
     .replace(/\bHome\b/g, " ") // Keyboard key label; lowercase English prose still counts.
     .replace(/\b[\w-]+\.(?:csv|json)\b/g, " ")
@@ -460,6 +461,7 @@ function leftoverSourceTokens(english: string, portuguese: string): string[] {
 }
 
 test("Portuguese copy checks preserve product names and executable examples without allowing English prose", () => {
+  assert.deepEqual(leftoverSourceTokens("Spot uses 1x leverage.", "À vista usa alavancagem de 1x."), []);
   assert.deepEqual(leftoverSourceTokens(
     "Use React and Lightweight Charts; import bars.csv and execution.json; use_bar_magnifier=true; init/on_bar/on_fill(ctx, bar).",
     "Utilize React e Lightweight Charts; importe bars.csv e execution.json; use_bar_magnifier=true; init/on_bar/on_fill(ctx, bar).",

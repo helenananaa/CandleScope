@@ -62,11 +62,15 @@ def public_review_projection(
     if not isinstance(public, dict):
         raise TypeError("review projection is invalid")
     public.pop("_account_history_internal", None)
+    public.pop("_hedge_history_internal", None)
     public.pop("_book_history_internal", None)
     public.pop("_review_descriptor_internal", None)
     domain = public.get("domain")
     if isinstance(domain, dict):
         domain.pop("critical_ledger_count", None)
+        if "portfolio" not in domain:
+            from ..review_account import legacy_account
+            domain["portfolio"] = legacy_account(public)
 
     blocked = {
         "archive_id",

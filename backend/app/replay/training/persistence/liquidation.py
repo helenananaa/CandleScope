@@ -993,6 +993,8 @@ def detect_contract_liquidations(
     trigger_virtual_time_ms: int | None = None,
     refresh_current_equity: bool = False,
     record_valuation_history: bool = True,
+    include_dormant: bool = False,
+    detect_new_cases: bool = True,
 ) -> None:
     account = connection.execute(
         """
@@ -1013,10 +1015,10 @@ def detect_contract_liquidations(
         connection.execute(
             """
             SELECT * FROM replay_training_market_track
-            WHERE run_id = ? AND subscription_tier = 'FULL'
+            WHERE run_id = ? AND (subscription_tier = 'FULL' OR ?)
             ORDER BY stable_ordinal, track_id
             """,
-            (run_id,),
+            (run_id, include_dormant),
         ).fetchall()
     )
     initial = Decimal(str(account["initial_equity"]))
@@ -1042,7 +1044,7 @@ def detect_contract_liquidations(
         ]
     ] = []
     total_maintenance = Decimal(0)
-    rules = load_track_rules(connection, run_id, effective=False)
+    rules = load_track_rules(connection, run_id, effective=False, include_dormant=include_dormant)
     for track in tracks:
         track_account = json.loads(str(track["account_json"]))
         position = json.loads(str(track["position_json"]))
@@ -1759,6 +1761,9 @@ def detect_contract_liquidations(
             state=ledger_append_state,
             now_ms=now_ms,
         )
+    if not detect_new_cases:
+        persist_current_equity()
+        return
     if not positions:
         pending = connection.execute(
             """

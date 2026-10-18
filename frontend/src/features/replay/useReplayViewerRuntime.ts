@@ -1,6 +1,7 @@
+import { buildReplayViewerCommand } from "./replayViewerCommands.js";
 import type { ReplayDigest } from "./replayTypes.js";
 import { describeError } from "../../i18n/serverErrors.js";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { recordPerfEvent } from "../../runtime/performance/perfMarks.js";
 
@@ -38,6 +39,7 @@ import {
 import type { ReplayRuntime } from "./useReplayRuntime.js";
 import { ReplayTrainingRunStream } from "./replayTrainingRunStream.js";
 import { marketTrackProjectionIsOlder } from "./marketTrackProjectionOrder.js";
+import { ReplayTapeViewer, type ReplayTapeViewerObservation } from "./replayTapeViewer.js";
 
 
 export type ReplayPhase3ControlType = Extract<ReplayV2CommandType,
@@ -354,6 +356,7 @@ export interface ReplayViewerRuntime {
   readonly marketTracks: ReplayMarketTracksResponse | null;
   readonly seriesStore: SeriesWindowStore;
   readonly historyBootstrapBeforeMs?: number | null;
+  readonly tapeObservation?: ReplayTapeViewerObservation | null;
   readonly loading: boolean;
   readonly error: string | null;
   readonly eventStopMessage?: string | null;
@@ -405,6 +408,7 @@ export interface ReplayViewerRuntime {
     resyncHistoricalBook(): Promise<void>;
     preparePeriodSummaries(): Promise<void>;
     reload(): void;
+    restoreLatestProjection?(): Promise<boolean>;
   };
 }
 
@@ -456,14 +460,13 @@ export function useReplayViewerRuntime(
   const controlRef = useRef(controlPending);
   controlRef.current = controlPending;
   const viewerCommandRef = useRef<string | null>(null);
-  const commandStoreRef = useRef(runtime.store);
-  useLayoutEffect(() => { commandStoreRef.current = runtime.store; }, [runtime.store]);
   const inlineCommandRef = useRef(false);
   const inlineTailRef = useRef<{
     projection: ReplayDisplayProjectionResponse;
     previousBoundaryMs: number;
   } | null>(null);
   const refreshProjectionRef = useRef<(() => void) | null>(null);
+  const tapeViewerRef = useRef<ReplayTapeViewer | null>(null);
   const streamedTracksRef = useRef<ReplayMarketTracksResponse | null>(null);
   const coordinatedPresentationRef = useRef(false);
   const bufferedMarketTracksRef = useRef<ReplayMarketTracksResponse | null>(null);
@@ -483,6 +486,7 @@ export function useReplayViewerRuntime(
   const sourceMarketType = config?.market_type ?? null;
   const sourceSymbol = config?.symbol ?? null;
   const dataEpoch = runtime.store.dataEpoch;
+  const requiresTapeProjection = config?.source_kind === "agg_trade";
   const requiresSourceBucketProjection = replayUsesAuthoritativeSourceBucketProjection(
     config?.source_kind,
     baseInterval,
@@ -506,7 +510,7 @@ export function useReplayViewerRuntime(
     )) {
       throw new Error("authoritative replay adapter is not projected at the base interval");
     }
-    if (replayUsesAuthoritativeSourceBucketProjection(
+    if (config?.source_kind === "agg_trade" || replayUsesAuthoritativeSourceBucketProjection(
       config?.source_kind,
       baseInterval,
       next.display_interval,
@@ -565,6 +569,8 @@ export function useReplayViewerRuntime(
     viewerSeriesCache,
   ]);
   const seriesStore = viewerSeriesBinding.store;
+  const [tapeStatus, setTapeStatus] = useState<{ store: SeriesWindowStore; loading: boolean;
+    observation: ReplayTapeViewerObservation | null } | null>(null);
   const [historyBootstrap, setHistoryBootstrap] = useState<{
     store: SeriesWindowStore; dataEpoch: ReplayDigest; beforeMs: number;
   } | null>(null);
@@ -690,6 +696,36 @@ export function useReplayViewerRuntime(
 
   useEffect(() => {
     if (controllerOnly) return;
+    if (requiresTapeProjection) {
+      const trackId = viewerState?.selected_track_id;
+      if (!sessionId || !trackId || !dataEpoch || !displayInterval || !baseInterval
+        || !sourceExchange || !sourceMarketType || !sourceSymbol) return;
+      setTapeStatus({ store: seriesStore, loading: true, observation: null });
+      const tape = new ReplayTapeViewer({ sessionId, trackId, dataEpoch,
+        identity: { exchange: sourceExchange, market_type: sourceMarketType, symbol: sourceSymbol,
+          source_kind: "AGG_TRADE", base_interval: baseInterval, display_interval: displayInterval },
+        source: sourceStore, target: seriesStore, authority: () => {
+          const current = runtime.replayStore.getAuthoritySnapshot();
+          return current.sessionId === sessionId && current.hasAuthoritativeSnapshot && current.virtualTimeMs !== null
+            ? { generation: current.generation, sourceSequence: current.sourceSequence, virtualTimeMs: current.virtualTimeMs } : null;
+        }, observation: observation => setTapeStatus(previous => ({ store: seriesStore,
+          loading: previous?.store === seriesStore && previous.loading, observation })),
+        loading: loading => setTapeStatus(previous => ({ store: seriesStore, loading,
+          observation: previous?.store === seriesStore ? previous.observation : null })),
+        error: cause => setError(cause === null ? null : describeError(cause, cause.message)),
+      });
+      tapeViewerRef.current = tape;
+      const refresh = () => { if (!inlineCommandRef.current) tape.update(); };
+      refreshProjectionRef.current = refresh;
+      const unsubscribeSource = sourceStore.subscribe(refresh);
+      const unsubscribeAuthority = runtime.replayStore.subscribe(refresh);
+      refresh();
+      return () => {
+        unsubscribeSource(); unsubscribeAuthority(); tape.dispose();
+        if (tapeViewerRef.current === tape) tapeViewerRef.current = null;
+        if (refreshProjectionRef.current === refresh) refreshProjectionRef.current = null;
+      };
+    }
     if (requiresSourceBucketProjection) {
       let disposed = false;
       let projectedBoundaryMs: number | null = null;
@@ -881,6 +917,7 @@ export function useReplayViewerRuntime(
     dataEpoch,
     displayInterval,
     requiresSourceBucketProjection,
+    requiresTapeProjection,
     runtime.replayStore,
     seriesStore,
     sessionId,
@@ -889,6 +926,7 @@ export function useReplayViewerRuntime(
     sourceSymbol,
     sourceStore,
     viewerSeriesCache,
+    viewerState?.selected_track_id,
   ]);
 
   useEffect(() => {
@@ -925,26 +963,11 @@ export function useReplayViewerRuntime(
     payload: Readonly<Record<string, ReplayV2Json>>,
     prefix: string,
   ): ReplayV2Command => {
-    const viewer = viewerRef.current;
-    const store = commandStoreRef.current;
-    if (viewer === null || store.virtualTimeMs === null || store.sessionId === null) {
-      throw new Error("replay.v3 viewer is not command-ready");
-    }
-    return {
-      protocol: "replay.v3",
-      run_id: viewer.run_id,
-      command_id: commandId(prefix),
-      client_instance_id: runtime.clientInstanceId,
-      expected_revision: store.revision,
-      expected_cursor: {
-        virtual_time_ms: store.virtualTimeMs,
-        source_sequence: store.sourceSequence,
-        revision: store.revision,
-      },
-      type,
-      payload,
-    };
-  }, [runtime.clientInstanceId]);
+    return buildReplayViewerCommand({
+      store: runtime.replayStore, viewer: viewerRef.current,
+      clientInstanceId: runtime.clientInstanceId, commandId: commandId(prefix), type, payload,
+    });
+  }, [runtime.clientInstanceId, runtime.replayStore]);
 
   const submitControl = useCallback(async (
     type: ReplayPhase3ControlType,
@@ -1383,7 +1406,8 @@ export function useReplayViewerRuntime(
     setDisplayInterval, submitControl, cancelAdvance, selectTrack, setSubscriptionTier,
     addAndSelectTrack, addTrack, submitTrade, previewOrder, orderCapacity, auditAccount,
     resyncHistoricalBook, preparePeriodSummaries,
-    reload: () => setReloadRevision((value) => value + 1),
+    reload: () => { setReloadRevision((value) => value + 1); void tapeViewerRef.current?.restoreLatest(); },
+    restoreLatestProjection: () => tapeViewerRef.current?.restoreLatest() ?? Promise.resolve(false),
   }), [setDisplayInterval, submitControl, cancelAdvance, selectTrack, setSubscriptionTier,
     addAndSelectTrack, addTrack, submitTrade, previewOrder, orderCapacity, auditAccount,
     resyncHistoricalBook, preparePeriodSummaries]);
@@ -1393,7 +1417,8 @@ export function useReplayViewerRuntime(
     seriesStore,
     historyBootstrapBeforeMs: historyBootstrap?.store === seriesStore
       && historyBootstrap.dataEpoch === dataEpoch ? historyBootstrap.beforeMs : null,
-    loading,
+    ...(requiresTapeProjection ? { tapeObservation: tapeStatus?.store === seriesStore ? tapeStatus.observation : null } : {}),
+    loading: loading || (requiresTapeProjection && seriesStore.isEmpty() && (tapeStatus?.store !== seriesStore || tapeStatus.loading)),
     error,
     eventStopMessage,
     controlPending,

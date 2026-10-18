@@ -141,7 +141,7 @@ class NativeBacktests:
                     external_plugin = {**plugin, "command": [*plugin["command"][:-1], plugin["command"][-1].replace(".native_strategy", ".external_strategy")]}
                     external = self.runner(external_plugin, {"operation": "describe"}, timeout=15)
                     supported = {"pine": {"pine-external/1", "pine-external/2", "pine-external/3", "pine-external/4", "pine-external/5"},
-                                 "pyne": {"pyne-external/1", "pyne-external/2", "pyne-external/3", "pyne-external/4"}}
+                                 "pyne": {"pyne-external/1", "pyne-external/2", "pyne-external/3", "pyne-external/4", "pyne-external/5"}}
                     external_available = (external["identity"].get("protocol") == PROTOCOL
                                           and external["identity"].get("adapter") in supported[language])
                 except Exception:
@@ -249,6 +249,7 @@ class NativeBacktests:
                 wire.update(fill_recalculation=payload.get("fill_recalculation", False), execution_events=freeze_execution(self, payload, bars), execution_fidelity=payload.get("execution_fidelity", "BAR_APPROX"))
                 wire["execution_provenance"] = (payload.get("execution_data") or {}).get("provenance", {})
                 wire.update(host_settings=payload["host_settings"], interval=payload["interval"], host_runtime_identity=host_identity(),
+                            account_model="SPOT_CASH_V1" if payload.get("market_type", "usdm") == "spot" else "LINEAR_PERP_ONE_WAY_V1",
                             context_intervals=[item["interval"] for item in payload.get("contexts", [])])
             if len(encoded(wire).encode()) > MAX_BYTES:
                 raise BacktestError("BUDGET_EXCEEDED", "native input exceeds 64 MiB")

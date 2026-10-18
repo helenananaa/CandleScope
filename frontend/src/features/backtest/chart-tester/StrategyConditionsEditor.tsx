@@ -11,6 +11,7 @@ export function StrategyConditionsEditor({ settings, marketType, onChange }: {
   };
   const fields = [
     ["initialBalance", "chartTester.settings.capital", "USDT"],
+    ["equityPercent", "backtest.equityPct", ""],
     ["leverage", "backtest.leverage", "×"],
     ["feeBps", "chartTester.settings.fee", "bps"],
     ["slippageBps", "ux.slippage", "bps"],
@@ -30,11 +31,13 @@ export function StrategyConditionsEditor({ settings, marketType, onChange }: {
     <label className="strategy-condition-toggle"><input type="checkbox" checked={settings.executionOverrides !== undefined}
       onChange={(event) => { const { executionOverrides: _removed, ...range } = settings; void _removed; onChange(event.target.checked ? { ...settings, executionOverrides: values } : range); }} />{t("ux.customExecution")}</label>
     <div className="strategy-condition-grid">
-      {fields.map(([key, label, unit]) => <label key={key}>{t(label)} · {unit}<input type="number" step="any" disabled={!settings.executionOverrides} value={values[key]}
+      {fields.map(([key, label, unit]) => <label key={key}>{t(label)}{unit ? ` · ${unit}` : ""}<input type="number" step="any" max={key === "leverage" && marketType === "spot" ? 1 : undefined} disabled={!settings.executionOverrides} value={values[key]}
         onChange={(event) => onChange({ ...settings, executionOverrides: { ...values, [key]: event.target.value } as StrategyExecutionOverrides })} /></label>)}
     </div>
     <p>{t(settings.executionOverrides ? "ux.customExecutionHint" : "chartTester.settings.feePending")}</p>
     <p>{t("ux.positionFromCode")}</p>
+    <p>{t("ux.signalSizingHint")}</p>
+    {marketType === "spot" && <p>{t("ux.spotCashHint")}</p>}
     {!validStrategyRunSettings(settings) && <p role="alert">{t("ux.invalidConditions")}</p>}
   </section>;
 }

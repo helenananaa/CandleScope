@@ -17,6 +17,7 @@ from ..account import (
     isolated_margin_key,
 )
 from ..errors import TrainingRunError
+from ..prepared_display import uses_prepared_base_history
 from ..historical_book import (
     PreparedHistoricalBookBinding,
     bind_historical_book_archive,
@@ -1803,6 +1804,7 @@ class TrainingMarketRepository:
                     s.config_json,
                     s.data_epoch AS session_data_epoch,
                     s.degraded_reason,
+                    primary_dataset.snapshot_ref_json AS primary_snapshot_ref_json,
                     policy.schema_version,
                     policy.indicator_warmup_bars,
                     policy.visible_history_mode,
@@ -1817,6 +1819,8 @@ class TrainingMarketRepository:
                 FROM replay_training_run AS r
                 JOIN replay_training_market_track AS t ON t.run_id = r.run_id
                 JOIN replay_session AS s ON s.session_id = t.adapter_session_id
+                JOIN replay_dataset_ref AS primary_dataset
+                  ON primary_dataset.session_id = r.adapter_session_id
                 JOIN replay_training_data_policy AS policy USING(run_id)
                 WHERE t.adapter_session_id = ? AND t.track_id = ?
                 """,
@@ -1848,6 +1852,9 @@ class TrainingMarketRepository:
         return {
             "run_id": str(row["run_id"]),
             "primary_adapter_session_id": str(row["primary_adapter_session_id"]),
+            "prepared_base_history": uses_prepared_base_history(
+                json.loads(str(row["primary_snapshot_ref_json"]))
+            ),
             "session_id": str(row["adapter_session_id"]),
             "track_id": str(row["track_id"]),
             "exchange": str(row["exchange"]),

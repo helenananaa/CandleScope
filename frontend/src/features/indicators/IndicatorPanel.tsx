@@ -22,6 +22,7 @@ import { IndicatorCategoryIcon } from "./IndicatorCategoryIcon.js";
 import { IndicatorNumberInput } from "./IndicatorNumberInput.js";
 import { indicatorParamLabel, indicatorSourceLabel } from "./indicatorParamLabels.js";
 import IndicatorEditor from "./IndicatorEditor";
+import { isFrontendScript } from "./frontendScriptContract.js";
 import type { ReactNode } from "react";
 import type { CatalogIndicator } from "./useIndicatorCatalogRuntime.js";
 import type {
@@ -152,7 +153,9 @@ export interface IndicatorPanelProps {
     securityMode?: string,
   ): void;
   computing: boolean;
-  realtimeMode?: "enabled" | "degraded" | "historical-only";
+  // A provided-data surface may supply its own truthful modeNotice instead
+  // of the live-market finality badge (for example, a revealed replay tail).
+  realtimeMode?: "enabled" | "degraded" | "historical-only" | null;
   onRecompute?: (force?: boolean) => void;
   marketStudies?: readonly IndicatorPanelMarketStudy[];
   onAddMarketStudy?: (studyId: string) => void;
@@ -329,6 +332,9 @@ export default function IndicatorPanel({
   });
   const [searchQuery, setSearchQuery] = useState("");
   const [editingIndicator, setEditingIndicator] = useState<IndicatorEditorSource | null>(null);
+  // Preview assigns an id and can change the saved language. Neither starts a
+  // new editing session: remounting here would discard other language drafts.
+  const [editorSession, setEditorSession] = useState(0);
   const activeMarketStudies = marketStudies.filter((study) => study.added);
   const activeItemCount = activeIndicators.length + activeMarketStudies.length;
 
@@ -482,18 +488,12 @@ export default function IndicatorPanel({
   }, [activeIndicators, deleteCustomIndicator, onRemoveIndicator]);
 
   const handleCreateCustom = useCallback(() => {
+    setEditorSession((session) => session + 1);
     setEditingIndicator({
       id: null,
       name: "My Indicator",
-      script: `indicator("My Indicator", overlay=True)
-
-length = input.int(20, "Length", minval=1)
-src = input.source(close, "Source")
-line_color = input.color(color.orange, "Color")
-
-ma = ta.sma(src, length)
-plot(ma, "MA", color=line_color)
-`,
+      // The runtime catalog chooses both the language and its starter source.
+      script: "",
       params: {},
       description: "",
       securityMode: "safe",
@@ -504,6 +504,7 @@ plot(ma, "MA", color=line_color)
   }, []);
 
   const handleEditIndicator = useCallback((indicator: IndicatorDefinition) => {
+    setEditorSession((session) => session + 1);
     setEditingIndicator({ ...indicator });
     setTab("editor");
   }, []);
@@ -522,6 +523,7 @@ plot(ma, "MA", color=line_color)
   }), []);
 
   const handleForkBuiltin = useCallback((indicator: IndicatorEditorValue) => {
+    setEditorSession((session) => session + 1);
     const draft = toCustomDraft({
       ...indicator,
       id: null,
@@ -587,6 +589,10 @@ plot(ma, "MA", color=line_color)
       });
     } catch (err) {
       console.error("Failed to save custom indicator:", err);
+      window.alert(t("indicator.saveFailed", {
+        error: err instanceof Error ? describeError(err, err.message) : String(err),
+      }));
+      return;
     }
 
     if (!shouldFork && activeIndicators.some((i) => i.id === saved.id)) {
@@ -630,7 +636,13 @@ plot(ma, "MA", color=line_color)
     id: previewedActiveIndicator?.id || null,
     error: previewedActiveIndicator?.error || null,
     visible: previewedActiveIndicator ? previewedActiveIndicator.visible !== false : true,
-    isComputing: computing
+    // Preview/add/source changes clear lines before the asynchronous worker
+    // publishes a result. Frontend scripts always return at least one line,
+    // including successful all-null warm-up output. An ID alone is not success.
+    isComputing: computing || Boolean(previewedActiveIndicator
+      && isFrontendScript(previewedActiveIndicator)
+      && !previewedActiveIndicator.error
+      && !previewedActiveIndicator.lines?.length)
   } : null;
 
   // Filter presets by search
@@ -699,7 +711,7 @@ plot(ma, "MA", color=line_color)
             {...(allowedSecurityModes === undefined
               ? {}
               : { allowedSecurityModes })}
-            key={`${editingIndicator.id || "new"}:${isBuiltinIndicator(editingIndicator) ? "builtin" : editingIndicator.language || "descriptor-default"}`}
+            key={editorSession}
             indicator={editingIndicator}
             onSave={handleEditorSave}
             onBack={handleEditorBack}

@@ -115,6 +115,16 @@ def serve(host: str, port: int) -> None:
         except BaseException:
             sock.close()
             raise
+    from app.core.config import BACKTEST_SETTINGS
+    if BACKTEST_SETTINGS.enabled and BACKTEST_SETTINGS.external_provider_enabled:
+        from app.backtest.external_provider.endpoint import publish
+        try:
+            publish(BACKTEST_SETTINGS.db_path.parent / "external-providers" / "host-endpoint.json",
+                    host="::1" if ":" in host else "127.0.0.1", port=port)
+        except BaseException:
+            if sock is not None:
+                sock.close()
+            raise
     server = uvicorn.Server(uvicorn.Config("app.main:app", host=host, port=port))
     threading.Thread(target=watch_parent, args=(server,), name="desktop-parent-pipe", daemon=True).start()
 

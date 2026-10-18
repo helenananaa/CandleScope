@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { createHash } = require("node:crypto");
 const { Arch } = require("builder-util");
 
 module.exports = async (context) => {
@@ -7,5 +8,16 @@ module.exports = async (context) => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
   if (manifest.platform !== context.electronPlatformName || manifest.arch !== Arch[context.arch]) {
     throw new Error("Python runtime does not match the desktop target. Prepare and package on the target platform and architecture.");
+  }
+  const pluginsRoot = path.join(root, "plugins");
+  const plugins = JSON.parse(fs.readFileSync(path.join(pluginsRoot, "manifest.json"), "utf8"));
+  if (plugins.schemaVersion !== 2 || plugins.plugins.length !== 2) {
+    throw new Error("Prepare the two bundled first-party runtimes before packaging.");
+  }
+  for (const plugin of plugins.plugins) {
+    const bytes = fs.readFileSync(path.join(pluginsRoot, plugin.filename));
+    if (bytes.length !== plugin.size || `sha256:${createHash("sha256").update(bytes).digest("hex")}` !== plugin.sha256) {
+      throw new Error(`Bundled runtime hash mismatch: ${plugin.runtimeId}`);
+    }
   }
 };

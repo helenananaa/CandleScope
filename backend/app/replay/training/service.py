@@ -69,6 +69,7 @@ from .hedge_timeline import IndexedHedgeSnapshot
 from .hedge_inputs import (
     HYBRID_PUBLIC_INPUT_FIDELITY,
     HedgeInputArchiveManager,
+    HybridInputSpec,
     PreparedHedgeInputBinding,
 )
 from .account import isolated_margin_key, round_to_step
@@ -818,6 +819,7 @@ class TrainingRunService:
         account_audit = await self.store.audit_account(
             normalized,
             authoritative_projections=authoritative,
+            hedge_initial_projection=hedge_input_audit.get("_initial_simulation"),
         )
         account_status = str(account_audit.get("status"))
         hedge_input_status = str(hedge_input_audit.get("status"))
@@ -1370,13 +1372,16 @@ class TrainingRunService:
         document: Mapping[str, object],
         entity_count: int,
     ) -> dict[str, object]:
-        return await self._review_service.record_drawing_document(
-            run_id,
-            command_id=command_id,
-            document_hash=document_hash,
-            document=document,
-            entity_count=entity_count,
-        )
+        normalized = self._identifier(run_id, field_name="run_id")
+        actor = self._run_actors.setdefault(normalized, TrainingRunActor(normalized))
+        async with actor.serialized():
+            return await self._review_service.record_drawing_document(
+                normalized,
+                command_id=command_id,
+                document_hash=document_hash,
+                document=document,
+                entity_count=entity_count,
+            )
 
     async def record_review_marker(
         self,
@@ -1385,11 +1390,14 @@ class TrainingRunService:
         command_id: str,
         text: str,
     ) -> dict[str, object]:
-        return await self._review_service.record_review_marker(
-            run_id,
-            command_id=command_id,
-            text=text,
-        )
+        normalized = self._identifier(run_id, field_name="run_id")
+        actor = self._run_actors.setdefault(normalized, TrainingRunActor(normalized))
+        # An annotation freezes account and actor checkpoints together. Wait
+        # for any in-flight global command, including its liquidation phases.
+        async with actor.serialized():
+            return await self._review_service.record_review_marker(
+                normalized, command_id=command_id, text=text,
+            )
 
     async def public_times(
         self,
@@ -1477,6 +1485,15 @@ class TrainingRunService:
             for track in tracks
             if isinstance(track, Mapping)
         }
+        review_tracks = {track["track_id"]: track for track in event["projection"]["tracks"]}
+        hedge_fork = market_tracks["portfolio"]["position_mode"] == "HEDGE"
+        hedge_input_snapshot = None
+        if hedge_fork:
+            from .review_hedge_inputs import prepare_selected_inputs
+
+            hedge_input_snapshot = await prepare_selected_inputs(
+                self.hedge_inputs, await self.store.run_binding(normalized), normalized_event,
+            )
         primary_anchor = next(
             (
                 anchor
@@ -1502,6 +1519,7 @@ class TrainingRunService:
                 field_name="review timeline_sequence",
             ),
             parent_anchor_set_hash=str(event["anchor_set_hash"]),
+            hedge_input_snapshot=hedge_input_snapshot,
         )
         child_sessions: list[str] = []
         try:
@@ -1548,7 +1566,7 @@ class TrainingRunService:
                         "review anchor references an unknown market track",
                         status_code=409,
                     )
-                reserved = await self.store.reserve_market_track(
+                reserved = (await self.store.get_market_track(child_run_id, parent_track_id)) if hedge_fork else await self.store.reserve_market_track(
                     run_id=child_run_id,
                     exchange=str(parent_track["exchange"]),
                     market_type=str(parent_track["market_type"]),
@@ -1558,10 +1576,11 @@ class TrainingRunService:
                     subscription_tier="FULL",
                 )
                 child_track_id = str(reserved["track_id"])
+                requested_tier = review_tracks[parent_track_id]["subscription_tier"] if hedge_fork else "FULL"
                 attach = self.store.attach_market_track_writer(
                     run_id=child_run_id,
                     track_id=child_track_id,
-                    requested_tier="FULL",
+                    requested_tier=requested_tier,
                     review_parent_run_id=normalized,
                     review_parent_track_id=parent_track_id,
                     review_parent_event_id=normalized_event,
@@ -1582,7 +1601,12 @@ class TrainingRunService:
                         "secondary forked actor does not match its review anchor",
                         status_code=409,
                     )
-            await self.store.checkpoint_market_tracks(child_run_id)
+            await self.store.checkpoint_market_tracks(child_run_id, restore_fork_valuation=hedge_fork)
+            if hedge_fork:
+                from .review_fork_valuation import assert_selected_valuation
+
+                recovered = await self.store.get_market_tracks(child_run_id)
+                assert_selected_valuation(event["projection"], recovered["portfolio"])
             portfolio = market_tracks.get("portfolio")
             history = (
                 portfolio.get("account_history")
@@ -1632,11 +1656,14 @@ class TrainingRunService:
                         },
                     )
         except BaseException:
-            for session_id in reversed(child_sessions):
-                try:
-                    await self.replay_service.discard_session(session_id)
-                except BaseException:
-                    pass
+            # Adapters are still referenced by their tracks. Delete the failed
+            # archive and all its adapters in one fenced transaction instead of
+            # suppressing the foreign-key failures of per-adapter deletion.
+            cleanup = asyncio.create_task(self.delete_run(child_run_id))
+            try:
+                await asyncio.shield(cleanup)
+            except asyncio.CancelledError:
+                await cleanup
             raise
         card = await self.store.get_run(child_run_id)
         child_tracks = await self.store.get_market_tracks(child_run_id)
@@ -2207,6 +2234,12 @@ class TrainingRunService:
         """Return one revealed-only page through the replay-owned data boundary."""
         return await self._display_service.history_page(session_id, track_id=track_id, before_ms=before_ms, revealed_boundary_ms=revealed_boundary_ms, limit=limit, data_epoch=data_epoch, history_epoch=history_epoch, display_interval=display_interval)
 
+    async def canonical_indicator_compute(self, session_id: str, **kwargs) -> dict[str, object]:
+        return await self._display_service.canonical_indicator_compute(session_id, **kwargs)
+
+    async def tape_projection(self, session_id: str, **kwargs) -> dict[str, object]:
+        return await self._display_service.tape_projection(session_id, **kwargs)
+
     async def display_projection(
         self,
         session_id: str,
@@ -2392,6 +2425,42 @@ class TrainingRunService:
             return replayed
 
         binding = await self.store.run_binding(normalized_run)
+        if binding["compatibility"] == "INPUT_PAUSED" and binding.get("position_mode") == "HEDGE":
+            from .hedge_track_readmission import catch_up_public_marks
+
+            tracks = await self.store.get_market_track_heads(normalized_run)
+            full = tuple(track for track in tracks if track["subscription_tier"] == "FULL")
+            times = {track["cursor"]["virtual_time_ms"] for track in full}
+            if len(times) == 1:
+                await catch_up_public_marks(
+                    manager=self.hedge_inputs, binding=binding,
+                    track_ids=tuple(str(track["track_id"]) for track in full),
+                    target_virtual_time_ms=next(iter(times)), recover_paused=True,
+                    store=self.store, replay_service=self.replay_service,
+                )
+                binding = await self.store.run_binding(normalized_run)
+        if binding["compatibility"] == "READY" and binding.get("position_mode") == "HEDGE":
+            # Older versions stopped public input lanes when a track became
+            # WARM/NONE. Bring only those dormant lanes to the durable global
+            # boundary before the new all-bound-input coordinator starts.
+            from .hedge_track_readmission import catch_up_public_marks
+
+            dormant, boundary = await self.hedge_inputs.store.run_extension_read(lambda connection: (
+                tuple(str(row[0]) for row in connection.execute(
+                    "SELECT t.track_id FROM replay_training_market_track t "
+                    "JOIN replay_hedge_track_public_binding b USING(run_id,track_id) "
+                    "WHERE t.run_id=? AND t.subscription_tier!='FULL'", (normalized_run,),
+                )),
+                connection.execute(
+                    "SELECT global_virtual_time_ms FROM replay_training_global_checkpoint "
+                    "WHERE run_id=? ORDER BY checkpoint_sequence DESC LIMIT 1", (normalized_run,),
+                ).fetchone(),
+            ))
+            if dormant and boundary is not None:
+                await catch_up_public_marks(
+                    manager=self.hedge_inputs, binding=binding, track_ids=dormant,
+                    target_virtual_time_ms=int(boundary[0]), store=self.store,
+                )
         if str(
             binding.get("account_data_mode")
         ) == AccountDataMode.HISTORICAL_EXACT.value and (
@@ -3196,11 +3265,15 @@ class TrainingRunService:
                         )
                     raise
                 except Exception as exc:
-                    await self.store.mark_market_track_error(
-                        run_id=command.run_id,
-                        track_id=str(track["track_id"]),
-                        reason=type(exc).__name__,
-                    )
+                    current = await self.store.get_market_track(command.run_id, str(track["track_id"]))
+                    if current.get("adapter_session_id") is None:
+                        await self.store.remove_market_track(command.run_id, str(track["track_id"]))
+                    else:
+                        await self.store.mark_market_track_error(
+                            run_id=command.run_id,
+                            track_id=str(track["track_id"]),
+                            reason=type(exc).__name__,
+                        )
                     raise TrainingRunError(
                         "MARKET_TRACK_PREPARE_FAILED",
                         "market track could not be prepared from frozen history",
@@ -3487,6 +3560,26 @@ class TrainingRunService:
                 binding,
                 target_virtual_time_ms,
             )
+            hybrid_policy = await self.hedge_inputs.hybrid_track_policy(command.run_id)
+            hybrid_public_archive_id = None
+            if hybrid_policy is not None:
+                catalog = await self.replay_service.catalog(warmup_bars=config.warmup_bars,
+                    horizon_ms=config.horizon_ms, quality_mode=config.quality_mode,
+                    blind_mode=config.blind_mode, source_kind=config.source_kind)
+                selection = await self.replay_service.select_training_window(config,
+                    expected_catalog_epoch=str(catalog["catalog_epoch"]),
+                    _prepared_bar_window=binding.get("prepared_base_history") is True)
+                seed = await self.replay_service.materialize_training_hybrid_input_seed(config, selection)
+                hybrid_receipt = await self.hedge_inputs.ensure_hybrid_inputs(HybridInputSpec(
+                    exchange=str(track["exchange"]), market_type=str(track["market_type"]),
+                    symbol=str(track["symbol"]), settlement_asset=str(track["settlement_asset"]),
+                    requested_start_ms=int(seed["range_start_ms"]),
+                    forward_cache_ms=int(seed["range_end_ms"])-int(seed["range_start_ms"]),
+                    maker_fee_bps=str(hybrid_policy["maker_fee_bps"]),
+                    taker_fee_bps=str(hybrid_policy["taker_fee_bps"]),
+                    max_leverage=config.max_leverage, initial_equity=str(binding["initial_equity"])),
+                    seed, public_only=True)
+                hybrid_public_archive_id = str(hybrid_receipt["public"]["object_id"])
             hedge_track_public_binding = (
                 await self.hedge_inputs.prepare_track_public_binding(
                     run_id=command.run_id,
@@ -3506,6 +3599,7 @@ class TrainingRunService:
                     actual_time_ms=actual_time_ms,
                     virtual_time_ms=target_virtual_time_ms,
                     historical_book_binding=historical_book_binding,
+                    public_archive_id=hybrid_public_archive_id,
                 )
             )
         extension_factory = self.store.attach_market_track_writer(
@@ -3528,6 +3622,7 @@ class TrainingRunService:
             selection = await self.replay_service.select_training_window(
                 config,
                 expected_catalog_epoch=track_catalog_epoch,
+                _prepared_bar_window=binding.get("prepared_base_history") is True,
             )
             created = await self.replay_service.create_session(
                 config,
@@ -3911,6 +4006,9 @@ class TrainingRunService:
                     details={"order_id": payload.get("order_id")},
                 )
             replacement_payload = {
+                "side": existing.get("side"),
+                "position_side": existing.get("position_side"),
+                "leverage": existing.get("leverage"),
                 "quantity": payload.get("quantity"),
                 "reduce_only": existing.get("reduce_only"),
                 "limit_price": payload.get("limit_price"),
@@ -3934,6 +4032,7 @@ class TrainingRunService:
             intent = payload.get("intent")
             if intent in {"OPEN", "REVERSE"}:
                 opening_payload = {
+                    "side": payload.get("side"),
                     "quantity": payload.get("quantity"),
                     "reduce_only": False,
                     "limit_price": None,

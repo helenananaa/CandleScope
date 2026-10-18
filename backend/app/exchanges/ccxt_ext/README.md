@@ -26,7 +26,22 @@ The generic lane projects pinned CCXT metadata and unified results for:
   interest/history, and public liquidations when CCXT advertises those
   methods;
 - runtime market-family and symbol validation after `load_markets()`;
-- pooled reconnecting CCXT Pro instances and deterministic cleanup.
+- pooled reconnecting CCXT Pro instances and deterministic cleanup;
+- transport-owned REST clients: each `TransportLayer` config keeps one CCXT
+  async client per market selection, so backfill pages and HTTP-fallback polls
+  reuse one `load_markets()` bootstrap and one HTTP session until
+  `close_history_transport()`.  Loading a venue catalog parses thousands of
+  markets synchronously on the event loop, so it must never run per request;
+- shared market tables (`markets.py`): long-lived clients of one venue rail
+  (ccxt exchange id, `defaultType`/`defaultSubType` and the other options
+  that select markets) in every transport's REST pool and the ccxt.pro
+  runtimes join one `load_markets()` and point at the same tables via
+  `set_markets_from_exchange()`.  A symbol-miss reload refreshes the rail and
+  re-points every sharer; the tables are dropped with the rail's last client;
+- symbol catalogs: `CcxtUnifiedAdapter.list_symbol_rows()` runs the same
+  `load_markets()` conversion in the out-of-process catalog worker
+  (`app/exchanges/catalog_worker.py`) and falls back to `list_symbols()`'s
+  inline load only when the worker is unavailable.
 
 Generic depth is explicitly a CCXT-managed bounded snapshot. Its local
 revision is not an exchange sequence number and it never claims strict
@@ -51,6 +66,13 @@ aggregate-trade repair, stale-state publication, and strict full-order-book
 reconstruction. Binance repair snapshots/history are requested through CCXT
 implicit REST methods, so no native HTTP client is available to bypass the
 provider boundary.
+
+Every CandleScope CCXT client class mixes in `tls.SharedSslContextMixin`.
+CCXT's own `open()` parses certifi's CA bundle on the event loop for each new
+client (0.5-1.8 s with OpenSSL 3); the mixin instead hands each client one
+verifying SSL context per process, keyed by CCXT's `cafile` and
+`include_OS_certificates` option (`verify=False` still disables verification).
+Backend startup builds the default context on a thread before feeds open.
 
 ## Quality boundaries
 

@@ -1,6 +1,6 @@
-from concurrent.futures import ThreadPoolExecutor
 import asyncio
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
 import pytest
@@ -60,15 +60,15 @@ def test_scan_cannot_release_a_publication_abandoned_after_scan_started(tmp_path
     root.mkdir()
     repo.register_publication_scopes([(root, "strategy_storage")])
     token = repo.reserve_publication(80)
-    original = repo.register_publications
+    original = repo.register_inventoried_publications
     def racing(objects):
         original(objects)
         (root / "late-file.bin").write_bytes(b"x" * 30)
         repo.abandon_publication(token)
-    monkeypatch.setattr(repo, "register_publications", racing)
+    monkeypatch.setattr(repo, "register_inventoried_publications", racing)
     reconcile(repo, threading.Event())
     assert repo.cache_inventory()["publication_reserved_bytes"] == 80
-    monkeypatch.setattr(repo, "register_publications", original)
+    monkeypatch.setattr(repo, "register_inventoried_publications", original)
     reconcile(repo, threading.Event())
     assert repo.storage_bytes() == 30
 

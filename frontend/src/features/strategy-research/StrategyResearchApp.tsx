@@ -61,6 +61,7 @@ import { createStrategyResearchAdvancedHref } from "./strategyResearchAdvanced.j
 import { StrategyResearchCompatNotice } from "./StrategyResearchCompatNotice.js";
 import { CapabilityRailIcon, ProfileRailIcon } from "../../app/marketRailIcons.js";
 import { MarketDataWorkspaceProvider } from "../market-data/MarketDataWorkspaceProvider.js";
+import { datasetIdentityChanged } from "../backtest/native/nativeExecutionSettings.js";
 
 const BacktestResearchApp = lazy(() => import("../backtest/research/BacktestResearchApp.js"));
 const StrategyResearchLiveChart = lazy(() => import("./StrategyResearchLiveChart.js"));
@@ -454,7 +455,9 @@ export default function StrategyResearchApp({
   const result = nativeMode ? researchRun.session && nativeRun?.result ? <Suspense fallback={<p>{t("native.loading")}</p>}>
     <div className="native-strategy-report">
       <details><summary>{t("native.source")}</summary><pre>{nativeRun.config?.source}</pre></details>
-      <NativeStrategyReport key={nativeRun.run_id} run={nativeRun} onLocate={(timeMs) => setFocusedAnalysis((current) => ({ scope: chartUiScope, value: {
+      <NativeStrategyReport key={nativeRun.run_id} run={nativeRun}
+        stale={datasetIdentityChanged(nativeRun.config, importedManifest ? { datasetId: importedManifest.dataset_id, dataEpoch: importedManifest.data_epoch } : undefined)}
+        onLocate={(timeMs) => setFocusedAnalysis((current) => ({ scope: chartUiScope, value: {
         requestId: (current.scope === chartUiScope ? current.value?.requestId ?? 0 : 0) + 1, time: Math.floor(timeMs / 1000),
       } }))} />
     </div>
