@@ -1,0 +1,162 @@
+import { computeFrontendScript } from "../features/indicators/frontendScriptRuntime.js";
+import { FRONTEND_SCRIPT_STARTER } from "../features/indicators/frontendScriptContract.js";
+import type { IndicatorComputeRequest } from "../features/indicators/indicatorTypes.js";
+import { createRoot } from "react-dom/client";
+import { flushSync } from "react-dom";
+import { useLayoutEffect } from "react";
+import { useProvidedBarsIndicatorRuntime } from "../features/indicators/useProvidedBarsIndicatorRuntime.js";
+import { createActiveIndicatorPersistence } from "../features/indicators/activeIndicatorStore.js";
+import type { IndicatorRuntime } from "../features/indicators/indicatorRuntimeContract.js";
+import { epochSeconds } from "./testHelpers.js";
+import IndicatorPanel from "../features/indicators/IndicatorPanel.js";
+import type { IndicatorDefinition } from "../features/indicators/indicatorTypes.js";
+
+function assert(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
+const bars = Array.from({ length: 30 }, (_, index) => ({ time: epochSeconds(1_700_000_000 + 60 * index), open: index + 1, high: index + 2, low: index, close: index + 1, volume: 1 }));
+const request: IndicatorComputeRequest = { language: "frontend-js", script: FRONTEND_SCRIPT_STARTER, ohlcv: bars, params: { length: 3 } };
+
+export async function checkFrontendScripts() {
+  const checks: string[] = [], before = JSON.stringify(bars);
+  const result = await computeFrontendScript(request);
+  assert(result.ok && result.lines[0]?.data.length === 28, `starter failed: ${JSON.stringify(result)}`);
+  assert(result.lines[0]?.data.at(-1)?.value === 29, "SMA differs from independent arithmetic");
+  checks.push("real isolated worker computes starter SMA");
+
+  const isolation = await computeFrontendScript({ ...request, script: `
+    if (typeof document !== "undefined" || typeof window !== "undefined" || typeof localStorage !== "undefined"
+      || typeof fetch !== "undefined" || typeof Worker !== "undefined" || typeof WebSocket !== "undefined"
+      || typeof importScripts !== "undefined" || typeof process !== "undefined" || typeof require !== "undefined") throw new Error("unexpected capability");
+    let denied = false;
+    try { indexedDB.open("should-not-exist"); } catch (_) { denied = true; }
+    if (!denied) throw new Error("storage allowed");
+    bars[0].close = 999;
+    plot("isolated", bars.map(() => 1));
+  ` });
+  assert(isolation.ok && JSON.stringify(bars) === before, `isolation failed: ${JSON.stringify(isolation)}`);
+  checks.push("opaque worker cannot use DOM, Node, storage, network or child workers; input copy preserved");
+
+  for (const script of ['throw new Error("example failure")', 'const = broken', 'plot("bad", bars.map(() => NaN))', 'postMessage({lines: []})']) {
+    const error = await computeFrontendScript({ ...request, script });
+    assert(error.ok === false && error.lines.length === 0, `failed closed: ${script}`);
+  }
+  checks.push("runtime, syntax, nonfinite and forged output errors clear plots");
+
+  let beats = 0;
+  const heartbeat = setInterval(() => beats++, 20);
+  const start = performance.now();
+  const timeout = await computeFrontendScript({ ...request, script: "while (true) {}" });
+  clearInterval(heartbeat);
+  assert(timeout.ok === false && timeout.error?.includes("execution limit") && beats >= 10 && performance.now() - start < 5_000, "infinite loop blocked UI or failed termination");
+  checks.push("infinite loop times out while parent event loop remains responsive");
+
+  const first = new AbortController(), second = new AbortController(), queued = new AbortController();
+  const tasks = [first, second, queued].map(controller => computeFrontendScript({ ...request, script: "while (true) {}" }, controller.signal)
+    .then(() => "unexpected", (error: unknown) => error instanceof Error ? error.name : String(error)));
+  queued.abort();
+  assert(await tasks[2] === "AbortError", "queued cancellation waited behind running jobs");
+  first.abort(); second.abort();
+  assert((await Promise.all(tasks)).every(value => value === "AbortError"), "running cancellation did not reject");
+  const final = await computeFrontendScript(request);
+  assert(final.ok && document.querySelectorAll("iframe").length === 0, "cancelled work leaked owners or prevented next compute");
+  checks.push("queued/running cancellation releases both slots and all frames; new work succeeds");
+  checks.push(...await checkReactReplayLifecycle());
+  return { checks, parentTimerBeats: beats, remainingFrames: document.querySelectorAll("iframe").length };
+}
+
+async function checkReactReplayLifecycle(): Promise<string[]> {
+  const storage = new Map<string, string>();
+  const persistence = createActiveIndicatorPersistence("frontend-js", {
+    getItem: key => storage.get(key) ?? null, setItem: (key, value) => { storage.set(key, value); },
+  });
+  const source = 'plot("tail", bars.map(() => bars.at(-1).close))';
+  persistence.save([{ id: "script", language: "frontend-js", script: source, visible: true }]);
+  let latest: IndicatorRuntime | null = null, backendCalls = 0;
+  const host = document.createElement("div"); document.body.append(host);
+  let root = createRoot(host);
+  function View({ count }: { count: number }) {
+    const runtime = useProvidedBarsIndicatorRuntime({
+      bars: bars.slice(0, count), datasetKey: `fixture-${count}`, exchange: "fixture", marketType: "spot", symbol: "TEST", interval: "1m",
+      sourceOrdinal: count, sourceScopeKey: "frozen", visibleThroughSeconds: bars[count - 1]!.time, persistence,
+      computeBatch: async () => { backendCalls++; throw new Error("Frontend source reached backend executor"); },
+    });
+    useLayoutEffect(() => { latest = runtime; });
+    return <span>{runtime.view.activeIndicators[0]?.error || runtime.view.activeIndicators[0]?.lines?.[0]?.data.at(-1)?.value}</span>;
+  }
+  const current = () => { assert(latest, "runtime not mounted"); return latest; };
+  async function until(predicate: () => boolean) {
+    for (let i = 0; i < 150; i++) { if (predicate()) return; await new Promise(resolve => setTimeout(resolve, 20)); }
+    throw new Error(`React condition did not converge: ${host.textContent}`);
+  }
+  const last = () => current().view.activeIndicators[0]?.lines?.[0]?.data.at(-1)?.value;
+  try {
+    flushSync(() => root.render(<View count={30} />));
+    await until(() => last() === 30);
+    flushSync(() => current().actions.updateIndicatorScript("script", 'const until=Date.now()+400; while(Date.now()<until) {} plot("old", bars.map(()=>999));', "frontend-js"));
+    await new Promise(resolve => setTimeout(resolve, 100));
+    flushSync(() => { current().actions.updateIndicatorScript("script", source, "frontend-js"); root.render(<View count={10} />); });
+    await until(() => last() === 10);
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const lines = current().view.activeIndicators[0]?.lines ?? [];
+    assert(last() === 10 && lines.every(line => line.data.every(point => point.time <= bars[9]!.time && point.value !== 999)), "obsolete worker republished future input after rewind");
+    flushSync(() => current().actions.updateIndicatorScript("script", 'const = broken', "frontend-js"));
+    await until(() => Boolean(current().view.activeIndicators[0]?.error));
+    assert(current().view.activeIndicators[0]?.lines?.every(line => !line.data.length), "error retained stale plotted data");
+    flushSync(() => current().actions.updateIndicatorScript("script", source, "frontend-js"));
+    await until(() => last() === 10);
+    flushSync(() => root.unmount());
+    latest = null;
+    root = createRoot(host);
+    flushSync(() => root.render(<View count={10} />));
+    await until(() => last() === 10);
+    assert(backendCalls === 0 && persistence.load()[0]?.script === source, "saved source was lost or sent to backend");
+    return ["real React replay rewind cancels stale worker and excludes unrevealed input/output", "syntax error clears old curves; corrected source and remounted persistence restore without backend execution"];
+  } finally { flushSync(() => root.unmount()); host.remove(); }
+}
+
+/** Real editor/panel, with deterministic failed and successful persistence HTTP responses. */
+export async function checkFrontendScriptEditor() {
+  const originalFetch = globalThis.fetch, originalAlert = window.alert;
+  const alerts: string[] = [], added: IndicatorDefinition[] = [], saved: Record<string, unknown>[] = [];
+  let rejectSave = true;
+  globalThis.fetch = async (input, options) => {
+    const url = new URL(String(input), location.href);
+    if (!url.pathname.startsWith("/api/")) return originalFetch(input, options);
+    if (url.pathname.endsWith("/custom") && options?.method === "POST") {
+      const data = JSON.parse(String(options.body)) as Record<string, unknown>;
+      if (rejectSave) return Response.json({ detail: "fixture storage unavailable" }, { status: 503 });
+      saved.push(data);
+      return Response.json(data);
+    }
+    if (url.pathname.endsWith("/custom") || url.pathname.endsWith("/presets")) return Response.json([]);
+    // Even a failed plugin discovery must leave the independent frontend language usable.
+    return Response.json({ detail: "fixture runtime catalog unavailable" }, { status: 503 });
+  };
+  window.alert = message => { alerts.push(String(message)); };
+  const host = document.createElement("div"); document.body.append(host);
+  const root = createRoot(host);
+  async function until(predicate: () => boolean) {
+    for (let i = 0; i < 150; i++) { if (predicate()) return; await new Promise(resolve => setTimeout(resolve, 20)); }
+    throw new Error(`Editor condition did not converge: ${host.textContent?.slice(-1000)}`);
+  }
+  try {
+    flushSync(() => root.render(<IndicatorPanel isOpen onClose={() => {}} activeIndicators={[]}
+      onAddIndicator={value => added.push(value)} onRemoveIndicator={() => {}} onToggleVisibility={() => {}}
+      onUpdateParams={() => {}} onUpdateScript={() => {}} computing={false} />));
+    (host.querySelector(".indicator-tab-create") as HTMLButtonElement).click();
+    await until(() => Boolean(host.querySelector<HTMLButtonElement>(".indicator-editor-run")?.disabled === false));
+    assert(host.querySelector<HTMLSelectElement>("select")?.value === "frontend-js", "frontend language unavailable after catalog failure");
+    (host.querySelector(".indicator-editor-run") as HTMLButtonElement).click();
+    await until(() => added.length === 1);
+    assert(added[0]?.language === "frontend-js" && added[0]?.script === FRONTEND_SCRIPT_STARTER, "editor did not preview JS starter");
+    (host.querySelector(".indicator-editor-save") as HTMLButtonElement).click();
+    await until(() => alerts.length === 1);
+    assert(Boolean(host.querySelector(".indicator-editor")) && added.length === 1 && saved.length === 0, "failed save closed/lost draft or claimed persistence");
+    rejectSave = false;
+    (host.querySelector(".indicator-editor-save") as HTMLButtonElement).click();
+    await until(() => saved.length === 1 && !host.querySelector(".indicator-editor"));
+    assert(saved[0]?.language === "frontend-js" && saved[0]?.script === FRONTEND_SCRIPT_STARTER, "retry changed saved source/language");
+    return { checks: ["real panel/editor offers frontend JS when plugin catalog fails", "preview retains exact starter, failed HTTP save keeps draft open, successful retry preserves source/language"] };
+  } finally {
+    flushSync(() => root.unmount()); host.remove(); globalThis.fetch = originalFetch; window.alert = originalAlert;
+  }
+}

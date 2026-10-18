@@ -10,6 +10,8 @@ import {
 import { flushSync } from "react-dom";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { computeIndicatorBatch } from "../../services/indicatorApi.js";
+import { isFrontendScript } from "./frontendScriptContract.js";
+import { routeIndicatorComputeBatch } from "./frontendScriptBatch.js";
 import { markPerf, recordPerfEvent } from "../../runtime/performance/perfMarks.js";
 import {
   buildIndicatorComputeParams,
@@ -88,7 +90,7 @@ export function buildLocalIndicatorPlanSignature(
   candleDownColor: string,
 ): string {
   const keys = indicators
-    .filter((indicator) => indicator.executionTarget === "local")
+    .filter((indicator) => indicator.executionTarget === "local" || isFrontendScript(indicator))
     .map((indicator) => {
       const params = buildIndicatorComputeParams(indicator, {
         candleUpColor,
@@ -159,7 +161,7 @@ export function useIndicatorComputeController({
   const [jobCoordinator] = useState(() => createIndicatorComputeJobCoordinator());
   const userTriggeredRef = useRef(false);
   const hasExplicitLocalIndicator = activeIndicators.some(
-    (indicator) => indicator.executionTarget === "local",
+    (indicator) => indicator.executionTarget === "local" || isFrontendScript(indicator),
   );
   const desiredDataSignature = useMemo(
     () => hasExplicitLocalIndicator
@@ -423,7 +425,7 @@ export function useIndicatorComputeController({
           try {
             const responses = await Promise.all(
               chunks.map(async (chunk) => {
-                const response = await computeBatch({ jobs: chunk, signal, onResults: publish });
+                const response = await routeIndicatorComputeBatch({ jobs: chunk, signal, onResults: publish }, computeBatch);
                 publish(response.results);
                 return response;
               }),

@@ -864,6 +864,8 @@ export const sv = {
   "indicator.editor.close": "Stäng redigerare",
   "indicator.editor.name": "Indikatornamn",
   "indicator.editor.script": "{language}-skript",
+  "indicator.saveFailed": "Indikatorn kunde inte sparas. Utkastet är fortfarande öppet. {error}",
+  "indicator.editor.frontendWindow": "Beräknar bara diagrammets datafönster; mer historik kan ändra resultaten. Endast kurvor, med en körningsgräns på 2 sekunder.",
   "indicator.editor.language": "Språk",
   "indicator.editor.languageUnavailable": "{language} (otillgängligt)",
   "indicator.editor.mode": "Läge",

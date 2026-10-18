@@ -864,6 +864,8 @@ export const uk = {
   "indicator.editor.close": "Закрити редактор",
   "indicator.editor.name": "Назва індикатора",
   "indicator.editor.script": "Скрипт {language}",
+  "indicator.saveFailed": "Не вдалося зберегти індикатор. Чернетка залишається відкритою. {error}",
+  "indicator.editor.frontendWindow": "Обчислює лише вікно даних графіка; завантаження додаткової історії може змінити результати. Виводить лише криві, час виконання — до 2 секунд.",
   "indicator.editor.language": "Мова",
   "indicator.editor.languageUnavailable": "{language} (недоступна)",
   "indicator.editor.mode": "Режим",

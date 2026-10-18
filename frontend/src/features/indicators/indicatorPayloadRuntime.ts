@@ -20,6 +20,7 @@ import type {
   NormalizedIndicatorPayload,
 } from "./indicatorTypes.js";
 import type { KlineBar } from "../market-data/marketDataTypes.js";
+import { isFrontendScript } from "./frontendScriptContract.js";
 
 const ENGINE_SCRIPT_MARKER = "# __ENGINE__:";
 
@@ -113,7 +114,7 @@ export function isBuiltinIndicator(
 export function isWsHostedIndicator(
   indicator: IndicatorDefinition | null | undefined,
 ): boolean {
-  if (indicator?.executionTarget === "local") return false;
+  if (indicator?.executionTarget === "local" || isFrontendScript(indicator)) return false;
   return isBuiltinIndicator(indicator) || Boolean(indicator?.script);
 }
 

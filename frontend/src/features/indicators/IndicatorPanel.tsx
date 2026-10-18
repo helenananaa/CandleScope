@@ -588,6 +588,10 @@ export default function IndicatorPanel({
       });
     } catch (err) {
       console.error("Failed to save custom indicator:", err);
+      window.alert(t("indicator.saveFailed", {
+        error: err instanceof Error ? describeError(err, err.message) : String(err),
+      }));
+      return;
     }
 
     if (!shouldFork && activeIndicators.some((i) => i.id === saved.id)) {

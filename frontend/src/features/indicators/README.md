@@ -67,6 +67,44 @@ The two batch contracts are intentionally separate:
   field. Response count and identities must match exactly; an item-level engine
   error is isolated in that item's payload.
 
+### Frontend JavaScript
+
+`frontend-js` is a first-party browser language, shown as JavaScript (Frontend)
+in the existing editor. It is distinct from community runtime language IDs.
+`bars`, `params`, and `plot(name, values, { pane, color })` form its window-plot
+API. A values array contains exactly one finite number or null per input bar;
+the Host assigns timestamps from the supplied window. Up to eight line plots
+target `main` or `separate`. There are no order, account, DOM or Host API hooks.
+
+The normal live compute controller supplies its newest 2,000 chart bars. Replay
+supplies only its revealed, loaded display window. The browser runtime accepts
+at most 50,000 bars and rejects larger input explicitly. This language does not
+claim a canonical full-history mathematical seed: loading a different window
+can change a recursive script's values. Builtin canonical replay is unchanged.
+
+Both live and provided-bars compute intercept this language before either
+backend executor. The existing coordinator owns generations, cancellation,
+errors and immutable cache publication; saved language/source/parameters reuse
+custom-indicator persistence. Only this explicit language avoids hosted WS and
+history range requests. A backend plugin's `javascript` language keeps its own
+route.
+
+User source is data sent to a dedicated Worker inside a first-party sandbox
+frame with an opaque origin, restrictive CSP and no Host bridge. Blob workers
+inherit that CSP. The parent validates numeric outputs independently; it never
+evaluates source. DOM/Node/storage/network and child-worker capabilities are
+unavailable. There are two active workers across all charts and 32 queued jobs;
+queued cancellation removes work immediately. A two-second execution timeout
+or cancellation terminates the worker through its owner before releasing its
+slot (bounded owner destruction if acknowledgement fails). Successful jobs also
+terminate their worker. These are execution/input/output limits, not a browser
+process memory quota against arbitrary hostile code.
+
+The isolated bootstrap and CSP behavior are covered by real-browser tests,
+including infinite loops and subsequent successful work. Browser standards:
+[Worker CSP inheritance](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers#content_security_policy)
+and [opaque sandbox origins](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/iframe#sandbox).
+
 ## Work, Cache, and Hydration Ownership
 
 The explicit-local lifecycle includes the dataset and normalized chart context,

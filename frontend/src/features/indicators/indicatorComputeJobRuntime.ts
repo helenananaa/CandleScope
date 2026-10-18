@@ -7,6 +7,7 @@ import type {
   IndicatorDefinition,
   IndicatorParams,
 } from "./indicatorTypes.js";
+import { isFrontendScript } from "./frontendScriptContract.js";
 
 export interface LocalIndicatorExecution {
   mode: "builtin" | "script";
@@ -24,13 +25,17 @@ export type LocalIndicatorExecutionResolution =
 export function resolveLocalIndicatorExecution(
   indicator: IndicatorDefinition | null | undefined,
 ): LocalIndicatorExecutionResolution {
-  if (indicator?.executionTarget !== "local") {
+  if (indicator?.executionTarget !== "local" && !isFrontendScript(indicator)) {
     return isWsHostedIndicator(indicator)
       ? { kind: "hosted" }
       : {
           kind: "invalid",
           error: "Hosted indicator requires an engine name or non-empty script",
         };
+  }
+  if (!indicator) return { kind: "invalid", error: "Indicator is missing" };
+  if (isFrontendScript(indicator) && (isBuiltinIndicator(indicator) || indicator.kind === "builtin" || indicator.is_builtin === true)) {
+    return { kind: "invalid", error: "Frontend JavaScript requires a script definition without a backend engine" };
   }
   const builtinName = getBuiltinIndicatorName(indicator)
     || ((indicator.kind === "builtin" || indicator.is_builtin === true)

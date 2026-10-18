@@ -863,6 +863,8 @@ export const de = {
   "indicator.editor.close": "Editor schließen",
   "indicator.editor.name": "Indikatorname",
   "indicator.editor.script": "{language}-Skript",
+  "indicator.saveFailed": "Der Indikator konnte nicht gespeichert werden. Der Entwurf bleibt geöffnet. {error}",
+  "indicator.editor.frontendWindow": "Berechnet nur das Datenfenster des Charts; weitere Historie kann Ergebnisse ändern. Nur Kurvenausgabe, Ausführungszeit maximal 2 Sekunden.",
   "indicator.editor.language": "Sprache",
   "indicator.editor.languageUnavailable": "{language} (nicht verfügbar)",
   "indicator.editor.mode": "Modus",
