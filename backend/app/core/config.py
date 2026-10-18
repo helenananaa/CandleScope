@@ -862,6 +862,19 @@ SYMBOL_DISCOVERY_REFRESH_SECONDS = max(
     0.0,
     float(os.getenv("SYMBOL_DISCOVERY_REFRESH_SECONDS", "21600")),
 )
+# CCXT catalogs (Binance spot exchangeInfo alone is ~18 MB) are parsed in a
+# spawned worker process; inline parsing stalled the event loop 1-4 s per
+# refresh.  Set to 0 to parse them in the backend process instead.
+SYMBOL_CATALOG_WORKER_ENABLED = (
+    os.getenv("SYMBOL_CATALOG_WORKER_ENABLED", "1").strip() != "0"
+)
+# The worker exits after this long without catalog work and is respawned on
+# demand.  The default outlives the 5-minute eager refresh cycle, so with the
+# default TTL the worker stays resident.  0 keeps it until shutdown.
+SYMBOL_CATALOG_WORKER_IDLE_SECONDS = max(
+    0.0,
+    float(os.getenv("SYMBOL_CATALOG_WORKER_IDLE_SECONDS", "900")),
+)
 SYMBOL_CATALOG_SNAPSHOT_PATH = Path(
     os.getenv(
         "SYMBOL_CATALOG_SNAPSHOT_PATH",

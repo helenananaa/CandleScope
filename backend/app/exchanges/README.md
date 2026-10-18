@@ -75,8 +75,21 @@ Only eagerly refreshed catalogs (the primary Binance/OKX venues) arm TTL and
 failure-retry timers. Lazy catalogs, including every generic CCXT venue, are
 refreshed on demand under the same TTL and retry deadline, or by the
 background discovery sweep at most once per `SYMBOL_DISCOVERY_REFRESH_SECONDS`
-(default 6 h). One CCXT catalog load parses thousands of markets on the event
-loop, so ~200 self-renewing 5-minute refreshes would saturate it.
+(default 6 h). One CCXT catalog load downloads and parses thousands of
+markets, so ~200 self-renewing 5-minute refreshes would still waste seconds of
+CPU each.
+
+CCXT catalogs are parsed out of process. `catalog_worker` lazily spawns one
+child process that runs the same CCXT load and `SymbolInfo` conversion and
+returns compact `to_dict()` rows in small chunks. Inline parsing stalled the
+event loop 1-4 s per eager refresh (Binance spot `exchangeInfo` is ~18 MB; the
+JSON parse and the full GC passes that follow hold the GIL, so a thread does
+not help). The request carries the backend's `IngestionConfig` proxy settings,
+and the worker builds clients with the same Windows `ThreadedResolver`.
+`cancel_exchange_metadata_refreshes()` stops the worker; it also exits after
+`SYMBOL_CATALOG_WORKER_IDLE_SECONDS` without work (default 15 min, longer than
+the eager refresh cycle). If it cannot start or crashes, catalogs load inline
+for a 5-minute cooldown. `SYMBOL_CATALOG_WORKER_ENABLED=0` disables it.
 
 Shared production rate-limit managers start conservatively: the first request
 for a newly created bucket is an exact-cost probe, so a process restart cannot
