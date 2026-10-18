@@ -115,7 +115,9 @@ _ROW_CACHES_LOCK = threading.Lock()
 
 def _shared_row_cache(db_path: Path) -> _BoundaryRowCache:
     """Share one cache between repositories opened on the same file."""
-    token = os.path.normcase(os.path.abspath(db_path))
+    # A profile may be opened through a symlink as well as its real path.
+    # Both names must share updates and deletions for the same database.
+    token = os.path.normcase(os.path.realpath(db_path))
     with _ROW_CACHES_LOCK:
         cache = _ROW_CACHES.get(token)
         if cache is None:

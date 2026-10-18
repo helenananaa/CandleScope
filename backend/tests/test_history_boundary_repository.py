@@ -358,3 +358,23 @@ def test_backfill_planning_reads_learned_boundaries_from_memory(
     second, _context = planner.plan(request)
     assert second.fetch_ranges[0].start_ms == 300_000
     assert sqlite_opens == []
+
+
+def test_symlinked_database_paths_share_boundary_writes_and_deletes(tmp_path) -> None:
+    real = tmp_path / "real"
+    real.mkdir()
+    alias = tmp_path / "alias"
+    try:
+        alias.symlink_to(real, target_is_directory=True)
+    except OSError:
+        pytest.skip("directory symlinks are unavailable on this platform")
+
+    first = HistoryBoundaryRepository(real / "history.sqlite3")
+    second = HistoryBoundaryRepository(alias / "history.sqlite3")
+    key = _key()
+    written = first.upsert(
+        key, "left", TimeBound(1_000, BoundaryReason.SOURCE_EXHAUSTED),
+    )
+    assert second.get(key, "left", include_stale=True) == written
+    assert second.delete(key, "left") == 1
+    assert first.get(key, "left", include_stale=True) is None
