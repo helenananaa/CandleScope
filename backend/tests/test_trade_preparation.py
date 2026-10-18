@@ -284,3 +284,27 @@ async def test_precise_strategy_prepares_bars_and_official_trades(tmp_path):
     finally:
         await service.shutdown()
         runtime.shutdown()
+
+
+@async_test
+async def test_desktop_official_wrapper_uses_local_verified_cache_for_cold_preparation(tmp_path):
+    from app.replay.official_trade_catalog import OfficialAggTradeArchive
+    fixture, local, calls = adapter_and_network(tmp_path)
+    official = OfficialAggTradeArchive(local.root, defer_refresh=True)
+    adapter = BarPreparationAdapter(tmp_path / "desktop-cache", coordinator=None,
+        replay_service=SimpleNamespace(raw_trade_archive=official))
+    adapter.trades.importer = fixture.trades.importer
+    repo = PreparationRepository(tmp_path / "jobs.db")
+    adapter.publication_repository = repo
+    receipt, size = await adapter.acquire(requirement(), "cold-desktop")
+    assert receipt["dataset"]["row_count"] == 4
+    assert size > 0 and len(calls) == 2
+    assert repo.cache_inventory()["publication_reserved_bytes"] == 0
+    # The official catalog may still be empty. Local verified bytes are enough;
+    # a warm repeat must not consult remote metadata or import the day again.
+    def no_remote(**kwargs):
+        raise AssertionError("preparation must inspect actual local coverage")
+    official.list_verified_windows = no_remote
+    repeated, _ = await adapter.acquire(requirement(), "warm-desktop")
+    assert repeated == receipt
+    assert len(calls) == 2

@@ -110,11 +110,19 @@ WITH cards AS (
             THEN 'SELECT_MARKET'
             WHEN s.degraded_reason IS NULL AND r.compatibility = 'READY'
             THEN 'OPEN_ADAPTER'
+            WHEN s.degraded_reason IS NULL AND r.compatibility = 'INPUT_PAUSED'
+             AND hedge_input.status = 'PAUSED'
+             AND hedge_input.degraded_reason = 'HEDGE_INPUT_CURSOR_BEHIND_MARKET'
+            THEN 'OPEN_ADAPTER'
             ELSE 'UNAVAILABLE'
         END AS resume_action,
         selected_track.adapter_session_id AS adapter_session_id,
         s.degraded_reason AS degraded_reason,
-        s.status_reason AS status_reason,
+        CASE WHEN r.compatibility = 'INPUT_PAUSED'
+              AND hedge_input.status = 'PAUSED'
+              AND hedge_input.degraded_reason = 'HEDGE_INPUT_CURSOR_BEHIND_MARKET'
+             THEN 'HEDGE_INPUT_RECOVERY_REQUIRED'
+             ELSE s.status_reason END AS status_reason,
         EXISTS(
             SELECT 1 FROM replay_report AS report
             WHERE report.session_id IN (
@@ -133,6 +141,7 @@ WITH cards AS (
       ON selected_track.run_id = r.run_id
      AND selected_track.track_id = viewer.selected_track_id
     LEFT JOIN replay_session AS s ON s.session_id = selected_track.adapter_session_id
+    LEFT JOIN replay_hedge_input_binding AS hedge_input ON hedge_input.run_id = r.run_id
 )
 """
 
@@ -1399,9 +1408,28 @@ def insert_pin(
     )
 
 
+def current_card_row(connection: sqlite3.Connection, row: Mapping[str, object]) -> Mapping[str, object]:
+    if row["kind"] != "V2" or row["equity_status"] != "CURRENT" or row["equity"] is None:
+        return row
+    from .portfolio import current_hedge_card_equity
+
+    try:
+        equity = current_hedge_card_equity(connection, str(row["run_id"]))
+    except TrainingRunError:
+        # An unavailable wallet must not make every other archive disappear or
+        # retain a balance that is already known to be untrustworthy.
+        return {**dict(row), "equity": None, "equity_status": "STALE"}
+    return row if equity is None else {**dict(row), "equity": equity}
+
+
 def card_from_row(row: Mapping[str, object]) -> dict[str, object]:
     unavailable = row["compatibility"] == "UNAVAILABLE"
-    if unavailable:
+    if row["status_reason"] == "HEDGE_INPUT_RECOVERY_REQUIRED" and row["resume_action"] == "OPEN_ADAPTER":
+        status = {
+            "code": "HEDGE_INPUT_RECOVERY_REQUIRED",
+            "message": "输入时间线需要恢复。可打开训练重试；校验通过前不会推进或交易。",
+        }
+    elif unavailable:
         status = {
             "code": "UNAVAILABLE",
             "message": "存档当前不可恢复；请检查服务端诊断或导出记录。",

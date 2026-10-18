@@ -7,7 +7,57 @@ import {
   replayOrderPreviewSide,
   replayOrderSizingAvailability,
   replayReduceOnlyUnavailableMessage,
+  replayBoundClosingCapacity,
+  replayOrderSideCapacity,
+  replayQuantityForShare,
 } from "../replayOrderSizing.js";
+
+test("percentage submission uses the target side capacity with exact quantity steps", () => {
+  assert.equal(replayQuantityForShare("76.27649932", 1, "0.00000001"), "76.27649932");
+  assert.equal(replayQuantityForShare("76.28441487", 1, "0.00000001"), "76.28441487");
+  assert.equal(replayQuantityForShare("76.27649932", 0.25, "0.00000001"), "19.06912483");
+  assert.equal(replayQuantityForShare("1.005", 0.5, "0.005"), "0.5");
+  assert.equal(replayQuantityForShare("100", 1, "1"), "100");
+  assert.equal(replayQuantityForShare("0.00000009", 0.5, "1e-8"), "0.00000004");
+  assert.equal(replayQuantityForShare("0", 1, "0.01"), "0");
+  assert.equal(replayQuantityForShare("", 1, "0.01"), null);
+  assert.equal(replayQuantityForShare("1", 2, "0.01"), null);
+});
+
+test("an empty short advisory cannot lock the held long closing action", () => {
+  const shortCap = replayBoundClosingCapacity(null, true, 0);
+  assert.equal(shortCap, "0");
+  assert.equal(replayOrderSizingAvailability(
+    replayOrderSideCapacity(shortCap, "BUY", "SELL", true, 1), "1",
+  ).quantityExceedsCapacity, false);
+  assert.equal(replayOrderSizingAvailability(
+    replayOrderSideCapacity(shortCap, "BUY", "BUY", true, 0), "1",
+  ).quantityExceedsCapacity, true);
+});
+
+test("unequal hedge legs and partial closes use each closing side's remaining quantity", () => {
+  for (const [side, other] of [["BUY", "SELL"], ["SELL", "BUY"]] as const) {
+    assert.equal(replayOrderSideCapacity("0.4", side, side, true, 0.4), "0.4");
+    assert.equal(replayOrderSideCapacity("0.4", side, other, true, -2), "2");
+    assert.equal(replayOrderSideCapacity("2", side, side, true, 0.4), "0.4");
+    assert.equal(replayOrderSideCapacity("2", side, other, true, 0), "0");
+    // An opening capacity from the other side remains unknown until revalidated.
+    assert.equal(replayOrderSideCapacity("0", side, other, false, 0), null);
+  }
+});
+
+test("close capacity follows full and partial closes instead of an old advisory", () => {
+  for (const remaining of [0, 0.4, -0.4]) {
+    const capacity = replayBoundClosingCapacity("1", true, remaining);
+    assert.equal(capacity, String(Math.abs(remaining)));
+    assert.equal(replayOrderSizingAvailability(capacity, "1").quantityExceedsCapacity, true);
+    assert.equal(replayOrderSizingAvailability(capacity, "1").sliderDisabled, remaining === 0);
+  }
+  assert.equal(replayBoundClosingCapacity(null, true, 0), "0");
+  assert.equal(replayBoundClosingCapacity(null, true, 1), null);
+  assert.equal(replayBoundClosingCapacity("0.2", true, 1), "0.2");
+  assert.equal(replayBoundClosingCapacity("1", false, 0), "1");
+});
 
 const BASE_INPUT = {
   previousMaxQuantity: 0.5,

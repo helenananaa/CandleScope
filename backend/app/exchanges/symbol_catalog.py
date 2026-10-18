@@ -11,7 +11,7 @@ import random
 import threading
 import time
 import weakref
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -26,12 +26,14 @@ from app.core.config import (
     SYMBOL_CATALOG_RETRY_JITTER_SECONDS,
     SYMBOL_CATALOG_SNAPSHOT_PATH,
     SYMBOL_CATALOG_TTL_SECONDS,
+    SYMBOL_DISCOVERY_REFRESH_SECONDS as SYMBOL_DISCOVERY_REFRESH_SECONDS,
 )
 from app.exchanges import (
     RateLimitDeferred,
     bootstrap_default_adapters,
     get_exchange_registry,
 )
+from app.exchanges.catalog_worker import shutdown_catalog_worker
 
 class SymbolCatalogError(Exception):
     """Catalog failure; transports decide how to expose it to their callers."""
@@ -364,7 +366,11 @@ def _snapshot_payload(revision: int) -> dict[str, Any]:
             "exchange": key[0],
             "market_type": key[1],
             "last_success_at": state.last_success_at or _cache_loaded_at,
-            "symbols": copy.deepcopy(symbols),
+            # Published rows are immutable (see ``cached_symbol_refs``); a
+            # refresh replaces the whole list.  A shallow list copy is enough
+            # for the writer thread, whereas a deep copy of every cached
+            # venue took ~0.5 s of event-loop time on each refresh.
+            "symbols": list(symbols),
         })
     return {
         "version": _SNAPSHOT_VERSION,
@@ -372,6 +378,38 @@ def _snapshot_payload(revision: int) -> dict[str, Any]:
         "saved_at": _cache_loaded_at or time.time(),
         "markets": markets,
     }
+
+
+_SNAPSHOT_ENCODE_BATCH = 256
+
+
+def _encode_snapshot(payload: dict[str, Any]) -> str:
+    """Serialize like one compact ``json.dumps`` call."""
+
+    return "".join(_snapshot_parts(payload))
+
+
+def _snapshot_parts(payload: dict[str, Any]) -> Iterator[str]:
+    """Yield the compact JSON snapshot in GIL-sized pieces.
+
+    The C JSON encoder holds the GIL for the whole call.  Encoding a
+    multi-megabyte catalog at once therefore froze the event loop even though
+    it ran on a worker thread; bounded batches let the loop run in between.
+    """
+
+    encode = json.JSONEncoder(ensure_ascii=False, separators=(",", ":")).encode
+    head = {key: value for key, value in payload.items() if key != "markets"}
+    yield encode(head)[:-1] + ',"markets":['
+    for index, market in enumerate(payload["markets"]):
+        header = {key: value for key, value in market.items() if key != "symbols"}
+        yield ("," if index else "") + encode(header)[:-1] + ',"symbols":['
+        symbols = market["symbols"]
+        for start in range(0, len(symbols), _SNAPSHOT_ENCODE_BATCH):
+            yield ("," if start else "") + encode(
+                symbols[start:start + _SNAPSHOT_ENCODE_BATCH]
+            )[1:-1]
+        yield "]}"
+    yield "]}"
 
 
 def _write_snapshot_atomic(
@@ -388,10 +426,11 @@ def _write_snapshot_atomic(
             f".{path.name}.{os.getpid()}.{time.monotonic_ns()}.tmp"
         )
         try:
-            temporary.write_text(
-                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
-                encoding="utf-8",
-            )
+            # Encode and write piece by piece: joining and UTF-8 encoding the
+            # whole ~25 MB document held the GIL for ~100 ms in one call.
+            with temporary.open("wb") as handle:
+                for part in _snapshot_parts(payload):
+                    handle.write(part.encode("utf-8"))
             os.replace(temporary, path)
             _last_persisted_revision = revision
         finally:
@@ -519,6 +558,7 @@ async def cancel_exchange_metadata_refreshes() -> None:
     for key, task in list(_market_refresh_tasks.items()):
         if task.done() or task in tasks:
             _market_refresh_tasks.pop(key, None)
+    await shutdown_catalog_worker()
 
 
 def _cancel_market_refresh_timer(key: tuple[str, str]) -> None:
@@ -611,7 +651,15 @@ async def refresh_market_catalog(
     market_type: str,
     *,
     force: bool,
+    max_age_seconds: float | None = None,
 ) -> int:
+    """Refresh one market catalog unless it is fresh or in failure backoff.
+
+    ``max_age_seconds`` is for best-effort background callers such as the
+    discovery sweep: the catalog is attempted at most once per that interval,
+    whether the previous attempt succeeded or failed.
+    """
+
     key = _market_cache_key(adapter.id, market_type)
     if _catalog_stopping:
         return _active_symbol_count(key)
@@ -624,7 +672,14 @@ async def refresh_market_catalog(
     if not force:
         if state.retry_at_ms is not None and int(now * 1000) < state.retry_at_ms:
             return _active_symbol_count(key)
-        if (
+        if max_age_seconds is not None:
+            last_touched = max(state.last_success_at, state.last_attempt_at)
+            if last_touched > 0 and now - last_touched < max(
+                SYMBOL_CATALOG_TTL_SECONDS,
+                float(max_age_seconds),
+            ):
+                return _active_symbol_count(key)
+        elif (
             not state.stale
             and key in _symbol_cache
             and state.last_success_at > 0
@@ -661,8 +716,7 @@ async def _run_market_refresh(
     try:
         async with _catalog_gate():
             async with asyncio.timeout(30):
-                symbols = await adapter.list_symbols(market_type)
-        current = [item.to_dict() for item in symbols]
+                current = await _list_symbol_rows(adapter, market_type)
         if not current:
             raise RuntimeError(
                 f"empty symbol catalog from {adapter.id}:{market_type}"
@@ -701,12 +755,13 @@ async def _run_market_refresh(
             market_type,
             state.retry_at_ms,
         )
-        _schedule_market_refresh(
-            adapter,
-            market_type,
-            deadline_ms=state.retry_at_ms,
-            jitter_seconds=SYMBOL_CATALOG_RETRY_JITTER_SECONDS,
-        )
+        if _owns_refresh_timers(adapter):
+            _schedule_market_refresh(
+                adapter,
+                market_type,
+                deadline_ms=state.retry_at_ms,
+                jitter_seconds=SYMBOL_CATALOG_RETRY_JITTER_SECONDS,
+            )
         return _active_symbol_count(key)
     except Exception as exc:
         state.stale = True
@@ -720,12 +775,13 @@ async def _run_market_refresh(
             market_type,
             exc,
         )
-        _schedule_market_refresh(
-            adapter,
-            market_type,
-            deadline_ms=state.retry_at_ms,
-            jitter_seconds=SYMBOL_CATALOG_RETRY_JITTER_SECONDS,
-        )
+        if _owns_refresh_timers(adapter):
+            _schedule_market_refresh(
+                adapter,
+                market_type,
+                deadline_ms=state.retry_at_ms,
+                jitter_seconds=SYMBOL_CATALOG_RETRY_JITTER_SECONDS,
+            )
         return _active_symbol_count(key)
 
     observed_at = attempted_at
@@ -749,7 +805,7 @@ async def _run_market_refresh(
     state.stale = False
     _cache_loaded_at = max(_cache_loaded_at, observed_at)
     await _persist_exchange_metadata_snapshot()
-    if SYMBOL_CATALOG_TTL_SECONDS > 0:
+    if SYMBOL_CATALOG_TTL_SECONDS > 0 and _owns_refresh_timers(adapter):
         _schedule_market_refresh(
             adapter,
             market_type,
@@ -758,6 +814,27 @@ async def _run_market_refresh(
             ),
         )
     return len(current)
+
+
+async def _list_symbol_rows(adapter: Any, market_type: str) -> list[dict[str, Any]]:
+    # Adapters with large catalogs (CCXT) build their rows off the event loop.
+    list_rows = getattr(adapter, "list_symbol_rows", None)
+    if callable(list_rows):
+        return list(await list_rows(market_type))
+    return [item.to_dict() for item in await adapter.list_symbols(market_type)]
+
+
+def _owns_refresh_timers(adapter: Any) -> bool:
+    """Only eagerly refreshed catalogs keep themselves fresh with timers.
+
+    Lazy catalogs (every generic CCXT venue) are loaded on demand or by the
+    background discovery sweep.  Arming a TTL or failure-retry timer for each
+    of them turned ~200 venue catalogs into self-renewing 5-minute refresh
+    loops, which is more CCXT parsing than one event loop can absorb.  Their
+    callers already re-request them under the same TTL and retry deadlines.
+    """
+
+    return getattr(adapter, "eager_catalog_refresh", True) is not False
 
 
 def _active_symbol_count(key: tuple[str, str]) -> int:

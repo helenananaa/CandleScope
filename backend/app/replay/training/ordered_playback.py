@@ -1685,7 +1685,7 @@ class TrainingOrderedPlayback:
 
             if (
                 allow_final_state_batch
-                and source_goal is None
+                and (source_goal is None or hedge_mode)
                 and not pending_global_events
             ):
                 from .multi_interval_advance import try_advance
@@ -1719,7 +1719,7 @@ class TrainingOrderedPlayback:
                         final = {**state, "sequence": state["event_sequence"]}
                         return terminal_result_factory(final, events, progress)
 
-                recorded = await try_advance(
+                recorded = (await try_advance(
                     self,
                     command=command,
                     binding=binding,
@@ -1729,7 +1729,7 @@ class TrainingOrderedPlayback:
                     runtime_snapshot=hedge_runtime_snapshot,
                     cancel_event=cancel_event,
                     completion=completion,
-                )
+                ) if source_goal is None else None)
                 completed_multi_interval = recorded is not None
                 if recorded is None:
                     from .tape_phases import try_advance as try_tape_phases
@@ -1741,8 +1741,10 @@ class TrainingOrderedPlayback:
                         tracks=tracks,
                         snapshots=snapshots,
                         target=target_virtual_time_ms,
+                        runtime_snapshot=hedge_runtime_snapshot,
+                        source_goal=source_goal,
                     )
-                if recorded is None:
+                if recorded is None and source_goal is None:
                     recorded = await self._try_indexed_interval(
                         command=command,
                         binding=binding,
@@ -1751,7 +1753,7 @@ class TrainingOrderedPlayback:
                         target=target_virtual_time_ms,
                         runtime_snapshot=hedge_runtime_snapshot,
                     )
-                if recorded is None:
+                if recorded is None and source_goal is None:
                     recorded = await self._try_recorded_interval(
                         command=command,
                         binding=binding,
@@ -1898,6 +1900,7 @@ class TrainingOrderedPlayback:
                 )
             planned_event_times: dict[str, tuple[int, ...]] = {}
             planned_source_boundaries: dict[str, int] = {}
+            requires_scalar_cohort = False
             for track, _snapshot in snapshots:
                 session_id = service_validation_ops.track_session_id(track)
                 try:
@@ -1957,6 +1960,27 @@ class TrainingOrderedPlayback:
                         "market event plan has an invalid timestamp count",
                         status_code=503,
                     )
+                if (
+                    hedge_mode
+                    and binding.get("source_kind") == "AGG_TRADE"
+                    and final_state_profile is not None
+                    and source_goal is None
+                    and event_times
+                    and plan.get("has_more_before_target") is True
+                ):
+                    # The bounded plan may stop inside its final timestamp
+                    # cohort. Post-market inputs wait for that cohort to finish;
+                    # batching older MARKs into it would leave their cursor
+                    # behind the already committed market on the next wave.
+                    # Seeing a later timestamp proves the preceding prefix is
+                    # complete, without an extra source scan. A single giant
+                    # cohort retains scalar phase ordering until fully drained.
+                    complete_prefix = tuple(t for t in event_times if t < event_times[-1])
+                    if complete_prefix:
+                        event_times = complete_prefix
+                        event_count = len(event_times)
+                    else:
+                        requires_scalar_cohort = True
                 if event_count > 0:
                     preserve_final_state_batch = (
                         source_goal is None and final_state_profile is not None
@@ -2004,6 +2028,9 @@ class TrainingOrderedPlayback:
                     )
                     next_times.append(first_time)
                 final_state_profile = None
+
+            if requires_scalar_cohort:
+                shrink_final_state_plan_to_first_event()
 
             if final_state_profile is not None and len(tracks) > 1:
                 planned_batches = tuple(
@@ -2504,11 +2531,14 @@ class TrainingOrderedPlayback:
                     await advance_market_barrier()
                     market_barrier = True
                 if not market_cohort_incomplete and not atomic_market_wave:
+                    # Both BAR and tape reach this point only after a complete
+                    # market cohort. Fold risk and its checkpoint together;
+                    # never fold an unfinished SOURCE_EVENT timestamp or a
+                    # simulation/exact-account/book reconciliation boundary.
                     supports_combined_hedge_wave = (
                         hedge_mode
-                        and str(binding.get("source_kind")) == "BAR"
+                        and str(binding.get("source_kind")) in {"BAR", "AGG_TRADE"}
                         and not book_required
-                        and source_goal is None
                         and not simulation_hedge_events
                         and str(binding.get("account_data_mode"))
                         != AccountDataMode.HISTORICAL_EXACT.value
@@ -3946,7 +3976,11 @@ class TrainingOrderedPlayback:
                             step_sequence=step_sequence,
                         )
                     elif step_type in {"PARTIAL_LIQUIDATION", "FULL_LIQUIDATION"}:
-                        session_id = plan.get("adapter_session_id")
+                        # The frozen plan retains its original actor as evidence;
+                        # a review fork executes against its own track's actor.
+                        track = next((item for item in event.get("tracks", [])
+                                      if isinstance(item, Mapping) and item.get("track_id") == plan.get("track_id")), None)
+                        session_id = track.get("adapter_session_id") if track is not None else None
                         if not isinstance(session_id, str):
                             raise TrainingRunError(
                                 "LIQUIDATION_EXECUTION_FAILED",
@@ -4198,6 +4232,16 @@ class TrainingOrderedPlayback:
             client_instance_id=command.client_instance_id,
             command_id=command.command_id,
         )
+        if track.get("subscription_tier") != "FULL":
+            from .hedge_track_readmission import catch_up_public_marks
+
+            binding = await self.store.run_binding(command.run_id)
+            await catch_up_public_marks(
+                manager=self.hedge_inputs, binding=binding,
+                track_ids=(str(track["track_id"]),),
+                target_virtual_time_ms=target_virtual_time_ms,
+                store=self.store,
+            )
         await self._advance_adapter_to(
             session_id=session_id,
             target_virtual_time_ms=target_virtual_time_ms,

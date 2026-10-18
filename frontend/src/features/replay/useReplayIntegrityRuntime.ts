@@ -25,6 +25,7 @@ import type {
 } from "./replayV2Types.js";
 import type { ReplayRuntime } from "./useReplayRuntime.js";
 import type { ReplayViewerRuntime } from "./useReplayViewerRuntime.js";
+import { seedForkReplayChartWorkspace, type ReplayWorkspaceSeed } from "./replayChartWorkspaceRepository.js";
 
 export type ReplayIntegrityOperation =
   | "refresh"
@@ -106,7 +107,11 @@ export function useReplayIntegrityRuntime(
   viewer: ReplayViewerRuntime,
   equityVisible = true,
   enabled = true,
+  forkWorkspace?: () => ReplayWorkspaceSeed,
 ): ReplayIntegrityRuntime {
+  const forkWorkspaceRef = useRef(forkWorkspace);
+  forkWorkspaceRef.current = forkWorkspace;
+  const pendingFork = useRef<{ parent: string; event: string; response: ReplayReviewForkResponse; seed: ReplayWorkspaceSeed | undefined } | null>(null);
   const [integrity, setIntegrity] = useState<ReplayIntegrityResponse | null>(null);
   const [rules, setRules] = useState<ReplayRunRulesResponse | null>(null);
   const [equity, setEquity] = useState<ReplayEquityResponse | null>(null);
@@ -139,7 +144,12 @@ export function useReplayIntegrityRuntime(
     runtime.store.controllerClientId,
   );
   const clockIsAdvancing = effectiveState === "PLAYING"
-    || effectiveState === "ADVANCING";
+    || effectiveState === "ADVANCING"
+    // Explicit advance commands leave the playback clock PAUSED between
+    // committed source cohorts. Do not re-query the whole equity history on
+    // each intermediate revision while that command is still in flight.
+    || viewer.controlPending?.type === "advance"
+    || runtime.pendingCommand !== null;
 
   const refresh = useCallback(async (): Promise<void> => {
     const currentRunId = replayRunId(viewerRef.current);
@@ -537,8 +547,20 @@ export function useReplayIntegrityRuntime(
     setOperation("fork");
     setError(null);
     try {
-      const response = await defaultReplayV2Api.forkRun(currentRunId, eventId);
+      const previous = pendingFork.current;
+      // Capture before the request; layout edits while awaiting it cannot
+      // change this fork. Retrying a failed local save reuses the created run.
+      const seed = previous?.parent === currentRunId && previous.event === eventId
+        ? previous.seed : forkWorkspaceRef.current?.();
+      const response = previous?.parent === currentRunId && previous.event === eventId
+        ? previous.response : await defaultReplayV2Api.forkRun(currentRunId, eventId);
+      pendingFork.current = { parent: currentRunId, event: eventId, response, seed };
+      if (seed) {
+        const tracks = await defaultReplayV2Api.tracksRun(response.run.run_id);
+        if (!seedForkReplayChartWorkspace(response.run.run_id, seed, tracks)) throw new Error("Replay workspace save failed");
+      }
       setForked(response);
+      pendingFork.current = null;
       return response;
     } catch (cause) {
       setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.reviewFork"));

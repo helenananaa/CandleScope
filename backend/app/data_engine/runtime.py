@@ -1189,11 +1189,16 @@ async def _background_gap_audit_loop(
 
     while True:
         try:
+            get_series_async = getattr(dm, "gap_audit_series_async", None)
             get_series = getattr(dm, "gap_audit_series", None)
-            if callable(get_series):
+            if callable(get_series_async) or callable(get_series):
                 get_tail_series = getattr(dm, "gap_audit_tail_series", None)
                 report = await backfill_coordinator.audit_storage_series(
-                    get_series(),
+                    (
+                        await get_series_async()
+                        if callable(get_series_async)
+                        else get_series()
+                    ),
                     scan_limit=50_000,
                     max_gaps=100,
                     repair=True,

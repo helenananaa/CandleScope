@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.replay.request_contracts import (
+    ReplayCanonicalIndicatorPayload,
     ReplayCommandPayload,
     TrainingRunPreparationPayload,
     TrainingRunSetupPayload,
@@ -60,6 +61,7 @@ from app.replay.training.service import TrainingRunService
 
 MAX_REPLAY_REQUEST_BYTES = 64 * 1024
 MAX_REPLAY_DRAWING_REQUEST_BYTES = 2_100_000
+MAX_REPLAY_INDICATOR_REQUEST_BYTES = 8_000_000
 _MAX_HORIZON_MS = REPLAY_SETTINGS.max_horizon_days * 86_400_000
 
 
@@ -97,6 +99,13 @@ class ReplayAPIRoute(APIRoute):
                     await enforce_replay_request_limit(request)
                 return await original(request)
             except TrainingRunError as exc:
+                if _is_adapter_request(request):
+                    code = (ReplayErrorCode.SESSION_NOT_FOUND if exc.status_code == 404
+                        else ReplayErrorCode.REPLAY_DISABLED if exc.code == "REPLAY_TRAINING_UNAVAILABLE"
+                        else ReplayErrorCode.PERSISTENCE_DEGRADED if exc.status_code >= 500
+                        else ReplayErrorCode.INVALID_STATE_TRANSITION)
+                    return JSONResponse(status_code=exc.status_code, content=replay_error_payload(
+                        ReplayDomainError(code, str(exc), details={**exc.details, "reason": exc.code})))
                 return JSONResponse(
                     status_code=exc.status_code,
                     content=exc.to_payload(),
@@ -172,7 +181,17 @@ class ReplayAPIRoute(APIRoute):
 
 
 def _is_training_run_request(request: Request) -> bool:
-    return "/replay/runs" in request.url.path
+    return "/replay/runs" in request.url.path and not _is_adapter_request(request)
+
+
+def _is_adapter_request(request: Request) -> bool:
+    # These two internal endpoints retain the v1 adapter snapshot/command
+    # protocol. Viewer/history/track endpoints under the same prefix are v3.
+    prefix, separator, tail = request.url.path.partition("/replay/runs/session/")
+    if not separator:
+        return False
+    parts = tail.strip("/").split("/")
+    return len(parts) == 1 or (len(parts) == 2 and parts[1] == "commands")
 
 
 router = APIRouter(
@@ -201,6 +220,9 @@ async def enforce_replay_request_limit(request: Request) -> None:
 
 
 def _replay_request_limit(request: Request) -> int:
+    if (request.method == "POST" and "/replay/runs/session/" in request.url.path
+            and request.url.path.endswith("/indicator-compute")):
+        return MAX_REPLAY_INDICATOR_REQUEST_BYTES
     if (
         request.method == "POST"
         and request.url.path.endswith("/drawings")
@@ -664,6 +686,15 @@ async def replay_v2_training_history(
     )
 
 
+@router.post("/runs/session/{session_id}/indicator-compute")
+async def replay_v2_canonical_indicator_compute(
+    request: Request, session_id: str, payload: ReplayCanonicalIndicatorPayload,
+) -> dict[str, object]:
+    from app.replay.training.indicator_http import compute_for_observer
+    return await compute_for_observer(request,
+        _training_service(request).canonical_indicator_compute(session_id, **payload.model_dump()))
+
+
 @router.get("/runs/session/{session_id}/display-projection")
 async def replay_v2_training_display_projection(
     request: Request,
@@ -682,6 +713,25 @@ async def replay_v2_training_display_projection(
         data_epoch=data_epoch,
         display_interval=display_interval,
     )
+
+
+@router.get("/runs/session/{session_id}/tape-projection")
+async def replay_v2_tape_projection(
+    request: Request, session_id: str,
+    track_id: str = Query(min_length=1, max_length=128),
+    revealed_boundary_ms: int = Query(ge=0, le=MAX_TIMESTAMP_MS),
+    source_sequence: int = Query(ge=0),
+    limit: int = Query(default=500, ge=1, le=500),
+    data_epoch: str = Query(min_length=71, max_length=71),
+    display_interval: str = Query(min_length=1, max_length=32),
+    before_ms: int | None = Query(default=None, ge=0, le=MAX_TIMESTAMP_MS),
+    history_epoch: str | None = Query(default=None, min_length=71, max_length=71),
+) -> dict[str, object]:
+    from app.replay.training.indicator_http import compute_for_observer
+    return await compute_for_observer(request, _training_service(request).tape_projection(
+        session_id, track_id=track_id, revealed_boundary_ms=revealed_boundary_ms,
+        source_sequence=source_sequence, limit=limit, data_epoch=data_epoch,
+        display_interval=display_interval, before_ms=before_ms, history_epoch=history_epoch))
 
 
 @router.get("/runs/session/{session_id}/viewer")

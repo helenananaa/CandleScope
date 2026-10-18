@@ -7,14 +7,14 @@ from typing import Any
 
 import httpx
 import pytest
-from fastapi import FastAPI
-
 from app.api.v1.replay import MAX_REPLAY_REQUEST_BYTES, router
 from app.replay.constants import REPLAY_PROTOCOL
 from app.replay.errors import ReplayDomainError, ReplayErrorCode
 from app.replay.service import ReplayService
 from app.replay.storage import ReplaySQLiteStore
 from app.replay.training.errors import TrainingRunError
+from fastapi import FastAPI
+
 from tests.fixtures.replay.service_fakes import (
     INTERVAL_MS,
     NOW_MS,
@@ -22,7 +22,6 @@ from tests.fixtures.replay.service_fakes import (
     replay_repository,
     replay_settings,
 )
-
 
 pytestmark = pytest.mark.anyio
 
@@ -118,11 +117,11 @@ async def test_http_routes_parse_strict_models_and_map_domain_errors() -> None:
     )
     assert conflict.status_code == 409
     assert conflict.json() == {
-        "protocol": "replay.v3",
+        "protocol": "replay.v1",
         "error": {
-            "code": "TRAINING_RUN_INVALID",
-            "message": "training run request is invalid",
-            "details": {"reason": "REVISION_CONFLICT"},
+            "code": "REVISION_CONFLICT",
+            "message": "revision does not match",
+            "details": {"latest_revision": 3},
         },
     }
 
@@ -133,8 +132,8 @@ async def test_http_routes_parse_strict_models_and_map_domain_errors() -> None:
         json={**_command(), "future_field": True},
     )
     assert unknown.status_code == 422
-    assert unknown.json()["protocol"] == "replay.v3"
-    assert unknown.json()["error"]["code"] == "TRAINING_RUN_INVALID"
+    assert unknown.json()["protocol"] == "replay.v1"
+    assert unknown.json()["error"]["code"] == "INVALID_STATE_TRANSITION"
 
     snapshot = await _request(
         app,
@@ -150,8 +149,8 @@ async def test_http_routes_parse_strict_models_and_map_domain_errors() -> None:
         "/api/v1/replay/runs/session/bare-session",
     )
     assert bare.status_code == 404
-    assert bare.json()["protocol"] == "replay.v3"
-    assert bare.json()["error"]["code"] == "TRAINING_RUN_NOT_FOUND"
+    assert bare.json()["protocol"] == "replay.v1"
+    assert bare.json()["error"]["code"] == "SESSION_NOT_FOUND"
 
     retired = await _request(
         app,
@@ -170,8 +169,8 @@ async def test_internal_adapter_routes_fail_closed_without_training_runtime() ->
         "/api/v1/replay/runs/session/session-1",
     )
     assert response.status_code == 503
-    assert response.json()["protocol"] == "replay.v3"
-    assert response.json()["error"]["code"] == "REPLAY_TRAINING_UNAVAILABLE"
+    assert response.json()["protocol"] == "replay.v1"
+    assert response.json()["error"]["code"] == "REPLAY_DISABLED"
 
 
 async def test_request_size_limit_and_openapi_examples_are_frozen() -> None:
@@ -184,9 +183,10 @@ async def test_request_size_limit_and_openapi_examples_are_frozen() -> None:
         json=_command(),
     )
     assert oversized.status_code == 413
-    assert oversized.json()["error"]["code"] == "TRAINING_RUN_INVALID"
+    assert oversized.json()["protocol"] == "replay.v1"
+    assert oversized.json()["error"]["code"] == "SCAN_LIMIT_EXCEEDED"
     assert oversized.json()["error"]["details"] == {
-        "reason": "SCAN_LIMIT_EXCEEDED"
+        "limit_bytes": MAX_REPLAY_REQUEST_BYTES
     }
 
     oversized_body = json.dumps(
@@ -206,7 +206,7 @@ async def test_request_size_limit_and_openapi_examples_are_frozen() -> None:
         content=oversized_body,
     )
     assert lying_length.status_code == 413
-    assert lying_length.json()["error"]["code"] == "TRAINING_RUN_INVALID"
+    assert lying_length.json()["error"]["code"] == "SCAN_LIMIT_EXCEEDED"
 
     async def chunked_body():
         encoded = oversized_body.encode("utf-8")
@@ -221,7 +221,7 @@ async def test_request_size_limit_and_openapi_examples_are_frozen() -> None:
         content=chunked_body(),
     )
     assert chunked.status_code == 413
-    assert chunked.json()["error"]["code"] == "TRAINING_RUN_INVALID"
+    assert chunked.json()["error"]["code"] == "SCAN_LIMIT_EXCEEDED"
 
     schema = app.openapi()
     paths = schema["paths"]

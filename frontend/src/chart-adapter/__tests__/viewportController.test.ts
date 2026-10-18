@@ -78,6 +78,50 @@ test("semantic fit falls back when the content provider has no usable range", ()
   assert.deepEqual(calls, [["fitContent"]]);
 });
 
+test("session persistence anchors at real rows rather than a future carrier tail", () => {
+  const { chart, timeScale, calls } = createChart();
+  const controller = new ViewportController({
+    chartProvider: () => chart,
+    contentLogicalRangeProvider: () => ({ from: 0, to: 5 }),
+  });
+  timeScale.range = { from: -89, to: 10 };
+  assert.equal(controller.captureRightOffset(), 5);
+  controller.applySessionRestore({ mode: "anchor", rightOffset: 5 });
+  assert.deepEqual(timeScale.range, { from: -89, to: 10 });
+  assert.equal(calls.some(([name]) => name === "scrollToPosition"), false);
+  // Legacy saved negative engine offsets are normalized to zero by the
+  // persistence policy; zero still means the real final candle.
+  controller.applySessionRestore({ mode: "anchor", rightOffset: 0 });
+  assert.deepEqual(timeScale.range, { from: -94, to: 5 });
+});
+
+test("semantic default reset keeps default zoom and real-content padding", () => {
+  const { timeScale } = createChart();
+  const scale = { ...timeScale, resetTimeScale: () => { scale.range = { from: 100, to: 199 }; } };
+  scale.getVisibleLogicalRange = () => scale.range;
+  scale.setVisibleLogicalRange = (range) => { scale.range = range; };
+  const controller = new ViewportController({
+    chartProvider: () => structuralMock<AdapterChart>({ timeScale: () => scale }),
+    contentLogicalRangeProvider: () => ({ from: 0, to: 5 }),
+  });
+  controller.resetToDefault();
+  assert.deepEqual(scale.range, { from: -89, to: 10 });
+  assert.equal(controller.captureRightOffset(), 5);
+});
+
+test("reopen recovers a saved future-only window without changing zoom", () => {
+  const { chart, timeScale } = createChart();
+  const controller = new ViewportController({ chartProvider: () => chart,
+    contentLogicalRangeProvider: () => ({ from: 0, to: 49 }),
+  });
+  controller.applySessionRestore({ mode: "anchor", barSpacing: 6, rightOffset: 190 });
+  assert.deepEqual(timeScale.range, { from: -45, to: 54 });
+  assert.equal(controller.captureRightOffset(), 5);
+  // Intentional whitespace that still leaves market content visible survives.
+  controller.applySessionRestore({ mode: "anchor", barSpacing: 6, rightOffset: 75 });
+  assert.deepEqual(timeScale.range, { from: 25, to: 124 });
+});
+
 test("interaction lock queues the highest priority intent", () => {
   const { chart, calls } = createChart();
   let unlock: (() => void) | undefined;
@@ -212,6 +256,29 @@ test("restoreProjectionRange owns logical writes and falls back to fit", () => {
   ]);
 });
 
+test("a fine-period transfer can retain more than the default half-pixel density", () => {
+  const { chart, calls } = createChart();
+  const controller = new ViewportController({ chartProvider: () => chart });
+  assert.equal(controller.restoreProjectionRange({ from: 0, to: 6000 }, { immediate: true }), true);
+  assert.deepEqual(calls, [
+    ["applyOptions", { minBarSpacing: 0.1 }],
+    ["setVisibleLogicalRange", { from: 0, to: 6000 }],
+  ]);
+});
+
+test("an explicit period hand-off freezes appended bars until the user returns to latest", () => {
+  const { chart, calls } = createChart();
+  const controller = new ViewportController({ chartProvider: () => chart });
+  assert.equal(controller.restoreProjectionRange({ from: 2, to: 12 }, { freezeOnNewBars: true, immediate: true }), true);
+  assert.deepEqual(calls[0], ["applyOptions", { shiftVisibleRangeOnNewBar: false }]);
+  assert.equal(controller.followLatest(20), true);
+  assert.deepEqual(calls[2], ["applyOptions", { shiftVisibleRangeOnNewBar: true }]);
+  calls.length = 0;
+  controller.restoreProjectionRange({ from: 2, to: 12 }, { freezeOnNewBars: true });
+  controller.resetSession();
+  assert.deepEqual(calls.at(-1), ["applyOptions", { shiftVisibleRangeOnNewBar: true }]);
+});
+
 test("immediate projection restore supersedes a queued outgoing-dataset intent", () => {
   const { chart, calls } = createChart();
   let unlock: (() => void) | undefined;
@@ -251,12 +318,12 @@ test("followLatest keeps an underfilled latest bar centered without fitting", ()
     contentLastLogical: 9,
     position: 0.5,
     width: 600,
-  }), { from: -41, to: 59 });
+  }), { from: -40.5, to: 58.5 });
   assert.equal(controller.followLatest(9), true);
   assert.equal(controller.followLatest(10), true);
   assert.deepEqual(calls, [
-    ["setVisibleLogicalRange", { from: -41, to: 59 }],
-    ["setVisibleLogicalRange", { from: -40, to: 60 }],
+    ["setVisibleLogicalRange", { from: -40.5, to: 58.5 }],
+    ["setVisibleLogicalRange", { from: -39.5, to: 59.5 }],
   ]);
 });
 

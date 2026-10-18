@@ -1,3 +1,4 @@
+import { hedgeHybridMarketTracksFixture } from "./fixtures/hedge-hybrid-market-tracks.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
@@ -5,13 +6,67 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { ReplayV2ApiClient } from "../replayV2Api.js";
-import { parseReplayMarketTracksResponse } from "../replayV2Types.js";
+import { parseReplayMarketTracksResponse, type ReplayHedgeInputView } from "../replayV2Types.js";
 import {
   applyReplayTrainingRunStreamMessage,
   buildReplayTrainingRunStreamUrl,
   ReplayTrainingRunStream,
   type ReplayTrainingRunStreamSocket,
 } from "../replayTrainingRunStream.js";
+
+// Captured from the isolated production QA profile after LTC -> DOGE admission.
+// Keep the complete wire response to catch backend/frontend contract drift.
+test("production HEDGE extension response survives parsing and blind time mapping", () => {
+  const wire = structuredClone(hedgeHybridMarketTracksFixture) as {
+    portfolio: { hedge_inputs: ReplayHedgeInputView & {
+      hybrid_extensions: NonNullable<ReplayHedgeInputView["hybrid_extensions"]>;
+    } };
+  };
+  const parse = (hedge: unknown) => parseReplayMarketTracksResponse({
+    ...wire, portfolio: { ...wire.portfolio, hedge_inputs: hedge },
+  });
+  const hedge = wire.portfolio.hedge_inputs;
+  const parsed = parse(hedge);
+  assert.equal(parsed.portfolio.schema_version, "replay.training.portfolio.v2");
+  if (parsed.portfolio.schema_version !== "replay.training.portfolio.v2") assert.fail();
+  assert.deepEqual(parsed.portfolio.hedge_inputs?.hybrid_extensions, hedge.hybrid_extensions);
+  assert.equal(parsed.tracks[1]?.symbol, "DOGEUSDT");
+  const { hybrid_extensions: extensions, ...legacy } = hedge;
+  const firstExtension = extensions[0];
+  assert.ok(firstExtension);
+  assert.doesNotThrow(() => parse(legacy));
+  const origin = 946_684_800_000;
+  const offset = origin - hedge.bound_range_start_ms;
+  const mapped = {
+    ...hedge, time_domain: "PUBLIC", bound_range_start_ms: origin,
+    bound_range_end_ms: hedge.bound_range_end_ms + offset,
+    projections: hedge.projections.map((item: Record<string, unknown>) => ({
+      ...item, time_domain: "PUBLIC", as_of_time_ms: Number(item.as_of_time_ms) + offset,
+    })),
+    track_public: hedge.track_public.map((item: Record<string, unknown>) => {
+      const projection = item.projection as Record<string, unknown>;
+      return { ...item, projection: { ...projection, time_domain: "PUBLIC",
+        as_of_time_ms: Number(projection.as_of_time_ms) + offset } };
+    }),
+    hybrid_extensions: extensions.map((item: Record<string, unknown>) => ({
+      ...item, time_domain: "PUBLIC", as_of_time_ms: Number(item.as_of_time_ms) + offset,
+    })),
+  };
+  assert.doesNotThrow(() => parse(mapped));
+  for (const malformed of [null, {}, [extensions[0], extensions[0]],
+    [{ ...extensions[0], track_id: "track-999" }],
+    [{ ...extensions[0], schema_version: "unknown" }],
+    [{ ...extensions[0], component_hash: "invalid" }],
+    [{ ...extensions[0], as_of_time_ms: hedge.bound_range_start_ms - 1 }],
+    [{ ...extensions[0], as_of_time_ms: hedge.bound_range_end_ms + 1 }],
+    [{ ...firstExtension, as_of_time_ms: firstExtension.as_of_time_ms + 1 }],
+    [{ ...extensions[0], time_domain: "PUBLIC" }],
+    [{ ...extensions[0], payload_json: "private simulation" }],
+  ]) {
+    assert.throws(() => parse({ ...hedge, hybrid_extensions: malformed }), /hybrid_extensions/);
+  }
+  assert.throws(() => parse({ ...mapped, hybrid_extensions: extensions }), /hybrid_extensions/);
+});
 
 
 function viewerState() {

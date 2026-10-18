@@ -11,8 +11,8 @@ import { useDrawingSurfacePlacement } from "./useDrawingEditorLayout.js";
 
 type ObjectFilter = "all" | "hidden" | "locked" | "otherIntervals";
 
-function ObjectGroup({ api, label, interval, query, filter, close }: {
-  api: DrawingObjectApi; label: string; interval: string; query: string; filter: ObjectFilter; close(): void;
+function ObjectGroup({ api, label, interval, query, filter, close, readOnly }: {
+  readOnly: boolean; api: DrawingObjectApi; label: string; interval: string; query: string; filter: ObjectFilter; close(): void;
 }) {
   const document = useSyncExternalStore(api.subscribeObjectDocument, api.getObjectDocument, api.getObjectDocument);
   const [failed, setFailed] = useState(false);
@@ -42,13 +42,13 @@ function ObjectGroup({ api, label, interval, query, filter, close }: {
     <ul>{objects.map(({ id, drawing, name, intervalHidden }) => {
       return <li key={id} data-drawing-object={id}>
         <div className="drawing-object-row">
-          <button className="drawing-object-select" type="button" disabled={drawing.hidden || intervalHidden}
+          <button className="drawing-object-select" type="button" disabled={readOnly || drawing.hidden || intervalHidden}
             title={name} onClick={() => { if (run(() => api.selectObject(id))) close(); }}>
             <span className="drawing-object-swatch" style={{ backgroundColor: "color" in drawing ? drawing.color : undefined }} />
             <span><strong>{name}</strong><small>{id}{drawing.hidden ? ` · ${t("drawing.objects.hidden")}` : ""}</small></span>
           </button>
           <button type="button" aria-label={t("drawing.objects.front")} title={t("drawing.objects.front")}
-            disabled={document.zOrder.at(-1) === id} onClick={() => run(() => api.reorderObject(id, "front"))}>
+            disabled={readOnly || document.zOrder.at(-1) === id} onClick={() => run(() => api.reorderObject(id, "front"))}>
             <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 4h16M12 20V8m-5 5 5-5 5 5" /></svg>
           </button>
           <button type="button" aria-label={t("drawing.objects.back")} title={t("drawing.objects.back")}
@@ -56,22 +56,23 @@ function ObjectGroup({ api, label, interval, query, filter, close }: {
             <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 20h16M12 4v12m-5-5 5 5 5-5" /></svg>
           </button>
           <button type="button" aria-label={t(drawing.hidden ? "drawing.objects.show" : "drawing.objects.hide")} aria-pressed={!!drawing.hidden}
-            title={t(drawing.hidden ? "drawing.objects.show" : "drawing.objects.hide")} onClick={() => run(() => api.updateObject(id, { hidden: !drawing.hidden }))}>
+            disabled={readOnly} title={t(drawing.hidden ? "drawing.objects.show" : "drawing.objects.hide")} onClick={() => run(() => api.updateObject(id, { hidden: !drawing.hidden }))}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" />{drawing.hidden && <path d="m3 3 18 18" />}</svg>
           </button>
           <button type="button" aria-label={t(drawing.locked ? "drawing.editor.unlock" : "drawing.editor.lock")} aria-pressed={!!drawing.locked}
-            title={t(drawing.locked ? "drawing.editor.unlock" : "drawing.editor.lock")} onClick={() => run(() => api.updateObject(id, { locked: !drawing.locked }))}><StyleIcon name={drawing.locked ? "lock" : "unlock"} /></button>
-          <button type="button" aria-label={t("format.delete")} title={t("format.delete")} onClick={() => run(() => api.deleteObject(id))}><StyleIcon name="delete" /></button>
+            disabled={readOnly} title={t(drawing.locked ? "drawing.editor.unlock" : "drawing.editor.lock")} onClick={() => run(() => api.updateObject(id, { locked: !drawing.locked }))}><StyleIcon name={drawing.locked ? "lock" : "unlock"} /></button>
+          <button type="button" disabled={readOnly} aria-label={t("format.delete")} title={t("format.delete")} onClick={() => run(() => api.deleteObject(id))}><StyleIcon name="delete" /></button>
         </div>
         {intervalHidden && <div className="drawing-object-interval"><span>{t("drawing.objects.otherIntervals")}</span>
-          <button type="button" onClick={() => run(() => api.updateObject(id, { visibleIntervals: null }))}>{t("drawing.visibility.all")}</button></div>}
+          <button type="button" disabled={readOnly} onClick={() => run(() => api.updateObject(id, { visibleIntervals: null }))}>{t("drawing.visibility.all")}</button></div>}
       </li>;
     })}</ul>
     {failed && <p role="alert" className="drawing-control-caption">{t("drawing.objects.failed")}</p>}
   </section>;
 }
 
-export default function DrawingObjectList({ apis, currentInterval, panes, onSelectPane }: {
+export default function DrawingObjectList({ apis, currentInterval, panes, onSelectPane, readOnly = false }: {
+  readOnly?: boolean;
   apis: ReadonlyMap<string, DrawingEngineApi>; currentInterval: string;
   panes: readonly { id: string; label: string }[];
   onSelectPane(paneId: string): void;
@@ -108,8 +109,8 @@ export default function DrawingObjectList({ apis, currentInterval, panes, onSele
           aria-pressed={filter === value} onClick={() => setFilter(value)}>{t(`drawing.objects.${value}`)}</button>)}
       </div>
       <div className="drawing-object-content">{sources.map(source => <ObjectGroup key={`${source.id}:${source.api.getObjectDocument().scopeKey}`}
-        api={source.api} label={source.label} interval={currentInterval} query={query} filter={filter} close={() => { onSelectPane(source.id); close(); }} />)}</div>
-      <footer className="drawing-properties-footer"><span className="drawing-control-caption">{t("drawing.objects.undoHint")}</span></footer>
+        readOnly={readOnly} api={source.api} label={source.label} interval={currentInterval} query={query} filter={filter} close={() => { onSelectPane(source.id); close(); }} />)}</div>
+      <footer className="drawing-properties-footer"><span className="drawing-control-caption">{t(readOnly ? "replay.kicker.reviewReadOnly" : "drawing.objects.undoHint")}</span></footer>
     </dialog>}
   </div>;
 }

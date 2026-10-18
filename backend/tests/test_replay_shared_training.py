@@ -44,6 +44,12 @@ async def test_shared_exact_event_boundaries(tmp_path, monkeypatch, event):
         kwargs["time_disclosure_policy"] = "HIDE_ALL"
     if event == "review":
         kwargs["review_fork"] = True
+        # Equity review events retain new minima, not every mark change. Make
+        # an actual loss before the interval endpoint so the fork exercises a
+        # historical financial anchor on both shared and scalar execution.
+        marks = [str(100 + i % 11) for i in range(261)]
+        marks[180] = "95"
+        kwargs["mark_prices"] = marks
     await run_case(
         tmp_path,
         monkeypatch,

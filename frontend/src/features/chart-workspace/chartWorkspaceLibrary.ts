@@ -217,6 +217,42 @@ export function cloneChartWorkspaceDocument(
   return normalizeChartWorkspace(cloneSerializable(document));
 }
 
+const MISSING_PENDING_VALUE = Symbol("missing pending workspace value");
+
+/** Rebase only locally changed fields onto the authoritative bus snapshot.
+ * Pending local edits keep their existing priority when the same field changed
+ * on both sides. Untouched cells and reports must come from the bus snapshot.
+ */
+function mergePendingWorkspaceValue(base: unknown, local: unknown, loaded: unknown): unknown {
+  const equal = (left: unknown, right: unknown) => left === right || JSON.stringify(left) === JSON.stringify(right);
+  const copy = (value: unknown) => value === MISSING_PENDING_VALUE ? value : structuredClone(value);
+  if (equal(local, base)) return copy(loaded);
+  if (equal(loaded, base) || equal(local, loaded)) return copy(local);
+  const object = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
+  if (!object(base) || !object(local) || !object(loaded)) return copy(local);
+  const keys = new Set([...Object.keys(base), ...Object.keys(local), ...Object.keys(loaded)]);
+  return Object.fromEntries([...keys].flatMap((key) => {
+    const read = (value: Record<string, unknown>) => Object.hasOwn(value, key) ? value[key] : MISSING_PENDING_VALUE;
+    const merged = mergePendingWorkspaceValue(read(base), read(local), read(loaded));
+    return merged === MISSING_PENDING_VALUE ? [] : [[key, merged]];
+  }));
+}
+
+function rebasePendingWorkspaceRecord(
+  base: ChartWorkspaceRecord,
+  local: ChartWorkspaceRecord,
+  loaded: ChartWorkspaceRecord,
+): ChartWorkspaceRecord {
+  if (loaded.document.revision === base.document.revision) return local;
+  if (JSON.stringify(local) === JSON.stringify(loaded)) return loaded;
+  const merged = mergePendingWorkspaceValue(base, local, loaded) as ChartWorkspaceRecord;
+  return {
+    ...merged,
+    updatedAt: Math.max(local.updatedAt, loaded.updatedAt),
+    document: { ...merged.document, revision: Math.max(local.document.revision, loaded.document.revision) + 1 },
+  };
+}
+
 export function mergeLoadedChartWorkspaceLibrary(
   current: ChartWorkspaceLibrarySnapshot,
   loaded: ChartWorkspaceLibrarySnapshot,
@@ -241,7 +277,7 @@ export function mergeLoadedChartWorkspaceLibrary(
     );
     if (locallyChanged) {
       keptLocal = true;
-      return [local];
+      return [prior ? rebasePendingWorkspaceRecord(prior, local, loadedWorkspace) : local];
     }
     return [loadedWorkspace];
   });

@@ -3,7 +3,7 @@
 MA -- Simple Moving Average indicator.
 
 Validates the window-based indicator pattern.
-Supports O(1) incremental update via rolling sum.
+Updates a bounded rolling window with history-independent arithmetic.
 """
 from __future__ import annotations
 
@@ -14,11 +14,12 @@ from app.data_engine.data_manager.models import BarData
 
 from ..base import Indicator
 from ..types import IndicatorMeta, IndicatorParam, IndicatorSpec, PaneType
+from ..window_math import window_mean
 
 
 class MAIndicator(Indicator):
     name = "MA"
-    version = "1.0"
+    version = "1.1"
     input_specs = ["close"]
     output_specs = ["ma"]
     warmup_period = 1  # dynamic, set from params
@@ -30,24 +31,19 @@ class MAIndicator(Indicator):
         self.warmup_period = self._period
         # Rolling state
         self._window: deque[float] = deque(maxlen=self._period)
-        self._rolling_sum: float = 0.0
 
     def _reset_state(self) -> None:
         self._window.clear()
-        self._rolling_sum = 0.0
 
     def init(self, bars: list[BarData]) -> None:
         self._reset_state()
 
         for bar in bars:
             val = self._get_field(bar, self._source)
-            if len(self._window) == self._period:
-                self._rolling_sum -= self._window[0]
             self._window.append(val)
-            self._rolling_sum += val
 
             if len(self._window) >= self._period:
-                ma_val = self._rolling_sum / self._period
+                ma_val = window_mean(self._window)
                 self._append_output("ma", bar.time, ma_val)
             else:
                 self._append_output("ma", bar.time, None)
@@ -60,20 +56,16 @@ class MAIndicator(Indicator):
             self._preview["ma"] = None
             return
         val = self._get_field(bar, self._source)
-        oldest = self._window[0] if len(self._window) == self._period else 0.0
-        preview_sum = self._rolling_sum - oldest + val
-        self._preview["ma"] = preview_sum / self._period
+        window = [*self._window, val][-self._period:]
+        self._preview["ma"] = window_mean(window)
 
     def update_closed(self, bar: BarData) -> None:
         val = self._get_field(bar, self._source)
-        if len(self._window) == self._period:
-            self._rolling_sum -= self._window[0]
         self._window.append(val)
-        self._rolling_sum += val
         self._bar_count += 1
 
         if len(self._window) >= self._period:
-            ma_val = self._rolling_sum / self._period
+            ma_val = window_mean(self._window)
             self._append_output("ma", bar.time, ma_val)
         else:
             self._append_output("ma", bar.time, None)

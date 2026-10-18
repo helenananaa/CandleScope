@@ -2,17 +2,20 @@ import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
 import { defaultReplayV2Api } from "./replayV2Api.js";
 import {
+  buildReplayViewerSeriesKey,
   rebuildReplayViewerSeries,
   replaceReplayViewerSeriesFromServer,
   replayUsesAuthoritativeSourceBucketProjection,
 } from "./replayViewerProjection.js";
 import type { ReplayRuntime, ReplayRuntimeLifecycle } from "./useReplayRuntime.js";
+import { ReplayTapeViewer, type ReplayTapeViewerObservation } from "./replayTapeViewer.js";
 
 interface ProjectionState {
   readonly loading: boolean;
   readonly error: string | null;
   readonly boundaryMs: number | null;
   readonly historyBootstrapBeforeMs?: number | null;
+  readonly tapeObservation?: ReplayTapeViewerObservation | null;
 }
 
 /** A cell owns its paged window; an old response can never replace a new dataset. */
@@ -26,13 +29,20 @@ export class ReplayChartProjection {
   private completedKey: string | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private leases = 0;
+  private tape: ReplayTapeViewer | null = null;
 
   constructor(
     private readonly lifecycle: ReplayRuntimeLifecycle,
     private readonly trackId: string,
     private readonly interval: string,
     private readonly api: Pick<typeof defaultReplayV2Api, "displayProjectionBySession"> = defaultReplayV2Api,
-  ) {}
+    private readonly fetcher?: typeof fetch,
+  ) {
+    // A period change renders the new, initially empty store before retain()
+    // starts its fetch. Publish its real identity immediately so the chart
+    // transfer never binds to an intermediate "uninitialized" dataset.
+    this.seriesStore.seriesKey = buildReplayViewerSeriesKey(lifecycle.store.seriesStore, interval);
+  }
 
   getSnapshot = () => this.state;
   subscribe = (listener: () => void) => {
@@ -42,6 +52,7 @@ export class ReplayChartProjection {
   private publish(next: ProjectionState) {
     if (this.state.loading === next.loading && this.state.error === next.error
       && this.state.boundaryMs === next.boundaryMs
+      && this.state.tapeObservation === next.tapeObservation
       && this.state.historyBootstrapBeforeMs === next.historyBootstrapBeforeMs) return;
     this.state = next;
     this.listeners.forEach((listener) => listener());
@@ -63,6 +74,8 @@ export class ReplayChartProjection {
       this.timer = null;
       this.request?.abort();
       this.request = null;
+      this.tape?.dispose();
+      this.tape = null;
     };
   };
 
@@ -83,9 +96,35 @@ export class ReplayChartProjection {
       this.authorityKey = authorityKey;
       this.request?.abort();
       this.request = null;
+      this.tape?.dispose();
+      this.tape = null;
       this.completedKey = null;
       this.seriesStore.clear({ source: "replay-cell-authority-change" });
-      this.publish({ loading: true, error: null, boundaryMs: null });
+      this.publish({ loading: true, error: null, boundaryMs: null,
+        ...(config?.source_kind === "agg_trade" ? { tapeObservation: null } : {}) });
+    }
+    // Multi-chart cells own the production display path. The run-level viewer
+    // only controls the account and must not supply a cell's sampled boundary.
+    if (config?.source_kind === "agg_trade") {
+      if (sessionId === null || epoch === null) return;
+      if (this.tape === null) this.tape = new ReplayTapeViewer({
+        sessionId, trackId: this.trackId, dataEpoch: epoch,
+        identity: { exchange: config.exchange, market_type: config.market_type, symbol: config.symbol,
+          source_kind: "AGG_TRADE", base_interval: config.base_interval, display_interval: this.interval },
+        source: this.lifecycle.store.seriesStore, target: this.seriesStore,
+        authority: () => {
+          const current = this.lifecycle.store.getAuthoritySnapshot();
+          return current.sessionId === sessionId && current.hasAuthoritativeSnapshot && current.virtualTimeMs !== null
+            ? { generation: current.generation, sourceSequence: current.sourceSequence, virtualTimeMs: current.virtualTimeMs } : null;
+        },
+        observation: tapeObservation => this.publish({ ...this.state, tapeObservation,
+          boundaryMs: tapeObservation?.virtualTimeMs ?? null }),
+        loading: loading => this.publish({ ...this.state, loading: loading && this.seriesStore.isEmpty() }),
+        error: error => this.publish({ ...this.state, error: error?.message ?? null }),
+        ...(this.fetcher ? { fetcher: this.fetcher } : {}),
+      });
+      this.tape.update();
+      return;
     }
     if (!config || boundary === null || epoch === null || sessionId === null) return;
     const source = this.lifecycle.store.seriesStore;
@@ -147,9 +186,12 @@ export class ReplayChartProjection {
   };
 
   retry = () => {
+    if (this.tape !== null) { void this.tape.restoreLatest(); return; }
     this.completedKey = null;
     this.refresh();
   };
+
+  restoreLatest = () => this.tape?.restoreLatest() ?? Promise.resolve(false);
 }
 
 export function useReplayChartProjection(runtime: ReplayRuntime, trackId: string, interval: string) {
@@ -165,5 +207,7 @@ export function useReplayChartProjection(runtime: ReplayRuntime, trackId: string
   }, [projection]);
   const seriesVersion = useCallback(() => projection.seriesStore.version, [projection]);
   useSyncExternalStore(subscribeSeries, seriesVersion, seriesVersion);
-  return { ...state, seriesStore: projection.seriesStore, retry: projection.retry };
+  return { ...state,
+    ...(runtime.store.sessionConfig?.source_kind === "agg_trade" ? { tapeObservation: state.tapeObservation ?? null } : {}),
+    seriesStore: projection.seriesStore, retry: projection.retry, restoreLatest: projection.restoreLatest };
 }

@@ -154,6 +154,7 @@ class ReplaySessionHandle:
     last_activity_ms: int
     in_flight: int = 0
     activity_generation: int = 0
+    startup_unclaimed: bool = False
     evicting: bool = False
     eviction_complete: asyncio.Event = field(
         default_factory=asyncio.Event,
@@ -293,6 +294,7 @@ class ReplayService:
             "sessions_created": 0,
             "sessions_recovered": 0,
             "startup_recoveries_deferred": 0,
+            "startup_sessions_evicted": 0,
             "sessions_evicted": 0,
             "ended_sessions_evicted": 0,
             "idle_sessions_evicted": 0,
@@ -354,7 +356,8 @@ class ReplayService:
             session_id = str(record["session_id"])
             blind_mode = self._persisted_blind_mode(record)
             try:
-                await self._recover_record(record)
+                handle = await self._recover_record(record)
+                handle.startup_unclaimed = True
             except asyncio.CancelledError:
                 # Startup cancellation is lifecycle control, not durable data
                 # corruption.  _recover_record owns candidate cleanup; never
@@ -3702,6 +3705,7 @@ class ReplayService:
     def _activate_handle_lease_locked(self, handle: ReplaySessionHandle) -> None:
         if handle.evicting:
             raise RuntimeError("cannot lease an evicting replay session")
+        handle.startup_unclaimed = False
         handle.in_flight += 1
         owner = asyncio.current_task()
         if owner is None:
@@ -3838,11 +3842,22 @@ class ReplayService:
             idle = (
                 snapshot.controller_client_id is None and activity_age_ms >= idle_ttl_ms
             )
-            if not idle and not (
+            # Eager startup recovery must not reserve all slots before the user
+            # can choose an archive. Only untouched, paused recovery handles may
+            # bypass the ordinary idle TTL, and only when a slot is needed.
+            startup = (
+                capacity_pressure
+                and len(self._sessions) + self._pending_session_reservations
+                >= self.settings.max_active_sessions
+                and handle.startup_unclaimed
+                and snapshot.state is SessionState.PAUSED
+                and snapshot.controller_client_id is None
+            )
+            if not idle and not startup and not (
                 ended and (capacity_pressure or ended_handoff_complete)
             ):
                 continue
-            reason = "ended" if ended else "idle_ttl"
+            reason = "ended" if ended else ("startup" if startup else "idle_ttl")
             async with self._lifecycle_lock:
                 if (
                     not self._accepting
@@ -3862,6 +3877,12 @@ class ReplayService:
                 ):
                     continue
                 if reason == "idle_ttl" and activity_age_ms < idle_ttl_ms:
+                    continue
+                if reason == "startup" and (
+                    not handle.startup_unclaimed
+                    or len(self._sessions) + self._pending_session_reservations
+                    < self.settings.max_active_sessions
+                ):
                     continue
                 handle.evicting = True
                 handle.eviction_complete.clear()
@@ -3910,7 +3931,11 @@ class ReplayService:
                         else (
                             "hub_sessions_evicted"
                             if reason == "hub"
-                            else "idle_sessions_evicted"
+                            else (
+                                "startup_sessions_evicted"
+                                if reason == "startup"
+                                else "idle_sessions_evicted"
+                            )
                         )
                     )
                     self._metrics[metric] = int(self._metrics[metric] or 0) + 1

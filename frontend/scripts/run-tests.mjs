@@ -167,12 +167,9 @@ export function createSteps(options, selected, files, root, output) {
       ? ["scripts/*.test.mjs", "src/**/*.test.{ts,tsx}"]
       : selected.frontend.map((file) => file.slice("frontend/".length));
     node("frontend", [
-      "--import",
-      "./scripts/monaco-esm-loader.mjs",
-      "--import",
-      "tsx",
-      "--test",
-      `--test-concurrency=${options.workers}`,
+      "scripts/run-frontend-tests.mjs",
+      "--workers",
+      String(options.workers),
       ...tests,
     ]);
   }

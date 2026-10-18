@@ -47,6 +47,10 @@ run(python, ["-c", "import fastapi, uvicorn, numpy, pandas, orjson, ccxt, exchan
 const installed = spawnSync(uv, ["pip", "freeze", "--python", python, "--path", site], { encoding: "utf8" });
 if (installed.status !== 0) throw new Error(installed.stderr);
 await fs.writeFile(path.join(staging, "installed-requirements.txt"), installed.stdout);
+run(python, [path.join(frontend, "scripts", "prepare-desktop-plugins.py"),
+  "--output", path.join(staging, "plugins"), "--cache", path.join(cache, "plugin-build"), "--uv", uv], {
+  env: { ...process.env, PYTHONPATH: site, PYTHONNOUSERSITE: "1" },
+});
 await fs.writeFile(path.join(staging, "manifest.json"), JSON.stringify({
   platform: process.platform, arch: process.arch, builtAt: new Date().toISOString(),
   python: path.basename(sourceRoot),

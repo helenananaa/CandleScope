@@ -121,23 +121,27 @@ class HistoryAvailabilityService:
             revision=revision,
             revalidate_at_ms=revalidate_at_ms,
         )
-        record = self.boundaries.upsert(
-            key,
-            side,
-            bound,
-            observed_at_ms=observed_at_ms,
-        )
-        if (
-            promote_after is not None
-            and promote_after > 0
-            and record.bound.state is BoundaryState.CANDIDATE
-            and record.evidence_count >= promote_after
-        ):
-            promoted = self.boundaries.confirm(
+        # Callers may run this on a storage thread.  Record and promote as one
+        # write so a concurrent writer cannot replace the candidate in between
+        # and have its own evidence promoted instead.
+        with self.boundaries.write_lock:
+            record = self.boundaries.upsert(
                 key,
                 side,
+                bound,
                 observed_at_ms=observed_at_ms,
             )
-            assert promoted is not None
-            return promoted
-        return record
+            if (
+                promote_after is not None
+                and promote_after > 0
+                and record.bound.state is BoundaryState.CANDIDATE
+                and record.evidence_count >= promote_after
+            ):
+                promoted = self.boundaries.confirm(
+                    key,
+                    side,
+                    observed_at_ms=observed_at_ms,
+                )
+                assert promoted is not None
+                return promoted
+            return record

@@ -20,6 +20,63 @@ from tests.test_data_preparation import Adapter, async_test, request
 
 
 @async_test
+async def test_failed_runner_still_drains_storage_and_releases_preparation_lease(tmp_path, monkeypatch):
+    repo = PreparationRepository(tmp_path / "jobs.db")
+    service = PreparationService(repo, Adapter(), workers=0)
+    await service.start()
+    job = await service.submit(request())
+    entered, release = threading.Event(), threading.Event()
+
+    def storage_work():
+        entered.set()
+        assert release.wait(5)
+
+    operation = asyncio.create_task(service.storage(storage_work))
+    shutdown = None
+    contender = PreparationLease(repo.path.with_suffix(".lock"))
+    try:
+        assert await asyncio.to_thread(entered.wait, 1)
+
+        def unavailable(*args, **kwargs):
+            raise sqlite3.OperationalError("unable to open database file")
+
+        monkeypatch.setattr(repo, "list", unavailable)
+        service._wake.set()
+        with pytest.raises(sqlite3.OperationalError, match="unable to open"):
+            await asyncio.wait_for(asyncio.shield(service._runner), 2)
+        shutdown = asyncio.create_task(service.shutdown())
+        await asyncio.sleep(0.03)
+        assert not shutdown.done(), "A failed runner must not abandon accepted physical storage"
+        with pytest.raises(PreparationError, match="Another backend"):
+            contender.acquire()
+        release.set()
+        await operation
+        with pytest.raises(sqlite3.OperationalError, match="unable to open"):
+            await shutdown
+        contender.acquire()
+        contender.release()
+        assert service._runner is None
+        assert not service._storage_owners
+        recovered_repository = PreparationRepository(repo.path)
+        assert recovered_repository.get(job["id"])["state"] == "QUEUED"
+        adapter = Adapter()
+        adapter.release.set()
+        restarted = PreparationService(recovered_repository, adapter)
+        await restarted.start()
+        try:
+            async def completed():
+                while recovered_repository.get(job["id"])["state"] != "READY":
+                    await asyncio.sleep(0.01)
+            await asyncio.wait_for(completed(), 3)
+        finally:
+            await restarted.shutdown()
+    finally:
+        release.set()
+        await asyncio.gather(operation, *([shutdown] if shutdown else []), return_exceptions=True)
+        service._lease.release()
+
+
+@async_test
 async def test_journal_lifecycle_and_http_routes_never_open_sqlite_on_the_event_loop(tmp_path):
     loop_thread = threading.get_ident()
     class CheckedRepository(PreparationRepository):

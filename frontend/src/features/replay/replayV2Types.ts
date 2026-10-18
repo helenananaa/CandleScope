@@ -1420,6 +1420,13 @@ export interface ReplayHedgeInputView {
   readonly simulation: Readonly<Record<string, ReplayV2Json>>;
   readonly projections: readonly Readonly<Record<string, ReplayV2Json>>[];
   readonly track_public: readonly Readonly<Record<string, ReplayV2Json>>[];
+  readonly hybrid_extensions?: readonly {
+    readonly track_id: string;
+    readonly schema_version: "replay.hybrid-adl-extension.v1";
+    readonly as_of_time_ms: number;
+    readonly time_domain: "ACTUAL" | "PUBLIC";
+    readonly component_hash: `sha256:${string}`;
+  }[];
   readonly auditor: {
     readonly status: "NOT_RUN" | "PASS" | "FAIL";
     readonly proof_hash: `sha256:${string}` | null;
@@ -1807,6 +1814,7 @@ function parseReplayLiquidationChannels(
 
 function parseReplayHedgeInputView(value: unknown): ReplayHedgeInputView | null {
   if (value === null) return null;
+  const rawInput = objectValue(value, "portfolio.hedge_inputs");
   const input = exactObject(value, "portfolio.hedge_inputs", [
     "schema_version",
     "status",
@@ -1820,6 +1828,7 @@ function parseReplayHedgeInputView(value: unknown): ReplayHedgeInputView | null 
     "projections",
     "track_public",
     "auditor",
+    ...(Object.hasOwn(rawInput, "hybrid_extensions") ? ["hybrid_extensions"] : []),
   ]);
   if (input.schema_version !== "replay.hedge-input-view.v2") {
     throw new TypeError("portfolio.hedge_inputs schema is unsupported");
@@ -2041,6 +2050,45 @@ function parseReplayHedgeInputView(value: unknown): ReplayHedgeInputView | null 
   ) {
     throw new TypeError("portfolio.hedge_inputs.track_public is not unique and canonical");
   }
+  let hybridExtensions: ReplayHedgeInputView["hybrid_extensions"];
+  if (Object.hasOwn(input, "hybrid_extensions")) {
+    if (!Array.isArray(input.hybrid_extensions)) {
+      throw new TypeError("portfolio.hedge_inputs.hybrid_extensions must be an array");
+    }
+    hybridExtensions = input.hybrid_extensions.map((raw, index) => {
+      const field = `portfolio.hedge_inputs.hybrid_extensions[${index}]`;
+      const extension = exactObject(raw, field, [
+        "track_id", "schema_version", "as_of_time_ms", "time_domain", "component_hash",
+      ]);
+      if (extension.schema_version !== "replay.hybrid-adl-extension.v1") {
+        throw new TypeError(`${field}.schema_version is unsupported`);
+      }
+      const trackId = identifier(extension.track_id, `${field}.track_id`);
+      const binding = trackPublic.find((item) => item.track_id === trackId);
+      if (!binding) throw new TypeError(`${field}.track_id has no public binding`);
+      const asOfTime = timestamp(extension.as_of_time_ms, `${field}.as_of_time_ms`);
+      const projection = binding.projection as Readonly<Record<string, ReplayV2Json>>;
+      if (asOfTime < rangeStart || asOfTime > rangeEnd
+        || asOfTime > Number(projection.as_of_time_ms)) {
+        throw new TypeError(`${field}.as_of_time_ms is outside the revealed bound range`);
+      }
+      if (enumValue(extension.time_domain, ["ACTUAL", "PUBLIC"] as const,
+        `${field}.time_domain`) !== timeDomain) {
+        throw new TypeError(`${field}.time_domain is inconsistent`);
+      }
+      return {
+        track_id: trackId,
+        schema_version: "replay.hybrid-adl-extension.v1" as const,
+        as_of_time_ms: asOfTime,
+        time_domain: timeDomain,
+        component_hash: digest(extension.component_hash, `${field}.component_hash`),
+      };
+    });
+    if (hybridExtensions.some((item, index) => index > 0
+      && item.track_id <= hybridExtensions![index - 1]!.track_id)) {
+      throw new TypeError("portfolio.hedge_inputs.hybrid_extensions is not unique and canonical");
+    }
+  }
   const rawAuditor = exactObject(input.auditor, "portfolio.hedge_inputs.auditor", [
     "status",
     "proof_hash",
@@ -2088,6 +2136,7 @@ function parseReplayHedgeInputView(value: unknown): ReplayHedgeInputView | null 
     simulation: parseObjectReceipt(input.simulation, "simulation"),
     projections,
     track_public: trackPublic,
+    ...(hybridExtensions === undefined ? {} : { hybrid_extensions: hybridExtensions }),
     auditor: {
       status: auditorStatus,
       proof_hash: auditorProof,

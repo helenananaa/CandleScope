@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
 import "../../../editor/localMonaco.js";
@@ -48,6 +48,9 @@ export default function StrategyScriptWorkspace({
   ariaLabel,
 }: StrategyScriptWorkspaceProps) {
   const locale = useLocale();
+  // Hidden strategies and execution modes remain mounted together. Monaco
+  // models must belong to an editor instance, not to a shared language path.
+  const modelId = useId();
   const [editorTheme, setEditorTheme] = useState("pyne-dark");
   useEffect(() => {
     const update = () => setEditorTheme(document.documentElement.dataset.theme === "light" ? "vs" : "pyne-dark");
@@ -146,7 +149,7 @@ export default function StrategyScriptWorkspace({
       <Editor
         height="100%"
         language={language === "pine" ? "pine" : "python"}
-        path={`strategy-script.${language === "python" ? "py" : language}`}
+        path={`strategy-script-${modelId}.${language === "python" ? "py" : language}`}
         value={source}
         theme={editorTheme}
         beforeMount={handleBeforeMount}

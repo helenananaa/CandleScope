@@ -201,11 +201,27 @@ class TrainingAdmissionService:
         | None = None,
     ) -> dict[str, object]:
         normalized = service_validation_ops.identifier(run_id, field_name="run_id")
-        setup = await self.store.get_run_setup(
-            normalized,
-            require_awaiting_market=False,
-        )
-        settings = setup.to_dict()
+        commitment = None
+        try:
+            setup = await self.store.get_run_setup(normalized, require_awaiting_market=False)
+        except TrainingRunError as exc:
+            if exc.code != "TRAINING_RUN_NOT_FOUND":
+                raise
+            # Directly-created and review-forked runs never passed through an
+            # empty-run setup. Their frozen adapter and account binding are
+            # authoritative; do not invent a setup/time commitment on a read.
+            binding = await self.store.run_binding(normalized)
+            config = ReplaySessionConfig.from_dict(binding["adapter_config"])
+            settings = {key: binding[key] for key in (
+                "source_kind", "settlement_asset", "time_disclosure_policy",
+                "book_mode", "position_mode", "account_data_mode", "funding_mode",
+            )}
+            settings.update(indicator_warmup_bars=config.warmup_bars, forward_cache_ms=config.horizon_ms)
+            start_ms = int(binding["actual_replay_start_ms"])
+        else:
+            settings = setup.to_dict()
+            commitment = await self.store.get_time_commitment(normalized)
+            start_ms = int(commitment["committed_start_ms"])
         cache_prefix = (
             int(settings["indicator_warmup_bars"]),
             int(settings["forward_cache_ms"]),
@@ -238,7 +254,6 @@ class TrainingAdmissionService:
                     _catalog_cache[internal_key] = internal_catalog
         else:
             internal_catalog = catalog
-        commitment = await self.store.get_time_commitment(normalized)
         admission_key = admission_rules_ops.setup_admission_cache_key(settings)
         capability_admission = (
             None if _admission_cache is None else _admission_cache.get(admission_key)
@@ -251,29 +266,33 @@ class TrainingAdmissionService:
             admission_rules_ops.catalog_identity_key(entry): entry
             for entry in cast(list[Mapping[str, object]], internal_catalog["entries"])
         }
+        # Cached source capabilities are shared across runs. Per-run admission
+        # and commitments must not mutate that cache or leak into another run.
+        catalog = {**catalog, "entries": [dict(entry) for entry in catalog["entries"]]}
         for entry in cast(list[dict[str, object]], catalog["entries"]):
             internal_entry = internal_by_identity.get(
                 admission_rules_ops.catalog_identity_key(entry), entry
             )
             time_compatibility = admission_rules_ops.market_start_compatibility(
                 internal_entry,
-                int(commitment["committed_start_ms"]),
+                start_ms,
             )
             identity_compatibility = self._setup_market_compatibility(
                 settings,
                 internal_entry,
                 capability_admission=capability_admission,
-                committed_start_ms=int(commitment["committed_start_ms"]),
+                committed_start_ms=start_ms,
             )
             entry["start_compatibility"] = (
                 time_compatibility
                 if time_compatibility["state"] != "READY"
                 else identity_compatibility
             )
-        catalog["time_commitment"] = admission_rules_ops.public_time_commitment(
-            commitment,
-            disclose_start=settings["time_disclosure_policy"] == "NONE",
-        )
+        if commitment is not None:
+            catalog["time_commitment"] = admission_rules_ops.public_time_commitment(
+                commitment,
+                disclose_start=settings["time_disclosure_policy"] == "NONE",
+            )
         return catalog
 
     async def market_track_plan(

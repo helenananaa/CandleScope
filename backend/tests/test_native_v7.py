@@ -1,7 +1,7 @@
 import pytest
 from tests.test_native_backtests import runtime, terminal, pytestmark
 from tests.test_external_strategy_v2 import source, tape
-from app.backtest.native import invoke
+from app.backtest.native import invoke, digest
 
 
 def config(payload, language):
@@ -15,14 +15,24 @@ if bar_index == 1:
 
 
 @pytest.mark.parametrize('language',['pine','pyne'])
-def test_worker_and_single_shot_have_identical_complete_reports(runtime,language):
+def test_worker_and_single_shot_preserve_complete_financial_reports_and_disclose_contract(runtime,language):
     host,payload=runtime
     request=config(payload,language)
     first=terminal(host.native,host.native.create(request,'worker')['run_id'])
     host.native.runner=lambda *args,**kwargs: invoke(*args,**kwargs)
     second=terminal(host.native,host.native.create(request,'single')['run_id'])
     assert first['state']==second['state']=='COMPLETED', (first.get('error'),second.get('error'))
-    assert first['result']==second['result']
+    expected = 'pyne.host-fixed-history/1' if first['runtime_identity'].get('adapter') == 'pyne-external/5' else 'historical-prefix/1'
+    assert first['result']['evaluation_contract'] == expected
+    assert second['result']['evaluation_contract'] == 'historical-prefix/1'
+    for record in (first, second):
+        report = {k: v for k, v in record['result'].items() if k != 'report_hash'}
+        assert digest(report) == record['result']['report_hash']
+    # Different declared endpoint semantics intentionally produce a different
+    # report identity. Every financial/source/graphics field remains identical
+    # for this script, which does not inspect historical endpoint flags.
+    fields = lambda result: {k: v for k, v in result.items() if k not in {'evaluation_contract', 'report_hash'}}
+    assert fields(first['result']) == fields(second['result'])
 
 
 @pytest.mark.parametrize('language',['pine','pyne'])

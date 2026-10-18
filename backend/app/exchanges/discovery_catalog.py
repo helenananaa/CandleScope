@@ -20,12 +20,25 @@ async def refresh_discovery_catalogs() -> None:
     for adapter in adapters:
         if callable(getattr(adapter, "search_symbols", None)):
             continue
+        # Eager catalogs keep their own TTL timers.  Lazy ones are only visited
+        # here, and each CCXT catalog load costs seconds of event-loop CPU, so
+        # re-download them on the much longer discovery interval.
+        max_age = (
+            None
+            if getattr(adapter, "eager_catalog_refresh", True)
+            else catalog.SYMBOL_DISCOVERY_REFRESH_SECONDS
+        )
         for market in adapter.capabilities().markets:
             # Yield to chart/history work. This sweep is optional background I/O.
             while catalog.foreground_is_busy():
                 await asyncio.sleep(1)
             try:
-                await catalog.refresh_market_catalog(adapter, market.market_type, force=False)
+                await catalog.refresh_market_catalog(
+                    adapter,
+                    market.market_type,
+                    force=False,
+                    max_age_seconds=max_age,
+                )
             except asyncio.CancelledError:
                 raise
             except Exception:

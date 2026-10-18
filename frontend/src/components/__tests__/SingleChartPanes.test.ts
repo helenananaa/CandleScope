@@ -145,13 +145,22 @@ test("sub-pane drawing cleanup never applies previous ids to a new symbol base",
     currentIds: new Set(["rsi"]),
     previousBase: "binance:spot:BTCUSDT",
     previousIds: new Set(["rsi", "macd"]),
+    explicitlyRemovedIds: new Set(["macd"]),
   }), []);
   assert.deepEqual(removedDrawingSubPaneScopeKeys({
     currentBase: "binance:spot:BTCUSDT",
     currentIds: new Set(["rsi"]),
     previousBase: "binance:spot:BTCUSDT",
     previousIds: new Set(["rsi", "macd"]),
+    explicitlyRemovedIds: new Set(["macd"]),
   }), ["binance:spot:BTCUSDT__macd"]);
+});
+
+test("loading, period changes and hidden indicator panes never authorize drawing deletion", () => {
+  assert.deepEqual(removedDrawingSubPaneScopeKeys({
+    currentBase: "replay:BTC", currentIds: new Set(),
+    previousBase: "replay:BTC", previousIds: new Set(["rsi", "macd"]),
+  }), []);
 });
 
 test("main-series drawing preparation restores partial and throwing failures", () => {
@@ -584,6 +593,16 @@ test("viewport restore waits for full ready history instead of a provisional lat
     hasRows: true,
     userInteracted: true,
   }), false);
+});
+
+test("late initial-history keeps an explicit period hand-off while ordinary cold seeds still settle", () => {
+  const datasetKey = "binance-spot-BTCUSDT-5m";
+  const common = { dataMeta: { status: "ready", seriesKey: datasetKey, source: "initial-history-complete" },
+    datasetKey, hasRestored: true, hasRows: true, userInteracted: false };
+  for (const lastRestoreSource of ["surface-viewport-transfer", "dataset-viewport-transfer"]) {
+    assert.equal(shouldRestoreChartViewport({ ...common, lastRestoreSource }), false);
+  }
+  assert.equal(shouldRestoreChartViewport({ ...common, lastRestoreSource: "latest-response" }), true);
 });
 
 test("fitting a fresh chart does not auto-load left history before user interaction", () => {

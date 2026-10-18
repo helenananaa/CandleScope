@@ -63,6 +63,21 @@ singleflight，然后明确返回可重试的 `503 symbol_catalog_unavailable`�
 `200` 空列表。自动刷新失败会按有界 deadline 重试；启动和 TTL 投机刷新必须等前台
 行情任务持续安静，用户主动请求目录则不受这段 dwell 限制。
 
+只有主动刷新的目录（主 Binance/OKX 交易所）会挂 TTL 与失败重试定时器。惰性目录（包括
+所有通用 CCXT 交易所）只在被请求时按同样的 TTL 与重试 deadline 刷新，或由后台发现扫描
+每隔 `SYMBOL_DISCOVERY_REFRESH_SECONDS`（默认 6 小时）最多刷新一次。一次 CCXT 目录加载
+要下载并解析数千个市场，约 200 个每 5 分钟自我续期的刷新仍会各自浪费数秒 CPU。
+
+CCXT 目录在独立进程中解析。`catalog_worker` 按需 spawn 一个子进程，执行同样的 CCXT
+加载与 `SymbolInfo` 转换，并以小分块返回紧凑的 `to_dict()` 行。原先在事件循环内解析时，
+每次主动刷新会阻塞事件循环 1-4 秒（Binance 现货 `exchangeInfo` 约 18 MB；JSON 解析和
+随后的完整 GC 都持有 GIL，所以换成线程也无济于事）。请求携带后端 `IngestionConfig` 的
+代理设置，子进程创建客户端时同样使用 Windows `ThreadedResolver`。
+`cancel_exchange_metadata_refreshes()` 会停止该子进程；空闲超过
+`SYMBOL_CATALOG_WORKER_IDLE_SECONDS`（默认 15 分钟，长于主动刷新周期）也会退出。若子进程
+无法启动或崩溃，目录会在 5 分钟冷却期内回退为进程内加载。设置
+`SYMBOL_CATALOG_WORKER_ENABLED=0` 可关闭该子进程。
+
 生产共享限流器采用保守冷启动：新 bucket 第一次只放行一次精确 request-cost 探针，
 避免进程重启把未知的交易所预算状态误当成满桶。启动时先完成核心 DataManager 初始化，
 所有上游目录刷新任务在 shutdown 时都可取消并等待收口。

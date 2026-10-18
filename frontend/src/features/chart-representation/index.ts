@@ -19,6 +19,9 @@ export {
   rememberSurfaceViewport,
   selectSurfaceViewportSnapshot,
   surfaceViewportHasAnchorCoverage,
+  sourceRangeFromLogicalRows,
+  selectPeriodViewportRestore,
+  surfaceViewportOwnsRestore,
   SURFACE_VIEWPORT_CACHE_LIMIT,
   transferSurfaceViewportSnapshot,
 } from "./surfaceViewportState.js";
@@ -60,3 +63,5 @@ export { LineBreakProjector } from "./projectors/lineBreakProjector.js";
 export { PointFigureProjector } from "./projectors/pointFigureProjector.js";
 export { RenkoProjector } from "./projectors/renkoProjector.js";
 export { PROJECTION_METADATA_KEY } from "./projectors/projectorData.js";
+
+export { createViewportTimeScale } from "./viewportTimeScale.js";

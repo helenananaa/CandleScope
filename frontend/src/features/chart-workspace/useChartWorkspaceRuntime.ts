@@ -45,7 +45,6 @@ import {
   type ChartStrategyAttachmentRecord,
   type ChartLinkGroupId,
   type ChartLinkGroup,
-  type ChartLinkGroupSettings,
   type ChartWindowId,
   type ChartWindowState,
   type ChartWorkspaceDocument,
@@ -78,7 +77,7 @@ import {
   type ChartWorkspaceLayoutHistory,
 } from "./chartWorkspaceEditing.js";
 import {
-  applyChartLinkSettingsPatch,
+  applyChartLinkGroupPolicyUpdate,
   applyLinkedIndicatorUpdate,
   applyLinkedSessionUpdate,
   assignCellLinkGroup,
@@ -283,10 +282,6 @@ function maxGroupDescendantDistance(
     : 1 + Math.max(...children.map((group) => maxGroupDescendantDistance(document, group.id)));
 }
 
-function sameLinkSettings(left: ChartLinkGroupSettings, right: ChartLinkGroupSettings): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
 function activeWorkspace(snapshot: ChartWorkspaceLibrarySnapshot) {
   return snapshot.workspaces.find((workspace) => workspace.id === snapshot.activeWorkspaceId)
     ?? snapshot.workspaces[0]!;
@@ -316,7 +311,7 @@ export function useChartWorkspaceRuntime(
     autosaveDelayMs: options.autosaveDelayMs ?? 350,
     windowId: options.windowId,
     workspaceBus: options.workspaceBus === undefined
-      ? CHART_WORKSPACE_FEATURE_FLAGS.multiChart64Enabled
+      ? CHART_WORKSPACE_FEATURE_FLAGS.multiWindowEnabled
         ? defaultWorkspaceBus(options.windowId ?? "main-window")
         : null
       : options.workspaceBus,
@@ -903,39 +898,7 @@ export function useChartWorkspaceRuntime(
     relationship: "peers" | "parent",
     patch: ChartLinkGroupSettingsPatch,
   ) => {
-    updateActiveDocument((current) => {
-      const group = current.linkGroups[groupId];
-      if (!group || (relationship === "parent" && group.parentId === null)) return current;
-      const policyKey = relationship === "peers" ? "peerPolicy" : "receiveFromParent";
-      const previous = group[policyKey];
-      const nextSettings = applyChartLinkSettingsPatch(previous, patch);
-      if (sameLinkSettings(previous, nextSettings)) return current;
-      let next: ChartWorkspaceDocument = {
-        ...current,
-        linkGroups: {
-          ...current.linkGroups,
-          [groupId]: { ...group, [policyKey]: nextSettings },
-        },
-      };
-      const enablesSessionLink = (patch.market === true && !previous.market)
-        || (patch.interval === true && !previous.interval);
-      const enablesIndicatorLink = patch.indicators
-        ? Object.entries(patch.indicators).some(([key, enabled]) => (
-          enabled === true
-          && previous.indicators[key as keyof typeof previous.indicators] === false
-        ))
-        : false;
-      const anchorGroupId = relationship === "parent" ? group.parentId : groupId;
-      const anchor = Object.values(next.cells)
-        .find((cell) => cell.linkGroupId === anchorGroupId);
-      if (enablesSessionLink && anchor) {
-        next = applyLinkedSessionUpdate(next, anchor.id, anchor.session);
-      }
-      if (enablesIndicatorLink && anchor) {
-        next = applyLinkedIndicatorUpdate(next, anchor.id, anchor.indicators);
-      }
-      return next;
-    });
+    updateActiveDocument((current) => applyChartLinkGroupPolicyUpdate(current, groupId, relationship, patch));
   }, [updateActiveDocument]);
 
   const setLayoutRatio = useCallback((

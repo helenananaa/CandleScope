@@ -108,7 +108,8 @@ test("Phase 13 workspace projects ViewerState and exposes capability-driven adva
   assert.match(workspace, /setDisplayInterval/);
   assert.match(workspace, /captureViewportTransfer/);
   assert.match(workspace, /datasetViewportTransfer=\{review === null \? activeIntervalViewportTransfer : null\}/);
-  assert.match(workspace, /useReplayHistoryRuntime\(runtime, viewer, activeIntervalViewportTransfer\)/);
+  assert.match(workspace, /useReplayHistoryRuntime\(runtime, viewer, activeIntervalViewportTransfer,/);
+  assert.match(workspace, /replayHistoryWarmupTarget\(indicators\.view\.activeIndicators\)/);
   assert.match(workspace, /intervalViewportTransfer\.targetInterval/);
   assert.match(workspace, /current\?\.snapshot === transfer/);
   assert.match(workspace, /data-replay-source-bar-count/);
@@ -393,7 +394,12 @@ test("history paging stays non-blocking and uses viewer delta projection", () =>
     /applyReplayHistoryPage\(runtime\.replayStore\.seriesStore/,
   );
   assert.match(historyRuntime, /expectedBeforeMs:\s*beforeMs/);
-  assert.doesNotMatch(historyRuntime, /oldestLoadedTime/);
+  // The chart boundary selects contiguous demand, but cannot supply an HTTP
+  // cursor: the actual loader still reads the authoritative viewer store.
+  const pageLoader = historyRuntime.slice(historyRuntime.indexOf("const performLoadMoreLeft ="),
+    historyRuntime.indexOf("const performLoadRef ="));
+  assert.doesNotMatch(pageLoader, /oldestLoadedTime/);
+  assert.match(historyRuntime, /loadGate\.runAfterCurrent/);
   assert.match(
     workspace,
     /history\.historyEpoch !== null && !history\.hasMore && !history\.loading/,

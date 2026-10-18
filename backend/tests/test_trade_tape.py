@@ -325,7 +325,7 @@ def _payload() -> dict[str, object]:
 def test_service_trade_run_requires_trade_flag(tmp_path: Path) -> None:
     closed = BacktestService.start(
         load_backtest_settings(
-            {"BACKTEST_ENABLED": "1", "BACKTEST_BAR_ENABLED": "1"},
+            {"BACKTEST_ENABLED": "1", "BACKTEST_BAR_ENABLED": "1", "BACKTEST_TRADE_TAPE_ENABLED": "0"},
             data_dir=tmp_path,
             klines_db_path=tmp_path / "candlescope.db",
             replay_db_path=tmp_path / "replay.db",

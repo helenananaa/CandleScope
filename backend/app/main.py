@@ -531,6 +531,11 @@ async def startup_event() -> None:
         print("[startup] LOCAL_OFFLINE runtime [ok]")
         return
 
+    # Parse the CCXT CA bundle off the loop before feeds open their clients.
+    from app.exchanges.ccxt_ext.tls import start_shared_ssl_context_warmup
+
+    start_shared_ssl_context_warmup()
+
     # 1. Initialize registered market-storage schemas through one composition root.
     storage_bootstrap = initialize_market_storage(
         klines_db_path=KLINES_DB_PATH,
@@ -751,7 +756,14 @@ async def shutdown_event() -> None:
     """Application shutdown handler."""
     preparation = getattr(app.state, "data_preparation_service", None)
     if preparation is not None:
-        await preparation.shutdown()
+        try:
+            await preparation.shutdown()
+        except Exception as exc:
+            logger.warning(
+                "Data preparation shutdown failed; continuing remaining cleanup: %s",
+                exc,
+                exc_info=True,
+            )
     local_runtime = getattr(app.state, "local_offline_runtime", None)
     if local_runtime is not None:
         backtest_runtime = getattr(app.state, "backtest_runtime", None)
@@ -986,6 +998,8 @@ async def health_check() -> dict:
 @app.get("/debug/snapshot", tags=["system"])
 async def debug_snapshot() -> dict:
     """Full diagnostic snapshot of the DataManager (dev/debug only)."""
+    from app.exchanges.ccxt_ext.markets import get_shared_ccxt_market_tables
+
     dm = getattr(app.state, "data_manager", None)
     try:
         snapshot = (
@@ -998,6 +1012,7 @@ async def debug_snapshot() -> dict:
             if lag_monitor is not None
             else None,
             "websocket": ws_runtime_metrics.snapshot(),
+            "ccxt_market_tables": get_shared_ccxt_market_tables().snapshot(),
         }
         replay_runtime = getattr(app.state, "replay_runtime", None)
         replay_service = getattr(app.state, "replay_service", None)

@@ -1,3 +1,4 @@
+import { drawingDocumentSessionRegistry } from "./core/drawingDocumentStore.js";
 import { DRAWING_ENGINE_TOOL_IDS } from "./drawingModel.js";
 import { drawingDocumentRepository } from "./persistence/drawingDocumentRepository.js";
 import type {
@@ -26,18 +27,23 @@ export interface DrawingEnginePresencePolicy {
 
 export function createDrawingEnginePresencePolicy(
   repository: DrawingPresenceRepository,
+  sessionCount: (scope: string) => number | null = () => null,
 ): DrawingEnginePresencePolicy {
   const presenceCache = new Map<string, boolean>();
   const presenceProbes = new Map<string, Promise<boolean>>();
 
   const shouldLoad: DrawingEnginePresencePolicy["shouldLoad"] = ({ activeTool, drawingKey }) => {
     if (activeTool != null && DRAWING_ENGINE_TOOL_IDS.has(activeTool)) return true;
+    const count = sessionCount(drawingKey);
+    if (count !== null) return count > 0;
     const manifest = repository.readManifestHint(drawingKey);
     if (manifest.status === "valid" && manifest.hint.count > 0) return true;
     return presenceCache.get(drawingKey) === true;
   };
 
   const probe = (drawingKey: string): Promise<boolean> => {
+    const count = sessionCount(drawingKey);
+    if (count !== null) return Promise.resolve(count > 0);
     const inFlight = presenceProbes.get(drawingKey);
     if (inFlight) return inFlight;
     const request = repository.probeAndRepairManifest(drawingKey)
@@ -62,7 +68,10 @@ export function createDrawingEnginePresencePolicy(
   return Object.freeze({ probe, shouldLoad });
 }
 
-const drawingEnginePresencePolicy = createDrawingEnginePresencePolicy(drawingDocumentRepository);
+const drawingEnginePresencePolicy = createDrawingEnginePresencePolicy(drawingDocumentRepository, scope =>
+  drawingDocumentSessionRegistry.isLoaded(scope)
+    ? drawingDocumentSessionRegistry.getStore(scope).getSnapshot().entities.size
+    : null);
 
 export function loadDrawingEngineHost(): Promise<DrawingEngineHostModule> {
   if (!drawingEngineHostPromise) {

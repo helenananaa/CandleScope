@@ -182,12 +182,47 @@ export function applyChartLinkSettingsPatch(
   return next;
 }
 
+/** Policy changes can immediately synchronize sessions, before the next render. */
+export function applyChartLinkGroupPolicyUpdate(
+  document: ChartWorkspaceDocument,
+  groupId: ChartLinkGroupId,
+  relationship: "peers" | "parent",
+  patch: ChartLinkGroupSettingsPatch,
+): ChartWorkspaceDocument {
+  const group = document.linkGroups[groupId];
+  if (!group || (relationship === "parent" && group.parentId === null)) return document;
+  const policyKey = relationship === "peers" ? "peerPolicy" : "receiveFromParent";
+  const previous = group[policyKey];
+  const nextSettings = applyChartLinkSettingsPatch(previous, patch);
+  if (JSON.stringify(previous) === JSON.stringify(nextSettings)) return document;
+  let next: ChartWorkspaceDocument = {
+    ...document,
+    linkGroups: { ...document.linkGroups, [groupId]: { ...group, [policyKey]: nextSettings } },
+  };
+  const enablesSessionLink = (patch.market === true && !previous.market)
+    || (patch.interval === true && !previous.interval);
+  const enablesIndicatorLink = patch.indicators
+    ? Object.entries(patch.indicators).some(([key, enabled]) => enabled === true
+      && previous.indicators[key as keyof typeof previous.indicators] === false)
+    : false;
+  const anchorGroupId = relationship === "parent" ? group.parentId : groupId;
+  const anchor = Object.values(next.cells).find((cell) => cell.linkGroupId === anchorGroupId);
+  if (enablesSessionLink && anchor) next = applyLinkedSessionUpdate(next, anchor.id, anchor.session, true);
+  if (enablesIndicatorLink && anchor) next = applyLinkedIndicatorUpdate(next, anchor.id, anchor.indicators);
+  return next;
+}
+
 export function applyLinkedSessionUpdate(
   document: ChartWorkspaceDocument,
   sourceCellId: ChartCellId,
   session: ChartSession,
+  synchronizeUnchangedChannels = false,
 ): ChartWorkspaceDocument {
-  chartWorkspaceCell(document, sourceCellId);
+  const previous = chartWorkspaceCell(document, sourceCellId).session;
+  // Changing a period must not re-broadcast an unchanged market (or vice versa).
+  // Explicitly joining/enabling a link group can still synchronize both channels.
+  const marketChanged = synchronizeUnchangedChannels || !sameSession({ ...previous, interval: session.interval }, session);
+  const intervalChanged = synchronizeUnchangedChannels || previous.interval !== session.interval;
   const policies = new Map(resolveChartLinkTargets(document, sourceCellId)
     .map((target) => [target.cellId, target.policy] as const));
   let changed = false;
@@ -200,7 +235,9 @@ export function applyLinkedSessionUpdate(
     const policy = policies.get(cellId);
     const nextSession = cellId === sourceCellId
       ? session
-      : policy ? linkedSession(cell.session, session, policy) : cell.session;
+      : policy ? linkedSession(cell.session, session, { ...policy,
+        market: policy.market && marketChanged, interval: policy.interval && intervalChanged,
+      }) : cell.session;
     if (sameSession(cell.session, nextSession)) continue;
     cells[cellId] = { ...cell, session: nextSession };
     changed = true;
@@ -337,7 +374,7 @@ export function assignCellLinkGroup(
     : undefined;
   const anchor = peerAnchor ?? parentAnchor;
   if (!anchor) return next;
-  next = applyLinkedSessionUpdate(next, anchor.id, anchor.session);
+  next = applyLinkedSessionUpdate(next, anchor.id, anchor.session, true);
   return applyLinkedIndicatorUpdate(next, anchor.id, anchor.indicators);
 }
 

@@ -1,3 +1,7 @@
+import { REVIEW_PREFIX_MAX_BARS, replayReviewDataMeta } from "./replayReviewPrefix.js";
+import { ReplayReviewHistory } from "./replayReviewHistory.js";
+import type { ReplayCanonicalBinding } from "./replayCanonicalIndicators.js";
+import { useReplayReviewIndicators } from "./useReplayReviewIndicators.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TickMarkType } from "../../chart-adapter/chartAdapterTypes.js";
@@ -26,7 +30,6 @@ import { useIntervalNoticeRuntime } from "../chart-session/intervalNoticeRuntime
 import { loadUserPrefs } from "../chart-session/chartSessionModel.js";
 import type { CustomIntervalRecord } from "../chart-session/chartSessionTypes.js";
 import { useDrawingRuntime } from "../drawings/useDrawingRuntime.js";
-import { createEmptyDrawingDocument } from "../drawings/core/drawingDocument.js";
 import { drawingDocumentSessionRegistry } from "../drawings/core/drawingDocumentStore.js";
 import type { ChartSettingsRuntime } from "../settings/chartAppearanceSettings.js";
 import { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
@@ -48,12 +51,11 @@ import {
 import { defaultReplayApi } from "./replayApi.js";
 import { defaultReplayV2Api } from "./replayV2Api.js";
 import {
-  applyReplayHistoryPage,
-  ReplayHistoryProvider,
+  type ReplayHistorySource,
 } from "./replayHistoryProvider.js";
+import { createReplayHistoryProvider } from "./replayTapeHistoryProvider.js";
 import {
   isReplayContextHistoryBar,
-  rebuildReplayViewerSeries,
 } from "./replayViewerProjection.js";
 import { handleReplayShortcut } from "./replayShortcuts.js";
 import { buildReplayPositionHlines } from "./replayPositionHlines.js";
@@ -64,6 +66,7 @@ import {
 import { returnToTrainingHub } from "./trainingHubNavigation.js";
 import { replayEffectiveTrainingState, replayOwnsController } from "./replayUiModel.js";
 import { useReplayHistoryRuntime } from "./useReplayHistoryRuntime.js";
+import { replayHistoryWarmupTarget } from "./replayHistoryWarmup.js";
 import { useReplayIntegrityRuntime } from "./useReplayIntegrityRuntime.js";
 import { useReplayPublicTimeRuntime } from "./useReplayPublicTimeRuntime.js";
 import type {
@@ -74,10 +77,11 @@ import type { ReplayViewerRuntime } from "./useReplayViewerRuntime.js";
 import { useReplayWorkspacePreferences } from "./replayWorkspacePreferences.js";
 import {
   replayReviewDocumentHash,
+  replayReviewPaneDocuments,
   replayReviewDrawingDocument,
   replayReviewDrawingRecord,
 } from "./replayReviewDrawing.js";
-import type { ReplayReviewResponse } from "./replayIntegrityModel.js";
+import ReplayReviewRightRail from "./components/ReplayReviewRightRail.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { Icon } from "../../components/icons/Icon.js";
@@ -104,6 +108,7 @@ export interface ReplayTrainingPageShellProps {
     readonly onCrosshairMove: (value: MainSeriesCrosshairValue | null) => void;
     readonly onVisibleRangeChange: (range: ChartSurfaceVisibleRange) => void;
     readonly onUserViewportRangeChange: (range: ChartSurfaceVisibleRange) => void;
+    readonly subscribeIntervalChange: (prepare: (interval: IntervalString) => void) => () => void;
   };
 }
 
@@ -117,44 +122,6 @@ interface ReplayIntervalViewportTransfer {
   readonly targetInterval: IntervalString;
 }
 
-function ReplayReviewRightRail({ review }: { readonly review: ReplayReviewResponse }) {
-  useLocale();
-  const selectedTrackId = String(review.projection.viewer_state.selected_track_id ?? "");
-  const selected = review.projection.tracks.find((track) => track.track_id === selectedTrackId)
-    ?? review.projection.tracks[0]
-    ?? null;
-  const position = selected?.position;
-  const positionRecord = position !== null && typeof position === "object"
-    && !Array.isArray(position)
-    ? position as Readonly<Record<string, unknown>>
-    : null;
-  const account = selected?.account;
-  const accountRecord = account !== null && typeof account === "object"
-    && !Array.isArray(account)
-    ? account as Readonly<Record<string, unknown>>
-    : null;
-  return (
-    <aside
-      className="replay-review-right-rail"
-      aria-label={t("replay.shell.reviewPortfolio")}
-      data-review-track-id={selectedTrackId}
-    >
-      <span className="training-hub-kicker">{t("replay.kicker.reviewReadOnly")}</span>
-      <h3>{String(selected?.symbol ?? "--")}</h3>
-      <dl>
-        <div><dt>{t("replay.shell.publicTime")}</dt><dd>{review.events.find((event) => event.event_id === review.selected_event_id)?.public_time.label ?? "--"}</dd></div>
-        <div><dt>{t("replay.shell.equity")}</dt><dd>{String(review.projection.domain.equity ?? "--")}</dd></div>
-        <div><dt>{t("replay.shell.position")}</dt><dd>{String(positionRecord?.quantity ?? "--")}</dd></div>
-        <div><dt>{t("replay.shell.unrealized")}</dt><dd>{String(positionRecord?.unrealized_pnl ?? "--")}</dd></div>
-        <div><dt>{t("replay.shell.available")}</dt><dd>{String(accountRecord?.available_equity ?? "--")}</dd></div>
-        <div><dt>{t("replay.shell.ordersFills")}</dt><dd>{review.projection.orders.length} / {review.projection.fills.length}</dd></div>
-        <div><dt>{t("replay.shell.ledger")}</dt><dd>{review.projection.ledger.length}</dd></div>
-        <div><dt>{t("replay.shell.drawingRev")}</dt><dd>r{review.projection.drawing_revision}</dd></div>
-      </dl>
-      <p>{t("replay.shell.reviewSidebarHint")}</p>
-    </aside>
-  );
-}
 
 function ReplayStatePanel({ runtime }: { readonly runtime: ReplayRuntime }) {
   useLocale();
@@ -207,6 +174,11 @@ export default function ReplayTrainingPageShell({
   const [trainingResultsOpen, setTrainingResultsOpen] = useState(false);
   const [indicatorPanelOpen, setIndicatorPanelOpen] = useState(false);
   const [intervalViewportTransfer, setIntervalViewportTransfer] = useState<ReplayIntervalViewportTransfer | null>(null);
+  const subscribeIntervalChange = cell?.subscribeIntervalChange;
+  useEffect(() => subscribeIntervalChange?.((targetInterval) => {
+    const snapshot = chartSurfaceActions.captureViewportTransfer();
+    setIntervalViewportTransfer(snapshot ? { snapshot, targetInterval } : null);
+  }), [chartSurfaceActions, subscribeIntervalChange]);
   const intervalCommandOwnerRef = useRef<object | null>(null);
   const {
     customIntervalRecords,
@@ -240,7 +212,8 @@ export default function ReplayTrainingPageShell({
     )
     ? intervalViewportTransfer.snapshot
     : null;
-  const history = useReplayHistoryRuntime(runtime, viewer, activeIntervalViewportTransfer);
+  const history = useReplayHistoryRuntime(runtime, viewer, activeIntervalViewportTransfer,
+    replayHistoryWarmupTarget(indicators.view.activeIndicators));
   useEffect(() => {
     if (!history.viewportTransferUnavailable
       || activeIntervalViewportTransfer === null) return;
@@ -281,6 +254,7 @@ export default function ReplayTrainingPageShell({
     : `replay-review:${review.review_id}${cell ? `:${cell.scope}` : ""}`;
   const reviewDrawingDocument = review?.drawing_document ?? null;
   const reviewDrawingCursorRevision = review?.cursor_revision ?? null;
+  const [reviewDrawingGeneration, setReviewDrawingGeneration] = useState(0);
   const reviewSelectedTrackId = review === null
     ? null
     : String(review.projection.viewer_state.selected_track_id ?? "");
@@ -294,12 +268,36 @@ export default function ReplayTrainingPageShell({
   const reviewProjectedSourceKind = reviewProjectedTrack?.source_kind;
   const reviewProjectedSymbol = reviewProjectedTrack?.symbol;
   const reviewProjectedInterval = review?.projection.viewer_state.display_interval;
+  const reviewTrackCursor = reviewProjectedTrack?.cursor;
+  const reviewSourceSequence = reviewTrackCursor && typeof reviewTrackCursor === "object" && !Array.isArray(reviewTrackCursor)
+    && "source_sequence" in reviewTrackCursor && typeof reviewTrackCursor.source_sequence === "number"
+    ? reviewTrackCursor.source_sequence : undefined;
   const reviewCursorVirtualTimeMs = review?.projection.cursor.virtual_time_ms ?? null;
+  const reviewAdapterSessionId = viewer.marketTracks?.tracks.find(item => item.track_id === reviewSelectedTrackId)?.adapter_session_id;
   const drawingScopeBase = reviewDrawingScopeBase ?? liveDrawingScopeBase;
-  const reviewSeriesStore = useMemo(() => new SeriesWindowStore(), []);
+  const reviewSeriesStore = useMemo(() => new SeriesWindowStore({ maxBars: REVIEW_PREFIX_MAX_BARS }), []);
   const [reviewChartLoading, setReviewChartLoading] = useState(false);
   const [reviewChartError, setReviewChartError] = useState<string | null>(null);
   const [reviewChartBounded, setReviewChartBounded] = useState(false);
+  const [reviewOlderLoading, setReviewOlderLoading] = useState(false);
+  const [reviewOlderError, setReviewOlderError] = useState<string | null>(null);
+  const [reviewHasMore, setReviewHasMore] = useState(false);
+  const reviewHistoryRef = useRef<ReplayReviewHistory | null>(null);
+  const loadReviewMoreLeft = useCallback(async () => { await reviewHistoryRef.current?.loadMoreLeft(); }, []);
+  const reviewPrefixKey = review === null ? null : JSON.stringify([
+    review.review_id, review.selected_timeline_sequence, reviewSelectedTrackId, reviewAdapterSessionId, reviewProjectedExchange, reviewProjectedMarketType,
+    reviewProjectedSymbol, reviewProjectedSourceKind, reviewProjectedInterval, reviewCursorVirtualTimeMs,
+  ]);
+  const [reviewLoadedPrefixKey, setReviewLoadedPrefixKey] = useState<string | null>(null);
+  const [reviewIndicatorBinding, setReviewIndicatorBinding] = useState<ReplayCanonicalBinding | null>(null);
+  const reviewIndicators = useReplayReviewIndicators({ seriesStore: reviewSeriesStore,
+    sourceBinding: reviewIndicatorBinding,
+    requestedKey: reviewPrefixKey, loadedKey: reviewLoadedPrefixKey, cursorMs: reviewCursorVirtualTimeMs,
+    definitions: indicators.view.activeIndicators,
+    exchange: typeof reviewProjectedExchange === "string" ? reviewProjectedExchange : "",
+    marketType: typeof reviewProjectedMarketType === "string" ? reviewProjectedMarketType : "",
+    symbol: typeof reviewProjectedSymbol === "string" ? reviewProjectedSymbol : "",
+    interval: typeof reviewProjectedInterval === "string" ? reviewProjectedInterval : "1m" });
   const [liveDrawingError, setLiveDrawingError] = useState<string | null>(null);
   const [reviewDrawingError, setReviewDrawingError] = useState<string | null>(null);
   const ownWorkspace = useReplayWorkspacePreferences(viewer.viewerState?.run_id ?? runtime.store.sessionId ?? "pending");
@@ -462,14 +460,18 @@ export default function ReplayTrainingPageShell({
     setReviewDrawingError(null);
     if (reviewDrawingCursorRevision === null || reviewDrawingScopeBase === null) return;
     try {
-      const scopeKey = `${reviewDrawingScopeBase}__main`;
-      const store = drawingDocumentSessionRegistry.getStore(scopeKey);
-      const document = reviewDrawingDocument === null
-        ? createEmptyDrawingDocument(scopeKey)
-        : replayReviewDrawingDocument(reviewDrawingDocument, scopeKey);
-      const loaded = store.loadDocument(document);
-      if (!loaded.ok) throw new Error(loaded.error);
-      drawingDocumentSessionRegistry.markLoaded(scopeKey, store);
+      const documents = replayReviewPaneDocuments(reviewDrawingDocument, liveDrawingScopeBase,
+        reviewDrawingScopeBase, drawingDocumentSessionRegistry.loadedScopes());
+      let changed = false;
+      for (const document of documents) {
+        const store = drawingDocumentSessionRegistry.getStore(document.scopeKey);
+        const loaded = store.loadDocument(document);
+        if (!loaded.ok) throw new Error(loaded.error);
+        changed ||= loaded.changed;
+        drawingDocumentSessionRegistry.markLoaded(document.scopeKey, store);
+      }
+      // Publish after all pane stores are ready; rewinding may lower document revisions.
+      if (changed) setReviewDrawingGeneration(generation => generation + 1);
     } catch (cause) {
       setReviewDrawingError(
         cause instanceof Error ? describeError(cause, cause.message) : t("replay.shell.reviewRestoreFailed", {}, locale),
@@ -480,36 +482,39 @@ export default function ReplayTrainingPageShell({
     reviewDrawingCursorRevision,
     reviewDrawingDocument,
     reviewDrawingScopeBase,
+    liveDrawingScopeBase,
   ]);
 
   useEffect(() => {
+    setReviewLoadedPrefixKey(null);
+    setReviewIndicatorBinding(null);
+    setReviewOlderLoading(false);
+    setReviewOlderError(null);
+    setReviewHasMore(false);
     if (reviewSelectedTrackId === null || reviewCursorVirtualTimeMs === null) {
       setReviewChartLoading(false);
       setReviewChartError(null);
       setReviewChartBounded(false);
       return;
     }
-    const track = viewer.marketTracks?.tracks.find((item) => (
-      item.track_id === reviewSelectedTrackId
-    ));
     if (typeof reviewProjectedExchange !== "string"
       || typeof reviewProjectedMarketType !== "string"
       || typeof reviewProjectedSymbol !== "string"
       || typeof reviewProjectedSourceKind !== "string"
       || typeof reviewProjectedInterval !== "string"
       || parseIntervalSeconds(reviewProjectedInterval) === null
-      || track?.adapter_session_id === null
-      || track?.adapter_session_id === undefined) {
+      || reviewAdapterSessionId === null
+      || reviewAdapterSessionId === undefined) {
       setReviewChartLoading(false);
       setReviewChartBounded(false);
       setReviewChartError(t("replay.shell.reviewIdentityMissing", {}, locale));
       reviewSeriesStore.replace([], { source: "replay-review-unavailable" });
       return;
     }
-    const adapterSessionId = track.adapter_session_id;
+    const adapterSessionId = reviewAdapterSessionId;
     const abort = new AbortController();
-    const source = new SeriesWindowStore();
-    let provider: ReplayHistoryProvider | null = null;
+    let provider: ReplayHistorySource | null = null;
+    let reviewHistory: ReplayReviewHistory | null = null;
     setReviewChartLoading(true);
     setReviewChartError(null);
     setReviewChartBounded(false);
@@ -525,42 +530,42 @@ export default function ReplayTrainingPageShell({
         || config.source_kind.toUpperCase() !== reviewProjectedSourceKind) {
         throw new Error(t("replay.shell.reviewIdentityMismatch", {}, locale));
       }
-      provider = new ReplayHistoryProvider({
+      provider = createReplayHistoryProvider({
         sessionId: adapterSessionId,
         trackId: reviewSelectedTrackId,
+        sourceSequence: reviewSourceSequence,
         identity: {
           exchange: config.exchange,
           market_type: config.market_type,
           symbol: config.symbol,
           source_kind: config.source_kind === "agg_trade" ? "AGG_TRADE" : "BAR",
           base_interval: config.base_interval,
-          display_interval: config.display_interval,
+          display_interval: reviewProjectedInterval,
         },
       });
       const revealedBoundaryMs = reviewCursorVirtualTimeMs;
-      let beforeMs = Math.min(Number.MAX_SAFE_INTEGER, revealedBoundaryMs + 1);
-      let bounded = false;
-      for (let pageIndex = 0; pageIndex < 20; pageIndex += 1) {
-        const page = await provider.loadBefore({
-          beforeMs,
-          revealedBoundaryMs,
-          dataEpoch: session.snapshot.data_epoch,
-          limit: 1_000,
-        });
-        applyReplayHistoryPage(source, page);
-        if (!page.has_more || page.bars.length === 0) break;
-        if (pageIndex === 19) bounded = true;
-        beforeMs = page.next_before_ms;
-      }
       if (abort.signal.aborted) return;
-      rebuildReplayViewerSeries(
-        reviewSeriesStore,
-        source,
-        config.base_interval,
-        reviewProjectedInterval,
-      );
-      setReviewChartBounded(bounded);
+      reviewHistory = new ReplayReviewHistory(reviewSeriesStore, provider, session.snapshot.data_epoch, revealedBoundaryMs, state => {
+        if (abort.signal.aborted) return;
+        setReviewChartBounded(state.bounded);
+        setReviewHasMore(state.hasMore);
+        setReviewOlderLoading(state.loading);
+        setReviewOlderError(state.error);
+      });
+      reviewHistoryRef.current = reviewHistory;
+      await reviewHistory.initialize(reviewPrefixKey!);
+      if (abort.signal.aborted) return;
+      setReviewIndicatorBinding({ sessionId: adapterSessionId, trackId: reviewSelectedTrackId,
+        dataEpoch: session.snapshot.data_epoch, revealedBoundaryMs,
+        ...(provider.historyEpoch === null ? {} : { historyEpoch: provider.historyEpoch }),
+        ...(reviewSourceSequence === undefined ? {} : { sourceSequence: reviewSourceSequence }),
+        identity: { exchange: config.exchange, market_type: config.market_type, symbol: config.symbol,
+          source_kind: config.source_kind === "agg_trade" ? "AGG_TRADE" : "BAR",
+          base_interval: config.base_interval, display_interval: reviewProjectedInterval },
+      });
+      setReviewLoadedPrefixKey(reviewPrefixKey);
     })().catch((cause: unknown) => {
+      if (abort.signal.aborted) return;
       if (cause instanceof DOMException && cause.name === "AbortError") return;
       reviewSeriesStore.replace([], { source: "replay-review-fail-closed" });
       setReviewChartError(
@@ -571,10 +576,13 @@ export default function ReplayTrainingPageShell({
     });
     return () => {
       abort.abort();
+      reviewHistory?.cancel();
+      if (reviewHistoryRef.current === reviewHistory) reviewHistoryRef.current = null;
       provider?.cancel();
     };
   }, [
     reviewCursorVirtualTimeMs,
+    reviewPrefixKey,
     reviewProjectedInterval,
     reviewProjectedExchange,
     reviewProjectedMarketType,
@@ -583,7 +591,8 @@ export default function ReplayTrainingPageShell({
     locale,
     reviewSelectedTrackId,
     reviewSeriesStore,
-    viewer.marketTracks,
+    reviewAdapterSessionId,
+    reviewSourceSequence,
   ]);
 
   const displayedSeriesStore = review === null ? viewer.seriesStore : reviewSeriesStore;
@@ -793,10 +802,13 @@ export default function ReplayTrainingPageShell({
   const viewerLast = displayedSeriesStore.last();
   const viewerFirst = displayedSeriesStore.first();
   const viewerBarCount = displayedSeriesStore.barCount;
+  // Paging older bars must leave the existing chart interactive. An empty
+  // projection still needs an initial loading state while history is seeded.
+  const historyBootstrapLoading = viewerBarCount === 0 && history.loading;
   const viewerVersion = Number(displayedSeriesStore.version);
   const viewerSeriesKey = displayedSeriesStore.seriesKey;
   const isReview = review !== null;
-  const viewerDataMeta = useMemo(() => ({
+  const viewerDataMeta = useMemo(() => isReview ? replayReviewDataMeta(displayedSeriesStore, reviewChartLoading) : ({
     ...runtime.marketData.view.meta,
     version: viewerVersion,
     status: !isReview
@@ -808,7 +820,7 @@ export default function ReplayTrainingPageShell({
     bars: viewerBarCount,
     firstTime: viewerFirst?.time ?? null,
     lastTime: viewerLast?.time ?? null,
-  }), [runtime.marketData.view.meta, viewerVersion, isReview, viewer.loading, reviewChartLoading,
+  }), [runtime.marketData.view.meta, viewerVersion, isReview, viewer.loading, reviewChartLoading, displayedSeriesStore,
     viewerSeriesKey, displayedInterval, viewerBarCount, viewerFirst?.time, viewerLast?.time]);
   const replayTradeMarkers = useMemo<IndicatorMarker[]>(() => [{
     id: "replay-trade-fills",
@@ -897,7 +909,7 @@ export default function ReplayTrainingPageShell({
         </div>
       </div>
     </div>
-  ) : active && review !== null && reviewChartLoading ? (
+  ) : active && review !== null && (reviewChartLoading || reviewLoadedPrefixKey !== reviewPrefixKey) ? (
     <div className="chart-area" data-replay-state="review-loading">
       <div className="error-overlay">
         <div className="replay-loading-spinner" />
@@ -907,27 +919,29 @@ export default function ReplayTrainingPageShell({
         </div>
       </div>
     </div>
-  ) : active && viewerBarCount > 0 && config !== null ? (
+  ) : active && config !== null ? (
     <SingleChartPanes
       ref={chartSurfaceRef}
       seriesStore={displayedSeriesStore}
       symbol={displayedSymbol}
       drawingKeyBase={drawingScopeBase}
+      drawingReadOnly={review !== null}
+      drawingDocumentGeneration={review === null ? 0 : reviewDrawingGeneration}
       paneLayoutScope={cell?.scope ?? null}
       interval={displayedInterval}
       loading={review === null
-        && (runtime.marketData.view.loading || viewer.loading)}
+        && (runtime.marketData.view.loading || viewer.loading || historyBootstrapLoading)}
       onCrosshairMove={cell?.onCrosshairMove ?? runtime.marketData.actions.onCrosshairMove}
-      onNeedMoreLeft={review === null ? history.loadMoreLeft : null}
+      onNeedMoreLeft={review === null ? history.loadMoreLeft : loadReviewMoreLeft}
       onNeedMoreRight={review === null ? history.restoreLatestWindow : null}
-      canLoadMoreLeft={review === null && history.hasMore}
+      canLoadMoreLeft={review === null ? history.hasMore : reviewHasMore && !reviewChartBounded}
       canRestoreLatestWindow={review === null && history.canRestoreLatestWindow}
       rightWindowTruncated={review === null
         ? viewer.seriesStore.rightTruncated
         : false}
       datasetKey={review === null
         ? String(displayedSeriesStore.seriesKey ?? "replay-viewer-uninitialized")
-        : `review:${review.review_id}:${review.selected_timeline_sequence}`}
+        : reviewPrefixKey!}
       datasetViewportTransfer={review === null ? activeIntervalViewportTransfer : null}
       onDatasetViewportTransferSettled={settleReplayIntervalViewportTransfer}
       followLatest={review === null}
@@ -969,13 +983,14 @@ export default function ReplayTrainingPageShell({
       drawingContinuousEnabled={drawings.view.drawingContinuousEnabled}
       drawingAutoSelectEnabled={drawings.view.drawingAutoSelectEnabled}
       onSelectedDrawingChange={drawings.actions.handleSelectedDrawingChange}
-      mainOverlayLines={review === null ? indicators.view.mainOverlayLines : []}
-      subPanes={review === null ? indicators.view.subPanes : []}
-      indicatorMarkers={review === null ? chartMarkers : []}
-      indicatorFills={review === null ? indicators.view.fills : []}
-      indicatorHlines={review === null ? chartHlines : []}
-      indicatorBgcolors={review === null ? indicators.view.bgcolors : []}
-      indicatorBarcolors={review === null ? indicators.view.barcolors : []}
+      mainOverlayLines={review === null ? indicators.view.mainOverlayLines : reviewIndicators.view.mainOverlayLines}
+      subPanes={review === null ? indicators.view.subPanes : reviewIndicators.view.subPanes}
+      indicatorStatusText={review === null ? indicators.status.preparationText : reviewIndicators.status.preparationText}
+      indicatorMarkers={review === null ? chartMarkers : reviewIndicators.view.markers}
+      indicatorFills={review === null ? indicators.view.fills : reviewIndicators.view.fills}
+      indicatorHlines={review === null ? chartHlines : reviewIndicators.view.hlines}
+      indicatorBgcolors={review === null ? indicators.view.bgcolors : reviewIndicators.view.bgcolors}
+      indicatorBarcolors={review === null ? indicators.view.barcolors : reviewIndicators.view.barcolors}
       onRemoveSubPane={review === null ? removeSubPane : null}
       invertScale={cell?.priceScale.invertScale ?? priceScale.invert}
       priceScaleMode={cell?.priceScale.priceScaleMode ?? priceScale.mode}
@@ -1000,6 +1015,9 @@ export default function ReplayTrainingPageShell({
       <span>{t("replay.kicker.closedPrefix")}</span>
       <span>{t("replay.shell.drawingRevValue", { rev: review.projection.drawing_revision })}</span>
       {reviewChartBounded && <span role="status">{t("replay.shell.historyTruncated")}</span>}
+      {reviewOlderLoading && <span role="status">{t("replay.loadingOlder")}</span>}
+      {reviewOlderError && <><span role="alert">{reviewOlderError}</span>
+        <button type="button" onClick={() => { void loadReviewMoreLeft(); }}>{t("replay.retry")}</button></>}
     </div>
   ) : (
     <DrawingToolbar
@@ -1194,7 +1212,7 @@ export default function ReplayTrainingPageShell({
         {review === null && indicatorPanelOpen && (
           <div id="replay-indicator-panel" className="replay-shared-indicator-panel">
             <IndicatorPanel
-              allowedScriptLanguages={["pyne", "pine"]}
+              allowedScriptLanguages={["pyne", "pine", "frontend-js"]}
               allowedSecurityModes={["safe"]}
               isOpen
               onClose={() => setIndicatorPanelOpen(false)}
@@ -1206,7 +1224,7 @@ export default function ReplayTrainingPageShell({
               onUpdateParams={indicators.actions.updateIndicatorParams}
               onUpdateScript={indicators.actions.updateIndicatorScript}
               computing={indicators.status.computing}
-              realtimeMode={indicators.status.realtimeMode}
+              realtimeMode={null}
               onRecompute={indicators.actions.recompute}
               marketStudies={indicators.marketStudies}
               onAddMarketStudy={indicators.marketStudyActions.add}
@@ -1215,8 +1233,8 @@ export default function ReplayTrainingPageShell({
                 indicators.marketStudyActions.toggleVisibility
               }
               modeNotice={{
-                label: t("replay.shell.closedPrefix"),
-                description: t("replay.shell.closedPrefixHint"),
+                label: t("replay.indicators.revealedPrefix"),
+                description: t("replay.indicators.revealedPrefixHint"),
               }}
               resolveIndicatorSupport={providedBarsIndicatorSupport}
             />

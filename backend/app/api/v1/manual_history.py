@@ -27,6 +27,7 @@ from app.data_engine.data_manager.runtime_pressure import (
     storage_file_snapshot,
 )
 from app.core.config import KLINES_DB_PATH
+from app.core.executors import run_storage
 
 router = APIRouter(
     prefix="/settings/storage/manual-downloads",
@@ -148,6 +149,24 @@ def _build_planner(
     )
 
 
+def _plan(
+    body: ManualHistoryPlanRequest,
+    *,
+    feature_enabled: bool,
+    request: Request,
+) -> dict[str, Any]:
+    # Planning reads SQLite (job reservations, coverage bounds) and the disk,
+    # so callers run it on a storage thread.
+    planner = _build_planner(feature_enabled=feature_enabled, request=request)
+    return planner.plan(
+        exchange=body.exchange,
+        market_type=body.market_type,
+        symbols=body.symbols,
+        intervals=body.intervals,
+        start_ms=body.start_ms,
+    )
+
+
 @router.get("/capabilities")
 async def get_manual_history_capabilities(request: Request) -> dict[str, Any]:
     """Advertise whether the write feature is enabled.  Always read-only."""
@@ -168,16 +187,11 @@ async def plan_manual_history_download(
 ) -> dict[str, Any]:
     """Expand targets and storage risk without creating jobs or protections."""
 
-    planner = _build_planner(
+    return await run_storage(
+        _plan,
+        body,
         feature_enabled=bool(MANUAL_HISTORY_DOWNLOAD_ENABLED),
         request=request,
-    )
-    return planner.plan(
-        exchange=body.exchange,
-        market_type=body.market_type,
-        symbols=body.symbols,
-        intervals=body.intervals,
-        start_ms=body.start_ms,
     )
 
 
@@ -215,17 +229,13 @@ def _job_payload(job: Any, *, targets: Any = None) -> dict[str, Any]:
     return payload
 
 
-@router.post("", status_code=202, dependencies=[Depends(_require_write_enabled)])
-@router.post("/", status_code=202, dependencies=[Depends(_require_write_enabled)])
-async def create_manual_history_download(
+def _create(
+    service: Any,
     body: ManualHistoryCreateRequest,
     request: Request,
 ) -> dict[str, Any]:
-    """Create a job from a previously computed plan hash."""
-
-    service = _service(request)
-    if service is None:
-        _reject_write(enabled=True)
+    # Runs on a storage thread inside ManualHistoryService.admit, which wakes
+    # the runner from the event loop afterwards.
     existing = service.repository.get_job_by_idempotency_key(body.idempotency_key)
     if existing is not None:
         if existing.request_hash != body.plan_hash:
@@ -245,14 +255,7 @@ async def create_manual_history_download(
             ),
             "reused_existing": True,
         }
-    planner = _build_planner(feature_enabled=True, request=request)
-    plan = planner.plan(
-        exchange=body.exchange,
-        market_type=body.market_type,
-        symbols=body.symbols,
-        intervals=body.intervals,
-        start_ms=body.start_ms,
-    )
+    plan = _plan(body, feature_enabled=True, request=request)
     if plan.get("plan_hash") != body.plan_hash:
         raise HTTPException(
             status_code=409,
@@ -268,7 +271,11 @@ async def create_manual_history_download(
             },
         )
     try:
-        created = service.create_from_plan(plan, idempotency_key=body.idempotency_key)
+        created = service.create_from_plan(
+            plan,
+            idempotency_key=body.idempotency_key,
+            wake=False,
+        )
     except ManualHistoryIdempotencyConflict as exc:
         raise HTTPException(
             status_code=409,
@@ -283,6 +290,20 @@ async def create_manual_history_download(
         "job": _job_payload(created.job, targets=created.job_targets),
         "reused_existing": created.reused_existing,
     }
+
+
+@router.post("", status_code=202, dependencies=[Depends(_require_write_enabled)])
+@router.post("/", status_code=202, dependencies=[Depends(_require_write_enabled)])
+async def create_manual_history_download(
+    body: ManualHistoryCreateRequest,
+    request: Request,
+) -> dict[str, Any]:
+    """Create a job from a previously computed plan hash."""
+
+    service = _service(request)
+    if service is None:
+        _reject_write(enabled=True)
+    return await service.admit(_create, service, body, request)
 
 
 @router.post("/{job_id}/replay-archive", dependencies=[Depends(_require_write_enabled)])
@@ -317,7 +338,7 @@ async def list_manual_history_jobs(
     if service is None:
         return {"status": "ok", "jobs": []}
     try:
-        jobs = service.repository.list_jobs(limit=limit, cursor=cursor)
+        jobs = await run_storage(service.repository.list_jobs, limit=limit, cursor=cursor)
     except ManualHistoryNotFound as exc:
         raise HTTPException(
             status_code=400,
@@ -330,12 +351,9 @@ async def list_manual_history_jobs(
     }
 
 
-@router.get("/collections")
-async def list_manual_history_collections(request: Request) -> dict[str, Any]:
-    service = _service(request)
-    if service is None:
-        return {"status": "ok", "collections": []}
-    collections = service.repository.list_collections()
+def _collections_payload(repository: Any) -> dict[str, Any]:
+    # One storage-thread span: the collection list plus one target read each.
+    collections = repository.list_collections()
     return {
         "status": "ok",
         "collections": [
@@ -355,7 +373,7 @@ async def list_manual_history_collections(request: Request) -> dict[str, Any]:
                         "continuous_end_ms": target.continuous_end_ms,
                         "status": target.status.value,
                     }
-                    for target in service.repository.list_collection_targets(
+                    for target in repository.list_collection_targets(
                         item.collection_id
                     )
                 ],
@@ -363,6 +381,14 @@ async def list_manual_history_collections(request: Request) -> dict[str, Any]:
             for item in collections
         ],
     }
+
+
+@router.get("/collections")
+async def list_manual_history_collections(request: Request) -> dict[str, Any]:
+    service = _service(request)
+    if service is None:
+        return {"status": "ok", "collections": []}
+    return await run_storage(_collections_payload, service.repository)
 
 
 @router.post(
@@ -377,7 +403,8 @@ async def release_manual_history_collection(
     if service is None:
         _reject_write(enabled=True)
     try:
-        released = service.release_collection(collection_id)
+        # Release waits for DataManager's GC guard; keep that wait off the loop.
+        released = await run_storage(service.release_collection, collection_id)
     except ManualHistoryNotFound as exc:
         raise HTTPException(
             status_code=404,
@@ -391,6 +418,11 @@ async def release_manual_history_collection(
     }
 
 
+def _job_with_targets(repository: Any, job_id: str) -> tuple[Any, Any]:
+    job = repository.get_job(job_id)
+    return job, repository.list_job_targets(job_id)
+
+
 @router.get("/{job_id}")
 async def get_manual_history_job(job_id: str, request: Request) -> dict[str, Any]:
     service = _service(request)
@@ -400,7 +432,7 @@ async def get_manual_history_job(job_id: str, request: Request) -> dict[str, Any
             detail={"status": "error", "reason": "job_not_found"},
         )
     try:
-        job = service.repository.get_job(job_id)
+        job, targets = await run_storage(_job_with_targets, service.repository, job_id)
     except ManualHistoryNotFound:
         raise HTTPException(
             status_code=404,
@@ -408,7 +440,7 @@ async def get_manual_history_job(job_id: str, request: Request) -> dict[str, Any
         ) from None
     return {
         "status": "ok",
-        "job": _job_payload(job, targets=service.repository.list_job_targets(job_id)),
+        "job": _job_payload(job, targets=targets),
     }
 
 

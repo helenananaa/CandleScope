@@ -15,6 +15,7 @@ import type {
   BacktestDataset,
   BacktestSnapshot,
   StrategyRevisionRecord,
+  ExternalProviderConnection,
 } from "../backtestApi.js";
 import type { StrategyDraftRecord } from "../chart-tester/StrategyDraftStore.js";
 import type { PythonStudioGate } from "../pythonStudio.js";
@@ -66,12 +67,18 @@ export interface BacktestResearchRuntimeView {
   endTimeMs: number;
   snapshot: BacktestSnapshot | null;
   runDraftText: string;
+  selectedRunRequest: Record<string, unknown> | null;
   studyDraftText: string;
   runComparison: RunCompareV3 | null;
   studyComparison: BacktestStudyComparison | null;
   signalTrace: SignalTraceItem[];
   reviewBridge: Record<string, unknown> | null;
   pythonGate: PythonStudioGate | null;
+  externalConnections: ExternalProviderConnection[];
+  externalConnection: ExternalProviderConnection | null;
+  externalTrace: Array<Record<string, unknown>>;
+  externalTraceNext: number;
+  externalTraceHasMore: boolean;
 }
 
 export interface BacktestResearchRuntime {
@@ -93,13 +100,17 @@ export interface BacktestResearchRuntime {
     copyStrategyRevision(): Promise<void>;
     archiveStrategyRevision(): Promise<void>;
     smokeStrategyRevision(): Promise<void>;
+    registerExternalExample(): Promise<void>;
+    createExternalConnection(): Promise<void>;
+    selectExternalConnection(connectionId: string): void;
+    revokeExternalConnection(): Promise<void>;
     createRun(): Promise<void>;
     cancelRun(): Promise<void>;
     resumeRun(): Promise<void>;
     cloneRun(parameter: string, value: unknown): Promise<void>;
     compareRun(otherRunId: string): Promise<void>;
     exportRun(): Promise<void>;
-    loadSignalTrace(): Promise<void>;
+    loadSignalTrace(after?: number): Promise<void>;
     createStudy(): Promise<void>;
     startStudy(): Promise<void>;
     cancelStudy(): Promise<void>;

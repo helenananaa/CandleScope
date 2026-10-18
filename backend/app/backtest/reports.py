@@ -206,6 +206,11 @@ def build_report(
         report["account_model"] = "LINEAR_PERP_ONE_WAY_V2"
         report["funding_mode"] = config.get("funding_mode", "OFF")
         report["liquidation_model"] = "MARK_IMMEDIATE_NO_LIQUIDATION_FEE_V1"
+    if account_model == "SPOT_CASH_V1":
+        report["identity"]["account_model"] = account_model
+        report["account_model"] = account_model
+        report["funding_mode"] = "OFF"
+        report["unmodeled"] = [item for item in report["unmodeled"] if item not in {"liquidation", "funding"}]
     if config.get("host_policy_revision"):
         report["identity"].update(
             {
@@ -216,7 +221,7 @@ def build_report(
         )
         report["risk_policy"] = copy.deepcopy(payload.get("risk_policy") or {})
         report["metrics"]["risk_rejection_count"] = sum(
-            item.get("reason") == "ORDER_REJECTED_RISK"
+            item.get("reason") == "ORDER_REJECTED_RISK" or str(item.get("reason", "")).startswith("SPOT_INSUFFICIENT_")
             for item in payload.get("rejected") or []
         )
     if config.get("execution_model_revision"):

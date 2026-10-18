@@ -29,6 +29,7 @@ from app.api.v1.stream_utils import (
     validate_ws_interval,
 )
 from app.core import config
+from app.core.async_cleanup import finish_cleanup
 from app.data_engine.data_manager import StreamCapacityError
 from app.data_engine.data_manager.models import DataEventType
 from app.data_engine.interval_policy import parse_interval_spec
@@ -239,10 +240,15 @@ class KlineBatchConnection:
             await self.close()
 
     async def close(self) -> None:
+        if not self.subscriptions:
+            return
+        await finish_cleanup(self._close_owned())
+
+    async def _close_owned(self) -> None:
         subscriptions = list(self.subscriptions.values())
         self.subscriptions.clear()
         for subscription in subscriptions:
-            await self._release_subscription(subscription)
+            await self._remove_intervals_owned(subscription, subscription.intervals)
 
     async def _forward(self) -> None:
         while not self.closed:
@@ -582,7 +588,7 @@ class KlineBatchConnection:
                 )
                 _require_active_stream_info(info, interval)
                 callback = self._event_callback(subscription.client_id)
-                handle = self.dm.subscribe(
+                handle = await self.dm.subscribe_async(
                     callback=callback,
                     on_recovery=self._require_resync,
                     symbol=subscription.symbol,
@@ -591,6 +597,11 @@ class KlineBatchConnection:
                     market_type=subscription.market_type,
                     event_types=_EVENT_TYPES,
                 )
+            except asyncio.CancelledError:
+                # ensure_stream may already own a lease while callback admission
+                # is still waiting for the GC guard. No handle exists to close.
+                await finish_cleanup(self._release_stream(subscription, interval))
+                raise
             except StreamCapacityError:
                 raise
             except Exception as exc:
@@ -658,11 +669,18 @@ class KlineBatchConnection:
         subscription: _BatchSubscription,
         intervals: set[str],
     ) -> None:
+        await finish_cleanup(self._remove_intervals_owned(subscription, intervals))
+
+    async def _remove_intervals_owned(
+        self,
+        subscription: _BatchSubscription,
+        intervals: set[str],
+    ) -> None:
         for interval in sorted(intervals):
             handle = subscription.handles.pop(interval, None)
             if handle is not None:
                 try:
-                    self.dm.unsubscribe(handle)
+                    await self.dm.unsubscribe_async(handle)
                 except Exception:
                     pass
                 await self._release_stream(subscription, interval)
@@ -823,8 +841,10 @@ async def stream_batch_kline(
         })
         await connection.run()
     finally:
-        await connection.close()
-        registry.unregister(connection)
+        try:
+            await connection.close()
+        finally:
+            registry.unregister(connection)
 
 
 __all__ = [

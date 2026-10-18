@@ -405,6 +405,14 @@ function identifier(value: unknown, field: string): string {
   return result;
 }
 
+function reviewEventType(value: unknown, field: string): string {
+  const result = stringValue(value, field, 128);
+  // Persisted actor checkpoints also contain internal training command names.
+  // This is an event label, not a transport command or a resource identifier.
+  if (/^_TRAINING_[A-Z0-9_]+$/.test(result)) return result;
+  return identifier(result, field);
+}
+
 function counter(value: unknown, field: string): number {
   if (!Number.isSafeInteger(value) || (value as number) < 0) {
     throw new TypeError(`${field} must be a non-negative safe integer`);
@@ -1002,7 +1010,7 @@ export function parseReplayReviewResponse(value: unknown): ReplayReviewResponse 
     ]);
     return {
       event_id: identifier(event.event_id, `${field}.event_id`),
-      event_type: identifier(event.event_type, `${field}.event_type`),
+      event_type: reviewEventType(event.event_type, `${field}.event_type`),
       category: identifier(event.category, `${field}.category`),
       timeline_sequence: counter(event.timeline_sequence, `${field}.timeline_sequence`),
       checkpoint_id: counter(event.checkpoint_id, `${field}.checkpoint_id`),
@@ -1026,7 +1034,7 @@ export function parseReplayReviewResponse(value: unknown): ReplayReviewResponse 
     );
     return {
       event_id: identifier(target.event_id, `review.jump_targets[${index}].event_id`),
-      event_type: identifier(target.event_type, `review.jump_targets[${index}].event_type`),
+      event_type: reviewEventType(target.event_type, `review.jump_targets[${index}].event_type`),
       category: identifier(target.category, `review.jump_targets[${index}].category`),
     };
   });
@@ -1140,7 +1148,7 @@ export function parseReplayReviewControlResponse(value: unknown): ReplayReviewCo
     ),
     selected_event: {
       event_id: selectedEventId,
-      event_type: identifier(
+      event_type: reviewEventType(
         selected.event_type,
         "review_control.selected_event.event_type",
       ),

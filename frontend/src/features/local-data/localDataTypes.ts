@@ -3,7 +3,7 @@ export interface LocalDatasetManifest {
   dataset_id: string;
   data_epoch: string;
   name: string;
-  source: "local_dataset";
+  source: "local_dataset" | "host_chart_snapshot";
   symbol: string;
   interval: string;
   alignment?: "fixed_epoch" | "weekly_monday" | "calendar_month";

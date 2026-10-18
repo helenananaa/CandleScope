@@ -122,3 +122,18 @@ builder 输出的 `.cspkg` SHA-256 应进入同一次可信 Release。安装方�
 `candlescope-plugin install <bundle> --sha256 <published digest>`，不能临时对未知 bundle
 自行计算摘要后当作信任来源。插件升级时同时升级 package version、release lock 与
 probe hash，禁止覆盖同版本 artifact。
+
+### 0.3.1 宿主增量历史执行
+
+`pyne-external/5` 对没有成交重算的 `init/on_bar` 策略采用
+`pyne.host-fixed-history/1`。每根已闭合源柱只执行一次；`last_bar_index`
+固定为本次冻结数据集的最后一根，`islast` / `islastconfirmedhistory` 仅在最后
+一根为真，`ishistory=True`、`isrealtime=False`。这与旧版逐前缀重新求值时
+“当前前缀末尾总是最后一根”的语义不同。报告的执行方式及 JSON 导出记录该契约；
+旧报告不会改写。依赖末尾标记的策略应按此契约复核信号。
+
+会话提前只知道总柱数；未来价格、未来账户反馈和未闭合的跨周期数据不可读取。
+撮合及资金账本仍由 CandleScope 维护，合成砖块只用于策略观察。进程错误、取消、
+超时均终止整个会话；重新运行从冻结输入重建，不恢复未经验证的内存状态。
+批量脚本和 `calc_on_order_fills` 目前继续使用 `historical-prefix/1`，其大数据性能
+仍需单独验收。已发布的 0.3.0 锁保持原样；构建 0.3.1 源码须显式提供包含实际 wheel 摘要的平台候选锁。本改动不发布新的事件引擎。

@@ -45,7 +45,8 @@ export function reportAnalytics(result: NativeResult, external = false) {
     maxDrawdownPercent = Math.max(maxDrawdownPercent, drawdownPercent ?? 0);
     return { ...point, returnPercent: baseline != null && baseline > 0 ? (point.value / baseline - 1) * 100 : null, drawdownPercent };
   });
-  const closed = external ? [] : result.trades.map(row => reportTrade(row, result.orders)).filter(trade => trade.focus?.exitTimeMs != null);
+  const closed = (external ? result.closed_trades ?? [] : result.trades)
+    .map(row => reportTrade(row, result.orders)).filter(trade => trade.focus?.exitTimeMs != null);
   const complete = closed.length > 0 && closed.every(trade => trade.profit != null);
   const wins = closed.filter(trade => (trade.profit ?? 0) > 0).length;
   const grossProfit = closed.reduce((sum, trade) => sum + Math.max(0, trade.profit ?? 0), 0);

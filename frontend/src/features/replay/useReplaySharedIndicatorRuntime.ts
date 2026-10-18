@@ -6,7 +6,9 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { createReplayBuiltinCompute } from "./replayBuiltinCompute.js";
+import { useReplayCanonicalIndicatorCompute } from "./useReplayCanonicalIndicatorCompute.js";
+import { replayIndicatorPresentation } from "./replayIndicatorPresentation.js";
+import { replayIndicatorCalculationKey } from "./replayCanonicalIndicators.js";
 
 import {
   createActiveIndicatorPersistence,
@@ -122,6 +124,7 @@ export interface ReplaySharedIndicatorRuntime {
   readonly view: IndicatorRuntime["view"];
   readonly actions: IndicatorRuntime["actions"];
   readonly status: IndicatorRuntime["status"] & {
+    preparationText: string | null;
     readonly mode: "provided_bars_replay_safe";
     readonly sourceBarCount: number;
     readonly latestSourceTimeMs: number | null;
@@ -227,6 +230,14 @@ function replayBarFinality(bar: KlineBar): boolean | null {
  * The forming bar is built only from base rows already revealed by the replay
  * cursor. Unknown or contradictory finality still fails closed.
  */
+export function excludeIncompleteReplayHistory(rows: readonly KlineBar[], cursorMs: number | null): KlineBar[] {
+  return rows.filter(row => !(cursorMs !== null && replayBarFinality(row) === false
+    && typeof row.replayCloseTimeMs === "number" && row.replayCloseTimeMs < cursorMs
+    && Number.isSafeInteger(row.replayComponentCount) && Number(row.replayComponentCount) > 0
+    && Number.isSafeInteger(row.replayExpectedComponents)
+    && Number(row.replayComponentCount) < Number(row.replayExpectedComponents)));
+}
+
 export function selectRevealedIndicatorBars(
   rows: readonly KlineBar[],
   cursorMs: number | null,
@@ -262,7 +273,11 @@ export function selectRevealedIndicatorBars(
     }
     if (finality) {
       if (closeTimeMs > cursorMs) break;
-    } else if (index !== rows.length - 1 || closeTimeMs <= cursorMs) {
+    } else if (index !== rows.length - 1 || closeTimeMs < cursorMs) {
+      // closeTimeMs is inclusive. Exact tape can stop inside a same-ms
+      // cohort at that final millisecond, so the builder may legitimately
+      // retain a forming tail there. Keep its revealed values and finality;
+      // do not drop it on restore or claim the remaining cohort is closed.
       break;
     }
     if (
@@ -312,25 +327,35 @@ export function useReplaySharedIndicatorRuntime(
   );
   const seriesRevision = seriesProjectionRevision.version;
   const seriesStructureRevision = seriesProjectionRevision.structureRevision;
-  const cursorMs = runtime.store.virtualTimeMs;
+  const tapeObservation = viewer.tapeObservation;
+  const cursorMs = tapeObservation === undefined ? runtime.store.virtualTimeMs : tapeObservation?.virtualTimeMs ?? null;
+  const sourceSequence = tapeObservation === undefined ? runtime.store.sourceSequence : tapeObservation?.sourceSequence ?? 0;
+  const historyEpoch = tapeObservation?.historyEpoch;
   const playing = runtime.store.state === "PLAYING";
   const latestIndicatorBoundaryRef = useRef({
     revision: seriesRevision,
     structureRevision: seriesStructureRevision,
     cursorMs,
+    sourceSequence,
+    historyEpoch,
   });
   const [sampledIndicatorBoundary, setSampledIndicatorBoundary] = useState({
     revision: seriesRevision,
     structureRevision: seriesStructureRevision,
     cursorMs,
+    sourceSequence,
+    historyEpoch,
   });
   const indicatorRefreshTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+  const canonicalPreparingRef = useRef(false);
   const wasPlayingRef = useRef(false);
   useEffect(() => {
     latestIndicatorBoundaryRef.current = {
       revision: seriesRevision,
       structureRevision: seriesStructureRevision,
       cursorMs,
+      sourceSequence,
+      historyEpoch,
     };
     if (!playing) {
       wasPlayingRef.current = false;
@@ -344,17 +369,28 @@ export function useReplaySharedIndicatorRuntime(
       wasPlayingRef.current = true;
       setSampledIndicatorBoundary(latestIndicatorBoundaryRef.current);
     }
+    setSampledIndicatorBoundary(current => (
+      current.historyEpoch !== historyEpoch || (current.cursorMs === null && cursorMs !== null)
+        || (current.cursorMs !== null && (cursorMs === null || current.cursorMs > cursorMs))
+        || current.sourceSequence > sourceSequence
+        ? latestIndicatorBoundaryRef.current : current
+    ));
     if (indicatorRefreshTimerRef.current !== null) return;
     indicatorRefreshTimerRef.current = globalThis.setTimeout(() => {
       indicatorRefreshTimerRef.current = null;
+      // Finish the selected initial seed even when forward display samples
+      // arrive faster than its history preparation. Rewinds/scope changes
+      // still invalidate the compute controller through their normal keys.
+      if (canonicalPreparingRef.current) return;
       const latest = latestIndicatorBoundaryRef.current;
       setSampledIndicatorBoundary((current) => (
-        current.revision === latest.revision && current.cursorMs === latest.cursorMs
+        current.revision === latest.revision && current.cursorMs === latest.cursorMs && current.sourceSequence === latest.sourceSequence
+          && current.historyEpoch === latest.historyEpoch
           ? current
           : latest
       ));
     }, REPLAY_INDICATOR_PLAYING_REFRESH_MS);
-  }, [cursorMs, playing, seriesRevision, seriesStructureRevision]);
+  }, [cursorMs, sourceSequence, historyEpoch, playing, seriesRevision, seriesStructureRevision]);
   useEffect(() => () => {
     if (indicatorRefreshTimerRef.current !== null) {
       globalThis.clearTimeout(indicatorRefreshTimerRef.current);
@@ -364,7 +400,9 @@ export function useReplaySharedIndicatorRuntime(
   // Paused/review navigation always uses the exact current boundary in the
   // same render. During forward playback a trailing sample may be older, but
   // can never contain data newer than the authoritative replay cursor.
-  const usePlaybackSample = playing && wasPlayingRef.current;
+  const usePlaybackSample = playing && wasPlayingRef.current && cursorMs !== null
+    && sampledIndicatorBoundary.cursorMs !== null && sampledIndicatorBoundary.cursorMs <= cursorMs
+    && sampledIndicatorBoundary.sourceSequence <= sourceSequence && sampledIndicatorBoundary.historyEpoch === historyEpoch;
   const indicatorRevision = usePlaybackSample
     ? sampledIndicatorBoundary.revision
     : seriesRevision;
@@ -374,9 +412,11 @@ export function useReplaySharedIndicatorRuntime(
   const indicatorCursorMs = usePlaybackSample
     ? sampledIndicatorBoundary.cursorMs
     : cursorMs;
+  const indicatorSourceSequence = usePlaybackSample ? sampledIndicatorBoundary.sourceSequence : sourceSequence;
+  const indicatorHistoryEpoch = usePlaybackSample ? sampledIndicatorBoundary.historyEpoch : historyEpoch;
   const indicatorBars = useMemo(() => {
     void indicatorRevision;
-    return selectRevealedIndicatorBars(seriesStore.snapshot(), indicatorCursorMs);
+    return selectRevealedIndicatorBars(excludeIncompleteReplayHistory(seriesStore.snapshot(), indicatorCursorMs), indicatorCursorMs);
   }, [indicatorCursorMs, indicatorRevision, seriesStore]);
   const selectedTrackId = viewer.viewerState?.selected_track_id ?? null;
   const selectedTrack = viewer.marketTracks?.tracks.find(
@@ -426,22 +466,40 @@ export function useReplaySharedIndicatorRuntime(
     seriesStore.seriesKey,
     indicatorRevision,
   ]);
-  const computeBatch = useMemo(() => {
-    void sourceScopeKey;
-    return createReplayBuiltinCompute();
-  }, [sourceScopeKey]);
+  const canonical = useReplayCanonicalIndicatorCompute(sourceScopeKey, seriesStore,
+    config && runtime.store.sessionId && runtime.store.dataEpoch && selectedTrackId && indicatorCursorMs !== null ? {
+      sessionId: runtime.store.sessionId, trackId: selectedTrackId, dataEpoch: runtime.store.dataEpoch,
+      revealedBoundaryMs: indicatorCursorMs, sourceSequence: indicatorSourceSequence,
+      ...(indicatorHistoryEpoch === undefined ? {} : { historyEpoch: indicatorHistoryEpoch }),
+      ...(tapeObservation === undefined ? {} : { sourceBars: indicatorBars }),
+      identity: { exchange, market_type: marketType, symbol,
+        source_kind: config.source_kind === "agg_trade" ? "AGG_TRADE" : "BAR",
+        base_interval: config.base_interval, display_interval: interval },
+    } : null);
+  canonicalPreparingRef.current = tapeObservation !== undefined && canonical.preparation.active > 0;
+  useEffect(() => {
+    if (playing && !canonical.preparation.active) {
+      setSampledIndicatorBoundary(current => current === latestIndicatorBoundaryRef.current
+        ? current : latestIndicatorBoundaryRef.current);
+    }
+  }, [canonical.preparation.active, playing]);
+  const computeBatch = canonical.compute;
+  const canonicalScopeKey = `${sourceScopeKey}|${canonical.sourceKey}`;
+  const outputBarTimes = useMemo(() => indicatorBars.map(bar => bar.time), [indicatorBars]);
   const providedBars = useProvidedBarsIndicatorRuntime({
     computeBatch,
     bars: indicatorBars,
+    outputBarTimes,
     chartDataMeta,
-    datasetKey: sourceScopeKey,
+    datasetKey: replayIndicatorCalculationKey(canonicalScopeKey, indicatorRevision,
+      indicatorSourceSequence, indicatorCursorMs),
     exchange,
     interval,
     marketType,
     persistence: cellPersistence ?? persistence,
     seriesReady: indicatorRevision,
     sourceOrdinal: indicatorCursorMs ?? -1,
-    sourceScopeKey,
+    sourceScopeKey: canonicalScopeKey,
     symbol,
     visibleThroughSeconds: indicatorCursorMs === null
       ? null
@@ -547,13 +605,14 @@ export function useReplaySharedIndicatorRuntime(
       };
     })
   ), [locale, orderFlowPreferences, orderFlowSupported]);
+  const presentation = useMemo(() => {
+    void locale;
+    return replayIndicatorPresentation(providedBars.view, canonical.preparation, providedBars.status.computing);
+  }, [providedBars.view, providedBars.status.computing, canonical.preparation, locale]);
   const view = useMemo(() => ({
-    ...providedBars.view,
-    subPanes: [
-      ...providedBars.view.subPanes,
-      ...visibleOrderFlowPanes,
-    ],
-  }), [providedBars.view, visibleOrderFlowPanes]);
+    ...presentation.view,
+    subPanes: [...presentation.view.subPanes, ...visibleOrderFlowPanes],
+  }), [presentation.view, visibleOrderFlowPanes]);
   const addedOrderFlowCount = Number(orderFlowPreferences.cvd.added)
     + Number(orderFlowPreferences.delta.added);
   const visibleOrderFlowCount = Number(
@@ -567,6 +626,8 @@ export function useReplaySharedIndicatorRuntime(
     actions: providedBars.actions,
     status: {
       ...providedBars.status,
+      computing: providedBars.status.computing || canonical.preparation.active > 0,
+      preparationText: presentation.statusText,
       mode: "provided_bars_replay_safe",
       sourceBarCount: indicatorBars.length,
       latestSourceTimeMs: last === undefined ? null : Number(last.time) * 1_000,

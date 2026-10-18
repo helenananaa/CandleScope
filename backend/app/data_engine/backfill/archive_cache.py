@@ -9,10 +9,11 @@ import os
 import sqlite3
 import threading
 import time
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import urljoin, urlparse
 from uuid import uuid4
 
@@ -22,10 +23,10 @@ from app.data_engine.ingestion.metrics import LayerMetrics
 from app.exchanges.archive import (
     ArchiveDataError,
     ArchiveHttpResponse,
+    ArchiveHttpStatusError,
     ArchiveObjectRef,
     HistoricalArchiveProvider,
 )
-
 
 logger = logging.getLogger("backfill.ArchiveCache")
 
@@ -242,9 +243,7 @@ class HistoricalArchiveCache:
                 max_bytes=16 * 1024,
             )
             if checksum_response.status != 200:
-                raise ArchiveDataError(
-                    f"archive checksum request returned HTTP {checksum_response.status}"
-                )
+                raise ArchiveHttpStatusError(checksum_response.status, "checksum request")
             provider_checksum = provider.parse_checksum(checksum_response.body, ref)
             if (
                 existing is not None
@@ -295,9 +294,7 @@ class HistoricalArchiveCache:
                 max_bytes=self.max_download_bytes,
             )
             if response.status != 200:
-                raise ArchiveDataError(
-                    f"archive download returned HTTP {response.status}"
-                )
+                raise ArchiveHttpStatusError(response.status, "download")
             if not temporary.is_file() or temporary.stat().st_size <= 0:
                 raise ArchiveDataError("archive download is empty")
             download_elapsed_ms = int(

@@ -15,6 +15,7 @@ from app.api.v1.stream_utils import (
     send_text_with_timeout,
     validate_ws_interval,
 )
+from app.core.async_cleanup import finish_cleanup
 from app.data_engine.consumer_recovery import ConsumerRecoveryRequired
 from app.data_engine.data_manager.models import DataEventType, StreamStatus
 from app.data_engine.interval_policy import parse_interval_spec
@@ -464,7 +465,7 @@ async def stream_multi_kline(
                                     consumer_id=consumer_id,
                                 )
                                 _require_active_stream_info(info, iv)
-                                handle = dm.subscribe(
+                                handle = await dm.subscribe_async(
                                     callback=event_callback,
                                     on_recovery=require_resync,
                                     symbol=symbol,
@@ -479,6 +480,17 @@ async def stream_multi_kline(
                                         DataEventType.BACKFILL_COMPLETED,
                                     },
                                 )
+                            except asyncio.CancelledError:
+                                # A stream claim can precede the callback handle.
+                                # The final subscription sweep cannot see it yet.
+                                release_stream = getattr(dm, "release_stream", None)
+                                if callable(release_stream):
+                                    await finish_cleanup(release_stream(
+                                        symbol, iv, exchange=exchange,
+                                        market_type=market_type,
+                                        focus_scope="websocket", consumer_id=consumer_id,
+                                    ))
+                                raise
                             except Exception as exc:
                                 failed.append(_subscription_failure(iv, exc))
                                 release_stream = getattr(dm, "release_stream", None)
@@ -524,13 +536,13 @@ async def stream_multi_kline(
                     }, msg))
 
                 elif action == "unsubscribe":
-                    for iv in valid:
+                    async def detach_interval(iv: str) -> None:
                         was_active = iv in active_intervals
                         active_intervals.discard(iv)
                         handle = subscriptions.pop(iv, None)
                         if handle is not None:
                             try:
-                                dm.unsubscribe(handle)
+                                await dm.unsubscribe_async(handle)
                             except Exception:
                                 pass
                         if was_active:
@@ -547,6 +559,8 @@ async def stream_multi_kline(
                                     )
                                 except Exception:
                                     pass
+                    for iv in valid:
+                        await finish_cleanup(detach_interval(iv))
                     await safe_send_json(_with_request_id({
                         "type": "unsubscribed",
                         "exchange": exchange,
@@ -573,28 +587,30 @@ async def stream_multi_kline(
 
     finally:
         ws_closed = True
-        release_stream = getattr(dm, "release_stream", None)
-        intervals_to_release = list(active_intervals)
-        for handle in list(subscriptions.values()):
-            try:
-                dm.unsubscribe(handle)
-            except Exception:
-                pass
-        if callable(release_stream):
-            for iv in intervals_to_release:
+        async def cleanup() -> None:
+            release_stream = getattr(dm, "release_stream", None)
+            intervals_to_release = list(active_intervals)
+            for handle in list(subscriptions.values()):
                 try:
-                    await release_stream(
-                        symbol,
-                        iv,
-                        exchange=exchange,
-                        market_type=market_type,
-                        focus_scope="websocket",
-                        consumer_id=consumer_id,
-                    )
+                    await dm.unsubscribe_async(handle)
                 except Exception:
                     pass
-        active_intervals.clear()
-        subscriptions.clear()
+            if callable(release_stream):
+                for iv in intervals_to_release:
+                    try:
+                        await release_stream(
+                            symbol,
+                            iv,
+                            exchange=exchange,
+                            market_type=market_type,
+                            focus_scope="websocket",
+                            consumer_id=consumer_id,
+                        )
+                    except Exception:
+                        pass
+            active_intervals.clear()
+            subscriptions.clear()
+        await finish_cleanup(cleanup())
 
 
 async def forward_events_to_ws(

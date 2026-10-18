@@ -8,7 +8,7 @@ import shutil
 import zipfile
 from weakref import WeakValueDictionary
 
-from app.data_engine.storage.raw_trade_archive import RawAggTradeDatasetRef
+from app.data_engine.storage.raw_trade_archive import RawAggTradeDatasetRef, ParquetRawAggTradeArchive
 from app.replay.trade_import import import_official_date_range, ReplayTradeImportError
 
 from .models import PreparationError
@@ -18,7 +18,12 @@ DAY_MS = 86_400_000
 
 class TradePreparationAdapter:
     def __init__(self, archive, *, importer=import_official_date_range):
-        self.archive = archive
+        # The desktop replay archive includes a remote catalog wrapper. Its
+        # advertised coverage is not proof that local bodies exist, and its
+        # freeze method can download outside our budget/receipt lifecycle.
+        # Preparation owns acquisition; inspect and freeze its local cache only.
+        local = getattr(archive, "cache", None)
+        self.archive = local if isinstance(local, ParquetRawAggTradeArchive) else archive
         self.importer = importer
         self._days: WeakValueDictionary = WeakValueDictionary()
 

@@ -7,7 +7,7 @@ import sqlite3
 from app.replay.canonical import canonical_sha256
 
 
-TRAINING_SCHEMA_VERSION = 23
+TRAINING_SCHEMA_VERSION = 25
 TRAINING_SCHEMA_ID = "replay.training.v2"
 TIME_COMMITMENT_SCHEMA_VERSION = "replay.time-commitment.v1"
 START_SELECTION_SCHEMA_VERSION = "replay.start-selection.v1"
@@ -2555,6 +2555,18 @@ CREATE TABLE IF NOT EXISTS replay_hedge_mark_span (
 """
 
 
+TRAINING_SCHEMA_V25_INPUT_ADMISSIONS = """
+CREATE TABLE IF NOT EXISTS replay_hedge_track_input_admission (
+    run_id TEXT NOT NULL REFERENCES replay_training_run(run_id) ON DELETE CASCADE,
+    track_id TEXT NOT NULL,
+    first_sequence INTEGER NOT NULL,
+    last_sequence INTEGER NOT NULL CHECK(last_sequence >= first_sequence),
+    admitted_virtual_time_ms INTEGER NOT NULL,
+    PRIMARY KEY(run_id, track_id, first_sequence)
+);
+"""
+
+
 TRAINING_SCHEMA_V23_MULTI_INTERVALS = """
 CREATE TABLE IF NOT EXISTS replay_multi_bar_interval (
     run_id TEXT NOT NULL REFERENCES replay_training_run(run_id) ON DELETE CASCADE,
@@ -2568,6 +2580,38 @@ CREATE TABLE IF NOT EXISTS replay_multi_bar_interval (
 CREATE INDEX IF NOT EXISTS replay_multi_bar_interval_time
 ON replay_multi_bar_interval(run_id,end_time_ms,start_time_ms);
 """
+
+
+TRAINING_SCHEMA_V24_HYBRID_EXTENSIONS = """
+CREATE TABLE IF NOT EXISTS replay_hedge_hybrid_extension (
+    run_id TEXT NOT NULL,
+    track_id TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    component_hash TEXT NOT NULL,
+    created_at_ms INTEGER NOT NULL,
+    PRIMARY KEY (run_id, track_id),
+    FOREIGN KEY (run_id, track_id)
+        REFERENCES replay_hedge_track_public_binding(run_id, track_id) ON DELETE CASCADE
+);
+"""
+
+
+def _ensure_hedge_admission_cursor(connection: sqlite3.Connection) -> None:
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(replay_hedge_track_public_binding)")}
+    if "initial_event_sequence" not in columns:
+        connection.execute("ALTER TABLE replay_hedge_track_public_binding ADD COLUMN initial_event_sequence INTEGER")
+
+
+def _ensure_review_query_indexes(connection: sqlite3.Connection) -> None:
+    # Budget/window queries need only scalar metadata. Covering indexes keep
+    # repeated reads away from the historical checkpoint/projection blob pages.
+    connection.execute("""CREATE INDEX IF NOT EXISTS idx_replay_review_anchor_budget
+        ON replay_review_actor_anchor(run_id,
+            CASE WHEN stored_bytes > 0 THEN stored_bytes ELSE length(payload) END)""")
+    connection.execute("""CREATE INDEX IF NOT EXISTS idx_replay_review_artifact_budget
+        ON replay_review_timeline_event(run_id, length(CAST(projection_json AS BLOB)))""")
+    connection.execute("""CREATE INDEX IF NOT EXISTS idx_replay_equity_sample_window
+        ON replay_equity_sample(run_id, resolution, bucket_id, source_sequence, revision)""")
 
 
 def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> None:
@@ -2587,13 +2631,18 @@ def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> N
     ).fetchone()
     current = 0 if row is None else int(row[0])
     if current == TRAINING_SCHEMA_VERSION:
+        _ensure_review_query_indexes(connection)
         return
-    if current in {19, 20, 21, 22}:
+    if current in {19, 20, 21, 22, 23, 24}:
         if current in {19, 20}:
             _execute_script(connection, TRAINING_SCHEMA_V20_INTERVAL_CURVES)
             _execute_script(connection, TRAINING_SCHEMA_V21_INDEXED_INTERVALS)
         _ensure_interval_curve_bounds(connection)
         _execute_script(connection, TRAINING_SCHEMA_V23_MULTI_INTERVALS)
+        _execute_script(connection, TRAINING_SCHEMA_V24_HYBRID_EXTENSIONS)
+        _execute_script(connection, TRAINING_SCHEMA_V25_INPUT_ADMISSIONS)
+        _ensure_hedge_admission_cursor(connection)
+        _ensure_review_query_indexes(connection)
         connection.execute(
             "UPDATE replay_training_schema_version SET version=?, applied_at_ms=? WHERE singleton=1",
             (TRAINING_SCHEMA_VERSION, now_ms),
@@ -2632,9 +2681,13 @@ def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> N
         TRAINING_SCHEMA_V20_INTERVAL_CURVES,
         TRAINING_SCHEMA_V21_INDEXED_INTERVALS,
         TRAINING_SCHEMA_V23_MULTI_INTERVALS,
+        TRAINING_SCHEMA_V24_HYBRID_EXTENSIONS,
+        TRAINING_SCHEMA_V25_INPUT_ADMISSIONS,
     ):
         _execute_script(connection, script)
     _ensure_interval_curve_bounds(connection)
+    _ensure_hedge_admission_cursor(connection)
+    _ensure_review_query_indexes(connection)
     connection.execute(
         """
         INSERT INTO replay_training_schema_version(singleton, version, applied_at_ms)

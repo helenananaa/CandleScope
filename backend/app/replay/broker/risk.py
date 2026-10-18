@@ -6,6 +6,7 @@ from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR, localcontext
 from typing import Iterable, Protocol
 
 from ..errors import ReplayDomainError, ReplayErrorCode
+from .affordability import opening_budget
 from .models import (
     Account,
     BrokerConfig,
@@ -30,6 +31,17 @@ class OrderRiskContext(Protocol):
     stop_price: str | None
     leverage: str | None
     position_side: PositionSide | None
+
+
+def _opening_budget(request: OrderRiskContext, config: BrokerConfig, reference: Decimal, leverage: Decimal):
+    return opening_budget(
+        reference=reference, leverage=leverage, side=request.side.value,
+        limit=request.limit_price is not None,
+        slippage_bps=Decimal(config.market_slippage_bps),
+        fee_bps=max(Decimal(config.maker_bps), Decimal(config.taker_bps)),
+        price_tick=Decimal(config.instrument.price_tick),
+        quote_step=Decimal(config.instrument.quote_step),
+    )
 
 
 def position_for_order(
@@ -237,7 +249,7 @@ def validate_order_risk(
     if projected_exposure > Decimal(limits.max_position_notional):
         _risk_rejected("order would exceed max_position_notional")
 
-    reservation = quote_round_up(notional / leverage, config)
+    reservation = _opening_budget(request, config, reference, leverage).required(quantity)
     if reservation > Decimal(account.available_equity):
         _risk_rejected("insufficient available equity for margin reservation")
     return decimal_to_string(reservation, field_name="reserved_margin")
@@ -305,13 +317,14 @@ def build_order_capacity(
             Decimal(0),
             Decimal(config.limits.max_position_notional) - existing_exposure,
         )
-        margin_capacity = max(Decimal(0), Decimal(account.available_equity)) * leverage
+        cash_capacity = _opening_budget(request, config, reference, leverage).capacity(
+            Decimal(account.available_equity), Decimal(filters.quantity_step))
         maximum = min(
             Decimal(filters.max_quantity),
             Decimal(config.limits.max_order_quantity),
             Decimal(filters.max_notional) / reference,
             notional_capacity / reference,
-            margin_capacity / reference,
+            cash_capacity,
         )
     maximum = round_to_step(
         max(Decimal(0), maximum),

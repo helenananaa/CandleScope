@@ -1,5 +1,6 @@
 -e ../packages/candlescope-plugin-sdk
 fastapi==0.115.6
+anyio==4.15.1
 uvicorn[standard]==0.34.0
 requests==2.32.3
 numpy==2.2.1

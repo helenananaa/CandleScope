@@ -95,6 +95,8 @@ interface ReplayStreamBoundary {
 
 export interface ReplayRuntimeLifecycleOptions {
   entry: ReplayRuntimeEntry;
+  /** Chart-only adapters observe the run owner's commands and never claim a lease. */
+  controllerMode?: "manage" | "observe";
   api?: ReplayApiBoundary;
   store?: ReplayStore;
   streamFactory?: (options: ReplayStreamControllerOptions) => ReplayStreamBoundary;
@@ -263,6 +265,8 @@ export class ReplayRuntimeLifecycle {
   private disposed = false;
   private acquireAfterSnapshot = false;
   private controllerOwnershipIntent = false;
+  private readonly controllerMode: "manage" | "observe";
+  private controllerLeases = 0;
   private commandRevisionFloor = 0;
   private latestWindowRestore: {
     readonly promise: Promise<boolean>;
@@ -289,6 +293,7 @@ export class ReplayRuntimeLifecycle {
 
   constructor({
     entry,
+    controllerMode = "manage",
     api = defaultReplayApi,
     store = new ReplayStore(),
     streamFactory = (options) => new ReplayStreamController(options),
@@ -296,6 +301,7 @@ export class ReplayRuntimeLifecycle {
     commandIdFactory = () => randomIdentity("command"),
   }: ReplayRuntimeLifecycleOptions) {
     this.entry = entry;
+    this.controllerMode = controllerMode;
     this.api = api;
     this.store = store;
     this.marketDataActions = {
@@ -325,6 +331,29 @@ export class ReplayRuntimeLifecycle {
   };
 
   getSnapshot = (): ReplayRuntimeSnapshot => this.snapshot;
+
+  private get managesController(): boolean {
+    return this.controllerMode === "manage" || this.controllerLeases > 0;
+  }
+
+  /** The selected run adapter owns control; other leases only render charts. */
+  retainController(): () => void {
+    this.controllerLeases += 1;
+    if (this.phase === "ACTIVE") {
+      this.observeControllerAuthority({ acquireWhenUnowned: this.store.getSnapshot().state !== "ENDED" });
+      this.recoverControllerOwnership();
+    }
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.controllerLeases -= 1;
+      if (!this.managesController) {
+        this.controllerOwnershipIntent = false;
+        this.acquireAfterSnapshot = false;
+      }
+    };
+  }
 
   start(): void {
     if (this.started || this.disposed) return;
@@ -408,6 +437,7 @@ export class ReplayRuntimeLifecycle {
     type: ReplayCommandType,
     payload: Readonly<Record<string, ReplayJson>> = {},
   ): Promise<ReplayCommandResult> {
+    if (!this.managesController) throw new Error("replay chart observer cannot submit commands");
     const commandApi = this.api.command;
     const sessionId = this.sessionId;
     if (!commandApi || !sessionId || this.phase !== "ACTIVE") {
@@ -888,7 +918,7 @@ export class ReplayRuntimeLifecycle {
       clientInstanceId: this.clientInstanceId,
       shouldHeartbeat: () => {
         const snapshot = this.store.getSnapshot();
-        return snapshot.controllerClientId === this.clientInstanceId;
+        return this.managesController && snapshot.controllerClientId === this.clientInstanceId;
       },
       onGeneration: ({ generation, reason, resetAuthoritativeState }) => {
         if (!isCurrentStream()) return;
@@ -1000,6 +1030,7 @@ export class ReplayRuntimeLifecycle {
     readonly acquireWhenUnowned?: boolean;
     readonly endedByEvent?: boolean;
   } = {}): void {
+    if (!this.managesController) return;
     const snapshot = this.store.getSnapshot();
     if (snapshot.controllerClientId === this.clientInstanceId) {
       this.controllerOwnershipIntent = true;

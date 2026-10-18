@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { prepareReplay, PreparedReplayDeletedError, waitForPreparation, type PreparationJob } from "./api.js";
+import { prepareReplay, preparationRequest, PreparationApiError, PreparedReplayDeletedError, waitForPreparation, type PreparationJob } from "./api.js";
 import type { TrainingRunCreatePayload } from "../replay/replayV2Types.js";
 
 function running(): PreparationJob {
@@ -11,6 +11,28 @@ function running(): PreparationJob {
     result: { run: { run_id: "prepared-task", adapter_session_id: "session" } as NonNullable<NonNullable<PreparationJob["result"]>["run"]> },
   };
 }
+
+test("preparation errors retain the actionable server code and HTTP status", async () => {
+  await assert.rejects(preparationRequest("/replay", {}, { fetcher: async () => Response.json({
+    detail: { code: "FUTURE_INPUT", message: "Only closed historical bars may be prepared" },
+  }, { status: 409 }) }), error => error instanceof PreparationApiError
+    && error.code === "FUTURE_INPUT" && error.status === 409);
+});
+
+test("request validation has an actionable code without exposing rejected inputs", async () => {
+  await assert.rejects(preparationRequest("/strategy", {}, { fetcher: async () => Response.json({
+    detail: [{ type: "extra_forbidden", loc: ["body", "strategy", "source"], input: "private script" }],
+  }, { status: 422 }) }), error => error instanceof PreparationApiError
+    && error.code === "DATA_PREPARATION_INVALID_REQUEST" && error.status === 422
+    && !error.message.includes("private script"));
+});
+
+test("durable preparation failures retain their domain code after polling", async () => {
+  const job = { ...running(), state: "FAILED" as const,
+    error: { code: "PYTHON_PERMISSION_DENIED", message: "Confirm local execution", retryable: false } };
+  await assert.rejects(waitForPreparation(job, () => {}), error => error instanceof PreparationApiError
+    && error.code === "PYTHON_PERMISSION_DENIED" && error.message === "Confirm local execution");
+});
 
 test("replay observer opens a committed prefix while download continues", async () => {
   const job = running();

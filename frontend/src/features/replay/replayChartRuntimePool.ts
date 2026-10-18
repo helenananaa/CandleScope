@@ -4,6 +4,7 @@ import {
   useReplayLifecycleRuntime,
   type ReplayLifecycleLease,
   type ReplayRuntime,
+  type ReplayRuntimeLifecycleOptions,
 } from "./useReplayRuntime.js";
 
 /** One resource per distinct track adapter, regardless of chart count/interval. */
@@ -43,18 +44,30 @@ export class ReplayChartResourcePool<T extends ReplayLifecycleLease> {
   }
 }
 
-export function createReplayChartRuntimePool(clientInstanceId: string) {
+export function createReplayChartRuntimePool(clientInstanceId: string,
+  dependencies: Pick<ReplayRuntimeLifecycleOptions, "api" | "streamFactory"> = {}) {
   return new ReplayChartResourcePool((sessionId) => new ReplayRuntimeLifecycle({
+    ...dependencies,
     entry: { kind: "adapter", sessionId },
     clientInstanceId,
+    controllerMode: "observe",
   }));
 }
 
 export function useSharedReplayChartRuntime(
   pool: ReplayChartResourcePool<ReplayRuntimeLifecycle>,
   sessionId: string,
+  controller = false,
 ): ReplayRuntime {
   const lifecycle = useMemo(() => pool.get(sessionId), [pool, sessionId]);
-  useEffect(() => pool.retain(sessionId), [pool, sessionId]);
+  useEffect(() => retainReplayChartRuntime(pool, sessionId, controller), [pool, sessionId, controller]);
   return useReplayLifecycleRuntime(lifecycle);
+}
+
+/** Used by both the selected run controller and its chart-only consumers. */
+export function retainReplayChartRuntime(pool: ReplayChartResourcePool<ReplayRuntimeLifecycle>,
+  sessionId: string, controller = false): () => void {
+  const releaseController = controller ? pool.get(sessionId).retainController() : undefined;
+  const release = pool.retain(sessionId);
+  return () => { releaseController?.(); release(); };
 }

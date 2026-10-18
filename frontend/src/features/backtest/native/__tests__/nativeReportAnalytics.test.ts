@@ -56,3 +56,12 @@ test("Pine entry metadata requires a unique exact matching fill", () => {
   assert.equal(reportTrade(row, [{ ...fill, time: 3 }]).returnPercent, null);
   assert.equal(reportTrade({ ...row, profit_percent: 4 }, [fill]).returnPercent, 4);
 });
+
+test("host complete position episodes supply statistics without counting fill rows", () => {
+  const data = reportAnalytics(result({ trades: [{ price: 63.436343 }, { price: 63.443655 }],
+    closed_trades: [{ entryTime: 1, exitTime: 2, entryPrice: "63.436343", exitPrice: "63.443655", qty: "1", side: "long", profit: "0.007312" }] }), true);
+  assert.equal(data.closedCount, 1);
+  assert.equal(data.wins, 1);
+  assert.equal(data.winRate, 100);
+  assert.equal(data.netProfit, 0.007312);
+});

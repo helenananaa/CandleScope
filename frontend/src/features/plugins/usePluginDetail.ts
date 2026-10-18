@@ -8,6 +8,7 @@ export function usePluginDetail(runtime: PluginPlatformRuntime, pluginId: string
   const target = useRef<{ id: string | null; available: boolean } | null>(null);
   const load = runtime.actions.loadDetail;
   const available = runtime.view.managementAvailable;
+  const revision = runtime.view.catalog?.platform.registryRevision;
   const reload = useCallback(async () => {
     // A mutation can finish after its detail component has been replaced.
     // Its old reload callback must not invalidate the new selection's request.
@@ -26,7 +27,7 @@ export function usePluginDetail(runtime: PluginPlatformRuntime, pluginId: string
     target.current = { id: pluginId, available };
     void reload();
     return () => { target.current = null; generation.current += 1; };
-  }, [reload, pluginId, available]);
+  }, [reload, pluginId, available, revision]);
   const current = result?.id === pluginId && available ? result : null;
   return { detail: current?.detail ?? null, loading: current?.loading ?? false, error: current?.error ?? null, reload };
 }

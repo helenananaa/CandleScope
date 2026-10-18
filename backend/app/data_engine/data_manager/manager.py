@@ -81,9 +81,11 @@ import logging
 import threading
 import time
 from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Protocol
 
+from app.core.async_cleanup import apply_thread_guard, finish_cleanup
 from app.core.executors import run_storage
 from app.data_engine.interval_policy import parse_interval_ms
 from app.data_engine.interval_resolution import IntervalResolver
@@ -598,43 +600,32 @@ class DataManager:
 
     def gap_audit_series(self) -> list[tuple[str, str, str, str]]:
         """Return exact series that should be included in background gap audits."""
-        series: set[tuple[str, str, str, str]] = set()
+        series = self._gap_audit_tracked_series()
+        try:
+            series |= self._gap_audit_stored_series()
+        except Exception:
+            logger.exception("Failed to list storage series for gap audit")
+        return sorted(item for item in series if item[2] and item[3])
 
-        for exchange, market_type, symbol in self.prewarm_targets():
-            for interval in self.prewarm_intervals():
-                series.add((
-                    exchange.strip().lower(),
-                    self._normalize_market_type(market_type),
-                    symbol.upper().strip(),
-                    interval,
-                ))
+    async def gap_audit_series_async(self) -> list[tuple[str, str, str, str]]:
+        """Return gap-audit series without listing storage on the event loop.
 
-        for exchange, market_type, symbol, interval in self.bar_aggregator.get_targets():
-            series.add((
-                exchange.strip().lower(),
-                self._normalize_market_type(market_type),
-                symbol.upper().strip(),
-                interval,
-            ))
-
-        storage = self.query_engine.storage
-        list_series = getattr(storage, "list_series", None)
-        if callable(list_series):
-            try:
-                for row in list_series(custom_only=False):
-                    series.add((
-                        str(row.get("exchange") or "binance").strip().lower(),
-                        self._normalize_market_type(row.get("market_type") or "spot"),
-                        str(row.get("symbol") or "").upper().strip(),
-                        str(row.get("interval") or "").strip(),
-                    ))
-            except Exception:
-                logger.exception("Failed to list storage series for gap audit")
-
+        Prewarm and aggregator targets are read on the event-loop thread that
+        mutates them; only the SQLite series inventory runs on the storage
+        executor.
+        """
+        series = self._gap_audit_tracked_series()
+        try:
+            series |= await run_storage(self._gap_audit_stored_series)
+        except Exception:
+            logger.exception("Failed to list storage series for gap audit")
         return sorted(item for item in series if item[2] and item[3])
 
     def gap_audit_tail_series(self) -> list[tuple[str, str, str, str]]:
         """Return live/prewarm series whose closed tail should stay current."""
+        return sorted(item for item in self._gap_audit_tracked_series() if item[2] and item[3])
+
+    def _gap_audit_tracked_series(self) -> set[tuple[str, str, str, str]]:
         series: set[tuple[str, str, str, str]] = set()
         for exchange, market_type, symbol in self.prewarm_targets():
             for interval in self.prewarm_intervals():
@@ -651,7 +642,22 @@ class DataManager:
                 symbol.upper().strip(),
                 interval,
             ))
-        return sorted(item for item in series if item[2] and item[3])
+        return series
+
+    def _gap_audit_stored_series(self) -> set[tuple[str, str, str, str]]:
+        """List stored series for gap audits; a blocking SQLite read."""
+        series: set[tuple[str, str, str, str]] = set()
+        list_series = getattr(self.query_engine.storage, "list_series", None)
+        if not callable(list_series):
+            return series
+        for row in list_series(custom_only=False):
+            series.add((
+                str(row.get("exchange") or "binance").strip().lower(),
+                self._normalize_market_type(row.get("market_type") or "spot"),
+                str(row.get("symbol") or "").upper().strip(),
+                str(row.get("interval") or "").strip(),
+            ))
+        return series
 
     def set_subscription_service(self, service: Any | None) -> None:
         """Attach the runtime-owned subscription service."""
@@ -1614,6 +1620,27 @@ class DataManager:
     #  Event Subscription — for real-time consumers
     # ═══════════════════════════════════════════════════════════
 
+    async def _apply_gc_protected(
+        self, operation: Callable[..., Any], *args: Any, **kwargs: Any,
+    ) -> Any:
+        """Wait without blocking the loop, then apply one synchronous mutation.
+
+        Acquire and release on the owning event-loop thread. No await occurs
+        while the re-entrant deletion guard is held, and cancellation while
+        waiting has no partially applied mutation or detached worker to drain.
+        """
+        return await apply_thread_guard(self._storage_gc_guard, operation, *args, **kwargs)
+
+    async def subscribe_async(
+        self, callback: EventCallback, **kwargs: Any,
+    ) -> SubscriptionHandle:
+        """Register an event-loop consumer after any contending GC transaction."""
+        return await self._apply_gc_protected(self.subscribe, callback, **kwargs)
+
+    async def unsubscribe_async(self, handle: SubscriptionHandle) -> None:
+        """Remove a consumer without synchronously waiting on a storage writer."""
+        await self._apply_gc_protected(self.unsubscribe, handle)
+
     def subscribe(
         self,
         callback: EventCallback,
@@ -1739,11 +1766,8 @@ class DataManager:
             focus_scope=focus_scope,
             subscription_tier=subscription_tier,
         )
-        self._register_stream_leases(
-            lease_keys,
-            consumer_id=stream_consumer,
-        )
-        self._register_stream_storage_intents(
+        await self._apply_gc_protected(
+            self._claim_stream_protection,
             lease_keys,
             consumer_id=stream_consumer,
             focus_scope=focus_scope,
@@ -1796,37 +1820,22 @@ class DataManager:
                 subscription_tier=subscription_tier,
                 series_identity=plan.requested.identity,
             )
-        except Exception:
-            empty_keys = self._release_stream_leases(
-                lease_keys,
-                consumer_id=stream_consumer,
-            )
-            self._release_stream_storage_intents(
-                lease_keys,
-                consumer_id=stream_consumer,
-            )
-            # Detach aggregation targets synchronously at the lease boundary.
-            # Waiting for physical stream teardown first leaves a window where
-            # a partial forming bar can hit its timeout and be emitted CLOSED.
-            for key in empty_keys:
-                self.bar_aggregator.remove_target(
-                    key.symbol,
-                    key.interval,
-                    exchange=key.exchange,
-                    market_type=key.market_type,
-                    series_identity=key.identity,
+        except BaseException:
+            async def rollback() -> None:
+                empty_keys = await self._apply_gc_protected(
+                    self._detach_stream_protection, lease_keys,
+                    consumer_id=stream_consumer,
                 )
-            for key in empty_keys:
-                try:
-                    await self.coordinator.stop_stream(
-                        key.symbol,
-                        key.interval,
-                        exchange=key.exchange,
-                        market_type=key.market_type,
-                        **_stream_identity_kwargs(key),
-                    )
-                except Exception:
-                    logger.exception("Failed to stop rolled-back stream %s", key)
+                for key in empty_keys:
+                    try:
+                        await self.coordinator.stop_stream(
+                            key.symbol, key.interval,
+                            exchange=key.exchange, market_type=key.market_type,
+                            **_stream_identity_kwargs(key),
+                        )
+                    except Exception:
+                        logger.exception("Failed to stop rolled-back stream %s", key)
+            await finish_cleanup(rollback())
             raise
 
         return info
@@ -1842,6 +1851,25 @@ class DataManager:
         raise RuntimeError(detail)
 
     async def release_stream(
+        self,
+        symbol: str,
+        interval: str,
+        exchange: str = "binance",
+        market_type: str = "spot",
+        *,
+        series_identity: Any = None,
+        consumer_id: str | None = None,
+        focus_scope: str = "foreground",
+        subscription_tier: str | None = None,
+    ) -> None:
+        """Finish detaching this consumer even when its caller is cancelled."""
+        await finish_cleanup(self._release_stream_owned(
+            symbol, interval, exchange, market_type,
+            series_identity=series_identity, consumer_id=consumer_id,
+            focus_scope=focus_scope, subscription_tier=subscription_tier,
+        ))
+
+    async def _release_stream_owned(
         self,
         symbol: str,
         interval: str,
@@ -1884,25 +1912,11 @@ class DataManager:
             focus_scope=focus_scope,
             subscription_tier=subscription_tier,
         )
-        empty_keys = self._release_stream_leases(
+        empty_keys = await self._apply_gc_protected(
+            self._detach_stream_protection,
             self._stream_plan_lease_keys(plan),
             consumer_id=consumer,
         )
-        self._release_stream_storage_intents(
-            self._stream_plan_lease_keys(plan),
-            consumer_id=consumer,
-        )
-
-        # Drop exact forming targets before any awaited physical stop so the
-        # timeout loop cannot finalize detached partial snapshots meanwhile.
-        for key in empty_keys:
-            self.bar_aggregator.remove_target(
-                key.symbol,
-                key.interval,
-                exchange=key.exchange,
-                market_type=key.market_type,
-                series_identity=key.identity,
-            )
         for key in empty_keys:
             await self.coordinator.stop_stream(
                 key.symbol,
@@ -1921,9 +1935,17 @@ class DataManager:
         *,
         series_identity: Any = None,
     ) -> None:
+        await finish_cleanup(self._stop_stream_owned(
+            symbol, interval, exchange, market_type, series_identity=series_identity,
+        ))
+
+    async def _stop_stream_owned(
+        self, symbol: str, interval: str, exchange: str, market_type: str,
+        *, series_identity: Any = None,
+    ) -> None:
         """Stop a running data stream."""
         market_type = self._normalize_market_type(market_type)
-        with self._storage_gc_guard:
+        def detach() -> SeriesKey:
             identity = (
                 identity_from_mapping(exchange, series_identity)
                 if isinstance(series_identity, dict)
@@ -1939,13 +1961,12 @@ class DataManager:
             removed = self._stream_leases.pop(key, None)
             if removed is not None:
                 self._mark_storage_gc_protection_changed()
-        self.bar_aggregator.remove_target(
-            symbol,
-            interval,
-            exchange=exchange,
-            market_type=market_type,
-            series_identity=key.identity,
-        )
+            self.bar_aggregator.remove_target(
+                symbol, interval, exchange=exchange, market_type=market_type,
+                series_identity=key.identity,
+            )
+            return key
+        key = await self._apply_gc_protected(detach)
         await self.coordinator.stop_stream(
             symbol,
             interval,
@@ -1977,6 +1998,29 @@ class DataManager:
         keys.extend(plan.aggregation_targets)
         keys.extend(plan.prerequisite_streams)
         return tuple(dict.fromkeys(keys))
+
+    def _claim_stream_protection(
+        self, keys: tuple[SeriesKey, ...], *, consumer_id: str,
+        focus_scope: str, subscription_tier: str | None,
+    ) -> None:
+        self._register_stream_leases(keys, consumer_id=consumer_id)
+        self._register_stream_storage_intents(
+            keys, consumer_id=consumer_id, focus_scope=focus_scope,
+            subscription_tier=subscription_tier,
+        )
+
+    def _detach_stream_protection(
+        self, keys: tuple[SeriesKey, ...], *, consumer_id: str,
+    ) -> list[SeriesKey]:
+        empty_keys = self._release_stream_leases(keys, consumer_id=consumer_id)
+        self._release_stream_storage_intents(keys, consumer_id=consumer_id)
+        # Detach forming targets at the lease boundary before any awaited stop.
+        for key in empty_keys:
+            self.bar_aggregator.remove_target(
+                key.symbol, key.interval, exchange=key.exchange,
+                market_type=key.market_type, series_identity=key.identity,
+            )
+        return empty_keys
 
     def _register_stream_leases(
         self,

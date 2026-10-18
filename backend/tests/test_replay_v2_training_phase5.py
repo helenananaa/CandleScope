@@ -125,6 +125,8 @@ def _multi_trade_sources(
     coalesce_trade_timestamps: bool = False,
     symbol_time_offset_ms: int = 0,
     constant_prices: bool = False,
+    trades_per_minute: int = 2,
+    trades_per_timestamp: int = 1,
 ) -> tuple[FakeKlinesRepo, ParquetRawAggTradeArchive]:
     repository = replay_repository()
     archive = ParquetRawAggTradeArchive(
@@ -150,11 +152,11 @@ def _multi_trade_sources(
                     "high": price,
                     "low": price,
                     "close": price,
-                    "volume": 2 if active else 0,
-                    "quote_volume": price * 2 if active else 0,
-                    "trades": 2 if active else 0,
-                    "taker_buy_base": 1 if active else 0,
-                    "taker_buy_quote": price if active else 0,
+                    "volume": trades_per_minute if active else 0,
+                    "quote_volume": price * trades_per_minute if active else 0,
+                    "trades": trades_per_minute if active else 0,
+                    "taker_buy_base": trades_per_minute - 1 if active else 0,
+                    "taker_buy_quote": price * (trades_per_minute - 1) if active else 0,
                     "source": "verified_fixture",
                 }
             )
@@ -162,13 +164,13 @@ def _multi_trade_sources(
         first_agg_trade_id = (symbol_index + 1) * 100_000
         for minute in range(TRADE_REPLAY_MINUTES):
             price = price_base if constant_prices else price_base + minute
-            for within in range(2):
-                index = minute * 2 + within
+            for within in range(trades_per_minute):
+                index = minute * trades_per_minute + within
                 timestamp = (
                     TRADE_REPLAY_START_MS
                     + minute * INTERVAL_MS
                     + 1_000
-                    + (0 if coalesce_trade_timestamps else within)
+                    + (0 if coalesce_trade_timestamps else within // trades_per_timestamp)
                     + symbol_index * symbol_time_offset_ms
                 )
                 trades.append(
@@ -1682,7 +1684,7 @@ async def test_run_level_trade_commands_force_full_and_share_available_equity(
         )
         assert first["data"]["account_contract"] == "TOUCH_OR_TAPE_V2_CONTRACT_ACCOUNT"
         assert Decimal(str(first["data"]["portfolio"]["reserved_margin"])) == Decimal(
-            "6000"
+            "6009"
         )
 
         primary = await service.get_session(primary_id)
@@ -1703,7 +1705,7 @@ async def test_run_level_trade_commands_force_full_and_share_available_equity(
         )
         assert primary_track["subscription_tier"] == "FULL"
         assert primary_track["forced_full_reasons"] == ["OPEN_ORDER"]
-        assert tracks["portfolio"]["available_equity"] == "4000"
+        assert tracks["portfolio"]["available_equity"] == "3991"
 
         with pytest.raises(TrainingRunError) as insufficient:
             await _place_limit(
@@ -1717,8 +1719,8 @@ async def test_run_level_trade_commands_force_full_and_share_available_equity(
             )
         assert insufficient.value.code == "RUN_ACCOUNT_MARGIN_EXCEEDED"
         unchanged = await service.training.get_market_tracks(run_id)  # type: ignore[union-attr]
-        assert unchanged["portfolio"]["reserved_margin"] == "6000"
-        assert unchanged["portfolio"]["available_equity"] == "4000"
+        assert unchanged["portfolio"]["reserved_margin"] == "6009"
+        assert unchanged["portfolio"]["available_equity"] == "3991"
     finally:
         await service.shutdown(step_timeout=1.0)
 

@@ -8,11 +8,15 @@ import asyncio
 from app.data_engine.interval_policy import compute_bucket_start_ms
 from .bars.trade_builder import _FormingBaseBar
 from .broker.risk import mark_position
-from .broker.models import decimal_to_string
+from .broker.models import PositionBook, decimal_to_string
 from .sources.trade_reader import ReplayTrade
 
 _CACHE = OrderedDict()
 CACHE_BLOCKS = 8
+
+
+def position_legs(position):
+    return (position.long, position.short) if isinstance(position, PositionBook) else (position,)
 
 
 def eligible(broker, trades):
@@ -22,12 +26,12 @@ def eligible(broker, trades):
     subtraction and a bounded (8192 trade) sum therefore fit precision 60.
     """
     values = [
-        broker._position.quantity,
-        broker._position.entry_price or "0",
         broker._account.cash_balance,
         broker._equity_peak,
         broker._max_drawdown,
     ]
+    for leg in position_legs(broker._position):
+        values.extend((leg.quantity, leg.entry_price or "0"))
     for trade in trades:
         values.extend((trade.price, trade.quantity, trade.quote_quantity))
     forming = broker._bar_builder._forming
@@ -196,9 +200,9 @@ def apply_candles(builder, summary):
 
 
 def apply(broker, trades):
-    if broker.open_orders or broker._ended or not hasattr(broker._position, "quantity"):
+    if broker.open_orders or broker._ended:
         raise ValueError(
-            "trade summary requires an active ONE_WAY broker without orders"
+            "trade summary requires an active broker without orders"
         )
     if len(trades) < 4 or not eligible(broker, trades):
         broker.apply_source_events_final_state(trades)
@@ -206,11 +210,13 @@ def apply(broker, trades):
     summary = prepare(trades, broker._bar_builder)
     with localcontext() as ctx:
         ctx.prec = 60
-        quantity = Decimal(broker._position.quantity)
+        legs = position_legs(broker._position)
+        quantity = sum((Decimal(leg.quantity) for leg in legs), Decimal(0))
         cash = Decimal(broker._account.cash_balance)
-        entry = Decimal(broker._position.entry_price or "0")
         low, high = sorted(
-            cash + (p - entry) * quantity for p in (summary.low, summary.high)
+            cash + sum(((p - Decimal(leg.entry_price or "0")) * Decimal(leg.quantity)
+                        for leg in legs), Decimal(0))
+            for p in (summary.low, summary.high)
         )
         drawdown = abs(quantity) * (summary.fall if quantity >= 0 else summary.rise)
         broker._max_drawdown = decimal_to_string(

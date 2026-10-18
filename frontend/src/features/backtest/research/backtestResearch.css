@@ -166,3 +166,12 @@
   .research-source-switch button { padding: 0 6px; }
   .research-top-actions button { display: none; }
 }
+.research-external-provider {
+  margin-block: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-color, #303742);
+  border-radius: 8px;
+}
+.research-external-provider h3 { margin: 0 0 8px; font-size: 13px; }
+.research-external-provider p,
+.research-external-provider code { overflow-wrap: anywhere; }
