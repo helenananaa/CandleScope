@@ -32,6 +32,12 @@ The generic lane projects pinned CCXT metadata and unified results for:
   reuse one `load_markets()` bootstrap and one HTTP session until
   `close_history_transport()`.  Loading a venue catalog parses thousands of
   markets synchronously on the event loop, so it must never run per request;
+- shared market tables (`markets.py`): long-lived clients of one venue rail
+  (ccxt exchange id, `defaultType`/`defaultSubType` and the other options
+  that select markets) in every transport's REST pool and the ccxt.pro
+  runtimes join one `load_markets()` and point at the same tables via
+  `set_markets_from_exchange()`.  A symbol-miss reload refreshes the rail and
+  re-points every sharer; the tables are dropped with the rail's last client;
 - symbol catalogs: `CcxtUnifiedAdapter.list_symbol_rows()` runs the same
   `load_markets()` conversion in the out-of-process catalog worker
   (`app/exchanges/catalog_worker.py`) and falls back to `list_symbols()`'s
