@@ -9,7 +9,7 @@ plan be locked at the first fill.
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, Iterable
 
 from .models import dec_str
 from .trades import Trade
@@ -40,11 +40,26 @@ def phase_at(ts_ms: int, trade: Trade | None) -> str:
     return "post"
 
 
-def should_coalesce(latest: dict[str, Any] | None, now: int, trade: Trade | None) -> bool:
+def should_coalesce(
+    latest: dict[str, Any] | None,
+    now: int,
+    trade: Trade | None,
+    fill_times: Iterable[int] = (),
+) -> bool:
+    """Whether a save may overwrite ``latest`` instead of appending a revision.
+
+    An unlinked note has no phases yet but may later be linked to a trade that
+    opened or closed in between, so for it any fill on its instrument since
+    ``latest`` was saved (``fill_times``) counts as a boundary.
+    """
     if latest is None:
         return False
     saved = int(latest["saved_at_ms"])
-    return now - saved <= COALESCE_WINDOW_MS and phase_at(saved, trade) == phase_at(now, trade)
+    if now - saved > COALESCE_WINDOW_MS:
+        return False
+    if trade is None:
+        return not any(saved <= ts < now for ts in fill_times)
+    return phase_at(saved, trade) == phase_at(now, trade)
 
 
 def _decimal(value: Any) -> Decimal | None:

@@ -8,8 +8,10 @@ Local trading accounts, practice matching and the trade journal. Persistence is
 - `store.py`: SQLite schema and queries (one lock, one transaction per mutation).
 - `trades.py`: pure flat-to-flat grouping of fills into trades; reversals split
   the crossing fill and its fee. Trades are derived, never stored.
-- `journal.py`: phases, revision coalescing (never across a phase boundary),
-  plan locking at the first fill, field timing for hindsight labels, R metrics.
+- `journal.py`: phases, revision coalescing (never across a phase boundary;
+  for an unlinked note, never across any fill on its instrument, since it may
+  be linked to that trade later), plan locking at the first fill, field timing
+  for hindsight labels, R metrics.
 - `practice.py`: pure order matching over a candle price path.
 - `practice_runtime.py`: the loop that drives matching from DataManager 1m
   candles.

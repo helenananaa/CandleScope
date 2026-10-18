@@ -155,6 +155,9 @@ def test_plan_locks_at_first_fill_and_phases_do_not_coalesce():
     assert phase_at(500, trade) == "pre" and phase_at(2_000, trade) == "open" and phase_at(6_000, trade) == "post"
     assert not should_coalesce({"saved_at_ms": 900}, 1_100, trade)
     assert should_coalesce({"saved_at_ms": 1_100}, 1_200, trade)
+    # An unlinked note may be linked later, so any fill since its last save is a boundary.
+    assert not should_coalesce({"saved_at_ms": 900}, 1_100, None, [1_000])
+    assert should_coalesce({"saved_at_ms": 900}, 1_100, None, [500, 1_100])
 
 
 # ── service ────────────────────────────────────────────────────
@@ -273,6 +276,28 @@ def test_manual_journal_plan_link_and_hindsight_flags(service):
     detail = service.trade_detail(account["id"], trade["id"])
     assert detail["plan"]["riskUsdt"] == "50"
     assert detail["metrics"]["netR"] == "1.96"  # (100 - 2) / 50
+
+
+def test_unlinked_plan_edited_soon_after_fill_keeps_pre_entry_revision(service):
+    clock = service.test_clock
+    account = service.create_account({"kind": "manual", "name": "Manual"})
+    plan_fields = {"entryPrice": "100", "stopPrice": "95", "riskUsdt": "50", "entryBasis": "breakout"}
+    note = service.create_entry(account["id"], {**INSTRUMENT, "kind": "note", "fields": plan_fields})
+    clock.now += 30_000
+    service.add_fill(account["id"], {**INSTRUMENT, "side": "buy", "qty": "10", "price": "100", "fee": "1"})
+    clock.now += 30_000  # inside the coalesce window, but the note is not linked yet
+    saved = service.save_entry(note["id"], {"fields": {**plan_fields, "riskUsdt": "80", "timeframe": "15m"}})
+    assert saved["revisionCount"] == 2
+    clock.now += 60_000
+    service.add_fill(account["id"], {**INSTRUMENT, "side": "sell", "qty": "10", "price": "110", "fee": "1"})
+    trade = service.list_trades(account["id"])["trades"][0]
+    service.link_entry(note["id"], trade["id"])
+
+    detail = service.trade_detail(account["id"], trade["id"])
+    assert detail["plan"]["lockedAtMs"] == note["createdAtMs"] and detail["plan"]["riskUsdt"] == "50"
+    assert detail["metrics"]["netR"] == "1.96"  # (100 - 2) / 50
+    timing = {group["key"]: group for group in service.account_stats(account["id"])["breakdowns"]["planTiming"]}
+    assert timing["mixed"]["tradeCount"] == 1 and timing["after"]["tradeCount"] == 0
 
 
 def test_link_suggestions_carry_plan_fields_so_same_minute_plans_differ(service):

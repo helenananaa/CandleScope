@@ -1299,13 +1299,18 @@ class TradingAccountService:
         body = bounded_text(payload.get("body"), "body") if "body" in payload else (latest or {}).get("body", "")
         now = self.clock()
         trade = self._trade_or_none(entry["account_id"], entry["trade_id"])
+        fill_times = [] if trade is not None else [
+            int(fill["ts_ms"])
+            for fill in self.store.fills(entry["account_id"])
+            if _instrument_of(fill) == _instrument_of(entry)
+        ]
         values: dict[str, Any] = {"updated_at_ms": now}
         if "tags" in payload:
             values["tags_json"] = json.dumps(normalize_tags(payload.get("tags")))
         changed = latest is None or latest["fields"] != fields or latest["body"] != body
         with self.store.transaction() as conn:
             if changed:
-                if should_coalesce(latest, now, trade):
+                if should_coalesce(latest, now, trade, fill_times):
                     assert latest is not None
                     self.store.update(conn, "journal_revisions", {
                         "saved_at_ms": now,
