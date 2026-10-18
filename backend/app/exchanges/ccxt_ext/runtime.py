@@ -13,6 +13,7 @@ from typing import Any
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import StreamDescriptor, StreamType
 
+from .markets import get_shared_ccxt_market_tables
 from .models import CcxtLifecycleEvent, CcxtRawMarketEvent
 from .profile import CcxtExchangeProfile
 
@@ -24,6 +25,7 @@ LifecycleSubscriber = Callable[[CcxtLifecycleEvent], None]
 async def close_ccxt_exchange(exchange: Any) -> None:
     """Close CCXT websocket state and its lazily-created REST connector."""
 
+    get_shared_ccxt_market_tables().release(exchange)
     close = exchange.close
     try:
         parameters = inspect.signature(close).parameters
@@ -65,7 +67,8 @@ class CcxtRuntime:
             return
         if self._closed:
             raise RuntimeError("CCXT runtime is already closed")
-        await self.exchange.load_markets()
+        # REST pools and other runtimes of the same rail share one table.
+        await get_shared_ccxt_market_tables().load(self.exchange)
         self._started = True
 
     def subscribe(

@@ -48,6 +48,7 @@ from .unified import (
     CcxtUnifiedProjector,
     make_unified_payload,
 )
+from .markets import get_shared_ccxt_market_tables
 from .runtime import close_ccxt_exchange
 from .tls import SharedSslContextMixin
 
@@ -176,7 +177,9 @@ class _RestExchangePool:
 
         started = time.perf_counter()
         try:
-            return await exchange.load_markets()
+            # Clients of the same rail in other transport pools and the
+            # websocket runtimes reuse one loaded table.
+            return await get_shared_ccxt_market_tables().load(exchange)
         except asyncio.CancelledError:
             raise
         except BaseException:
@@ -265,7 +268,7 @@ class _RestExchangePool:
                 market_type=market_type,
             )
         except ValueError:
-            pass
+            stale_markets = exchange.markets
 
         requested = str(descriptor.symbol or "").strip().upper()
         attempt_key = (selection, requested)
@@ -278,7 +281,14 @@ class _RestExchangePool:
             last_attempt = self._symbol_reload_attempts.get(attempt_key, 0.0)
             if reload_task is None and now - last_attempt >= 60.0:
                 self._symbol_reload_attempts[attempt_key] = now
-                reload_task = asyncio.create_task(exchange.load_markets(reload=True))
+                # The rail's table is shared: a reload re-points every client
+                # of the rail, unless one already published a newer table.
+                reload_task = asyncio.create_task(
+                    get_shared_ccxt_market_tables().reload(
+                        exchange,
+                        stale_markets=stale_markets,
+                    )
+                )
                 reload_task.add_done_callback(_consume_task_outcome)
                 current.reload_task = reload_task
                 self._market_reloads += 1
