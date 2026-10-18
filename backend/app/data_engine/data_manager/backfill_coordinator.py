@@ -9,6 +9,7 @@ from collections import OrderedDict, deque
 from collections.abc import Awaitable, Callable, Iterable
 from typing import Any, Protocol
 
+from app.core.bounded_executor import ExecutorBusyError
 from app.core.executors import run_storage
 from app.data_engine.history.calendar import (
     TradingCalendar,
@@ -3390,10 +3391,15 @@ class BackfillCoordinator:
 
         availability = self._history_planner.availability(context)
         revision = availability.revision if availability is not None else ""
+        # The write takes BEGIN IMMEDIATE and can wait behind a klines writer,
+        # so it runs on a storage thread; the repository's row cache makes it
+        # visible to planning reads on the loop as soon as it commits.
         try:
+            series_key = self._history_planner.series_key(request)
             if semantics is HistoryEmptyPageSemantics.TERMINAL_EXHAUSTION:
-                record = self._history_service.record_boundary(
-                    self._history_planner.series_key(request),
+                record = await run_storage(
+                    self._history_service.record_boundary,
+                    series_key,
                     BoundarySide.LEFT,
                     value_ms=boundary_ms,
                     reason=BoundaryReason.SOURCE_EXHAUSTED,
@@ -3401,8 +3407,9 @@ class BackfillCoordinator:
                     revision=revision,
                 )
             else:
-                record = self._history_service.record_boundary(
-                    self._history_planner.series_key(request),
+                record = await run_storage(
+                    self._history_service.record_boundary,
+                    series_key,
                     BoundarySide.LEFT,
                     value_ms=boundary_ms,
                     reason=BoundaryReason.SOURCE_EXHAUSTED,
@@ -3410,6 +3417,18 @@ class BackfillCoordinator:
                     revision=revision,
                     promote_after=2,
                 )
+        except ExecutorBusyError:
+            # Nothing was written; the repair stays retryable and records the
+            # evidence again on a later attempt.
+            logger.warning(
+                "History boundary evidence deferred for %s:%s:%s@%s: "
+                "storage executor is busy",
+                request.exchange,
+                request.market_type,
+                request.symbol,
+                request.interval,
+            )
+            return None, None
         except (RuntimeError, ValueError) as exc:
             logger.warning(
                 "History boundary evidence rejected for %s:%s:%s@%s: %s",

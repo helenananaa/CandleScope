@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+
 import pytest
 
 from app.data_engine.history import (
@@ -148,6 +150,50 @@ def test_service_requires_repeated_evidence_before_promotion(tmp_path) -> None:
     )
     assert first.bound.state is BoundaryState.CANDIDATE
     assert second.bound.state is BoundaryState.CONFIRMED
+
+
+def test_service_promotes_its_own_candidate_while_another_thread_writes(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    repository = HistoryBoundaryRepository(tmp_path / "history.sqlite3")
+    service = HistoryAvailabilityService(boundaries=repository)
+    key = _key()
+    evidence = {"reason": BoundaryReason.SOURCE_EXHAUSTED, "promote_after": 2}
+    service.record_boundary(key, "left", value_ms=1_000, **evidence)
+
+    competitor_done = threading.Event()
+    competitor_errors: list[str] = []
+
+    def _compete() -> None:
+        try:
+            service.record_boundary(key, "left", value_ms=2_000, **evidence)
+        except ValueError as exc:
+            competitor_errors.append(str(exc))
+        finally:
+            competitor_done.set()
+
+    competitor = threading.Thread(target=_compete)
+    upsert = repository.upsert
+
+    def _upsert_then_compete(*args, **kwargs):
+        record = upsert(*args, **kwargs)
+        if competitor.ident is None:
+            competitor.start()
+            # A different candidate must wait until this promotion commits.
+            assert not competitor_done.wait(0.2)
+        return record
+
+    monkeypatch.setattr(repository, "upsert", _upsert_then_compete)
+    promoted = service.record_boundary(key, "left", value_ms=1_000, **evidence)
+    competitor.join(timeout=5)
+
+    assert promoted.bound.state is BoundaryState.CONFIRMED
+    assert promoted.bound.value_ms == 1_000
+    assert repository.get(key, "left", include_stale=True).bound.value_ms == 1_000
+    assert competitor_errors == [
+        "candidate boundary cannot replace a confirmed boundary"
+    ]
 
 
 @pytest.fixture
