@@ -66,6 +66,7 @@ export interface UseIndicatorComputeControllerOptions {
   datasetKey: string;
   exchange: string;
   computeBatch?: IndicatorComputeBatchExecutor;
+  onComputePendingChange?(delta: 1 | -1): void;
   forceHostedSubscriptions(): void;
   historyLimit?: number;
   interval: string;
@@ -146,6 +147,7 @@ export function useIndicatorComputeController({
   datasetKey,
   exchange,
   computeBatch = computeIndicatorBatch,
+  onComputePendingChange,
   forceHostedSubscriptions,
   historyLimit,
   interval,
@@ -208,6 +210,10 @@ export function useIndicatorComputeController({
 
     const invalid = new Map<string, string>();
     const localIndicators = currentIndicators.flatMap((indicator) => {
+      if (isFrontendScript(indicator) && indicator.visible === false) return [];
+      // A broken browser program remains visible and idle until an explicit
+      // retry or program/parameter edit. Live ticks must not spin it forever.
+      if (isFrontendScript(indicator) && indicator.error && !force) return [];
       const resolution = resolveLocalIndicatorExecution(indicator);
       if (resolution.kind === "invalid") {
         invalid.set(indicator.id, resolution.error);
@@ -423,6 +429,7 @@ export function useIndicatorComputeController({
             physicalRequestCount: chunks.length,
           });
           try {
+            onComputePendingChange?.(1);
             const responses = await Promise.all(
               chunks.map(async (chunk) => {
                 const response = await routeIndicatorComputeBatch({ jobs: chunk, signal, onResults: publish }, computeBatch);
@@ -432,6 +439,7 @@ export function useIndicatorComputeController({
             );
             return responses.flatMap((response) => response.results);
           } finally {
+            onComputePendingChange?.(-1);
             markPerf("indicator.compute.end", {
               force,
               indicatorCount: physicalJobs.length,
@@ -525,6 +533,7 @@ export function useIndicatorComputeController({
     computeBatch,
     historyLimit,
     jobCoordinator,
+    onComputePendingChange,
     outputDispatch,
     resultCacheMode,
     setActiveIndicators,

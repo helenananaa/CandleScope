@@ -89,6 +89,14 @@ custom-indicator persistence. Only this explicit language avoids hosted WS and
 history range requests. A backend plugin's `javascript` language keeps its own
 route.
 
+Live script inputs subscribe to the market-data Store contract: ordinary
+replace-last ticks intentionally retain the chart array and metadata identity.
+A 250 ms sampler takes only the newest 2,000 rows and coalesces ticks while a
+bounded calculation is running, so continuous input cannot cancel every attempt
+before its timeout. Source replacement, corrections and a new candle fence old
+work immediately. A failed frontend program stays idle until an explicit retry
+or program/parameter edit; ticks alone do not continually rerun a broken script.
+
 User source is data sent to a dedicated Worker inside a first-party sandbox
 frame with an opaque origin, restrictive CSP and no Host bridge. Blob workers
 inherit that CSP. The parent validates numeric outputs independently; it never
