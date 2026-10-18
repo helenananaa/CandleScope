@@ -148,3 +148,213 @@ def test_service_requires_repeated_evidence_before_promotion(tmp_path) -> None:
     )
     assert first.bound.state is BoundaryState.CANDIDATE
     assert second.bound.state is BoundaryState.CONFIRMED
+
+
+@pytest.fixture
+def sqlite_opens(monkeypatch) -> list[object]:
+    """Record every SQLite connection the boundary repository opens."""
+    import app.data_engine.history.repository as repository_module
+
+    opened: list[object] = []
+    original = repository_module.open_sqlite
+
+    def _open_sqlite(*args, **kwargs):
+        opened.append(args[0] if args else kwargs.get("db_path"))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(repository_module, "open_sqlite", _open_sqlite)
+    return opened
+
+
+def test_reads_are_served_without_opening_sqlite(tmp_path, sqlite_opens) -> None:
+    repository = HistoryBoundaryRepository(tmp_path / "history.sqlite3")
+    key = _key()
+    repository.upsert(
+        key,
+        "left",
+        TimeBound(
+            2_000,
+            BoundaryReason.SOURCE_EXHAUSTED,
+            revision="v1",
+            revalidate_at_ms=9_000,
+        ),
+    )
+    sqlite_opens.clear()
+
+    base = HistoryAvailability(revision="v1")
+    for _ in range(3):
+        resolved = repository.load_availability(key, base, now_ms=5_000)
+        assert resolved.upstream_start.value_ms == 2_000
+    # Revision and revalidation still filter cached rows on every read.
+    assert repository.get(key, "left", now_ms=9_000, revision="v1") is None
+    assert repository.get(key, "left", now_ms=5_000, revision="v2") is None
+    assert repository.get(_key(variant="5m"), "left") is None
+    assert [record.side for record in repository.list_for_series(key)] == [
+        BoundarySide.LEFT
+    ]
+    assert sqlite_opens == []
+
+
+def test_upsert_refreshes_cached_boundaries(tmp_path, sqlite_opens) -> None:
+    repository = HistoryBoundaryRepository(tmp_path / "history.sqlite3")
+    key = _key()
+    base = HistoryAvailability(revision="v1")
+    assert repository.load_availability(key, base).upstream_start is None
+
+    repository.upsert(
+        key,
+        "left",
+        TimeBound(
+            1_000,
+            BoundaryReason.SOURCE_EXHAUSTED,
+            state=BoundaryState.CANDIDATE,
+            revision="v1",
+        ),
+        observed_at_ms=10,
+    )
+    candidate = repository.get(key, "left")
+    assert candidate is not None
+    assert candidate.bound.state is BoundaryState.CANDIDATE
+    # Candidates are cached but never clamp availability.
+    assert repository.load_availability(key, base).upstream_start is None
+
+    repository.confirm(key, "left", observed_at_ms=20)
+    assert repository.load_availability(key, base).upstream_start.value_ms == 1_000
+
+    repository.upsert(
+        key,
+        "left",
+        TimeBound(3_000, BoundaryReason.SOURCE_EXHAUSTED, revision="v1"),
+        observed_at_ms=30,
+    )
+    record = repository.get(key, "left")
+    assert record.bound.value_ms == 3_000
+    assert record.evidence_count == 1
+    assert record.first_seen_at_ms == 30
+    assert repository.load_availability(key, base).upstream_start.value_ms == 3_000
+
+    # A rejected candidate rolls back without touching the cached row.
+    opens_before = len(sqlite_opens)
+    with pytest.raises(ValueError, match="candidate boundary"):
+        repository.upsert(
+            key,
+            "left",
+            TimeBound(
+                4_000,
+                BoundaryReason.SOURCE_EXHAUSTED,
+                state=BoundaryState.CANDIDATE,
+                revision="v1",
+            ),
+        )
+    assert repository.get(key, "left").bound.value_ms == 3_000
+    assert len(sqlite_opens) == opens_before + 1
+
+    # The cache matches what a fresh process would read from disk.
+    reopened = HistoryBoundaryRepository(tmp_path / "history.sqlite3")
+    assert reopened.get(key, "left") == repository.get(key, "left")
+
+
+def test_repositories_on_the_same_file_share_cached_rows(
+    tmp_path,
+    sqlite_opens,
+) -> None:
+    writer = HistoryBoundaryRepository(tmp_path / "history.sqlite3")
+    reader = HistoryBoundaryRepository(tmp_path / "history.sqlite3")
+    other_file = HistoryBoundaryRepository(tmp_path / "other.sqlite3")
+    key = _key()
+
+    writer.upsert(key, "right", TimeBound(8_000, BoundaryReason.UPSTREAM_END))
+    sqlite_opens.clear()
+
+    assert reader.get(key, "right").bound.value_ms == 8_000
+    assert other_file.get(key, "right") is None
+    assert sqlite_opens == []
+
+    assert reader.delete(key, "right") == 1
+    assert writer.get(key, "right") is None
+
+
+def test_delete_paths_refresh_cached_boundaries(tmp_path) -> None:
+    repository = HistoryBoundaryRepository(tmp_path / "history.sqlite3")
+    first = _key(variant="5m")
+    second = _key(variant="1h")
+    repository.upsert(
+        first,
+        "left",
+        TimeBound(1_000, BoundaryReason.SOURCE_EXHAUSTED, revalidate_at_ms=5_000),
+    )
+    repository.upsert(first, "right", TimeBound(9_000, BoundaryReason.UPSTREAM_END))
+    repository.upsert(second, "left", TimeBound(2_000, BoundaryReason.MANUAL))
+
+    assert repository.delete_stale(now_ms=5_000) == 1
+    assert repository.get(first, "left", include_stale=True) is None
+    assert repository.get(first, "right") is not None
+
+    assert repository.delete(first) == 1
+    assert repository.list_for_series(first, include_stale=True) == ()
+    assert repository.get(second, "left").bound.value_ms == 2_000
+
+
+def test_failed_cache_refresh_reloads_from_sqlite(tmp_path, monkeypatch) -> None:
+    repository = HistoryBoundaryRepository(tmp_path / "history.sqlite3")
+    key = _key()
+
+    def _fail_refresh(*args, **kwargs):
+        raise RuntimeError("refresh failed")
+
+    monkeypatch.setattr(repository._cache, "replace_series", _fail_refresh)
+    with pytest.raises(RuntimeError, match="refresh failed"):
+        repository.upsert(key, "left", TimeBound(1_000, BoundaryReason.MANUAL))
+    monkeypatch.undo()
+
+    # The write committed, so the next read must reload it rather than
+    # answer from the pre-write cache.
+    assert repository.get(key, "left").bound.value_ms == 1_000
+
+
+def test_backfill_planning_reads_learned_boundaries_from_memory(
+    tmp_path,
+    sqlite_opens,
+) -> None:
+    from app.data_engine.data_manager.backfill_coordinator import RepairRequest
+    from app.data_engine.data_manager.backfill_history import (
+        BackfillHistoryPlanner,
+    )
+
+    service = HistoryAvailabilityService(
+        boundaries=HistoryBoundaryRepository(tmp_path / "history.sqlite3")
+    )
+    planner = BackfillHistoryPlanner(
+        service,
+        policy_resolver=lambda request: service.resolve_availability(
+            planner.series_key(request),
+            HistoryAvailability(calendar_id="crypto.24x7.utc", revision="v1"),
+        ),
+    )
+    request = RepairRequest(
+        symbol="BTCUSDT",
+        interval="1m",
+        start_ms=0,
+        end_ms=600_000,
+        exchange="binance",
+        market_type="spot",
+    )
+    sqlite_opens.clear()
+
+    first, _context = planner.plan(request)
+    assert first.fetch_ranges[0].start_ms == 0
+    assert sqlite_opens == []
+
+    service.record_boundary(
+        planner.series_key(request),
+        "left",
+        value_ms=300_000,
+        reason=BoundaryReason.SOURCE_EXHAUSTED,
+        state=BoundaryState.CONFIRMED,
+        revision="v1",
+    )
+    sqlite_opens.clear()
+
+    second, _context = planner.plan(request)
+    assert second.fetch_ranges[0].start_ms == 300_000
+    assert sqlite_opens == []
