@@ -756,7 +756,14 @@ async def shutdown_event() -> None:
     """Application shutdown handler."""
     preparation = getattr(app.state, "data_preparation_service", None)
     if preparation is not None:
-        await preparation.shutdown()
+        try:
+            await preparation.shutdown()
+        except Exception as exc:
+            logger.warning(
+                "Data preparation shutdown failed; continuing remaining cleanup: %s",
+                exc,
+                exc_info=True,
+            )
     local_runtime = getattr(app.state, "local_offline_runtime", None)
     if local_runtime is not None:
         backtest_runtime = getattr(app.state, "backtest_runtime", None)

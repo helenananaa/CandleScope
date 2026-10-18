@@ -124,20 +124,30 @@ class PreparationService:
     async def _shutdown(self):
         self._inventory_stop.set()
         self._wake.set()
-        if self._runner:
-            await self._runner
-            self._runner = None
-        # Drain storage/network boundaries before application dependencies stop.
-        # A job observes closing at its next checkpoint and remains recoverable.
-        await asyncio.gather(*self._tasks.values(), return_exceptions=True)
-        self._tasks.clear()
-        if self._inventory_task is not None:
-            await asyncio.gather(self._inventory_task, return_exceptions=True)
-            self._inventory_task = None
-        # An accepted HTTP write may still be committing after its observer
-        # disconnects. Its task keeps ownership until the physical call drains.
-        await asyncio.gather(*self._storage_owners, return_exceptions=True)
-        await self._storage(self._lease.release)
+        runner_failure = None
+        try:
+            if self._runner:
+                # A failed poller does not release accepted jobs, physical I/O,
+                # or the process lease. Drain those owners before reporting it.
+                result = await asyncio.gather(self._runner, return_exceptions=True)
+                runner_failure = result[0]
+                self._runner = None
+            # Drain storage/network boundaries before application dependencies stop.
+            # A job observes closing at its next checkpoint and remains recoverable.
+            await asyncio.gather(*self._tasks.values(), return_exceptions=True)
+            self._tasks.clear()
+            if self._inventory_task is not None:
+                await asyncio.gather(self._inventory_task, return_exceptions=True)
+                self._inventory_task = None
+            # An accepted HTTP write may still be committing after its observer
+            # disconnects. Its task keeps ownership until the physical call drains.
+            await asyncio.gather(*self._storage_owners, return_exceptions=True)
+        finally:
+            await self._storage(self._lease.release)
+        # Cancellation of the owned poller is not cancellation of shutdown's
+        # observer. Actual poller failures remain visible after cleanup.
+        if isinstance(runner_failure, BaseException) and not isinstance(runner_failure, asyncio.CancelledError):
+            raise runner_failure
 
     async def submit(self, request: PreparationRequest):
         if not self.enabled:
