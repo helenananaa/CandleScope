@@ -259,6 +259,7 @@ export function normalizeResearchRunDraft(input: {
     interval: input.dataset.interval,
     exchange: input.session.exchange,
     market_type: input.session.marketType,
+    symbol: input.session.symbol,
     fidelity_mode: fidelityMode,
     source_event_kind: fidelityMode === "BAR_APPROX" ? "BAR" : "AGG_TRADE",
   };

@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { StrategyRevisionRecord, ExternalProviderConnection } from "../../backtestApi.js";
+import type { StrategyRevisionRecord, ExternalProviderConnection, BacktestDataset, BacktestSnapshot } from "../../backtestApi.js";
 import type { BacktestReport } from "../../backtestTypes.js";
 import { structuralMock } from "../../../../test/testHelpers.js";
 import { getLocale, setLocale } from "../../../../i18n/locale.js";
 import type { BacktestResearchRuntime } from "../backtestResearchTypes.js";
 import ResearchExternalProviderPanel from "../ResearchExternalProviderPanel.js";
 import { editableResearchRunConfig, externalReportIsStale, externalRunDraft, externalSnapshotRequest, matchingExternalConnections } from "../externalProviderModel.js";
+import { normalizeResearchRunDraft } from "../backtestResearchAdvancedModel.js";
 
 const revision: StrategyRevisionRecord = {
   revision_id: "srv_model", provider_kind: "EXTERNAL_PROVIDER", label: "External model", description: "",
@@ -120,4 +121,25 @@ test("legacy API report event kind comes from its immutable Run when the optiona
   assert.equal(externalReportIsStale({ ...input, request: { ...input.request, taker_fee_bps: "1" } }), true);
   assert.equal(externalReportIsStale({ ...input, run: structuralMock<NonNullable<BacktestResearchRuntime["view"]["activeRun"]>>({ config_json: JSON.stringify(original) }) }), true);
   assert.equal(externalReportIsStale({ ...input, run: { ...input.run, config_json: JSON.stringify({ ...original, source_event_kind: "BAR" }) } }), true);
+});
+
+test("a legacy draft stays current after Host freezes its canonical symbol in a newly created Run", () => {
+  const dataset = structuralMock<BacktestDataset>({ dataset_id: config.dataset_id, data_epoch: "imported_bar_epoch", symbol: "LTCUSDT", interval: "1m" });
+  const selectedSnapshot = structuralMock<BacktestSnapshot>({ data_epoch: config.data_epoch, snapshot_hash: config.snapshot_hash,
+    catalog_dataset_id: config.dataset_id, identity: { symbol: "LTCUSDT" } });
+  const draft = { ...config, symbol: null, source_event_kind: "AGG_TRADE", fidelity_mode: "AGG_TRADE_EXECUTION", parameters: {} };
+  const request = normalizeResearchRunDraft({ draft, dataset, snapshot: selectedSnapshot, revisionId: revision.revision_id,
+    session: { exchange: "binance", marketType: "futures", symbol: "LTCUSDT", interval: "1m" }, startTimeMs: 0, endTimeMs: 359999 });
+  assert.equal(request.symbol, "LTCUSDT");
+  const frozen = { ...request, symbol: "LTCUSDT" };
+  const run = structuralMock<NonNullable<BacktestResearchRuntime["view"]["activeRun"]>>({ dataset_id: config.dataset_id,
+    data_epoch: config.data_epoch, snapshot_hash: config.snapshot_hash, source_event_kind: "AGG_TRADE", config_json: JSON.stringify(frozen) });
+  const input = { report: structuralMock<BacktestReport>({ identity: config, strategy: { external_provider: revision.external_provider } }),
+    run, revisionId: revision.revision_id, datasetId: config.dataset_id, snapshot: selectedSnapshot, draftText: JSON.stringify(draft), request };
+  assert.equal(externalReportIsStale(input), false);
+  const legacy = { ...run, config_json: JSON.stringify({ ...frozen, symbol: null, source_event_kind: null }) };
+  assert.equal(externalReportIsStale({ ...input, run: legacy }), false);
+  assert.equal(externalReportIsStale({ ...input, run: legacy, snapshot: { ...selectedSnapshot, catalog_dataset_id: "different_dataset" } }), true);
+  assert.equal(externalReportIsStale({ ...input, request: { ...request, symbol: "BTCUSDT" } }), true);
+  assert.equal(externalReportIsStale({ ...input, request: { ...request, taker_fee_bps: "1" } }), true);
 });

@@ -43,6 +43,17 @@ function parseRunConfig(run: BacktestRunRecord | null): Record<string, unknown> 
   }
 }
 
+export function researchSnapshotSymbol(
+  snapshot: Pick<BacktestSnapshot, "data_epoch" | "snapshot_hash" | "catalog_dataset_id" | "identity"> | null | undefined,
+  run: BacktestRunRecord | null,
+): string | null {
+  if (!snapshot || !run?.dataset_id || !run.data_epoch || !run.snapshot_hash) return null;
+  const datasetId = snapshot.catalog_dataset_id ?? snapshot.identity?.dataset_id;
+  if (datasetId !== run.dataset_id || snapshot.data_epoch !== run.data_epoch || snapshot.snapshot_hash !== run.snapshot_hash) return null;
+  const symbol = snapshot.identity?.symbol;
+  return typeof symbol === "string" && symbol ? symbol : null;
+}
+
 export function researchSessionFromAuthority(input: {
   context: BacktestResearchLaunchContext | null;
   run: BacktestRunRecord | null;
@@ -59,13 +70,7 @@ export function researchSessionFromAuthority(input: {
       ? input.context.chart_session : null;
     const datasetSymbol = input.dataset?.dataset_id === input.run.dataset_id
       && input.dataset?.data_epoch === input.run.data_epoch ? input.dataset?.symbol : null;
-    const snapshotIdentity = input.snapshot?.identity;
-    const snapshotDatasetId = input.snapshot?.catalog_dataset_id ?? snapshotIdentity?.dataset_id;
-    const snapshotSymbol = snapshotDatasetId === input.run.dataset_id
-      && input.snapshot?.data_epoch === input.run.data_epoch
-      && input.snapshot?.snapshot_hash === input.run.snapshot_hash
-      && typeof snapshotIdentity?.symbol === "string" && snapshotIdentity.symbol
-      ? snapshotIdentity.symbol : null;
+    const snapshotSymbol = researchSnapshotSymbol(input.snapshot, input.run);
     return {
       exchange: String(config.exchange ?? input.fallback?.exchange ?? "binance"),
       marketType: String(config.market_type ?? input.fallback?.marketType ?? "usdm"),

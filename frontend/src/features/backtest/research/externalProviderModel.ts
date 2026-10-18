@@ -1,5 +1,6 @@
-import type { ExternalProviderConnection, StrategyRevisionRecord } from "../backtestApi.js";
+import type { BacktestSnapshot, ExternalProviderConnection, StrategyRevisionRecord } from "../backtestApi.js";
 import type { BacktestReport, BacktestRunRecord } from "../backtestTypes.js";
+import { researchSnapshotSymbol } from "./backtestResearchModel.js";
 
 export function isExternalRevision(revision: StrategyRevisionRecord | undefined): boolean {
   return revision?.provider_kind === "EXTERNAL_PROVIDER";
@@ -49,7 +50,7 @@ function canonical(value: unknown): string {
 
 export function externalReportIsStale(input: {
   report: BacktestReport | null; run: BacktestRunRecord | null; revisionId: string; datasetId: string;
-  snapshot: { data_epoch: string; snapshot_hash: string } | null; draftText: string;
+  snapshot: Pick<BacktestSnapshot, "data_epoch" | "snapshot_hash" | "catalog_dataset_id" | "identity"> | null; draftText: string;
   request?: Record<string, unknown> | null | undefined;
   externalSelected?: boolean;
 }): boolean {
@@ -60,6 +61,9 @@ export function externalReportIsStale(input: {
       || (input.snapshot && (identity?.data_epoch !== input.snapshot.data_epoch || identity?.snapshot_hash !== input.snapshot.snapshot_hash))) return true;
   try {
     const frozen = JSON.parse(input.run?.config_json ?? "{}") as Record<string, unknown>;
+    const canonicalFrozen: Record<string, unknown> = { ...frozen,
+      source_event_kind: frozen.source_event_kind ?? input.run?.source_event_kind,
+      symbol: frozen.symbol ?? researchSnapshotSymbol(input.snapshot, input.run) };
     if (input.request === null) return true;
     const draft = input.request ?? JSON.parse(input.draftText) as Record<string, unknown>;
     // Compare the normalized request actually submitted, including account,
@@ -67,6 +71,6 @@ export function externalReportIsStale(input: {
     const metadata = new Set(["external_connection_id", "external_scope_hash", "external_provider_identity", "strategy_execution_revision"]);
     return Object.entries(draft).some(([field, value]) => !metadata.has(field)
       && !(field === "snapshot_hash" && value === "")
-      && canonical(frozen[field] ?? (field === "source_event_kind" ? input.run?.source_event_kind : null) ?? null) !== canonical(value ?? null));
+      && canonical(canonicalFrozen[field] ?? null) !== canonical(value ?? null));
   } catch { return true; }
 }
