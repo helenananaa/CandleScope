@@ -186,6 +186,30 @@ def test_refresh_honors_ttl_but_force_bypasses_it(monkeypatch) -> None:
     assert adapter.calls == 2
 
 
+def test_refresh_prefers_adapter_rows_built_off_the_event_loop(monkeypatch) -> None:
+    class _RowsAdapter(_Adapter):
+        async def list_symbols(self, market_type: str) -> list[SymbolInfo]:
+            raise AssertionError("catalog rows must come from list_symbol_rows")
+
+        async def list_symbol_rows(self, market_type: str) -> list[dict]:
+            self.calls += 1
+            return [
+                SymbolInfo(
+                    "AAAUSDT", "AAA", "USDT", "TRADING", self.id, market_type, "spot",
+                ).to_dict()
+            ]
+
+    adapter = _RowsAdapter()
+    _install_registry(monkeypatch, adapter)
+
+    counts = asyncio.run(symbols_api.refresh_exchange_metadata(force=True))
+
+    assert counts == {"test:spot": 1}
+    assert adapter.calls == 1
+    cached = symbols_api.get_cached_symbol_metadata("test", "spot", "AAAUSDT")
+    assert cached is not None and cached["active"] is True
+
+
 def test_successful_refresh_restores_validated_snapshot_after_process_reset(
     monkeypatch,
 ) -> None:

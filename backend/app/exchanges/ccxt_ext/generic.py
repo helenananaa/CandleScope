@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import sys
 import time
 from contextlib import asynccontextmanager
@@ -24,6 +25,11 @@ from app.data_engine.ingestion.models import (
     StreamType,
     TransportRequest,
 )
+from app.exchanges.catalog_worker import (
+    CatalogWorkerUnavailable,
+    catalog_worker_enabled,
+    run_catalog_loader,
+)
 from app.exchanges.models import ExchangeCapabilities, SymbolInfo
 from app.exchanges.pagination import ReverseTimePaginationPolicy
 from app.exchanges.plugin import BuiltinExchangePlugin
@@ -44,6 +50,8 @@ from .unified import (
 )
 from .runtime import close_ccxt_exchange
 
+
+logger = logging.getLogger(__name__)
 
 _GENERIC_STREAM_METHODS = {
     StreamType.KLINE: ("watchOHLCV", "fetchOHLCV"),
@@ -520,6 +528,8 @@ class CcxtUnifiedAdapter:
     """Lazy symbol-catalog adapter for one pinned CCXT exchange ID."""
 
     eager_catalog_refresh = False
+    # Publish exchange-native IDs (``BTCUSDT``) instead of CCXT symbols.
+    native_symbol_ids = False
 
     def __init__(
         self,
@@ -535,62 +545,40 @@ class CcxtUnifiedAdapter:
         return self._capabilities
 
     async def list_symbols(self, market_type: str = "") -> list[SymbolInfo]:
-        config = IngestionConfig()
-        selection = str(market_type or "").strip().lower()
-        if not self.entry.market_types:
-            return []
-        resolved_selection = (
-            resolve_market_selection(self.entry, selection) if selection else ""
-        )
-        exchange = _create_exchange(
+        return await load_ccxt_symbols(
             self.entry,
-            config,
-            market_type=resolved_selection or self.entry.market_types[0],
-            websocket=False,
+            market_type,
+            IngestionConfig(),
+            native_ids=self.native_symbol_ids,
         )
-        try:
-            await exchange.load_markets()
-            selections = (
-                (resolved_selection,) if resolved_selection else self.entry.market_types
-            )
-            symbols: list[SymbolInfo] = []
-            for market in exchange.markets.values():
-                if market.get("active") is False:
-                    continue
-                selected = next(
-                    (
-                        candidate
-                        for candidate in selections
-                        if market_matches_selection(market, candidate)
-                    ),
-                    None,
+
+    async def list_symbol_rows(self, market_type: str = "") -> list[dict[str, Any]]:
+        """``list_symbols`` as catalog rows, parsed off the event loop.
+
+        A CCXT catalog load (Binance spot exchangeInfo is ~18 MB) stalls the
+        event loop for seconds even from a thread, so the catalog worker
+        process runs it and returns only the rows.
+        """
+
+        config = IngestionConfig()
+        args = (
+            self.entry,
+            market_type,
+            config.proxy_mode,
+            config.http_proxy,
+            self.native_symbol_ids,
+        )
+        if catalog_worker_enabled():
+            try:
+                return await run_catalog_loader(load_ccxt_symbol_rows, *args)
+            except CatalogWorkerUnavailable as exc:
+                logger.debug(
+                    "Loading %s:%s catalog inline: %s",
+                    self.id,
+                    market_type,
+                    exc,
                 )
-                if selected is None:
-                    continue
-                symbol = str(market.get("symbol") or "").strip()
-                base = str(market.get("base") or "").strip()
-                quote = str(market.get("quote") or "").strip()
-                if not symbol or not base or not quote:
-                    continue
-                symbols.append(
-                    SymbolInfo(
-                        symbol=symbol,
-                        base_asset=base,
-                        quote_asset=quote,
-                        status="TRADING",
-                        exchange=self.id,
-                        market_type=selection or selected,
-                        product_type=_product_type(selection or selected),
-                        contract_type=_contract_type(selection or selected),
-                        raw=dict(market),
-                        listed_at_ms=_timestamp(market.get("created")),
-                        expiry_at_ms=_timestamp(market.get("expiry")),
-                        price_tick_size=_price_tick_size(exchange, market),
-                    )
-                )
-            return sorted(symbols, key=lambda item: item.symbol)
-        finally:
-            await close_ccxt_exchange(exchange)
+        return await load_ccxt_symbol_rows(*args)
 
     @staticmethod
     def get_http_base_urls(
@@ -1120,6 +1108,97 @@ def _rest_method_for(
         return "fetchOpenInterest"
     methods = _GENERIC_STREAM_METHODS.get(stream_type)
     return methods[1] if methods is not None else None
+
+
+async def load_ccxt_symbols(
+    entry: CcxtCatalogEntry,
+    market_type: str,
+    config: IngestionConfig,
+    *,
+    native_ids: bool = False,
+) -> list[SymbolInfo]:
+    selection = str(market_type or "").strip().lower()
+    if not entry.market_types:
+        return []
+    resolved_selection = (
+        resolve_market_selection(entry, selection) if selection else ""
+    )
+    exchange = _create_exchange(
+        entry,
+        config,
+        market_type=resolved_selection or entry.market_types[0],
+        websocket=False,
+    )
+    try:
+        await exchange.load_markets()
+        selections = (
+            (resolved_selection,) if resolved_selection else entry.market_types
+        )
+        symbols: list[SymbolInfo] = []
+        for market in exchange.markets.values():
+            if market.get("active") is False:
+                continue
+            selected = next(
+                (
+                    candidate
+                    for candidate in selections
+                    if market_matches_selection(market, candidate)
+                ),
+                None,
+            )
+            if selected is None:
+                continue
+            symbol = str(market.get("symbol") or "").strip()
+            base = str(market.get("base") or "").strip()
+            quote = str(market.get("quote") or "").strip()
+            if not symbol or not base or not quote:
+                continue
+            symbols.append(
+                SymbolInfo(
+                    symbol=symbol,
+                    base_asset=base,
+                    quote_asset=quote,
+                    status="TRADING",
+                    exchange=entry.exchange_id,
+                    market_type=selection or selected,
+                    product_type=_product_type(selection or selected),
+                    contract_type=_contract_type(selection or selected),
+                    raw=dict(market),
+                    listed_at_ms=_timestamp(market.get("created")),
+                    expiry_at_ms=_timestamp(market.get("expiry")),
+                    price_tick_size=_price_tick_size(exchange, market),
+                )
+            )
+    finally:
+        await close_ccxt_exchange(exchange)
+    symbols.sort(key=lambda item: item.symbol)
+    if native_ids:
+        for symbol in symbols:
+            native_id = str(symbol.raw.get("id") or "").strip()
+            if native_id:
+                symbol.symbol = native_id
+            if symbol.market_type == "swap.linear" and market_type == "futures":
+                symbol.market_type = "futures"
+    return symbols
+
+
+async def load_ccxt_symbol_rows(
+    entry: CcxtCatalogEntry,
+    market_type: str,
+    proxy_mode: str,
+    http_proxy: str | None,
+    native_ids: bool,
+) -> list[dict[str, Any]]:
+    """Catalog rows for ``symbol_catalog``; normally runs in the catalog worker."""
+
+    config = IngestionConfig(proxy_mode=proxy_mode, http_proxy=http_proxy)
+    symbols = await load_ccxt_symbols(
+        entry,
+        market_type,
+        config,
+        native_ids=native_ids,
+    )
+    return [item.to_dict() for item in symbols]
 
 
 def _create_exchange(

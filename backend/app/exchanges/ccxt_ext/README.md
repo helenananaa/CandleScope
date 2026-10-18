@@ -31,7 +31,11 @@ The generic lane projects pinned CCXT metadata and unified results for:
   async client per market selection, so backfill pages and HTTP-fallback polls
   reuse one `load_markets()` bootstrap and one HTTP session until
   `close_history_transport()`.  Loading a venue catalog parses thousands of
-  markets synchronously on the event loop, so it must never run per request.
+  markets synchronously on the event loop, so it must never run per request;
+- symbol catalogs: `CcxtUnifiedAdapter.list_symbol_rows()` runs the same
+  `load_markets()` conversion in the out-of-process catalog worker
+  (`app/exchanges/catalog_worker.py`) and falls back to `list_symbols()`'s
+  inline load only when the worker is unavailable.
 
 Generic depth is explicitly a CCXT-managed bounded snapshot. Its local
 revision is not an exchange sequence number and it never claims strict
