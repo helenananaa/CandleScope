@@ -3,15 +3,51 @@ import { TRADE_REVIEW_TEMPLATE, type TemplateField } from "./journalTemplates.js
 import { formatAmount, formatDateTime, formatPrice, formatSigned } from "./tradingFormat.js";
 import type { Excursion, LinkSuggestion, TradeDetail } from "./tradingTypes.js";
 
+export type PlanLevels = Pick<LinkSuggestion, "entryPrice" | "stopPrice" | "targetPrice" | "riskUsdt" | "direction">;
+
+// What the backend's Decimal() accepts once trimmed (digit grouping aside).
+const DECIMAL_TEXT = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
+
+function planDecimal(value: string | undefined): string | null {
+  const text = value?.trim() ?? "";
+  if (!DECIMAL_TEXT.test(text) || !Number.isFinite(Number(text))) return null;
+  if (/e/i.test(text)) return String(Number(text));
+  // Like the backend's dec_str, without trailing zeros; tiny prices keep their digits (no "1e-7").
+  return text.replace(/^\+/, "").replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+}
+
+/** A plan's latest risk fields, read as the backend does (risk_fields + plan_direction in journal.py). */
+export function planLevels(fields: Record<string, string>): PlanLevels {
+  const entryPrice = planDecimal(fields.entryPrice);
+  const stopPrice = planDecimal(fields.stopPrice);
+  const targetPrice = planDecimal(fields.targetPrice);
+  const riskUsdt = planDecimal(fields.riskUsdt);
+  // Plans have no side: stop below / target above entry implies long, and vice versa.
+  const implied = new Set<"long" | "short">();
+  if (entryPrice !== null) {
+    const entry = Number(entryPrice);
+    if (stopPrice !== null && Number(stopPrice) !== entry) implied.add(Number(stopPrice) < entry ? "long" : "short");
+    if (targetPrice !== null && Number(targetPrice) !== entry) implied.add(Number(targetPrice) > entry ? "long" : "short");
+  }
+  const direction = implied.size === 1 ? [...implied][0]! : null;
+  return { entryPrice, stopPrice, targetPrice, riskUsdt, direction };
+}
+
+/** "entry … · stop … · target … · risk …" parts; empty levels are left out. */
+export function planLevelParts(plan: PlanLevels): string[] {
+  const parts: string[] = [];
+  if (plan.entryPrice !== null) parts.push(t("trading.journal.suggestion.entry", { value: formatPrice(plan.entryPrice) }));
+  if (plan.stopPrice !== null) parts.push(t("trading.journal.suggestion.stop", { value: formatPrice(plan.stopPrice) }));
+  if (plan.targetPrice !== null) parts.push(t("trading.journal.suggestion.target", { value: formatPrice(plan.targetPrice) }));
+  if (plan.riskUsdt !== null) parts.push(t("trading.journal.suggestion.risk", { value: formatAmount(plan.riskUsdt) }));
+  return parts;
+}
+
 /** Plans saved in the same minute share a time, so add what was planned; empty parts are left out. */
 export function linkSuggestionLabel(item: LinkSuggestion): string {
   const parts = [t("trading.journal.linkPlan", { time: formatDateTime(item.createdAtMs) })];
   if (item.direction) parts.push(t(item.direction === "long" ? "trading.long" : "trading.short"));
-  if (item.entryPrice !== null) parts.push(t("trading.journal.suggestion.entry", { value: formatPrice(item.entryPrice) }));
-  if (item.stopPrice !== null) parts.push(t("trading.journal.suggestion.stop", { value: formatPrice(item.stopPrice) }));
-  if (item.targetPrice !== null) parts.push(t("trading.journal.suggestion.target", { value: formatPrice(item.targetPrice) }));
-  if (item.riskUsdt !== null) parts.push(t("trading.journal.suggestion.risk", { value: formatAmount(item.riskUsdt) }));
-  return parts.join(" · ");
+  return [...parts, ...planLevelParts(item)].join(" · ");
 }
 
 export function journalMarkdown(

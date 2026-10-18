@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { Fragment, useCallback, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import AddAccountDialog from "./AddAccountDialog.js";
@@ -6,6 +6,7 @@ import ManualFillForm from "./ManualFillForm.js";
 import PracticeOrderTicket, { type PlanDraft } from "./PracticeOrderTicket.js";
 import TradeJournalDrawer, { type JournalTarget } from "./TradeJournalDrawer.js";
 import TradingStatsView from "./TradingStatsView.js";
+import { planLevelParts, planLevels } from "./journalRender.js";
 import { tradingApi } from "./tradingApi.js";
 import {
   formatAmount,
@@ -260,30 +261,47 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
                   </button>
                 </div>
                 {entries.length === 0 && <p className="trading-empty-line">{t("trading.journal.empty")}</p>}
-                {entries.map((entry) => (
-                  <article key={entry.id} className="trading-row" data-clickable="true">
-                    <button
-                      type="button"
-                      className="trading-row-button"
-                      onClick={() => setJournal(entry.tradeId && entry.kind === "quick"
-                        ? { kind: "trade", tradeId: entry.tradeId }
-                        : { kind: "entry", entryId: entry.id })}
-                    >
-                      <div className="trading-row-main">
-                        <strong>{entry.symbol}</strong>
-                        <span className="trading-badge" data-tone={entry.kind === "note" && !entry.tradeId ? "info" : "muted"}>
-                          {entry.kind === "quick"
-                            ? t("trading.journal.quick")
-                            : entry.tradeId ? t("trading.journal.tradeNote") : t("trading.journal.plan")}
-                        </span>
-                        <time>{formatDateTime(entry.createdAtMs)}</time>
-                      </div>
-                      <div className="trading-row-sub">
-                        {entry.kind === "quick" ? entry.body : (entry.fields.entryBasis ?? entry.fields.strategyTag ?? "")}
-                      </div>
-                    </button>
-                  </article>
-                ))}
+                {entries.map((entry) => {
+                  // Same-minute plans share a time, so show what each one planned.
+                  const plan = entry.kind === "note" ? planLevels(entry.fields) : null;
+                  const levels = plan ? planLevelParts(plan) : [];
+                  return (
+                    <article key={entry.id} className="trading-row" data-clickable="true">
+                      <button
+                        type="button"
+                        className="trading-row-button"
+                        onClick={() => setJournal(entry.tradeId && entry.kind === "quick"
+                          ? { kind: "trade", tradeId: entry.tradeId }
+                          : { kind: "entry", entryId: entry.id })}
+                      >
+                        <div className="trading-row-main">
+                          <strong>{entry.symbol}</strong>
+                          <span className="trading-badge" data-tone={entry.kind === "note" && !entry.tradeId ? "info" : "muted"}>
+                            {entry.kind === "quick"
+                              ? t("trading.journal.quick")
+                              : entry.tradeId ? t("trading.journal.tradeNote") : t("trading.journal.plan")}
+                          </span>
+                          {plan?.direction && (
+                            <span className="trading-badge" data-tone={plan.direction === "long" ? "up" : "down"}>
+                              {t(plan.direction === "long" ? "trading.long" : "trading.short")}
+                            </span>
+                          )}
+                          <time>{formatDateTime(entry.createdAtMs)}</time>
+                        </div>
+                        {levels.length > 0 && (
+                          <div className="trading-row-levels">
+                            {levels.map((part, index) => (
+                              <Fragment key={part}>{index > 0 && " · "}<span>{part}</span></Fragment>
+                            ))}
+                          </div>
+                        )}
+                        <div className="trading-row-sub">
+                          {entry.kind === "quick" ? entry.body : (entry.fields.entryBasis ?? entry.fields.strategyTag ?? "")}
+                        </div>
+                      </button>
+                    </article>
+                  );
+                })}
               </div>
             )}
 
