@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+import threading
+import time
+from types import SimpleNamespace
+
+import httpx
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -235,3 +242,222 @@ def test_create_uses_factory_runtime_service_not_hand_built(monkeypatch, tmp_pat
     assert repeated.status_code == 202
     assert repeated.json()["reused_existing"] is True
     assert repeated.json()["job"]["job_id"] == created.json()["job"]["job_id"]
+
+
+class _ThreadProbe:
+    """Proxy that records each call and whether it ran on the event loop thread."""
+
+    def __init__(self, inner=None) -> None:
+        self._inner = inner
+        self.loop_thread: int | None = None
+        self.calls: list[tuple[str, bool]] = []
+
+    def wrap(self, name, func):
+        def call(*args, **kwargs):
+            self.calls.append((name, threading.get_ident() == self.loop_thread))
+            return func(*args, **kwargs)
+
+        return call
+
+    def __getattr__(self, name):
+        attr = getattr(self._inner, name)
+        return self.wrap(name, attr) if callable(attr) else attr
+
+
+def _runtime_app(monkeypatch, tmp_path):
+    """App over a real repository, DataManager and the real planner wiring."""
+
+    from app.data_engine.manual_history.planner import ManualHistoryPlanner
+    from app.data_engine.storage.klines_repo import get_bounds
+    from tests.test_manual_history_planner import FakeResolver, NOW_MS as PLAN_NOW
+    from tests.test_manual_history_service import _service, _setup
+
+    db_path, repo, dm = _setup(monkeypatch, tmp_path)
+    probe = _ThreadProbe(repo)
+    service = _service(probe, dm, idle_poll_seconds=60)
+    monkeypatch.setattr("app.api.v1.manual_history.MANUAL_HISTORY_DOWNLOAD_ENABLED", True)
+    monkeypatch.setattr("app.api.v1.manual_history.KLINES_DB_PATH", db_path)
+    monkeypatch.setattr(
+        "app.api.v1.manual_history.ManualHistoryPlanner",
+        lambda **kwargs: ManualHistoryPlanner(
+            resolver=FakeResolver(),
+            clock_ms=lambda: PLAN_NOW,
+            normalize_symbol_fn=lambda symbol, **kw: str(symbol).strip().upper(),
+            **kwargs,
+        ),
+    )
+    # Coverage bounds and disk probes are storage reads too.
+    monkeypatch.setattr("app.api.v1.manual_history.get_bounds", probe.wrap("get_bounds", get_bounds))
+    monkeypatch.setattr(
+        "app.api.v1.manual_history.storage_file_snapshot",
+        probe.wrap("storage_file_snapshot", lambda path: {"physical_size_bytes": 1_000}),
+    )
+    monkeypatch.setattr(
+        "app.api.v1.manual_history.disk_pressure_snapshot",
+        probe.wrap("disk_pressure_snapshot", lambda path: {"free_bytes": 50_000_000_000}),
+    )
+    app = FastAPI()
+    app.include_router(manual_history_router, prefix="/api/v1")
+    app.state.data_engine_runtime = SimpleNamespace(manual_history_service=service, data_manager=dm)
+    app.state.data_manager = dm
+    return app, probe, service, dm
+
+
+_SELECTION = {
+    "exchange": "binance",
+    "market_type": "spot",
+    "symbols": ["BTCUSDT"],
+    "intervals": ["1m"],
+    "start_ms": START_MS,
+}
+_BASE = "/api/v1/settings/storage/manual-downloads"
+
+
+def test_handlers_keep_repository_and_storage_reads_off_the_event_loop(monkeypatch, tmp_path) -> None:
+    app, probe, service, _ = _runtime_app(monkeypatch, tmp_path)
+
+    @app.middleware("http")
+    async def record_loop_thread(request, call_next):
+        probe.loop_thread = threading.get_ident()
+        return await call_next(request)
+
+    wakes: list[bool] = []
+    wake = service._wake_runner
+
+    def recording_wake() -> None:
+        wakes.append(threading.get_ident() == probe.loop_thread)
+        wake()
+
+    monkeypatch.setattr(service, "_wake_runner", recording_wake)
+    client = TestClient(app)
+
+    plan = client.post(f"{_BASE}/plan", json=_SELECTION)
+    assert plan.status_code == 200, plan.text
+    create_body = {**_SELECTION, "plan_hash": plan.json()["plan_hash"], "idempotency_key": "off-loop-create"}
+    created = client.post(_BASE, json=create_body)
+    assert created.status_code == 202, created.text
+    assert created.json()["reused_existing"] is False
+    job = created.json()["job"]
+    assert [target["symbol"] for target in job["targets"]] == ["BTCUSDT"]
+    repeated = client.post(_BASE, json=create_body)
+    assert repeated.status_code == 202
+    assert repeated.json()["reused_existing"] is True
+    assert repeated.json()["job"]["job_id"] == job["job_id"]
+
+    jobs = client.get(_BASE)
+    assert jobs.status_code == 200
+    assert [item["job_id"] for item in jobs.json()["jobs"]] == [job["job_id"]]
+    detail = client.get(f"{_BASE}/{job['job_id']}")
+    assert detail.status_code == 200
+    assert detail.json()["job"]["targets"][0]["canonical_interval"] == "1m"
+    assert client.get(f"{_BASE}/job:missing").status_code == 404
+    collections = client.get(f"{_BASE}/collections")
+    assert collections.status_code == 200
+    (collection,) = collections.json()["collections"]
+    assert collection["collection_id"] == job["collection_id"]
+    assert [target["symbol"] for target in collection["targets"]] == ["BTCUSDT"]
+    released = client.post(f"{_BASE}/collections/{job['collection_id']}/release")
+    assert released.status_code == 200
+    assert released.json()["state"] == "RELEASED"
+
+    called = {name for name, _ in probe.calls}
+    assert {
+        "list_recoverable_jobs",
+        "get_bounds",
+        "storage_file_snapshot",
+        "disk_pressure_snapshot",
+        "get_job_by_idempotency_key",
+        "create_collection_and_job",
+        "list_job_targets",
+        "list_jobs",
+        "get_job",
+        "list_collections",
+        "list_collection_targets",
+        "release_collection",
+    } <= called
+    assert [name for name, on_loop in probe.calls if on_loop] == []
+    # The runner's wake event is set from the loop, never from a storage thread.
+    assert wakes == [True, True]
+
+
+@pytest.mark.anyio
+async def test_create_waits_for_the_gc_guard_without_blocking_the_event_loop(monkeypatch, tmp_path) -> None:
+    app, _, _, dm = _runtime_app(monkeypatch, tmp_path)
+    entered = threading.Event()
+    held = threading.Event()
+    release = threading.Event()
+    guarded_create = dm.create_manual_history_collection
+
+    def signalling_create(repository, spec):
+        entered.set()
+        return guarded_create(repository, spec)
+
+    monkeypatch.setattr(dm, "create_manual_history_collection", signalling_create)
+
+    def hold_guard() -> None:
+        # Stands in for a GC or seal pass holding the guard.
+        with dm._storage_gc_guard:
+            held.set()
+            release.wait(5)
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        plan = await client.post(f"{_BASE}/plan", json=_SELECTION)
+        assert plan.status_code == 200, plan.text
+        holder = threading.Thread(target=hold_guard)
+        holder.start()
+        try:
+            assert await asyncio.to_thread(held.wait, 5)
+            create = asyncio.create_task(client.post(_BASE, json={
+                **_SELECTION, "plan_hash": plan.json()["plan_hash"], "idempotency_key": "guard-held",
+            }))
+            assert await asyncio.to_thread(entered.wait, 5)
+            # Other requests keep being served while the create waits for the guard.
+            started = time.monotonic()
+            listed = await client.get(_BASE)
+            assert listed.status_code == 200
+            assert time.monotonic() - started < 1.0
+            await asyncio.sleep(0.1)
+            assert not create.done()
+        finally:
+            release.set()
+            await asyncio.to_thread(holder.join, 5)
+        created = await asyncio.wait_for(create, 5)
+    assert created.status_code == 202, created.text
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("post", "/plan", _SELECTION),
+        ("post", "", {**_SELECTION, "plan_hash": "sha256:" + "0" * 64, "idempotency_key": "busy-create"}),
+        ("get", "", None),
+        ("get", "/collections", None),
+        ("get", "/job:busy", None),
+        ("post", "/collections/col:busy/release", None),
+    ],
+)
+def test_full_storage_executor_is_a_retryable_503(monkeypatch, tmp_path, method, path, body) -> None:
+    from app.core.bounded_executor import ExecutorBusyError
+    from app.data_engine.manual_history.repository import ManualHistoryRepository
+    from app.data_engine.manual_history.service import ManualHistoryService
+    from app.main import executor_busy_handler
+
+    async def busy(func, *args, **kwargs):
+        raise ExecutorBusyError("storage")
+
+    monkeypatch.setattr("app.api.v1.manual_history.run_storage", busy)
+    monkeypatch.setattr("app.data_engine.manual_history.service.run_storage", busy)
+    monkeypatch.setattr("app.api.v1.manual_history.MANUAL_HISTORY_DOWNLOAD_ENABLED", True)
+    app = FastAPI()
+    app.include_router(manual_history_router, prefix="/api/v1")
+    app.add_exception_handler(ExecutorBusyError, executor_busy_handler)
+    # Never opened: every handler hits the full executor first.
+    repository = ManualHistoryRepository(tmp_path / "unused.db")
+    service = ManualHistoryService(repository=repository, data_manager=None)
+    app.state.data_engine_runtime = SimpleNamespace(manual_history_service=service)
+    client = TestClient(app)
+    response = getattr(client, method)(f"{_BASE}{path}", **({"json": body} if body else {}))
+    assert response.status_code == 503
+    assert response.headers["Retry-After"] == "1"
+    assert response.json()["detail"]["retryable"] is True
