@@ -11,7 +11,8 @@ Startup sequence:
      ``app.state`` for API/WS endpoints.
   5. Refresh exchange metadata asynchronously on a best-effort basis.
   6. Bridge the IndicatorEngine to DataManager events.
-  7. On shutdown, stop IndicatorEngine, plugin sidecars, and DataEngine.
+  7. Freeze the startup heap out of later full GC passes.
+  8. On shutdown, stop IndicatorEngine, plugin sidecars, and DataEngine.
 
 When DataManager fails to initialize, the application can still expose
 health endpoints, but data APIs report explicit service-unavailable errors.
@@ -53,6 +54,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from app.core.config import (
     CORS_ORIGINS,
     EVENT_LOOP_LAG_INTERVAL_SECONDS,
+    GC_FREEZE_STARTUP_HEAP,
     KLINES_DB_PATH,
     LIQUIDATION_DB_PATH,
     LIQUIDATION_ROLLUP_BACKEND,
@@ -68,6 +70,7 @@ from app.core.config import (
 )
 from app.core.executors import executors_snapshot
 from app.core.bounded_executor import ExecutorBusyError
+from app.core.gc_policy import freeze_startup_heap, gc_policy_snapshot, unfreeze_startup_heap
 from app.core.version import APP_VERSION
 from app.core.support_diagnostics import install_support_logging, router as support_router
 from app.core.runtime_metrics import EventLoopLagMonitor, ws_runtime_metrics
@@ -529,6 +532,7 @@ async def startup_event() -> None:
             raise
         logger.info("Started LOCAL_OFFLINE runtime at %s", LOCAL_DATA_DIR)
         print("[startup] LOCAL_OFFLINE runtime [ok]")
+        freeze_startup_heap(enabled=GC_FREEZE_STARTUP_HEAP)
         return
 
     # 1. Initialize registered market-storage schemas through one composition root.
@@ -696,6 +700,9 @@ async def startup_event() -> None:
     # its last-known-good process cache while this best-effort task is pending.
     _schedule_symbol_catalog_refresh()
 
+    # Keep the startup heap out of later full GC passes (see gc_policy).
+    freeze_startup_heap(enabled=GC_FREEZE_STARTUP_HEAP)
+
 
 def _schedule_symbol_catalog_refresh() -> asyncio.Task[None]:
     async def _refresh() -> None:
@@ -766,6 +773,7 @@ async def shutdown_event() -> None:
         if lag_monitor is not None:
             await lag_monitor.stop()
         print("[shutdown] LOCAL_OFFLINE runtime shut down [ok]")
+        unfreeze_startup_heap()
         return
 
     backtest_runtime = getattr(app.state, "backtest_runtime", None)
@@ -871,6 +879,7 @@ async def shutdown_event() -> None:
     if replay_runtime is not None:
         await replay_runtime.shutdown(step_timeout=5)
 
+    unfreeze_startup_heap()
     print("[shutdown] All components shut down")
 
 
@@ -998,6 +1007,7 @@ async def debug_snapshot() -> dict:
             if lag_monitor is not None
             else None,
             "websocket": ws_runtime_metrics.snapshot(),
+            "gc": gc_policy_snapshot(),
         }
         replay_runtime = getattr(app.state, "replay_runtime", None)
         replay_service = getattr(app.state, "replay_service", None)

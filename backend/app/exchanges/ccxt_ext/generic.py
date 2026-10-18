@@ -42,7 +42,7 @@ from .unified import (
     CcxtUnifiedProjector,
     make_unified_payload,
 )
-from .runtime import close_ccxt_exchange
+from .runtime import close_ccxt_exchange, untrack_ccxt_market_tables
 
 
 _GENERIC_STREAM_METHODS = {
@@ -168,7 +168,7 @@ class _RestExchangePool:
 
         started = time.perf_counter()
         try:
-            return await exchange.load_markets()
+            markets = await exchange.load_markets()
         except asyncio.CancelledError:
             raise
         except BaseException:
@@ -178,6 +178,14 @@ class _RestExchangePool:
             elapsed_ms = (time.perf_counter() - started) * 1000.0
             self._market_load_ms_last = elapsed_ms
             self._market_load_ms_total += elapsed_ms
+        await untrack_ccxt_market_tables(exchange)
+        return markets
+
+    @staticmethod
+    async def _reload_markets(exchange: Any) -> Any:
+        markets = await exchange.load_markets(reload=True)
+        await untrack_ccxt_market_tables(exchange)
+        return markets
 
     async def _acquire(self, selection: str) -> _RestExchangeEntry:
         async with self._lock:
@@ -270,7 +278,7 @@ class _RestExchangePool:
             last_attempt = self._symbol_reload_attempts.get(attempt_key, 0.0)
             if reload_task is None and now - last_attempt >= 60.0:
                 self._symbol_reload_attempts[attempt_key] = now
-                reload_task = asyncio.create_task(exchange.load_markets(reload=True))
+                reload_task = asyncio.create_task(self._reload_markets(exchange))
                 reload_task.add_done_callback(_consume_task_outcome)
                 current.reload_task = reload_task
                 self._market_reloads += 1

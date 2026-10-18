@@ -10,6 +10,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.core.config import GC_UNTRACK_MARKET_TABLES
+from app.core.gc_policy import untrack_acyclic_tree
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import StreamDescriptor, StreamType
 
@@ -33,6 +35,30 @@ async def close_ccxt_exchange(exchange: Any) -> None:
         await close(clean_instance_data=True)
         return
     await close()
+
+
+# Tables ``Exchange.set_markets`` builds from the venue catalog.  The REST pool
+# and websocket runtimes keep them for their lifetime (see app.core.gc_policy).
+_MARKET_TABLE_ATTRIBUTES = (
+    "markets",
+    "markets_by_id",
+    "symbols",
+    "ids",
+    "currencies",
+    "currencies_by_id",
+    "baseCurrencies",
+    "quoteCurrencies",
+    "codes",
+)
+
+
+async def untrack_ccxt_market_tables(exchange: Any) -> int:
+    """Keep a long-lived client's parsed catalog out of full GC passes."""
+
+    if not GC_UNTRACK_MARKET_TABLES:
+        return 0
+    roots = [getattr(exchange, name, None) for name in _MARKET_TABLE_ATTRIBUTES]
+    return await untrack_acyclic_tree(*roots)
 
 
 class CcxtRuntime:
@@ -66,6 +92,7 @@ class CcxtRuntime:
         if self._closed:
             raise RuntimeError("CCXT runtime is already closed")
         await self.exchange.load_markets()
+        await untrack_ccxt_market_tables(self.exchange)
         self._started = True
 
     def subscribe(
