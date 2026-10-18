@@ -598,43 +598,32 @@ class DataManager:
 
     def gap_audit_series(self) -> list[tuple[str, str, str, str]]:
         """Return exact series that should be included in background gap audits."""
-        series: set[tuple[str, str, str, str]] = set()
+        series = self._gap_audit_tracked_series()
+        try:
+            series |= self._gap_audit_stored_series()
+        except Exception:
+            logger.exception("Failed to list storage series for gap audit")
+        return sorted(item for item in series if item[2] and item[3])
 
-        for exchange, market_type, symbol in self.prewarm_targets():
-            for interval in self.prewarm_intervals():
-                series.add((
-                    exchange.strip().lower(),
-                    self._normalize_market_type(market_type),
-                    symbol.upper().strip(),
-                    interval,
-                ))
+    async def gap_audit_series_async(self) -> list[tuple[str, str, str, str]]:
+        """Return gap-audit series without listing storage on the event loop.
 
-        for exchange, market_type, symbol, interval in self.bar_aggregator.get_targets():
-            series.add((
-                exchange.strip().lower(),
-                self._normalize_market_type(market_type),
-                symbol.upper().strip(),
-                interval,
-            ))
-
-        storage = self.query_engine.storage
-        list_series = getattr(storage, "list_series", None)
-        if callable(list_series):
-            try:
-                for row in list_series(custom_only=False):
-                    series.add((
-                        str(row.get("exchange") or "binance").strip().lower(),
-                        self._normalize_market_type(row.get("market_type") or "spot"),
-                        str(row.get("symbol") or "").upper().strip(),
-                        str(row.get("interval") or "").strip(),
-                    ))
-            except Exception:
-                logger.exception("Failed to list storage series for gap audit")
-
+        Prewarm and aggregator targets are read on the event-loop thread that
+        mutates them; only the SQLite series inventory runs on the storage
+        executor.
+        """
+        series = self._gap_audit_tracked_series()
+        try:
+            series |= await run_storage(self._gap_audit_stored_series)
+        except Exception:
+            logger.exception("Failed to list storage series for gap audit")
         return sorted(item for item in series if item[2] and item[3])
 
     def gap_audit_tail_series(self) -> list[tuple[str, str, str, str]]:
         """Return live/prewarm series whose closed tail should stay current."""
+        return sorted(item for item in self._gap_audit_tracked_series() if item[2] and item[3])
+
+    def _gap_audit_tracked_series(self) -> set[tuple[str, str, str, str]]:
         series: set[tuple[str, str, str, str]] = set()
         for exchange, market_type, symbol in self.prewarm_targets():
             for interval in self.prewarm_intervals():
@@ -651,7 +640,22 @@ class DataManager:
                 symbol.upper().strip(),
                 interval,
             ))
-        return sorted(item for item in series if item[2] and item[3])
+        return series
+
+    def _gap_audit_stored_series(self) -> set[tuple[str, str, str, str]]:
+        """List stored series for gap audits; a blocking SQLite read."""
+        series: set[tuple[str, str, str, str]] = set()
+        list_series = getattr(self.query_engine.storage, "list_series", None)
+        if not callable(list_series):
+            return series
+        for row in list_series(custom_only=False):
+            series.add((
+                str(row.get("exchange") or "binance").strip().lower(),
+                self._normalize_market_type(row.get("market_type") or "spot"),
+                str(row.get("symbol") or "").upper().strip(),
+                str(row.get("interval") or "").strip(),
+            ))
+        return series
 
     def set_subscription_service(self, service: Any | None) -> None:
         """Attach the runtime-owned subscription service."""
