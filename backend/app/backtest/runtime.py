@@ -770,6 +770,7 @@ class BacktestWorker:
         try:
             config = json.loads(str(record["config_json"]))
             manifest = self.local_data.get_manifest(str(record["dataset_id"]))
+            observation_market = None
             persisted = service.repository.get_strategy_revision(
                 str(record["strategy_revision_id"])
             )
@@ -780,6 +781,11 @@ class BacktestWorker:
                     service._assert_execution_control(run_id, deadline=float("inf"), expected_generation=int(record["generation"]))
 
                 provider = service.external.build_provider(record, config, check_control=check_external_control)
+                # Resolve the actual market from the verified dataset, never a
+                # caller's optional symbol or the local storage identifier.
+                observation_market = {"venue": str(config["exchange"]),
+                                      "market_type": str(config["market_type"]),
+                                      "symbol": str(manifest["symbol"])}
             elif persisted is not None and persisted["base_revision_id"] == "python-source-v1":
                 provider = service.build_python_host_provider(
                     str(record["strategy_revision_id"]),
@@ -841,6 +847,7 @@ class BacktestWorker:
                     run_id,
                     events=market_events,
                     provider=provider,
+                    observation_market=observation_market,
                     snapshot_evidence={
                         "quality": snapshot.quality,
                         "contract_coverage": snapshot.quality.get(
@@ -919,6 +926,7 @@ class BacktestWorker:
                         run_id,
                         events=events,
                         provider=provider,
+                        observation_market=observation_market,
                         snapshot_evidence=evidence,
                     )
                 else:

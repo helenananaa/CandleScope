@@ -146,7 +146,7 @@ def test_independent_process_http_smoke_run_and_full_host_restart(fixture, tmp_p
     try:
         selected, binding = select(host, fixture)
         config = {**selected, "external_connection_id": binding["connection_id"], "warmup_bars": 3,
-                  "parameters": {}, "output_mode": "TARGET_POSITION"}
+                  "parameters": {}, "output_mode": "TARGET_POSITION", "symbol": "WRONGUSDT"}
         before = host.request("POST", "/runs", config, headers={"Idempotency-Key": "before-smoke"}, expected=400)
         assert before["error"]["code"] == "SMOKE_REQUIRED"
         client = launch_client(binding, tmp_path)
@@ -204,6 +204,9 @@ def test_independent_process_http_smoke_run_and_full_host_restart(fixture, tmp_p
             assert page["next_after"] > cursor
             cursor = page["next_after"]
         assert sum(item["operation"] == "step" for item in trace) == 5
+        observations = [item["payload"]["observation"] for item in trace if item["operation"] in {"warmup", "step"}]
+        assert all(item["market"] == {"venue": "binance", "market_type": "usdm", "symbol": "LTCUSDT"}
+                   for item in observations)
         audit = hashlib.sha256()
         for item in trace:
             assert "model_state" not in item["reply"]

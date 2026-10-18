@@ -47,7 +47,8 @@ def test_external_http_model_receives_only_completed_trade_bars_and_host_fills_n
         wait_until(lambda: host.runtime.service.external.waiting_reason(binding["connection_id"]) is None)
         smoke = host.request("POST", "/provider-connections/" + binding["connection_id"] + "/smoke", selected)
         assert smoke["evaluationBars"] == 3
-        created = host.request("POST", "/runs", {**selected, "external_connection_id": binding["connection_id"], "warmup_bars": 3},
+        created = host.request("POST", "/runs", {**selected, "external_connection_id": binding["connection_id"], "warmup_bars": 3,
+                                                "symbol": "WRONGUSDT"},
                                headers={"Idempotency-Key": "external-trade-clock"})
         _, report = completed(host, created["run_id"])
         assert report["fidelity_mode"] == "AGG_TRADE_EXECUTION"
@@ -65,6 +66,12 @@ def test_external_http_model_receives_only_completed_trade_bars_and_host_fills_n
         assert Decimal(observations[-1]["features"]["close"]) == Decimal(6)
         assert all(item["bar"]["close_time_ms"] <= item["watermark_ms"] == item["event_time_ms"] for item in observations)
         assert all("trade" not in item and "book" not in item for item in observations)
+        assert all(item["market"] == {"venue": "binance", "market_type": "usdm", "symbol": "LTCUSDT"}
+                   for item in observations)
+        with host.runtime.service.external.store._read() as connection:
+            smoke_calls = connection.execute("SELECT payload_json FROM external_provider_calls WHERE run_id LIKE 'smoke_%' AND operation IN ('warmup', 'step')").fetchall()
+        assert len(smoke_calls) == 6
+        assert all(json.loads(call[0])["observation"]["market"] == observations[0]["market"] for call in smoke_calls)
     finally:
         if client is not None:
             stop_client(client)

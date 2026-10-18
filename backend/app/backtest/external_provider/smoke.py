@@ -100,7 +100,8 @@ def _run_smoke(runtime: BacktestRuntime, values: dict[str, Any]) -> dict[str, An
             for ordinal, event in enumerate(selected):
                 adapter.observe(sequence=event.sequence, event_time_ms=event.event_time_ms, watermark_ms=event.event_time_ms,
                                 phase="WARMUP" if ordinal < parsed.warmup_bars else "EVALUATION",
-                                market={"venue": values["exchange"], "symbol": str(market["symbol"])}, bar=dict(event.payload),
+                                market={"venue": values["exchange"], "market_type": values["market_type"],
+                                        "symbol": str(market["symbol"])}, bar=dict(event.payload),
                                 features={name: event.payload[name] for name in parsed.required_features})
             audit = provider.report_metadata()["external_provider"]
             session.close()

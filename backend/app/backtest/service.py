@@ -2643,6 +2643,7 @@ class BacktestService:
         now_ms: int | None = None,
         warmup_events: int | None = None,
         snapshot_evidence: Mapping[str, object] | None = None,
+        observation_market: Mapping[str, object] | None = None,
     ) -> dict[str, object]:
         """Run a queued BAR backtest through the reference kernel. No live I/O."""
         if not self.settings.bar_effective:
@@ -2804,7 +2805,7 @@ class BacktestService:
                 feature_names = _declared_feature_names(provider) or ()
                 from .strategy.generic_bar import build_generic_bar
                 generic_bar = build_generic_bar(provider, session, adapter,
-                    {"venue": "local", "symbol": str(record["dataset_id"])}, feature_names)
+                    dict(observation_market or {"venue": "local", "symbol": str(record["dataset_id"])}), feature_names)
                 from .strategy.chart_batch import build_chart_batch
                 # The V2 account remaps source clocks to market-only sequences;
                 # the current batch queue is indexed by original source events.
@@ -2851,7 +2852,7 @@ class BacktestService:
                     event_time_ms=event.event_time_ms,
                     watermark_ms=event.event_time_ms,
                     phase=phase,
-                    market={"venue": "local", "symbol": str(record["dataset_id"])},
+                    market=dict(observation_market or {"venue": "local", "symbol": str(record["dataset_id"])}),
                     bar=bar,
                     features=self._observation_features(provider, bar=bar, trade=None, _names=feature_names),
                 )
@@ -3030,6 +3031,7 @@ class BacktestService:
         now_ms: int | None = None,
         warmup_events: int | None = None,
         snapshot_evidence: Mapping[str, object] | None = None,
+        observation_market: Mapping[str, object] | None = None,
     ) -> dict[str, object]:
         """Run completed-bar strategy signals against subsequent aggTrade prints."""
         if not self.settings.trade_tape_effective:
@@ -3174,7 +3176,7 @@ class BacktestService:
                     event_time_ms=bar.event_time_ms,
                     watermark_ms=bar.event_time_ms,
                     phase=phase,
-                    market={"venue": "local", "symbol": str(record["dataset_id"])},
+                    market=dict(observation_market or {"venue": "local", "symbol": str(record["dataset_id"])}),
                     bar=bar_payload,
                     features=self._observation_features(
                         provider, bar=bar_payload, trade=None
