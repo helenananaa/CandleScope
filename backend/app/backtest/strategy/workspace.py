@@ -19,6 +19,7 @@ from app.backtest.strategy.chart_pyne import (
     compile_chart_pyne,
 )
 from app.backtest.strategy.protocol import StrategyProviderError, canonical_hash
+from app.backtest.external_provider.contracts import EXTERNAL_REVISION, parse_manifest
 
 STRATEGY_REVISION_SCHEMA = "STRATEGY_REVISION_V2"
 COMPILE_RECEIPT_SCHEMA = "STRATEGY_COMPILE_RECEIPT_V2"
@@ -30,6 +31,7 @@ LANGUAGES = frozenset(
         "PYNE_ORDER_DSL",
         "PYNE_CHART_V1",
         "EXTERNAL_ARTIFACT_REF",
+        "EXTERNAL_PROVIDER",
         "PYTHON_SOURCE",
     }
 )
@@ -67,6 +69,7 @@ def compile_revision(payload: Mapping[str, object], *, now_ms: int) -> dict[str,
             "SCHEMA_UNKNOWN_FIELD", "parameter_schema must be a list"
         )
     diagnostics: list[dict[str, object]] = []
+    external_manifest = None
     if language == "BUILTIN_TEMPLATE":
         base = str(
             payload.get("base_revision_id") or BUILTIN_RSI_WILDER_LONG_SHORT_REVISION
@@ -141,6 +144,9 @@ def compile_revision(payload: Mapping[str, object], *, now_ms: int) -> dict[str,
         warmup = artifact.get("warmup") or {}
         python_warmup = warmup if isinstance(warmup, dict) else {}
         base = "python-source-v1"
+    elif language == "EXTERNAL_PROVIDER":
+        external_manifest = parse_manifest(source)
+        base = EXTERNAL_REVISION
     else:
         try:
             artifact = json.loads(source)
@@ -207,10 +213,22 @@ def compile_revision(payload: Mapping[str, object], *, now_ms: int) -> dict[str,
         ChartPyneStrategyProvider()
         if base == CHART_PYNE_REVISION
         else None
-        if base in {"pine-long-flat-v1", "python-source-v1"}
+        if base in {"pine-long-flat-v1", "python-source-v1", EXTERNAL_REVISION}
         else build_builtin_provider(base)
     )
     capabilities = (
+        {
+            "input_modes": list(external_manifest.input_modes),
+            "output_modes": list(external_manifest.output_modes),
+            "signal_clock": "BAR_CLOSE",
+            "required_features": list(external_manifest.required_features),
+            "warmup_requirement": dict(external_manifest.capabilities().warmup_requirement),
+            "external_provider": external_manifest.identity(),
+            "unsupported": ["Host account/fill/report writes", "direct raw trade observations",
+                            "Host attestation of external training data or deterministic execution"],
+        }
+        if external_manifest is not None
+        else
         {
             "input_modes": list(provider.describe().input_modes),
             "output_modes": list(provider.describe().output_modes),

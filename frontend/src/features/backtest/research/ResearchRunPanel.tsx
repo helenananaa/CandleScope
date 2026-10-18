@@ -32,6 +32,9 @@ export default function ResearchRunPanel({ runtime }: { runtime: BacktestResearc
         <div className="research-active-run">
           <span data-state={activeRun.state}>{activeRun.state}</span>
           <small>{activeRun.fidelity_mode}</small>
+          {activeRun.waiting_for && <p role="status">{t(activeRun.waiting_for === "EXTERNAL_PROVIDER_DISABLED"
+            ? "research.external.disabledRun" : activeRun.waiting_for === "EXTERNAL_CONNECTION_REVOKED"
+              ? "research.external.revokedRun" : "research.external.waitingRun")}</p>}
         </div>
       )}
       {advancedEnabled && (
