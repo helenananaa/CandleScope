@@ -1148,6 +1148,8 @@ export const en = {
   "indicator.editor.close": "Close editor",
   "indicator.editor.name": "Indicator name",
   "indicator.editor.script": "{language} script",
+  "indicator.saveFailed": "The indicator could not be saved. Your draft is still open. {error}",
+  "indicator.editor.frontendWindow": "Computes only the chart-provided data window; loading more history may change results. Plots only, with a 2 second execution limit.",
   "indicator.editor.language": "Language",
   "indicator.editor.languageUnavailable": "{language} (unavailable)",
   "indicator.editor.mode": "Mode",

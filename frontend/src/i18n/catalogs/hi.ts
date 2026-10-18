@@ -864,6 +864,8 @@ export const hi = {
   "indicator.editor.close": "संपादक बंद करें",
   "indicator.editor.name": "इंडिकेटर नाम",
   "indicator.editor.script": "{language} स्क्रिप्ट",
+  "indicator.saveFailed": "इंडिकेटर सहेजा नहीं जा सका। आपका ड्राफ़्ट खुला है। {error}",
+  "indicator.editor.frontendWindow": "केवल चार्ट की दी गई डेटा विंडो पर गणना करता है; अधिक इतिहास लोड करने से परिणाम बदल सकते हैं। केवल रेखाएँ बनाता है, निष्पादन सीमा 2 सेकंड है।",
   "indicator.editor.language": "भाषा",
   "indicator.editor.languageUnavailable": "{language} (उपलब्ध नहीं)",
   "indicator.editor.mode": "मोड",

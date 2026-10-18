@@ -863,6 +863,8 @@ export const fr = {
   "indicator.editor.close": "Fermer l’éditeur",
   "indicator.editor.name": "Nom de l’indicateur",
   "indicator.editor.script": "Script {language}",
+  "indicator.saveFailed": "Impossible d’enregistrer l’indicateur. Le brouillon reste ouvert. {error}",
+  "indicator.editor.frontendWindow": "Calcule uniquement la fenêtre de données du graphique ; charger plus d’historique peut modifier les résultats. Courbes uniquement, avec une limite d’exécution de 2 secondes.",
   "indicator.editor.language": "Langage",
   "indicator.editor.languageUnavailable": "{language} (indisponible)",
   "indicator.editor.mode": "Mode",

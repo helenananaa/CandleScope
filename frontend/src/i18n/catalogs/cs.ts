@@ -864,6 +864,8 @@ export const cs = {
   "indicator.editor.close": "Zavřít editor",
   "indicator.editor.name": "Název indikátoru",
   "indicator.editor.script": "Skript {language}",
+  "indicator.saveFailed": "Indikátor se nepodařilo uložit. Koncept zůstává otevřený. {error}",
+  "indicator.editor.frontendWindow": "Výpočet používá pouze datové okno grafu; načtení další historie může změnit výsledky. Výstupem jsou jen křivky, časový limit je 2 sekundy.",
   "indicator.editor.language": "Jazyk",
   "indicator.editor.languageUnavailable": "{language} (nedostupné)",
   "indicator.editor.mode": "Režim",

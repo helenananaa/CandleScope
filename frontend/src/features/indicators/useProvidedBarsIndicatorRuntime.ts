@@ -94,7 +94,7 @@ export function providedBarsIndicatorSupport(
     return { supported: true, reason: null };
   }
   const language = normalizedScriptLanguage(local);
-  if (language !== "pyne" && language !== "pine") {
+  if (language !== "pyne" && language !== "pine" && language !== "frontend-js") {
     return {
       supported: false,
       reason: t("indicator.replayUnsafe", { language: language || t("indicator.unknownRuntime") }),

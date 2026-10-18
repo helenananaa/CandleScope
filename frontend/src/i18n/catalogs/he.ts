@@ -864,6 +864,8 @@ export const he = {
   "indicator.editor.close": "סגירת עורך",
   "indicator.editor.name": "שם האינדיקטור",
   "indicator.editor.script": "סקריפט {language}",
+  "indicator.saveFailed": "לא ניתן לשמור את האינדיקטור. הטיוטה נשארת פתוחה. {error}",
+  "indicator.editor.frontendWindow": "החישוב משתמש רק בחלון הנתונים של הגרף; טעינת היסטוריה נוספת עשויה לשנות תוצאות. הפלט הוא קווים בלבד, עם מגבלת ריצה של 2 שניות.",
   "indicator.editor.language": "שפה",
   "indicator.editor.languageUnavailable": "{language} (לא זמין)",
   "indicator.editor.mode": "מצב",

@@ -864,6 +864,8 @@ export const nl = {
   "indicator.editor.close": "Editor sluiten",
   "indicator.editor.name": "Indicatornaam",
   "indicator.editor.script": "{language}-script",
+  "indicator.saveFailed": "De indicator kon niet worden opgeslagen. Uw concept blijft geopend. {error}",
+  "indicator.editor.frontendWindow": "Berekent alleen het gegevensvenster van de grafiek; meer historie laden kan de resultaten wijzigen. Alleen curven, met een uitvoeringstijd van maximaal 2 seconden.",
   "indicator.editor.language": "Taal",
   "indicator.editor.languageUnavailable": "{language} (niet beschikbaar)",
   "indicator.editor.mode": "Modus",

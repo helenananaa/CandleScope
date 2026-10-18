@@ -864,6 +864,8 @@ export const ro = {
   "indicator.editor.close": "Închide editorul",
   "indicator.editor.name": "Numele indicatorului",
   "indicator.editor.script": "Script {language}",
+  "indicator.saveFailed": "Indicatorul nu a putut fi salvat. Ciorna rămâne deschisă. {error}",
+  "indicator.editor.frontendWindow": "Calculează doar fereastra de date a graficului; încărcarea unui istoric suplimentar poate schimba rezultatele. Produce doar curbe, cu o limită de execuție de 2 secunde.",
   "indicator.editor.language": "Limbă",
   "indicator.editor.languageUnavailable": "{language} (indisponibil)",
   "indicator.editor.mode": "Mod",

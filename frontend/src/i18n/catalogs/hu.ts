@@ -864,6 +864,8 @@ export const hu = {
   "indicator.editor.close": "Szerkesztő bezárása",
   "indicator.editor.name": "Indikátor neve",
   "indicator.editor.script": "{language} szkript",
+  "indicator.saveFailed": "A jelző mentése nem sikerült. A piszkozat nyitva marad. {error}",
+  "indicator.editor.frontendWindow": "Csak a grafikon által megadott adatablakot számítja; további előzmények betöltése módosíthatja az eredményt. Csak görbéket rajzol, a futási időkorlát 2 másodperc.",
   "indicator.editor.language": "Nyelv",
   "indicator.editor.languageUnavailable": "{language} (nem érhető el)",
   "indicator.editor.mode": "Mód",

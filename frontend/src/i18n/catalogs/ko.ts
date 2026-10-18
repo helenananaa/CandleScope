@@ -1162,6 +1162,8 @@ export const ko = {
   "indicator.editor.close": "편집기 닫기",
   "indicator.editor.name": "지표 이름",
   "indicator.editor.script": "{language} 스크립트",
+  "indicator.saveFailed": "지표를 저장하지 못했습니다. 편집 중인 초안은 그대로 열려 있습니다. {error}",
+  "indicator.editor.frontendWindow": "차트에서 제공한 데이터 구간만 계산하며, 과거 데이터를 더 불러오면 결과가 달라질 수 있습니다. 곡선만 출력하며 실행 제한은 2초입니다.",
   "indicator.editor.language": "언어",
   "indicator.editor.languageUnavailable": "{language} (사용 불가)",
   "indicator.editor.mode": "모드",

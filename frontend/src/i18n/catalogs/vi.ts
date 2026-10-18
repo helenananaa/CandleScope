@@ -863,6 +863,8 @@ export const vi = {
   "indicator.editor.close": "Đóng trình soạn",
   "indicator.editor.name": "Tên chỉ báo",
   "indicator.editor.script": "Script {language}",
+  "indicator.saveFailed": "Không thể lưu chỉ báo. Bản nháp của bạn vẫn đang mở. {error}",
+  "indicator.editor.frontendWindow": "Chỉ tính trên cửa sổ dữ liệu do biểu đồ cung cấp; tải thêm lịch sử có thể làm thay đổi kết quả. Chỉ xuất đường biểu diễn, giới hạn chạy là 2 giây.",
   "indicator.editor.language": "Ngôn ngữ",
   "indicator.editor.languageUnavailable": "{language} (không khả dụng)",
   "indicator.editor.mode": "Chế độ",

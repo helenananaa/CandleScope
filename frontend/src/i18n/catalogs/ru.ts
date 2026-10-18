@@ -863,6 +863,8 @@ export const ru = {
   "indicator.editor.close": "Закрыть редактор",
   "indicator.editor.name": "Название индикатора",
   "indicator.editor.script": "Скрипт {language}",
+  "indicator.saveFailed": "Не удалось сохранить индикатор. Черновик остаётся открытым. {error}",
+  "indicator.editor.frontendWindow": "Расчёт только по окну данных графика; загрузка дополнительной истории может изменить результат. Выводятся только линии, время выполнения — не более 2 секунд.",
   "indicator.editor.language": "Язык",
   "indicator.editor.languageUnavailable": "{language} (недоступен)",
   "indicator.editor.mode": "Режим",
