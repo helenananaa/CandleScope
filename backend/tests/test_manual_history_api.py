@@ -269,7 +269,8 @@ def _runtime_app(monkeypatch, tmp_path):
 
     from app.data_engine.manual_history.planner import ManualHistoryPlanner
     from app.data_engine.storage.klines_repo import get_bounds
-    from tests.test_manual_history_planner import FakeResolver, NOW_MS as PLAN_NOW
+    from tests.test_manual_history_planner import NOW_MS as PLAN_NOW
+    from tests.test_manual_history_planner import FakeResolver
     from tests.test_manual_history_service import _service, _setup
 
     db_path, repo, dm = _setup(monkeypatch, tmp_path)
@@ -461,3 +462,61 @@ def test_full_storage_executor_is_a_retryable_503(monkeypatch, tmp_path, method,
     assert response.status_code == 503
     assert response.headers["Retry-After"] == "1"
     assert response.json()["detail"]["retryable"] is True
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("cancel_first", [False, True])
+async def test_concurrent_creates_recheck_reserved_budget_after_inflight_commit(
+    monkeypatch, tmp_path, cancel_first,
+) -> None:
+    app, _, service, _ = _runtime_app(monkeypatch, tmp_path)
+    entered, release = threading.Event(), threading.Event()
+    create = service.create_from_plan
+
+    def held_create(plan, **kwargs):
+        entered.set()
+        assert release.wait(5)
+        return create(plan, **kwargs)
+
+    monkeypatch.setattr(service, "create_from_plan", held_create)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        planned = await client.post(f"{_BASE}/plan", json=_SELECTION)
+        assert planned.status_code == 200
+        plan = planned.json()
+        growth = plan["storage"]["estimated_db_growth_bytes"]
+        assert growth > 0
+        # Enough for either request alone, but not both durable reservations.
+        monkeypatch.setattr(
+            "app.api.v1.manual_history.disk_pressure_snapshot",
+            lambda path: {"free_bytes": int(growth * 1.5)},
+        )
+        body = {**_SELECTION, "plan_hash": plan["plan_hash"]}
+        first = asyncio.create_task(client.post(_BASE, json={**body, "idempotency_key": "admission-first"}))
+        second = None
+        try:
+            assert await asyncio.to_thread(entered.wait, 5), first.result().text if first.done() else "create did not start"
+            if cancel_first:
+                first.cancel()
+                await asyncio.sleep(0)
+                first.cancel()
+            second = asyncio.create_task(client.post(_BASE, json={**body, "idempotency_key": "admission-second"}))
+            await asyncio.sleep(0.05)
+            assert not first.done() and not second.done()
+        finally:
+            release.set()
+        if cancel_first:
+            with pytest.raises(asyncio.CancelledError):
+                await first
+        else:
+            assert (await first).status_code == 202
+        assert second is not None
+        rejected = await asyncio.wait_for(second, 5)
+        assert rejected.status_code == 409, rejected.text
+        assert rejected.json()["detail"]["reason"] == "storage_conflict"
+        jobs = (await client.get(_BASE)).json()["jobs"]
+        assert len(jobs) == 1
+        # A cancelled caller can recover its durable job without duplicating it.
+        retry = await client.post(_BASE, json={**body, "idempotency_key": "admission-first"})
+        assert retry.status_code == 202 and retry.json()["reused_existing"] is True
+        assert retry.json()["job"]["job_id"] == jobs[0]["job_id"]
