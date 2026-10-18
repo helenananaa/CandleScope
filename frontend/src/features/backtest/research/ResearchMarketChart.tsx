@@ -68,6 +68,17 @@ export default function ResearchMarketChart({ runtime }: { runtime: BacktestRese
     effectiveSourceMode,
   );
   const [viewSession, setViewSession] = useState<ChartSession>(runtime.view.session);
+  const { exchange: authorityExchange, marketType: authorityMarket, symbol: authoritySymbol,
+    interval: authorityInterval } = runtime.view.session;
+  useEffect(() => {
+    // A queued Run can mount before its chart identity arrives. Keep the
+    // controls/header aligned when the authoritative Run chart becomes ready.
+    setViewSession((current) => current.exchange === authorityExchange
+      && current.marketType === authorityMarket && current.symbol === authoritySymbol
+      && current.interval === authorityInterval ? current : {
+        exchange: authorityExchange, marketType: authorityMarket, symbol: authoritySymbol, interval: authorityInterval,
+      });
+  }, [authorityExchange, authorityMarket, authoritySymbol, authorityInterval]);
   const chartSurface = useChartSurfaceRuntime();
   const chartSettings = useChartSettingsRuntime();
   const realtimePriceRef = useRef<number | null>(null);

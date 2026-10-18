@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from app.core import gc_policy
-from app.exchanges.ccxt_ext import runtime as ccxt_runtime
+from app.exchanges.ccxt_ext import markets as ccxt_markets
 
 pytestmark = pytest.mark.skipif(
     gc_policy._untrack is None,
@@ -133,12 +133,12 @@ def test_ccxt_market_tables_follow_the_untrack_setting(monkeypatch: Any) -> None
             self.symbols = sorted(self.markets)
             self.currencies = {"USDT": {"limits": {"withdraw": {"min": None}}, "networks": {}}}
 
-    monkeypatch.setattr(ccxt_runtime, "GC_UNTRACK_MARKET_TABLES", False)
+    monkeypatch.setattr(ccxt_markets, "GC_UNTRACK_MARKET_TABLES", False)
     exchange = Exchange()
-    assert asyncio.run(ccxt_runtime.untrack_ccxt_market_tables(exchange)) == 0
+    assert asyncio.run(ccxt_markets.untrack_ccxt_market_tables(exchange)) == 0
     assert gc.is_tracked(exchange.markets) is True
 
-    monkeypatch.setattr(ccxt_runtime, "GC_UNTRACK_MARKET_TABLES", True)
-    assert asyncio.run(ccxt_runtime.untrack_ccxt_market_tables(exchange)) > 0
+    monkeypatch.setattr(ccxt_markets, "GC_UNTRACK_MARKET_TABLES", True)
+    assert asyncio.run(ccxt_markets.untrack_ccxt_market_tables(exchange)) > 0
     for table in (exchange.markets, exchange.markets_by_id, exchange.symbols, exchange.currencies):
         assert gc.is_tracked(table) is False

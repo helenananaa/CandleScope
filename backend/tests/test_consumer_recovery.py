@@ -354,11 +354,11 @@ def test_multi_kline_closes_on_bus_gap_or_authoritative_outbox_failure(monkeypat
             async def release_stream(self, *args, **kwargs):
                 pass
 
-            def subscribe(self, **kwargs):
+            async def subscribe_async(self, **kwargs):
                 self.subscription = kwargs
                 return "handle"
 
-            def unsubscribe(self, handle):
+            async def unsubscribe_async(self, handle):
                 self.unsubscribed = handle
 
         socket, manager = Socket(), Manager()

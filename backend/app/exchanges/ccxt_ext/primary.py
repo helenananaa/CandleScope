@@ -22,7 +22,7 @@ from app.data_engine.ingestion.models import (
     TransportRequest,
 )
 from app.data_engine.market_data.models import MarketChannel, TransportMode
-from app.exchanges.models import ExchangeCapabilities, SymbolInfo
+from app.exchanges.models import ExchangeCapabilities
 from app.exchanges.plugin import BuiltinExchangePlugin, DefaultSymbolNormalizer
 from app.exchanges.realtime import RealtimePolicy, RealtimeUpdateMode
 
@@ -164,16 +164,7 @@ class CcxtPrimaryAdapter(CcxtUnifiedAdapter):
     """CCXT catalog adapter that preserves CandleScope's native symbol IDs."""
 
     eager_catalog_refresh = True
-
-    async def list_symbols(self, market_type: str = "") -> list[SymbolInfo]:
-        symbols = await super().list_symbols(market_type)
-        for symbol in symbols:
-            native_id = str(symbol.raw.get("id") or "").strip()
-            if native_id:
-                symbol.symbol = native_id
-            if symbol.market_type == "swap.linear" and market_type == "futures":
-                symbol.market_type = "futures"
-        return symbols
+    native_symbol_ids = True
 
 
 @dataclass(slots=True)

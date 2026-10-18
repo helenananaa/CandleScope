@@ -21,6 +21,7 @@ import {
 import { registerPyneLanguageSupport } from "../../editor/pyneLanguage";
 import { registerPyneTheme, getPyneEditorOptions } from "../../editor/pyneTheme";
 import { fetchScriptRuntimes } from "../../services/indicatorApi.js";
+import { FRONTEND_SCRIPT_LANGUAGE, withFrontendScriptRuntime } from "./frontendScriptContract.js";
 import {
   resolveAvailableScriptLanguage,
   resolveScriptEditorProfile,
@@ -163,10 +164,11 @@ export default function IndicatorEditor({
   useEffect(() => {
     const controller = new AbortController();
     void fetchScriptRuntimes(controller.signal).then((catalog) => {
-      setRuntimeCatalog(catalog);
+      setRuntimeCatalog(withFrontendScriptRuntime(catalog));
       setRuntimeCatalogError(null);
     }).catch((error: unknown) => {
       if (controller.signal.aborted) return;
+      setRuntimeCatalog(withFrontendScriptRuntime({ schemaVersion: 1, defaultLanguage: FRONTEND_SCRIPT_LANGUAGE, languages: [], runtimes: [] }));
       setRuntimeCatalogError(
         error instanceof Error ? describeError(error, error.message) : String(error),
       );
@@ -401,6 +403,11 @@ export default function IndicatorEditor({
         </div>
 
         {/* Code editor */}
+        {selectedLanguage?.id === FRONTEND_SCRIPT_LANGUAGE && (
+          <p className="indicator-editor-frontend-help" style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+            {t("indicator.editor.frontendWindow")}
+          </p>
+        )}
         <div className="indicator-editor-code-label" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '8px', marginBottom: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>
@@ -460,7 +467,7 @@ export default function IndicatorEditor({
               ? <>{t("indicator.editor.hintPyne")} <code>ta.</code> <code>input.</code> <code>color.</code> {t("indicator.editor.hintComplete")} </>
               : editorProfile?.pineEnhancements
                 ? <>{t("indicator.editor.hintPine")} <code>ta.</code> <code>timeframe.</code> {t("indicator.editor.hintComplete")} </>
-              : <>{t("indicator.editor.hintPlugin")} </>}
+              : selectedLanguage?.id === FRONTEND_SCRIPT_LANGUAGE ? null : <>{t("indicator.editor.hintPlugin")} </>}
             <kbd style={{ background: 'var(--bg-tertiary)', padding: '1px 5px', borderRadius: '3px', fontSize: 'var(--font-size-2xs)', border: '1px solid var(--border-color)' }}>Ctrl+Enter</kbd> {t("indicator.editor.runKbd")}
           </span>
         </div>

@@ -1,3 +1,4 @@
+import { useChartAiControl } from "../features/ai-control/useChartAiControl.js";
 import { describeError } from "../i18n/serverErrors.js";
 import {
   lazy,
@@ -93,6 +94,7 @@ function LiveWorkspaceApp() {
     ? defaultWorkspaceBus(desktopWindowManager.windowId)
     : null;
   const workspace = useChartWorkspaceRuntime({ windowId: desktopWindowManager.windowId });
+  useChartAiControl(workspace, "market");
   const [desktopBootstrap, setDesktopBootstrap] = useState<DesktopBootstrap>(
     desktopWindowManager.cachedBootstrap,
   );

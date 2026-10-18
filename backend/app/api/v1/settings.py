@@ -213,6 +213,17 @@ def _call_runtime_list(obj, method_name: str) -> list:
         return []
 
 
+async def _call_runtime_list_async(obj, method_name: str) -> list:
+    method = getattr(obj, method_name, None)
+    if not callable(method):
+        return []
+    try:
+        return list(await method())
+    except Exception:
+        logger.exception("Failed to read runtime list via %s", method_name)
+        return []
+
+
 def _model_field_was_set(model: BaseModel, field: str) -> bool:
     fields = getattr(model, "model_fields_set", None)
     if fields is None:
@@ -786,7 +797,11 @@ async def storage_health(request: Request) -> dict:
         "status": "ok",
         "targets": _call_runtime_list(dm, "prewarm_targets"),
         "intervals": _call_runtime_list(dm, "prewarm_intervals"),
-        "audit_series": _call_runtime_list(dm, "gap_audit_series"),
+        "audit_series": (
+            await _call_runtime_list_async(dm, "gap_audit_series_async")
+            if callable(getattr(dm, "gap_audit_series_async", None))
+            else _call_runtime_list(dm, "gap_audit_series")
+        ),
         "open_gap_count": int(ledger_health.get("open_total", len(open_gaps))),
         "open_gap_by_status": ledger_health.get("by_status", {}),
         "open_gap_age_buckets": ledger_health.get("age_buckets", {}),

@@ -493,7 +493,7 @@ test("v2 composition reuses the shared indicator product without hosted/cache re
   assert.match(cells, /useReplaySharedIndicatorRuntime\(runtime, viewer, scope, persistence\)/);
   assert.match(cells, /controlled: true/);
   assert.match(workspace, /<IndicatorPanel/);
-  assert.match(workspace, /allowedScriptLanguages=\{\["pyne", "pine"\]\}/);
+  assert.match(workspace, /allowedScriptLanguages=\{\["pyne", "pine", "frontend-js"\]\}/);
   assert.doesNotMatch(workspace, /ReplayIndicatorPanel/);
   for (const prop of [
     "indicatorMarkers",
