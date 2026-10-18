@@ -144,7 +144,9 @@ class _CatalogWorker:
             try:
                 return await request.future
             except asyncio.CancelledError:
-                if not generation.retired and not request.future.done():
+                # Cancelling this task also cancels the Future it awaited.
+                # Its done state does not mean the child loader has stopped.
+                if not generation.retired:
                     with contextlib.suppress(EOFError, OSError):
                         generation.requests.send(("cancel", request_id))
                 raise
