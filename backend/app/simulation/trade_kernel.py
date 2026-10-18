@@ -926,8 +926,9 @@ class TradeSimulationKernel:
                 return Decimal("0")
         self.fee_total += fee
         order_qty_before = order.qty
-        if not isinstance(self.account, (LinearPerpetualAccountV2, SpotCashAccount)):
-            self.account.mark = price
+        # The event loop already marked the account to its market observation.
+        # Execution prices include slippage and must not replace that mark:
+        # an open position incurs slippage loss on the fill event itself.
         position_before = self.account.position_qty
         if isinstance(self.account, LinearPerpetualAccountV2):
             self.account.apply_fill(
