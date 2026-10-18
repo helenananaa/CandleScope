@@ -47,6 +47,7 @@ export function researchSessionFromAuthority(input: {
   context: BacktestResearchLaunchContext | null;
   run: BacktestRunRecord | null;
   chart: BacktestChartData | null;
+  dataset?: BacktestDataset | null;
   fallback?: ChartSession;
 }): ChartSession {
   if (input.run) {
@@ -55,10 +56,12 @@ export function researchSessionFromAuthority(input: {
       && input.context.dataset_identity.dataset_id === input.run.dataset_id
       && input.context?.dataset_identity?.data_epoch === input.run.data_epoch
       ? input.context.chart_session : null;
+    const datasetSymbol = input.dataset?.dataset_id === input.run.dataset_id
+      && input.dataset?.data_epoch === input.run.data_epoch ? input.dataset?.symbol : null;
     return {
       exchange: String(config.exchange ?? input.fallback?.exchange ?? "binance"),
       marketType: String(config.market_type ?? input.fallback?.marketType ?? "usdm"),
-      symbol: String(input.chart?.symbol ?? config.symbol ?? contextSession?.symbol ?? input.fallback?.symbol ?? "BTCUSDT"),
+      symbol: String(input.chart?.symbol ?? config.symbol ?? datasetSymbol ?? contextSession?.symbol ?? input.fallback?.symbol ?? "BTCUSDT"),
       interval: String(input.chart?.interval ?? config.interval ?? input.fallback?.interval ?? "15m"),
     } as ChartSession;
   }

@@ -263,6 +263,7 @@ export function useBacktestResearchRuntime(options: {
         context: nextContext,
         run: bundle?.run ?? null,
         chart: bundle?.chart ?? null,
+        dataset: nextDatasets.find((item) => item.dataset_id === bundle?.run.dataset_id) ?? null,
       });
       const nextDatasetId = researchDatasetIdFromAuthority({
         context: nextContext,
@@ -340,7 +341,8 @@ export function useBacktestResearchRuntime(options: {
     context: launchContext,
     run: activeRun,
     chart,
-  }), [activeRun, chart, launchContext]);
+    dataset: datasets.find((item) => item.dataset_id === activeRun?.dataset_id) ?? null,
+  }), [activeRun, chart, datasets, launchContext]);
   const activeDataset = useMemo(
     () => selectedDataset(datasets, selectedDatasetId),
     [datasets, selectedDatasetId],

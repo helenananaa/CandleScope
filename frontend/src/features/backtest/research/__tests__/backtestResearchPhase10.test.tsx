@@ -126,6 +126,18 @@ test("a queued non-BTC Run keeps its matching frozen context identity before its
   assert.equal(researchSessionFromAuthority({ context, run: { ...run, state: "COMPLETED" }, chart }).symbol, "LTCUSDT");
 });
 
+test("an imported launch without a quick-test snapshot binds a queued Run through its exact dataset epoch", () => {
+  const run: BacktestRunRecord = { run_id: "bt_imported_queued", dataset_id: "local_ltc", data_epoch: "epoch_ltc",
+    state: "QUEUED", fidelity_mode: "BAR_APPROX", source_event_kind: "BAR", config_hash: "sha256:queued",
+    config_json: JSON.stringify({ exchange: "local", market_type: "spot", interval: "1m" }) };
+  const dataset: BacktestDataset = { dataset_id: "local_ltc", data_epoch: "epoch_ltc", symbol: "LTCUSDT", interval: "1m",
+    name: "imported LTC", rows: 8, first_open_ms: 0, last_close_ms: 479999, strategy_revisions: [] };
+  const input = { context: { ...context, dataset_identity: null }, run, chart: null, dataset };
+  assert.equal(researchSessionFromAuthority(input).symbol, "LTCUSDT");
+  assert.notEqual(researchSessionFromAuthority({ ...input, dataset: { ...dataset, data_epoch: "changed_epoch" } }).symbol, "LTCUSDT");
+  assert.notEqual(researchSessionFromAuthority({ ...input, dataset: { ...dataset, dataset_id: "different_dataset" } }).symbol, "LTCUSDT");
+});
+
 test("selected Run overrides a launch context from another chart", () => {
   const run: BacktestRunRecord = {
     run_id: "bt_result_btc_12345678",
