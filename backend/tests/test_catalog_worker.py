@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from pathlib import Path
 from typing import Any
 
 import ccxt
@@ -95,6 +96,49 @@ def test_worker_crash_fails_requests_and_backs_off(worker: catalog_worker._Catal
         with pytest.raises(CatalogWorkerUnavailable, match="cooldown"):
             await run_catalog_loader(asyncio.sleep, 0, [])
         await catalog_worker.shutdown_catalog_worker()
+
+    asyncio.run(run())
+
+
+async def _loader_until_cancelled(started: str, cancelled: str) -> list[Any]:
+    Path(started).write_text(str(os.getpid()))
+    try:
+        await asyncio.Event().wait()
+    finally:
+        Path(cancelled).write_text(str(os.getpid()))
+    return []
+
+
+def test_cancelled_caller_stops_its_loader_in_the_child(
+    worker: catalog_worker._CatalogWorker, tmp_path: Path,
+) -> None:
+    started = tmp_path / 'started'
+    cancelled = tmp_path / 'cancelled'
+
+    async def wait_for_file(path: Path) -> None:
+        async with asyncio.timeout(5):
+            while not path.exists():
+                await asyncio.sleep(0.01)
+
+    async def run() -> None:
+        pending = asyncio.create_task(
+            run_catalog_loader(_loader_until_cancelled, str(started), str(cancelled)),
+        )
+        try:
+            await wait_for_file(started)
+            generation = _generation(worker)
+            assert int(started.read_text()) == generation.process.pid
+            pending.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await pending
+            await wait_for_file(cancelled)
+            assert int(cancelled.read_text()) == generation.process.pid
+            assert await run_catalog_loader(asyncio.sleep, 0, [1]) == [1]
+            assert _generation(worker) is generation
+        finally:
+            pending.cancel()
+            await asyncio.gather(pending, return_exceptions=True)
+            await catalog_worker.shutdown_catalog_worker()
 
     asyncio.run(run())
 
