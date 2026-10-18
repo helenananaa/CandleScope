@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Mapping
 from dataclasses import replace
+from threading import Event
 
 from app.data_engine.interval_policy import (
     VALID_INTERVALS,
@@ -40,6 +42,7 @@ from .control import (
     virtual_duration_ms,
 )
 from .errors import TrainingRunError
+from .indicator_jobs import IndicatorPreparationJobs
 from .history import (
     build_display_projection,
     build_history_page,
@@ -72,6 +75,189 @@ class TrainingDisplayService:
         self.replay_service = replay_service
         self._display_source_grid_anchors = display_source_grid_anchors
         self._native_display_pin_proofs = native_display_pin_proofs
+        self._indicator_preparation_jobs = IndicatorPreparationJobs()
+        from .tape_projection import TapeDisplayProjection
+        self._tape_projection = TapeDisplayProjection()
+        self._tape_projection_jobs = IndicatorPreparationJobs()
+
+    async def tape_projection(self, session_id: str, *, track_id: str, **kwargs):
+        from .indicator_history import PinnedIndicatorHistory
+        from .indicator_context import attach_context_history, await_context
+        normalized_session = service_validation_ops.identifier(session_id, field_name="session_id")
+        normalized_track = service_validation_ops.identifier(track_id, field_name="track_id")
+        binding = await self.store.history_binding(session_id=normalized_session, track_id=normalized_track)
+        if binding.get("subscription_tier") == SubscriptionTier.NONE.value:
+            raise TrainingRunError("HISTORY_SUBSCRIPTION_REQUIRED", "tape projection requires WARM or FULL", status_code=409)
+        persisted = await self.replay_service.store.load_dataset(normalized_session)
+        if persisted is None:
+            raise TrainingRunError("HISTORY_SNAPSHOT_UNAVAILABLE", "frozen tape is unavailable", status_code=503)
+        cancelled = Event()
+        # Expected versions validate a request; they do not create independent
+        # owners of the same mutable derived-market preparation window.
+        kwargs = {"before_ms": None, "history_epoch": None, **kwargs}
+        key = (normalized_session, normalized_track, *sorted((name, value) for name, value in kwargs.items() if name != "history_epoch"))
+        repository = self.replay_service.prepared_history_repository(normalized_session, kwargs["data_epoch"])
+        context = getattr(self.replay_service, "history_context", None)
+        lookback = binding.get("history_policy", {}).get("visible_history_lookback", {})
+        extend_context = (context is not None and context.preparation.enabled
+                          and str(binding.get("base_interval")) == "1m"
+                          and lookback.get("mode") == "ALL_AVAILABLE")
+        loop = asyncio.get_running_loop()
+        def evaluate():
+            history = PinnedIndicatorHistory(binding=binding, persisted=persisted, repository=repository,
+                data_epoch=kwargs["data_epoch"], display_interval=str(binding["base_interval"]),
+                revealed_boundary_ms=kwargs["revealed_boundary_ms"],
+                progressive_history_factory=lambda: self.replay_service.progressive_history)
+            origin = attach_context_history(history, context, loop=loop, cancelled=cancelled) if extend_context else None
+            result = self._tape_projection.compute(binding=binding, persisted=persisted,
+                archive=self.replay_service.raw_trade_archive, context_history=history, cancelled=cancelled, **kwargs)
+            if origin is not None:
+                await_context(context.assert_origin(origin), loop=loop, cancelled=cancelled)
+            return result
+        async def work():
+            return await self.replay_service.store.run_worker("display_build", evaluate)
+        return await self._tape_projection_jobs.run(key, work, cancelled)
+
+    async def canonical_indicator_compute(
+        self,
+        session_id: str,
+        *,
+        track_id: str,
+        display_interval: str,
+        revealed_boundary_ms: int,
+        data_epoch: str,
+        name: str,
+        params: dict,
+        bars: list[dict],
+        history_epoch: str | None = None,
+        source_sequence: int | None = None,
+    ) -> dict[str, object]:
+        """Prepare a fixed history prefix without holding the account writer."""
+        from app.replay.bars.builder import ReplayDisplayBar
+
+        from .indicator_checkpoint import (
+            IndicatorCheckpointStore,
+            normalized_parameters,
+        )
+        from .indicator_history import PinnedIndicatorHistory
+        from .indicator_prefix import CanonicalReplayIndicators
+
+        normalized_session = service_validation_ops.identifier(
+            session_id, field_name="session_id"
+        )
+        normalized_track = service_validation_ops.identifier(
+            track_id, field_name="track_id"
+        )
+        try:
+            params = normalized_parameters(name, params)
+        except (KeyError, TypeError, ValueError, OverflowError) as exc:
+            raise TrainingRunError(
+                "INDICATOR_PREFIX_INVALID", str(exc), status_code=422
+            ) from exc
+        work_key = (
+            normalized_session,
+            normalized_track,
+            display_interval,
+            data_epoch,
+            name,
+            json.dumps(params, sort_keys=True, allow_nan=False),
+        )
+        binding = await self.store.history_binding(
+            session_id=normalized_session, track_id=normalized_track
+        )
+        if binding.get("subscription_tier") == SubscriptionTier.NONE.value:
+            raise TrainingRunError(
+                "HISTORY_SUBSCRIPTION_REQUIRED",
+                "indicator history requires WARM or FULL",
+                status_code=409,
+            )
+        persisted = await self.replay_service.store.load_dataset(normalized_session)
+        if persisted is None:
+            raise TrainingRunError(
+                "HISTORY_SNAPSHOT_UNAVAILABLE",
+                "indicator history snapshot is unavailable",
+                status_code=503,
+            )
+        tape = source_sequence is not None and binding.get("source_kind") == "AGG_TRADE"
+        if source_sequence is not None and not tape:
+            raise TrainingRunError("INDICATOR_PREFIX_INVALID", "source_sequence requires a tape source", status_code=422)
+        if not tape and not is_progressive_dataset(persisted):
+            binding = await self._attach_native_display_archive_pin(
+                binding, display_interval=display_interval, persisted=persisted
+            )
+        repository = self.replay_service.prepared_history_repository(
+            normalized_session, data_epoch
+        )
+        cancelled = Event()
+        loop = asyncio.get_running_loop()
+        context = getattr(self.replay_service, "history_context", None)
+        lookback = binding.get("history_policy", {}).get("visible_history_lookback", {})
+        extend_context = (context is not None and context.preparation.enabled
+                          and str(binding.get("base_interval")) == "1m"
+                          and lookback.get("mode") == "ALL_AVAILABLE"
+                          and (tape or binding.get("prepared_base_history") is True
+                               or is_requested_horizon_dataset(persisted) or is_progressive_dataset(persisted)))
+
+        def evaluate():
+            try:
+                history = PinnedIndicatorHistory(
+                    binding=binding,
+                    persisted=persisted,
+                    repository=repository,
+                    data_epoch=data_epoch,
+                    display_interval=str(binding["base_interval"]) if tape else display_interval,
+                    revealed_boundary_ms=revealed_boundary_ms,
+                    progressive_history_factory=lambda: (
+                        self.replay_service.progressive_history
+                    ),
+                )
+                origin = None
+                if extend_context:
+                    from .indicator_context import attach_context_history
+                    origin = attach_context_history(history, context, loop=loop, cancelled=cancelled)
+                if tape:
+                    from .tape_indicator_history import TapeIndicatorHistory
+                    history = TapeIndicatorHistory(context_history=history, projection=self._tape_projection,
+                        binding=binding, persisted=persisted, archive=self.replay_service.raw_trade_archive,
+                        data_epoch=data_epoch, display_interval=display_interval, source_sequence=source_sequence,
+                        revealed_boundary_ms=revealed_boundary_ms, cancelled=cancelled)
+                if ((tape or extend_context or history_epoch is not None)
+                        and history_epoch != history.history_epoch):
+                    raise TrainingRunError("HISTORY_EPOCH_MISMATCH",
+                        "Reload the chart history before computing indicators from this source",
+                        status_code=409, details={"history_epoch": history.history_epoch,
+                            "history_boundary_ms": history.origin_ms, "reload_history": True})
+                rows = tuple(ReplayDisplayBar.from_dict(bar) for bar in bars)
+                path = self.replay_service.store.path
+                cache = IndicatorCheckpointStore(
+                    path.with_name(path.name + ".indicator-cache.sqlite3")
+                )
+                result = CanonicalReplayIndicators(cache).compute(
+                    history=history,
+                    name=name,
+                    params=params,
+                    rows=rows,
+                    cancelled=cancelled,
+                )
+                if origin is not None:
+                    from .indicator_context import await_context
+                    await_context(context.assert_origin(origin), loop=loop, cancelled=cancelled)
+            except (KeyError, TypeError, ValueError, OverflowError) as exc:
+                raise TrainingRunError(
+                    "INDICATOR_PREFIX_INVALID", str(exc), status_code=422
+                ) from exc
+            return {"protocol": "replay.v3", **result}
+
+        try:
+            return await self._indicator_preparation_jobs.run(
+                work_key,
+                lambda: self.replay_service.store.run_worker(
+                    "indicator_prefix", evaluate
+                ),
+                cancelled,
+            )
+        finally:
+            cancelled.set()
 
     def _remember_native_display_pin_proof(
         self,
@@ -99,7 +285,9 @@ class TrainingDisplayService:
         # Automatic preparation seals a finite base window, without downloading
         # separate native intervals. Aggregate that same revision for charts and
         # interval commands; unrelated native archives must not become required.
-        if persisted is not None and is_requested_horizon_dataset(persisted):
+        if binding.get("prepared_base_history") is True or (
+            persisted is not None and is_requested_horizon_dataset(persisted)
+        ):
             return dict(binding)
 
         requested_interval = (
@@ -657,7 +845,8 @@ class TrainingDisplayService:
         extend_context = (context is not None and context.preparation.enabled
                           and str(binding.get("base_interval")) == "1m"
                           and lookback.get("mode") == "ALL_AVAILABLE"
-                          and (is_requested_horizon_dataset(persisted) or is_progressive_dataset(persisted)))
+                          and (binding.get("prepared_base_history") is True
+                               or is_requested_horizon_dataset(persisted) or is_progressive_dataset(persisted)))
         repository = self.replay_service.prepared_history_repository(normalized_session, data_epoch)
         page = await asyncio.to_thread(
             build_history_page,
@@ -743,7 +932,8 @@ class TrainingDisplayService:
         if (context is not None and context.preparation.enabled
             and str(binding.get("base_interval")) == "1m"
             and lookback.get("mode") == "ALL_AVAILABLE"
-            and (is_requested_horizon_dataset(persisted) or is_progressive_dataset(persisted))):
+            and (binding.get("prepared_base_history") is True
+                 or is_requested_horizon_dataset(persisted) or is_progressive_dataset(persisted))):
             context_repository, _ = _progressive_repository(
                 persisted, repository, lambda: self.replay_service.progressive_history)
             return await context.complete_projection(page=page, binding=binding,

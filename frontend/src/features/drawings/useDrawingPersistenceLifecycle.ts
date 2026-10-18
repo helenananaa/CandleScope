@@ -2709,7 +2709,8 @@ export function useDrawingPersistenceLifecycle({
           || requestedScopeRef.current !== requestedSymbol
           || activeStoreRef.current !== requestedStore
           || requestedStore.getSnapshot().scopeKey !== requestedSymbol) return;
-        if (requestedStore.dirty) {
+        if (requestedStore.dirty || drawingDocumentSessionRegistry.isLoaded(requestedSymbol)) {
+          // A review/fork snapshot loaded while disk IO was pending is authoritative.
           drawingDocumentSessionRegistry.markLoaded(requestedSymbol, requestedStore);
         } else if (loaded.status === "found") {
           const result = requestedStore.loadDocument(loaded.document);

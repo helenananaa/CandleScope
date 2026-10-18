@@ -194,6 +194,7 @@ export interface ProjectionSeriesWriter<TData> extends SeriesDataWriter<TData> {
 
 export interface ProjectionRenderPatch {
   kind: "replace-tail";
+  forceFullReplace?: boolean;
   fromOutputIndex: number;
   deleteCount: number;
   insert: ChartSeriesInputRow[];
@@ -205,6 +206,7 @@ export interface ProjectionRenderPatch {
 
 export interface ProjectionPatchCandidate {
   kind?: string;
+  forceFullReplace?: boolean;
   fromOutputIndex?: unknown;
   deleteCount?: unknown;
   insert?: ChartSeriesInputRow[];

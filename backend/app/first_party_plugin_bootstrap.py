@@ -1,9 +1,9 @@
 """Pinned first-party runtime installation before the generic plugin host starts.
 
-The generic installer deliberately accepts local ``.cspkg`` files only.  This
-module is the product-owned layer that maps CandleScope's default runtime route
-to one immutable public Release asset, downloads it, verifies the outer digest,
-and hands the local file to that installer.
+The generic installer deliberately accepts local ``.cspkg`` files only. This
+module resolves default routes from package-local source builds or immutable
+public Release assets. It verifies missing defaults before installation and
+preserves installer-verified user activations.
 """
 
 from __future__ import annotations
@@ -41,6 +41,7 @@ OFFICIAL_PLUGIN_BOOTSTRAP_ENV = "CANDLESCOPE_OFFICIAL_PLUGIN_BOOTSTRAP"
 OFFICIAL_PLUGIN_BUNDLE_ENV = "CANDLESCOPE_OFFICIAL_PLUGIN_BUNDLE"
 OFFICIAL_PLUGIN_DOWNLOAD_CACHE_ENV = "CANDLESCOPE_PLUGIN_DOWNLOAD_CACHE"
 OFFICIAL_PLUGIN_DOWNLOAD_TIMEOUT_ENV = "CANDLESCOPE_PLUGIN_DOWNLOAD_TIMEOUT_SECONDS"
+BUNDLED_PLUGIN_MANIFEST_ENV = "CANDLESCOPE_BUNDLED_PLUGIN_MANIFEST"
 DEFAULT_RELEASE_LOCK_PATH = Path(__file__).with_name("official-plugin-releases.json")
 MAX_RELEASE_LOCK_BYTES = 64 * 1024
 MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024
@@ -81,6 +82,7 @@ class OfficialPluginRelease:
     machine: str
     implementation: str
     python_version: str
+    bundled_path: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,6 +195,17 @@ def _string(value: Any, label: str, *, maximum: int = 512) -> str:
 def load_official_plugin_releases(
     path: Path | str = DEFAULT_RELEASE_LOCK_PATH,
 ) -> tuple[OfficialPluginRelease, ...]:
+    return _load_plugin_releases(path, bundled=False)
+
+
+def load_bundled_plugin_releases(path: Path | str) -> tuple[OfficialPluginRelease, ...]:
+    """Read package-owned local assets; never interpret a local entry as a URL."""
+    return _load_plugin_releases(path, bundled=True)
+
+
+def _load_plugin_releases(
+    path: Path | str, *, bundled: bool,
+) -> tuple[OfficialPluginRelease, ...]:
     lock_path = Path(path).expanduser().resolve(strict=False)
     try:
         if lock_path.stat().st_size > MAX_RELEASE_LOCK_BYTES:
@@ -214,11 +227,17 @@ def load_official_plugin_releases(
         raise FirstPartyPluginBootstrapError(
             "official plugin release lock must be an object"
         )
-    _only_keys(value, {"schemaVersion", "plugins"}, "official plugin release lock")
-    if value.get("schemaVersion") != 1:
+    allowed = {"schemaVersion", "plugins"}
+    if bundled:
+        allowed.add("releaseStatus")
+    _only_keys(value, allowed, "plugin release lock")
+    expected_schema = 2 if bundled else 1
+    if value.get("schemaVersion") != expected_schema:
         raise FirstPartyPluginBootstrapError(
-            "official plugin release lock schemaVersion must be 1"
+            f"plugin release lock schemaVersion must be {expected_schema}"
         )
+    if bundled and value.get("releaseStatus") != "desktop-source-build-unpublished":
+        raise FirstPartyPluginBootstrapError("bundled source build status is missing")
     raw_plugins = value.get("plugins")
     if not isinstance(raw_plugins, list) or not raw_plugins:
         raise FirstPartyPluginBootstrapError(
@@ -237,7 +256,7 @@ def load_official_plugin_releases(
                 "package",
                 "version",
                 "filename",
-                "url",
+                *(set() if bundled else {"url"}),
                 "sha256",
                 "size",
                 "platform",
@@ -247,17 +266,26 @@ def load_official_plugin_releases(
         runtime_id = _string(raw.get("runtimeId"), f"{label}.runtimeId", maximum=64)
         if _RUNTIME_ID.fullmatch(runtime_id) is None:
             raise FirstPartyPluginBootstrapError(f"{label}.runtimeId is invalid")
+        if bundled and runtime_id not in FIRST_PARTY_RUNTIME_IDS:
+            raise FirstPartyPluginBootstrapError("bundled runtime must be first-party")
         filename = _string(raw.get("filename"), f"{label}.filename", maximum=255)
-        if Path(filename).name != filename or not filename.endswith(".cspkg"):
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+\.cspkg", filename):
             raise FirstPartyPluginBootstrapError(
                 f"{label}.filename must be one local .cspkg filename"
             )
-        url = _string(raw.get("url"), f"{label}.url", maximum=2048)
-        parsed = urlparse(url)
-        if parsed.scheme != "https" or parsed.hostname != "github.com":
-            raise FirstPartyPluginBootstrapError(
-                f"{label}.url must be an HTTPS github.com Release URL"
-            )
+        url = ""
+        bundled_path = None
+        if bundled:
+            bundled_path = (lock_path.parent / filename).resolve(strict=False)
+            if bundled_path.parent != lock_path.parent:
+                raise FirstPartyPluginBootstrapError("bundled plugin escapes its package directory")
+        else:
+            url = _string(raw.get("url"), f"{label}.url", maximum=2048)
+            parsed = urlparse(url)
+            if parsed.scheme != "https" or parsed.hostname != "github.com":
+                raise FirstPartyPluginBootstrapError(
+                    f"{label}.url must be an HTTPS github.com Release URL"
+                )
         sha256 = _string(raw.get("sha256"), f"{label}.sha256", maximum=71)
         if _SHA256.fullmatch(sha256) is None:
             raise FirstPartyPluginBootstrapError(f"{label}.sha256 is invalid")
@@ -283,6 +311,7 @@ def load_official_plugin_releases(
                 version=_string(raw.get("version"), f"{label}.version", maximum=128),
                 filename=filename,
                 url=url,
+                bundled_path=bundled_path,
                 sha256=sha256,
                 size=size,
                 system=_string(
@@ -516,6 +545,17 @@ def ensure_first_party_plugins_from_environment(
     releases: dict[str, list[OfficialPluginRelease]] = {}
     for release in load_official_plugin_releases(release_lock_path):
         releases.setdefault(release.runtime_id, []).append(release)
+    bundled_manifest = env.get(BUNDLED_PLUGIN_MANIFEST_ENV)
+    if bundled_manifest is not None:
+        if not bundled_manifest.strip():
+            raise FirstPartyPluginBootstrapError(f"{BUNDLED_PLUGIN_MANIFEST_ENV} must not be empty")
+        bundled = load_bundled_plugin_releases(bundled_manifest)
+        for release in bundled:
+            _assert_platform(release)
+            releases[release.runtime_id] = [release]
+        missing = (required_runtime_ids & FIRST_PARTY_RUNTIME_IDS) - {r.runtime_id for r in bundled}
+        if missing:
+            raise FirstPartyPluginBootstrapError("desktop bundle is missing runtimes: " + ", ".join(sorted(missing)))
     missing_first_party = sorted(
         (required_runtime_ids & FIRST_PARTY_RUNTIME_IDS) - set(releases)
     )
@@ -570,36 +610,45 @@ def ensure_first_party_plugins_from_environment(
                 "refusing to replace an unmanaged runtime activation",
                 runtime_id=release.runtime_id,
             )
-        if (
-            current is not None
-            and current.get("version") == release.version
-            and current.get("bundleSha256") == release.sha256
-            and current.get("enabled") is True
-            and current.get("autoStart") is True
-            and current.get("required") is True
-        ):
+        if current is not None:
+            # Bootstrap fills missing defaults. A user-selected, installer-
+            # verified activation (including a newer/local build or a disabled
+            # runtime) must survive restart without being silently downgraded
+            # or re-enabled. The receipt/environment check still fails closed.
+            if current.get("package", release.package) != release.package:
+                raise FirstPartyPluginBootstrapError(
+                    "runtime activation package does not match the routed runtime",
+                    runtime_id=release.runtime_id,
+                )
             checked = installer.check(release.runtime_id)
             results[release.runtime_id] = FirstPartyPluginBootstrapItemResult(
-                status="ready",
+                status="ready" if current.get("enabled") is True else "skipped",
                 runtime_id=release.runtime_id,
-                version=release.version,
-                bundle_sha256=release.sha256,
+                version=current["version"],
+                bundle_sha256=current["bundleSha256"],
                 registry_path=registry_path,
-                reason=f"checked:{checked.activation_id}",
+                reason=(f"checked:{checked.activation_id}" if current.get("enabled") is True
+                        else "user-disabled-runtime"),
             )
         else:
             pending.append(release)
 
     resolved_bundles: dict[str, tuple[Path, bool]] = {}
     override = env.get(OFFICIAL_PLUGIN_BUNDLE_ENV)
-    if pending and override is not None:
+    bundled_pending = [release for release in pending if release.bundled_path is not None]
+    for release in bundled_pending:
+        resolved_bundles[release.runtime_id] = (
+            _verified_local_bundle(release.bundled_path, release), False,
+        )
+    remote_pending = [release for release in pending if release.bundled_path is None]
+    if remote_pending and override is not None:
         if not override.strip():
             raise FirstPartyPluginBootstrapError(
                 f"{OFFICIAL_PLUGIN_BUNDLE_ENV} must not be empty"
             )
         override_path = Path(override).expanduser().resolve(strict=False)
         if len(selected) == 1:
-            release = pending[0]
+            release = remote_pending[0]
             resolved_bundles[release.runtime_id] = (
                 _verified_local_bundle(override_path, release),
                 False,
@@ -610,12 +659,12 @@ def ensure_first_party_plugins_from_environment(
                     f"{OFFICIAL_PLUGIN_BUNDLE_ENV} must name a directory when "
                     "multiple official runtimes are routed"
                 )
-            for release in pending:
+            for release in remote_pending:
                 resolved_bundles[release.runtime_id] = (
                     _verified_local_bundle(override_path / release.filename, release),
                     False,
                 )
-    elif pending:
+    elif remote_pending:
         cache_override = env.get(OFFICIAL_PLUGIN_DOWNLOAD_CACHE_ENV)
         if cache_override is not None and not cache_override.strip():
             raise FirstPartyPluginBootstrapError(
@@ -637,7 +686,7 @@ def ensure_first_party_plugins_from_environment(
             raise FirstPartyPluginBootstrapError(
                 f"{OFFICIAL_PLUGIN_DOWNLOAD_TIMEOUT_ENV} must be between 0.1 and 300"
             )
-        for release in pending:
+        for release in remote_pending:
             resolved_bundles[release.runtime_id] = download_official_plugin_bundle(
                 release,
                 cache_directory,

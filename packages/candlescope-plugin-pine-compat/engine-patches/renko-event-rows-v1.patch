@@ -1,0 +1,154 @@
+diff --git a/crates/pine-python/src/lib.rs b/crates/pine-python/src/lib.rs
+index e6a067d..eff17d3 100644
+--- a/crates/pine-python/src/lib.rs
++++ b/crates/pine-python/src/lib.rs
+@@ -263,6 +263,7 @@ fn run_script(
+ #[pymodule]
+ fn pine_compat(module: &Bound<'_, PyModule>) -> PyResult<()> {
+     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
++    module.add("EVENT_REQUEST_SERIES_CONTRACT", "renko-event-rows/1")?;
+     module.add("ANALYSIS_SCHEMA_VERSION", PUBLIC_ANALYSIS_SCHEMA_VERSION)?;
+     module.add("RUNTIME_SCHEMA_VERSION", PUBLIC_RUNTIME_SCHEMA_VERSION)?;
+     module.add("RENDER_METADATA_VERSION", PUBLIC_RENDER_METADATA_VERSION)?;
+@@ -342,7 +343,13 @@ fn parse_request_environment(
+             continue;
+         }
+         let request_key = parse_request_key(&key)?;
+-        streams.push((request_key, parse_bars(&value)?));
++        // Provider validation owns the context-specific ordering contract.
++        // Renko event rows can share a source timestamp without inventing time.
++        let mut bars = Vec::new();
++        for item in value.try_iter()? {
++            bars.push(parse_bar(&item?)?);
++        }
++        streams.push((request_key, bars));
+     }
+     let provider = InMemoryRequestDataProvider::from_streams(streams)
+         .map_err(|err| PyValueError::new_err(err.to_string()))?;
+diff --git a/crates/pine-runtime/src/builtins/requests.rs b/crates/pine-runtime/src/builtins/requests.rs
+index 6a26816..93978e9 100644
+--- a/crates/pine-runtime/src/builtins/requests.rs
++++ b/crates/pine-runtime/src/builtins/requests.rs
+@@ -760,7 +760,7 @@ impl<'a> HistoricalRuntime<'a> {
+             .resolved_from(key, provider_bars, include_forming, start);
+         // External execution can receive a known stream with no closed bars yet.
+         // Missing keys still fail above; empty visible history aligns to na.
+-        if bars.is_empty() && self.external_execution.is_none() {
++        if bars.is_empty() && self.external_execution.is_none() && !key.is_event_chart() {
+             return Err(RuntimeError {
+                 message: RequestDataError::MissingData {
+                     symbol: key.symbol().to_owned(),
+@@ -1677,7 +1677,13 @@ fn align_requested_value(
+         if lo == available || stamp(lo) != target {
+             return RequestedValue::Scalar(PineValue::Na);
+         }
+-        lo
++        // A source event can confirm multiple synthetic rows. Gapped security
++        // returns the final row of that confirmation cohort, just as gaps-off.
++        let mut end = lo + 1;
++        while end < available && stamp(end) == target {
++            end += 1;
++        }
++        end - 1
+     } else {
+         let Some(index) = lo.checked_sub(1) else {
+             return RequestedValue::Scalar(PineValue::Na);
+diff --git a/crates/pine-runtime/src/request/provider.rs b/crates/pine-runtime/src/request/provider.rs
+index 399a534..8515c92 100644
+--- a/crates/pine-runtime/src/request/provider.rs
++++ b/crates/pine-runtime/src/request/provider.rs
+@@ -30,6 +30,21 @@ impl RequestKey {
+     pub fn timeframe(&self) -> &RequestTimeframe {
+         &self.timeframe
+     }
++
++    /// Event chart rows are ordered by row ordinal; several confirmed bricks
++    /// may share one source timestamp. Ordinary time series remain unique.
++    #[must_use]
++    pub fn is_event_chart(&self) -> bool {
++        serde_json::from_str::<serde_json::Value>(&self.symbol)
++            .ok()
++            .is_some_and(|value| {
++                value.get("chart").and_then(serde_json::Value::as_str) == Some("renko")
++                    && value
++                        .get("symbol")
++                        .and_then(serde_json::Value::as_str)
++                        .is_some_and(|s| !s.is_empty())
++            })
++    }
+ }
+ 
+ #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+@@ -126,7 +141,18 @@ impl InMemoryRequestDataProvider {
+     }
+ 
+     pub fn insert(&mut self, key: RequestKey, bars: Vec<Bar>) -> Result<(), RequestDataError> {
+-        validate_requested_bars(&bars)?;
++        if key.is_event_chart() {
++            for pair in bars.windows(2) {
++                if pair[1].time < pair[0].time {
++                    return Err(RequestDataError::UnsortedBars {
++                        previous_time: pair[0].time,
++                        time: pair[1].time,
++                    });
++                }
++            }
++        } else {
++            validate_requested_bars(&bars)?;
++        }
+         if self.streams.contains_key(&key) {
+             return Err(RequestDataError::DuplicateKey {
+                 symbol: key.symbol().to_owned(),
+diff --git a/python/tests/test_renko_event_requests.py b/python/tests/test_renko_event_requests.py
+new file mode 100644
+index 0000000..916f791
+--- /dev/null
++++ b/python/tests/test_renko_event_requests.py
+@@ -0,0 +1,47 @@
++import json
++import pytest
++import pine_compat
++
++
++def row(time, value):
++    return dict(time=time, open=value-1, high=value, low=value-1, close=value, volume=1)
++
++
++def test_renko_same_source_time_retains_all_bricks_and_history():
++    source = '''//@version=6
++indicator("brick history")
++r = ticker.renko(syminfo.tickerid, "Traditional", 1)
++plot(request.security(r, timeframe.period, close))
++plot(request.security(r, timeframe.period, close[1]))
++plot(request.security(r, timeframe.period, close, gaps=barmerge.gaps_on))
++'''
++    symbol = '{"chart":"renko","style":"Traditional","param":1,"symbol":"BTC"}'
++    main = [row(i*60000, 100+i) for i in range(3)]
++    bricks = [row(0, 101), row(60000, 102), row(60000, 103), row(120000, 104)]
++    out = pine_compat.compile_script(source).run(main, chart_symbol="BTC", chart_timeframe="1",
++        request_bars={symbol+":1":bricks})
++    assert not out["diagnostics"]
++    values = [plot["values"] for plot in out["plots"]]
++    assert values == [[101,103,104], [None,102,103], [101,103,104]]
++    assert [item['time'] for item in bricks] == [0,60000,60000,120000]
++
++
++def test_empty_known_renko_stream_is_na_before_any_confirmed_brick():
++    source = '''//@version=6
++indicator("empty bricks")
++plot(request.security(ticker.renko(syminfo.tickerid, "Traditional", 1), timeframe.period, close))
++'''
++    symbol = '{"chart":"renko","style":"Traditional","param":1,"symbol":"BTC"}'
++    out = pine_compat.compile_script(source).run([row(0,100)], chart_symbol="BTC", chart_timeframe="1",
++        request_bars={symbol+":1":[]})
++    assert not out["diagnostics"]
++    assert out["plots"][0]["values"][0] is None
++
++
++def test_duplicate_standard_context_and_descending_event_rows_still_rejected():
++    program = pine_compat.compile_script('//@version=6\nindicator("ordinary")\nplot(close)')
++    with pytest.raises(ValueError, match="duplicate requested bar"):
++        program.run([row(0,100)], request_bars={"BTC:1":[row(0,100),row(0,101)]})
++    key = '{"chart":"renko","symbol":"BTC"}:1'
++    with pytest.raises(ValueError, match="not sorted"):
++        program.run([row(0,100)], request_bars={key:[row(60000,100),row(0,101)]})

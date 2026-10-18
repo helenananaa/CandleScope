@@ -4395,5 +4395,7 @@ export const zhHant = {
   "common.listSeparator": "，",
   "editor.pyne.namespaceDetail": "{ns}.* — 輸入 \"{ns}.\" 檢視方法",
   "editor.pyne.namespaceDocumentation": "輸入 `{ns}.` 觸發自動補全",
+  "replay.indicators.revealedPrefix": "回放已揭示行情",
+  "replay.indicators.revealedPrefixHint": "只使用回放時刻及之前已揭示的行情，包含形成中的 K 線；該柱指標值會隨回放推進更新。",
   ...tradingAccountsZhHant,
 } as const satisfies MessageCatalog;

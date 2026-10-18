@@ -43,18 +43,38 @@ function parseRunConfig(run: BacktestRunRecord | null): Record<string, unknown> 
   }
 }
 
+export function researchSnapshotSymbol(
+  snapshot: Pick<BacktestSnapshot, "data_epoch" | "snapshot_hash" | "catalog_dataset_id" | "identity"> | null | undefined,
+  run: BacktestRunRecord | null,
+): string | null {
+  if (!snapshot || !run?.dataset_id || !run.data_epoch || !run.snapshot_hash) return null;
+  const datasetId = snapshot.catalog_dataset_id ?? snapshot.identity?.dataset_id;
+  if (datasetId !== run.dataset_id || snapshot.data_epoch !== run.data_epoch || snapshot.snapshot_hash !== run.snapshot_hash) return null;
+  const symbol = snapshot.identity?.symbol;
+  return typeof symbol === "string" && symbol ? symbol : null;
+}
+
 export function researchSessionFromAuthority(input: {
   context: BacktestResearchLaunchContext | null;
   run: BacktestRunRecord | null;
   chart: BacktestChartData | null;
+  dataset?: BacktestDataset | null;
+  snapshot?: BacktestSnapshot | null;
   fallback?: ChartSession;
 }): ChartSession {
   if (input.run) {
     const config = parseRunConfig(input.run);
+    const contextSession = input.context?.dataset_identity
+      && input.context.dataset_identity.dataset_id === input.run.dataset_id
+      && input.context?.dataset_identity?.data_epoch === input.run.data_epoch
+      ? input.context.chart_session : null;
+    const datasetSymbol = input.dataset?.dataset_id === input.run.dataset_id
+      && input.dataset?.data_epoch === input.run.data_epoch ? input.dataset?.symbol : null;
+    const snapshotSymbol = researchSnapshotSymbol(input.snapshot, input.run);
     return {
       exchange: String(config.exchange ?? input.fallback?.exchange ?? "binance"),
       marketType: String(config.market_type ?? input.fallback?.marketType ?? "usdm"),
-      symbol: String(input.chart?.symbol ?? config.symbol ?? input.fallback?.symbol ?? "BTCUSDT"),
+      symbol: String(input.chart?.symbol ?? snapshotSymbol ?? config.symbol ?? datasetSymbol ?? contextSession?.symbol ?? input.fallback?.symbol ?? "BTCUSDT"),
       interval: String(input.chart?.interval ?? config.interval ?? input.fallback?.interval ?? "15m"),
     } as ChartSession;
   }

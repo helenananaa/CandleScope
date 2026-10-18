@@ -665,6 +665,7 @@ class BacktestRepository:
         owner: str,
         now_ms: int,
         lease_ms: int,
+        excluded_run_ids: tuple[str, ...] = (),
     ) -> dict[str, Any] | None:
         """Atomically lease the oldest queued run to one local worker."""
         connection = self.connection
@@ -674,6 +675,8 @@ class BacktestRepository:
                 "DELETE FROM backtest_job_leases WHERE expires_at_ms < ?",
                 (now_ms,),
             )
+            excluded = " AND runs.run_id NOT IN (SELECT value FROM json_each(?))" if excluded_run_ids else ""
+            excluded_parameters = (json.dumps(excluded_run_ids),) if excluded_run_ids else ()
             row = connection.execute(
                 """
                 SELECT runs.*
@@ -681,9 +684,10 @@ class BacktestRepository:
                 LEFT JOIN backtest_job_leases AS leases
                   ON leases.run_id = runs.run_id
                 WHERE runs.state = 'QUEUED' AND leases.run_id IS NULL
+                """ + excluded + """
                 ORDER BY runs.created_at_ms ASC, runs.run_id ASC
                 LIMIT 1
-                """
+                """, excluded_parameters,
             ).fetchone()
             if row is None:
                 connection.commit()
@@ -705,6 +709,22 @@ class BacktestRepository:
         except Exception:
             connection.rollback()
             raise
+
+    @_locked
+    def queued_provider_connections(self) -> list[tuple[str, str]]:
+        rows = self.connection.execute(
+            """SELECT run_id, json_extract(CASE WHEN json_valid(config_json) THEN config_json ELSE '{}' END, '$.external_connection_id')
+               FROM backtest_runs WHERE state = 'QUEUED'
+               AND json_extract(CASE WHEN json_valid(config_json) THEN config_json ELSE '{}' END, '$.external_connection_id') IS NOT NULL"""
+        ).fetchall()
+        return [(str(row[0]), str(row[1])) for row in rows]
+
+    @_locked
+    def active_provider_runs(self, connection_id: str) -> list[str]:
+        return [str(row[0]) for row in self.connection.execute(
+            """SELECT run_id FROM backtest_runs WHERE state IN ('QUEUED', 'PREPARING', 'RUNNING', 'COMPLETING')
+               AND json_extract(CASE WHEN json_valid(config_json) THEN config_json ELSE '{}' END, '$.external_connection_id') = ?""", (connection_id,),
+        )]
 
     @_locked
     def release_lease(self, run_id: str, *, owner: str) -> None:

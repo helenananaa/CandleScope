@@ -60,16 +60,18 @@ export function removedDrawingSubPaneScopeKeys({
   currentIds,
   previousBase,
   previousIds,
+  explicitlyRemovedIds = new Set<string>(),
 }: Readonly<{
   currentBase: string;
   currentIds: ReadonlySet<string>;
   previousBase: string | null;
   previousIds: ReadonlySet<string>;
+  explicitlyRemovedIds?: ReadonlySet<string>;
 }>): string[] {
   if (!currentBase || previousBase !== currentBase) return [];
   const removed: string[] = [];
   for (const previousId of previousIds) {
-    if (!currentIds.has(previousId)) removed.push(`${currentBase}__${previousId}`);
+    if (explicitlyRemovedIds.has(previousId) && !currentIds.has(previousId)) removed.push(`${currentBase}__${previousId}`);
   }
   return removed;
 }
@@ -504,6 +506,11 @@ export function shouldRestoreChartViewport({
 
   const source = String(dataMeta?.source || "");
   const previousSource = String(lastRestoreSource || "");
+  // A period/representation hand-off already restored an explicit user view.
+  // The later initial-history publication may deepen that data, but it must
+  // not replace the transferred range with the target interval's saved zoom.
+  if (previousSource === "surface-viewport-transfer"
+    || previousSource === "dataset-viewport-transfer") return false;
   return source.startsWith("initial-history")
     && !previousSource.startsWith("initial-history");
 }

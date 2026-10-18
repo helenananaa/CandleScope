@@ -353,6 +353,8 @@ export class ReplayStreamController {
         snapshot.status_reason === "fast_forward_final_state_complete"
         || snapshot.status_reason === "fast_forward_final_state_cancelled"
         || snapshot.status_reason === "fast_forward_final_state_interaction"
+        // Tape phases publish one terminal snapshot after their shared commit.
+        || snapshot.status_reason === "tape_cohort_batch_complete"
       );
       const isIntentionalFinalStateReset = hasAuthorityFloor
         && isFinalStateReset

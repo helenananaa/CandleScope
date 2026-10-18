@@ -27,10 +27,11 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
             raise BacktestError("NATIVE_TIMEOUT", "fill callback deadline exceeded")
         orders.feedback()
         account = kernel.account
+        from .external import account_feedback_profit
         frame = {"time": visible["time"], "position_size": float(account.position_qty),
             "position_avg_price": None if account.entry_price is None else float(account.entry_price),
             "equity": float(account.equity()), "initial_capital": float(kernel.initial_balance),
-            "netprofit": float(account.quote_balance - kernel.initial_balance), "openprofit": float(account.unrealized())}
+            "netprofit": float(account_feedback_profit(account, kernel.initial_balance)), "openprofit": float(account.unrealized())}
         if len(groups) == cursor:
             groups.append([])
             accounts.append(frame)

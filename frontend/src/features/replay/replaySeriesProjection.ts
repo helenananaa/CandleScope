@@ -42,7 +42,7 @@ export function replayDisplayBarToKline(bar: ReplayDisplayBar): KlineBar {
     // must keep the most recently revealed base-bar identity.  Keeping this
     // lineage on the row prevents a forming coarse bucket from collapsing an
     // anchor such as 12:07 back to its 12:00 display time.
-    sourceFromTime: time,
+    sourceFromTime: Math.floor(bar.first_base_open_ms / 1_000),
     sourceToTime: Math.floor(bar.last_base_open_ms / 1_000),
     open: finiteDecimal(bar.open, "open"),
     high: finiteDecimal(bar.high, "high"),

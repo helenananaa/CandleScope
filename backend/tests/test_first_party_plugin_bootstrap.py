@@ -18,6 +18,7 @@ from app.first_party_plugin_bootstrap import (
     download_official_plugin_bundle,
     ensure_first_party_plugins_from_environment,
     load_official_plugin_releases,
+    load_bundled_plugin_releases,
 )
 from app.plugin_runtime.errors import PluginBundleError
 from app.plugin_runtime.registry import load_runtime_registry
@@ -118,6 +119,121 @@ def _write_routes(
         encoding="utf-8",
     )
     return path
+
+
+def _write_bundled_lock(path: Path, *releases: OfficialPluginRelease) -> Path:
+    _write_lock(path, *releases)
+    value = json.loads(path.read_text())
+    value["schemaVersion"] = 2
+    value["releaseStatus"] = "desktop-source-build-unpublished"
+    for item in value["plugins"]:
+        del item["url"]
+    path.write_text(json.dumps(value))
+    return path
+
+
+@pytest.mark.parametrize("corrupt_second", [False, True])
+def test_bundled_defaults_are_offline_and_verify_all_before_activation(tmp_path, corrupt_second):
+    pine = _release(b"packaged pine", runtime_id="candlescope.pine-compat")
+    pyne = _release(b"packaged pyne")
+    manifest = _write_bundled_lock(tmp_path / "bundled.json", pine, pyne)
+    (tmp_path / pine.filename).write_bytes(b"packaged pine")
+    (tmp_path / pyne.filename).write_bytes(b"tampered" if corrupt_second else b"packaged pyne")
+    calls = []
+
+    class Installer:
+        def __init__(self, **kwargs):
+            pass
+
+        def list_plugins(self):
+            return ()
+
+        def install_many(self, bundles, **kwargs):
+            calls.append(bundles)
+            return tuple(SimpleNamespace(changed=True, installation_path=tmp_path / r.runtime_id)
+                         for r in (pine, pyne))
+
+    def execute():
+        return ensure_first_party_plugins_from_environment(
+            host_name="CandleScope", host_version="0.3.0",
+            environ={"CANDLESCOPE_BUNDLED_PLUGIN_MANIFEST": str(manifest),
+                     "CANDLESCOPE_RUNTIME_REGISTRY": str(tmp_path / "runtime-registry.json")},
+            installer_factory=Installer,
+            opener=lambda *args, **kwargs: pytest.fail("packaged defaults must never download"),
+        )
+
+    if corrupt_second:
+        with pytest.raises(FirstPartyPluginBootstrapError, match="pinned size and SHA-256"):
+            execute()
+        assert calls == []
+    else:
+        result = execute()
+        assert result.status == "installed" and result.downloaded is False
+        assert calls == [tuple((tmp_path / r.filename, r.sha256) for r in (pine, pyne))]
+
+
+@pytest.mark.parametrize("changed", [
+    {"filename": "../escape.cspkg"}, {"filename": "..\\escape.cspkg"},
+    {"url": "https://github.com/extra"}, {"runtimeId": "unrelated.plugin"},
+])
+def test_bundled_manifest_rejects_external_assets(tmp_path, changed):
+    path = _write_bundled_lock(tmp_path / "manifest.json", _release(b"bundle"))
+    value = json.loads(path.read_text())
+    value["plugins"][0].update(changed)
+    path.write_text(json.dumps(value))
+    with pytest.raises(FirstPartyPluginBootstrapError):
+        load_bundled_plugin_releases(path)
+
+
+def test_bundled_symlink_cannot_escape_package(tmp_path):
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    release = _release(b"bundle")
+    path = _write_bundled_lock(assets / "manifest.json", release)
+    (assets / release.filename).symlink_to(tmp_path / "outside.cspkg")
+    with pytest.raises(FirstPartyPluginBootstrapError, match="escapes"):
+        load_bundled_plugin_releases(path)
+
+
+def test_bundled_manifest_must_cover_routes_on_this_platform(tmp_path):
+    release = _release(b"bundle")
+    path = _write_bundled_lock(tmp_path / "manifest.json", release)
+    options = dict(host_name="CandleScope", host_version="0.3.0",
+                   environ={"CANDLESCOPE_BUNDLED_PLUGIN_MANIFEST": str(path)},
+                   installer_factory=lambda **kwargs: pytest.fail("invalid package must not install"))
+    with pytest.raises(FirstPartyPluginBootstrapError, match="missing runtimes"):
+        ensure_first_party_plugins_from_environment(**options)
+    _write_bundled_lock(path, replace(release, system="OtherSystem"))
+    with pytest.raises(FirstPartyPluginBootstrapError, match="does not support this host"):
+        ensure_first_party_plugins_from_environment(**options)
+
+
+def test_bundled_default_preserves_verified_manual_disabled_activation(tmp_path):
+    release = _release(b"not read when user owns activation")
+    path = _write_bundled_lock(tmp_path / "manifest.json", release)
+    checks = []
+
+    class Installer:
+        def __init__(self, **kwargs):
+            pass
+
+        def list_plugins(self):
+            return ({"runtimeId": release.runtime_id, "package": release.package,
+                     "managed": True, "enabled": False, "version": "9.0.0",
+                     "bundleSha256": "sha256:" + "f" * 64},)
+
+        def check(self, runtime_id):
+            checks.append(runtime_id)
+            return SimpleNamespace(activation_id="user-choice")
+
+    result = ensure_first_party_plugins_from_environment(
+        host_name="CandleScope", host_version="0.3.0",
+        environ=_single_pyne_environment(tmp_path, CANDLESCOPE_BUNDLED_PLUGIN_MANIFEST=str(path)),
+        installer_factory=Installer,
+        opener=lambda *args, **kwargs: pytest.fail("must preserve installed selection"),
+    )
+    assert result.status == "skipped" and result.reason == "user-disabled-runtime"
+    assert result.version == "9.0.0" and checks == [release.runtime_id]
 
 
 def _single_pyne_environment(tmp_path: Path, **values: str) -> dict[str, str]:
@@ -385,6 +501,56 @@ def test_ensure_never_replaces_an_unmanaged_community_activation(
             release_lock_path=lock,
             installer_factory=Installer,
         )
+
+
+@pytest.mark.parametrize("runtime_id", ["candlescope.pine-compat", "candlescope.pyne"])
+@pytest.mark.parametrize("enabled,version,digest", [
+    (True,"0.2.0","sha256:"+"ab"*32),
+    (True,"0.3.3","sha256:"+"cd"*32),
+    (False,"0.2.0","sha256:"+"ab"*32),
+])
+def test_bootstrap_preserves_verified_user_activation_and_disabled_choice(
+    tmp_path, enabled, version, digest, runtime_id,
+):
+    release = _release(b"must not download", runtime_id=runtime_id)
+    lock = _write_lock(tmp_path / "releases.json", release)
+    checks = []
+
+    class Installer:
+        def __init__(self, **kwargs):
+            pass
+
+        def list_plugins(self):
+            return ({"runtimeId":release.runtime_id,"managed":True,
+                "package":release.package,"version":version,"bundleSha256":digest,
+                "enabled":enabled,"autoStart":False,"required":False},)
+
+        def check(self, runtime_id):
+            checks.append(runtime_id)
+            return SimpleNamespace(activation_id="user-activation")
+
+        def install(self, *args, **kwargs):
+            pytest.fail("bootstrap must not replace a verified user activation")
+
+    routes = _write_routes(tmp_path / "routes.json",
+        ("pine" if runtime_id == "candlescope.pine-compat" else "pyne", runtime_id))
+    if runtime_id == "candlescope.pine-compat":
+        # The route contract always names Pyne, even when this test selects
+        # only Pine for first-party bootstrap.
+        value = json.loads(routes.read_text())
+        value["routes"].append({"language": "pyne", "mode": "legacy"})
+        routes.write_text(json.dumps(value))
+    result = ensure_first_party_plugins_from_environment(
+        host_name="CandleScope",host_version="0.3.2",
+        environ={"CANDLESCOPE_RUNTIME_REGISTRY": str(tmp_path / "runtime-registry.json"),
+                 "CANDLESCOPE_INDICATOR_RUNTIME_ROUTES": str(routes)},
+        release_lock_path=lock,
+        installer_factory=Installer,
+        opener=lambda *args,**kwargs:pytest.fail("must not download"))
+    assert checks == [release.runtime_id]
+    assert result.status == ("ready" if enabled else "skipped")
+    assert result.version == version and result.bundle_sha256 == digest
+    assert not result.changed and not result.downloaded
 
 
 def test_multi_runtime_bootstrap_verifies_then_installs_in_runtime_order(

@@ -382,6 +382,38 @@ def contract_current_equity(
     return decimal_to_string(equity, field_name="equity")
 
 
+def current_hedge_card_equity(connection: sqlite3.Connection, run_id: str) -> str | None:
+    """Read a small committed wallet head, including pre-fix polluted cards.
+
+    Do not open actors, replay history, write an upgrade or materialize the
+    contract ledger. Relational legs retain the committed account valuation
+    even when an older exporter replaced the adapter summary's trade mark.
+    """
+    run = connection.execute(
+        "SELECT r.initial_equity,r.position_mode,r.state,c.overlay_cash "
+        "FROM replay_training_run r JOIN replay_training_contract_account c USING(run_id) "
+        "WHERE r.run_id=?", (run_id,),
+    ).fetchone()
+    if run is None or run["position_mode"] != "HEDGE" or run["state"] == "AWAITING_MARKET":
+        return None
+    try:
+        initial = Decimal(str(run["initial_equity"]))
+        cash = initial + Decimal(str(run["overlay_cash"]))
+        for row in connection.execute(
+            "SELECT account_json FROM replay_training_market_track WHERE run_id=?", (run_id,),
+        ):
+            cash += Decimal(str(json.loads(row["account_json"])["cash_balance"])) - initial
+        legs = connection.execute(
+            "SELECT unrealized_pnl FROM replay_training_position_leg WHERE run_id=?", (run_id,),
+        ).fetchall()
+        if not legs:
+            raise ValueError("HEDGE account has no committed position legs")
+        equity = cash + sum((Decimal(str(row[0])) for row in legs), Decimal(0))
+        return decimal_to_string(equity, field_name="equity")
+    except (InvalidOperation, KeyError, TypeError, ValueError) as exc:
+        raise TrainingRunError("TRAINING_RUN_STORAGE_DEGRADED", "HEDGE account summary is invalid", status_code=503) from exc
+
+
 def refresh_contract_current_equity(
     connection: sqlite3.Connection,
     *,
@@ -1138,14 +1170,11 @@ def contract_portfolio_projection(
                     }
                 )
             if live_hedge_heads:
-                ledger_total = (
-                    Decimal(initial_equity)
-                    + realized
-                    - live_fee_total
-                    + funding_total
-                    - liquidation_fee_total
-                )
-                cash = ledger_total
+                # Broker cash includes capital adjustments; shared funding,
+                # fee and liquidation overlays are counted once per account.
+                # Leg PnL/fees alone cannot reconstruct deposits or withdrawals.
+                cash = Decimal(str(base["cash_balance"])) + Decimal(str(account["overlay_cash"]))
+                ledger_total = cash
         unrealized = sum(
             (
                 Decimal(str(item["position"]["unrealized_pnl"]))

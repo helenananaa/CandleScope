@@ -9,6 +9,13 @@ export interface AdvancedInputs { contexts: ContextChoice[]; magnifier: InputDat
 export const emptyAdvancedInputs = (): AdvancedInputs => ({ contexts: [], magnifier: null, libraries: "{}" });
 export interface MainRange { start_time_ms: number; end_time_ms: number; exchange: string; market_type: string }
 
+export function automaticHostExecution(mode: "NATIVE" | "CANDLESCOPE", hostSettings: Record<string, number>, fidelity: string, fillRecalculation: boolean, executionData: unknown) {
+  if (mode === "NATIVE") return null;
+  if ((fidelity !== "BAR_APPROX" && executionData !== null) || (fidelity !== "BAR_APPROX" && fidelity !== "TRADE_TAPE")) return undefined;
+  return { execution_fidelity: fidelity, host_settings: hostSettings,
+    fill_recalculation: fidelity === "TRADE_TAPE" && fillRecalculation };
+}
+
 export function executionInputs(mode: "NATIVE" | "CANDLESCOPE", hostSettings: Record<string, number>, fidelity: string, fillRecalculation: boolean, executionData: unknown) {
   return mode === "NATIVE" ? {} : { host_settings: hostSettings, execution_fidelity: fidelity,
     fill_recalculation: fidelity !== "BAR_APPROX" && fillRecalculation,

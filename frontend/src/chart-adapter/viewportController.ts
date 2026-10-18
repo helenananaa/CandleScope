@@ -79,7 +79,9 @@ export function logicalRangeForLatestBarPosition({
     || !Number.isFinite(scaleWidth) || scaleWidth <= 0
     || !Number.isFinite(normalizedPosition)
     || normalizedPosition < 0 || normalizedPosition > 1) return null;
-  const span = scaleWidth / spacing;
+  // LWC sets spacing to width / (to - from + 1). Using width / spacing
+  // as the endpoint difference zooms out by one bar on every follow intent.
+  const span = scaleWidth / spacing - 1;
   if (!Number.isFinite(span) || span <= 0) return null;
   const from = last - span * normalizedPosition;
   return { from, to: from + span };
@@ -95,6 +97,8 @@ export class ViewportController {
   private unlockTimer: TimerHandle | null;
   private pendingIntent: ViewportIntent | null;
   private readonly fitSessionKeys: Set<string>;
+  private readonly resetScaleOptions: { barSpacing: number; rightOffset: number } | null;
+  private frozenOnNewBars = false;
 
   constructor({
     chartProvider,
@@ -112,6 +116,10 @@ export class ViewportController {
     this.unlockTimer = null;
     this.pendingIntent = null;
     this.fitSessionKeys = new Set();
+    this.resetScaleOptions = safeCall(() => {
+      const options = this.getTimeScale()?.options();
+      return options ? { barSpacing: options.barSpacing, rightOffset: options.rightOffset } : null;
+    }, null);
   }
 
   getChart(): AdapterChart | null {
@@ -141,6 +149,8 @@ export class ViewportController {
   }
 
   resetSession(): void {
+    if (this.frozenOnNewBars) this.getTimeScale()?.applyOptions?.({ shiftVisibleRangeOnNewBar: true });
+    this.frozenOnNewBars = false;
     if (this.unlockTimer != null) this.clearTimer(this.unlockTimer);
     this.unlockTimer = null;
     this.userInteracting = false;
@@ -179,6 +189,58 @@ export class ViewportController {
     this.pendingIntent = null;
     if (!intent) return false;
     return this.applyIntent(intent.name, intent.priority, intent.apply);
+  }
+
+  private contentRange(): ViewportLogicalRange | null {
+    const range = safeCall(() => this.contentLogicalRangeProvider?.() ?? null, null);
+    return finiteNumber(range?.from) && finiteNumber(range?.to) && range.from <= range.to
+      ? range : null;
+  }
+
+  /** Persist whitespace relative to market rows, excluding axis-only carriers. */
+  captureRightOffset(): number | null {
+    const timeScale = this.getTimeScale();
+    if (!timeScale) return null;
+    const content = this.contentRange();
+    const logical = safeCall(() => timeScale.getVisibleLogicalRange(), null);
+    return content && finiteNumber(logical?.to)
+      ? logical.to - content.to
+      : safeCall(() => timeScale.scrollPosition(), null);
+  }
+
+  private anchorContent(timeScale: AdapterTimeScale, offset: number, barSpacing?: number | null): boolean {
+    const content = this.contentRange();
+    if (!content) return false;
+    const range = logicalRangeForLatestBarPosition({
+      barSpacing: barSpacing ?? timeScale.options().barSpacing,
+      contentLastLogical: content.to + offset,
+      position: 1,
+      width: timeScale.width(),
+    });
+    if (!range) return false;
+    // A reopened session starts at the market tail. Older shared-axis shifts
+    // may have persisted an offset that puts the entire view in the future.
+    // Keep its zoom, but recover usable default padding in that case.
+    if (range.from > content.to) {
+      const padding = Math.min(range.to - range.from,
+        Math.max(0, this.resetScaleOptions?.rightOffset ?? 0));
+      const shift = range.to - (content.to + padding);
+      range.from -= shift;
+      range.to -= shift;
+    }
+    timeScale.setVisibleLogicalRange(toLogicalRange(range));
+    return true;
+  }
+
+  resetToDefault(): boolean {
+    return this.applyIntent("resetToDefault", PRIORITY.restore, (timeScale) => {
+      timeScale.resetTimeScale();
+      // The chart engine's default reset includes hidden future carriers.
+      // Retain its default zoom/padding around the real content instead.
+      const defaults = this.resetScaleOptions ?? timeScale.options();
+      this.anchorContent(timeScale, Math.max(0, defaults.rightOffset), defaults.barSpacing);
+      return true;
+    });
   }
 
   fitSemanticContent(timeScale: AdapterTimeScale): boolean {
@@ -233,11 +295,11 @@ export class ViewportController {
 
       let restored = false;
       if (plan.mode === "anchor") {
-        // plan.rightOffset carries timeScale.scrollPosition() semantics
-        // (bars from the right edge). It must be restored through
-        // scrollToPosition, never through the rightOffset option, which is
-        // a permanent whitespace setting with a different meaning.
-        if (finiteNumber(plan.rightOffset)) {
+        const offset = finiteNumber(plan.rightOffset)
+          ? plan.rightOffset : Math.max(0, timeScale.options().rightOffset);
+        if (!this.anchorContent(timeScale, offset, plan.barSpacing) && finiteNumber(plan.rightOffset)) {
+          // Generic charts without a semantic content provider retain the
+          // chart engine's scrollPosition contract.
           timeScale.scrollToPosition?.(plan.rightOffset, false);
         }
         restored = true;
@@ -272,9 +334,11 @@ export class ViewportController {
     {
       barSpacing = null,
       immediate = false,
+      freezeOnNewBars = false,
     }: {
       barSpacing?: number | null;
       immediate?: boolean;
+      freezeOnNewBars?: boolean;
     } = {},
   ): boolean {
     const apply = (timeScale: AdapterTimeScale) => {
@@ -282,6 +346,19 @@ export class ViewportController {
         timeScale.applyOptions?.({ barSpacing });
       }
       if (finiteNumber(logicalRange?.from) && finiteNumber(logicalRange?.to)) {
+        const span = logicalRange.to - logicalRange.from;
+        const requiredSpacing = Number(timeScale.width?.()) / span;
+        const minimumSpacing = Number(timeScale.options?.().minBarSpacing ?? 0.5);
+        // The default LWC minimum would silently widen a large source-time
+        // view when switching to a finer period. Lower it only as required.
+        if (span > 0 && Number.isFinite(requiredSpacing) && requiredSpacing > 0
+          && requiredSpacing < minimumSpacing) {
+          timeScale.applyOptions?.({ minBarSpacing: requiredSpacing });
+        }
+        if (freezeOnNewBars) {
+          timeScale.applyOptions?.({ shiftVisibleRangeOnNewBar: false });
+          this.frozenOnNewBars = true;
+        }
         timeScale.setVisibleLogicalRange?.(toLogicalRange(logicalRange));
         return true;
       }
@@ -308,6 +385,8 @@ export class ViewportController {
         width: safeCall(() => Number(timeScale.width?.()), Number.NaN),
       });
       if (!range) return false;
+      if (this.frozenOnNewBars) timeScale.applyOptions?.({ shiftVisibleRangeOnNewBar: true });
+      this.frozenOnNewBars = false;
       timeScale.setVisibleLogicalRange?.(toLogicalRange(range));
       return true;
     });

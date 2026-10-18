@@ -58,30 +58,31 @@ export function NativeCurve({ points, title, markers = [], onLocate }: { points:
     </svg></figure>;
 }
 
-export function NativeStrategyReport({ run, onLocate, onReviewTrade, active = true, view = "all" }: { active?: boolean; onReviewTrade?: ((trade: StrategyTradeFocus | null) => void) | undefined; view?: "all" | "overview" | "trades"; run: NativeRun; onLocate?: ((time: number) => void) | undefined }) {
+export function NativeStrategyReport({ run, onLocate, onReviewTrade, active = true, view = "all", stale = false }: { stale?: boolean; active?: boolean; onReviewTrade?: ((trade: StrategyTradeFocus | null) => void) | undefined; view?: "all" | "overview" | "trades"; run: NativeRun; onLocate?: ((time: number) => void) | undefined }) {
   const [replay, setReplay] = useState<NativeReplayRecord | null>(null);
   const [replayView, setReplayView] = useState(!run.result);
   return <>
+    {stale && <div className="strategy-notice" data-tone="warning" role="status"><strong>{t("chartTester.result.stale")}</strong> · {t("chartTester.result.staleGuidanceTitle")}</div>}
     {run.execution_mode !== "CANDLESCOPE" && <div className="native-report-view-switch"><button aria-pressed={replayView} onClick={() => setReplayView(!replayView)}>{t(replayView ? "report.analysis" : "report.replay")}</button>{replayView && <span>{t("native.replay.title")}</span>}</div>}
-    <NativeResultBody key={`${replayView ? replay?.replay_id ?? "replay" : "analysis"}:${run.run_id}`} run={replayView && replay ? { ...run, result: replay.result } : run} onLocate={onLocate} view={view} onReviewTrade={onReviewTrade} active={active}
+    <NativeResultBody key={`${replayView ? replay?.replay_id ?? "replay" : "analysis"}:${run.run_id}`} run={replayView && replay ? { ...run, result: replay.result } : run} onLocate={stale ? undefined : onLocate} view={view} onReviewTrade={stale ? undefined : onReviewTrade} active={active && !stale}
       controls={replayView && run.execution_mode !== "CANDLESCOPE" ? <NativeReplayControls runId={run.run_id} replay={replay} onChange={setReplay} /> : null}
       exportUrl={replayView && replay ? nativeExportUrl(run.run_id).replace(`/runs/${run.run_id}/`, `/replays/${replay.replay_id}/`) : nativeExportUrl(run.run_id, run.execution_mode)} /></>
 }
 
 function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTrade, active }: { active: boolean; onReviewTrade: ((trade: StrategyTradeFocus | null) => void) | undefined; controls: ReactNode; view: "all" | "overview" | "trades"; run: NativeRun; onLocate?: ((time: number) => void) | undefined; exportUrl: string }) {
   const locale = useLocale();
-  const [section, setSection] = useState<"trades" | "orders">("trades");
-  const [positions, setPositions] = useState<Record<"trades" | "orders", { page: number; selectedIndex: number | null }>>({
-    trades: { page: 0, selectedIndex: null }, orders: { page: 0, selectedIndex: null },
+  const [section, setSection] = useState<"trades" | "orders" | "closed_trades">("trades");
+  const [positions, setPositions] = useState<Record<typeof section, { page: number; selectedIndex: number | null }>>({
+    trades: { page: 0, selectedIndex: null }, orders: { page: 0, selectedIndex: null }, closed_trades: { page: 0, selectedIndex: null },
   });
   const { page, selectedIndex } = positions[section];
   const setPage = (next: number) => setPositions((current) => ({ ...current, [section]: { ...current[section], page: next } }));
-  const scrollPositions = useRef({ trades: 0, orders: 0 });
+  const scrollPositions = useRef({ trades: 0, orders: 0, closed_trades: 0 });
   const table = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     if (table.current && active && view !== "overview") table.current.scrollTop = scrollPositions.current[section];
   }, [section, active, view]);
-  const selectedRow = selectedIndex === null ? undefined : run.result?.[section][selectedIndex];
+  const selectedRow = selectedIndex === null ? undefined : run.result?.[section]?.[selectedIndex];
   const focus = useMemo(() => selectedRow ? strategyTradeFocus(selectedRow, `${run.run_id}:${section}:${selectedIndex}`) : null, [selectedRow, run.run_id, section, selectedIndex]);
   useEffect(() => {
     if (!active) return;
@@ -89,10 +90,10 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
     return () => onReviewTrade?.(null);
   }, [active, focus, onReviewTrade]);
   const selectRow = (index: number, focusRow = false) => {
-    if (!run.result?.[section][index]) return;
+    if (!run.result?.[section]?.[index]) return;
     setPositions((current) => ({ ...current, [section]: { selectedIndex: index, page: Math.floor(index / 50) } }));
     if (!onReviewTrade) {
-      const row = run.result?.[section][index];
+      const row = run.result?.[section]?.[index];
       const target = row ? strategyTradeFocus(row, String(index)) : null;
       if (target) onLocate?.(target.entryTimeMs);
     }
@@ -111,8 +112,8 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
   const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
   const display = (value: number | null) => value == null ? "—" : value === Infinity ? "∞" : number.format(value);
   const percent = (value: number | null) => formatReportPercent(value, locale);
-  const grouped = section === "trades" && run.execution_mode !== "CANDLESCOPE";
-  const rows = result[section];
+  const grouped = section === "closed_trades" || (section === "trades" && run.execution_mode !== "CANDLESCOPE");
+  const rows = result[section] ?? [];
   const sourceColumns = [...new Set(rows.flatMap((row) => Object.keys(row)))].filter((column) => !["entryBarIndex", "exitBarIndex"].includes(column));
   const preferred = ["side", "direction", "entryTime", "entry_time", "entry_time_ms", "entryPrice", "entry_price", "exitTime", "exit_time", "exit_time_ms", "exitPrice", "exit_price", "qty", "quantity", "profit", "net_pnl"];
   const columns = [...preferred.filter((key) => sourceColumns.includes(key)), ...sourceColumns.filter((key) => !preferred.includes(key))];
@@ -155,6 +156,7 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
   return <section className="native-report" data-view={view}>
     <div className="native-report-context"><span>{run.config?.context?.symbol ?? "—"} · {run.config?.interval ?? run.config?.context?.timeframe ?? "—"}</span><span>{t("report.range")} · {analytics.equity.length ? `${new Date(analytics.equity[0]!.time * 1000).toLocaleDateString(locale)} — ${new Date(analytics.equity.at(-1)!.time * 1000).toLocaleDateString(locale)}` : "—"}</span><span>{t("report.sample")} · {display(analytics.baseline)}</span></div>
     {controls && <div className="native-report-toolbar">{controls}</div>}
+    {result.account_model === "SPOT_CASH_V1" && <p className="native-report-caption">{t("ux.spotCashHint")}</p>}
 
     <div hidden={view === "trades"}>
     <div className="native-report-metrics">
@@ -174,7 +176,8 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
     <div className="native-trade-view" hidden={view === "overview"}>
     {grouped && <p className="native-report-caption">{t("report.tradeBasis")}</p>}
     <div className="native-trade-controls">
-    <div className="native-trade-sections"><button aria-pressed={section === "trades"} onClick={() => setSection("trades")}>{t("native.trades")} ({result.trades.length})</button>
+    <div className="native-trade-sections"><button aria-pressed={section === "trades"} onClick={() => setSection("trades")}>{t(run.execution_mode === "CANDLESCOPE" ? "native.external.fill" : "native.trades")} ({result.trades.length})</button>
+      {run.execution_mode === "CANDLESCOPE" && result.closed_trades && <button aria-pressed={section === "closed_trades"} onClick={() => setSection("closed_trades")}>{t("native.trades")} ({result.closed_trades.length})</button>}
       <button aria-pressed={section === "orders"} onClick={() => setSection("orders")}>{t("native.orders")} ({result.orders.length})</button></div>
     <div className="strategy-trade-navigation" aria-label={t("strategyReview.navigation")}>
       <button disabled={!rows.length || selectedIndex === 0} onClick={() => selectRow(selectedIndex === null ? 0 : selectedIndex - 1)}>{t("strategyReview.previous")}</button>
@@ -209,7 +212,7 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
             if (event.key === "ArrowUp" || event.key === "ArrowDown") { event.preventDefault(); selectRow(Math.max(0, Math.min(rows.length - 1, absolute + (event.key === "ArrowUp" ? -1 : 1))), true); }
           }}>{grouped ? <>
             <td><strong>#{absolute + 1} · {String(row.id ?? "—")}</strong><small className={trade.side === "short" ? "negative" : trade.side === "long" ? "positive" : undefined}>{t(trade.side === "long" ? "report.long" : trade.side === "short" ? "report.short" : "report.unknownSide")}</small></td>
-            <td><span>{t("native.entry")} · {date(trade.focus?.entryTimeMs)}</span><small>{t("native.exit")} · {date(trade.focus?.exitTimeMs)}</small></td>
+            <td><span>{t("chartTester.result.entry")} · {date(trade.focus?.entryTimeMs)}</span><small>{t("chartTester.result.exit")} · {date(trade.focus?.exitTimeMs)}</small></td>
             <td><span>{formatCell("price", trade.focus?.entryPrice)}</span><small>{formatCell("price", trade.focus?.exitPrice)}</small></td>
             <td>{formatCell("qty", trade.quantity)}</td>
             <td className={trade.profit == null ? undefined : trade.profit < 0 ? "negative" : "positive"}><strong>{display(trade.profit)}</strong><small title={trade.derivedReturn ? t("report.notionalReturn") : undefined}>{percent(trade.returnPercent)}{trade.derivedReturn && "*"}</small></td>
@@ -220,6 +223,7 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
     <details className="native-report-disclosure"><summary>{t("report.details")}</summary><div className="native-report-toolbar">
     <details className="native-report-method"><summary>{t("native.mode")}</summary>
     <p><strong>{result.account_authority}</strong> · {run.execution_mode === "CANDLESCOPE" && run.runtime_identity.engine.package} {run.runtime_identity.engine.version} · {result.fill_model}{result.fidelity && <> · {result.fidelity}</>}</p>
+    {result.evaluation_contract && <p><code>{result.evaluation_contract}</code></p>}
     {run.config?.context && <p>{run.config.context.symbol} · {run.config.interval} · {JSON.stringify(run.config.parameters)}</p>}
     <p>{t(run.execution_mode === "CANDLESCOPE" ? "native.external.authority" : "native.authority")}</p>
     {result.fidelity === "BOOK_DEPTH" && <p>{t("native.external.depthHint")}</p>}

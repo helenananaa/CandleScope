@@ -3,8 +3,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sqlite3
+import threading
 import time
+import weakref
+from collections.abc import Iterable
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -29,24 +33,121 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
+_SeriesValues = tuple[str, ...]
+_SideRows = dict[str, dict[str, Any]]
+
+
+class _BoundaryRowCache:
+    """Process-wide copy of ``history_series_boundaries`` for one database.
+
+    Backfill planning and calendar resolution read boundaries synchronously on
+    the event loop for every gap-audit series, repair request and calendar
+    lookup, so reads are answered from memory instead of opening SQLite.
+
+    ``HistoryBoundaryRepository`` is the only writer of the table.  Writers
+    hold ``write_lock`` across their transaction and copy the touched rows
+    from the same connection after commit, so in-process readers never see a
+    row older than the last committed write.  Rows written by another process
+    are only picked up when a repository for the file is constructed again.
+    """
+
+    def __init__(self) -> None:
+        self.write_lock = threading.RLock()
+        self._lock = threading.Lock()
+        self._series: dict[_SeriesValues, _SideRows] | None = None
+
+    def series(self, values: _SeriesValues) -> _SideRows | None:
+        """Rows by side for one series, or ``None`` until the table is loaded."""
+        with self._lock:
+            if self._series is None:
+                return None
+            return dict(self._series.get(values, {}))
+
+    def replace_all(self, rows: Iterable[sqlite3.Row]) -> None:
+        series: dict[_SeriesValues, _SideRows] = {}
+        for row in rows:
+            series.setdefault(self._row_series(row), {})[row["side"]] = dict(row)
+        with self._lock:
+            self._series = series
+
+    def replace_series(
+        self,
+        values: _SeriesValues,
+        rows: Iterable[sqlite3.Row],
+        *,
+        side: str | None = None,
+    ) -> None:
+        """Replace one series (or one side of it) with freshly read rows."""
+        fresh = {row["side"]: dict(row) for row in rows}
+        with self._lock:
+            if self._series is None:
+                return
+            sides = {} if side is None else dict(self._series.get(values, {}))
+            if side is not None:
+                sides.pop(side, None)
+            sides.update(fresh)
+            if sides:
+                self._series[values] = sides
+            else:
+                self._series.pop(values, None)
+
+    def invalidate(self) -> None:
+        with self._lock:
+            self._series = None
+
+    @staticmethod
+    def _row_series(row: sqlite3.Row) -> _SeriesValues:
+        return (
+            row["exchange"],
+            row["market_type"],
+            row["symbol"],
+            row["channel"],
+            row["variant"],
+            row["params_hash"],
+        )
+
+
+_ROW_CACHES: weakref.WeakValueDictionary[str, _BoundaryRowCache] = (
+    weakref.WeakValueDictionary()
+)
+_ROW_CACHES_LOCK = threading.Lock()
+
+
+def _shared_row_cache(db_path: Path) -> _BoundaryRowCache:
+    """Share one cache between repositories opened on the same file."""
+    # A profile may be opened through a symlink as well as its real path.
+    # Both names must share updates and deletions for the same database.
+    token = os.path.normcase(os.path.realpath(db_path))
+    with _ROW_CACHES_LOCK:
+        cache = _ROW_CACHES.get(token)
+        if cache is None:
+            cache = _BoundaryRowCache()
+            _ROW_CACHES[token] = cache
+        return cache
+
+
 class HistoryBoundaryRepository:
     """Persist evidence about the left/right edge of one historical series.
 
     Rolling-retention cutoffs are intentionally rejected: callers persist the
     retention duration in capabilities and let the planner recalculate its
     absolute cutoff against the current clock.
+
+    Reads are served from a process-wide row cache (see
+    ``_BoundaryRowCache``) that this class keeps current on every write.
     """
 
     def __init__(self, db_path: Path | str | None = None) -> None:
         self._db_path = Path(db_path or KLINES_DB_PATH)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._cache = _shared_row_cache(self._db_path)
         self.init_storage()
 
     def _connect(self) -> sqlite3.Connection:
         return open_sqlite(self._db_path, logger=logger)
 
     def init_storage(self) -> None:
-        with self._connect() as conn:
+        with self._cache.write_lock, self._connect() as conn:
             conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS history_series_boundaries (
@@ -80,6 +181,62 @@ class HistoryBoundaryRepository:
                 ON history_series_boundaries(state, retryable);
                 """
             )
+            self._reload_cache(conn)
+
+    def _reload_cache(self, conn: sqlite3.Connection) -> None:
+        self._cache.replace_all(
+            conn.execute("SELECT * FROM history_series_boundaries").fetchall()
+        )
+
+    def _cached_series(self, key: HistorySeriesKey) -> _SideRows:
+        values = self._key_values(key)
+        rows = self._cache.series(values)
+        if rows is None:
+            # Only after a write failed past its commit; reload once.
+            with self._cache.write_lock:
+                rows = self._cache.series(values)
+                if rows is None:
+                    with self._connect() as conn:
+                        self._reload_cache(conn)
+                    rows = self._cache.series(values) or {}
+        return rows
+
+    def _commit_and_refresh(
+        self,
+        conn: sqlite3.Connection,
+        key: HistorySeriesKey | None,
+        side: BoundarySide | None = None,
+    ) -> None:
+        """Commit a write and copy the rows it touched into the row cache.
+
+        ``key=None`` reloads the whole table.  Callers hold ``write_lock``.
+        """
+        try:
+            conn.commit()
+            if key is None:
+                self._reload_cache(conn)
+                return
+            params: tuple[Any, ...] = self._key_values(key)
+            side_clause = ""
+            if side is not None:
+                side_clause = " AND side = ?"
+                params = (*params, side.value)
+            rows = conn.execute(
+                f"""
+                SELECT * FROM history_series_boundaries
+                WHERE exchange = ? AND market_type = ? AND symbol = ?
+                  AND channel = ? AND variant = ? AND params_hash = ?{side_clause}
+                """,
+                params,
+            ).fetchall()
+            self._cache.replace_series(
+                self._key_values(key),
+                rows,
+                side=(side.value if side is not None else None),
+            )
+        except BaseException:
+            self._cache.invalidate()
+            raise
 
     @staticmethod
     def _key_values(key: HistorySeriesKey) -> tuple[str, ...]:
@@ -106,7 +263,7 @@ class HistoryBoundaryRepository:
             raise ValueError("dynamic rolling-retention bounds must not be persisted")
         increment = max(1, int(evidence_increment))
         observed_at = _now_ms() if observed_at_ms is None else int(observed_at_ms)
-        with self._connect() as conn:
+        with self._cache.write_lock, self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             existing = conn.execute(
                 """
@@ -138,7 +295,7 @@ class HistoryBoundaryRepository:
                             """,
                             (increment, observed_at, *self._key_values(key), side.value),
                         )
-                        conn.commit()
+                        self._commit_and_refresh(conn, key, side)
                         record = self.get(key, side, include_stale=True)
                         assert record is not None
                         return record
@@ -200,7 +357,7 @@ class HistoryBoundaryRepository:
                         json.dumps(dict(bound.metadata), sort_keys=True, default=str),
                     ),
                 )
-            conn.commit()
+            self._commit_and_refresh(conn, key, side)
         record = self.get(key, side, include_stale=True)
         assert record is not None
         return record
@@ -215,15 +372,7 @@ class HistoryBoundaryRepository:
         include_stale: bool = False,
     ) -> StoredHistoryBoundary | None:
         side = BoundarySide(side)
-        with self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT * FROM history_series_boundaries
-                WHERE exchange = ? AND market_type = ? AND symbol = ?
-                  AND channel = ? AND variant = ? AND params_hash = ? AND side = ?
-                """,
-                (*self._key_values(key), side.value),
-            ).fetchone()
+        row = self._cached_series(key).get(side.value)
         if row is None:
             return None
         record = self._row_to_record(row)
@@ -242,17 +391,8 @@ class HistoryBoundaryRepository:
         revision: str | None = None,
         include_stale: bool = False,
     ) -> tuple[StoredHistoryBoundary, ...]:
-        with self._connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT * FROM history_series_boundaries
-                WHERE exchange = ? AND market_type = ? AND symbol = ?
-                  AND channel = ? AND variant = ? AND params_hash = ?
-                ORDER BY side
-                """,
-                self._key_values(key),
-            ).fetchall()
-        records = tuple(self._row_to_record(row) for row in rows)
+        rows = self._cached_series(key)
+        records = tuple(self._row_to_record(rows[side]) for side in sorted(rows))
         if include_stale:
             return records
         return tuple(
@@ -290,7 +430,7 @@ class HistoryBoundaryRepository:
         if side is not None:
             side_clause = " AND side = ?"
             params = (*params, BoundarySide(side).value)
-        with self._connect() as conn:
+        with self._cache.write_lock, self._connect() as conn:
             cursor = conn.execute(
                 f"""
                 DELETE FROM history_series_boundaries
@@ -299,12 +439,17 @@ class HistoryBoundaryRepository:
                 """,
                 params,
             )
-            conn.commit()
-            return int(cursor.rowcount)
+            deleted = int(cursor.rowcount)
+            self._commit_and_refresh(
+                conn,
+                key,
+                BoundarySide(side) if side is not None else None,
+            )
+            return deleted
 
     def delete_stale(self, *, now_ms: int | None = None) -> int:
         current_ms = _now_ms() if now_ms is None else int(now_ms)
-        with self._connect() as conn:
+        with self._cache.write_lock, self._connect() as conn:
             cursor = conn.execute(
                 """
                 DELETE FROM history_series_boundaries
@@ -312,8 +457,9 @@ class HistoryBoundaryRepository:
                 """,
                 (current_ms,),
             )
-            conn.commit()
-            return int(cursor.rowcount)
+            deleted = int(cursor.rowcount)
+            self._commit_and_refresh(conn, None)
+            return deleted
 
     def load_availability(
         self,

@@ -333,7 +333,7 @@ test("forced recompute bypasses completed work but still joins the same in-fligh
   const joinedResult = await joinedForce;
   assert.equal(joinedResult.joined, 1);
   assert.equal(joinedResult.queued, 0);
-  assert.deepEqual(joinedResult.results, []);
+  assert.deepEqual(joinedResult.results, [{ jobKey: "A:ma" }]);
   assert.equal((await forced).results.length, 1);
 });
 
@@ -415,4 +415,136 @@ test("a caller can acknowledge a durably cached result as completed", async () =
   });
   assert.equal(reused.skipped, 1);
   assert.equal(reused.queued, 0);
+});
+
+test("independent results publish once before a slow sibling and are reusable immediately", async () => {
+  const coordinator = createIndicatorComputeJobCoordinator();
+  const seen: string[] = [];
+  let finish!: () => void, firstReady!: () => void;
+  const gate = new Promise<void>(resolve => { finish = resolve; });
+  const ready = new Promise<void>(resolve => { firstReady = resolve; });
+  const work = coordinator.schedule({
+    lifecycleKey: "A", jobs: [{ jobKey: "ma" }, { jobKey: "rsi" }],
+    onResults: results => seen.push(...results.map(result => result.jobKey)),
+    execute: async (jobs, _signal, publish) => {
+      publish([jobs[0]!, { jobKey: "unsubmitted" }]); firstReady();
+      await gate;
+      publish([jobs[0]!, jobs[1]!]);
+      return jobs;
+    },
+  });
+  await ready;
+  assert.deepEqual(seen, ["ma"]);
+  const cached = await coordinator.schedule({ lifecycleKey: "A", jobs: [{ jobKey: "ma" }], execute: async () => { throw new Error("duplicated"); } });
+  assert.equal(cached.skipped, 1);
+  finish();
+  await work;
+  assert.deepEqual(seen, ["ma", "rsi"]);
+});
+
+test("stale or failed batch callbacks cannot publish late results", async () => {
+  for (const mode of ["activate", "dispose", "failure"] as const) {
+    const coordinator = createIndicatorComputeJobCoordinator();
+    const seen: string[] = [];
+    let publish!: (results: { jobKey: string }[]) => void, finish!: () => void;
+    const gate = new Promise<void>(resolve => { finish = resolve; });
+    const work = coordinator.schedule({ lifecycleKey: "A", jobs: [{ jobKey: "fast" }, { jobKey: "slow" }],
+      onResults: results => seen.push(...results.map(result => result.jobKey)),
+      execute: async (jobs, _signal, emit) => {
+        publish = emit; emit([jobs[0]!]); await gate;
+        if (mode === "failure") throw new Error("network failed");
+        emit([jobs[1]!]); return jobs;
+      } });
+    await Promise.resolve();
+    if (mode === "activate") coordinator.activate("B");
+    if (mode === "dispose") coordinator.dispose();
+    finish();
+    if (mode === "failure") await assert.rejects(work, /network failed/); else assert.equal((await work).stale, true);
+    publish([{ jobKey: "slow" }]);
+    assert.deepEqual(seen, ["fast"]);
+  }
+});
+
+test("an old rejection cannot overwrite a successor that returned to the same lifecycle key", async () => {
+  const coordinator = createIndicatorComputeJobCoordinator();
+  let finish!: () => void;
+  const gate = new Promise<void>(resolve => { finish = resolve; });
+  const old = coordinator.schedule({ lifecycleKey: "A", jobs: [{ jobKey: "study" }],
+    execute: async () => { await gate; throw new DOMException("old source cancelled", "AbortError"); } });
+  await Promise.resolve();
+  coordinator.activate("B");
+  const current = await coordinator.schedule({ lifecycleKey: "A", jobs: [{ jobKey: "study" }], execute: async jobs => jobs });
+  assert.equal(current.results.length, 1);
+  finish();
+  const obsolete = await old;
+  assert.equal(obsolete.stale, true);
+  assert.deepEqual(obsolete.results, []);
+});
+
+
+test("forced restoration replays already published joined results and only its requested keys", async () => {
+  const coordinator = createIndicatorComputeJobCoordinator();
+  let release: (() => void) | undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const rendered = new Set<string>();
+  let physical = 0;
+  const original = coordinator.schedule({
+    lifecycleKey: "A", jobs: [{ jobKey: "ma" }, { jobKey: "rsi" }, { jobKey: "script" }],
+    isResultComplete: () => false,
+    onResults: results => {
+      for (const result of results) rendered.add(result.jobKey);
+      coordinator.complete(results.map(result => result.jobKey));
+    },
+    execute: async (jobs, _signal, publish) => {
+      physical++;
+      publish(jobs.slice(0, 2));
+      await gate;
+      publish(jobs.slice(2));
+      return jobs;
+    },
+  });
+  await Promise.resolve();
+  assert.deepEqual([...rendered], ["ma", "rsi"]);
+  // A workspace definition restore clears runtime output while scripts are pending.
+  rendered.clear();
+  const restored = coordinator.schedule({
+    lifecycleKey: "A", force: true,
+    jobs: [{ jobKey: "ma" }, { jobKey: "script" }, { jobKey: "new" }],
+    execute: async jobs => { physical++; return jobs; },
+  });
+  release?.();
+  const result = await restored;
+  await original;
+  assert.equal(physical, 2);
+  assert.equal(result.joined, 2);
+  assert.equal(result.queued, 1);
+  assert.deepEqual(result.results.map(item => item.jobKey), ["ma", "script", "new"]);
+  for (const item of result.results) rendered.add(item.jobKey);
+  assert.deepEqual([...rendered].sort(), ["ma", "new", "script"]);
+});
+
+test("forced joined restoration rejects an obsolete lifecycle even after returning to the same key", async () => {
+  const coordinator = createIndicatorComputeJobCoordinator();
+  let release: (() => void) | undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const jobs = [{ jobKey: "ma" }];
+  const original = coordinator.schedule({
+    lifecycleKey: "A", jobs,
+    execute: async () => { await gate; return [{ jobKey: "ma", value: "old-prefix" }]; },
+  });
+  const restored = coordinator.schedule({
+    lifecycleKey: "A", jobs, force: true,
+    execute: async () => { throw new Error("joined work must not execute twice"); },
+  });
+  coordinator.activate("B");
+  const successor = await coordinator.schedule({
+    lifecycleKey: "A", jobs,
+    execute: async () => [{ jobKey: "ma", value: "current-prefix" }],
+  });
+  release?.();
+  const obsolete = await restored;
+  await original;
+  assert.equal(obsolete.stale, true);
+  assert.deepEqual(obsolete.results, []);
+  assert.deepEqual(successor.results, [{ jobKey: "ma", value: "current-prefix" }]);
 });

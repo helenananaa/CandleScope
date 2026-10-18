@@ -1408,6 +1408,20 @@ def insert_pin(
     )
 
 
+def current_card_row(connection: sqlite3.Connection, row: Mapping[str, object]) -> Mapping[str, object]:
+    if row["kind"] != "V2" or row["equity_status"] != "CURRENT" or row["equity"] is None:
+        return row
+    from .portfolio import current_hedge_card_equity
+
+    try:
+        equity = current_hedge_card_equity(connection, str(row["run_id"]))
+    except TrainingRunError:
+        # An unavailable wallet must not make every other archive disappear or
+        # retain a balance that is already known to be untrustworthy.
+        return {**dict(row), "equity": None, "equity_status": "STALE"}
+    return row if equity is None else {**dict(row), "equity": equity}
+
+
 def card_from_row(row: Mapping[str, object]) -> dict[str, object]:
     unavailable = row["compatibility"] == "UNAVAILABLE"
     if row["status_reason"] == "HEDGE_INPUT_RECOVERY_REQUIRED" and row["resume_action"] == "OPEN_ADAPTER":

@@ -1,11 +1,12 @@
 """Preparation tasks are durable; disconnecting an HTTP observer never cancels one."""
 from typing import Literal
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.data_preparation.models import PreparationError, PreparationRequest, Requirement
 from app.replay.request_contracts import TrainingRunSetupPayload
 from app.backtest.request_contracts import ChartContextResolveRequest, ResearchExecutionOverrides
+from app.backtest.native_contracts import HostMatchingSettings, ExternalRunRequest
 from app.api.v1.backtests import _operator_python_payload
 
 router = APIRouter(prefix="/data-preparations", tags=["data-preparation"])
@@ -49,6 +50,50 @@ class NativeDependencyPayload(BaseModel):
     warmup_bars: int | None = Field(default=None, strict=True, ge=0, le=5000)
 
 
+class AutomaticHostExecution(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    execution_fidelity: Literal["BAR_APPROX", "TRADE_TAPE"] = "BAR_APPROX"
+    host_settings: HostMatchingSettings = Field(default_factory=HostMatchingSettings)
+    fill_recalculation: bool = False
+
+    @model_validator(mode="after")
+    def check_callbacks(self):
+        if self.execution_fidelity == "BAR_APPROX" and self.fill_recalculation:
+            raise ValueError("fill callbacks require TRADE_TAPE")
+        return self
+
+
+class FrozenExternalPreparationPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    idempotency_key: str = Field(min_length=8, max_length=128)
+    run: ExternalRunRequest
+
+
+@router.post("/external-strategy", status_code=202)
+async def prepare_frozen_external_strategy(request: Request, payload: FrozenExternalPreparationPayload):
+    """Acquire execution prints while preserving the selected signal snapshots."""
+    from app.data_preparation.models import canonical
+    from app.data_preparation.native_plan import validate_frozen_external
+    submission = payload.model_dump(mode="json")
+    instance = service(request)
+    prior = await invoke_async(lambda: instance.storage(instance.repository.by_idempotency, payload.idempotency_key))
+    if prior is not None:
+        if canonical(prior["request"]["intent"].get("submission")) != canonical(submission):
+            raise HTTPException(409, detail={"code": "IDEMPOTENCY_CONFLICT", "message": "Key belongs to another frozen strategy preparation"})
+        return prior
+    runtime = getattr(request.app.state, "backtest_runtime", None)
+    if runtime is None or not runtime.settings.bar_effective or not runtime.settings.trade_tape_effective:
+        raise HTTPException(409, detail={"code": "TRADE_ENGINE_DISABLED", "message": "Precise strategy execution is disabled"})
+    run = payload.run.model_dump(mode="json")
+    await call_storage(request, validate_frozen_external, runtime, run)
+    requirement = Requirement(exchange=run["exchange"], market_type=run["market_type"],
+        symbol=run["context"]["symbol"].split(":")[-1], role="TRADES",
+        start_ms=run["start_time_ms"], end_ms=run["end_time_ms"] + 1)
+    return await invoke_async(lambda: instance.submit(PreparationRequest(
+        idempotency_key=payload.idempotency_key, consumer="STRATEGY", requirements=[requirement],
+        intent={"submission": submission, "native_strategy": {"frozen_payload": run}})))
+
+
 class NativePreparationPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     idempotency_key: str = Field(min_length=8, max_length=128)
@@ -58,6 +103,7 @@ class NativePreparationPayload(BaseModel):
     parameters: dict = Field(default_factory=dict)
     contexts: list[NativeDependencyPayload] = Field(default_factory=list, max_length=16)
     libraries: dict[str, str] = Field(default_factory=dict)
+    execution: AutomaticHostExecution | None = None
 
 
 @router.post("/native-strategy", status_code=202)
@@ -68,6 +114,9 @@ async def prepare_native_strategy(request: Request, payload: NativePreparationPa
     from app.data_preparation.native_plan import requested_contexts, requested_lookbacks, chart_interval, plan_inputs
     from app.backtest.chart_context import ChartContextRequest
     submission = payload.model_dump(mode="json")
+    if payload.execution is None:
+        # Preserve the existing idempotency shape for native jobs.
+        submission.pop("execution")
     prior = await invoke_async(lambda: service(request).storage(service(request).repository.by_idempotency, payload.idempotency_key))
     if prior is not None:
         if canonical(prior["request"]["intent"].get("submission")) != canonical(submission):
@@ -76,6 +125,9 @@ async def prepare_native_strategy(request: Request, payload: NativePreparationPa
     runtime = getattr(request.app.state, "backtest_runtime", None)
     if runtime is None or not runtime.settings.bar_effective or not runtime.settings.chart_context_effective:
         raise HTTPException(503, detail={"code": "NATIVE_PREPARATION_UNAVAILABLE", "message": "Native BAR preparation is unavailable"})
+    if (payload.execution is not None and payload.execution.execution_fidelity == "TRADE_TAPE"
+            and not runtime.settings.trade_tape_effective):
+        raise HTTPException(409, detail={"code": "TRADE_ENGINE_DISABLED", "message": "Precise strategy execution is disabled"})
     if payload.context.fidelity_preference != "FAST":
         raise HTTPException(409, detail={"code": "NATIVE_INPUT_UNSUPPORTED", "message": "Native execution requires its own BAR input profile"})
     context = payload.context.model_dump()
@@ -128,10 +180,18 @@ async def prepare_native_strategy(request: Request, payload: NativePreparationPa
     if len(dependencies) > 16:
         raise HTTPException(409, detail={"code": "DEPENDENCY_LIMIT", "message": "Native execution supports at most 16 requested contexts"})
     requirements, bindings = invoke(lambda: plan_inputs(context, dependencies))
+    if payload.execution is not None and payload.execution.execution_fidelity == "TRADE_TAPE":
+        # Only the primary market drives matching. Requested signal contexts
+        # remain independently frozen bars, never surrogate execution prices.
+        primary = bindings[0]
+        requirements.append(Requirement(exchange=primary["exchange"], market_type=primary["market_type"],
+            symbol=context["symbol"], role="TRADES", start_ms=primary["start_time_ms"],
+            end_ms=primary["end_time_ms"] + 1))
     prepared = PreparationRequest(idempotency_key=payload.idempotency_key, consumer="STRATEGY",
         requirements=requirements, intent={"submission": submission, "native_strategy": {
             "language": payload.language, "source": payload.source, "parameters": payload.parameters,
-            "libraries": payload.libraries, "bindings": bindings, "dependency_requirements": dependencies}})
+            "libraries": payload.libraries, "bindings": bindings, "dependency_requirements": dependencies,
+            **({"execution": payload.execution.model_dump(mode="json")} if payload.execution is not None else {})}})
     return await invoke_async(lambda: service(request).submit(prepared))
 
 

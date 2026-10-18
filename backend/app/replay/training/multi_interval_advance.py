@@ -74,6 +74,17 @@ async def resume_advance(owner, *, command, binding, intent):
         )
     target = int(intent["target_virtual_time_ms"])
     snapshot = service_validation_ops.adapter_snapshot(await service.get_session(intent["session_id"]))
+    source_goal = None
+    target_sequence = intent["plan"].get("target_source_sequence")
+    if target_sequence is not None:
+        remaining = target_sequence - snapshot["cursor"]["source_sequence"]
+        if remaining < 0:
+            raise TrainingRunError("ADVANCE_INTENT_CURSOR_CONFLICT", "source count exceeded the committed target", status_code=409)
+        if remaining:
+            source_goal = await owner._ordered_source_goal(tracks, max_events=remaining, expected_snapshot=snapshot)
+            if (source_goal is None or source_goal.target_virtual_time_ms != target
+                    or source_goal.target_source_sequence != target_sequence):
+                raise TrainingRunError("ADVANCE_INTENT_CURSOR_CONFLICT", "source count target changed after restart", status_code=409)
     decision = owner._plan_fast_forward(
         binding=binding, snapshot=snapshot, tracks=tracks, target_virtual_time_ms=target
     )
@@ -96,7 +107,7 @@ async def resume_advance(owner, *, command, binding, intent):
     owner._advance_jobs[key] = job
     event_stop = {} if control_rules_ops.stop_on_event(command) else None
     try:
-        if snapshot["cursor"]["virtual_time_ms"] < target:
+        if snapshot["cursor"]["virtual_time_ms"] < target or source_goal is not None:
             await owner._advance_full_tracks_to(
                 command=command,
                 binding=binding,
@@ -106,6 +117,7 @@ async def resume_advance(owner, *, command, binding, intent):
                 allow_final_state_batch=True,
                 audit_account_at_barrier=False,
                 event_stop=event_stop,
+                source_goal=source_goal,
             )
         final = service_validation_ops.adapter_snapshot(await service.get_session(intent["session_id"]))
         cancelled = job["status"] == "CANCELLED"

@@ -1,0 +1,12 @@
+{
+  "schema_version": "candlescope.external-provider/1",
+  "provider_id": "example.rolling_mean",
+  "provider_revision": "1",
+  "provider_kind": "MODEL",
+  "input_modes": ["BAR_CLOSE"],
+  "output_modes": ["TARGET_POSITION"],
+  "required_features": ["close"],
+  "warmup_bars": 3,
+  "snapshot_restore": true,
+  "reproducibility": "RECORDED_OUTPUT_ONLY"
+}

@@ -17,16 +17,23 @@ from app.simulation.kernel import SimulationKernel
 from app.data_engine.interval_policy import parse_interval_spec
 from .errors import BacktestError
 from .external_orders import ExternalOrders
+from .external_report import closed_trades
 
 
 def host_identity():
     import app.simulation.kernel as kernel_module
-    files = [Path(__file__), Path(__file__).with_name("native_session.py"), Path(__file__).with_name("external_orders.py"), Path(__file__).with_name("external_market.py"), Path(__file__).with_name("external_feedback.py"), *sorted(Path(kernel_module.__file__).parent.rglob("*.py"))]
+    files = [Path(__file__), Path(__file__).with_name("native_session.py"), Path(__file__).with_name("external_orders.py"), Path(__file__).with_name("external_report.py"), Path(__file__).with_name("external_market.py"), Path(__file__).with_name("external_feedback.py"), Path(__file__).with_name("external_incremental.py"), *sorted(Path(kernel_module.__file__).parent.rglob("*.py"))]
     checksum = hashlib.sha256()
     for path in files:
         checksum.update(path.name.encode())
         checksum.update(path.read_bytes())
-    return {"contract": "external-broker/1", "host_model": "SAMPLED_BOOK_VISIBLE_TAKER_V9", "code_sha256": checksum.hexdigest()}
+    return {"contract": "external-broker/1", "host_model": "PYNE_FIXED_HISTORY_V12_CLOSED_TRADES", "code_sha256": checksum.hexdigest()}
+
+
+def account_feedback_profit(account, initial_balance):
+    # Buying an asset spends cash, but is not a realized trading loss. This
+    # formula also preserves the legacy derivative account's net-profit value.
+    return account.equity() - initial_balance - account.unrealized()
 
 
 def visible_contexts(wire, boundary_ms):
@@ -53,11 +60,14 @@ def resolve_external(language):
 def run_external_host(plugin, wire, runner, cancelled):
     from .native import invoke
     from .native_session import SessionWorker
-    if runner is invoke and wire["identity"].get("adapter") in {"pine-external/5", "pyne-external/4"}:
+    if runner is invoke and wire["identity"].get("adapter") in {"pine-external/5", "pyne-external/4", "pyne-external/5"}:
         worker = SessionWorker(plugin, wire, cancelled, evaluator=True)
         try:
-            return _run_external_host(plugin, wire,
-                lambda _plugin, payload, **kwargs: worker.request(payload, **kwargs), cancelled)
+            evaluate = lambda _plugin, payload, **kwargs: worker.request(payload, **kwargs)
+            if wire["identity"].get("adapter") == "pyne-external/5":
+                from .external_incremental import IncrementalEvaluator
+                evaluate = IncrementalEvaluator(worker, len(wire["bars"]))
+            return _run_external_host(plugin, wire, evaluate, cancelled)
         finally:
             worker.close()
     return _run_external_host(plugin, wire, runner, cancelled)
@@ -74,7 +84,8 @@ def _run_external_host(plugin, wire, runner, cancelled):
     from app.simulation.sampled_book_kernel import SampledBookKernel
     kernel_type = {"BAR_APPROX":SimulationKernel,"BOOK_ASSISTED":BookAssistedKernel,
                    "TRADE_TAPE":TradeSimulationKernel,"BOOK_DEPTH":DepthQueueKernel,"BOOK_SAMPLED":SampledBookKernel}[fidelity]
-    kernel = kernel_type(initial_balance=Decimal(str(settings["initial_balance"])),
+    kernel = kernel_type(account_model=wire.get("account_model", "LINEAR_PERP_ONE_WAY_V1"),
+                              initial_balance=Decimal(str(settings["initial_balance"])),
                               slippage_bps=Decimal(str(settings["slippage_bps"])),
                               taker_fee_bps=Decimal(str(settings["taker_fee_bps"])))
     interval = parse_interval_spec(wire["interval"])
@@ -94,7 +105,7 @@ def _run_external_host(plugin, wire, runner, cancelled):
         accounts.append({"time": wire["bars"][count - 1]["time"], "position_size": float(account.position_qty),
                          "position_avg_price": None if account.entry_price is None else float(account.entry_price),
                          "equity": float(account.equity()), "initial_capital": float(kernel.initial_balance),
-                         "netprofit": float(account.quote_balance - kernel.initial_balance), "openprofit": float(account.unrealized())})
+                         "netprofit": float(account_feedback_profit(account, kernel.initial_balance)), "openprofit": float(account.unrealized())})
         request = {**{key: value for key, value in wire.items() if key != "execution_events"}, "bars": wire["bars"][:count], "accounts": accounts}
         request["contexts"] = visible_contexts(wire, interval.next_ms(wire["bars"][count - 1]["time"] * 1000))
         latest = runner(plugin, request, cancelled=cancelled, timeout=max(0.1, deadline - time.monotonic()))
@@ -128,12 +139,15 @@ def _run_external_host(plugin, wire, runner, cancelled):
         run_print_clock(kernel, wire, strategy, cancelled)
     report = json.loads(json.dumps(asdict(kernel.result()), default=str))
     return {"execution_mode": "CANDLESCOPE", "account_authority": "candlescope", "identity": wire["identity"],
+            "account_model": kernel.account_model,
+            "evaluation_contract": latest.get("evaluation_contract", "historical-prefix/1"),
             "host_runtime_identity": wire["host_runtime_identity"],
             "fill_model": kernel.fill_policy, "fidelity": ("AGG_TRADE_TAPE" if fidelity == "TRADE_TAPE" and kernel.source_kind == "AGG_TRADE" else fidelity),
             "trades": [{**fill, "time": fill["event_time_ms"] / 1000,
                         "script_order_id": orders.bindings[fill["order_id"]][0],
                         "closed_entries": allocation["closed"], "opened_entry": allocation["opened"]}
                        for fill, allocation in zip(report["fills"], orders.allocations, strict=True)],
+            "closed_trades": closed_trades(report["fills"]),
             "orders": [{**order,"script_order_id":orders.bindings[order["order_id"]][0]} for order in report["orders"]],
             "position": report["ledger"]["account"],
             "equity": [{"time": row["event_time_ms"] / 1000, "value": float(row["equity"])} for row in report["equity_curve"]],

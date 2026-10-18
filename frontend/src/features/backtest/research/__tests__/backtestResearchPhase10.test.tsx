@@ -116,6 +116,46 @@ test("Run deep link derives session from immutable Run config and chart", () => 
   }), false);
 });
 
+test("a queued non-BTC Run keeps its matching frozen context identity before its chart arrives", () => {
+  const run: BacktestRunRecord = { run_id: "bt_queued", dataset_id: context.dataset_identity!.dataset_id,
+    data_epoch: context.dataset_identity!.data_epoch, state: "QUEUED", fidelity_mode: "BAR_APPROX", source_event_kind: "BAR",
+    config_hash: "sha256:queued", config_json: JSON.stringify({ exchange: "okx", market_type: "swap", interval: "1h" }) };
+  assert.equal(researchSessionFromAuthority({ context, run, chart: null }).symbol, "ETHUSDT");
+  assert.notEqual(researchSessionFromAuthority({ context, run: { ...run, data_epoch: "other_epoch" }, chart: null }).symbol, "ETHUSDT");
+  const chart = { run_id: run.run_id, chart_hash: "sha256:chart", symbol: "LTCUSDT", interval: "1m", bars: [], fills: [], equity_curve: [], truncated: false };
+  assert.equal(researchSessionFromAuthority({ context, run: { ...run, state: "COMPLETED" }, chart }).symbol, "LTCUSDT");
+});
+
+test("an imported launch without a quick-test snapshot binds a queued Run through its exact dataset epoch", () => {
+  const run: BacktestRunRecord = { run_id: "bt_imported_queued", dataset_id: "local_ltc", data_epoch: "epoch_ltc",
+    state: "QUEUED", fidelity_mode: "BAR_APPROX", source_event_kind: "BAR", config_hash: "sha256:queued",
+    config_json: JSON.stringify({ exchange: "local", market_type: "spot", interval: "1m" }) };
+  const dataset: BacktestDataset = { dataset_id: "local_ltc", data_epoch: "epoch_ltc", symbol: "LTCUSDT", interval: "1m",
+    name: "imported LTC", rows: 8, first_open_ms: 0, last_close_ms: 479999, strategy_revisions: [] };
+  const input = { context: { ...context, dataset_identity: null }, run, chart: null, dataset };
+  assert.equal(researchSessionFromAuthority(input).symbol, "LTCUSDT");
+  assert.notEqual(researchSessionFromAuthority({ ...input, dataset: { ...dataset, data_epoch: "changed_epoch" } }).symbol, "LTCUSDT");
+  assert.notEqual(researchSessionFromAuthority({ ...input, dataset: { ...dataset, dataset_id: "different_dataset" } }).symbol, "LTCUSDT");
+});
+
+test("a legacy queued trade Run uses its verified snapshot rather than a different BAR catalog epoch", () => {
+  const run: BacktestRunRecord = { run_id: "bt_trade_queued", dataset_id: "local_ltc", data_epoch: "trade_epoch",
+    snapshot_hash: "trade_hash", state: "QUEUED", fidelity_mode: "AGG_TRADE_EXECUTION", source_event_kind: "AGG_TRADE",
+    config_hash: "sha256:queued", config_json: JSON.stringify({ exchange: "binance", market_type: "futures", interval: "1m", symbol: null }) };
+  const dataset: BacktestDataset = { dataset_id: "local_ltc", data_epoch: "bar_epoch", symbol: "LTCUSDT", interval: "1m",
+    name: "original imported BARs", rows: 6, first_open_ms: 0, last_close_ms: 359999, strategy_revisions: [] };
+  const tradeSnapshot: BacktestSnapshot = { data_epoch: "trade_epoch", snapshot_hash: "trade_hash",
+    coverage_start_ms: 0, coverage_end_ms: 359999, row_count: 355, quality: {}, fidelity_capabilities: ["AGG_TRADE_EXECUTION"],
+    catalog_dataset_id: "local_ltc", identity: { symbol: "LTCUSDT" } };
+  const input = { context: null, run, chart: null, dataset, snapshot: tradeSnapshot };
+  assert.equal(researchSessionFromAuthority(input).symbol, "LTCUSDT");
+  assert.equal(researchSessionFromAuthority({ ...input, run: { ...run, config_json: JSON.stringify({ symbol: "WRONGUSDT" }) } }).symbol, "LTCUSDT");
+  for (const changed of [{ data_epoch: "different_epoch" }, { snapshot_hash: "different_hash" },
+    { catalog_dataset_id: "different_dataset" }, { identity: { symbol: 42 } }]) {
+    assert.notEqual(researchSessionFromAuthority({ ...input, snapshot: { ...tradeSnapshot, ...changed } }).symbol, "LTCUSDT");
+  }
+});
+
 test("selected Run overrides a launch context from another chart", () => {
   const run: BacktestRunRecord = {
     run_id: "bt_result_btc_12345678",

@@ -18,6 +18,14 @@ export const FUTURE_TIME_AXIS_ORDINAL_ORDER_START = Number.MAX_SAFE_INTEGER
 
 const EMPTY_PLAN_KEY = "future-time-axis:empty";
 
+/** Only the invisible carrier series receives this render anchor. Whitespace
+ * alone extends time points but not LWC's scrollable base index, so a sparse
+ * synthetic view near the revealed edge is silently clamped two bars left.
+ * The zero is never source, indicator, drawing, export or execution data. */
+export function futureTimeAxisRenderData(data: readonly ChartSeriesRow[]): ChartSeriesRow[] {
+  return data.map((row, index) => index === data.length - 1 ? { ...row, value: 0 } : row);
+}
+
 function finiteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }

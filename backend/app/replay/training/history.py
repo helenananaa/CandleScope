@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
@@ -29,7 +30,6 @@ from app.replay.market_halts import ReplayBarHalt, validate_registered_bar_halts
 from app.replay.models import ReplaySessionConfig
 
 from .errors import TrainingRunError
-
 
 HISTORY_SCHEMA_VERSION = "replay.history.v3"
 HISTORY_EPOCH_SCHEMA_VERSION = "replay.history-epoch.v6"
@@ -164,7 +164,10 @@ def is_requested_horizon_dataset(persisted: Mapping[str, object]) -> bool:
 def _progressive_repository(persisted, repository, factory):
     if not is_progressive_dataset(persisted):
         return repository, False
-    from app.replay.progressive_history import ProgressiveHistoryRepository, validate_manifest
+    from app.replay.progressive_history import (
+        ProgressiveHistoryRepository,
+        validate_manifest,
+    )
     decoded = _decode_bar_snapshot_blob(bytes(persisted["snapshot_blob"]))
     manifest = validate_manifest(decoded.paging_manifest, decoded.snapshot)
     if factory is None:
@@ -534,7 +537,9 @@ def _bound_source_start_ms(
     source_revision = snapshot.provenance.source_revision
     try:
         if source_revision is not None:
-            get_bounds = getattr(repository, "get_bounds_at_revision", None)
+            get_bounds = getattr(repository, "get_history_bounds_at_revision", None)
+            if not callable(get_bounds):
+                get_bounds = getattr(repository, "get_bounds_at_revision", None)
             if not callable(get_bounds):
                 raise RuntimeError("bound replay-history revision has no bounds reader")
             bounds = get_bounds(
@@ -555,10 +560,11 @@ def _bound_source_start_ms(
     except TrainingRunError:
         raise
     except Exception as exc:
-        raise _fail(
+        raise TrainingRunError(
             "HISTORY_SOURCE_UNAVAILABLE",
             "replay history listing boundary could not be read",
             status_code=503,
+            details={"retryable": getattr(exc, "retryable", False) is True},
         ) from exc
     if not isinstance(bounds, Mapping):
         raise _fail(
@@ -580,9 +586,17 @@ def _bound_source_start_ms(
         bounds.get("earliest_open_time"),
     )
     source_start_ms = _safe_bound(raw_start)
+    latest_start_ms = fallback_start_ms
+    if bounds.get("history_origin_complete") is True:
+        # Legacy official catalogs stored midnight availability as the Run's
+        # ALL_AVAILABLE preference. A verified partial first day may refine
+        # that preference, but must still cover every frozen warmup row.
+        frozen_first = (snapshot.warmup_rows[0].open_time_ms
+                        if snapshot.warmup_rows else snapshot.replay_start_ms)
+        latest_start_ms = actual_replay_start_ms + frozen_first - snapshot.replay_start_ms
     if (
         source_start_ms is None
-        or source_start_ms > fallback_start_ms
+        or source_start_ms > latest_start_ms
         or source_start_ms > actual_replay_start_ms
         or compute_bucket_start_ms(
             source_start_ms,
@@ -603,7 +617,7 @@ def _bound_source_start_ms(
         skipped_rows = (-public_start_ms + interval_ms - 1) // interval_ms
         source_start_ms += skipped_rows * interval_ms
         public_start_ms += skipped_rows * interval_ms
-    if public_start_ms < 0 or source_start_ms > fallback_start_ms:
+    if public_start_ms < 0 or source_start_ms > latest_start_ms:
         raise _fail(
             "HISTORY_POLICY_INVALID",
             "public replay history cannot represent the source boundary",
@@ -723,7 +737,7 @@ def _scan_bound_repository_gaps(
             status_code=503,
         ) from exc
     gaps.sort()
-    if any(current[0] <= previous[1] for previous, current in zip(gaps, gaps[1:])):
+    if any(current[0] <= previous[1] for previous, current in itertools.pairwise(gaps)):
         raise _fail(
             "HISTORY_SOURCE_INCOMPLETE",
             "replay history gap evidence overlaps",
@@ -738,7 +752,7 @@ def _page_holes(
     connection_before_ms: int,
 ) -> list[tuple[int, int]]:
     holes: list[tuple[int, int]] = []
-    for previous, current in zip(bars, bars[1:]):
+    for previous, current in itertools.pairwise(bars):
         if current.open_time_ms <= previous.close_time_ms:
             raise _fail(
                 "HISTORY_SOURCE_INCOMPLETE",
@@ -1830,10 +1844,11 @@ def _query_validated_descending_base_rows(
     except TrainingRunError:
         raise
     except Exception as exc:
-        raise _fail(
+        raise TrainingRunError(
             "HISTORY_SOURCE_UNAVAILABLE",
             "replay history source could not be read",
             status_code=503,
+            details={"retryable": getattr(exc, "retryable", False) is True},
         ) from exc
     validated = []
     previous_open_ms = actual_end_ms

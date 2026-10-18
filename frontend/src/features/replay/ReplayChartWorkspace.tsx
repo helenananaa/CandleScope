@@ -1,3 +1,5 @@
+import { ReplayIntervalViewportTransfers } from "./replayIntervalViewportTransfers.js";
+import { applyChartLinkGroupPolicyUpdate } from "../chart-workspace/chartWorkspaceLinkModel.js";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
@@ -69,6 +71,7 @@ interface CellProps {
   globalSettings: ChartSettingsRuntime;
   integrity: ReplayIntegrityRuntime;
   links: ChartLinkCoordinator;
+  intervalTransfers: ReplayIntervalViewportTransfers;
   hosts: Hosts;
   controls: ReactNode;
   preferences: ReturnType<typeof useReplayWorkspacePreferences>;
@@ -76,13 +79,14 @@ interface CellProps {
 }
 
 function ReplayChartCell({ runId, cell, track, workspace, controller, pool, globalSettings,
-  integrity, links, hosts, controls, preferences, onOpenTrack }: CellProps) {
+  integrity, links, intervalTransfers, hosts, controls, preferences, onOpenTrack }: CellProps) {
   const runtime = useSharedReplayChartRuntime(pool, track.adapter_session_id!);
   const projection = useReplayChartProjection(runtime, track.track_id, cell.session.interval);
   const active = workspace.view.activeCellId === cell.id;
   const scope = `replay:${runId}:${workspace.view.activeWorkspaceId}:${cell.id}`;
   const surface = useChartSurfaceRuntime();
-  const saveViewport = useReplayCellViewport(`${scope}:${track.track_id}:${cell.session.interval}`, surface.actions);
+  const saveViewport = useReplayCellViewport(`${scope}:${track.track_id}:${cell.session.interval}`, surface.actions,
+    `${scope}:${track.track_id}`);
   const bound = controller.viewerState?.selected_track_id === track.track_id;
   const tradeAuthority = useRef({ active, bound, controller, reviewing: integrity.review !== null });
   tradeAuthority.current = { active, bound, controller, reviewing: integrity.review !== null };
@@ -99,13 +103,16 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
       ...controller.viewerState, selected_track_id: track.track_id, display_interval: cell.session.interval,
     },
     seriesStore: projection.seriesStore,
+    ...(projection.tapeObservation === undefined ? {} : { tapeObservation: projection.tapeObservation }),
     historyBootstrapBeforeMs: projection.historyBootstrapBeforeMs ?? null,
     loading: projection.loading,
     error: projection.error ?? controller.error,
     viewerPending: controller.viewerPending || (active && !bound),
     actions: {
       ...controller.actions,
+      ...(projection.tapeObservation === undefined ? {} : { restoreLatestProjection: projection.restoreLatest }),
       setDisplayInterval: async (interval) => {
+        intervalTransfers.prepare(workspace.view.document, cell.id, interval);
         workspace.actions.updateCellSession(cell.id, { ...cell.session, interval });
         return null;
       },
@@ -116,7 +123,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
       previewOrder: (...args) => assertTradeAuthority().actions.previewOrder(...args),
       orderCapacity: (...args) => assertTradeAuthority().actions.orderCapacity(...args),
     },
-  }), [active, bound, cell, controller, onOpenTrack, projection.error, projection.loading, projection.seriesStore, projection.historyBootstrapBeforeMs, track.track_id, workspace.actions, assertTradeAuthority]);
+  }), [active, bound, cell, controller, onOpenTrack, projection.error, projection.loading, projection.seriesStore, projection.historyBootstrapBeforeMs, projection.tapeObservation, projection.restoreLatest, track.track_id, workspace.actions, workspace.view.document, intervalTransfers, assertTradeAuthority]);
   const persistence = useMemo<ActiveIndicatorPersistence>(() => ({
     controlled: true,
     load: () => cell.indicators,
@@ -141,11 +148,12 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
       },
       // A legacy drawing document is bound to the recorded selected market.
       drawing_document: integrity.review.drawing_document?.documentSchemaVersion === 2
-        ? replayWorkspaceDrawingCharts(integrity.review.drawing_document)[`${chartCellDrawingScopeBase(`replay:${runId}:${workspace.view.activeWorkspaceId}`, workspace.view.document, cell.id)}__main`] ?? null
+        ? { ...integrity.review.drawing_document, scopeKey: `replay-run:${runId}`,
+          charts: replayWorkspaceDrawingCharts(integrity.review.drawing_document, runId) }
         : integrity.review.projection.viewer_state.selected_track_id === track.track_id
           ? integrity.review.drawing_document : null,
     },
-  }), [integrity, track.track_id, cell.session.interval, cell.id, runId, workspace.view.activeWorkspaceId, workspace.view.document]);
+  }), [integrity, track.track_id, cell.session.interval, runId]);
   useEffect(() => links.register(cell.id, surface.actions), [cell.id, links, surface.actions]);
   const linkUserViewport = useChartViewportLink(links, cell.id, scope);
   const cellOptions = useMemo(() => ({
@@ -160,7 +168,8 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
     },
     onVisibleRangeChange: saveViewport,
     onUserViewportRangeChange: linkUserViewport,
-  }), [scope, runId, workspace.view.activeWorkspaceId, workspace.view.document, workspace.actions, cell.id, cell.priceScale, active, cellIntegrity, controls, controller, links, runtime.marketData.actions, saveViewport, linkUserViewport, preferences]);
+    subscribeIntervalChange: (prepare: (interval: string) => void) => intervalTransfers.register(cell.id, prepare),
+  }), [scope, runId, workspace.view.activeWorkspaceId, workspace.view.document, workspace.actions, cell.id, cell.priceScale, active, cellIntegrity, controls, controller, links, runtime.marketData.actions, saveViewport, linkUserViewport, preferences, intervalTransfers]);
   const frame = useMemo(() => ({ active, hosts }), [active, hosts]);
   return <CellFrameContext.Provider value={frame}>
     <span hidden data-replay-cell-diagnostics={cell.id} data-replay-track-id={track.track_id}
@@ -190,6 +199,19 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
   const workspace = useChartWorkspaceRuntime({ repository, workspaceBus: null });
   const preferences = useReplayWorkspacePreferences(runId);
   const [links] = useState(() => new ChartLinkCoordinator(workspace.view.document));
+  const [intervalTransfers] = useState(() => new ReplayIntervalViewportTransfers());
+  const panelWorkspace = useMemo<ChartWorkspaceRuntime>(() => ({
+    ...workspace,
+    actions: {
+      ...workspace.actions,
+      updateLinkGroupPolicy: (groupId, relationship, patch) => {
+        const before = workspace.view.document;
+        const after = applyChartLinkGroupPolicyUpdate(before, groupId, relationship, patch);
+        intervalTransfers.prepareDocumentChange(before, after);
+        workspace.actions.updateLinkGroupPolicy(groupId, relationship, patch);
+      },
+    },
+  }), [workspace, intervalTransfers]);
   const [panelOpen, setPanelOpen] = useState(false);
   const focusStart = useRef<{ id: string; started: number } | null>(null);
   const [focusTiming, setFocusTiming] = useState<{ id: string; durationMs: number } | null>(null);
@@ -226,7 +248,10 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
     viewerPending: viewer.viewerPending || viewer.viewerState === null
       || viewer.marketTracks?.tracks.find((track) => track.track_id === viewer.viewerState?.selected_track_id)?.adapter_session_id !== runtime.store.sessionId,
   }), [viewer, runtime.store.sessionId]);
-  const integrity = useReplayIntegrityRuntime(runtime, controller);
+  const integrity = useReplayIntegrityRuntime(runtime, controller, true, true, () => ({
+    document: workspace.view.document, windowId: workspace.view.window.id,
+    workspaceId: workspace.view.activeWorkspaceId,
+  }));
   const drawings = useReplayWorkspaceDrawings(runId, workspace.view.activeWorkspaceId, workspace.view.document, integrity);
   const selectionPending = useRef(false);
   const [selectionAttempt, setSelectionAttempt] = useState(0);
@@ -320,7 +345,7 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
               </header>
               {track?.adapter_session_id ? <ReplayChartCell key={`${id}:${track.track_id}`} runId={runId} cell={cell} track={track}
                 workspace={workspace} controller={controller} pool={pool} globalSettings={chartSettingsRuntime}
-                integrity={integrity} links={links} hosts={hosts} controls={controls} preferences={preferences} onOpenTrack={openTrack} />
+                integrity={integrity} links={links} intervalTransfers={intervalTransfers} hosts={hosts} controls={controls} preferences={preferences} onOpenTrack={openTrack} />
                 : <div role="status">{cell.session.symbol} — {tracks.length === 0 ? t("replay.opening") : t("replay.watchlist.noCover")}
                   {tracks.filter((candidate) => candidate.adapter_session_id).map((candidate) => <button key={candidate.track_id}
                     type="button" onClick={() => workspace.actions.updateCellSession(id, { ...cell.session,
@@ -337,7 +362,7 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
       </>}
       statusBar={<div ref={hostRefs.statusBar} className="replay-workspace-host" />}
     />
-    <WorkspacePanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} runtime={workspace}
+    <WorkspacePanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} runtime={panelWorkspace}
       desktop={{ mode: "web", multiWindowEnabled: false, displayCount: 1, error: null }} viewportIssue={links.getViewportIssue()} />
   </>;
 }

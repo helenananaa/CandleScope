@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { drawingDocumentSessionRegistry as registry } from "../drawings/core/drawingDocumentStore.js";
 import { chartCellDrawingScopeBase } from "../chart-workspace/chartWorkspaceDrawingLink.js";
 import type { ChartWorkspaceDocument } from "../chart-workspace/chartWorkspaceTypes.js";
@@ -19,6 +19,14 @@ export function replayWorkspaceDrawingCharts(
   ]));
 }
 
+/** Pane IDs can become available only after indicator output has loaded. */
+export function replayWorkspaceDrawingScopes(bases: readonly string[], available: readonly string[]): string[] {
+  return [...new Set([
+    ...bases.map(base => `${base}__main`),
+    ...available.filter(scope => bases.some(base => scope.startsWith(`${base}__`))),
+  ])].sort();
+}
+
 /** One serialized evidence writer for every chart, including charts closed later. */
 export function useReplayWorkspaceDrawings(runId: string, workspaceId: string,
   document: ChartWorkspaceDocument, integrity: ReplayIntegrityRuntime) {
@@ -28,8 +36,11 @@ export function useReplayWorkspaceDrawings(runId: string, workspaceId: string,
   const tail = useRef(Promise.resolve());
   const latest = useRef(integrity);
   latest.current = integrity;
-  const scopesKey = JSON.stringify([...new Set(Object.keys(document.cells).map((id) =>
-    `${chartCellDrawingScopeBase(`replay:${runId}:${workspaceId}`, document, id)}__main`))].sort());
+  useSyncExternalStore(registry.subscribeScopeLoads, registry.getScopeRevision, registry.getScopeRevision);
+  const scopesKey = JSON.stringify(replayWorkspaceDrawingScopes(
+    Object.keys(document.cells).map(id => chartCellDrawingScopeBase(`replay:${runId}:${workspaceId}`, document, id)),
+    [...registry.loadedScopes(), ...Object.keys(replayWorkspaceDrawingCharts(integrity.currentDrawing?.document ?? null, runId))],
+  ));
   const scopes = useMemo(() => JSON.parse(scopesKey) as string[], [scopesKey]);
   const flush = useCallback(() => {
     // Capture now: switching/closing a cell cannot change the pending document.
@@ -55,15 +66,23 @@ export function useReplayWorkspaceDrawings(runId: string, workspaceId: string,
     const existing = integrity.currentDrawing.document;
     const stored = replayWorkspaceDrawingCharts(existing, runId);
     charts.current = { ...stored, ...charts.current };
+    let captureLoadedPane = false;
     for (const scope of scopes) {
       if (loaded.current.has(scope)) continue;
       const store = registry.getStore(scope);
-      const record = charts.current[scope] ?? (existing?.documentSchemaVersion === 1 && scope === scopes[0] ? existing : null);
+      const record = charts.current[scope] ?? (existing?.documentSchemaVersion === 1
+        && scope === scopes.find(candidate => candidate.endsWith("__main")) ? existing : null);
       if (record && !store.dirty) {
         const result = store.loadDocument(replayReviewDrawingDocument(record, scope));
         if (!result.ok) { setError(result.error); continue; }
         registry.markLoaded(scope, store);
         charts.current[scope] = { ...record, scopeKey: `replay-run:${runId}` };
+      }
+      // A pane restored from local persistence may already contain drawings
+      // when its first review subscription is installed (including upgrades).
+      if (registry.isLoaded(scope) && ((!record && store.getSnapshot().entities.size > 0)
+        || (store.dirty && record?.documentRevision !== store.getSnapshot().documentRevision))) {
+        captureLoadedPane = true;
       }
       loaded.current.add(scope);
     }
@@ -72,6 +91,7 @@ export function useReplayWorkspaceDrawings(runId: string, workspaceId: string,
       if (timer !== null) clearTimeout(timer);
       timer = setTimeout(() => { timer = null; flush(); }, 500);
     }));
+    if (captureLoadedPane) timer = setTimeout(() => { timer = null; flush(); }, 500);
     return () => {
       unsubscribe.forEach((release) => release());
       if (timer !== null) { clearTimeout(timer); flush(); }

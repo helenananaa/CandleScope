@@ -152,7 +152,9 @@ export interface IndicatorPanelProps {
     securityMode?: string,
   ): void;
   computing: boolean;
-  realtimeMode?: "enabled" | "degraded" | "historical-only";
+  // A provided-data surface may supply its own truthful modeNotice instead
+  // of the live-market finality badge (for example, a revealed replay tail).
+  realtimeMode?: "enabled" | "degraded" | "historical-only" | null;
   onRecompute?: (force?: boolean) => void;
   marketStudies?: readonly IndicatorPanelMarketStudy[];
   onAddMarketStudy?: (studyId: string) => void;

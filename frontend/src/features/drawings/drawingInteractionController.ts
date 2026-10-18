@@ -1244,11 +1244,17 @@ export interface DrawingStylePatch {
   positionSize?: number;
 }
 
+/** Keep review/export reads available while all user edit entry points fail closed. */
+export function admitDrawingUserMutation(readOnly: boolean, exportLocked: boolean, prepare: () => boolean): boolean {
+  return !readOnly && !exportLocked && prepare();
+}
+
 export interface UseDrawingOptions {
   chartAdapter: DrawingChartAdapter | null;
   chartContainerRef: MutableRefObject<HTMLElement | null>;
   activeTool: DrawingToolId | null;
   manageChartCursor?: boolean;
+  readOnly?: boolean;
   penColor: string;
   penSize: number;
   textFontSize: number;
@@ -1552,6 +1558,7 @@ export function useDrawing({
   chartContainerRef,
   activeTool,
   manageChartCursor = true,
+  readOnly = false,
   penColor,
   penSize,
   textFontSize,
@@ -2064,8 +2071,8 @@ export function useDrawing({
   savedDrawingGetterRef.current = getSavedDrawing;
   sceneScreenBoxGetterRef.current = getSceneScreenBox;
   const prepareUserMutationScope = useCallback((): boolean => (
-    !exportVisibilityIntentGate.isLocked() && preparePersistenceUserMutationScope()
-  ), [exportVisibilityIntentGate, preparePersistenceUserMutationScope]);
+    admitDrawingUserMutation(readOnly, exportVisibilityIntentGate.isLocked(), preparePersistenceUserMutationScope)
+  ), [readOnly, exportVisibilityIntentGate, preparePersistenceUserMutationScope]);
 
   const cancelActiveFreehandStroke = useCallback(() => {
     const draft = freehandDraftRef.current;

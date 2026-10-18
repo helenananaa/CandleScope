@@ -1,7 +1,9 @@
+import { externalProviderEnglish } from "./externalProviderEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
+  ...externalProviderEnglish,
   "plugin.trust.scriptRuntimeExecution": "The installer creates a separate Python environment and runs the package verification probe. After restart, script code runs as your current user without an OS sandbox. Files, network access and subprocesses are not restricted by the platform plugin permission summary.",
   "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
   "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",
@@ -260,6 +262,11 @@ export const en = {
   "pc.enginesHint": "Separately discovered script engines for chart computation, excluded from the installed plugin count above.",
 
   "native.external.sampledLabel": "Sampled book (bounded depth)",
+  "native.external.executionOrigin": "Execution venue for imported data",
+  "native.external.binanceUsdm": "Binance USD-M",
+  "native.external.originRequired": "Select the venue and market matching this dataset",
+  "native.external.uploadMissing": "This strategy previously used an uploaded trade or book file. Select it again, or explicitly clear the file selection. Another data source will not be substituted automatically.",
+  "native.external.clearUpload": "Clear file selection",
   "native.external.sampledHint": "Approximate sampled book: consume only visible depth; excess quantity stays unfilled. Books older than 2 seconds cannot fill. No inferred passive queue fills; resting limits fill only when marketable. Same-ms trades precede new book samples. Import paired bars.csv and upload execution.json from the same archive.",
   "native.series.title": "Strategy series graphics",
   "native.series.hint": "Candles, OHLC bars, markers, colors and fills from the runtime. This report view approximates marker shapes and uses one fill slice per bar; it is not a pixel-identical platform chart.",
@@ -4604,7 +4611,7 @@ export const en = {
   "research.strategy.smoke": "Smoke",
   "research.strategy.copy": "Copy",
   "research.strategy.archive": "Archive",
-  "research.strategy.create": "Create Pyne/Pine revision",
+  "research.strategy.create": "Create strategy or model revision",
   "research.strategy.name": "Name",
   "research.strategy.language": "Language",
   "research.strategy.source": "Source",
@@ -4738,5 +4745,7 @@ export const en = {
   "strategyReview.go": "Go",
   "strategyReview.previousPage": "Previous page",
   "strategyReview.nextPage": "Next page",
+  "replay.indicators.revealedPrefix": "Revealed replay data",
+  "replay.indicators.revealedPrefixHint": "Uses only prices revealed up to the replay clock, including the forming candle. Its indicator values may change as replay advances.",
   ...tradingAccountsEn,
 } as const satisfies MessageCatalog;

@@ -46,6 +46,8 @@ import type {
 export type IndicatorComputeBatchExecutor = (options: {
   jobs: IndicatorComputeBatchJob[];
   signal?: AbortSignal;
+  /** Independent results may publish before slower jobs in the same batch. */
+  onResults?: (results: IndicatorComputeBatchItem[]) => void;
 }) => Promise<IndicatorComputeBatchResponse>;
 
 export interface UseIndicatorComputeControllerOptions {
@@ -275,72 +277,12 @@ export function useIndicatorComputeController({
         })
       : null;
     const submittedJobKeys = new Set<string>();
-    try {
-      const scheduled = await jobCoordinator.schedule<
-        IndicatorComputeBatchJob,
-        IndicatorComputeBatchItem
-      >({
-        force,
-        isResultComplete: (result) => result.payload.ok === false,
-        jobs,
-        lifecycleKey,
-        execute: async (physicalJobs, signal) => {
-          const startedAt = performance.now();
-          const chunks = chunkIndicatorComputeJobs(physicalJobs);
-          for (const job of physicalJobs) {
-            submittedJobKeys.add(job.jobKey);
-            if (cacheContext !== null) {
-              removeCachedIndicatorResult(
-                targetByJobKey.get(job.jobKey)?.indicator,
-                cacheContext,
-              );
-            }
-          }
-          markPerf("indicator.compute.start", {
-            force,
-            indicatorCount: physicalJobs.length,
-            bars: ohlcv.length,
-            symbol: context.symbol,
-            interval: context.interval,
-            marketType: context.marketType,
-            exchange: context.exchange,
-            lifecycleKey,
-            physicalRequestCount: chunks.length,
-          });
-          try {
-            const responses = await Promise.all(
-              chunks.map((chunk) => computeBatch({ jobs: chunk, signal })),
-            );
-            return responses.flatMap((response) => response.results);
-          } finally {
-            markPerf("indicator.compute.end", {
-              force,
-              indicatorCount: physicalJobs.length,
-              bars: ohlcv.length,
-              symbol: context.symbol,
-              interval: context.interval,
-              marketType: context.marketType,
-              exchange: context.exchange,
-              lifecycleKey,
-              durationMs: performance.now() - startedAt,
-              physicalRequestCount: chunks.length,
-            });
-          }
-        },
-      });
-      recordPerfEvent("indicator.compute.plan", {
-        force,
-        lifecycleKey,
-        joined: scheduled.joined,
-        queued: scheduled.queued,
-        skipped: scheduled.skipped,
-        stale: scheduled.stale,
-      });
-      if (scheduled.stale || scheduled.results.length === 0) return;
+    const publishedJobKeys = new Set<string>();
+    const publishResults = (results: IndicatorComputeBatchItem[]) => {
       if (committedRuntimeRef.current.lifecycleKey !== lifecycleKey) return;
-
       const acceptedJobKeyById = new Map<string, string>();
-      const accepted = scheduled.results.flatMap((result) => {
+      const accepted = results.flatMap((result) => {
+        if (publishedJobKeys.has(result.jobKey)) return [];
         const target = targetByJobKey.get(result.jobKey);
         if (!target || result.clientId !== target.indicator.id) return [];
         const currentIndicator = activeIndicatorsRef.current.find(
@@ -369,6 +311,10 @@ export function useIndicatorComputeController({
         }];
       });
       if (accepted.length === 0) return;
+      for (const key of acceptedJobKeyById.values()) {
+        publishedJobKeys.add(key);
+        submittedJobKeys.delete(key);
+      }
 
       const {
         processedResults,
@@ -440,6 +386,77 @@ export function useIndicatorComputeController({
       } else {
         startTransition(publishAcceptedResults);
       }
+    };
+    try {
+      const scheduled = await jobCoordinator.schedule<
+        IndicatorComputeBatchJob,
+        IndicatorComputeBatchItem
+      >({
+        force,
+        isResultComplete: (result) => result.payload.ok === false,
+        jobs,
+        lifecycleKey,
+        onResults: publishResults,
+        execute: async (physicalJobs, signal, publish) => {
+          const startedAt = performance.now();
+          const chunks = chunkIndicatorComputeJobs(physicalJobs);
+          for (const job of physicalJobs) {
+            submittedJobKeys.add(job.jobKey);
+            if (cacheContext !== null) {
+              removeCachedIndicatorResult(
+                targetByJobKey.get(job.jobKey)?.indicator,
+                cacheContext,
+              );
+            }
+          }
+          markPerf("indicator.compute.start", {
+            force,
+            indicatorCount: physicalJobs.length,
+            bars: ohlcv.length,
+            symbol: context.symbol,
+            interval: context.interval,
+            marketType: context.marketType,
+            exchange: context.exchange,
+            lifecycleKey,
+            physicalRequestCount: chunks.length,
+          });
+          try {
+            const responses = await Promise.all(
+              chunks.map(async (chunk) => {
+                const response = await computeBatch({ jobs: chunk, signal, onResults: publish });
+                publish(response.results);
+                return response;
+              }),
+            );
+            return responses.flatMap((response) => response.results);
+          } finally {
+            markPerf("indicator.compute.end", {
+              force,
+              indicatorCount: physicalJobs.length,
+              bars: ohlcv.length,
+              symbol: context.symbol,
+              interval: context.interval,
+              marketType: context.marketType,
+              exchange: context.exchange,
+              lifecycleKey,
+              durationMs: performance.now() - startedAt,
+              physicalRequestCount: chunks.length,
+            });
+          }
+        },
+      });
+      recordPerfEvent("indicator.compute.plan", {
+        force,
+        lifecycleKey,
+        joined: scheduled.joined,
+        queued: scheduled.queued,
+        skipped: scheduled.skipped,
+        stale: scheduled.stale,
+      });
+      if (scheduled.stale || scheduled.results.length === 0) return;
+      if (committedRuntimeRef.current.lifecycleKey !== lifecycleKey) return;
+
+      publishResults(scheduled.results);
     } catch (error) {
       if (committedRuntimeRef.current.lifecycleKey === lifecycleKey) {
         const message = error instanceof Error ? error.message : String(error);
@@ -452,7 +469,7 @@ export function useIndicatorComputeController({
         });
         if (failedJobKeysById.size === 0) return;
 
-        // A transport failure invalidates every physically submitted result.
+        // A transport failure invalidates only the still-pending results.
         // Clear both chart lines and auxiliary trading signals immediately so
         // stale output cannot masquerade as a current computation.
         outputDispatch({

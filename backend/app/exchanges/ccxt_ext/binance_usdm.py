@@ -23,6 +23,7 @@ from app.exchanges.rate_limits import (
 )
 
 from .models import CcxtLifecycleEvent, CcxtRawMarketEvent
+from .tls import SharedSslContextMixin
 
 SUPPORTED_CCXT_VERSION = "4.5.60"
 
@@ -56,7 +57,7 @@ class _RestObservation:
     retry_after: float | None
 
 
-class CandleScopeBinanceUSDM(CcxtBinanceUSDM):
+class CandleScopeBinanceUSDM(SharedSslContextMixin, CcxtBinanceUSDM):
     """CCXT Binance USD-M extension that preserves CandleScope quality seams.
 
     This class deliberately does not replace CandleScope normalization,

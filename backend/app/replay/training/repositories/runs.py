@@ -13,6 +13,7 @@ from app.replay.canonical import canonical_json, canonical_sha256
 from app.replay.storage.sqlite_store import ReplaySQLiteStore
 
 from ..errors import TrainingRunError
+from ..prepared_display import uses_prepared_base_history
 from ..models import (
     REPLAY_V2_PROTOCOL,
     TrainingRunCreateRequest,
@@ -557,7 +558,7 @@ class TrainingRunRepository:
             )
         decoded_cursor = run_records_ops._cursor_payload(cursor)
 
-        def read(connection: sqlite3.Connection) -> tuple[sqlite3.Row, ...]:
+        def read(connection: sqlite3.Connection) -> tuple[Mapping[str, object], ...]:
             sql = (
                 run_records_ops._CARD_CTE
                 + """
@@ -589,7 +590,7 @@ class TrainingRunRepository:
                 "cursor_kind": None if decoded_cursor is None else decoded_cursor[2],
                 "row_limit": limit + 1,
             }
-            return tuple(connection.execute(sql, params).fetchall())
+            return tuple(run_records_ops.current_card_row(connection, row) for row in connection.execute(sql, params))
 
         rows = await self.base_store.run_extension_read(read)
         visible = rows[:limit]
@@ -607,12 +608,13 @@ class TrainingRunRepository:
         }
 
     async def get_run(self, run_id: str) -> dict[str, object]:
-        def read(connection: sqlite3.Connection) -> sqlite3.Row | None:
-            return connection.execute(
+        def read(connection: sqlite3.Connection) -> Mapping[str, object] | None:
+            row = connection.execute(
                 run_records_ops._CARD_CTE
                 + "SELECT * FROM cards WHERE run_id = ? AND kind = 'V2'",
                 (run_id,),
             ).fetchone()
+            return None if row is None else run_records_ops.current_card_row(connection, row)
 
         row = await self.base_store.run_extension_read(read)
         if row is None:
@@ -1417,6 +1419,7 @@ class TrainingRunRepository:
                        i.strict_eligible, i.start_time_known, i.result_label,
                        dataset.actual_replay_start_ms,
                        dataset.actual_replay_end_ms,
+                       dataset.snapshot_ref_json AS primary_snapshot_ref_json,
                        dataset.synthetic_origin_ms
                 FROM replay_training_run AS r
                 JOIN replay_training_viewer_state AS viewer USING(run_id)
@@ -1452,6 +1455,9 @@ class TrainingRunRepository:
             "display_interval": str(row["display_interval"]),
             "compatibility": str(row["compatibility"]),
             "adapter_config": adapter_config,
+            "prepared_base_history": uses_prepared_base_history(
+                json.loads(str(row["primary_snapshot_ref_json"]))
+            ),
             "position_mode": str(row["position_mode"]),
             "exchange": str(row["exchange"]),
             "market_type": str(row["market_type"]),

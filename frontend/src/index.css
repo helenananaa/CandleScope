@@ -9047,6 +9047,20 @@ div.right-drawer-overlay {
   font-weight: 500;
 }
 
+.chart-indicator-status {
+  position: absolute;
+  bottom: 30px;
+  left: 10px;
+  z-index: 18;
+  max-width: calc(100% - 90px);
+  padding: 3px 6px;
+  color: var(--text-muted);
+  background: var(--bg-primary);
+  font-size: var(--font-size-xs);
+  pointer-events: none;
+  overflow-wrap: anywhere;
+}
+
 .indicator-pane-label {
   max-width: calc(100% - 250px);
   overflow: hidden;

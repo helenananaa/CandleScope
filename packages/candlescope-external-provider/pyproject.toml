@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "candlescope-external-provider"
+version = "0.1.0"
+description = "Explicit loopback client for independently run CandleScope decision models."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "GPL-3.0-only"
+dependencies = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/candlescope_external_provider"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

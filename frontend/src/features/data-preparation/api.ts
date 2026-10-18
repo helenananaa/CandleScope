@@ -9,6 +9,10 @@ export class PreparedReplayDeletedError extends Error {
   constructor() { super("Prepared training was deleted"); }
 }
 
+export class PreparationApiError extends Error {
+  constructor(readonly code: string, message: string, readonly status: number) { super(message); }
+}
+
 export interface PreparationJob {
   id: string;
   state: "QUEUED" | "RUNNING" | "READY" | "FAILED" | "CANCELLED" | "BLOCKED_STORAGE";
@@ -38,9 +42,12 @@ export async function preparationRequest<T>(path: string, options: RequestInit =
   const body: unknown = await response.json();
   if (!response.ok) {
     const detail = typeof body === "object" && body !== null && "detail" in body ? body.detail : null;
+    const validationFailure = response.status === 422 && Array.isArray(detail);
     const message = typeof detail === "object" && detail !== null && "message" in detail && typeof detail.message === "string"
-      ? detail.message : `Data preparation failed (${response.status})`;
-    throw new Error(message);
+      ? detail.message : validationFailure ? "Data preparation request validation failed" : `Data preparation failed (${response.status})`;
+    const code = typeof detail === "object" && detail !== null && "code" in detail && typeof detail.code === "string"
+      ? detail.code : validationFailure ? "DATA_PREPARATION_INVALID_REQUEST" : "DATA_PREPARATION_ERROR";
+    throw new PreparationApiError(code, message, response.status);
   }
   return body as T;
 }
@@ -58,7 +65,7 @@ export async function waitForPreparation(
     onProgress(job);
     if (job.state === "READY") return job;
     if (["FAILED", "CANCELLED", "BLOCKED_STORAGE"].includes(job.state)) {
-      throw new Error(job.error?.message ?? job.state);
+      throw new PreparationApiError(job.error?.code ?? `DATA_PREPARATION_${job.state}`, job.error?.message ?? job.state, 200);
     }
     if (acceptReplayPrefix && job.state === "RUNNING" && job.request.progressive
       && job.result?.run?.adapter_session_id) return job;
