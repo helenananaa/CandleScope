@@ -864,6 +864,8 @@ export const pl = {
   "indicator.editor.close": "Zamknij edytor",
   "indicator.editor.name": "Nazwa wskaźnika",
   "indicator.editor.script": "Skrypt {language}",
+  "indicator.saveFailed": "Nie udało się zapisać wskaźnika. Wersja robocza pozostaje otwarta. {error}",
+  "indicator.editor.frontendWindow": "Oblicza tylko okno danych wykresu; wczytanie dalszej historii może zmienić wyniki. Zwraca wyłącznie krzywe, z limitem wykonania 2 sekund.",
   "indicator.editor.language": "Język",
   "indicator.editor.languageUnavailable": "{language} (niedostępny)",
   "indicator.editor.mode": "Tryb",

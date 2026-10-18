@@ -870,6 +870,8 @@ export const es = {
   "indicator.editor.close": "Cerrar editor",
   "indicator.editor.name": "Nombre del indicador",
   "indicator.editor.script": "Script {language}",
+  "indicator.saveFailed": "No se pudo guardar el indicador. El borrador sigue abierto. {error}",
+  "indicator.editor.frontendWindow": "Calcula solo la ventana de datos del gráfico; cargar más historial puede cambiar los resultados. Solo genera curvas, con un límite de ejecución de 2 segundos.",
   "indicator.editor.language": "Lenguaje",
   "indicator.editor.languageUnavailable": "{language} (no disponible)",
   "indicator.editor.mode": "Modo",

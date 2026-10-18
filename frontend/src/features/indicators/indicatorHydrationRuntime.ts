@@ -1,4 +1,5 @@
 import { clearIndicatorLineData } from "./indicatorPayloadRuntime.js";
+import { isFrontendScript } from "./frontendScriptContract.js";
 import type {
   IndicatorCacheResult,
   IndicatorDefinition,
@@ -99,7 +100,7 @@ export function hydrateIndicatorDefinitionsFromCache(
     const hasRuntimeData = lines.some((line) => (
       (line.data?.length || 0) > 0 || (line.colorData?.length || 0) > 0
     ));
-    const preserveError = indicator.executionTarget === "local";
+    const preserveError = indicator.executionTarget === "local" || isFrontendScript(indicator);
     const clearedLines = hasRuntimeData ? clearIndicatorLineData(lines) : lines;
     const nextLines = reconcileLines
       ? reconcileLines(indicator, clearedLines)

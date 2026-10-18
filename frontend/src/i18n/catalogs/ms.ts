@@ -865,6 +865,8 @@ export const ms = {
   "indicator.editor.close": "Tutup editor",
   "indicator.editor.name": "Nama penunjuk",
   "indicator.editor.script": "Skrip {language}",
+  "indicator.saveFailed": "Penunjuk tidak dapat disimpan. Draf anda masih terbuka. {error}",
+  "indicator.editor.frontendWindow": "Mengira tetingkap data carta sahaja; memuatkan lebih banyak sejarah boleh mengubah hasil. Menghasilkan lengkung sahaja, dengan had pelaksanaan 2 saat.",
   "indicator.editor.language": "Bahasa",
   "indicator.editor.languageUnavailable": "{language} (tidak tersedia)",
   "indicator.editor.mode": "Mod",

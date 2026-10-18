@@ -1180,6 +1180,8 @@ export const ptBR = {
   "indicator.editor.close": "Fechar editor",
   "indicator.editor.name": "Nome do indicador",
   "indicator.editor.script": "Script {language}",
+  "indicator.saveFailed": "Não foi possível salvar o indicador. Seu rascunho continua aberto. {error}",
+  "indicator.editor.frontendWindow": "Calcula apenas a janela de dados do gráfico; carregar mais histórico pode alterar os resultados. Gera somente curvas, com limite de execução de 2 segundos.",
   "indicator.editor.language": "Linguagem",
   "indicator.editor.languageUnavailable": "{language} (indisponível)",
   "indicator.editor.mode": "Modo",

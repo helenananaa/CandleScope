@@ -1178,6 +1178,8 @@ export const zhCN = {
   "indicator.editor.close": "关闭编辑器",
   "indicator.editor.name": "指标名称",
   "indicator.editor.script": "{language} 脚本",
+  "indicator.saveFailed": "指标保存失败，编辑草稿已保留。{error}",
+  "indicator.editor.frontendWindow": "仅计算图表提供的数据窗口；加载更多历史可能改变结果。只输出曲线，运行限时 2 秒。",
   "indicator.editor.language": "语言",
   "indicator.editor.languageUnavailable": "{language}（当前不可用）",
   "indicator.editor.mode": "模式",

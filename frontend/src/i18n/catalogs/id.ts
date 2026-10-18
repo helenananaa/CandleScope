@@ -864,6 +864,8 @@ export const id = {
   "indicator.editor.close": "Tutup editor",
   "indicator.editor.name": "Nama indikator",
   "indicator.editor.script": "Skrip {language}",
+  "indicator.saveFailed": "Indikator tidak dapat disimpan. Draf Anda tetap terbuka. {error}",
+  "indicator.editor.frontendWindow": "Hanya menghitung jendela data grafik; memuat riwayat tambahan dapat mengubah hasil. Hanya menghasilkan kurva, dengan batas eksekusi 2 detik.",
   "indicator.editor.language": "Bahasa",
   "indicator.editor.languageUnavailable": "{language} (tidak tersedia)",
   "indicator.editor.mode": "Mode",

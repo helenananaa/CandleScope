@@ -865,6 +865,8 @@ export const ar = {
   "indicator.editor.close": "إغلاق المحرر",
   "indicator.editor.name": "اسم المؤشر",
   "indicator.editor.script": "نص {language}",
+  "indicator.saveFailed": "تعذر حفظ المؤشر. لا تزال المسودة مفتوحة. {error}",
+  "indicator.editor.frontendWindow": "يحسب فقط نافذة البيانات التي يوفرها الرسم؛ قد يؤدي تحميل سجل إضافي إلى تغيير النتائج. يخرج خطوطًا فقط، بحد تنفيذ ثانيتين.",
   "indicator.editor.language": "اللغة",
   "indicator.editor.languageUnavailable": "{language} (غير متاح)",
   "indicator.editor.mode": "الوضع",

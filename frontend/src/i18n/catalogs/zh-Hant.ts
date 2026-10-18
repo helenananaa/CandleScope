@@ -865,6 +865,8 @@ export const zhHant = {
   "indicator.editor.close": "關閉編輯器",
   "indicator.editor.name": "指標名稱",
   "indicator.editor.script": "{language} 腳本",
+  "indicator.saveFailed": "指標儲存失敗，編輯草稿已保留。{error}",
+  "indicator.editor.frontendWindow": "僅計算圖表提供的資料視窗；載入更多歷史可能改變結果。只輸出曲線，執行限時 2 秒。",
   "indicator.editor.language": "語言",
   "indicator.editor.languageUnavailable": "{language}（當前不可用）",
   "indicator.editor.mode": "模式",

@@ -864,6 +864,8 @@ export const tr = {
   "indicator.editor.close": "Düzenleyiciyi kapat",
   "indicator.editor.name": "Gösterge adı",
   "indicator.editor.script": "{language} betiği",
+  "indicator.saveFailed": "Gösterge kaydedilemedi. Taslağınız açık kalıyor. {error}",
+  "indicator.editor.frontendWindow": "Yalnızca grafiğin sağladığı veri penceresini hesaplar; daha fazla geçmiş yüklemek sonuçları değiştirebilir. Yalnızca eğri üretir, çalışma sınırı 2 saniyedir.",
   "indicator.editor.language": "Dil",
   "indicator.editor.languageUnavailable": "{language} (kullanılamıyor)",
   "indicator.editor.mode": "Mod",

@@ -865,6 +865,8 @@ export const th = {
   "indicator.editor.close": "ปิดตัวแก้ไข",
   "indicator.editor.name": "ชื่ออินดิเคเตอร์",
   "indicator.editor.script": "สคริปต์ {language}",
+  "indicator.saveFailed": "ไม่สามารถบันทึกอินดิเคเตอร์ได้ ฉบับร่างของคุณยังเปิดอยู่ {error}",
+  "indicator.editor.frontendWindow": "คำนวณเฉพาะช่วงข้อมูลที่กราฟส่งให้ การโหลดประวัติเพิ่มอาจเปลี่ยนผลลัพธ์ ส่งออกเฉพาะเส้นกราฟ โดยจำกัดเวลารัน 2 วินาที",
   "indicator.editor.language": "ภาษา",
   "indicator.editor.languageUnavailable": "{language} (ใช้ไม่ได้)",
   "indicator.editor.mode": "โหมด",

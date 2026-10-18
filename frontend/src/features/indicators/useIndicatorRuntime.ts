@@ -27,6 +27,8 @@ import {
 } from "./indicatorRealtimeBatcher.js";
 import { computeIndicatorRangeBatch } from "../../services/indicatorApi.js";
 import { useIndicatorComputeController } from "./indicatorComputeController.js";
+import { useFrontendScriptWindow } from "./useFrontendScriptWindow.js";
+import { isFrontendScript } from "./frontendScriptContract.js";
 import { parseIntervalParts, parseIntervalSeconds } from "../../utils/intervals.js";
 import {
   createIndicatorOutputState,
@@ -3029,6 +3031,13 @@ export function useIndicatorRuntime(
     symbol,
   ]);
 
+  const frontendWindow = useFrontendScriptWindow(
+    options.marketData?.view.seriesStore ?? null,
+    options.realtimeEnabled !== false && activeIndicators.some(indicator => isFrontendScript(indicator) && indicator.visible !== false),
+    sessionKey,
+  );
+  const computeChartData = frontendWindow.rows ?? chartData;
+  const computeChartDataRef = useLatestRef(computeChartData);
   const { computeAll, computing, recompute } = useIndicatorComputeController({
     activeIndicators,
     activeIndicatorsRef,
@@ -3036,10 +3045,11 @@ export function useIndicatorRuntime(
     candleDownColorRef,
     candleUpColor,
     candleUpColorRef,
-    chartData,
+    chartData: computeChartData,
     chartDataMeta,
     chartDataMetaRef,
-    chartDataRef,
+    chartDataRef: computeChartDataRef,
+    onComputePendingChange: frontendWindow.onComputePendingChange,
     datasetKey,
     exchange,
     forceHostedSubscriptions,

@@ -864,6 +864,8 @@ export const it = {
   "indicator.editor.close": "Chiudi editor",
   "indicator.editor.name": "Nome indicatore",
   "indicator.editor.script": "Script {language}",
+  "indicator.saveFailed": "Impossibile salvare l’indicatore. La bozza resta aperta. {error}",
+  "indicator.editor.frontendWindow": "Calcola solo la finestra di dati del grafico; caricare altra cronologia può cambiare i risultati. Produce solo curve, con un limite di esecuzione di 2 secondi.",
   "indicator.editor.language": "Linguaggio",
   "indicator.editor.languageUnavailable": "{language} (non disponibile)",
   "indicator.editor.mode": "Modalità",

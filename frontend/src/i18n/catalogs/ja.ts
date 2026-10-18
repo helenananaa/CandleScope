@@ -1163,6 +1163,8 @@ export const ja = {
   "indicator.editor.close": "エディターを閉じる",
   "indicator.editor.name": "インジケーター名",
   "indicator.editor.script": "{language} スクリプト",
+  "indicator.saveFailed": "指標を保存できませんでした。編集中の下書きは開いたままです。{error}",
+  "indicator.editor.frontendWindow": "チャートから渡されたデータ範囲のみを計算します。履歴を追加すると結果が変わる場合があります。曲線のみを出力し、実行時間は2秒までです。",
   "indicator.editor.language": "言語",
   "indicator.editor.languageUnavailable": "{language}（現在利用不可）",
   "indicator.editor.mode": "モード",
