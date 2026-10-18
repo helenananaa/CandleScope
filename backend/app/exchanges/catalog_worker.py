@@ -252,7 +252,7 @@ class _CatalogWorker:
                 message = generation.results.recv()
             except (EOFError, OSError):
                 break
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - retire the transport on any decode failure
                 message = ("lost", f"unreadable catalog worker message: {exc!r}")
             if not deliver:
                 continue
@@ -503,7 +503,7 @@ async def _answer(
         rows = list(await function(*args))
     except asyncio.CancelledError:
         return
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - preserve arbitrary loader errors across the process boundary
         results.send(("error", request_id, _encode_error(exc)))
         return
     for start in range(0, len(rows), _ROW_CHUNK):
@@ -518,6 +518,6 @@ def _encode_error(exc: Exception) -> tuple[str, str, bytes | None]:
         # Both processes run the same code, so a local round trip predicts
         # whether the parent can rebuild the exception.
         pickle.loads(payload)
-    except Exception:
+    except Exception:  # noqa: BLE001 - unknown exception types may not support a pickle round trip
         payload = None
     return type(exc).__name__, str(exc), payload
