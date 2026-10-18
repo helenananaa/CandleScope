@@ -350,6 +350,27 @@ def test_storage_health_returns_backfill_snapshot() -> None:
     }
 
 
+def test_storage_health_prefers_async_audit_series_listing(monkeypatch) -> None:
+    async def gap_audit_series_async(self):
+        return [("okx", "spot", "ETH-USDT", "5m")]
+
+    def gap_audit_series(self):
+        raise AssertionError("storage health must not list storage on the event loop")
+
+    monkeypatch.setattr(
+        _DataManager,
+        "gap_audit_series_async",
+        gap_audit_series_async,
+        raising=False,
+    )
+    monkeypatch.setattr(_DataManager, "gap_audit_series", gap_audit_series)
+
+    response = _client().get("/api/v1/settings/storage/health")
+
+    assert response.status_code == 200
+    assert response.json()["audit_series"] == [["okx", "spot", "ETH-USDT", "5m"]]
+
+
 def test_storage_health_requires_data_engine() -> None:
     response = _client(with_runtime=False).get("/api/v1/settings/storage/health")
 
