@@ -61,6 +61,13 @@ reconstruction. Binance repair snapshots/history are requested through CCXT
 implicit REST methods, so no native HTTP client is available to bypass the
 provider boundary.
 
+Every CandleScope CCXT client class mixes in `tls.SharedSslContextMixin`.
+CCXT's own `open()` parses certifi's CA bundle on the event loop for each new
+client (0.5-1.8 s with OpenSSL 3); the mixin instead hands each client one
+verifying SSL context per process, keyed by CCXT's `cafile` and
+`include_OS_certificates` option (`verify=False` still disables verification).
+Backend startup builds the default context on a thread before feeds open.
+
 ## Quality boundaries
 
 - The CCXT version is pinned in `backend/requirements.txt`; a version mismatch

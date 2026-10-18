@@ -9,6 +9,7 @@ from ccxt.pro.binance import binance as CcxtBinanceSpot
 
 from .binance_usdm import SUPPORTED_CCXT_VERSION
 from .hooks import build_hooked_exchange_class
+from .tls import SharedSslContextMixin
 
 _HookedBinanceSpot = build_hooked_exchange_class(
     CcxtBinanceSpot,
@@ -18,7 +19,10 @@ _HookedBinanceSpot = build_hooked_exchange_class(
 )
 
 
-class CandleScopeBinanceSpot(_HookedBinanceSpot):  # type: ignore[misc, valid-type]
+class CandleScopeBinanceSpot(  # type: ignore[misc, valid-type]
+    SharedSslContextMixin,
+    _HookedBinanceSpot,
+):
     """Pinned Binance Spot client that preserves complete decoded payloads.
 
     Production strict K-line, aggregate-trade, and full-depth sessions use this
