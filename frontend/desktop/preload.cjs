@@ -1,6 +1,11 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 const channels = {
+  aiControlStatus: "candlescope:ai-control:status",
+  aiControlMode: "candlescope:ai-control:mode",
+  aiControlPublish: "candlescope:ai-control:publish",
+  aiControlRequest: "candlescope:ai-control:request",
+  aiControlReply: "candlescope:ai-control:reply",
   backendEndpoint: "candlescope:desktop:backend-endpoint",
   strategyStorageRead: "candlescope:strategy-storage:read",
   strategyStorageWrite: "candlescope:strategy-storage:write",
@@ -46,6 +51,11 @@ contextBridge.exposeInMainWorld("candlescopeDesktop", Object.freeze({
     setItem: (key, value) => ipcRenderer.invoke(channels.strategyStorageWrite, key, value),
   }),
   apiBase: `http://127.0.0.1:${backendPort}/api/v1`,
+  aiControlStatus: () => ipcRenderer.invoke(channels.aiControlStatus),
+  aiControlSetMode: (mode) => ipcRenderer.invoke(channels.aiControlMode, mode),
+  aiControlPublish: (views) => ipcRenderer.invoke(channels.aiControlPublish, views),
+  onAiControlRequest: (listener) => subscribe(channels.aiControlRequest, listener),
+  aiControlReply: (value) => ipcRenderer.send(channels.aiControlReply, value),
   getBootstrap: () => ipcRenderer.invoke(channels.bootstrap),
   getPluginManagementSession: () => ipcRenderer.sendSync(channels.managementSession),
   openAppPage: (url) => ipcRenderer.invoke(channels.openAppPage, url),

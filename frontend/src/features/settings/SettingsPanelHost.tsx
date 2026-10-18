@@ -1,3 +1,4 @@
+import AiControlSettingsPanel from "../ai-control/AiControlSettingsPanel.js";
 import { useState } from "react";
 import AboutSettingsPanel from "./panels/AboutSettingsPanel.js";
 import CacheDiagnosticsPanel from "./panels/CacheDiagnosticsPanel.js";
@@ -57,6 +58,8 @@ export default function SettingsPanelHost({
       return plugins
         ? <PluginSettingsPanel runtime={plugins} />
         : <div className="st-info-box">{t("settings.pluginsUnavailable")}</div>;
+    case "ai":
+      return <AiControlSettingsPanel />;
     case "about":
       return <AboutSettingsPanel />;
     default:
