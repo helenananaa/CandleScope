@@ -3,7 +3,8 @@ import { FRONTEND_SCRIPT_STARTER } from "../features/indicators/frontendScriptCo
 import type { IndicatorComputeRequest } from "../features/indicators/indicatorTypes.js";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
-import { useLayoutEffect } from "react";
+import { useLayoutEffect, useState } from "react";
+import { t } from "../i18n/index.js";
 import { useProvidedBarsIndicatorRuntime } from "../features/indicators/useProvidedBarsIndicatorRuntime.js";
 import { createActiveIndicatorPersistence } from "../features/indicators/activeIndicatorStore.js";
 import type { IndicatorRuntime } from "../features/indicators/indicatorRuntimeContract.js";
@@ -209,6 +210,8 @@ export async function checkFrontendScriptEditor() {
   const originalFetch = globalThis.fetch, originalAlert = window.alert;
   const alerts: string[] = [], added: IndicatorDefinition[] = [], saved: Record<string, unknown>[] = [];
   let rejectSave = true;
+  let finishPreview: (() => Promise<void>) | undefined;
+  let previewBars = bars;
   globalThis.fetch = async (input, options) => {
     const url = new URL(String(input), location.href);
     if (!url.pathname.startsWith("/api/")) return originalFetch(input, options);
@@ -225,20 +228,50 @@ export async function checkFrontendScriptEditor() {
   window.alert = message => { alerts.push(String(message)); };
   const host = document.createElement("div"); document.body.append(host);
   const root = createRoot(host);
+  function View() {
+    const [active, setActive] = useState<IndicatorDefinition[]>([]);
+    const stagePreview = (value: IndicatorDefinition) => {
+      const pending = { ...value, visible: true, lines: [], error: null };
+      setActive([pending]);
+      // Hold publication independently of execution speed. The real worker's
+      // result is the only event that can turn the pending preview into success.
+      finishPreview = async () => {
+        const result = await computeFrontendScript({ ...request, script: pending.script || "", params: pending.params || {}, ohlcv: previewBars });
+        setActive([{ ...pending, lines: result.lines, error: result.error || null }]);
+      };
+    };
+    return <IndicatorPanel isOpen onClose={() => {}} activeIndicators={active}
+      onAddIndicator={value => { added.push(value); stagePreview(value); }}
+      onRemoveIndicator={() => {}} onToggleVisibility={() => {}} onUpdateParams={() => {}}
+      onUpdateScript={(id, script, language, securityMode) => {
+        const value = active.find(item => item.id === id);
+        assert(value, "editor updated a missing preview");
+        stagePreview({ ...value, script, ...(language ? { language } : {}), ...(securityMode ? { securityMode } : {}) });
+      }} computing={false} />;
+  }
   async function until(predicate: () => boolean) {
     for (let i = 0; i < 150; i++) { if (predicate()) return; await new Promise(resolve => setTimeout(resolve, 20)); }
     throw new Error(`Editor condition did not converge: ${host.textContent?.slice(-1000)}`);
   }
   try {
-    flushSync(() => root.render(<IndicatorPanel isOpen onClose={() => {}} activeIndicators={[]}
-      onAddIndicator={value => added.push(value)} onRemoveIndicator={() => {}} onToggleVisibility={() => {}}
-      onUpdateParams={() => {}} onUpdateScript={() => {}} computing={false} />));
+    flushSync(() => root.render(<View />));
     (host.querySelector(".indicator-tab-create") as HTMLButtonElement).click();
     await until(() => Boolean(host.querySelector<HTMLButtonElement>(".indicator-editor-run")?.disabled === false));
     assert(host.querySelector<HTMLSelectElement>("select")?.value === "frontend-js", "frontend language unavailable after catalog failure");
     (host.querySelector(".indicator-editor-run") as HTMLButtonElement).click();
     await until(() => added.length === 1);
     assert(added[0]?.language === "frontend-js" && added[0]?.script === FRONTEND_SCRIPT_STARTER, "editor did not preview JS starter");
+    const consoleText = () => host.querySelector(".indicator-editor-console")?.textContent;
+    assert(consoleText() === t("indicator.editor.computingData"), "new preview claimed success before worker output");
+    await finishPreview!();
+    await until(() => consoleText() === t("indicator.editor.runOk"));
+    previewBars = bars.slice(0, 2); // A valid all-null SMA warm-up still finishes.
+    finishPreview = undefined;
+    (host.querySelector(".indicator-editor-run") as HTMLButtonElement).click();
+    await until(() => Boolean(finishPreview));
+    assert(consoleText() === t("indicator.editor.computingData"), "updated preview reused old success before worker output");
+    await finishPreview!();
+    await until(() => consoleText() === t("indicator.editor.runOk"));
     (host.querySelector(".indicator-editor-save") as HTMLButtonElement).click();
     await until(() => alerts.length === 1);
     assert(Boolean(host.querySelector(".indicator-editor")) && added.length === 1 && saved.length === 0, "failed save closed/lost draft or claimed persistence");
@@ -246,7 +279,7 @@ export async function checkFrontendScriptEditor() {
     (host.querySelector(".indicator-editor-save") as HTMLButtonElement).click();
     await until(() => saved.length === 1 && !host.querySelector(".indicator-editor"));
     assert(saved[0]?.language === "frontend-js" && saved[0]?.script === FRONTEND_SCRIPT_STARTER, "retry changed saved source/language");
-    return { checks: ["real panel/editor offers frontend JS when plugin catalog fails", "preview retains exact starter, failed HTTP save keeps draft open, successful retry preserves source/language"] };
+    return { checks: ["real panel/editor offers frontend JS when plugin catalog fails", "new and updated previews stay pending until worker output; all-null warm-up completes", "preview retains exact starter, failed HTTP save keeps draft open, successful retry preserves source/language"] };
   } finally {
     flushSync(() => root.unmount()); host.remove(); globalThis.fetch = originalFetch; window.alert = originalAlert;
   }

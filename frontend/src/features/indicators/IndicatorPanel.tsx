@@ -22,6 +22,7 @@ import { IndicatorCategoryIcon } from "./IndicatorCategoryIcon.js";
 import { IndicatorNumberInput } from "./IndicatorNumberInput.js";
 import { indicatorParamLabel, indicatorSourceLabel } from "./indicatorParamLabels.js";
 import IndicatorEditor from "./IndicatorEditor";
+import { isFrontendScript } from "./frontendScriptContract.js";
 import type { ReactNode } from "react";
 import type { CatalogIndicator } from "./useIndicatorCatalogRuntime.js";
 import type {
@@ -635,7 +636,13 @@ export default function IndicatorPanel({
     id: previewedActiveIndicator?.id || null,
     error: previewedActiveIndicator?.error || null,
     visible: previewedActiveIndicator ? previewedActiveIndicator.visible !== false : true,
-    isComputing: computing
+    // Preview/add/source changes clear lines before the asynchronous worker
+    // publishes a result. Frontend scripts always return at least one line,
+    // including successful all-null warm-up output. An ID alone is not success.
+    isComputing: computing || Boolean(previewedActiveIndicator
+      && isFrontendScript(previewedActiveIndicator)
+      && !previewedActiveIndicator.error
+      && !previewedActiveIndicator.lines?.length)
   } : null;
 
   // Filter presets by search
