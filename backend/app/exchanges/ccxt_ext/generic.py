@@ -43,6 +43,7 @@ from .unified import (
     make_unified_payload,
 )
 from .runtime import close_ccxt_exchange
+from .tls import SharedSslContextMixin
 
 
 _GENERIC_STREAM_METHODS = {
@@ -60,7 +61,7 @@ _GENERIC_STREAM_METHODS = {
 }
 
 
-class _OwnedThreadedResolverMixin:
+class _OwnedThreadedResolverMixin(SharedSslContextMixin):
     """Give one-shot CCXT clients a reliable owned session on Windows."""
 
     def open(self) -> None:
@@ -93,11 +94,10 @@ class _OwnedThreadedResolverMixin:
 
 @lru_cache(maxsize=None)
 def _owned_exchange_class(exchange_class: type, *, windows: bool) -> type:
-    if not windows:
-        return exchange_class
+    mixin = _OwnedThreadedResolverMixin if windows else SharedSslContextMixin
     return type(
         f"CandleScopeOwned{exchange_class.__name__}",
-        (_OwnedThreadedResolverMixin, exchange_class),
+        (mixin, exchange_class),
         {"__module__": __name__},
     )
 
