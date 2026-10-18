@@ -112,6 +112,20 @@ class ManualHistoryService:
         """Rescan durable jobs now instead of at the next fallback poll."""
         self._wake.set()
 
+    async def admit(self, func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+        """Run one HTTP create span on a storage thread, then wake the runner.
+
+        The idempotency lookup, plan and create ran as one step on the event
+        loop. The lock keeps them one step: two creates cannot both pass the
+        same reservation budget. ``func`` runs off the loop, so it creates with
+        ``create_from_plan(..., wake=False)`` and the wake happens here. A full
+        storage executor raises ExecutorBusyError (a retryable 503).
+        """
+        async with self._durable_lock:
+            result = await run_storage(func, *args, **kwargs)
+        self._wake_runner()
+        return result
+
     def _seal_end_open_ms(self, interval: str, *, fallback: int) -> int:
         from app.data_engine.interval_policy import last_closed_bar_open_ms
 
@@ -285,7 +299,13 @@ class ManualHistoryService:
         idempotency_key: str,
         collection_id: str | None = None,
         job_id: str | None = None,
+        wake: bool = True,
     ) -> Any:
+        """Create the collection and job a plan describes.
+
+        The wake event belongs to the event loop: a caller on a storage thread
+        passes ``wake=False`` and wakes the runner from the loop (see ``admit``).
+        """
         if not plan.get("can_start"):
             raise ValueError("plan cannot start: " + ",".join(plan.get("blocking_reasons") or []))
         selection = plan["selection"]
@@ -336,7 +356,8 @@ class ManualHistoryService:
             created = guarded_create(self.repository, spec)
         else:
             created = self.repository.create_collection_and_job(spec)
-        self._wake_runner()
+        if wake:
+            self._wake_runner()
         return created
 
     def release_collection(self, collection_id: str) -> Any:
