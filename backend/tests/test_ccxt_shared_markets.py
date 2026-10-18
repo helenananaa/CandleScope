@@ -67,7 +67,6 @@ class _Catalog:
 
         async def fetch_currencies(exchange: Any, params: Any = None) -> None:
             del exchange, params
-            return None
 
         monkeypatch.setattr(ccxt_async.binance, "fetch_markets", fetch_markets)
         monkeypatch.setattr(ccxt_async.binance, "fetch_currencies", fetch_currencies)
