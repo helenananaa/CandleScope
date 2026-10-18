@@ -531,6 +531,11 @@ async def startup_event() -> None:
         print("[startup] LOCAL_OFFLINE runtime [ok]")
         return
 
+    # Parse the CCXT CA bundle off the loop before feeds open their clients.
+    from app.exchanges.ccxt_ext.tls import start_shared_ssl_context_warmup
+
+    start_shared_ssl_context_warmup()
+
     # 1. Initialize registered market-storage schemas through one composition root.
     storage_bootstrap = initialize_market_storage(
         klines_db_path=KLINES_DB_PATH,
