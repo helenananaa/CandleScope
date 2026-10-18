@@ -31,7 +31,7 @@ from app.core.operator_origin import (
     is_trusted_operator_origin,
     origin_from,
 )
-from app.backtest.snapshot_validation import require_contract_snapshot, require_declared_snapshot
+from app.backtest.snapshot_validation import bind_external_snapshot_symbol, require_contract_snapshot, require_declared_snapshot
 from app.backtest.errors import BacktestError
 from app.backtest.reports import export_bundle
 from app.backtest.runtime import BacktestRuntime
@@ -297,9 +297,8 @@ def preview_snapshot(
 @router.post("/runs/validate")
 def validate_run(request: Request, payload: RunCreateRequest) -> dict[str, Any]:
     try:
-        validated = _service(request).validate_run(
-            _operator_python_payload(request, payload.model_dump())
-        )
+        values = _operator_python_payload(request, payload.model_dump())
+        validated = _service(request).validate_run(values)
         runtime = _optional_runtime(request)
         if runtime is not None:
             preview = runtime.preview_snapshot(
@@ -317,6 +316,9 @@ def validate_run(request: Request, payload: RunCreateRequest) -> dict[str, Any]:
             )
             require_contract_snapshot(preview, payload.contract_data_mode)
             require_declared_snapshot(preview, payload)
+            bound = bind_external_snapshot_symbol(values, preview)
+            if bound != values:
+                validated = _service(request).validate_run(bound)
             validated["snapshot"] = preview
         return validated
     except BacktestError as exc:
@@ -330,6 +332,7 @@ def create_run(
     x_idempotency_key: str = Header(alias="Idempotency-Key"),
 ) -> dict[str, Any]:
     try:
+        values = _operator_python_payload(request, payload.model_dump())
         runtime = _optional_runtime(request)
         if runtime is not None:
             preview = runtime.preview_snapshot(
@@ -347,8 +350,9 @@ def create_run(
             )
             require_contract_snapshot(preview, payload.contract_data_mode)
             require_declared_snapshot(preview, payload)
+            values = bind_external_snapshot_symbol(values, preview)
         return _service(request).create_run(
-            _operator_python_payload(request, payload.model_dump()),
+            values,
             idempotency_key=x_idempotency_key,
         )
     except BacktestError as exc:

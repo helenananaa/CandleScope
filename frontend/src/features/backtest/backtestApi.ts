@@ -290,6 +290,8 @@ export interface BacktestSnapshot {
   quality: Record<string, unknown>;
   role_hashes?: Record<string, string>;
   fidelity_capabilities: string[];
+  catalog_dataset_id?: string;
+  identity?: Record<string, unknown>;
 }
 
 export class BacktestApiError extends Error {

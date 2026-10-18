@@ -1157,6 +1157,7 @@ class BacktestService:
         digest = config_hash(identity)
         run_id = f"bt_{uuid.uuid4().hex}"
         stored_payload = dict(payload)
+        stored_payload["source_event_kind"] = identity.source_event_kind
         normalized_execution = json.loads(identity.execution_json)
         for name in ("checkpoint_policy", "checkpoint_interval", "cost_sensitivity_mode"):
             if name in normalized_execution:

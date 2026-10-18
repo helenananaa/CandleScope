@@ -158,7 +158,12 @@ def test_independent_process_http_smoke_run_and_full_host_restart(fixture, tmp_p
         changed = host.request("POST", "/runs", {**config, "parameters": {"quantity": "0.002"}},
                                headers={"Idempotency-Key": "changed-external-parameters"}, expected=400)
         assert changed["error"]["code"] == "SMOKE_REQUIRED"
+        validated = host.request("POST", "/runs/validate", config)
         created = host.request("POST", "/runs", config, headers={"Idempotency-Key": "external-first"})
+        queued_config = json.loads(created["config_json"])
+        assert queued_config["symbol"] == "LTCUSDT"
+        assert queued_config["source_event_kind"] == "BAR"
+        assert created["config_hash"] == validated["config_hash"]
         first, report = completed(host, created["run_id"])
         result = report
         fills = result["fills"]

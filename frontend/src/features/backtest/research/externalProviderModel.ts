@@ -67,6 +67,6 @@ export function externalReportIsStale(input: {
     const metadata = new Set(["external_connection_id", "external_scope_hash", "external_provider_identity", "strategy_execution_revision"]);
     return Object.entries(draft).some(([field, value]) => !metadata.has(field)
       && !(field === "snapshot_hash" && value === "")
-      && canonical(frozen[field] ?? null) !== canonical(value ?? null));
+      && canonical(frozen[field] ?? (field === "source_event_kind" ? input.run?.source_event_kind : null) ?? null) !== canonical(value ?? null));
   } catch { return true; }
 }

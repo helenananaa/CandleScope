@@ -138,6 +138,24 @@ test("an imported launch without a quick-test snapshot binds a queued Run throug
   assert.notEqual(researchSessionFromAuthority({ ...input, dataset: { ...dataset, dataset_id: "different_dataset" } }).symbol, "LTCUSDT");
 });
 
+test("a legacy queued trade Run uses its verified snapshot rather than a different BAR catalog epoch", () => {
+  const run: BacktestRunRecord = { run_id: "bt_trade_queued", dataset_id: "local_ltc", data_epoch: "trade_epoch",
+    snapshot_hash: "trade_hash", state: "QUEUED", fidelity_mode: "AGG_TRADE_EXECUTION", source_event_kind: "AGG_TRADE",
+    config_hash: "sha256:queued", config_json: JSON.stringify({ exchange: "binance", market_type: "futures", interval: "1m", symbol: null }) };
+  const dataset: BacktestDataset = { dataset_id: "local_ltc", data_epoch: "bar_epoch", symbol: "LTCUSDT", interval: "1m",
+    name: "original imported BARs", rows: 6, first_open_ms: 0, last_close_ms: 359999, strategy_revisions: [] };
+  const tradeSnapshot: BacktestSnapshot = { data_epoch: "trade_epoch", snapshot_hash: "trade_hash",
+    coverage_start_ms: 0, coverage_end_ms: 359999, row_count: 355, quality: {}, fidelity_capabilities: ["AGG_TRADE_EXECUTION"],
+    catalog_dataset_id: "local_ltc", identity: { symbol: "LTCUSDT" } };
+  const input = { context: null, run, chart: null, dataset, snapshot: tradeSnapshot };
+  assert.equal(researchSessionFromAuthority(input).symbol, "LTCUSDT");
+  assert.equal(researchSessionFromAuthority({ ...input, run: { ...run, config_json: JSON.stringify({ symbol: "WRONGUSDT" }) } }).symbol, "LTCUSDT");
+  for (const changed of [{ data_epoch: "different_epoch" }, { snapshot_hash: "different_hash" },
+    { catalog_dataset_id: "different_dataset" }, { identity: { symbol: 42 } }]) {
+    assert.notEqual(researchSessionFromAuthority({ ...input, snapshot: { ...tradeSnapshot, ...changed } }).symbol, "LTCUSDT");
+  }
+});
+
 test("selected Run overrides a launch context from another chart", () => {
   const run: BacktestRunRecord = {
     run_id: "bt_result_btc_12345678",

@@ -48,6 +48,7 @@ export function researchSessionFromAuthority(input: {
   run: BacktestRunRecord | null;
   chart: BacktestChartData | null;
   dataset?: BacktestDataset | null;
+  snapshot?: BacktestSnapshot | null;
   fallback?: ChartSession;
 }): ChartSession {
   if (input.run) {
@@ -58,10 +59,17 @@ export function researchSessionFromAuthority(input: {
       ? input.context.chart_session : null;
     const datasetSymbol = input.dataset?.dataset_id === input.run.dataset_id
       && input.dataset?.data_epoch === input.run.data_epoch ? input.dataset?.symbol : null;
+    const snapshotIdentity = input.snapshot?.identity;
+    const snapshotDatasetId = input.snapshot?.catalog_dataset_id ?? snapshotIdentity?.dataset_id;
+    const snapshotSymbol = snapshotDatasetId === input.run.dataset_id
+      && input.snapshot?.data_epoch === input.run.data_epoch
+      && input.snapshot?.snapshot_hash === input.run.snapshot_hash
+      && typeof snapshotIdentity?.symbol === "string" && snapshotIdentity.symbol
+      ? snapshotIdentity.symbol : null;
     return {
       exchange: String(config.exchange ?? input.fallback?.exchange ?? "binance"),
       marketType: String(config.market_type ?? input.fallback?.marketType ?? "usdm"),
-      symbol: String(input.chart?.symbol ?? config.symbol ?? datasetSymbol ?? contextSession?.symbol ?? input.fallback?.symbol ?? "BTCUSDT"),
+      symbol: String(input.chart?.symbol ?? snapshotSymbol ?? config.symbol ?? datasetSymbol ?? contextSession?.symbol ?? input.fallback?.symbol ?? "BTCUSDT"),
       interval: String(input.chart?.interval ?? config.interval ?? input.fallback?.interval ?? "15m"),
     } as ChartSession;
   }

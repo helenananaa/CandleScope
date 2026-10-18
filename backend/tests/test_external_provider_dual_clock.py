@@ -50,6 +50,10 @@ def test_external_http_model_receives_only_completed_trade_bars_and_host_fills_n
         created = host.request("POST", "/runs", {**selected, "external_connection_id": binding["connection_id"], "warmup_bars": 3,
                                                 "symbol": "WRONGUSDT"},
                                headers={"Idempotency-Key": "external-trade-clock"})
+        queued_config = json.loads(created["config_json"])
+        assert queued_config["symbol"] == "LTCUSDT"
+        assert queued_config["source_event_kind"] == "AGG_TRADE"
+        assert created["data_epoch"] != fixture[2]["data_epoch"]
         _, report = completed(host, created["run_id"])
         assert report["fidelity_mode"] == "AGG_TRADE_EXECUTION"
         assert [fill["sequence"] for fill in report["fills"]] == [5, 7]

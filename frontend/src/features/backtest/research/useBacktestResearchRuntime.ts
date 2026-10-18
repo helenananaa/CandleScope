@@ -342,7 +342,8 @@ export function useBacktestResearchRuntime(options: {
     run: activeRun,
     chart,
     dataset: datasets.find((item) => item.dataset_id === activeRun?.dataset_id) ?? null,
-  }), [activeRun, chart, datasets, launchContext]);
+    snapshot,
+  }), [activeRun, chart, datasets, launchContext, snapshot]);
   const activeDataset = useMemo(
     () => selectedDataset(datasets, selectedDatasetId),
     [datasets, selectedDatasetId],

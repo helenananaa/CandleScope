@@ -108,3 +108,16 @@ test("report freshness follows the submitted account, cost, sizing, clock and ri
   assert.equal(externalReportIsStale({ ...input, request: undefined, draftText: "{" }), true);
   assert.equal(externalReportIsStale(input), false);
 });
+
+test("legacy API report event kind comes from its immutable Run when the optional draft field was omitted", () => {
+  const original = { ...config, source_event_kind: null, parameters: {}, warmup_bars: 3 };
+  const input = { report: structuralMock<BacktestReport>({ identity: config, strategy: { external_provider: revision.external_provider } }),
+    run: structuralMock<NonNullable<BacktestResearchRuntime["view"]["activeRun"]>>({ source_event_kind: "AGG_TRADE", config_json: JSON.stringify(original) }),
+    revisionId: "srv_model", datasetId: "dataset_one", snapshot: { data_epoch: "epoch_one", snapshot_hash: "snapshot_one" },
+    draftText: JSON.stringify(original), request: { ...original, source_event_kind: "AGG_TRADE" } };
+  assert.equal(externalReportIsStale(input), false);
+  assert.equal(externalReportIsStale({ ...input, request: { ...input.request, source_event_kind: "BAR" } }), true);
+  assert.equal(externalReportIsStale({ ...input, request: { ...input.request, taker_fee_bps: "1" } }), true);
+  assert.equal(externalReportIsStale({ ...input, run: structuralMock<NonNullable<BacktestResearchRuntime["view"]["activeRun"]>>({ config_json: JSON.stringify(original) }) }), true);
+  assert.equal(externalReportIsStale({ ...input, run: { ...input.run, config_json: JSON.stringify({ ...original, source_event_kind: "BAR" }) } }), true);
+});

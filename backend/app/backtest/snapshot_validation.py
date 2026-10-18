@@ -6,6 +6,17 @@ from .errors import BacktestError
 from .request_contracts import RunCreateRequest
 
 
+def bind_external_snapshot_symbol(values: dict[str, Any], preview: dict[str, Any]) -> dict[str, Any]:
+    """Freeze an external Run's instrument before it becomes visible in the queue."""
+    if values.get("external_connection_id") is None:
+        return values
+    identity = preview.get("identity")
+    symbol = identity.get("symbol") if isinstance(identity, dict) else None
+    if not isinstance(symbol, str) or not symbol or symbol != symbol.strip():
+        raise BacktestError("DATA_QUALITY_FAILED", "verified external snapshot lacks an instrument identity")
+    return {**values, "symbol": symbol}
+
+
 def require_contract_snapshot(
     preview: dict[str, Any], contract_data_mode: str
 ) -> None:
