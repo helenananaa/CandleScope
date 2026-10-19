@@ -311,6 +311,7 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
                     events,
                     event_virtual_times_ms=None,
                     checkpoint_market_wave=True,
+                    settle_fixed_funding=False,
                 ):
                     applied = await reference_store.apply_hedge_input_events(
                         run_id,
@@ -322,14 +323,14 @@ async def test_waiting_order_skips_safe_prefix_and_stops_at_first_fill(
                         checkpointed = (
                             await reference_store.finalize_hedge_inputs_and_checkpoint(
                                 run_id,
-                                risk_virtual_time_ms=risk_virtual_time_ms,
+                                risk_virtual_time_ms=risk_virtual_time_ms, settle_fixed_funding=settle_fixed_funding,
                                 events=(*events, *applied),
                             )
                         )
                     else:
                         await reference_store.finalize_hedge_inputs(
                             run_id,
-                            risk_virtual_time_ms=risk_virtual_time_ms,
+                            risk_virtual_time_ms=risk_virtual_time_ms, settle_fixed_funding=settle_fixed_funding,
                         )
                         checkpointed = False
                     return applied, checkpointed

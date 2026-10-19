@@ -162,6 +162,7 @@ async def try_advance(owner, *, command, binding, tracks, snapshots, target, run
         or binding.get("source_kind") != "AGG_TRADE"
         or binding.get("position_mode") not in {"ONE_WAY", "HEDGE"}
         or (source_goal is not None and (not hedge or len(tracks) != 1))
+        or binding.get("funding_mode") == "SANDBOX_FIXED"
         or (not hedge and binding.get("funding_mode") != "OFF")
         or binding.get("book_mode", "OFF") != "OFF"
         or binding.get("account_data_mode") == "HISTORICAL_EXACT"

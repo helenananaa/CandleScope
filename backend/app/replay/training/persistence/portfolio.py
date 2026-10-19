@@ -1511,6 +1511,15 @@ def contract_portfolio_projection(
                 (run_id,),
             ).fetchall()
         }
+    if position_leg_rows:
+        for row in connection.execute(
+            "SELECT track_id,json_extract(metadata_json,'$.position_side') AS position_side,"
+            "COUNT(*) AS entry_count FROM replay_training_contract_ledger WHERE run_id=? "
+            "AND kind='FUNDING_SETTLEMENT' AND reference_type='SANDBOX_FIXED_POLICY' "
+            "GROUP BY track_id,json_extract(metadata_json,'$.position_side')", (run_id,),
+        ).fetchall():
+            key = (str(row["track_id"]), str(row["position_side"]))
+            funding_counts[key] = funding_counts.get(key, 0) + int(row["entry_count"])
     leg_accounting: list[dict[str, object]] = []
     for leg in position_leg_rows:
         track_id = str(leg["track_id"])
@@ -1937,6 +1946,8 @@ def contract_portfolio_projection(
             "funding": (
                 "OFF"
                 if str(account["funding_mode"]) == "OFF"
+                else SANDBOX_FUNDING_FIDELITY
+                if str(account["funding_mode"]) == "SANDBOX_FIXED"
                 else (
                     "HISTORICAL_EXACT_ARCHIVE_FUNDING"
                     if exact_account

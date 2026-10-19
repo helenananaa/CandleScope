@@ -820,6 +820,7 @@ class TrainingRunService:
             normalized,
             authoritative_projections=authoritative,
             hedge_initial_projection=hedge_input_audit.get("_initial_simulation"),
+            hedge_public_marks=hedge_input_audit.get("_public_marks"),
         )
         account_status = str(account_audit.get("status"))
         hedge_input_status = str(hedge_input_audit.get("status"))
