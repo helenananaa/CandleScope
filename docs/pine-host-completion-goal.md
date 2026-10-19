@@ -15,14 +15,14 @@ The mistakenly relayed scope-narrowing instruction was withdrawn by the user.
 - Original main checkout remains at `1a2a0189` with its 19 existing local changes;
   this task did not modify that checkout.
 - Core branch: `codex/pine-host-completion`, based on `b9200480e`, now committed
-  at `336e1f83952528a0559b2b24ba328ffd0823b643` (external order schema 2).
+  at `dc869e6be26857e34a6cba0edc69943110187d8d` (external closing-tick opt-in).
   Metadata checkpoint `40a1ac8d4` remains in the previous receipt.
-- Current core wheel: `.local/host-completion/order-qualified-wheels/` in the core repo.
-  SHA256: `66018858791af4877d07491f4e8a49fe467aa9156ec4e167bcbfe55905641da2`.
+- Current core wheel: `.local/host-completion/closing-qualified-wheels/` in the core repo.
+  SHA256: `0ac745fa781e278a48ffb87a5c5daf0bfe8e6fdef6373b14ab7d886e0324b8f8`.
   It is installed only in the task's `output/pine-host/phase3/venv`.
 - Package version remains `0.3.2`; use the artifact/source identity and
   `EXTERNAL_CLOCK_SCHEMA_VERSION == 1`, `SYMBOL_METADATA_SCHEMA_VERSION == 1`
-  and `EXTERNAL_ORDER_SCHEMA_VERSION == 2`,
+  `EXTERNAL_ORDER_SCHEMA_VERSION == 2` and `EXTERNAL_CLOSING_TICK_SCHEMA_VERSION == 1`,
   rather than the version alone. The previous clock-only candidate and receipt
   remain preserved separately.
 - Final receipts and logs: `output/pine-host/phase3/`. Official runtime catalogs
@@ -30,6 +30,23 @@ The mistakenly relayed scope-narrowing instruction was withdrawn by the user.
 
 ## Implemented host work
 
+- Chart BAR and aggregate-trade runners now negotiate explicit simulated closing
+  ticks for `process_orders_on_close=true`. Matching uses only the revealed close,
+  taker fees, market/stop slippage and explicit Host latency. V2 closing capacity
+  subtracts all quantity already filled in the bucket from the bar participation
+  allowance. Reports disclose synthetic liquidity and label simulated closing
+  fills separately from physical tape events. Aggregate-trade closing fill
+  callbacks retain immutable confirmed market inputs with authoritative account
+  updates, ordinary rollback and persistent `varip`; callback orders may use the
+  same close under bounded budgets. BAR plus fill recalculation and Workbench
+  closing ticks remain explicitly unsupported. Independent cost reexecution and
+  checkpoint recovery follow the same negotiated closing contract.
+- Dual-clock V2 physical fill traces now correctly identify aggregate trades as
+  `AGG_TRADE`; the inner tape kernel previously retained its raw-trade default.
+  Simulated closing provenance remains `SCRIPT_BAR_CLOSE`. The implementation
+  identity changes, so earlier frozen runs/checkpoints must not be relabeled or
+  resumed with this new implementation. New mode flags are keyword-only and do
+  not shift existing positional constructor parameters.
 - Pine V2 robustness matrices now use independent interpreter, account, Host
   allocation and policy execution for each cost scenario, including legacy
   target-position runs. A fresh baseline must match primary decision/fill/ledger/
@@ -44,7 +61,7 @@ The mistakenly relayed scope-narrowing instruction was withdrawn by the user.
   time. Matrix rows expose their decision/policy hashes, rejected-order counts,
   ending positions and fill-callback counts. Public report hashes include the
   matrix; primary decision/fill/ledger/order/curve evidence stays unchanged.
-- Chart `pine-chart/3` and workbench `pine-external/7` now negotiate external
+- Chart `pine-chart/4` and workbench `pine-external/8` now negotiate external
   order schema 2. Fixed positive-quantity `strategy.order` calls support market,
   limit, stop and stop-limit execution through the authoritative Host allocator.
   Quantities net against existing positions without automatic reversal sizing or
@@ -134,6 +151,14 @@ The mistakenly relayed scope-narrowing instruction was withdrawn by the user.
 
 ## Interpreter interface addition
 
+Rust `ExternalExecutionOptions { closing_ticks: true }` and Python's keyword-only
+`closing_ticks=True` opt into externally scheduled closing ticks. Repeated
+confirmed fill passes must keep bars, clocks and request snapshots identical;
+only Host account feedback changes. Default callers still reject on-close
+execution. WASM exports a schema marker without adding external-account
+execution. The pure core owns validation and rollback, while the Host owns
+matching, liquidity, process lifecycle and persistence.
+
 Rust exposes `append_external_bars_with_execution_times`; Python adds optional
 `execution_times` to `Program.run_external` and `ExternalSession.append`.
 The caller supplies timestamps; the core does not access a host system clock or
@@ -150,7 +175,30 @@ the host. Interface details: core `docs/SYMBOL_METADATA_INPUT.md`.
 
 ## Validation
 
-- Current Pine-cost/Host group: 177 passed, 22 mixed/non-Pine cases deselected in
+- Closing Host gate: 210 passed, 22 mixed/non-Pine cases deselected in
+  `closing-host-qualified.log`. The 34 added cases cover close-only price
+  triggering, explicit latency, shared bucket capacity, pending-order snapshots,
+  physical/simulated provenance, callback budgets, old constructor compatibility,
+  queued BAR runs, authoritative closing callbacks, OCA reduction, closed-group
+  recovery, independent costs, legacy targets, private-flag spoofing and retained
+  BAR/Workbench rejection. Shared kernel/cost/provider/recovery group: 75 passed
+  in `closing-kernel-protocol-qualified.log`. Lint and diff checks passed.
+- The first new physical-fill provenance assertion exposed the inner dual-clock
+  raw-trade default; `closing-final-focused.log` retains that failure. The final
+  210-case run includes the repaired production path and default-mode regression.
+  Earlier draft tests also assumed smoke validation performed run admission;
+  the retained failure was corrected to test actual run creation.
+- Closing core gate: 7,906 Rust, 1,721 fresh-wheel Python and 172 tooling tests,
+  formatting, Clippy, structure/host-parity and actual generated WASM/Node passed.
+  Log: core `.local/host-completion/closing-full-gate.log`. The task-installed
+  wheel independently passed all 1,721 Python tests. Generated Node bindings
+  separately verified closing schema 1 and external order schema 2. These are
+  controlled interface checks, not TradingView differential qualification.
+- Closing bridge suite: 69 passed, 12 optional Renko cases skipped in
+  `closing-bridge.log`. Frontend backtest: 225 passed; UI and Node typechecks
+  passed in `closing-frontend-*.log`. The approximation-label guard accepts the
+  explicit simulated-close label while rejecting a trade-sequence BAR label.
+- Earlier Pine-cost/Host group: 177 passed, 22 mixed/non-Pine cases deselected in
   `pine-cost-host-final.log`. Fourteen cost cases cover fee-dependent decisions,
   relative exits, causal callback/partial-fill and latency changes, warmup, legacy
   targets, spot inventory, historical contract roles, queued whole-run/isolated
@@ -159,8 +207,8 @@ the host. Interface details: core `docs/SYMBOL_METADATA_INPUT.md`.
   generic cost/kernel/provider/recovery regression: 75 passed in
   `pine-cost-kernel-protocol-final.log`. Tick/minimum-notional admission controls
   cover both relative and trailing exits. Lint/diff checks pass.
-  The core, bridge and frontend are unchanged from the previous candidate;
-  their gates below remain inherited evidence.
+  At that checkpoint, core, bridge and frontend were unchanged; its earlier
+  gates below describe those historical source identities.
 - Earlier generic-order Host group: 161 passed, 22 mixed/non-Pine cases deselected
   in `generic-order-host-final.log`. Added API cases cover queued charts,
   preparation launch, all four generic order kinds, OCA effects, and workbench
@@ -168,7 +216,7 @@ the host. Interface details: core `docs/SYMBOL_METADATA_INPUT.md`.
   all four result hashes. Allocation group: 39 passed in
   `generic-order-allocation-final.log`, including V2 margin release and retained
   reversal caps. Bridge suite: 69 passed, 12 optional extension cases skipped.
-- Current order-schema core complete gate: 7,905 Rust, 1,714 fresh-wheel Python,
+- Earlier order-schema core complete gate: 7,905 Rust, 1,714 fresh-wheel Python,
   172 tooling tests, fmt, Clippy, structure/host-parity and actual WASM/Node.
   Log: core `.local/host-completion/order-intents-full-gate.log`. The installed
   candidate independently passes 1,714 Python tests. Generated Node bindings
@@ -203,7 +251,7 @@ the host. Interface details: core `docs/SYMBOL_METADATA_INPUT.md`.
   172 tooling tests, formatting, Clippy, structure and host-parity guards, and
   actual WASM/Node execution. The installed candidate independently passed all
   1,700 Python tests. Logs: core `.local/host-completion/symbol-metadata-*.log`.
-- Current host group: 119 passed, 4 non-Pine profiles deselected. Bridge suite:
+- Earlier metadata host group: 119 passed, 4 non-Pine profiles deselected. Bridge suite:
   69 passed, 12 Renko-extension cases skipped. Chart requested-data integration
   includes 11 actual-engine cases, including HTTP, preparation launch, queued
   fills, foreign grids and pinned revision restore.
@@ -259,7 +307,7 @@ that observation. The corrected allocation group passes.
 
 ## Remaining goal work
 
-1. Finish chart script intrabar callbacks, process-on-close
+1. Finish chart script tick/history-tick callbacks, BAR fill-recalculation
    and Pine risk-rule semantics through the authoritative Host matcher. Chart
    closed-bar rich orders and print-clock trailing stops are connected.
    Requested datasets are connected; growing requested prefixes currently rebase
@@ -270,6 +318,9 @@ that observation. The corrected allocation group passes.
    describe `calc_on_every_history_tick`, requiring a fresh core/host audit.
    V2 cost matrices now independently reexecute scripts and Host allocation;
    larger-history performance and broader product acceptance remain to qualify.
+   Simulated closing ticks are connected for chart BAR and aggregate-trade runs,
+   including aggregate-trade closing fill callbacks. They do not prove actual
+   close-auction liquidity or TradingView broker-emulator equivalence.
 2. Workbench `CANDLESCOPE` account restoration into native replay remains
    explicitly unsupported. It needs a host-account recovery contract. Tested
    chart-provider restore and native-account replay are separate paths.

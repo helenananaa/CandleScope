@@ -73,7 +73,34 @@ executions see developing values. CandleScope's observed-print callbacks do not
 claim equivalence to that historical broker-emulator behavior. See the official
 [strategy execution documentation](https://www.tradingview.com/pine-script-docs/concepts/strategies/#calc_on_order_fills).
 
-`calc_on_every_tick`, `calc_on_every_history_tick`, `process_orders_on_close`,
+`process_orders_on_close=true` additionally negotiates
+`candlescope.pine-closing-tick/1`. The BAR and aggregate-trade chart runners
+attempt execution at the revealed close price after the close decision. These
+simulated ticks cannot use earlier high/low prices to trigger newly placed
+orders. Closing fills use taker fees and market/stop slippage; explicit Host
+latency remains in force. Physical event latency counts source events, while
+an intrabar order's ordinary next-tick delay may elapse at the later simulated
+close. V2 caps aggregate closing fills at observed bar volume times participation
+minus quantity already filled in that bucket; V1 remains uncapped. This is a
+liquidity assumption, not measured close-auction liquidity.
+
+In the aggregate-trade profile, `calc_on_order_fills` also recalculates after
+closing fills on the same immutable confirmed bar and timestamp. The actual
+Host account changes, ordinary variables roll back and `varip` survives.
+Callback orders can consume the same closing tick within the existing per-bar
+pass/intent budgets. BAR plus fill recalculation remains rejected because its
+OHLC matcher does not expose the required intrabar execution phases.
+
+Reports append `_WITH_SIMULATED_CLOSE` to their fidelity label and expose the
+closing contract, liquidity assumption and fill count. V2 fill provenance uses
+`SCRIPT_BAR_CLOSE`; physical and simulated trace counts remain separate. Kernel
+checkpoints freeze this mode, and independent cost scenarios use the same closing
+hook. Older adapters and the Workbench external-account path keep rejecting the
+declaration unless they explicitly opt into the core closing-tick contract.
+The official [closing-order documentation](https://www.tradingview.com/pine-script-docs/concepts/strategies/#process_orders_on_close)
+informs this behavior; these tests are not a TradingView output oracle.
+
+`calc_on_every_tick`, `calc_on_every_history_tick`,
 and Pine `strategy.risk.*` still require further integration or core capability
 work. Order comments/alert metadata, zero-quantity no-op parity, and non-fixed
 default sizing also remain outside the external order profile. The current

@@ -21,6 +21,7 @@ DualClockStrategyFn = Callable[[tuple[MarketEvent, ...], MarketEvent], list[dict
 @dataclass(slots=True)
 class DualClockSimulationKernel:
     signal_interval: str
+    process_orders_on_close: bool = field(default=False, kw_only=True)
     gap_policy: str = "REJECT"
     max_events: int = 2_000_000
     checkpoint_event_interval: int = 10_000
@@ -56,6 +57,7 @@ class DualClockSimulationKernel:
         self.builder = TradeBarBuilder(self.signal_interval, gap_policy=self.gap_policy)
         self.signal_interval = self.builder.interval
         self.execution = TradeSimulationKernel(
+            source_kind="AGG_TRADE",
             max_events=self.max_events,
             checkpoint_event_interval=0,
             slippage_bps=self.slippage_bps,
@@ -90,6 +92,7 @@ class DualClockSimulationKernel:
         extended = history_encoder is not None and getattr(history_encoder, "extended", False)
         return {
             "schemaVersion": "candlescope.dual-clock-kernel/1",
+            **({"process_orders_on_close": True} if self.process_orders_on_close else {}),
             "signal_interval": self.signal_interval,
             "gap_policy": self.gap_policy,
             "execution": self.execution.snapshot(history_encoder=history_encoder),
@@ -116,6 +119,7 @@ class DualClockSimulationKernel:
     def restore(self, payload: Mapping[str, Any]) -> None:
         if (
             payload.get("schemaVersion") != "candlescope.dual-clock-kernel/1"
+            or bool(payload.get("process_orders_on_close")) != self.process_orders_on_close
             or payload.get("signal_interval") != self.signal_interval
             or payload.get("gap_policy") != self.gap_policy
             or bool(payload.get("scale_stream_decisions") or False)
@@ -149,7 +153,10 @@ class DualClockSimulationKernel:
         finalize: bool = False,
         checkpoint_callback: Callable[[MarketEvent], None] | None = None,
         fill_callback: Callable[[MarketEvent, MarketEvent], list[dict]] | None = None,
+        close_callback=None,
     ) -> SimulationResult:
+        if self.process_orders_on_close and close_callback is None:
+            raise MarketDatasetError("closing-tick handler is required", code="FIDELITY_UNSUPPORTED")
         lazy_curve = getenv("BACKTEST_LAZY_DUAL_CURVE_ENABLED", "1").strip() == "1"
         trades = tuple(event for event in events if event.role == "TRADES")
         if len(trades) > self.max_events:
@@ -164,35 +171,45 @@ class DualClockSimulationKernel:
                 )
         def emit(completed, source):
             for bar in completed:
-                intents = strategy((bar,), bar)
-                if bar.sequence <= warmup_events:
-                    intents = []
-                decision = _decision_record(
-                    intents,
-                    sequence=(getattr(intents, "decision", None) or {}).get("sequence", bar.sequence) if fill_callback else bar.sequence,
-                    watermark_ms=bar.event_time_ms,
-                )
-                if fill_callback is not None:
-                    decision.update(trigger="BAR_CLOSE", signal_sequence=bar.sequence)
-                if self.scale_stream_decisions:
-                    self._decision_chain_hash = "sha256:" + sha256_hex(
-                        {"previous": self._decision_chain_hash, "decision": decision}
+                previous = self.execution._last_event
+                if self.process_orders_on_close:
+                    from .closing_tick import closing_event
+                    self.execution._last_event = closing_event(bar, source.sequence - 1)
+                try:
+                    intents = strategy((bar,), bar)
+                    if bar.sequence <= warmup_events:
+                        intents = []
+                    decision = _decision_record(
+                        intents,
+                        sequence=(getattr(intents, "decision", None) or {}).get("sequence", bar.sequence) if fill_callback else bar.sequence,
+                        watermark_ms=bar.event_time_ms,
                     )
-                    self._decision_count += 1
-                else:
-                    self.decisions.append(decision)
-                if self.execution_model_revision is not None and intents:
-                    self.frozen_intents.append(
-                        {
-                            "sequence": bar.sequence,
-                            "intents": [dict(intent) for intent in intents],
-                        }
+                    if fill_callback is not None:
+                        decision.update(trigger="BAR_CLOSE", signal_sequence=bar.sequence)
+                    if self.scale_stream_decisions:
+                        self._decision_chain_hash = "sha256:" + sha256_hex(
+                            {"previous": self._decision_chain_hash, "decision": decision}
+                        )
+                        self._decision_count += 1
+                    else:
+                        self.decisions.append(decision)
+                    if self.execution_model_revision is not None and intents:
+                        self.frozen_intents.append(
+                            {
+                                "sequence": bar.sequence,
+                                "intents": [dict(intent) for intent in intents],
+                            }
+                        )
+                    # The signal precedes this boundary source event. Admission
+                    # happens before its account updates; fills require a trade.
+                    self.execution._enqueue_many(
+                        intents, current_sequence=source.sequence - (2 if self.process_orders_on_close else 1)
                     )
-                # The signal precedes this boundary source event. Admission
-                # happens before its account updates; fills require a trade.
-                self.execution._enqueue_many(
-                    intents, current_sequence=source.sequence - 1
-                )
+                    if self.process_orders_on_close:
+                        close_callback(bar, source.sequence - 1)
+                finally:
+                    if self.process_orders_on_close:
+                        self.execution._last_event = previous
         for trade in events:
             if trade.role in {"INSTRUMENT_RULES", "MARK_INDEX", "FUNDING"}:
                 emit(self.builder.close_before(trade.event_time_ms), trade)

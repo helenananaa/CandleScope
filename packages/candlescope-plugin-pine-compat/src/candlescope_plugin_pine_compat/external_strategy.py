@@ -23,7 +23,7 @@ def describe():
         raise ValueError("EXTERNAL_RUNTIME_UNAVAILABLE: install external-broker/1 runtime")
     return {
         **identity(
-            "candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-external/7"
+            "candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-external/8"
         ),
         "external_orders": getattr(pine_compat, "EXTERNAL_ORDER_SCHEMA_VERSION", 1),
         "prefix_append": PREFIX_CONTRACT,
@@ -114,6 +114,7 @@ def execute(request):
             for item in request.get("contexts", [])
         },
     )
+    closing = {"closing_ticks": True} if request.get("closing_ticks") is True else {}
     tick = request.get("host_settings", {}).get("price_tick")
     if tick is not None:
         grid = chart_metadata({"priceTickSize": tick})
@@ -132,6 +133,7 @@ def execute(request):
                     chart_symbol=request["context"]["symbol"],
                     chart_timeframe=request["context"]["timeframe"],
                     request_bars=supplied,
+                    **closing,
                 )
                 _session_count = 0
             result = _session.append(
@@ -152,6 +154,7 @@ def execute(request):
                     chart_timeframe=request["context"]["timeframe"],
                     execution_passes=passes,
                     request_bars=request_bars,
+                    **closing,
                     **({"execution_times": clocks} if clocks is not None else {}),
                 ),
                 request,

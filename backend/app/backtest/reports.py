@@ -227,6 +227,21 @@ def build_report(
         )
     if pine_orders is not None:
         report["pine_orders"] = copy.deepcopy(pine_orders)
+    if config.get("pine_process_on_close"):
+        from app.simulation.closing_tick import CONTRACT, REASON
+        closing = {
+            "contract": CONTRACT,
+            "synthetic": True,
+            "price": "REVEALED_BAR_CLOSE",
+            "liquidity": "UNUSED_BAR_PARTICIPATION" if config.get("execution_model_revision") else "UNCAPPED",
+            "fill_count": sum(item.get("reason") == REASON for item in fills),
+            "close_auction_is_historical_fact": False,
+        }
+        report["report_label"] += "_WITH_SIMULATED_CLOSE"
+        report["identity"]["closing_tick_contract"] = CONTRACT
+        report["fill_model"] = {**report["fill_model"], "closing_tick": closing}
+        report["unmodeled"].append("close auction liquidity")
+        report["suitable_for"] = ["completed-bar signals", "simulated closing-tick execution"]
     if config.get("execution_model_revision"):
         report["order_events"] = list(
             (payload.get("ledger") or {}).get("order_events") or []
@@ -250,6 +265,7 @@ def build_report(
             "ohlc_path_is_historical_fact": False,
             "agg_trade_is_raw_trade": False,
             "queue_exact": False,
+            **({"closing_tick": closing} if config.get("pine_process_on_close") else {}),
         }
         if fidelity == "BAR_APPROX":
             report["unmodeled"] = [
@@ -258,7 +274,9 @@ def build_report(
         traced = sum(bool(item.get("source_event_hash")) for item in fills)
         report["fill_trace"] = {
             "fill_count": len(fills),
-            "authoritative_event_trace_count": traced,
+            "authoritative_event_trace_count": sum(bool(item.get("source_event_hash")) and item.get("source_event_kind") != "SCRIPT_BAR_CLOSE" for item in fills),
+            **({"simulated_event_trace_count": sum(item.get("source_event_kind") == "SCRIPT_BAR_CLOSE" for item in fills)}
+               if config.get("pine_process_on_close") else {}),
             "complete": traced == len(fills),
         }
     strategy_metadata = payload.get("strategy_metadata")

@@ -1168,7 +1168,7 @@ class BacktestService:
         normalized_execution = json.loads(identity.execution_json)
         if normalized_execution.get("pine_runtime_identity"):
             stored_payload["pine_runtime_identity"] = normalized_execution["pine_runtime_identity"]
-        for name in ("pine_contexts", "pine_local_data_root", "pine_order_runtime_identity", "pine_fill_callbacks"):
+        for name in ("pine_contexts", "pine_local_data_root", "pine_order_runtime_identity", "pine_fill_callbacks", "pine_process_on_close"):
             stored_payload.pop(name, None)
             if name in normalized_execution:
                 stored_payload[name] = normalized_execution[name]
@@ -2744,6 +2744,7 @@ class BacktestService:
             resume_sequence = 0
 
             kernel = SimulationKernel(
+                process_orders_on_close=bool(config.get("pine_process_on_close")),
                 account_model=str(
                     config.get("account_model") or "LINEAR_PERP_ONE_WAY_V1"
                 ),
@@ -2810,6 +2811,10 @@ class BacktestService:
                 )
 
             input_modes = feature_names = None
+            closing = None
+            if config.get("pine_process_on_close"):
+                from .pine_closing import ChartClosingTicks
+                closing = ChartClosingTicks(kernel)
             chart_batch = None
             python_batch = None
             generic_bar = None
@@ -2944,6 +2949,7 @@ class BacktestService:
                 warmup_events=0,
                 finalize=True,
                 checkpoint_callback=checkpoint_after,
+                **({"close_callback": closing.process} if closing is not None else {}),
             )
             cost_sensitivity = (
                 self._build_cost_sensitivity(config, kernel, events, result, provider=provider, planner=planner, input_plan=adapter.input_plan,
@@ -3123,6 +3129,7 @@ class BacktestService:
                     "aggregate-trade snapshot exceeds worker memory ceiling",
                 )
             kernel = DualClockSimulationKernel(
+                process_orders_on_close=bool(config.get("pine_process_on_close")),
                 signal_interval=str(config["signal_interval"]),
                 gap_policy="REJECT",
                 max_events=self.settings.max_trade_events,
@@ -3188,6 +3195,11 @@ class BacktestService:
                     warmup=warmup_events, deadline=deadline,
                     features=lambda bar: self._observation_features(provider, bar=bar, trade=None),
                     control=lambda: self._assert_execution_control(run_id, deadline=deadline, expected_generation=expected_generation))
+
+            closing = None
+            if config.get("pine_process_on_close"):
+                from .pine_closing import ChartClosingTicks
+                closing = ChartClosingTicks(kernel, callbacks)
 
             def strategy(
                 _visible: tuple[MarketEvent, ...], bar: MarketEvent
@@ -3279,6 +3291,7 @@ class BacktestService:
                 finalize=True,
                 checkpoint_callback=checkpoint_after,
                 **({"fill_callback": callbacks.on_fill} if callbacks is not None else {}),
+                **({"close_callback": closing.process} if closing is not None else {}),
             )
             cost_sensitivity = self._build_cost_sensitivity(config, kernel, events, result, provider=provider, planner=planner, input_plan=adapter.input_plan,
                 market=observation_market or {"venue": "local", "symbol": str(record["dataset_id"])}, warmup=warmup_events,
@@ -4456,11 +4469,14 @@ class BacktestService:
             compiled_pine = json.loads(str(persisted_execution["compiled_json"]))
             execution_config["pine_runtime_identity"] = compiled_pine["dependencyHash"]
             fill_callbacks = json.loads(compiled_pine["executionSource"]).get("fillCallbacks") is True
+            process_close = json.loads(compiled_pine["executionSource"]).get("processOnClose") is True
+            if process_close:
+                execution_config["pine_process_on_close"] = True
             if fill_callbacks:
                 if fidelity != "AGG_TRADE_EXECUTION" or output_mode != "ORDER_INTENT":
                     raise BacktestError("FIDELITY_UNSUPPORTED", "Pine fill callbacks require ORDER_INTENT and aggregate-trade execution")
                 execution_config["pine_fill_callbacks"] = True
-            if output_mode == "ORDER_INTENT":
+            if output_mode == "ORDER_INTENT" or process_close:
                 from .strategy.pine_planner import host_identity
                 execution_config["pine_order_runtime_identity"] = host_identity()
             if fidelity not in {"BAR_APPROX", "AGG_TRADE_EXECUTION"}:
@@ -5468,6 +5484,10 @@ def _pine_account_view(kernel):
 
 
 def _new_host_planner(config, **kwargs):
+    if config.get("pine_process_on_close"):
+        from .strategy.pine_planner import host_identity
+        if config.get("pine_order_runtime_identity") != host_identity():
+            raise BacktestError("IDENTITY_MUTATION", "Pine closing-tick implementation changed; create a fresh run")
     if config.get("pine_runtime_identity") and config.get("output_mode") == "ORDER_INTENT":
         from .strategy.pine_planner import PineHostPlanner, host_identity
         if config.get("pine_order_runtime_identity") != host_identity():

@@ -13,9 +13,10 @@ from .libraries import library_sources
 
 def describe():
     return {
-        **identity("candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-chart/3"),
+        **identity("candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-chart/4"),
         "external_orders": getattr(pine_compat, "EXTERNAL_ORDER_SCHEMA_VERSION", 1),
         "fill_callbacks": "candlescope.pine-fill-callbacks/1",
+        "closing_tick_contract": "candlescope.pine-closing-tick/1" if getattr(pine_compat,"EXTERNAL_CLOSING_TICK_SCHEMA_VERSION",0)==1 else None,
         "prefix_append": PREFIX_CONTRACT,
         "prefix_passes": PASSES_CONTRACT,
         "prefix_clocks": CLOCKS_CONTRACT,
@@ -30,7 +31,7 @@ def execute(request):
         requirements = program.host_requirements()
         # The empty prefix exposes declared broker settings without making trades.
         try:
-            profile = program.run_external([], [], **({"execution_passes": []} if requirements["execution"].get("calcOnOrderFills") else {}))
+            profile = program.run_external([], [], **({"closing_ticks": True} if requirements["execution"].get("processOrdersOnClose") and getattr(pine_compat,"EXTERNAL_CLOSING_TICK_SCHEMA_VERSION",0)==1 else {}), **({"execution_passes": []} if requirements["execution"].get("calcOnOrderFills") else {}))
         except ValueError as exc:
             profile = {"profileError": str(exc)}
         return {

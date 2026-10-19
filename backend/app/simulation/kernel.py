@@ -94,6 +94,7 @@ StrategyFn = Callable[[tuple[MarketEvent, ...], MarketEvent], list[dict]]
 
 @dataclass(slots=True)
 class SimulationKernel:
+    process_orders_on_close: bool = field(default=False, kw_only=True)
     account_model: str = "LINEAR_PERP_ONE_WAY_V1"
     funding_mode: str = "OFF"
     leverage: Decimal = Decimal("1")
@@ -237,6 +238,7 @@ class SimulationKernel:
 
     def snapshot(self, *, history_encoder=None) -> dict:
         return {
+            **({"process_orders_on_close": True} if self.process_orders_on_close else {}),
             "scale_stream_decisions": self.scale_stream_decisions,
             **(
                 {
@@ -323,6 +325,8 @@ class SimulationKernel:
         }
 
     def restore(self, payload: Mapping[str, object]) -> None:
+        if bool(payload.get("process_orders_on_close")) != self.process_orders_on_close:
+            raise MarketDatasetError("closing-tick checkpoint identity changed", code="CHECKPOINT_CORRUPT")
         if bool(payload.get("scale_stream_decisions") or False) != bool(
             self.scale_stream_decisions
         ):
@@ -453,12 +457,16 @@ class SimulationKernel:
         warmup_events: int = 0,
         finalize: bool = False,
         checkpoint_callback: Callable[[MarketEvent], None] | None = None,
+        close_callback=None,
     ) -> SimulationResult:
-        loop = (self._run_plain_bars if self._specialized_bar
+        if self.process_orders_on_close and close_callback is None:
+            raise MarketDatasetError("closing-tick handler is required", code="FIDELITY_UNSUPPORTED")
+        loop = (self._run_plain_bars if self._specialized_bar and not self.process_orders_on_close
                 and type(self) is SimulationKernel and type(self.account) is ContractAccount
                 and self.funding_rate == 0 and warmup_events == 0 else self._run_events)
         loop(events, strategy, warmup_events=warmup_events,
-                         finalize=finalize, checkpoint_callback=checkpoint_callback)
+                         finalize=finalize, checkpoint_callback=checkpoint_callback,
+                         **({"close_callback": close_callback} if close_callback is not None else {}))
         return self.result()
 
     def _run_plain_bars(self, events, strategy, *, warmup_events, finalize, checkpoint_callback):
@@ -499,6 +507,7 @@ class SimulationKernel:
         warmup_events: int = 0,
         finalize: bool = False,
         checkpoint_callback: Callable[[MarketEvent], None] | None = None,
+        close_callback=None,
     ) -> None:
         for event in events:
             if self.paused:
@@ -535,7 +544,9 @@ class SimulationKernel:
             if self._market_event_count <= warmup_events:
                 intents = []
             self._record_decision(intents, market_event)
-            self._enqueue_many(intents, current_sequence=market_event.sequence)
+            self._enqueue_many(intents, current_sequence=market_event.sequence - (1 if self.process_orders_on_close else 0))
+            if self.process_orders_on_close:
+                close_callback(market_event, market_event.sequence)
             self._record_equity(market_event)
             if checkpoint_callback is not None:
                 checkpoint_callback(event)

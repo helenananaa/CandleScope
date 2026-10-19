@@ -55,6 +55,10 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
             if config.get("pine_fill_callbacks"):
                 callbacks = ChartFillCallbacks(session, adapter, shadow_planner, replay,
                     market=market, warmup=warmup, features=features, control=control, deadline=deadline)
+            closing = None
+            if config.get("pine_process_on_close"):
+                from .pine_closing import ChartClosingTicks
+                closing = ChartClosingTicks(replay, callbacks)
 
             def strategy(_visible, event):
                 nonlocal observed
@@ -74,7 +78,8 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
                     context=None if shadow_planner.config is None else _planning_context(account_kernel, event))
 
             result = replay.run(events, strategy, warmup_events=0, finalize=True,
-                **({"fill_callback": callbacks.on_fill} if callbacks is not None else {}))
+                **({"fill_callback": callbacks.on_fill} if callbacks is not None else {}),
+                **({"close_callback": closing.process} if closing is not None else {}))
             service._assert_provider_state_budget(session.snapshot())
             check_deadline(deadline)
             control()

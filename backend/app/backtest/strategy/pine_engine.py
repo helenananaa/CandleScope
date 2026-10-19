@@ -22,6 +22,7 @@ REVISION = "pine-engine-chart-v1"
 SOURCE_SCHEMA = "candlescope.chart-pine/1"
 ORDER_CONTRACT = "candlescope.pine-orders/1"
 CALLBACK_CONTRACT = "candlescope.pine-fill-callbacks/1"
+CLOSING_CONTRACT = "candlescope.pine-closing-tick/1"
 
 
 def plugin():
@@ -95,9 +96,10 @@ def analyze(source, libraries=None):
         or (requirements.get("account") or {}).get("declaredCurrency")
         or any(
             execution.get(key)
-            for key in ("calcOnEveryTick", "processOrdersOnClose")
+            for key in ("calcOnEveryTick",)
         )
         or (execution.get("calcOnOrderFills") and result["identity"].get("fill_callbacks") != CALLBACK_CONTRACT)
+        or (execution.get("processOrdersOnClose") and result["identity"].get("closing_tick_contract") != CLOSING_CONTRACT)
         or (any(feature == "strategy.order" or feature.startswith("strategy.oca.") for feature in features)
             and result["identity"].get("external_orders", 1) < 2)
         or execution.get("clock") not in {"notUsed", "explicitTimestampWhenEvaluated"}
@@ -107,7 +109,7 @@ def analyze(source, libraries=None):
         raise StrategyProviderError(
             "FIDELITY_UNSUPPORTED",
             "Chart Pine supports closed-bar entry, exit and cancellation with pinned requested datasets; "
-            "fill callbacks require the aggregate-trade execution clock; tick/close callbacks need additional contracts. "
+            "fill callbacks require the aggregate-trade execution clock; closing ticks require explicit Host support. "
             + ", ".join(sorted(blocked)),
         )
     return result
@@ -149,6 +151,7 @@ class PineEngineProvider:
             self.runtime_identity = frozen["identity"]
             self.needs_clock = frozen.get("executionClock") == "explicitTimestampWhenEvaluated"
             self.fill_callbacks = frozen.get("fillCallbacks") is True
+            self.process_on_close = frozen.get("processOnClose") is True
         except (KeyError, ValueError, TypeError) as exc:
             raise StrategyProviderError(
                 "PROVIDER_PROTOCOL_VIOLATION", "compiled Pine source envelope required"
@@ -170,6 +173,7 @@ class PineEngineProvider:
             "source": self.source,
             "libraries": self.libraries,
             "parameters": dict(context.get("parameters") or {}),
+            **({"closing_ticks": True} if self.process_on_close else {}),
         }
         from app.backtest.errors import BacktestError
         from app.backtest.pine_requested_data import load_contexts
@@ -213,7 +217,9 @@ class PineEngineProvider:
                 if self.needs_clock:
                     self.execution_times.append(frame.event_time_ms)
             else:
-                if self.execution_passes[index][-1]["confirmed"] or self.bars[index]["time"] != bar["time"]:
+                previous_pass = self.execution_passes[index][-1]
+                if (self.bars[index]["time"] != bar["time"] or (previous_pass["confirmed"] and
+                    (not self.process_on_close or not confirmed or previous_pass["bar"] != bar or previous_pass["event_time_ms"] != frame.event_time_ms))):
                     raise StrategyProviderError("LOOKAHEAD_VIOLATION", "a committed Pine bar cannot be replaced")
                 self.bars[index], self.accounts[index] = bar, account
                 if self.needs_clock:
@@ -450,11 +456,13 @@ class PineEngineProvider:
         }
 
     def report_metadata(self):
+        close_callbacks = sum(max(0, sum(item["confirmed"] for item in group) - 1) for group in self.execution_passes)
         return {"pineExecution": {
             "profile": "CAUSAL_AGG_TRADE_FILL_PASSES" if self.fill_callbacks else "CONFIRMED_BAR_CLOSE",
             "accountAuthority": "candlescope", "tradingViewEquivalent": False,
             "barCount": len(self.bars),
-            "fillCallbackCount": sum(not item["confirmed"] for group in self.execution_passes for item in group),
+            "fillCallbackCount": sum(not item["confirmed"] for group in self.execution_passes for item in group) + close_callbacks,
+            **({"closingTickContract": CLOSING_CONTRACT, "closingFillCallbackCount": close_callbacks} if self.process_on_close else {}),
         }}
 
     def abort(self):

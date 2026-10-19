@@ -217,6 +217,7 @@ def compile_revision(payload: Mapping[str, object], *, now_ms: int) -> dict[str,
             json.dumps({"schema": SOURCE_SCHEMA, "source": source, "identity": pine_analysis["identity"], "libraries": libraries,
                 "executionClock": pine_analysis["requirements"]["execution"]["clock"], "orderContract": ORDER_CONTRACT,
                 "fillCallbacks": pine_analysis["requirements"]["execution"].get("calcOnOrderFills", False),
+                "processOnClose": pine_analysis["requirements"]["execution"].get("processOrdersOnClose", False),
                 "requiresOrderMode": any(item["feature"] == "strategy.order" or item["feature"].startswith("strategy.oca.")
                     for item in pine_analysis["analysis"].get("compatibility", {}).get("supported", []))}, sort_keys=True)
             if pine_analysis else

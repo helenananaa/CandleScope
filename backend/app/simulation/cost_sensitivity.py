@@ -204,6 +204,8 @@ def _clone_kernel(kernel: Any, *, _bar_sensitivity=False, **overrides: object) -
         "order_end_policy": kernel.order_end_policy,
         "equity_curve_event_interval": kernel.equity_curve_event_interval,
     }
+    if isinstance(kernel, (SimulationKernel, DualClockSimulationKernel)):
+        common["process_orders_on_close"] = kernel.process_orders_on_close
     common.update(overrides)
     if isinstance(kernel, DualClockSimulationKernel):
         return DualClockSimulationKernel(

@@ -128,7 +128,7 @@ def source_event_trace(event: object, *, source_kind: str) -> dict[str, object]:
         "payload": dict(event.payload),
     }
     return {
-        "source_event_kind": source_kind,
+        "source_event_kind": "SCRIPT_BAR_CLOSE" if event.payload.get("execution_phase") == "PINE_BAR_CLOSE" else source_kind,
         "source_sequence": event.sequence,
         "source_event_time_ms": event.event_time_ms,
         "source_event_hash": "sha256:" + sha256_hex(canonical),

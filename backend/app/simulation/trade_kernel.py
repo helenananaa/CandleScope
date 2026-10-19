@@ -915,7 +915,7 @@ class TradeSimulationKernel:
             self.maker_fee_bps
             if maker or (
                 order.type in {"LIMIT", "STOP_LIMIT"}
-                and reason not in {"PRINT_THROUGH", "DEPTH_WALK"}
+                and reason not in {"PRINT_THROUGH", "DEPTH_WALK", "PINE_BAR_CLOSE"}
             )
             else self.taker_fee_bps
         )

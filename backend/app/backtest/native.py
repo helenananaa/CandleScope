@@ -140,7 +140,7 @@ class NativeBacktests:
                 try:
                     external_plugin = {**plugin, "command": [*plugin["command"][:-1], plugin["command"][-1].replace(".native_strategy", ".external_strategy")]}
                     external = self.runner(external_plugin, {"operation": "describe"}, timeout=15)
-                    supported = {"pine": {"pine-external/1", "pine-external/2", "pine-external/3", "pine-external/4", "pine-external/5", "pine-external/6", "pine-external/7"},
+                    supported = {"pine": {"pine-external/1", "pine-external/2", "pine-external/3", "pine-external/4", "pine-external/5", "pine-external/6", "pine-external/7", "pine-external/8"},
                                  "pyne": {"pyne-external/1", "pyne-external/2", "pyne-external/3", "pyne-external/4", "pyne-external/5"}}
                     external_available = (external["identity"].get("protocol") == PROTOCOL
                                           and external["identity"].get("adapter") in supported[language])

@@ -18,6 +18,7 @@ def host_identity():
         digest.update(Path(__file__).with_name(name).read_bytes())
     digest.update(Path(__file__).parent.parent.joinpath("pine_callbacks.py").read_bytes())
     digest.update(Path(__file__).parent.parent.joinpath("pine_sensitivity.py").read_bytes())
+    digest.update(Path(__file__).parent.parent.joinpath("pine_closing.py").read_bytes())
     digest.update(Path(__file__).parent.parent.joinpath("service.py").read_bytes())
     return {"contract": ORDER_CONTRACT, "execution": execution_identity(), "planner_sha256": digest.hexdigest()}
 
