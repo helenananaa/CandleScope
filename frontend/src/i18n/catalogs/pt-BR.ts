@@ -1,6 +1,9 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
+  "native.inputs.priceTick": "Incremento mínimo de preço",
+  "native.inputs.currency": "Moeda de cotação (exige o incremento real de preço)",
+  "native.inputs.quantityPrecision": "Casas decimais da quantidade (0–9)",
   "indicator.pine.currencyRates": "Taxas de câmbio efetivas do Pine (JSON)",
   "indicator.pine.currencyRatesHelp": "Informe a disponibilidade real em milissegundos Unix. Valores futuros não são usados em consultas anteriores. Não há substituição automática de mercados de câmbio.",
   "indicator.pine.quoteCurrency": "Moeda de cotação do gráfico (exige o passo real de preço)",

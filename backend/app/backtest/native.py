@@ -213,7 +213,8 @@ class NativeBacktests:
                 requested = self.runtime.local_data.get_manifest(context["dataset_id"])
                 if pair[0].split(":")[-1] != requested["symbol"] or pair[1] != timeframe(context["interval"]):
                     raise BacktestError("DATA_SNAPSHOT_MISMATCH", "requested metadata differs from frozen dataset")
-                contexts.append({"symbol": pair[0], "timeframe": pair[1], "bars": self._freeze(context)})
+                contexts.append({"symbol": pair[0], "timeframe": pair[1], "bars": self._freeze(context),
+                    **({"metadata": context["metadata"]} if context.get("metadata") else {})})
             magnifier = None
             if payload.get("magnifier"):
                 if payload["language"] != "pine":

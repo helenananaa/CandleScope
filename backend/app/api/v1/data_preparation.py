@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.data_preparation.models import PreparationError, PreparationRequest, Requirement
 from app.replay.request_contracts import TrainingRunSetupPayload
 from app.backtest.request_contracts import ChartContextResolveRequest, ResearchExecutionOverrides
-from app.backtest.native_contracts import HostMatchingSettings, ExternalRunRequest, PineChartMetadata
+from app.backtest.native_contracts import HostMatchingSettings, ExternalRunRequest, PineChartMetadata, RequestedNativeData
 from app.api.v1.backtests import _operator_python_payload
 
 router = APIRouter(prefix="/data-preparations", tags=["data-preparation"])
@@ -28,6 +28,7 @@ class StrategyLaunchPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     strategy_revision_id: str = Field(min_length=1, max_length=128)
     parameters: dict = Field(default_factory=dict)
+    pine_contexts: list[RequestedNativeData] = Field(default_factory=list, max_length=16)
     execution_overrides: ResearchExecutionOverrides | None = None
     chart_cell_scope: str | None = Field(default=None, min_length=1, max_length=320)
     strategy_draft_id: str | None = Field(default=None, pattern=r"^draft-[A-Za-z0-9_-]{8,152}$")

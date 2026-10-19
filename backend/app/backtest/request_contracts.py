@@ -4,6 +4,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from .native_contracts import RequestedNativeData
 
 
 class RunCreateRequest(BaseModel):
@@ -29,6 +30,7 @@ class RunCreateRequest(BaseModel):
     bar_builder: str | None = Field(default=None, max_length=80)
     timezone: str | None = Field(default=None, max_length=40)
     parameters: dict[str, Any] = Field(default_factory=dict)
+    pine_contexts: list[RequestedNativeData] = Field(default_factory=list, max_length=16)
     strategy_source: str | None = Field(default=None, max_length=2_000)
     signal_trace_mode: str = Field(default="LEGACY_INLINE_V1", max_length=32)
     output_mode: str = Field(default="TARGET_POSITION", max_length=32)

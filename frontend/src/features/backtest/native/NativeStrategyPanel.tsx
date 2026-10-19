@@ -252,7 +252,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       if (!params || Array.isArray(params) || typeof params !== "object") throw new Error(t("native.parametersInvalid"));
       const context = props.session;
       const pineMetadata = language === "pine" && advanced.priceTickSize ? { priceTickSize: advanced.priceTickSize,
-        ...(advanced.currency ? { currency: advanced.currency } : {}) } : undefined;
+        ...(advanced.currency ? { currency: advanced.currency } : {}),
+        ...(advanced.quantityPrecision ? { quantityPrecision: Number(advanced.quantityPrecision) } : {}) } : undefined;
       const execution = executionInputs(mode, hostSettings, fidelity, fillRecalculation, executionData);
       const automaticExecution = automaticHostExecution(mode, hostSettings, fidelity, fillRecalculation, executionData);
       const prepareRun = async (route: string, submission: Record<string, unknown>) => {

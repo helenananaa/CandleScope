@@ -317,6 +317,43 @@ test("Pine charts compile through the real engine revision rather than the froze
   assert.equal(calls[0], "revision:PINE_ENGINE");
 });
 
+test("Pine requested datasets are frozen into manual and automatically prepared runs", async (context) => {
+  const previousFetch = globalThis.fetch;
+  context.after(() => { globalThis.fetch = previousFetch; });
+  const dataset = { dataset_id: "remote", data_epoch: "remote-epoch", name: "ETH", symbol: "ETHUSDT",
+    interval: "2m", first_open_ms: 0, last_close_ms: 599999, exchange: "okx", market_type: "spot" };
+  const signal = new AbortController().signal;
+  globalThis.fetch = async (url, options) => {
+    assert.equal(options?.signal, signal);
+    if (String(url).endsWith("/datasets")) return new Response(JSON.stringify({ datasets: [dataset] }));
+    assert.ok(String(url).endsWith("/datasets/snapshot"));
+    const body = JSON.parse(String(options?.body));
+    assert.equal(body.exchange, "okx"); assert.equal(body.market_type, "spot");
+    return new Response(JSON.stringify({ snapshot_hash: "remote-snapshot" }));
+  };
+  const pine: ChartStrategyRunRequest = { ...request, language: "pine", attachment: {
+    ...request.attachment, language: "pine", parameters: { length: 5, __pineInputs: {
+      contexts: [{ dataset, symbol: "OKX:ETHUSDT" }], magnifier: null, libraries: "{}",
+    } },
+  } };
+  const calls: string[] = [];
+  const api = apiWithResolutions([resolution(), resolution()], calls);
+  api.createRun = async (body) => {
+    assert.deepEqual(body.parameters, { length: 5 });
+    assert.equal((body.pine_contexts as Record<string, unknown>[])[0]?.snapshot_hash, "remote-snapshot");
+    assert.equal((body.pine_contexts as Record<string, unknown>[])[0]?.exchange, "okx");
+    return completed();
+  };
+  assert.equal((await runChartStrategyBacktest({ api, request: pine, signal, pollIntervalMs: 0 })).kind, "TERMINAL");
+  const automatic = apiWithResolutions([resolution("NEEDS_DATA")], []);
+  automatic.prepareChartContext = async (_body, _signal, intent) => {
+    assert.deepEqual(intent?.parameters, { length: 5 });
+    assert.equal((intent?.pine_contexts?.[0] as Record<string, unknown>).snapshot_hash, "remote-snapshot");
+    return { ...resolution(), prepared_run: completed() };
+  };
+  assert.equal((await runChartStrategyBacktest({ api: automatic, request: pine, signal, pollIntervalMs: 0 })).kind, "TERMINAL");
+});
+
 test("an idempotent completed Run is reused without polling or retry", async () => {
   const calls: string[] = [];
   const api = apiWithResolutions([resolution(), resolution()], calls);

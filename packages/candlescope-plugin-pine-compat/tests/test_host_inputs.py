@@ -185,3 +185,65 @@ def test_unused_wall_clock_does_not_add_history_sized_clock_vectors():
     )
     assert result.ok, result.diagnostics
     assert "executionTimesMs" not in result.meta
+
+
+def test_foreign_symbol_metadata_reaches_native_sessions_and_requires_actual_values():
+    from candlescope_plugin_pine_compat.native_session import Session
+    from candlescope_plugin_pine_compat.native_strategy import execute
+    source = '''//@version=6
+strategy("Requested metadata")
+plot(request.security("OKX:ETH-USDT","1",syminfo.mintick))
+plot(request.security("OKX:ETH-USDT","1",syminfo.currency == "EUR" ? 1 : 0))
+plot(request.security("OKX:ETH-USDT","1",syminfo.mincontract))
+'''
+    bars = [{"time": i * 60, "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1} for i in range(3)]
+    context = {"symbol": "OKX:ETH-USDT", "timeframe": "1", "bars": bars,
+        "metadata": {"priceTickSize": ".25", "currency": "EUR", "quantityPrecision": 3}}
+    data = {"source": source, "parameters": {}, "bars": bars, "contexts": [context],
+        "context": {"symbol": "BINANCE:BTCUSDT", "timeframe": "1", "metadata": {"priceTickSize": ".1", "currency": "USDT", "quantityPrecision": 2}}}
+    result = execute(data)
+    assert [plot["values"] for plot in result["raw_output"]["plots"]] == [[.25]*3, [1]*3, [.001]*3]
+    session = Session(data)
+    assert session.advance(3) == result
+    for metadata in (None, {"priceTickSize": ".25"}):
+        with pytest.raises(ValueError, match="PINE_HOST_METADATA_REQUIRED"):
+            execute({**data, "contexts": [{**context, "metadata": metadata}]})
+
+
+def test_requested_symbol_metadata_rejects_contradictory_timeframes_and_old_runtime(monkeypatch):
+    import pine_compat
+    from candlescope_plugin_pine_compat.host_inputs import native_request_bars
+    context = {"symbol": "B", "metadata": {"priceTickSize": ".25"}}
+    with pytest.raises(ValueError, match="conflicting metadata"):
+        native_request_bars({"contexts": [context, {**context, "metadata": {"priceTickSize": ".1"}}]}, {})
+    monkeypatch.setattr(pine_compat, "SYMBOL_METADATA_SCHEMA_VERSION", 0)
+    with pytest.raises(ValueError, match="PINE_HOST_METADATA_UNAVAILABLE"):
+        native_request_bars({"contexts": [context]}, {})
+
+
+def test_indicator_requests_use_foreign_metadata_and_do_not_use_runtime_defaults():
+    bars = (Bar(time=60, open=1, high=1, low=1, close=1, volume=1),)
+    supplied = {"OKX:ETH-USDT:1": [{"time": 60000, "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}]}
+    options = {"pineChartMetadata": {"priceTickSize": ".1", "currency": "USDT"}, "pineRequestBars": supplied,
+        "pineRequestSymbolMetadata": {"OKX:ETH-USDT": {"priceTickSize": ".25", "currency": "EUR"}}}
+    source = 'plot(request.security("OKX:ETH-USDT","1",syminfo.mintick))\nplot(request.security("OKX:ETH-USDT","1",syminfo.currency == "EUR" ? 1 : 0))'
+    plugin = PineCompatRuntimePlugin()
+    actual = plugin.execute_batch(replace(request(source, **options), bars=bars))
+    assert actual.ok, actual.diagnostics
+    assert [series.points[0].value for series in actual.output.series] == [.25, 1]
+    missing = plugin.execute_batch(replace(request(source, **{**options, "pineRequestSymbolMetadata": {}}), bars=bars))
+    assert not missing.ok
+    assert missing.diagnostics[0].code == "PINE_HOST_METADATA_REQUIRED"
+
+
+def test_forming_lower_timeframe_requests_retain_the_symbol_registry():
+    plugin = PineCompatRuntimePlugin()
+    bars = tuple(Bar(time=t, open=1, high=1, low=1, close=1, volume=1, is_closed=t == 60) for t in (60, 120))
+    supplied = {"OKX:ETH-USDT:30S": [{"time": t, "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}
+        for t in (60000, 90000, 120000, 150000)]}
+    options = {"pineChartMetadata": {"priceTickSize": ".1"}, "pineRequestBars": supplied,
+        "pineRequestSymbolMetadata": {"OKX:ETH-USDT": {"priceTickSize": ".25"}}, "pineExecutionTimeMs": 179999}
+    source = 'values=request.security_lower_tf("OKX:ETH-USDT","30S",syminfo.mintick)\nplot(array.sum(values))'
+    result = plugin.execute_batch(replace(request(source, **options), bars=bars))
+    assert result.ok, result.diagnostics
+    assert [point.value for point in result.output.series[0].points] == [.5, .5]

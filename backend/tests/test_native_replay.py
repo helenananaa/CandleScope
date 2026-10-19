@@ -11,8 +11,10 @@ from tests.test_native_strategy_plugins import PINE, PYNE
 def settle(service, key):
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
-        value = service.get(key)
         with service.native.lock:
+            # Observe the record and job completion atomically. A read before
+            # this lock can return the initial record after the worker finishes.
+            value = service.get(key)
             if key not in service.jobs:
                 assert value["state"] != "FAILED", value
                 return value

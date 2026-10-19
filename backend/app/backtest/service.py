@@ -1168,6 +1168,10 @@ class BacktestService:
         normalized_execution = json.loads(identity.execution_json)
         if normalized_execution.get("pine_runtime_identity"):
             stored_payload["pine_runtime_identity"] = normalized_execution["pine_runtime_identity"]
+        for name in ("pine_contexts", "pine_local_data_root"):
+            stored_payload.pop(name, None)
+            if name in normalized_execution:
+                stored_payload[name] = normalized_execution[name]
         for name in ("checkpoint_policy", "checkpoint_interval", "cost_sensitivity_mode"):
             if name in normalized_execution:
                 stored_payload[name] = normalized_execution[name]
@@ -2716,6 +2720,8 @@ class BacktestService:
                     "pineChartMetadata": {"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None,
                     "pineChartInterval": config.get("signal_interval") or config.get("interval"),
                     "pineChartMarketType": config.get("market_type"),
+                    "pineRequestedContexts": config.get("pine_contexts", []),
+                    "pineLocalDataRoot": config.get("pine_local_data_root"),
                 }
             )
 
@@ -3106,6 +3112,8 @@ class BacktestService:
                     "pineChartMetadata": {"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None,
                     "pineChartInterval": config.get("signal_interval") or config.get("interval"),
                     "pineChartMarketType": config.get("market_type"),
+                    "pineRequestedContexts": config.get("pine_contexts", []),
+                    "pineLocalDataRoot": config.get("pine_local_data_root"),
                 }
             )
             event_bytes = _event_wire_bytes(events)
@@ -3413,6 +3421,8 @@ class BacktestService:
                     "pineChartMetadata": {"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None,
                     "pineChartInterval": config.get("signal_interval") or config.get("interval"),
                     "pineChartMarketType": config.get("market_type"),
+                    "pineRequestedContexts": config.get("pine_contexts", []),
+                    "pineLocalDataRoot": config.get("pine_local_data_root"),
                 }
             )
 
@@ -4431,6 +4441,15 @@ class BacktestService:
             execution_config["pine_runtime_identity"] = json.loads(str(persisted_execution["compiled_json"]))["dependencyHash"]
             if fidelity not in {"BAR_APPROX", "AGG_TRADE_EXECUTION"}:
                 raise BacktestError("FIDELITY_UNSUPPORTED", "chart Pine requires closed-bar observations")
+        if payload.get("pine_contexts"):
+            from .pine_requested_data import normalize_contexts
+            if persisted_execution is None or persisted_execution["base_revision_id"] != PINE_ENGINE_REVISION:
+                raise BacktestError("FIDELITY_UNSUPPORTED", "Requested Pine datasets require PINE_ENGINE.")
+            root = getattr(self, "pine_local_data_root", None)
+            if not root:
+                raise BacktestError("PINE_REQUEST_DATA_REQUIRED", "The local dataset service is unavailable.")
+            execution_config["pine_contexts"] = normalize_contexts(payload["pine_contexts"])
+            execution_config["pine_local_data_root"] = root
         python_protocol = payload.get("python_execution_protocol")
         if python_protocol is not None:
             from .strategy.python_market_batch import EXECUTION_PROTOCOL, certified_source

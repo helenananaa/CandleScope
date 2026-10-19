@@ -1,4 +1,7 @@
 export const zhCN = {
+  "native.inputs.priceTick": "最小价格步长",
+  "native.inputs.currency": "报价币种（需实际价格步长）",
+  "native.inputs.quantityPrecision": "数量小数位数（0–9）",
   "indicator.pine.currencyRates": "Pine 已生效汇率（JSON）",
   "indicator.pine.currencyRatesHelp": "按实际可用时刻提供汇率，时间使用 Unix 毫秒。较早的查询不会读取未来汇率。汇率需要明确提供，不会自动替换为其他货币市场。",
   "indicator.pine.quoteCurrency": "图表报价币种（需提供实际价格步长）",

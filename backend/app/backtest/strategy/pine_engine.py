@@ -77,7 +77,8 @@ def analyze(source, libraries=None):
     blocked = {
         feature
         for feature in features
-        if feature.startswith(("request.", "strategy.risk"))
+        if (feature.startswith("request.") and feature not in {"request.security", "request.security_lower_tf"})
+        or feature.startswith("strategy.risk")
         or feature
         in {"strategy.exit", "strategy.order", "strategy.cancel", "strategy.cancel_all"}
     }
@@ -88,7 +89,8 @@ def analyze(source, libraries=None):
         or blocked
         or result.get("profileError")
         or result.get("pyramiding") != 1
-        or requirements.get("requests")
+        or any(item.get("function") not in {"security", "request.security", "request.security_lower_tf"}
+               for item in requirements.get("requests", []))
         or (requirements.get("account") or {}).get("declaredCurrency")
         or any(
             execution.get(key)
@@ -101,7 +103,7 @@ def analyze(source, libraries=None):
         raise StrategyProviderError(
             "FIDELITY_UNSUPPORTED",
             "Chart Pine supports closed-bar market entry/close with one entry ID; "
-            "use the native strategy workbench for requests, price orders, pyramiding or intrabar callbacks. "
+            "use pinned requested datasets; use the native strategy workbench for price orders, pyramiding or intrabar callbacks. "
             + ", ".join(sorted(blocked)),
         )
     return result
@@ -157,6 +159,12 @@ class PineEngineProvider:
             "libraries": self.libraries,
             "parameters": dict(context.get("parameters") or {}),
         }
+        from app.backtest.errors import BacktestError
+        from app.backtest.pine_requested_data import load_contexts
+        try:
+            self.requested_streams = load_contexts(context.get("pineLocalDataRoot"), context.get("pineRequestedContexts", []))
+        except BacktestError as exc:
+            raise StrategyProviderError(exc.code, str(exc)) from exc
         self.worker = SessionWorker(runtime, self.wire, self.cancelled, evaluator=True)
         self.bars, self.accounts, self.history, self.entry_id = [], [], [], None
         self.execution_times = []
@@ -203,11 +211,15 @@ class PineEngineProvider:
             from app.backtest.native import timeframe as pine_timeframe
 
             timeframe = pine_timeframe(self.context["pineChartInterval"])
+        from app.backtest.pine_requested_data import visible_contexts
+        contexts = visible_contexts(self.requested_streams,
+            min(frame.watermark_ms, int(row.get("close_time_ms", frame.event_time_ms))))
         result = self.worker.request(
             {
                 **self.wire,
                 "bars": self.bars,
                 "accounts": self.accounts,
+                **({"contexts": contexts} if contexts else {}),
                 **({"execution_times": self.execution_times} if self.needs_clock else {}),
                 "context": {
                     "symbol": chart_symbol,

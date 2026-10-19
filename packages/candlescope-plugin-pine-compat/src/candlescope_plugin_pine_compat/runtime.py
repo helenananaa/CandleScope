@@ -34,7 +34,7 @@ from candlescope_plugin_sdk import (
     RuntimeDescriptor,
 )
 
-from .host_inputs import chart_metadata, execution_times
+from .host_inputs import chart_metadata, execution_times, indicator_request_bars
 from .libraries import LIBRARY_PARAMETER, library_digests, library_sources
 from .currency_inputs import currency_rates
 from .object_scene import object_scenes
@@ -82,7 +82,7 @@ _HOST_CHART_SYMBOL_FEATURES = frozenset(
     {"syminfo.prefix", "syminfo.ticker", "syminfo.tickerid"}
 )
 _HOST_CHART_GRID_FEATURES = frozenset(
-    {"syminfo.mintick", "syminfo.minmove", "syminfo.pricescale", "syminfo.pointvalue", "syminfo.currency"}
+    {"syminfo.mintick", "syminfo.minmove", "syminfo.pricescale", "syminfo.mincontract", "syminfo.pointvalue", "syminfo.currency"}
 )
 _HOST_CHART_TIMEFRAME_FEATURES = frozenset(
     {
@@ -1384,6 +1384,9 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                 raise BridgeError("PINE_HOST_METADATA_REQUIRED", "This script requires the chart's actual price grid.")
             if grid is not None:
                 options["request_bars"] = {**options.get("request_bars", {}), "$chart": grid}
+            requested = indicator_request_bars(analysis, request.options, bindings["chartSymbol"], dict(supplied or {}))
+            if requested:
+                options["request_bars"] = requested
             if "syminfo.currency" in features and (grid is None or "currency" not in grid):
                 raise BridgeError("PINE_HOST_METADATA_REQUIRED", "This script requires the chart's actual quote currency.")
             rates = currency_rates(request.options.get("pineCurrencyRates"))

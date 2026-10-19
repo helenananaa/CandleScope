@@ -1,6 +1,9 @@
 import { externalProviderEnglish } from "./externalProviderEnglish.js";
 import { supportEnglish } from "./supportEnglish.js";
 export const nativeEnglish = {
+  "native.inputs.priceTick": "Minimum price increment",
+  "native.inputs.currency": "Quote currency (requires the actual price tick)",
+  "native.inputs.quantityPrecision": "Quantity decimal places (0-9)",
   "indicator.pine.currencyRates": "Pine effective currency rates (JSON)",
   "indicator.pine.currencyRatesHelp": "Supply rates with their actual availability time in Unix milliseconds. Future observations are excluded from earlier queries. Rates are supplied explicitly; no currency market is substituted.",
   "indicator.pine.quoteCurrency": "Chart quote currency (requires the actual price tick)",

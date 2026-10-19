@@ -86,6 +86,7 @@ class BacktestRuntime:
         self.settings = settings
         self.service = service
         self.local_data = local_data_service
+        self.service.pine_local_data_root = str(self.local_data.root)
         self.snapshots = LocalBarSnapshotProvider(
             self.local_data,
             max_rows=settings.max_bar_rows,
@@ -167,6 +168,7 @@ class BacktestRuntime:
                     "name": manifest["name"],
                     "symbol": manifest["symbol"],
                     "interval": manifest["interval"],
+                    **{key: manifest[key] for key in ("exchange", "market_type") if manifest.get(key)},
                     "rows": manifest["rows"],
                     "first_open_ms": manifest.get("first_open_ms"),
                     "last_close_ms": last_close_ms,

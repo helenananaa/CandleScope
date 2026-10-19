@@ -1,19 +1,44 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { automaticHostExecution, emptyAdvancedInputs, executionInputs, freezeAdvancedInputs, restoreAdvancedInputs, type InputDataset } from "./nativeInputs.js";
+import { automaticHostExecution, emptyAdvancedInputs, executionInputs, freezeAdvancedInputs, freezePineChartContexts, restoreAdvancedInputs, type InputDataset } from "./nativeInputs.js";
 import { nativeApi } from "./nativeBacktestApi.js";
 
 const dataset: InputDataset = { dataset_id: "data", data_epoch: "epoch1", name: "ETH", symbol: "ETHUSDT",
   interval: "1m", first_open_ms: 0, last_close_ms: 599999 };
 const main = { start_time_ms: 60000, end_time_ms: 299999, exchange: "binance", market_type: "spot" };
 
+test("chart and native requests freeze the selected venue and market instead of the primary chart", async () => {
+  const calls: unknown[] = [];
+  const other = { ...dataset, exchange: "okx", market_type: "futures" };
+  const choices = [{ dataset: other, symbol: "OKX:ETHUSDT", marketType: "futures" }];
+  const contexts = await freezePineChartContexts(choices, main, mockApi([other], calls));
+  assert.equal(contexts[0]?.exchange, "okx");
+  assert.equal(contexts[0]?.market_type, "futures");
+  assert.equal(contexts[0]?.start_time_ms, 0);
+  const native = await freezeAdvancedInputs({ ...emptyAdvancedInputs(), contexts: choices }, "pine", main, mockApi([other], []));
+  assert.deepEqual(native.contexts, contexts);
+  await assert.rejects(freezePineChartContexts([{ ...choices[0]!, marketType: "spot" }], main, mockApi([other], [])), /provenance/);
+  await assert.rejects(freezePineChartContexts([{ ...choices[0]!, symbol: "BINANCE:ETHUSDT" }], main, mockApi([other], [])), /provenance/);
+});
+
 test("advanced source dependencies and partial JSON edits survive draft restoration without trusting stale datasets", async () => {
   const input = { contexts: [{ dataset, symbol: "BINANCE:ETHUSDT" }], magnifier: dataset,
     libraries: "{", priceTickSize: ".1", currency: "USDT", currencyRates: "{" };
   assert.deepEqual(restoreAdvancedInputs(JSON.parse(JSON.stringify(input))), input);
   assert.deepEqual(restoreAdvancedInputs({ contexts: [{ dataset: {}, symbol: "x" }], libraries: 1 }), emptyAdvancedInputs());
+  assert.throws(() => restoreAdvancedInputs({ contexts: [{ dataset: {}, symbol: "x" }] }, true), /malformed/);
+  assert.throws(() => restoreAdvancedInputs({ contexts: Array(17).fill({ dataset, symbol: "x" }) }, true), /at most 16/);
   const valid = restoreAdvancedInputs({ ...input, libraries: "{}", currencyRates: "" });
   await assert.rejects(freezeAdvancedInputs(valid, "pine", main, mockApi([], [])), /changed/);
+});
+
+test("requested instrument metadata is frozen and survives draft restore", async () => {
+  const selection = { ...emptyAdvancedInputs(), contexts: [{ dataset, symbol: "OKX:ETHUSDT", marketType: "spot",
+    priceTickSize: ".25", currency: "USDT", quantityPrecision: "3" }] };
+  assert.deepEqual(restoreAdvancedInputs(selection), selection);
+  const contexts = await freezePineChartContexts(selection.contexts, main, mockApi([dataset], []));
+  assert.deepEqual(contexts[0]?.metadata, { priceTickSize: ".25", currency: "USDT", quantityPrecision: 3 });
+  await assert.rejects(freezePineChartContexts([{ ...selection.contexts[0]!, priceTickSize: "" }], main, mockApi([dataset], [])), /actual price tick/);
 });
 function mockApi(datasets: InputDataset[], calls: unknown[]) {
   return (async (path: string, body?: unknown) => {

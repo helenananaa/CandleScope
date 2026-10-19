@@ -1470,6 +1470,21 @@ class LocalDatasetService:
             raise LocalDatasetError(
                 "Dataset revision not found", code="dataset_corrupt"
             )
+        return self._validated_revision_payload(manifest, revision_dir)
+
+    def _validated_pinned_revision_dir(self, dataset_id: str, data_epoch: str) -> tuple[dict[str, Any], Path]:
+        revision_dir = self._specific_revision_dir(dataset_id, data_epoch)
+        try:
+            manifest = json.loads((revision_dir / "manifest.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise LocalDatasetError("Dataset manifest is unreadable", code="dataset_corrupt") from exc
+        if (not isinstance(manifest, dict) or manifest.get("dataset_id") != dataset_id
+                or manifest.get("data_epoch") != data_epoch):
+            raise LocalDatasetError("Pinned dataset manifest identity is invalid", code="DATA_SNAPSHOT_MISMATCH")
+        manifest.setdefault("volume_available", True)
+        return self._validated_revision_payload(manifest, revision_dir)
+
+    def _validated_revision_payload(self, manifest: dict[str, Any], revision_dir: Path) -> tuple[dict[str, Any], Path]:
         bars_path = revision_dir / "bars.sqlite"
         try:
             actual_sqlite_hash = self._file_sha256(bars_path)
@@ -1543,11 +1558,13 @@ class LocalDatasetService:
         data_epoch: str,
         interval: str | None = None,
         max_rows: int = 200_000,
+        pinned_revision: bool = False,
     ) -> tuple[dict[str, Any], list[dict[str, str | int | None]]]:
         """Load one revision as Decimal-safe strings for immutable snapshots."""
         if max_rows < 1:
             raise ValueError("max_rows must be positive")
-        manifest, revision_dir = self._validated_revision_dir(
+        resolver = self._validated_pinned_revision_dir if pinned_revision else self._validated_revision_dir
+        manifest, revision_dir = resolver(
             dataset_id,
             data_epoch,
         )

@@ -1,6 +1,9 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  "native.inputs.priceTick": "최소 가격 단위",
+  "native.inputs.currency": "호가 통화 (실제 가격 단위 필요)",
+  "native.inputs.quantityPrecision": "수량 소수 자릿수 (0~9)",
   "indicator.pine.currencyRates": "Pine 유효 환율 (JSON)",
   "indicator.pine.currencyRatesHelp": "실제 사용 가능 시각을 Unix 밀리초로 지정하세요. 미래 값은 과거 조회에 사용되지 않습니다. 다른 통화 시장으로 자동 대체하지 않습니다.",
   "indicator.pine.quoteCurrency": "차트 호가 통화 (실제 가격 단위 필요)",

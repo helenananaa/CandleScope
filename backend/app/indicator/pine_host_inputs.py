@@ -51,7 +51,7 @@ def requested_data(request, requirements, data_manager):
         contexts = requested_contexts(request, requests)
     except ValueError as exc:
         return {"pineRequestError": str(exc)}
-    supplied = {}
+    supplied, symbol_metadata = {}, {}
     total = 0
     for symbol, timeframe, market_type in contexts:
         venue, separator, ticker = symbol.partition(":")
@@ -64,9 +64,23 @@ def requested_data(request, requirements, data_manager):
             # instrument (e.g. BINANCE:BTCUSDT.P -> BTCUSDT in usdm), not a guess
             # that an arbitrary requested perpetual is a spot market.
             ticker = request.context.symbol
+        elif venue.lower() == "binance" and market_type.lower() in {"usdm", "futures", "swap"}:
+            ticker = ticker.removesuffix(".P")
         key = f"{symbol}:{timeframe}"
         if key in supplied:
             continue
+        explicit_metadata = next((item.get("metadata") for item in request.options.get("pineRequestContexts", [])
+            if (item["symbol"], item["timeframe"]) == (symbol, timeframe)), None)
+        metadata = get_cached_symbol_metadata(venue.lower(), market_type, ticker)
+        frozen = explicit_metadata
+        if frozen is None and metadata and metadata.get("priceTickSize"):
+            frozen = {"priceTickSize": metadata["priceTickSize"]}
+            if metadata.get("quoteAsset"):
+                frozen["currency"] = metadata["quoteAsset"]
+        if frozen:
+            if symbol in symbol_metadata and symbol_metadata[symbol] != frozen:
+                return {"pineRequestError": "One requested symbol cannot have conflicting metadata."}
+            symbol_metadata[symbol] = frozen
         try:
             interval = parse_interval_spec(
                 pine_interval(timeframe or request.context.interval)
@@ -108,7 +122,8 @@ def requested_data(request, requirements, data_manager):
                 )
         supplied[key] = rows
         total += len(rows)
-    return {"pineRequestBars": supplied}
+    return {"pineRequestBars": supplied,
+        **({"pineRequestSymbolMetadata": symbol_metadata} if symbol_metadata else {})}
 
 
 def requested_contexts(request, requirements):
@@ -122,7 +137,7 @@ def requested_contexts(request, requirements):
         raise ValueError("Declare at most 16 Pine requested contexts.")
     contexts = {}
     for item in explicit:
-        if not isinstance(item, dict) or set(item) - {"symbol", "timeframe", "marketType"}:
+        if not isinstance(item, dict) or set(item) - {"symbol", "timeframe", "marketType", "metadata"}:
             raise ValueError("Each Pine context needs symbol, timeframe and optional marketType.")
         symbol, timeframe = item.get("symbol"), item.get("timeframe")
         market = item.get("marketType", request.context.market_type)
@@ -132,6 +147,9 @@ def requested_contexts(request, requirements):
             or not isinstance(market, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", market)
         ):
             raise ValueError("Invalid Pine context symbol, timeframe or marketType.")
+        if item.get("metadata") is not None:
+            from app.backtest.native_contracts import PineChartMetadata
+            PineChartMetadata.model_validate(item["metadata"])
         key = symbol, timeframe
         if key in contexts and contexts[key] != market:
             raise ValueError("A Pine provider key cannot name two market types.")

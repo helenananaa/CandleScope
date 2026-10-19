@@ -114,3 +114,23 @@ def test_inherited_usdm_symbol_uses_perpetual_identity_and_exact_storage_instrum
     assert "BINANCE:BTCUSDT.P:1" in result["pineRequestBars"]
     assert calls[0][0] == ("BTCUSDT", "1m")
     assert calls[0][1]["market_type"] == "usdm"
+
+
+def test_requested_metadata_uses_the_exact_auxiliary_market_and_preserves_explicit_values(monkeypatch):
+    from app.indicator import pine_host_inputs
+    calls = []
+    def metadata(exchange, market, symbol):
+        calls.append((exchange, market, symbol))
+        return {"priceTickSize": ".25", "quoteAsset": "USDT"}
+    monkeypatch.setattr(pine_host_inputs, "get_cached_symbol_metadata", metadata)
+    context = {"symbol": "BINANCE:ETHUSDT.P", "timeframe": "1", "marketType": "usdm"}
+    request = ExecuteBatchRequest(source="", context=MarketContext("okx", "spot", "BTC-USDT", "1m"),
+        bars=(Bar(time=120, open=1, high=1, low=1, close=1, volume=1),), options={"pineRequestContexts": [context]})
+    requirements = {"requests": [{"function": "request.security", "symbol": {"kind": "runtimeExpression"}, "timeframe": {"kind": "literal", "value": "1"}}]}
+    result = requested_data(request, requirements, SimpleNamespace(query=lambda *a, **k: SimpleNamespace(bars=request.bars, missing_ranges=[])))
+    assert calls == [("binance", "usdm", "ETHUSDT")]
+    assert result["pineRequestSymbolMetadata"] == {"BINANCE:ETHUSDT.P": {"priceTickSize": ".25", "currency": "USDT"}}
+    explicit = {"priceTickSize": ".5", "currency": "USDT", "quantityPrecision": 3}
+    result = requested_data(replace(request, options={"pineRequestContexts": [{**context, "metadata": explicit}]}), requirements,
+        SimpleNamespace(query=lambda *a, **k: SimpleNamespace(bars=request.bars, missing_ranges=[])))
+    assert result["pineRequestSymbolMetadata"][context["symbol"]] == explicit

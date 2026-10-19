@@ -1,6 +1,9 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ja = {
+  "native.inputs.priceTick": "最小価格刻み",
+  "native.inputs.currency": "建値通貨（実際の価格刻みが必要）",
+  "native.inputs.quantityPrecision": "数量の小数桁数（0～9）",
   "indicator.pine.currencyRates": "Pine 有効為替レート（JSON）",
   "indicator.pine.currencyRatesHelp": "実際の利用可能時刻を Unix ミリ秒で指定してください。将来の値は過去の照会に使用されません。為替市場の自動置換は行いません。",
   "indicator.pine.quoteCurrency": "チャートの建値通貨（実際の価格刻みが必要）",

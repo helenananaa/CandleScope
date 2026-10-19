@@ -15,12 +15,14 @@ The mistakenly relayed scope-narrowing instruction was withdrawn by the user.
 - Original main checkout remains at `1a2a0189` with its 19 existing local changes;
   this task did not modify that checkout.
 - Core branch: `codex/pine-host-completion`, based on `b9200480e`, now committed
-  at `0ec4e886e23009bda6c90f394c1075f843de12a5`.
-- Final core wheel: `.local/host-completion/qualified-wheels/` in the core repo.
-  SHA256: `1f9551d4d9ed06093208412fe05a8bf634f80a2e5c7a888213c7c82f3faf25ce`.
+  at `40a1ac8d418b89224c1fa9c268039d95a38c2ebd`.
+- Current core wheel: `.local/host-completion/symbol-qualified-wheels/` in the core repo.
+  SHA256: `c3e8f517c625b66ec174b42ba09e6b1535903d0a49a1bcb1b48aa3cabb99717b`.
   It is installed only in the task's `output/pine-host/phase3/venv`.
 - Package version remains `0.3.2`; use the artifact/source identity and
-  `EXTERNAL_CLOCK_SCHEMA_VERSION == 1`, rather than the version alone.
+  `EXTERNAL_CLOCK_SCHEMA_VERSION == 1` and `SYMBOL_METADATA_SCHEMA_VERSION == 1`,
+  rather than the version alone. The previous clock-only candidate and receipt
+  remain preserved separately.
 - Final receipts and logs: `output/pine-host/phase3/`. Official runtime catalogs
   and global plugin activation remain unchanged.
 
@@ -55,6 +57,21 @@ The mistakenly relayed scope-narrowing instruction was withdrawn by the user.
   Prefix transport negotiates clock append support, rebases historical clock
   corrections and clips clock arrays with replay/feedback prefixes. Native
   replay uses its frozen clocks; scheduled fill passes retain their own times.
+- Chart Pine now accepts pinned local requested datasets through both direct
+  run creation and automatic preparation. Dynamic symbols, library requests,
+  higher-timeframe values and lower-timeframe arrays reach the actual isolated
+  evaluator and authoritative host fills. Only confirmed auxiliary bars at or
+  before the current observation are supplied. Limits are 16 contexts and
+  100,000 combined auxiliary bars; missing data requires preparation.
+- Checkpoints retain requested revision/hash references, not duplicated market
+  arrays. Restore can read the same immutable revision after the dataset's active
+  revision changes. The ordinary dataset-selection API still rejects stale
+  active selections; pinned reads explicitly opt into revision recovery.
+- Requested instrument metadata is frozen through chart/native inputs and
+  indicator data settings. Indicators can use exact-market cached metadata or
+  explicit values. Cross-venue inputs preserve their own exchange/market type;
+  Binance perpetual aliases resolve only against the declared perpetual market.
+  Price-grid, currency and quantity-dependent reads diagnose missing metadata.
 
 ## Interpreter interface addition
 
@@ -64,9 +81,32 @@ The caller supplies timestamps; the core does not access a host system clock or
 CandleScope services. Batch/append equivalence, decoding failures, empty append,
 feedback preservation and fill-pass clock precedence are tested.
 
+The core also accepts host-owned symbol metadata through
+`RequestEnvironment::with_symbol_contexts` and Python/WASM `$symbolMetadata`.
+Requested grids, quote currencies and decimal quantity precision survive
+different timeframes, nested requests back to the root, historical sessions,
+external append and ordered intrabar evaluation. Literal symbols in dynamic
+nested scalar requests are admitted. All acquisition and persistence remain in
+the host. Interface details: core `docs/SYMBOL_METADATA_INPUT.md`.
+
 ## Validation
 
-- Complete core gate passed: 7,901 Rust tests, 1,686 tests against a freshly built
+- Current complete core gate: 7,903 Rust tests, 1,700 fresh-wheel Python tests,
+  172 tooling tests, formatting, Clippy, structure and host-parity guards, and
+  actual WASM/Node execution. The installed candidate independently passed all
+  1,700 Python tests. Logs: core `.local/host-completion/symbol-metadata-*.log`.
+- Current host group: 119 passed, 4 non-Pine profiles deselected. Bridge suite:
+  69 passed, 12 Renko-extension cases skipped. Chart requested-data integration
+  includes 11 actual-engine cases, including HTTP, preparation launch, queued
+  fills, foreign grids and pinned revision restore.
+- Frontend backtest group: 225 passed; latest metadata/run/indicator group:
+  34 passed. Typechecks and the 30-locale catalog check passed.
+- Playwright checked the actual auxiliary-input component: venue preservation,
+  metadata freezing, invalid quantity precision and correction, with zero
+  browser errors/warnings. Screenshot:
+  `output/playwright/pine-requested-metadata.png`. Temporary helpers were removed.
+  This remains component validation, not packaged-app acceptance.
+- Earlier clock-only core gate: 7,901 Rust tests, 1,686 tests against a freshly built
   wheel, 172 tooling tests, formatting, Clippy, source structure, binding golden
   checks and generated WASM/Node execution. Focused external Python suite: 41.
 - Before final-wheel replacement: combined host group 135 passed; rich Pine host
@@ -96,19 +136,38 @@ rerun passed. The original failure log is retained. Backend and plugin suites ru
 in separate processes because their test helpers both import a `scripts` module;
 the mixed collection failure is also retained.
 
+Current retained failures include the first symbol-metadata gate's old negative
+assertion for literal nested requests, now promoted to an executable positive
+control with distinct provider data. A host replay test also read its record
+before taking the job-completion lock; reading both atomically fixed the race.
+The full host rerun passed. Earlier draft-test mistakes and their logs are kept.
+
 ## Remaining goal work
 
-1. Chart strategy requested datasets, rich orders and intrabar scheduling through
-   the authoritative host matcher. The rich workbench already covers selected
+1. Chart strategy rich orders and intrabar scheduling through the authoritative
+   host matcher. Requested datasets are connected; growing requested prefixes
+   currently rebase the evaluator and need a causal incremental provider-update
+   contract for scalable execution. The rich workbench already covers selected
    limit/stop/bracket/fill callbacks; this does not qualify the chart path.
 2. Workbench `CANDLESCOPE` account restoration into native replay remains
    explicitly unsupported. It needs a host-account recovery contract. Tested
    chart-provider restore and native-account replay are separate paths.
 3. Remaining display destinations and symbol/session/chart metadata, keeping
-   unsupported diagnostics until the real host capability is connected.
+   unsupported diagnostics until the real host capability is connected. The
+   tick-only bridge uses a reduced rational grid; exact TradingView minmove/
+   pricescale representation and arbitrary lot steps need richer host metadata.
+   Metadata admission currently requires all selected foreign contexts when a
+   corresponding builtin is used anywhere in the script; expression-scoped
+   requirements would avoid unnecessary admission failures.
 4. Re-audit current core gaps and implement selected missing language/request/
    account semantics. Current development core already provides FX conversion;
    nonunit contract multipliers remain unsupported.
 5. Continue broader product and official-reference qualification. Current tests
    do not establish arbitrary TradingView script, pixel, broker-fill,
    protected-library or live-tick equivalence.
+
+Official context semantics reviewed against TradingView's
+[chart information](https://www.tradingview.com/pine-script-docs/concepts/chart-information/)
+and [other timeframes/data](https://www.tradingview.com/pine-script-docs/concepts/other-timeframes-and-data/)
+documentation. This is documentation alignment, not a fresh TradingView output
+oracle for the new metadata tests.

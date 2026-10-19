@@ -22,6 +22,8 @@ import type { ChartContextResolution } from "../backtestApi.js";
 import type { RecentRunCompareV1 } from "../backtestTypes.js";
 import { t } from "../../../i18n/index.js";
 import { PineLibraryInputs } from "../../indicators/PineLibraryInputs.js";
+import { NativeAdvancedInputs } from "../native/NativeAdvancedInputs.js";
+import { restoreAdvancedInputs } from "../native/nativeInputs.js";
 import { StrategyLanguageControls } from "./StrategyLanguageControls.js";
 import { strategyLanguageLabel } from "./strategyLanguageLabel.js";
 import { StrategyConditionsEditor } from "./StrategyConditionsEditor.js";
@@ -906,6 +908,12 @@ export function CandleScopeStrategyTesterPanel({
 
         {activeTab === "settings" && currentAttachment && (
           <div className="chart-strategy-settings" data-testid="chart-strategy-quick-settings">
+            {activeDraft?.language === "pine" && <NativeAdvancedInputs
+              value={restoreAdvancedInputs(currentAttachment.parameters.__pineInputs)}
+              language="pine" disabled={false} exchange={session.exchange} native={false} contextsOnly
+              onChange={(value) => { setRunReady(false); onSourceDirty();
+                onAttachmentChange({ ...currentAttachment, parameters: { ...currentAttachment.parameters, __pineInputs: value } });
+              }} />}
             {activeDraft?.language === "pine" && <PineLibraryInputs
               value={typeof currentAttachment.parameters.__pineLibrariesText === "string"
                 ? currentAttachment.parameters.__pineLibrariesText

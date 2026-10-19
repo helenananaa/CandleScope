@@ -55,6 +55,7 @@ class NativeContext(BaseModel):
 class RequestedNativeData(FrozenNativeData):
     symbol: str = Field(min_length=1, max_length=120)
     timeframe: str = Field(min_length=1, max_length=16)
+    metadata: PineChartMetadata | None = None
 
 
 class NativeRunRequest(FrozenNativeData):
@@ -69,7 +70,8 @@ class NativeRunRequest(FrozenNativeData):
 
     @model_validator(mode="after")
     def validate_pine_metadata(self):
-        if self.language != "pine" and (self.context.metadata is not None or self.currency_rates is not None):
+        if self.language != "pine" and (self.context.metadata is not None or self.currency_rates is not None
+                or any(item.metadata is not None for item in self.contexts)):
             raise ValueError("Pine chart metadata and currency rates require a Pine strategy")
         return self
 

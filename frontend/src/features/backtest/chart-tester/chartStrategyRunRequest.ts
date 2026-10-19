@@ -22,6 +22,7 @@ import {
 import type { ResultProjectionIdentity } from "./chartStrategyTesterState.js";
 import type { ChartStrategyRunRequest } from "./chartStrategyTesterUiModel.js";
 import { parsePineLibraries } from "../../indicators/PineLibraryInputs.js";
+import { freezePineChartContexts, restoreAdvancedInputs } from "../native/nativeInputs.js";
 
 export type ChartStrategyRunApi = Pick<BacktestApiClient,
   | "createStrategyRevision"
@@ -136,6 +137,7 @@ function executionParameters(frozen: ChartStrategyRunRequest): Record<string, un
   if (frozen.language === "pine") {
     delete parameters.__pineLibraries;
     delete parameters.__pineLibrariesText;
+    delete parameters.__pineInputs;
   }
   return parameters;
 }
@@ -260,6 +262,7 @@ export function buildChartStrategyRunBody(input: {
   frozen: ChartStrategyFrozenRunRequest;
   revision: StrategyRevisionRecord;
   resolution: ChartContextResolution;
+  pineContexts?: Awaited<ReturnType<typeof freezePineChartContexts>>;
 }): Record<string, unknown> {
   const identity = requireReadyIdentity(input.resolution);
   const range = readyRange(input.resolution);
@@ -295,6 +298,7 @@ export function buildChartStrategyRunBody(input: {
     interval: input.frozen.session.interval,
     warmup_bars: input.resolution.preparation?.warmup_bars ?? 0,
     parameters: executionParameters(input.frozen),
+    ...(input.pineContexts?.length ? { pine_contexts: input.pineContexts } : {}),
     output_mode: input.revision.output_modes.includes("TARGET_POSITION")
       ? "TARGET_POSITION"
       : input.revision.output_modes[0],
@@ -600,6 +604,9 @@ export async function runResearchBacktest(options: {
     ...(frozen.language === "pine" ? { libraries: frozen.attachment.parameters.__pineLibraries ?? {} } : {}),
   }, options.signal);
   options.onRevision?.(revision);
+  const pineContexts = frozen.language === "pine" ? await freezePineChartContexts(
+    restoreAdvancedInputs(frozen.attachment.parameters.__pineInputs, true).contexts,
+    { exchange: frozen.session.exchange, market_type: frozen.session.marketType }, undefined, options.signal) : [];
 
   let resolution: ChartContextResolution;
   let frozenContext: FrozenResearchContextV1 | null = null;
@@ -649,6 +656,7 @@ export async function runResearchBacktest(options: {
         ...(frozen.language === "python" ? { python_runtime_mode: "TRUSTED_LOCAL", python_trusted_confirmed: frozen.pythonTrustedConfirmed === true } : {}),
         strategy_revision_id: revision.revision_id,
         parameters: executionParameters(frozen),
+        ...(pineContexts.length ? { pine_contexts: pineContexts } : {}),
         ...(frozen.attachment.executionOverrides ? { execution_overrides: frozen.attachment.executionOverrides } : {}),
         chart_cell_scope: frozen.cellScope,
         strategy_draft_id: frozen.draftId,
@@ -676,7 +684,7 @@ export async function runResearchBacktest(options: {
     );
   }
 
-  const body = buildChartStrategyRunBody({ frozen, revision, resolution });
+  const body = buildChartStrategyRunBody({ frozen, revision, resolution, pineContexts });
   const range = readyRange(resolution);
   options.onStage?.("VALIDATING");
   if (!resolution.prepared_run) {
@@ -729,7 +737,7 @@ export async function runResearchBacktest(options: {
     );
   }
 
-  const refreshedBody = buildChartStrategyRunBody({ frozen, revision, resolution: refreshed });
+  const refreshedBody = buildChartStrategyRunBody({ frozen, revision, resolution: refreshed, pineContexts });
   const idempotencyKey = await chartStrategyRunIdempotencyKey({
     revisionId: revision.revision_id,
     resolution: refreshed,

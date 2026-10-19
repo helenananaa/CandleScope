@@ -25,6 +25,10 @@ test("Pine context settings preserve exact venue, timeframe and market and rejec
   assert.deepEqual(pineContextParams({ __pineContexts: contexts, length: 5 }, "[]"), { length: 5 });
   for (const value of [{}, [{ symbol: "x", timeframe: "0" }], [...contexts, { ...contexts[0], marketType: "usdm" }], Array(17).fill(contexts[0])])
     assert.throws(() => parsePineContexts(JSON.stringify(value)));
+  const withMetadata = [{ ...contexts[0], metadata: { priceTickSize: ".25", currency: "USDT", quantityPrecision: 3 } }];
+  assert.deepEqual(parsePineContexts(JSON.stringify(withMetadata)), withMetadata);
+  for (const metadata of [{ priceTickSize: "0" }, { priceTickSize: ".25", currency: "usdt" }, { priceTickSize: ".25", quantityPrecision: 10 }, { priceTickSize: ".25", typo: 1 }])
+    assert.throws(() => parsePineContexts(JSON.stringify([{ ...contexts[0], metadata }])));
 });
 import { normalizeIndicatorPayload } from "../indicatorPayloadRuntime.js";
 import { createIndicatorOutputState, indicatorOutputReducer, filterIndicatorOutputStateByVisibility } from "../indicatorOutputReducer.js";

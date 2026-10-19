@@ -180,6 +180,7 @@ export interface BacktestApiClient {
     python_runtime_mode?: string;
     python_trusted_confirmed?: boolean;
     parameters: Record<string, unknown>;
+    pine_contexts?: unknown[];
     execution_overrides?: import("../../shared/strategyRunSettings.js").StrategyExecutionOverrides;
     chart_cell_scope: string;
     strategy_draft_id: string;
