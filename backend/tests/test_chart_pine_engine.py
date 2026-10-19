@@ -173,7 +173,7 @@ def test_native_broker_and_intrabar_profiles_are_not_silently_downgraded(flag):
     with pytest.raises(StrategyProviderError, match="FIDELITY_UNSUPPORTED"):
         analyze(SOURCE.replace('strategy("SMA")', f'strategy("SMA", {flag}=true)'))
     with pytest.raises(StrategyProviderError, match="FIDELITY_UNSUPPORTED"):
-        analyze(SOURCE + '\nstrategy.risk.max_drawdown(3,strategy.cash)\n')
+        analyze(SOURCE.replace('strategy("SMA")', 'strategy("SMA",use_bar_magnifier=true)'))
 
 
 def test_runtime_identity_change_requires_recompile():

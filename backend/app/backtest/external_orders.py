@@ -19,6 +19,7 @@ class ExternalOrders:
         self.pyramiding = None
         from .pine_entry_risk import PineEntryRisk
         self.entry_risk = PineEntryRisk()
+        self.risk_stops = None
         self.price_tick = None if price_tick is None else Decimal(str(price_tick))
         self.fidelity = fidelity
         self.execution_reporter = kernel.execution_reporter
@@ -56,6 +57,12 @@ class ExternalOrders:
         detail = self.details.get(order.order_id)
         if detail is None:
             raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "unbound host order")
+        if self.risk_stops is not None and self.risk_stops.blocked and detail["kind"] != "risk_close":
+            self.cancel_order(order, "PINE_RISK_STOP")
+            return False
+        if (detail["kind"] == "risk_close" and event.sequence == detail["submitted_sequence"]
+                and event.event_time_ms <= detail["submitted_time"]):
+            return False
         if detail["kind"] == "entry":
             position, direction = self.kernel.account.position_qty, detail["direction"]
             own_lot = any(lot["order_id"] == order.order_id for lot in self.lots)
@@ -128,6 +135,8 @@ class ExternalOrders:
             self.bindings[order_id] = (script_id, detail["kind"])
             self.details[order_id] = detail
         self._allocate_execution(event)
+        if self.risk_stops is not None:
+            self.risk_stops.after_fill(event)
         if self.execution_reporter is not None:
             self.execution_reporter(event)
 
@@ -236,6 +245,8 @@ class ExternalOrders:
         return quote
 
     def translate(self, intents, sequence):
+        if self.risk_stops is not None and self.risk_stops.blocked:
+            return []
         kernel, staged = self.kernel, []
         def cancel(script_id=None):
             staged[:] = [row for row in staged if script_id is not None and row[1] != script_id]

@@ -92,6 +92,7 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
                 adapter.close()
                 account_kernel.execution_reporter = None
                 account_kernel.order_policy = None
+                account_kernel.market_observer = None
 
     baseline, baseline_policy, metadata = evaluate(_clone_kernel(kernel))
     hashes = ("decision_hash", "fill_hash", "ledger_hash", "report_hash")

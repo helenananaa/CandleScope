@@ -12,6 +12,8 @@ import threading
 from decimal import Decimal
 
 from app.backtest.pine_entry_risk import CONTRACT as RISK_CONTRACT, FUNCTIONS as RISK_FUNCTIONS
+from app.backtest.pine_risk_stops import CONTRACT as STOP_CONTRACT
+from app.backtest.pine_risk_state import STOP_FUNCTIONS
 
 from .protocol import (
     ProviderCapabilities,
@@ -83,8 +85,9 @@ def analyze(source, libraries=None):
         feature
         for feature in features
         if (feature.startswith("request.") and feature not in {"request.security", "request.security_lower_tf"})
-        or (feature.startswith("strategy.risk") and (feature not in RISK_FUNCTIONS
-            or result["identity"].get("entry_risk_contract") != RISK_CONTRACT))
+        or (feature.startswith("strategy.risk") and not (
+            (feature in RISK_FUNCTIONS and result["identity"].get("entry_risk_contract") == RISK_CONTRACT)
+            or (feature in STOP_FUNCTIONS and result["identity"].get("risk_stop_contract") == STOP_CONTRACT)))
     }
     execution = requirements.get("execution", {})
     if (
@@ -156,6 +159,7 @@ class PineEngineProvider:
             self.fill_callbacks = frozen.get("fillCallbacks") is True
             self.process_on_close = frozen.get("processOnClose") is True
             self.entry_risk = frozen.get("entryRisk") is True
+            self.stop_functions = frozen.get("riskStopFunctions") or []
         except (KeyError, ValueError, TypeError) as exc:
             raise StrategyProviderError(
                 "PROVIDER_PROTOCOL_VIOLATION", "compiled Pine source envelope required"
@@ -164,6 +168,8 @@ class PineEngineProvider:
             raise StrategyProviderError("FIDELITY_UNSUPPORTED", "fill callbacks require ORDER_INTENT mode")
         if self.entry_risk and (not self.order_mode or self.runtime_identity.get("entry_risk_contract") != RISK_CONTRACT):
             raise StrategyProviderError("FIDELITY_UNSUPPORTED", "Pine risk rules require the Host order risk contract")
+        if self.stop_functions and self.runtime_identity.get("risk_stop_contract") != STOP_CONTRACT:
+            raise StrategyProviderError("FIDELITY_UNSUPPORTED", "Pine stop rules require the Host event risk contract")
         if frozen.get("requiresOrderMode") and not self.order_mode:
             raise StrategyProviderError("FIDELITY_UNSUPPORTED", "generic and OCA orders require ORDER_INTENT mode")
         runtime = plugin()
@@ -180,7 +186,7 @@ class PineEngineProvider:
             "libraries": self.libraries,
             "parameters": dict(context.get("parameters") or {}),
             **({"closing_ticks": True} if self.process_on_close else {}),
-            **({"risk_contract": RISK_CONTRACT} if self.entry_risk else {}),
+            **({"risk_contract": STOP_CONTRACT if self.stop_functions else RISK_CONTRACT} if self.entry_risk else {}),
         }
         from app.backtest.errors import BacktestError
         from app.backtest.pine_requested_data import load_contexts
@@ -337,7 +343,7 @@ class PineEngineProvider:
             }
         )
         if self.order_mode:
-            if warmup or not intents:
+            if warmup or (not intents and not self.entry_risk):
                 return None
             payload = {"contract": ORDER_CONTRACT, "intents": intents, "pyramiding": result.get("pyramiding", 1)}
             if self.entry_risk:

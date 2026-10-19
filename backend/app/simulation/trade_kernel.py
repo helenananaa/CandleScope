@@ -83,6 +83,7 @@ class TradeSimulationKernel:
     equity_curve_event_interval: int = 1
     equity_curve_mode: str | None = None
     order_policy: Callable[[SimulatedOrder, MarketEvent], bool] | None = field(default=None, repr=False)
+    market_observer: Callable[[MarketEvent], None] | None = field(default=None, repr=False)
     execution_reporter: Callable[[dict], None] | None = field(
         default=None,
         repr=False,
@@ -429,7 +430,11 @@ class TradeSimulationKernel:
         for event in events:
             self._last_event = event
             if event.role in {"INSTRUMENT_RULES", "MARK_INDEX", "FUNDING"}:
+                if event.role == "FUNDING" and self.market_observer is not None:
+                    self.market_observer(event)
                 self.account.apply(event)
+                if self.market_observer is not None:
+                    self.market_observer(event)
                 if checkpoint_callback is not None:
                     checkpoint_callback(event)
                 continue
@@ -452,7 +457,11 @@ class TradeSimulationKernel:
                 self.account.validate_ready()
             else:
                 self.account.mark = Decimal(str(event.payload["price"]))
+            if self.funding_rate != 0 and self.market_observer is not None:
+                self.market_observer(market_event)
             self._apply_funding(market_event)
+            if self.market_observer is not None:
+                self.market_observer(market_event)
             self._match(market_event)
             intents = strategy((market_event,), market_event)
             if self._market_event_count <= warmup_events:

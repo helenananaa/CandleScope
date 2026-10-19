@@ -1168,7 +1168,7 @@ class BacktestService:
         normalized_execution = json.loads(identity.execution_json)
         if normalized_execution.get("pine_runtime_identity"):
             stored_payload["pine_runtime_identity"] = normalized_execution["pine_runtime_identity"]
-        for name in ("pine_contexts", "pine_local_data_root", "pine_order_runtime_identity", "pine_fill_callbacks", "pine_process_on_close"):
+        for name in ("pine_contexts", "pine_local_data_root", "pine_order_runtime_identity", "pine_fill_callbacks", "pine_process_on_close", "pine_risk_windows"):
             stored_payload.pop(name, None)
             if name in normalized_execution:
                 stored_payload[name] = normalized_execution[name]
@@ -4470,6 +4470,12 @@ class BacktestService:
             execution_config["pine_runtime_identity"] = compiled_pine["dependencyHash"]
             fill_callbacks = json.loads(compiled_pine["executionSource"]).get("fillCallbacks") is True
             process_close = json.loads(compiled_pine["executionSource"]).get("processOnClose") is True
+            stop_functions = json.loads(compiled_pine["executionSource"]).get("riskStopFunctions") or []
+            if stop_functions:
+                from .pine_risk_stops import window_contract
+                if output_mode != "ORDER_INTENT":
+                    raise BacktestError("FIDELITY_UNSUPPORTED", "Pine stop rules require ORDER_INTENT")
+                execution_config["pine_risk_windows"] = window_contract({**payload, "fidelity_mode": fidelity}, stop_functions)
             if process_close:
                 execution_config["pine_process_on_close"] = True
             if fill_callbacks:
@@ -5388,10 +5394,12 @@ def _policy_result_overrides(
     if not policy:
         return {}
     pine_orders = policy.pop("pine_orders", None)
+    pine_stops = policy.pop("pine_risk_stops", None)
     return {
         "rejected": [*result.rejected, *planner.rejections],
         **({"risk_policy": policy} if policy else {}),
         **({"pine_orders": pine_orders} if pine_orders is not None else {}),
+        **({"pine_risk_stops": pine_stops} if pine_stops is not None else {}),
     }
 
 

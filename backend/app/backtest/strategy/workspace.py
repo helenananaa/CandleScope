@@ -21,6 +21,7 @@ from app.backtest.strategy.chart_pyne import (
 )
 from app.backtest.strategy.protocol import StrategyProviderError, canonical_hash
 from app.backtest.external_provider.contracts import EXTERNAL_REVISION, parse_manifest
+from app.backtest.pine_risk_state import STOP_FUNCTIONS
 
 STRATEGY_REVISION_SCHEMA = "STRATEGY_REVISION_V2"
 COMPILE_RECEIPT_SCHEMA = "STRATEGY_COMPILE_RECEIPT_V2"
@@ -220,6 +221,10 @@ def compile_revision(payload: Mapping[str, object], *, now_ms: int) -> dict[str,
                 "processOnClose": pine_analysis["requirements"]["execution"].get("processOrdersOnClose", False),
                 **({"entryRisk": True} if any(item["feature"].startswith("strategy.risk.")
                     for item in pine_analysis["analysis"].get("compatibility", {}).get("supported", [])) else {}),
+                **({"riskStopFunctions": sorted(item["feature"] for item in pine_analysis["analysis"].get("compatibility", {}).get("supported", [])
+                    if item["feature"] in STOP_FUNCTIONS)}
+                    if any(item["feature"] in STOP_FUNCTIONS
+                        for item in pine_analysis["analysis"].get("compatibility", {}).get("supported", [])) else {}),
                 "requiresOrderMode": any(item["feature"] == "strategy.order" or item["feature"].startswith("strategy.oca.")
                     for item in pine_analysis["analysis"].get("compatibility", {}).get("supported", []))}, sort_keys=True)
             if pine_analysis else

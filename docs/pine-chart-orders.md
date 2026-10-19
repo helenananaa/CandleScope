@@ -100,10 +100,11 @@ declaration unless they explicitly opt into the core closing-tick contract.
 The official [closing-order documentation](https://www.tradingview.com/pine-script-docs/concepts/strategies/#process_orders_on_close)
 informs this behavior; these tests are not a TradingView output oracle.
 
-`calc_on_every_tick`, `calc_on_every_history_tick`,
-and four session/equity Pine risk commands still require further integration or
-core capability work. The explicit entry-direction/position-limit development
-profile is described in [pine-entry-risk.md](pine-entry-risk.md).
+`calc_on_every_tick` and `calc_on_every_history_tick`
+still require further integration or core capability work. Entry constraints
+are described in [pine-entry-risk.md](pine-entry-risk.md); four chart stop rules
+use the separate [stop contract](pine-risk-stops.md) with explicit calendar,
+capacity, recovery and fidelity boundaries.
 Order comments/alert metadata, zero-quantity no-op parity, and non-fixed
 default sizing also remain outside the external order profile. The current
 runtime rejects unknown declaration options.

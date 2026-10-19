@@ -27,6 +27,7 @@ class PineHostPlanner(PyneHostPlanner):
     def __init__(self, config=None, **kwargs):
         super().__init__(config, **kwargs)
         self.price_tick = (config or {}).get("price_tick")
+        self.risk_context = dict(config or {})
 
     def bind_kernel(self, kernel):
         from app.simulation.kernel import SimulationKernel
@@ -34,10 +35,14 @@ class PineHostPlanner(PyneHostPlanner):
         self.orders = ExternalOrders(self.kernel, price_tick=self.price_tick,
             fidelity="BAR_APPROX" if isinstance(self.kernel, SimulationKernel) else "TRADE_TAPE")
         self.kernel.order_policy = self._before_match
+        from app.backtest.pine_risk_stops import PineRiskStops
+        self.stop_rules = PineRiskStops(self.orders, self.risk_context)
 
     def _before_match(self, order, event):
         if not self.orders.prepare_order(order, event):
             return False
+        if self.orders.details[order.order_id]["kind"] == "risk_close":
+            return True  # The kernel still enforces account, liquidity and latency constraints.
         if self.config is None:
             return True
         from app.backtest.service import _planning_context
@@ -65,8 +70,8 @@ class PineHostPlanner(PyneHostPlanner):
         self.orders.feedback()
         self.orders.configure(payload["pyramiding"])
         if "risk_rules" in payload:
-            self.orders.entry_risk.configure(payload["risk_rules"])
-        elif self.orders.entry_risk.configuration is not None:
+            self.stop_rules.configure(payload["risk_rules"])
+        elif self.stop_rules.configuration is not None or self.orders.entry_risk.configuration is not None:
             raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "Pine risk configuration missing")
         translated = self.orders.translate(intents, wire["sequence"])
         if self.config is None:
@@ -92,11 +97,20 @@ class PineHostPlanner(PyneHostPlanner):
         return HostPlan(accepted, decision=wire)
 
     def snapshot(self):
-        return {**super().snapshot(), "pine_orders": self.orders.snapshot()}
+        return {**super().snapshot(), "pine_orders": self.orders.snapshot(),
+            **({"pine_risk_stops": self.stop_rules.snapshot()} if self.stop_rules.state is not None else
+                {"pine_risk_stops": None} if self.risk_context.get("pine_risk_windows") is not None else {})}
 
     def restore(self, payload):
         super().restore(payload)
         self.orders.restore(payload.get("pine_orders") or {})
+        if payload.get("pine_risk_stops") is not None:
+            self.stop_rules.restore(payload["pine_risk_stops"])
+        elif self.risk_context.get("pine_risk_windows") is not None and (
+                "pine_risk_stops" not in payload or self.orders.bindings):
+            from app.backtest.errors import BacktestError
+            raise BacktestError("CHECKPOINT_CORRUPT", "Pine stop checkpoint state missing")
 
     def report(self):
-        return {**super().report(), "pine_orders": self.orders.report()}
+        return {**super().report(), "pine_orders": self.orders.report(),
+            **({"pine_risk_stops": self.stop_rules.report()} if self.stop_rules.state is not None else {})}

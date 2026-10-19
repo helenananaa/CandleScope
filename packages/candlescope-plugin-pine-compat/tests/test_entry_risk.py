@@ -3,6 +3,7 @@ import pine_compat
 
 from candlescope_plugin_pine_compat import external_strategy as adapter
 from candlescope_plugin_pine_compat.entry_risk import CONTRACT
+from candlescope_plugin_pine_compat.entry_risk import STOP_CONTRACT
 from test_external_incremental import wire, data
 
 pytestmark = pytest.mark.skipif(
@@ -35,3 +36,13 @@ def test_entry_handshake_does_not_authorize_unconnected_drawdown_rules():
     bar, account = data(0)
     with pytest.raises(ValueError, match="EXTERNAL_UNSUPPORTED"):
         adapter.execute({**request, "bars": [bar], "accounts": [account]})
+
+
+def test_explicit_stop_handshake_exports_declarations_without_native_enforcement():
+    request = {**wire('if false\n    strategy.risk.max_drawdown(5,strategy.cash)\nstrategy.entry("L",strategy.long,qty=5)'),
+        "risk_contract": STOP_CONTRACT}
+    bar, account = data(0)
+    result = adapter.execute({**request, "bars": [bar], "accounts": [account]})
+    assert result["risk_rules"]["rules"][0]["function"] == "strategy.risk.max_drawdown"
+    assert result["intents"][0]["qty"] == 5
+    assert not result["raw_output"].get("strategy")

@@ -42,6 +42,8 @@ def match_closing_tick(kernel, bar, sequence, *, on_fill=None):
     try:
         if not isinstance(kernel.account, LinearPerpetualAccountV2):
             kernel.account.mark = price
+        if kernel.market_observer is not None:
+            kernel.market_observer(event)
         for _ in range(65):
             progress = False
             working = kernel._live_orders() if isinstance(kernel, SimulationKernel) else kernel._working_orders()

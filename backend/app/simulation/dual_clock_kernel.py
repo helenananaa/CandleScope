@@ -214,7 +214,11 @@ class DualClockSimulationKernel:
             if trade.role in {"INSTRUMENT_RULES", "MARK_INDEX", "FUNDING"}:
                 emit(self.builder.close_before(trade.event_time_ms), trade)
                 self.execution._last_event = trade
+                if trade.role == "FUNDING" and self.execution.market_observer is not None:
+                    self.execution.market_observer(trade)
                 self.execution.account.apply(trade)
+                if self.execution.market_observer is not None:
+                    self.execution.market_observer(trade)
                 if checkpoint_callback is not None:
                     checkpoint_callback(trade)
                 continue
@@ -245,7 +249,11 @@ class DualClockSimulationKernel:
                 self.execution.account.validate_ready()
             else:
                 self.execution.account.mark = Decimal(str(trade.payload["price"]))
+            if self.execution.funding_rate != 0 and self.execution.market_observer is not None:
+                self.execution.market_observer(trade)
             self.execution._apply_funding(trade)
+            if self.execution.market_observer is not None:
+                self.execution.market_observer(trade)
             if fill_callback is None:
                 self.execution._match(trade)
             else:

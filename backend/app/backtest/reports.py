@@ -227,6 +227,8 @@ def build_report(
         )
     if pine_orders is not None:
         report["pine_orders"] = copy.deepcopy(pine_orders)
+    if payload.get("pine_risk_stops") is not None:
+        report["pine_risk_stops"] = copy.deepcopy(payload["pine_risk_stops"])
     if config.get("pine_process_on_close"):
         from app.simulation.closing_tick import CONTRACT, REASON
         closing = {

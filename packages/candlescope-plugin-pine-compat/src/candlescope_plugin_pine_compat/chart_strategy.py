@@ -10,6 +10,7 @@ from .external_strategy import prepare
 from .prefix_transport import CONTRACT as PREFIX_CONTRACT, PASSES_CONTRACT, CLOCKS_CONTRACT
 from .libraries import library_sources
 from .entry_risk import CONTRACT as RISK_CONTRACT, available as risk_available
+from .entry_risk import STOP_CONTRACT
 
 
 def describe():
@@ -17,6 +18,7 @@ def describe():
         **identity("candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-chart/4"),
         "external_orders": getattr(pine_compat, "EXTERNAL_ORDER_SCHEMA_VERSION", 1),
         **({"entry_risk_contract": RISK_CONTRACT} if risk_available() else {}),
+        **({"risk_stop_contract": STOP_CONTRACT} if risk_available() else {}),
         "fill_callbacks": "candlescope.pine-fill-callbacks/1",
         "closing_tick_contract": "candlescope.pine-closing-tick/1" if getattr(pine_compat,"EXTERNAL_CLOSING_TICK_SCHEMA_VERSION",0)==1 else None,
         "prefix_append": PREFIX_CONTRACT,

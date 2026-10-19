@@ -58,9 +58,9 @@ if bar_index==0
     'max_drawdown(20,strategy.cash)', 'max_intraday_loss(20,strategy.cash)',
     'max_intraday_filled_orders(2)', 'max_cons_loss_days(2)',
 ])
-def test_unconnected_risk_execution_stays_rejected_even_in_false_branches(call):
-    with pytest.raises(StrategyProviderError, match="FIDELITY_UNSUPPORTED"):
-        analyze('//@version=6\nstrategy("Risk")\nif false\n    strategy.risk.' + call)
+def test_stop_rule_analysis_declares_the_required_host_execution_contract(call):
+    result = analyze('//@version=6\nstrategy("Risk")\nif false\n    strategy.risk.' + call)
+    assert result["identity"]["risk_stop_contract"] == "candlescope.pine-risk-stops/1"
 
 
 def test_risk_revision_cannot_use_legacy_target_position_execution():

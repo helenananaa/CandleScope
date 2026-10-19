@@ -339,13 +339,16 @@ that observation. The corrected allocation group passes.
    and Pine risk-rule semantics through the authoritative Host matcher. Chart
    entry direction and maximum-position rules are now wired through the
    explicit entry-risk development contract; see `pine-entry-risk.md`. Four
-   session/equity halt rules remain rejected. The new core configuration schema
+   session/equity halt rules require the separate explicit stop contract. The new core configuration schema
    is a prerequisite and does not fix native conditional rule registration or
    duplicate-rule aggregation. Candidate qualification is tracked separately
    from the retained 3a08561b installed-environment receipt.
-   The four-stop Host state component now has explicit window/account/fill
-   inputs and deterministic snapshot recovery (`pine-risk-stops.md`), but its
-   market/funding/fill hooks and cancel/flatten scheduling remain to connect.
+   The four-stop chart contract now connects market/account/fill observations,
+   cancellation and real-capacity reducing closes (`pine-risk-stops.md`). Other
+   venue calendars, multi-day BAR consecutive-loss windows, Workbench risk
+   wiring, V2 automatic-liquidation ownership receipts (currently explicitly
+   rejected), partial-fill official oracle and broader fidelity qualification
+   remain open. The original default task runtime has not been replaced.
    closed-bar rich orders and print-clock trailing stops are connected.
    Requested datasets are connected; growing requested prefixes currently rebase
    the evaluator and need a causal incremental provider-update contract for

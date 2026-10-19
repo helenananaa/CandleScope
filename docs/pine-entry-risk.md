@@ -29,13 +29,12 @@ General arbitrary lot-step/minimum-contract rounding remains a separate metadata
 and execution gap. This does not establish TradingView fill/lot/alert equivalence.
 Risk alert text is retained as configuration metadata; delivery is not implemented.
 
-`max_drawdown`, `max_intraday_loss`, `max_intraday_filled_orders`, and
-`max_cons_loss_days` remain explicitly rejected, including unreachable calls.
-They require market/fill event observation, session boundaries, halt/flatten
-scheduling, deterministic partial-fill counting and checkpoint state through the
-authoritative matcher. The core's native risk registration/aggregation gaps also
-remain separate work. None of these unfinished paths are advertised by this
-entry-only contract.
+The entry-only contract still rejects `max_drawdown`, `max_intraday_loss`,
+`max_intraday_filled_orders` and `max_cons_loss_days`. The chart adapter's separate
+[stop contract](pine-risk-stops.md) now connects those rules through market/fill
+observations and authoritative cancel/flatten scheduling, with explicit calendar
+and liquidity boundaries. Native risk registration/aggregation and Workbench
+risk integration remain separate work.
 
 Semantics were checked against the official
 [strategy risk-management documentation](https://www.tradingview.com/pine-script-docs/concepts/strategies/#risk-management).
@@ -68,6 +67,7 @@ Qualification evidence is retained under `output/pine-host/phase3/`:
   passed 7,912 Rust, 1,731 Python and 172 tooling tests; its installed candidate
   independently passed the 1,731-case Python group.
 
-The separate four-stop state component has 19 unit cases. These do not prove
-market-event observation, cancellation or forced-close execution for those four
-commands; that integration remains unfinished.
+The retained 20b67788 checkpoint contained a 19-case four-stop state component.
+Its later chart execution integration and current boundaries are documented in
+[pine-risk-stops.md](pine-risk-stops.md); the older receipt is not rewritten to
+claim that the execution hooks existed at that checkpoint.

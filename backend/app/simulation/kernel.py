@@ -141,6 +141,7 @@ class SimulationKernel:
     equity_curve_mode: str | None = None
     scale_stream_decisions: bool = False
     order_policy: Callable[[SimulatedOrder, MarketEvent], bool] | None = field(default=None, repr=False)
+    market_observer: Callable[[MarketEvent], None] | None = field(default=None, repr=False)
     execution_reporter: Callable[[dict], None] | None = field(
         default=None,
         repr=False,
@@ -463,7 +464,7 @@ class SimulationKernel:
             raise MarketDatasetError("closing-tick handler is required", code="FIDELITY_UNSUPPORTED")
         loop = (self._run_plain_bars if self._specialized_bar and not self.process_orders_on_close
                 and type(self) is SimulationKernel and type(self.account) is ContractAccount
-                and self.funding_rate == 0 and warmup_events == 0 else self._run_events)
+                and self.funding_rate == 0 and warmup_events == 0 and self.market_observer is None else self._run_events)
         loop(events, strategy, warmup_events=warmup_events,
                          finalize=finalize, checkpoint_callback=checkpoint_callback,
                          **({"close_callback": close_callback} if close_callback is not None else {}))
@@ -480,7 +481,7 @@ class SimulationKernel:
         for event in iterator:
             if self.paused:
                 break
-            if event.role != "BARS" or self.account is not account or self.funding_rate != 0:
+            if event.role != "BARS" or self.account is not account or self.funding_rate != 0 or self.market_observer is not None:
                 self._run_events(chain((event,), iterator), strategy, warmup_events=0,
                                  finalize=finalize, checkpoint_callback=checkpoint_callback)
                 return
@@ -515,7 +516,11 @@ class SimulationKernel:
             if not self._accept_event(event):
                 continue
             if event.role in {"INSTRUMENT_RULES", "MARK_INDEX", "FUNDING"}:
+                if event.role == "FUNDING" and self.market_observer is not None:
+                    self.market_observer(event)  # Open the session before its first funding debit/credit.
                 self.account.apply(event)
+                if self.market_observer is not None:
+                    self.market_observer(event)
                 if checkpoint_callback is not None:
                     checkpoint_callback(event)
                 continue
@@ -538,7 +543,11 @@ class SimulationKernel:
                 self.account.validate_ready()
             else:
                 self.account.mark = _bar_decimal(event, "close")
+            if self.funding_rate != 0 and self.market_observer is not None:
+                self.market_observer(market_event)
             self._apply_funding(market_event)
+            if self.market_observer is not None:
+                self.market_observer(market_event)
             self._match(market_event)
             intents = strategy((market_event,), market_event)
             if self._market_event_count <= warmup_events:
