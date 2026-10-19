@@ -49,15 +49,12 @@ The current fill-count convention counts an order once per intraday window,
 beginning with its first positive partial fill. Later partials still update
 financial state. Risk-generated closes do not recursively count as script
 orders. This convention needs an official partial-fill differential oracle.
-Automatic V2 account liquidation remains an open ownership-receipt gap. A
-controlled mark-price liquidation reproduced account position 0 with allocated
-Pine quantity 50. The candidate now raises
-`EXTERNAL_LIQUIDATION_RECEIPT_REQUIRED` at that boundary instead of publishing a
-completed report with stale allocations. This is a temporary explicit rejection,
-not completion of liquidation integration. Mapping the actual account settlement
-into ownership/fill evidence, callbacks and recovery remains required goal work.
-The reproduction is retained in
-`output/pine-host/phase3/risk-stops-v2-liquidation-gap.json`.
+Automatic V2 account liquidation now publishes the actual account-ledger
+settlement to Pine ownership, fill evidence, callbacks and recovery. The previous
+0-account/50-allocated failure probe and its explicit rejection remain historical
+evidence. See `pine-account-liquidation.md` for the implemented receipt contract,
+deferred observation policy and controlled qualification boundaries. This does
+not establish TradingView margin-liquidation equivalence.
 
 BAR risk observation follows the Host BAR approximation; it does not reconstruct
 an official historical four-tick or lower-timeframe broker-emulator path. V2
@@ -78,7 +75,15 @@ output oracle or packaged-app acceptance.
 
 ## Development evidence
 
-The complete pre-optimization Host group passed 328 cases, with 41 non-Pine or
+The subsequent liquidation-receipt phase passed a fresh 373-case Host gate with
+41 scoped exclusions, plus 162 kernel/risk/report and 103 accounting/execution
+checks. The eight real-Pine liquidation cases include compound fills, deferred
+callbacks, durable recovery and independent cost scenarios. Gate groups overlap.
+Production-source hashes are frozen across the complete Host gate; the receipt
+is `output/pine-host/phase3/liquidation-candidate-receipt.json`. See
+`pine-account-liquidation.md` for supported scope and qualification limits.
+
+The previous stop checkpoint's complete pre-optimization Host group passed 328 cases, with 41 non-Pine or
 optional-profile cases deselected. A later change limits halted-stop processing
 to the existing active-order index; the regression reproduces 20,200 historical
 row visits before that change. Its subsequent focused real-Pine group passed

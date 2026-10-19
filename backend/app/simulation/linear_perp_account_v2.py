@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any, Mapping
+from typing import Any, Mapping, Callable
 
 from app.market_dataset.snapshot import MarketDatasetError, MarketEvent, sha256_hex
 
@@ -242,6 +242,7 @@ class LinearPerpetualAccountV2:
         event_time_ms: int = 0,
         order_id: str | None = None,
         order_margin_fraction: Decimal = Decimal("1"),
+        after_booked: Callable[[], None] | None = None,
     ) -> None:
         self._assert_tradable()
         self._require_market_state()
@@ -298,7 +299,13 @@ class LinearPerpetualAccountV2:
             event_time_ms,
             {"side": side, "price": str(price), "qty": str(qty), "order_id": order_id},
         )
-        self._after_event(event_time_ms, "FILL")
+        # Publish the ordinary fill while its actual position is observable.
+        # Maintenance settlement follows, even if an execution consumer fails.
+        try:
+            if after_booked is not None:
+                after_booked()
+        finally:
+            self._after_event(event_time_ms, "FILL")
 
     def compensate(self, *, amount: Decimal, reason: str, event_time_ms: int) -> None:
         if not reason.strip() or amount == 0:

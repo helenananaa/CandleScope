@@ -54,6 +54,9 @@ class ExternalOrders:
     def prepare_order(self, order, event):
         if order.status not in LIVE:
             return False
+        if getattr(self.kernel.account, "liquidation_event", None) is not None:
+            self.cancel_order(order, "ACCOUNT_LIQUIDATION")
+            return False
         detail = self.details.get(order.order_id)
         if detail is None:
             raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "unbound host order")
@@ -127,6 +130,12 @@ class ExternalOrders:
         return order.qty > 0
 
     def on_execution(self, event):
+        receipt = event.get("account_liquidation")
+        if receipt is not None:
+            order_id = event["order_id"]
+            self.bindings[order_id] = ("$host:account-liquidation", "liquidation")
+            self.details[order_id] = {"kind": "liquidation", "owner": None,
+                "remaining": Decimal(str(event["fill"]["qty"])), "receipt": receipt}
         token = event.get("client_tag") or (event.get("intent") or {}).get("client_tag")
         binding = self.staged_bindings.pop(token, None)
         if binding is not None and event.get("accepted"):
@@ -245,6 +254,8 @@ class ExternalOrders:
         return quote
 
     def translate(self, intents, sequence):
+        if getattr(self.kernel.account, "liquidation_event", None) is not None:
+            return []
         if self.risk_stops is not None and self.risk_stops.blocked:
             return []
         kernel, staged = self.kernel, []

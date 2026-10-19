@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 from dataclasses import asdict, dataclass, field
 from decimal import Decimal
 from typing import Any, Callable, Mapping
@@ -11,6 +13,9 @@ from app.market_dataset.snapshot import MarketDatasetError, MarketEvent, sha256_
 from app.market_dataset.trades import assert_trade_stream
 from app.simulation.contract_accounting import ContractAccount
 from app.simulation.spot_cash_account import ACCOUNT_MODEL as SPOT_ACCOUNT_MODEL, SpotCashAccount, reserved_spot_order_reason, reject_spot_fill
+from app.simulation.account_execution import (
+    publish_account_liquidation, enrich_account_executions, restore_account_executions,
+)
 from app.simulation.linear_perp_account_v2 import (
     ACCOUNT_MODEL as ACCOUNT_MODEL_V2,
     LinearPerpetualAccountV2,
@@ -194,9 +199,13 @@ class TradeSimulationKernel:
             return max(Decimal("0"), max(after, Decimal("0")) - max(prior, Decimal("0")))
         return max(Decimal("0"), max(-after, Decimal("0")) - max(-prior, Decimal("0")))
 
+    _account_execution_receipts: dict = field(default_factory=dict)
+
     def snapshot(self, *, history_encoder=None) -> dict[str, Any]:
         extended = history_encoder is not None and getattr(history_encoder, "extended", False)
         return {
+            **({"account_execution_receipts": deepcopy(self._account_execution_receipts)}
+               if self._account_execution_receipts else {}),
             **(
                 {
                     "execution_model_revision": self.execution_model_revision,
@@ -412,6 +421,8 @@ class TradeSimulationKernel:
             )
         )
 
+        restore_account_executions(self, payload)
+
     def run(
         self,
         events: tuple[MarketEvent, ...],
@@ -426,13 +437,15 @@ class TradeSimulationKernel:
             raise MarketDatasetError(
                 "trade event budget exceeded", code="BUDGET_EXCEEDED"
             )
-        self.source_kind = assert_trade_stream(market_events)
+        if market_events:
+            self.source_kind = assert_trade_stream(market_events)
         for event in events:
             self._last_event = event
             if event.role in {"INSTRUMENT_RULES", "MARK_INDEX", "FUNDING"}:
                 if event.role == "FUNDING" and self.market_observer is not None:
                     self.market_observer(event)
                 self.account.apply(event)
+                publish_account_liquidation(self)
                 if self.market_observer is not None:
                     self.market_observer(event)
                 if checkpoint_callback is not None:
@@ -514,7 +527,7 @@ class TradeSimulationKernel:
                     or self._market_event_count == 1
                     or self._market_event_count % self.equity_curve_event_interval == 0
                 ):
-                    self.equity_curve.append(curve_point)
+                    self._record_equity_point(curve_point)
             if (
                 self.checkpoint_event_interval
                 and self._market_event_count % self.checkpoint_event_interval == 0
@@ -554,6 +567,8 @@ class TradeSimulationKernel:
         self._record_equity_point(point)
 
     def _record_equity_point(self, point: dict) -> None:
+        if self.equity_curve and self.equity_curve[-1] == point:
+            return
         if (
             self.equity_curve_mode == "UTC_DAILY_CLOSE_V1"
             and self.equity_curve
@@ -586,6 +601,7 @@ class TradeSimulationKernel:
         if self.execution_model_revision == EXECUTION_REALISM_V2:
             for fill, event in zip(fills, self._fill_source_events, strict=True):
                 fill.update(source_event_trace(event, source_kind=self.source_kind))
+        enrich_account_executions(self, fills)
         account = self.account.snapshot()
         account["equity"] = str(self.account.equity())
         account["initial_balance"] = str(self.initial_balance)
@@ -940,6 +956,64 @@ class TradeSimulationKernel:
         # Execution prices include slippage and must not replace that mark:
         # an open position incurs slippage loss on the fill event itself.
         position_before = self.account.position_qty
+        def publish_fill():
+            position_after = self.account.position_qty
+            order.qty -= fill_qty
+            order.status = "FILLED" if order.qty <= 0 or reduce_only_complete else "PARTIAL"
+            if reduce_only_complete:
+                order.qty = Decimal("0")
+            if order.qty < 0:
+                order.qty = Decimal("0")
+            order.fill_price = price
+            order.fill_sequence = sequence
+            fill = SimulatedFill(
+                order_id=order.order_id,
+                sequence=sequence,
+                event_time_ms=(
+                    0 if self._last_event is None else self._last_event.event_time_ms
+                ),
+                side=order.side,
+                price=price,
+                qty=fill_qty,
+                fee=fee,
+                reason=reason,
+                action=_fill_action(position_before, position_after),
+                position_before=position_before,
+                position_after=position_after,
+            )
+            self.fills.append(fill)
+            if self.execution_model_revision == EXECUTION_REALISM_V2:
+                assert self._last_event is not None
+                self._fill_source_events.append(self._last_event)
+                self._lifecycle(order, order.status, fill_qty=fill_qty)
+            if order.status not in {"OPEN", "PARTIAL"}:
+                self._active_orders.pop(order.order_id, None)
+            if order.oco_group is not None and order.status == "FILLED":
+                for sibling in tuple(self._working_orders()):
+                    if (
+                        sibling.order_id != order.order_id
+                        and sibling.oco_group == order.oco_group
+                        and sibling.status in {"OPEN", "PARTIAL"}
+                    ):
+                        sibling.status = (
+                            "CANCELLED"
+                            if self.execution_model_revision == EXECUTION_REALISM_V2
+                            else "CANCELLED_OCO"
+                        )
+                        self._lifecycle(
+                            sibling, sibling.status, reason="OCO_SIBLING_FILLED"
+                        )
+                        if isinstance(self.account, LinearPerpetualAccountV2):
+                            self.account.release_order_margin(sibling.order_id)
+            if self.execution_reporter is not None:
+                self.execution_reporter(
+                    {
+                        "accepted": True,
+                        "fill": {**self._record_encoder(fill), "side": order.side},
+                        "order_id": order.order_id,
+                    }
+                )
+
         if isinstance(self.account, LinearPerpetualAccountV2):
             self.account.apply_fill(
                 side=order.side,
@@ -949,67 +1023,14 @@ class TradeSimulationKernel:
                 event_time_ms=(
                     0 if self._last_event is None else self._last_event.event_time_ms
                 ),
+                after_booked=publish_fill,
                 order_id=order.order_id,
                 order_margin_fraction=fill_qty / order_qty_before,
             )
+            publish_account_liquidation(self)
         else:
             self.account.apply_fill(side=order.side, price=price, qty=fill_qty, fee=fee)
-        position_after = self.account.position_qty
-        order.qty -= fill_qty
-        order.status = "FILLED" if order.qty <= 0 or reduce_only_complete else "PARTIAL"
-        if reduce_only_complete:
-            order.qty = Decimal("0")
-        if order.qty < 0:
-            order.qty = Decimal("0")
-        order.fill_price = price
-        order.fill_sequence = sequence
-        fill = SimulatedFill(
-            order_id=order.order_id,
-            sequence=sequence,
-            event_time_ms=(
-                0 if self._last_event is None else self._last_event.event_time_ms
-            ),
-            side=order.side,
-            price=price,
-            qty=fill_qty,
-            fee=fee,
-            reason=reason,
-            action=_fill_action(position_before, position_after),
-            position_before=position_before,
-            position_after=position_after,
-        )
-        self.fills.append(fill)
-        if self.execution_model_revision == EXECUTION_REALISM_V2:
-            assert self._last_event is not None
-            self._fill_source_events.append(self._last_event)
-            self._lifecycle(order, order.status, fill_qty=fill_qty)
-        if order.status not in {"OPEN", "PARTIAL"}:
-            self._active_orders.pop(order.order_id, None)
-        if order.oco_group is not None and order.status == "FILLED":
-            for sibling in tuple(self._working_orders()):
-                if (
-                    sibling.order_id != order.order_id
-                    and sibling.oco_group == order.oco_group
-                    and sibling.status in {"OPEN", "PARTIAL"}
-                ):
-                    sibling.status = (
-                        "CANCELLED"
-                        if self.execution_model_revision == EXECUTION_REALISM_V2
-                        else "CANCELLED_OCO"
-                    )
-                    self._lifecycle(
-                        sibling, sibling.status, reason="OCO_SIBLING_FILLED"
-                    )
-                    if isinstance(self.account, LinearPerpetualAccountV2):
-                        self.account.release_order_margin(sibling.order_id)
-        if self.execution_reporter is not None:
-            self.execution_reporter(
-                {
-                    "accepted": True,
-                    "fill": {**self._record_encoder(fill), "side": order.side},
-                    "order_id": order.order_id,
-                }
-            )
+            publish_fill()
         return fill_qty
 
     def _lifecycle(
@@ -1078,6 +1099,7 @@ class TradeSimulationKernel:
                     rate=self.funding_rate,
                     period_id=f"fixed:{self._next_funding_time_ms}",
                 )
+                publish_account_liquidation(self)
                 self._next_funding_time_ms += self.funding_interval_ms
             return
         if self.funding_rate == 0 or self.funding_interval_ms <= 0:

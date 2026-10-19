@@ -69,15 +69,12 @@ class PineRiskStops:
 
     @property
     def blocked(self):
-        return self.state is not None and (self.state.blocked or self.flatten_requested)
+        return (getattr(self.kernel.account, "liquidation_event", None) is not None
+            or self.state is not None and (self.state.blocked or self.flatten_requested))
 
     def observe_market(self, event, *, update_cursor=True):
         if self.state is None:
             return
-        if (getattr(self.kernel.account, "liquidation_event", None) is not None
-                and self.orders.owned() != self.kernel.account.position_qty):
-            raise BacktestError("EXTERNAL_LIQUIDATION_RECEIPT_REQUIRED",
-                "automatic V2 liquidation requires an ownership execution receipt; refusing an unreconciled report")
         if update_cursor and event.role in {"BARS", "TRADES"}:
             self.execution_cursor = event.sequence
         self._observe(event.event_time_ms)
@@ -89,7 +86,8 @@ class PineRiskStops:
         fill, order_id = execution["fill"], execution["order_id"]
         self.execution_cursor = fill["sequence"]
         kind = self.orders.details[order_id]["kind"]
-        self._observe(fill["event_time_ms"], None if kind == "risk_close" else order_id)
+        observation_time = max(fill["event_time_ms"], self.kernel._last_event.event_time_ms)
+        self._observe(observation_time, None if kind in {"risk_close", "liquidation"} else order_id)
         if not self.kernel.account.position_qty:
             self.flatten_requested = False
         self._enforce(self.kernel._last_event)

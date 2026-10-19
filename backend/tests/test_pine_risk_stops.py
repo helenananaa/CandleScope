@@ -224,7 +224,7 @@ def test_flat_permanent_halt_does_not_scan_completed_order_history_on_every_tick
     assert history.visited < len(history)
 
 
-def test_automatic_v2_liquidation_cannot_publish_an_unreconciled_pine_allocation_report():
+def test_automatic_v2_liquidation_reconciles_actual_pine_allocations():
     from tests.test_backtest_account_v2_m4 import rules
     kernel = TradeSimulationKernel(account_model="LINEAR_PERP_ONE_WAY_V2",funding_mode="HISTORICAL_REQUIRED",
         initial_balance=Decimal(1000),leverage=Decimal(10),slippage_bps=Decimal(0))
@@ -236,7 +236,12 @@ def test_automatic_v2_liquidation_cannot_publish_an_unreconciled_pine_allocation
         MarketEvent(3,3,"FUNDING",{"period_id":"p0","funding_rate":"0"}),
         event(1,100,tape=True,time=1000),event(2,100,tape=True,time=2000),
         MarketEvent(3000,3000,"MARK_INDEX",{"mark_price":"80","index_price":"80"}))
-    with pytest.raises(BacktestError,match="EXTERNAL_LIQUIDATION_RECEIPT_REQUIRED"):
-        kernel.run(rows,lambda _,e: orders.translate([intent("L",qty=50)] if e.sequence==1 else [],e.sequence))
-    assert kernel.account.position_qty==0 and orders.owned()==50
-    assert kernel.account.liquidation_event is not None  # The actual account settlement is not fabricated or undone.
+    kernel.run(rows,lambda _,e: orders.translate([intent("L",qty=50)] if e.sequence==1 else [],e.sequence))
+    assert kernel.account.position_qty==orders.owned()==0
+    assert [fill.position_after for fill in kernel.fills]==[50,0]
+    assert kernel.fills[-1].reason=="ACCOUNT_LIQUIDATION"
+    assert orders.allocations[-1]["closed"]==[{"entry_id":"L","entry_order_id":"ord-1","qty":"50"}]
+    assert stop.blocked and not stop.flatten_requested
+    assert orders.translate([intent("retry",qty=1)],3)==[]
+    assert kernel.account.cumulative_realized_pnl==-1000
+    assert kernel.result().fills[-1]["account_liquidation"]["trigger"]=="MARK_INDEX"

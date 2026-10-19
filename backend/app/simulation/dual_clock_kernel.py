@@ -14,6 +14,7 @@ from .kernel import SimulationResult, _decision_record
 from .trade_bar_builder import TradeBarBuilder
 from .trade_kernel import TradeSimulationKernel, _wire_order
 from .linear_perp_account_v2 import LinearPerpetualAccountV2
+from .account_execution import publish_account_liquidation
 
 DualClockStrategyFn = Callable[[tuple[MarketEvent, ...], MarketEvent], list[dict]]
 
@@ -52,6 +53,8 @@ class DualClockSimulationKernel:
     frozen_intents: list[dict] = field(default_factory=list)
     _decision_chain_hash: str = "sha256:GENESIS"
     _decision_count: int = 0
+    _pending_account_callbacks: list[dict] = field(default_factory=list)
+    _account_callback_count: int = 0
 
     def __post_init__(self) -> None:
         self.builder = TradeBarBuilder(self.signal_interval, gap_policy=self.gap_policy)
@@ -92,6 +95,9 @@ class DualClockSimulationKernel:
         extended = history_encoder is not None and getattr(history_encoder, "extended", False)
         return {
             "schemaVersion": "candlescope.dual-clock-kernel/1",
+            **({"account_fill_callbacks": {"pending": [dict(row) for row in self._pending_account_callbacks],
+                "delivered": self._account_callback_count}}
+                if self._pending_account_callbacks or self._account_callback_count else {}),
             **({"process_orders_on_close": True} if self.process_orders_on_close else {}),
             "signal_interval": self.signal_interval,
             "gap_policy": self.gap_policy,
@@ -143,6 +149,17 @@ class DualClockSimulationKernel:
             else int(payload["last_source_sequence"])
         )
         self.frozen_intents = list(payload.get("frozen_intents") or [])
+        callbacks = payload.get("account_fill_callbacks") or {}
+        self._pending_account_callbacks = [dict(row) for row in callbacks.get("pending", [])]
+        self._account_callback_count = callbacks.get("delivered", 0)
+        receipts = self.execution._account_execution_receipts
+        pending_ids = [row.get("order_id") for row in self._pending_account_callbacks]
+        if (type(self._account_callback_count) is not int or self._account_callback_count < 0
+                or len(set(pending_ids)) != len(pending_ids)
+                or self._account_callback_count + len(pending_ids) > len(receipts)
+                or any(row.get("order_id") not in receipts or row.get("execution_time_ms") !=
+                    receipts[row["order_id"]]["event_time_ms"] for row in self._pending_account_callbacks)):
+            raise MarketDatasetError("invalid pending account callback", code="CHECKPOINT_CORRUPT")
 
     def run(
         self,
@@ -210,13 +227,55 @@ class DualClockSimulationKernel:
                 finally:
                     if self.process_orders_on_close:
                         self.execution._last_event = previous
+        def observe_fill(source, settlement=None, *, deferred=False):
+            if settlement is not None and not self.builder.has_forming_bar(source.event_time_ms):
+                self._pending_account_callbacks.append(dict(settlement))
+                return
+            forming = self.builder.forming_bar(source.event_time_ms)
+            intents = fill_callback(source, forming)
+            wire = getattr(intents, "decision", None) or {}
+            decision = _decision_record(intents, sequence=wire.get("sequence", forming.sequence),
+                watermark_ms=source.event_time_ms)
+            decision.update(trigger="ORDER_FILL", signal_sequence=forming.sequence, source_sequence=source.sequence)
+            if settlement is not None:
+                decision.update(execution_kind="ACCOUNT_LIQUIDATION", **settlement, observation_deferred=deferred)
+                self._account_callback_count += 1
+            if self.scale_stream_decisions:
+                self._decision_chain_hash = "sha256:" + sha256_hex({"previous": self._decision_chain_hash, "decision": decision})
+                self._decision_count += 1
+            else:
+                self.decisions.append(decision)
+            self.execution._enqueue_many(intents, current_sequence=source.sequence)
+
+        def with_execution_reports(operation, source):
+            if fill_callback is None:
+                return operation()
+            prior_reporter = self.execution.execution_reporter
+            def report(execution):
+                if prior_reporter is not None:
+                    prior_reporter(execution)
+                if execution.get("fill"):
+                    settlement = ({"order_id": execution["order_id"],
+                        "execution_time_ms": execution["fill"]["event_time_ms"]}
+                        if execution.get("account_liquidation") else None)
+                    observe_fill(source, settlement)
+            self.execution.execution_reporter = report
+            try:
+                return operation()
+            finally:
+                self.execution.execution_reporter = prior_reporter
+
+        def apply_account_event(source):
+            self.execution.account.apply(source)
+            publish_account_liquidation(self.execution)
+
         for trade in events:
             if trade.role in {"INSTRUMENT_RULES", "MARK_INDEX", "FUNDING"}:
                 emit(self.builder.close_before(trade.event_time_ms), trade)
                 self.execution._last_event = trade
                 if trade.role == "FUNDING" and self.execution.market_observer is not None:
                     self.execution.market_observer(trade)
-                self.execution.account.apply(trade)
+                with_execution_reports(lambda: apply_account_event(trade), trade)
                 if self.execution.market_observer is not None:
                     self.execution.market_observer(trade)
                 if checkpoint_callback is not None:
@@ -251,36 +310,14 @@ class DualClockSimulationKernel:
                 self.execution.account.mark = Decimal(str(trade.payload["price"]))
             if self.execution.funding_rate != 0 and self.execution.market_observer is not None:
                 self.execution.market_observer(trade)
-            self.execution._apply_funding(trade)
+            if fill_callback is not None and self._pending_account_callbacks:
+                for pending in tuple(self._pending_account_callbacks):
+                    observe_fill(trade, pending, deferred=True)
+                    self._pending_account_callbacks.remove(pending)
+            with_execution_reports(lambda: self.execution._apply_funding(trade), trade)
             if self.execution.market_observer is not None:
                 self.execution.market_observer(trade)
-            if fill_callback is None:
-                self.execution._match(trade)
-            else:
-                prior_reporter = self.execution.execution_reporter
-                def report(execution):
-                    if prior_reporter is not None:
-                        prior_reporter(execution)
-                    if execution.get("fill"):
-                        forming = self.builder.forming_bar(trade.event_time_ms)
-                        intents = fill_callback(trade, forming)
-                        wire = getattr(intents, "decision", None) or {}
-                        decision = _decision_record(intents, sequence=wire.get("sequence", forming.sequence),
-                            watermark_ms=trade.event_time_ms)
-                        decision.update(trigger="ORDER_FILL", signal_sequence=forming.sequence, source_sequence=trade.sequence)
-                        if self.scale_stream_decisions:
-                            self._decision_chain_hash = "sha256:" + sha256_hex({"previous": self._decision_chain_hash, "decision": decision})
-                            self._decision_count += 1
-                        else:
-                            self.decisions.append(decision)
-                        # The callback sees this execution but cannot consume
-                        # the same print with an order it has just submitted.
-                        self.execution._enqueue_many(intents, current_sequence=trade.sequence)
-                self.execution.execution_reporter = report
-                try:
-                    self.execution._match(trade)
-                finally:
-                    self.execution.execution_reporter = prior_reporter
+            with_execution_reports(lambda: self.execution._match(trade), trade)
             sample_curve = (
                 self.equity_curve_mode == "UTC_DAILY_CLOSE_V1"
                 or self.execution_model_revision is None
@@ -308,7 +345,7 @@ class DualClockSimulationKernel:
                     or (self.execution_event_count + 1) % self.equity_curve_event_interval
                     == 0
                 ):
-                    self.execution.equity_curve.append(curve_point)
+                    self.execution._record_equity_point(curve_point)
             self.execution_event_count += 1
             self._last_source_sequence = source_sequence
             if checkpoint_callback is not None:
@@ -335,6 +372,10 @@ class DualClockSimulationKernel:
             fill_hash, orders = base.fill_hash, base.orders
             rejected, curve = base.rejected, base.equity_curve
             ambiguity = base.ambiguity_count
+        if self._pending_account_callbacks or self._account_callback_count:
+            ledger["account_fill_callbacks"] = {"policy": "OBSERVED_FORMING_BAR_OR_NEXT_TRADE_V1",
+                "delivered": self._account_callback_count,
+                "pending": [dict(row) for row in self._pending_account_callbacks]}
         ledger["signal_event_count"] = self.builder.signal_count
         ledger["execution_event_count"] = self.execution_event_count
         ledger_hash = sha256_hex(ledger)

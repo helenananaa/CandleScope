@@ -27,7 +27,8 @@ def match_closing_tick(kernel, bar, sequence, *, on_fill=None):
         for fill in reversed(kernel.fills):
             if fill.event_time_ms < int(bar.payload["open_time_ms"]):
                 break
-            used += fill.qty
+            if fill.reason != "ACCOUNT_LIQUIDATION":
+                used += fill.qty
         remaining = max(Decimal(0), Decimal(str(bar.payload["volume"])) * kernel.participation_rate - used)
 
     def report(value):

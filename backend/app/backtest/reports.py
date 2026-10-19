@@ -460,7 +460,6 @@ def build_round_trip_trades(fills: list[Mapping[str, Any]]) -> list[dict[str, An
         fills,
         key=lambda item: (
             int(item.get("sequence") or 0),
-            str(item.get("order_id") or ""),
         ),
     )
     for fill in ordered:

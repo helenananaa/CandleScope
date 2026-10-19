@@ -14,12 +14,20 @@ The mistakenly relayed scope-narrowing instruction was withdrawn by the user.
   conflicts at `e134d86742e6bcd32825e12bdb8600f8be0824b2`.
 - Original main checkout remains at `1a2a0189` with its 19 existing local changes;
   this task did not modify that checkout.
-- Core branch: `codex/pine-host-completion`, based on `b9200480e`, now committed
-  at `dc869e6be26857e34a6cba0edc69943110187d8d` (external closing-tick opt-in).
+- Core branch: `codex/pine-host-completion`, based on `b9200480e`, is at
+  `1b506560a5df3ba031b2d1b6d97a86c2061db30b` (declarative risk configuration).
+  The retained default candidate still uses
+  `dc869e6be26857e34a6cba0edc69943110187d8d` (external closing-tick opt-in).
   Metadata checkpoint `40a1ac8d4` remains in the previous receipt.
-- Current core wheel: `.local/host-completion/closing-qualified-wheels/` in the core repo.
+- Retained default core wheel: `.local/host-completion/closing-qualified-wheels/` in the core repo.
   SHA256: `0ac745fa781e278a48ffb87a5c5daf0bfe8e6fdef6373b14ab7d886e0324b8f8`.
   It is installed only in the task's `output/pine-host/phase3/venv`.
+- The isolated risk/automatic-liquidation candidate uses the core wheel in
+  `.local/host-completion/risk-qualified-wheels/`, SHA256
+  `88dace3e039039b4e5c57d28988f26708e59cb273ab791eea072e4552049b278`,
+  with risk schema 1. Its environment and registry remain under
+  `output/pine-host/phase3/risk-stops-venv` and
+  `output/pine-host/phase3/risk-stops-runtime-registry.json`.
 - Package version remains `0.3.2`; use the artifact/source identity and
   `EXTERNAL_CLOCK_SCHEMA_VERSION == 1`, `SYMBOL_METADATA_SCHEMA_VERSION == 1`
   `EXTERNAL_ORDER_SCHEMA_VERSION == 2` and `EXTERNAL_CLOSING_TICK_SCHEMA_VERSION == 1`,
@@ -30,6 +38,14 @@ The mistakenly relayed scope-narrowing instruction was withdrawn by the user.
 
 ## Implemented host work
 
+- Chart V2 automatic account liquidation now publishes the actual ledger-backed
+  settlement through entry allocation, financial fills, completed trades and
+  equity samples. Ordinary fill then immediate liquidation exposes both actual
+  account states. Aggregate-trade Pine fill callbacks use observed forming bars
+  or persist a deferred callback until a real next trade; checkpoints preserve
+  the settlement proof and queue. Independent cost scenarios reexecute this path.
+  See `pine-account-liquidation.md` for the declared model and remaining official
+  margin-liquidation qualification boundary.
 - Pine Workbench `CANDLESCOPE` replay now restores the actual Host kernel,
   account, pending orders, entry/OCA allocation and execution cursor. It validates
   reconstructed evaluator output before matching future events, commits account
@@ -346,9 +362,12 @@ that observation. The corrected allocation group passes.
    The four-stop chart contract now connects market/account/fill observations,
    cancellation and real-capacity reducing closes (`pine-risk-stops.md`). Other
    venue calendars, multi-day BAR consecutive-loss windows, Workbench risk
-   wiring, V2 automatic-liquidation ownership receipts (currently explicitly
-   rejected), partial-fill official oracle and broader fidelity qualification
+   wiring, partial-fill official oracle and broader fidelity qualification
    remain open. The original default task runtime has not been replaced.
+   V2 automatic-liquidation ledger receipts now reconcile ownership, callbacks,
+   deferred observations and recovery (`pine-account-liquidation.md`). Their
+   declared full-position mark-settlement model still requires separate official
+   margin-liquidation and product qualification.
    closed-bar rich orders and print-clock trailing stops are connected.
    Requested datasets are connected; growing requested prefixes currently rebase
    the evaluator and need a causal incremental provider-update contract for
