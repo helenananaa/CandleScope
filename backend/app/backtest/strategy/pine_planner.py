@@ -64,6 +64,10 @@ class PineHostPlanner(PyneHostPlanner):
             raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "at most 64 Pine order intents")
         self.orders.feedback()
         self.orders.configure(payload["pyramiding"])
+        if "risk_rules" in payload:
+            self.orders.entry_risk.configure(payload["risk_rules"])
+        elif self.orders.entry_risk.configuration is not None:
+            raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "Pine risk configuration missing")
         translated = self.orders.translate(intents, wire["sequence"])
         if self.config is None:
             return HostPlan(translated, decision=wire)

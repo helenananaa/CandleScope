@@ -144,7 +144,8 @@ if bar_index == 1
     assert [float(fill["price"]) for fill in report["fills"]] == [10, 9.5]
 
 
-def test_checkpoint_recovery_preserves_pending_brackets_and_actual_entry_allocations(tmp_path):
+@pytest.mark.parametrize("entry_risk", [False, True])
+def test_checkpoint_recovery_preserves_pending_brackets_and_actual_entry_allocations(tmp_path, entry_risk):
     from app.backtest.strategy.pine_engine import PineEngineProvider
     from app.backtest.strategy.protocol import StrategyProviderError
     from app.market_dataset.snapshot import MarketEvent
@@ -157,6 +158,8 @@ if bar_index == 0
     strategy.entry("L",strategy.long,qty=4,limit=11)
     strategy.exit("X","L",limit=30,stop=8)
 '''
+    if entry_risk:
+        source = source.replace('strategy("Recover orders",pyramiding=2)', 'strategy("Recover orders",pyramiding=2)\nif false\n    strategy.risk.max_position_size(2)')
     try:
         revision = service.create_strategy_revision({"language": "PINE_ENGINE", "name": "Recover", "source_text": source})
         payload = {"strategy_revision_id": revision["revision_id"], "dataset_id": "local-pine", "data_epoch": "epoch-20261019",

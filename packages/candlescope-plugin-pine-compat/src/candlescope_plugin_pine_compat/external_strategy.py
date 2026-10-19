@@ -12,6 +12,7 @@ from .libraries import library_sources
 from .prefix_transport import CONTRACT as PREFIX_CONTRACT
 from .prefix_transport import PASSES_CONTRACT, CLOCKS_CONTRACT, PrefixInput
 from .strategy_time import engine_bars
+from .entry_risk import options as risk_options
 
 _prefix = PrefixInput()
 _session = None
@@ -48,6 +49,7 @@ def execute(request):
         _session = None
         _session_count = 0
     program, analysis = prepare(request["source"], library_sources({"pineLibrarySources": request.get("libraries", {})}))
+    risk = risk_options(request, analysis)
     require_price_grid(analysis, request)
     require_quote_currency(analysis, program.host_requirements(), request, external=True)
     inputs = analysis.get("inputs", [])
@@ -134,6 +136,7 @@ def execute(request):
                     chart_timeframe=request["context"]["timeframe"],
                     request_bars=supplied,
                     **closing,
+                    **risk,
                 )
                 _session_count = 0
             result = _session.append(
@@ -155,6 +158,7 @@ def execute(request):
                     execution_passes=passes,
                     request_bars=request_bars,
                     **closing,
+                    **risk,
                     **({"execution_times": clocks} if clocks is not None else {}),
                 ),
                 request,
@@ -174,6 +178,7 @@ def execute(request):
         "intents": result["intents"],
         "graphics": result["output"].get("plots", []),
         "raw_output": result["output"],
+        **({"risk_rules": result["risk_rules"]} if "risk_rules" in result else {}),
         "execution_mode": "CANDLESCOPE",
         "account_authority": "candlescope",
     }

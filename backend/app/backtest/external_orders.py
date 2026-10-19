@@ -17,6 +17,8 @@ class ExternalOrders:
         self.staged_bindings = {}
         self.lots, self.allocations = [], []
         self.pyramiding = None
+        from .pine_entry_risk import PineEntryRisk
+        self.entry_risk = PineEntryRisk()
         self.price_tick = None if price_tick is None else Decimal(str(price_tick))
         self.fidelity = fidelity
         self.execution_reporter = kernel.execution_reporter
@@ -60,6 +62,7 @@ class ExternalOrders:
             if position * direction > 0 and not own_lot and len(self.lots) >= (self.pyramiding or 1):
                 self.cancel_order(order, "EXTERNAL_PYRAMID_LIMIT")
                 return False
+            detail["remaining"] = self.entry_risk.opening_quantity(detail["remaining"], position, direction)
             # Pending reversals use the live position, never the submission-time size.
             order.qty = detail["remaining"] + (abs(position) if position * direction < 0 else ZERO)
             if detail.get("oca_cap") is not None:
@@ -112,6 +115,8 @@ class ExternalOrders:
                         order.stop_price = target
                 if target <= 0:
                     raise BacktestError("EXTERNAL_UNSUPPORTED", "distance exit produced a nonpositive price")
+        if order.qty <= 0 and detail["kind"] == "entry":
+            self.cancel_order(order, "PINE_ENTRY_RISK_LIMIT")
         return order.qty > 0
 
     def on_execution(self, event):
@@ -255,8 +260,16 @@ class ExternalOrders:
                 if action == "entry" and position * direction > 0 and len(self.lots) >= (self.pyramiding or 1):
                     continue
                 opening = Decimal(str(intent["qty"]))
+                if action == "entry":
+                    opening = self.entry_risk.opening_quantity(opening, position, direction)
                 qty = opening + (abs(position) if action == "entry" and position * direction < 0 else ZERO)
+                if qty <= 0:
+                    continue
                 limit, stop = intent.get("limit"), intent.get("stop")
+                if action == "entry" and direction not in self.entry_risk.directions:
+                    # A prohibited reversal becomes a market close even when
+                    # the original entry specified a limit/stop price.
+                    limit, stop = None, None
                 # Explicit independent groups prevent the kernel's legacy
                 # limit+stop heuristic from pairing unrelated script entries.
                 order = {"side":"BUY" if direction > 0 else "SELL","qty":str(qty),
@@ -347,7 +360,8 @@ class ExternalOrders:
             return value
         return encode({"schema": "candlescope.external-orders/1", "bindings": self.bindings,
             "details": self.details, "lots": self.lots, "allocations": self.allocations,
-            "pyramiding": self.pyramiding, "staged_bindings": self.staged_bindings})
+            "pyramiding": self.pyramiding, "staged_bindings": self.staged_bindings,
+            **({"pine_entry_risk": self.entry_risk.configuration} if self.entry_risk.configuration is not None else {})})
 
     def restore(self, payload):
         def decode(value):
@@ -364,6 +378,10 @@ class ExternalOrders:
         if payload.get("schema") != "candlescope.external-orders/1":
             raise BacktestError("CHECKPOINT_CORRUPT", "order allocation schema differs")
         value = decode(payload)
+        if value.get("pine_entry_risk") is not None:
+            self.entry_risk.configure(value["pine_entry_risk"])
+        elif self.entry_risk.configuration is not None:
+            raise BacktestError("CHECKPOINT_CORRUPT", "Pine risk configuration missing")
         self.bindings = {key: tuple(item) for key, item in value["bindings"].items()}
         self.details, self.lots, self.allocations = value["details"], value["lots"], value["allocations"]
         self.pyramiding = value["pyramiding"]
@@ -375,4 +393,6 @@ class ExternalOrders:
     def report(self):
         return {"model":"HOST_NET_AVERAGE_COST_ENTRY_QUANTITY_FIFO_V1", "price_tick":None if self.price_tick is None else str(self.price_tick),
                 "open_entries":[{**lot,"qty":str(lot["qty"]),"price":str(lot["price"])} for lot in self.lots],
-                "fill_allocations":self.allocations}
+                "fill_allocations":self.allocations,
+                **({"risk_contract":"candlescope.pine-entry-risk/1", "risk_configuration":self.entry_risk.configuration}
+                    if self.entry_risk.configuration is not None else {})}

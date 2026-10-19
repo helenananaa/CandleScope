@@ -1,5 +1,5 @@
 import pytest
-from tests.test_native_backtests import runtime, terminal, pytestmark
+from tests.test_native_backtests import runtime as runtime, terminal, pytestmark as pytestmark
 from tests.test_native_additional_inputs import additional
 from tests.test_external_strategy_v2 import tape
 
@@ -80,9 +80,11 @@ def test_missing_requested_dataset_never_falls_back(runtime, kind):
     assert record["result"] is None
 
 
-def test_capability_probe_accepts_current_versioned_adapters(runtime):
+@pytest.mark.parametrize("language", ["pine", "pyne"])
+def test_capability_probe_accepts_current_versioned_adapters(runtime, language):
     host, _ = runtime
-    assert all(item["external_available"] for item in host.native.capabilities()["engines"])
+    engine = next(row for row in host.native.capabilities()["engines"] if row["language"] == language)
+    assert engine.get("available") is True and engine.get("external_available") is True, engine
 
 
 def test_lookahead_that_rewrites_previous_host_intents_is_rejected(runtime):

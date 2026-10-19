@@ -11,6 +11,8 @@ import re
 import threading
 from decimal import Decimal
 
+from app.backtest.pine_entry_risk import CONTRACT as RISK_CONTRACT, FUNCTIONS as RISK_FUNCTIONS
+
 from .protocol import (
     ProviderCapabilities,
     StrategyOutput,
@@ -81,7 +83,8 @@ def analyze(source, libraries=None):
         feature
         for feature in features
         if (feature.startswith("request.") and feature not in {"request.security", "request.security_lower_tf"})
-        or feature.startswith("strategy.risk")
+        or (feature.startswith("strategy.risk") and (feature not in RISK_FUNCTIONS
+            or result["identity"].get("entry_risk_contract") != RISK_CONTRACT))
     }
     execution = requirements.get("execution", {})
     if (
@@ -152,12 +155,15 @@ class PineEngineProvider:
             self.needs_clock = frozen.get("executionClock") == "explicitTimestampWhenEvaluated"
             self.fill_callbacks = frozen.get("fillCallbacks") is True
             self.process_on_close = frozen.get("processOnClose") is True
+            self.entry_risk = frozen.get("entryRisk") is True
         except (KeyError, ValueError, TypeError) as exc:
             raise StrategyProviderError(
                 "PROVIDER_PROTOCOL_VIOLATION", "compiled Pine source envelope required"
             ) from exc
         if self.fill_callbacks and not self.order_mode:
             raise StrategyProviderError("FIDELITY_UNSUPPORTED", "fill callbacks require ORDER_INTENT mode")
+        if self.entry_risk and (not self.order_mode or self.runtime_identity.get("entry_risk_contract") != RISK_CONTRACT):
+            raise StrategyProviderError("FIDELITY_UNSUPPORTED", "Pine risk rules require the Host order risk contract")
         if frozen.get("requiresOrderMode") and not self.order_mode:
             raise StrategyProviderError("FIDELITY_UNSUPPORTED", "generic and OCA orders require ORDER_INTENT mode")
         runtime = plugin()
@@ -174,6 +180,7 @@ class PineEngineProvider:
             "libraries": self.libraries,
             "parameters": dict(context.get("parameters") or {}),
             **({"closing_ticks": True} if self.process_on_close else {}),
+            **({"risk_contract": RISK_CONTRACT} if self.entry_risk else {}),
         }
         from app.backtest.errors import BacktestError
         from app.backtest.pine_requested_data import load_contexts
@@ -186,6 +193,7 @@ class PineEngineProvider:
         self.execution_times = []
         self.execution_passes = []
         self.state_hash = canonical_hash([])
+        self.risk_configuration = None
 
     def _evaluate(self, frame, *, warmup=False):
         if self.worker is None or not frame.account_view:
@@ -294,6 +302,13 @@ class PineEngineProvider:
                 "Pine returned the wrong account contract",
             )
         index = len(self.bars) - 1
+        if self.entry_risk:
+            configuration = result.get("risk_rules")
+            if not isinstance(configuration, dict) or not configuration.get("rules"):
+                raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "Pine risk configuration missing")
+            if self.risk_configuration is not None and configuration != self.risk_configuration:
+                raise StrategyProviderError("LOOKAHEAD_VIOLATION", "Pine risk configuration changed")
+            self.risk_configuration = configuration
         def ordinal(item):
             return (item["bar_index"], item.get("pass_index", -1)) if self.fill_callbacks else (item["bar_index"], -1)
         cursor = (index, pass_index) if self.fill_callbacks else (index, -1)
@@ -315,6 +330,7 @@ class PineEngineProvider:
                 "bar": bar,
                 "account": account,
                 "intents": intents,
+                **({"risk_rules": self.risk_configuration} if self.entry_risk else {}),
                 **({"executionTimeMs": frame.event_time_ms} if self.needs_clock else {}),
                 **({"executionPass": {"barIndex": index, "passIndex": pass_index, "confirmed": confirmed,
                     "eventTimeMs": frame.event_time_ms}} if self.fill_callbacks else {}),
@@ -324,6 +340,8 @@ class PineEngineProvider:
             if warmup or not intents:
                 return None
             payload = {"contract": ORDER_CONTRACT, "intents": intents, "pyramiding": result.get("pyramiding", 1)}
+            if self.entry_risk:
+                payload["risk_rules"] = self.risk_configuration
             return StrategyOutput(frame.sequence, "ORDER_INTENT", payload, self.state_hash, canonical_hash(payload))
         if result.get("pyramiding", 1) != 1:
             raise StrategyProviderError("FIDELITY_UNSUPPORTED", "Pyramiding requires ORDER_INTENT mode")
@@ -427,6 +445,7 @@ class PineEngineProvider:
             "history": self.history,
             "entry_id": self.entry_id,
             "state_hash": self.state_hash,
+            **({"risk_rules": self.risk_configuration} if self.entry_risk else {}),
             **({"execution_times": self.execution_times} if self.needs_clock else {}),
             **({"execution_passes": self.execution_passes} if self.fill_callbacks else {}),
         }
@@ -436,6 +455,10 @@ class PineEngineProvider:
         self.bars, self.accounts = list(payload["bars"]), list(payload["accounts"])
         self.history, self.entry_id = list(payload["history"]), payload["entry_id"]
         self.state_hash = payload["state_hash"]
+        if self.entry_risk:
+            self.risk_configuration = payload.get("risk_rules")
+            if self.bars and not isinstance(self.risk_configuration, dict):
+                raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "restored Pine risk configuration missing")
         if self.fill_callbacks:
             from copy import deepcopy
             passes = payload.get("execution_passes")

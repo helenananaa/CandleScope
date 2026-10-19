@@ -101,8 +101,10 @@ The official [closing-order documentation](https://www.tradingview.com/pine-scri
 informs this behavior; these tests are not a TradingView output oracle.
 
 `calc_on_every_tick`, `calc_on_every_history_tick`,
-and Pine `strategy.risk.*` still require further integration or core capability
-work. Order comments/alert metadata, zero-quantity no-op parity, and non-fixed
+and four session/equity Pine risk commands still require further integration or
+core capability work. The explicit entry-direction/position-limit development
+profile is described in [pine-entry-risk.md](pine-entry-risk.md).
+Order comments/alert metadata, zero-quantity no-op parity, and non-fixed
 default sizing also remain outside the external order profile. The current
 runtime rejects unknown declaration options.
 

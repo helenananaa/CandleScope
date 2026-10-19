@@ -94,9 +94,12 @@ def test_fill_callbacks_use_actual_account_and_observed_forming_bar(service,spot
     assert completed["report"]["strategy"]["pineExecution"]["fillCallbackCount"] == 2
 
 
-@pytest.mark.parametrize("generic",[False,True])
-def test_recovery_resumes_an_unconfirmed_fill_group(service,generic):
-    config = payload(service,SOURCE.replace("strategy.entry(","strategy.order(") if generic else SOURCE)
+@pytest.mark.parametrize("generic,entry_risk",[(False,False),(True,False),(False,True)])
+def test_recovery_resumes_an_unconfirmed_fill_group(service,generic,entry_risk):
+    source = SOURCE.replace("strategy.entry(","strategy.order(") if generic else SOURCE
+    if entry_risk:
+        source = source.replace('varip int passes=0', 'if false\n    strategy.risk.max_position_size(1)\nvarip int passes=0')
+    config = payload(service,source)
     baseline = execute(service, service.create_run(config,idempotency_key="baseline",now_ms=3))
     run = service.create_run(config,idempotency_key="interrupted",now_ms=3)
     original = service.repository.save_checkpoint

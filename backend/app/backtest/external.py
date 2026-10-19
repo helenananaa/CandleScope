@@ -25,6 +25,7 @@ def host_identity():
     files = [Path(__file__), Path(__file__).with_name("native_session.py"), Path(__file__).with_name("external_orders.py"), Path(__file__).with_name("external_report.py"), Path(__file__).with_name("external_market.py"), Path(__file__).with_name("external_feedback.py"), Path(__file__).with_name("external_incremental.py"), Path(__file__).with_name("external_replay.py"), *sorted(Path(kernel_module.__file__).parent.rglob("*.py"))]
     checksum = hashlib.sha256()
     files.extend(Path(__file__).with_name(name) for name in ("native_replay.py","native_replay_storage.py"))
+    files.append(Path(__file__).with_name("pine_entry_risk.py"))
     for path in files:
         checksum.update(path.name.encode())
         checksum.update(path.read_bytes())

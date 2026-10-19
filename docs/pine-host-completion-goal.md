@@ -337,6 +337,15 @@ that observation. The corrected allocation group passes.
 
 1. Finish chart script tick/history-tick callbacks, BAR fill-recalculation
    and Pine risk-rule semantics through the authoritative Host matcher. Chart
+   entry direction and maximum-position rules are now wired through the
+   explicit entry-risk development contract; see `pine-entry-risk.md`. Four
+   session/equity halt rules remain rejected. The new core configuration schema
+   is a prerequisite and does not fix native conditional rule registration or
+   duplicate-rule aggregation. Candidate qualification is tracked separately
+   from the retained 3a08561b installed-environment receipt.
+   The four-stop Host state component now has explicit window/account/fill
+   inputs and deterministic snapshot recovery (`pine-risk-stops.md`), but its
+   market/funding/fill hooks and cancel/flatten scheduling remain to connect.
    closed-bar rich orders and print-clock trailing stops are connected.
    Requested datasets are connected; growing requested prefixes currently rebase
    the evaluator and need a causal incremental provider-update contract for
