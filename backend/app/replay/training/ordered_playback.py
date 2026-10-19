@@ -1552,6 +1552,11 @@ class TrainingOrderedPlayback:
                 status_code=409,
             )
         hedge_mode = str(binding.get("position_mode")) == "HEDGE"
+        fixed_funding_boundary = (
+            int(binding["next_funding_time_ms"])
+            if hedge_mode and binding.get("funding_mode") == "SANDBOX_FIXED"
+            else None
+        )
         if not hedge_mode:
             await self.account_history.guard_run(
                 run_id=command.run_id,
@@ -1871,7 +1876,7 @@ class TrainingOrderedPlayback:
                 tracks=tracks,
                 snapshot=snapshots[0][1],
                 target_virtual_time_ms=target_virtual_time_ms,
-                enabled=allow_final_state_batch and source_goal is None,
+                enabled=allow_final_state_batch and source_goal is None and fixed_funding_boundary is None,
                 held_certificate=held_prefix_end is not None or constant_tape,
             )
             if final_state_profile is None:
@@ -2230,6 +2235,7 @@ class TrainingOrderedPlayback:
                 and (not next_times or min(next_times) > current)
                 and (next_account_virtual is None or next_account_virtual > current)
                 and (next_hedge_virtual is None or next_hedge_virtual > current)
+                and (fixed_funding_boundary is None or fixed_funding_boundary > current)
             ):
                 if pending_global_events:
                     raise TrainingRunError(
@@ -2264,9 +2270,12 @@ class TrainingOrderedPlayback:
                 candidate_times.append(next_account_virtual)
             if next_hedge_virtual is not None:
                 candidate_times.append(next_hedge_virtual)
+            if fixed_funding_boundary is not None:
+                candidate_times.append(fixed_funding_boundary)
             wave_time = min(candidate_times)
             market_barrier = (
                 wave_time == target_virtual_time_ms or wave_time in next_times
+                or wave_time == fixed_funding_boundary
             )
             wave_events: list[StableMarketEvent] = []
             actual_wave_time = control_rules_ops.actual_event_time_ms(
@@ -2573,6 +2582,7 @@ class TrainingOrderedPlayback:
                             events=(*pending_global_events, *wave_events),
                             risk_virtual_time_ms=wave_time,
                             checkpoint_market_wave=checkpoint_hedge_wave,
+                            settle_fixed_funding=fixed_funding_boundary == wave_time,
                             event_virtual_times_ms=(
                                 batched_hedge_virtual_times
                                 if hedge_batch_wave_time == wave_time
@@ -2608,12 +2618,14 @@ class TrainingOrderedPlayback:
                                 command.run_id,
                                 risk_virtual_time_ms=wave_time,
                                 events=(*pending_global_events, *wave_events),
+                                settle_fixed_funding=fixed_funding_boundary == wave_time,
                             )
                         )
                     elif not combined_mark_wave:
                         await self.store.finalize_hedge_inputs(
                             command.run_id,
                             risk_virtual_time_ms=wave_time,
+                            settle_fixed_funding=fixed_funding_boundary == wave_time,
                         )
                     wave_events.extend(
                         await self.store.apply_hedge_input_events(
@@ -2739,6 +2751,10 @@ class TrainingOrderedPlayback:
             ):
                 stop_reason = stop_reason or "ACCOUNT_EVENT"
             after_wave_state: list[tuple[int, int]] = []
+            if fixed_funding_boundary == wave_time:
+                fixed_funding_boundary += int(binding["funding_interval_ms"])
+                if event_stop is not None:
+                    stop_reason = stop_reason or "ACCOUNT_EVENT"
             for track in tracks:
                 after_session = await self.replay_service.get_session(
                     service_validation_ops.track_session_id(track)

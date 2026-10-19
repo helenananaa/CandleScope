@@ -1291,15 +1291,18 @@ class ReviewRecorder:
                        'POSITION_ACCOUNTING_MUTATION',
                        'MARGIN_MUTATION'
                    )) AS critical_ledger_count,
-                (SELECT COUNT(*) FROM replay_training_funding_settlement
-                 WHERE run_id = ?) AS funding_count,
+                ((SELECT COUNT(*) FROM replay_training_funding_settlement
+                  WHERE run_id = ?) +
+                 (SELECT COUNT(*) FROM replay_training_contract_ledger
+                  WHERE run_id = ? AND kind = 'FUNDING_SETTLEMENT'
+                    AND reference_type = 'SANDBOX_FIXED_POLICY')) AS funding_count,
                 (SELECT COUNT(*) FROM replay_training_liquidation_case
                  WHERE run_id = ?) AS liquidation_count,
                 (SELECT COUNT(*) FROM replay_training_liquidation_case
                  WHERE run_id = ? AND state = 'COMPLETED')
                     AS completed_liquidation_count
             """,
-            (run_id, run_id, run_id, run_id, run_id, run_id),
+            (run_id, run_id, run_id, run_id, run_id, run_id, run_id),
         ).fetchone()
         if counts is None:
             raise TypeError("review descriptor counts are incomplete")
@@ -1467,9 +1470,10 @@ class ReviewRecorder:
             "critical_ledger_count": critical_ledger_count,
             "funding_count": int(
                 connection.execute(
-                    "SELECT COUNT(*) FROM replay_training_funding_settlement "
-                    "WHERE run_id = ?",
-                    (run_id,),
+                    "SELECT (SELECT COUNT(*) FROM replay_training_funding_settlement WHERE run_id = ?) + "
+                    "(SELECT COUNT(*) FROM replay_training_contract_ledger WHERE run_id = ? "
+                    "AND kind = 'FUNDING_SETTLEMENT' AND reference_type = 'SANDBOX_FIXED_POLICY')",
+                    (run_id, run_id),
                 ).fetchone()[0]
             ),
             "liquidation_count": int(len(liquidations)),

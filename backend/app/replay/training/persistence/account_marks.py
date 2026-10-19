@@ -994,6 +994,10 @@ def hedge_accounting_totals_by_leg(
         bucket(row["track_id"], row["position_side"])[0] += Decimal(
             str(row["cash_delta"])
         )
+    from .hedge_fixed_funding import fixed_leg_postings
+
+    for row, metadata in fixed_leg_postings(connection, run_id):
+        bucket(row["track_id"], metadata["position_side"])[0] += Decimal(str(row["cash_delta"]))
     for row in connection.execute(
         """
         SELECT track_id, fill_json, configured_fee
@@ -1827,7 +1831,7 @@ def settle_contract_funding(
 ) -> None:
     account = connection.execute(
         """
-        SELECT account.*, run.settlement_asset
+        SELECT account.*, run.settlement_asset, run.position_mode
         FROM replay_training_contract_account AS account
         JOIN replay_training_run AS run USING(run_id)
         WHERE run_id = ?
@@ -1838,6 +1842,7 @@ def settle_contract_funding(
         account is None
         or str(account["account_model"]) != CONTRACT_ACCOUNT_MODEL
         or str(account["funding_mode"]) != "SANDBOX_FIXED"
+        or str(account["position_mode"]) == "HEDGE"
     ):
         return
     interval = account["funding_interval_ms"]
