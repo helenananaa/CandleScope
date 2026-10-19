@@ -7,10 +7,11 @@ module.exports = async (context) => {
     : path.join(context.appOutDir, "resources");
   const runtime = path.join(resources, "python-runtime");
   const python = path.join(runtime, "python", ...(context.electronPlatformName === "win32" ? ["python.exe"] : ["bin", "python3"]));
-  // Hash-based pyc files remain valid after bundle copying and relocation.
+  // Replace even current timestamp caches (including imports made by this
+  // interpreter). Archive timestamp rounding must not rewrite signed resources.
   // ccxt 4.5.60 ships unused BIP configuration templates with invalid imports.
   // Preserve their sources, but do not treat those templates as executable modules.
-  const result = spawnSync(python, ["-m", "compileall", "-q", "--invalidation-mode", "checked-hash",
+  const result = spawnSync(python, ["-m", "compileall", "-q", "-f", "--invalidation-mode", "checked-hash",
     "-x", "[/\\\\]ccxt[/\\\\]static_dependencies[/\\\\]bip[/\\\\]conf[/\\\\]",
     path.join(resources, "backend", "app"), path.join(resources, "packages"),
     path.join(runtime, "site-packages"), path.join(runtime, "python", "lib")], {
