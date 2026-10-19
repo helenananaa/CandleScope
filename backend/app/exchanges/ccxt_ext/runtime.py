@@ -71,6 +71,66 @@ class CcxtRuntime:
             raw_event_sink=self._on_raw_event,
             lifecycle_sink=self._on_lifecycle_event,
         )
+        self._install_traffic_observer()
+
+    def _install_traffic_observer(self) -> None:
+        """Observe each physical CCXT client before decoding/fanout, once.
+
+        Uses the pinned CCXT client's synchronous entry points. Never counts
+        watch results, which may be cached or delivered to several sessions.
+        """
+        original_client = getattr(self.exchange, "client", None)
+        if not self.config.proxy_route_id or not self.config.http_proxy or not callable(original_client):
+            return
+        from aiohttp import WSMsgType
+        from app.core.proxy_pool import get_proxy_pool
+        pool = get_proxy_pool()
+        url = self.config.http_proxy
+
+        def client(endpoint):
+            result = original_client(endpoint)
+            if getattr(result, "_candlescope_traffic_observer", False):
+                return result
+            original_message = result.handle_message
+            original_close = result.on_close
+            original_error = result.on_error
+            original_connected = result.on_connected_callback
+            connected = False
+
+            def handle_message(message):
+                nonlocal connected
+                if not self._closed and message.type in {WSMsgType.TEXT, WSMsgType.BINARY}:
+                    connected = True
+                    pool.record_ws_traffic(url, message.data)
+                return original_message(message)
+
+            def on_close(code):
+                nonlocal connected
+                if not self._closed and connected:
+                    connected = False
+                    pool.record_ws_traffic(url, disconnected=True)
+                return original_close(code)
+
+            def on_connected(*args):
+                nonlocal connected
+                connected = True
+                return original_connected(*args)
+
+            def on_error(error):
+                nonlocal connected
+                if not self._closed and connected:
+                    connected = False
+                    pool.record_ws_traffic(url, disconnected=True)
+                return original_error(error)
+
+            result.handle_message = handle_message
+            result.on_close = on_close
+            result.on_error = on_error
+            result.on_connected_callback = on_connected
+            result._candlescope_traffic_observer = True
+            return result
+
+        self.exchange.client = client
 
     async def start(self) -> None:
         if self._started:
@@ -174,11 +234,13 @@ class CcxtRuntime:
             await result
 
     def snapshot(self) -> dict[str, Any]:
+        from app.core.proxy_pool import redact_proxy_url
         clients = getattr(self.exchange, "clients", None)
         return {
             "exchange": self.profile.exchange_id,
             "proxy_route_id": self.config.proxy_route_id,
             "proxy_egress_group": self.config.proxy_egress_group,
+            "proxy_endpoint": redact_proxy_url(self.config.http_proxy),
             "market_type": self.profile.market_type,
             "started": self._started,
             "closed": self._closed,
@@ -249,6 +311,8 @@ class CcxtRuntimePool:
         descriptor: StreamDescriptor | None = None,
     ) -> CcxtRuntime:
         base_key = profile.runtime_key(config)
+        if config.proxy_route_id is not None:
+            base_key = (*base_key, "proxy-route", config.proxy_route_id, config.proxy_egress_group or "shared")
         descriptor_key = _sharded_descriptor_key(profile, descriptor)
         isolated_partition = _isolated_runtime_partition(descriptor)
         async with self._lock:

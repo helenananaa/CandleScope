@@ -29,3 +29,4 @@ class WsConnectionContext:
     subscription: WsSubscriptionSpec
     prefetched_payloads: list[Any] = field(default_factory=list)
     proxy_route: Any | None = None
+    proxy_ws_lease: Any | None = None

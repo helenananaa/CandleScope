@@ -18,7 +18,7 @@ from app.exchanges.rate_limits import (
 def config(*, shared=False, strategy="balanced", urls=None):
     urls = urls or ["http://127.0.0.1:31001", "http://127.0.0.1:31002"]
     routes = [{"id": name, "name": name, "url": url, "egress_group": "shared" if shared else name,
-               "enabled": True, "exchanges": [], "max_concurrency": 1}
+               "enabled": True, "exchanges": [], "max_concurrency": 1, "max_ws_subscriptions": 64}
               for name, url in zip(["a", "b"], urls)]
     return IngestionConfig(proxy_mode="pool", proxy_routes=routes, proxy_strategy=strategy)
 
@@ -304,10 +304,11 @@ def test_settings_roundtrip_status_and_invalid_pool_preserves_file(tmp_path, mon
 
 
 @pytest.mark.anyio
-async def test_ccxt_session_releases_old_route_before_backup_attach():
+@pytest.mark.parametrize("strategy", ["failover", "balanced"])
+async def test_ccxt_session_releases_old_route_before_backup_attach(strategy):
     from app.exchanges.ccxt_ext.session import CcxtProviderSession
 
-    cfg = config(strategy="failover")
+    cfg = config(strategy=strategy)
     cfg.ws_reconnect_delay_initial = 0
     cfg.ws_reconnect_delay_max = 0
     attached, released = [], []

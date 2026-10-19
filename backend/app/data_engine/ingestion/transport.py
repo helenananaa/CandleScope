@@ -58,6 +58,49 @@ logger = logging.getLogger("ingestion.L1_Transport")
 _NON_RETRYABLE_HTTP_BODY_CODES = frozenset({"-1130"})
 
 
+class _ProxyObservedWebSocket:
+    """Count native receives before handshake decoding or subscriber fanout."""
+
+    def __init__(self, connection: Any, pool: Any, lease: Any) -> None:
+        self._connection, self._pool, self._lease = connection, pool, lease
+        self._closing = False
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._connection, name)
+
+    def _received(self, payload: Any) -> None:
+        if not self._closing:
+            self._pool.record_ws_receive(self._lease, payload)
+
+    def _disconnected(self) -> None:
+        if not self._closing:
+            self._pool.mark_ws_disconnected(self._lease)
+
+    async def recv(self, *args: Any, **kwargs: Any) -> Any:
+        try:
+            payload = await self._connection.recv(*args, **kwargs)
+        except websockets.exceptions.ConnectionClosed:
+            self._disconnected()
+            raise
+        self._received(payload)
+        return payload
+
+    async def __aiter__(self):
+        try:
+            async for payload in self._connection:
+                self._received(payload)
+                yield payload
+        except Exception:
+            self._disconnected()
+            raise
+        else:
+            self._disconnected()
+
+    async def close(self, *args: Any, **kwargs: Any) -> Any:
+        self._closing = True
+        return await self._connection.close(*args, **kwargs)
+
+
 class TransportLayer:
     """Async HTTP + WS transport with endpoint rotation.
 
@@ -80,6 +123,7 @@ class TransportLayer:
         # Shared HTTP session (created lazily)
         self._http_session: aiohttp.ClientSession | None = None
         self._route_configs: dict[tuple[str, str, str], IngestionConfig] = {}
+        self._ws_contexts: dict[str, WsConnectionContext] = {}
 
     def _bound_route_config(self, route: Any) -> IngestionConfig:
         key = (route.id, route.url, route.egress_group)
@@ -245,6 +289,8 @@ class TransportLayer:
                     exc_info=True,
                 )
         self._route_configs.clear()
+        for context in list(self._ws_contexts.values()):
+            await self.ws_close(context)
         if self._http_session and not self._http_session.closed:
             await self._http_session.close()
             self._http_session = None
@@ -791,16 +837,46 @@ class TransportLayer:
 
     async def ws_connect(
         self, descriptor: StreamDescriptor, *, quiet: bool = False,
+        shared_descriptors: list[StreamDescriptor] | None = None,
     ) -> WsConnectionContext:
         from app.core.proxy_pool import get_proxy_pool
-        route = get_proxy_pool().select_ws(self._cfg, descriptor.exchange)
+        pool = get_proxy_pool()
+        lease = pool.acquire_ws(self._cfg, shared_descriptors or [descriptor])
+        route = lease.route if lease else None
         try:
             context = await self._ws_connect(descriptor, quiet=quiet, route=route)
             context.proxy_route = route
+            context.proxy_ws_lease = lease
+            if lease:
+                context.connection = _ProxyObservedWebSocket(context.connection, pool, lease)
+                self._ws_contexts[lease.token] = context
+                pool.mark_ws_connected(lease)
             return context
-        except Exception as exc:
-            get_proxy_pool().record(route, descriptor.exchange, error=exc, kind="ws")
+        except BaseException as exc:
+            if isinstance(exc, Exception):
+                pool.record(route, descriptor.exchange, error=exc, kind="ws")
+            pool.release_ws(lease)
             raise
+
+    async def ws_close(self, ctx: WsConnectionContext) -> None:
+        """Close owned native sockets and settle their capacity even on cancellation."""
+        try:
+            try:
+                await asyncio.wait_for(self.ws_unsubscribe(ctx), timeout=2)
+            except Exception:
+                pass
+        finally:
+            try:
+                await asyncio.wait_for(ctx.connection.close(), timeout=2)
+            except Exception:
+                pass
+            finally:
+                lease = getattr(ctx, "proxy_ws_lease", None)
+                if lease:
+                    from app.core.proxy_pool import get_proxy_pool
+                    get_proxy_pool().release_ws(lease)
+                    self._ws_contexts.pop(lease.token, None)
+                    ctx.proxy_ws_lease = None
 
     async def _ws_connect(
         self,
@@ -992,13 +1068,16 @@ class TransportLayer:
 
         Returns True if connection succeeds, False otherwise.
         """
+        ctx = None
         try:
             ctx = await self.ws_connect(descriptor, quiet=True)
             await self.ws_subscribe(ctx, quiet=True)
-            await ctx.connection.close()
             return True
-        except TransportError:
+        except (TransportError, RateLimitDeferred):
             return False
+        finally:
+            if ctx is not None:
+                await self.ws_close(ctx)
 
     # ── Public: current endpoints ────────────────────────────
 

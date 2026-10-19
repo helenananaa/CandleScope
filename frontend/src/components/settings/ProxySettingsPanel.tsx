@@ -36,6 +36,7 @@ export interface ProxySettingsPanelProps {
     onProxyTest(): void;
     onProxySave(): void;
     proxyRoutes?: ProxyRouteConfig[];
+    proxySavedRoutes?: ProxyRouteConfig[];
     proxyStrategy?: "failover" | "balanced";
     proxyPoolStatus?: ProxyPoolStatus | null;
     onProxyRoutesChange?(routes: ProxyRouteConfig[]): void;
@@ -54,7 +55,7 @@ export default function ProxySettingsPanel({
     onCustomProxyChange,
     onProxyTest,
     onProxySave,
-    proxyRoutes = [], proxyStrategy = "failover", proxyPoolStatus,
+    proxyRoutes = [], proxySavedRoutes, proxyStrategy = "failover", proxyPoolStatus,
     onProxyRoutesChange, onProxyStrategyChange,
 }: ProxySettingsPanelProps) {
     useLocale();
@@ -114,7 +115,13 @@ export default function ProxySettingsPanel({
                     </label>
                     <p className="st-group-desc">{t("settings.proxy.poolHelp")}</p>
                     {proxyRoutes.map((route, index) => {
-                        const status = proxyPoolStatus?.routes?.find((row) => row.id === route.id);
+                        const saved = proxySavedRoutes?.find((item) => item.id === route.id);
+                        const matchesSaved = !proxySavedRoutes || (saved && saved.url === route.url
+                            && saved.egress_group === route.egress_group && saved.enabled === route.enabled
+                            && saved.max_concurrency === route.max_concurrency
+                            && (saved.max_ws_subscriptions ?? 64) === (route.max_ws_subscriptions ?? 64)
+                            && saved.exchanges.join(",") === route.exchanges.join(","));
+                        const status = matchesSaved ? proxyPoolStatus?.routes?.find((row) => row.id === route.id) : undefined;
                         const cooldown = status ? Math.max(0, ...Object.values(status.budgets).map((budget) =>
                             Math.max(budget.cooldown_remaining_seconds ?? 0, budget.global_circuit?.cooldown_remaining_seconds ?? 0)),
                             ...status.observations.map((item) => item.cooldown_seconds)) : 0;
@@ -131,6 +138,9 @@ export default function ProxySettingsPanel({
                                 <label className="st-proxy-field"><span>{t("settings.proxy.concurrency")}</span>
                                     <input type="number" min={1} max={32} className="st-input" value={route.max_concurrency}
                                         onChange={(event) => updateRoute(route.id, { max_concurrency: Number(event.target.value) })} /></label>
+                                <label className="st-proxy-field"><span>{t("settings.proxy.wsCapacity")}</span>
+                                    <input type="number" min={1} max={4096} className="st-input" value={route.max_ws_subscriptions ?? 64}
+                                        onChange={(event) => updateRoute(route.id, { max_ws_subscriptions: Number(event.target.value) })} /></label>
                                 <label className="st-proxy-field"><span>{t("settings.proxy.exchanges")}</span>
                                     <input className="st-input" value={route.exchanges.join(", ")}
                                         onChange={(event) => updateRoute(route.id, { exchanges: event.target.value.split(",").map((value) => value.trim()).filter(Boolean) })} /></label>
@@ -144,8 +154,32 @@ export default function ProxySettingsPanel({
                                     {t("settings.proxy.remove")}</button>
                             </div>
                             <div className="st-result-detail" role="status">
+                                {status && <div>{t("settings.proxy.active", { count: status.active_requests })}</div>}
+                                {status?.ws_subscriptions !== undefined && <div>{t("settings.proxy.wsLoad", {
+                                    count: status.ws_subscriptions, capacity: status.max_ws_subscriptions ?? 64,
+                                })}</div>}
+                                {status?.ws_sessions !== undefined && <div>{t("settings.proxy.wsSessions", { count: status.ws_sessions })}</div>}
+                                {status?.native_websockets !== undefined && status.ccxt_physical_websockets !== undefined && <div>{t("settings.proxy.physicalWs", {
+                                    count: status.native_websockets + status.ccxt_physical_websockets,
+                                })}</div>}
+                                {status?.ws_traffic && <>
+                                    <div>{t("settings.proxy.wsFlow", {
+                                        messages: status.ws_traffic.messages_per_second.toFixed(1),
+                                        kib: (status.ws_traffic.payload_bytes_per_second / 1024).toFixed(1),
+                                        seconds: status.ws_traffic.window_seconds,
+                                    })}</div>
+                                    {status.ws_traffic.queue_capacity > 0 && <div>{t("settings.proxy.wsQueue", {
+                                        count: status.ws_traffic.queue_size, capacity: status.ws_traffic.queue_capacity,
+                                    })}</div>}
+                                    <div>{t("settings.proxy.wsDisconnects", {
+                                        count: status.ws_traffic.disconnects_recent, seconds: status.ws_traffic.window_seconds,
+                                    })}</div>
+                                    {status.ws_traffic.last_message_age_seconds !== null && <div>{t("settings.proxy.wsLastMessage", {
+                                        seconds: Math.floor(status.ws_traffic.last_message_age_seconds),
+                                    })}</div>}
+                                    <div>{t("settings.proxy.wsTrafficHelp")}</div>
+                                </>}
                                 {!status?.observations.length ? t("settings.proxy.unobserved") : <>
-                                    <span>{t("settings.proxy.active", { count: status.active_requests })}</span>
                                     {status.observations.map((item) => <div key={`${item.exchange}:${item.kind}`}>
                                         {item.exchange} · {item.kind === "ws" ? "WS" : "REST"}{item.latency_ms !== null && <> · {t("settings.proxy.latency", { ms: Math.round(item.latency_ms) })}</>} · {t("settings.proxy.failures", { count: item.failures })}
                                     </div>)}
@@ -156,7 +190,7 @@ export default function ProxySettingsPanel({
                     })}
                     <button className="st-btn st-btn-secondary" disabled={proxyLoading || proxyRoutes.length >= 16}
                         onClick={() => onProxyRoutesChange?.([...proxyRoutes, { id: crypto.randomUUID(), name: "", url: "",
-                            egress_group: "shared", enabled: true, exchanges: [], max_concurrency: 4 }])}>
+                            egress_group: "shared", enabled: true, exchanges: [], max_concurrency: 4, max_ws_subscriptions: 64 }])}>
                         {t("settings.proxy.add")}
                     </button>
                 </div>

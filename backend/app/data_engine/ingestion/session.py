@@ -23,6 +23,7 @@ from websockets.asyncio.client import ClientConnection
 from websockets.exceptions import ConnectionClosed
 
 from app.exchanges.ws_protocol import WsConnectionContext
+from app.exchanges.rate_limits import RateLimitDeferred
 
 from .config import IngestionConfig
 from .metrics import LayerMetrics
@@ -173,6 +174,11 @@ class SessionLayer:
 
             except asyncio.CancelledError:
                 break
+            except RateLimitDeferred as exc:
+                await self._set_health(SessionHealth.RECONNECTING, "proxy capacity or cooldown")
+                await asyncio.sleep(max(0.05, min(exc.retry_after_seconds,
+                                                max(1, self._cfg.ws_reconnect_delay_max))))
+                continue
             except Exception as exc:
                 logger.error("Unexpected error in session loop: %s", exc, exc_info=True)
                 self._metrics.inc("unexpected_errors")
@@ -222,6 +228,12 @@ class SessionLayer:
                 "All WS endpoints failed for %s: %s",
                 self._descriptor.key, exc,
             )
+            if self._ws_context is not None:
+                from app.core.proxy_pool import get_proxy_pool
+                get_proxy_pool().record(self._ws_context.proxy_route,
+                    self._descriptor.exchange, error=exc, kind="ws")
+                self._conn = self._ws_context.connection
+                await self._close_conn()
             self._ws_context = None
             self._conn = None
 
@@ -268,6 +280,11 @@ class SessionLayer:
                         self._descriptor.key, elapsed,
                     )
                     self._metrics.inc("stale_disconnects")
+                    if self._ws_context is not None and self._ws_context.proxy_route is not None:
+                        from app.core.proxy_pool import get_proxy_pool
+                        get_proxy_pool().record(self._ws_context.proxy_route,
+                            self._descriptor.exchange, error=TimeoutError("WS stale"), kind="ws")
+                        get_proxy_pool().mark_ws_disconnected(self._ws_context.proxy_ws_lease)
                     await self._close_conn()
                     break
         except asyncio.CancelledError:
@@ -276,9 +293,17 @@ class SessionLayer:
     # ── Internal: Connection cleanup ─────────────────────────
 
     async def _close_conn(self) -> None:
+        # Subscription handshakes may be cancelled before _connect assigns
+        # _conn. The context already owns a live socket and proxy lease.
+        if self._conn is None and self._ws_context is not None:
+            self._conn = self._ws_context.connection
         if self._conn is not None:
             try:
                 if self._ws_context is not None:
+                    close = getattr(self._transport, "ws_close", None)
+                    if callable(close):
+                        await close(self._ws_context)
+                        return
                     await self._transport.ws_unsubscribe(self._ws_context)
                 # Timeout prevents hanging on WS close handshake during
                 # shutdown — the server may not respond to close frames
@@ -287,8 +312,9 @@ class SessionLayer:
                 await asyncio.wait_for(self._conn.close(), timeout=2)
             except (asyncio.TimeoutError, Exception):
                 pass
-            self._conn = None
-            self._ws_context = None
+            finally:
+                self._conn = None
+                self._ws_context = None
 
     async def _handle_payload(self, raw_msg) -> None:
         self._last_msg_time = time.monotonic()

@@ -1,0 +1,93 @@
+{
+  "date": "2026-10-07",
+  "feature": "public_market_data_proxy_pool_phase_2",
+  "phase_1_commit": "fdf1e1da50b53514c19c862a7282317cc5d3cec1",
+  "phase_2_git_state": "uncommitted working tree; unrelated runtime-upgrade changes preserved",
+  "backend": {
+    "scope": [
+      "test_proxy_pool.py",
+      "test_proxy_pool_ws.py",
+      "test_backfill_rate_limit.py",
+      "test_transport_http_rate_limit_metadata.py",
+      "test_transport_ws_urls.py",
+      "test_ccxt_provider_runtime.py",
+      "test_ccxt_unified_provider.py",
+      "test_settings_api.py",
+      "test_symbol_catalog_contracts.py",
+      "test_symbol_catalog_refresh.py",
+      "test_native_session_transport.py",
+      "test_stream_transport_close.py",
+      "test_proxy_engine_readiness.py",
+      "test_multi_chart_upstream_shards.py",
+      "test_binance_derivatives_market_data.py",
+      "test_ingestion_session_types.py",
+      "test_ccxt_owned_close.py"
+    ],
+    "passed": 225,
+    "failed": 0,
+    "duration_seconds": 39.93,
+    "warnings": "4 existing FastAPI on_event deprecation warnings",
+    "ruff": "passed"
+  },
+  "frontend": {
+    "command": "npm test",
+    "passed": 3942,
+    "failed": 0,
+    "duration_seconds": 58.404,
+    "typecheck": "passed",
+    "lint": "passed",
+    "architecture_check": "passed",
+    "i18n_check": "passed: 30 locales, 4663 catalog keys",
+    "production_build": "passed; existing large-chunk warning",
+    "draft_status_guard": "edited routing parameters cannot display old saved-route counters"
+  },
+  "websocket_evidence": {
+    "real_loopback_connect_proxies": 2,
+    "real_loopback_websocket_server": true,
+    "requested_host": "exchange.invalid:80",
+    "public_DNS_or_exchange_connection": false,
+    "proxy_connect_counts": [1, 1],
+    "extra_connection_attempts_when_full": 0,
+    "sessions_and_native_connections_after_close": 0,
+    "weighted_capacity_example": {
+      "capacities": [2, 4],
+      "new_descriptor_routes": ["a", "b", "b", "a", "b", "b"]
+    },
+    "verified": [
+      "atomic capacity reservation before dial or CCXT runtime acquisition",
+      "duplicate descriptor references consume one subscription slot",
+      "exchange and market identities remain separate",
+      "sticky reconnect placement and both failover and balanced backup attach",
+      "shared egress IP circuit blocks all affected aliases",
+      "whole native multiplex batch and dynamic unsubscribe capacity accounting",
+      "failed and cancelled native subscription handshakes close their sockets",
+      "capacity waiting does not increment native network failure counts",
+      "CCXT start failure and cancellation release runtime and route references",
+      "same-route CCXT descriptors reuse a runtime while different routes remain isolated"
+    ]
+  },
+  "browser": {
+    "surface": "isolated real component and styles with explicitly fake runtime counters",
+    "viewports": [[1280, 900], [420, 900]],
+    "narrow_horizontal_overflow": false,
+    "interactions": ["select balanced strategy", "edit subscription capacity"],
+    "screenshots": [
+      "output/playwright/proxy-pool/desktop-v2.png",
+      "output/playwright/proxy-pool/narrow-v2.png"
+    ],
+    "artifacts_are_local_ignored_files": true,
+    "owned_browser_and_preview_server_closed": true,
+    "actual_proxy_settings_changed": false
+  },
+  "qualification_boundaries": {
+    "real_exchange_connection": "not tested: user reports TUN mode",
+    "distinct_public_egress_ips": "not verified",
+    "live_throughput_and_byte_rate_balancing": "not measured or implemented",
+    "healthy_session_forced_rebalancing": "not implemented; placement remains sticky",
+    "universal_exchange_IP_connection_attempt_limiter": "not implemented; existing adapter and CCXT controls preserved",
+    "cross_process_quota_coordination": "not implemented",
+    "private_trading": "out of scope",
+    "TUN_changed": false,
+    "pushed": false
+  }
+}
