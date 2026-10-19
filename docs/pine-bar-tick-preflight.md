@@ -1,5 +1,10 @@
 # BAR/tick preflight after Workbench controls
 
+The subsequent [explicit schedule foundation](pine-external-schedule-foundation.md)
+implements the core observation/state separation below. CandleScope transport,
+BAR matching and history-tick scheduling remain unfinished. This preflight
+retains the original installed-core evidence rather than rewriting its results.
+
 Verified against the installed core candidate from `1b506560a` on 2026-10-19.
 This is a requirements/ownership audit, not implementation or official output
 qualification. The actual probe is retained at

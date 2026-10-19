@@ -399,6 +399,10 @@ that observation. The corrected allocation group passes.
    in `pine-bar-tick-preflight.md`: the history-tick declaration is a core gap,
    while realtime ticks are accepted by the language but blocked by the external
    contract. The next phase must separate historical bar state from final commit.
+   That core separation is now implemented in the explicit schedule foundation
+   (`pine-external-schedule-foundation.md`), together with heap/drawing and
+   price-flow rollback. The current Host adapters still use legacy pass transport;
+   connecting the new schedule to BAR/tick matching and replay remains required.
    V2 cost matrices now independently reexecute scripts and Host allocation;
    larger-history performance and broader product acceptance remain to qualify.
    Simulated closing ticks are connected for chart BAR and aggregate-trade runs,
