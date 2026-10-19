@@ -112,9 +112,17 @@ def run_print_clock(kernel, wire, strategy, cancelled, *, state=None, target=Non
         kernel.account.mark = Decimal(str(bar["close"]))
         decision_event = MarketEvent(last_sequence, time_ms, "TRADES", {"price": str(bar["close"]), "qty": "0"})
         kernel._last_event = decision_event
+        if kernel.market_observer is not None:
+            kernel.market_observer(decision_event)
         intents = strategy((), decision_event)
         kernel.decisions.append({"sequence": last_sequence, "watermark_ms": time_ms, "intents": intents, "signal_bar": bar_cursor})
         kernel._enqueue_many(intents, current_sequence=last_sequence)
+        if wire.get("closing_ticks"):
+            from .pine_workbench import bar_event
+            from app.simulation.closing_tick import match_closing_tick
+            match_closing_tick(kernel, bar_event(wire, bar_cursor, last_sequence), last_sequence)
+            kernel._record_equity_point({"sequence": last_sequence, "event_time_ms": time_ms,
+                "equity": str(kernel.account.equity()), "position_qty": str(kernel.account.position_qty)})
         bar_cursor += 1
     for event in events[event_cursor:]:
         if event.event_time_ms>=end:
@@ -126,8 +134,12 @@ def run_print_clock(kernel, wire, strategy, cancelled, *, state=None, target=Non
         kernel._last_event = event
         if event.role == "ORDER_BOOK":
             kernel._apply_book(event)
+            if kernel.market_observer is not None:
+                kernel.market_observer(event)
         else:
             kernel.account.mark = Decimal(str(event.payload["price"]))
+            if kernel.market_observer is not None:
+                kernel.market_observer(event)
             kernel._match(event)
             kernel.equity_curve.append({"sequence": event.sequence, "event_time_ms": event.event_time_ms,
                 "equity": str(kernel.account.equity()), "position_qty": str(kernel.account.position_qty)})

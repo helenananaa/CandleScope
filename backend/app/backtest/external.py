@@ -27,6 +27,7 @@ def host_identity():
     files.extend(Path(__file__).with_name(name) for name in ("native_replay.py","native_replay_storage.py"))
     files.append(Path(__file__).with_name("pine_entry_risk.py"))
     files.extend(Path(__file__).with_name(name) for name in ("pine_risk_state.py", "pine_risk_stops.py"))
+    files.append(Path(__file__).with_name("pine_workbench.py"))
     for path in files:
         checksum.update(path.name.encode())
         checksum.update(path.read_bytes())
@@ -87,7 +88,8 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
     from app.simulation.sampled_book_kernel import SampledBookKernel
     kernel_type = {"BAR_APPROX":SimulationKernel,"BOOK_ASSISTED":BookAssistedKernel,
                    "TRADE_TAPE":TradeSimulationKernel,"BOOK_DEPTH":DepthQueueKernel,"BOOK_SAMPLED":SampledBookKernel}[fidelity]
-    kernel = kernel_type(account_model=wire.get("account_model", "LINEAR_PERP_ONE_WAY_V1"),
+    kernel = kernel_type(**({"process_orders_on_close": True} if kernel_type is SimulationKernel and wire.get("closing_ticks") else {}),
+                              account_model=wire.get("account_model", "LINEAR_PERP_ONE_WAY_V1"),
                               initial_balance=Decimal(str(settings["initial_balance"])),
                               slippage_bps=Decimal(str(settings["slippage_bps"])),
                               taker_fee_bps=Decimal(str(settings["taker_fee_bps"])))
@@ -108,6 +110,9 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
             raise BacktestError("NATIVE_REPLAY_RANGE","external restore cannot advance backward")
         kernel.restore(resume["kernel"])
         orders.restore(resume["orders"])
+    from .pine_workbench import configure_risk, check_risk_response
+    risk_stops = configure_risk(orders, wire, resume=resume)
+    if resume is not None:
         accounts,history,latest=resume["accounts"],resume["history"],resume["latest"]
         clock,last_request=resume["clock"],resume["last_request"]
         # Rebuild only the evaluator transcript. Restored fills, fees, depth and
@@ -153,6 +158,7 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
             raise BacktestError("EXTERNAL_UNSUPPORTED", "at most 64 order intents per bar")
         history.extend(current)
         orders.configure(latest.get("pyramiding", 1))
+        check_risk_response(orders, wire, latest)
         return orders.translate(current, event.sequence)
 
     events = [MarketEvent(sequence=index + 1, event_time_ms=interval.next_ms(bar["time"] * 1000) - 1, role="BARS",
@@ -164,7 +170,9 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
         from .external_feedback import run_feedback_clock
         latest,history,accounts,execution_passes,clock=run_feedback_clock(kernel,orders,wire,plugin,evaluate,cancelled,deadline,state=clock,target=target)
     elif fidelity == "BAR_APPROX":
-        kernel.run(events[cursor:target], strategy, finalize=target==len(wire["bars"]))
+        from app.simulation.closing_tick import match_closing_tick
+        kernel.run(events[cursor:target], strategy, finalize=target==len(wire["bars"]),
+            **({"close_callback": lambda bar, seq: match_closing_tick(kernel, bar, seq)} if wire.get("closing_ticks") else {}))
     else:
         from .external_market import run_print_clock
         clock=run_print_clock(kernel,wire,strategy,cancelled,state=clock,target=target)
@@ -190,7 +198,18 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
                            "execution_provenance": wire.get("execution_provenance", {}),
                            "entry_allocation": orders.report(), "kernel": report, "account_feedback": accounts, "intent_history": history,
                            "execution_passes": execution_passes, "strategy_output": latest.get("raw_output", {})}}
+    if risk_stops is not None and risk_stops.state is not None:
+        result["pine_risk_stops"] = risk_stops.report()
+    if wire.get("closing_ticks"):
+        result["raw_output"]["closing_tick_contract"] = "candlescope.pine-closing-tick/1"
+        result["raw_output"]["closing_execution"] = {
+            "price_policy": "VISIBLE_BOOK_QUOTES" if fidelity.startswith("BOOK") else "REVEALED_BAR_CLOSE",
+            "capacity_policy": ("REMAINING_VISIBLE_DEPTH" if fidelity in {"BOOK_DEPTH", "BOOK_SAMPLED"}
+                else "REMAINING_BAR_VOLUME_PROXY" if fidelity == "BOOK_ASSISTED" else "HOST_BAR_OR_TAPE_APPROXIMATION"),
+            "passive_prints_inferred": False, "actual_close_auction_verified": False}
+        if result["raw_output"]["depth_model"] is not None:
+            result["raw_output"]["depth_model"]["taker_clock"] = "next_trade_print_or_explicit_script_close"
     if capture:
         from .external_replay import make_state
-        return result,make_state(wire,target,kernel,orders,accounts,history,latest,clock,last_request)
+        return result,make_state(wire,target,kernel,orders,accounts,history,latest,clock,last_request,risk_stops=risk_stops)
     return result

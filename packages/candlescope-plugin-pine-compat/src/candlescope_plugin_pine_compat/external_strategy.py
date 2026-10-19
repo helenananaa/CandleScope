@@ -12,7 +12,7 @@ from .libraries import library_sources
 from .prefix_transport import CONTRACT as PREFIX_CONTRACT
 from .prefix_transport import PASSES_CONTRACT, CLOCKS_CONTRACT, PrefixInput
 from .strategy_time import engine_bars
-from .entry_risk import options as risk_options
+from .entry_risk import options as risk_options, available as risk_available, STOP_CONTRACT
 
 _prefix = PrefixInput()
 _session = None
@@ -26,6 +26,10 @@ def describe():
         **identity(
             "candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-external/8"
         ),
+        "workbench_control": "candlescope.pine-workbench-control/1",
+        **({"risk_stop_contract": STOP_CONTRACT} if risk_available() else {}),
+        **({"closing_tick_contract": "candlescope.pine-closing-tick/1"}
+           if getattr(pine_compat, "EXTERNAL_CLOSING_TICK_SCHEMA_VERSION", 0) == 1 else {}),
         "external_orders": getattr(pine_compat, "EXTERNAL_ORDER_SCHEMA_VERSION", 1),
         "prefix_append": PREFIX_CONTRACT,
         "prefix_passes": PASSES_CONTRACT,
@@ -40,6 +44,27 @@ def prepare(source, libraries=()):
     kwargs = {"library_sources": dict(libraries)} if libraries else {}
     return pine_compat.compile_script(source, **kwargs), pine_compat.analyze_script(source, **kwargs)
 
+
+
+def request_environment(request):
+    supplied = native_request_bars(
+        request,
+        {
+            f"{item['symbol']}:{item['timeframe']}": engine_bars(item["bars"])
+            for item in request.get("contexts", [])
+        },
+    )
+    tick = request.get("host_settings", {}).get("price_tick")
+    if tick is not None:
+        grid = chart_metadata({"priceTickSize": tick})
+        if "$chart" in supplied and any(
+            supplied["$chart"][key] != grid[key] for key in ("minMove", "priceScale")
+        ):
+            raise ValueError(
+                "EXTERNAL_UNSUPPORTED: context price grid differs from matching price_tick"
+            )
+        supplied["$chart"] = {**supplied.get("$chart", {}), **grid}
+    return supplied
 
 def execute(request):
     global _session, _session_count
@@ -61,6 +86,13 @@ def execute(request):
         if len(matches) != 1 or str(matches[0]["callSiteId"]) in parameters:
             raise ValueError("EXTERNAL_PARAMETER_INVALID: " + name)
         parameters[str(matches[0]["callSiteId"])] = value
+    if request.get("operation") == "host_control":
+        environment = request_environment(request)
+        requirements = program.host_requirements()
+        return {"contract": "candlescope.pine-workbench-control/1", "execution": requirements["execution"],
+            **({"risk_rules": program.strategy_risk_configuration(input_overrides=parameters or None,
+                chart_symbol=request["context"]["symbol"], chart_timeframe=request["context"]["timeframe"],
+                request_bars=environment or None)} if risk else {})}
     features = {
         item.get("feature", "") for item in analysis.get("compatibility", {}).get("supported", [])
     }
@@ -109,24 +141,8 @@ def execute(request):
             for group in passes[start:]
         ]
     accounts = [{**item, "time": item["time"] * 1000} for item in request["accounts"][start:]]
-    supplied = native_request_bars(
-        request,
-        {
-            f"{item['symbol']}:{item['timeframe']}": engine_bars(item["bars"])
-            for item in request.get("contexts", [])
-        },
-    )
+    supplied = request_environment(request)
     closing = {"closing_ticks": True} if request.get("closing_ticks") is True else {}
-    tick = request.get("host_settings", {}).get("price_tick")
-    if tick is not None:
-        grid = chart_metadata({"priceTickSize": tick})
-        if "$chart" in supplied and any(
-            supplied["$chart"][key] != grid[key] for key in ("minMove", "priceScale")
-        ):
-            raise ValueError(
-                "EXTERNAL_UNSUPPORTED: context price grid differs from matching price_tick"
-            )
-        supplied["$chart"] = {**supplied.get("$chart", {}), **grid}
     try:
         if incremental:
             if _session is None:

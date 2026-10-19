@@ -38,6 +38,22 @@ The mistakenly relayed scope-narrowing instruction was withdrawn by the user.
 
 ## Implemented host work
 
+- The Workbench-control checkpoint passed 424 Host cases (41 scoped exclusions),
+  176 kernel/risk/contract checks and 75 bridge checks (12 optional Renko skips).
+  Counts overlap. Source and test hashes were frozen across the final full gate.
+  The current local candidate is isolated in `workbench-control-venv`, with
+  `workbench-control-runtime-registry.json` and
+  `workbench-control-candidate-receipt.json` under `output/pine-host/phase3`.
+  Core source/binary, prior candidate environments and the original checkout
+  remain unchanged by this phase.
+- Workbench Pine Host-account runs now freeze execution settings and all six
+  declarative risk rules under `candlescope.pine-workbench-control/1`. BAR/tape/
+  book clocks feed real account/fill observations into the shared controller.
+  Synthetic closing scheduling retains visible quotes, consumed depth and sample
+  age restrictions; closing callbacks and risk state survive replay restore.
+  The candidate remains isolated in `workbench-control-venv` and its dedicated
+  runtime registry. See `pine-workbench-controls.md` for scope and limits.
+
 - Chart V2 automatic account liquidation now publishes the actual ledger-backed
   settlement through entry allocation, financial fills, completed trades and
   equity samples. Ordinary fill then immediate liquidation exposes both actual
@@ -63,8 +79,9 @@ The mistakenly relayed scope-narrowing instruction was withdrawn by the user.
   fills separately from physical tape events. Aggregate-trade closing fill
   callbacks retain immutable confirmed market inputs with authoritative account
   updates, ordinary rollback and persistent `varip`; callback orders may use the
-  same close under bounded budgets. BAR plus fill recalculation and Workbench
-  closing ticks remain explicitly unsupported. Independent cost reexecution and
+  same close under bounded budgets. BAR plus fill recalculation remains
+  explicitly unsupported. Workbench closing scheduling is now connected through
+  its explicit control contract (`pine-workbench-controls.md`). Independent cost reexecution and
   checkpoint recovery follow the same negotiated closing contract.
 - Dual-clock V2 physical fill traces now correctly identify aggregate trades as
   `AGG_TRADE`; the inner tape kernel previously retained its raw-trade default.
@@ -200,7 +217,7 @@ the host. Interface details: core `docs/SYMBOL_METADATA_INPUT.md`.
 
 ## Validation
 
-- Current Workbench-recovery/Host gate: 278 passed, 26 mixed/non-Pine cases
+- Earlier replay-only Workbench/Host gate: 278 passed, 26 mixed/non-Pine cases
   deselected in `external-replay-host-qualified.log`. This includes the earlier
   chart closing/cost/callback/order/request groups and new Workbench/queue
   checkpoints, account-preserving resume, prefix seeks, SQLite reconstruction,
@@ -359,10 +376,13 @@ that observation. The corrected allocation group passes.
    is a prerequisite and does not fix native conditional rule registration or
    duplicate-rule aggregation. Candidate qualification is tracked separately
    from the retained 3a08561b installed-environment receipt.
+   The unchanged-core native probe in `native-risk-preflight.json` reproduces
+   conditional cap 2 yielding position 10 and duplicate caps 2/5 yielding 5;
+   these remain genuine core work despite the completed Host rule enforcement.
    The four-stop chart contract now connects market/account/fill observations,
    cancellation and real-capacity reducing closes (`pine-risk-stops.md`). Other
-   venue calendars, multi-day BAR consecutive-loss windows, Workbench risk
-   wiring, partial-fill official oracle and broader fidelity qualification
+   venue calendars, multi-day BAR consecutive-loss windows, partial-fill official
+   oracle and broader fidelity qualification
    remain open. The original default task runtime has not been replaced.
    V2 automatic-liquidation ledger receipts now reconcile ownership, callbacks,
    deferred observations and recovery (`pine-account-liquidation.md`). Their
@@ -375,13 +395,18 @@ that observation. The corrected allocation group passes.
    contract and forming-pass checkpoint recovery; TradingView historical final-
    OHLCV callback parity remains unqualified. The current upstream docs also
    describe `calc_on_every_history_tick`, requiring a fresh core/host audit.
+   The fresh installed-core probe and current official contract are now recorded
+   in `pine-bar-tick-preflight.md`: the history-tick declaration is a core gap,
+   while realtime ticks are accepted by the language but blocked by the external
+   contract. The next phase must separate historical bar state from final commit.
    V2 cost matrices now independently reexecute scripts and Host allocation;
    larger-history performance and broader product acceptance remain to qualify.
    Simulated closing ticks are connected for chart BAR and aggregate-trade runs,
    including aggregate-trade closing fill callbacks. They do not prove actual
    close-auction liquidity or TradingView broker-emulator equivalence.
-2. Workbench Pine Host-account replay is connected for BAR/tape/book modes;
-   closing-tick scheduling remains to integrate there. Pyne external-account
+2. Workbench Pine Host-account replay, six-rule risk enforcement and closing
+   scheduling are connected for BAR/tape/book modes through the negotiated
+   control contract. BAR fill recalculation remains unfinished. Pyne external-account
    replay is not advertised. Native-account replay remains a separate path.
    Larger-history account-journal/reconstruction performance and packaged
    Workbench acceptance remain unqualified.

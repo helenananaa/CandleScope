@@ -4,9 +4,9 @@ The chart `ORDER_INTENT` adapter supports `max_drawdown`, `max_intraday_loss`,
 `max_intraday_filled_orders` and `max_cons_loss_days` through
 `candlescope.pine-risk-stops/1`. It requires risk configuration schema 1 from the
 interpreter. The older entry-only handshake continues to authorize only entry
-direction and position-size constraints. Workbench external-account risk stops
-remain unconnected and reject; the chart implementation must not be advertised
-as that separate execution path.
+direction and position-size constraints. Workbench external-account runs now
+connect the same controller through `candlescope.pine-workbench-control/1`; see
+`pine-workbench-controls.md` for its separate negotiation and execution clocks.
 
 The interpreter discovers declarations independently of branch execution. The
 Host freezes every rule, including duplicate rules, and observes the real ledger
@@ -65,6 +65,15 @@ and positive numeric limits. Zero-limit boundary semantics, arbitrary session
 calendars/lot steps, official broker-fill equivalence and native-account risk
 registration/aggregation remain separate work. The default task environment is
 unchanged; the stop candidate has its own runtime registry and installed wheels.
+
+A fresh native-account probe on `1b506560a` retains another aggregation failure:
+a single 2-percent drawdown declaration produces positions `[0, 10, 0, 0]`,
+whereas declarations of 2 then 5 percent produce `[0, 10, 10, 10]` on the same
+bars. Both declarations appear in the configuration metadata. This reproduces
+the pending native overwrite behavior independently of Host enforcement. The
+sources and plots are in `output/pine-host/phase3/native-risk-preflight.json`.
+The earlier official v4 risk documentation below describes strict-rule
+precedence; current official output qualification remains separate.
 
 The official [risk-management documentation](https://www.tradingview.com/pine-script-docs/concepts/strategies/#risk-management)
 defines every-tick/order-execution checks and stop actions. The

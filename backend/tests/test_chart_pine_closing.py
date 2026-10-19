@@ -147,14 +147,20 @@ if strategy.position_size>0
     assert scenarios(result)["BASELINE"]["pine_execution"]["closingFillCallbackCount"]==1
 
 
-def test_workbench_process_close_remains_explicitly_unsupported(runtime):
+def test_workbench_process_close_uses_negotiated_host_closing_execution(runtime):
     from tests.test_native_backtests import terminal
     host,main=runtime
     record=host.native.create({**main,"language":"pine","source":SOURCE,"execution_mode":"CANDLESCOPE",
-        "host_settings":{"initial_balance":10000,"slippage_bps":0,"taker_fee_bps":0}},"unsupported-close")
+        "host_settings":{"initial_balance":10000,"slippage_bps":0,"taker_fee_bps":0}},"workbench-close")
     completed=terminal(host.native,record["run_id"])
-    assert completed["state"]=="FAILED"
-    assert "E_EXTERNAL_UNSUPPORTED" in str(completed)
+    assert completed["state"]=="COMPLETED",completed.get("error")
+    result=completed["result"]
+    assert result["account_authority"]=="candlescope"
+    assert [row["event_time_ms"] for row in result["trades"]]==[59999,119999]
+    assert [float(row["price"]) for row in result["trades"]]==[10,10]
+    assert all(row["reason"]=="PINE_BAR_CLOSE" for row in result["trades"])
+    assert float(result["position"]["position_qty"])==0
+    assert not result["raw_output"]["strategy_output"].get("strategy")
 
 
 def test_bar_closing_mode_keeps_intrabar_fill_callbacks_fail_closed(service):

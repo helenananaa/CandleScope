@@ -4,8 +4,9 @@ The chart `ORDER_INTENT` path implements `strategy.risk.allow_entry_in` and
 `strategy.risk.max_position_size` through `candlescope.pine-entry-risk/1`.
 It requires an interpreter exposing declarative risk configuration schema 1.
 Both the compiled revision and the evaluator request carry the capability
-handshake. Legacy target-position and Workbench external-account callers remain
-unavailable for scripts containing these rules.
+handshake. Workbench external-account runs now negotiate the superset control
+contract described in `pine-workbench-controls.md`. Legacy target-position and
+older unconnected adapters remain unavailable for scripts containing these rules.
 
 The interpreter discovers declarations independently of branch execution and
 resolves inputs against the actual chart context. The Host freezes the resolved
@@ -33,8 +34,17 @@ The entry-only contract still rejects `max_drawdown`, `max_intraday_loss`,
 `max_intraday_filled_orders` and `max_cons_loss_days`. The chart adapter's separate
 [stop contract](pine-risk-stops.md) now connects those rules through market/fill
 observations and authoritative cancel/flatten scheduling, with explicit calendar
-and liquidity boundaries. Native risk registration/aggregation and Workbench
+and liquidity boundaries. Native risk registration/aggregation and broader
 risk integration remain separate work.
+
+A fresh native-account probe on the unchanged `1b506560a` core records an
+unconditional size cap of 2 producing position 2, the same declaration inside
+`if false` producing position 10, and caps 2 then 5 producing position 5.
+Declaration metadata still discovers the conditional/duplicate rules. These
+observations reproduce the native registration/overwrite gaps; the Host's
+separate frozen-rule enforcement does not repair native-account execution.
+Sources and actual plots are retained in
+`output/pine-host/phase3/native-risk-preflight.json`.
 
 Semantics were checked against the official
 [strategy risk-management documentation](https://www.tradingview.com/pine-script-docs/concepts/strategies/#risk-management).

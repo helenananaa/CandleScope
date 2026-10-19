@@ -15,6 +15,11 @@ visible result journals commit in the same SQLite transaction as the cursor.
 The private account journal is excluded from list/get/export API envelopes.
 User snapshots include the private state inside their server-side checksum.
 
+With `candlescope.pine-workbench-control/1`, the checkpoint also retains the
+frozen risk configuration and stop state. Synthetic closing fills preserve the
+same ownership and consumed-liquidity state. See `pine-workbench-controls.md` for
+the separate control negotiation, window and closing-liquidity contracts.
+
 Forward execution restores the actual Host account and matcher and processes
 only the remaining market events. The evaluator reconstructs the saved feedback
 transcript and must reproduce its previous output before matching resumes. It
@@ -47,7 +52,7 @@ to match an earlier market event. Endpoint reports are compared against nine
 pre-change receipts under `output/pine-host/phase3/replay-before/`; only the
 expected Host implementation identity and enclosing report seal are excluded.
 
-The selected combined Host regression passed 278 cases, with 26 mixed/non-Pine
+The earlier replay-only combined Host regression passed 278 cases, with 26 mixed/non-Pine
 cases deselected. Shared kernel/cost/provider/recovery checks passed 75 cases.
 Frontend checks passed 226 cases, both TypeScript projects and the 30-locale
 catalog guard. A Playwright run operated the actual React report/controls against
@@ -59,7 +64,8 @@ warnings were zero. Screenshots and exported receipts are under
 This is component plus real-service validation, not packaged-application proof.
 
 Pyne external-account replay remains unadvertised; existing Pyne native-account
-replay is separate. Workbench closing-tick scheduling, richer request-prefix
-updates and larger-history performance remain further work. These local checks
+replay is separate. Workbench risk and closing scheduling now use the negotiated
+control contract. BAR fill recalculation, richer request-prefix updates and
+larger-history performance remain further work. These local checks
 do not establish packaged-app acceptance, real exchange queues or TradingView
 broker-emulator equivalence.

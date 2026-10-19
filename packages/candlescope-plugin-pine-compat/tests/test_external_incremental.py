@@ -18,6 +18,19 @@ def wire(source):
     }
 
 
+@pytest.mark.skipif(getattr(pine_compat,"EXTERNAL_CLOSING_TICK_SCHEMA_VERSION",0)!=1,
+    reason="requires the explicit external closing-tick runtime")
+def test_external_closing_settings_still_require_host_opt_in():
+    request=wire('strategy.entry("L",strategy.long,qty=1)')
+    request["source"]=request["source"].replace('strategy("external")','strategy("external",process_orders_on_close=true)')
+    bar,account=data(0)
+    with pytest.raises(ValueError,match="E_EXTERNAL_UNSUPPORTED"):
+        adapter.execute({**request,"bars":[bar],"accounts":[account]})
+    accepted=adapter.execute({**request,"closing_ticks":True,"bars":[bar],"accounts":[account]})
+    assert accepted["intents"][0]["qty"]==1
+    assert accepted["raw_output"].get("strategy") is None
+
+
 def data(i):
     bar = {
         "time": 1700000000 + i * 60, "open": 10 + i, "high": 11 + i, "low": 9 + i, "close": 10 + i, "volume": 1

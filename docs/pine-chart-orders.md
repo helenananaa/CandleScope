@@ -95,7 +95,7 @@ Reports append `_WITH_SIMULATED_CLOSE` to their fidelity label and expose the
 closing contract, liquidity assumption and fill count. V2 fill provenance uses
 `SCRIPT_BAR_CLOSE`; physical and simulated trace counts remain separate. Kernel
 checkpoints freeze this mode, and independent cost scenarios use the same closing
-hook. Older adapters and the Workbench external-account path keep rejecting the
+hook. Older adapters keep rejecting the
 declaration unless they explicitly opt into the core closing-tick contract.
 The official [closing-order documentation](https://www.tradingview.com/pine-script-docs/concepts/strategies/#process_orders_on_close)
 informs this behavior; these tests are not a TradingView output oracle.

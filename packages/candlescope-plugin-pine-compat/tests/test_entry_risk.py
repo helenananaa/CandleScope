@@ -11,6 +11,17 @@ pytestmark = pytest.mark.skipif(
     reason="requires declarative risk runtime candidate")
 
 
+def test_workbench_control_query_resolves_settings_and_inputs_without_execution_bars():
+    request=wire('if false\n    strategy.risk.max_position_size(input.int(2,"Cap"))')
+    request["source"]=request["source"].replace('strategy("external")','strategy("external",process_orders_on_close=true)')
+    result=adapter.execute({**request,"operation":"host_control","bars":[],"accounts":[],
+        "parameters":{"Cap":3},"risk_contract":STOP_CONTRACT})
+    assert result["contract"]=="candlescope.pine-workbench-control/1"
+    assert result["execution"]["processOrdersOnClose"] is True
+    assert result["risk_rules"]["rules"][0]["value"]==3
+    assert "intents" not in result and "raw_output" not in result
+
+
 def test_legacy_external_callers_cannot_silently_ignore_unreachable_risk_rules():
     request = wire('if false\n    strategy.risk.max_position_size(2)')
     bar, account = data(0)

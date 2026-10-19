@@ -21,15 +21,19 @@ def match_closing_tick(kernel, bar, sequence, *, on_fill=None):
     event = closing_event(bar, sequence)
     previous_event, previous_reporter = kernel._last_event, kernel.execution_reporter
     price = Decimal(str(bar.payload["close"]))
+    from .closing_book import is_book_kernel, match_book_close
+    from .book_kernel import BookAssistedKernel
+    book = is_book_kernel(kernel)
     remaining = None
-    if kernel.execution_model_revision is not None:
+    if kernel.execution_model_revision is not None or isinstance(kernel, BookAssistedKernel):
         used = Decimal(0)
         for fill in reversed(kernel.fills):
             if fill.event_time_ms < int(bar.payload["open_time_ms"]):
                 break
             if fill.reason != "ACCOUNT_LIQUIDATION":
                 used += fill.qty
-        remaining = max(Decimal(0), Decimal(str(bar.payload["volume"])) * kernel.participation_rate - used)
+        rate = kernel.participation_rate if kernel.execution_model_revision is not None else Decimal(1)
+        remaining = max(Decimal(0), Decimal(str(bar.payload["volume"])) * rate - used)
 
     def report(value):
         if not isinstance(kernel.account, LinearPerpetualAccountV2):
@@ -61,6 +65,12 @@ def match_closing_tick(kernel, bar, sequence, *, on_fill=None):
                 if getattr(kernel, "_order_eligible_time_ms", {}).get(order.order_id, 0) > event.event_time_ms:
                     continue
                 if kernel.order_policy is not None and not kernel.order_policy(order, event):
+                    continue
+                if book:
+                    used = match_book_close(kernel, order, event, remaining)
+                    progress |= used > 0
+                    if remaining is not None:
+                        remaining -= used
                     continue
                 if order.type == "STOP_LIMIT" and not order.activated and triggers_stop(order, price):
                     order.activated = True

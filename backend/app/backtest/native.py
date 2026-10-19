@@ -146,8 +146,12 @@ class NativeBacktests:
                                           and external["identity"].get("adapter") in supported[language])
                 except Exception:
                     external_available = False
+                    external = {}
                 result.append({"language": language, "available": True, "identity": description["identity"], "external_available": external_available,
-                    **({"external_replay":"candlescope.external-replay/1"} if language=="pine" and external_available else {})})
+                    **({"external_replay":"candlescope.external-replay/1"} if language=="pine" and external_available else {}),
+                    **({"external_controls": {key: external["identity"][key] for key in
+                        ("workbench_control", "risk_stop_contract", "closing_tick_contract") if key in external["identity"]}}
+                        if language=="pine" and external_available and external["identity"].get("workbench_control") else {})})
             except Exception as exc:
                 result.append({"language": language, "available": False, "reason": str(exc)})
         return {"execution_mode": "NATIVE", "engines": result, "interactive_replay": True,
@@ -268,6 +272,9 @@ class NativeBacktests:
                 wire.update(host_settings=payload["host_settings"], interval=payload["interval"], host_runtime_identity=host_identity(),
                             account_model="SPOT_CASH_V1" if payload.get("market_type", "usdm") == "spot" else "LINEAR_PERP_ONE_WAY_V1",
                             context_intervals=[item["interval"] for item in payload.get("contexts", [])])
+                if payload["language"] == "pine":
+                    from .pine_workbench import freeze_control
+                    freeze_control(self, plugin, wire, payload)
             if len(encoded(wire).encode()) > MAX_BYTES:
                 raise BacktestError("BUDGET_EXCEEDED", "native input exceeds 64 MiB")
             run_id = "native_" + uuid.uuid4().hex

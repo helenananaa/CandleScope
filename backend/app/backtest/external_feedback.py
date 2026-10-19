@@ -70,6 +70,8 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
             raise BacktestError("BUDGET_EXCEEDED", "at most 64 intents per chart bar")
         history.extend(current)
         orders.configure(latest.get("pyramiding", 1))
+        from .pine_workbench import check_risk_response
+        check_risk_response(orders, wire, latest)
         intents = orders.translate(current, event.sequence)
         kernel.decisions.append({"sequence": event.sequence, "watermark_ms": event.event_time_ms,
             "intents": intents, "signal_bar": cursor, "pass_index": pass_index,
@@ -80,7 +82,7 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
     prior_reporter = kernel.execution_reporter
     def report(event):
         prior_reporter(event)
-        if event.get("fill"):
+        if event.get("fill") and kernel._last_event.payload.get("execution_phase") != "PINE_BAR_CLOSE":
             evaluate(active_event, False)
     kernel.execution_reporter = report
 
@@ -92,7 +94,16 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
         boundary = interval.next_ms(visible["time"] * 1000) - 1
         event = MarketEvent(last_sequence, boundary, "TRADES", {"price": str(visible["close"]), "qty": "0"})
         kernel._last_event = event
+        if kernel.market_observer is not None:
+            kernel.market_observer(event)
         evaluate(event, True)
+        if wire.get("closing_ticks"):
+            from .pine_workbench import bar_event
+            from app.simulation.closing_tick import match_closing_tick
+            match_closing_tick(kernel, bar_event(wire, cursor, last_sequence), last_sequence,
+                on_fill=lambda _bar, tick: evaluate(tick, True))
+            kernel._record_equity_point({"sequence": last_sequence, "event_time_ms": boundary,
+                "equity": str(kernel.account.equity()), "position_qty": str(kernel.account.position_qty)})
         cursor += 1
         visible = None
 
@@ -108,6 +119,8 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
             kernel._last_event = event
             if event.role == "ORDER_BOOK":
                 kernel._apply_book(event)
+                if kernel.market_observer is not None:
+                    kernel.market_observer(event)
             else:
                 price, qty = float(event.payload["price"]), float(event.payload["qty"])
                 if visible is None:
@@ -115,6 +128,8 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
                 else:
                     visible.update(high=max(visible["high"], price), low=min(visible["low"], price), close=price, volume=visible["volume"]+qty)
                 kernel.account.mark = Decimal(str(event.payload["price"]))
+                if kernel.market_observer is not None:
+                    kernel.market_observer(event)
                 kernel._match(event)
                 kernel.equity_curve.append({"sequence": event.sequence, "event_time_ms": event.event_time_ms,
                     "equity": str(kernel.account.equity()), "position_qty": str(kernel.account.position_qty)})
