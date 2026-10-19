@@ -15,12 +15,14 @@ The mistakenly relayed scope-narrowing instruction was withdrawn by the user.
 - Original main checkout remains at `1a2a0189` with its 19 existing local changes;
   this task did not modify that checkout.
 - Core branch: `codex/pine-host-completion`, based on `b9200480e`, now committed
-  at `40a1ac8d418b89224c1fa9c268039d95a38c2ebd`.
-- Current core wheel: `.local/host-completion/symbol-qualified-wheels/` in the core repo.
-  SHA256: `c3e8f517c625b66ec174b42ba09e6b1535903d0a49a1bcb1b48aa3cabb99717b`.
+  at `336e1f83952528a0559b2b24ba328ffd0823b643` (external order schema 2).
+  Metadata checkpoint `40a1ac8d4` remains in the previous receipt.
+- Current core wheel: `.local/host-completion/order-qualified-wheels/` in the core repo.
+  SHA256: `66018858791af4877d07491f4e8a49fe467aa9156ec4e167bcbfe55905641da2`.
   It is installed only in the task's `output/pine-host/phase3/venv`.
 - Package version remains `0.3.2`; use the artifact/source identity and
-  `EXTERNAL_CLOCK_SCHEMA_VERSION == 1` and `SYMBOL_METADATA_SCHEMA_VERSION == 1`,
+  `EXTERNAL_CLOCK_SCHEMA_VERSION == 1`, `SYMBOL_METADATA_SCHEMA_VERSION == 1`
+  and `EXTERNAL_ORDER_SCHEMA_VERSION == 2`,
   rather than the version alone. The previous clock-only candidate and receipt
   remain preserved separately.
 - Final receipts and logs: `output/pine-host/phase3/`. Official runtime catalogs
@@ -28,7 +30,19 @@ The mistakenly relayed scope-narrowing instruction was withdrawn by the user.
 
 ## Implemented host work
 
-- Chart `calc_on_order_fills` now uses the negotiated `pine-chart/2` causal
+- Chart `pine-chart/3` and workbench `pine-external/7` now negotiate external
+  order schema 2. Fixed positive-quantity `strategy.order` calls support market,
+  limit, stop and stop-limit execution through the authoritative Host allocator.
+  Quantities net against existing positions without automatic reversal sizing or
+  entry pyramiding. Entry IDs remain available to closes, exits and recovery.
+- Entry and generic order OCA groups preserve names and none/cancel/reduce types.
+  Peer effects apply after each fill, before Pine callbacks. Partial fills,
+  independent same-name/different-type groups, gross reversal caps and V2 margin
+  release are covered. Legacy target-position revisions reject generic/OCA
+  semantics instead of dropping them. The core only emits order intentions and
+  receives explicit account feedback; the Host owns all allocation and fills.
+
+- Chart `calc_on_order_fills` now uses the negotiated chart causal
   aggregate-trade profile. Actual fills update logical ownership before Pine
   observes the account; callback orders wait for a later print. Each pass freezes
   its forming OHLCV, execution clock and visible requested-data prefix. Restore
@@ -122,7 +136,22 @@ the host. Interface details: core `docs/SYMBOL_METADATA_INPUT.md`.
 
 ## Validation
 
-- Current callback/Host gate: 120 passed, 16 mixed/non-Pine cases deselected in
+- Current generic-order Host group: 161 passed, 22 mixed/non-Pine cases deselected
+  in `generic-order-host-final.log`. Added API cases cover queued charts,
+  preparation launch, all four generic order kinds, OCA effects, and workbench
+  BAR/trade/book matching. Actual Pine partial-OCA callback recovery preserves
+  all four result hashes. Allocation group: 39 passed in
+  `generic-order-allocation-final.log`, including V2 margin release and retained
+  reversal caps. Bridge suite: 69 passed, 12 optional extension cases skipped.
+- Current order-schema core complete gate: 7,905 Rust, 1,714 fresh-wheel Python,
+  172 tooling tests, fmt, Clippy, structure/host-parity and actual WASM/Node.
+  Log: core `.local/host-completion/order-intents-full-gate.log`. The installed
+  candidate independently passes 1,714 Python tests. Generated Node bindings
+  expose `externalOrderSchemaVersion() == 2`; this is schema metadata and does
+  not imply a WASM external-account execution API. Artifact/source reconciliation
+  is in `generic-order-installed-proof.json` and the current candidate receipt.
+
+- Earlier callback/Host gate: 120 passed, 16 mixed/non-Pine cases deselected in
   `chart-fill-host-final.log`. This includes eight actual-worker callback cases:
   authoritative spot/derivative account observations, threaded adapter execution,
   same-print ownership, unconfirmed-group recovery, incompatible-mode admission,
@@ -143,9 +172,9 @@ the host. Interface details: core `docs/SYMBOL_METADATA_INPUT.md`.
   Existing kernel/account/recovery group: 61 passed; one native-row optimization
   module skipped because its optional extension is not built for this test
   environment. Frontend
-  backtest group: 225 passed; UI/Node typechecks passed. The core remains at
-  `40a1ac8d4` with its prior complete gate; no interpreter source changed here.
-- Current complete core gate: 7,903 Rust tests, 1,700 fresh-wheel Python tests,
+  backtest group: 225 passed; UI/Node typechecks passed. At that checkpoint the core was
+  `40a1ac8d4`; the order-schema gate above supersedes that core identity.
+- Earlier metadata core gate: 7,903 Rust tests, 1,700 fresh-wheel Python tests,
   172 tooling tests, formatting, Clippy, structure and host-parity guards, and
   actual WASM/Node execution. The installed candidate independently passed all
   1,700 Python tests. Logs: core `.local/host-completion/symbol-metadata-*.log`.
@@ -205,7 +234,7 @@ that observation. The corrected allocation group passes.
 
 ## Remaining goal work
 
-1. Finish chart script intrabar callbacks, process-on-close, `strategy.order`
+1. Finish chart script intrabar callbacks, process-on-close
    and Pine risk-rule semantics through the authoritative Host matcher. Chart
    closed-bar rich orders and print-clock trailing stops are connected.
    Requested datasets are connected; growing requested prefixes currently rebase
@@ -228,7 +257,8 @@ that observation. The corrected allocation group passes.
    corresponding builtin is used anywhere in the script; expression-scoped
    requirements would avoid unnecessary admission failures.
 4. Re-audit current core gaps and implement selected missing language/request/
-   account semantics. Current development core already provides FX conversion;
+   account semantics. The external order profile still needs comments/alert
+   metadata, zero-quantity no-op parity and non-fixed default sizing. Current development core already provides FX conversion;
    nonunit contract multipliers remain unsupported.
 5. Continue broader product and official-reference qualification. Current tests
    do not establish arbitrary TradingView script, pixel, broker-fill,

@@ -13,7 +13,8 @@ from .libraries import library_sources
 
 def describe():
     return {
-        **identity("candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-chart/2"),
+        **identity("candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-chart/3"),
+        "external_orders": getattr(pine_compat, "EXTERNAL_ORDER_SCHEMA_VERSION", 1),
         "fill_callbacks": "candlescope.pine-fill-callbacks/1",
         "prefix_append": PREFIX_CONTRACT,
         "prefix_passes": PASSES_CONTRACT,

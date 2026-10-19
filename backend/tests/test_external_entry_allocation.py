@@ -11,6 +11,99 @@ def entry(id, direction="long", qty=1, **prices):
     return dict(action="entry", id=id, direction=direction, qty=qty, **prices)
 
 
+def generic(id, direction="long", qty=1, **options):
+    return {**entry(id,direction,qty,**options),"action":"order"}
+
+
+@pytest.mark.parametrize("kernel_type", [SimulationKernel, TradeSimulationKernel, BookAssistedKernel])
+def test_generic_orders_net_quantities_without_pyramiding_or_auto_reversal(kernel_type):
+    kernel,orders = drive(kernel_type, {1:[generic("A",qty=5),generic("B",qty=3)],
+        2:[generic("D","short",3)],3:[generic("R","short",7)],4:[dict(action="close",id="R")]},pyramiding=1)
+    assert [fill.qty for fill in kernel.fills] == [5,3,3,7,2]
+    assert orders.owned() == kernel.account.position_qty == 0
+    assert orders.allocations[2]["closed"][0]["entry_id"] == "A"
+    assert orders.allocations[3]["opened"] == {"entry_id":"R","qty":"2"}
+
+
+@pytest.mark.parametrize("kernel_type", [SimulationKernel, TradeSimulationKernel, BookAssistedKernel])
+@pytest.mark.parametrize("oca,expected", [("none",7),("cancel",2),("reduce",5)])
+def test_generic_oca_groups_use_actual_filled_quantity(kernel_type,oca,expected):
+    kernel,orders = drive(kernel_type,{1:[generic("A",qty=2,oca_name="g",oca_type=oca),
+        generic("B",qty=5,oca_name="g",oca_type=oca)]},pyramiding=1)
+    assert kernel.account.position_qty == orders.owned() == expected
+
+
+def test_same_name_different_oca_types_are_independent_and_generic_pending_order_survives_close():
+    kernel,orders = drive(SimulationKernel,{1:[generic("A",qty=2,oca_name="g",oca_type="cancel"),
+        generic("B",qty=3,oca_name="g",oca_type="reduce"),generic("pending","short",5,limit=100)],
+        2:[dict(action="close_all",id="")]},pyramiding=1)
+    assert [fill.qty for fill in kernel.fills] == [2,3,5]
+    assert orders.owned() == 0
+    assert kernel.orders[2].status == "OPEN"
+
+
+@pytest.mark.parametrize("oca",["cancel","reduce"])
+@pytest.mark.parametrize("v2",[False,True])
+def test_partial_generic_fill_applies_oca_before_next_print_and_recovers(oca,v2):
+    import json
+    def make():
+        kernel=TradeSimulationKernel(slippage_bps=Decimal(0),account_model="LINEAR_PERP_ONE_WAY_V2" if v2 else "LINEAR_PERP_ONE_WAY_V1",leverage=Decimal(10))
+        if v2:
+            from tests.test_backtest_account_v2_m4 import rules,event
+            kernel.account.apply(rules())
+            kernel.account.apply(event("MARK_INDEX",2,mark_price="100"))
+        orders=ExternalOrders(kernel)
+        orders.configure(1)
+        return kernel,orders
+    kernel,orders=make()
+    kernel._enqueue_many(orders.translate([generic("A",qty=4,oca_name="g",oca_type=oca),
+        generic("B",qty=10,oca_name="g",oca_type=oca)],0),current_sequence=0)
+    def match(kernel,sequence,qty):
+        kernel._last_event=MarketEvent(sequence,sequence*1000,"TRADES",dict(price="10",qty=str(qty)))
+        kernel.account.mark=Decimal(10)
+        kernel._match(kernel._last_event)
+    match(kernel,1,2)
+    assert kernel.orders[1].status == ("CANCELLED" if oca == "cancel" else "OPEN")
+    if oca == "reduce":
+        assert kernel.orders[1].qty == 8
+    restored,owners=make()
+    restored.restore(json.loads(json.dumps(kernel.snapshot(),default=str)))
+    owners.restore(json.loads(json.dumps(orders.snapshot())))
+    for target in (kernel,restored):
+        match(target,2,100)
+    assert restored.snapshot() == kernel.snapshot()
+    assert owners.snapshot() == orders.snapshot()
+    assert owners.owned() == (4 if oca == "cancel" else 10)
+    if v2:
+        assert restored.account.frozen_order_margin == 0
+
+
+def test_oca_reduced_reversal_keeps_the_gross_quantity_cap_after_restore():
+    import json
+    kernel=TradeSimulationKernel(slippage_bps=Decimal(0))
+    orders=ExternalOrders(kernel)
+    orders.configure(3)
+    def match(sequence,qty):
+        kernel._last_event=MarketEvent(sequence,sequence*1000,"TRADES",dict(price="10",qty=str(qty)))
+        kernel.account.mark=Decimal(10)
+        kernel._match(kernel._last_event)
+    kernel._enqueue_many(orders.translate([generic("short","short",2)],0),current_sequence=0)
+    match(1,2)
+    kernel._enqueue_many(orders.translate([generic("A",qty=3,oca_name="g",oca_type="reduce"),
+        entry("B",qty=3,oca_name="g",oca_type="reduce")],1),current_sequence=1)
+    match(2,3)
+    assert kernel.account.position_qty == 1
+    assert kernel.orders[2].qty == 2
+    restored=TradeSimulationKernel(slippage_bps=Decimal(0))
+    owners=ExternalOrders(restored)
+    restored.restore(json.loads(json.dumps(kernel.snapshot(),default=str)))
+    owners.restore(json.loads(json.dumps(orders.snapshot())))
+    restored._last_event=MarketEvent(3,3000,"TRADES",dict(price="10",qty="100"))
+    restored._match(restored._last_event)
+    assert restored.account.position_qty == owners.owned() == 3
+    assert owners.owned("B") == 2
+
+
 def drive(kernel_type, decisions, pyramiding=2, **settings):
     kernel = kernel_type(slippage_bps=Decimal(0), taker_fee_bps=Decimal(0))
     orders = ExternalOrders(kernel, **settings)

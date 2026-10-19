@@ -23,8 +23,9 @@ def describe():
         raise ValueError("EXTERNAL_RUNTIME_UNAVAILABLE: install external-broker/1 runtime")
     return {
         **identity(
-            "candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-external/6"
+            "candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-external/7"
         ),
+        "external_orders": getattr(pine_compat, "EXTERNAL_ORDER_SCHEMA_VERSION", 1),
         "prefix_append": PREFIX_CONTRACT,
         "prefix_passes": PASSES_CONTRACT,
         "prefix_clocks": CLOCKS_CONTRACT,

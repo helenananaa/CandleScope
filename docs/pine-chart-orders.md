@@ -25,11 +25,28 @@ Supported chart orders include:
 - cancellation and replacement of pending script order IDs; and
 - trailing stops on an ordered trade execution clock, with an explicit tick.
 
+The development `pine-chart/3` and `pine-external/7` adapters negotiate
+`external_orders=2` with the core's `EXTERNAL_ORDER_SCHEMA_VERSION`. Generic
+`strategy.order` calls transact fixed quantities directly: opposing orders reduce
+the existing net position before opening any remainder, without automatic entry
+reversal sizing or entry pyramiding. They support market, limit, stop and
+stop-limit orders, logical entry IDs, cancellation and subsequent ID-specific
+closes/exits. The script's generic pending orders remain independent when another
+entry closes.
+
+Both entries and generic orders preserve named OCA groups (`none`, `cancel`,
+`reduce`). The allocator applies peer effects immediately after each actual fill,
+including partial fills, before Pine receives its fill callback. Names with
+different OCA types are independent. Reduced quantities and entry reversal caps
+survive checkpoints; cancellations and reductions release corresponding V2 order
+margin. Generic/OCA revisions require `ORDER_INTENT`; legacy target-position
+mode rejects them at admission.
+
 `BAR_APPROX` keeps the Host's approximate OHLC fill policy. Aggregate-trade
 execution evaluates completed signal bars and matches against subsequent trade
 prints. It can advance a trailing stop between signal-bar evaluations.
 `calc_on_order_fills` additionally negotiates
-`candlescope.pine-fill-callbacks/1` with the installed `pine-chart/2` adapter.
+`candlescope.pine-fill-callbacks/1` with the installed chart adapter.
 This profile requires `ORDER_INTENT` and `AGG_TRADE_EXECUTION`; incompatible
 BAR or target-position runs are rejected before execution. Each actual fill
 updates logical entry ownership before the next Pine observation. The callback
@@ -57,8 +74,10 @@ claim equivalence to that historical broker-emulator behavior. See the official
 [strategy execution documentation](https://www.tradingview.com/pine-script-docs/concepts/strategies/#calc_on_order_fills).
 
 `calc_on_every_tick`, `calc_on_every_history_tick`, `process_orders_on_close`,
-`strategy.order` and Pine `strategy.risk.*` still require further integration or
-core capability work. The current runtime rejects unknown declaration options.
+and Pine `strategy.risk.*` still require further integration or core capability
+work. Order comments/alert metadata, zero-quantity no-op parity, and non-fixed
+default sizing also remain outside the external order profile. The current
+runtime rejects unknown declaration options.
 
 The Host validates order batches and rechecks risk when a pending order becomes
 executable against the live ledger. Script IDs bind to actual accepted order

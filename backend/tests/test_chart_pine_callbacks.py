@@ -94,8 +94,9 @@ def test_fill_callbacks_use_actual_account_and_observed_forming_bar(service,spot
     assert completed["report"]["strategy"]["pineExecution"]["fillCallbackCount"] == 2
 
 
-def test_recovery_resumes_an_unconfirmed_fill_group(service):
-    config = payload(service)
+@pytest.mark.parametrize("generic",[False,True])
+def test_recovery_resumes_an_unconfirmed_fill_group(service,generic):
+    config = payload(service,SOURCE.replace("strategy.entry(","strategy.order(") if generic else SOURCE)
     baseline = execute(service, service.create_run(config,idempotency_key="baseline",now_ms=3))
     run = service.create_run(config,idempotency_key="interrupted",now_ms=3)
     original = service.repository.save_checkpoint
@@ -140,6 +141,45 @@ if not barstate.isconfirmed and strategy.position_size>0
     assert [float(f.account_view["position_size"]) for f in provider.observations[:4]] == [0,2,5,3]
     remaining = result["report"]["pine_orders"]["open_entries"]
     assert len(remaining) == 1 and remaining[0]["entry_id"] == "B" and float(remaining[0]["qty"]) == 3
+
+
+def test_partial_oca_orders_restore_through_actual_pine_fill_callbacks(service):
+    source='''//@version=6
+strategy("OCA recovery",calc_on_order_fills=true)
+if barstate.isconfirmed and bar_index==0
+    strategy.order("A",strategy.long,qty=4,oca_name="g",oca_type=strategy.oca.reduce)
+    strategy.order("B",strategy.long,qty=10,oca_name="g",oca_type=strategy.oca.reduce)
+if not barstate.isconfirmed and strategy.position_size>0
+    strategy.exit("X","A",limit=1000)
+'''
+    config=payload(service,source)
+    rows=tuple(_trade(i+1,stamp,"10",str(qty)) for i,(stamp,qty) in enumerate(
+        ((1000,100),(60000,2),(70000,100),(120000,100),(180000,100))))
+    def run(record):
+        return service.execute_dual_clock_run(record["run_id"],events=rows,provider=PineEngineProvider(),now_ms=4,
+            observation_market={"venue":"binance","symbol":"BTCUSDT"})
+    baseline=run(service.create_run(config,idempotency_key="oca-baseline",now_ms=3))
+    interrupted=service.create_run(config,idempotency_key="oca-interrupted",now_ms=3)
+    save=service.repository.save_checkpoint
+    def interrupt(value):
+        result=save(value)
+        if value["sequence"]==2:
+            raise KeyboardInterrupt("durable OCA partial fill")
+        return result
+    service.repository.save_checkpoint=interrupt
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            run(interrupted)
+    finally:
+        service.repository.save_checkpoint=save
+    assert service.requeue_interrupted_run(interrupted["run_id"],expected_generation=1,now_ms=8)
+    recovered=run(interrupted)
+    assert [float(f["qty"]) for f in recovered["report"]["fills"]]==[2,2,6]
+    assert [(x["entry_id"],float(x["qty"])) for x in recovered["report"]["pine_orders"]["open_entries"]]==[("A",4),("B",6)]
+    for key in ("fills","orders","pine_orders"):
+        assert recovered["report"][key]==baseline["report"][key]
+    for key in ("decision_hash","fill_hash","ledger_hash","report_hash"):
+        assert recovered["result"][key]==baseline["result"][key]
 
 
 @pytest.mark.parametrize("override", [{"fidelity_mode":"BAR_APPROX","source_event_kind":"BAR"},{"output_mode":"TARGET_POSITION"}])

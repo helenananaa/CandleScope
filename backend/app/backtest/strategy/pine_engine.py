@@ -81,8 +81,6 @@ def analyze(source, libraries=None):
         for feature in features
         if (feature.startswith("request.") and feature not in {"request.security", "request.security_lower_tf"})
         or feature.startswith("strategy.risk")
-        or feature
-        in {"strategy.order"}
     }
     execution = requirements.get("execution", {})
     if (
@@ -100,6 +98,8 @@ def analyze(source, libraries=None):
             for key in ("calcOnEveryTick", "processOrdersOnClose")
         )
         or (execution.get("calcOnOrderFills") and result["identity"].get("fill_callbacks") != CALLBACK_CONTRACT)
+        or (any(feature == "strategy.order" or feature.startswith("strategy.oca.") for feature in features)
+            and result["identity"].get("external_orders", 1) < 2)
         or execution.get("clock") not in {"notUsed", "explicitTimestampWhenEvaluated"}
         or (execution.get("clock") == "explicitTimestampWhenEvaluated"
             and not result["identity"].get("external_execution_times"))
@@ -107,7 +107,7 @@ def analyze(source, libraries=None):
         raise StrategyProviderError(
             "FIDELITY_UNSUPPORTED",
             "Chart Pine supports closed-bar entry, exit and cancellation with pinned requested datasets; "
-            "fill callbacks require the aggregate-trade execution clock; tick/close callbacks and strategy.order need additional contracts. "
+            "fill callbacks require the aggregate-trade execution clock; tick/close callbacks need additional contracts. "
             + ", ".join(sorted(blocked)),
         )
     return result
@@ -155,6 +155,8 @@ class PineEngineProvider:
             ) from exc
         if self.fill_callbacks and not self.order_mode:
             raise StrategyProviderError("FIDELITY_UNSUPPORTED", "fill callbacks require ORDER_INTENT mode")
+        if frozen.get("requiresOrderMode") and not self.order_mode:
+            raise StrategyProviderError("FIDELITY_UNSUPPORTED", "generic and OCA orders require ORDER_INTENT mode")
         runtime = plugin()
         current = invoke(runtime, {"operation": "describe"}, timeout=15)["identity"]
         if current != self.runtime_identity:

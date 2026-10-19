@@ -10,8 +10,9 @@ from tests.test_native_backtests import runtime as runtime, pytestmark as pytest
 
 def run_chart(host, main, body, **settings):
     prepared = settings.pop("prepared", False)
+    pyramiding = settings.pop("pyramiding",2)
     revision = host.service.create_strategy_revision({"language": "PINE_ENGINE", "name": "Chart orders",
-        "source_text": '//@version=6\nstrategy("Chart orders",pyramiding=2)\n' + body})
+        "source_text": f'//@version=6\nstrategy("Chart orders",pyramiding={pyramiding})\n' + body})
     payload = {key: main[key] for key in ("dataset_id", "data_epoch", "snapshot_hash", "interval", "start_time_ms", "end_time_ms")}
     payload.update(strategy_revision_id=revision["revision_id"], fidelity_mode="BAR_APPROX", source_event_kind="BAR",
         exchange="binance", market_type="usdm", symbol="BTCUSDT", output_mode="ORDER_INTENT",

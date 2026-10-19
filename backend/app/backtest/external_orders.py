@@ -37,12 +37,16 @@ class ExternalOrders:
 
     def pending(self, entry_id=None):
         return [order for order in self.kernel.orders if order.status in LIVE
-                and self.bindings.get(order.order_id, (None, None))[1] == "entry"
+                and self.bindings.get(order.order_id, (None, None))[1] in {"entry", "order"}
                 and (not entry_id or self.bindings[order.order_id][0] == entry_id)]
 
     def cancel_order(self, order, reason):
         order.status = "CANCELLED"
         self.kernel._lifecycle(order, "CANCELLED", reason=reason)
+        self.kernel._active_orders.pop(order.order_id, None)
+        release = getattr(self.kernel.account, "release_order_margin", None)
+        if release is not None:
+            release(order.order_id, event_time_ms=self.kernel._last_event.event_time_ms if self.kernel._last_event else 0)
 
     def prepare_order(self, order, event):
         if order.status not in LIVE:
@@ -58,6 +62,12 @@ class ExternalOrders:
                 return False
             # Pending reversals use the live position, never the submission-time size.
             order.qty = detail["remaining"] + (abs(position) if position * direction < 0 else ZERO)
+            if detail.get("oca_cap") is not None:
+                order.qty = min(order.qty, detail["oca_cap"])
+        elif detail["kind"] == "order":
+            # A generic order transacts its remaining quantity, independently
+            # of entry pyramiding and automatic reversal sizing.
+            order.qty = detail["remaining"]
         else:
             position = self.owned(detail["owner"])
             if not position:
@@ -133,7 +143,7 @@ class ExternalOrders:
         for lot in self.lots:
             if remaining_close <= 0:
                 break
-            if kind != "entry" and detail["owner"] and lot["entry_id"] != detail["owner"]:
+            if kind not in {"entry", "order"} and detail["owner"] and lot["entry_id"] != detail["owner"]:
                 continue
             take = min(abs(lot["qty"]), remaining_close)
             lot["qty"] -= (Decimal(1) if lot["qty"] > 0 else Decimal(-1)) * take
@@ -144,7 +154,7 @@ class ExternalOrders:
         self.lots = [lot for lot in self.lots if lot["qty"]]
         opening = qty - closing
         if opening:
-            if kind != "entry":
+            if kind not in {"entry", "order"}:
                 raise BacktestError("EXTERNAL_ACCOUNT_MISMATCH", "exit opened a position")
             lot = next((lot for lot in self.lots if lot["order_id"] == order_id), None)
             price = Decimal(str(fill["price"]))
@@ -154,7 +164,10 @@ class ExternalOrders:
                 lot["price"] = (abs(lot["qty"])*lot["price"] + opening*price)/(abs(lot["qty"])+opening)
                 lot["qty"] += opening*direction
         detail["remaining"] = max(ZERO, detail["remaining"] - (opening if kind == "entry" else qty))
+        if detail.get("oca_cap") is not None:
+            detail["oca_cap"] = max(ZERO, detail["oca_cap"] - qty)
         filled = next(order for order in self.kernel.orders if order.order_id == order_id)
+        self._apply_oca(filled, detail, qty)
         for order in self.kernel.orders:
             if order.order_id == order_id or order.status not in LIVE:
                 continue
@@ -165,7 +178,7 @@ class ExternalOrders:
                 if not order.qty:
                     order.status = "CANCELLED_OCO"
                     self.kernel._lifecycle(order, order.status, reason="EXTERNAL_OCO_REDUCED")
-            if sibling["kind"] != "entry" and not self.owned(sibling["owner"]) and not self.pending(sibling["owner"]):
+            if sibling["kind"] not in {"entry", "order"} and not self.owned(sibling["owner"]) and not self.pending(sibling["owner"]):
                 if order.status in LIVE:
                     self.cancel_order(order, "EXTERNAL_ENTRY_CLOSED")
         if self.owned() != after or after != self.kernel.account.position_qty:
@@ -173,6 +186,34 @@ class ExternalOrders:
         self.allocations.append({"order_id":order_id,"sequence":fill["sequence"],"closed":closed,
             "opened": {"entry_id":script_id,"qty":str(opening)} if opening else None,
             "position_qty":str(after)})
+
+    def _apply_oca(self, filled, detail, qty):
+        group = detail.get("oca_name"), detail.get("oca_type", "none")
+        if not group[0] or group[1] == "none":
+            return
+        for peer in tuple(self.kernel.orders):
+            if peer.order_id == filled.order_id or peer.status not in LIVE:
+                continue
+            meta = self.details[peer.order_id]
+            if (meta.get("oca_name"), meta.get("oca_type", "none")) != group:
+                continue
+            if group[1] == "cancel":
+                self.cancel_order(peer, "SCRIPT_OCA_CANCEL")
+                continue
+            before = peer.qty
+            peer.qty = max(ZERO, before - qty)
+            if meta["kind"] == "entry":
+                meta["oca_cap"] = peer.qty
+            else:
+                meta["remaining"] = peer.qty
+            if not peer.qty:
+                self.cancel_order(peer, "SCRIPT_OCA_REDUCED_TO_ZERO")
+            else:
+                release = getattr(self.kernel.account, "release_order_margin", None)
+                if release is not None:
+                    release(peer.order_id, fraction=(before-peer.qty)/before,
+                        event_time_ms=self.kernel._last_event.event_time_ms if self.kernel._last_event else 0)
+                self.kernel._lifecycle(peer, "OCA_REDUCED", reason=f"SCRIPT_OCA_REDUCE:{before-peer.qty}")
 
     def feedback(self):
         if self.owned() != self.kernel.account.position_qty:
@@ -194,16 +235,16 @@ class ExternalOrders:
             if action in {"cancel", "cancel_all"}:
                 cancel(script_id if action == "cancel" else None)
                 continue
-            if action not in {"entry", "close", "close_all", "exit"}:
+            if action not in {"entry", "order", "close", "close_all", "exit"}:
                 raise BacktestError("EXTERNAL_UNSUPPORTED", "unknown order intent")
             position = kernel.account.position_qty
-            if action == "entry":
+            if action in {"entry", "order"}:
                 cancel(script_id)
                 direction = Decimal(1) if intent["direction"] == "long" else Decimal(-1)
-                if position * direction > 0 and len(self.lots) >= (self.pyramiding or 1):
+                if action == "entry" and position * direction > 0 and len(self.lots) >= (self.pyramiding or 1):
                     continue
                 opening = Decimal(str(intent["qty"]))
-                qty = opening + (abs(position) if position * direction < 0 else ZERO)
+                qty = opening + (abs(position) if action == "entry" and position * direction < 0 else ZERO)
                 limit, stop = intent.get("limit"), intent.get("stop")
                 # Explicit independent groups prevent the kernel's legacy
                 # limit+stop heuristic from pairing unrelated script entries.
@@ -214,7 +255,11 @@ class ExternalOrders:
                     order["limit_price"] = str(limit)
                 if stop is not None:
                     order["stop_price"] = str(stop)
-                staged.append((order,script_id,{"kind":"entry","remaining":opening,"direction":direction}))
+                oca_name, oca_type = intent.get("oca_name"), intent.get("oca_type") or "none"
+                if (oca_name is not None and not isinstance(oca_name,str)) or oca_type not in {"none","cancel","reduce"}:
+                    raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "invalid script OCA group")
+                staged.append((order,script_id,{"kind":action,"remaining":opening,"direction":direction,
+                    **({"oca_name":oca_name,"oca_type":oca_type} if oca_name and oca_type != "none" else {})}))
                 continue
             trail_watermark = None
             trail_triggered = False
@@ -240,7 +285,7 @@ class ExternalOrders:
                         trail_triggered = meta.get("triggered", False)
                 cancel(script_id)
                 if not position:
-                    pending = [(row,meta) for row,sid,meta in staged if meta["kind"] == "entry" and (not owner or owner == sid)]
+                    pending = [(row,meta) for row,sid,meta in staged if meta["kind"] in {"entry","order"} and (not owner or owner == sid)]
                     pending += [({"side":order.side}, self.details[order.order_id]) for order in self.pending(owner)]
                     if pending:
                         direction = Decimal(1) if pending[0][0]["side"] == "BUY" else Decimal(-1)
