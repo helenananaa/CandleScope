@@ -79,6 +79,15 @@ class TransportLayer:
 
         # Shared HTTP session (created lazily)
         self._http_session: aiohttp.ClientSession | None = None
+        self._route_configs: dict[tuple[str, str, str], IngestionConfig] = {}
+
+    def _bound_route_config(self, route: Any) -> IngestionConfig:
+        key = (route.id, route.url, route.egress_group)
+        config = self._route_configs.get(key)
+        if config is None:
+            config = route.bind(self._cfg)
+            self._route_configs[key] = config
+        return config
 
     # ── Public: Proxy resolution ─────────────────────────────
 
@@ -100,6 +109,11 @@ class TransportLayer:
         if mode == "custom":
             proxy = self._cfg.http_proxy
             return proxy if proxy else None
+        if mode == "pool":
+            routes = [route for route in self._cfg.proxy_routes if route.get("enabled", True)]
+            if not routes:
+                raise ValueError("no enabled proxy route")
+            return routes[0]["url"]
 
         # mode == "system" (default) — env vars first, then OS-level settings
         env_proxy = (
@@ -182,6 +196,11 @@ class TransportLayer:
             except Exception as exc:
                 value = {"diagnostic_error": f"{type(exc).__name__}: {exc}"}
             if isinstance(value, dict):
+                if self._route_configs:
+                    value = {**value, "proxy_routes": {
+                        route_id: snapshot(config)
+                        for (route_id, _url, _group), config in self._route_configs.items()
+                    }}
                 snapshots[str(plugin.id)] = value
         return snapshots
 
@@ -217,13 +236,15 @@ class TransportLayer:
             if not callable(close_history_transport):
                 continue
             try:
-                await close_history_transport(self._cfg)
+                for config in (self._cfg, *self._route_configs.values()):
+                    await close_history_transport(config)
             except Exception:
                 logger.warning(
                     "Failed to close %s provider history transport",
                     plugin.id,
                     exc_info=True,
                 )
+        self._route_configs.clear()
         if self._http_session and not self._http_session.closed:
             await self._http_session.close()
             self._http_session = None
@@ -239,6 +260,49 @@ class TransportLayer:
     # ── Public: HTTP ─────────────────────────────────────────
 
     async def http_fetch(self, req: TransportRequest) -> list[RawMessage]:
+        from app.core.proxy_pool import get_proxy_pool
+
+        if getattr(self._cfg, "proxy_mode", "system") != "pool" and req.proxy_route is None:
+            return await self._http_fetch(req)
+        pool = get_proxy_pool()
+        reservation = req.quota_reservation
+        if reservation is not None and reservation.proxy_route is not None:
+            req.proxy_route = reservation.proxy_route
+        if req.proxy_route is None:
+            admission = await self.http_admission(req)
+            if req.defer_on_rate_limit and not admission.allowed:
+                raise RateLimitDeferred(admission)
+        route = req.proxy_route
+        started = time.monotonic()
+        entered = False
+        try:
+            while not entered:
+                try:
+                    pool.begin(route, req.descriptor.exchange)
+                    entered = True
+                except RateLimitDeferred as exc:
+                    if req.defer_on_rate_limit:
+                        raise
+                    await asyncio.sleep(exc.retry_after_seconds)
+            result = await self._http_fetch(req)
+            pool.record(route, req.descriptor.exchange, elapsed=time.monotonic() - started)
+            return result
+        except RateLimitDeferred:
+            if reservation is not None and not reservation.settled:
+                reservation.record_response(response_unknown=True)
+            raise
+        except asyncio.CancelledError:
+            if reservation is not None and not reservation.settled:
+                reservation.record_response(response_unknown=True)
+            raise
+        except Exception as exc:
+            pool.record(route, req.descriptor.exchange, error=exc)
+            raise
+        finally:
+            if entered:
+                pool.end(route)
+
+    async def _http_fetch(self, req: TransportRequest) -> list[RawMessage]:
         """Fetch data via REST API for any stream type.
 
         Tries each endpoint on failure.
@@ -269,18 +333,36 @@ class TransportLayer:
         provider_fetch = getattr(plugin, "fetch_history", None)
         if callable(configured_provider_fetch):
             async def provider_fetch(request: TransportRequest) -> list[RawMessage]:
-                return await configured_provider_fetch(request, self._cfg)
+                config = self._bound_route_config(request.proxy_route) if request.proxy_route else self._cfg
+                return await configured_provider_fetch(request, config)
         if callable(provider_fetch):
+            provider_gate = None
+            provider_gate_held = False
             try:
+                if req.proxy_route is not None and quota_reservation is None:
+                    from app.exchanges.rate_limits import scope_rate_limit_rule
+                    endpoint = plugin.provider_rate_limit_endpoint(req)
+                    quota_request = HistoricalRequest(exchange=exchange, market_type=market_type,
+                        endpoint=endpoint, symbol=desc.symbol, interval=desc.interval, limit=req.limit)
+                    rule = scope_rate_limit_rule(plugin.rate_limit_policy(self._cfg).rule_for(quota_request),
+                                                 req.proxy_route.egress_group)
+                    await self._wait_for_http_admission(rule, quota_request,
+                                                      defer=req.defer_on_rate_limit)
+                    provider_gate = get_shared_rate_limit_semaphore(rule)
+                    await provider_gate.acquire()
+                    provider_gate_held = True
+                    await self._rate_limits.acquire_nowait(rule, quota_request)
+                    quota_reservation = RateLimitReservation(self._rate_limits, rule, quota_request,
+                                                            proxy_route=req.proxy_route)
                 self._metrics.inc("plugin_requests_sent")
                 messages = await provider_fetch(req)
                 if quota_reservation is not None:
-                    # Provider results carry no exchange HTTP quota headers.
-                    # The completed invocation is nevertheless authoritative
-                    # for the Host-owned probe lease, including an empty page.
-                    quota_reservation.record_response(
-                        status_code=200,
-                    )
+                    # Raw providers preserve quota headers when available.
+                    # An empty successful page still settles the probe lease.
+                    feedback = {"status_code": 200}
+                    if messages and messages[0].http_headers:
+                        feedback["headers"] = messages[0].http_headers
+                    quota_reservation.record_response(**feedback)
                 self._metrics.inc("plugin_requests_ok")
                 self._metrics.mark("plugin_last_success_at")
                 return messages
@@ -289,6 +371,8 @@ class TransportLayer:
                     quota_reservation.record_response(
                         response_unknown=True,
                     )
+                raise
+            except RateLimitDeferred:
                 raise
             except TransportError as exc:
                 if quota_reservation is not None:
@@ -304,17 +388,38 @@ class TransportLayer:
                     exc.rate_limit_recorded = True
                 raise
             except Exception as exc:
+                # CCXT quota errors must cool the selected exit rather than
+                # being mistaken for an ordinary proxy transport failure.
+                import ccxt
+                import re
+                status = getattr(exc, "status_code", None)
+                if isinstance(exc, ccxt.RateLimitExceeded):
+                    status = 429
+                if isinstance(exc, ccxt.BaseError):
+                    match = re.search(r"(?:^|\s)(418|429)(?:\s|:|$)", str(exc))
+                    if match:
+                        status = int(match.group(1))
+                headers = getattr(exc, "headers", None) or {}
+                body = str(exc)
+                body_code = _extract_body_code(body[body.find("{"):]) if "{" in body else None
                 if quota_reservation is not None:
                     quota_reservation.record_response(
-                        response_unknown=True,
+                        status_code=status, headers=headers, body_code=body_code,
+                        retry_after=_parse_retry_after(headers.get("Retry-After") or headers.get("retry-after")),
+                        fallback_cooldown_seconds=quota_reservation.rule.cooldown_seconds,
                     )
                 self._metrics.inc("plugin_requests_failed")
                 self._metrics.mark("plugin_last_error_at")
                 wrapped = TransportError(
-                    f"Provider fetch failed for {desc.key}: [{type(exc).__name__}] {exc}"
+                    f"Provider fetch failed for {desc.key}: [{type(exc).__name__}] {exc}",
+                    status_code=status, headers=headers, body_code=body_code,
+                    retry_after=_parse_retry_after(headers.get("Retry-After") or headers.get("retry-after")),
                 )
                 wrapped.rate_limit_recorded = quota_reservation is not None
                 raise wrapped from exc
+            finally:
+                if provider_gate_held:
+                    provider_gate.release()
 
         try:
             await self._ensure_http_session()
@@ -349,6 +454,9 @@ class TransportLayer:
                 quota_policy = plugin.rate_limit_policy(self._cfg)
                 quota_manager = self._rate_limits
                 quota_rule = quota_policy.rule_for(actual_quota_request)
+                if req.proxy_route is not None:
+                    from app.exchanges.rate_limits import scope_rate_limit_rule
+                    quota_rule = scope_rate_limit_rule(quota_rule, req.proxy_route.egress_group)
                 quota_request = actual_quota_request
                 quota_concurrency = quota_policy.concurrency_for(market_type)
             quota_semaphore = get_shared_rate_limit_semaphore(
@@ -437,7 +545,7 @@ class TransportLayer:
                 self._metrics.set("http_active_endpoint", base)
                 self._metrics.mark("http_last_request_at")
 
-                proxy = self._resolve_proxy()
+                proxy = req.proxy_route.url if req.proxy_route else self._resolve_proxy()
                 async with self._http_session.get(
                     url, params=params, headers=spec.headers, proxy=proxy
                 ) as resp:  # type: ignore[union-attr]
@@ -650,6 +758,14 @@ class TransportLayer:
             params=params,
         )
         quota_rule = plugin.rate_limit_policy(self._cfg).rule_for(quota_request)
+        if getattr(self._cfg, "proxy_mode", "system") == "pool":
+            from app.core.proxy_pool import get_proxy_pool
+            from app.exchanges.rate_limits import scope_rate_limit_rule
+            req.proxy_route = await get_proxy_pool().select_rest(
+                self._cfg, quota_request, quota_rule, self._rate_limits,
+            )
+            quota_request.egress_group = req.proxy_route.egress_group
+            quota_rule = scope_rate_limit_rule(quota_rule, quota_request.egress_group)
         return await self._rate_limits.inspect(quota_rule, quota_request)
 
     async def _wait_for_http_admission(
@@ -674,10 +790,24 @@ class TransportLayer:
     # ── Public: WebSocket ────────────────────────────────────
 
     async def ws_connect(
+        self, descriptor: StreamDescriptor, *, quiet: bool = False,
+    ) -> WsConnectionContext:
+        from app.core.proxy_pool import get_proxy_pool
+        route = get_proxy_pool().select_ws(self._cfg, descriptor.exchange)
+        try:
+            context = await self._ws_connect(descriptor, quiet=quiet, route=route)
+            context.proxy_route = route
+            return context
+        except Exception as exc:
+            get_proxy_pool().record(route, descriptor.exchange, error=exc, kind="ws")
+            raise
+
+    async def _ws_connect(
         self,
         descriptor: StreamDescriptor,
         *,
         quiet: bool = False,
+        route: Any | None = None,
     ) -> WsConnectionContext:
         """Open a raw WebSocket connection for the given stream.
 
@@ -720,7 +850,7 @@ class TransportLayer:
                 # websockets ≥15 supports proxy natively.
                 # When proxy_mode == "none", pass proxy=None to
                 # disable the library's automatic system-proxy detection.
-                proxy = self._resolve_proxy()
+                proxy = route.url if route else self._resolve_proxy()
                 proxy_mode = getattr(self._cfg, "proxy_mode", "system")
                 if proxy:
                     connect_kwargs["proxy"] = proxy

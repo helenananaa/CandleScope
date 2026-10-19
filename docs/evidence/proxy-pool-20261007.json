@@ -1,0 +1,77 @@
+{
+  "date": "2026-10-07",
+  "feature": "public_market_data_proxy_pool_phase_1",
+  "backend": {
+    "scope": [
+      "test_proxy_pool.py",
+      "test_backfill_rate_limit.py",
+      "test_transport_http_rate_limit_metadata.py",
+      "test_transport_ws_urls.py",
+      "test_ccxt_provider_runtime.py",
+      "test_ccxt_unified_provider.py",
+      "test_settings_api.py",
+      "test_symbol_catalog_contracts.py",
+      "test_symbol_catalog_refresh.py",
+      "test_native_session_transport.py",
+      "test_stream_transport_close.py",
+      "test_proxy_engine_readiness.py"
+    ],
+    "passed": 170,
+    "failed": 0,
+    "duration_seconds": 42.12,
+    "warnings": "4 existing FastAPI on_event deprecation warnings",
+    "ruff": "passed"
+  },
+  "frontend": {
+    "command": "npm test",
+    "passed": 3941,
+    "failed": 0,
+    "duration_seconds": 56.363,
+    "typecheck": "passed",
+    "lint": "passed",
+    "architecture_check": "passed",
+    "i18n_check": "passed: 30 locales, 4659 catalog keys",
+    "production_build": "passed; existing large-chunk warning"
+  },
+  "controlled_network_evidence": {
+    "real_loopback_http_proxy_sockets": true,
+    "exchange_host": "exchange.invalid",
+    "first_request_429_proxy_call_counts": [1, 0],
+    "next_request_healthy_route_proxy_call_counts": [1, 1],
+    "verified": [
+      "same egress group shares quota",
+      "418 circuit spans endpoints only within the affected exchange and egress group",
+      "API-key quota does not multiply by route count",
+      "reservation pins the actual request route",
+      "429 is not immediately replayed on another route",
+      "cancelled requests release route occupancy and probe ownership",
+      "route-bound CCXT history configs are reused and closed",
+      "controlled CCXT session switches after 3 failures and releases its old runtime",
+      "invalid saved pool cannot fall back to system proxy"
+    ]
+  },
+  "browser": {
+    "surface": "isolated page importing the real settings component and styles",
+    "viewports": [[1280, 900], [420, 900]],
+    "horizontal_overflow": false,
+    "interactions": ["edit", "make primary", "change strategy", "add", "remove", "fake save"],
+    "screenshots": [
+      "output/playwright/proxy-pool/desktop.png",
+      "output/playwright/proxy-pool/narrow-final.png"
+    ],
+    "artifacts_are_local_ignored_files": true,
+    "real_settings_saved": false,
+    "owned_browser_and_preview_server_closed": true
+  },
+  "qualification_boundaries": {
+    "real_exchange_connection": "not tested: user reports TUN mode",
+    "distinct_public_egress_ips": "not verified; exit groups require operator configuration",
+    "live_throughput": "not measured",
+    "websocket_subscription_sharding": "not implemented in this phase",
+    "cross_process_quota_coordination": "not implemented",
+    "private_trading": "out of scope",
+    "TUN_changed": false,
+    "actual_proxy_settings_changed": false,
+    "committed_or_pushed": false
+  }
+}

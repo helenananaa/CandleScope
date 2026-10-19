@@ -19,3 +19,19 @@ test("network success does not label missing or uninitialized engine status as s
     }
   } finally { setLocale(previous); }
 });
+
+test("pool controls show exit grouping and cooldown without inventing websocket latency", () => {
+  const previous = getLocale();
+  try {
+    setLocale("en");
+    const html = renderToStaticMarkup(<ProxySettingsPanel proxyMode="pool" customProxy="" systemProxy="" effectiveProxy="" proxyLoading={false}
+      proxySaveMsg={null} proxyTestResult={null} onProxyModeChange={() => {}} onCustomProxyChange={() => {}} onProxyTest={() => {}} onProxySave={() => {}}
+      proxyRoutes={[{id:"a",name:"Primary",url:"http://user:secret@localhost:7890",egress_group:"shared",enabled:true,exchanges:[],max_concurrency:4}]}
+      proxyStrategy="balanced" proxyPoolStatus={{routes:[{id:"a",active_requests:0,observations:[{exchange:"binance",kind:"ws",successes:0,failures:3,latency_ms:null,cooldown_seconds:5}],budgets:{}}]}}/>);
+    assert.ok(html.includes("Exit group"));
+    assert.ok(html.includes("Smart balancing"));
+    assert.ok(html.includes("Waiting / cooldown: 5 s"));
+    assert.ok(!html.includes("Latency: 250"));
+    assert.ok(html.includes('type="password"'));
+  } finally { setLocale(previous); }
+});

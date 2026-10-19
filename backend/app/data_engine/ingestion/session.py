@@ -245,6 +245,10 @@ class SessionLayer:
         except ConnectionClosed as exc:
             self._metrics.inc("ws_disconnects")
             self._metrics.mark("last_disconnect_at")
+            if self._ws_context is not None and self._ws_context.proxy_route is not None:
+                from app.core.proxy_pool import get_proxy_pool
+                get_proxy_pool().record(self._ws_context.proxy_route,
+                    self._descriptor.exchange, error=exc, kind="ws")
             logger.info(
                 "WS closed (%s): code=%s reason=%s",
                 self._descriptor.key, exc.code, exc.reason,
@@ -297,6 +301,10 @@ class SessionLayer:
             self._metrics.inc("messages_malformed")
             logger.warning("Malformed WS message: %s", str(raw_msg)[:200])
             return
+
+        if self._ws_context is not None and self._ws_context.proxy_route is not None:
+            from app.core.proxy_pool import get_proxy_pool
+            get_proxy_pool().record(self._ws_context.proxy_route, self._descriptor.exchange, kind="ws")
 
         msg = RawMessage(
             payload=data,

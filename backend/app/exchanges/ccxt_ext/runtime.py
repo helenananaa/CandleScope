@@ -18,6 +18,16 @@ from .models import CcxtLifecycleEvent, CcxtRawMarketEvent
 from .profile import CcxtExchangeProfile
 
 logger = logging.getLogger("ingestion.ccxt.runtime")
+
+
+def _diagnostic_key(key: tuple[str, ...]) -> str:
+    from app.core.proxy_pool import redact_proxy_url
+    from hashlib import sha256
+    return "|".join(
+        redact_proxy_url(value) + "#" + sha256(value.encode()).hexdigest()[:12]
+        if value.startswith(("http://", "https://")) and "@" in value else value
+        for value in key
+    )
 RawSubscriber = Callable[[CcxtRawMarketEvent], None]
 LifecycleSubscriber = Callable[[CcxtLifecycleEvent], None]
 
@@ -167,6 +177,8 @@ class CcxtRuntime:
         clients = getattr(self.exchange, "clients", None)
         return {
             "exchange": self.profile.exchange_id,
+            "proxy_route_id": self.config.proxy_route_id,
+            "proxy_egress_group": self.config.proxy_egress_group,
             "market_type": self.profile.market_type,
             "started": self._started,
             "closed": self._closed,
@@ -365,7 +377,7 @@ class CcxtRuntimePool:
     def snapshot(self) -> dict[str, Any]:
         return {
             "runtimes": {
-                "|".join(key): {
+                _diagnostic_key(key): {
                     **entry.runtime.snapshot(),
                     "references": entry.references,
                     "descriptor_count": len(entry.descriptor_references),
@@ -383,7 +395,7 @@ class CcxtRuntimePool:
             entries = tuple(self._entries.items())
         results: dict[str, int] = {}
         for key, entry in entries:
-            results["|".join(key)] = await entry.runtime.recycle_websockets()
+            results[_diagnostic_key(key)] = await entry.runtime.recycle_websockets()
         return results
 
 

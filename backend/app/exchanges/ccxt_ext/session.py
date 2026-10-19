@@ -63,6 +63,7 @@ class CcxtProviderSession:
         self._consecutive_failures = 0
         self._last_message_time = 0.0
         self._last_lifecycle: CcxtLifecycleEvent | None = None
+        self._proxy_route: Any | None = None
 
     @property
     def health(self) -> SessionHealth:
@@ -125,6 +126,7 @@ class CcxtProviderSession:
             "layer": "L2_CcxtProvider",
             "stream_key": self._descriptor.key,
             "provider": "ccxt",
+            "proxy_route_id": self._proxy_route.id if self._proxy_route else None,
             "health": self._health.value,
             "ccxt_symbol": self._ccxt_symbol,
             "queue_size": self._queue.qsize(),
@@ -212,6 +214,9 @@ class CcxtProviderSession:
                         f"raw queue overflow for {self._descriptor.key}"
                     )
                 self._consecutive_failures = 0
+                if self._proxy_route is not None:
+                    from app.core.proxy_pool import get_proxy_pool
+                    get_proxy_pool().record(self._proxy_route, self._descriptor.exchange, kind="ws")
                 delay = float(self._cfg.ws_reconnect_delay_initial)
                 await self._set_health(SessionHealth.CONNECTED, "CCXT stream active")
                 self._metrics.inc("watch_updates")
@@ -239,6 +244,9 @@ class CcxtProviderSession:
                 await asyncio.sleep(min(delay, self._cfg.ws_reconnect_delay_max))
                 delay = min(delay * 2, self._cfg.ws_reconnect_delay_max)
             except Exception as exc:  # noqa: BLE001 - CCXT exchange/network errors
+                if self._proxy_route is not None and not isinstance(exc, CcxtRawQueueOverflow):
+                    from app.core.proxy_pool import get_proxy_pool
+                    get_proxy_pool().record(self._proxy_route, self._descriptor.exchange, error=exc, kind="ws")
                 self._consecutive_failures += 1
                 self._metrics.inc("watch_failures")
                 self._metrics.mark("last_failure_at")
@@ -253,6 +261,14 @@ class CcxtProviderSession:
                 logger.warning("CCXT stream failed (%s): %s", self._descriptor.key, exc)
                 if self._overflowed or not self._running:
                     break
+                if self._proxy_route is not None and self._consecutive_failures >= 3:
+                    # Reattach a fresh, route-bound runtime. Its websocket book
+                    # caches are empty; healthy sessions retain their runtime.
+                    await self._detach_runtime()
+                    self._result_projector = None
+                    while not self._queue.empty():
+                        self._queue.get_nowait()
+                        self._queue.task_done()
                 await self._rebuild_runtime_after_failure(watch_generation)
                 await asyncio.sleep(min(delay, self._cfg.ws_reconnect_delay_max))
                 delay = min(delay * 2, self._cfg.ws_reconnect_delay_max)
@@ -279,9 +295,14 @@ class CcxtProviderSession:
             self._metrics.inc("runtime_rebuilds")
 
     async def _attach_runtime(self) -> None:
+        config = self._cfg
+        if getattr(config, "proxy_mode", "system") == "pool":
+            from app.core.proxy_pool import get_proxy_pool
+            self._proxy_route = get_proxy_pool().select_ws(config, self._descriptor.exchange)
+            config = self._proxy_route.bind(config)
         runtime = await self._pool.acquire(
             self._profile,
-            self._cfg,
+            config,
             self._descriptor,
         )
         try:

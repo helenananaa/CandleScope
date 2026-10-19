@@ -34,7 +34,7 @@ export interface SettingsCategoryDescriptor {
 export interface SettingsRuntimeView {
   appearance: ChartAppearancePanelProps;
   proxy: Omit<ProxySettingsPanelProps,
-    "onProxyModeChange" | "onCustomProxyChange" | "onProxyTest" | "onProxySave">;
+    "onProxyModeChange" | "onCustomProxyChange" | "onProxyTest" | "onProxySave" | "onProxyRoutesChange" | "onProxyStrategyChange">;
   exchanges: Omit<ExchangeSettingsPanelProps, "onRefreshExchanges" | "onTestExchangeMarket">;
   cacheLimits: Omit<CacheLimitsPanelProps, "onToggleAdvanced">;
   cacheDiagnostics: CacheDiagnosticsPanelProps;
@@ -44,7 +44,7 @@ export interface SettingsRuntimeView {
 
 export interface SettingsRuntimeActions {
   proxy: Pick<ProxySettingsPanelProps,
-    "onProxyModeChange" | "onCustomProxyChange" | "onProxyTest" | "onProxySave">;
+    "onProxyModeChange" | "onCustomProxyChange" | "onProxyTest" | "onProxySave" | "onProxyRoutesChange" | "onProxyStrategyChange">;
   exchanges: Pick<ExchangeSettingsPanelProps, "onRefreshExchanges" | "onTestExchangeMarket">;
   cacheLimits: Pick<CacheLimitsPanelProps, "onToggleAdvanced">;
   cacheDiagnostics: Pick<CacheDiagnosticsPanelProps,
