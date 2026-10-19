@@ -22,8 +22,9 @@ from .external_report import closed_trades
 
 def host_identity():
     import app.simulation.kernel as kernel_module
-    files = [Path(__file__), Path(__file__).with_name("native_session.py"), Path(__file__).with_name("external_orders.py"), Path(__file__).with_name("external_report.py"), Path(__file__).with_name("external_market.py"), Path(__file__).with_name("external_feedback.py"), Path(__file__).with_name("external_incremental.py"), *sorted(Path(kernel_module.__file__).parent.rglob("*.py"))]
+    files = [Path(__file__), Path(__file__).with_name("native_session.py"), Path(__file__).with_name("external_orders.py"), Path(__file__).with_name("external_report.py"), Path(__file__).with_name("external_market.py"), Path(__file__).with_name("external_feedback.py"), Path(__file__).with_name("external_incremental.py"), Path(__file__).with_name("external_replay.py"), *sorted(Path(kernel_module.__file__).parent.rglob("*.py"))]
     checksum = hashlib.sha256()
+    files.extend(Path(__file__).with_name(name) for name in ("native_replay.py","native_replay_storage.py"))
     for path in files:
         checksum.update(path.name.encode())
         checksum.update(path.read_bytes())
@@ -57,7 +58,7 @@ def resolve_external(language):
     return plugin
 
 
-def run_external_host(plugin, wire, runner, cancelled):
+def run_external_host(plugin, wire, runner, cancelled, **options):
     from .native import invoke
     from .native_session import SessionWorker
     if runner is invoke and wire["identity"].get("adapter") in {"pine-external/5", "pine-external/6", "pine-external/7", "pine-external/8", "pyne-external/4", "pyne-external/5"}:
@@ -67,13 +68,13 @@ def run_external_host(plugin, wire, runner, cancelled):
             if wire["identity"].get("adapter") == "pyne-external/5":
                 from .external_incremental import IncrementalEvaluator
                 evaluate = IncrementalEvaluator(worker, len(wire["bars"]))
-            return _run_external_host(plugin, wire, evaluate, cancelled)
+            return _run_external_host(plugin, wire, evaluate, cancelled, **options)
         finally:
             worker.close()
-    return _run_external_host(plugin, wire, runner, cancelled)
+    return _run_external_host(plugin, wire, runner, cancelled, **options)
 
 
-def _run_external_host(plugin, wire, runner, cancelled):
+def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=None):
     if wire.get("host_runtime_identity") != host_identity():
         raise BacktestError("NATIVE_IDENTITY_MISMATCH", "host matching code changed after submission")
     settings = wire["host_settings"]
@@ -89,9 +90,35 @@ def _run_external_host(plugin, wire, runner, cancelled):
                               slippage_bps=Decimal(str(settings["slippage_bps"])),
                               taker_fee_bps=Decimal(str(settings["taker_fee_bps"])))
     interval = parse_interval_spec(wire["interval"])
-    accounts, history, latest = [], [], {}
+    capture=target is not None
+    target=len(wire["bars"]) if target is None else target
+    if type(target) is not int or not 1<=target<=len(wire["bars"]):
+        raise BacktestError("NATIVE_REPLAY_RANGE","invalid external chart cursor")
+    accounts,history,latest=[],[],{}
     orders = ExternalOrders(kernel, price_tick=settings.get("price_tick"), fidelity=fidelity)
     deadline = time.monotonic() + 120
+    clock,last_request,cursor={},None,0
+    if resume is not None:
+        from .external_replay import validate_state
+        validate_state(wire,resume)
+        cursor=resume["cursor"]
+        if cursor>target:
+            raise BacktestError("NATIVE_REPLAY_RANGE","external restore cannot advance backward")
+        kernel.restore(resume["kernel"])
+        orders.restore(resume["orders"])
+        accounts,history,latest=resume["accounts"],resume["history"],resume["latest"]
+        clock,last_request=resume["clock"],resume["last_request"]
+        # Rebuild only the evaluator transcript. Restored fills, fees, depth and
+        # ownership stay in the Host kernel and must never be matched again.
+        reproduced=runner(plugin,last_request,cancelled=cancelled,timeout=120)
+        from .native_replay_storage import same_json
+        if not same_json(reproduced,latest):
+            raise BacktestError("EXTERNAL_NONCAUSAL_PREFIX","restored evaluator transcript changed")
+
+    def evaluate(plugin,request,**kwargs):
+        nonlocal last_request
+        last_request=request
+        return runner(plugin,request,**kwargs)
 
     def strategy(_window, event):
         nonlocal latest
@@ -110,7 +137,7 @@ def _run_external_host(plugin, wire, runner, cancelled):
         if "execution_times" in wire:
             request["execution_times"] = wire["execution_times"][:count]
         request["contexts"] = visible_contexts(wire, interval.next_ms(wire["bars"][count - 1]["time"] * 1000))
-        latest = runner(plugin, request, cancelled=cancelled, timeout=max(0.1, deadline - time.monotonic()))
+        latest = evaluate(plugin, request, cancelled=cancelled, timeout=max(0.1, deadline - time.monotonic()))
         if latest.get("contract") != "external-broker/1" or latest.get("identity") != wire["identity"] or latest.get("account_authority") != "candlescope" or latest.get("execution_mode") != "CANDLESCOPE":
             raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "external runtime returned the wrong account contract")
         if latest.get("raw_output", {}).get("strategy"):
@@ -133,14 +160,14 @@ def _run_external_host(plugin, wire, runner, cancelled):
     execution_passes = None
     if wire.get("fill_recalculation"):
         from .external_feedback import run_feedback_clock
-        latest, history, accounts, execution_passes = run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline)
+        latest,history,accounts,execution_passes,clock=run_feedback_clock(kernel,orders,wire,plugin,evaluate,cancelled,deadline,state=clock,target=target)
     elif fidelity == "BAR_APPROX":
-        kernel.run(events, strategy, finalize=True)
+        kernel.run(events[cursor:target], strategy, finalize=target==len(wire["bars"]))
     else:
         from .external_market import run_print_clock
-        run_print_clock(kernel, wire, strategy, cancelled)
+        clock=run_print_clock(kernel,wire,strategy,cancelled,state=clock,target=target)
     report = json.loads(json.dumps(asdict(kernel.result()), default=str))
-    return {"execution_mode": "CANDLESCOPE", "account_authority": "candlescope", "identity": wire["identity"],
+    result={"execution_mode": "CANDLESCOPE", "account_authority": "candlescope", "identity": wire["identity"],
             "account_model": kernel.account_model,
             "evaluation_contract": latest.get("evaluation_contract", "historical-prefix/1"),
             "host_runtime_identity": wire["host_runtime_identity"],
@@ -161,3 +188,7 @@ def _run_external_host(plugin, wire, runner, cancelled):
                            "execution_provenance": wire.get("execution_provenance", {}),
                            "entry_allocation": orders.report(), "kernel": report, "account_feedback": accounts, "intent_history": history,
                            "execution_passes": execution_passes, "strategy_output": latest.get("raw_output", {})}}
+    if capture:
+        from .external_replay import make_state
+        return result,make_state(wire,target,kernel,orders,accounts,history,latest,clock,last_request)
+    return result

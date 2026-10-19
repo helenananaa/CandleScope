@@ -303,6 +303,7 @@ export const en = {
   "native.external.fillRecalculation": "Evaluate strategy after fills",
   "native.external.fillHint": "Requires calc_on_order_fills: Pine recalculates the current bar; Pyne uses init/on_bar/on_fill(ctx, bar). New orders become eligible on the next market event.",
   "native.replay.incremental": "Advance native strategy state within fixed history. Last-bar flags use the full horizon; after a process restart, rebuild from frozen inputs to the checkpoint cursor.",
+  "native.replay.host": "Restore the CandleScope account and pending orders from the checkpoint, then continue through the remaining frozen market events.",
   "native.replay.method": "Rebuild the native account from each historical prefix. Checkpoints retain the frozen input and cursor; realtime execution semantics are not substituted.",
   "native.replay.empty": "No replay report yet. Step forward or play to begin, or return to the full report.",
   "native.replay.start": "Create replay",

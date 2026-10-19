@@ -106,7 +106,6 @@ def test_pine_host_matching_accepts_frozen_library_sources(runtime):
 
 @pytest.mark.parametrize("execution_mode", ["NATIVE", "CANDLESCOPE"])
 def test_pine_bar_close_execution_clock_matches_batch_replay_and_seek(runtime, execution_mode):
-    from app.backtest.errors import BacktestError
     host, payload = runtime
     source = ('//@version=6\nstrategy("Clock")\n'
         'if timenow >= 179999\n    strategy.entry("L",strategy.long,qty=1)\nplot(timenow)')
@@ -127,10 +126,6 @@ def test_pine_bar_close_execution_clock_matches_batch_replay_and_seek(runtime, e
         assert repeated["state"] == "COMPLETED", repeated.get("error")
         assert clock_values(repeated["result"]) == expected
         assert repeated["result"]["trades"] == origin["result"]["trades"]
-        # Native replay has no authoritative host-account restoration contract.
-        with pytest.raises(BacktestError, match="cannot restore a CandleScope matching account"):
-            replay.create(origin["run_id"])
-        return
     record = replay.create(origin["run_id"])
     replay.command(record["replay_id"], 0, "seek", 2)
     first = settle(replay, record["replay_id"])

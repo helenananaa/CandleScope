@@ -42,6 +42,24 @@ class BookAssistedKernel(TradeSimulationKernel):
     last_bid: Decimal | None = None
     last_ask: Decimal | None = None
 
+    def snapshot(self, *, history_encoder=None):
+        return {**TradeSimulationKernel.snapshot(self,history_encoder=history_encoder),
+            "book_state":{"schema":"book-assisted/1","fill_policy":self.fill_policy,
+                "bid":None if self.last_bid is None else str(self.last_bid),
+                "ask":None if self.last_ask is None else str(self.last_ask)}}
+
+    def restore(self,payload):
+        from .book_checkpoint import corrupt,number
+        state=payload.get("book_state") or {}
+        if state.get("schema")!="book-assisted/1" or state.get("fill_policy")!=self.fill_policy:
+            corrupt("book-assisted checkpoint identity differs")
+        bid=None if state.get("bid") is None else number(state["bid"],positive=True)
+        ask=None if state.get("ask") is None else number(state["ask"],positive=True)
+        if (bid is None)!=(ask is None) or (bid is not None and bid>ask):
+            corrupt("invalid checkpoint spread")
+        TradeSimulationKernel.restore(self,payload)
+        self.last_bid,self.last_ask=bid,ask
+
     def run(
         self,
         events: tuple[MarketEvent, ...],

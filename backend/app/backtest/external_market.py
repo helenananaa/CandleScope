@@ -14,7 +14,8 @@ def freeze_execution(native, payload, bars):
     if mode == "BAR_APPROX":
         if payload.get("fill_recalculation"):
             raise BacktestError("EXTERNAL_UNSUPPORTED", "fill callbacks require a frozen trade tape")
-        if data: raise BacktestError("FIDELITY_MISLABEL", "BAR mode cannot accept print data")
+        if data:
+            raise BacktestError("FIDELITY_MISLABEL", "BAR mode cannot accept print data")
         return []
     if data is None:
         if mode in {"BOOK_ASSISTED", "BOOK_DEPTH", "BOOK_SAMPLED"}:
@@ -77,26 +78,33 @@ def validate_execution(events, bars, interval, mode):
             previous_id = source_id
         else:
             raise BacktestError("FIDELITY_MISLABEL", "unsupported execution role")
-    if mode == "BOOK_ASSISTED": assert_book_chain(tuple(events))
+    if mode == "BOOK_ASSISTED":
+        assert_book_chain(tuple(events))
     # Chart history must be derived from this exact print tape, never unrelated OHLCV.
     cursor = 0
     for bar in bars:
         selected = []
         boundary = step.next_ms(bar["time"] * 1000)
         while cursor < len(trades) and trades[cursor].event_time_ms < boundary:
-            selected.append(trades[cursor]); cursor += 1
-        if not selected: raise BacktestError("DATA_GAP_REJECTED", "no prints for a chart bar")
+            selected.append(trades[cursor])
+            cursor += 1
+        if not selected:
+            raise BacktestError("DATA_GAP_REJECTED", "no prints for a chart bar")
         prices = [Decimal(str(e.payload["price"])) for e in selected]
         computed = dict(open=prices[0], high=max(prices), low=min(prices), close=prices[-1], volume=sum((Decimal(str(e.payload["qty"])) for e in selected), Decimal(0)))
         if any(not math.isclose(float(computed[k]), bar[k], rel_tol=1e-10, abs_tol=1e-10) for k in computed):
             raise BacktestError("DATA_SNAPSHOT_MISMATCH", "chart OHLCV differs from execution tape")
 
 
-def run_print_clock(kernel, wire, strategy, cancelled):
+def run_print_clock(kernel, wire, strategy, cancelled, *, state=None, target=None):
     interval = parse_interval_spec(wire["interval"])
     events = [MarketEvent(**item) for item in wire["execution_events"]]
     kernel.source_kind = assert_trade_stream(tuple(e for e in events if e.role == "TRADES"))
-    bar_cursor, last_sequence = 0, 0
+    state=state or {}
+    target=len(wire["bars"]) if target is None else target
+    bar_cursor,last_sequence=state.get("bar_cursor",0),state.get("last_sequence",0)
+    event_cursor=state.get("event_cursor",0)
+    end=interval.next_ms(wire["bars"][target-1]["time"]*1000)
     def decide():
         nonlocal bar_cursor
         bar = wire["bars"][bar_cursor]
@@ -108,8 +116,11 @@ def run_print_clock(kernel, wire, strategy, cancelled):
         kernel.decisions.append({"sequence": last_sequence, "watermark_ms": time_ms, "intents": intents, "signal_bar": bar_cursor})
         kernel._enqueue_many(intents, current_sequence=last_sequence)
         bar_cursor += 1
-    for event in events:
-        if cancelled.is_set(): raise BacktestError("NATIVE_CANCELLED", "execution cancelled")
+    for event in events[event_cursor:]:
+        if event.event_time_ms>=end:
+            break
+        if cancelled.is_set():
+            raise BacktestError("NATIVE_CANCELLED", "execution cancelled")
         while bar_cursor < len(wire["bars"]) and interval.next_ms(wire["bars"][bar_cursor]["time"] * 1000) <= event.event_time_ms:
             decide()
         kernel._last_event = event
@@ -121,5 +132,9 @@ def run_print_clock(kernel, wire, strategy, cancelled):
             kernel.equity_curve.append({"sequence": event.sequence, "event_time_ms": event.event_time_ms,
                 "equity": str(kernel.account.equity()), "position_qty": str(kernel.account.position_qty)})
         last_sequence = event.sequence
-    while bar_cursor < len(wire["bars"]): decide()
-    kernel.finalize_orders()
+        event_cursor+=1
+    while bar_cursor < target:
+        decide()
+    if target==len(wire["bars"]):
+        kernel.finalize_orders()
+    return {"bar_cursor":bar_cursor,"last_sequence":last_sequence,"event_cursor":event_cursor}

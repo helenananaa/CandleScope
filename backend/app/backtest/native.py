@@ -146,7 +146,8 @@ class NativeBacktests:
                                           and external["identity"].get("adapter") in supported[language])
                 except Exception:
                     external_available = False
-                result.append({"language": language, "available": True, "identity": description["identity"], "external_available": external_available})
+                result.append({"language": language, "available": True, "identity": description["identity"], "external_available": external_available,
+                    **({"external_replay":"candlescope.external-replay/1"} if language=="pine" and external_available else {})})
             except Exception as exc:
                 result.append({"language": language, "available": False, "reason": str(exc)})
         return {"execution_mode": "NATIVE", "engines": result, "interactive_replay": True,
@@ -276,6 +277,8 @@ class NativeBacktests:
                       "runtime_identity": identity, "plugin_installation": plugin.get("installation"),
                       "runtime_launch": plugin,
                       "row_count": len(bars), "result": None, "error": None}
+            if external and payload["language"]=="pine":
+                record["replay_contract"]="candlescope.external-replay/1"
             self.db.execute("INSERT INTO runs VALUES (?,?,?,?)", (run_id, key, fingerprint, encoded(record)))
             self.db.execute("INSERT INTO native_inputs VALUES (?,?)", (run_id, encoded(wire)))
             self._save_summary(record)

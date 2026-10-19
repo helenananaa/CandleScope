@@ -43,6 +43,44 @@ class DepthQueueKernel(TradeSimulationKernel):
     queues: dict = field(default_factory=dict)
     admission_depth: dict = field(default_factory=dict)
 
+    def snapshot(self, *, history_encoder=None):
+        from .book_checkpoint import encode_book
+        return {**TradeSimulationKernel.snapshot(self,history_encoder=history_encoder),
+            "book_state":{"schema":"depth-queue/1","fill_policy":self.fill_policy,
+                "depth":encode_book(self.depth),"available":encode_book(self.available),
+                "sequence":self.book_sequence,
+                "queues":{key:[side,str(price),str(ahead)] for key,((side,price),ahead) in self.queues.items()},
+                "admission_depth":{key:encode_book(book) for key,book in self.admission_depth.items()}}}
+
+    def restore(self,payload):
+        from .book_checkpoint import corrupt,decode_book,number
+        state=payload.get("book_state") or {}
+        if state.get("schema")!="depth-queue/1" or state.get("fill_policy")!=self.fill_policy:
+            corrupt("depth checkpoint identity differs")
+        depth,available=decode_book(state["depth"]),decode_book(state["available"])
+        sequence=state.get("sequence")
+        if sequence is not None and (type(sequence) is not int or sequence<0):
+            corrupt("invalid checkpoint book cursor")
+        if sequence is None and any(depth.values()):
+            corrupt("unobserved checkpoint book contains levels")
+        if sequence is not None and (not depth["BUY"] or not depth["SELL"] or max(depth["BUY"])>=min(depth["SELL"])):
+            corrupt("checkpoint book must be two-sided and uncrossed")
+        for side in ("BUY","SELL"):
+            if set(available[side])!=set(depth[side]) or any(qty>depth[side][price] for price,qty in available[side].items()):
+                corrupt("checkpoint recreated consumed liquidity")
+        known={row["order_id"] for row in payload["orders"]}
+        queues={}
+        for key,row in state["queues"].items():
+            if key not in known or not isinstance(row,list) or len(row)!=3 or row[0] not in {"BUY","SELL"}:
+                corrupt("invalid checkpoint queue ownership")
+            queues[key]=((row[0],number(row[1],positive=True)),number(row[2]))
+        admitted={key:decode_book(book) for key,book in state["admission_depth"].items()}
+        if not set(admitted)<=known:
+            corrupt("invalid checkpoint admission ownership")
+        TradeSimulationKernel.restore(self,payload)
+        self.depth,self.available,self.book_sequence=depth,available,sequence
+        self.queues,self.admission_depth=queues,admitted
+
     def _validate_book(self, event):
         data = event.payload
         seq = data.get("book_sequence")
@@ -68,8 +106,10 @@ class DepthQueueKernel(TradeSimulationKernel):
             delta = levels(data.get(key))
             book = {} if data.get("snapshot") else dict(self.depth[side])
             for price, qty in delta.items():
-                if qty: book[price] = qty
-                else: book.pop(price, None)
+                if qty:
+                    book[price] = qty
+                else:
+                    book.pop(price, None)
             updated[side] = book
             # Apply observed size changes; identical snapshots cannot recreate
             # liquidity already consumed by our hypothetical orders.
@@ -99,7 +139,8 @@ class DepthQueueKernel(TradeSimulationKernel):
         price, volume = Decimal(str(event.payload["price"])), Decimal(str(event.payload["qty"]))
         active = [o for o in self.orders if o.status in LIVE and o.eligible_after_sequence <= event.sequence]
         if self.order_policy is not None:
-            for order in active: self.order_policy(order, event)
+            for order in active:
+                self.order_policy(order, event)
         preceding = []
         initial_ahead = {}
         for order in active:
@@ -112,18 +153,23 @@ class DepthQueueKernel(TradeSimulationKernel):
             if order.status not in LIVE or (self.order_policy and not self.order_policy(order, event)):
                 continue
             if order.type in {"STOP", "STOP_LIMIT"}:
-                if _print_triggers_stop(order, price): order.activated = True
-                if not order.activated: continue
+                if _print_triggers_stop(order, price):
+                    order.activated = True
+                if not order.activated:
+                    continue
             opposite = "SELL" if order.side == "BUY" else "BUY"
             market = order.type in {"MARKET", "STOP"}
             best = min(self.depth[opposite]) if order.side == "BUY" else max(self.depth[opposite])
             crosses = order.limit_price is not None and (best <= order.limit_price if order.side == "BUY" else best >= order.limit_price)
             if market or crosses:
                 for level in sorted(self.depth[opposite], reverse=order.side == "SELL"):
-                    if order.status not in LIVE or (self.order_policy and not self.order_policy(order, event)): break
-                    if not market and (level > order.limit_price if order.side == "BUY" else level < order.limit_price): break
+                    if order.status not in LIVE or (self.order_policy and not self.order_policy(order, event)):
+                        break
+                    if not market and (level > order.limit_price if order.side == "BUY" else level < order.limit_price):
+                        break
                     qty = min(order.qty, self.available[opposite].get(level, ZERO))
-                    if qty <= 0: continue
+                    if qty <= 0:
+                        continue
                     execution = level
                     if market:
                         execution *= 1 + self.slippage_bps / 10000 * (1 if order.side == "BUY" else -1)

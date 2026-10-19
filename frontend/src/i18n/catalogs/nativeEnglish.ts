@@ -1,6 +1,7 @@
 import { externalProviderEnglish } from "./externalProviderEnglish.js";
 import { supportEnglish } from "./supportEnglish.js";
 export const nativeEnglish = {
+  "native.replay.host": "Restore the CandleScope account and pending orders from the checkpoint, then continue through the remaining frozen market events.",
   "native.inputs.priceTick": "Minimum price increment",
   "native.inputs.currency": "Quote currency (requires the actual price tick)",
   "native.inputs.quantityPrecision": "Quantity decimal places (0-9)",

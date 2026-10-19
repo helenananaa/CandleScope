@@ -1,6 +1,7 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  "native.replay.host": "체크포인트에서 CandleScope 계좌와 미체결 주문을 복원한 다음 남은 고정 시장 이벤트를 계속 재생합니다.",
   "native.inputs.priceTick": "최소 가격 단위",
   "native.inputs.currency": "호가 통화 (실제 가격 단위 필요)",
   "native.inputs.quantityPrecision": "수량 소수 자릿수 (0~9)",

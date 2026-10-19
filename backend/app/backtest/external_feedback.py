@@ -9,15 +9,19 @@ from app.market_dataset.trades import assert_trade_stream
 from .errors import BacktestError
 
 
-def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline):
+def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline, *, state=None, target=None):
     if wire["execution_fidelity"] == "BAR_APPROX":
         raise BacktestError("EXTERNAL_UNSUPPORTED", "fill callbacks require a frozen trade tape")
     interval = parse_interval_spec(wire["interval"])
     events = [MarketEvent(**item) for item in wire["execution_events"]]
     kernel.source_kind = assert_trade_stream(tuple(event for event in events if event.role == "TRADES"))
-    groups, accounts, history, latest = [], [], [], {}
-    cursor, visible, active_event = 0, None, None
-    last_sequence = 0
+    state=state or {}
+    target=len(wire["bars"]) if target is None else target
+    groups,accounts,history,latest=(state.get(name,default) for name,default in
+        (("groups",[]),("accounts",[]),("history",[]),("latest",{})))
+    cursor,visible,active_event=state.get("bar_cursor",0),None,None
+    last_sequence,event_cursor=state.get("last_sequence",0),state.get("event_cursor",0)
+    end=interval.next_ms(wire["bars"][target-1]["time"]*1000)
 
     def evaluate(event, confirmed):
         nonlocal latest
@@ -93,7 +97,9 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
         visible = None
 
     try:
-        for event in events:
+        for event in events[event_cursor:]:
+            if event.event_time_ms>=end:
+                break
             if cancelled.is_set():
                 raise BacktestError("NATIVE_CANCELLED", "execution cancelled")
             while cursor < len(wire["bars"]) and interval.next_ms(wire["bars"][cursor]["time"]*1000) <= event.event_time_ms:
@@ -113,9 +119,12 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
                 kernel.equity_curve.append({"sequence": event.sequence, "event_time_ms": event.event_time_ms,
                     "equity": str(kernel.account.equity()), "position_qty": str(kernel.account.position_qty)})
             last_sequence = event.sequence
-        while cursor < len(wire["bars"]):
+            event_cursor+=1
+        while cursor < target:
             close_bar()
-        kernel.finalize_orders()
+        if target==len(wire["bars"]):
+            kernel.finalize_orders()
     finally:
         kernel.execution_reporter = prior_reporter
-    return latest, history, accounts, groups
+    return latest,history,accounts,groups,{"bar_cursor":cursor,"last_sequence":last_sequence,
+        "event_cursor":event_cursor,"groups":groups,"accounts":accounts,"history":history,"latest":latest}

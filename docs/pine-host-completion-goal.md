@@ -30,6 +30,15 @@ The mistakenly relayed scope-narrowing instruction was withdrawn by the user.
 
 ## Implemented host work
 
+- Pine Workbench `CANDLESCOPE` replay now restores the actual Host kernel,
+  account, pending orders, entry/OCA allocation and execution cursor. It validates
+  reconstructed evaluator output before matching future events, commits account
+  and result journals atomically, and restores full/sampled book consumption and
+  queue state. Backward seek, saved snapshots, process restart and HTTP/UI paths
+  use the negotiated `candlescope.external-replay/1` contract. Restart coverage
+  recreates the replay service from SQLite and launches a fresh evaluator process.
+  Native-account
+  replay keeps its own existing behavior. Details: [Workbench replay](pine-workbench-replay.md).
 - Chart BAR and aggregate-trade runners now negotiate explicit simulated closing
   ticks for `process_orders_on_close=true`. Matching uses only the revealed close,
   taker fees, market/stop slippage and explicit Host latency. V2 closing capacity
@@ -175,6 +184,25 @@ the host. Interface details: core `docs/SYMBOL_METADATA_INPUT.md`.
 
 ## Validation
 
+- Current Workbench-recovery/Host gate: 278 passed, 26 mixed/non-Pine cases
+  deselected in `external-replay-host-qualified.log`. This includes the earlier
+  chart closing/cost/callback/order/request groups and new Workbench/queue
+  checkpoints, account-preserving resume, prefix seeks, SQLite reconstruction,
+  worker restarts, spot inventory, imports/requested contexts, HTTP/export,
+  cancellation, corrupted snapshots, transcript drift, size budgets and atomic
+  account/result rollback. Forward-resume spies reject old market events.
+  Nine endpoint receipts captured before the change match all stable public
+  fields after it; Host implementation identity and its enclosing seal change.
+- Current shared kernel/cost/provider/recovery: 75 passed. Frontend: 226 passed,
+  both typechecks and 30-locale catalog guard passed. Playwright operated the
+  actual React controls against an isolated real Pine Host service. Cursor
+  sequence 1/2/1/2/10 reproduces saved/restored reports and the complete batch
+  result, with zero browser errors/warnings. This is not packaged-app acceptance.
+  Logs and UI proof: `external-replay-*.log` / `external-replay-ui-proof.json`.
+- Core and bridge are unchanged from the closing checkpoint; the installed
+  binary/wheel and all 15 bridge sources retain that qualified artifact identity.
+  New Host identities include replay orchestration/storage code. Earlier frozen
+  runs must retain their original implementation rather than be relabeled.
 - Closing Host gate: 210 passed, 22 mixed/non-Pine cases deselected in
   `closing-host-qualified.log`. The 34 added cases cover close-only price
   triggering, explicit latency, shared bucket capacity, pending-order snapshots,
@@ -321,9 +349,11 @@ that observation. The corrected allocation group passes.
    Simulated closing ticks are connected for chart BAR and aggregate-trade runs,
    including aggregate-trade closing fill callbacks. They do not prove actual
    close-auction liquidity or TradingView broker-emulator equivalence.
-2. Workbench `CANDLESCOPE` account restoration into native replay remains
-   explicitly unsupported. It needs a host-account recovery contract. Tested
-   chart-provider restore and native-account replay are separate paths.
+2. Workbench Pine Host-account replay is connected for BAR/tape/book modes;
+   closing-tick scheduling remains to integrate there. Pyne external-account
+   replay is not advertised. Native-account replay remains a separate path.
+   Larger-history account-journal/reconstruction performance and packaged
+   Workbench acceptance remain unqualified.
 3. Remaining display destinations and symbol/session/chart metadata, keeping
    unsupported diagnostics until the real host capability is connected. The
    tick-only bridge uses a reduced rational grid; exact TradingView minmove/

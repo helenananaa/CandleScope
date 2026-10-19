@@ -332,6 +332,7 @@ export const zhCN = {
   "native.external.fillRecalculation": "成交后执行策略",
   "native.external.fillHint": "需启用 calc_on_order_fills：Pine 重算当前柱；Pyne 使用 init/on_bar/on_fill(ctx, bar)。新增订单最早在下一个行情事件成交。",
   "native.replay.incremental": "保留原生策略状态逐步运行固定历史区间。历史末柱标记以完整区间为准；进程重启后按固定输入重建到快照游标。",
+  "native.replay.host": "从快照恢复 CandleScope 账户和待成交订单，继续回放剩余的固定行情。",
   "native.replay.method": "按历史前缀重建原生账户；每一步重新计算，保持历史回测语义。快照保存固定输入和游标，恢复时不会混入其他账户。",
   "native.replay.empty": "回放尚未生成报告。点击“前进一步”或“播放”开始，也可返回整段报告。",
   "native.replay.start": "创建回放",
