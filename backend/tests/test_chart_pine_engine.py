@@ -176,7 +176,7 @@ def test_native_broker_and_intrabar_profiles_are_not_silently_downgraded():
             )
         )
     with pytest.raises(StrategyProviderError, match="FIDELITY_UNSUPPORTED"):
-        analyze(SOURCE + '\nstrategy.exit("X", "L", stop=1)\n')
+        analyze(SOURCE + '\nstrategy.order("X", strategy.long, qty=1)\n')
 
 
 def test_runtime_identity_change_requires_recompile():

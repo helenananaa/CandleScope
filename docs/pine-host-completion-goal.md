@@ -72,6 +72,24 @@ The mistakenly relayed scope-narrowing instruction was withdrawn by the user.
   explicit values. Cross-venue inputs preserve their own exchange/market type;
   Binance perpetual aliases resolve only against the declared perpetual market.
   Price-grid, currency and quantity-dependent reads diagnose missing metadata.
+- Chart Pine now negotiates `ORDER_INTENT` for direct and automatically prepared
+  runs. The Host planner reuses actual order allocation and kernel matching for
+  price orders, pyramiding, ID-specific partial closes, OCO brackets,
+  cancellation and replacement. New compile/run identities freeze the order
+  contract and matching/planning implementation. Legacy target-position runs
+  retain their market-order profile.
+- Script IDs now bind to accepted Host order receipts, rather than predicted
+  numeric IDs. Earlier rejected submissions cannot misattribute later fills.
+  The shared workbench allocator receives the same repair. Host risk remains
+  active at submission and is rechecked against the live ledger before matching.
+- Chart provider, kernel, policy and logical-order checkpoints restore together.
+  Controlled interrupted/resumed execution preserves fills, orders, entry
+  allocations and decision/fill/ledger hashes. Pending submission tags also
+  survive a snapshot taken before physical order admission.
+- Completed-bar Pine decisions can use the aggregate-trade execution clock;
+  a controlled actual-engine case fills a limit entry on the next print and
+  advances/fills its trailing stop between signal bars. Intrabar script callbacks
+  remain separate goal work. Interface and limits: `docs/pine-chart-orders.md`.
 
 ## Interpreter interface addition
 
@@ -91,6 +109,17 @@ the host. Interface details: core `docs/SYMBOL_METADATA_INPUT.md`.
 
 ## Validation
 
+- Current rich-chart gates are recorded in `rich-chart-host-final.log`,
+  `rich-chart-kernel-recovery-regression.log`, `rich-chart-types-qualified.log`
+  and `rich-chart-frontend-regression.log` under `output/pine-host/phase3/`.
+  Order integration covers 12 actual-engine cases. Shared allocation controls
+  include BAR, trade and book admission after an earlier rejection.
+  Selected Pine/Host group: 148 passed, 26 mixed/non-Pine cases deselected.
+  Existing kernel/account/recovery group: 61 passed; one native-row optimization
+  module skipped because its optional extension is not built for this test
+  environment. Frontend
+  backtest group: 225 passed; UI/Node typechecks passed. The core remains at
+  `40a1ac8d4` with its prior complete gate; no interpreter source changed here.
 - Current complete core gate: 7,903 Rust tests, 1,700 fresh-wheel Python tests,
   172 tooling tests, formatting, Clippy, structure and host-parity guards, and
   actual WASM/Node execution. The installed candidate independently passed all
@@ -142,13 +171,22 @@ control with distinct provider data. A host replay test also read its record
 before taking the job-completion lock; reading both atomically fixed the race.
 The full host rerun passed. Earlier draft-test mistakes and their logs are kept.
 
+The first rich-order cross-module run included two mixed-engine cases that
+require an installed Pyne adapter, which this Pine candidate environment does
+not contain. Their failures are retained; the selected Pine gate explicitly
+excludes them and the parameterized Pyne profiles. An early allocation fixture
+also omitted the BAR kernel's last observed reference price; it now supplies
+that observation. The corrected allocation group passes.
+
 ## Remaining goal work
 
-1. Chart strategy rich orders and intrabar scheduling through the authoritative
-   host matcher. Requested datasets are connected; growing requested prefixes
-   currently rebase the evaluator and need a causal incremental provider-update
-   contract for scalable execution. The rich workbench already covers selected
-   limit/stop/bracket/fill callbacks; this does not qualify the chart path.
+1. Finish chart script intrabar/fill callbacks, process-on-close, `strategy.order`
+   and Pine risk-rule semantics through the authoritative Host matcher. Chart
+   closed-bar rich orders and print-clock trailing stops are connected.
+   Requested datasets are connected; growing requested prefixes currently rebase
+   the evaluator and need a causal incremental provider-update contract for
+   scalable execution. Selected workbench fill callbacks do not qualify the
+   chart callback path.
 2. Workbench `CANDLESCOPE` account restoration into native replay remains
    explicitly unsupported. It needs a host-account recovery contract. Tested
    chart-provider restore and native-account replay are separate paths.

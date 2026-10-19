@@ -14,10 +14,12 @@ class ExternalOrders:
     def __init__(self, kernel, *, price_tick=None, fidelity="BAR_APPROX"):
         self.kernel = kernel
         self.bindings, self.details = {}, {}
+        self.staged_bindings = {}
         self.lots, self.allocations = [], []
         self.pyramiding = None
         self.price_tick = None if price_tick is None else Decimal(str(price_tick))
         self.fidelity = fidelity
+        self.execution_reporter = kernel.execution_reporter
         kernel.execution_reporter = self.on_execution
         kernel.order_policy = self.prepare_order
         if hasattr(kernel, "_resting_filter_enabled"):
@@ -94,13 +96,27 @@ class ExternalOrders:
                     order.stop_price = target
                 else:
                     target = basis + direction * detail["distance"] * self.price_tick * (1 if order.type == "LIMIT" else -1)
-                    if order.type == "LIMIT": order.limit_price = target
-                    else: order.stop_price = target
+                    if order.type == "LIMIT":
+                        order.limit_price = target
+                    else:
+                        order.stop_price = target
                 if target <= 0:
                     raise BacktestError("EXTERNAL_UNSUPPORTED", "distance exit produced a nonpositive price")
         return order.qty > 0
 
     def on_execution(self, event):
+        token = event.get("client_tag") or (event.get("intent") or {}).get("client_tag")
+        binding = self.staged_bindings.pop(token, None)
+        if binding is not None and event.get("accepted"):
+            order_id = event["order"]["order_id"]
+            script_id, detail = binding
+            self.bindings[order_id] = (script_id, detail["kind"])
+            self.details[order_id] = detail
+        self._allocate_execution(event)
+        if self.execution_reporter is not None:
+            self.execution_reporter(event)
+
+    def _allocate_execution(self, event):
         fill = event.get("fill")
         if not fill:
             return
@@ -194,8 +210,10 @@ class ExternalOrders:
                 order = {"side":"BUY" if direction > 0 else "SELL","qty":str(qty),
                     "oco_group":f"external-entry-{sequence}-{script_id}",
                     "type":"STOP_LIMIT" if limit is not None and stop is not None else "LIMIT" if limit is not None else "STOP" if stop is not None else "MARKET"}
-                if limit is not None: order["limit_price"] = str(limit)
-                if stop is not None: order["stop_price"] = str(stop)
+                if limit is not None:
+                    order["limit_price"] = str(limit)
+                if stop is not None:
+                    order["stop_price"] = str(stop)
                 staged.append((order,script_id,{"kind":"entry","remaining":opening,"direction":direction}))
                 continue
             trail_watermark = None
@@ -249,11 +267,47 @@ class ExternalOrders:
                     meta = {**detail,"trailing":True,"watermark":trail_watermark,"triggered":trail_triggered,
                             **{key:Decimal(str(intent[key])) for key in ("trail_price","trail_points","trail_offset") if intent.get(key) is not None}}
                     staged.append(({**base,"type":"STOP","stop_price":"1","oco_group":group},script_id,meta))
-        for index,(_,script_id,detail) in enumerate(staged):
-            key = f"ord-{kernel._next_order_id+index}"
-            self.bindings[key] = (script_id, detail["kind"])
-            self.details[key] = detail
+        for index,(order,script_id,detail) in enumerate(staged):
+            token = f"external-{sequence}-{index}"
+            order["client_tag"] = token
+            self.staged_bindings[token] = (script_id, detail)
         return [row[0] for row in staged]
+
+    def snapshot(self):
+        def encode(value):
+            if isinstance(value, Decimal):
+                return {"$decimal": str(value)}
+            if isinstance(value, dict):
+                return {key: encode(item) for key, item in value.items()}
+            if isinstance(value, (list, tuple)):
+                return [encode(item) for item in value]
+            return value
+        return encode({"schema": "candlescope.external-orders/1", "bindings": self.bindings,
+            "details": self.details, "lots": self.lots, "allocations": self.allocations,
+            "pyramiding": self.pyramiding, "staged_bindings": self.staged_bindings})
+
+    def restore(self, payload):
+        def decode(value):
+            if isinstance(value, dict):
+                if set(value) == {"$decimal"}:
+                    result = Decimal(value["$decimal"])
+                    if not result.is_finite():
+                        raise BacktestError("CHECKPOINT_CORRUPT", "nonfinite order allocation")
+                    return result
+                return {key: decode(item) for key, item in value.items()}
+            if isinstance(value, list):
+                return [decode(item) for item in value]
+            return value
+        if payload.get("schema") != "candlescope.external-orders/1":
+            raise BacktestError("CHECKPOINT_CORRUPT", "order allocation schema differs")
+        value = decode(payload)
+        self.bindings = {key: tuple(item) for key, item in value["bindings"].items()}
+        self.details, self.lots, self.allocations = value["details"], value["lots"], value["allocations"]
+        self.pyramiding = value["pyramiding"]
+        self.staged_bindings = {key: tuple(item) for key, item in value.get("staged_bindings", {}).items()}
+        if set(self.bindings) != set(self.details) or any(order.order_id not in self.bindings for order in self.kernel.orders):
+            raise BacktestError("CHECKPOINT_CORRUPT", "host order ownership differs")
+        self.feedback()
 
     def report(self):
         return {"model":"HOST_NET_AVERAGE_COST_ENTRY_QUANTITY_FIFO_V1", "price_tick":None if self.price_tick is None else str(self.price_tick),

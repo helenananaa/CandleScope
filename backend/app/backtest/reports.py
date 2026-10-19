@@ -57,6 +57,7 @@ def build_report(
     except (TypeError, ValueError, json.JSONDecodeError):
         config = {}
     explanation_enabled = bool(payload.get("trade_explanation_enabled"))
+    pine_orders = payload.get("pine_orders")
     # Enrichment already creates detached nested trees for every returned row.
     def copy_row(item):
         return dict(item) if explanation_enabled else copy.deepcopy(dict(item))
@@ -224,6 +225,8 @@ def build_report(
             item.get("reason") == "ORDER_REJECTED_RISK" or str(item.get("reason", "")).startswith("SPOT_INSUFFICIENT_")
             for item in payload.get("rejected") or []
         )
+    if pine_orders is not None:
+        report["pine_orders"] = copy.deepcopy(pine_orders)
     if config.get("execution_model_revision"):
         report["order_events"] = list(
             (payload.get("ledger") or {}).get("order_events") or []

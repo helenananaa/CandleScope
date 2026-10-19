@@ -29,6 +29,7 @@ class StrategyLaunchPayload(BaseModel):
     strategy_revision_id: str = Field(min_length=1, max_length=128)
     parameters: dict = Field(default_factory=dict)
     pine_contexts: list[RequestedNativeData] = Field(default_factory=list, max_length=16)
+    output_mode: Literal["SIGNAL", "TARGET_POSITION", "ORDER_INTENT"] | None = None
     execution_overrides: ResearchExecutionOverrides | None = None
     chart_cell_scope: str | None = Field(default=None, min_length=1, max_length=320)
     strategy_draft_id: str | None = Field(default=None, pattern=r"^draft-[A-Za-z0-9_-]{8,152}$")

@@ -132,6 +132,12 @@ function cloneFrozen<T>(value: T): T {
   return JSON.parse(canonicalChartStrategyJson(value)) as T;
 }
 
+function selectedOutputMode(frozen: ChartStrategyFrozenRunRequest, revision: StrategyRevisionRecord): "SIGNAL" | "TARGET_POSITION" | "ORDER_INTENT" {
+  if (frozen.language === "pine" && revision.output_modes.includes("ORDER_INTENT")) return "ORDER_INTENT";
+  if (revision.output_modes.includes("TARGET_POSITION")) return "TARGET_POSITION";
+  return revision.output_modes[0] === "ORDER_INTENT" ? "ORDER_INTENT" : "SIGNAL";
+}
+
 function executionParameters(frozen: ChartStrategyRunRequest): Record<string, unknown> {
   const parameters = cloneFrozen(frozen.attachment.parameters);
   if (frozen.language === "pine") {
@@ -299,9 +305,7 @@ export function buildChartStrategyRunBody(input: {
     warmup_bars: input.resolution.preparation?.warmup_bars ?? 0,
     parameters: executionParameters(input.frozen),
     ...(input.pineContexts?.length ? { pine_contexts: input.pineContexts } : {}),
-    output_mode: input.revision.output_modes.includes("TARGET_POSITION")
-      ? "TARGET_POSITION"
-      : input.revision.output_modes[0],
+    output_mode: selectedOutputMode(input.frozen, input.revision),
     signal_trace_mode: "PAGED_V1",
     account_model: requireString(account, "account_model"),
     contract_data_mode: requireString(account, "contract_data_mode"),
@@ -656,6 +660,7 @@ export async function runResearchBacktest(options: {
         ...(frozen.language === "python" ? { python_runtime_mode: "TRUSTED_LOCAL", python_trusted_confirmed: frozen.pythonTrustedConfirmed === true } : {}),
         strategy_revision_id: revision.revision_id,
         parameters: executionParameters(frozen),
+        ...(frozen.language === "pine" ? { output_mode: selectedOutputMode(frozen, revision) } : {}),
         ...(pineContexts.length ? { pine_contexts: pineContexts } : {}),
         ...(frozen.attachment.executionOverrides ? { execution_overrides: frozen.attachment.executionOverrides } : {}),
         chart_cell_scope: frozen.cellScope,

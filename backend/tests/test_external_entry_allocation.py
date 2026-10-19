@@ -89,6 +89,35 @@ def test_distances_require_explicit_tick_and_trailing_requires_prints():
         drive(SimulationKernel, {1:[entry("A"),dict(action="exit",id="X",trail_points=2,trail_offset=1)]}, price_tick="0.5")
 
 
+@pytest.mark.parametrize("kernel_type", [SimulationKernel, TradeSimulationKernel, BookAssistedKernel])
+def test_rejected_order_does_not_claim_the_next_actual_order_id(kernel_type):
+    kernel = kernel_type(account_model="SPOT_CASH_V1", initial_balance=Decimal(100), slippage_bps=Decimal(0))
+    observed = []
+    kernel.execution_reporter = observed.append
+    orders = ExternalOrders(kernel)
+    orders.configure(2)
+    kernel.account.mark = Decimal(10)
+    kernel._last_event = MarketEvent(1, 60000, "BARS" if kernel_type is SimulationKernel else "TRADES",
+        dict(open="10", high="11", low="9", close="10", volume="100", price="10", qty="100"))
+    kernel._enqueue_many(orders.translate([entry("unfunded", qty=1000000), entry("B", qty=2)], 1), current_sequence=1)
+    assert len(kernel.rejected) == 1
+    assert orders.bindings == {"ord-1": ("B", "entry")}
+    assert not orders.staged_bindings
+    assert len(observed) == 2 and observed[1]["order"]["order_id"] == "ord-1"
+
+
+def test_pending_submission_tokens_survive_snapshot_before_kernel_admission():
+    import json
+    original, restored_kernel = SimulationKernel(), SimulationKernel()
+    orders, restored = ExternalOrders(original), ExternalOrders(restored_kernel)
+    orders.configure(2)
+    intents = orders.translate([entry("B", qty=2)], 1)
+    restored.restore(json.loads(json.dumps(orders.snapshot())))
+    restored_kernel._enqueue_many(intents, current_sequence=1)
+    assert restored.bindings == {"ord-1": ("B", "entry")}
+    assert not restored.staged_bindings
+
+
 @pytest.mark.parametrize("kernel_type", [TradeSimulationKernel, BookAssistedKernel])
 @pytest.mark.parametrize("direction", [1,-1])
 def test_trailing_watermark_survives_replace_and_partial_trigger(kernel_type, direction):

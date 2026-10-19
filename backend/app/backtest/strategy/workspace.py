@@ -13,7 +13,7 @@ from app.backtest.strategy.builtin import (
     build_builtin_provider,
 )
 from app.backtest.strategy.pine_adapter import MATRIX_VERSION, analyze_pine_strategy
-from app.backtest.strategy.pine_engine import REVISION as PINE_ENGINE_REVISION, SOURCE_SCHEMA, PineEngineProvider, analyze as analyze_engine, validate_libraries
+from app.backtest.strategy.pine_engine import REVISION as PINE_ENGINE_REVISION, SOURCE_SCHEMA, ORDER_CONTRACT, PineEngineProvider, analyze as analyze_engine, validate_libraries
 from app.backtest.strategy.chart_pyne import (
     CHART_PYNE_REVISION,
     ChartPyneStrategyProvider,
@@ -203,7 +203,7 @@ def compile_revision(payload: Mapping[str, object], *, now_ms: int) -> dict[str,
     source_hash = canonical_hash({"language": language, "source": source})
     dependency_hash = canonical_hash(
         {"baseRevision": base, "runtime": RUNTIME_REVISION,
-         **({"pineIdentity": pine_analysis["identity"], "pineLibraries": libraries} if pine_analysis else {})}
+         **({"pineIdentity": pine_analysis["identity"], "pineLibraries": libraries, "pineOrderContract": ORDER_CONTRACT} if pine_analysis else {})}
     )
     compiled = {
         "schema": COMPILE_RECEIPT_SCHEMA,
@@ -215,7 +215,7 @@ def compile_revision(payload: Mapping[str, object], *, now_ms: int) -> dict[str,
         "tradingViewEquivalent": False if language in {"PINE_SUBSET", "PINE_ENGINE"} else None,
         "executionSource": (
             json.dumps({"schema": SOURCE_SCHEMA, "source": source, "identity": pine_analysis["identity"], "libraries": libraries,
-                "executionClock": pine_analysis["requirements"]["execution"]["clock"]}, sort_keys=True)
+                "executionClock": pine_analysis["requirements"]["execution"]["clock"], "orderContract": ORDER_CONTRACT}, sort_keys=True)
             if pine_analysis else
             artifact["recorded_expression"]
             if language == "EXTERNAL_ARTIFACT_REF"

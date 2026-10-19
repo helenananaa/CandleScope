@@ -871,6 +871,7 @@ class SimulationKernel:
                     "accepted": True,
                     "sequence": current_sequence,
                     "order": _wire_order(order),
+                    **({"client_tag": intent["client_tag"]} if "client_tag" in intent else {}),
                 }
             )
         self._lifecycle(order, "ACCEPTED")

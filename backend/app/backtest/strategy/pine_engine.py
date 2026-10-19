@@ -1,7 +1,7 @@
-"""Real Pine decisions, with market orders and one net entry owner.
+"""Real closed-bar Pine decisions over the authoritative Host account.
 
-The existing Host planner/account remains authoritative. Rich order profiles
-continue to use the separate native/host-matching workbench.
+ORDER_INTENT preserves script orders for Host allocation and matching. The
+legacy target-position mode retains its one-entry market-order profile.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from .protocol import (
 
 REVISION = "pine-engine-chart-v1"
 SOURCE_SCHEMA = "candlescope.chart-pine/1"
+ORDER_CONTRACT = "candlescope.pine-orders/1"
 
 
 def plugin():
@@ -80,7 +81,7 @@ def analyze(source, libraries=None):
         if (feature.startswith("request.") and feature not in {"request.security", "request.security_lower_tf"})
         or feature.startswith("strategy.risk")
         or feature
-        in {"strategy.exit", "strategy.order", "strategy.cancel", "strategy.cancel_all"}
+        in {"strategy.order"}
     }
     execution = requirements.get("execution", {})
     if (
@@ -88,7 +89,8 @@ def analyze(source, libraries=None):
         or not info.get("executable")
         or blocked
         or result.get("profileError")
-        or result.get("pyramiding") != 1
+        or type(result.get("pyramiding")) is not int
+        or not 1 <= result["pyramiding"] <= 64
         or any(item.get("function") not in {"security", "request.security", "request.security_lower_tf"}
                for item in requirements.get("requests", []))
         or (requirements.get("account") or {}).get("declaredCurrency")
@@ -102,8 +104,8 @@ def analyze(source, libraries=None):
     ):
         raise StrategyProviderError(
             "FIDELITY_UNSUPPORTED",
-            "Chart Pine supports closed-bar market entry/close with one entry ID; "
-            "use pinned requested datasets; use the native strategy workbench for price orders, pyramiding or intrabar callbacks. "
+            "Chart Pine supports closed-bar entry, exit and cancellation with pinned requested datasets; "
+            "intrabar callbacks and strategy.order require additional host contracts. "
             + ", ".join(sorted(blocked)),
         )
     return result
@@ -122,7 +124,7 @@ class PineEngineProvider:
     def describe(self):
         return ProviderCapabilities(
             input_modes=("BAR_CLOSE",),
-            output_modes=("TARGET_POSITION",),
+            output_modes=("TARGET_POSITION", "ORDER_INTENT"),
             signal_clock="BAR_CLOSE",
         )
 
@@ -133,10 +135,13 @@ class PineEngineProvider:
         self.close()
         self.cancelled = threading.Event()
         self.context = dict(context)
+        self.order_mode = context.get("outputMode") == "ORDER_INTENT"
         try:
             frozen = json.loads(context["source"])
             if frozen.get("schema") != SOURCE_SCHEMA:
                 raise ValueError("unknown source envelope")
+            if self.order_mode and frozen.get("orderContract") != ORDER_CONTRACT:
+                raise ValueError("recompile Pine for the Host order contract")
             self.source = frozen["source"]
             self.libraries = validate_libraries(frozen.get("libraries", {}))
             self.runtime_identity = frozen["identity"]
@@ -263,6 +268,13 @@ class PineEngineProvider:
                 **({"executionTimeMs": frame.event_time_ms} if self.needs_clock else {}),
             }
         )
+        if self.order_mode:
+            if warmup or not intents:
+                return None
+            payload = {"contract": ORDER_CONTRACT, "intents": intents, "pyramiding": result.get("pyramiding", 1)}
+            return StrategyOutput(frame.sequence, "ORDER_INTENT", payload, self.state_hash, canonical_hash(payload))
+        if result.get("pyramiding", 1) != 1:
+            raise StrategyProviderError("FIDELITY_UNSUPPORTED", "Pyramiding requires ORDER_INTENT mode")
         actual = Decimal(str(account["position_size"]))
         target = actual
         for intent in intents:
@@ -277,7 +289,7 @@ class PineEngineProvider:
                 )
             ):
                 raise StrategyProviderError(
-                    "FIDELITY_UNSUPPORTED", "use the native workbench for price orders"
+                    "FIDELITY_UNSUPPORTED", "select ORDER_INTENT mode for price orders"
                 )
             action = intent["action"]
             if action == "entry":

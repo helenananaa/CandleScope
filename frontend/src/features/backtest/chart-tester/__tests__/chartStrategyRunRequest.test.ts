@@ -338,16 +338,20 @@ test("Pine requested datasets are frozen into manual and automatically prepared 
   } };
   const calls: string[] = [];
   const api = apiWithResolutions([resolution(), resolution()], calls);
+  api.createStrategyRevision = async () => ({ ...revision, language: "PINE_ENGINE", output_modes: ["TARGET_POSITION", "ORDER_INTENT"] });
   api.createRun = async (body) => {
     assert.deepEqual(body.parameters, { length: 5 });
+    assert.equal(body.output_mode, "ORDER_INTENT");
     assert.equal((body.pine_contexts as Record<string, unknown>[])[0]?.snapshot_hash, "remote-snapshot");
     assert.equal((body.pine_contexts as Record<string, unknown>[])[0]?.exchange, "okx");
     return completed();
   };
   assert.equal((await runChartStrategyBacktest({ api, request: pine, signal, pollIntervalMs: 0 })).kind, "TERMINAL");
   const automatic = apiWithResolutions([resolution("NEEDS_DATA")], []);
+  automatic.createStrategyRevision = api.createStrategyRevision;
   automatic.prepareChartContext = async (_body, _signal, intent) => {
     assert.deepEqual(intent?.parameters, { length: 5 });
+    assert.equal(intent?.output_mode, "ORDER_INTENT");
     assert.equal((intent?.pine_contexts?.[0] as Record<string, unknown>).snapshot_hash, "remote-snapshot");
     return { ...resolution(), prepared_run: completed() };
   };

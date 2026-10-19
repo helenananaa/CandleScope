@@ -1168,7 +1168,7 @@ class BacktestService:
         normalized_execution = json.loads(identity.execution_json)
         if normalized_execution.get("pine_runtime_identity"):
             stored_payload["pine_runtime_identity"] = normalized_execution["pine_runtime_identity"]
-        for name in ("pine_contexts", "pine_local_data_root"):
+        for name in ("pine_contexts", "pine_local_data_root", "pine_order_runtime_identity"):
             stored_payload.pop(name, None)
             if name in normalized_execution:
                 stored_payload[name] = normalized_execution[name]
@@ -2706,9 +2706,7 @@ class BacktestService:
                 config = json.loads(str(record["config_json"]))
             except (TypeError, ValueError, json.JSONDecodeError):
                 config = {}
-            planner = PyneHostPlanner(
-                config, execution_reporter=self._execution_reporter(session)
-            )
+            planner = _new_host_planner(config, execution_reporter=self._execution_reporter(session))
             adapter.start(
                 {
                     "roles": ["BARS"],
@@ -2782,6 +2780,7 @@ class BacktestService:
                 if kernel.equity_curve_event_interval < 10_000:
                     kernel.equity_curve_event_interval = 10_000
                 kernel.scale_stream_decisions = True
+            planner.bind_kernel(kernel)
             checkpoint = self.repository.latest_checkpoint(run_id)
             if checkpoint is not None:
                 payload = self._verified_checkpoint_payload(record, checkpoint)
@@ -3096,9 +3095,7 @@ class BacktestService:
                 config = json.loads(str(record["config_json"]))
             except (TypeError, ValueError, json.JSONDecodeError):
                 config = {}
-            planner = PyneHostPlanner(
-                config, execution_reporter=self._execution_reporter(session)
-            )
+            planner = _new_host_planner(config, execution_reporter=self._execution_reporter(session))
             adapter.start(
                 {
                     "roles": ["BARS"],
@@ -3145,6 +3142,7 @@ class BacktestService:
                 execution_reporter=self._execution_reporter(session),
             )
             resume_sequence = 0
+            planner.bind_kernel(kernel)
             checkpoint = self.repository.latest_checkpoint(run_id)
             if checkpoint is not None:
                 payload = self._verified_checkpoint_payload(record, checkpoint)
@@ -3407,9 +3405,7 @@ class BacktestService:
                 config = json.loads(str(record["config_json"]))
             except (TypeError, ValueError, json.JSONDecodeError):
                 config = {}
-            planner = PyneHostPlanner(
-                config, execution_reporter=self._execution_reporter(session)
-            )
+            planner = _new_host_planner(config, execution_reporter=self._execution_reporter(session))
             adapter.start(
                 {
                     "roles": ["TRADES"],
@@ -3514,6 +3510,7 @@ class BacktestService:
                 **_execution_kernel_kwargs(config),
                 execution_reporter=self._execution_reporter(session),
             )
+            planner.bind_kernel(kernel)
             checkpoint = self.repository.latest_checkpoint(run_id)
             if checkpoint is not None:
                 payload = self._verified_checkpoint_payload(record, checkpoint)
@@ -4439,6 +4436,9 @@ class BacktestService:
         )
         if persisted_execution is not None and persisted_execution["base_revision_id"] == PINE_ENGINE_REVISION:
             execution_config["pine_runtime_identity"] = json.loads(str(persisted_execution["compiled_json"]))["dependencyHash"]
+            if output_mode == "ORDER_INTENT":
+                from .strategy.pine_planner import host_identity
+                execution_config["pine_order_runtime_identity"] = host_identity()
             if fidelity not in {"BAR_APPROX", "AGG_TRADE_EXECUTION"}:
                 raise BacktestError("FIDELITY_UNSUPPORTED", "chart Pine requires closed-bar observations")
         if payload.get("pine_contexts"):
@@ -5343,9 +5343,11 @@ def _policy_result_overrides(
     policy = planner.report()
     if not policy:
         return {}
+    pine_orders = policy.pop("pine_orders", None)
     return {
         "rejected": [*result.rejected, *planner.rejections],
-        "risk_policy": policy,
+        **({"risk_policy": policy} if policy else {}),
+        **({"pine_orders": pine_orders} if pine_orders is not None else {}),
     }
 
 
@@ -5434,3 +5436,12 @@ def _pine_account_view(kernel):
             "equity": float(account.equity()), "initial_capital": float(kernel.initial_balance),
             "netprofit": float(account.quote_balance - kernel.initial_balance),
             "openprofit": float(account.unrealized())}
+
+
+def _new_host_planner(config, **kwargs):
+    if config.get("pine_runtime_identity") and config.get("output_mode") == "ORDER_INTENT":
+        from .strategy.pine_planner import PineHostPlanner, host_identity
+        if config.get("pine_order_runtime_identity") != host_identity():
+            raise BacktestError("IDENTITY_MUTATION", "Pine Host order implementation changed; create a fresh run")
+        return PineHostPlanner(config, **kwargs)
+    return PyneHostPlanner(config, **kwargs)
