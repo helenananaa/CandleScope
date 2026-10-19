@@ -1860,7 +1860,12 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
                     )}
                   </dl>
                   {!selected && (
-                    <button type="button" disabled={viewer.viewerPending} onClick={() => void viewer.actions.selectTrack(item.track_id).catch(() => undefined)}>
+                    <button type="button" disabled={viewer.viewerPending} onClick={() => {
+                      const activate = viewer.actions.openTrack
+                        ? viewer.actions.openTrack(item.track_id, "current")
+                        : viewer.actions.selectTrack(item.track_id);
+                      void activate.catch(() => undefined);
+                    }}>
                       {t("replay.wb.switchTrack")}
                     </button>
                   )}
