@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 from dataclasses import replace
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -16,11 +17,12 @@ from tests.test_replay_v2_training_phase6 import _risk_service, _sandbox_request
 pytestmark = pytest.mark.anyio
 
 
+@pytest.mark.parametrize("fixed", [False, True])
 @pytest.mark.parametrize("basis,count,coalesced", [
     ("BASE_BAR", 3, False), ("BASE_BAR", 3, True), ("SOURCE_EVENT", 3, True),
 ])
 async def test_tape_wave_matches_separate_commits_including_partial_cohorts(
-    tmp_path, monkeypatch, basis, count, coalesced,
+    tmp_path, monkeypatch, basis, count, coalesced, fixed,
 ):
     from tests import test_replay_v2_training_phase5 as tape
     sources = tape._multi_trade_sources
@@ -35,6 +37,9 @@ async def test_tape_wave_matches_separate_commits_including_partial_cohorts(
             root=tmp_path, prefix="tape-wave", book_mode="OFF", funding_event_offset_bars=2,
             mark_prices=["100", "103", "99"] + ["110"] * (tape.TRADE_REPLAY_MINUTES - 2),
         )
+        if fixed:
+            request = replace(request, funding_mode="SANDBOX_FIXED",
+                              fixed_funding_rate="0.0001", funding_interval_ms=60_000)
         created = await service.training.create_run(request)
         run_id, sid = created["run"]["run_id"], created["run"]["adapter_session_id"]
         await _acquire(service, run_id=run_id, selected_session_id=sid, command_id="acquire")
@@ -56,15 +61,15 @@ async def test_tape_wave_matches_separate_commits_including_partial_cohorts(
         try:
             store = service.training.store
             if mode == "separate":
-                async def separate_risk(run_id, *, risk_virtual_time_ms, events):
-                    await store.finalize_hedge_inputs(run_id, risk_virtual_time_ms=risk_virtual_time_ms)
+                async def separate_risk(run_id, *, risk_virtual_time_ms, events, settle_fixed_funding=False):
+                    await store.finalize_hedge_inputs(run_id, risk_virtual_time_ms=risk_virtual_time_ms, settle_fixed_funding=settle_fixed_funding)
                     return False
 
                 async def separate_marks(run_id, *, risk_virtual_time_ms, input_events, events,
-                                         event_virtual_times_ms=None, checkpoint_market_wave=True):
+                                         event_virtual_times_ms=None, checkpoint_market_wave=True, settle_fixed_funding=False):
                     applied = await store.apply_hedge_input_events(run_id, events=input_events,
                         virtual_time_ms=risk_virtual_time_ms, event_virtual_times_ms=event_virtual_times_ms)
-                    await store.finalize_hedge_inputs(run_id, risk_virtual_time_ms=risk_virtual_time_ms)
+                    await store.finalize_hedge_inputs(run_id, risk_virtual_time_ms=risk_virtual_time_ms, settle_fixed_funding=settle_fixed_funding)
                     return applied, False
 
                 monkeypatch.setattr(store, "finalize_hedge_inputs_and_checkpoint", separate_risk)
@@ -82,6 +87,8 @@ async def test_tape_wave_matches_separate_commits_including_partial_cohorts(
                 assert response["cursor"]["source_sequence"] == count + 1
             commits = service.store._metrics["transactions"] - before
             state = await store.get_market_tracks(run_id)
+            if fixed:
+                assert Decimal(state["portfolio"]["funding_cashflow"]) == Decimal("-0.01")
             events = await store.global_events(run_id)
             review = await service.store.run_extension_read(lambda c: [tuple(row) for row in c.execute(
                 "SELECT timeline_sequence,event_hash,projection_json FROM replay_review_timeline_event WHERE run_id=? ORDER BY timeline_sequence",
@@ -189,9 +196,9 @@ async def test_merged_wave_matches_reference_and_reduces_transactions(
             )
             if mode == "reference":
 
-                async def reference(run_id, *, risk_virtual_time_ms, events):
+                async def reference(run_id, *, risk_virtual_time_ms, events, settle_fixed_funding=False):
                     await store.finalize_hedge_inputs(
-                        run_id, risk_virtual_time_ms=risk_virtual_time_ms
+                        run_id, risk_virtual_time_ms=risk_virtual_time_ms, settle_fixed_funding=settle_fixed_funding
                     )
                     return False
 
@@ -207,6 +214,7 @@ async def test_merged_wave_matches_reference_and_reduces_transactions(
                     events,
                     event_virtual_times_ms=None,
                     checkpoint_market_wave=True,
+                    settle_fixed_funding=False,
                 ):
                     applied = await store.apply_hedge_input_events(
                         run_id,
@@ -215,7 +223,7 @@ async def test_merged_wave_matches_reference_and_reduces_transactions(
                         event_virtual_times_ms=event_virtual_times_ms,
                     )
                     await store.finalize_hedge_inputs(
-                        run_id, risk_virtual_time_ms=risk_virtual_time_ms
+                        run_id, risk_virtual_time_ms=risk_virtual_time_ms, settle_fixed_funding=settle_fixed_funding
                     )
                     return applied, False
 
