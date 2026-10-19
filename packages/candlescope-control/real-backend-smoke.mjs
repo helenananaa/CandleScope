@@ -31,7 +31,13 @@ async function waitFor(name, operation, accept, timeout = 45_000) {
   let last;
   const until = Date.now() + timeout;
   while (Date.now() < until) {
-    last = await operation();
+    try { last = await operation(); }
+    catch (error) {
+      // A managed page temporarily leaves the bridge during full navigation.
+      // Retry only this transport state; domain and permission failures remain fatal.
+      if (!String(error.message).includes("WINDOW_UNAVAILABLE")) throw error;
+      await delay(100); continue;
+    }
     if (accept(last)) return last;
     await delay(100);
   }
