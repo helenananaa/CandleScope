@@ -18,6 +18,7 @@ from app.data_engine.interval_policy import parse_interval_spec
 from .errors import BacktestError
 from .external_orders import ExternalOrders
 from .external_report import closed_trades
+from .external_support import persistent_evaluator
 
 
 def host_identity():
@@ -28,6 +29,7 @@ def host_identity():
     files.append(Path(__file__).with_name("pine_entry_risk.py"))
     files.extend(Path(__file__).with_name(name) for name in ("pine_risk_state.py", "pine_risk_stops.py"))
     files.append(Path(__file__).with_name("pine_workbench.py"))
+    files.append(Path(__file__).with_name("external_support.py"))
     for path in files:
         checksum.update(path.name.encode())
         checksum.update(path.read_bytes())
@@ -64,7 +66,7 @@ def resolve_external(language):
 def run_external_host(plugin, wire, runner, cancelled, **options):
     from .native import invoke
     from .native_session import SessionWorker
-    if runner is invoke and wire["identity"].get("adapter") in {"pine-external/5", "pine-external/6", "pine-external/7", "pine-external/8", "pyne-external/4", "pyne-external/5"}:
+    if runner is invoke and persistent_evaluator(wire["identity"]):
         worker = SessionWorker(plugin, wire, cancelled, evaluator=True)
         try:
             evaluate = lambda _plugin, payload, **kwargs: worker.request(payload, **kwargs)

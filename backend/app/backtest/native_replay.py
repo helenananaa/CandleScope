@@ -187,7 +187,8 @@ class NativeReplay:
         from .native_session import SessionWorker
         if self.native.runner is not invoke or (not external and wire["identity"].get("historical_session") != "fixed-history/1"):
             return None
-        if external and wire["identity"].get("adapter") not in {"pine-external/5","pine-external/6","pine-external/7","pine-external/8"}:
+        from .external_support import pine_replay_available
+        if external and not pine_replay_available(wire["identity"]):
             return None
         with self.native.lock:
             if key in self.workers:

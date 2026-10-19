@@ -11,11 +11,13 @@ from .prefix_transport import CONTRACT as PREFIX_CONTRACT, PASSES_CONTRACT, CLOC
 from .libraries import library_sources
 from .entry_risk import CONTRACT as RISK_CONTRACT, available as risk_available
 from .entry_risk import STOP_CONTRACT
+from .execution_schedule import capabilities as schedule_capabilities
 
 
 def describe():
     return {
-        **identity("candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-chart/4"),
+        **identity("candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-chart/5"),
+        **schedule_capabilities(),
         "external_orders": getattr(pine_compat, "EXTERNAL_ORDER_SCHEMA_VERSION", 1),
         **({"entry_risk_contract": RISK_CONTRACT} if risk_available() else {}),
         **({"risk_stop_contract": STOP_CONTRACT} if risk_available() else {}),

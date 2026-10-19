@@ -1,5 +1,9 @@
 # Explicit Pine execution contexts: core foundation
 
+The subsequent [Host transport phase](pine-external-schedule-transport.md) connects
+this core API through the two bridges and chart-provider reconstruction. The
+qualification and limitations below describe the original foundation checkpoint.
+
 The development core now exposes `EXTERNAL_SCHEDULE_SCHEMA_VERSION == 1` in
 Rust/Python. Its specification is `docs/EXTERNAL_SCHEDULE_V1.md` in
 `E:\projects\pine-interpreter`. This removes the core contract's coupling of
@@ -71,8 +75,8 @@ installed proof under `.local/host-completion/schedule-context-v1-*`.
 ## Remaining Host and core work
 
 This is a prerequisite, not a connected CandleScope BAR/tick execution model.
-The current chart and Workbench adapters still send legacy `execution_passes`;
-they do not negotiate or forward the new explicit schedule. Existing admission
+At that checkpoint the chart and Workbench adapters still sent legacy `execution_passes`;
+they did not negotiate or forward the new explicit schedule. Existing admission
 diagnostics therefore remain appropriate until matching, replay and transport
 are implemented together.
 

@@ -140,15 +140,15 @@ class NativeBacktests:
                 try:
                     external_plugin = {**plugin, "command": [*plugin["command"][:-1], plugin["command"][-1].replace(".native_strategy", ".external_strategy")]}
                     external = self.runner(external_plugin, {"operation": "describe"}, timeout=15)
-                    supported = {"pine": {"pine-external/1", "pine-external/2", "pine-external/3", "pine-external/4", "pine-external/5", "pine-external/6", "pine-external/7", "pine-external/8"},
-                                 "pyne": {"pyne-external/1", "pyne-external/2", "pyne-external/3", "pyne-external/4", "pyne-external/5"}}
+                    from .external_support import external_available as supports_external
                     external_available = (external["identity"].get("protocol") == PROTOCOL
-                                          and external["identity"].get("adapter") in supported[language])
+                                          and supports_external(language, external["identity"]))
                 except Exception:
                     external_available = False
                     external = {}
+                from .external_support import pine_replay_available
                 result.append({"language": language, "available": True, "identity": description["identity"], "external_available": external_available,
-                    **({"external_replay":"candlescope.external-replay/1"} if language=="pine" and external_available else {}),
+                    **({"external_replay":"candlescope.external-replay/1"} if language=="pine" and external_available and pine_replay_available(external["identity"]) else {}),
                     **({"external_controls": {key: external["identity"][key] for key in
                         ("workbench_control", "risk_stop_contract", "closing_tick_contract") if key in external["identity"]}}
                         if language=="pine" and external_available and external["identity"].get("workbench_control") else {})})

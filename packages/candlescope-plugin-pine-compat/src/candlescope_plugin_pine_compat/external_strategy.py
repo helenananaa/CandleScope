@@ -13,6 +13,7 @@ from .prefix_transport import CONTRACT as PREFIX_CONTRACT
 from .prefix_transport import PASSES_CONTRACT, CLOCKS_CONTRACT, PrefixInput
 from .strategy_time import engine_bars
 from .entry_risk import options as risk_options, available as risk_available, STOP_CONTRACT
+from .execution_schedule import CONTRACT as SCHEDULE_CONTRACT, capabilities as schedule_capabilities, execution_input
 
 _prefix = PrefixInput()
 _session = None
@@ -24,9 +25,11 @@ def describe():
         raise ValueError("EXTERNAL_RUNTIME_UNAVAILABLE: install external-broker/1 runtime")
     return {
         **identity(
-            "candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-external/8"
+            "candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-external/9"
         ),
         "workbench_control": "candlescope.pine-workbench-control/1",
+        "external_replay": "candlescope.external-replay/1",
+        **schedule_capabilities(),
         **({"risk_stop_contract": STOP_CONTRACT} if risk_available() else {}),
         **({"closing_tick_contract": "candlescope.pine-closing-tick/1"}
            if getattr(pine_compat, "EXTERNAL_CLOSING_TICK_SCHEMA_VERSION", 0) == 1 else {}),
@@ -117,29 +120,7 @@ def execute(request):
         if (not isinstance(clocks, list) or len(clocks) != len(request["bars"])
                 or any(type(value) is not int or not 0 <= value <= 9_007_199_254_740_991 for value in clocks)):
             raise ValueError("EXTERNAL_CLOCK_INVALID: one integer millisecond timestamp is required per bar")
-    passes = request.get("execution_passes")
-    if passes is not None:
-        passes = [
-            [
-                {
-                    **item,
-                    "bar": engine_bars([item["bar"]])[0],
-                    "account": {**item["account"], "time": item["account"]["time"] * 1000},
-                    **(
-                        {
-                            "request_data": [
-                                {"symbol": stream["symbol"], "timeframe": stream["timeframe"], "bars": engine_bars(stream["bars"])}
-                                for stream in item["request_data"]
-                            ]
-                        }
-                        if "request_data" in item
-                        else {}
-                    ),
-                }
-                for item in group
-            ]
-            for group in passes[start:]
-        ]
+    evaluations = execution_input(request, start)
     accounts = [{**item, "time": item["time"] * 1000} for item in request["accounts"][start:]]
     supplied = request_environment(request)
     closing = {"closing_ticks": True} if request.get("closing_ticks") is True else {}
@@ -153,12 +134,13 @@ def execute(request):
                     request_bars=supplied,
                     **closing,
                     **risk,
+                    **({"scheduled": True} if "execution_schedule" in evaluations else {}),
                 )
                 _session_count = 0
             result = _session.append(
                 engine_bars(request["bars"][start:]),
                 accounts,
-                **({"execution_passes": passes} if passes is not None else {}),
+                **evaluations,
                 **({"execution_times": clocks[start:]} if clocks is not None else {}),
             )
             _session_count = len(request["bars"])
@@ -171,7 +153,7 @@ def execute(request):
                     input_overrides=parameters or None,
                     chart_symbol=request["context"]["symbol"],
                     chart_timeframe=request["context"]["timeframe"],
-                    execution_passes=passes,
+                    **evaluations,
                     request_bars=request_bars,
                     **closing,
                     **risk,
@@ -197,6 +179,7 @@ def execute(request):
         **({"risk_rules": result["risk_rules"]} if "risk_rules" in result else {}),
         "execution_mode": "CANDLESCOPE",
         "account_authority": "candlescope",
+        **({"execution_schedule_contract": SCHEDULE_CONTRACT} if "execution_schedule" in evaluations else {}),
     }
 
 

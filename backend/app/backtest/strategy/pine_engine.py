@@ -14,6 +14,7 @@ from decimal import Decimal
 from app.backtest.pine_entry_risk import CONTRACT as RISK_CONTRACT, FUNCTIONS as RISK_FUNCTIONS
 from app.backtest.pine_risk_stops import CONTRACT as STOP_CONTRACT
 from app.backtest.pine_risk_state import STOP_FUNCTIONS
+from .pine_schedule import CONTRACT as SCHEDULE_CONTRACT, frame_context, encode as encode_schedule, decode as decode_schedule
 
 from .protocol import (
     ProviderCapabilities,
@@ -164,6 +165,13 @@ class PineEngineProvider:
             raise StrategyProviderError(
                 "PROVIDER_PROTOCOL_VIOLATION", "compiled Pine source envelope required"
             ) from exc
+        schedule_contract = context.get("pineExecutionScheduleContract")
+        self.scheduled = schedule_contract is not None
+        self.pass_mode = self.fill_callbacks or self.scheduled
+        if self.scheduled and (schedule_contract != SCHEDULE_CONTRACT or not self.order_mode
+                or frozen.get("executionScheduleContract") != SCHEDULE_CONTRACT
+                or self.runtime_identity.get("execution_schedule_contract") != SCHEDULE_CONTRACT):
+            raise StrategyProviderError("FIDELITY_UNSUPPORTED", "explicit Pine schedule requires a compiled contract and ORDER_INTENT")
         if self.fill_callbacks and not self.order_mode:
             raise StrategyProviderError("FIDELITY_UNSUPPORTED", "fill callbacks require ORDER_INTENT mode")
         if self.entry_risk and (not self.order_mode or self.runtime_identity.get("entry_risk_contract") != RISK_CONTRACT):
@@ -185,6 +193,7 @@ class PineEngineProvider:
             "source": self.source,
             "libraries": self.libraries,
             "parameters": dict(context.get("parameters") or {}),
+            **({"execution_schedule_contract": SCHEDULE_CONTRACT} if self.scheduled else {}),
             **({"closing_ticks": True} if self.process_on_close else {}),
             **({"risk_contract": STOP_CONTRACT if self.stop_functions else RISK_CONTRACT} if self.entry_risk else {}),
         }
@@ -198,6 +207,7 @@ class PineEngineProvider:
         self.bars, self.accounts, self.history, self.entry_id = [], [], [], None
         self.execution_times = []
         self.execution_passes = []
+        self.execution_contexts = []
         self.state_hash = canonical_hash([])
         self.risk_configuration = None
 
@@ -208,6 +218,7 @@ class PineEngineProvider:
                 "Pine requires the authoritative Host account",
             )
         row = frame.bar or {}
+        schedule_context = frame_context(frame, self.scheduled)
         bar = {
             name: float(row[name])
             for name in ("open", "high", "low", "close", "volume")
@@ -216,7 +227,7 @@ class PineEngineProvider:
         account = dict(frame.account_view)
         account["time"] = bar["time"]
         confirmed, pass_index = True, None
-        if self.fill_callbacks:
+        if self.pass_mode:
             observation = frame.features.get("pineExecutionPass") or {}
             index, confirmed = observation.get("barIndex"), observation.get("confirmed")
             if (type(index) is not int or type(confirmed) is not bool or index < 0
@@ -228,6 +239,7 @@ class PineEngineProvider:
                 self.bars.append(bar)
                 self.accounts.append(account)
                 self.execution_passes.append([])
+                self.execution_contexts.append([])
                 if self.needs_clock:
                     self.execution_times.append(frame.event_time_ms)
             else:
@@ -272,11 +284,13 @@ class PineEngineProvider:
         from app.backtest.pine_requested_data import visible_contexts
         contexts = visible_contexts(self.requested_streams,
             min(frame.watermark_ms - (0 if confirmed else 1), int(row.get("close_time_ms", frame.event_time_ms))))
-        if self.fill_callbacks:
+        if self.pass_mode:
             self.execution_passes[index].append({"bar": dict(bar), "account": dict(account), "confirmed": confirmed,
                 "event_time_ms": frame.event_time_ms, "request_data": [
                     {key: value for key, value in context.items() if key in {"symbol", "timeframe", "bars"}}
                     for context in contexts]})
+            if self.scheduled:
+                self.execution_contexts[index].append(schedule_context)
             contexts = [{**context, "bars": []} for context in contexts]
         result = self.worker.request(
             {
@@ -285,7 +299,8 @@ class PineEngineProvider:
                 "accounts": self.accounts,
                 **({"contexts": contexts} if contexts else {}),
                 **({"execution_times": self.execution_times} if self.needs_clock else {}),
-                **({"execution_passes": self.execution_passes} if self.fill_callbacks else {}),
+                **({"execution_schedule": encode_schedule(self.execution_passes, self.execution_contexts)} if self.scheduled
+                   else {"execution_passes": self.execution_passes} if self.pass_mode else {}),
                 "context": {
                     "symbol": chart_symbol,
                     "timeframe": timeframe,
@@ -302,6 +317,7 @@ class PineEngineProvider:
         if (
             result.get("contract") != "external-broker/1"
             or result.get("account_authority") != "candlescope"
+            or (self.scheduled and result.get("execution_schedule_contract") != SCHEDULE_CONTRACT)
         ):
             raise StrategyProviderError(
                 "PROVIDER_PROTOCOL_VIOLATION",
@@ -316,8 +332,8 @@ class PineEngineProvider:
                 raise StrategyProviderError("LOOKAHEAD_VIOLATION", "Pine risk configuration changed")
             self.risk_configuration = configuration
         def ordinal(item):
-            return (item["bar_index"], item.get("pass_index", -1)) if self.fill_callbacks else (item["bar_index"], -1)
-        cursor = (index, pass_index) if self.fill_callbacks else (index, -1)
+            return (item["bar_index"], item.get("pass_index", -1)) if self.pass_mode else (item["bar_index"], -1)
+        cursor = (index, pass_index) if self.pass_mode else (index, -1)
         previous = [item for item in result["intents"] if ordinal(item) < cursor]
         if previous != self.history:
             raise StrategyProviderError(
@@ -339,7 +355,8 @@ class PineEngineProvider:
                 **({"risk_rules": self.risk_configuration} if self.entry_risk else {}),
                 **({"executionTimeMs": frame.event_time_ms} if self.needs_clock else {}),
                 **({"executionPass": {"barIndex": index, "passIndex": pass_index, "confirmed": confirmed,
-                    "eventTimeMs": frame.event_time_ms}} if self.fill_callbacks else {}),
+                    "eventTimeMs": frame.event_time_ms}} if self.pass_mode else {}),
+                **({"executionContext": schedule_context} if self.scheduled else {}),
             }
         )
         if self.order_mode:
@@ -444,7 +461,8 @@ class PineEngineProvider:
             )
 
     def snapshot(self):
-        return {
+        from copy import deepcopy
+        return deepcopy({
             "context": self.context,
             "bars": self.bars,
             "accounts": self.accounts,
@@ -453,11 +471,17 @@ class PineEngineProvider:
             "state_hash": self.state_hash,
             **({"risk_rules": self.risk_configuration} if self.entry_risk else {}),
             **({"execution_times": self.execution_times} if self.needs_clock else {}),
-            **({"execution_passes": self.execution_passes} if self.fill_callbacks else {}),
-        }
+            **({"execution_schedule": encode_schedule(self.execution_passes, self.execution_contexts)} if self.scheduled
+               else {"execution_passes": self.execution_passes} if self.pass_mode else {}),
+        })
 
     def restore(self, payload):
+        from copy import deepcopy
+        payload = deepcopy(payload)
         self.prepare(payload["context"])
+        if ("execution_schedule" in payload) != self.scheduled or (self.scheduled and "execution_passes" in payload):
+            self.close()
+            raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "restored Pine schedule mode differs")
         self.bars, self.accounts = list(payload["bars"]), list(payload["accounts"])
         self.history, self.entry_id = list(payload["history"]), payload["entry_id"]
         self.state_hash = payload["state_hash"]
@@ -465,7 +489,9 @@ class PineEngineProvider:
             self.risk_configuration = payload.get("risk_rules")
             if self.bars and not isinstance(self.risk_configuration, dict):
                 raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "restored Pine risk configuration missing")
-        if self.fill_callbacks:
+        if self.scheduled:
+            self.execution_passes, self.execution_contexts = decode_schedule(payload.get("execution_schedule"), len(self.bars))
+        elif self.fill_callbacks:
             from copy import deepcopy
             passes = payload.get("execution_passes")
             if not isinstance(passes, list) or len(passes) != len(self.bars):
@@ -486,11 +512,15 @@ class PineEngineProvider:
 
     def report_metadata(self):
         close_callbacks = sum(max(0, sum(item["confirmed"] for item in group) - 1) for group in self.execution_passes)
+        if self.scheduled:
+            close_callbacks = sum(item["trigger"] == "closing_fill" for group in self.execution_contexts for item in group)
         return {"pineExecution": {
-            "profile": "CAUSAL_AGG_TRADE_FILL_PASSES" if self.fill_callbacks else "CONFIRMED_BAR_CLOSE",
+            "profile": "EXPLICIT_HOST_EXECUTION_SCHEDULE" if self.scheduled else "CAUSAL_AGG_TRADE_FILL_PASSES" if self.fill_callbacks else "CONFIRMED_BAR_CLOSE",
+            **({"executionScheduleContract": SCHEDULE_CONTRACT} if self.scheduled else {}),
             "accountAuthority": "candlescope", "tradingViewEquivalent": False,
             "barCount": len(self.bars),
-            "fillCallbackCount": sum(not item["confirmed"] for group in self.execution_passes for item in group) + close_callbacks,
+            "fillCallbackCount": (sum(item["trigger"] in {"order_fill", "closing_fill"} for group in self.execution_contexts for item in group)
+                                  if self.scheduled else sum(not item["confirmed"] for group in self.execution_passes for item in group) + close_callbacks),
             **({"closingTickContract": CLOSING_CONTRACT, "closingFillCallbackCount": close_callbacks} if self.process_on_close else {}),
         }}
 
