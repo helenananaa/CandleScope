@@ -1045,6 +1045,7 @@ def audit_hedge_account_state(
     ledger_rows: Sequence[sqlite3.Row],
     portfolio: Mapping[str, object],
     differences: list[dict[str, object]],
+    public_marks: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Rebuild both HEDGE legs from fills and pinned public settlements."""
 
@@ -1533,6 +1534,79 @@ def audit_hedge_account_state(
         funding_by_leg[leg_key] = (
             funding_by_leg.get(leg_key, Decimal(0)) + expected_delta
         )
+
+    # Older fixed HEDGE archives wrote a flat zero aggregate and consumed the
+    # calendar boundary. Expose that gap for held legs; never retroactively
+    # debit a saved exercise or certify the old zero posting as correct.
+    for legacy in ledger_rows:
+        if legacy["kind"] != "FUNDING_SETTLEMENT" or legacy["reference_type"] != "FUNDING_BOUNDARY":
+            continue
+        legacy_metadata = json.loads(str(legacy["metadata_json"]))
+        causal_boundary = causal_ledger_sequence(legacy, legacy_metadata)
+        for side in ("LONG", "SHORT"):
+            pre = {"quantity": Decimal(0), "entry_price": None, "realized_pnl": Decimal(0)}
+            for _, fill_row, raw, causal_sequence in ordered_fills:
+                if (fill_row["track_id"] != legacy["track_id"]
+                    or raw["position_side"] != side or causal_sequence >= causal_boundary):
+                    continue
+                fill_rule = rules[(str(fill_row["track_id"]), int(fill_row["rule_revision"]))]
+                apply_fill(pre, position_side=side, side=str(raw["side"]),
+                           quantity=Decimal(str(raw["quantity"])), price=Decimal(str(raw["price"])),
+                           contract_size=Decimal(fill_rule.contract_size))
+            if pre["quantity"]:
+                add_difference(f"legacy_fixed_funding[{legacy['track_id']}:{side}:{legacy['virtual_time_ms']}]",
+                               "PER_LEG_FIXED_SETTLEMENT", "LEGACY_FLAT_AGGREGATE")
+
+    from .hedge_fixed_funding import fixed_leg_postings
+
+    for posting, metadata in fixed_leg_postings(connection, run_id):
+        track_id, side = str(posting["track_id"]), str(metadata["position_side"])
+        prefix = f"hedge_fixed_funding[{track_id}:{side}:{posting['virtual_time_ms']}]"
+        rule = rules[(track_id, int(posting["rule_revision"]))]
+        pre_state = {"quantity": Decimal(0), "entry_price": None, "realized_pnl": Decimal(0)}
+        boundary = causal_ledger_sequence(posting, metadata)
+        for _, fill_row, raw, causal_sequence in ordered_fills:
+            if (str(fill_row["track_id"]) != track_id
+                or str(raw["position_side"]) != side or causal_sequence >= boundary):
+                continue
+            fill_rule = rules[(track_id, int(fill_row["rule_revision"]))]
+            apply_fill(pre_state, position_side=side, side=str(raw["side"]),
+                       quantity=Decimal(str(raw["quantity"])), price=Decimal(str(raw["price"])),
+                       contract_size=Decimal(fill_rule.contract_size))
+        quantity = cast(Decimal, pre_state["quantity"])
+        compare_decimal(f"{prefix}.pre_quantity", quantity, metadata.get("pre_settlement_signed_quantity"))
+        compare_decimal(f"{prefix}.pre_absolute_quantity", abs(quantity), metadata.get("pre_settlement_absolute_quantity"))
+        policy = connection.execute(
+            "SELECT * FROM replay_training_funding_policy WHERE run_id=? AND revision=?",
+            (run_id, metadata["funding_policy_revision"]),
+        ).fetchone()
+        if (policy is None or policy["funding_mode"] != "SANDBOX_FIXED"
+            or int(policy["effective_virtual_time_ms"]) > int(posting["virtual_time_ms"])):
+            add_difference(f"{prefix}.policy", "EFFECTIVE_FIXED_POLICY", "MISSING")
+            continue
+        rate = Decimal(str(policy["fixed_funding_rate"]))
+        compare_decimal(f"{prefix}.rate", rate, metadata.get("rate"))
+        mark_row = connection.execute(
+            "SELECT payload_json FROM replay_hedge_track_public_applied_event "
+            "WHERE run_id=? AND track_id=? AND event_kind='MARK_INDEX' "
+            "AND applied_virtual_time_ms<=? ORDER BY event_sequence DESC LIMIT 1",
+            (run_id, track_id, posting["virtual_time_ms"]),
+        ).fetchone()
+        historical_mark = (public_marks or {}).get(track_id, {}).get(int(posting["virtual_time_ms"]))
+        if historical_mark is not None:
+            mark = Decimal(str(historical_mark))
+        elif mark_row is not None:
+            mark = Decimal(str(json.loads(mark_row["payload_json"])["mark_price"]))
+        else:
+            add_difference(f"{prefix}.mark", "REVEALED_MARK", "MISSING")
+            continue
+        compare_decimal(f"{prefix}.mark", mark, metadata.get("mark_price"))
+        compare_decimal(f"{prefix}.contract_size", Decimal(rule.contract_size), metadata.get("contract_size"))
+        raw_delta = -quantity * mark * Decimal(rule.contract_size) * rate
+        rounded = round_to_step(abs(raw_delta), Decimal(rule.quote_step), upward=True)
+        expected_delta = rounded.copy_sign(raw_delta) if raw_delta else Decimal(0)
+        compare_decimal(f"{prefix}.cash_delta", expected_delta, posting["cash_delta"])
+        funding_by_leg[(track_id, side)] = funding_by_leg.get((track_id, side), Decimal(0)) + expected_delta
 
     liquidation_by_leg: dict[tuple[str, str], Decimal] = {}
     liquidation_total = Decimal(0)
@@ -2698,6 +2772,7 @@ def write_account_audit(
     now_ms: int,
     authoritative_projections: (Mapping[str, Mapping[str, object]] | None) = None,
     hedge_initial_projection: Mapping[str, object] | None = None,
+    hedge_public_marks: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     run = connection.execute(
         """
@@ -2823,6 +2898,7 @@ def write_account_audit(
             ledger_rows=ledger_rows,
             portfolio=portfolio,
             differences=differences,
+            public_marks=hedge_public_marks,
         )
         independent_state["insurance_and_adl"] = audit_hedge_insurance_and_adl(
             connection,

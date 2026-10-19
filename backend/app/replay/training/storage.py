@@ -1364,21 +1364,26 @@ class TrainingRunStore:
                 elif event.event_kind == "MARK_INDEX":
                     state["mark_index"] = dict(event.payload)
                 elif event.event_kind == "FUNDING":
-                    if funding_accounting_totals is None:
+                    historical_funding_enabled = connection.execute(
+                        "SELECT funding_mode FROM replay_training_contract_account WHERE run_id=?",
+                        (run_id,),
+                    ).fetchone()["funding_mode"] == "HISTORICAL_EXACT"
+                    if historical_funding_enabled and funding_accounting_totals is None:
                         funding_accounting_totals = (
                             account_marks_ops.hedge_accounting_totals_by_leg(
                                 connection,
                                 run_id=run_id,
                             )
                         )
-                    account_marks_ops.settle_hedge_funding_event(
-                        connection,
-                        run_id=run_id,
-                        event=event,
-                        virtual_time_ms=virtual_time_ms,
-                        now_ms=now_ms,
-                        accounting_totals=funding_accounting_totals,
-                    )
+                    if historical_funding_enabled:
+                        account_marks_ops.settle_hedge_funding_event(
+                            connection,
+                            run_id=run_id,
+                            event=event,
+                            virtual_time_ms=virtual_time_ms,
+                            now_ms=now_ms,
+                            accounting_totals=funding_accounting_totals,
+                        )
                     state["funding"] = dict(event.payload)
                 elif event.event_kind == "INSURANCE_INPUT":
                     state["insurance"] = dict(event.payload)
@@ -1789,12 +1794,14 @@ class TrainingRunStore:
 
     async def finalize_hedge_inputs(
         self, run_id: str, *, risk_virtual_time_ms: int | None = None,
+        settle_fixed_funding: bool = False,
     ) -> None:
         cached_fingerprint = self._hedge_risk_fingerprints.get(run_id)
         committed_fingerprint = await self.base_store.run_extension_write(
             lambda connection: self._finalize_hedge_inputs_in_transaction(
                 connection, run_id=run_id, risk_virtual_time_ms=risk_virtual_time_ms,
                 cached_fingerprint=cached_fingerprint,
+                settle_fixed_funding=settle_fixed_funding,
             )
         )
         self._cache_committed_hedge_fingerprint(run_id, committed_fingerprint)
@@ -1852,6 +1859,7 @@ class TrainingRunStore:
     async def finalize_hedge_inputs_and_checkpoint(
         self, run_id: str, *, risk_virtual_time_ms: int,
         events: Sequence[StableMarketEvent],
+        settle_fixed_funding: bool = False,
     ) -> bool:
         """Commit one complete risk-safe market wave with its global checkpoint.
 
@@ -1865,6 +1873,7 @@ class TrainingRunStore:
             return self._checkpoint_hedge_wave_in_transaction(
                 connection, run_id=run_id, risk_virtual_time_ms=risk_virtual_time_ms,
                 ordered=ordered, cached_fingerprint=cached_fingerprint,
+                settle_fixed_funding=settle_fixed_funding,
             )
 
         fingerprint, checkpointed = await self.base_store.run_extension_write(write)
@@ -1877,6 +1886,7 @@ class TrainingRunStore:
         events: Sequence[StableMarketEvent],
         event_virtual_times_ms: Sequence[int] | None = None,
         checkpoint_market_wave: bool = True,
+        settle_fixed_funding: bool = False,
     ) -> tuple[tuple[StableMarketEvent, ...], bool]:
         """Commit mark inputs, exact risk history and the wave in one transaction."""
         if not input_events or any(
@@ -1897,12 +1907,14 @@ class TrainingRunStore:
                 fingerprint = self._finalize_hedge_inputs_in_transaction(
                     connection, run_id=run_id, risk_virtual_time_ms=risk_virtual_time_ms,
                     cached_fingerprint=cached_fingerprint,
+                    settle_fixed_funding=settle_fixed_funding,
                 )
                 return applied, fingerprint, False
             fingerprint, checkpointed = self._checkpoint_hedge_wave_in_transaction(
                 connection, run_id=run_id, risk_virtual_time_ms=risk_virtual_time_ms,
                 ordered=stable_market_event_order((*market_events, *applied)),
                 cached_fingerprint=cached_fingerprint,
+                settle_fixed_funding=settle_fixed_funding,
             )
             return applied, fingerprint, checkpointed
 
@@ -1914,10 +1926,12 @@ class TrainingRunStore:
         self, connection: sqlite3.Connection, *, run_id: str,
         risk_virtual_time_ms: int, ordered: Sequence[StableMarketEvent],
         cached_fingerprint: str | None,
+        settle_fixed_funding: bool = False,
     ) -> tuple[str | None, bool]:
         fingerprint = self._finalize_hedge_inputs_in_transaction(
             connection, run_id=run_id, risk_virtual_time_ms=risk_virtual_time_ms,
             cached_fingerprint=cached_fingerprint,
+            settle_fixed_funding=settle_fixed_funding,
         )
         pending = connection.execute(
             """SELECT 1 FROM replay_training_liquidation_case
@@ -1939,10 +1953,12 @@ class TrainingRunStore:
         run_id: str,
         risk_virtual_time_ms: int | None,
         cached_fingerprint: str | None,
+        settle_fixed_funding: bool = False,
     ) -> str | None:
         run = connection.execute(
             """
-            SELECT position_mode FROM replay_training_run WHERE run_id = ?
+            SELECT r.position_mode,a.funding_mode FROM replay_training_run r
+            JOIN replay_training_contract_account a USING(run_id) WHERE run_id = ?
             """,
             (run_id,),
         ).fetchone()
@@ -1954,6 +1970,11 @@ class TrainingRunStore:
             run_id=run_id,
             now_ms=now_ms,
         )
+        from .persistence.hedge_fixed_funding import settle as settle_fixed_hedge_funding
+
+        if settle_fixed_funding and run["funding_mode"] == "SANDBOX_FIXED":
+            settle_fixed_hedge_funding(connection, run_id=run_id,
+                                      virtual_time_ms=risk_virtual_time_ms, now_ms=now_ms)
         interval = getattr(self, "_recorded_risk_context", None)
         if (
             interval is not None
@@ -2079,6 +2100,7 @@ class TrainingRunStore:
         *,
         authoritative_projections: (Mapping[str, Mapping[str, object]] | None) = None,
         hedge_initial_projection: Mapping[str, object] | None = None,
+        hedge_public_marks: Mapping[str, object] | None = None,
     ) -> dict[str, object]:
         def write(connection: sqlite3.Connection) -> dict[str, object]:
             return account_audit_ops.write_account_audit(
@@ -2087,6 +2109,7 @@ class TrainingRunStore:
                 now_ms=self.base_store._validated_now_ms(),
                 authoritative_projections=authoritative_projections,
                 hedge_initial_projection=hedge_initial_projection,
+                hedge_public_marks=hedge_public_marks,
             )
 
         return await self.base_store.run_extension_write(write)

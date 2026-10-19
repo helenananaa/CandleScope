@@ -10,6 +10,7 @@ import shutil
 import sqlite3
 import threading
 import uuid
+from bisect import bisect_right
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -3367,6 +3368,12 @@ class HedgeInputArchiveManager:
                         (run_id,),
                     ).fetchall()
                 ),
+                "fixed_funding_times": tuple(connection.execute(
+                    "SELECT DISTINCT track_id,virtual_time_ms FROM replay_training_contract_ledger "
+                    "WHERE run_id=? AND kind='FUNDING_SETTLEMENT' "
+                    "AND reference_type='SANDBOX_FIXED_POLICY' ORDER BY track_id,virtual_time_ms",
+                    (run_id,),
+                ).fetchall()),
                 "applied": tuple(
                     connection.execute(
                         """
@@ -3651,6 +3658,7 @@ class HedgeInputArchiveManager:
         for row in track_inputs["applied"]:
             track_applied.setdefault(str(row["track_id"]), []).append(row)
         track_projection_snapshot: list[dict[str, object]] = []
+        audited_public_marks: dict[str, dict[int, str]] = {}
         for track_id, track_binding in track_bindings.items():
             try:
                 path = await self._guard_catalog_row(
@@ -3707,6 +3715,21 @@ class HedgeInputArchiveManager:
                         projection_row["component_hash"],
                     )
                 events = await asyncio.to_thread(_read_public_events, path)
+                funding_times = [int(row["virtual_time_ms"]) for row in rows["fixed_funding_times"]
+                                 if row["track_id"] == track_id]
+                if funding_times:
+                    # Reuse the source already loaded by the explicit audit.
+                    # Retain one price per actual settlement, rather than a
+                    # second full history in ordinary HEDGE audit results.
+                    clock_offset = int(projection_row["as_of_actual_time_ms"]) - int(projection_row["as_of_virtual_time_ms"])
+                    marks = [event for event in events if event.event_kind == "MARK_INDEX"
+                             and event.event_time_ms <= int(projection_row["as_of_actual_time_ms"])]
+                    times = [event.event_time_ms - clock_offset for event in marks]
+                    audited_public_marks[track_id] = {
+                        boundary: str(marks[index].payload["mark_price"])
+                        for boundary in funding_times
+                        if (index := bisect_right(times, boundary) - 1) >= 0
+                    }
                 expected_projection = _projection(
                     events,
                     source_kind="PUBLIC",
@@ -3908,6 +3931,7 @@ class HedgeInputArchiveManager:
             "differences": differences,
             "snapshot": snapshot,
             "_initial_simulation": initial_simulation,
+            "_public_marks": audited_public_marks if status == "PASS" else {},
         }
 
     async def rehydrate(self, *, source_kind: str, object_id: str) -> dict[str, object]:
