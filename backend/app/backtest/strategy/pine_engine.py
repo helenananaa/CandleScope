@@ -94,7 +94,9 @@ def analyze(source, libraries=None):
             execution.get(key)
             for key in ("calcOnEveryTick", "calcOnOrderFills", "processOrdersOnClose")
         )
-        or execution.get("clock") != "notUsed"
+        or execution.get("clock") not in {"notUsed", "explicitTimestampWhenEvaluated"}
+        or (execution.get("clock") == "explicitTimestampWhenEvaluated"
+            and not result["identity"].get("external_execution_times"))
     ):
         raise StrategyProviderError(
             "FIDELITY_UNSUPPORTED",
@@ -136,6 +138,7 @@ class PineEngineProvider:
             self.source = frozen["source"]
             self.libraries = validate_libraries(frozen.get("libraries", {}))
             self.runtime_identity = frozen["identity"]
+            self.needs_clock = frozen.get("executionClock") == "explicitTimestampWhenEvaluated"
         except (KeyError, ValueError, TypeError) as exc:
             raise StrategyProviderError(
                 "PROVIDER_PROTOCOL_VIOLATION", "compiled Pine source envelope required"
@@ -156,6 +159,7 @@ class PineEngineProvider:
         }
         self.worker = SessionWorker(runtime, self.wire, self.cancelled, evaluator=True)
         self.bars, self.accounts, self.history, self.entry_id = [], [], [], None
+        self.execution_times = []
         self.state_hash = canonical_hash([])
 
     def _evaluate(self, frame, *, warmup=False):
@@ -174,9 +178,16 @@ class PineEngineProvider:
         account = dict(frame.account_view)
         account["time"] = bar["time"]
         self.accounts.append(account)
+        if self.needs_clock:
+            self.execution_times.append(frame.event_time_ms)
         market = frame.market
         venue = str(market.get("venue") or "local").upper()
         symbol = str(market.get("symbol") or "LOCAL")
+        chart_symbol = symbol if ":" in symbol else f"{venue}:{symbol}"
+        if (chart_symbol.startswith("BINANCE:")
+                and str(self.context.get("pineChartMarketType") or "").lower() in {"usdm", "futures", "swap"}
+                and not chart_symbol.endswith(".P")):
+            chart_symbol += ".P"
         timeframe = str(
             max(
                 1,
@@ -197,8 +208,9 @@ class PineEngineProvider:
                 **self.wire,
                 "bars": self.bars,
                 "accounts": self.accounts,
+                **({"execution_times": self.execution_times} if self.needs_clock else {}),
                 "context": {
-                    "symbol": symbol if ":" in symbol else f"{venue}:{symbol}",
+                    "symbol": chart_symbol,
                     "timeframe": timeframe,
                     **(
                         {"metadata": self.context["pineChartMetadata"]}
@@ -236,6 +248,7 @@ class PineEngineProvider:
                 "bar": bar,
                 "account": account,
                 "intents": intents,
+                **({"executionTimeMs": frame.event_time_ms} if self.needs_clock else {}),
             }
         )
         actual = Decimal(str(account["position_size"]))
@@ -279,15 +292,21 @@ class PineEngineProvider:
             elif action in {"close", "close_all"}:
                 if action == "close_all" or intent.get("id") == self.entry_id:
                     if intent.get("qty_percent") is not None:
-                        raise StrategyProviderError(
-                            "FIDELITY_UNSUPPORTED",
-                            "use the native workbench for partial percentage closes",
+                        percent = Decimal(str(intent["qty_percent"]))
+                        if not percent.is_finite() or not 0 < percent <= 100:
+                            raise StrategyProviderError(
+                                "PROVIDER_PROTOCOL_VIOLATION", "invalid Pine close percentage"
+                            )
+                        quantity = abs(target) * percent / 100
+                    else:
+                        quantity = (
+                            abs(target)
+                            if intent.get("qty") is None
+                            else Decimal(str(intent["qty"]))
                         )
-                    quantity = (
-                        abs(target)
-                        if intent.get("qty") is None
-                        else Decimal(str(intent["qty"]))
-                    )
+                    # Closing an already flat authoritative account is a no-op.
+                    if target == 0:
+                        continue
                     if not quantity.is_finite() or quantity <= 0:
                         raise StrategyProviderError(
                             "PROVIDER_PROTOCOL_VIOLATION", "invalid Pine close quantity"
@@ -332,6 +351,7 @@ class PineEngineProvider:
             "history": self.history,
             "entry_id": self.entry_id,
             "state_hash": self.state_hash,
+            **({"execution_times": self.execution_times} if self.needs_clock else {}),
         }
 
     def restore(self, payload):
@@ -339,6 +359,11 @@ class PineEngineProvider:
         self.bars, self.accounts = list(payload["bars"]), list(payload["accounts"])
         self.history, self.entry_id = list(payload["history"]), payload["entry_id"]
         self.state_hash = payload["state_hash"]
+        if self.needs_clock:
+            clocks = payload.get("execution_times")
+            if not isinstance(clocks, list) or len(clocks) != len(self.bars):
+                raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "restored Pine execution clocks are missing")
+            self.execution_times = list(clocks)
 
     def identity(self):
         return {

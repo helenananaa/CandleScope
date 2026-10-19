@@ -433,6 +433,15 @@ export interface IndicatorRangeBatchResponse {
   results: IndicatorRangeBatchItem[];
 }
 
+/** Captured replay observation, shared by all jobs using the same OHLCV. */
+export interface IndicatorReplayContext {
+  sessionId: string;
+  trackId: string;
+  dataEpoch: string;
+  revealedBoundaryMs: number;
+  sourceSequence?: number;
+}
+
 export interface IndicatorComputeRequest {
   mode?: string;
   language?: string;
@@ -445,6 +454,7 @@ export interface IndicatorComputeRequest {
   interval?: string;
   marketType?: string;
   exchange?: string;
+  replayContext?: IndicatorReplayContext;
 }
 
 export interface IndicatorComputeBatchJob {

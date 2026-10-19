@@ -2715,6 +2715,7 @@ class BacktestService:
                     "tradeExplanationEnabled": self.settings.trade_explanation_effective,
                     "pineChartMetadata": {"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None,
                     "pineChartInterval": config.get("signal_interval") or config.get("interval"),
+                    "pineChartMarketType": config.get("market_type"),
                 }
             )
 
@@ -3104,6 +3105,7 @@ class BacktestService:
                     "tradeExplanationEnabled": self.settings.trade_explanation_effective,
                     "pineChartMetadata": {"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None,
                     "pineChartInterval": config.get("signal_interval") or config.get("interval"),
+                    "pineChartMarketType": config.get("market_type"),
                 }
             )
             event_bytes = _event_wire_bytes(events)
@@ -3410,6 +3412,7 @@ class BacktestService:
                     "tradeExplanationEnabled": self.settings.trade_explanation_effective,
                     "pineChartMetadata": {"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None,
                     "pineChartInterval": config.get("signal_interval") or config.get("interval"),
+                    "pineChartMarketType": config.get("market_type"),
                 }
             )
 

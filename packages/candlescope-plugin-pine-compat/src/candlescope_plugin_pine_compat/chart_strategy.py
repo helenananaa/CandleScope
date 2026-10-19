@@ -7,7 +7,7 @@ from candlescope_plugin_sdk.native_strategy import identity, serve, serve_evalua
 
 from .external_strategy import execute as evaluate
 from .external_strategy import prepare
-from .prefix_transport import CONTRACT as PREFIX_CONTRACT, PASSES_CONTRACT
+from .prefix_transport import CONTRACT as PREFIX_CONTRACT, PASSES_CONTRACT, CLOCKS_CONTRACT
 from .libraries import library_sources
 
 
@@ -16,6 +16,8 @@ def describe():
         **identity("candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-chart/1"),
         "prefix_append": PREFIX_CONTRACT,
         "prefix_passes": PASSES_CONTRACT,
+        "prefix_clocks": CLOCKS_CONTRACT,
+        "external_execution_times": getattr(pine_compat, "EXTERNAL_CLOCK_SCHEMA_VERSION", 0) == 1,
         "external_incremental": callable(getattr(pine_compat.Program, "external_session", None)),
     }
 

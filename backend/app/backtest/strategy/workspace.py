@@ -214,7 +214,8 @@ def compile_revision(payload: Mapping[str, object], *, now_ms: int) -> dict[str,
         "runtimeRevision": RUNTIME_REVISION,
         "tradingViewEquivalent": False if language in {"PINE_SUBSET", "PINE_ENGINE"} else None,
         "executionSource": (
-            json.dumps({"schema": SOURCE_SCHEMA, "source": source, "identity": pine_analysis["identity"], "libraries": libraries}, sort_keys=True)
+            json.dumps({"schema": SOURCE_SCHEMA, "source": source, "identity": pine_analysis["identity"], "libraries": libraries,
+                "executionClock": pine_analysis["requirements"]["execution"]["clock"]}, sort_keys=True)
             if pine_analysis else
             artifact["recorded_expression"]
             if language == "EXTERNAL_ARTIFACT_REF"

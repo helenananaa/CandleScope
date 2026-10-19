@@ -162,8 +162,10 @@ export async function computeIndicator({
   interval,
   marketType,
   exchange,
+  replayContext,
 }: IndicatorComputeRequest): Promise<IndicatorPayloadEnvelope> {
   const body: Record<string, unknown> = { ohlcv, params: params || {} };
+  if (replayContext) body.replayContext = replayContext;
 
   if (mode) {
     body.mode = mode;
@@ -245,6 +247,11 @@ export async function computeIndicatorBatch({
       || item.marketType !== shared.marketType
       || item.symbol !== shared.symbol
       || item.interval !== shared.interval
+      || item.replayContext?.sessionId !== shared.replayContext?.sessionId
+      || item.replayContext?.trackId !== shared.replayContext?.trackId
+      || item.replayContext?.dataEpoch !== shared.replayContext?.dataEpoch
+      || item.replayContext?.revealedBoundaryMs !== shared.replayContext?.revealedBoundaryMs
+      || item.replayContext?.sourceSequence !== shared.replayContext?.sourceSequence
     ) {
       throw new TypeError("Indicator compute batch jobs must share one chart context and OHLCV array");
     }
@@ -272,6 +279,7 @@ export async function computeIndicatorBatch({
         marketType: shared.marketType || "spot",
         symbol: shared.symbol || "UNKNOWN",
         interval: shared.interval || "1m",
+        replayContext: shared.replayContext,
       },
       ohlcv: shared.ohlcv,
       requests,

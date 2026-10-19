@@ -107,6 +107,8 @@ def _run_external_host(plugin, wire, runner, cancelled):
                          "equity": float(account.equity()), "initial_capital": float(kernel.initial_balance),
                          "netprofit": float(account_feedback_profit(account, kernel.initial_balance)), "openprofit": float(account.unrealized())})
         request = {**{key: value for key, value in wire.items() if key != "execution_events"}, "bars": wire["bars"][:count], "accounts": accounts}
+        if "execution_times" in wire:
+            request["execution_times"] = wire["execution_times"][:count]
         request["contexts"] = visible_contexts(wire, interval.next_ms(wire["bars"][count - 1]["time"] * 1000))
         latest = runner(plugin, request, cancelled=cancelled, timeout=max(0.1, deadline - time.monotonic()))
         if latest.get("contract") != "external-broker/1" or latest.get("identity") != wire["identity"] or latest.get("account_authority") != "candlescope" or latest.get("execution_mode") != "CANDLESCOPE":

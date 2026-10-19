@@ -10,7 +10,7 @@ from .event_requests import run_with_event_requests
 from .host_inputs import chart_metadata, native_request_bars, require_price_grid, require_quote_currency
 from .libraries import library_sources
 from .prefix_transport import CONTRACT as PREFIX_CONTRACT
-from .prefix_transport import PASSES_CONTRACT, PrefixInput
+from .prefix_transport import PASSES_CONTRACT, CLOCKS_CONTRACT, PrefixInput
 from .strategy_time import engine_bars
 
 _prefix = PrefixInput()
@@ -27,6 +27,8 @@ def describe():
         ),
         "prefix_append": PREFIX_CONTRACT,
         "prefix_passes": PASSES_CONTRACT,
+        "prefix_clocks": CLOCKS_CONTRACT,
+        "external_execution_times": getattr(pine_compat, "EXTERNAL_CLOCK_SCHEMA_VERSION", 0) == 1,
         "external_incremental": callable(getattr(pine_compat.Program, "external_session", None)),
     }
 
@@ -73,6 +75,13 @@ def execute(request):
         and not any(feature.startswith("ticker.") for feature in features)
     )
     start = _session_count if incremental and _session is not None else 0
+    clocks = request.get("execution_times")
+    if clocks is not None:
+        if getattr(pine_compat, "EXTERNAL_CLOCK_SCHEMA_VERSION", 0) != 1:
+            raise ValueError("EXTERNAL_CLOCK_UNAVAILABLE: install a runtime with explicit external execution clocks")
+        if (not isinstance(clocks, list) or len(clocks) != len(request["bars"])
+                or any(type(value) is not int or not 0 <= value <= 9_007_199_254_740_991 for value in clocks)):
+            raise ValueError("EXTERNAL_CLOCK_INVALID: one integer millisecond timestamp is required per bar")
     passes = request.get("execution_passes")
     if passes is not None:
         passes = [
@@ -128,6 +137,7 @@ def execute(request):
                 engine_bars(request["bars"][start:]),
                 accounts,
                 **({"execution_passes": passes} if passes is not None else {}),
+                **({"execution_times": clocks[start:]} if clocks is not None else {}),
             )
             _session_count = len(request["bars"])
         else:
@@ -141,6 +151,7 @@ def execute(request):
                     chart_timeframe=request["context"]["timeframe"],
                     execution_passes=passes,
                     request_bars=request_bars,
+                    **({"execution_times": clocks} if clocks is not None else {}),
                 ),
                 request,
                 supplied,

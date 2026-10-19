@@ -49,6 +49,8 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
             groups[cursor][-1]["request_data"] = visible_contexts(wire, boundary)
         request = {key: value for key, value in wire.items() if key != "execution_events"}
         request.update(bars=[*wire["bars"][:cursor], deepcopy(visible)], accounts=accounts, execution_passes=groups, contexts=[])
+        if "execution_times" in wire:
+            request["execution_times"] = wire["execution_times"][:cursor + 1]
         latest = runner(plugin, request, cancelled=cancelled, timeout=max(.1, deadline-time.monotonic()))
         if (latest.get("contract") != "external-broker/1" or latest.get("identity") != wire["identity"]
                 or latest.get("execution_mode") != "CANDLESCOPE" or latest.get("account_authority") != "candlescope"

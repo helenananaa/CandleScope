@@ -78,25 +78,32 @@ class SessionWorker:
 
     def _prefix_payload(self, payload):
         bars, accounts, passes = payload.get("bars"), payload.get("accounts"), payload.get("execution_passes")
+        clocks = payload.get("execution_times")
         if (not isinstance(bars, list) or not isinstance(accounts, list) or len(bars) != len(accounts)
                 or any(payload.get(key) for key in ("libraries", "magnifier"))
+                or (clocks is not None and (self.identity.get("prefix_clocks") != "candlescope.pine-prefix-clocks/1"
+                    or not isinstance(clocks, list) or len(clocks) != len(bars)))
                 or (passes is not None and (self.identity.get("prefix_passes") != "candlescope.pine-prefix-passes/1"
                     or not isinstance(passes, list) or len(passes) != len(bars)))):
             self._prefix_state = None
             return payload
-        static = {key: value for key, value in payload.items() if key not in {"bars", "accounts", "execution_passes"}}
+        static = {key: value for key, value in payload.items() if key not in {"bars", "accounts", "execution_passes", "execution_times"}}
         previous = self._prefix_state
-        self._prefix_state = (static, list(bars), list(accounts), list(passes) if passes is not None else None)
+        self._prefix_state = (static, list(bars), list(accounts), list(passes) if passes is not None else None,
+                              list(clocks) if clocks is not None else None)
         if previous is not None:
-            old_static, old_bars, old_accounts, old_passes = previous
+            old_static, old_bars, old_accounts, old_passes, old_clocks = previous
             count = len(old_bars)
             stable_passes = passes is None and old_passes is None or (passes is not None and old_passes is not None
                 and passes[:count] == old_passes and all(group and group[-1].get("confirmed") is True for group in old_passes))
+            stable_clocks = clocks is None and old_clocks is None or (clocks is not None and old_clocks is not None
+                and clocks[:count] == old_clocks)
             if (static == old_static and len(bars) > count and bars[:count] == old_bars
-                    and accounts[:count] == old_accounts and stable_passes):
+                    and accounts[:count] == old_accounts and stable_passes and stable_clocks):
                 return {"operation": "append_prefix", "prefix_base": count,
                         "bars": bars[count:], "accounts": accounts[count:],
-                        **({"execution_passes": passes[count:]} if passes is not None else {})}
+                        **({"execution_passes": passes[count:]} if passes is not None else {}),
+                        **({"execution_times": clocks[count:]} if clocks is not None else {})}
         return payload
 
     def close(self):

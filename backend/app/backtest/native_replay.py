@@ -144,8 +144,10 @@ class NativeReplay:
     def _prefix(self, wire, config, count):
         # Detach only the revealed prefix; never copy unrevealed history.
         clipped = {key: copy.deepcopy(value) for key, value in wire.items()
-                   if key not in {"bars", "contexts", "magnifier"}}
+                   if key not in {"bars", "contexts", "magnifier", "execution_times"}}
         clipped["bars"] = copy.deepcopy(wire["bars"][:count])
+        if "execution_times" in wire:
+            clipped["execution_times"] = list(wire["execution_times"][:count])
         boundary = parse_interval_spec(config["interval"]).next_ms(clipped["bars"][-1]["time"] * 1000)
         clipped["contexts"] = []
         for context, ref in zip(wire["contexts"], config.get("contexts", []), strict=True):

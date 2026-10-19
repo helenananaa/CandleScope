@@ -39,8 +39,14 @@ def requested_data(request, requirements, data_manager):
     bars = request.bars
     last = bars[-1]
     asof = parse_interval_spec(request.context.interval).next_ms(last.time * 1000)
+    revealed = request.options.get("pineRevealedBoundaryMs")
+    if revealed is not None:
+        # Replay cursors include the millisecond at the candle's close. Provider
+        # intervals use an exclusive end; preserve that distinction at the edge.
+        asof = min(asof, revealed + 1)
     if not last.is_closed:
-        asof = min(asof, request.options.get("pineExecutionTimeMs", int(time.time() * 1000)))
+        if revealed is None:
+            asof = min(asof, request.options.get("pineExecutionTimeMs", int(time.time() * 1000)))
     try:
         contexts = requested_contexts(request, requests)
     except ValueError as exc:

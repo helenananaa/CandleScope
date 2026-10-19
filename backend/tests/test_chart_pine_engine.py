@@ -1,5 +1,6 @@
 import json
 import os
+from decimal import Decimal
 from dataclasses import replace
 
 import pytest
@@ -22,6 +23,77 @@ if close < average
 
 LIBRARY = '//@version=6\nlibrary("Threshold")\nexport twice(float x) => x * 2\n'
 LIBRARY_SOURCE = '//@version=6\nstrategy("import")\nimport local/Threshold/1 as threshold\nif close > threshold.twice(7)\n    strategy.entry("L", strategy.long, qty=2)\n'
+PARTIAL_SOURCE = '''//@version=6
+strategy("Partial")
+if bar_index == 0
+    strategy.entry("L", strategy.long, qty=4)
+if bar_index == 2
+    strategy.close("L", qty_percent=25)
+if bar_index == 4
+    strategy.close_all()
+'''
+CLOCK_SOURCE = PARTIAL_SOURCE.replace("bar_index == 0", "timenow == 59999").replace(
+    "bar_index == 2", "timenow == 179999").replace("bar_index == 4", "timenow == 299999")
+PERP_SOURCE = PARTIAL_SOURCE.replace("bar_index == 0", 'bar_index == 0 and syminfo.tickerid == "BINANCE:BTCUSDT.P"')
+
+
+@pytest.mark.parametrize("market_type,quantity", [("spot", None), ("usdm", 4), ("futures", 4)])
+def test_chart_symbol_uses_the_explicit_market_type_and_survives_restore(market_type, quantity):
+    revision = compile_revision({"language": "PINE_ENGINE", "name": "Instrument", "source_text": PERP_SOURCE}, now_ms=1)
+    provider = PineEngineProvider()
+    try:
+        provider.prepare({"source": json.loads(revision["compiled_json"])["executionSource"],
+            "parameters": {}, "pineChartMarketType": market_type})
+        result = provider.step(frame(0, 20))
+        assert (Decimal(result.payload["targetExposure"]) if result else None) == quantity
+        provider.restore(provider.snapshot())
+        assert provider.context["pineChartMarketType"] == market_type
+        assert provider.step(frame(1, 20, position=quantity or 0)) is None
+    finally:
+        provider.close()
+
+
+@pytest.mark.parametrize("imported", [False, True])
+def test_chart_clock_uses_each_host_observation_and_restores(imported):
+    source, libraries = CLOCK_SOURCE, {}
+    if imported:
+        source = source.replace('strategy("Partial")', 'strategy("Partial")\nimport local/Clock/1 as clock').replace("timenow", "clock.now()")
+        libraries = {"local/Clock/1": '//@version=6\nlibrary("Clock")\nexport now() => timenow'}
+    revision = compile_revision({"language": "PINE_ENGINE", "name": "Clock", "source_text": source, "libraries": libraries}, now_ms=1)
+    context = {"source": json.loads(revision["compiled_json"])["executionSource"], "parameters": {}}
+    provider, restored = PineEngineProvider(), PineEngineProvider()
+    try:
+        provider.prepare(context)
+        assert provider.step(frame(0, 20)).payload["targetExposure"] == "4.0"
+        assert provider.step(frame(1, 20, position=4)) is None
+        snapshot = provider.snapshot()
+        assert snapshot["execution_times"] == [59999, 119999]
+        restored.restore(snapshot)
+        assert provider.step(frame(2, 20, position=4)) == restored.step(frame(2, 20, position=4))
+        assert provider.snapshot()["execution_times"] == [59999, 119999, 179999]
+    finally:
+        provider.close()
+        restored.close()
+
+
+def test_percentage_close_uses_actual_host_quantity_and_restores():
+    revision = compile_revision({"language": "PINE_ENGINE", "name": "Partial", "source_text": PARTIAL_SOURCE}, now_ms=1)
+    context = {"source": json.loads(revision["compiled_json"])["executionSource"], "parameters": {}}
+    provider, restored = PineEngineProvider(), PineEngineProvider()
+    try:
+        provider.prepare(context)
+        assert provider.step(frame(0, 20)).payload["targetExposure"] == "4.0"
+        assert provider.step(frame(1, 20, position=8)) is None
+        restored.restore(provider.snapshot())
+        # Actual ledger position differs from the requested four units.
+        close = provider.step(frame(2, 20, position=8))
+        assert Decimal(close.payload["targetExposure"]) == 6
+        assert restored.step(frame(2, 20, position=8)) == close
+        assert provider.step(frame(3, 20)) is None
+        assert provider.step(frame(4, 20)) is None
+    finally:
+        provider.close()
+        restored.close()
 
 
 def test_imported_strategy_freezes_library_content_and_restores_actual_account_execution():
@@ -143,8 +215,9 @@ def test_host_account_is_required_and_not_inferred_from_previous_intents():
 
 
 @pytest.mark.parametrize("isolated", [False, True])
+@pytest.mark.parametrize("source,quantities", [(SOURCE, [2, 2]), (PARTIAL_SOURCE, [4, 1, 3]), (CLOCK_SOURCE, [4, 1, 3]), (PERP_SOURCE, [4, 1, 3])])
 def test_chart_workspace_compiles_smokes_and_runs_through_host_ledger(
-    tmp_path, monkeypatch, isolated
+    tmp_path, monkeypatch, isolated, source, quantities
 ):
     from app.market_dataset.snapshot import MarketEvent
 
@@ -154,7 +227,7 @@ def test_chart_workspace_compiles_smokes_and_runs_through_host_ledger(
     provider = PineEngineProvider()
     try:
         revision = service.create_strategy_revision(
-            {"language": "PINE_ENGINE", "name": "SMA Host", "source_text": SOURCE}
+            {"language": "PINE_ENGINE", "name": "SMA Host", "source_text": source}
         )
         payload = {
             "strategy_revision_id": revision["revision_id"],
@@ -190,7 +263,7 @@ def test_chart_workspace_compiles_smokes_and_runs_through_host_ledger(
                     "volume": "100",
                 },
             )
-            for i, value in enumerate([10, 20, 20, 5, 5])
+            for i, value in enumerate([10, 20, 20, 5, 5, 5, 5])
         )
         if isolated:
             from app.backtest.strategy.isolated import IsolatedStrategyProvider
@@ -206,8 +279,8 @@ def test_chart_workspace_compiles_smokes_and_runs_through_host_ledger(
         )
         assert completed["state"] == "COMPLETED"
         fills = completed["report"]["fills"]
-        assert [str(row["side"]) for row in fills] == ["BUY", "SELL"]
-        assert all(float(row["qty"]) == 2 for row in fills)
+        assert [str(row["side"]) for row in fills] == ["BUY", *(["SELL"] * (len(quantities) - 1))]
+        assert [float(row["qty"]) for row in fills] == quantities
     finally:
         provider.close()
         service.shutdown()

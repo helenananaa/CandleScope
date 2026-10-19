@@ -12,10 +12,14 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_real_worker_append_transport_matches_batch_and_reduces_input_bytes():
+@pytest.mark.parametrize("clocked", [False, True])
+def test_real_worker_append_transport_matches_batch_and_reduces_input_bytes(clocked):
     runtime = plugin()
     identity = invoke(runtime, {"operation": "describe"})["identity"]
     source = '//@version=6\nstrategy("prefix")\nif close>15\n    strategy.entry("L",strategy.long,qty=2)\nplot(close)\n'
+    if clocked:
+        assert identity["external_execution_times"] is True
+        source += "plot(timenow)\n"
     wire = {
         "protocol": PROTOCOL,
         "identity": identity,
@@ -52,6 +56,8 @@ def test_real_worker_append_transport_matches_batch_and_reduces_input_bytes():
                 for bar in bars
             ]
             request = {**wire, "bars": bars, "accounts": accounts}
+            if clocked:
+                request["execution_times"] = [bar["time"] * 1000 + 59999 for bar in bars]
             full_bytes += len((encoded(request) + "\n").encode())
             result = worker.request(request, cancelled)
         assert result == invoke(runtime, request)
@@ -59,5 +65,10 @@ def test_real_worker_append_transport_matches_batch_and_reduces_input_bytes():
         # A historical correction goes through a full rebase, never an append.
         request["bars"][0] = {**request["bars"][0], "close": 10.5}
         assert worker.request(request, cancelled) == invoke(runtime, request)
+        if clocked:
+            request["execution_times"][0] += 1
+            corrected = worker.request(request, cancelled)
+            assert corrected == invoke(runtime, request)
+            assert corrected["raw_output"]["plots"][-1]["values"][0] == request["execution_times"][0]
     finally:
         worker.close()

@@ -9,6 +9,27 @@ from dataclasses import dataclass
 from typing import Any
 
 
+def requested_tail(options, forming_time):
+    """Seed prior history, then feed observed confirmed intrabars in order.
+
+    These rows have already been clipped by the host's observation boundary.
+    Keeping them out of the static seed lets the core distinguish an observed
+    intrabar from unobserved historical data in a forming chart period.
+    """
+    supplied = options.get("request_bars")
+    if forming_time is None or not supplied:
+        return options, []
+    history, updates = {}, []
+    for key, rows in supplied.items():
+        if key.startswith("$"):
+            history[key] = rows
+            continue
+        symbol, timeframe = key.rsplit(":", 1)
+        history[key] = [row for row in rows if row["time"] < forming_time]
+        updates.extend((symbol, timeframe, row) for row in rows if row["time"] >= forming_time)
+    return {**options, "request_bars": history}, updates
+
+
 @dataclass
 class Session:
     identity: Any
@@ -28,7 +49,8 @@ class PineSessions:
         self.entries.clear()
 
     def execute(self, engine, source, bars, options, *, session_id, forming, execution_times=None, calculation_bars_count=None):
-        identity = (source, options)
+        native_options, request_updates = requested_tail(options, bars[-1]["time"] if forming else None)
+        identity = (source, options, native_options)
         confirmed = bars[:-1] if forming else bars
         entry = self.entries.get(session_id) if session_id else None
         reset = (
@@ -42,12 +64,14 @@ class PineSessions:
         )
         try:
             if reset:
-                native = engine.create_realtime_session(source, **options)
+                native = engine.create_realtime_session(source, **native_options)
                 native.seed(confirmed, **({"execution_times": execution_times[:len(confirmed)]}
                                          if execution_times is not None else {}))
                 entry = Session(identity, native, list(confirmed),
                                 history_start=max(0, len(confirmed) - calculation_bars_count) if calculation_bars_count else 0,
                                 clocks=execution_times[:len(confirmed)] if execution_times is not None else None)
+                for symbol, timeframe, row in request_updates:
+                    native.apply_request_confirmed(symbol, timeframe, row)
             else:
                 for index in range(len(entry.confirmed), len(confirmed)):
                     entry.native.update_confirmed(confirmed[index], **(

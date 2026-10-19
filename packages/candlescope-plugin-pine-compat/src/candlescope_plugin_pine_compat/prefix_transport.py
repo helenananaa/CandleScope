@@ -2,6 +2,7 @@
 
 CONTRACT = "candlescope.pine-prefix/1"
 PASSES_CONTRACT = "candlescope.pine-prefix-passes/1"
+CLOCKS_CONTRACT = "candlescope.pine-prefix-clocks/1"
 
 
 class PrefixInput:
@@ -11,7 +12,7 @@ class PrefixInput:
     def decode(self, request):
         if request.get("operation") != "append_prefix":
             self.request = dict(request)
-            for key in ("bars", "accounts", "execution_passes"):
+            for key in ("bars", "accounts", "execution_passes", "execution_times"):
                 if isinstance(self.request.get(key), list):
                     self.request[key] = list(self.request[key])
             return request
@@ -37,8 +38,16 @@ class PrefixInput:
                 raise ValueError("PINE_PREFIX_INVALID: append requires matching execution passes")
         elif passes is not None:
             raise ValueError("PINE_PREFIX_INVALID: execution mode changed")
+        clocks = request.get("execution_times")
+        if self.request.get("execution_times") is not None:
+            if not isinstance(clocks, list) or len(clocks) != len(bars):
+                raise ValueError("PINE_PREFIX_INVALID: append requires matching execution clocks")
+        elif clocks is not None:
+            raise ValueError("PINE_PREFIX_INVALID: execution clock mode changed")
         self.request["bars"].extend(bars)
         self.request["accounts"].extend(accounts)
         if passes is not None:
             self.request["execution_passes"].extend(passes)
+        if clocks is not None:
+            self.request["execution_times"].extend(clocks)
         return self.request
