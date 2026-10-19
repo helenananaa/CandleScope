@@ -113,7 +113,7 @@ export function replayInitialMarketDowngradeConfirmation(
   return t("replay.init.hedgeHybrid");
 }
 
-export async function prepareReplayInitialMarketSelection({
+async function prepareReplayInitialMarketSelectionOnce({
   api,
   runId,
   catalog,
@@ -133,6 +133,63 @@ export async function prepareReplayInitialMarketSelection({
   };
 }
 
+interface RefreshedInitialMarket {
+  readonly catalog: ReplayCatalog;
+  readonly entry: ReplayCatalogEntry;
+}
+
+async function refreshInitialMarket(
+  api: ReplayInitialMarketApi,
+  runId: string,
+  entry: ReplayCatalogEntry,
+): Promise<RefreshedInitialMarket> {
+  const catalog = await api.marketCatalog(runId);
+  const refreshed = catalog.entries.find(candidate => sameMarket(candidate, entry));
+  if (refreshed === undefined || refreshed.selected_base_interval === null) {
+    throw new Error(t("replay.init.catalogGone"));
+  }
+  return { catalog, entry: refreshed };
+}
+
+export interface ReplayInitialMarketPreparedResult
+  extends ReplayInitialMarketPreparedSelection, RefreshedInitialMarket {
+  readonly catalogRefreshes: 0 | 1;
+}
+
+/** The disclosure plan can drift before selection is ever attempted. */
+export async function prepareReplayInitialMarketSelection({
+  api, runId, catalog, entry,
+}: {
+  readonly api: ReplayInitialMarketApi;
+  readonly runId: string;
+  readonly catalog: ReplayCatalog;
+  readonly entry: ReplayCatalogEntry;
+}): Promise<ReplayInitialMarketPreparedResult> {
+  let active = { catalog, entry };
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const prepared = await prepareReplayInitialMarketSelectionOnce({ api, runId, ...active });
+      return { ...prepared, ...active, catalogRefreshes: attempt as 0 | 1 };
+    } catch (reason) {
+      if (!(reason instanceof ReplayV2ApiError)
+        || reason.code !== "CATALOG_EPOCH_MISMATCH" || attempt !== 0) throw reason;
+      active = await refreshInitialMarket(api, runId, entry);
+    }
+  }
+  throw new Error(t("replay.init.retryUnreachable"));
+}
+
+export class ReplayInitialMarketDowngradeRequired extends Error {
+  constructor(
+    readonly catalog: ReplayCatalog,
+    readonly entry: ReplayCatalogEntry,
+    readonly prepared: ReplayInitialMarketPreparedSelection,
+  ) {
+    super(prepared.downgradeConfirmation ?? t("replay.init.retryUnreachable"));
+    this.name = "ReplayInitialMarketDowngradeRequired";
+  }
+}
+
 /**
  * Prepare and select the first market against one catalog epoch at a time.
  * Archive preparation can legitimately advance the capability epoch. Only
@@ -143,22 +200,27 @@ export async function selectReplayInitialMarketWithEpochRetry({
   runId,
   catalog,
   entry,
+  allowHedgeHybrid = false,
 }: {
   readonly api: ReplayInitialMarketApi;
   readonly runId: string;
   readonly catalog: ReplayCatalog;
   readonly entry: ReplayCatalogEntry;
+  readonly allowHedgeHybrid?: boolean;
 }): Promise<ReplayInitialMarketSelectionResult> {
   let activeCatalog = catalog;
   let activeEntry = entry;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const prepared = await prepareReplayInitialMarketSelection({
+      const prepared = await prepareReplayInitialMarketSelectionOnce({
         api,
         runId,
         catalog: activeCatalog,
         entry: activeEntry,
       });
+      if (prepared.downgradeConfirmation !== null && !allowHedgeHybrid) {
+        throw new ReplayInitialMarketDowngradeRequired(activeCatalog, activeEntry, prepared);
+      }
       const response = await api.selectInitialMarket(
         runId,
         prepared.selection,
@@ -174,14 +236,9 @@ export async function selectReplayInitialMarketWithEpochRetry({
         || attempt !== 0) {
         throw reason;
       }
-      activeCatalog = await api.marketCatalog(runId);
-      const refreshedEntry = activeCatalog.entries.find((candidate) => (
-        sameMarket(candidate, entry)
-      ));
-      if (refreshedEntry === undefined || refreshedEntry.selected_base_interval === null) {
-        throw new Error(t("replay.init.catalogGone"));
-      }
-      activeEntry = refreshedEntry;
+      const refreshed = await refreshInitialMarket(api, runId, entry);
+      activeCatalog = refreshed.catalog;
+      activeEntry = refreshed.entry;
     }
   }
   throw new Error(t("replay.init.retryUnreachable"));
