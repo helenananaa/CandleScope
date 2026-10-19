@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { t } from "../../../i18n/index.js";
 import { nativeApi, nativeTimeframe } from "./nativeBacktestApi.js";
 import type { AdvancedInputs, InputDataset } from "./nativeInputs.js";
+import { PineCurrencyInputs } from "../../indicators/PineCurrencyInputs.js";
 
 export function NativeAdvancedInputs({ value, onChange, language, disabled, exchange, native = true }: {
   value: AdvancedInputs; onChange: (value: AdvancedInputs) => void;
@@ -20,6 +21,10 @@ export function NativeAdvancedInputs({ value, onChange, language, disabled, exch
   return <details className="native-advanced-inputs">
     <summary>{t(native ? "native.inputs.title" : "native.inputs.addContext")}</summary>
     <p>{t("native.inputs.hint")}</p>
+    {language === "pine" && <label>{t("native.external.price_tick")}
+      <input type="number" min="0" step="any" disabled={disabled} value={value.priceTickSize ?? ""}
+        onChange={(event) => onChange({ ...value, priceTickSize: event.target.value })} />
+    </label>}
     <button type="button" disabled={disabled} onClick={() => refresh((n) => n+1)}>{t("native.inputs.refresh")}</button>
     {error && <p role="alert">{error}</p>}
     <label>{t("native.inputs.addContext")}<select value="" disabled={disabled || value.contexts.length >= 16} onChange={(event) => {
@@ -33,13 +38,17 @@ export function NativeAdvancedInputs({ value, onChange, language, disabled, exch
       <p>{t("native.inputs.timeframe")}: {nativeTimeframe(item.dataset.interval)} · {item.dataset.data_epoch.slice(0, 19)}</p>
       <button type="button" onClick={() => onChange({ ...value, contexts: value.contexts.filter((_, i) => i !== index) })}>{t("native.inputs.remove")}</button>
     </fieldset>)}
-    {native && language === "pine" && <>
-      <label>{t("native.inputs.magnifier")}<select disabled={disabled} value={value.magnifier?.dataset_id ?? ""} onChange={(event) => onChange({ ...value,
+    {language === "pine" && <>
+      <label>{t("indicator.pine.quoteCurrency")}<input disabled={disabled} value={value.currency ?? ""}
+        onChange={(event) => onChange({ ...value, currency: event.target.value })} /></label>
+      {native && <><label>{t("native.inputs.magnifier")}<select disabled={disabled} value={value.magnifier?.dataset_id ?? ""} onChange={(event) => onChange({ ...value,
         magnifier: datasets.find((item) => item.dataset_id === event.target.value) ?? null })}>
         <option value="">{t("native.inputs.none")}</option>{datasets.map((item) => <option key={item.dataset_id} value={item.dataset_id}>{item.name} · {item.symbol} · {item.interval}</option>)}
       </select></label>
-      <p>{t("native.inputs.magnifierHint")}</p>
+      <p>{t("native.inputs.magnifierHint")}</p></>}
       <label>{t("native.inputs.libraries")}<textarea disabled={disabled} spellCheck={false} value={value.libraries} onChange={(event) => onChange({ ...value, libraries: event.target.value })} /></label>
+      <PineCurrencyInputs value={value.currencyRates ?? ""} readOnly={disabled}
+        onChange={(currencyRates) => onChange({ ...value, currencyRates })} />
     </>}
   </details>;
 }

@@ -140,7 +140,7 @@ class NativeBacktests:
                 try:
                     external_plugin = {**plugin, "command": [*plugin["command"][:-1], plugin["command"][-1].replace(".native_strategy", ".external_strategy")]}
                     external = self.runner(external_plugin, {"operation": "describe"}, timeout=15)
-                    supported = {"pine": {"pine-external/1", "pine-external/2", "pine-external/3", "pine-external/4", "pine-external/5"},
+                    supported = {"pine": {"pine-external/1", "pine-external/2", "pine-external/3", "pine-external/4", "pine-external/5", "pine-external/6"},
                                  "pyne": {"pyne-external/1", "pyne-external/2", "pyne-external/3", "pyne-external/4", "pyne-external/5"}}
                     external_available = (external["identity"].get("protocol") == PROTOCOL
                                           and external["identity"].get("adapter") in supported[language])
@@ -194,8 +194,8 @@ class NativeBacktests:
             external = payload.get("execution_mode") == "CANDLESCOPE"
             plugin = self.resolver(payload["language"])
             if external:
-                if payload.get("libraries") or payload.get("magnifier"):
-                    raise BacktestError("EXTERNAL_UNSUPPORTED", "host matching does not accept native libraries or Magnifier")
+                if payload.get("magnifier"):
+                    raise BacktestError("EXTERNAL_UNSUPPORTED", "host matching requires execution events instead of native Magnifier")
                 plugin = {**plugin, "command": [*plugin["command"][:-1], plugin["command"][-1].replace(".native_strategy", ".external_strategy")]}
             identity = self.runner(plugin, {"operation": "describe"}, timeout=15)["identity"]
             if identity.get("protocol") != PROTOCOL:
@@ -243,6 +243,21 @@ class NativeBacktests:
             wire = {"protocol": PROTOCOL, "identity": identity, "source": payload["source"],
                     "parameters": payload.get("parameters", {}), "bars": bars, "contexts": contexts,
                     "libraries": payload.get("libraries", {}), "context": payload["context"], "magnifier": magnifier}
+            if payload.get("currency_rates") is not None:
+                wire["currency_rates"] = payload["currency_rates"]
+            if payload["language"] == "pine":
+                from app.exchanges.symbol_catalog import get_cached_symbol_metadata
+                chart = dict(wire["context"])
+                if not chart.get("metadata"):
+                    metadata = get_cached_symbol_metadata(payload.get("exchange", "binance"),
+                                                          payload.get("market_type", "usdm"), manifest["symbol"])
+                    if metadata and metadata.get("priceTickSize"):
+                        chart["metadata"] = {"priceTickSize": metadata["priceTickSize"]}
+                        if metadata.get("quoteAsset"):
+                            chart["metadata"]["currency"] = metadata["quoteAsset"]
+                wire["context"] = chart
+                clock_interval = parse_interval_spec(payload["interval"])
+                wire["execution_times"] = [clock_interval.next_ms(bar["time"] * 1000) - 1 for bar in bars]
             if external:
                 from .external import host_identity
                 from .external_market import freeze_execution

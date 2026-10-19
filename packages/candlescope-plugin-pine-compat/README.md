@@ -27,9 +27,71 @@ source or parameters, eviction and process restarts replay history and report
 `meta.sessionReset=true`. Cold starts use mid-bar admission; earlier ticks and
 varip state cannot be recovered. No persistent recovery or indefinite retention is promised.
 
-External `request.*` data, imports, strategies and unmapped native drawing objects
-remain rejected by the indicator sidecar. Strategies use the separate native or
-external strategy entry point and its registry.
+The current source candidate adds explicit execution clocks, cached source
+analysis, and exchange price grids. `syminfo` price-grid values require actual
+host metadata instead of synthetic defaults. Native backtests and replay freeze
+execution clocks at bar close; indicators use the host observation clock.
+
+Indicator `request.security` and `request.security_lower_tf` can read complete,
+already-local standard candles from exact exchanges and market types. Literal
+and inherited chart selectors are resolved; dynamic/nested contexts require a
+finite declaration in `params.__pineContexts` / `options.pineRequestContexts`
+(at most 16). Missing data fails explicitly; execution does not initiate a
+download or substitute another market. Versioned indicator imports are supplied
+as an explicit `options.pineLibrarySources` map; the editor persists that map in
+`params.__pineLibraries`, including preview, range requests and subscriptions.
+
+The current development-core candidate (`b9200480e`, requirements schema 3)
+also accepts explicit effective currency rates through `pineCurrencyRates`
+(indicator params `__pineCurrencyRates`) or frozen native `currency_rates`.
+Their `effectiveTime` is the actual availability time in Unix milliseconds;
+future frames do not affect earlier queries. Missing pairs remain input errors.
+Chart quote currency comes from exchange metadata or explicit chart metadata,
+never from a symbol-name guess. Native batch and fixed-history replay share
+these inputs. Chart revisions and host-matching runs also freeze library sources.
+These are source-candidate capabilities, not a published-plugin release claim.
+Analysis, compilation and session identities include the full library sources;
+public results expose dependency SHA-256 digests. Transitive imports require all
+source files. The host does not fetch libraries from the internet.
+
+Native drawing snapshots now use `collections.objects.pineScenes` and the public
+`drawings` payload lane. The chart renders vertical/arrow lines, boxes, labels,
+curved/filled polylines, linefills and viewport-positioned tables with merged cells.
+Snapshots replace object state, including deletions; older range responses cannot
+replace a newer observation. Coordinates retain the execution window and original
+chart times across gaps, prepend and replay. Fonts and curve interpolation use
+host rendering; pixel parity with TradingView is not claimed. Native plotchar, plotarrow, OHLC
+bars/candles and vertical gradient fills use the same scene renderer.
+The bridge requires `render.native-scene/1`; older hosts reject the capability
+instead of silently dropping these objects.
+
+New chart strategy revisions use `PINE_ENGINE` / `pine-engine-chart-v1`, calling
+the real engine in an isolated process with actual Host account feedback. The
+profile supports closed-bar market entries/closes, one entry ID and net positions;
+price orders, pyramiding, requests and intrabar callbacks use the separate native
+strategy workbench. Frozen `PINE_SUBSET` revisions keep their prior semantics.
+Compiled revisions bind the installed engine identity; reinstalling requires
+recompilation. Host checkpoints retain the visible bars/account transcript.
+
+`pine-external/6` and chart evaluators negotiate append transport, including
+stable requested contexts and confirmed fill-pass groups. The companion isolated
+engine candidate `0.3.2+external.1` adds `Program.external_session().append(...)`:
+committed state is retained and only new bars/account frames execute. Frozen
+request changes, historical corrections, unconfirmed-pass replacement, process
+restart and dataset-end-dependent scripts rebase deliberately. `barstate.islast`,
+`last_bar_index/time`, visible-chart builtins and `calc_bars_count` cannot safely
+reuse a growing historical prefix. Synthetic ticker contexts also retain replay.
+Older engines keep the batch fallback. Outputs are still full snapshots; this
+removes repeated interpreter evaluation, not all history-sized transport costs.
+
+Build the companion engine from upstream branch `codex/external-incremental-host`
+(base `28ecae3c645e9269e2099d27cc9abbb1f52ee9ea`) with `maturin build --release`.
+`qualify_source_candidate.py --engine-wheel <candidate.whl>` builds and verifies
+a separately labelled offline CSPKG against that exact wheel digest. Omit that
+option to qualify against the unchanged official engine.
+
+These are source-candidate capabilities, not a replacement for the published
+0.3.2 CSPKG. Published release locks and active user installations are unchanged.
 
 Run locally:
 

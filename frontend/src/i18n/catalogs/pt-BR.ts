@@ -1,6 +1,11 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
+  "indicator.pine.currencyRates": "Taxas de câmbio efetivas do Pine (JSON)",
+  "indicator.pine.currencyRatesHelp": "Informe a disponibilidade real em milissegundos Unix. Valores futuros não são usados em consultas anteriores. Não há substituição automática de mercados de câmbio.",
+  "indicator.pine.quoteCurrency": "Moeda de cotação do gráfico (exige o passo real de preço)",
+  "indicator.pine.contexts": "Mercados solicitados pelo Pine (JSON)",
+  "indicator.pine.contextsHelp": "Declare os mercados locais usados por solicitações dinâmicas ou aninhadas. Use períodos no formato Pine (60 = uma hora). Defina marketType quando necessário e prepare os dados ausentes primeiro.",
   "research.external.copyCommand": "Copiar comando de inicialização",
   "research.external.commandCopied": "Comando de inicialização copiado.",
   "research.external.copyFailed": "Não foi possível copiar automaticamente. Selecione e copie o texto do comando.",

@@ -21,6 +21,7 @@ import {
 } from "../../research-data/researchDataSourceModel.js";
 import type { ResultProjectionIdentity } from "./chartStrategyTesterState.js";
 import type { ChartStrategyRunRequest } from "./chartStrategyTesterUiModel.js";
+import { parsePineLibraries } from "../../indicators/PineLibraryInputs.js";
 
 export type ChartStrategyRunApi = Pick<BacktestApiClient,
   | "createStrategyRevision"
@@ -130,6 +131,15 @@ function cloneFrozen<T>(value: T): T {
   return JSON.parse(canonicalChartStrategyJson(value)) as T;
 }
 
+function executionParameters(frozen: ChartStrategyRunRequest): Record<string, unknown> {
+  const parameters = cloneFrozen(frozen.attachment.parameters);
+  if (frozen.language === "pine") {
+    delete parameters.__pineLibraries;
+    delete parameters.__pineLibrariesText;
+  }
+  return parameters;
+}
+
 export function chartStrategyQuickPresetIdForMarket(marketType: string): string {
   return marketType === "spot" ? "CRYPTO_SPOT_STANDARD_V1" : "CRYPTO_PERP_STANDARD_V1";
 }
@@ -138,6 +148,14 @@ export async function freezeChartStrategyRunRequest(
   request: ChartStrategyRunRequest,
 ): Promise<ChartStrategyFrozenRunRequest> {
   const cloned = cloneFrozen(request);
+  if (cloned.language === "pine") {
+    const parameters = cloned.attachment.parameters;
+    const libraries = parsePineLibraries(typeof parameters.__pineLibrariesText === "string"
+      ? parameters.__pineLibrariesText : JSON.stringify(parameters.__pineLibraries ?? {}));
+    delete parameters.__pineLibrariesText;
+    delete parameters.__pineLibraries;
+    if (Object.keys(libraries).length) parameters.__pineLibraries = libraries;
+  }
   if (cloned.language === "python" && !cloned.pythonTrustedConfirmed) {
     throw new ChartStrategyRunError("TRUSTED_LOCAL_UNCONFIRMED", "Confirm local Python permissions before running");
   }
@@ -185,7 +203,7 @@ export function chartContextRequestForFrozen(
 }
 
 function revisionLanguage(language: ChartStrategyFrozenRunRequest["language"]): string {
-  return language === "python" ? "PYTHON_EDITOR" : language === "pine" ? "PINE_SUBSET" : "PYNE_CHART_V1";
+  return language === "python" ? "PYTHON_EDITOR" : language === "pine" ? "PINE_ENGINE" : "PYNE_CHART_V1";
 }
 
 function requireString(source: Record<string, string>, name: string): string {
@@ -276,7 +294,7 @@ export function buildChartStrategyRunBody(input: {
     symbol: input.frozen.session.symbol,
     interval: input.frozen.session.interval,
     warmup_bars: input.resolution.preparation?.warmup_bars ?? 0,
-    parameters: cloneFrozen(input.frozen.attachment.parameters),
+    parameters: executionParameters(input.frozen),
     output_mode: input.revision.output_modes.includes("TARGET_POSITION")
       ? "TARGET_POSITION"
       : input.revision.output_modes[0],
@@ -579,6 +597,7 @@ export async function runResearchBacktest(options: {
     base_revision_id: null,
     source_text: frozen.source,
     parameter_schema: [],
+    ...(frozen.language === "pine" ? { libraries: frozen.attachment.parameters.__pineLibraries ?? {} } : {}),
   }, options.signal);
   options.onRevision?.(revision);
 
@@ -629,7 +648,7 @@ export async function runResearchBacktest(options: {
       const strategyIntent = {
         ...(frozen.language === "python" ? { python_runtime_mode: "TRUSTED_LOCAL", python_trusted_confirmed: frozen.pythonTrustedConfirmed === true } : {}),
         strategy_revision_id: revision.revision_id,
-        parameters: frozen.attachment.parameters,
+        parameters: executionParameters(frozen),
         ...(frozen.attachment.executionOverrides ? { execution_overrides: frozen.attachment.executionOverrides } : {}),
         chart_cell_scope: frozen.cellScope,
         strategy_draft_id: frozen.draftId,
@@ -667,7 +686,7 @@ export async function runResearchBacktest(options: {
     snapshot_hash: resolution.snapshot_hash,
     start_time_ms: range.startTimeMs,
     end_time_ms: Math.min(range.endTimeMs, range.startTimeMs + 7 * 86_400_000),
-    parameters: frozen.attachment.parameters,
+    parameters: executionParameters(frozen),
   }, options.signal);
     await options.api.validate(body, options.signal);
   }

@@ -148,7 +148,10 @@ def launch(runtime, intent, inputs, job_id):
     payload = {key: value for key, value in main.items() if key not in {"symbol", "timeframe"}}
     payload.update(language=intent["language"], source=intent["source"], parameters=intent["parameters"],
         libraries=intent["libraries"], contexts=contexts,
-        context={"symbol": main["symbol"], "timeframe": main["timeframe"]})
+        context={"symbol": main["symbol"], "timeframe": main["timeframe"],
+                 **({"metadata": intent["chart_metadata"]} if intent.get("chart_metadata") else {})})
+    if intent.get("currency_rates") is not None:
+        payload["currency_rates"] = intent["currency_rates"]
     contract = NativeRunRequest
     if intent.get("execution") is not None:
         contract = ExternalRunRequest
@@ -162,8 +165,8 @@ def validate_frozen_external(runtime, payload):
     from app.market_dataset.snapshot import MarketDatasetError
     if payload["execution_fidelity"] != "TRADE_TAPE" or payload.get("execution_data") is not None:
         raise PreparationError("INPUT_UNSUPPORTED", "Automatic frozen execution requires archive TRADE_TAPE")
-    if payload.get("libraries") or payload.get("magnifier"):
-        raise PreparationError("EXTERNAL_UNSUPPORTED", "Host matching does not accept native libraries or Magnifier")
+    if payload.get("magnifier"):
+        raise PreparationError("EXTERNAL_UNSUPPORTED", "Host matching requires execution events instead of native Magnifier")
     keys = set()
     for index, item in enumerate([payload, *payload.get("contexts", [])]):
         metadata = payload["context"] if index == 0 else item

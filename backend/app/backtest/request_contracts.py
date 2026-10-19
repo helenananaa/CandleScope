@@ -206,6 +206,7 @@ class StrategyRevisionRequest(BaseModel):
     base_revision_id: str | None = None
     source_text: str = Field(default="", max_length=100_000)
     parameter_schema: list[dict[str, Any]] = Field(default_factory=list)
+    libraries: dict[str, str] = Field(default_factory=dict, max_length=64)
 
 
 class StrategyCopyRequest(BaseModel):

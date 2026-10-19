@@ -3,6 +3,7 @@ from candlescope_plugin_sdk.native_strategy import serve_session
 from .native_strategy import describe, prepare, pack
 from .strategy_time import engine_bars, engine_magnifier
 from .event_requests import run_with_event_requests
+from .host_inputs import native_request_bars, execution_times
 import pine_compat
 
 
@@ -13,6 +14,9 @@ class Session:
         bars = engine_bars(request["bars"])
         supplied = {f"{item['symbol']}:{item['timeframe']}": engine_bars(item["bars"])
                     for item in request.get("contexts", [])}
+        native_request_bars(request, supplied)
+        clocks = execution_times(request["bars"], request.get("execution_times"))
+        clock_options = {"execution_times": clocks} if clocks is not None else {}
         # Runtime ticker descriptors cannot be inferred from source text. Resolve
         # them against the immutable horizon once; the engine still reveals only
         # the event cohorts confirmed by each market bar as the session advances.
@@ -21,12 +25,12 @@ class Session:
             run_with_event_requests(lambda request_bars: program.run(bars,
                 input_overrides=overrides or None,
                 chart_symbol=request["context"]["symbol"], chart_timeframe=request["context"]["timeframe"],
-                request_bars=request_bars, magnifier_bars=engine_magnifier(request.get("magnifier"))),
+                request_bars=request_bars, magnifier_bars=engine_magnifier(request.get("magnifier")), **clock_options),
                 request, supplied, engine_bars, pine_compat)
         self.engine = program.historical_session(bars, input_overrides=overrides or None,
             chart_symbol=request["context"]["symbol"], chart_timeframe=request["context"]["timeframe"],
             request_bars=supplied or None,
-            magnifier_bars=engine_magnifier(request.get("magnifier")))
+            magnifier_bars=engine_magnifier(request.get("magnifier")), **clock_options)
         self.saved = {0: self.engine.fork()}
 
     def advance(self, target):

@@ -1,11 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { automaticHostExecution, emptyAdvancedInputs, executionInputs, freezeAdvancedInputs, type InputDataset } from "./nativeInputs.js";
+import { automaticHostExecution, emptyAdvancedInputs, executionInputs, freezeAdvancedInputs, restoreAdvancedInputs, type InputDataset } from "./nativeInputs.js";
 import { nativeApi } from "./nativeBacktestApi.js";
 
 const dataset: InputDataset = { dataset_id: "data", data_epoch: "epoch1", name: "ETH", symbol: "ETHUSDT",
   interval: "1m", first_open_ms: 0, last_close_ms: 599999 };
 const main = { start_time_ms: 60000, end_time_ms: 299999, exchange: "binance", market_type: "spot" };
+
+test("advanced source dependencies and partial JSON edits survive draft restoration without trusting stale datasets", async () => {
+  const input = { contexts: [{ dataset, symbol: "BINANCE:ETHUSDT" }], magnifier: dataset,
+    libraries: "{", priceTickSize: ".1", currency: "USDT", currencyRates: "{" };
+  assert.deepEqual(restoreAdvancedInputs(JSON.parse(JSON.stringify(input))), input);
+  assert.deepEqual(restoreAdvancedInputs({ contexts: [{ dataset: {}, symbol: "x" }], libraries: 1 }), emptyAdvancedInputs());
+  const valid = restoreAdvancedInputs({ ...input, libraries: "{}", currencyRates: "" });
+  await assert.rejects(freezeAdvancedInputs(valid, "pine", main, mockApi([], [])), /changed/);
+});
 function mockApi(datasets: InputDataset[], calls: unknown[]) {
   return (async (path: string, body?: unknown) => {
     calls.push({ path, body });

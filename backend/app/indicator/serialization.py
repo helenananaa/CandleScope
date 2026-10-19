@@ -16,6 +16,7 @@ PYNE_EXTENDED_OUTPUT_KEYS = (
     "bgcolors",
     "barcolors",
     "signals",
+    "drawings",
 )
 INDICATOR_PAYLOAD_SCHEMA_VERSION = 1
 INDICATOR_OUTPUT_SCHEMA_VERSION = 2
@@ -574,6 +575,8 @@ def serialize_plugin_runtime_result(result: ExecuteBatchResult) -> dict[str, Any
         ),
     }
     collections = structured or {}
+    if (collections.get("objects") or {}).get("pineScenes") is not None:
+        payload["drawings"] = collections["objects"]["pineScenes"]
     payload.update(
         build_unified_output(
             lines=lines,

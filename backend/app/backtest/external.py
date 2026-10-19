@@ -60,7 +60,7 @@ def resolve_external(language):
 def run_external_host(plugin, wire, runner, cancelled):
     from .native import invoke
     from .native_session import SessionWorker
-    if runner is invoke and wire["identity"].get("adapter") in {"pine-external/5", "pyne-external/4", "pyne-external/5"}:
+    if runner is invoke and wire["identity"].get("adapter") in {"pine-external/5", "pine-external/6", "pyne-external/4", "pyne-external/5"}:
         worker = SessionWorker(plugin, wire, cancelled, evaluator=True)
         try:
             evaluate = lambda _plugin, payload, **kwargs: worker.request(payload, **kwargs)

@@ -1,4 +1,9 @@
 export const zhCN = {
+  "indicator.pine.currencyRates": "Pine 已生效汇率（JSON）",
+  "indicator.pine.currencyRatesHelp": "按实际可用时刻提供汇率，时间使用 Unix 毫秒。较早的查询不会读取未来汇率。汇率需要明确提供，不会自动替换为其他货币市场。",
+  "indicator.pine.quoteCurrency": "图表报价币种（需提供实际价格步长）",
+  "indicator.pine.contexts": "Pine 请求行情（JSON）",
+  "indicator.pine.contextsHelp": "声明动态或嵌套请求使用的本地行情。周期使用 Pine 格式（60 表示一小时），可指定 marketType。缺失的行情需要先准备。",
   "research.external.copyCommand": "复制启动命令",
   "research.external.commandCopied": "启动命令已复制。",
   "research.external.copyFailed": "无法自动复制，请选中命令文本手动复制。",

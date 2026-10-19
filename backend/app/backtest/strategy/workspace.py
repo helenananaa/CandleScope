@@ -13,6 +13,7 @@ from app.backtest.strategy.builtin import (
     build_builtin_provider,
 )
 from app.backtest.strategy.pine_adapter import MATRIX_VERSION, analyze_pine_strategy
+from app.backtest.strategy.pine_engine import REVISION as PINE_ENGINE_REVISION, SOURCE_SCHEMA, PineEngineProvider, analyze as analyze_engine, validate_libraries
 from app.backtest.strategy.chart_pyne import (
     CHART_PYNE_REVISION,
     ChartPyneStrategyProvider,
@@ -28,6 +29,7 @@ LANGUAGES = frozenset(
     {
         "BUILTIN_TEMPLATE",
         "PINE_SUBSET",
+        "PINE_ENGINE",
         "PYNE_ORDER_DSL",
         "PYNE_CHART_V1",
         "EXTERNAL_ARTIFACT_REF",
@@ -70,6 +72,12 @@ def compile_revision(payload: Mapping[str, object], *, now_ms: int) -> dict[str,
         )
     diagnostics: list[dict[str, object]] = []
     external_manifest = None
+    pine_analysis = None
+    libraries = payload.get("libraries", {})
+    if language == "PINE_ENGINE":
+        libraries = validate_libraries(libraries)
+    if libraries and language != "PINE_ENGINE":
+        raise StrategyProviderError("FIDELITY_UNSUPPORTED", "versioned Pine libraries require PINE_ENGINE")
     if language == "BUILTIN_TEMPLATE":
         base = str(
             payload.get("base_revision_id") or BUILTIN_RSI_WILDER_LONG_SHORT_REVISION
@@ -79,6 +87,9 @@ def compile_revision(payload: Mapping[str, object], *, now_ms: int) -> dict[str,
                 "FIDELITY_UNSUPPORTED",
                 "M9 builtin template supports the frozen Wilder RSI revision",
             )
+    elif language == "PINE_ENGINE":
+        pine_analysis = analyze_engine(source, libraries)
+        base = PINE_ENGINE_REVISION
     elif language == "PINE_SUBSET":
         rejected = analyze_pine_strategy(source)
         diagnostics = [
@@ -191,7 +202,8 @@ def compile_revision(payload: Mapping[str, object], *, now_ms: int) -> dict[str,
 
     source_hash = canonical_hash({"language": language, "source": source})
     dependency_hash = canonical_hash(
-        {"baseRevision": base, "runtime": RUNTIME_REVISION}
+        {"baseRevision": base, "runtime": RUNTIME_REVISION,
+         **({"pineIdentity": pine_analysis["identity"], "pineLibraries": libraries} if pine_analysis else {})}
     )
     compiled = {
         "schema": COMPILE_RECEIPT_SCHEMA,
@@ -200,8 +212,10 @@ def compile_revision(payload: Mapping[str, object], *, now_ms: int) -> dict[str,
         "sourceHash": source_hash,
         "dependencyHash": dependency_hash,
         "runtimeRevision": RUNTIME_REVISION,
-        "tradingViewEquivalent": False if language == "PINE_SUBSET" else None,
+        "tradingViewEquivalent": False if language in {"PINE_SUBSET", "PINE_ENGINE"} else None,
         "executionSource": (
+            json.dumps({"schema": SOURCE_SCHEMA, "source": source, "identity": pine_analysis["identity"], "libraries": libraries}, sort_keys=True)
+            if pine_analysis else
             artifact["recorded_expression"]
             if language == "EXTERNAL_ARTIFACT_REF"
             else source
@@ -210,6 +224,9 @@ def compile_revision(payload: Mapping[str, object], *, now_ms: int) -> dict[str,
     compiled_hash = canonical_hash(compiled)
     revision_id = "srv2_" + uuid.uuid4().hex
     provider = (
+        PineEngineProvider()
+        if base == PINE_ENGINE_REVISION
+        else
         ChartPyneStrategyProvider()
         if base == CHART_PYNE_REVISION
         else None

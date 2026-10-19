@@ -3181,6 +3181,7 @@ export function useIndicatorRuntime(
       fills: visibleOutputState.fills,
       hlines: visibleOutputState.hlines,
       bgcolors: visibleOutputState.bgcolors,
+      drawings: visibleOutputState.drawings,
     }),
     [
       activeIndicators,
@@ -3199,6 +3200,7 @@ export function useIndicatorRuntime(
     fills: visibleOutputState.fills,
     hlines: visibleOutputState.hlines,
     bgcolors: visibleOutputState.bgcolors,
+      drawings: visibleOutputState.drawings,
     barcolors: visibleOutputState.barcolors,
     signals: visibleOutputState.signals,
     paramSchemas: visibleOutputState.paramSchemas,

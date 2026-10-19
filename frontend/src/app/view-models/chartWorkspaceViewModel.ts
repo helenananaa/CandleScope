@@ -174,6 +174,7 @@ export function buildChartWorkspaceViewModel({
         indicatorFills: indicatorView.fills,
         indicatorHlines: indicatorView.hlines,
         indicatorBgcolors: indicatorView.bgcolors,
+        indicatorDrawings: indicatorView.drawings,
         indicatorBarcolors: indicatorView.barcolors,
         onRemoveSubPane: (pane) => {
           const owner = pane.owner;

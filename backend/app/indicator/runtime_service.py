@@ -8,13 +8,15 @@ import json
 import logging
 import threading
 import time
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
 from candlescope_plugin_sdk import (
     FEATURE_BATCH_EXECUTION_V1,
     FEATURE_RENDER_LINE_SERIES_V1,
+    AnalyzeRequest,
     Bar,
     ExecuteBatchRequest,
     ExecuteBatchResult,
@@ -22,8 +24,8 @@ from candlescope_plugin_sdk import (
     RuntimeDescriptor,
 )
 
-from app.plugin_runtime.errors import PluginHostError, PluginRequestError
 from app.core.executors import run_indicator
+from app.plugin_runtime.errors import PluginHostError, PluginRequestError
 
 from .runtime_routes import (
     ROUTE_MODE_LEGACY,
@@ -34,7 +36,6 @@ from .runtime_routes import (
     IndicatorRuntimeRoutesError,
     load_indicator_runtime_routes_from_environment,
 )
-
 
 MAX_RECENT_ROUTE_RESULTS = 64
 DEFAULT_MAX_PENDING_SHADOW_TASKS = 64
@@ -89,6 +90,16 @@ class IndicatorRuntimeRequest:
         object.__setattr__(self, "options", dict(self.options))
 
     def to_sdk_request(self) -> ExecuteBatchRequest:
+        options = dict(self.options)
+        if self.language == "pine":
+            if "__pineLibraries" in self.params:
+                options["pineLibrarySources"] = self.params["__pineLibraries"]
+            if "__pineContexts" in self.params:
+                options["pineRequestContexts"] = self.params["__pineContexts"]
+            if "__pineCurrencyRates" in self.params:
+                options["pineCurrencyRates"] = self.params["__pineCurrencyRates"]
+            from app.indicator.pine_host_inputs import indicator_host_options
+            options = indicator_host_options(self, options)
         return ExecuteBatchRequest(
             source=self.source,
             context=MarketContext(
@@ -99,7 +110,7 @@ class IndicatorRuntimeRequest:
             ),
             bars=tuple(_to_sdk_bar(item) for item in self.bars),
             params=dict(self.params),
-            options=dict(self.options),
+            options=options,
         )
 
 
@@ -235,6 +246,8 @@ class IndicatorRuntimeService:
             "sidecarErrors": 0,
         }
         self._recent: list[dict[str, Any]] = []
+        self.pine_data_manager = None
+        self._pine_requirements = OrderedDict()
 
     @classmethod
     def legacy_only(cls) -> "IndicatorRuntimeService":
@@ -632,6 +645,25 @@ class IndicatorRuntimeService:
             # historical windows use the bounded CPU pool before IPC begins.
             sdk_request = (request.to_sdk_request() if len(request.bars) <= 64
                            else await run_indicator(request.to_sdk_request))
+            if request.language == "pine" and self.pine_data_manager is not None:
+                libraries = sdk_request.options.get("pineLibrarySources", {})
+                library_key = json.dumps(libraries, sort_keys=True, ensure_ascii=False)
+                key = (route.runtime_id, sdk_request.source, sdk_request.context, library_key)
+                requirements = self._pine_requirements.get(key)
+                if requirements is None:
+                    analysis = await self.host.analyze(route.runtime_id, AnalyzeRequest(source=sdk_request.source, context=sdk_request.context, options={"pineLibrarySources": libraries}))
+                    requirements = analysis.meta.get("hostRequirements") or {}
+                    self._pine_requirements[key] = requirements
+                    while len(self._pine_requirements) > 64:
+                        self._pine_requirements.popitem(last=False)
+                else:
+                    self._pine_requirements.move_to_end(key)
+                if requirements.get("requests"):
+                    from app.core.executors import run_storage
+
+                    from .pine_host_inputs import requested_data
+                    data = await run_storage(requested_data, sdk_request, requirements, self.pine_data_manager())
+                    sdk_request = replace(sdk_request, options={**sdk_request.options, **data})
             result = await self.host.execute_batch(route.runtime_id, sdk_request)
             payload = await run_indicator(adapt_sidecar, result)
             if not isinstance(payload, dict):

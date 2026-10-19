@@ -801,6 +801,9 @@ class BacktestWorker:
                     ),
                     step_timeout_s=self.settings.provider_step_timeout_ms / 1000,
                 )
+            if config.get("pine_runtime_identity"):
+                observation_market = {"venue": str(config["exchange"]), "market_type": str(config["market_type"]),
+                                      "symbol": str(manifest["symbol"])}
             if record["fidelity_mode"] == "BAR_APPROX":
                 ref = DatasetRef(
                     dataset_id=str(record["dataset_id"]),

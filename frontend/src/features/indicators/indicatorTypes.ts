@@ -148,6 +148,15 @@ export interface IndicatorLine {
   renderUpdate?: "tail" | "full" | null;
 }
 
+export interface IndicatorDrawing {
+  id: string;
+  indicatorId?: string;
+  pane: string;
+  asOf: number;
+  times: number[];
+  objects: Array<{ kind: "lines" | "labels" | "boxes" | "polylines" | "linefills" | "tables" | "plotseries" | "gradientfills"; row: Record<string, unknown> }>;
+}
+
 export interface IndicatorMarker {
   data: IndicatorAnnotationPoint[];
   indicatorId?: string;
@@ -224,6 +233,7 @@ export type IndicatorOutput =
   | { kind: "signal"; value: IndicatorSignal };
 
 export interface NormalizedIndicatorPayload {
+  drawings?: IndicatorDrawing[] | undefined;
   lines: IndicatorLine[];
   markers: IndicatorMarker[];
   fills: IndicatorFill[];
@@ -289,6 +299,7 @@ export interface IndicatorUnifiedAnnotation {
 }
 
 export interface IndicatorPayloadEnvelope {
+  drawings?: IndicatorDrawing[] | undefined;
   ok: boolean | null;
   schemaVersion?: number;
   outputSchemaVersion?: number;
@@ -764,6 +775,7 @@ export interface IndicatorWsSequenceState {
 }
 
 export interface IndicatorOutputState {
+  drawings?: IndicatorDrawing[] | undefined;
   markers: IndicatorMarker[];
   fills: IndicatorFill[];
   hlines: IndicatorHLine[];
@@ -796,6 +808,7 @@ export type IndicatorOutputAction =
   | { type: "remove-indicator"; indicatorId: string }
   | {
       type: "compute-results";
+      drawings?: IndicatorDrawing[] | undefined;
       processedIds?: string[];
       markers?: IndicatorMarker[];
       fills?: IndicatorFill[];

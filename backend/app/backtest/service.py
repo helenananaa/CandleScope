@@ -108,6 +108,7 @@ from .strategy.registry import StrategyRevisionRegistry, build_default_strategy_
 from .strategy.builtin import build_builtin_provider
 from .strategy.chart_pyne import CHART_PYNE_REVISION, ChartPyneStrategyProvider
 from .strategy.pine_adapter import PineStrategyProvider
+from .strategy.pine_engine import REVISION as PINE_ENGINE_REVISION, PineEngineProvider
 from .strategy.workspace import compile_revision
 from .external_provider.contracts import EXTERNAL_REVISION
 from .external_provider.control import ExternalProviderControl
@@ -523,6 +524,10 @@ class BacktestService:
             raise BacktestError(
                 "SCHEMA_UNKNOWN_FIELD", f"unknown strategy revision {revision_id}"
             )
+        pine_libraries = {}
+        if source["language"] == "PINE_ENGINE":
+            compiled = json.loads(str(source["compiled_json"]))
+            pine_libraries = json.loads(compiled["executionSource"]).get("libraries", {})
         return self.create_strategy_revision(
             {
                 "name": name,
@@ -530,6 +535,7 @@ class BacktestService:
                 "base_revision_id": source["base_revision_id"],
                 "source_text": source["source_text"],
                 "parameter_schema": json.loads(str(source["parameter_schema_json"])),
+                "libraries": pine_libraries,
                 "_force_new_revision": True,
             },
             now_ms=now_ms,
@@ -595,6 +601,7 @@ class BacktestService:
                     else (
                         PineStrategyProvider()
                         if row["base_revision_id"] == "pine-long-flat-v1"
+                        else PineEngineProvider() if row["base_revision_id"] == PINE_ENGINE_REVISION
                         else build_builtin_provider(str(row["base_revision_id"]))
                     )
                 )
@@ -1159,6 +1166,8 @@ class BacktestService:
         stored_payload = dict(payload)
         stored_payload["source_event_kind"] = identity.source_event_kind
         normalized_execution = json.loads(identity.execution_json)
+        if normalized_execution.get("pine_runtime_identity"):
+            stored_payload["pine_runtime_identity"] = normalized_execution["pine_runtime_identity"]
         for name in ("checkpoint_policy", "checkpoint_interval", "cost_sensitivity_mode"):
             if name in normalized_execution:
                 stored_payload[name] = normalized_execution[name]
@@ -2661,7 +2670,7 @@ class BacktestService:
             if spec is not None:
                 return execute(self, run_id, spec, events, {
                     "now_ms": now_ms, "warmup_events": warmup_events,
-                    "snapshot_evidence": snapshot_evidence,
+                    "snapshot_evidence": snapshot_evidence, "observation_market": observation_market,
                 })
         if (not getattr(self, "_colocated_worker", False)
                 and json.loads(str(record["config_json"])).get("python_execution_protocol") == "MARKET_BATCH_V1"):
@@ -2704,6 +2713,8 @@ class BacktestService:
                     "seed": config.get("seed"),
                     "outputMode": config.get("output_mode") or "TARGET_POSITION",
                     "tradeExplanationEnabled": self.settings.trade_explanation_effective,
+                    "pineChartMetadata": {"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None,
+                    "pineChartInterval": config.get("signal_interval") or config.get("interval"),
                 }
             )
 
@@ -2856,6 +2867,7 @@ class BacktestService:
                     market=dict(observation_market or {"venue": "local", "symbol": str(record["dataset_id"])}),
                     bar=bar,
                     features=self._observation_features(provider, bar=bar, trade=None, _names=feature_names),
+                    account_view=_pine_account_view(kernel) if config.get("pine_runtime_identity") else None,
                 )
                 return planner.plan(
                     wire,
@@ -3050,7 +3062,7 @@ class BacktestService:
             if spec is not None:
                 return execute(self, run_id, spec, events, {
                     "now_ms": now_ms, "warmup_events": warmup_events,
-                    "snapshot_evidence": snapshot_evidence,
+                    "snapshot_evidence": snapshot_evidence, "observation_market": observation_market,
                 })
         stamp = now_ms or _now_ms()
         warmup_events = self._resolve_warmup(record, warmup_events)
@@ -3090,6 +3102,8 @@ class BacktestService:
                     "signalClock": SIGNAL_CLOCK,
                     "executionClock": EXECUTION_CLOCK,
                     "tradeExplanationEnabled": self.settings.trade_explanation_effective,
+                    "pineChartMetadata": {"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None,
+                    "pineChartInterval": config.get("signal_interval") or config.get("interval"),
                 }
             )
             event_bytes = _event_wire_bytes(events)
@@ -3182,6 +3196,7 @@ class BacktestService:
                     features=self._observation_features(
                         provider, bar=bar_payload, trade=None
                     ),
+                    account_view=_pine_account_view(kernel) if config.get("pine_runtime_identity") else None,
                 )
                 return planner.plan(
                     wire,
@@ -3393,6 +3408,8 @@ class BacktestService:
                     "seed": config.get("seed"),
                     "outputMode": config.get("output_mode") or "TARGET_POSITION",
                     "tradeExplanationEnabled": self.settings.trade_explanation_effective,
+                    "pineChartMetadata": {"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None,
+                    "pineChartInterval": config.get("signal_interval") or config.get("interval"),
                 }
             )
 
@@ -3458,6 +3475,7 @@ class BacktestService:
                     bar=bar,
                     trade=trade,
                     features=self._observation_features(provider, bar=bar, trade=trade),
+                    account_view=_pine_account_view(kernel) if config.get("pine_runtime_identity") else None,
                 )
                 return planner.plan(
                     wire,
@@ -4243,6 +4261,7 @@ class BacktestService:
                             else (
                                 PineStrategyProvider()
                                 if base_revision == "pine-long-flat-v1"
+                                else PineEngineProvider() if base_revision == PINE_ENGINE_REVISION
                                 else build_builtin_provider(base_revision)
                             )
                         )
@@ -4405,6 +4424,10 @@ class BacktestService:
         persisted_execution = self.repository.get_strategy_revision(
             str(payload["strategy_revision_id"])
         )
+        if persisted_execution is not None and persisted_execution["base_revision_id"] == PINE_ENGINE_REVISION:
+            execution_config["pine_runtime_identity"] = json.loads(str(persisted_execution["compiled_json"]))["dependencyHash"]
+            if fidelity not in {"BAR_APPROX", "AGG_TRADE_EXECUTION"}:
+                raise BacktestError("FIDELITY_UNSUPPORTED", "chart Pine requires closed-bar observations")
         python_protocol = payload.get("python_execution_protocol")
         if python_protocol is not None:
             from .strategy.python_market_batch import EXECUTION_PROTOCOL, certified_source
@@ -5380,3 +5403,12 @@ def _trade_chart_bar(bar: MarketEvent) -> dict[str, object]:
         "close": float(bar.payload["close"]),
         "volume": float(bar.payload["volume"]),
     }
+
+
+def _pine_account_view(kernel):
+    account = kernel.account
+    return {"position_size": float(account.position_qty),
+            "position_avg_price": None if account.entry_price is None else float(account.entry_price),
+            "equity": float(account.equity()), "initial_capital": float(kernel.initial_balance),
+            "netprofit": float(account.quote_balance - kernel.initial_balance),
+            "openprofit": float(account.unrealized())}

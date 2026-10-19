@@ -1,6 +1,11 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ja = {
+  "indicator.pine.currencyRates": "Pine 有効為替レート（JSON）",
+  "indicator.pine.currencyRatesHelp": "実際の利用可能時刻を Unix ミリ秒で指定してください。将来の値は過去の照会に使用されません。為替市場の自動置換は行いません。",
+  "indicator.pine.quoteCurrency": "チャートの建値通貨（実際の価格刻みが必要）",
+  "indicator.pine.contexts": "Pine リクエスト市場（JSON）",
+  "indicator.pine.contextsHelp": "動的または入れ子のリクエストで使用するローカル市場を指定します。時間足は Pine 形式です（60 = 1時間）。必要に応じて marketType を指定し、不足データを先に準備してください。",
   "research.external.copyCommand": "起動コマンドをコピー",
   "research.external.commandCopied": "起動コマンドをコピーしました。",
   "research.external.copyFailed": "自動コピーを使用できません。コマンドのテキストを選択してコピーしてください。",

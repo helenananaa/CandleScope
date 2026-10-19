@@ -5,6 +5,7 @@ from .constants import (
     FEATURE_BATCH_EXECUTION_V1,
     FEATURE_RENDER_HISTOGRAM_SERIES_V1,
     FEATURE_RENDER_LINE_SERIES_V1,
+    FEATURE_RENDER_NATIVE_SCENE_V1,
     FEATURE_RENDER_STRUCTURED_OUTPUT_V1,
     FEATURE_SOURCE_ANALYSIS_V1,
     JSONRPC_VERSION,
@@ -34,7 +35,6 @@ from .models import (
 from .runtime import BaseRuntimePlugin, RuntimeDispatcher
 from .server import JsonLineRuntimeServer, serve_runtime
 
-
 __version__ = "0.2.0"
 
 __all__ = [
@@ -50,6 +50,7 @@ __all__ = [
     "FEATURE_RENDER_HISTOGRAM_SERIES_V1",
     "FEATURE_RENDER_LINE_SERIES_V1",
     "FEATURE_RENDER_STRUCTURED_OUTPUT_V1",
+    "FEATURE_RENDER_NATIVE_SCENE_V1",
     "FEATURE_SOURCE_ANALYSIS_V1",
     "HandshakeRequest",
     "HandshakeResult",

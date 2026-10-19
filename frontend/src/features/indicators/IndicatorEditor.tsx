@@ -1,3 +1,6 @@
+import { PineLibraryInputs, pineLibraryParams, parsePineLibraries } from "./PineLibraryInputs.js";
+import { PineContextInputs, pineContextParams, parsePineContexts } from "./PineContextInputs.js";
+import { PineCurrencyInputs, pineCurrencyParams, parsePineCurrencyRates } from "./PineCurrencyInputs.js";
 /**
  * IndicatorEditor — Pyne code editor for writing custom indicators.
  *
@@ -98,6 +101,11 @@ export default function IndicatorEditor({
   const [draft, setDraft] = useState(() => createScriptEditorDraft(indicator.script, Boolean(indicator.id)));
   const modelId = useId();
   const [language, setLanguage] = useState(indicator?.language || "");
+  const [libraryJson, setLibraryJson] = useState(() => JSON.stringify(indicator.params?.__pineLibraries || {}, null, 2));
+  const [contextJson, setContextJson] = useState(() => JSON.stringify(indicator.params?.__pineContexts || [], null, 2));
+  const [currencyJson, setCurrencyJson] = useState(() => indicator.params?.__pineCurrencyRates ? JSON.stringify(indicator.params.__pineCurrencyRates, null, 2) : "");
+  const librariesValid = useMemo(() => { try { parsePineLibraries(libraryJson); parsePineContexts(contextJson); parsePineCurrencyRates(currencyJson); return true; } catch { return false; } }, [libraryJson, contextJson, currencyJson]);
+
   const [securityMode, setSecurityMode] = useState(() => {
     const requested = indicator?.securityMode || "safe";
     return allowedSecurityModes.includes(requested)
@@ -144,6 +152,10 @@ export default function IndicatorEditor({
       : null,
     [allowedRuntimeCatalog, selectedLanguage],
   );
+  const editorParams = useMemo(() => librariesValid && selectedLanguage?.id === "pine"
+    ? pineCurrencyParams(pineContextParams(pineLibraryParams(indicator.params, libraryJson), contextJson), currencyJson)
+    : pineCurrencyParams(pineContextParams(pineLibraryParams(indicator.params, "{}"), "[]"), ""),
+  [indicator.params, selectedLanguage?.id, libraryJson, contextJson, currencyJson, librariesValid]);
   const languageReady = Boolean(selectedLanguage?.available && editorProfile);
   const script = scriptEditorSource(draft, selectedLanguage?.id || language, editorProfile?.starterSource || "");
   const requestedLanguageId = (language || indicator?.language || "").trim();
@@ -183,12 +195,12 @@ export default function IndicatorEditor({
   }, [editorProfile?.pineEnhancements, pineHostCapabilities]);
 
   const handlePreview = useCallback(() => {
-    if (readOnly || !selectedLanguage || !editorProfile) return;
+    if (readOnly || !selectedLanguage || !editorProfile || (selectedLanguage.id === "pine" && !librariesValid)) return;
     onPreview({
       id: indicator?.id || previewState?.id || null,
       name,
       script,
-      params: indicator?.params || {},
+      params: editorParams,
       description: indicator?.description || "",
       language: selectedLanguage.id,
       ...(editorProfile.pyneEnhancements ? { securityMode } : {}),
@@ -196,6 +208,8 @@ export default function IndicatorEditor({
     });
   }, [
     editorProfile,
+    editorParams,
+    librariesValid,
     indicator,
     name,
     onPreview,
@@ -207,12 +221,12 @@ export default function IndicatorEditor({
   ]);
 
   const handleSave = useCallback(() => {
-    if (readOnly || !selectedLanguage || !editorProfile) return;
+    if (readOnly || !selectedLanguage || !editorProfile || (selectedLanguage.id === "pine" && !librariesValid)) return;
     void onSave({
       id: indicator?.id || previewState?.id || null,
       name,
       script,
-      params: indicator?.params || {},
+      params: editorParams,
       description: indicator?.description || "",
       language: selectedLanguage.id,
       ...(editorProfile.pyneEnhancements ? { securityMode } : {}),
@@ -220,6 +234,8 @@ export default function IndicatorEditor({
     });
   }, [
     editorProfile,
+    editorParams,
+    librariesValid,
     indicator,
     name,
     onSave,
@@ -337,14 +353,14 @@ export default function IndicatorEditor({
           {readOnly ? (
             <button
               className="indicator-editor-save"
-              disabled={!languageReady}
+              disabled={!languageReady || (selectedLanguage?.id === "pine" && !librariesValid)}
               onClick={() => {
                 if (!selectedLanguage || !editorProfile) return;
                 onForkBuiltin?.({
                   ...indicator,
                   name,
                   script,
-                  params: indicator.params || {},
+                  params: editorParams,
                   language: selectedLanguage.id,
                   ...(editorProfile.pyneEnhancements ? { securityMode } : {}),
                 });
@@ -357,7 +373,7 @@ export default function IndicatorEditor({
             <>
               <button
                 className="indicator-editor-run"
-                disabled={!languageReady}
+                disabled={!languageReady || (selectedLanguage?.id === "pine" && !librariesValid)}
                 onClick={handlePreview}
                 style={{ background: 'var(--bg-tertiary)', color: 'var(--accent-blue)', border: '1px solid var(--accent-blue)', padding: '6px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '13px', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', gap: '6px' }}
               >
@@ -365,7 +381,7 @@ export default function IndicatorEditor({
               </button>
               <button
                 className="indicator-editor-save"
-                disabled={!languageReady}
+                disabled={!languageReady || (selectedLanguage?.id === "pine" && !librariesValid)}
                 onClick={handleSave}
                 style={{ background: 'var(--accent-blue)', color: 'var(--text-on-accent)', border: 'none', padding: '6px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '13px', boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)', transition: 'all 0.2s ease', marginLeft: '8px' }}
               >
@@ -486,6 +502,9 @@ export default function IndicatorEditor({
             {t("indicator.editor.unsafeHint")}
           </div>
         )}
+        {selectedLanguage?.id === "pine" && <PineLibraryInputs value={libraryJson} onChange={setLibraryJson} readOnly={readOnly} />}
+        {selectedLanguage?.id === "pine" && <PineContextInputs value={contextJson} onChange={setContextJson} readOnly={readOnly} />}
+        {selectedLanguage?.id === "pine" && <PineCurrencyInputs value={currencyJson} onChange={setCurrencyJson} readOnly={readOnly} />}
         <div className="indicator-editor-monaco" style={{ flex: 1, minHeight: 0, border: "1px solid rgba(255, 255, 255, 0.1)", borderRadius: "10px", overflow: "hidden", boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2), inset 0 2px 4px rgba(0, 0, 0, 0.2)" }}>
           <Suspense fallback={null}><Editor
             height="100%"

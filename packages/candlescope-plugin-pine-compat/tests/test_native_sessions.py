@@ -67,7 +67,7 @@ def test_stateless_forming_and_changed_parameters_do_not_reuse_state():
     source = '//@version=6\nindicator("x")\nx=input.int(2)\nplot(close*x)\n'
     plugin = PineCompatRuntimePlugin()
     analysis = plugin.analyze(AnalyzeRequest(source=source, context=CONTEXT))
-    assert analysis.ok and analysis.meta["hostRequirements"]["schemaVersion"] == 2
+    assert analysis.ok and analysis.meta["hostRequirements"]["schemaVersion"] in {2, 3}
     key = str(analysis.inputs[0]["callSiteId"])
     bars = [bar(0, 10), bar(1, 20, False)]
     first = execute(plugin, bars, source=source)
@@ -99,7 +99,7 @@ def test_engine_version_drift_is_rejected(monkeypatch):
         PineCompatRuntimePlugin().describe()
 
 
-def test_gradient_fill_fails_explicitly_instead_of_losing_visual_information():
+def test_gradient_fill_preserves_native_color_stops_in_scene():
     source = ('//@version=6\nindicator("gradient")\n'
               'a=plot(close+2)\nb=plot(close-2)\n'
               'fill(a,b,close+1,close-1,color.green,color.red)\n')
@@ -107,9 +107,14 @@ def test_gradient_fill_fails_explicitly_instead_of_losing_visual_information():
     result = plugin.execute_batch(ExecuteBatchRequest(
         source=source, context=CONTEXT, bars=(bar(0, 10),),
         options={"pineSessionId": "gradient"}))
-    assert not result.ok
-    assert any(d.code == "PINE_HOST_CAPABILITY_UNSUPPORTED" for d in result.diagnostics)
-    assert "gradient" not in plugin._sessions.entries
+    assert result.ok, result.diagnostics
+    objects = result.output.collections.objects["pineScenes"][0]["objects"]
+    assert objects[0]["kind"] == "gradientfills"
+    gradient = objects[0]["row"]["gradient"][0]
+    assert gradient["topValue"] == 11
+    assert gradient["bottomValue"] == 9
+    assert gradient["topColor"] != gradient["bottomColor"]
+
 
 
 def test_time_close_uses_chart_interval_and_resource_errors_are_reported():

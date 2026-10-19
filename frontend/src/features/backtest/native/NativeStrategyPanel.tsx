@@ -12,7 +12,7 @@ import "./nativeStrategy.css";
 import { NativeAdvancedInputs } from "./NativeAdvancedInputs.js";
 import { NativePreparationContexts } from "./NativePreparationContexts.js";
 import { restorePreparationContexts, restorePreparationDate, type NativePreparationContext } from "./nativePreparationInputs.js";
-import { automaticHostExecution, emptyAdvancedInputs, executionInputs, freezeAdvancedInputs, type AdvancedInputs } from "./nativeInputs.js";
+import { automaticHostExecution, emptyAdvancedInputs, executionInputs, freezeAdvancedInputs, restoreAdvancedInputs, type AdvancedInputs } from "./nativeInputs.js";
 import { PreparationApiError, preparationRequest, waitForPreparation, type PreparationJob, type PreparationCapabilities } from "../../data-preparation/api.js";
 import PreparationWaiting from "../../data-preparation/PreparationWaiting.js";
 import { Icon } from "../../../components/icons/Icon.js";
@@ -217,14 +217,14 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       setHistoryEnd(restorePreparationDate(draft && typeof draft === "object" && "historyEnd" in draft ? draft.historyEnd : null, defaultEnd));
       setExecutionOrigin(draft && typeof draft === "object" && "executionOrigin" in draft && draft.executionOrigin === "binance-futures"
         && "executionOriginDataset" in draft && draft.executionOriginDataset === importedDatasetId ? draft.executionOrigin : "");
-    } catch { setSource(NATIVE_TEMPLATES[language]); setParameters("{}"); setAutomaticContexts([]); setHistoryStart(defaultStart); setHistoryEnd(defaultEnd); setExecutionOrigin(""); }
-    setAdvanced(emptyAdvancedInputs());
+      setAdvanced(restoreAdvancedInputs(draft && typeof draft === "object" && "advanced" in draft ? draft.advanced : null));
+    } catch { setSource(NATIVE_TEMPLATES[language]); setParameters("{}"); setAutomaticContexts([]); setHistoryStart(defaultStart); setHistoryEnd(defaultEnd); setExecutionOrigin(""); setAdvanced(emptyAdvancedInputs()); }
   }, [storageKey, legacyStorageKey, language, mode, importedDatasetId]);
   useEffect(() => { setResolution(null); }, [props.session.exchange, props.session.marketType, props.session.symbol, props.session.interval]);
-  const save = (text: string, params: string, contexts = automaticContexts, start = historyStart, end = historyEnd, origin = executionOrigin) => {
+  const save = (text: string, params: string, contexts = automaticContexts, start = historyStart, end = historyEnd, origin = executionOrigin, advancedInputs = advanced) => {
     setSource(text); setParameters(params);
     const draft = JSON.stringify({ source: text, parameters: params, automaticContexts: contexts, historyStart: start, historyEnd: end,
-      executionOrigin: origin, executionOriginDataset: importedDatasetId });
+      executionOrigin: origin, executionOriginDataset: importedDatasetId, advanced: advancedInputs });
     const item = instanceRef.current;
     patchInstance.current(item.id, { drafts: { [`${language}:${mode}`]: draft } });
     try { localStorage.setItem(storageKey, draft); } catch { setError(t("native.saveFailed")); }
@@ -251,6 +251,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       try { params = JSON.parse(parameters); } catch { throw new Error(t("native.parametersInvalid")); }
       if (!params || Array.isArray(params) || typeof params !== "object") throw new Error(t("native.parametersInvalid"));
       const context = props.session;
+      const pineMetadata = language === "pine" && advanced.priceTickSize ? { priceTickSize: advanced.priceTickSize,
+        ...(advanced.currency ? { currency: advanced.currency } : {}) } : undefined;
       const execution = executionInputs(mode, hostSettings, fidelity, fillRecalculation, executionData);
       const automaticExecution = automaticHostExecution(mode, hostSettings, fidelity, fillRecalculation, executionData);
       const prepareRun = async (route: string, submission: Record<string, unknown>) => {
@@ -279,6 +281,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
           start_time_ms: startTime, end_time_ms: endTime - 1, exchange: context.exchange, market_type: context.marketType,
         });
         const submission = { language, source, parameters: params, libraries: inputs.libraries,
+          ...("currency_rates" in inputs ? { currency_rates: inputs.currency_rates } : {}),
+          ...(pineMetadata ? { chart_metadata: pineMetadata } : {}),
           ...(automaticExecution === null ? {} : { execution: automaticExecution }),
           contexts: automaticContexts.map((row) => ({ ...row, binding_symbol: row.binding_symbol.trim() || undefined })),
           context: { exchange: context.exchange, market_type: context.marketType, symbol: context.symbol,
@@ -301,7 +305,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         const snapshot = await nativeApi<{ snapshot_hash: string }>("/datasets/snapshot", data);
         const inputs = await freezeAdvancedInputs(advanced, language, data);
         const payload = { ...data, ...inputs, ...execution, snapshot_hash: snapshot.snapshot_hash,
-          language, source, parameters: params, context: { symbol: context.symbol, timeframe: nativeTimeframe(context.interval) } };
+          language, source, parameters: params, context: { symbol: context.symbol, timeframe: nativeTimeframe(context.interval), ...(pineMetadata ? { metadata: pineMetadata } : {}) } };
         if (prepareTrades) { await prepareRun("/external-strategy", { run: payload }); return; }
         const result = await nativeApi<NativeRun>(runPath, payload, crypto.randomUUID());
         if (alive.current) receiveRun(result);
@@ -326,7 +330,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         snapshot_hash: frozen.snapshot_hash, start_time_ms: frozen.coverage.requested_start_ms ?? frozen.coverage.available_start_ms,
         end_time_ms: frozen.coverage.requested_end_ms ?? frozen.coverage.available_end_ms,
         interval: context.interval, exchange: context.exchange, market_type: context.marketType,
-        context: { symbol: `${context.exchange.toUpperCase()}:${context.symbol}`, timeframe: nativeTimeframe(context.interval) },
+        context: { symbol: `${context.exchange.toUpperCase()}:${context.symbol}`, timeframe: nativeTimeframe(context.interval), ...(pineMetadata ? { metadata: pineMetadata } : {}) },
       }, crypto.randomUUID());
       if (alive.current) receiveRun(result);
     } catch (reason) { if (alive.current) { setError(reason instanceof PreparationApiError ? `${reason.code}: ${reason.message}` : String(reason)); setBusy(false); } }
@@ -495,7 +499,10 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         {fidelity !== "BAR_APPROX" && <><label className="strategy-settings-check"><input type="checkbox" disabled={busy} checked={fillRecalculation} onChange={(event) => { setFillRecalculation(event.target.checked); saveExecution({ fillRecalculation: event.target.checked }); }} />{t("native.external.fillRecalculation")}</label><p>{t("native.external.fillHint")}</p>{fidelity !== "BOOK_SAMPLED" && <p>{t("native.external.dataHint")}</p>}</>}
       </section>}
       <details className="strategy-settings-section"><summary>{t("replay.hub.sectionAdvanced")}</summary>
-        <NativeAdvancedInputs native={mode === "NATIVE"} value={advanced} onChange={setAdvanced} language={language} disabled={busy} exchange={props.session.exchange} />
+        <NativeAdvancedInputs native={mode === "NATIVE"} value={advanced} onChange={(next) => {
+          setAdvanced(next);
+          save(source, parameters, automaticContexts, historyStart, historyEnd, executionOrigin, next);
+        }} language={language} disabled={busy} exchange={props.session.exchange} />
       </details>
     </div>
     <div className="native-dock-report" data-view={tab} hidden={props.docked && tab !== "overview" && tab !== "trades"}>

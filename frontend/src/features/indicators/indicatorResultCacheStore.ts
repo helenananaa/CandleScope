@@ -1,3 +1,4 @@
+import { reconcilePineScenes } from "./pineDrawingState.js";
 import { isLegacyKlineSeriesIdentity, klineSeriesIdentityKey, resolveKlineSeriesIdentity, type KlineSeriesIdentityInput } from "../market-data/klineSeriesIdentity.js";
 import {
   getBuiltinIndicatorName,
@@ -249,6 +250,7 @@ function normalizeCachedPayload(
     markers: retargetItems(normalized.markers || [], indicatorId),
     fills: retargetItems(normalized.fills || [], indicatorId),
     hlines: retargetItems(normalized.hlines || [], indicatorId),
+    ...(normalized.drawings ? { drawings: normalized.drawings.map((scene) => ({ ...scene, indicatorId })) } : {}),
     bgcolors: retargetItems(normalized.bgcolors || [], indicatorId),
     barcolors: retargetItems(normalized.barcolors || [], indicatorId),
     signals: retargetItems(normalized.signals || [], indicatorId),
@@ -269,6 +271,11 @@ function buildOutputCoverage(
       lastTime = lastTime == null ? time : Math.max(lastTime, time);
       points += 1;
     }
+  }
+  for (const scene of normalized.drawings || []) for (const time of scene.times) {
+    firstTime = firstTime === null ? time : Math.min(firstTime, time);
+    lastTime = lastTime === null ? time : Math.max(lastTime, time);
+    points += 1;
   }
   if (!points || firstTime === null || lastTime === null) return null;
   return {
@@ -317,7 +324,8 @@ function countOutputItems(
     (total, line) => total + (Array.isArray(line.colorData) ? line.colorData.length : 0),
     0,
   );
-  return lineColorPoints + OUTPUT_KEYS.reduce((total, key) => {
+  const drawingItems = (normalized.drawings || []).reduce((total, scene) => total + scene.times.length + scene.objects.reduce((sum, item) => sum + 1 + Object.values(item.row).reduce<number>((n, value) => n + (Array.isArray(value) ? value.length : 0), 0), 0), 0);
+  return drawingItems + lineColorPoints + OUTPUT_KEYS.reduce((total, key) => {
     const items = Array.isArray(normalized[key]) ? normalized[key] : [];
     return total + items.reduce((itemTotal, item) => {
       const record = isIndicatorRecord(item) ? item : {};
@@ -353,11 +361,12 @@ function hasTimedData(items: IndicatorAuxiliaryItem[] = []): boolean {
 function analyzeTrimSafety(
   normalized: Partial<NormalizedIndicatorPayload> = {},
 ) {
-  const unsafeOutputs = OUTPUT_KEYS.filter((key) => {
+  const unsafeOutputs: string[] = OUTPUT_KEYS.filter((key) => {
     const items = normalized[key] || [];
     if (!Array.isArray(items) || items.length === 0) return false;
     return key !== "barcolors" || hasTimedData(items);
   });
+  if (normalized.drawings?.length) unsafeOutputs.push("drawings");
   const safeLines = (normalized.lines || []).every(
     (line) =>
       Array.isArray(line.data) &&
@@ -781,6 +790,7 @@ export function patchCachedIndicatorResult(
     markers: mergeIndicatorItems(base.markers, incoming.markers),
     fills: mergeIndicatorItems(base.fills, incoming.fills),
     hlines: mergeIndicatorItems(base.hlines, incoming.hlines),
+    ...(incoming.drawings || base.drawings ? { drawings: reconcilePineScenes(base.drawings, incoming.drawings) } : {}),
     bgcolors: mergeIndicatorItems(base.bgcolors, incoming.bgcolors),
     barcolors: mergeIndicatorItems(base.barcolors, incoming.barcolors),
     signals: mergeIndicatorItems(base.signals, incoming.signals),
@@ -830,6 +840,7 @@ export function replaceCachedIndicatorRange(
     markers: replaceIndicatorItemsRange(base.markers, incoming.markers, range),
     fills: replaceIndicatorItemsRange(base.fills, incoming.fills, range),
     hlines: replaceIndicatorItemsRange(base.hlines, incoming.hlines, range),
+    ...(incoming.drawings || base.drawings ? { drawings: reconcilePineScenes(base.drawings, incoming.drawings) } : {}),
     bgcolors: replaceIndicatorItemsRange(base.bgcolors, incoming.bgcolors, range),
     barcolors: replaceIndicatorItemsRange(base.barcolors, incoming.barcolors, range),
     signals: replaceIndicatorItemsRange(base.signals, incoming.signals, range),

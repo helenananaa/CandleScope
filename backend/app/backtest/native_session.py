@@ -14,6 +14,9 @@ from .errors import BacktestError
 class SessionWorker:
     def __init__(self, plugin, wire, cancelled, *, evaluator=False):
         self.identity = wire["identity"]
+        self._prefix_enabled = evaluator and self.identity.get("prefix_append") == "candlescope.pine-prefix/1"
+        self._prefix_state = None
+        self.input_bytes = 0
         self.stderr = tempfile.TemporaryFile()
         command = [*plugin["command"], "--worker"] if evaluator else [*plugin["command"][:-1], plugin["command"][-1].replace(".native_strategy", ".native_session")]
         try:
@@ -26,7 +29,9 @@ class SessionWorker:
 
     def request(self, payload, cancelled, timeout=120):
         response = queue.Queue(maxsize=1)
-        raw = (encoded({**payload, "protocol": PROTOCOL, "identity": self.identity}) + "\n").encode("utf-8")
+        wire_payload = self._prefix_payload(payload) if self._prefix_enabled else payload
+        raw = (encoded({**wire_payload, "protocol": PROTOCOL, "identity": self.identity}) + "\n").encode("utf-8")
+        self.input_bytes += len(raw)
         if len(raw) > MAX_BYTES:
             self.close()
             raise BacktestError("BUDGET_EXCEEDED", "native session input exceeds 64 MiB")
@@ -70,6 +75,29 @@ class SessionWorker:
 
     def advance(self, target, cancelled):
         return self.request({"operation": "advance", "target": target}, cancelled)
+
+    def _prefix_payload(self, payload):
+        bars, accounts, passes = payload.get("bars"), payload.get("accounts"), payload.get("execution_passes")
+        if (not isinstance(bars, list) or not isinstance(accounts, list) or len(bars) != len(accounts)
+                or any(payload.get(key) for key in ("libraries", "magnifier"))
+                or (passes is not None and (self.identity.get("prefix_passes") != "candlescope.pine-prefix-passes/1"
+                    or not isinstance(passes, list) or len(passes) != len(bars)))):
+            self._prefix_state = None
+            return payload
+        static = {key: value for key, value in payload.items() if key not in {"bars", "accounts", "execution_passes"}}
+        previous = self._prefix_state
+        self._prefix_state = (static, list(bars), list(accounts), list(passes) if passes is not None else None)
+        if previous is not None:
+            old_static, old_bars, old_accounts, old_passes = previous
+            count = len(old_bars)
+            stable_passes = passes is None and old_passes is None or (passes is not None and old_passes is not None
+                and passes[:count] == old_passes and all(group and group[-1].get("confirmed") is True for group in old_passes))
+            if (static == old_static and len(bars) > count and bars[:count] == old_bars
+                    and accounts[:count] == old_accounts and stable_passes):
+                return {"operation": "append_prefix", "prefix_base": count,
+                        "bars": bars[count:], "accounts": accounts[count:],
+                        **({"execution_passes": passes[count:]} if passes is not None else {})}
+        return payload
 
     def close(self):
         if self.process.poll() is None:

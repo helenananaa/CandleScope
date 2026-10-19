@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.data_preparation.models import PreparationError, PreparationRequest, Requirement
 from app.replay.request_contracts import TrainingRunSetupPayload
 from app.backtest.request_contracts import ChartContextResolveRequest, ResearchExecutionOverrides
-from app.backtest.native_contracts import HostMatchingSettings, ExternalRunRequest
+from app.backtest.native_contracts import HostMatchingSettings, ExternalRunRequest, PineChartMetadata
 from app.api.v1.backtests import _operator_python_payload
 
 router = APIRouter(prefix="/data-preparations", tags=["data-preparation"])
@@ -104,6 +104,8 @@ class NativePreparationPayload(BaseModel):
     contexts: list[NativeDependencyPayload] = Field(default_factory=list, max_length=16)
     libraries: dict[str, str] = Field(default_factory=dict)
     execution: AutomaticHostExecution | None = None
+    chart_metadata: PineChartMetadata | None = None
+    currency_rates: dict | None = None
 
 
 @router.post("/native-strategy", status_code=202)
@@ -114,6 +116,10 @@ async def prepare_native_strategy(request: Request, payload: NativePreparationPa
     from app.data_preparation.native_plan import requested_contexts, requested_lookbacks, chart_interval, plan_inputs
     from app.backtest.chart_context import ChartContextRequest
     submission = payload.model_dump(mode="json")
+    if payload.chart_metadata is None:
+        submission.pop("chart_metadata")
+    if payload.currency_rates is None:
+        submission.pop("currency_rates")
     if payload.execution is None:
         # Preserve the existing idempotency shape for native jobs.
         submission.pop("execution")
@@ -191,6 +197,8 @@ async def prepare_native_strategy(request: Request, payload: NativePreparationPa
         requirements=requirements, intent={"submission": submission, "native_strategy": {
             "language": payload.language, "source": payload.source, "parameters": payload.parameters,
             "libraries": payload.libraries, "bindings": bindings, "dependency_requirements": dependencies,
+            **({"chart_metadata": payload.chart_metadata.model_dump(exclude_none=True)} if payload.chart_metadata is not None else {}),
+            **({"currency_rates": payload.currency_rates} if payload.currency_rates is not None else {}),
             **({"execution": payload.execution.model_dump(mode="json")} if payload.execution is not None else {})}})
     return await invoke_async(lambda: service(request).submit(prepared))
 

@@ -736,6 +736,7 @@ export function normalizeParsedIndicatorPayload(
   const splitAnnotations = splitUnifiedAnnotations(annotations, indicatorId);
 
   return {
+    ...(parsed.drawings ? { drawings: parsed.drawings.map((scene) => ({ ...scene, indicatorId })) } : {}),
     lines: normalizeIndicatorLines(
       hasUnifiedSeries ? normalizeSeriesToLines(parsed.series) : parsed.lines,
     ),

@@ -1,6 +1,11 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  "indicator.pine.currencyRates": "Pine 유효 환율 (JSON)",
+  "indicator.pine.currencyRatesHelp": "실제 사용 가능 시각을 Unix 밀리초로 지정하세요. 미래 값은 과거 조회에 사용되지 않습니다. 다른 통화 시장으로 자동 대체하지 않습니다.",
+  "indicator.pine.quoteCurrency": "차트 호가 통화 (실제 가격 단위 필요)",
+  "indicator.pine.contexts": "Pine 요청 시장 (JSON)",
+  "indicator.pine.contextsHelp": "동적 또는 중첩 요청에 사용할 로컬 시장을 지정하세요. 시간 주기는 Pine 형식입니다 (60 = 1시간). 필요하면 marketType을 지정하고 누락된 데이터를 먼저 준비하세요.",
   "research.external.copyCommand": "시작 명령 복사",
   "research.external.commandCopied": "시작 명령을 복사했습니다.",
   "research.external.copyFailed": "자동 복사를 사용할 수 없습니다. 명령 텍스트를 선택하여 복사하세요.",

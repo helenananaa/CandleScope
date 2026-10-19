@@ -185,6 +185,7 @@ export function collectIndicatorComputeResults(
   const allBgcolors = [];
   const allBarcolors = [];
   const allSignals = [];
+  const allDrawings: import("./indicatorTypes.js").IndicatorDrawing[] = [];
   const newParamSchemas: Record<string, IndicatorParameterSchema[]> = {};
 
   for (const item of results) {
@@ -223,6 +224,7 @@ export function collectIndicatorComputeResults(
     allBgcolors.push(...normalized.bgcolors);
     allBarcolors.push(...normalized.barcolors);
     allSignals.push(...normalized.signals);
+    allDrawings.push(...(normalized.drawings || []));
 
     if (result.param_schema && result.param_schema.length > 0) {
       newParamSchemas[id] = normalizeParamSchema(result.param_schema);
@@ -237,6 +239,7 @@ export function collectIndicatorComputeResults(
     allBgcolors,
     allBarcolors,
     allSignals,
+    allDrawings,
     newParamSchemas,
   };
 }

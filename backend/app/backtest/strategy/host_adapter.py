@@ -61,13 +61,15 @@ class StrategyHostAdapter:
         bar: dict[str, Any] | None,
         features: dict[str, Any] | None = None,
         trade: dict[str, Any] | None = None,
+        account_view: dict[str, Any] | None = None,
     ) -> dict[str, Any] | StrategyOutput | None:
         if event_time_ms > watermark_ms:
             raise StrategyProviderError("LOOKAHEAD_VIOLATION", "host refused future bar")
-        encoded = try_bar_input_bytes(sequence, watermark_ms, bar, trade, features)
+        encoded = None if account_view else try_bar_input_bytes(sequence, watermark_ms, bar, trade, features)
         input_hash = ("sha256:" + hashlib.sha256(encoded).hexdigest() if encoded is not None
                       else canonical_hash({"sequence": sequence, "watermark": watermark_ms,
-                                           "bar": bar, "trade": trade, "features": features}))
+                                           "bar": bar, "trade": trade, "features": features,
+                                           **({"account": account_view} if account_view else {})}))
         frame = ObservationFrame(
             run_id=self.session.run_id,
             sequence=sequence,
@@ -79,6 +81,7 @@ class StrategyHostAdapter:
             bar=bar,
             trade=trade,
             features=features or {},
+            account_view=account_view or {},
         )
         if self._closed:
             raise StrategyProviderError("PROVIDER_TIMEOUT", "adapter is closed")
