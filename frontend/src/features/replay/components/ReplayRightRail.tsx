@@ -19,6 +19,7 @@ import {
   replayBoundClosingCapacity,
   replayOrderSideCapacity,
   replayQuantityForShare,
+  replayOrderIsolatedAllocation,
 } from "../replayOrderSizing.js";
 import { replayOrderCtaState } from "../replayOrderCtaState.js";
 import { createReplayOrderAdvisoryScheduler } from "../replayOrderAdvisoryScheduler.js";
@@ -484,6 +485,13 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
   const activePositionSide: "LONG" | "SHORT" = reduceOnly
     ? side === "BUY" ? "SHORT" : "LONG"
     : side === "BUY" ? "LONG" : "SHORT";
+  const isolatedAllocation = replayOrderIsolatedAllocation({
+    marginMode: contract?.margin_mode,
+    positionMode,
+    allocations: contract?.isolated_allocations,
+    trackId: selectedTrackId,
+    positionSide: activePositionSide,
+  });
   const selectedPosition = portfolio?.positions.find((item) => (
     item.track_id === selectedTrackId
     && (positionMode !== "HEDGE" || item.position_side === activePositionSide)
@@ -521,6 +529,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
   );
   const maxQuantitySizingKey = JSON.stringify([
     selectedTrackId,
+    isolatedAllocation,
     previewSide,
     orderType,
     reduceOnly,
@@ -592,6 +601,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
   const previewKey = JSON.stringify([
     cursorAdvisoryEpoch,
     selectedTrackId,
+    isolatedAllocation,
     previewPositionIntent,
     clientOrderId,
     previewSide,
@@ -606,6 +616,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
   ]);
   const maxQuantityContextKey = JSON.stringify([
     selectedTrackId,
+    isolatedAllocation,
     previewSide,
     orderType,
     reduceOnly,
@@ -691,7 +702,8 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
       if (scheduled && !settled) capacityScheduler.forget(maxQuantityContextKey);
     };
   // Cursor-driven equity is deliberately sampled only when this draft context
-  // changes. The cached cap is conservatively rebased between those requests.
+  // changes, including explicit funding of the selected isolated leg. The
+  // cached cap is conservatively rebased between those requests.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     capacityScheduler,
@@ -1014,8 +1026,16 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
       leverage: String(leverage),
       ...(positionMode === "HEDGE" ? { position_side: targetPositionSide } : {}),
     };
+    const sideAllocation = replayOrderIsolatedAllocation({
+      marginMode: contract?.margin_mode,
+      positionMode,
+      allocations: contract?.isolated_allocations,
+      trackId: selectedTrackId,
+      positionSide: targetPositionSide,
+    });
     const sideSizingKey = JSON.stringify([
       selectedTrackId,
+      sideAllocation,
       sideForContext,
       orderType,
       reduceOnly,
@@ -1023,6 +1043,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
     ]);
     const sideContextKey = JSON.stringify([
       selectedTrackId,
+      sideAllocation,
       sideForContext,
       orderType,
       reduceOnly,
