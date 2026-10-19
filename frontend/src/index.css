@@ -1,6 +1,7 @@
 @import "./styles/tokens.css";
 @import "./styles/components.css";
 @import "./features/plugins/pluginCenter.css";
+@import "./features/extensions/extensions.css";
 /* ── CandleScope 全局样式与主题 ───────────────────────────── */
 
 /* 自定义背景色由 JS 直接注入 style 属性 */

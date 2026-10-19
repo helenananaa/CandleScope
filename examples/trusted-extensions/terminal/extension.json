@@ -1,0 +1,27 @@
+{
+  "schema": "candlescope.extension/1",
+  "id": "candlescope.terminal-workbench",
+  "name": "Terminal Workbench / 终端工作台",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "internalApiVersion": 1,
+  "trust": "full-trust",
+  "description": "A compact green terminal skin, left market rail, custom top bar and host integration examples.",
+  "entries": { "frontend": "frontend.mjs", "backend": "backend.py", "desktop": "desktop.mjs" },
+  "theme": {
+    "base": "dark",
+    "tokens": {
+      "bg-primary": "#07120d", "bg-secondary": "#0d1b13", "bg-tertiary": "#13291c",
+      "bg-hover": "#1a3625", "border-color": "#264632", "text-primary": "#c6e9cf",
+      "text-secondary": "#8ab597", "text-muted": "#5d866a", "accent-blue": "#62d995",
+      "accent-purple": "#d1c26f", "accent-cyan": "#7dcbbb", "candle-up": "#62d995",
+      "candle-down": "#e78d73", "radius-sm": "0px", "radius-md": "2px",
+      "font-sans": "'JetBrains Mono', monospace", "font-mono": "'JetBrains Mono', monospace",
+      "control-height": "28px", "panel-gap": "4px", "panel-shadow": "none"
+    }
+  },
+  "layout": {
+    "page": ["topBar", "intervalSelector", "workspace", "statusBar", "featureSurfaces"],
+    "workspace": ["rightRail", "chart", "toolbar", "bottomPanel", "exportOverlay"]
+  }
+}

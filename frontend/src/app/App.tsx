@@ -43,6 +43,7 @@ import { useLocale } from "../i18n/useLocale.js";
 import { requestAlertPanelOpen } from "../features/alerts/alertDeliveryClient.js";
 import { CHART_STRATEGY_TESTER_ENABLED } from "../features/backtest/chart-tester/chartStrategyTesterFeature.js";
 import AppProviders from "./AppProviders.js";
+import { useExtensionService } from "../features/extensions/hooks.js";
 import LiveChartCell from "./LiveChartCell.js";
 import type {
   ActiveChartEnvironment,
@@ -109,6 +110,9 @@ function LiveWorkspaceApp() {
     longTaskKeys: new Set<string>(),
   });
   const settings = useChartSettingsRuntime();
+  useExtensionService("workspace", workspace);
+  useExtensionService("settings", settings);
+  useExtensionService("desktop", desktopWindowManager);
   const locale = useLocale();
   // The toolbar is window-global, so every chart interaction controller must
   // consume the same active tool instead of retaining a per-cell copy.

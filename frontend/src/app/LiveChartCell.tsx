@@ -73,6 +73,7 @@ import { useTradeFlowRuntime } from "../features/trade-flow/useTradeFlowRuntime.
 import type { WatchlistRuntime } from "../features/watchlist/useWatchlistRuntime.js";
 import type { WatchlistSubscriptionContext } from "../features/watchlist/watchlistSubscriptionRuntime.js";
 import { usePluginPlatformRuntime } from "../features/plugins/usePluginPlatformRuntime.js";
+import { useExtensionService } from "../features/extensions/hooks.js";
 import PluginPlatformSurfaces, { PluginUiErrorBoundary } from "../features/plugins/PluginPlatformSurfaces.js";
 import PluginPlatformToolbar from "../features/plugins/PluginPlatformToolbar.js";
 import PluginPlatformStatus from "../features/plugins/PluginPlatformStatus.js";
@@ -336,6 +337,7 @@ function LiveChartCell({
     symbol: chartSession.view.symbol,
     interval: chartSession.view.interval,
   });
+  useExtensionService(`charts.${cell.id}`, { session: chartSession, surface: chartSurface });
   const initialViewportCountBackCap = initialViewportCountBackCapForCellCount(
     layoutCellIds.length,
   );
@@ -593,6 +595,9 @@ function LiveChartCell({
     toggleAlertsPanel,
   ]);
 
+  useExtensionService(`market.${cell.id}`, sourceMarketData);
+  useExtensionService(`indicators.${cell.id}`, indicatorRuntime);
+  useExtensionService(`drawings.${cell.id}`, drawings);
   const model = useMemo(() => buildAppShellViewModel({
     session: {
       view: chartSession.view,

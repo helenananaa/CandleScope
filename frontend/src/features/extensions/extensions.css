@@ -1,0 +1,18 @@
+.extension-manager { padding: 18px; color: var(--text-primary); background: var(--bg-secondary); font: 13px/1.5 var(--font-sans); }
+.extension-manager h3 { margin: 0 0 8px; }
+.extension-manager p { margin: 8px 0; }
+.extension-manager fieldset { border: 0; padding: 0; min-width: 0; }
+.extension-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+.extension-actions label { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.extension-manager button, .extension-manager select, .extension-recovery button { border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 7px 10px; color: var(--text-primary); background: var(--bg-tertiary); cursor: pointer; }
+.extension-manager button:disabled { opacity: .5; cursor: default; }
+.extension-manager input[type=file] { max-width: 230px; }
+.extension-review, .extension-item { border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; margin: 12px 0; overflow-wrap: anywhere; }
+.extension-review { border-color: var(--accent-blue); }
+.extension-review code { display: block; font-size: 11px; margin: 12px 0; }
+.extension-item > span { margin-inline-start: 10px; color: var(--text-secondary); }
+.extension-recovery { position: fixed; bottom: 5px; right: 8px; z-index: 12000; font: 11px var(--font-sans); }
+.extension-recovery-panel { position: fixed; right: 8px; bottom: 40px; width: min(680px, calc(100vw - 16px)); max-height: calc(100vh - 80px); overflow: auto; background: var(--bg-secondary); border: 1px solid var(--border-color); box-shadow: 0 8px 32px #0006; }
+.extension-rail-slot { display: flex; flex: 0 0 auto; min-height: 0; }
+.extension-bottom-slot { display: flex; flex: 0 0 auto; flex-direction: column; min-width: 0; }
+.extension-rail-slot[data-extension-rail-side=left] .right-market-rail > .wl-resize-handle { order: 1; margin-right: 0; margin-left: -2px; }

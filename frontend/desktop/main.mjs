@@ -19,6 +19,9 @@ import { SeriesSnapshotHub } from "./series-snapshot-hub.mjs";
 import { DesktopShellStateStore } from "./shell-state-store.mjs";
 import { DesktopStrategyStorage } from "./strategy-storage.mjs";
 import { WorkspaceBusConflictError, WorkspaceBusHub } from "./workspace-bus-hub.mjs";
+import { TrustedDesktopExtensionHost } from "./trusted-extension-host.mjs";
+
+if (process.argv.includes("--extensions-safe-mode")) process.env.CANDLESCOPE_EXTENSIONS_SAFE_MODE = "1";
 
 const desktopDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(desktopDir, "../..");
@@ -54,6 +57,7 @@ let supervisor = null;
 let shutdownComplete = false;
 let shutdownPromise = null;
 const strategyStorage = new DesktopStrategyStorage(path.join(app.getPath("userData"), "strategy-storage-v1.json"));
+let desktopExtensions = null;
 const workspaceBus = new WorkspaceBusHub();
 const appWorkBudget = new AppWorkBudgetHub();
 const seriesSnapshots = new SeriesSnapshotHub();
@@ -214,6 +218,25 @@ async function boot() {
     event.returnValue = { port: backendPort };
   });
 
+  desktopExtensions = new TrustedDesktopExtensionHost({
+    safeMode: process.env.CANDLESCOPE_EXTENSIONS_SAFE_MODE === "1",
+    markerPath: path.join(app.getPath("userData"), "extension-desktop-loading.json"),
+    context: { electron: { app, BrowserWindow, dialog, ipcMain, screen, shell },
+      host: { manager, workspaceBus, appWorkBudget, seriesSnapshots } },
+  });
+  if (supervisor && process.env.CANDLESCOPE_EXTENSIONS_SAFE_MODE !== "1") {
+    try {
+      const response = await fetch(`http://127.0.0.1:${backendPort}/api/v2/plugins/manage/extensions/desktop`, {
+        headers: { "X-CandleScope-Plugin-Session": managementSession.sessionToken, Origin: new URL(appUrl).origin },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) throw new Error(`Desktop extension plan unavailable: ${response.status}`);
+      await desktopExtensions.start(await response.json());
+    } catch (error) { desktopExtensions.errors.runtime = String(error); }
+    if (Object.keys(desktopExtensions.errors).length) console.error("Desktop extension startup", desktopExtensions.errors);
+  }
+
+  trustedIpc.handle(DESKTOP_IPC.extensionDiagnostics, () => desktopExtensions.diagnostics());
   trustedIpc.on(DESKTOP_IPC.managementSession, (event) => {
     event.returnValue = supervisor ? {
       apiBase: `http://127.0.0.1:${backendPort}/api/v2/plugins`,
@@ -412,7 +435,7 @@ app.on("before-quit", () => {
 app.on("will-quit", (event) => {
   if (shutdownComplete || (!supervisor && !assetServer && !localMcp.server)) return;
   event.preventDefault();
-  shutdownPromise ??= Promise.all([supervisor?.stop(), assetServer?.close(), strategyStorage.flush(), localMcp.close()]).finally(() => {
+  shutdownPromise ??= Promise.resolve(desktopExtensions?.stop()).then(() => Promise.all([supervisor?.stop(), assetServer?.close(), strategyStorage.flush(), localMcp.close()])).finally(() => {
     shutdownComplete = true;
     app.quit();
   });

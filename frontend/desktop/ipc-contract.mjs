@@ -8,6 +8,7 @@ export const DESKTOP_IPC = Object.freeze({
   strategyStorageRead: "candlescope:strategy-storage:read",
   strategyStorageWrite: "candlescope:strategy-storage:write",
   managementSession: "candlescope:desktop:management-session",
+  extensionDiagnostics: "candlescope:desktop:extension-diagnostics",
   openAppPage: "candlescope:desktop:open-app-page",
   bootstrap: "candlescope:desktop:bootstrap",
   reconcile: "candlescope:desktop:reconcile",

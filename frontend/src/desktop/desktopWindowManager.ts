@@ -59,6 +59,7 @@ interface NativeDesktopBridge extends Partial<AiControlBridge> {
   strategyStorage?: { getItem(key: string): string | null; setItem(key: string, value: string): Promise<void> };
   readonly apiBase: string;
   getPluginManagementSession?(): { apiBase: string; sessionToken: string; csrfToken: string } | null;
+  getExtensionDiagnostics?(): Promise<import("../features/extensions/contracts.js").ExtensionDiagnostics>;
   openAppPage?(url: string): Promise<{ windowId: string }>;
   getBootstrap(): Promise<DesktopBootstrap>;
   reconcileWorkspace(payload: DesktopTopologyPayload): Promise<DesktopTopologyResult>;

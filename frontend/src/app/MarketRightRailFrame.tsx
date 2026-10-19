@@ -117,7 +117,7 @@ export default function MarketRightRailFrame({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const sectionRefs = useRef(new Map<string, HTMLElement>());
   const pendingRevealRef = useRef<string | null>(null);
-  const widthStartRef = useRef<{ x: number; width: number } | null>(null);
+  const widthStartRef = useRef<{ x: number; width: number; direction: number } | null>(null);
   const heightStartRef = useRef<{ y: number; viewId: string; height: number } | null>(null);
   const transientWidthRef = useRef<number | null>(null);
   const transientHeightsRef = useRef<Record<string, number> | null>(null);
@@ -215,7 +215,7 @@ export default function MarketRightRailFrame({
       if (!start) return;
       const bounds = marketRailWidthBounds(window.innerWidth);
       const next = clamp(
-        start.width - (event.clientX - start.x),
+        start.width + start.direction * (event.clientX - start.x),
         bounds.min,
         bounds.max,
       );
@@ -293,7 +293,8 @@ export default function MarketRightRailFrame({
 
   const startWidthResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
-    widthStartRef.current = { x: event.clientX, width };
+    const direction = event.currentTarget.closest('[data-extension-rail-side="left"]') ? 1 : -1;
+    widthStartRef.current = { x: event.clientX, width, direction };
     setWidthResizing(true);
   }, [width]);
 

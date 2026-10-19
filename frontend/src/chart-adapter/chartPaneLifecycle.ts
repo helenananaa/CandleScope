@@ -8,6 +8,7 @@ import type {
 } from "lightweight-charts";
 import type { ChartTime } from "./chartAdapterTypes.js";
 import { getDateTimeLocale } from "../i18n/index.js";
+import { getExtensionState } from "../features/extensions/state.js";
 
 type AdapterTickMarkFormatter = (
   time: ChartTime,
@@ -175,19 +176,22 @@ export function buildCrosshairOptions(visible = true): DeepPartial<CrosshairOpti
   };
 }
 
-function getPaneThemeColors({ theme, customBg }: PaneAppearanceOptions): {
+export function getPaneThemeColors({ theme, customBg }: PaneAppearanceOptions): {
   bgColor: string;
   textColor: string;
   gridColor: string;
   borderColor: string;
 } {
+  const extension = getExtensionState().theme;
+  const tokens = extension?.tokens;
+  theme = extension?.base ?? theme;
   return {
-    bgColor: theme === "light"
+    bgColor: tokens?.["bg-primary"] ?? (theme === "light"
       ? "#ffffff"
-      : (theme === "custom" ? customBg || "#0a0e17" : "#0a0e17"),
-    textColor: theme === "light" ? "#1e293b" : "#94a3b8",
-    gridColor: theme === "light" ? "rgba(0,0,0,0.05)" : "rgba(30, 41, 59, 0.5)",
-    borderColor: theme === "light" ? "#e2e8f0" : "#1e293b",
+      : (theme === "custom" ? customBg || "#0a0e17" : "#0a0e17")),
+    textColor: tokens?.["text-secondary"] ?? (theme === "light" ? "#1e293b" : "#94a3b8"),
+    gridColor: tokens?.["border-color"] ?? (theme === "light" ? "rgba(0,0,0,0.05)" : "rgba(30, 41, 59, 0.5)"),
+    borderColor: tokens?.["border-color"] ?? (theme === "light" ? "#e2e8f0" : "#1e293b"),
   };
 }
 
