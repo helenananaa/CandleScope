@@ -198,9 +198,15 @@ class ImmutableReplayHistoryFake(FakeKlinesRepo):
 
 
 def replay_settings(path: Path, *, enabled: bool = True) -> ReplaySettings:
+    # Archive roots live beside the test database, as load_replay_settings
+    # derives them from its data dir. The dataclass defaults are relative
+    # to the working directory, i.e. the developer's real backend/data.
+    data_dir = path.parent
     return ReplaySettings(
         enabled=enabled,
         db_path=path,
+        replay_history_archive_dir=data_dir / "replay-history",
+        replay_agg_trade_archive_dir=data_dir / "replay-agg-trades",
         max_active_sessions=8,
         command_queue_size=32,
         event_buffer_size=64,
