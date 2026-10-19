@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { resolveReplayEntry, replayEntryFromWindow } from "../replayEntry.js";
+import { resolveReplayEntry } from "../replayEntry.js";
 
 test("direct replay access opens the run archive Hub", () => {
   assert.deepEqual(resolveReplayEntry({ pathname: "/replay.html", search: "" }), { kind: "configure" });
