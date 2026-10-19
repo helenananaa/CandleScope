@@ -11,7 +11,10 @@ from app.data_engine.interval_policy import (
 )
 from app.replay.bars.builder import ReplayDisplayBar
 from app.replay.shared_market_index import MarketRange
-from app.replay.training.indexed_indicator_closes import read_indexed_closes
+from app.replay.training.indexed_indicator_closes import (
+    LocalIndicatorCloseBuffer,
+    read_indexed_closes,
+)
 from app.replay.training.indicator_checkpoint import IndicatorCheckpointStore
 from app.replay.training.indicator_history import IndicatorCloseBar, IndicatorCloseChunk
 from app.replay.training.indicator_prefix import CanonicalReplayIndicators
@@ -89,8 +92,9 @@ def test_selected_closes_equal_scalar_full_history_including_partial_origin(
     assert actual or interval == "1M"
 
 
+@pytest.mark.parametrize("buffered", [False, True])
 @pytest.mark.parametrize("condition", ["gap", "extreme"])
-def test_close_reader_keeps_full_path_for_unproven_context(tmp_path, condition):
+def test_close_reader_keeps_full_path_for_unproven_context(tmp_path, condition, buffered):
     rows = [
         {**make_bar(at), "market_type": "futures"}
         for at in range(START, START + DAY, MINUTE)
@@ -102,10 +106,9 @@ def test_close_reader_keeps_full_path_for_unproven_context(tmp_path, condition):
     context = history(repo, revision)
     context.revealed_boundary_ms = END
     context.snapshot.warmup_rows = ()
-    assert (
-        read_indexed_closes(context, START, START + DAY, "15m", 15 * MINUTE, Event())
-        is None
-    )
+    result = (LocalIndicatorCloseBuffer(context, "15m", 15 * MINUTE, Event()).read(START, START + DAY)
+              if buffered else read_indexed_closes(context, START, START + DAY, "15m", 15 * MINUTE, Event()))
+    assert result is None
 
 
 def test_full_calendar_bucket_larger_than_source_budget_keeps_chart_reader(prepared):
