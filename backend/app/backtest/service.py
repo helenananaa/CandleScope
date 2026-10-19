@@ -2946,7 +2946,10 @@ class BacktestService:
                 checkpoint_callback=checkpoint_after,
             )
             cost_sensitivity = (
-                self._build_cost_sensitivity(config, kernel, events, result)
+                self._build_cost_sensitivity(config, kernel, events, result, provider=provider, planner=planner, input_plan=adapter.input_plan,
+                    market=observation_market or {"venue": "local", "symbol": str(record["dataset_id"])}, warmup=warmup_events,
+                    deadline=deadline, control=lambda: self._assert_execution_control(run_id, deadline=deadline,
+                        expected_generation=expected_generation), run_id=run_id)
                 if materialized
                 else None
             )
@@ -3277,7 +3280,10 @@ class BacktestService:
                 checkpoint_callback=checkpoint_after,
                 **({"fill_callback": callbacks.on_fill} if callbacks is not None else {}),
             )
-            cost_sensitivity = self._build_cost_sensitivity(config, kernel, events, result)
+            cost_sensitivity = self._build_cost_sensitivity(config, kernel, events, result, provider=provider, planner=planner, input_plan=adapter.input_plan,
+                market=observation_market or {"venue": "local", "symbol": str(record["dataset_id"])}, warmup=warmup_events,
+                deadline=deadline, control=lambda: self._assert_execution_control(run_id, deadline=deadline,
+                    expected_generation=expected_generation), run_id=run_id)
             metrics_market_context = _metrics_market_context(
                 config, events, result.fills
             )
@@ -4573,13 +4579,14 @@ class BacktestService:
 
         return report
 
-    @staticmethod
-    def _build_cost_sensitivity(config, kernel, events, result):
+    def _build_cost_sensitivity(self, config, kernel, events, result, **pine_context):
         if config.get("cost_sensitivity_mode", "FULL") == "SKIP":
             return {"status": "SKIPPED_BY_REQUEST", "scenarios": []}
-        if config.get("pine_order_runtime_identity"):
-            return {"status": "PINE_ORDER_RESIMULATION_REQUIRED", "scenarios": [],
-                "reason": "Relative orders and fill-dependent decisions require the Host order allocator in each cost scenario."}
+        if kernel.execution_model_revision != EXECUTION_REALISM_V2:
+            return {}
+        if config.get("pine_runtime_identity"):
+            from .pine_sensitivity import build_matrix
+            return build_matrix(self, config, kernel, events, result, **pine_context)
         return build_cost_sensitivity_matrix(kernel, events, result)
 
     def _save_bar_checkpoint(

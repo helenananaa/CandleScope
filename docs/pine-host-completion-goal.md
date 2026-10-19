@@ -30,6 +30,20 @@ The mistakenly relayed scope-narrowing instruction was withdrawn by the user.
 
 ## Implemented host work
 
+- Pine V2 robustness matrices now use independent interpreter, account, Host
+  allocation and policy execution for each cost scenario, including legacy
+  target-position runs. A fresh baseline must match primary decision/fill/ledger/
+  kernel-report hashes, orders, curves and policy/allocation evidence. Prepared
+  input plans preserve requested references, libraries, clocks and warmup across
+  queued whole-run and isolated-provider execution. Secondary runs remain in
+  memory and keep per-step/global deadlines, cancellation and state budgets.
+- Relative/trailing exit admission now uses allocated entry costs or the observed
+  pre-entry quote. The prior unit-price placeholder could reject valid V2 exits
+  on tick/minimum-notional rules; the reproduced failure is retained in
+  `pine-cost-v2-debug.log`. Prices still bind to actual allocated fills at match
+  time. Matrix rows expose their decision/policy hashes, rejected-order counts,
+  ending positions and fill-callback counts. Public report hashes include the
+  matrix; primary decision/fill/ledger/order/curve evidence stays unchanged.
 - Chart `pine-chart/3` and workbench `pine-external/7` now negotiate external
   order schema 2. Fixed positive-quantity `strategy.order` calls support market,
   limit, stop and stop-limit execution through the authoritative Host allocator.
@@ -136,7 +150,18 @@ the host. Interface details: core `docs/SYMBOL_METADATA_INPUT.md`.
 
 ## Validation
 
-- Current generic-order Host group: 161 passed, 22 mixed/non-Pine cases deselected
+- Current Pine-cost/Host group: 177 passed, 22 mixed/non-Pine cases deselected in
+  `pine-cost-host-final.log`. Fourteen cost cases cover fee-dependent decisions,
+  relative exits, causal callback/partial-fill and latency changes, warmup, legacy
+  targets, spot inventory, historical contract roles, queued whole-run/isolated
+  workers, deadlines/cancellation, baseline drift and OCA checkpoint recovery.
+  The cost matrix and complete report hash reproduce after recovery. Separate
+  generic cost/kernel/provider/recovery regression: 75 passed in
+  `pine-cost-kernel-protocol-final.log`. Tick/minimum-notional admission controls
+  cover both relative and trailing exits. Lint/diff checks pass.
+  The core, bridge and frontend are unchanged from the previous candidate;
+  their gates below remain inherited evidence.
+- Earlier generic-order Host group: 161 passed, 22 mixed/non-Pine cases deselected
   in `generic-order-host-final.log`. Added API cases cover queued charts,
   preparation launch, all four generic order kinds, OCA effects, and workbench
   BAR/trade/book matching. Actual Pine partial-OCA callback recovery preserves
@@ -243,9 +268,8 @@ that observation. The corrected allocation group passes.
    contract and forming-pass checkpoint recovery; TradingView historical final-
    OHLCV callback parity remains unqualified. The current upstream docs also
    describe `calc_on_every_history_tick`, requiring a fresh core/host audit.
-   Rich-order cost sensitivity requires independent Host allocation and script
-   resimulation per scenario; generic frozen-order matrices are explicitly
-   withheld with `PINE_ORDER_RESIMULATION_REQUIRED`.
+   V2 cost matrices now independently reexecute scripts and Host allocation;
+   larger-history performance and broader product acceptance remain to qualify.
 2. Workbench `CANDLESCOPE` account restoration into native replay remains
    explicitly unsupported. It needs a host-account recovery contract. Tested
    chart-provider restore and native-account replay are separate paths.

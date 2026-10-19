@@ -89,16 +89,39 @@ state and order ownership/allocation state. Pending submission tags are also
 retained for clocks that freeze a decision before order admission. The report's
 `pine_orders` section exposes the logical entries and fill allocations.
 
-Pine rich-order cost sensitivity currently returns the explicit status
-`PINE_ORDER_RESIMULATION_REQUIRED` instead of applying the generic frozen-order
-matrix. Relative exits and fill-dependent decisions require independent Host
-allocation and script feedback in every cost scenario; replaying placeholder
-prices or baseline callback decisions would produce invalid comparisons.
+For `EXECUTION_REALISM_V2`, Pine cost sensitivity independently executes each
+scenario with a fresh interpreter, Host allocator, policy and account. It covers
+both rich orders and the legacy target-position profile. Warmup, frozen imports,
+requested-data references, explicit clocks and causal fill passes follow the
+primary run's prepared input plan. Queued execution supports both whole-run and
+isolated-provider workers. Shadow scenarios do not create persisted runs.
+
+The Host first reexecutes the original costs and verifies decision, fill, ledger,
+kernel-report, order, equity-curve and policy/allocation evidence against the
+primary execution. Only then does it calculate the existing five-row robustness
+matrix: baseline, +25% costs, +50% costs, one latency tier, and half participation.
+The BAR latency row remains explicitly inapplicable. Each scenario records its
+own decision/policy hashes, rejections, ending position and callback counts.
+The matrix identifies `INDEPENDENT_PINE_HOST_REEXECUTION` as its decision source.
+
+Every scenario retains provider-step deadlines, the original run's time ceiling,
+generation/cancellation checks and provider-state limits. A mismatch or execution
+failure aborts publication; scenario workers close on success and failure.
+`cost_sensitivity_mode=SKIP` remains available. V1 execution has no matrix, matching
+the existing generic execution contract. The matrix changes the complete report
+seal; it leaves primary decisions, fills, ledger, orders and curves unchanged.
+
+Relative/trailing exits now enter admission using allocated entry costs, or the
+observed quote before their entry fills. The matcher subsequently binds the
+prices to actual allocated fills. This avoids artificial unit-price tick and
+minimum-notional rejections without supplying a future entry price.
 
 Validation uses the actual installed interpreter, HTTP run creation, queued
 workers, automatic preparation, a durable interrupted/resumed run and an
 aggregate-trade trailing-stop case. The callback cases also cover per-fill
 ownership, requested-data boundaries, and interruption after a durable forming
 pass. Logs live under `output/pine-host/phase3/chart-fill-*.log` and
-`output/pine-host/phase3/rich-chart-*.log`. These are controlled fixtures; current
+`output/pine-host/phase3/rich-chart-*.log`. Cost, policy, deadline and recovery
+receipts are in `output/pine-host/phase3/pine-cost-*.log`. These are controlled
+fixtures; current
 work does not establish arbitrary TradingView broker-fill or live-tick parity.

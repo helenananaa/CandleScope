@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from copy import deepcopy
 import hashlib
 from app.core.config import getenv
 from .qualified_json import try_bar_input_bytes
@@ -27,6 +28,7 @@ class StrategyHostAdapter:
         inline: bool = False,
     ) -> None:
         self.session = session
+        self.input_plan = {}
         self.step_timeout_s = step_timeout_s
         self._worker: SerialWorker | None = None
         self._closed = False
@@ -45,6 +47,7 @@ class StrategyHostAdapter:
 
     def start(self, input_plan: dict[str, Any]) -> dict[str, Any]:
         described = self.session.describe()
+        self.input_plan = deepcopy(input_plan)
         self.session.prepare(
             {"runId": self.session.run_id, "inputPlan": input_plan, **input_plan}
         )

@@ -15,6 +15,25 @@ def generic(id, direction="long", qty=1, **options):
     return {**entry(id,direction,qty,**options),"action":"order"}
 
 
+@pytest.mark.parametrize("trailing",[False,True])
+def test_relative_exit_admission_uses_observed_prices_instead_of_a_fake_unit_price(trailing):
+    from tests.test_backtest_account_v2_m4 import rules,event
+    kernel=TradeSimulationKernel(account_model="LINEAR_PERP_ONE_WAY_V2",leverage=Decimal(10))
+    bootstrap=rules()
+    kernel.account.apply(MarketEvent(1,0,"INSTRUMENT_RULES",{**bootstrap.payload,"price_tick":"2","min_notional":"50"}))
+    kernel.account.apply(event("MARK_INDEX",0,mark_price="100"))
+    orders=ExternalOrders(kernel,price_tick="2",fidelity="TRADE_TAPE")
+    orders.configure(2)
+    leg=dict(action="exit",id="X",from_entry="A",**(dict(trail_points=2,trail_offset=1) if trailing else dict(profit=2)))
+    kernel._enqueue_many(orders.translate([entry("A",qty=2),leg],0),current_sequence=0)
+    assert not kernel.rejected and len(kernel.orders)==2
+    for i,price in enumerate((100,104,102),start=1):
+        kernel._last_event=MarketEvent(i,i*1000,"TRADES",dict(price=str(price),qty="100"))
+        kernel._match(kernel._last_event)
+    assert [fill.qty for fill in kernel.fills]==[2,2]
+    assert orders.owned()==0
+
+
 @pytest.mark.parametrize("kernel_type", [SimulationKernel, TradeSimulationKernel, BookAssistedKernel])
 def test_generic_orders_net_quantities_without_pyramiding_or_auto_reversal(kernel_type):
     kernel,orders = drive(kernel_type, {1:[generic("A",qty=5),generic("B",qty=3)],

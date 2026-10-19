@@ -219,6 +219,17 @@ class ExternalOrders:
         if self.owned() != self.kernel.account.position_qty:
             raise BacktestError("EXTERNAL_ACCOUNT_MISMATCH", "entry allocations differ from host position")
 
+    def exit_reference(self, owner):
+        lots = [lot for lot in self.lots if not owner or lot["entry_id"] == owner]
+        if lots:
+            return sum((abs(lot["qty"]) * lot["price"] for lot in lots), ZERO) / sum((abs(lot["qty"]) for lot in lots), ZERO)
+        # Before an entry fills, admission can only use the observed quote.
+        # prepare_order binds the exit again to actual allocated fills.
+        quote = self.kernel.account.mark
+        if quote is None or not quote.is_finite() or quote <= 0:
+            raise BacktestError("EXTERNAL_UNSUPPORTED", "relative exit admission needs an observed host price")
+        return quote
+
     def translate(self, intents, sequence):
         kernel, staged = self.kernel, []
         def cancel(script_id=None):
@@ -304,14 +315,21 @@ class ExternalOrders:
                         meta = dict(detail)
                         if intent.get(distance) is not None:
                             meta["distance"] = Decimal(str(intent[distance]))
-                        # A positive placeholder satisfies order admission. The price is
-                        # bound to actual allocated fills before this order can match.
-                        price = intent.get(name) if intent.get(name) is not None else 1
+                        price = intent.get(name)
+                        if price is None:
+                            direction = Decimal(1) if position > 0 else Decimal(-1)
+                            price = self.exit_reference(owner) + direction * meta["distance"] * self.price_tick * (1 if kind == "LIMIT" else -1)
                         staged.append(({**base,"type":kind,name+"_price":str(price),"oco_group":group},script_id,meta))
                 if intent.get("trail_offset") is not None:
                     meta = {**detail,"trailing":True,"watermark":trail_watermark,"triggered":trail_triggered,
                             **{key:Decimal(str(intent[key])) for key in ("trail_price","trail_points","trail_offset") if intent.get(key) is not None}}
-                    staged.append(({**base,"type":"STOP","stop_price":"1","oco_group":group},script_id,meta))
+                    direction = Decimal(1) if position > 0 else Decimal(-1)
+                    activation = meta.get("trail_price")
+                    if activation is None:
+                        activation = self.exit_reference(owner) + direction * meta["trail_points"] * self.price_tick
+                    reference = trail_watermark if trail_watermark is not None else activation
+                    price = reference - direction * meta["trail_offset"] * self.price_tick
+                    staged.append(({**base,"type":"STOP","stop_price":str(price),"oco_group":group},script_id,meta))
         for index,(order,script_id,detail) in enumerate(staged):
             token = f"external-{sequence}-{index}"
             order["client_tag"] = token

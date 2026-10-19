@@ -90,7 +90,7 @@ def test_fill_callbacks_use_actual_account_and_observed_forming_bar(service,spot
     assert [float(f.bar["volume"]) for f in frames] == [100,100,200,300,100]
     assert [float(f.bar["high"]) for f in frames] == [10,10,11,99,12]
     assert completed["report"]["pine_orders"]["open_entries"] == []
-    assert completed["result"]["cost_sensitivity"]["status"] == "PINE_ORDER_RESIMULATION_REQUIRED"
+    assert completed["result"]["cost_sensitivity"] == {}
     assert completed["report"]["strategy"]["pineExecution"]["fillCallbackCount"] == 2
 
 
