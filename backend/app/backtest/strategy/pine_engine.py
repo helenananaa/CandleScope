@@ -1,4 +1,4 @@
-"""Real closed-bar Pine decisions over the authoritative Host account.
+"""Pine decisions over the authoritative Host account and causal chart clock.
 
 ORDER_INTENT preserves script orders for Host allocation and matching. The
 legacy target-position mode retains its one-entry market-order profile.
@@ -21,6 +21,7 @@ from .protocol import (
 REVISION = "pine-engine-chart-v1"
 SOURCE_SCHEMA = "candlescope.chart-pine/1"
 ORDER_CONTRACT = "candlescope.pine-orders/1"
+CALLBACK_CONTRACT = "candlescope.pine-fill-callbacks/1"
 
 
 def plugin():
@@ -96,8 +97,9 @@ def analyze(source, libraries=None):
         or (requirements.get("account") or {}).get("declaredCurrency")
         or any(
             execution.get(key)
-            for key in ("calcOnEveryTick", "calcOnOrderFills", "processOrdersOnClose")
+            for key in ("calcOnEveryTick", "processOrdersOnClose")
         )
+        or (execution.get("calcOnOrderFills") and result["identity"].get("fill_callbacks") != CALLBACK_CONTRACT)
         or execution.get("clock") not in {"notUsed", "explicitTimestampWhenEvaluated"}
         or (execution.get("clock") == "explicitTimestampWhenEvaluated"
             and not result["identity"].get("external_execution_times"))
@@ -105,7 +107,7 @@ def analyze(source, libraries=None):
         raise StrategyProviderError(
             "FIDELITY_UNSUPPORTED",
             "Chart Pine supports closed-bar entry, exit and cancellation with pinned requested datasets; "
-            "intrabar callbacks and strategy.order require additional host contracts. "
+            "fill callbacks require the aggregate-trade execution clock; tick/close callbacks and strategy.order need additional contracts. "
             + ", ".join(sorted(blocked)),
         )
     return result
@@ -146,10 +148,13 @@ class PineEngineProvider:
             self.libraries = validate_libraries(frozen.get("libraries", {}))
             self.runtime_identity = frozen["identity"]
             self.needs_clock = frozen.get("executionClock") == "explicitTimestampWhenEvaluated"
+            self.fill_callbacks = frozen.get("fillCallbacks") is True
         except (KeyError, ValueError, TypeError) as exc:
             raise StrategyProviderError(
                 "PROVIDER_PROTOCOL_VIOLATION", "compiled Pine source envelope required"
             ) from exc
+        if self.fill_callbacks and not self.order_mode:
+            raise StrategyProviderError("FIDELITY_UNSUPPORTED", "fill callbacks require ORDER_INTENT mode")
         runtime = plugin()
         current = invoke(runtime, {"operation": "describe"}, timeout=15)["identity"]
         if current != self.runtime_identity:
@@ -173,6 +178,7 @@ class PineEngineProvider:
         self.worker = SessionWorker(runtime, self.wire, self.cancelled, evaluator=True)
         self.bars, self.accounts, self.history, self.entry_id = [], [], [], None
         self.execution_times = []
+        self.execution_passes = []
         self.state_hash = canonical_hash([])
 
     def _evaluate(self, frame, *, warmup=False):
@@ -187,12 +193,37 @@ class PineEngineProvider:
             for name in ("open", "high", "low", "close", "volume")
         }
         bar["time"] = int(row.get("open_time_ms", frame.event_time_ms)) // 1000
-        self.bars.append(bar)
         account = dict(frame.account_view)
         account["time"] = bar["time"]
-        self.accounts.append(account)
-        if self.needs_clock:
-            self.execution_times.append(frame.event_time_ms)
+        confirmed, pass_index = True, None
+        if self.fill_callbacks:
+            observation = frame.features.get("pineExecutionPass") or {}
+            index, confirmed = observation.get("barIndex"), observation.get("confirmed")
+            if (type(index) is not int or type(confirmed) is not bool or index < 0
+                    or index not in {len(self.bars), len(self.bars) - 1}):
+                raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "an ordered Pine execution pass is required")
+            if index == len(self.bars):
+                if self.execution_passes and not self.execution_passes[-1][-1]["confirmed"]:
+                    raise StrategyProviderError("LOOKAHEAD_VIOLATION", "confirm the previous Pine bar before advancing")
+                self.bars.append(bar)
+                self.accounts.append(account)
+                self.execution_passes.append([])
+                if self.needs_clock:
+                    self.execution_times.append(frame.event_time_ms)
+            else:
+                if self.execution_passes[index][-1]["confirmed"] or self.bars[index]["time"] != bar["time"]:
+                    raise StrategyProviderError("LOOKAHEAD_VIOLATION", "a committed Pine bar cannot be replaced")
+                self.bars[index], self.accounts[index] = bar, account
+                if self.needs_clock:
+                    self.execution_times[index] = frame.event_time_ms
+            pass_index = len(self.execution_passes[index])
+            if pass_index >= 65:
+                raise StrategyProviderError("BUDGET_EXCEEDED", "at most 64 fill callbacks and one close per bar")
+        else:
+            self.bars.append(bar)
+            self.accounts.append(account)
+            if self.needs_clock:
+                self.execution_times.append(frame.event_time_ms)
         market = frame.market
         venue = str(market.get("venue") or "local").upper()
         symbol = str(market.get("symbol") or "LOCAL")
@@ -218,7 +249,13 @@ class PineEngineProvider:
             timeframe = pine_timeframe(self.context["pineChartInterval"])
         from app.backtest.pine_requested_data import visible_contexts
         contexts = visible_contexts(self.requested_streams,
-            min(frame.watermark_ms, int(row.get("close_time_ms", frame.event_time_ms))))
+            min(frame.watermark_ms - (0 if confirmed else 1), int(row.get("close_time_ms", frame.event_time_ms))))
+        if self.fill_callbacks:
+            self.execution_passes[index].append({"bar": dict(bar), "account": dict(account), "confirmed": confirmed,
+                "event_time_ms": frame.event_time_ms, "request_data": [
+                    {key: value for key, value in context.items() if key in {"symbol", "timeframe", "bars"}}
+                    for context in contexts]})
+            contexts = [{**context, "bars": []} for context in contexts]
         result = self.worker.request(
             {
                 **self.wire,
@@ -226,6 +263,7 @@ class PineEngineProvider:
                 "accounts": self.accounts,
                 **({"contexts": contexts} if contexts else {}),
                 **({"execution_times": self.execution_times} if self.needs_clock else {}),
+                **({"execution_passes": self.execution_passes} if self.fill_callbacks else {}),
                 "context": {
                     "symbol": chart_symbol,
                     "timeframe": timeframe,
@@ -248,13 +286,17 @@ class PineEngineProvider:
                 "Pine returned the wrong account contract",
             )
         index = len(self.bars) - 1
-        previous = [item for item in result["intents"] if item["bar_index"] < index]
+        def ordinal(item):
+            return (item["bar_index"], item.get("pass_index", -1)) if self.fill_callbacks else (item["bar_index"], -1)
+        cursor = (index, pass_index) if self.fill_callbacks else (index, -1)
+        previous = [item for item in result["intents"] if ordinal(item) < cursor]
         if previous != self.history:
             raise StrategyProviderError(
                 "LOOKAHEAD_VIOLATION", "Pine changed an earlier decision"
             )
-        intents = [item for item in result["intents"] if item["bar_index"] == index]
-        if len(intents) > 64 or len(previous) + len(intents) != len(result["intents"]):
+        intents = [item for item in result["intents"] if ordinal(item) == cursor]
+        if (len(intents) > 64 or len(previous) + len(intents) != len(result["intents"])
+                or sum(item["bar_index"] == index for item in result["intents"]) > 64):
             raise StrategyProviderError(
                 "PROVIDER_PROTOCOL_VIOLATION", "invalid Pine intent prefix"
             )
@@ -266,6 +308,8 @@ class PineEngineProvider:
                 "account": account,
                 "intents": intents,
                 **({"executionTimeMs": frame.event_time_ms} if self.needs_clock else {}),
+                **({"executionPass": {"barIndex": index, "passIndex": pass_index, "confirmed": confirmed,
+                    "eventTimeMs": frame.event_time_ms}} if self.fill_callbacks else {}),
             }
         )
         if self.order_mode:
@@ -376,6 +420,7 @@ class PineEngineProvider:
             "entry_id": self.entry_id,
             "state_hash": self.state_hash,
             **({"execution_times": self.execution_times} if self.needs_clock else {}),
+            **({"execution_passes": self.execution_passes} if self.fill_callbacks else {}),
         }
 
     def restore(self, payload):
@@ -383,6 +428,12 @@ class PineEngineProvider:
         self.bars, self.accounts = list(payload["bars"]), list(payload["accounts"])
         self.history, self.entry_id = list(payload["history"]), payload["entry_id"]
         self.state_hash = payload["state_hash"]
+        if self.fill_callbacks:
+            from copy import deepcopy
+            passes = payload.get("execution_passes")
+            if not isinstance(passes, list) or len(passes) != len(self.bars):
+                raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "restored Pine execution passes are missing")
+            self.execution_passes = deepcopy(passes)
         if self.needs_clock:
             clocks = payload.get("execution_times")
             if not isinstance(clocks, list) or len(clocks) != len(self.bars):
@@ -395,6 +446,14 @@ class PineEngineProvider:
             "runtime": self.runtime_identity,
             "tradingViewEquivalent": False,
         }
+
+    def report_metadata(self):
+        return {"pineExecution": {
+            "profile": "CAUSAL_AGG_TRADE_FILL_PASSES" if self.fill_callbacks else "CONFIRMED_BAR_CLOSE",
+            "accountAuthority": "candlescope", "tradingViewEquivalent": False,
+            "barCount": len(self.bars),
+            "fillCallbackCount": sum(not item["confirmed"] for group in self.execution_passes for item in group),
+        }}
 
     def abort(self):
         self.cancelled.set()

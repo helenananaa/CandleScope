@@ -13,7 +13,8 @@ from .libraries import library_sources
 
 def describe():
     return {
-        **identity("candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-chart/1"),
+        **identity("candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-chart/2"),
+        "fill_callbacks": "candlescope.pine-fill-callbacks/1",
         "prefix_append": PREFIX_CONTRACT,
         "prefix_passes": PASSES_CONTRACT,
         "prefix_clocks": CLOCKS_CONTRACT,
@@ -25,14 +26,15 @@ def describe():
 def execute(request):
     if request.get("operation") == "analyze":
         program, analysis = prepare(request["source"], library_sources({"pineLibrarySources": request.get("libraries", {})}))
+        requirements = program.host_requirements()
         # The empty prefix exposes declared broker settings without making trades.
         try:
-            profile = program.run_external([], [])
+            profile = program.run_external([], [], **({"execution_passes": []} if requirements["execution"].get("calcOnOrderFills") else {}))
         except ValueError as exc:
             profile = {"profileError": str(exc)}
         return {
             "analysis": analysis,
-            "requirements": program.host_requirements(),
+            "requirements": requirements,
             "pyramiding": profile.get("pyramiding", 1),
             "profileError": profile.get("profileError"),
         }

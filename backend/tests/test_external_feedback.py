@@ -1,5 +1,5 @@
 import pytest
-from tests.test_native_backtests import runtime, terminal, pytestmark
+from tests.test_native_backtests import runtime as runtime, terminal, pytestmark as pytestmark
 from tests.test_external_strategy_v2 import tape
 
 PINE = """//@version=6
@@ -71,6 +71,21 @@ def test_bar_only_fill_profile_is_rejected_before_run(runtime):
     with pytest.raises(ValueError, match="trade tape"):
         host.native.create({**payload, "execution_mode": "CANDLESCOPE", "fill_recalculation": True,
             "host_settings": {"initial_balance": 10000, "slippage_bps": 0, "taker_fee_bps": 0}}, "bad-fill")
+
+
+def test_pine_fill_passes_keep_foreign_symbol_metadata_outside_bar_streams(runtime):
+    from tests.test_native_additional_inputs import additional
+    host, payload = runtime
+    context = {**additional(host,"foreign-grid","ETHUSDT","2m",120000,[100,200,300,400,500]),
+        "symbol":"BINANCE:ETHUSDT","timeframe":"2", "metadata":{"priceTickSize":".25"}}
+    source = PINE + '\nremote=request.security("BINANCE:ETHUSDT","2",close+syminfo.mintick)\nplot(remote)\n'
+    created = host.native.create({**payload, "language":"pine", "source":source, "contexts":[context],
+        "execution_mode":"CANDLESCOPE", "execution_fidelity":"TRADE_TAPE", "execution_data":tape(), "fill_recalculation":True,
+        "host_settings":{"initial_balance":10000,"slippage_bps":0,"taker_fee_bps":0,"price_tick":.1}}, "foreign-fill-metadata")
+    record = terminal(host.native, created["run_id"])
+    assert record["state"] == "COMPLETED", record.get("error")
+    values = record["result"]["graphics"][-1]["values"]
+    assert 100.25 in values and 200.25 in values
 
 
 @pytest.mark.parametrize("language", ["pine", "pyne"])

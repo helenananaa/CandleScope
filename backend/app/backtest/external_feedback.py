@@ -48,7 +48,8 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
             boundary = event.event_time_ms + (1 if confirmed else 0)
             groups[cursor][-1]["request_data"] = visible_contexts(wire, boundary)
         request = {key: value for key, value in wire.items() if key != "execution_events"}
-        request.update(bars=[*wire["bars"][:cursor], deepcopy(visible)], accounts=accounts, execution_passes=groups, contexts=[])
+        request.update(bars=[*wire["bars"][:cursor], deepcopy(visible)], accounts=accounts, execution_passes=groups,
+            contexts=[{**context, "bars": []} for context in wire.get("contexts", [])])
         if "execution_times" in wire:
             request["execution_times"] = wire["execution_times"][:cursor + 1]
         latest = runner(plugin, request, cancelled=cancelled, timeout=max(.1, deadline-time.monotonic()))

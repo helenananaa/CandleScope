@@ -1168,7 +1168,7 @@ class BacktestService:
         normalized_execution = json.loads(identity.execution_json)
         if normalized_execution.get("pine_runtime_identity"):
             stored_payload["pine_runtime_identity"] = normalized_execution["pine_runtime_identity"]
-        for name in ("pine_contexts", "pine_local_data_root", "pine_order_runtime_identity"):
+        for name in ("pine_contexts", "pine_local_data_root", "pine_order_runtime_identity", "pine_fill_callbacks"):
             stored_payload.pop(name, None)
             if name in normalized_execution:
                 stored_payload[name] = normalized_execution[name]
@@ -3177,6 +3177,15 @@ class BacktestService:
             )
             collected_chart_bars = []
 
+            callbacks = None
+            if config.get("pine_fill_callbacks"):
+                from .pine_callbacks import ChartFillCallbacks
+                callbacks = ChartFillCallbacks(session, adapter, planner, kernel,
+                    market=observation_market or {"venue": "local", "symbol": str(record["dataset_id"])},
+                    warmup=warmup_events, deadline=deadline,
+                    features=lambda bar: self._observation_features(provider, bar=bar, trade=None),
+                    control=lambda: self._assert_execution_control(run_id, deadline=deadline, expected_generation=expected_generation))
+
             def strategy(
                 _visible: tuple[MarketEvent, ...], bar: MarketEvent
             ) -> list[dict]:
@@ -3194,6 +3203,8 @@ class BacktestService:
                 phase = "WARMUP" if bar.sequence <= warmup_events else "EVALUATION"
                 bar_payload = dict(bar.payload)
                 self._assert_frame_inputs(provider, bar=bar_payload, trade=None)
+                if callbacks is not None:
+                    return callbacks.observe(bar, confirmed=True)
                 wire = adapter.observe(
                     sequence=bar.sequence,
                     event_time_ms=bar.event_time_ms,
@@ -3264,6 +3275,7 @@ class BacktestService:
                 warmup_events=0,
                 finalize=True,
                 checkpoint_callback=checkpoint_after,
+                **({"fill_callback": callbacks.on_fill} if callbacks is not None else {}),
             )
             cost_sensitivity = self._build_cost_sensitivity(config, kernel, events, result)
             metrics_market_context = _metrics_market_context(
@@ -4435,7 +4447,13 @@ class BacktestService:
             str(payload["strategy_revision_id"])
         )
         if persisted_execution is not None and persisted_execution["base_revision_id"] == PINE_ENGINE_REVISION:
-            execution_config["pine_runtime_identity"] = json.loads(str(persisted_execution["compiled_json"]))["dependencyHash"]
+            compiled_pine = json.loads(str(persisted_execution["compiled_json"]))
+            execution_config["pine_runtime_identity"] = compiled_pine["dependencyHash"]
+            fill_callbacks = json.loads(compiled_pine["executionSource"]).get("fillCallbacks") is True
+            if fill_callbacks:
+                if fidelity != "AGG_TRADE_EXECUTION" or output_mode != "ORDER_INTENT":
+                    raise BacktestError("FIDELITY_UNSUPPORTED", "Pine fill callbacks require ORDER_INTENT and aggregate-trade execution")
+                execution_config["pine_fill_callbacks"] = True
             if output_mode == "ORDER_INTENT":
                 from .strategy.pine_planner import host_identity
                 execution_config["pine_order_runtime_identity"] = host_identity()
@@ -4559,6 +4577,9 @@ class BacktestService:
     def _build_cost_sensitivity(config, kernel, events, result):
         if config.get("cost_sensitivity_mode", "FULL") == "SKIP":
             return {"status": "SKIPPED_BY_REQUEST", "scenarios": []}
+        if config.get("pine_order_runtime_identity"):
+            return {"status": "PINE_ORDER_RESIMULATION_REQUIRED", "scenarios": [],
+                "reason": "Relative orders and fill-dependent decisions require the Host order allocator in each cost scenario."}
         return build_cost_sensitivity_matrix(kernel, events, result)
 
     def _save_bar_checkpoint(
@@ -5431,10 +5452,11 @@ def _trade_chart_bar(bar: MarketEvent) -> dict[str, object]:
 
 def _pine_account_view(kernel):
     account = kernel.account
+    from .external import account_feedback_profit
     return {"position_size": float(account.position_qty),
             "position_avg_price": None if account.entry_price is None else float(account.entry_price),
             "equity": float(account.equity()), "initial_capital": float(kernel.initial_balance),
-            "netprofit": float(account.quote_balance - kernel.initial_balance),
+            "netprofit": float(account_feedback_profit(account, kernel.initial_balance)),
             "openprofit": float(account.unrealized())}
 
 

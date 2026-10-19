@@ -28,6 +28,19 @@ The mistakenly relayed scope-narrowing instruction was withdrawn by the user.
 
 ## Implemented host work
 
+- Chart `calc_on_order_fills` now uses the negotiated `pine-chart/2` causal
+  aggregate-trade profile. Actual fills update logical ownership before Pine
+  observes the account; callback orders wait for a later print. Each pass freezes
+  its forming OHLCV, execution clock and visible requested-data prefix. Restore
+  covers an unconfirmed pass group. The report records this execution profile
+  and callback count, with `tradingViewEquivalent=false`.
+- Chart spot net profit no longer treats purchased inventory as a realized loss.
+  The failing actual-worker receipt is retained in `chart-fill-spot-before.log`.
+  The actual account callback tests pass after using the workbench's realized
+  net-profit formula. Auxiliary mark/funding events also close earlier signal
+  bars before changing account state; `chart-fill-mark-boundary-before.log`
+  retains the reproduced future-mark leak. Restoring a newly produced checkpoint
+  after auxiliary confirmation preserves decision/fill/ledger/report hashes.
 - Complex drawing/plot output, indicator library imports and frozen dependency
   identities; chart strategy libraries and workbench imports use the same
   validated source graph. Renderer work includes native lines, labels, boxes,
@@ -109,7 +122,19 @@ the host. Interface details: core `docs/SYMBOL_METADATA_INPUT.md`.
 
 ## Validation
 
-- Current rich-chart gates are recorded in `rich-chart-host-final.log`,
+- Current callback/Host gate: 120 passed, 16 mixed/non-Pine cases deselected in
+  `chart-fill-host-final.log`. This includes eight actual-worker callback cases:
+  authoritative spot/derivative account observations, threaded adapter execution,
+  same-print ownership, unconfirmed-group recovery, incompatible-mode admission,
+  and requested data/metadata at the last millisecond of a bar.
+  Shared contract-clock/account/sensitivity group: 59 passed in
+  `chart-fill-contract-clock-final.log`. Existing kernel/account/recovery group:
+  57 passed, one optional-native-row module skipped, in
+  `chart-fill-kernel-regression.log`. Bridge group: 69 passed, 12 extension cases
+  skipped, in `chart-fill-bridge-final.log`. The core and frontend are unchanged;
+  their earlier gates below are inherited evidence. Installed bridge files and
+  the unchanged core binary are reconciled in `chart-fill-installed-proof.json`.
+- Earlier rich-chart gates are recorded in `rich-chart-host-final.log`,
   `rich-chart-kernel-recovery-regression.log`, `rich-chart-types-qualified.log`
   and `rich-chart-frontend-regression.log` under `output/pine-host/phase3/`.
   Order integration covers 12 actual-engine cases. Shared allocation controls
@@ -165,7 +190,7 @@ rerun passed. The original failure log is retained. Backend and plugin suites ru
 in separate processes because their test helpers both import a `scripts` module;
 the mixed collection failure is also retained.
 
-Current retained failures include the first symbol-metadata gate's old negative
+Retained failures include the first symbol-metadata gate's old negative
 assertion for literal nested requests, now promoted to an executable positive
 control with distinct provider data. A host replay test also read its record
 before taking the job-completion lock; reading both atomically fixed the race.
@@ -180,13 +205,18 @@ that observation. The corrected allocation group passes.
 
 ## Remaining goal work
 
-1. Finish chart script intrabar/fill callbacks, process-on-close, `strategy.order`
+1. Finish chart script intrabar callbacks, process-on-close, `strategy.order`
    and Pine risk-rule semantics through the authoritative Host matcher. Chart
    closed-bar rich orders and print-clock trailing stops are connected.
    Requested datasets are connected; growing requested prefixes currently rebase
    the evaluator and need a causal incremental provider-update contract for
-   scalable execution. Selected workbench fill callbacks do not qualify the
-   chart callback path.
+   scalable execution. Chart fill callbacks now have a causal observed-print
+   contract and forming-pass checkpoint recovery; TradingView historical final-
+   OHLCV callback parity remains unqualified. The current upstream docs also
+   describe `calc_on_every_history_tick`, requiring a fresh core/host audit.
+   Rich-order cost sensitivity requires independent Host allocation and script
+   resimulation per scenario; generic frozen-order matrices are explicitly
+   withheld with `PINE_ORDER_RESIMULATION_REQUIRED`.
 2. Workbench `CANDLESCOPE` account restoration into native replay remains
    explicitly unsupported. It needs a host-account recovery contract. Tested
    chart-provider restore and native-account replay are separate paths.

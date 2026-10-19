@@ -162,19 +162,16 @@ def test_real_engine_runs_arbitrary_sma_with_actual_account_and_restores():
         closed = provider.step(frame(2, 5, position=2))
         assert closed.payload["targetExposure"] == "0"
         assert restored.step(frame(2, 5, position=2)) == closed
-        assert provider.identity()["runtime"]["adapter"] == "pine-chart/1"
+        assert provider.identity()["runtime"]["adapter"] == "pine-chart/2"
     finally:
         provider.close()
         restored.close()
 
 
-def test_native_broker_and_intrabar_profiles_are_not_silently_downgraded():
+@pytest.mark.parametrize("flag", ["calc_on_every_tick", "process_orders_on_close"])
+def test_native_broker_and_intrabar_profiles_are_not_silently_downgraded(flag):
     with pytest.raises(StrategyProviderError, match="FIDELITY_UNSUPPORTED"):
-        analyze(
-            SOURCE.replace(
-                'strategy("SMA")', 'strategy("SMA", calc_on_order_fills=true)'
-            )
-        )
+        analyze(SOURCE.replace('strategy("SMA")', f'strategy("SMA", {flag}=true)'))
     with pytest.raises(StrategyProviderError, match="FIDELITY_UNSUPPORTED"):
         analyze(SOURCE + '\nstrategy.order("X", strategy.long, qty=1)\n')
 

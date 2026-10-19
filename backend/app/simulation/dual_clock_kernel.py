@@ -148,6 +148,7 @@ class DualClockSimulationKernel:
         warmup_events: int = 0,
         finalize: bool = False,
         checkpoint_callback: Callable[[MarketEvent], None] | None = None,
+        fill_callback: Callable[[MarketEvent, MarketEvent], list[dict]] | None = None,
     ) -> SimulationResult:
         lazy_curve = getenv("BACKTEST_LAZY_DUAL_CURVE_ENABLED", "1").strip() == "1"
         trades = tuple(event for event in events if event.role == "TRADES")
@@ -161,8 +162,40 @@ class DualClockSimulationKernel:
                 raise MarketDatasetError(
                     "dual-clock execution requires AGG_TRADE", code="FIDELITY_MISLABEL"
                 )
+        def emit(completed, source):
+            for bar in completed:
+                intents = strategy((bar,), bar)
+                if bar.sequence <= warmup_events:
+                    intents = []
+                decision = _decision_record(
+                    intents,
+                    sequence=(getattr(intents, "decision", None) or {}).get("sequence", bar.sequence) if fill_callback else bar.sequence,
+                    watermark_ms=bar.event_time_ms,
+                )
+                if fill_callback is not None:
+                    decision.update(trigger="BAR_CLOSE", signal_sequence=bar.sequence)
+                if self.scale_stream_decisions:
+                    self._decision_chain_hash = "sha256:" + sha256_hex(
+                        {"previous": self._decision_chain_hash, "decision": decision}
+                    )
+                    self._decision_count += 1
+                else:
+                    self.decisions.append(decision)
+                if self.execution_model_revision is not None and intents:
+                    self.frozen_intents.append(
+                        {
+                            "sequence": bar.sequence,
+                            "intents": [dict(intent) for intent in intents],
+                        }
+                    )
+                # The signal precedes this boundary source event. Admission
+                # happens before its account updates; fills require a trade.
+                self.execution._enqueue_many(
+                    intents, current_sequence=source.sequence - 1
+                )
         for trade in events:
             if trade.role in {"INSTRUMENT_RULES", "MARK_INDEX", "FUNDING"}:
+                emit(self.builder.close_before(trade.event_time_ms), trade)
                 self.execution._last_event = trade
                 self.execution.account.apply(trade)
                 if checkpoint_callback is not None:
@@ -188,35 +221,7 @@ class DualClockSimulationKernel:
                         code="DATA_GAP_REJECTED",
                     )
 
-            completed = self.builder.push(trade)
-            for bar in completed:
-                intents = strategy((bar,), bar)
-                if bar.sequence <= warmup_events:
-                    intents = []
-                decision = _decision_record(
-                    intents,
-                    sequence=bar.sequence,
-                    watermark_ms=bar.event_time_ms,
-                )
-                if self.scale_stream_decisions:
-                    self._decision_chain_hash = "sha256:" + sha256_hex(
-                        {"previous": self._decision_chain_hash, "decision": decision}
-                    )
-                    self._decision_count += 1
-                else:
-                    self.decisions.append(decision)
-                if self.execution_model_revision is not None and intents:
-                    self.frozen_intents.append(
-                        {
-                            "sequence": bar.sequence,
-                            "intents": [dict(intent) for intent in intents],
-                        }
-                    )
-                # The signal exists immediately before this boundary trade, so
-                # its first eligible print is the current authoritative event.
-                self.execution._enqueue_many(
-                    intents, current_sequence=trade.sequence - 1
-                )
+            emit(self.builder.push(trade), trade)
 
             self.execution._last_event = trade
             if isinstance(self.execution.account, LinearPerpetualAccountV2):
@@ -224,7 +229,33 @@ class DualClockSimulationKernel:
             else:
                 self.execution.account.mark = Decimal(str(trade.payload["price"]))
             self.execution._apply_funding(trade)
-            self.execution._match(trade)
+            if fill_callback is None:
+                self.execution._match(trade)
+            else:
+                prior_reporter = self.execution.execution_reporter
+                def report(execution):
+                    if prior_reporter is not None:
+                        prior_reporter(execution)
+                    if execution.get("fill"):
+                        forming = self.builder.forming_bar(trade.event_time_ms)
+                        intents = fill_callback(trade, forming)
+                        wire = getattr(intents, "decision", None) or {}
+                        decision = _decision_record(intents, sequence=wire.get("sequence", forming.sequence),
+                            watermark_ms=trade.event_time_ms)
+                        decision.update(trigger="ORDER_FILL", signal_sequence=forming.sequence, source_sequence=trade.sequence)
+                        if self.scale_stream_decisions:
+                            self._decision_chain_hash = "sha256:" + sha256_hex({"previous": self._decision_chain_hash, "decision": decision})
+                            self._decision_count += 1
+                        else:
+                            self.decisions.append(decision)
+                        # The callback sees this execution but cannot consume
+                        # the same print with an order it has just submitted.
+                        self.execution._enqueue_many(intents, current_sequence=trade.sequence)
+                self.execution.execution_reporter = report
+                try:
+                    self.execution._match(trade)
+                finally:
+                    self.execution.execution_reporter = prior_reporter
             sample_curve = (
                 self.equity_curve_mode == "UTC_DAILY_CLOSE_V1"
                 or self.execution_model_revision is None

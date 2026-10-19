@@ -93,7 +93,7 @@ def execute(request):
                     **(
                         {
                             "request_data": [
-                                {**stream, "bars": engine_bars(stream["bars"])}
+                                {"symbol": stream["symbol"], "timeframe": stream["timeframe"], "bars": engine_bars(stream["bars"])}
                                 for stream in item["request_data"]
                             ]
                         }
