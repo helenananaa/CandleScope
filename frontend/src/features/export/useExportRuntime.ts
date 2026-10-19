@@ -45,6 +45,7 @@ export interface ExportRuntime {
     togglePanel(): void;
     closePanel(): void;
     exportChart(options?: ExportOptions): Promise<void>;
+    exportTo(sink: (blob: Blob, filename: string) => Promise<void>): Promise<void>;
   };
   status: {
     inProgress: boolean;
@@ -134,7 +135,7 @@ export function useExportRuntime({
     setIsOpen(false);
   }, [inProgress]);
 
-  const exportChart = useCallback(async (requestedOptions: ExportOptions = options): Promise<void> => {
+  const exportChart = useCallback(async (requestedOptions: ExportOptions = options, sink?: (blob: Blob, filename: string) => Promise<void>): Promise<void> => {
     if (inProgress) return;
 
     const finalOptions = {
@@ -181,7 +182,7 @@ export function useExportRuntime({
         filename = refreshed.filename;
       }
 
-      downloadBlob(blob, filename);
+      if (sink) await sink(blob, filename); else downloadBlob(blob, filename);
       setNotice(t("export.saved", { filename }));
     } catch (err: unknown) {
       setError(errorMessage(err, t("export.saveFailed")));
@@ -211,6 +212,7 @@ export function useExportRuntime({
       togglePanel,
       closePanel,
       exportChart,
+      exportTo: (sink) => exportChart(options, sink),
     },
     status: {
       inProgress,

@@ -14,6 +14,11 @@ import { createPortal, flushSync } from "react-dom";
 import { ForegroundPreloadGate } from "../features/market-data/foregroundPreloadGate.js";
 import { MarketDataWorkspaceProvider } from "../features/market-data/MarketDataWorkspaceProvider.js";
 import { useChartWorkspaceRuntime } from "../features/chart-workspace/useChartWorkspaceRuntime.js";
+import { useAppControl } from "../features/app-control/useAppControl.js";
+import { useControlCommands } from "../features/app-control/useControlCommands.js";
+import { workspaceCommands } from "../features/app-control/workspaceCommands.js";
+import { watchlistCommands } from "../features/app-control/watchlistCommands.js";
+import { settingsCommands } from "../features/app-control/settingsCommands.js";
 import {
   DEFAULT_CHART_LINK_GROUP_ID,
   type ChartCellId,
@@ -96,6 +101,8 @@ function LiveWorkspaceApp() {
     : null;
   const workspace = useChartWorkspaceRuntime({ windowId: desktopWindowManager.windowId });
   useChartAiControl(workspace, "market");
+  const appControl = useAppControl(workspace, desktopWindowManager.windowId);
+  useControlCommands(() => workspaceCommands(workspace));
   const [desktopBootstrap, setDesktopBootstrap] = useState<DesktopBootstrap>(
     desktopWindowManager.cachedBootstrap,
   );
@@ -110,6 +117,7 @@ function LiveWorkspaceApp() {
     longTaskKeys: new Set<string>(),
   });
   const settings = useChartSettingsRuntime();
+  useControlCommands(() => settingsCommands(settings));
   useExtensionService("workspace", workspace);
   useExtensionService("settings", settings);
   useExtensionService("desktop", desktopWindowManager);
@@ -421,6 +429,7 @@ function LiveWorkspaceApp() {
   const watchlist = useWatchlistRuntime(currentActiveEnvironment
     ? { subscriptionContext: currentActiveEnvironment.value.subscriptionContext }
     : {});
+  useControlCommands(() => watchlistCommands(watchlist));
   const marketRail = useMemo(() => ({
     openViewIds: marketRailLayout.openViewIds,
     panelCollapsed: marketRailLayout.panelCollapsed,
@@ -651,6 +660,7 @@ function LiveWorkspaceApp() {
                       onStrategyTesterModeChange={workspace.actions.updateCellStrategyTesterMode}
                       onOpenReplayLauncher={openReplayLauncher}
                       onActiveEnvironmentChange={handleActiveEnvironmentChange}
+                      {...(window.candlescopeDesktop?.controlEnabled ? { onControlObservation: appControl.reportCell } : {})}
                     />
                   )}
                 />

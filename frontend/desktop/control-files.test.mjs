@@ -1,0 +1,33 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { ControlFiles } from "./control-files.mjs";
+const bytes = Buffer.from("time,open,high,low,close\n1,2,3,1,2\n");
+const input = { uploadId: "csv-1", name: "sample.csv", mimeType: "text/csv", size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
+test("files require edit, exact offsets, length/hash, and window identity; identical retries do not rewrite", () => {
+  const store = new ControlFiles();
+  assert.throws(() => store.call("a", "begin", input, false), /SCOPE_DENIED/);
+  const entry = store.call("a", "begin", input, true);
+  assert.deepEqual(store.call("a", "begin", input, true), entry);
+  assert.throws(() => store.call("a", "begin", { ...input, size: 1 }, true), /UPLOAD_ID_CONFLICT/);
+  assert.throws(() => store.call("b", "read", { fileRef: entry.fileRef, offset: 0 }, true), /FILE_UNAVAILABLE/);
+  assert.throws(() => store.call("a", "commit", { fileRef: entry.fileRef }, true), /FILE_INCOMPLETE/);
+  const chunk = { fileRef: entry.fileRef, offset: 0, data: bytes.toString("base64") };
+  store.call("a", "write", chunk, true); store.call("a", "write", chunk, true);
+  assert.throws(() => store.call("a", "write", { ...chunk, data: Buffer.alloc(bytes.length).toString("base64") }, true), /FILE_OFFSET_CONFLICT/);
+  assert.equal(store.call("a", "commit", { fileRef: entry.fileRef }, true).committed, true);
+  assert.equal(store.call("a", "read", { fileRef: entry.fileRef, offset: 0 }, false).data, chunk.data);
+  store.clear("a"); assert.throws(() => store.call("a", "read", { fileRef: entry.fileRef, offset: 0 }, true), /FILE_UNAVAILABLE/);
+});
+test("files reject paths, malformed base64, invalid hashes, over-budget allocations, and expired handles", () => {
+  let now = 0; const store = new ControlFiles({ now: () => now });
+  for (const name of ["../x", "C:\\secret", "..", "a\n"]) assert.throws(() => store.call("a", "begin", { ...input, name }, true), /INVALID_PARAMS/);
+  assert.throws(() => store.call("a", "begin", { ...input, size: 33554433 }, true), /INVALID_PARAMS/);
+  const entry = store.call("a", "begin", { ...input, sha256: "0".repeat(64) }, true);
+  assert.throws(() => store.call("a", "write", { fileRef: entry.fileRef, offset: 0, data: "not base64!" }, true), /INVALID_PARAMS/);
+  store.call("a", "write", { fileRef: entry.fileRef, offset: 0, data: bytes.toString("base64") }, true);
+  assert.throws(() => store.call("a", "commit", { fileRef: entry.fileRef }, true), /FILE_HASH_MISMATCH/);
+  now = 1800001; assert.throws(() => store.call("a", "read", { fileRef: entry.fileRef, offset: 0 }, true), /FILE_UNAVAILABLE/);
+  for (let n = 0; n < 4; n++) store.call("a", "begin", { ...input, uploadId: String(n), size: 33554432 }, true);
+  assert.throws(() => store.call("a", "begin", input, true), /FILE_BUDGET/);
+});

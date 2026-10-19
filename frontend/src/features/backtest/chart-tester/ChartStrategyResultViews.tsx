@@ -1,6 +1,10 @@
 import { strategyTradeFocus, type StrategyTradeFocus } from "./strategyTradeReview.js";
+import { useControlCommands } from "../../app-control/useControlCommands.js";
+import { command } from "../../app-control/commandRegistry.js";
+import { number, object } from "../../app-control/commandSchema.js";
 import {
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -385,6 +389,11 @@ export function ChartStrategyTradeList({
     viewportHeight,
   }), [scrollTop, trades.length, viewportHeight]);
   const visible = trades.slice(window.start, window.end);
+  const controlId = useId();
+  useControlCommands(() => ({ id: `host-trade-review:${controlId}`, title: "Host strategy trade review", context: () => ({ runId: result.report.runId, selectedTradeId, active }), snapshot: () => ({ count: trades.length, selectedTradeId, selectedIndex, active }), commands: [
+    command("rows", "Read a bounded trade report page.", object({ offset: number(0, 1e9, true), limit: number(1, 500, true) }), ({ offset, limit }) => trades.slice(offset, offset + limit), { readOnly: true }),
+    command("select", "Select a trade and navigate the chart using the existing review callback.", object({ index: number(0, 1e9, true) }), ({ index }) => { if (!trades[index]) throw new Error("TRADE_UNAVAILABLE"); selectTrade(index); }, { available: () => active }),
+  ] }));
   const onScroll = (event: UIEvent<HTMLDivElement>) => {
     setScrollTop(event.currentTarget.scrollTop);
     setViewportHeight(event.currentTarget.clientHeight);

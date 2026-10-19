@@ -9,6 +9,10 @@ const channels = {
   backendEndpoint: "candlescope:desktop:backend-endpoint",
   strategyStorageRead: "candlescope:strategy-storage:read",
   strategyStorageWrite: "candlescope:strategy-storage:write",
+  controlRequest: "candlescope:control:request",
+  controlResult: "candlescope:control:result",
+  controlReady: "candlescope:control:ready",
+  controlFile: "candlescope:control:file",
   managementSession: "candlescope:desktop:management-session",
   extensionDiagnostics: "candlescope:desktop:extension-diagnostics",
   openAppPage: "candlescope:desktop:open-app-page",
@@ -41,7 +45,8 @@ function subscribe(channel, listener) {
 
 // Query the host for every document, including newly opened application windows.
 // Renderer command-line arguments are not a reliable per-window bootstrap channel.
-const backendPort = ipcRenderer.sendSync(channels.backendEndpoint)?.port;
+const endpoint = ipcRenderer.sendSync(channels.backendEndpoint);
+const backendPort = endpoint?.port;
 if (!Number.isInteger(backendPort) || backendPort < 1 || backendPort > 65535) {
   throw new Error("Desktop backend endpoint was not configured by the host");
 }
@@ -51,9 +56,17 @@ contextBridge.exposeInMainWorld("candlescopeDesktop", Object.freeze({
     getItem: (key) => ipcRenderer.sendSync(channels.strategyStorageRead, key),
     setItem: (key, value) => ipcRenderer.invoke(channels.strategyStorageWrite, key, value),
   }),
+  // Registration is available while off; the host service owns every access grant.
+  controlEnabled: true,
+  controlScopes: Object.freeze(endpoint.controlScopes ?? ["observe", "workspace.edit", "app.edit"]),
+  controlWindowId: endpoint.windowId,
+  onControlRequest: (listener) => subscribe(channels.controlRequest, listener),
+  sendControlResult: (payload) => ipcRenderer.send(channels.controlResult, payload),
+  controlReady: () => ipcRenderer.send(channels.controlReady),
+  controlFile: (operation, input) => ipcRenderer.invoke(channels.controlFile, operation, input),
   apiBase: `http://127.0.0.1:${backendPort}/api/v1`,
   aiControlStatus: () => ipcRenderer.invoke(channels.aiControlStatus),
-  aiControlSetMode: (mode) => ipcRenderer.invoke(channels.aiControlMode, mode),
+  aiControlSetMode: (mode, workflows = false) => ipcRenderer.invoke(channels.aiControlMode, mode, workflows),
   aiControlPublish: (views) => ipcRenderer.invoke(channels.aiControlPublish, views),
   onAiControlRequest: (listener) => subscribe(channels.aiControlRequest, listener),
   aiControlReply: (value) => ipcRenderer.send(channels.aiControlReply, value),

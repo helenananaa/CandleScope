@@ -20,6 +20,7 @@ import { DesktopShellStateStore } from "./shell-state-store.mjs";
 import { DesktopStrategyStorage } from "./strategy-storage.mjs";
 import { WorkspaceBusConflictError, WorkspaceBusHub } from "./workspace-bus-hub.mjs";
 import { TrustedDesktopExtensionHost } from "./trusted-extension-host.mjs";
+import { WorkflowControlHost } from "./workflow-control-host.mjs";
 
 if (process.argv.includes("--extensions-safe-mode")) process.env.CANDLESCOPE_EXTENSIONS_SAFE_MODE = "1";
 
@@ -58,6 +59,9 @@ let shutdownComplete = false;
 let shutdownPromise = null;
 const strategyStorage = new DesktopStrategyStorage(path.join(app.getPath("userData"), "strategy-storage-v1.json"));
 let desktopExtensions = null;
+let workflowControl = null;
+const registeredWorkflowContents = new WeakSet();
+const workflowScopes = ["observe", "workspace.edit", "app.edit", ...(process.argv.includes("--control-trust") ? ["app.trust"] : []), ...(process.argv.includes("--control-live") ? ["app.live"] : [])];
 const workspaceBus = new WorkspaceBusHub();
 const appWorkBudget = new AppWorkBudgetHub();
 const seriesSnapshots = new SeriesSnapshotHub();
@@ -174,6 +178,7 @@ async function boot() {
 
   const store = new DesktopShellStateStore(path.join(app.getPath("userData"), "desktop-windows-v1.json"));
   const cached = await store.load();
+
   manager = new ElectronWindowManager({
     openExternal: (url) => shell.openExternal(url),
     BrowserWindow,
@@ -184,6 +189,31 @@ async function boot() {
     backendPort,
     appUrl: evidenceSession?.instrumentAppUrl(appUrl) ?? new URL(appUrl).href,
     multiWindowEnabled,
+    controlEnabled: true,
+    controlScopes: workflowScopes,
+  });
+
+  workflowControl = new WorkflowControlHost({ manager, channels: DESKTOP_IPC,
+    directory: path.join(app.getPath("userData"), "control"), executable: process.execPath,
+    adapter: app.isPackaged ? path.join(process.resourcesPath, "control/cli.mjs") : path.join(repoRoot, "packages/candlescope-control/cli.mjs"),
+    trust: process.argv.includes("--control-trust"), live: process.argv.includes("--control-live") });
+  localMcp.workflow = workflowControl;
+  trustedIpc.on(DESKTOP_IPC.controlReady, (event) => {
+    const windowId = windowIdForSender(event.sender);
+    const sender = event.sender;
+    if (!registeredWorkflowContents.has(sender)) {
+      registeredWorkflowContents.add(sender);
+      sender.on("did-start-loading", () => workflowControl.disconnect(windowId));
+      sender.once("destroyed", () => workflowControl.disconnect(windowId));
+    }
+    workflowControl.ready(windowId);
+  });
+  trustedIpc.on(DESKTOP_IPC.controlResult, (event, payload) => {
+    workflowControl.service?.acceptResult(windowIdForSender(event.sender), payload);
+  });
+  trustedIpc.handle(DESKTOP_IPC.controlFile, (event, operation, input) => {
+    if (!workflowControl.service) throw new Error("CONTROL_DISABLED");
+    return workflowControl.service.fileCall(windowIdForSender(event.sender), operation, input);
   });
 
   await evidenceSession?.initialize({
@@ -192,7 +222,7 @@ async function boot() {
   });
 
   trustedIpc.handle(DESKTOP_IPC.aiControlStatus, () => localMcp.status());
-  trustedIpc.handle(DESKTOP_IPC.aiControlMode, (_event, mode) => localMcp.setMode(mode));
+  trustedIpc.handle(DESKTOP_IPC.aiControlMode, (_event, mode, workflows = false) => localMcp.setMode(mode, workflows));
   trustedIpc.handle(DESKTOP_IPC.aiControlPublish, (event, views) => {
     const windowId = manager.assertTrustedSender(event);
     const sender = event.sender;
@@ -215,7 +245,7 @@ async function boot() {
   });
 
   trustedIpc.on(DESKTOP_IPC.backendEndpoint, (event) => {
-    event.returnValue = { port: backendPort };
+    event.returnValue = { port: backendPort, windowId: windowIdForSender(event.sender), controlScopes: workflowScopes };
   });
 
   desktopExtensions = new TrustedDesktopExtensionHost({
@@ -421,6 +451,7 @@ if (!gotSingleInstanceLock) {
         sidecarFailed ? "backend-sidecar.log / desktop-startup-error.log" : "desktop-startup-error.log",
       ].join("\n\n"),
     );
+    await localMcp.close();
     await supervisor?.stop();
     await assetServer?.close();
     app.exit(1);
@@ -435,7 +466,7 @@ app.on("before-quit", () => {
 app.on("will-quit", (event) => {
   if (shutdownComplete || (!supervisor && !assetServer && !localMcp.server)) return;
   event.preventDefault();
-  shutdownPromise ??= Promise.resolve(desktopExtensions?.stop()).then(() => Promise.all([supervisor?.stop(), assetServer?.close(), strategyStorage.flush(), localMcp.close()])).finally(() => {
+  shutdownPromise ??= Promise.resolve(localMcp.close()).then(() => desktopExtensions?.stop()).then(() => Promise.all([supervisor?.stop(), assetServer?.close(), strategyStorage.flush()])).finally(() => {
     shutdownComplete = true;
     app.quit();
   });

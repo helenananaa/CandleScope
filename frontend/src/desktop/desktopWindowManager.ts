@@ -57,6 +57,13 @@ export interface DesktopTopologyResult {
 
 interface NativeDesktopBridge extends Partial<AiControlBridge> {
   strategyStorage?: { getItem(key: string): string | null; setItem(key: string, value: string): Promise<void> };
+  readonly controlScopes?: readonly string[];
+  onControlRequest?(listener: (request: import("../features/app-control/controlModel.js").ControlRequest) => void): () => void;
+  sendControlResult?(payload: { id: string; instanceId?: string; result: Record<string, unknown>; final: boolean }): void;
+  controlReady?(): void;
+  controlFile?(operation: string, input: Record<string, unknown>): Promise<{ fileRef: string; name: string; mimeType: string; size: number; sha256: string; offset: number; committed: boolean; chunkBytes: number; data?: string }>;
+  readonly controlEnabled?: boolean;
+  readonly controlWindowId?: string;
   readonly apiBase: string;
   getPluginManagementSession?(): { apiBase: string; sessionToken: string; csrfToken: string } | null;
   getExtensionDiagnostics?(): Promise<import("../features/extensions/contracts.js").ExtensionDiagnostics>;

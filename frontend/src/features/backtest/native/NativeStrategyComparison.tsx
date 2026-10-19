@@ -1,10 +1,13 @@
 import { NativeStrategyReport } from "./NativeStrategyReport.js";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { nativeApi, type NativeRun } from "./nativeBacktestApi.js";
 import { normalizeComparison, type NativeComparisonSelection, type PinnedStrategyRun, type NativeStrategyInstance } from "./nativeStrategyCollection.js";
 import { comparisonConditions, comparisonMetrics, conditionStatus } from "./nativeStrategyComparisonModel.js";
+import { useControlCommands } from "../../app-control/useControlCommands.js";
+import { command } from "../../app-control/commandRegistry.js";
+import { array, choice, empty, object, text } from "../../app-control/commandSchema.js";
 
 type Candidate = { id: string; name: string; runId: string | undefined; mode: PinnedStrategyRun["mode"] };
 type Pinned = PinnedStrategyRun;
@@ -45,6 +48,18 @@ export default function NativeStrategyComparison({ items, context, onOpen, saved
   });
   const checks = ready.length > 1 ? CONDITION_KEYS.map((key) => conditionStatus(ready.map((entry) => entry.conditions[key] ?? null))) : ["unknown"];
   const overall = checks.includes("different") ? "different" : checks.includes("unknown") ? "unknown" : "same";
+  const controlId = useId();
+  useControlCommands(() => ({ id: `strategy-comparison:${controlId}`, title: "Frozen native strategy report comparison", context: () => ({ context, selection }),
+    snapshot: () => ({ selection, candidates, overall, reports: ready.map(({ item, run, metrics, conditions }) => ({ item, runId: run.run_id, reportHash: run.result?.report_hash, metrics: { ...metrics, points: metrics.points.slice(-500) }, conditions })) }), commands: [
+      command("selection", "Select up to four current report identities for a frozen comparison.", object({ ids: array(text(128), 4), name: text(80, 0), metric: choice(["returnPct", "drawdownPct"]) }), ({ ids, name, metric }) => {
+        if (new Set(ids).size !== ids.length) throw new Error("DUPLICATE_STRATEGY");
+        const pinned = ids.map((id) => { const candidate = candidates.find((row) => row.id === id); if (!candidate?.runId) throw new Error("REPORT_UNAVAILABLE"); return { ...candidate, runId: candidate.runId }; });
+        saveSelection({ name, metric, pinned });
+      }),
+      command("refresh", "Refresh the pinned comparison to each candidate's current run.", empty, () => setPinned((value) => value.map((item) => { const latest = candidates.find((row) => row.id === item.id); return latest?.runId ? { ...latest, runId: latest.runId } : item; }))),
+      command("inspectRun", "Open/close a loaded pinned report.", object({ id: text(128, 0) }), ({ id }) => { if (!id) { setInspected(null); return; } const item = pinned.find((row) => row.id === id); const run = reports[id]?.run; if (!item || !run?.result) throw new Error("REPORT_UNAVAILABLE"); setInspected({ name: item.name, run }); }),
+      command("openStrategy", "Open a current compared strategy.", object({ id: text(128) }), ({ id }) => { if (!candidates.some((row) => row.id === id)) throw new Error("STRATEGY_UNAVAILABLE"); onOpen(id); }),
+    ] }));
   const format = (value: number | null) => value === null ? "—" : `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value)}%`;
   const points = ready.flatMap((entry) => entry.metrics.points.filter((p) => p[metric] !== null));
   const times = points.map((p) => p.time);

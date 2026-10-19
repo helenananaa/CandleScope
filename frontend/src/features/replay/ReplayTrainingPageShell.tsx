@@ -30,6 +30,12 @@ import { useIntervalNoticeRuntime } from "../chart-session/intervalNoticeRuntime
 import { loadUserPrefs } from "../chart-session/chartSessionModel.js";
 import type { CustomIntervalRecord } from "../chart-session/chartSessionTypes.js";
 import { useDrawingRuntime } from "../drawings/useDrawingRuntime.js";
+import { useControlCommands } from "../app-control/useControlCommands.js";
+import { providedChartCommands } from "../app-control/providedChartCommands.js";
+import { drawingCommands } from "../app-control/drawingCommands.js";
+import { command } from "../app-control/commandRegistry.js";
+import { bool, choice, empty, number, object, text } from "../app-control/commandSchema.js";
+import { REPLAY_RAIL_VIEW_IDS } from "./replayWorkspacePreferences.js";
 import { drawingDocumentSessionRegistry } from "../drawings/core/drawingDocumentStore.js";
 import type { ChartSettingsRuntime } from "../settings/chartAppearanceSettings.js";
 import { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
@@ -224,6 +230,9 @@ export default function ReplayTrainingPageShell({
   const ownIntegrity = useReplayIntegrityRuntime(runtime, viewer, integrityOpen, cell === undefined);
   const integrityRuntime = cell?.integrity ?? ownIntegrity;
   const review = integrityRuntime.review;
+  const controlCellId = cell?.scope ?? "replay-chart";
+  useControlCommands(() => providedChartCommands(controlCellId, { runId: integrityRuntime.runId, viewRevision: viewer.viewerState?.semantic_view_revision }, indicators, chartSurfaceActions, drawings, review === null));
+  useControlCommands(() => drawingCommands(controlCellId, { actions: chartSurfaceActions }, drawings, controlCellId, review === null));
   useEffect(() => {
     if (review !== null && !trainingResultsOpen) setIntegrityOpen(true);
   }, [review, trainingResultsOpen]);
@@ -1098,6 +1107,21 @@ export default function ReplayTrainingPageShell({
       variant="compact"
     />
   );
+  useControlCommands(() => ({ id: `replay-panels:${controlCellId}`, title: "Replay panels and interval preferences", context: () => ({ runId: integrityRuntime.runId, displayedInterval, preferences: workspace.preferences, indicatorPanelOpen, integrityOpen, trainingResultsOpen }),
+    snapshot: () => ({ indicatorPanelOpen, integrityOpen, trainingResultsOpen, preferences: workspace.preferences, displayedInterval, customIntervalRecords, savedCustomIntervals, returningToHub, returnToHubError }), commands: [
+      command("panel", "Open/close an existing replay panel.", object({ panel: choice(["indicators", "integrity", "results"]), open: bool }), ({ panel, open }) => { if (panel === "indicators") { if (review !== null) throw new Error("REVIEW_READ_ONLY"); setIndicatorPanelOpen(open); } else if (panel === "integrity") { setTrainingResultsOpen(false); setIntegrityOpen(open); } else { setIntegrityOpen(false); setTrainingResultsOpen(open); } }),
+      command("interval", "Select a replay interval through the existing capability/viewport policy.", object({ interval: text(24) }), ({ interval }) => selectReplayInterval(interval as IntervalString), { available: () => review === null && !viewer.viewerPending && intervalViewportTransfer === null }),
+      command("createInterval", "Create a custom replay interval through the existing policy.", object({ interval: text(24) }), ({ interval }) => createReplayCustomInterval(interval as IntervalString), { available: () => review === null }),
+      command("removeInterval", "Remove a saved custom interval.", object({ interval: text(24) }), ({ interval }) => removeReplayCustomInterval(interval as IntervalString), { available: () => review === null }),
+      command("restoreInterval", "Restore the last removed custom interval.", empty, restoreReplayCustomInterval, { available: () => review === null }),
+      command("pinInterval", "Toggle a custom interval pin.", object({ interval: text(24) }), ({ interval }) => togglePinCustomInterval(interval as IntervalString), { available: () => review === null }),
+      command("clearIntervals", "Clear saved custom intervals.", empty, clearReplayCustomIntervals, { available: () => review === null }),
+      command("railWidth", "Resize the rail through persisted clamped preferences.", object({ width: number(0, 4096) }), ({ width }) => workspace.actions.setRailWidth(width)),
+      command("railView", "Toggle/close a replay rail view.", object({ view: choice(Object.values(REPLAY_RAIL_VIEW_IDS)), action: choice(["toggle", "close"]) }), ({ view, action }) => action === "toggle" ? workspace.actions.toggleView(view) : workspace.actions.closeView(view)),
+      command("railHeight", "Resize a rail view through clamped preferences.", object({ view: choice(Object.values(REPLAY_RAIL_VIEW_IDS)), height: number(0, 4096) }), ({ view, height }) => workspace.actions.setViewHeight(view, height)),
+      command("collapseRail", "Collapse/restore the rail.", object({ collapsed: bool }), ({ collapsed }) => workspace.actions.setPanelCollapsed(collapsed)),
+      command("returnToHub", "Pause/save through the return-to-hub workflow.", empty, returnToHub, { available: () => active && !returningToHub && review === null }),
+    ] }));
   return (
     <PageFrame
       toolbar={drawingToolbar}

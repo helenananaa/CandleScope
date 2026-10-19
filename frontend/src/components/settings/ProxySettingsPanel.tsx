@@ -20,7 +20,7 @@ const PROXY_MODES: ProxyModeOption[] = [
     { value: 'system', icon: 'monitor', labelKey: 'settings.proxy.system' },
     { value: 'custom', icon: 'sliders', labelKey: 'settings.proxy.custom' },
     { value: 'none', icon: 'ban', labelKey: 'settings.proxy.none' },
-    { value: 'pool', icon: 'layers', labelKey: 'settings.proxy.pool' },
+    { value: 'pool', icon: 'exchange', labelKey: 'settings.proxy.pool' },
 ];
 
 export interface ProxySettingsPanelProps {

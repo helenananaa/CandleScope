@@ -11,7 +11,7 @@
 .extension-review { border-color: var(--accent-blue); }
 .extension-review code { display: block; font-size: 11px; margin: 12px 0; }
 .extension-item > span { margin-inline-start: 10px; color: var(--text-secondary); }
-.extension-recovery { position: fixed; bottom: 5px; right: 8px; z-index: 12000; font: 11px var(--font-sans); }
+.extension-recovery { position: fixed; bottom: 5px; right: 8px; z-index: var(--z-modal); font: 11px var(--font-sans); }
 .extension-recovery-panel { position: fixed; right: 8px; bottom: 40px; width: min(680px, calc(100vw - 16px)); max-height: calc(100vh - 80px); overflow: auto; background: var(--bg-secondary); border: 1px solid var(--border-color); box-shadow: 0 8px 32px #0006; }
 .extension-rail-slot { display: flex; flex: 0 0 auto; min-height: 0; }
 .extension-bottom-slot { display: flex; flex: 0 0 auto; flex-direction: column; min-width: 0; }

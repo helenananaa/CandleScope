@@ -64,8 +64,15 @@ import { useAdvancedMarketDataRuntime } from "../features/advanced-market-data/u
 import { useDrawingRuntime } from "../features/drawings/useDrawingRuntime.js";
 import type { DrawingToolSelectionRuntime } from "../features/drawings/drawingToolState.js";
 import { useIndicatorRuntime } from "../features/indicators/useIndicatorRuntime.js";
+import { indicatorSignature, type ControlCellObservation } from "../features/app-control/controlModel.js";
+import { useControlCommands } from "../features/app-control/useControlCommands.js";
+import { chartCommands } from "../features/app-control/chartCommands.js";
+import { drawingCommands } from "../features/app-control/drawingCommands.js";
+import { command } from "../features/app-control/commandRegistry.js";
+import { bool, choice, object } from "../features/app-control/commandSchema.js";
 import type { ActiveIndicatorPersistence } from "../features/indicators/activeIndicatorStore.js";
 import { useExportRuntime } from "../features/export/useExportRuntime.js";
+import { exportCommands } from "../features/app-control/exportCommands.js";
 import type { ChartSettingsRuntime } from "../features/settings/chartAppearanceSettings.js";
 import { normalizeSettings } from "../features/settings/chartAppearanceSettings.js";
 import { useOrderBookRuntime } from "../features/order-book/useOrderBookRuntime.js";
@@ -73,6 +80,7 @@ import { useTradeFlowRuntime } from "../features/trade-flow/useTradeFlowRuntime.
 import type { WatchlistRuntime } from "../features/watchlist/useWatchlistRuntime.js";
 import type { WatchlistSubscriptionContext } from "../features/watchlist/watchlistSubscriptionRuntime.js";
 import { usePluginPlatformRuntime } from "../features/plugins/usePluginPlatformRuntime.js";
+import { pluginCommands, PluginControlSession } from "../features/app-control/pluginCommands.js";
 import { useExtensionService } from "../features/extensions/hooks.js";
 import PluginPlatformSurfaces, { PluginUiErrorBoundary } from "../features/plugins/PluginPlatformSurfaces.js";
 import PluginPlatformToolbar from "../features/plugins/PluginPlatformToolbar.js";
@@ -133,6 +141,7 @@ export interface ActiveChartEnvironment {
 }
 
 export interface LiveChartCellProps {
+  onControlObservation?(cellId: string, observation: ControlCellObservation | null): void;
   workspaceId: ChartWorkspaceId;
   windowId: ChartWindowId;
   cell: ChartCellState;
@@ -182,6 +191,7 @@ export interface LiveChartCellProps {
 }
 
 function LiveChartCell({
+  onControlObservation,
   workspaceId,
   windowId,
   cell,
@@ -495,6 +505,30 @@ function LiveChartCell({
     streamIdentity: indicatorStreamIdentity,
     workSchedulerCellId: cell.id,
   });
+  useEffect(() => {
+    onControlObservation?.(cell.id, {
+      session: { exchange: chartSession.view.exchange, marketType: chartSession.view.marketType,
+        symbol: chartSession.view.symbol, interval: chartSession.view.interval },
+      indicatorSignature: indicatorSignature(indicators.view.activeIndicators),
+      marketReady: !obscured && sourceMarketData.status.barCount > 0 && !sourceMarketData.view.loading
+        && !sourceMarketData.status.initialHistoryPending && !sourceMarketData.status.loadingMoreLeft,
+      indicatorsReady: !indicators.status.computing && indicators.view.activeIndicators.every((indicator) =>
+        !indicator.error && (indicator.visible === false || indicator.lines?.some((line) => line.data.length > 0))),
+      barCount: sourceMarketData.status.barCount,
+      loading: sourceMarketData.view.loading,
+      initialHistoryPending: sourceMarketData.status.initialHistoryPending,
+      loadingMoreLeft: sourceMarketData.status.loadingMoreLeft,
+      paused: obscured,
+      computing: indicators.status.computing,
+      indicatorErrors: indicators.view.activeIndicators.flatMap((indicator) => indicator.error ? [indicator.error] : []),
+      indicatorOutputPoints: indicators.view.activeIndicators.map((indicator) => indicator.lines?.reduce((count, line) => count + line.data.length, 0) ?? 0),
+      error: sourceMarketData.view.error ? String(sourceMarketData.view.error) : null,
+    });
+  }, [cell.id, chartSession.view.exchange, chartSession.view.marketType, chartSession.view.symbol,
+    chartSession.view.interval, indicators.view.activeIndicators, indicators.status.computing,
+    sourceMarketData.status.barCount, sourceMarketData.view.loading, sourceMarketData.status.initialHistoryPending,
+    sourceMarketData.status.loadingMoreLeft, sourceMarketData.view.error, obscured, onControlObservation]);
+  useEffect(() => () => onControlObservation?.(cell.id, null), [cell.id, onControlObservation]);
   const exportFlow = useExportRuntime({
     indicators: indicators.view.activeIndicators,
     session: chartSession,
@@ -594,6 +628,24 @@ function LiveChartCell({
     showAlertsPanel,
     toggleAlertsPanel,
   ]);
+
+  useControlCommands(() => chartCommands({ cellId: cell.id, session: chartSession, indicators,
+    settings: { settings: combinedSettings, setSettings: setCombinedSettings, resolvedTheme: globalSettings.resolvedTheme },
+    marketData: sourceMarketData, surface: chartSurface, drawings }));
+  useControlCommands(() => drawingCommands(cell.id, chartSurface, drawings, chartSession.view.sessionKey));
+  useControlCommands(() => exportCommands(cell.id, exportFlow));
+  const [pluginControlSession] = useState(() => new PluginControlSession());
+  useControlCommands(() => pluginCommands(cell.id, plugins, pluginControlSession));
+  useControlCommands(() => ({ id: `panels:${cell.id}`, title: "Chart panels", context: () => ({ session: chartSession.view.sessionKey }),
+    snapshot: () => ({ indicators: showIndicatorPanel, settings: showSettings, alerts: showAlertsPanel, strategy: strategyPanelOpen }), commands: [
+      command("show", "Open/close a chart panel. Rediscover commands after opening lazy strategy or settings panels.",
+        object({ panel: choice(["indicators", "settings", "alerts", "strategy"]), visible: bool }), ({ panel, visible }) => {
+          if (panel === "indicators") setShowIndicatorPanel(visible);
+          if (panel === "settings") setShowSettings(visible);
+          if (panel === "alerts") setShowAlertsPanel(visible);
+          if (panel === "strategy") onStrategyPanelOpenChange(visible);
+        }),
+    ] }));
 
   useExtensionService(`market.${cell.id}`, sourceMarketData);
   useExtensionService(`indicators.${cell.id}`, indicatorRuntime);

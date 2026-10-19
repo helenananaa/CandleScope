@@ -5125,6 +5125,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   }, [onSelectedDrawingChange]);
 
   useImperativeHandle(ref, () => ({
+    getDrawingPaneApis: () => new Map(drawingApisByPaneRef.current),
     getVisibleRange: captureVisibleRange,
     setLinkedCrosshairTime,
     setLinkedVisibleTimeAnchor,
