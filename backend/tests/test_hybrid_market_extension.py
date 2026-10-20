@@ -191,6 +191,104 @@ async def test_hybrid_aggregate_trade_run_admits_second_market_and_advances(tmp_
         await service.shutdown(step_timeout=1.0)
 
 
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"max_leverage": "200"},
+        {"max_leverage": "3"},
+        {"maker_fee_bps": "3", "taker_fee_bps": "7"},
+        {"initial_equity": "20000"},
+    ],
+)
+async def test_new_hybrid_run_pins_its_own_configuration(tmp_path, changes, monkeypatch):
+    from tests.test_replay_v2_training_phase5 import _trade_request, _trade_service
+
+    service = await _trade_service(
+        tmp_path / "different-configurations.db",
+        archive_root=tmp_path / "trades",
+        symbols=("BTCUSDT",),
+        constant_prices=True,
+    )
+    try:
+        payload = (await _trade_request(service)).to_dict()
+        payload.update(
+            max_leverage="5", maker_fee_bps="2", taker_fee_bps="5",
+            position_mode="HEDGE", margin_mode="ISOLATED",
+            account_data_mode="DETERMINISTIC_SIMULATION",
+            account_fidelity="PINNED_PUBLIC_INPUTS_DETERMINISTIC_SIMULATED_PRIVATE_STATE",
+            insurance_adl_fidelity="DETERMINISTIC_SIMULATION_NOT_HISTORICAL_EXCHANGE_FACT",
+        )
+        original = await service.training.create_run(TrainingRunCreateRequest.from_dict(payload))
+        original_id = original["run"]["run_id"]
+
+        async def bindings(run_id):
+            return await service.store.run_extension_read(lambda c: {
+                "binding": dict(c.execute(
+                    "SELECT * FROM replay_hedge_input_binding WHERE run_id=?", (run_id,),
+                ).fetchone()),
+                "insurance": [dict(row) for row in c.execute(
+                    "SELECT * FROM replay_training_insurance_fund WHERE run_id=?", (run_id,),
+                )],
+            })
+
+        original_binding = await bindings(original_id)
+        changed_payload = {**payload, **changes}
+        created = await service.training.create_run(
+            TrainingRunCreateRequest.from_dict(changed_payload)
+        )
+        run_id = created["run"]["run_id"]
+        tracks = await service.training.get_market_tracks(run_id)
+        portfolio = tracks["portfolio"]
+        rule = portfolio["instrument_rules"][0]["rule"]
+        assert rule["max_leverage"] == changed_payload["max_leverage"]
+        assert Decimal(rule["max_notional"]) == (
+            Decimal(changed_payload["initial_equity"]) * Decimal(changed_payload["max_leverage"])
+        )
+        assert portfolio["active_fee_policy"]["maker_fee_bps"] == changed_payload["maker_fee_bps"]
+        assert portfolio["active_fee_policy"]["taker_fee_bps"] == changed_payload["taker_fee_bps"]
+        current_binding = await bindings(run_id)
+        assert current_binding["binding"]["public_archive_id"] != original_binding["binding"]["public_archive_id"]
+        assert current_binding["binding"]["simulation_manifest_id"] != original_binding["binding"]["simulation_manifest_id"]
+        assert Decimal(portfolio["cash_balance"]) == Decimal(changed_payload["initial_equity"])
+        assert Decimal(current_binding["insurance"][0]["opening_balance"]) == max(
+            Decimal(1000000),
+            Decimal(changed_payload["initial_equity"]) * Decimal(changed_payload["max_leverage"]) * 100,
+        )
+        assert not portfolio["positions"]
+        assert await bindings(original_id) == original_binding
+        assert (await service.training.hedge_inputs.audit_run(run_id))["status"] == "PASS"
+
+        # Reusing the same configuration pins the same pair, even with older,
+        # smaller compatible-by-coverage objects still in the catalog.
+        repeated = await service.training.create_run(
+            TrainingRunCreateRequest.from_dict(changed_payload)
+        )
+        repeated_binding = await bindings(repeated["run"]["run_id"])
+        for key in ("public_archive_id", "simulation_manifest_id"):
+            assert repeated_binding["binding"][key] == current_binding["binding"][key]
+
+        plan = (await service.training.segment_plan(
+            TrainingRunCreateRequest.from_dict(changed_payload)
+        ))["hedge_inputs"]
+        explicit = TrainingRunCreateRequest.from_dict({
+            **changed_payload,
+            "hedge_public_history_ref": plan["hedge_public_history_ref"],
+            "simulation_manifest_ref": plan["simulation_manifest_ref"],
+        })
+
+        async def unexpected_generation(*args, **kwargs):
+            raise AssertionError("explicit immutable refs must not be regenerated")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(service.training.hedge_inputs, "ensure_hybrid_inputs", unexpected_generation)
+            pinned_plan = (await service.training.segment_plan(explicit))["hedge_inputs"]
+        for key in ("hedge_public_history_ref", "simulation_manifest_ref"):
+            assert pinned_plan[key] == plan[key]
+        assert await bindings(original_id) == original_binding
+    finally:
+        await service.shutdown(step_timeout=1.0)
+
+
 @pytest.mark.parametrize("old_version", [23, 24, 25])
 async def test_schema_upgrade_preserves_existing_runs_and_null_admission_cursors(tmp_path, old_version):
     import sqlite3

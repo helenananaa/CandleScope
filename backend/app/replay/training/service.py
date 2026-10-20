@@ -735,11 +735,19 @@ class TrainingRunService:
         warmup_bars: int | None = None,
     ) -> dict[str, object]:
         plan = await self.hedge_inputs.plan_for_request(request)
+        generated_hybrid = (
+            plan.get("capability_state") == "AVAILABLE_APPROX"
+            and plan.get("public_fidelity") == HYBRID_PUBLIC_INPUT_FIDELITY
+        )
         if (
             request.position_mode.value != "HEDGE"
             or request.book_mode is not BookMode.OFF
-            or plan.get("capability_state") in {"AVAILABLE_EXACT", "AVAILABLE_APPROX"}
-            or plan.get("reason") != "NO_COMPLETE_CROSS_VERIFIED_INPUT_SET"
+            or request.hedge_public_history_ref is not None
+            or request.simulation_manifest_ref is not None
+            or (
+                not generated_hybrid
+                and plan.get("reason") != "NO_COMPLETE_CROSS_VERIFIED_INPUT_SET"
+            )
             or request.start_mode is not StartMode.MANUAL
             or request.requested_start_ms is None
         ):
@@ -759,8 +767,22 @@ class TrainingRunService:
             config,
             bound_selection,
         )
-        await self.hedge_inputs.ensure_hybrid_inputs(request, seed)
-        return await self.hedge_inputs.plan_for_request(request)
+        receipt = await self.hedge_inputs.ensure_hybrid_inputs(request, seed)
+        public = service_validation_ops._stored_mapping(
+            receipt["public"], field_name="generated public input receipt"
+        )
+        simulation = service_validation_ops._stored_mapping(
+            receipt["simulation"], field_name="generated simulation input receipt"
+        )
+        # Generated inputs belong to this seed/configuration. Coverage alone
+        # cannot select another run's leverage, fees or simulated fund state.
+        return await self.hedge_inputs.plan_for_request(
+            request,
+            public_archive_id=self._identifier(public["object_id"], field_name="archive_id"),
+            simulation_manifest_id=self._identifier(
+                simulation["object_id"], field_name="manifest_id"
+            ),
+        )
 
     async def list_account_history_archives(self) -> dict[str, object]:
         return await self.account_history.list_archives()

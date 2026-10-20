@@ -1915,6 +1915,9 @@ class HedgeInputArchiveManager:
     async def plan_for_request(
         self,
         request: TrainingRunCreateRequest,
+        *,
+        public_archive_id: str | None = None,
+        simulation_manifest_id: str | None = None,
     ) -> dict[str, object]:
         """Resolve the exact immutable refs required by an explicit HEDGE create.
 
@@ -1923,6 +1926,11 @@ class HedgeInputArchiveManager:
         mark/index, rule, fee and funding history and does not require an L2
         object to exist locally.
         """
+
+        if public_archive_id is None and request.hedge_public_history_ref is not None:
+            public_archive_id = request.hedge_public_history_ref.archive_id
+        if simulation_manifest_id is None and request.simulation_manifest_ref is not None:
+            simulation_manifest_id = request.simulation_manifest_ref.manifest_id
 
         base: dict[str, object] = {
             "schema_version": "replay.hedge-input-plan.v1",
@@ -2002,6 +2010,7 @@ class HedgeInputArchiveManager:
                       AND range_start_ms <= ? AND range_end_ms >= ?
                       AND l2_archive_id = ? AND l2_dataset_epoch = ?
                       AND l2_checksum_sha256 = ?
+                      AND (? IS NULL OR archive_id = ?)
                     ORDER BY byte_size, range_start_ms DESC, archive_id
                     LIMIT 1
                     """,
@@ -2015,6 +2024,8 @@ class HedgeInputArchiveManager:
                         book["archive_id"],
                         book["dataset_epoch"],
                         book["checksum_sha256"],
+                        public_archive_id,
+                        public_archive_id,
                     ),
                 ).fetchone()
             elif request.book_mode.value == "OFF":
@@ -2026,6 +2037,7 @@ class HedgeInputArchiveManager:
                       AND range_start_ms <= ? AND range_end_ms >= ?
                       AND (? = 'HISTORICAL_EXACT'
                            OR archive_id LIKE 'hybrid-public-%')
+                      AND (? IS NULL OR archive_id = ?)
                     ORDER BY
                       CASE
                         WHEN archive_id LIKE 'hybrid-public-%' THEN 1
@@ -2042,6 +2054,8 @@ class HedgeInputArchiveManager:
                         requested_start,
                         requested_end,
                         request.funding_mode.value,
+                        public_archive_id,
+                        public_archive_id,
                     ),
                 ).fetchone()
             simulations = tuple(
@@ -2050,9 +2064,16 @@ class HedgeInputArchiveManager:
                     SELECT * FROM replay_hedge_simulation_manifest
                     WHERE settlement_asset = ? AND health = 'READY'
                       AND range_start_ms <= ? AND range_end_ms >= ?
+                      AND (? IS NULL OR manifest_id = ?)
                     ORDER BY byte_size, range_start_ms DESC, manifest_id
                     """,
-                    (request.settlement_asset, requested_start, requested_end),
+                    (
+                        request.settlement_asset,
+                        requested_start,
+                        requested_end,
+                        simulation_manifest_id,
+                        simulation_manifest_id,
+                    ),
                 ).fetchall()
             )
             degraded = (
