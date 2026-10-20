@@ -708,10 +708,13 @@ class ChartBacktestContextResolver:
     def _manifest_matches(
         manifest: Mapping[str, Any], request: ChartContextRequest
     ) -> bool:
+        # Older immutable publications retained market aliases such as usdm.
+        # Normalize at lookup; rewriting a frozen manifest would change its identity.
+        identity = ChartContextRequest.from_mapping(manifest)
         return (
-            str(manifest.get("exchange") or "").lower() == request.exchange
-            and str(manifest.get("market_type") or "").lower() == request.market_type
-            and str(manifest.get("symbol") or "").upper() == request.symbol
+            identity.exchange == request.exchange
+            and identity.market_type == request.market_type
+            and identity.symbol == request.symbol
         )
 
     @staticmethod

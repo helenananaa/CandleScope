@@ -18,6 +18,7 @@ MODULES = (
     "test_pine_schedule_transport", "test_pine_bar_kernel", "test_pine_bar_workbench",
     "test_chart_pine_bar_callbacks", "test_pine_chart_kernel", "test_pine_v2_bar_kernel",
     "test_chart_pine_v2_bar", "test_pine_workbench_v2_bar", "test_pine_workbench_preparation",
+    "test_pine_legacy_market_identity",
     "test_pine_workbench_contract", "test_pine_workbench_control", "test_chart_pine_risk_stops",
     "test_chart_pine_liquidation", "test_v2_margin_repricing", "test_pine_workbench_costs",
     "test_pine_cost_sensitivity", "test_workbench_default_upgrade", "test_external_replay",

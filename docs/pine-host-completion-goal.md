@@ -13,6 +13,16 @@ checkout's Replay/runtime-cache work was separately committed through `83105c0f`
 
 ## Active source and runtime identities (2026-10-20)
 
+- The repeatable historical profile at Host `e0ab1718` passed 307 cases, with
+  zero skips and stable source/runtime/registry hashes. A subsequent lookup-side
+  legacy market-identity repair passed 83 boundary checks, including a persisted
+  failed preparation retried after restart without rewriting its request or
+  frozen bars. Its six new cases are now part of the historical profile.
+- A private Pine candidate bundle passed production offline installation and
+  worker protocol probes. Its 56 Python/native payload files exactly match the
+  historical worker. Candidate artifacts and original failure receipts remain
+  under `output/pine-host/completion-goal/`; whole-application packaging and
+  official-output comparisons remain open.
 - Host worktree and branch remain `E:/CodexData/worktrees/pine-host-adaptation/CandleScope`
   and `codex/pine-host-adaptation`. The latest sealed margin/book checkpoint is
   `41c894bc900110f12a577e7e52cbac28b59fb9db`; subsequent upgrade-retry work is

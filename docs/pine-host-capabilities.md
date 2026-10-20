@@ -19,7 +19,7 @@ means source and controlled regression evidence exist. `partial` means listed
 requirements remain open. Neither means released. Official-output comparison,
 resource qualification and packaged acceptance are independent evidence levels.
 
-Source baseline: CandleScope `60ae862906b44ed976ea67c951cfc0228a57b255`, branch
+Starting source baseline: CandleScope `60ae862906b44ed976ea67c951cfc0228a57b255`, branch
 `codex/pine-host-adaptation`; core `02fdbebffd9baa1cb80b0aa2454cecf3b7b3207d`,
 branch `codex/pine-host-completion`. The original main checkout is separately at
 `83105c0f56c68a8e08f394b23b93a25c7b544a14`; this goal uses the isolated Pine tree.
@@ -103,4 +103,10 @@ The first repeatable historical profile on `730fcf85` subsequently passed all
 Controlled entry work and the preparation market-identity defect are recorded
 in [the entry acceptance procedure](pine-host-entry-acceptance.md). The latter's
 74-case boundary regression belongs to the later source containing that fix;
-it does not replace the full historical profile or packaged acceptance.
+it does not replace the full historical profile or packaged acceptance. The
+complete post-fix profile at `e0ab1718` then passed all 307 cases with zero skips
+and stable source/runtime/registry fingerprints. The subsequent legacy lookup
+repair adds six frozen-identity/restart cases to the repeatable profile and passed
+83 preparation/context/qualification checks in the fresh managed install. Isolated
+candidate plugin installation/protocol and exact payload identity also passed;
+complete application packaging remains open.
