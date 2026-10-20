@@ -235,6 +235,8 @@ def build_report(
         report["report_label"] += "_WITH_SYNTHETIC_OHLC_PATH"
         report["unmodeled"].append("physical intrabar tape and actual intrabar timestamps")
         report["suitable_for"] = ["historical OHLC path signals", "historical fill recalculation"]
+        if config.get("pine_v2_bar_contract"):
+            report["identity"]["pine_v2_bar_contract"] = config["pine_v2_bar_contract"]
     if config.get("pine_process_on_close"):
         from app.simulation.closing_tick import CONTRACT, REASON
         closing = {

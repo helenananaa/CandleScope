@@ -53,10 +53,11 @@ detaches its worker before closing it, so concurrent cleanup cannot reuse it.
 Reports identify the path contract, synthetic timestamps and absent physical
 tape. This implements historical BAR callbacks for V1/spot; it does not prove
 TradingView output equivalence. The path's low-first tie policy and synthetic
-interpolation remain declared assumptions. V2 margin/mark authority,
-participation/latency capacity, realtime ticks, history-tick declarations and
-magnifier scheduling remain goal work. Sources requesting V2 path execution
-are explicitly rejected until that complete lifecycle is connected.
+interpolation remain declared assumptions. V2 margin/mark authority and shared
+participation capacity are now connected through the separate model in
+`pine-v2-bar-path.md`. BAR latency remains not applicable under its declared
+API. Realtime ticks, history-tick declarations and magnifier scheduling remain
+goal work.
 
 See [the shared path model](pine-bar-path.md) and the
 [official strategy execution documentation](https://www.tradingview.com/pine-script-docs/concepts/strategies/).

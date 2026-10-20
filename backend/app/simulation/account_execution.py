@@ -61,6 +61,9 @@ def publish_account_liquidation(kernel):
     # trades. Keep its actual loss visible to equity/drawdown reports as well.
     sequence = ((kernel._market_event_count or event.sequence)
         if event.role in {"BARS", "TRADES"} else event.sequence)
+    sequence_policy = getattr(kernel, "_account_curve_sequence", None)
+    if sequence_policy is not None:
+        sequence = sequence_policy(event)
     kernel._record_equity_point({"sequence": sequence, "event_time_ms": event.event_time_ms,
         "equity": str(account.equity()), "position_qty": str(account.position_qty),
         "wallet_balance": str(account.quote_balance), "available_balance": str(account.available_balance())})

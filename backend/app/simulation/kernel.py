@@ -179,7 +179,7 @@ class SimulationKernel:
                     "V2 participation rate must be in (0, 1]",
                     code="SCHEMA_UNKNOWN_FIELD",
                 )
-            if self.bar_path_scenario != BAR_PATH_SCENARIO:
+            if not self._supports_bar_path_scenario():
                 raise MarketDatasetError(
                     "V2 bar path scenario is not frozen",
                     code="FIDELITY_UNSUPPORTED",
@@ -206,6 +206,9 @@ class SimulationKernel:
             min_notional=self.min_notional,
             liquidation_enabled=False,
         )
+
+    def _supports_bar_path_scenario(self):
+        return self.bar_path_scenario == BAR_PATH_SCENARIO
 
     @property
     def projected_position_qty(self) -> Decimal:
@@ -884,7 +887,7 @@ class SimulationKernel:
                     order_id=order.order_id,
                     qty=self._opening_reserve_qty(order),
                     reference_price=reference,
-                    estimated_fee=reference * order.qty * fee_bps / Decimal("10000"),
+                    estimated_fee=self._execution_fee(reference, order.qty, fee_bps),
                 )
             except MarketDatasetError as exc:
                 self.orders.pop()
@@ -1052,7 +1055,7 @@ class SimulationKernel:
                     self.account.release_order_margin(order.order_id)
                 return Decimal("0")
         fee_bps = self.maker_fee_bps if reason in {"LIMIT_TOUCH"} else self.taker_fee_bps
-        fee = price * fill_qty * fee_bps / Decimal("10000")
+        fee = self._execution_fee(price, fill_qty, fee_bps)
         if isinstance(self.account, SpotCashAccount):
             rejection = self.account.fill_rejection(side=order.side, price=price, qty=fill_qty, fee=fee)
             if rejection:
@@ -1144,6 +1147,9 @@ class SimulationKernel:
         return fill_qty
 
     _fill_source_events: list[MarketEvent] = field(default_factory=list)
+
+    def _execution_fee(self, price, quantity, fee_bps):
+        return price * quantity * fee_bps / Decimal("10000")
 
     def _lifecycle(
         self,

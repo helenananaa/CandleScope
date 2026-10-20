@@ -163,11 +163,14 @@ def test_workbench_process_close_uses_negotiated_host_closing_execution(runtime)
     assert not result["raw_output"]["strategy_output"].get("strategy")
 
 
-def test_bar_closing_mode_keeps_unconnected_v2_path_capacity_fail_closed(service):
-    from app.backtest.errors import BacktestError
-    value=config(service,SOURCE.replace("process_orders_on_close=true","process_orders_on_close=true,calc_on_order_fills=true"))
-    with pytest.raises(BacktestError,match="V2 account/capacity scheduling"):
-        execute(service,value)
+def test_bar_closing_mode_connects_v2_path_callbacks_and_shared_capacity(service):
+    from app.simulation.execution_realism import PINE_BAR_PATH_SCENARIO
+    value=config(service,SOURCE.replace("process_orders_on_close=true","process_orders_on_close=true,calc_on_order_fills=true"),
+        bar_path_scenario=PINE_BAR_PATH_SCENARIO)
+    result=execute(service,value)
+    assert [row["event_time_ms"] for row in result["report"]["fills"]]==[59999,119999]
+    assert result["report"]["fill_model"]["name"]=="PINE_OHLC_PATH_V2"
+    assert result["report"]["strategy"]["pineExecution"]["closingFillCallbackCount"]==2
 
 
 def test_legacy_target_positions_use_the_same_closing_contract(service):

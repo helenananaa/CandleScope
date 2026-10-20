@@ -11,6 +11,8 @@ from app.market_dataset.snapshot import MarketDatasetError
 EXECUTION_REALISM_V2 = "EXECUTION_REALISM_V2"
 BAR_FILL_POLICY_V2 = "BAR_VOLUME_PARTICIPATION_WORST_CASE_V2"
 BAR_PATH_SCENARIO = "OHLC_WORST_CASE_STOP_FIRST_V1"
+PINE_BAR_PATH_SCENARIO = "OHLC_NEAREST_EXTREME_PATH_V2"
+PINE_BAR_FILL_POLICY = "PINE_OHLC_PATH_V2"
 TRADE_FILL_POLICY_V2 = "AGG_TRADE_LATENCY_PARTICIPATION_V2"
 END_POLICIES = frozenset({"KEEP_OPEN", "CANCEL_AT_END"})
 
@@ -41,8 +43,8 @@ class ExecutionRealismConfig:
         if fidelity_mode == "BAR_APPROX":
             payload.update(
                 {
-                    "fill_policy": BAR_FILL_POLICY_V2,
-                    "bar_path_scenario": BAR_PATH_SCENARIO,
+                    "fill_policy": PINE_BAR_FILL_POLICY if self.bar_path_scenario == PINE_BAR_PATH_SCENARIO else BAR_FILL_POLICY_V2,
+                    "bar_path_scenario": self.bar_path_scenario or BAR_PATH_SCENARIO,
                 }
             )
         else:
@@ -57,7 +59,7 @@ class ExecutionRealismConfig:
 
 
 def parse_execution_realism(
-    payload: Mapping[str, object], *, fidelity_mode: str
+    payload: Mapping[str, object], *, fidelity_mode: str, pine_bar_path: bool = False
 ) -> ExecutionRealismConfig:
     revision = str(payload.get("execution_model_revision") or "").strip() or None
     if revision is None:
@@ -98,9 +100,10 @@ def parse_execution_realism(
         raise MarketDatasetError(
             "unknown order_end_policy", code="SCHEMA_UNKNOWN_FIELD"
         )
-    scenario = str(payload.get("bar_path_scenario") or BAR_PATH_SCENARIO)
+    required_scenario = PINE_BAR_PATH_SCENARIO if pine_bar_path else BAR_PATH_SCENARIO
+    scenario = str(payload.get("bar_path_scenario") or required_scenario)
     if fidelity_mode == "BAR_APPROX":
-        if scenario != BAR_PATH_SCENARIO:
+        if scenario != required_scenario:
             raise MarketDatasetError(
                 "unknown bar_path_scenario", code="FIDELITY_UNSUPPORTED"
             )

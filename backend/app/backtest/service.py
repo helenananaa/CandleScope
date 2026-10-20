@@ -1168,7 +1168,7 @@ class BacktestService:
         normalized_execution = json.loads(identity.execution_json)
         if normalized_execution.get("pine_runtime_identity"):
             stored_payload["pine_runtime_identity"] = normalized_execution["pine_runtime_identity"]
-        for name in ("pine_contexts", "pine_local_data_root", "pine_order_runtime_identity", "pine_fill_callbacks", "pine_process_on_close", "pine_risk_windows", "pine_bar_path_contract"):
+        for name in ("pine_contexts", "pine_local_data_root", "pine_order_runtime_identity", "pine_fill_callbacks", "pine_process_on_close", "pine_risk_windows", "pine_bar_path_contract", "pine_v2_bar_contract"):
             stored_payload.pop(name, None)
             if name in normalized_execution:
                 stored_payload[name] = normalized_execution[name]
@@ -2749,6 +2749,9 @@ class BacktestService:
             if config.get("pine_bar_path_contract"):
                 from app.simulation.pine_chart_kernel import PineChartBarKernel
                 bar_kernel_type = PineChartBarKernel
+                if config.get("pine_v2_bar_contract"):
+                    from app.simulation.pine_v2_bar_kernel import PineV2BarKernel
+                    bar_kernel_type = PineV2BarKernel
             kernel = bar_kernel_type(
                 process_orders_on_close=bool(config.get("pine_process_on_close")),
                 account_model=str(
@@ -2907,6 +2910,7 @@ class BacktestService:
 
             streamed_last: MarketEvent | None = None
             streamed_count = 0
+            resume_bar_count = observed
 
             def remaining_events() -> Iterable[MarketEvent]:
                 nonlocal streamed_last, streamed_count
@@ -2916,7 +2920,7 @@ class BacktestService:
                         continue
                     if event.role == "BARS":
                         seen_bars += 1
-                        streamed_count = resume_sequence + seen_bars
+                        streamed_count = resume_bar_count + seen_bars
                         if streamed_count > self.settings.max_bar_rows:
                             raise BacktestError(
                                 "BUDGET_EXCEEDED",
@@ -3045,7 +3049,7 @@ class BacktestService:
                 | kernel.account.coverage(),
                 "fill_model": {
                     "name": (
-                        "PINE_OHLC_PATH_V1" if config.get("pine_bar_path_contract") else BAR_FILL_POLICY_V2
+                        kernel.fill_policy if config.get("pine_bar_path_contract") else BAR_FILL_POLICY_V2
                         if kernel.execution_model_revision == EXECUTION_REALISM_V2
                         else "BAR_NEXT_BAR_WORST_CASE_V1"
                     ),
@@ -3066,6 +3070,10 @@ class BacktestService:
                     **({"path_contract": config["pine_bar_path_contract"],
                         "timestamps": "LINEAR_INTERPOLATION_SYNTHETIC", "physical_tape": False,
                         "official_oracle_verified": False} if config.get("pine_bar_path_contract") else {}),
+                    **({"v2_path_contract": config["pine_v2_bar_contract"],
+                        "capacity_policy": "SHARED_BAR_VOLUME_PARTICIPATION" if kernel.execution_model_revision else "UNCAPPED",
+                        "mark_authority": "HISTORICAL_MARK_INDEX" if kernel.account_model == "LINEAR_PERP_ONE_WAY_V2" else "PATH_MARK",
+                        "account_event_order": "EVENTS_AT_TIME_PRECEDE_PATH_MATCH"} if config.get("pine_v2_bar_contract") else {}),
                     **_execution_fill_model(config),
                 },
                 "cost_sensitivity": cost_sensitivity,
@@ -4414,7 +4422,9 @@ class BacktestService:
                     "AGG_TRADE_EXECUTION M2 requires gap_policy=REJECT",
                 )
         try:
-            execution_realism = parse_execution_realism(payload, fidelity_mode=fidelity)
+            pine_path = bool(persisted_revision is not None and persisted_revision["base_revision_id"] == PINE_ENGINE_REVISION
+                and json.loads(json.loads(str(persisted_revision["compiled_json"]))["executionSource"]).get("fillCallbacks"))
+            execution_realism = parse_execution_realism(payload, fidelity_mode=fidelity, pine_bar_path=pine_path)
         except MarketDatasetError as exc:
             raise BacktestError(exc.code, str(exc)) from exc
         try:
@@ -4509,8 +4519,8 @@ class BacktestService:
                     envelope = json.loads(compiled_pine["executionSource"])
                     if envelope.get("executionScheduleContract") != "candlescope.pine-execution-schedule/1":
                         raise BacktestError("FIDELITY_UNSUPPORTED", "historical BAR callbacks require explicit execution schedules")
-                    if account_model not in {"LINEAR_PERP_ONE_WAY_V1", "SPOT_CASH_V1"} or payload.get("execution_model_revision") is not None:
-                        raise BacktestError("FIDELITY_UNSUPPORTED", "historical BAR path V2 account/capacity scheduling is not connected")
+                    if account_model == "LINEAR_PERP_ONE_WAY_V2" or execution_realism.enabled:
+                        execution_config["pine_v2_bar_contract"] = "candlescope.pine-v2-bar/1"
                     execution_config["pine_bar_path_contract"] = "candlescope.pine-bar-path/1"
                 execution_config["pine_fill_callbacks"] = True
             if output_mode == "ORDER_INTENT" or process_close:

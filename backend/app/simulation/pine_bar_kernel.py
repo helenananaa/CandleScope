@@ -30,6 +30,8 @@ class PineBarKernel(SimulationKernel):
                 "pine_bar_path": {"contract": CONTRACT, "sequence": self.path_sequence}}
 
     def restore(self, payload):
+        if payload.get("pine_v2_bar") is not None and getattr(self, "v2_path_contract", None) != "candlescope.pine-v2-bar/1":
+            raise MarketDatasetError("V2 path snapshot requires its own matcher", code="CHECKPOINT_CORRUPT")
         if payload.get("pine_chart_bar") is not None and not hasattr(self, "chart_bar_count"):
             raise MarketDatasetError("chart BAR snapshot requires its own clock", code="CHECKPOINT_CORRUPT")
         state = payload.get("pine_bar_path") or {}
@@ -113,6 +115,9 @@ class PineBarKernel(SimulationKernel):
         return [level for level in levels if level is not None
                 and (start < level <= end if end > start else end <= level < start)]
 
+    def _interleave_point(self, start, finish, begin_ms, end_ms, price, timestamp, endpoint):
+        return price, timestamp, endpoint
+
     def walk_bar(self, bar, on_close):
         """Match four OHLC vertices and continuous price-order crossings.
 
@@ -139,6 +144,8 @@ class PineBarKernel(SimulationKernel):
                 endpoint = next_price == finish
                 timestamp = times[index] if start == finish else times[index - 1] + int(
                     (times[index] - times[index - 1]) * abs(next_price - start) / abs(finish - start))
+                next_price, timestamp, endpoint = self._interleave_point(
+                    start, finish, times[index - 1], times[index], next_price, timestamp, endpoint)
                 self._point(next_price, timestamp, vertex=endpoint)
                 position = next_price
                 if endpoint:

@@ -406,8 +406,10 @@ that observation. The corrected allocation group passes.
    both bridges (`pine-external-schedule-transport.md`). Historical BAR fill
    callbacks now use the shared OHLC path on chart V1/spot accounts, including
    full historical observations, risk, independent cost reexecution and durable
-   complete-bar recovery (`pine-chart-bar-callbacks.md`). V2 path capacity/mark
-   scheduling, realtime ticks and history-tick scheduling remain required.
+   complete-bar recovery (`pine-chart-bar-callbacks.md`). Chart V2 historical
+   account-event merging, actual mark authority, shared capacity, partial fills
+   and settlement callbacks now use their own contract (`pine-v2-bar-path.md`).
+   Realtime ticks and history-tick scheduling remain required.
    V2 cost matrices now independently reexecute scripts and Host allocation;
    larger-history performance and broader product acceptance remain to qualify.
    Simulated closing ticks are connected for chart BAR and aggregate-trade runs,
@@ -418,7 +420,7 @@ that observation. The corrected allocation group passes.
    control contract. Workbench historical BAR fill recalculation now has an
    independent OHLC path matcher and explicit historical callback schedule;
    see `pine-bar-path.md`. Chart V1/spot callbacks now share the matcher;
-   V2 path integration remains unfinished. Pyne external-account
+   chart V2 integration is tracked in `pine-v2-bar-path.md`. Pyne external-account
    replay is not advertised. Native-account replay remains a separate path.
    Larger-history account-journal/reconstruction performance and packaged
    Workbench acceptance remain unqualified.
