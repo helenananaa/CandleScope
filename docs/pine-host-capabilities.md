@@ -97,3 +97,10 @@ it is not a complete passing Host regression. Restored-account match guards,
 instrumented request-test waits and pause-runner cleanup were corrected in
 `60ae8629`. A new complete historical-profile result must name its own sources,
 runtime and receipt rather than inheriting an earlier count.
+
+The first repeatable historical profile on `730fcf85` subsequently passed all
+305 cases, with no skipped cases and unchanged source/runtime/registry files.
+Controlled entry work and the preparation market-identity defect are recorded
+in [the entry acceptance procedure](pine-host-entry-acceptance.md). The latter's
+74-case boundary regression belongs to the later source containing that fix;
+it does not replace the full historical profile or packaged acceptance.

@@ -4,6 +4,7 @@
     "types": ["vite/client", "node"]
   },
   "include": [
+    "tests/fixtures/pine-host-entry/**/*.tsx",
     "scripts/**/*.ts",
     "scripts/**/*.tsx",
     "src/**/__tests__/**/*.ts",

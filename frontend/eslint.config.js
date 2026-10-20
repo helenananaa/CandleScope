@@ -76,6 +76,7 @@ export default defineConfig([
   },
   {
     files: [
+      'tests/fixtures/pine-host-entry/**/*.tsx',
       'scripts/**/*.{ts,tsx}',
       'src/**/__tests__/**/*.{ts,tsx}',
       'src/**/*.test.{ts,tsx}',
