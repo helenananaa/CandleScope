@@ -677,6 +677,23 @@ class TapeDisplayProjection:
             interval=interval,
         )
         end = compute_bucket_end_ms(observed_start, width, interval=interval)
+        if last is not None and boundary >= end:
+            # A clock-only advance can complete the last selected bucket even
+            # before this market trades again. A historical request may pair
+            # an older sequence with that newer clock, so time alone is not a
+            # completeness proof: an unselected trade in the same bucket must
+            # keep it forming (including a partial equal-ms cohort).
+            next_trade = (
+                None
+                if sequence == reference.row_count
+                else reader.read_sequence_page(
+                    after_sequence=sequence,
+                    revealed_sequence=sequence + 1,
+                    limit=1,
+                ).trades[0]
+            )
+            if next_trade is None or next_trade.trade_time_ms + offset >= end:
+                selected_closed_before = end
         if before_ms is not None:
             end = min(end, before_ms)
         start = compute_bucket_start_ms(max(0, end - 1), width, interval=interval)
@@ -744,6 +761,8 @@ class TapeDisplayProjection:
             close_at = end - 1
         elif boundary == terminal and sequence == reference.row_count:
             close_at = terminal
+        elif end <= selected_closed_before:
+            close_at = end - 1
         execution_start = max(start, snapshot.replay_start_ms)
         after = 0
         warmup = tuple(
