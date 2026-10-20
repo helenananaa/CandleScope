@@ -190,9 +190,14 @@ class NativeBacktests:
         with self.lock:
             existing = self.db.execute("SELECT hash,record FROM runs WHERE key=?", (key,)).fetchone()
             if existing:
+                record = json.loads(existing[1])
                 if existing[0] != fingerprint:
-                    raise BacktestError("IDEMPOTENCY_CONFLICT", "key belongs to different native inputs")
-                return json.loads(existing[1])
+                    from .workbench_identity import request_identity
+                    stored = record.get("config")
+                    if (not isinstance(stored, dict) or digest(stored) != existing[0]
+                            or digest(request_identity(stored)) != digest(request_identity(payload))):
+                        raise BacktestError("IDEMPOTENCY_CONFLICT", "key belongs to different native inputs")
+                return record
             if self.closed or len(self.cancel_events) + len(self.replay.jobs) >= 2:
                 raise BacktestError("RUN_CAPACITY_EXCEEDED", "two native runs are already active")
             external = payload.get("execution_mode") == "CANDLESCOPE"

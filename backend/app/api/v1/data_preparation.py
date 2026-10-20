@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.data_preparation.models import PreparationError, PreparationRequest, Requirement
 from app.replay.request_contracts import TrainingRunSetupPayload
 from app.backtest.request_contracts import ChartContextResolveRequest, ResearchExecutionOverrides
+from app.backtest.workbench_identity import preparation_identity
 from app.backtest.native_contracts import HostMatchingSettings, ExternalRunRequest, PineChartMetadata, RequestedNativeData, WorkbenchBarSettings
 from app.api.v1.backtests import _operator_python_payload
 
@@ -81,7 +82,8 @@ async def prepare_frozen_external_strategy(request: Request, payload: FrozenExte
     instance = service(request)
     prior = await invoke_async(lambda: instance.storage(instance.repository.by_idempotency, payload.idempotency_key))
     if prior is not None:
-        if canonical(prior["request"]["intent"].get("submission")) != canonical(submission):
+        if (canonical(preparation_identity(prior["request"]["intent"].get("submission"), field="run"))
+                != canonical(preparation_identity(submission, field="run"))):
             raise HTTPException(409, detail={"code": "IDEMPOTENCY_CONFLICT", "message": "Key belongs to another frozen strategy preparation"})
         return prior
     runtime = getattr(request.app.state, "backtest_runtime", None)
@@ -141,7 +143,8 @@ async def prepare_native_strategy(request: Request, payload: NativePreparationPa
         submission.pop("execution")
     prior = await invoke_async(lambda: service(request).storage(service(request).repository.by_idempotency, payload.idempotency_key))
     if prior is not None:
-        if canonical(prior["request"]["intent"].get("submission")) != canonical(submission):
+        if (canonical(preparation_identity(prior["request"]["intent"].get("submission"), field="execution"))
+                != canonical(preparation_identity(submission, field="execution"))):
             raise HTTPException(409, detail={"code": "IDEMPOTENCY_CONFLICT", "message": "Key belongs to a different native preparation"})
         return prior
     runtime = getattr(request.app.state, "backtest_runtime", None)

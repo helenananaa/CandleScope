@@ -4,7 +4,30 @@ Status: active. Continue the original user goal: CandleScope host gaps first,
 then related interpreter work directly in `E:/projects/pine-interpreter`.
 The mistakenly relayed scope-narrowing instruction was withdrawn by the user.
 
-## Source and artifact identities
+## Active source and runtime identities (2026-10-20)
+
+- Host worktree and branch remain `E:/CodexData/worktrees/pine-host-adaptation/CandleScope`
+  and `codex/pine-host-adaptation`. The latest sealed margin/book checkpoint is
+  `41c894bc900110f12a577e7e52cbac28b59fb9db`; subsequent upgrade-retry work is
+  recorded in its separate candidate receipt.
+- Core remains clean at `02fdbebffd9baa1cb80b0aa2454cecf3b7b3207d` on
+  `codex/pine-host-completion`. This Host-account phase did not modify it.
+- The worker environment is `output/pine-host/phase3/schedule-transport-admission-venv`,
+  selected by `schedule-transport-admission-runtime-registry.json` in that directory's
+  parent. The installed core binary SHA256 is
+  `b3762e5dc0df0eff47751b28b1cb66717b51aadb200bd412f71b72503586ba89`.
+- `margin-repricing-candidate-receipt.json` binds the 54-module regression
+  (673 passed, 45 excluded by the recorded selection), 1,508 source hashes and
+  55 installed runtime hashes. It retains the initial four failures, the baseline
+  book reproduction and the provider-timeout diagnostic. The final complete gate
+  passed without relaxing deadlines; the first timeout's cause remains unproven.
+- Original checkout preservation and historical receipts remain separate from
+  packaged-product, official-oracle and exchange-data acceptance.
+
+## Retained source and artifact history
+
+The entries below describe earlier checkpoints and candidates. Their source
+and runtime versions do not replace the active identities above.
 
 - Host worktree: `E:/CodexData/worktrees/pine-host-adaptation/CandleScope`,
   branch `codex/pine-host-adaptation`.
@@ -41,7 +64,7 @@ The mistakenly relayed scope-narrowing instruction was withdrawn by the user.
 - The Workbench-control checkpoint passed 424 Host cases (41 scoped exclusions),
   176 kernel/risk/contract checks and 75 bridge checks (12 optional Renko skips).
   Counts overlap. Source and test hashes were frozen across the final full gate.
-  The current local candidate is isolated in `workbench-control-venv`, with
+  The retained Workbench-control candidate is isolated in `workbench-control-venv`, with
   `workbench-control-runtime-registry.json` and
   `workbench-control-candidate-receipt.json` under `output/pine-host/phase3`.
   Core source/binary, prior candidate environments and the original checkout
@@ -423,7 +446,9 @@ that observation. The corrected allocation group passes.
    chart V2 integration is tracked in `pine-v2-bar-path.md`. Workbench V2 BAR API
    and replay now consume frozen account data (`pine-workbench-v2-bar.md`);
    settings UI/import and automatic BAR preparation now preserve its controls,
-   uploaded-input lifecycle and result staleness. Independent Workbench cost
+   uploaded-input lifecycle and result staleness. Retry comparison also preserves
+   known additive defaults across old stored submissions without rewriting their
+   frozen identities (`pine-workbench-default-upgrade.md`). Independent Workbench cost
    matrices and V2 print/book paths remain to connect. Working-order margin now
    reprices across gaps with FIFO cancellation of unfunded remainders while
    preserving booked fills and valid negative initial-margin availability;
