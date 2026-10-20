@@ -62,3 +62,17 @@ def test_risk_state_from_another_configuration_cannot_be_reused():
     foreign["pine_host_control"]["risk_rules"]["rules"][0]["value"]=3
     with pytest.raises(BacktestError,match="configuration differs"):
         configure_risk(other,foreign,resume=saved)
+
+
+@pytest.mark.parametrize("schedule,calc", [(False, True), (True, False)])
+def test_bar_callbacks_require_both_source_setting_and_negotiated_schedule(schedule, calc):
+    identity = {"workbench_control": CONTRACT}
+    if schedule:
+        identity["execution_schedule_contract"] = "candlescope.pine-execution-schedule/1"
+    native = SimpleNamespace(runner=lambda *args, **kwargs: {"identity": identity, "contract": CONTRACT,
+        "execution": {"processOrdersOnClose": False, "calcOnOrderFills": calc}, "risk_rules": None})
+    wire = {"identity": identity, "bars": [], "contexts": [], "fill_recalculation": True,
+            "execution_fidelity": "BAR_APPROX"}
+    with pytest.raises(BacktestError, match="explicit schedule support and calc_on_order_fills"):
+        freeze_control(native, {}, wire, {})
+    assert "pine_bar_path_contract" not in wire

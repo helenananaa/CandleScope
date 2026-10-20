@@ -25,6 +25,8 @@ class ExternalOrders:
         self.execution_reporter = kernel.execution_reporter
         kernel.execution_reporter = self.on_execution
         kernel.order_policy = self.prepare_order
+        if hasattr(kernel, "path_level_provider"):
+            kernel.path_level_provider = self.path_levels
         if hasattr(kernel, "_resting_filter_enabled"):
             kernel._resting_filter_enabled = False
 
@@ -34,6 +36,22 @@ class ExternalOrders:
         if self.pyramiding is not None and self.pyramiding != limit:
             raise BacktestError("EXTERNAL_NONCAUSAL_PREFIX", "pyramiding changed during the run")
         self.pyramiding = limit
+
+    def path_levels(self):
+        """Visit a dormant trailing activation before ratcheting its watermark."""
+        levels = []
+        for order in tuple(self.kernel._live_orders()):
+            detail = self.details.get(order.order_id, {})
+            if not detail.get("trailing") or detail.get("watermark") is not None:
+                continue
+            position = self.owned(detail["owner"])
+            if not position:
+                continue
+            selected = [lot for lot in self.lots if not detail["owner"] or lot["entry_id"] == detail["owner"]]
+            basis = sum((abs(lot["qty"]) * lot["price"] for lot in selected), ZERO) / abs(position)
+            levels.append(detail.get("trail_price") if detail.get("trail_price") is not None
+                          else basis + (1 if position > 0 else -1) * detail["trail_points"] * self.price_tick)
+        return levels
 
     def owned(self, entry_id=None):
         return sum((lot["qty"] for lot in self.lots if not entry_id or lot["entry_id"] == entry_id), ZERO)

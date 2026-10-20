@@ -43,6 +43,12 @@ def freeze_control(native, plugin, wire, payload):
         wire["pine_risk_context"] = context
     wire["pine_host_control"] = {"contract": CONTRACT, "execution": deepcopy(execution),
         "risk_rules": deepcopy(configuration)}
+    if wire["execution_fidelity"] == "BAR_APPROX" and wire.get("fill_recalculation"):
+        from .strategy.pine_schedule import CONTRACT as SCHEDULE_CONTRACT
+        from app.simulation.pine_bar_kernel import CONTRACT as PATH_CONTRACT
+        if identity.get("execution_schedule_contract") != SCHEDULE_CONTRACT or not execution.get("calcOnOrderFills"):
+            raise BacktestError("EXTERNAL_UNSUPPORTED", "Pine BAR callbacks require explicit schedule support and calc_on_order_fills")
+        wire.update(pine_bar_path_contract=PATH_CONTRACT, execution_schedule_contract=SCHEDULE_CONTRACT)
 
 
 def configure_risk(orders, wire, *, resume=None):

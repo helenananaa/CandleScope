@@ -9,7 +9,7 @@ from tests.test_external_replay import payload as replay_payload
 from tests.test_native_replay import settle
 
 MODES=["BAR_APPROX","TRADE_TAPE","BOOK_ASSISTED","BOOK_DEPTH","BOOK_SAMPLED"]
-PROFILES=[("BAR_APPROX",False), *[(mode,callback) for mode in MODES[1:] for callback in (False,True)]]
+PROFILES=[("BAR_APPROX",False),("BAR_APPROX",True), *[(mode,callback) for mode in MODES[1:] for callback in (False,True)]]
 
 
 def value(main,mode,*,callbacks=False,closing=False,rule='max_intraday_filled_orders(1)',fresh=True):
@@ -93,7 +93,7 @@ def test_workbench_closing_tick_then_risk_close_waits_for_actual_future_tick(run
         assert group[1]["account"]["position_size"]>0
 
 
-@pytest.mark.parametrize("mode,callbacks",[("BAR_APPROX",False),("TRADE_TAPE",True),("BOOK_DEPTH",True),("BOOK_SAMPLED",True)])
+@pytest.mark.parametrize("mode,callbacks",[("BAR_APPROX",False),("BAR_APPROX",True),("TRADE_TAPE",True),("BOOK_DEPTH",True),("BOOK_SAMPLED",True)])
 def test_workbench_risk_and_closing_state_restore_to_identical_endpoint(runtime,mode,callbacks):
     host,main=runtime
     origin=terminal(host.native,host.native.create(value(main,mode,callbacks=callbacks,closing=True),"restore")["run_id"])

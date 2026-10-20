@@ -30,6 +30,7 @@ def host_identity():
     files.extend(Path(__file__).with_name(name) for name in ("pine_risk_state.py", "pine_risk_stops.py"))
     files.append(Path(__file__).with_name("pine_workbench.py"))
     files.append(Path(__file__).with_name("external_support.py"))
+    files.append(Path(__file__).with_name("pine_bar_clock.py"))
     for path in files:
         checksum.update(path.name.encode())
         checksum.update(path.read_bytes())
@@ -90,7 +91,12 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
     from app.simulation.sampled_book_kernel import SampledBookKernel
     kernel_type = {"BAR_APPROX":SimulationKernel,"BOOK_ASSISTED":BookAssistedKernel,
                    "TRADE_TAPE":TradeSimulationKernel,"BOOK_DEPTH":DepthQueueKernel,"BOOK_SAMPLED":SampledBookKernel}[fidelity]
-    kernel = kernel_type(**({"process_orders_on_close": True} if kernel_type is SimulationKernel and wire.get("closing_ticks") else {}),
+    if wire.get("pine_bar_path_contract"):
+        from app.simulation.pine_bar_kernel import PineBarKernel, CONTRACT as PATH_CONTRACT
+        if fidelity != "BAR_APPROX" or wire["pine_bar_path_contract"] != PATH_CONTRACT or not wire.get("fill_recalculation"):
+            raise BacktestError("EXTERNAL_UNSUPPORTED", "invalid Pine BAR path contract")
+        kernel_type = PineBarKernel
+    kernel = kernel_type(**({"process_orders_on_close": True} if issubclass(kernel_type, SimulationKernel) and wire.get("closing_ticks") else {}),
                               account_model=wire.get("account_model", "LINEAR_PERP_ONE_WAY_V1"),
                               initial_balance=Decimal(str(settings["initial_balance"])),
                               slippage_bps=Decimal(str(settings["slippage_bps"])),
@@ -101,7 +107,8 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
     if type(target) is not int or not 1<=target<=len(wire["bars"]):
         raise BacktestError("NATIVE_REPLAY_RANGE","invalid external chart cursor")
     accounts,history,latest=[],[],{}
-    orders = ExternalOrders(kernel, price_tick=settings.get("price_tick"), fidelity=fidelity)
+    orders = ExternalOrders(kernel, price_tick=settings.get("price_tick"),
+                            fidelity="PINE_BAR_PATH" if wire.get("pine_bar_path_contract") else fidelity)
     deadline = time.monotonic() + 120
     clock,last_request,cursor={},None,0
     if resume is not None:
@@ -168,7 +175,10 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
                                    **{key: str(bar[key]) for key in ("open", "high", "low", "close", "volume")}})
               for index, bar in enumerate(wire["bars"])]
     execution_passes = None
-    if wire.get("fill_recalculation"):
+    if wire.get("pine_bar_path_contract"):
+        from .pine_bar_clock import run_bar_clock
+        latest,history,accounts,execution_passes,clock=run_bar_clock(kernel,orders,wire,plugin,evaluate,cancelled,deadline,state=clock,target=target)
+    elif wire.get("fill_recalculation"):
         from .external_feedback import run_feedback_clock
         latest,history,accounts,execution_passes,clock=run_feedback_clock(kernel,orders,wire,plugin,evaluate,cancelled,deadline,state=clock,target=target)
     elif fidelity == "BAR_APPROX":
@@ -202,6 +212,11 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
                            "execution_passes": execution_passes, "strategy_output": latest.get("raw_output", {})}}
     if risk_stops is not None and risk_stops.state is not None:
         result["pine_risk_stops"] = risk_stops.report()
+    if wire.get("pine_bar_path_contract"):
+        result["raw_output"]["pine_bar_path"] = {"contract": wire["pine_bar_path_contract"],
+            "vertices": "NEAREST_EXTREME_FIRST_LOW_ON_TIE", "timestamps": "LINEAR_INTERPOLATION_SYNTHETIC",
+            "physical_tape": False, "official_oracle_verified": False}
+        result["raw_output"]["execution_schedule"] = clock["groups"]
     if wire.get("closing_ticks"):
         result["raw_output"]["closing_tick_contract"] = "candlescope.pine-closing-tick/1"
         result["raw_output"]["closing_execution"] = {

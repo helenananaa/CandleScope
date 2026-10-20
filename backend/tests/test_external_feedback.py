@@ -66,9 +66,9 @@ def test_fill_profile_requires_incremental_callback_and_explicit_opt_in(runtime)
     assert "on_fill" in str(record["error"])
 
 
-def test_bar_only_fill_profile_is_rejected_before_run(runtime):
+def test_bar_fill_profile_requires_source_calc_on_order_fills(runtime):
     host, payload = runtime
-    with pytest.raises(ValueError, match="trade tape"):
+    with pytest.raises(ValueError, match="calc_on_order_fills"):
         host.native.create({**payload, "execution_mode": "CANDLESCOPE", "fill_recalculation": True,
             "host_settings": {"initial_balance": 10000, "slippage_bps": 0, "taker_fee_bps": 0}}, "bad-fill")
 

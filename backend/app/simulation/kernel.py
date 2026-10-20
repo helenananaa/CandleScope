@@ -335,6 +335,8 @@ class SimulationKernel:
         }
 
     def restore(self, payload: Mapping[str, object]) -> None:
+        if payload.get("pine_bar_path") is not None and not hasattr(self, "path_sequence"):
+            raise MarketDatasetError("Pine BAR path requires its own matcher", code="CHECKPOINT_CORRUPT")
         if bool(payload.get("process_orders_on_close")) != self.process_orders_on_close:
             raise MarketDatasetError("closing-tick checkpoint identity changed", code="CHECKPOINT_CORRUPT")
         if bool(payload.get("scale_stream_decisions") or False) != bool(

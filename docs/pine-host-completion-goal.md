@@ -413,7 +413,10 @@ that observation. The corrected allocation group passes.
    close-auction liquidity or TradingView broker-emulator equivalence.
 2. Workbench Pine Host-account replay, six-rule risk enforcement and closing
    scheduling are connected for BAR/tape/book modes through the negotiated
-   control contract. BAR fill recalculation remains unfinished. Pyne external-account
+   control contract. Workbench historical BAR fill recalculation now has an
+   independent OHLC path matcher and explicit historical callback schedule;
+   see `pine-bar-path.md`. Chart BAR callbacks and V2 path integration remain
+   unfinished. Pyne external-account
    replay is not advertised. Native-account replay remains a separate path.
    Larger-history account-journal/reconstruction performance and packaged
    Workbench acceptance remain unqualified.

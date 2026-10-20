@@ -25,6 +25,16 @@ def validate_state(wire,state):
                 or not 1<=event_cursor<=len(events)
                 or clock.get("last_sequence")!=events[event_cursor-1]["sequence"]):
             raise BacktestError("NATIVE_IDENTITY_MISMATCH","external execution cursor differs")
+    if wire.get("pine_bar_path_contract"):
+        clock = state.get("clock") or {}
+        path = state.get("kernel", {}).get("pine_bar_path") or {}
+        from .native_replay_storage import same_json
+        if (clock.get("contract") != wire["pine_bar_path_contract"] or clock.get("bar_cursor") != cursor
+                or len(clock.get("groups", [])) != cursor
+                or path.get("contract") != wire["pine_bar_path_contract"]
+                or clock.get("last_sequence") != path.get("sequence")
+                or not same_json(clock.get("groups"), state["last_request"].get("execution_schedule"))):
+            raise BacktestError("NATIVE_IDENTITY_MISMATCH", "Pine BAR path replay cursor differs")
 
 
 def make_state(wire,cursor,kernel,orders,accounts,history,latest,clock,last_request,*,risk_stops=None):

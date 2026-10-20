@@ -267,7 +267,7 @@ class NativeBacktests:
             if external:
                 from .external import host_identity
                 from .external_market import freeze_execution
-                wire.update(fill_recalculation=payload.get("fill_recalculation", False), execution_events=freeze_execution(self, payload, bars), execution_fidelity=payload.get("execution_fidelity", "BAR_APPROX"))
+                wire.update(fill_recalculation=payload.get("fill_recalculation", False), execution_fidelity=payload.get("execution_fidelity", "BAR_APPROX"))
                 wire["execution_provenance"] = (payload.get("execution_data") or {}).get("provenance", {})
                 wire.update(host_settings=payload["host_settings"], interval=payload["interval"], host_runtime_identity=host_identity(),
                             account_model="SPOT_CASH_V1" if payload.get("market_type", "usdm") == "spot" else "LINEAR_PERP_ONE_WAY_V1",
@@ -275,6 +275,8 @@ class NativeBacktests:
                 if payload["language"] == "pine":
                     from .pine_workbench import freeze_control
                     freeze_control(self, plugin, wire, payload)
+                wire["execution_events"] = freeze_execution(self, payload, bars,
+                    allow_bar_callbacks=bool(wire.get("pine_bar_path_contract")))
             if len(encoded(wire).encode()) > MAX_BYTES:
                 raise BacktestError("BUDGET_EXCEEDED", "native input exceeds 64 MiB")
             run_id = "native_" + uuid.uuid4().hex

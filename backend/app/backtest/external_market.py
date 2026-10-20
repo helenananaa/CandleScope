@@ -8,11 +8,11 @@ from app.data_engine.interval_policy import parse_interval_spec
 from .errors import BacktestError
 
 
-def freeze_execution(native, payload, bars):
+def freeze_execution(native, payload, bars, *, allow_bar_callbacks=False):
     mode = payload.get("execution_fidelity", "BAR_APPROX")
     data = payload.get("execution_data")
     if mode == "BAR_APPROX":
-        if payload.get("fill_recalculation"):
+        if payload.get("fill_recalculation") and not allow_bar_callbacks:
             raise BacktestError("EXTERNAL_UNSUPPORTED", "fill callbacks require a frozen trade tape")
         if data:
             raise BacktestError("FIDELITY_MISLABEL", "BAR mode cannot accept print data")
