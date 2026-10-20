@@ -154,7 +154,14 @@ async def test_native_api_freezes_multiple_symbols_and_timeframes_before_launch(
         resumed = await adapter.launch(PreparationRequest.model_validate(job["request"]), job["result"], job["id"])
         assert resumed["native_run"]["run_id"] == run_id
         assert len(runtime.native.list()) == 1
-        assert len(launched) == (1 if mode == "NATIVE" else 12)
+        if mode == "NATIVE":
+            assert len(launched) == 1
+        else:
+            scenarios = run["result"]["cost_sensitivity"]["scenarios"]
+            assert {row["name"] for row in scenarios if row["executed"]} == {
+                "BASELINE", "COSTS_PLUS_25_PERCENT", "COSTS_PLUS_50_PERCENT"}
+            # Primary and each independent cost account replay all prefixes.
+            assert [len(wire["bars"]) for wire in launched] == list(range(1, 13)) * 4
         assert runtime.service.list_runs() == []
         payload = run["config"]
         assert run["execution_mode"] == mode

@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from app.api.v1.data_preparation import router
 from app.data_preparation.bar_adapter import BarPreparationAdapter
 from app.data_preparation.models import PreparationRequest
+from app.data_preparation.native_plan import plan_inputs
 from app.data_preparation.repository import PreparationRepository
 from app.data_preparation.service import PreparationService
 from tests.test_backtest_chart_context import _runtime
@@ -16,9 +17,23 @@ from tests.test_data_preparation import START, async_test, terminal
 from tests.test_native_strategy_plugins import plugin
 
 
+def test_preparation_market_aliases_share_the_same_physical_input_and_frozen_identity():
+    main = dict(exchange="BINANCE", market_type="usdm", symbol="btcusdt", interval="1m",
+                start_time_ms=120000, end_time_ms=239999)
+    requirements, bindings = plan_inputs(main, [
+        {**main, "exchange": "binance", "market_type": "futures", "symbol": "BTCUSDT"}])
+    assert len(requirements) == 1
+    assert requirements[0].exchange == "binance"
+    assert requirements[0].market_type == "futures"
+    assert requirements[0].symbol == "BTCUSDT"
+    assert all((item["exchange"], item["market_type"], item["symbol"], item["binding_symbol"])
+               == ("binance", "futures", "BTCUSDT", "BINANCE:BTCUSDT") for item in bindings)
+
+
 @async_test
+@pytest.mark.parametrize("market_type", ["futures", "usdm"])
 @pytest.mark.skipif(not os.environ.get("NATIVE_TEST_PYTHON"), reason="requires installed Pine worker")
-async def test_automatic_pine_bar_v2_preparation_preserves_account_inputs_and_launch_identity(tmp_path):
+async def test_automatic_pine_bar_v2_preparation_preserves_account_inputs_and_launch_identity(tmp_path, market_type):
     runtime = _runtime(tmp_path)
     runtime.native.resolver = plugin
     inventory, acquired = [], []
@@ -43,7 +58,7 @@ if bar_index==0 and not sent
     strategy.entry("L",strategy.long,qty=7)
 if strategy.position_size>0
     strategy.exit("X","L",stop=9.5,limit=10.5)
-''', "context": {"exchange": "binance", "market_type": "futures", "symbol": "BTCUSDT", "interval": "1m",
+''', "context": {"exchange": "binance", "market_type": market_type, "symbol": "BTCUSDT", "interval": "1m",
         "range_mode": "CUSTOM", "fidelity_preference": "FAST", "start_time_ms": START, "end_time_ms": START + 300000 - 1},
         "chart_metadata": {"priceTickSize": "1/10"}, "execution": {"execution_fidelity": "BAR_APPROX", "fill_recalculation": True,
             "host_settings": {"initial_balance": 10000, "slippage_bps": 0, "taker_fee_bps": 0},
@@ -62,7 +77,8 @@ if strategy.position_size>0
             assert acquired == []
             response = await client.post("/data-preparations/native-strategy", json=body)
             assert response.status_code == 202, response.text
-            job = await terminal(service, response.json()["id"])
+            # Installed-worker metadata/analysis may cold-start several processes.
+            job = await terminal(service, response.json()["id"], timeout=30)
             assert job["state"] == "READY", job.get("error")
             assert (await client.post("/data-preparations/native-strategy", json=body)).json()["id"] == job["id"]
             changed = {**body, "execution": {**body["execution"], "participation_rate": .1}}
@@ -75,6 +91,7 @@ if strategy.position_size>0
             await asyncio.sleep(.02)
         assert record["state"] == "COMPLETED", record.get("error")
         assert record["config"]["account_data"] == body["execution"]["account_data"]
+        assert record["config"]["market_type"] == "futures"
         assert [float(row["qty"]) for row in record["result"]["trades"]] == [5, 2, 3, 4]
         assert float(record["result"]["position"]["cumulative_funding"]) == -.5
         assert record["result"]["fill_model"] == "PINE_OHLC_PATH_V2"

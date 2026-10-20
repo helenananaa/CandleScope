@@ -95,9 +95,11 @@ def chart_interval(value):
 
 def plan_inputs(context, dependencies):
     """Deduplicate physical minute-bar acquisition across logical intervals."""
+    from app.backtest.chart_context import ChartContextRequest
     bindings, physical = [], {}
     primary_start, primary_end = context["start_time_ms"], context["end_time_ms"] + 1
     for index, dependency in enumerate([context, *dependencies]):
+        market = ChartContextRequest.from_mapping(dependency)
         spec = parse_interval_spec(dependency["interval"])
         if spec is None or spec.nominal_ms < 60_000:
             raise PreparationError("DEPENDENCY_INTERVAL_UNSUPPORTED", "Native input cannot be constructed from minute bars")
@@ -111,9 +113,11 @@ def plan_inputs(context, dependencies):
             start = warmup_start(spec, start, max(1, warmup))
         if end <= start or start < 0:
             raise PreparationError("DEPENDENCY_RANGE_UNAVAILABLE", "No complete historical bars cover the requested input")
-        binding = {"exchange": dependency["exchange"], "market_type": dependency["market_type"],
-            "symbol": dependency["symbol"], "interval": spec.canonical,
-            "binding_symbol": dependency.get("binding_symbol", f"{dependency['exchange'].upper()}:{dependency['symbol']}"),
+        # Publication and subsequent context resolution must use the same
+        # canonical market identity, including aliases such as usdm -> futures.
+        binding = {"exchange": market.exchange, "market_type": market.market_type,
+            "symbol": market.symbol, "interval": spec.canonical,
+            "binding_symbol": dependency.get("binding_symbol", f"{market.exchange.upper()}:{market.symbol}"),
             "range_mode": "CUSTOM", "fidelity_preference": "FAST", "start_time_ms": start, "end_time_ms": end - 1}
         bindings.append(binding)
         identity = (binding["exchange"], binding["market_type"], binding["symbol"])
