@@ -527,12 +527,16 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
       ? recordText(selectedTrack?.account ?? {}, "available_equity", "")
       : portfolio?.available_equity,
   );
+  const tradePlanEligible = !reduceOnly && (orderType === "MARKET" || orderType === "LIMIT");
+  const previewPositionIntent = !reduceOnly
+    && (orderType === "MARKET" || (tradePlanEnabled && tradePlanEligible)) ? "OPEN" : "NET";
   const maxQuantitySizingKey = JSON.stringify([
     selectedTrackId,
     isolatedAllocation,
     previewSide,
     orderType,
     reduceOnly,
+    previewPositionIntent,
     reduceOnly ? positionQty : null,
   ]);
   const rebasedMaxQuantity = maxQuantitySnapshot?.sizingKey === maxQuantitySizingKey
@@ -568,7 +572,6 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
     if (sizeMode === "NOTIONAL") return quantityForStep(input / referencePrice, quantityStep);
     return quantityForStep((input * leverage) / referencePrice, quantityStep);
   })();
-  const tradePlanEligible = !reduceOnly && (orderType === "MARKET" || orderType === "LIMIT");
   const tradePlanDraft = useMemo<ReplayTradePlanDraft | null>(() => (
     tradePlanEnabled && tradePlanEligible
       ? {
@@ -591,7 +594,6 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
   ]);
   const previewOrder = viewer.actions.previewOrder;
   const orderCapacity = viewer.actions.orderCapacity;
-  const previewPositionIntent = orderType === "MARKET" && !reduceOnly ? "OPEN" : "NET";
   const cursorReady = store.virtualTimeMs !== null;
   const cursorAdvisoryEpoch = JSON.stringify([
     store.revision,
@@ -620,6 +622,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
     previewSide,
     orderType,
     reduceOnly,
+    previewPositionIntent,
     price,
     leverage,
     reduceOnly ? positionQty : null,
@@ -1003,7 +1006,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
       leverage: String(leverage),
       ...(positionMode === "HEDGE" ? { position_side: targetPositionSide } : {}),
     };
-    const intent = orderType === "MARKET" && !reduceOnly ? "OPEN" : "NET";
+    const intent = previewPositionIntent;
     const planForSide = tradePlanEnabled && tradePlanEligible && !reduceOnly
       ? tradePlanDraft
       : null;
@@ -1039,6 +1042,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
       sideForContext,
       orderType,
       reduceOnly,
+      intent,
       reduceOnly ? targetPositionQty : null,
     ]);
     const sideContextKey = JSON.stringify([
@@ -1047,6 +1051,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
       sideForContext,
       orderType,
       reduceOnly,
+      intent,
       price,
       leverage,
       reduceOnly ? targetPositionQty : null,
