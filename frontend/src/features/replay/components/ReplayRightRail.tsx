@@ -1399,8 +1399,8 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
 
           <dl className="replay-order-preview" aria-label={t("replay.paper.orderPreview")}>
             <div><dt>{t("replay.paper.notionalVal")}</dt><dd>{previewPending ? t("replay.paper.checking") : `${formatDecimal(preview?.estimated_notional, 2)} ${settlementAsset}`}</dd></div>
-            <div><dt>{t("replay.paper.orderBudget")}</dt><dd>{formatDecimal(preview?.reserved_margin, 2)} {settlementAsset}</dd></div>
-            <div><dt>{t("replay.paper.feeCap")}</dt><dd>{formatDecimal(preview?.estimated_fee, 4)} {settlementAsset}</dd></div>
+            <div><dt>{t("replay.paper.orderBudget")}</dt><dd>{formatDecimal(preview?.reserved_margin, 8)} {settlementAsset}</dd></div>
+            <div><dt>{t("replay.paper.feeCap")}</dt><dd>{formatDecimal(preview?.estimated_fee, 8)} {settlementAsset}</dd></div>
           </dl>
 
           <details className="replay-trade-plan replay-disclosure" open={tradePlanEnabled && tradePlanEligible}>
