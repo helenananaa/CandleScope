@@ -82,6 +82,16 @@ def analyze(source, libraries=None):
     features = {
         item["feature"] for item in info.get("compatibility", {}).get("supported", [])
     }
+    from app.backtest.pine_sizing import supported as sizing_supported, declaration as sizing_declaration
+    quantity = (requirements.get("account") or {}).get("defaultQuantity") or {}
+    if sizing_supported(result["identity"]) and info.get("scriptMode") == "strategy":
+        try:
+            quantity = sizing_declaration(quantity)
+        except ValueError as exc:
+            raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", str(exc)) from exc
+    if (quantity.get("kind") in {"cash", "percent_of_equity"}
+        or "strategy.default_entry_qty" in features) and not sizing_supported(result["identity"]):
+        raise StrategyProviderError("FIDELITY_UNSUPPORTED", "Install a Pine worker with external sizing schema 1 for default quantity execution")
     blocked = {
         feature
         for feature in features
@@ -130,6 +140,7 @@ class PineEngineProvider:
         self.entry_id = None
         self.context = {}
         self.runtime_identity = None
+        self.default_quantity = None
         self.state_hash = canonical_hash([])
 
     def describe(self):
@@ -156,6 +167,10 @@ class PineEngineProvider:
             self.source = frozen["source"]
             self.libraries = validate_libraries(frozen.get("libraries", {}))
             self.runtime_identity = frozen["identity"]
+            self.default_quantity = None
+            if frozen.get("defaultQuantity") is not None:
+                from app.backtest.pine_sizing import declaration
+                self.default_quantity = declaration(frozen["defaultQuantity"])
             self.needs_clock = frozen.get("executionClock") == "explicitTimestampWhenEvaluated"
             self.fill_callbacks = frozen.get("fillCallbacks") is True
             self.process_on_close = frozen.get("processOnClose") is True
@@ -520,6 +535,7 @@ class PineEngineProvider:
             "profile": "EXPLICIT_HOST_EXECUTION_SCHEDULE" if self.scheduled else "CAUSAL_AGG_TRADE_FILL_PASSES" if self.fill_callbacks else "CONFIRMED_BAR_CLOSE",
             **({"executionScheduleContract": SCHEDULE_CONTRACT} if self.scheduled else {}),
             "accountAuthority": "candlescope", "tradingViewEquivalent": False,
+            **({"defaultQuantity": dict(self.default_quantity)} if self.default_quantity is not None else {}),
             "barCount": len(self.bars),
             "fillCallbackCount": (sum(item["trigger"] in {"order_fill", "closing_fill"} for group in self.execution_contexts for item in group)
                                   if self.scheduled else sum(not item["confirmed"] for group in self.execution_passes for item in group) + close_callbacks),

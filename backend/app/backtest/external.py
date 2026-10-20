@@ -29,6 +29,7 @@ def host_identity():
     files.append(Path(__file__).with_name("pine_entry_risk.py"))
     files.extend(Path(__file__).with_name(name) for name in ("pine_risk_state.py", "pine_risk_stops.py"))
     files.append(Path(__file__).with_name("pine_workbench.py"))
+    files.append(Path(__file__).with_name("pine_sizing.py"))
     files.append(Path(__file__).with_name("external_support.py"))
     files.append(Path(__file__).with_name("pine_bar_clock.py"))
     files.append(Path(__file__).with_name("pine_workbench_v2.py"))
@@ -235,6 +236,9 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
                            "execution_passes": execution_passes, "strategy_output": latest.get("raw_output", {})}}
     if risk_stops is not None and risk_stops.state is not None:
         result["pine_risk_stops"] = risk_stops.report()
+    quantity = (wire.get("pine_host_control") or {}).get("default_quantity")
+    if quantity is not None:
+        result["raw_output"]["default_quantity"] = dict(quantity)
     if wire.get("pine_bar_path_contract"):
         result["raw_output"]["pine_bar_path"] = {"contract": wire["pine_bar_path_contract"],
             "vertices": "NEAREST_EXTREME_FIRST_LOW_ON_TIE", "timestamps": "LINEAR_INTERPOLATION_SYNTHETIC",

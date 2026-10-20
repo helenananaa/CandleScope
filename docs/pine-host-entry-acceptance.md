@@ -144,3 +144,11 @@ unchanged production budget. Those repeats, retained in
 `output/pine-host/completion-goal/provider-timeout-recheck/`, do not qualify the
 complete candidate profile. Keep this failure distinct from the 307-case
 historical pass and the 83-case boundary pass.
+
+The unchanged managed candidate then passed the complete 313-case profile,
+zero failures/errors/skips and stable source/runtime/registry fingerprints, at
+Host `5d44bbf5` in 1565.562 seconds. Receipt:
+`output/pine-host/completion-goal/historical-20261020-04/receipt.json`.
+This closes the complete controlled historical gate for that worker; the
+default-sizing worker is a later, independently qualified input. Its entry
+evidence is documented in [Pine defaults](pine-default-sizing.md).

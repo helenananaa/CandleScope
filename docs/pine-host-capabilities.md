@@ -28,7 +28,7 @@ Development package versions do not identify the source or native binary.
 | Capability | Runtime | Contract | Execution | User entry | Packaged | Principal evidence / remaining scope |
 | --- | --- | --- | --- | --- | --- | --- |
 | Actual account feedback, clocks and requested symbols | connected | connected | connected | partial | open | `pine-host-inputs`, `chart_pine_requested_data`; metadata/calendar and per-expression admission gaps remain |
-| Fixed market/limit/stop/stop-limit, entry/exit/generic orders and OCA | connected | connected | connected | connected | open | `pine-chart-orders.md`; external comments/alerts, zero quantities and non-fixed defaults remain open |
+| Market/limit/stop/stop-limit, entry/exit/generic orders and OCA | connected | connected | connected | connected | open | `pine-chart-orders.md`, `pine-default-sizing.md`; external comments/alerts remain open |
 | Historical BAR fill callbacks and simulated closing ticks | connected | connected | connected | connected | open | `pine-chart-bar-callbacks.md`, `pine-bar-path.md`; declared synthetic OHLC path, not physical liquidity |
 | V2 historical marks/rules/funding, margin and shared BAR capacity | connected | connected | connected | connected | open | `pine-v2-bar-path.md`, `pine-workbench-v2-bar.md`, `pine-v2-margin-repricing.md`; unit multiplier and fixed opening tick only |
 | Six risk rules through actual Host accounts | partial | connected | connected | connected | open | `pine-risk-stops.md`, `pine-workbench-controls.md`; bounded calendars/expressions, positive limits; native rule aggregation remains open |
@@ -36,7 +36,8 @@ Development package versions do not identify the source or native binary.
 | Replay snapshot, seek, restart and transaction recovery | connected | connected | connected | connected | open | `pine-workbench-replay.md`; source/implementation identity must match frozen inputs |
 | Independent cost scenarios and unavailable-model disclosures | connected | connected | connected | connected | open | `pine-workbench-costs.md`; independent account and strategy runs, shared deadline, AUTO/SKIP |
 | Automatic BAR preparation, account-file lifecycle and retry identity | connected | connected | connected | connected | open | `test_pine_workbench_preparation.py`, `workbenchAccountInputs.test.ts`, `pine-workbench-default-upgrade.md` |
-| Default cash/equity sizing, nonunit multipliers and external order metadata | partial | partial | open | open | open | Stage 3; core/native support must not be mistaken for external-profile admission |
+| Fixed/cash/equity defaults from authoritative Host accounts | connected | connected | connected | connected | open | `pine-default-sizing.md`; controlled installed-worker and entry evidence, new complete historical profile pending |
+| Nonunit multipliers and external order metadata | partial | partial | open | open | open | Stage 3; native support must not be mistaken for external-profile admission |
 | Incremental requested-context growth | partial | partial | partial | partial | open | Base external sessions retain state; growing request providers still rebase and lack scalable qualification |
 | V2 historical-account trade/book combination | connected | partial | open | open | open | Stage 4; legacy trade/book execution exists separately, V2 BAR options currently reject there |
 | Realtime and every-history-tick strategy scheduling | partial | partial | open | open | open | `pine-external-schedule-foundation.md`; explicit context foundation exists, concrete schedulers remain open |
@@ -115,12 +116,21 @@ The first full managed-candidate attempt stopped at one provider timeout after
 85 passes while a release compiler was active. Three isolated repeats passed
 after compilation, with the original budget; the cause remains unproven. See
 the retained failure/recheck scopes in the entry procedure. This candidate's
-complete profile still needs a passing result.
+complete repeat under the unchanged budget subsequently passed all 313 cases,
+zero failures/errors/skips, with stable source/runtime/registry fingerprints.
+Its receipt is `output/pine-host/completion-goal/historical-20261020-04/receipt.json`
+at Host `5d44bbf5`; the earlier timeout and cause uncertainty remain retained.
 
 Stage 3 core checkpoint `de91ea5dc` now honors explicit quantities despite
 cash/equity declarations and treats explicit/fixed-default zero quantities as
 no-ops. It passed 33 focused Rust checks and 164 checks against a fresh Python
 wheel. Its source/binary identity is separate from the historical Host worker.
-Cash/equity defaults when actually used, order metadata, contract multipliers,
-growing requests and CandleScope admission remain open; this is a partial core
-checkpoint rather than an enabled Host feature.
+The later default-sizing implementation adopts sizing schema 1 in both Host
+routes, freezes its declaration and uses actual Host account equity. The core
+passed 7,929 Rust workspace and 1,838 fresh-wheel Python checks. All 12 real
+chart/Workbench account combinations passed, plus production-panel cash/equity
+runs and stale-result disclosure. See `pine-default-sizing.md` for exact scope
+and artifact identity. The historical runner now also requires sizing schema 1
+and includes the new sizing modules; that expanded profile needs its own result.
+Order metadata, nonunit multipliers, growing requests, later schedulers and
+complete packaged application acceptance remain open.

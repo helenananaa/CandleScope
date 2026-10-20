@@ -149,7 +149,7 @@ class NativeBacktests:
                 result.append({"language": language, "available": True, "identity": description["identity"], "external_available": external_available,
                     **({"external_replay":"candlescope.external-replay/1"} if language=="pine" and external_available and pine_replay_available(external["identity"]) else {}),
                     **({"external_controls": {key: external["identity"][key] for key in
-                        ("workbench_control", "risk_stop_contract", "closing_tick_contract") if key in external["identity"]}}
+                        ("workbench_control", "risk_stop_contract", "closing_tick_contract", "external_sizing") if key in external["identity"]}}
                         if language=="pine" and external_available and external["identity"].get("workbench_control") else {})})
             except Exception as exc:
                 result.append({"language": language, "available": False, "reason": str(exc)})

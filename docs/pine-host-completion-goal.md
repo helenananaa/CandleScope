@@ -18,6 +18,9 @@ checkout's Replay/runtime-cache work was separately committed through `83105c0f`
   legacy market-identity repair passed 83 boundary checks, including a persisted
   failed preparation retried after restart without rewriting its request or
   frozen bars. Its six new cases are now part of the historical profile.
+  The managed candidate then passed the full 313-case profile at `5d44bbf5`,
+  with stable hashes and zero skips. The earlier timeout remains retained;
+  its cause was not established by the successful repeat.
 - A private Pine candidate bundle passed production offline installation and
   worker protocol probes. Its 56 Python/native payload files exactly match the
   historical worker. Candidate artifacts and original failure receipts remain
@@ -27,13 +30,18 @@ checkout's Replay/runtime-cache work was separately committed through `83105c0f`
   and `codex/pine-host-adaptation`. The latest sealed margin/book checkpoint is
   `41c894bc900110f12a577e7e52cbac28b59fb9db`; subsequent upgrade-retry work is
   recorded in its separate candidate receipt.
-- Core's Stage 3 quantity checkpoint is clean at
+- Core's Stage 3 sizing work builds on
   `de91ea5dc483919de4e1e723544059239d639819` on `codex/pine-host-completion`.
-  Explicit quantities override cash/equity declarations; zero explicit/fixed
-  defaults emit no order. Its fresh wheel passed 164 Python checks and 33
-  focused Rust checks. Actual cash/equity default execution and Host admission
-  remain open. The historical Host worker below retains the earlier core.
-- The worker environment is `output/pine-host/phase3/schedule-transport-admission-venv`,
+  Cash/equity defaults and the default-quantity query now use the authoritative
+  active-pass account, with placement-close native semantics. The matching
+  fresh wheel passed 7,929 Rust workspace, 1,838 Python and 172 tooling checks,
+  plus Clippy, structure/host parity and generated WASM/Node gates.
+  Chart and Workbench now negotiate sizing schema 1 and freeze its declaration.
+  Twelve installed-worker cases and two production-panel runs passed; the new
+  expanded historical profile requires its own result. See
+  [Pine defaults](pine-default-sizing.md) for binary identity, entry evidence and
+  the still-open multiplier/metadata/currency boundaries.
+- The earlier historical worker environment is `output/pine-host/phase3/schedule-transport-admission-venv`,
   selected by `schedule-transport-admission-runtime-registry.json` in that directory's
   parent. The installed core binary SHA256 is
   `b3762e5dc0df0eff47751b28b1cb66717b51aadb200bd412f71b72503586ba89`.

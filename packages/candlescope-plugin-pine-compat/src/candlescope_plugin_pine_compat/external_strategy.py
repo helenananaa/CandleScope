@@ -25,7 +25,7 @@ def describe():
         raise ValueError("EXTERNAL_RUNTIME_UNAVAILABLE: install external-broker/1 runtime")
     return {
         **identity(
-            "candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-external/9"
+            "candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-external/10"
         ),
         "workbench_control": "candlescope.pine-workbench-control/1",
         "external_replay": "candlescope.external-replay/1",
@@ -34,6 +34,7 @@ def describe():
         **({"closing_tick_contract": "candlescope.pine-closing-tick/1"}
            if getattr(pine_compat, "EXTERNAL_CLOSING_TICK_SCHEMA_VERSION", 0) == 1 else {}),
         "external_orders": getattr(pine_compat, "EXTERNAL_ORDER_SCHEMA_VERSION", 1),
+        "external_sizing": getattr(pine_compat, "EXTERNAL_SIZING_SCHEMA_VERSION", 0),
         "prefix_append": PREFIX_CONTRACT,
         "prefix_passes": PASSES_CONTRACT,
         "prefix_clocks": CLOCKS_CONTRACT,
@@ -92,7 +93,11 @@ def execute(request):
     if request.get("operation") == "host_control":
         environment = request_environment(request)
         requirements = program.host_requirements()
+        if requirements.get("account") is None:
+            raise ValueError("EXTERNAL_UNSUPPORTED: Workbench Host execution requires a Pine strategy")
         return {"contract": "candlescope.pine-workbench-control/1", "execution": requirements["execution"],
+            **({"default_quantity": requirements["account"]["defaultQuantity"]}
+               if getattr(pine_compat, "EXTERNAL_SIZING_SCHEMA_VERSION", 0) == 1 else {}),
             **({"risk_rules": program.strategy_risk_configuration(input_overrides=parameters or None,
                 chart_symbol=request["context"]["symbol"], chart_timeframe=request["context"]["timeframe"],
                 request_bars=environment or None)} if risk else {})}

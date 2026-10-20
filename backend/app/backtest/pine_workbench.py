@@ -23,6 +23,13 @@ def freeze_control(native, plugin, wire, payload):
         raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine execution requirements missing")
     if any(type(execution.get(name)) is not bool for name in ("calcOnOrderFills", "processOrdersOnClose")):
         raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "invalid Pine execution requirements")
+    from .pine_sizing import supported, declaration
+    quantity = None
+    if supported(identity):
+        try:
+            quantity = declaration(response.get("default_quantity"))
+        except ValueError as exc:
+            raise BacktestError("EXTERNAL_PROTOCOL_ERROR", str(exc)) from exc
     if execution.get("calcOnOrderFills") and not wire.get("fill_recalculation"):
         raise BacktestError("EXTERNAL_UNSUPPORTED", "Pine calc_on_order_fills requires explicit fill_recalculation")
     if execution.get("processOrdersOnClose"):
@@ -43,6 +50,8 @@ def freeze_control(native, plugin, wire, payload):
         wire["pine_risk_context"] = context
     wire["pine_host_control"] = {"contract": CONTRACT, "execution": deepcopy(execution),
         "risk_rules": deepcopy(configuration)}
+    if quantity is not None:
+        wire["pine_host_control"]["default_quantity"] = quantity
     if wire["execution_fidelity"] == "BAR_APPROX" and wire.get("fill_recalculation"):
         from .strategy.pine_schedule import CONTRACT as SCHEDULE_CONTRACT
         from app.simulation.pine_bar_kernel import CONTRACT as PATH_CONTRACT
