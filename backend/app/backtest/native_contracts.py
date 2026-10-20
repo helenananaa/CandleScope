@@ -114,6 +114,7 @@ class AccountData(BaseModel):
 
 class WorkbenchBarSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    cost_sensitivity_mode: Literal["AUTO", "SKIP"] = "AUTO"
     account_model: Literal["LINEAR_PERP_ONE_WAY_V1", "LINEAR_PERP_ONE_WAY_V2", "SPOT_CASH_V1"] | None = None
     leverage: float = Field(default=1, gt=0, le=1000)
     funding_mode: Literal["OFF", "HISTORICAL_REQUIRED"] = "OFF"

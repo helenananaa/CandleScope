@@ -20,6 +20,7 @@ from app.data_preparation.repository import PreparationRepository
 from app.data_preparation.service import PreparationService
 
 ADDITIVE_FIELDS = {
+    "cost_sensitivity_mode",
     "account_model",
     "leverage",
     "funding_mode",
@@ -232,6 +233,7 @@ def test_legacy_native_retry_returns_original_record_without_resubmitting_or_rew
 @pytest.mark.parametrize(
     "field,value",
     [
+        ("cost_sensitivity_mode", "SKIP"),
         ("account_model", "LINEAR_PERP_ONE_WAY_V2"),
         ("leverage", 2),
         ("funding_mode", "HISTORICAL_REQUIRED"),

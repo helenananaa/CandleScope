@@ -58,7 +58,10 @@ def test_requested_data_crosses_only_closed_boundary_and_host_owns_fills(runtime
                 events.append(event)
             data["events"] = events
         config["execution_data"] = data
-    record = terminal(host.native, host.native.create(config, kind)["run_id"])
+    # The observing runner starts a process per prefix, including independent
+    # Pine cost scenarios. Allow their shared 120-second execution budget.
+    record = terminal(host.native, host.native.create(config, kind)["run_id"],
+                      timeout=130 if kind == "pine" else 25)
     assert record["state"] == "COMPLETED", record.get("error")
     assert seen[0] == (60000, [])
     assert len(seen[1][1]) == 1

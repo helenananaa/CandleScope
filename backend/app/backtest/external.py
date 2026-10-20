@@ -33,6 +33,7 @@ def host_identity():
     files.append(Path(__file__).with_name("pine_bar_clock.py"))
     files.append(Path(__file__).with_name("pine_workbench_v2.py"))
     files.append(Path(__file__).with_name("native_contracts.py"))
+    files.append(Path(__file__).with_name("workbench_sensitivity.py"))
     for path in files:
         checksum.update(path.name.encode())
         checksum.update(path.read_bytes())
@@ -69,10 +70,13 @@ def resolve_external(language):
 def run_external_host(plugin, wire, runner, cancelled, **options):
     from .native import invoke
     from .native_session import SessionWorker
+    options.setdefault("deadline", time.monotonic() + 120)
+    options.setdefault("_scenario_runner", runner)
     if runner is invoke and persistent_evaluator(wire["identity"]):
         worker = SessionWorker(plugin, wire, cancelled, evaluator=True)
         try:
-            evaluate = lambda _plugin, payload, **kwargs: worker.request(payload, **kwargs)
+            def evaluate(_plugin, payload, **kwargs):
+                return worker.request(payload, **kwargs)
             if wire["identity"].get("adapter") == "pyne-external/5":
                 from .external_incremental import IncrementalEvaluator
                 evaluate = IncrementalEvaluator(worker, len(wire["bars"]))
@@ -82,9 +86,20 @@ def run_external_host(plugin, wire, runner, cancelled, **options):
     return _run_external_host(plugin, wire, runner, cancelled, **options)
 
 
-def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=None):
+def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=None,
+                       deadline=None, _cost_scenario=False, _scenario_runner=None):
     if wire.get("host_runtime_identity") != host_identity():
         raise BacktestError("NATIVE_IDENTITY_MISMATCH", "host matching code changed after submission")
+    from .workbench_sensitivity import validate_contract, check_control
+    validate_contract(wire)
+    deadline = time.monotonic() + 120 if deadline is None else deadline
+    scenario_runner = runner if _scenario_runner is None else _scenario_runner
+    source_runner = runner
+    def bounded_runner(plugin, request, **kwargs):
+        check_control(cancelled, deadline)
+        kwargs["timeout"] = min(kwargs.get("timeout", 120), deadline - time.monotonic())
+        return source_runner(plugin, request, **kwargs)
+    runner = bounded_runner
     settings = wire["host_settings"]
     fidelity = wire.get("execution_fidelity", "BAR_APPROX")
     from app.simulation.trade_kernel import TradeSimulationKernel
@@ -118,7 +133,6 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
     accounts,history,latest=[],[],{}
     orders = ExternalOrders(kernel, price_tick=settings.get("price_tick"),
                             fidelity="PINE_BAR_PATH" if wire.get("pine_bar_path_contract") else fidelity)
-    deadline = time.monotonic() + 120
     clock,last_request,cursor={},None,0
     if resume is not None:
         from .external_replay import validate_state
@@ -240,6 +254,10 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
             "passive_prints_inferred": False, "actual_close_auction_verified": False}
         if result["raw_output"]["depth_model"] is not None:
             result["raw_output"]["depth_model"]["taker_clock"] = "next_trade_print_or_explicit_script_close"
+    if wire.get("pine_cost_contract") and not _cost_scenario and target == len(wire["bars"]):
+        from .workbench_sensitivity import build_matrix, skipped_matrix
+        result["cost_sensitivity"] = (skipped_matrix() if wire.get("cost_sensitivity_mode") == "SKIP"
+            else build_matrix(plugin, wire, scenario_runner, cancelled, result, deadline=deadline))
     if capture:
         from .external_replay import make_state
         return result,make_state(wire,target,kernel,orders,accounts,history,latest,clock,last_request,risk_stops=risk_stops)

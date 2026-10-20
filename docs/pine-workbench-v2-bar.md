@@ -61,8 +61,9 @@ changing historical grids remain unsupported by this profile.
 
 Controlled browser qualification mounts the actual Workbench panel and submits
 to an isolated real backend/Pine worker. It is not a packaged-app release or an
-exchange-data acceptance test. Independent cost matrices on this route remain
-open; the chart route has separately qualified cost reexecution.
+exchange-data acceptance test. Independent complete-endpoint Workbench cost
+matrices now reexecute Pine and fresh Host accounts (`pine-workbench-costs.md`),
+with an explicit SKIP control and replay endpoint verification.
 The synthetic OHLC path, volume proxy and declared CandleScope liquidation model
 do not establish TradingView equivalence. Nonunit Pine metadata remains rejected.
 Working-order margin now reprices causally across price gaps, retaining booked

@@ -106,10 +106,19 @@ def test_host_account_snapshot_resume_seek_and_restart_match_the_frozen_endpoint
     cls={"BAR_APPROX":SimulationKernel,"TRADE_TAPE":TradeSimulationKernel,"BOOK_ASSISTED":BookAssistedKernel,
         "BOOK_DEPTH":DepthQueueKernel,"BOOK_SAMPLED":SampledBookKernel}[mode]
     original=cls._match
+    original_restore=cls.restore
+    restored_kernels=[]
+    def track_restore(kernel,state):
+        result=original_restore(kernel,state)
+        restored_kernels.append(kernel)
+        return result
+    monkeypatch.setattr(cls,"restore",track_restore)
     cutoff=180000
     matched=[]
     def only_future(kernel,event):
-        if cutoff is not None:
+        # Restored accounts must never rematch their prefix. Independent cost
+        # scenarios intentionally match the full input in fresh accounts.
+        if cutoff is not None and any(kernel is item for item in restored_kernels):
             assert event.event_time_ms>=cutoff,"restored replay rematched an old market event"
             matched.append(event.event_time_ms)
         return original(kernel,event)
@@ -247,6 +256,7 @@ def test_pause_discards_uncommitted_host_fills_and_preserves_the_durable_account
         assert service._host_state(key)==before
     saved=service.snapshot(key,paused["revision"])
     service.shutdown()
+    host.native.runner=runner
     host.native.replay=service=NativeReplay(host.native)
     assert service.get(key)["snapshots"]==saved["snapshots"]
     service.command(key,saved["revision"],"play")

@@ -1,10 +1,11 @@
 """Compare known additive Workbench defaults without rewriting frozen records.
 
-Only the seven defaults introduced by WorkbenchBarSettings are aliases for
+Only the reviewed defaults introduced by WorkbenchBarSettings are aliases for
 absence. Other fields, values and number types keep their original identity.
 """
 
 _DEFAULTS = (
+    ("cost_sensitivity_mode", "AUTO"),
     ("account_model", None),
     ("leverage", 1),
     ("funding_mode", "OFF"),

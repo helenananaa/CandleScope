@@ -1,7 +1,9 @@
 import { API_BASE } from "../../../services/apiConfig.js";
 import type { FrozenExecutionSettings } from "./nativeExecutionSettings.js";
+import type { NativeCostMatrix } from "./NativeCostSensitivity.js";
 
 export interface NativeResult {
+  cost_sensitivity?: NativeCostMatrix;
   account_authority: string;
   account_model?: string;
   evaluation_contract?: string;

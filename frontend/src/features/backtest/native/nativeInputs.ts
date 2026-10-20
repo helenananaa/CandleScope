@@ -2,13 +2,14 @@ import { nativeApi, nativeTimeframe } from "./nativeBacktestApi.js";
 import { parsePineCurrencyRates } from "../../indicators/PineCurrencyInputs.js";
 import { workbenchAccountInputs, type WorkbenchAccountDraft, type WorkbenchAccountPayload } from "./workbenchAccountInputs.js";
 
-type WorkbenchOptions = { language?: "pine" | "pyne"; account?: WorkbenchAccountDraft; accountData?: unknown };
+type WorkbenchOptions = { language?: "pine" | "pyne"; account?: WorkbenchAccountDraft; accountData?: unknown; costSensitivityMode?: "AUTO" | "SKIP" };
 function hostOptions(fidelity: string, callbacks: boolean, options: WorkbenchOptions = {}) {
   const fill = callbacks && (options.language !== "pyne" || fidelity !== "BAR_APPROX");
   const account = workbenchAccountInputs(options.account, options.accountData);
   if (Object.keys(account).length && (options.language === "pyne" || fidelity !== "BAR_APPROX" || !fill))
     throw new Error("V2 account/capacity requires Pine historical BAR fill callbacks");
-  return { fill_recalculation: fill, ...account };
+  return { fill_recalculation: fill, ...account,
+    ...(options.language !== "pyne" && options.costSensitivityMode ? { cost_sensitivity_mode: options.costSensitivityMode } : {}) };
 }
 
 export interface InputDataset {
@@ -105,6 +106,7 @@ export function automaticHostExecution(mode: "NATIVE" | "CANDLESCOPE", hostSetti
 
 export function executionInputs(mode: "NATIVE" | "CANDLESCOPE", hostSettings: Record<string, number>, fidelity: string, fillRecalculation: boolean, executionData: unknown, options?: WorkbenchOptions): WorkbenchAccountPayload & {
   host_settings?: Record<string, number>; execution_fidelity?: string; fill_recalculation?: boolean; execution_data?: unknown;
+  cost_sensitivity_mode?: "AUTO" | "SKIP";
 } {
   return mode === "NATIVE" ? {} : { host_settings: hostSettings, execution_fidelity: fidelity,
     ...hostOptions(fidelity, fillRecalculation, options),

@@ -280,6 +280,9 @@ class NativeBacktests:
                 if payload["language"] == "pine":
                     from .pine_workbench_v2 import freeze_grid
                     account_settings = freeze_grid(wire, payload)
+                    from .workbench_sensitivity import CONTRACT as COST_CONTRACT
+                    wire.update(pine_cost_contract=COST_CONTRACT,
+                                cost_sensitivity_mode=account_settings.cost_sensitivity_mode)
                     from .pine_workbench import freeze_control
                     freeze_control(self, plugin, wire, payload)
                 from .pine_workbench_v2 import freeze_account

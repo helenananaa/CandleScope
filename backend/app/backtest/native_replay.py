@@ -238,7 +238,8 @@ class NativeReplay:
                     if external:
                         from .external import _run_external_host
                         evaluate=(lambda _plugin,payload,**kwargs:worker.request(payload,**kwargs)) if worker else self.native.runner
-                        result,external_state=_run_external_host(plugin,wire,evaluate,cancelled,resume=external_state,target=count)
+                        result,external_state=_run_external_host(plugin,wire,evaluate,cancelled,resume=external_state,target=count,
+                            _scenario_runner=self.native.runner)
                     else:
                         result = worker.advance(count, cancelled) if worker else self.native.runner(plugin, self._prefix(wire, origin["config"], count), cancelled=cancelled)
                     if result.get("identity") != wire["identity"] or result.get("account_authority") != origin["result"]["account_authority"] or result.get("execution_mode") != origin["execution_mode"]:

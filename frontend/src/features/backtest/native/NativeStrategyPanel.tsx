@@ -115,6 +115,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const [hostSettings, setHostSettings] = useState(() => defaultExecutionDraft().hostSettings);
   const [fidelity, setFidelity] = useState("BAR_APPROX");
   const [fillRecalculation, setFillRecalculation] = useState(false);
+  const [costSensitivityMode, setCostSensitivityMode] = useState<"AUTO" | "SKIP">("AUTO");
   const [accountDraft, setAccountDraft] = useState(defaultWorkbenchAccount);
   const [accountData, setAccountData] = useState<FrozenAccountData | null>(null);
   const [accountDataState, setAccountDataState] = useState<AccountInputState>("ready");
@@ -161,6 +162,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   useEffect(() => {
     const draft = restoreExecutionDraft(instanceRef.current.drafts[executionDraftKey]);
     setHostSettings(draft.hostSettings); setFidelity(draft.fidelity); setFillRecalculation(draft.fillRecalculation);
+    setCostSensitivityMode(draft.costSensitivityMode ?? "AUTO");
     setAccountDraft(draft.account ?? defaultWorkbenchAccount());
     accountUpload.current += 1;
     setAccountInputKey((key) => key + 1);
@@ -170,7 +172,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
     setExecutionData(null); setExecutionDataState(draft.uploaded ? "missing" : "ready");
   }, [executionDraftKey]);
   const saveExecution = (change: Partial<NativeExecutionDraft>) => {
-    const draft: NativeExecutionDraft = { hostSettings, fidelity, fillRecalculation, account: accountDraft,
+    const draft: NativeExecutionDraft = { hostSettings, fidelity, fillRecalculation, account: accountDraft, costSensitivityMode,
       uploaded: executionData !== null || executionDataState !== "ready", ...change };
     patchInstance.current(instanceRef.current.id, { drafts: { [executionDraftKey]: JSON.stringify(draft) } });
   };
@@ -189,7 +191,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       setAccountDataState("invalid"); setError(String(reason));
     });
   };
-  const accountOptions = { language, account: accountDraft, accountData };
+  const accountOptions = { language, account: accountDraft, accountData, costSensitivityMode };
   const accountError = mode === "CANDLESCOPE" ? workbenchAccountError(accountDraft, accountData, accountDataState,
     language, fidelity, fillRecalculation, props.session.marketType) : "";
   const runContext = JSON.stringify([mode, props.session.exchange, props.session.marketType, props.session.symbol, props.session.interval]);
@@ -379,7 +381,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
     || datasetIdentityChanged(reportRun.config, props.dataset)
     || (mode === "CANDLESCOPE" && (!reportRun.config || executionSettingsChanged(reportRun.config,
       { hostSettings, fidelity, fillRecalculation: fillRecalculation && (language === "pine" || fidelity !== "BAR_APPROX"),
-        uploaded: executionData !== null, account: accountDraft }, executionDataMatches, accountDataMatches))));
+        uploaded: executionData !== null, account: accountDraft, costSensitivityMode: language === "pine" ? costSensitivityMode : "AUTO" }, executionDataMatches, accountDataMatches))));
   const available = capabilities?.engines.find((item) => item.language === language);
   const engineReady = mode === "NATIVE" ? available?.available : available?.external_available;
   const runDisabled = busy || !!accountError || (mode === "CANDLESCOPE" && fidelity !== "BAR_APPROX" && executionDataState !== "ready") || !engineReady;
@@ -535,6 +537,11 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       {mode === "CANDLESCOPE" && language === "pine" && <WorkbenchAccountSettings value={accountDraft} data={accountData}
         state={accountDataState} inputKey={accountInputKey} disabled={busy} error={accountError}
         onChange={(value) => { setAccountDraft(value); saveExecution({ account: value }); }} onFile={uploadAccount} />}
+      {mode === "CANDLESCOPE" && language === "pine" && <section className="strategy-settings-section">
+        <label className="strategy-settings-check"><input type="checkbox" checked={costSensitivityMode === "AUTO"} disabled={busy}
+          onChange={(event) => { const value = event.target.checked ? "AUTO" : "SKIP"; setCostSensitivityMode(value); saveExecution({ costSensitivityMode: value }); }} />{t("native.cost.enable")}</label>
+        <p>{t("native.cost.enableHelp")}</p>
+      </section>}
       <details className="strategy-settings-section"><summary>{t("replay.hub.sectionAdvanced")}</summary>
         <NativeAdvancedInputs native={mode === "NATIVE"} value={advanced} onChange={(next) => {
           setAdvanced(next);

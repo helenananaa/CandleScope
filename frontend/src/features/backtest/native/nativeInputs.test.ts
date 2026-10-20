@@ -7,6 +7,15 @@ const dataset: InputDataset = { dataset_id: "data", data_epoch: "epoch1", name: 
   interval: "1m", first_open_ms: 0, last_close_ms: 599999 };
 const main = { start_time_ms: 60000, end_time_ms: 299999, exchange: "binance", market_type: "spot" };
 
+test("cost selection reaches direct and automatic Pine submissions without entering native accounts", () => {
+  const settings = { initial_balance: 10000, slippage_bps: 0, taker_fee_bps: 0 };
+  const options = { language: "pine" as const, costSensitivityMode: "SKIP" as const };
+  assert.equal(executionInputs("CANDLESCOPE", settings, "BAR_APPROX", false, null, options).cost_sensitivity_mode, "SKIP");
+  assert.equal(automaticHostExecution("CANDLESCOPE", settings, "BAR_APPROX", false, null, options)?.cost_sensitivity_mode, "SKIP");
+  assert.deepEqual(executionInputs("NATIVE", settings, "BAR_APPROX", false, null, options), {});
+  assert.equal(executionInputs("CANDLESCOPE", settings, "BAR_APPROX", false, null, { ...options, language: "pyne" }).cost_sensitivity_mode, undefined);
+});
+
 test("chart and native requests freeze the selected venue and market instead of the primary chart", async () => {
   const calls: unknown[] = [];
   const other = { ...dataset, exchange: "okx", market_type: "futures" };

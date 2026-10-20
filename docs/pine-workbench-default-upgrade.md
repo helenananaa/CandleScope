@@ -2,11 +2,12 @@
 
 The V2 Workbench profile added seven optional fields to host-matched requests:
 account model, leverage, funding mode, account data, execution-model revision,
-participation rate and BAR path scenario. Pydantic includes their defaults in
+participation rate and BAR path scenario. The later independent-cost profile adds
+an eighth reviewed default, `cost_sensitivity_mode="AUTO"`. Pydantic includes their defaults in
 new request dictionaries. An old durable job or run stored before that change
 can therefore reject the same user request with an idempotency conflict.
 
-Retry comparison now treats only those seven known defaults as equivalent to
+Retry comparison now treats only those reviewed defaults as equivalent to
 absence. Automatic preparation compares its execution envelope; frozen external
 preparation compares its run envelope; existing host-account native records use
 the same rule. Numeric parameter types, sources, requested contexts, unknown

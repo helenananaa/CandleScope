@@ -6,6 +6,7 @@ export type NativeHostSettings = {
 export interface NativeExecutionDraft {
   hostSettings: NativeHostSettings; fidelity: string; fillRecalculation: boolean; uploaded: boolean;
   account?: WorkbenchAccountDraft;
+  costSensitivityMode?: "AUTO" | "SKIP";
 }
 const fidelities = new Set(["BAR_APPROX", "TRADE_TAPE", "BOOK_ASSISTED", "BOOK_DEPTH", "BOOK_SAMPLED"]);
 export function defaultExecutionDraft(): NativeExecutionDraft {
@@ -27,6 +28,7 @@ export function restoreExecutionDraft(serialized?: string): NativeExecutionDraft
     }
     if (typeof draft.fidelity === "string" && fidelities.has(draft.fidelity)) defaults.fidelity = draft.fidelity;
     defaults.fillRecalculation = draft.fillRecalculation === true;
+    if (draft.costSensitivityMode === "AUTO" || draft.costSensitivityMode === "SKIP") defaults.costSensitivityMode = draft.costSensitivityMode;
     defaults.uploaded = draft.uploaded === true;
     if (draft.account !== undefined) defaults.account = restoreWorkbenchAccount(draft.account);
     return defaults;
@@ -53,6 +55,7 @@ function sameJson(left: unknown, right: unknown, depth = 0): boolean {
     && keys.every((key) => Object.hasOwn(b, key) && sameJson(a[key], b[key], depth + 1));
 }
 export type FrozenExecutionSettings = {
+  cost_sensitivity_mode?: "AUTO" | "SKIP";
   dataset_id?: string;
   data_epoch?: string;
   execution_fidelity?: string;
@@ -71,6 +74,7 @@ export function datasetIdentityChanged(
     && (config?.dataset_id !== current.datasetId || config?.data_epoch !== current.dataEpoch);
 }
 export function executionSettingsChanged(config: FrozenExecutionSettings, current: NativeExecutionDraft, dataMatches: boolean, accountMatches = true): boolean {
+  if ((config.cost_sensitivity_mode ?? "AUTO") !== (current.costSensitivityMode ?? "AUTO")) return true;
   if ((config.execution_fidelity ?? "BAR_APPROX") !== current.fidelity) return true;
   const settings = config.host_settings;
   if (!settings || (Object.keys(current.hostSettings) as Array<keyof NativeHostSettings>)

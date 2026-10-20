@@ -4,13 +4,12 @@ import json
 import os
 import threading
 import time
-from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from app.api.v1.backtests import router
-from app.backtest.native import NativeBacktests, PROTOCOL, digest
+from app.backtest.native import NativeBacktests, PROTOCOL
 from app.backtest.runtime import BacktestRuntime
 from app.core.config import load_backtest_settings
 from app.local_data.service import LocalDatasetService, LocalImportOptions
@@ -39,8 +38,8 @@ def runtime(tmp_path):
     runtime.shutdown()
 
 
-def terminal(native, run_id):
-    deadline = time.monotonic() + 25
+def terminal(native, run_id, *, timeout=25):
+    deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         result = native.get(run_id)
         if result["state"] in {"COMPLETED", "FAILED", "CANCELLED"}:
@@ -88,7 +87,8 @@ def test_cancellation_never_publishes_late_result(runtime):
     entered, release = threading.Event(), threading.Event()
     identity = {"protocol": PROTOCOL}
     def runner(plugin, wire, **kwargs):
-        if wire.get("operation") == "describe": return {"identity": identity}
+        if wire.get("operation") == "describe":
+            return {"identity": identity}
         entered.set()
         release.wait(5)
         return {"identity": identity, "execution_mode": "NATIVE", "account_authority": "pine-compat-runtime"}

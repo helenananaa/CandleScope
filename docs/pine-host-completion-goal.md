@@ -448,8 +448,10 @@ that observation. The corrected allocation group passes.
    settings UI/import and automatic BAR preparation now preserve its controls,
    uploaded-input lifecycle and result staleness. Retry comparison also preserves
    known additive defaults across old stored submissions without rewriting their
-   frozen identities (`pine-workbench-default-upgrade.md`). Independent Workbench cost
-   matrices and V2 print/book paths remain to connect. Working-order margin now
+   frozen identities (`pine-workbench-default-upgrade.md`). Independent complete-endpoint
+   Workbench cost matrices now reexecute Pine and fresh accounts, with AUTO/SKIP
+   controls, replay parity and worker cleanup (`pine-workbench-costs.md`). V2
+   historical-account print/book paths remain to connect. Working-order margin now
    reprices across gaps with FIFO cancellation of unfunded remainders while
    preserving booked fills and valid negative initial-margin availability;
    see `pine-v2-margin-repricing.md`. This does not qualify an exchange-specific

@@ -9,6 +9,7 @@ import { NativeSeriesScene } from "./NativeSeriesScene.js";
 
 import { reportAnalytics, reportTrade, formatReportPercent } from "./nativeReportAnalytics.js";
 import { NativePerformanceChart } from "./NativePerformanceChart.js";
+import { NativeCostSensitivity } from "./NativeCostSensitivity.js";
 
 interface NativeMarker { time: number; value: number; kind: "entry" | "exit" | "fill" }
 export function NativeCurve({ points, title, markers = [], onLocate }: { points: Array<{ time: number; value: number | null }>; title: string;
@@ -167,6 +168,7 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
       <div title={t("report.factorBasis")}><span>{t("report.factor")}</span><strong>{display(analytics.profitFactor)}</strong><small>{t("report.factorBasis")}</small></div>
     </div>
     <NativePerformanceChart result={result} />
+    {run.execution_mode === "CANDLESCOPE" && <NativeCostSensitivity matrix={result.cost_sensitivity} />}
     <details open={view === "all"}><summary>{t("native.price")}</summary>
     <NativeCurve points={result.bars.map((bar) => ({ time: bar.time, value: bar.close }))} title={t("native.price")} markers={markers} onLocate={onLocate} />
     {graphics.map((graphic, index) => <NativeCurve key={index} {...graphic} />)}
