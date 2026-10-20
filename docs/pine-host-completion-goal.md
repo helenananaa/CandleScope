@@ -422,8 +422,9 @@ that observation. The corrected allocation group passes.
    see `pine-bar-path.md`. Chart V1/spot callbacks now share the matcher;
    chart V2 integration is tracked in `pine-v2-bar-path.md`. Workbench V2 BAR API
    and replay now consume frozen account data (`pine-workbench-v2-bar.md`);
-   settings UI/import, independent cost matrices and V2 print/book paths remain
-   to connect. Working-order margin repricing across gaps also needs account-model
+   settings UI/import and automatic BAR preparation now preserve its controls,
+   uploaded-input lifecycle and result staleness. Independent Workbench cost
+   matrices and V2 print/book paths remain to connect. Working-order margin repricing across gaps also needs account-model
    repair; retained partial-fill diagnostics reject negative available balances.
    Pyne external-account
    replay is not advertised. Native-account replay remains a separate path.

@@ -1,7 +1,9 @@
+import { workbenchEnglish } from "./workbenchEnglish.js";
 import { externalProviderEnglish } from "./externalProviderEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
+  ...workbenchEnglish,
   "native.inputs.priceTick": "Minimum price increment",
   "native.inputs.currency": "Quote currency (requires the actual price tick)",
   "native.inputs.quantityPrecision": "Quantity decimal places (0-9)",

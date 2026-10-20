@@ -1,5 +1,15 @@
 import { nativeApi, nativeTimeframe } from "./nativeBacktestApi.js";
 import { parsePineCurrencyRates } from "../../indicators/PineCurrencyInputs.js";
+import { workbenchAccountInputs, type WorkbenchAccountDraft, type WorkbenchAccountPayload } from "./workbenchAccountInputs.js";
+
+type WorkbenchOptions = { language?: "pine" | "pyne"; account?: WorkbenchAccountDraft; accountData?: unknown };
+function hostOptions(fidelity: string, callbacks: boolean, options: WorkbenchOptions = {}) {
+  const fill = callbacks && (options.language !== "pyne" || fidelity !== "BAR_APPROX");
+  const account = workbenchAccountInputs(options.account, options.accountData);
+  if (Object.keys(account).length && (options.language === "pyne" || fidelity !== "BAR_APPROX" || !fill))
+    throw new Error("V2 account/capacity requires Pine historical BAR fill callbacks");
+  return { fill_recalculation: fill, ...account };
+}
 
 export interface InputDataset {
   dataset_id: string; data_epoch: string; name: string; symbol: string; interval: string;
@@ -23,9 +33,11 @@ export function restoreAdvancedInputs(value: unknown, strictContexts = false): A
       && typeof row.last_close_ms === "number" && Number.isSafeInteger(row.last_close_ms);
   };
   const contexts: ContextChoice[] = [];
-  for (const item of Array.isArray(raw.contexts) ? raw.contexts : []) {
+  for (const candidate of (Array.isArray(raw.contexts) ? raw.contexts : []) as unknown[]) {
     if (contexts.length >= 16) break;
-    if (item && typeof item === "object" && typeof item.symbol === "string" && dataset(item.dataset))
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) continue;
+    const item = candidate as Record<string, unknown>;
+    if (typeof item.symbol === "string" && dataset(item.dataset))
       contexts.push({ symbol: item.symbol, dataset: { ...item.dataset },
         ...Object.fromEntries(["marketType", "priceTickSize", "currency", "quantityPrecision"]
           .filter((key) => typeof (item as Record<string, unknown>)[key] === "string")
@@ -84,16 +96,18 @@ export async function freezePineChartContexts(choices: ContextChoice[], main: Pi
   return freezeContextChoices(choices, main, datasets, api, signal);
 }
 
-export function automaticHostExecution(mode: "NATIVE" | "CANDLESCOPE", hostSettings: Record<string, number>, fidelity: string, fillRecalculation: boolean, executionData: unknown) {
+export function automaticHostExecution(mode: "NATIVE" | "CANDLESCOPE", hostSettings: Record<string, number>, fidelity: string, fillRecalculation: boolean, executionData: unknown, options?: WorkbenchOptions) {
   if (mode === "NATIVE") return null;
   if ((fidelity !== "BAR_APPROX" && executionData !== null) || (fidelity !== "BAR_APPROX" && fidelity !== "TRADE_TAPE")) return undefined;
-  return { execution_fidelity: fidelity, host_settings: hostSettings,
-    fill_recalculation: fidelity === "TRADE_TAPE" && fillRecalculation };
+  try { return { execution_fidelity: fidelity, host_settings: hostSettings,
+    ...hostOptions(fidelity, fillRecalculation, options) }; } catch { return undefined; }
 }
 
-export function executionInputs(mode: "NATIVE" | "CANDLESCOPE", hostSettings: Record<string, number>, fidelity: string, fillRecalculation: boolean, executionData: unknown) {
+export function executionInputs(mode: "NATIVE" | "CANDLESCOPE", hostSettings: Record<string, number>, fidelity: string, fillRecalculation: boolean, executionData: unknown, options?: WorkbenchOptions): WorkbenchAccountPayload & {
+  host_settings?: Record<string, number>; execution_fidelity?: string; fill_recalculation?: boolean; execution_data?: unknown;
+} {
   return mode === "NATIVE" ? {} : { host_settings: hostSettings, execution_fidelity: fidelity,
-    fill_recalculation: fidelity !== "BAR_APPROX" && fillRecalculation,
+    ...hostOptions(fidelity, fillRecalculation, options),
     execution_data: fidelity === "BAR_APPROX" ? null : executionData };
 }
 

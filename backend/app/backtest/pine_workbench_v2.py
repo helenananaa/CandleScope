@@ -12,12 +12,39 @@ from .native_contracts import WorkbenchBarSettings
 from .pine_workbench import bar_event
 
 
-def freeze_account(wire, payload):
+def _settings(payload):
     names = WorkbenchBarSettings.model_fields
     try:
-        settings = WorkbenchBarSettings.model_validate({k: payload[k] for k in names if k in payload})
+        return WorkbenchBarSettings.model_validate({k: payload[k] for k in names if k in payload})
     except ValidationError as exc:
         raise BacktestError("SCHEMA_UNKNOWN_FIELD", "invalid Workbench account settings") from exc
+
+
+def freeze_grid(wire, payload):
+    settings = _settings(payload)
+    if settings.account_model != "LINEAR_PERP_ONE_WAY_V2":
+        return settings
+    account = LinearPerpetualAccountV2(funding_mode=settings.funding_mode)
+    opening = wire["bars"][0]["time"] * 1000
+    try:
+        for index, row in enumerate(settings.account_data.events):
+            if row.time_ms > opening:
+                break
+            account.apply(MarketEvent(index + 1, row.time_ms, row.role, row.payload))
+        account.validate_ready()
+    except MarketDatasetError as exc:
+        raise BacktestError(exc.code, str(exc)) from exc
+    explicit = (payload.get("context", {}).get("metadata") or {}).get("priceTickSize")
+    if explicit is not None and Fraction(str(explicit)) != Fraction(account.tick):
+        raise BacktestError("DATA_SNAPSHOT_MISMATCH", "historical tick differs from explicit Pine metadata")
+    wire["context"] = {**wire["context"], "metadata": {
+        **(wire["context"].get("metadata") or {}), "priceTickSize": str(account.tick)}}
+    wire["host_settings"] = {**wire["host_settings"], "price_tick": str(account.tick)}
+    return settings
+
+
+def freeze_account(wire, payload, *, settings=None):
+    settings = settings or _settings(payload)
     default_model = "SPOT_CASH_V1" if payload.get("market_type", "usdm") == "spot" else "LINEAR_PERP_ONE_WAY_V1"
     model = settings.account_model or default_model
     extended = (model == "LINEAR_PERP_ONE_WAY_V2" or settings.execution_model_revision is not None)

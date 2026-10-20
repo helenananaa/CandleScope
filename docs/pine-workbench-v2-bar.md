@@ -44,9 +44,25 @@ the future account-event tape. Replay snapshots bind the chart count, raw source
 cursor, logical path cursor, account ledger, allocation and evaluation transcript.
 Restoring and continuing does not repeat earlier fills, funding or settlements.
 
-The API and durable replay route are connected. The Workbench settings UI still
-needs controls/import for these fields. Independent cost matrices on this route
-also remain open; the chart route has separately qualified cost reexecution.
+The API, durable replay route and Workbench settings now connect these fields.
+Pine BAR fill callbacks remain enabled through both direct and automatic-preparation
+submission. The UI offers account, leverage, funding, account-file import and
+volume participation controls. Drafts retain parameter values and an upload
+marker, rather than the event tape; reopening requires file reselection and marks
+the old result stale. Changed callback settings or account data also invalidate
+the old result. Static account/capacity validation is shared with automatic
+preparation, before its market-data acquisition.
+
+V2 freezes its opening price grid from the historical account rules before
+compiling Workbench controls. Explicit conflicting chart metadata rejects;
+the generic matching tick cannot override the historical grid. Relative and
+trailing Host prices read actual account rules. Nonunit Pine metadata and
+changing historical grids remain unsupported by this profile.
+
+Controlled browser qualification mounts the actual Workbench panel and submits
+to an isolated real backend/Pine worker. It is not a packaged-app release or an
+exchange-data acceptance test. Independent cost matrices on this route remain
+open; the chart route has separately qualified cost reexecution.
 The synthetic OHLC path, volume proxy and declared CandleScope liquidation model
 do not establish TradingView equivalence. Nonunit Pine metadata remains rejected.
 Working-order margin repricing across large price gaps remains account-model

@@ -122,6 +122,19 @@ class WorkbenchBarSettings(BaseModel):
     participation_rate: float | None = Field(default=None, gt=0, le=1)
     bar_path_scenario: Literal["OHLC_NEAREST_EXTREME_PATH_V2"] | None = None
 
+    @model_validator(mode="after")
+    def check_account_settings(self):
+        if self.execution_model_revision is None and (self.participation_rate is not None or self.bar_path_scenario is not None):
+            raise ValueError("participation settings require EXECUTION_REALISM_V2")
+        if self.execution_model_revision is not None and self.participation_rate is None:
+            raise ValueError("EXECUTION_REALISM_V2 requires participation_rate")
+        if self.account_model == "LINEAR_PERP_ONE_WAY_V2":
+            if self.account_data is None:
+                raise ValueError("V2 account requires frozen account_data")
+        elif self.account_data is not None or self.funding_mode != "OFF" or self.leverage != 1:
+            raise ValueError("historical account settings require LINEAR_PERP_ONE_WAY_V2")
+        return self
+
 
 class ExternalRunRequest(NativeRunRequest, WorkbenchBarSettings):
     execution_mode: Literal["CANDLESCOPE"] = "CANDLESCOPE"

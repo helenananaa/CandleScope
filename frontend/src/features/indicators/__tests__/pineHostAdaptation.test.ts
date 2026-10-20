@@ -1,7 +1,7 @@
-import type { SeriesAttachedParameter, Logical } from "lightweight-charts";
-import type { ChartTime } from "../../../chart-adapter/chartAdapterTypes.js";
 import { structuralMock } from "../../../test/testHelpers.js";
 import { PineObjectPrimitive } from "../../../chart-adapter/pineObjectPrimitive.js";
+type Attached = Parameters<PineObjectPrimitive["attached"]>[0];
+type Logical = Parameters<PineObjectPrimitive["autoscaleInfo"]>[0];
 import { klineDependencyKey, registerCacheResource, resetCacheRegistry } from "../../cache-gc/cacheRegistry.js";
 import { cacheIndicatorSnapshot, getCachedIndicatorResult, resetIndicatorResultCache } from "../indicatorResultCacheStore.js";
 import assert from "node:assert/strict";
@@ -87,7 +87,7 @@ test("future bar-index geometry advances one ordinal even after a timestamp gap"
   const bars = [{ time: 60 }, { time: 120 }, { time: 300 }];
   const drawings = normalizeIndicatorPayload({ drawings: [{ ...scene, objects: [{ kind: "lines", row: { x1: 2, x2: 3, y1: 20, y2: 30 } }, { kind: "lines", row: { x1: 0, x2: 1, y1: -500, y2: -500 } }] }] }, "future").drawings || [];
   const primitive = new PineObjectPrimitive();
-  primitive.attached(structuralMock<SeriesAttachedParameter<ChartTime>>({ chart: { timeScale: () => ({ options: () => ({ barSpacing: 10 }), logicalToCoordinate: (index: number) => index * 10 }) }, series: {}, requestUpdate() {} }));
+  primitive.attached(structuralMock<Attached>({ chart: { timeScale: () => ({ options: () => ({ barSpacing: 10 }), logicalToCoordinate: (index: number) => index * 10 }) }, series: {}, requestUpdate() {} }));
   primitive.update(drawings, bars, (time) => time > 300 ? 20 + (time - 300) / 60 * 10 : pineTimeLogical(time, bars)! * 10);
   assert.deepEqual(primitive.autoscaleInfo(3 as Logical, 4 as Logical), { priceRange: { minValue: 30, maxValue: 30 } });
   primitive.detached();

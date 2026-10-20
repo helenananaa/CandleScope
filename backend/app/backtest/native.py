@@ -273,10 +273,12 @@ class NativeBacktests:
                             account_model="SPOT_CASH_V1" if payload.get("market_type", "usdm") == "spot" else "LINEAR_PERP_ONE_WAY_V1",
                             context_intervals=[item["interval"] for item in payload.get("contexts", [])])
                 if payload["language"] == "pine":
+                    from .pine_workbench_v2 import freeze_grid
+                    account_settings = freeze_grid(wire, payload)
                     from .pine_workbench import freeze_control
                     freeze_control(self, plugin, wire, payload)
                 from .pine_workbench_v2 import freeze_account
-                freeze_account(wire, payload)
+                freeze_account(wire, payload, settings=account_settings if payload["language"] == "pine" else None)
                 wire["execution_events"] = freeze_execution(self, payload, bars,
                     allow_bar_callbacks=bool(wire.get("pine_bar_path_contract")))
             if len(encoded(wire).encode()) > MAX_BYTES:

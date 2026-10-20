@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.data_preparation.models import PreparationError, PreparationRequest, Requirement
 from app.replay.request_contracts import TrainingRunSetupPayload
 from app.backtest.request_contracts import ChartContextResolveRequest, ResearchExecutionOverrides
-from app.backtest.native_contracts import HostMatchingSettings, ExternalRunRequest, PineChartMetadata, RequestedNativeData
+from app.backtest.native_contracts import HostMatchingSettings, ExternalRunRequest, PineChartMetadata, RequestedNativeData, WorkbenchBarSettings
 from app.api.v1.backtests import _operator_python_payload
 
 router = APIRouter(prefix="/data-preparations", tags=["data-preparation"])
@@ -52,7 +52,7 @@ class NativeDependencyPayload(BaseModel):
     warmup_bars: int | None = Field(default=None, strict=True, ge=0, le=5000)
 
 
-class AutomaticHostExecution(BaseModel):
+class AutomaticHostExecution(WorkbenchBarSettings):
     model_config = ConfigDict(extra="forbid")
     execution_fidelity: Literal["BAR_APPROX", "TRADE_TAPE"] = "BAR_APPROX"
     host_settings: HostMatchingSettings = Field(default_factory=HostMatchingSettings)
@@ -60,8 +60,9 @@ class AutomaticHostExecution(BaseModel):
 
     @model_validator(mode="after")
     def check_callbacks(self):
-        if self.execution_fidelity == "BAR_APPROX" and self.fill_recalculation:
-            raise ValueError("fill callbacks require TRADE_TAPE")
+        if ((self.account_model == "LINEAR_PERP_ONE_WAY_V2" or self.execution_model_revision is not None)
+                and (self.execution_fidelity != "BAR_APPROX" or not self.fill_recalculation)):
+            raise ValueError("V2 account/capacity requires historical BAR fill callbacks")
         return self
 
 
@@ -108,6 +109,19 @@ class NativePreparationPayload(BaseModel):
     execution: AutomaticHostExecution | None = None
     chart_metadata: PineChartMetadata | None = None
     currency_rates: dict | None = None
+
+    @model_validator(mode="after")
+    def check_bar_profile(self):
+        execution = self.execution
+        if execution is not None:
+            if (execution.execution_fidelity == "BAR_APPROX" and execution.fill_recalculation and self.language != "pine"):
+                raise ValueError("historical BAR callbacks require Pine")
+            if execution.account_model == "LINEAR_PERP_ONE_WAY_V2":
+                if self.context.market_type == "spot":
+                    raise ValueError("V2 account requires a perpetual market")
+                if execution.account_data.symbol != self.context.symbol:
+                    raise ValueError("account-data symbol differs from chart")
+        return self
 
 
 @router.post("/native-strategy", status_code=202)

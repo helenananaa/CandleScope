@@ -140,6 +140,23 @@ def test_workbench_v2_source_checkpoint_and_future_tape_are_bound(runtime):
     assert prefix == result
 
 
+def test_v2_trailing_prices_use_actual_account_rules_instead_of_generic_host_tick(runtime):
+    host, main = runtime
+    value = config(main)
+    value["host_settings"]["price_tick"] = .001
+    value["participation_rate"] = .5
+    value["source"] = '''//@version=6
+strategy("Historical tick",calc_on_order_fills=true)
+if bar_index==0
+    strategy.entry("L",strategy.long,qty=2)
+if strategy.position_size>0
+    strategy.exit("T","L",trail_points=5,trail_offset=2)
+'''
+    record = terminal(host.native, host.native.create(value, "historical-account-tick")["run_id"])
+    assert record["state"] == "COMPLETED", record.get("error")
+    assert [D(row["price"]) for row in record["result"]["trades"]] == [D(10), D("10.8")]
+
+
 @pytest.mark.parametrize("change", ["missing", "late", "symbol", "order", "multiplier", "tick", "profile"])
 def test_workbench_v2_invalid_inputs_fail_before_matching(runtime, change):
     host, main = runtime

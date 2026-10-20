@@ -1,8 +1,11 @@
+import { restoreWorkbenchAccount, workbenchAccountInputs, type WorkbenchAccountDraft } from "./workbenchAccountInputs.js";
+
 export type NativeHostSettings = {
   initial_balance: number; slippage_bps: number; taker_fee_bps: number; price_tick: number;
 };
 export interface NativeExecutionDraft {
   hostSettings: NativeHostSettings; fidelity: string; fillRecalculation: boolean; uploaded: boolean;
+  account?: WorkbenchAccountDraft;
 }
 const fidelities = new Set(["BAR_APPROX", "TRADE_TAPE", "BOOK_ASSISTED", "BOOK_DEPTH", "BOOK_SAMPLED"]);
 export function defaultExecutionDraft(): NativeExecutionDraft {
@@ -25,6 +28,7 @@ export function restoreExecutionDraft(serialized?: string): NativeExecutionDraft
     if (typeof draft.fidelity === "string" && fidelities.has(draft.fidelity)) defaults.fidelity = draft.fidelity;
     defaults.fillRecalculation = draft.fillRecalculation === true;
     defaults.uploaded = draft.uploaded === true;
+    if (draft.account !== undefined) defaults.account = restoreWorkbenchAccount(draft.account);
     return defaults;
   } catch { return defaults; }
 }
@@ -55,6 +59,9 @@ export type FrozenExecutionSettings = {
   host_settings?: Record<string, number | null>;
   fill_recalculation?: boolean;
   execution_data?: unknown;
+  account_model?: string | null; leverage?: number; funding_mode?: string;
+  execution_model_revision?: string | null; participation_rate?: number | null; bar_path_scenario?: string | null;
+  account_data?: unknown;
 };
 export function datasetIdentityChanged(
   config: Pick<FrozenExecutionSettings, "dataset_id" | "data_epoch"> | undefined,
@@ -63,11 +70,20 @@ export function datasetIdentityChanged(
   return current !== undefined
     && (config?.dataset_id !== current.datasetId || config?.data_epoch !== current.dataEpoch);
 }
-export function executionSettingsChanged(config: FrozenExecutionSettings, current: NativeExecutionDraft, dataMatches: boolean): boolean {
+export function executionSettingsChanged(config: FrozenExecutionSettings, current: NativeExecutionDraft, dataMatches: boolean, accountMatches = true): boolean {
   if ((config.execution_fidelity ?? "BAR_APPROX") !== current.fidelity) return true;
   const settings = config.host_settings;
   if (!settings || (Object.keys(current.hostSettings) as Array<keyof NativeHostSettings>)
     .some((field) => settings[field] !== current.hostSettings[field])) return true;
-  if (current.fidelity === "BAR_APPROX") return false;
-  return (config.fill_recalculation ?? false) !== current.fillRecalculation || !dataMatches;
+  if ((config.fill_recalculation ?? false) !== current.fillRecalculation) return true;
+  try {
+    const desired = workbenchAccountInputs(current.account, current.account?.accountModel === "LINEAR_PERP_ONE_WAY_V2" ? {} : undefined);
+    for (const key of ["account_model", "execution_model_revision", "participation_rate", "bar_path_scenario"] as const) {
+      const actual = key === "account_model" && config[key] !== "LINEAR_PERP_ONE_WAY_V2" ? undefined : config[key] ?? undefined;
+      if (actual !== desired[key]) return true;
+    }
+    if ((config.leverage ?? 1) !== (desired.leverage ?? 1) || (config.funding_mode ?? "OFF") !== (desired.funding_mode ?? "OFF")) return true;
+    if (desired.account_model && !accountMatches) return true;
+  } catch { return true; }
+  return current.fidelity !== "BAR_APPROX" && !dataMatches;
 }

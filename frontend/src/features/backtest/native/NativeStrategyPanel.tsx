@@ -22,6 +22,8 @@ import { StrategyDockPane, StrategyDockSlot } from "../chart-tester/StrategyDock
 import { StrategySwitcher } from "../chart-tester/StrategySwitcher.js";
 import { strategyLanguageLabel } from "../chart-tester/strategyLanguageLabel.js";
 import { datasetIdentityChanged, defaultExecutionDraft, executionSettingsChanged, restoreExecutionDraft, sameExecutionData, type NativeExecutionDraft } from "./nativeExecutionSettings.js";
+import { WorkbenchAccountSettings } from "./WorkbenchAccountSettings.js";
+import { defaultWorkbenchAccount, parseAccountData, workbenchAccountError, type AccountInputState, type FrozenAccountData } from "./workbenchAccountInputs.js";
 
 const StrategyScriptWorkspace = lazy(() => import("../chart-tester/StrategyScriptWorkspace.js"));
 
@@ -113,6 +115,11 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const [hostSettings, setHostSettings] = useState(() => defaultExecutionDraft().hostSettings);
   const [fidelity, setFidelity] = useState("BAR_APPROX");
   const [fillRecalculation, setFillRecalculation] = useState(false);
+  const [accountDraft, setAccountDraft] = useState(defaultWorkbenchAccount);
+  const [accountData, setAccountData] = useState<FrozenAccountData | null>(null);
+  const [accountDataState, setAccountDataState] = useState<AccountInputState>("ready");
+  const [accountInputKey, setAccountInputKey] = useState(0);
+  const accountUpload = useRef(0);
   const [executionData, setExecutionData] = useState<unknown>(null);
   const [executionOrigin, setExecutionOrigin] = useState("");
   const [executionDataState, setExecutionDataState] = useState<"ready" | "loading" | "invalid" | "missing">("ready");
@@ -154,15 +161,37 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   useEffect(() => {
     const draft = restoreExecutionDraft(instanceRef.current.drafts[executionDraftKey]);
     setHostSettings(draft.hostSettings); setFidelity(draft.fidelity); setFillRecalculation(draft.fillRecalculation);
+    setAccountDraft(draft.account ?? defaultWorkbenchAccount());
+    accountUpload.current += 1;
+    setAccountInputKey((key) => key + 1);
+    setAccountData(null); setAccountDataState(draft.account?.uploaded ? "missing" : "ready");
     executionUpload.current += 1;
     setExecutionInputKey((key) => key + 1);
     setExecutionData(null); setExecutionDataState(draft.uploaded ? "missing" : "ready");
   }, [executionDraftKey]);
   const saveExecution = (change: Partial<NativeExecutionDraft>) => {
-    const draft: NativeExecutionDraft = { hostSettings, fidelity, fillRecalculation,
+    const draft: NativeExecutionDraft = { hostSettings, fidelity, fillRecalculation, account: accountDraft,
       uploaded: executionData !== null || executionDataState !== "ready", ...change };
     patchInstance.current(instanceRef.current.id, { drafts: { [executionDraftKey]: JSON.stringify(draft) } });
   };
+  const uploadAccount = (file: File | null) => {
+    const upload = ++accountUpload.current;
+    const next = { ...accountDraft, uploaded: !!file };
+    setAccountDraft(next); saveExecution({ account: next });
+    setAccountData(null); setAccountDataState(file ? "loading" : "ready");
+    if (!file) { setAccountInputKey((key) => key + 1); return; }
+    if (file.size > 64 * 1024 * 1024) { setAccountDataState("invalid"); setError(t("native.account.invalidData")); return; }
+    void file.text().then((text) => {
+      if (upload !== accountUpload.current || !alive.current) return;
+      setAccountData(parseAccountData(text)); setAccountDataState("ready"); setError("");
+    }).catch((reason) => {
+      if (upload !== accountUpload.current || !alive.current) return;
+      setAccountDataState("invalid"); setError(String(reason));
+    });
+  };
+  const accountOptions = { language, account: accountDraft, accountData };
+  const accountError = mode === "CANDLESCOPE" ? workbenchAccountError(accountDraft, accountData, accountDataState,
+    language, fidelity, fillRecalculation, props.session.marketType) : "";
   const runContext = JSON.stringify([mode, props.session.exchange, props.session.marketType, props.session.symbol, props.session.interval]);
   const { onInstanceBusy } = props;
   const instanceId = props.instance.id;
@@ -243,6 +272,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
     // A restored uploaded input requires an explicit re-selection or clearing,
     // including the automatic preparation entry point.
     if (mode === "CANDLESCOPE" && fidelity !== "BAR_APPROX" && executionDataState !== "ready") return;
+    if (accountError) return;
     pendingOverview.current = !run?.result && !previousRun?.result ? navigationRevision.current : null;
     if (run?.result) setPreviousRun(run);
     setHistoricalRun(null); setBusy(true); setError(""); setRun(null); setPreparation(null); setResolution(null);
@@ -254,8 +284,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       const pineMetadata = language === "pine" && advanced.priceTickSize ? { priceTickSize: advanced.priceTickSize,
         ...(advanced.currency ? { currency: advanced.currency } : {}),
         ...(advanced.quantityPrecision ? { quantityPrecision: Number(advanced.quantityPrecision) } : {}) } : undefined;
-      const execution = executionInputs(mode, hostSettings, fidelity, fillRecalculation, executionData);
-      const automaticExecution = automaticHostExecution(mode, hostSettings, fidelity, fillRecalculation, executionData);
+      const execution = executionInputs(mode, hostSettings, fidelity, fillRecalculation, executionData, accountOptions);
+      const automaticExecution = automaticHostExecution(mode, hostSettings, fidelity, fillRecalculation, executionData, accountOptions);
       const prepareRun = async (route: string, submission: Record<string, unknown>) => {
         const body = JSON.stringify({ route, submission });
         if (preparationSubmission.current?.body !== body) preparationSubmission.current = { body, key: crypto.randomUUID() };
@@ -341,15 +371,18 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const reportRun = historicalRun ?? (run?.result ? run : previousRun);
   const executionDataMatches = useMemo(() => executionDataState === "ready"
     && sameExecutionData(reportRun?.config?.execution_data, executionData), [executionDataState, reportRun?.config?.execution_data, executionData]);
+  const accountDataMatches = useMemo(() => accountDataState === "ready"
+    && sameExecutionData(reportRun?.config?.account_data, accountData), [accountDataState, reportRun?.config?.account_data, accountData]);
   let parametersChanged = false;
   try { parametersChanged = JSON.stringify(reportRun?.config?.parameters ?? {}) !== JSON.stringify(JSON.parse(parameters)); } catch { parametersChanged = true; }
   const resultStale = !!reportRun && (reportRun !== run || reportRun.config?.source !== source || reportRun.config?.language !== language || parametersChanged
     || datasetIdentityChanged(reportRun.config, props.dataset)
     || (mode === "CANDLESCOPE" && (!reportRun.config || executionSettingsChanged(reportRun.config,
-      { hostSettings, fidelity, fillRecalculation, uploaded: executionData !== null }, executionDataMatches))));
+      { hostSettings, fidelity, fillRecalculation: fillRecalculation && (language === "pine" || fidelity !== "BAR_APPROX"),
+        uploaded: executionData !== null, account: accountDraft }, executionDataMatches, accountDataMatches))));
   const available = capabilities?.engines.find((item) => item.language === language);
   const engineReady = mode === "NATIVE" ? available?.available : available?.external_available;
-  const runDisabled = busy || (mode === "CANDLESCOPE" && fidelity !== "BAR_APPROX" && executionDataState !== "ready") || !engineReady;
+  const runDisabled = busy || !!accountError || (mode === "CANDLESCOPE" && fidelity !== "BAR_APPROX" && executionDataState !== "ready") || !engineReady;
   const status = preparation?.state === "CANCELLED" || run?.state === "CANCELLED" ? "cancelled"
     : error || run?.state === "FAILED" || run?.state === "INTERRUPTED" ? "failed"
       : busy ? (run ? "running" : "preparing")
@@ -447,7 +480,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
           </button>)}
         </div>
       </section>
-      {automatic && automaticHostExecution(mode, hostSettings, fidelity, fillRecalculation, executionData) !== undefined && !props.dataset && !advanced.contexts.length && !advanced.magnifier && <section className="strategy-settings-section">
+      {automatic && automaticHostExecution(mode, hostSettings, fidelity, fillRecalculation, executionData, accountOptions) !== undefined && !props.dataset && !advanced.contexts.length && !advanced.magnifier && <section className="strategy-settings-section">
         <h3>{t("chartTester.settings.date")}</h3>
         <div className="strategy-settings-grid">
           <label>{t("preparation.startDate")}<input type="date" disabled={busy} value={historyStart} onChange={(event) => { setHistoryStart(event.target.value); save(source, parameters, automaticContexts, event.target.value, historyEnd); }} /></label>
@@ -459,7 +492,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       </section>}
       {mode === "CANDLESCOPE" && <section className="strategy-settings-section">
         <h3>{t("chartTester.settings.fee")}</h3>
-        <div className="strategy-settings-grid">{(["initial_balance", "slippage_bps", "taker_fee_bps", "price_tick"] as const).map((field) => <label key={field}>{t(`native.external.${field}`)}
+        <div className="strategy-settings-grid">{(["initial_balance", "slippage_bps", "taker_fee_bps", "price_tick"] as const).filter((field) => field !== "price_tick" || accountDraft.accountModel !== "LINEAR_PERP_ONE_WAY_V2").map((field) => <label key={field}>{t(`native.external.${field}`)}
           <input type="number" min="0" step="any" disabled={busy} value={hostSettings[field]} onChange={(event) => {
             const next = { ...hostSettings, [field]: Number(event.target.value) }; setHostSettings(next); saveExecution({ hostSettings: next });
           }} />
@@ -497,8 +530,11 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         }}>{t("native.external.clearUpload")}</button>}
         {fidelity === "BOOK_DEPTH" && <p>{t("native.external.depthHint")}</p>}
         {fidelity === "BOOK_SAMPLED" && <p>{t("native.external.sampledHint")}</p>}
-        {fidelity !== "BAR_APPROX" && <><label className="strategy-settings-check"><input type="checkbox" disabled={busy} checked={fillRecalculation} onChange={(event) => { setFillRecalculation(event.target.checked); saveExecution({ fillRecalculation: event.target.checked }); }} />{t("native.external.fillRecalculation")}</label><p>{t("native.external.fillHint")}</p>{fidelity !== "BOOK_SAMPLED" && <p>{t("native.external.dataHint")}</p>}</>}
+        {(fidelity !== "BAR_APPROX" || language === "pine") && <><label className="strategy-settings-check"><input type="checkbox" disabled={busy} checked={fillRecalculation} onChange={(event) => { setFillRecalculation(event.target.checked); saveExecution({ fillRecalculation: event.target.checked }); }} />{t("native.external.fillRecalculation")}</label><p>{t("native.external.fillHint")}</p>{fidelity !== "BOOK_SAMPLED" && fidelity !== "BAR_APPROX" && <p>{t("native.external.dataHint")}</p>}</>}
       </section>}
+      {mode === "CANDLESCOPE" && language === "pine" && <WorkbenchAccountSettings value={accountDraft} data={accountData}
+        state={accountDataState} inputKey={accountInputKey} disabled={busy} error={accountError}
+        onChange={(value) => { setAccountDraft(value); saveExecution({ account: value }); }} onFile={uploadAccount} />}
       <details className="strategy-settings-section"><summary>{t("replay.hub.sectionAdvanced")}</summary>
         <NativeAdvancedInputs native={mode === "NATIVE"} value={advanced} onChange={(next) => {
           setAdvanced(next);

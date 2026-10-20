@@ -20,7 +20,7 @@ class ExternalOrders:
         from .pine_entry_risk import PineEntryRisk
         self.entry_risk = PineEntryRisk()
         self.risk_stops = None
-        self.price_tick = None if price_tick is None else Decimal(str(price_tick))
+        self._price_tick = None if price_tick is None else Decimal(str(price_tick))
         self.fidelity = fidelity
         self.execution_reporter = kernel.execution_reporter
         kernel.execution_reporter = self.on_execution
@@ -29,6 +29,12 @@ class ExternalOrders:
             kernel.path_level_provider = self.path_levels
         if hasattr(kernel, "_resting_filter_enabled"):
             kernel._resting_filter_enabled = False
+
+    @property
+    def price_tick(self):
+        if self.kernel.account_model == "LINEAR_PERP_ONE_WAY_V2":
+            return self.kernel.account.tick
+        return self._price_tick
 
     def configure(self, limit):
         if type(limit) is not int or not 1 <= limit <= 64:

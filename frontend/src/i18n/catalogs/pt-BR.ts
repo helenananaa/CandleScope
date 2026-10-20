@@ -1,6 +1,8 @@
+import { workbenchEnglish } from "./workbenchEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
+  ...workbenchEnglish,
   "native.replay.host": "Restaura a conta CandleScope e as ordens pendentes do ponto de restauração e continua pelos eventos de mercado restantes da entrada fixada.",
   "native.inputs.priceTick": "Incremento mínimo de preço",
   "native.inputs.currency": "Moeda de cotação (exige o incremento real de preço)",

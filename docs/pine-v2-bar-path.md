@@ -6,7 +6,8 @@ Chart `PINE_ENGINE` strategies with `calc_on_order_fills=true` and
 accounts can also use the volume-participation path without changing their
 account model. The subsequent [Workbench API integration](pine-workbench-v2-bar.md)
 connects this matcher to frozen Workbench account data and durable replay;
-settings UI and cost-matrix integration remain separate work.
+settings UI and automatic BAR preparation now preserve its controls and account
+inputs. Workbench cost-matrix integration remains separate work.
 
 The Host freezes `candlescope.pine-v2-bar/1`, with fill model
 `PINE_OHLC_PATH_V2`. Execution-realism requests use the distinct scenario

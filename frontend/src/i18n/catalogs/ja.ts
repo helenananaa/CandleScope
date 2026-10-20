@@ -1,6 +1,8 @@
+import { workbenchEnglish } from "./workbenchEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ja = {
+  ...workbenchEnglish,
   "native.replay.host": "チェックポイントから CandleScope の口座と未約定注文を復元し、残りの固定された市場イベントの再生を続けます。",
   "native.inputs.priceTick": "最小価格刻み",
   "native.inputs.currency": "建値通貨（実際の価格刻みが必要）",
