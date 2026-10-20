@@ -223,27 +223,8 @@ class SimulationKernel:
         return self.account.position_qty + pending
 
     def _opening_reserve_qty(self, order: SimulatedOrder) -> Decimal:
-        if order.reduce_only:
-            return Decimal("0")
-        if order.type == "MARKET":
-            return max(
-                Decimal("0"),
-                abs(self.projected_position_qty) - abs(self.account.position_qty),
-            )
-        same_side_pending = sum(
-            (
-                candidate.qty for candidate in self._live_orders()
-                if candidate.status in {"OPEN", "PARTIAL"}
-                and not candidate.reduce_only
-                and candidate.side == order.side
-            ), Decimal("0"),
-        )
-        direction = Decimal("1") if order.side == "BUY" else Decimal("-1")
-        after = self.account.position_qty + direction * same_side_pending
-        prior = after - direction * order.qty
-        if order.side == "BUY":
-            return max(Decimal("0"), max(after, Decimal("0")) - max(prior, Decimal("0")))
-        return max(Decimal("0"), max(-after, Decimal("0")) - max(-prior, Decimal("0")))
+        from .v2_margin import opening_quantity
+        return opening_quantity(self, order)
 
     _account_execution_receipts: dict = field(default_factory=dict)
 
@@ -919,6 +900,8 @@ class SimulationKernel:
         self._next_order_id += 1
 
     def _match(self, event: MarketEvent, *, _prices=None) -> None:
+        from .v2_margin import reprice
+        reprice(self, event)
         bar = event.payload
         active = self._live_orders()
         if not active:
@@ -1054,6 +1037,10 @@ class SimulationKernel:
                 if isinstance(self.account, LinearPerpetualAccountV2):
                     self.account.release_order_margin(order.order_id)
                 return Decimal("0")
+        from .v2_margin import reprice
+        reprice(self, execution_price=price)
+        if order.status not in {"OPEN", "PARTIAL"}:
+            return Decimal("0")
         fee_bps = self.maker_fee_bps if reason in {"LIMIT_TOUCH"} else self.taker_fee_bps
         fee = self._execution_fee(price, fill_qty, fee_bps)
         if isinstance(self.account, SpotCashAccount):
@@ -1114,6 +1101,8 @@ class SimulationKernel:
                         )
                         if isinstance(self.account, LinearPerpetualAccountV2):
                             self.account.release_order_margin(sibling.order_id)
+            from .v2_margin import reprice
+            reprice(self)
             if self.execution_reporter is not None:
                 self.execution_reporter(
                     {
@@ -1149,7 +1138,8 @@ class SimulationKernel:
     _fill_source_events: list[MarketEvent] = field(default_factory=list)
 
     def _execution_fee(self, price, quantity, fee_bps):
-        return price * quantity * fee_bps / Decimal("10000")
+        multiplier = (self.account.multiplier or Decimal(1)) if isinstance(self.account, LinearPerpetualAccountV2) else Decimal(1)
+        return price * quantity * multiplier * fee_bps / Decimal("10000")
 
     def _lifecycle(
         self,

@@ -17,6 +17,8 @@ REASON = "ACCOUNT_LIQUIDATION"
 
 def publish_account_liquidation(kernel):
     account = kernel.account
+    from .v2_margin import reprice
+    reprice(kernel)
     if not isinstance(account, LinearPerpetualAccountV2) or account.liquidation_event is None:
         return
     if kernel._account_execution_receipts:

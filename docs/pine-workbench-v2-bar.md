@@ -65,8 +65,8 @@ exchange-data acceptance test. Independent cost matrices on this route remain
 open; the chart route has separately qualified cost reexecution.
 The synthetic OHLC path, volume proxy and declared CandleScope liquidation model
 do not establish TradingView equivalence. Nonunit Pine metadata remains rejected.
-Working-order margin repricing across large price gaps remains account-model
-work: a retained diagnostic reproduces negative available balance after partial
-fills under stale marks; the current account rejects the run rather than silently
-continuing with an invalid ledger. Realtime/history-tick and other remaining work
+Working-order margin now reprices causally across price gaps, retaining booked
+fills and cancelling unfunded remainders under the declared CandleScope policy;
+see `pine-v2-margin-repricing.md` for collateral, maintenance and replay boundaries.
+Realtime/history-tick and other remaining work
 in `pine-host-completion-goal.md` remain active.

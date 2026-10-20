@@ -15,6 +15,7 @@ from app.market_dataset.snapshot import MarketDatasetError, MarketEvent, sha256_
 ACCOUNT_MODEL = "LINEAR_PERP_ONE_WAY_V2"
 FUNDING_MODES = frozenset({"OFF", "FIXED_SCENARIO", "HISTORICAL_REQUIRED"})
 LIQUIDATION_MODEL = "MARK_IMMEDIATE_NO_LIQUIDATION_FEE_V1"
+MARGIN_POLICY = "candlescope.v2-margin-reprice/1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,8 +182,8 @@ class LinearPerpetualAccountV2:
         assert self.mark is not None and self.multiplier is not None
         price = self.mark if reference_price is None else reference_price
         amount = abs(qty) * price * self.multiplier / self.leverage
-        required = amount + abs(estimated_fee)
-        if required > self.available_balance():
+        required = amount + (abs(estimated_fee) if qty else Decimal(0))
+        if qty and required > self.available_balance():
             self._append(
                 "ORDER_MARGIN_REJECTED",
                 0,
@@ -210,6 +211,29 @@ class LinearPerpetualAccountV2:
         if self.position_qty == 0 or self.position_qty * signed > 0:
             return qty
         return max(Decimal("0"), qty - abs(self.position_qty))
+
+    def reprice_order_margin(self, order_id, amount, *, event_time_ms, reference_price):
+        if (not amount.is_finite() or amount < 0
+                or not reference_price.is_finite() or reference_price <= 0):
+            raise MarketDatasetError("invalid V2 margin repricing", code="SCHEMA_UNKNOWN_FIELD")
+        previous = self.order_margins.get(order_id, Decimal(0))
+        if previous == amount:
+            return
+        self.order_margins[order_id] = amount
+        self.frozen_order_margin = sum(self.order_margins.values(), Decimal(0))
+        self._append("ORDER_MARGIN_REPRICED", event_time_ms, {
+            "order_id": order_id, "previous": str(previous), "amount": str(amount),
+            "reference_price": str(reference_price), "policy": MARGIN_POLICY,
+        })
+        self.assert_invariants()
+
+    def reject_repriced_margin(self, order_id, *, amount, budget, event_time_ms, reference_price):
+        self._append("ORDER_MARGIN_REPRICE_REJECTED", event_time_ms, {
+            "order_id": order_id, "required_with_fee": str(amount),
+            "remaining_budget": str(budget), "reference_price": str(reference_price),
+            "policy": MARGIN_POLICY,
+        })
+        self.release_order_margin(order_id, event_time_ms=event_time_ms)
 
     def release_order_margin(
         self, order_id: str, *, event_time_ms: int = 0, fraction: Decimal = Decimal("1")
@@ -287,7 +311,7 @@ class LinearPerpetualAccountV2:
         charged = abs(
             fee
             if fee is not None
-            else price * qty * self.taker_fee_bps / Decimal("10000")
+            else price * qty * self.multiplier * self.taker_fee_bps / Decimal("10000")
         )
         if charged:
             self.cumulative_fees += charged
@@ -318,7 +342,7 @@ class LinearPerpetualAccountV2:
         )
         self._after_event(event_time_ms, "COMPENSATION")
 
-    def assert_invariants(self, *, allow_negative_available: bool = False) -> None:
+    def assert_invariants(self, *, allow_negative_available: bool = True) -> None:
         projected_qty = sum(
             (Decimal(lot["sign"]) * Decimal(lot["qty"]) for lot in self.lots),
             Decimal("0"),
@@ -365,6 +389,7 @@ class LinearPerpetualAccountV2:
         return {
             "schemaVersion": "candlescope.linear-perp-account/2",
             "account_model": ACCOUNT_MODEL,
+            "margin_policy": MARGIN_POLICY,
             "funding_mode": self.funding_mode,
             "initial_balance": str(self.initial_balance),
             "wallet_balance": str(self.wallet_balance()),
@@ -432,6 +457,8 @@ class LinearPerpetualAccountV2:
         }
 
     def restore(self, payload: Mapping[str, Any]) -> None:
+        if payload.get("margin_policy", MARGIN_POLICY) != MARGIN_POLICY:
+            raise MarketDatasetError("V2 margin policy changed", code="CHECKPOINT_CORRUPT")
         if payload.get("schemaVersion") != "candlescope.linear-perp-account/2":
             raise MarketDatasetError(
                 "V2 account checkpoint schema changed", code="CHECKPOINT_CORRUPT"
@@ -507,9 +534,7 @@ class LinearPerpetualAccountV2:
             )
             for t in rules.get("maintenance_tiers") or []
         )
-        self.assert_invariants(
-            allow_negative_available=self.liquidation_state != "ACTIVE"
-        )
+        self.assert_invariants()
         if (
             self.ledger_entries
             and self.ledger_entries[-1]["entry_hash"] != self.ledger_tail_hash
@@ -630,9 +655,10 @@ class LinearPerpetualAccountV2:
         ):
             if self.equity() <= self.maintenance_margin():
                 self._liquidate(event_time_ms, trigger)
-        self.assert_invariants(
-            allow_negative_available=self.liquidation_state != "ACTIVE"
-        )
+        if self.position_qty == 0 and self.wallet_balance() < 0 and self.insolvency_state == "SOLVENT":
+            self.insolvency_state = "INSOLVENT"
+            self._append("INSOLVENCY", event_time_ms, {"wallet_balance": str(self.wallet_balance()), "trigger": trigger})
+        self.assert_invariants()
 
     def _liquidate(self, event_time_ms: int, trigger: str) -> None:
         if self.liquidation_state != "ACTIVE" or self.position_qty == 0:
@@ -722,6 +748,8 @@ class LinearPerpetualAccountV2:
             raise MarketDatasetError(
                 "V2 account was liquidated", code="ACCOUNT_LIQUIDATED"
             )
+        if self.insolvency_state != "SOLVENT":
+            raise MarketDatasetError("V2 account is insolvent", code="ACCOUNT_INSOLVENT")
 
     @staticmethod
     def _optional(value: object) -> Decimal | None:

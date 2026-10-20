@@ -54,9 +54,12 @@ class SampledBookKernel(DepthQueueKernel):
         return False
 
     def _match(self, event):
+        from .v2_margin import reprice
         if event.role == "ORDER_BOOK":
             self._apply_book(event)
+            reprice(self, event)
             return
+        reprice(self, event)
         if self.sample_time_ms is None:
             depth_error("trade precedes sampled book")
         if event.event_time_ms < self.sample_time_ms:

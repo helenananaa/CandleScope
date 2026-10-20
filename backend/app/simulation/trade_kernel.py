@@ -177,27 +177,8 @@ class TradeSimulationKernel:
         return self.position_qty + pending
 
     def _opening_reserve_qty(self, order: SimulatedOrder) -> Decimal:
-        if order.reduce_only:
-            return Decimal("0")
-        if order.type == "MARKET":
-            return max(
-                Decimal("0"),
-                abs(self.projected_position_qty) - abs(self.position_qty),
-            )
-        same_side_pending = sum(
-            (
-                candidate.qty for candidate in self._working_orders()
-                if candidate.status in {"OPEN", "PARTIAL"}
-                and not candidate.reduce_only
-                and candidate.side == order.side
-            ), Decimal("0"),
-        )
-        direction = Decimal("1") if order.side == "BUY" else Decimal("-1")
-        after = self.position_qty + direction * same_side_pending
-        prior = after - direction * order.qty
-        if order.side == "BUY":
-            return max(Decimal("0"), max(after, Decimal("0")) - max(prior, Decimal("0")))
-        return max(Decimal("0"), max(-after, Decimal("0")) - max(-prior, Decimal("0")))
+        from .v2_margin import opening_quantity
+        return opening_quantity(self, order)
 
     _account_execution_receipts: dict = field(default_factory=dict)
 
@@ -775,10 +756,7 @@ class TradeSimulationKernel:
                     order_id=order.order_id,
                     qty=self._opening_reserve_qty(order),
                     reference_price=self.account.mark,
-                    estimated_fee=self.account.mark
-                    * order.qty
-                    * fee_bps
-                    / Decimal("10000"),
+                    estimated_fee=self._execution_fee(self.account.mark, order.qty, fee_bps),
                 )
             except MarketDatasetError as exc:
                 self.orders.pop()
@@ -811,6 +789,8 @@ class TradeSimulationKernel:
         self._next_order_id += 1
 
     def _match(self, event: MarketEvent) -> None:
+        from .v2_margin import reprice
+        reprice(self, event)
         price = Decimal(str(event.payload["price"]))
         qty = Decimal(str(event.payload["qty"]))
         working = self._working_orders()
@@ -936,6 +916,10 @@ class TradeSimulationKernel:
                     self.account.release_order_margin(order.order_id)
                 return Decimal("0")
             reduce_only_complete = fill_qty >= reducible
+        from .v2_margin import reprice
+        reprice(self, execution_price=price)
+        if order.status not in {"OPEN", "PARTIAL"}:
+            return Decimal("0")
         fee_bps = (
             self.maker_fee_bps
             if maker or (
@@ -944,7 +928,7 @@ class TradeSimulationKernel:
             )
             else self.taker_fee_bps
         )
-        fee = price * fill_qty * fee_bps / Decimal("10000")
+        fee = self._execution_fee(price, fill_qty, fee_bps)
         if isinstance(self.account, SpotCashAccount):
             rejection = self.account.fill_rejection(side=order.side, price=price, qty=fill_qty, fee=fee)
             if rejection:
@@ -1005,6 +989,8 @@ class TradeSimulationKernel:
                         )
                         if isinstance(self.account, LinearPerpetualAccountV2):
                             self.account.release_order_margin(sibling.order_id)
+            from .v2_margin import reprice
+            reprice(self)
             if self.execution_reporter is not None:
                 self.execution_reporter(
                     {
@@ -1032,6 +1018,10 @@ class TradeSimulationKernel:
             self.account.apply_fill(side=order.side, price=price, qty=fill_qty, fee=fee)
             publish_fill()
         return fill_qty
+
+    def _execution_fee(self, price, quantity, fee_bps):
+        multiplier = (self.account.multiplier or Decimal(1)) if isinstance(self.account, LinearPerpetualAccountV2) else Decimal(1)
+        return price * quantity * multiplier * fee_bps / Decimal("10000")
 
     def _lifecycle(
         self,

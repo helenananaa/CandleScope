@@ -118,6 +118,45 @@ def test_workbench_v2_http_freezes_funding_and_provenance(runtime):
         assert record["result"]["raw_output"]["account_provenance"] == {"fixture": "frozen-account"}
 
 
+def test_workbench_v2_gap_cancels_unfunded_remainder_and_replay_preserves_booked_fills(runtime):
+    host, main = runtime
+    value = config(main)
+    value["host_settings"]["initial_balance"] = 100
+    value["source"] = '''//@version=6
+strategy("Margin gap",calc_on_order_fills=true)
+if bar_index==0
+    strategy.entry("L",strategy.long,qty=50)
+plot(strategy.position_size)
+'''
+    value["account_data"]["events"].append({"time_ms": 60000, "role": "MARK_INDEX",
+        "payload": {"mark_price": "8", "index_price": "8"}})
+    record = terminal(host.native, host.native.create(value, "v2-margin-gap")["run_id"])
+    assert record["state"] == "COMPLETED", record.get("error")
+    report = record["result"]
+    assert [D(row["qty"]) for row in report["trades"]] == [5, 5]
+    assert D(report["position"]["position_qty"]) == 10
+    assert D(report["position"]["equity"]) == 80
+    assert D(report["position"]["frozen_order_margin"]) == 0
+    assert report["position"]["liquidation_state"] == "ACTIVE"
+    callbacks = [row["evaluation"]["account"]["position_size"] for group in report["raw_output"]["execution_schedule"]
+                 for row in group if row["context"]["trigger"] == "order_fill"]
+    assert callbacks == [5, 10]
+    replay = host.native.replay
+    created = replay.create(record["run_id"])
+    key = created["replay_id"]
+    def seek(target):
+        replay.command(key, replay.get(key)["revision"], "seek", target)
+        result = settle(replay, key)
+        assert result.get("error") is None, result
+        return result
+    before = seek(3)
+    saved = replay.snapshot(key, before["revision"])["snapshots"][0]["snapshot_id"]
+    after = seek(4)
+    replay.restore(key, after["revision"], saved)
+    assert seek(4)["result"] == after["result"]
+    assert seek(created["total"])["result"] == report
+
+
 def test_workbench_v2_source_checkpoint_and_future_tape_are_bound(runtime):
     from app.backtest.external import _run_external_host
     from app.backtest.external_replay import validate_state

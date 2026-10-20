@@ -66,6 +66,51 @@ def test_actual_pine_callbacks_share_bar_capacity_and_reexecute_all_scenarios(se
     assert scenarios["LATENCY_PLUS_ONE_TIER"]["status"] == "NOT_APPLICABLE_BAR_CLOCK"
 
 
+def test_gap_margin_repricing_reexecutes_cost_accounts_and_recovers_exactly(service):
+    source = '''//@version=6
+strategy("Margin repricing",calc_on_order_fills=true)
+if bar_index==0
+    strategy.entry("L",strategy.long,qty=50)
+'''
+    values = tuple(replace(row, payload={**row.payload, **({"open": "20", "high": "21", "low": "19", "close": "20"} if index >= 3 else {})})
+                   for index, row in enumerate(bars()))
+    rows = numbered(rules(-2), mark(-1, 10), values[0], mark(60000, 8), *values[1:])
+    value = config(service, account="LINEAR_PERP_ONE_WAY_V2", source=source, initial_balance="100", taker_fee_bps="1")
+    baseline = execute(service, value, "gap-full", rows)
+    report = baseline["report"]
+    assert [D(fill["qty"]) for fill in report["fills"]] == [5, 5]
+    account = report["ledger"]["account"]
+    assert D(account["position_qty"]) == 10 and D(account["frozen_order_margin"]) == 0
+    assert D(account["equity"]) == D("79.99") and account["liquidation_state"] == "ACTIVE"
+    assert any(event.get("reason") == "ACCOUNT_MARGIN_REPRICE_REJECTED" for event in report["order_events"])
+    matrix = report["cost_sensitivity"]
+    assert matrix["baseline_reexecution_verified"]
+    scenarios = {row["name"]: row for row in matrix["scenarios"]}
+    assert scenarios["BASELINE"]["hashes"]["fill"] == baseline["result"]["fill_hash"]
+    for name in ("COSTS_PLUS_25_PERCENT", "COSTS_PLUS_50_PERCENT", "PARTICIPATION_DOWN_ONE_TIER"):
+        assert scenarios[name]["status"] == "COMPLETED"
+    assert scenarios["COSTS_PLUS_50_PERCENT"]["hashes"]["fill"] != baseline["result"]["fill_hash"]
+    record = service.create_run(value, idempotency_key="gap-recovery", now_ms=3)
+    save = service.repository.save_checkpoint
+    def interrupt(checkpoint):
+        result = save(checkpoint)
+        if checkpoint["sequence"] == 3:
+            raise KeyboardInterrupt("before gap cancellation")
+        return result
+    service.repository.save_checkpoint = interrupt
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            execute(service, value, "gap-recovery", rows, run=record)
+    finally:
+        service.repository.save_checkpoint = save
+    assert service.requeue_interrupted_run(record["run_id"], expected_generation=1, now_ms=8)
+    restored = execute(service, value, "gap-recovery", rows, run=record)
+    for name in ("fills", "orders", "pine_orders", "ledger", "cost_sensitivity"):
+        assert restored["report"][name] == report[name]
+    for name in ("decision_hash", "fill_hash", "ledger_hash", "report_hash"):
+        assert restored["result"][name] == baseline["result"][name]
+
+
 @pytest.mark.parametrize("stamp,trigger", [(60000, "FILL"), (70000, "MARK_INDEX")])
 def test_real_pine_observes_actual_v2_liquidation_after_distinct_primary_fill(service, stamp, trigger):
     source = '''//@version=6

@@ -128,9 +128,12 @@ class DepthQueueKernel(TradeSimulationKernel):
             self.admission_depth[self.orders[-1].order_id] = self.depth
 
     def _match(self, event):
+        from .v2_margin import reprice
         if event.role == "ORDER_BOOK":
             self._apply_book(event)
+            reprice(self, event)
             return
+        reprice(self, event)
         if self.book_sequence is None:
             depth_error("trade precedes full depth snapshot")
         aggressor = event.payload.get("aggressor_side")

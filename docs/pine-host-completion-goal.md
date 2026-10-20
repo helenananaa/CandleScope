@@ -424,8 +424,11 @@ that observation. The corrected allocation group passes.
    and replay now consume frozen account data (`pine-workbench-v2-bar.md`);
    settings UI/import and automatic BAR preparation now preserve its controls,
    uploaded-input lifecycle and result staleness. Independent Workbench cost
-   matrices and V2 print/book paths remain to connect. Working-order margin repricing across gaps also needs account-model
-   repair; retained partial-fill diagnostics reject negative available balances.
+   matrices and V2 print/book paths remain to connect. Working-order margin now
+   reprices across gaps with FIFO cancellation of unfunded remainders while
+   preserving booked fills and valid negative initial-margin availability;
+   see `pine-v2-margin-repricing.md`. This does not qualify an exchange-specific
+   pretrade margin model or TradingView's broker emulator.
    Pyne external-account
    replay is not advertised. Native-account replay remains a separate path.
    Larger-history account-journal/reconstruction performance and packaged

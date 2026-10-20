@@ -43,10 +43,6 @@ class PineV2BarKernel(PineChartBarKernel):
     def _account_curve_sequence(self, event):
         return event.sequence
 
-    def _execution_fee(self, price, quantity, fee_bps):
-        multiplier = self.account.multiplier if isinstance(self.account, LinearPerpetualAccountV2) else Decimal(1)
-        return super(PineV2BarKernel, self)._execution_fee(price, quantity, fee_bps) * (multiplier or Decimal(1))
-
     def _mark(self, price):
         if not isinstance(self.account, LinearPerpetualAccountV2):
             self.account.mark = price
@@ -110,6 +106,8 @@ class PineV2BarKernel(PineChartBarKernel):
         return price, timestamp, endpoint
 
     def _match_point(self, event, *, vertex):
+        from .v2_margin import reprice
+        reprice(self, event)
         price = Decimal(event.payload["price"])
         eligible = []
         for _ in range(10000):
