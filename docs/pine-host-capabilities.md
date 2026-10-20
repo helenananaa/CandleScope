@@ -110,3 +110,17 @@ repair adds six frozen-identity/restart cases to the repeatable profile and pass
 83 preparation/context/qualification checks in the fresh managed install. Isolated
 candidate plugin installation/protocol and exact payload identity also passed;
 complete application packaging remains open.
+
+The first full managed-candidate attempt stopped at one provider timeout after
+85 passes while a release compiler was active. Three isolated repeats passed
+after compilation, with the original budget; the cause remains unproven. See
+the retained failure/recheck scopes in the entry procedure. This candidate's
+complete profile still needs a passing result.
+
+Stage 3 core checkpoint `de91ea5dc` now honors explicit quantities despite
+cash/equity declarations and treats explicit/fixed-default zero quantities as
+no-ops. It passed 33 focused Rust checks and 164 checks against a fresh Python
+wheel. Its source/binary identity is separate from the historical Host worker.
+Cash/equity defaults when actually used, order metadata, contract multipliers,
+growing requests and CandleScope admission remain open; this is a partial core
+checkpoint rather than an enabled Host feature.

@@ -132,3 +132,15 @@ not attest that the wheel was freshly built from that checkout.
 This qualifies isolated plugin installation and its bounded probe. The default
 desktop recipe still pins the released core, so a complete candidate application
 must use explicit candidate inputs and pass the later packaged-entry gate.
+
+The first 313-case profile against this managed candidate stopped after 85
+passing cases at a queued V2 chart `PROVIDER_TIMEOUT`. Source/runtime/registry
+hashes were unchanged. A core release compilation was running concurrently;
+resource contention is a hypothesis, not an established root cause. The failed
+receipt, log and synthetic SQLite state are retained in
+`output/pine-host/completion-goal/historical-20261020-03/`. After compilation
+ended, the exact queued-chart case passed three separate executions under the
+unchanged production budget. Those repeats, retained in
+`output/pine-host/completion-goal/provider-timeout-recheck/`, do not qualify the
+complete candidate profile. Keep this failure distinct from the 307-case
+historical pass and the 83-case boundary pass.

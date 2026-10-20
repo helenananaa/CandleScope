@@ -27,8 +27,12 @@ checkout's Replay/runtime-cache work was separately committed through `83105c0f`
   and `codex/pine-host-adaptation`. The latest sealed margin/book checkpoint is
   `41c894bc900110f12a577e7e52cbac28b59fb9db`; subsequent upgrade-retry work is
   recorded in its separate candidate receipt.
-- Core remains clean at `02fdbebffd9baa1cb80b0aa2454cecf3b7b3207d` on
-  `codex/pine-host-completion`. This Host-account phase did not modify it.
+- Core's Stage 3 quantity checkpoint is clean at
+  `de91ea5dc483919de4e1e723544059239d639819` on `codex/pine-host-completion`.
+  Explicit quantities override cash/equity declarations; zero explicit/fixed
+  defaults emit no order. Its fresh wheel passed 164 Python checks and 33
+  focused Rust checks. Actual cash/equity default execution and Host admission
+  remain open. The historical Host worker below retains the earlier core.
 - The worker environment is `output/pine-host/phase3/schedule-transport-admission-venv`,
   selected by `schedule-transport-admission-runtime-registry.json` in that directory's
   parent. The installed core binary SHA256 is
