@@ -5,10 +5,16 @@ import itertools
 import json
 from copy import deepcopy
 from dataclasses import replace
+from decimal import Decimal
 from pathlib import Path
 from threading import Event
 
 import pytest
+from app.data_engine.interval_policy import (
+    compute_bucket_end_ms,
+    compute_bucket_start_ms,
+    parse_interval_ms,
+)
 from app.data_engine.storage.raw_trade_archive import RawAggTradeDatasetRef
 from app.replay.bars.trade_builder import TradeReplayBarBuilder
 from app.replay.models import ReplaySessionConfig
@@ -53,6 +59,93 @@ async def source(service, session):
     offset = bars.replay_start_ms - reference.start_time_ms
     trades = tuple(trade.with_time_offset(offset) for trade in reader.iter_trades())
     return snapshot, config, bars, reference.end_time_ms + offset, trades
+
+
+@pytest.mark.parametrize("number", [1, 2])
+@pytest.mark.parametrize("interval", ["1m", "2m"])
+@pytest.mark.parametrize("coalesced", [False, True])
+async def test_clock_boundary_closes_complete_selected_tape_without_another_trade(
+    tmp_path, monkeypatch, number, interval, coalesced
+):
+    if coalesced:
+        original = phase5._multi_trade_sources
+
+        def same_time(*args, **kwargs):
+            return original(*args, **kwargs, coalesce_trade_timestamps=True)
+
+        monkeypatch.setattr(phase5, "_multi_trade_sources", same_time)
+    service, run, session = await setup_tape(tmp_path, held=True)
+    try:
+        await prepare(service, run, session)
+        sid = f"trade-adapter-{number}"
+        snapshot, _, _, _, trades = await source(service, sid)
+        boundary = compute_bucket_end_ms(
+            compute_bucket_start_ms(
+                trades[0].trade_time_ms, parse_interval_ms(interval), interval=interval
+            ),
+            parse_interval_ms(interval),
+            interval=interval,
+        )
+        sequence = sum(trade.trade_time_ms < boundary for trade in trades)
+        assert sequence > 1
+        assert boundary <= snapshot["cursor"]["virtual_time_ms"]
+        args = {
+            "track_id": f"track-{number}",
+            "data_epoch": snapshot["data_epoch"],
+            "display_interval": interval,
+            "source_sequence": sequence,
+            "limit": 5,
+        }
+        before = await service.training.tape_projection(
+            sid, **args, revealed_boundary_ms=boundary - 1
+        )
+        after = await service.training.tape_projection(
+            sid, **args, revealed_boundary_ms=boundary
+        )
+        assert before["status"] == after["status"] == "ready"
+        assert not before["bars"][-1]["is_closed"]
+        expected = deepcopy(before["bars"])
+        expected[-1]["is_closed"] = True
+        assert after["bars"] == expected
+        # The same later clock must not finalize a truncated source cohort.
+        partial = await service.training.tape_projection(
+            sid,
+            **dict(args, source_sequence=sequence - 1),
+            revealed_boundary_ms=boundary,
+        )
+        assert partial["bars"][-1]["is_closed"] is False
+        assert partial["bars"][-1]["volume"] != after["bars"][-1]["volume"]
+        # Finalizing one disposable selection must not mutate the older cache.
+        assert await service.training.tape_projection(
+            sid, **args, revealed_boundary_ms=boundary - 1
+        ) == before
+        # Wider intervals can have a truthful partial oldest warmup bucket.
+        selected = [row for row in after["bars"] if row["is_closed"]][-3:]
+        period = min(2, len(selected))
+        response = await _request(
+            _app(service),
+            "POST",
+            f"/api/v1/replay/runs/session/{sid}/indicator-compute",
+            json={
+                **{k: v for k, v in args.items() if k != "limit"},
+                "revealed_boundary_ms": boundary,
+                "history_epoch": after["history_epoch"],
+                "name": "MA",
+                "params": {"period": period},
+                "bars": selected,
+            },
+        )
+        assert response.status_code == 200, response.text
+        result = response.json()
+        assert result["status"] == "ready"
+        last = result["payload"]["lines"][0]["data"][-1]
+        assert last["time"] == selected[-1]["open_time_ms"] // 1000
+        assert Decimal(str(last["value"])) == sum(
+            (Decimal(row["close"]) for row in selected[-period:]), Decimal(0)
+        ) / period
+        assert (await service.get_session(sid))["snapshot"] == snapshot
+    finally:
+        await service.shutdown(step_timeout=3)
 
 
 def scalar_base(config, bars, terminal, trades, sequence, boundary):

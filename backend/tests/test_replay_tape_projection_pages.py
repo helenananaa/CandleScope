@@ -302,8 +302,9 @@ async def test_sparse_pages_close_only_with_revealed_evidence_and_survive_cache_
                     }
                 )
         await frontend_oracle(tmp_path, cases)
-        # Merely selecting a later clock without consuming the later trade
-        # cannot close the earlier forming minute or invent intervening rows.
+        # The later clock and the next immutable timestamp prove the first
+        # minute complete. Do not consume that later trade or invent the
+        # intervening minutes merely to close the selected candle.
         first_only = TapeDisplayProjection().compute(
             **{**arguments, "limit": 10},
             display_interval="1m",
@@ -311,6 +312,7 @@ async def test_sparse_pages_close_only_with_revealed_evidence_and_survive_cache_
             revealed_boundary_ms=trades[-1].trade_time_ms,
         )
         assert first_only["bars"][-1]["open_time_ms"] == bars.replay_start_ms
-        assert first_only["bars"][-1]["is_closed"] is False
+        assert first_only["bars"][-1]["is_closed"] is True
+        assert first_only["bars"][-1]["volume"] == trades[0].quantity
     finally:
         await service.shutdown(step_timeout=3)
