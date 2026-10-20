@@ -23,7 +23,7 @@ def run_bar_clock(kernel, orders, wire, plugin, runner, cancelled, deadline, *, 
         raise BacktestError("NATIVE_IDENTITY_MISMATCH", "Pine BAR clock identity differs")
     target = len(wire["bars"]) if target is None else target
 
-    def evaluate(event, trigger):
+    def evaluate(event, trigger, *, dispatch=True):
         nonlocal latest
         if cancelled.is_set():
             raise BacktestError("NATIVE_CANCELLED", "Pine BAR execution cancelled")
@@ -53,7 +53,8 @@ def run_bar_clock(kernel, orders, wire, plugin, runner, cancelled, deadline, *, 
             evaluation["request_data"] = visible_contexts(wire, bar_event(wire, cursor, 0).event_time_ms + 1)
         groups[cursor].append({"evaluation": evaluation,
             "context": {"bar_state": "historical", "trigger": trigger, "is_new": True}})
-        request = {key: value for key, value in wire.items() if key not in {"execution_events", "execution_passes"}}
+        request = {key: value for key, value in wire.items() if key not in {
+            "execution_events", "execution_passes", "account_events", "account_provenance", "pine_v2_settings"}}
         request.update(bars=wire["bars"][:cursor + 1], accounts=accounts,
             execution_schedule=groups, contexts=[{**row, "bars": []} for row in wire.get("contexts", [])])
         if "execution_times" in wire:
@@ -75,9 +76,11 @@ def run_bar_clock(kernel, orders, wire, plugin, runner, cancelled, deadline, *, 
         orders.configure(latest.get("pyramiding", 1))
         check_risk_response(orders, wire, latest)
         intents = orders.translate(current, event.sequence)
-        kernel.decisions.append({"sequence": event.sequence, "watermark_ms": event.event_time_ms,
-            "intents": intents, "signal_bar": cursor, "pass_index": index, "trigger": trigger.upper()})
-        kernel._enqueue_many(intents, current_sequence=event.sequence)
+        if dispatch:
+            kernel.decisions.append({"sequence": event.sequence, "watermark_ms": event.event_time_ms,
+                "intents": intents, "signal_bar": cursor, "pass_index": index, "trigger": trigger.upper()})
+            kernel._enqueue_many(intents, current_sequence=event.sequence)
+        return intents
 
     prior_reporter = kernel.execution_reporter
 
@@ -95,16 +98,31 @@ def run_bar_clock(kernel, orders, wire, plugin, runner, cancelled, deadline, *, 
         if wire.get("closing_ticks"):
             kernel.closing_tick()
 
-    kernel.execution_reporter = report
-    try:
-        while cursor < target:
-            kernel.walk_bar(bar_event(wire, cursor, cursor + 1), close)
-            cursor += 1
-        if target == len(wire["bars"]):
-            kernel.finalize_orders()
-    finally:
-        kernel.execution_reporter = prior_reporter
+    if wire.get("pine_v2_bar_contract"):
+        from .pine_workbench_v2 import events
+        source = events(wire)
+        last = bar_event(wire, target - 1, 0).event_time_ms
+        remaining = [row for row in source if row.sequence > kernel.source_sequence and row.event_time_ms <= last]
+        def committed(_bar):
+            nonlocal cursor
+            if _bar.role == "BARS":
+                cursor += 1
+        kernel.run(remaining, lambda *_: evaluate(kernel._last_event, "bar_close", dispatch=False),
+            fill_callback=lambda _bar, point, trigger: evaluate(point, trigger, dispatch=False),
+            checkpoint_callback=committed, finalize=target == len(wire["bars"]))
+    else:
+        kernel.execution_reporter = report
+        try:
+            while cursor < target:
+                kernel.walk_bar(bar_event(wire, cursor, cursor + 1), close)
+                cursor += 1
+            if target == len(wire["bars"]):
+                kernel.finalize_orders()
+        finally:
+            kernel.execution_reporter = prior_reporter
     passes = [[row["evaluation"] for row in group] for group in groups]
     clock = {"contract": CONTRACT, "bar_cursor": cursor, "last_sequence": kernel.path_sequence,
              "groups": groups, "accounts": accounts, "history": history, "latest": latest}
+    if wire.get("pine_v2_bar_contract"):
+        clock["source_sequence"] = kernel.source_sequence
     return latest, history, accounts, passes, clock

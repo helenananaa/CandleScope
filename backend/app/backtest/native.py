@@ -15,7 +15,6 @@ import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 
 from app.core.config import runtime_environment
 from app.data_engine.interval_policy import parse_interval_spec
@@ -241,7 +240,8 @@ class NativeBacktests:
                         cursor += 1
                     selected = []
                     while cursor < len(lower) and lower[cursor]["time"] * 1000 < end:
-                        selected.append(lower[cursor]); cursor += 1
+                        selected.append(lower[cursor])
+                        cursor += 1
                     if not selected or selected[0]["time"] * 1000 != start or lower_interval.next_ms(selected[-1]["time"] * 1000) != end:
                         raise BacktestError("DATA_QUALITY_FAILED", "Magnifier requires full intrabar coverage")
                     chart_bars.append({"chartBarIndex": index, "bars": selected})
@@ -275,6 +275,8 @@ class NativeBacktests:
                 if payload["language"] == "pine":
                     from .pine_workbench import freeze_control
                     freeze_control(self, plugin, wire, payload)
+                from .pine_workbench_v2 import freeze_account
+                freeze_account(wire, payload)
                 wire["execution_events"] = freeze_execution(self, payload, bars,
                     allow_bar_callbacks=bool(wire.get("pine_bar_path_contract")))
             if len(encoded(wire).encode()) > MAX_BYTES:

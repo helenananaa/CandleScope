@@ -31,6 +31,8 @@ def host_identity():
     files.append(Path(__file__).with_name("pine_workbench.py"))
     files.append(Path(__file__).with_name("external_support.py"))
     files.append(Path(__file__).with_name("pine_bar_clock.py"))
+    files.append(Path(__file__).with_name("pine_workbench_v2.py"))
+    files.append(Path(__file__).with_name("native_contracts.py"))
     for path in files:
         checksum.update(path.name.encode())
         checksum.update(path.read_bytes())
@@ -96,7 +98,14 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
         if fidelity != "BAR_APPROX" or wire["pine_bar_path_contract"] != PATH_CONTRACT or not wire.get("fill_recalculation"):
             raise BacktestError("EXTERNAL_UNSUPPORTED", "invalid Pine BAR path contract")
         kernel_type = PineBarKernel
+        if wire.get("pine_v2_bar_contract"):
+            from app.simulation.pine_v2_bar_kernel import PineV2BarKernel, CONTRACT as V2_CONTRACT
+            if wire["pine_v2_bar_contract"] != V2_CONTRACT:
+                raise BacktestError("EXTERNAL_UNSUPPORTED", "invalid Pine V2 BAR contract")
+            kernel_type = PineV2BarKernel
     kernel = kernel_type(**({"process_orders_on_close": True} if issubclass(kernel_type, SimulationKernel) and wire.get("closing_ticks") else {}),
+                              **({key: (Decimal(value) if key in {"leverage", "participation_rate"} and value is not None else value)
+                                  for key, value in wire["pine_v2_settings"].items()} if wire.get("pine_v2_bar_contract") else {}),
                               account_model=wire.get("account_model", "LINEAR_PERP_ONE_WAY_V1"),
                               initial_balance=Decimal(str(settings["initial_balance"])),
                               slippage_bps=Decimal(str(settings["slippage_bps"])),
@@ -217,11 +226,16 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
             "vertices": "NEAREST_EXTREME_FIRST_LOW_ON_TIE", "timestamps": "LINEAR_INTERPOLATION_SYNTHETIC",
             "physical_tape": False, "official_oracle_verified": False}
         result["raw_output"]["execution_schedule"] = clock["groups"]
+        if wire.get("pine_v2_bar_contract"):
+            result["raw_output"]["pine_bar_path"].update(v2_contract=wire["pine_v2_bar_contract"],
+                capacity_policy="SHARED_BAR_VOLUME_PARTICIPATION" if kernel.execution_model_revision else "UNCAPPED",
+                mark_authority="HISTORICAL_MARK_INDEX" if kernel.account_model == "LINEAR_PERP_ONE_WAY_V2" else "PATH_MARK")
+            result["raw_output"]["account_provenance"] = wire.get("account_provenance", {})
     if wire.get("closing_ticks"):
         result["raw_output"]["closing_tick_contract"] = "candlescope.pine-closing-tick/1"
         result["raw_output"]["closing_execution"] = {
             "price_policy": "VISIBLE_BOOK_QUOTES" if fidelity.startswith("BOOK") else "REVEALED_BAR_CLOSE",
-            "capacity_policy": ("REMAINING_VISIBLE_DEPTH" if fidelity in {"BOOK_DEPTH", "BOOK_SAMPLED"}
+            "capacity_policy": ("SHARED_BAR_VOLUME_PARTICIPATION" if wire.get("pine_v2_bar_contract") and kernel.execution_model_revision else "REMAINING_VISIBLE_DEPTH" if fidelity in {"BOOK_DEPTH", "BOOK_SAMPLED"}
                 else "REMAINING_BAR_VOLUME_PROXY" if fidelity == "BOOK_ASSISTED" else "HOST_BAR_OR_TAPE_APPROXIMATION"),
             "passive_prints_inferred": False, "actual_close_auction_verified": False}
         if result["raw_output"]["depth_model"] is not None:

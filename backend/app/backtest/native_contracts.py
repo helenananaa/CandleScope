@@ -98,7 +98,32 @@ class ExecutionData(BaseModel):
     provenance: dict[str, Any] = Field(default_factory=dict)
 
 
-class ExternalRunRequest(NativeRunRequest):
+class AccountEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    time_ms: int = Field(strict=True)
+    role: Literal["INSTRUMENT_RULES", "MARK_INDEX", "FUNDING"]
+    payload: dict[str, Any]
+
+
+class AccountData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    symbol: str = Field(min_length=1, max_length=120)
+    events: list[AccountEvent] = Field(min_length=1, max_length=500_000)
+    provenance: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkbenchBarSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    account_model: Literal["LINEAR_PERP_ONE_WAY_V1", "LINEAR_PERP_ONE_WAY_V2", "SPOT_CASH_V1"] | None = None
+    leverage: float = Field(default=1, gt=0, le=1000)
+    funding_mode: Literal["OFF", "HISTORICAL_REQUIRED"] = "OFF"
+    account_data: AccountData | None = None
+    execution_model_revision: Literal["EXECUTION_REALISM_V2"] | None = None
+    participation_rate: float | None = Field(default=None, gt=0, le=1)
+    bar_path_scenario: Literal["OHLC_NEAREST_EXTREME_PATH_V2"] | None = None
+
+
+class ExternalRunRequest(NativeRunRequest, WorkbenchBarSettings):
     execution_mode: Literal["CANDLESCOPE"] = "CANDLESCOPE"
     execution_fidelity: Literal["BAR_APPROX", "TRADE_TAPE", "BOOK_ASSISTED", "BOOK_DEPTH", "BOOK_SAMPLED"] = "BAR_APPROX"
     fill_recalculation: bool = False

@@ -35,6 +35,15 @@ def validate_state(wire,state):
                 or clock.get("last_sequence") != path.get("sequence")
                 or not same_json(clock.get("groups"), state["last_request"].get("execution_schedule"))):
             raise BacktestError("NATIVE_IDENTITY_MISMATCH", "Pine BAR path replay cursor differs")
+        if wire.get("pine_v2_bar_contract"):
+            chart = state.get("kernel", {}).get("pine_chart_bar") or {}
+            v2 = state.get("kernel", {}).get("pine_v2_bar") or {}
+            from .pine_workbench_v2 import events as v2_events
+            expected = [row for row in v2_events(wire) if row.role == "BARS"][cursor - 1]
+            if (chart.get("bar_count") != cursor or chart.get("sequence") != clock.get("source_sequence")
+                    or chart.get("sequence") != expected.sequence or chart.get("time_ms") != expected.event_time_ms
+                    or v2.get("contract") != wire["pine_v2_bar_contract"]):
+                raise BacktestError("NATIVE_IDENTITY_MISMATCH", "Pine V2 account source cursor differs")
 
 
 def make_state(wire,cursor,kernel,orders,accounts,history,latest,clock,last_request,*,risk_stops=None):
