@@ -4,6 +4,13 @@ Status: active. Continue the original user goal: CandleScope host gaps first,
 then related interpreter work directly in `E:/projects/pine-interpreter`.
 The mistakenly relayed scope-narrowing instruction was withdrawn by the user.
 
+The user reaffirmed and ordered this goal on 2026-10-20. The current capability
+matrix, acceptance stages and delivery sequence are maintained in
+[Pine Host delivery and acceptance](pine-host-capabilities.md). Historical
+checkpoint counts below retain their own identities and do not qualify later
+changes. The current committed cost checkpoint is `60ae8629`; the original main
+checkout's Replay/runtime-cache work was separately committed through `83105c0f`.
+
 ## Active source and runtime identities (2026-10-20)
 
 - Host worktree and branch remain `E:/CodexData/worktrees/pine-host-adaptation/CandleScope`
