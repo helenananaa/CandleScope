@@ -17,6 +17,7 @@ def host_identity():
         digest.update(name.encode())
         digest.update(Path(__file__).with_name(name).read_bytes())
     digest.update(Path(__file__).parent.parent.joinpath("pine_callbacks.py").read_bytes())
+    digest.update(Path(__file__).parent.parent.joinpath("pine_chart_bar.py").read_bytes())
     digest.update(Path(__file__).parent.parent.joinpath("pine_sensitivity.py").read_bytes())
     digest.update(Path(__file__).parent.parent.joinpath("pine_closing.py").read_bytes())
     digest.update(Path(__file__).parent.parent.joinpath("service.py").read_bytes())
@@ -33,7 +34,8 @@ class PineHostPlanner(PyneHostPlanner):
         from app.simulation.kernel import SimulationKernel
         self.kernel = getattr(kernel, "execution", kernel)
         self.orders = ExternalOrders(self.kernel, price_tick=self.price_tick,
-            fidelity="BAR_APPROX" if isinstance(self.kernel, SimulationKernel) else "TRADE_TAPE")
+            fidelity="PINE_BAR_PATH" if hasattr(self.kernel, "path_level_provider")
+                else "BAR_APPROX" if isinstance(self.kernel, SimulationKernel) else "TRADE_TAPE")
         self.kernel.order_policy = self._before_match
         from app.backtest.pine_risk_stops import PineRiskStops
         self.stop_rules = PineRiskStops(self.orders, self.risk_context)

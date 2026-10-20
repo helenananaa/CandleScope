@@ -17,6 +17,9 @@ PREFIX_SCHEDULE_CONTRACT = "candlescope.pine-prefix-schedule/1"
 
 class SessionWorker:
     def __init__(self, plugin, wire, cancelled, *, evaluator=False):
+        self._close_lock = threading.Lock()
+        self._closed = False
+        self.close_errors = []
         self.identity = wire["identity"]
         self._prefix_enabled = evaluator and self.identity.get("prefix_append") == "candlescope.pine-prefix/1"
         self._prefix_state = None
@@ -124,9 +127,21 @@ class SessionWorker:
         return payload
 
     def close(self):
-        if self.process.poll() is None:
-            self.process.kill()
-        self.process.wait()
-        for stream in (self.process.stdin, self.process.stdout, self.stderr):
-            if not stream.closed:
-                stream.close()
+        # Cancellation can race with request()'s exception cleanup. Only one
+        # owner reaps the process and closes the pipes; later calls are no-ops.
+        with self._close_lock:
+            if self._closed:
+                return
+            if self.process.poll() is None:
+                self.process.kill()
+            self.process.wait()
+            for name, stream in (("stdin", self.process.stdin), ("stdout", self.process.stdout), ("stderr", self.stderr)):
+                if not stream.closed:
+                    try:
+                        stream.close()
+                    except OSError as exc:
+                        # A terminated Windows pipe may fail its buffered
+                        # close/flush. Preserve the original timeout/cancel
+                        # and still release every remaining stream.
+                        self.close_errors.append({"stream": name, "errno": exc.errno})
+            self._closed = True

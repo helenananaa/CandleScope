@@ -43,7 +43,9 @@ model. `raw_output.execution_schedule` records context and evaluations, while
 ## Qualification boundaries
 
 This phase connects Workbench historical fill recalculation for the existing
-linear V1 and spot cash accounts. Chart BAR callbacks, V2 path integration,
+linear V1 and spot cash accounts. Chart V1/spot BAR callbacks now use the shared
+path with independent source/provider cursors; see `pine-chart-bar-callbacks.md`.
+V2 path integration,
 realtime ticks, `calc_on_every_history_tick`, magnifier scheduling, larger
 history performance and packaged product acceptance remain goal work.
 

@@ -222,6 +222,9 @@ def _clone_kernel(kernel: Any, *, _bar_sensitivity=False, **overrides: object) -
             **common,
         )
     kind = _BarSensitivityKernel if _bar_sensitivity and type(kernel) is SimulationKernel else SimulationKernel
+    from .pine_chart_kernel import PineChartBarKernel
+    if isinstance(kernel, PineChartBarKernel):
+        kind = PineChartBarKernel
     return kind(
         price_tick=kernel.price_tick,
         qty_step=kernel.qty_step,

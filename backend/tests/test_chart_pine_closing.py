@@ -163,10 +163,10 @@ def test_workbench_process_close_uses_negotiated_host_closing_execution(runtime)
     assert not result["raw_output"]["strategy_output"].get("strategy")
 
 
-def test_bar_closing_mode_keeps_intrabar_fill_callbacks_fail_closed(service):
+def test_bar_closing_mode_keeps_unconnected_v2_path_capacity_fail_closed(service):
     from app.backtest.errors import BacktestError
     value=config(service,SOURCE.replace("process_orders_on_close=true","process_orders_on_close=true,calc_on_order_fills=true"))
-    with pytest.raises(BacktestError,match="fill callbacks require"):
+    with pytest.raises(BacktestError,match="V2 account/capacity scheduling"):
         execute(service,value)
 
 

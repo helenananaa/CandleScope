@@ -12,8 +12,9 @@ def run_chart(host, main, body, **settings):
     prepared = settings.pop("prepared", False)
     pyramiding = settings.pop("pyramiding",2)
     process_close = ",process_orders_on_close=true" if settings.pop("process_orders_on_close", False) else ""
+    fill_callbacks = ",calc_on_order_fills=true" if settings.pop("calc_on_order_fills", False) else ""
     revision = host.service.create_strategy_revision({"language": "PINE_ENGINE", "name": "Chart orders",
-        "source_text": f'//@version=6\nstrategy("Chart orders",pyramiding={pyramiding}{process_close})\n' + body})
+        "source_text": f'//@version=6\nstrategy("Chart orders",pyramiding={pyramiding}{process_close}{fill_callbacks})\n' + body})
     payload = {key: main[key] for key in ("dataset_id", "data_epoch", "snapshot_hash", "interval", "start_time_ms", "end_time_ms")}
     payload.update(strategy_revision_id=revision["revision_id"], fidelity_mode="BAR_APPROX", source_event_kind="BAR",
         exchange="binance", market_type="usdm", symbol="BTCUSDT", output_mode="ORDER_INTENT",

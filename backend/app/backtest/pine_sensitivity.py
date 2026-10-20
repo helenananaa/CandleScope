@@ -52,11 +52,16 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
             callbacks = None
             def features(bar):
                 return service._observation_features(fresh, bar=bar, trade=None)
-            if config.get("pine_fill_callbacks"):
+            historical_callbacks = None
+            if config.get("pine_bar_path_contract"):
+                from .pine_chart_bar import ChartHistoricalBarCallbacks
+                historical_callbacks = ChartHistoricalBarCallbacks(session, adapter, shadow_planner, replay,
+                    market=market, warmup=warmup, features=features, control=control, deadline=deadline)
+            elif config.get("pine_fill_callbacks"):
                 callbacks = ChartFillCallbacks(session, adapter, shadow_planner, replay,
                     market=market, warmup=warmup, features=features, control=control, deadline=deadline)
             closing = None
-            if config.get("pine_process_on_close"):
+            if config.get("pine_process_on_close") and historical_callbacks is None:
                 from .pine_closing import ChartClosingTicks
                 closing = ChartClosingTicks(replay, callbacks)
 
@@ -67,6 +72,8 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
                     control()
                 index = event.sequence - 1 if isinstance(replay, DualClockSimulationKernel) else observed
                 observed += 1
+                if historical_callbacks is not None:
+                    return historical_callbacks.observe(event)
                 if callbacks is not None:
                     return callbacks.observe(event, confirmed=True)
                 bar = dict(event.payload)
@@ -79,6 +86,7 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
 
             result = replay.run(events, strategy, warmup_events=0, finalize=True,
                 **({"fill_callback": callbacks.on_fill} if callbacks is not None else {}),
+                **({"fill_callback": historical_callbacks.on_fill} if historical_callbacks is not None else {}),
                 **({"close_callback": closing.process} if closing is not None else {}))
             service._assert_provider_state_budget(session.snapshot())
             check_deadline(deadline)
@@ -105,7 +113,7 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
     def assumptions(multiplier="1", latency=False, participation=rate):
         return {"fee_multiplier": multiplier, "slippage_multiplier": multiplier,
             "latency_ms_delta": 100 if latency else 0, "latency_events_delta": 1 if latency else 0,
-            "participation_rate": str(participation)}
+            "participation_rate": None if participation is None else str(participation)}
 
     scenarios = [summarize("BASELINE", assumptions(), baseline, baseline_policy, metadata)]
     for label, multiplier in (("COSTS_PLUS_25_PERCENT", Decimal("1.25")), ("COSTS_PLUS_50_PERCENT", Decimal("1.5"))):
@@ -118,8 +126,12 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
     else:
         replay = _clone_kernel(kernel, latency_ms=kernel.latency_ms + 100, latency_events=kernel.latency_events + 1)
         scenarios.append(summarize("LATENCY_PLUS_ONE_TIER", assumptions(latency=True), *evaluate(replay)))
-    replay = _clone_kernel(kernel, participation_rate=rate / 2)
-    scenarios.append(summarize("PARTICIPATION_DOWN_ONE_TIER", assumptions(participation=rate / 2), *evaluate(replay)))
+    if rate is None:
+        scenarios.append(summarize("PARTICIPATION_DOWN_ONE_TIER", assumptions(), baseline, baseline_policy, metadata,
+            status="NOT_APPLICABLE_OHLC_PATH_NO_TAPE_CAPACITY"))
+    else:
+        replay = _clone_kernel(kernel, participation_rate=rate / 2)
+        scenarios.append(summarize("PARTICIPATION_DOWN_ONE_TIER", assumptions(participation=rate / 2), *evaluate(replay)))
     payload = {"schemaVersion": "candlescope.cost-sensitivity/1", "status": "COMPLETED",
         "purpose": "ROBUSTNESS_CHECK_NOT_PARAMETER_TUNING", "decision_source": "INDEPENDENT_PINE_HOST_REEXECUTION",
         "included_in_primary_config_hash": False, "baseline_reexecution_verified": True, "scenarios": scenarios}

@@ -1168,7 +1168,7 @@ class BacktestService:
         normalized_execution = json.loads(identity.execution_json)
         if normalized_execution.get("pine_runtime_identity"):
             stored_payload["pine_runtime_identity"] = normalized_execution["pine_runtime_identity"]
-        for name in ("pine_contexts", "pine_local_data_root", "pine_order_runtime_identity", "pine_fill_callbacks", "pine_process_on_close", "pine_risk_windows"):
+        for name in ("pine_contexts", "pine_local_data_root", "pine_order_runtime_identity", "pine_fill_callbacks", "pine_process_on_close", "pine_risk_windows", "pine_bar_path_contract"):
             stored_payload.pop(name, None)
             if name in normalized_execution:
                 stored_payload[name] = normalized_execution[name]
@@ -2720,6 +2720,8 @@ class BacktestService:
                     "pineChartMarketType": config.get("market_type"),
                     "pineRequestedContexts": config.get("pine_contexts", []),
                     "pineLocalDataRoot": config.get("pine_local_data_root"),
+                    **({"pineExecutionScheduleContract": "candlescope.pine-execution-schedule/1"}
+                       if config.get("pine_bar_path_contract") else {}),
                 }
             )
 
@@ -2743,7 +2745,11 @@ class BacktestService:
             observed = 0
             resume_sequence = 0
 
-            kernel = SimulationKernel(
+            bar_kernel_type = SimulationKernel
+            if config.get("pine_bar_path_contract"):
+                from app.simulation.pine_chart_kernel import PineChartBarKernel
+                bar_kernel_type = PineChartBarKernel
+            kernel = bar_kernel_type(
                 process_orders_on_close=bool(config.get("pine_process_on_close")),
                 account_model=str(
                     config.get("account_model") or "LINEAR_PERP_ONE_WAY_V1"
@@ -2798,6 +2804,9 @@ class BacktestService:
                 planner.restore(payload.get("planner") or {})
                 observed = int(payload["observed"])
                 resume_sequence = int(payload["sequence"])
+                if config.get("pine_bar_path_contract") and (observed != kernel.chart_bar_count
+                        or resume_sequence != kernel.source_sequence):
+                    raise BacktestError("CHECKPOINT_CORRUPT", "historical BAR observation cursor differs")
 
             if checkpoint is None:
                 self._save_bar_checkpoint(
@@ -2812,13 +2821,22 @@ class BacktestService:
 
             input_modes = feature_names = None
             closing = None
-            if config.get("pine_process_on_close"):
+            if config.get("pine_process_on_close") and not config.get("pine_bar_path_contract"):
                 from .pine_closing import ChartClosingTicks
                 closing = ChartClosingTicks(kernel)
+            historical_callbacks = None
+            if config.get("pine_bar_path_contract"):
+                from .pine_chart_bar import ChartHistoricalBarCallbacks
+                historical_callbacks = ChartHistoricalBarCallbacks(session, adapter, planner, kernel,
+                    market=observation_market or {"venue": "local", "symbol": str(record["dataset_id"])},
+                    warmup=warmup_events, deadline=deadline,
+                    features=lambda bar: self._observation_features(provider, bar=bar, trade=None),
+                    control=lambda: self._assert_execution_control(run_id, deadline=deadline,
+                        expected_generation=expected_generation))
             chart_batch = None
             python_batch = None
             generic_bar = None
-            if getattr(self, "_colocated_worker", False):
+            if getattr(self, "_colocated_worker", False) and historical_callbacks is None:
                 from .strategy.python_market_batch import PythonMarketBatchProvider
                 if type(getattr(provider, "provider", None)) is PythonMarketBatchProvider:
                     python_batch = provider.provider
@@ -2852,6 +2870,8 @@ class BacktestService:
                     )
                 phase = "WARMUP" if observed < warmup_events else "EVALUATION"
                 observed += 1
+                if historical_callbacks is not None:
+                    return historical_callbacks.observe(event)
                 if generic_bar is not None:
                     wire = generic_bar.observe(event, phase)
                     return planner.plan(wire, context=(None if planner.config is None else _planning_context(kernel, event)))
@@ -2949,6 +2969,7 @@ class BacktestService:
                 warmup_events=0,
                 finalize=True,
                 checkpoint_callback=checkpoint_after,
+                **({"fill_callback": historical_callbacks.on_fill} if historical_callbacks is not None else {}),
                 **({"close_callback": closing.process} if closing is not None else {}),
             )
             cost_sensitivity = (
@@ -3024,7 +3045,7 @@ class BacktestService:
                 | kernel.account.coverage(),
                 "fill_model": {
                     "name": (
-                        BAR_FILL_POLICY_V2
+                        "PINE_OHLC_PATH_V1" if config.get("pine_bar_path_contract") else BAR_FILL_POLICY_V2
                         if kernel.execution_model_revision == EXECUTION_REALISM_V2
                         else "BAR_NEXT_BAR_WORST_CASE_V1"
                     ),
@@ -3042,6 +3063,9 @@ class BacktestService:
                     ),
                     "gap_policy": kernel.gap_policy,
                     "order_closeout": "CANCEL_OPEN_AT_END",
+                    **({"path_contract": config["pine_bar_path_contract"],
+                        "timestamps": "LINEAR_INTERPOLATION_SYNTHETIC", "physical_tape": False,
+                        "official_oracle_verified": False} if config.get("pine_bar_path_contract") else {}),
                     **_execution_fill_model(config),
                 },
                 "cost_sensitivity": cost_sensitivity,
@@ -4479,8 +4503,15 @@ class BacktestService:
             if process_close:
                 execution_config["pine_process_on_close"] = True
             if fill_callbacks:
-                if fidelity != "AGG_TRADE_EXECUTION" or output_mode != "ORDER_INTENT":
-                    raise BacktestError("FIDELITY_UNSUPPORTED", "Pine fill callbacks require ORDER_INTENT and aggregate-trade execution")
+                if fidelity not in {"BAR_APPROX", "AGG_TRADE_EXECUTION"} or output_mode != "ORDER_INTENT":
+                    raise BacktestError("FIDELITY_UNSUPPORTED", "Pine fill callbacks require ORDER_INTENT and BAR or aggregate-trade execution")
+                if fidelity == "BAR_APPROX":
+                    envelope = json.loads(compiled_pine["executionSource"])
+                    if envelope.get("executionScheduleContract") != "candlescope.pine-execution-schedule/1":
+                        raise BacktestError("FIDELITY_UNSUPPORTED", "historical BAR callbacks require explicit execution schedules")
+                    if account_model not in {"LINEAR_PERP_ONE_WAY_V1", "SPOT_CASH_V1"} or payload.get("execution_model_revision") is not None:
+                        raise BacktestError("FIDELITY_UNSUPPORTED", "historical BAR path V2 account/capacity scheduling is not connected")
+                    execution_config["pine_bar_path_contract"] = "candlescope.pine-bar-path/1"
                 execution_config["pine_fill_callbacks"] = True
             if output_mode == "ORDER_INTENT" or process_close:
                 from .strategy.pine_planner import host_identity
@@ -4604,7 +4635,7 @@ class BacktestService:
     def _build_cost_sensitivity(self, config, kernel, events, result, **pine_context):
         if config.get("cost_sensitivity_mode", "FULL") == "SKIP":
             return {"status": "SKIPPED_BY_REQUEST", "scenarios": []}
-        if kernel.execution_model_revision != EXECUTION_REALISM_V2:
+        if kernel.execution_model_revision != EXECUTION_REALISM_V2 and not config.get("pine_bar_path_contract"):
             return {}
         if config.get("pine_runtime_identity"):
             from .pine_sensitivity import build_matrix

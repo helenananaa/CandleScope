@@ -282,8 +282,10 @@ class PineEngineProvider:
 
             timeframe = pine_timeframe(self.context["pineChartInterval"])
         from app.backtest.pine_requested_data import visible_contexts
-        contexts = visible_contexts(self.requested_streams,
-            min(frame.watermark_ms - (0 if confirmed else 1), int(row.get("close_time_ms", frame.event_time_ms))))
+        cutoff = int(row.get("close_time_ms", frame.event_time_ms))
+        if not schedule_context or schedule_context["bar_state"] != "historical":
+            cutoff = min(frame.watermark_ms - (0 if confirmed else 1), cutoff)
+        contexts = visible_contexts(self.requested_streams, cutoff)
         if self.pass_mode:
             self.execution_passes[index].append({"bar": dict(bar), "account": dict(account), "confirmed": confirmed,
                 "event_time_ms": frame.event_time_ms, "request_data": [
@@ -529,7 +531,7 @@ class PineEngineProvider:
         self.close()
 
     def close(self):
-        if self.worker is not None:
-            self.worker.close()
-            self.worker = None
+        worker, self.worker = self.worker, None
+        if worker is not None:
+            worker.close()
         return canonical_hash(self.history)

@@ -185,8 +185,8 @@ if not barstate.isconfirmed and strategy.position_size>0
         assert recovered["result"][key]==baseline["result"][key]
 
 
-@pytest.mark.parametrize("override", [{"fidelity_mode":"BAR_APPROX","source_event_kind":"BAR"},{"output_mode":"TARGET_POSITION"}])
-def test_callback_profile_requires_order_intents_and_real_trade_execution(service,override):
+@pytest.mark.parametrize("override", [{"fidelity_mode":"BAR_APPROX","source_event_kind":"BAR","execution_model_revision":"EXECUTION_REALISM_V2"},{"output_mode":"TARGET_POSITION"}])
+def test_callback_profile_requires_order_intents_and_connected_execution_model(service,override):
     with pytest.raises(BacktestError,match="FIDELITY_UNSUPPORTED"):
         service.create_run(payload(service,**override), idempotency_key="invalid", now_ms=3)
 

@@ -30,6 +30,8 @@ class PineBarKernel(SimulationKernel):
                 "pine_bar_path": {"contract": CONTRACT, "sequence": self.path_sequence}}
 
     def restore(self, payload):
+        if payload.get("pine_chart_bar") is not None and not hasattr(self, "chart_bar_count"):
+            raise MarketDatasetError("chart BAR snapshot requires its own clock", code="CHECKPOINT_CORRUPT")
         state = payload.get("pine_bar_path") or {}
         if (state.get("contract") != CONTRACT or type(state.get("sequence")) is not int
                 or state["sequence"] < 0

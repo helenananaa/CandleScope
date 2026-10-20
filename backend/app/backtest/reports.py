@@ -229,6 +229,12 @@ def build_report(
         report["pine_orders"] = copy.deepcopy(pine_orders)
     if payload.get("pine_risk_stops") is not None:
         report["pine_risk_stops"] = copy.deepcopy(payload["pine_risk_stops"])
+    if config.get("pine_bar_path_contract"):
+        report["identity"]["pine_bar_path_contract"] = config["pine_bar_path_contract"]
+        report["cost_sensitivity"] = copy.deepcopy(payload.get("cost_sensitivity") or {})
+        report["report_label"] += "_WITH_SYNTHETIC_OHLC_PATH"
+        report["unmodeled"].append("physical intrabar tape and actual intrabar timestamps")
+        report["suitable_for"] = ["historical OHLC path signals", "historical fill recalculation"]
     if config.get("pine_process_on_close"):
         from app.simulation.closing_tick import CONTRACT, REASON
         closing = {
@@ -244,6 +250,8 @@ def build_report(
         report["fill_model"] = {**report["fill_model"], "closing_tick": closing}
         report["unmodeled"].append("close auction liquidity")
         report["suitable_for"] = ["completed-bar signals", "simulated closing-tick execution"]
+        if config.get("pine_bar_path_contract"):
+            report["suitable_for"] = ["historical OHLC path signals", "historical fill recalculation", "simulated closing-tick execution"]
     if config.get("execution_model_revision"):
         report["order_events"] = list(
             (payload.get("ledger") or {}).get("order_events") or []
