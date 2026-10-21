@@ -78,4 +78,3 @@ def test_negotiated_metadata_cannot_be_silently_removed_from_an_active_order_str
     orders.negotiate_metadata(CONTRACT)
     with pytest.raises(BacktestError,match="contract changed"):
         orders.negotiate_metadata(None)
-
