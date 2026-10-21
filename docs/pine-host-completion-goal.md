@@ -4,6 +4,41 @@ Status: active. Continue the original user goal: CandleScope host gaps first,
 then related interpreter work directly in `E:/projects/pine-interpreter`.
 The mistakenly relayed scope-narrowing instruction was withdrawn by the user.
 
+## Goal continuation ordered on 2026-10-21
+
+The user enabled Goal mode after the two source PRs (#81 here and #18 in the
+core, with prerequisite core #17). Continue on their existing branches, preserving
+the original main checkout and the earlier candidate evidence. Delivery order:
+
+1. Repair native risk registration and same-kind rule aggregation in the core.
+2. Connect nonunit contract multipliers and actual quantity rules end to end.
+3. Add causal incremental updates for growing requested data.
+4. Connect V2 historical-account trade/book combinations, then realtime and
+   every-history-tick strategy schedules.
+5. Qualify official-reference comparisons, workload-specific resources,
+   interruption/recovery, release artifacts and actual packaged application use.
+
+Phase 1 is implemented and committed at core `7adcca2a3` on PR #18. Native risk
+registration is independent of branch/declaration order; duplicate limits retain
+the strictest constraints and immutable arguments use the real chart/calendar
+environment. The complete local Windows core gate passed 7,942 Rust, 1,886
+fresh-wheel Python and 172 tooling tests, plus Clippy, structural/host parity and
+generated WASM/Node checks. The 950 frozen inputs remained unchanged. Core
+`docs/NATIVE_RISK_REGISTRATION.md` records binary identity and retained failures.
+These checks do not establish official-reference or packaged qualification.
+Existing 392-case Host receipts retain their original worker identity and do not
+qualify the new core automatically.
+
+Phase 2 now proceeds from this checkpoint. Before implementation, independent
+Decimal accounting/grid oracles and six failing multiplier regressions were
+retained in the core's `.local/goal-contract-spec-20261021/`. Host source and
+production-function probes also confirm that the current minimum-notional
+admission omits contract multiplier in both BAR and trade call paths. Its repair
+must accompany metadata, sizing, native accounting and actual quantity rules;
+lifting the existing nonunit-multiplier rejection alone is insufficient.
+The previous round's closeout below is a historical checkpoint, not completion
+of this full Goal.
+
 The user reaffirmed and ordered this goal on 2026-10-20. The current capability
 matrix, acceptance stages and delivery sequence are maintained in
 [Pine Host delivery and acceptance](pine-host-capabilities.md). Historical
