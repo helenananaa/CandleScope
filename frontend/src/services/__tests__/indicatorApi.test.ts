@@ -39,11 +39,12 @@ test("local compute preserves a shared replay observation and rejects mixed cloc
   context.after(() => { globalThis.fetch = originalFetch; });
   const replayContext = { sessionId: "session", trackId: "track", dataEpoch: `sha256:${"a".repeat(64)}`,
     revealedBoundaryMs: 123456, sourceSequence: 7 };
-  let body: Record<string, any> = {};
+  let body: Record<string, unknown> = {};
   globalThis.fetch = async (_url, options) => {
-    body = JSON.parse(String(options?.body));
-    return new Response(JSON.stringify(body.requests
-      ? { ok: true, results: body.requests.map((item: object) => ({ ...item, payload: { ok: true } })) }
+    body = JSON.parse(String(options?.body)) as Record<string, unknown>;
+    const requests = body.requests as Array<Record<string, unknown>> | undefined;
+    return new Response(JSON.stringify(requests
+      ? { ok: true, results: requests.map((item) => ({ ...item, payload: { ok: true } })) }
       : { ok: true }), { headers: { "Content-Type": "application/json" } });
   };
   const request = { mode: "script", language: "pine", script: "plot(close)", ohlcv: [], replayContext };
@@ -54,8 +55,8 @@ test("local compute preserves a shared replay observation and rejects mixed cloc
       dataEpoch: replayContext.dataEpoch, trackId: "track", sessionId: "session" },
   } }];
   await computeIndicatorBatch({ jobs });
-  assert.deepEqual(body.context.replayContext, replayContext);
-  assert.equal(body.requests[0].replayContext, undefined);
+  assert.deepEqual((body.context as Record<string, unknown>).replayContext, replayContext);
+  assert.equal((body.requests as Array<Record<string, unknown>>)[0]?.replayContext, undefined);
   await assert.rejects(computeIndicatorBatch({ jobs: [jobs[0]!, { ...jobs[1]!, request: {
     ...request, replayContext: { ...replayContext, revealedBoundaryMs: 123457 },
   } }] }), /share one chart context/);

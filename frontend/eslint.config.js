@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'desktop-dist', '.desktop-runtime', '.playwright-cli/**']),
+  globalIgnores(['dist', 'desktop-dist', '.desktop-runtime', '.playwright-cli/**', '.local/**']),
   {
     files: ['**/*.{js,jsx,mjs,cjs}'],
     extends: [

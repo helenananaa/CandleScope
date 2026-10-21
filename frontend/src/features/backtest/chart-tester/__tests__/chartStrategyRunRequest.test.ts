@@ -327,7 +327,7 @@ test("Pine requested datasets are frozen into manual and automatically prepared 
     assert.equal(options?.signal, signal);
     if (String(url).endsWith("/datasets")) return new Response(JSON.stringify({ datasets: [dataset] }));
     assert.ok(String(url).endsWith("/datasets/snapshot"));
-    const body = JSON.parse(String(options?.body));
+    const body = JSON.parse(String(options?.body)) as Record<string, unknown>;
     assert.equal(body.exchange, "okx"); assert.equal(body.market_type, "spot");
     return new Response(JSON.stringify({ snapshot_hash: "remote-snapshot" }));
   };

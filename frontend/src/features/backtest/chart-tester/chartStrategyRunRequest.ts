@@ -21,7 +21,7 @@ import {
 } from "../../research-data/researchDataSourceModel.js";
 import type { ResultProjectionIdentity } from "./chartStrategyTesterState.js";
 import type { ChartStrategyRunRequest } from "./chartStrategyTesterUiModel.js";
-import { parsePineLibraries } from "../../indicators/PineLibraryInputs.js";
+import { parsePineLibraries } from "../../indicators/pineLibraryModel.js";
 import { freezePineChartContexts, restoreAdvancedInputs } from "../native/nativeInputs.js";
 
 export type ChartStrategyRunApi = Pick<BacktestApiClient,

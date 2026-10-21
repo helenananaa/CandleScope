@@ -1,5 +1,5 @@
 import { nativeApi, nativeTimeframe } from "./nativeBacktestApi.js";
-import { parsePineCurrencyRates } from "../../indicators/PineCurrencyInputs.js";
+import { parsePineCurrencyRates } from "../../indicators/pineCurrencyModel.js";
 import { workbenchAccountInputs, type WorkbenchAccountDraft, type WorkbenchAccountPayload } from "./workbenchAccountInputs.js";
 
 type WorkbenchOptions = { language?: "pine" | "pyne"; account?: WorkbenchAccountDraft; accountData?: unknown; costSensitivityMode?: "AUTO" | "SKIP" };

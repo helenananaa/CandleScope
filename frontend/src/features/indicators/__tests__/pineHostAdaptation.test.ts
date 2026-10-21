@@ -5,8 +5,8 @@ type Logical = Parameters<PineObjectPrimitive["autoscaleInfo"]>[0];
 import { klineDependencyKey, registerCacheResource, resetCacheRegistry } from "../../cache-gc/cacheRegistry.js";
 import { cacheIndicatorSnapshot, getCachedIndicatorResult, resetIndicatorResultCache } from "../indicatorResultCacheStore.js";
 import assert from "node:assert/strict";
-import { parsePineContexts, pineContextParams } from "../PineContextInputs.js";
-import { parsePineCurrencyRates, pineCurrencyParams } from "../PineCurrencyInputs.js";
+import { parsePineContexts, pineContextParams } from "../pineContextModel.js";
+import { parsePineCurrencyRates, pineCurrencyParams } from "../pineCurrencyModel.js";
 import test from "node:test";
 
 test("effective currency inputs preserve availability times and reject ambiguous or unordered data", () => {
@@ -33,7 +33,7 @@ test("Pine context settings preserve exact venue, timeframe and market and rejec
 import { normalizeIndicatorPayload } from "../indicatorPayloadRuntime.js";
 import { createIndicatorOutputState, indicatorOutputReducer, filterIndicatorOutputStateByVisibility } from "../indicatorOutputReducer.js";
 import { pineIndexTime, pineTimeLogical } from "../../../chart-adapter/pineObjectPrimitive.js";
-import { pineLibraryParams, parsePineLibraries } from "../PineLibraryInputs.js";
+import { pineLibraryParams, parsePineLibraries } from "../pineLibraryModel.js";
 import { buildIndicatorPaneData } from "../indicatorPaneProjection.js";
 
 const scene = { id: "objects", pane: "separate", asOf: 300, times: [60, 120, 300], objects: [{ kind: "lines", row: { id: 1, x1: 1, x2: 1, y1: 8, y2: 12 } }] };

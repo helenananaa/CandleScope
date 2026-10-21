@@ -81,7 +81,7 @@ export class PineObjectPrimitive implements ISeriesPrimitive<ChartTime> {
       if (kind === "plotseries" || kind === "gradientfills") {
         const r = normalize(row);
         for (const { i, bar } of this.nativeSamples(scene, r)) {
-          const value = (key: string) => Array.isArray(r[key]) ? r[key][i] : undefined;
+          const value = (key: string): unknown => Array.isArray(r[key]) ? r[key][i] : undefined;
           if (kind === "gradientfills") { include(value("firstvalues")); include(value("secondvalues")); }
           else if (r.family === "plotBars" || r.family === "plotCandles") { include(value("highs")); include(value("lows")); }
           else if (suffix(value("locations")) === "absolute") include(value("values"));
@@ -195,7 +195,7 @@ export class PineObjectPrimitive implements ISeriesPrimitive<ChartTime> {
   }
   private drawNativeSeries(ctx: CanvasRenderingContext2D, scene: IndicatorDrawing, row: Row, paneHeight: number) {
     const spacing = this.chart!.timeScale().options().barSpacing, half = Math.max(1, spacing * .35);
-    const at = (key: string, index: number) => Array.isArray(row[key]) ? row[key][index] : undefined;
+    const at = (key: string, index: number): unknown => Array.isArray(row[key]) ? row[key][index] : undefined;
     const py = (value: unknown) => { const v = num(value); return v === undefined ? null : this.series!.priceToCoordinate(v); };
     for (const { i, x, bar } of this.nativeSamples(scene, row)) {
       if (!Number.isFinite(x)) continue;
@@ -228,7 +228,7 @@ export class PineObjectPrimitive implements ISeriesPrimitive<ChartTime> {
     }
   }
   private drawGradient(ctx: CanvasRenderingContext2D, scene: IndicatorDrawing, row: Row) {
-    const at = (key: string, index: number) => Array.isArray(row[key]) ? row[key][index] : undefined;
+    const at = (key: string, index: number): unknown => Array.isArray(row[key]) ? row[key][index] : undefined;
     let previous: { x: number; a: number; b: number } | null = null;
     for (const { i, x } of this.nativeSamples(scene, row)) {
       const a = num(at("firstvalues", i)), b = num(at("secondvalues", i));
