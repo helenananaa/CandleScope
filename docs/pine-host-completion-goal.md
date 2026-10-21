@@ -514,8 +514,9 @@ that observation. The corrected allocation group passes.
    corresponding builtin is used anywhere in the script; expression-scoped
    requirements would avoid unnecessary admission failures.
 4. Re-audit current core gaps and implement selected missing language/request/
-   account semantics. The external order profile still needs comments/alert
-   metadata, zero-quantity no-op parity and non-fixed default sizing. Current development core already provides FX conversion;
+   account semantics. The current round connects negotiated comments/alert
+   metadata, zero-quantity no-op parity and Host-account default sizing; see
+   `pine-order-metadata.md` and `pine-default-sizing.md`. Current development core already provides FX conversion;
    nonunit contract multipliers remain unsupported.
 5. Continue broader product and official-reference qualification. Current tests
    do not establish arbitrary TradingView script, pixel, broker-fill,
