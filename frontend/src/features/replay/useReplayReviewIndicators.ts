@@ -58,6 +58,7 @@ export function useReplayReviewIndicators({ seriesStore, requestedKey, loadedKey
     source: "replay-indicator-revealed-prefix" }), [revision]);
   const outputBarTimes = useMemo(() => bars.map(bar => bar.time), [bars]);
   const runtime = useProvidedBarsIndicatorRuntime({ bars, outputBarTimes, computeBatch, chartDataMeta: meta, persistence,
+    visibleRangePriority: true,
     datasetKey: `${requestedKey ?? "review-inactive"}|${canonical.sourceKey}`,
     sourceScopeKey: `${requestedKey ?? "review-inactive"}|${canonical.sourceKey}`,
     sourceOrdinal: cursorMs ?? -1, visibleThroughSeconds: cursorMs === null ? null : cursorMs / 1_000,

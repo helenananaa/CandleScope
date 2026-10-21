@@ -60,6 +60,8 @@ export interface UseIndicatorComputeControllerOptions {
   candleUpColor: string;
   candleUpColorRef: MutableRefObject<string>;
   chartData: KlineBar[];
+  /** Display-only builtins may request a viewport; scripts retain caller input. */
+  builtinChartData?: KlineBar[];
   chartDataMeta: ChartDataCommitMeta | null;
   chartDataMetaRef: MutableRefObject<ChartDataCommitMeta | null>;
   chartDataRef: MutableRefObject<KlineBar[]>;
@@ -141,6 +143,7 @@ export function useIndicatorComputeController({
   candleUpColor,
   candleUpColorRef,
   chartData,
+  builtinChartData,
   chartDataMeta,
   chartDataMetaRef,
   chartDataRef,
@@ -167,12 +170,12 @@ export function useIndicatorComputeController({
   );
   const desiredDataSignature = useMemo(
     () => hasExplicitLocalIndicator
-      ? buildIndicatorOhlcvSignature(
+      ? JSON.stringify([buildIndicatorOhlcvSignature(
           chartData || [],
           historyLimit === undefined ? {} : { limit: historyLimit },
-        )
+        ), builtinChartData === undefined ? null : buildIndicatorOhlcvSignature(builtinChartData, { limit: builtinChartData.length })])
       : "hosted-only",
-    [chartData, hasExplicitLocalIndicator, historyLimit],
+    [chartData, builtinChartData, hasExplicitLocalIndicator, historyLimit],
   );
   const desiredPlanSignature = useMemo(() => buildLocalIndicatorPlanSignature(
     activeIndicators,
@@ -190,6 +193,7 @@ export function useIndicatorComputeController({
   const committedRuntimeRef = useRef({
     context: { datasetKey, exchange, interval, marketType, symbol },
     lifecycleKey: desiredLifecycleKey,
+    builtinChartData,
   });
 
   const computeAll = useCallback(async (force = false) => {
@@ -243,6 +247,8 @@ export function useIndicatorComputeController({
       currentChartData,
       historyLimit === undefined ? {} : { limit: historyLimit },
     );
+    const builtinOhlcv = committedRuntime.builtinChartData === undefined ? ohlcv
+      : buildIndicatorOhlcv(committedRuntime.builtinChartData, { limit: committedRuntime.builtinChartData.length });
     const targetByJobKey = new Map<string, {
       indicator: IndicatorDefinition;
       job: IndicatorComputeBatchJob;
@@ -255,7 +261,7 @@ export function useIndicatorComputeController({
       const jobKey = buildIndicatorComputeJobKey({ indicator, lifecycleKey, params });
       const request: IndicatorComputeRequest = {
         mode: execution.mode,
-        ohlcv,
+        ohlcv: execution.mode === "builtin" ? builtinOhlcv : ohlcv,
         params,
         exchange: context.exchange,
         symbol: context.symbol,
@@ -549,10 +555,12 @@ export function useIndicatorComputeController({
     committedRuntimeRef.current = {
       context: { datasetKey, exchange, interval, marketType, symbol },
       lifecycleKey: desiredLifecycleKey,
+      builtinChartData,
     };
     jobCoordinator.activate(desiredLifecycleKey);
   }, [
     datasetKey,
+    builtinChartData,
     desiredLifecycleKey,
     exchange,
     interval,
@@ -591,6 +599,7 @@ export function useIndicatorComputeController({
     candleDownColor,
     candleUpColor,
     chartData,
+    builtinChartData,
     chartDataMeta,
     computeAll,
     pendingForceComputeRef,
