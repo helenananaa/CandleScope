@@ -14,6 +14,14 @@ from typing import Any, Callable
 PROTOCOL = "candlescope.native-strategy/1"
 
 
+def _utf8_stdio():
+    """Native IPC is UTF-8 regardless of the Windows process code page."""
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="strict")
+
+
 def identity(package: str, engine: str, *, adapter: str) -> dict[str, Any]:
     def distribution(name: str) -> dict[str, str]:
         dist = importlib.metadata.distribution(name)
@@ -30,6 +38,7 @@ def identity(package: str, engine: str, *, adapter: str) -> dict[str, Any]:
 
 
 def serve(describe: Callable, execute: Callable) -> int:
+    _utf8_stdio()
     try:
         request = json.load(sys.stdin)
         current = describe()
@@ -55,6 +64,7 @@ def serve_evaluator(describe, execute):
     Identity is frozen once. No native broker state or script globals are carried
     between requests, and the first error terminates the worker.
     """
+    _utf8_stdio()
     current = describe()
     for line in sys.stdin:
         try:
@@ -75,6 +85,7 @@ def serve_evaluator(describe, execute):
 
 def serve_session(describe, factory):
     """JSON-lines transport. State belongs to this process; errors terminate it."""
+    _utf8_stdio()
     session = None
     current = describe()
     for line in sys.stdin:
