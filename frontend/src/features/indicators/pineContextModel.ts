@@ -41,4 +41,3 @@ export function pineContextParams(params: IndicatorParams, text: string): Indica
   delete result.__pineContexts;
   return contexts.length ? { ...result, __pineContexts: contexts } : result;
 }
-

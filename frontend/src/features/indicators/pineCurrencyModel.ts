@@ -45,4 +45,3 @@ export function pineCurrencyParams(params: IndicatorParams, text: string): Indic
   delete result.__pineCurrencyRates;
   return rates ? { ...result, __pineCurrencyRates: rates } : result;
 }
-
