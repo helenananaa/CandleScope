@@ -40,6 +40,22 @@ export interface ReplayOrderSizingAvailability {
   readonly quantityExceedsCapacity: boolean;
 }
 
+/** Explicit funding changes invalidate advisories for the affected leg only. */
+export function replayOrderIsolatedAllocation({
+  marginMode, positionMode, allocations, trackId, positionSide,
+}: {
+  readonly marginMode: "CROSS" | "ISOLATED" | undefined;
+  readonly positionMode: "ONE_WAY" | "HEDGE";
+  readonly allocations: Readonly<Record<string, unknown>> | undefined;
+  readonly trackId: string;
+  readonly positionSide: "LONG" | "SHORT";
+}): string | null {
+  if (marginMode !== "ISOLATED") return null;
+  const key = positionMode === "HEDGE" ? `${trackId}:${positionSide}` : trackId;
+  const amount = allocations?.[key];
+  return typeof amount === "string" || typeof amount === "number" ? String(amount) : "0";
+}
+
 /** A stale advisory must never offer more closing size than the remaining leg. */
 export function replayBoundClosingCapacity(
   advisory: string | null, reduceOnly: boolean, positionQuantity: number,

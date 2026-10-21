@@ -10,6 +10,7 @@ import { ReplayInitialMarketPicker } from "../ReplayApp.js";
 import { ReplayV2ApiClient, ReplayV2ApiError } from "../replayV2Api.js";
 import {
   prepareReplayInitialMarketSelection,
+  ReplayInitialMarketDowngradeRequired,
   selectReplayInitialMarketWithEpochRetry,
 } from "../replayInitialMarket.js";
 import {
@@ -443,6 +444,104 @@ test("initial HEDGE hybrid selection requires an explicit funding downgrade conf
   assert.match(prepared.downgradeConfirmation ?? "", /HEDGE_HYBRID/);
   assert.match(prepared.downgradeConfirmation ?? "", /资金费.*OFF/);
   assert.equal(selectionCalls, 0);
+});
+
+test("initial preparation refreshes one stale epoch before showing HEDGE confirmation", async () => {
+  const catalog = hedgeCatalog();
+  const epoch: `sha256:${string}` = `sha256:${"9".repeat(64)}`;
+  const fresh = { ...catalog, catalog_epoch: epoch,
+    entries: catalog.entries.map(entry => ({ ...entry, catalog_epoch: epoch })) };
+  const planned: string[] = [];
+  let refreshes = 0;
+  let selected = 0;
+  const prepared = await prepareReplayInitialMarketSelection({
+    runId: "run-hybrid-stale-plan", catalog, entry: catalog.entries[0]!,
+    api: {
+      async marketCatalog() { refreshes += 1; return fresh; },
+      async planInitialMarket(_id, selection) {
+        planned.push(selection.catalog_epoch);
+        if (selection.catalog_epoch === catalog.catalog_epoch) {
+          throw new ReplayV2ApiError("CATALOG_EPOCH_MISMATCH", "stale plan", { status: 409 });
+        }
+        return parseReplaySegmentPreparePlan({ ...segmentPlanResponse(), hedge_inputs: {
+          ...exactHedgeInputPlan(), capability_state: "AVAILABLE_APPROX",
+          reason: "PINNED_HYBRID_PUBLIC_AND_SIMULATION_INPUTS",
+          public_fidelity: "VERSIONED_HYBRID_PUBLIC_INPUT", fallback_applied: true,
+          historical_l2_ref: null,
+        } });
+      },
+      async selectInitialMarket() { selected += 1; throw new Error("confirmation must precede selection"); },
+    },
+  });
+  assert.equal(refreshes, 1);
+  assert.deepEqual(planned, [catalog.catalog_epoch, epoch]);
+  assert.equal(prepared.selection.catalog_epoch, epoch);
+  assert.equal(prepared.catalog, fresh);
+  assert.equal(prepared.entry, fresh.entries[0]);
+  assert.match(prepared.downgradeConfirmation ?? "", /HEDGE_HYBRID/);
+  assert.equal(selected, 0);
+});
+
+test("initial preparation bounds repeated drift and never retries other failures or another market", async () => {
+  const catalog = hedgeCatalog();
+  for (const mode of ["stale", "other-error", "market-gone"] as const) {
+    let plans = 0;
+    let refreshes = 0;
+    const failure = new ReplayV2ApiError(
+      mode === "other-error" ? "MARKET_UNSUPPORTED_AT_COMMITTED_START" : "CATALOG_EPOCH_MISMATCH",
+      mode, { status: 409 },
+    );
+    await assert.rejects(prepareReplayInitialMarketSelection({
+      runId: "run-bounded-plan", catalog, entry: catalog.entries[0]!,
+      api: {
+        async marketCatalog() { refreshes += 1; return mode === "market-gone" ? { ...catalog, entries: [] } : catalog; },
+        async planInitialMarket() { plans += 1; throw failure; },
+        async selectInitialMarket() { throw new Error("failed preparation must not select a market"); },
+      },
+    }), reason => mode === "market-gone" ? reason instanceof Error && reason !== failure : reason === failure);
+    assert.equal(plans, mode === "stale" ? 2 : 1);
+    assert.equal(refreshes, mode === "other-error" ? 0 : 1);
+  }
+});
+
+test("selection drift to hybrid inputs requires confirmation of the refreshed plan", async () => {
+  const catalog = hedgeCatalog();
+  const epoch: `sha256:${string}` = `sha256:${"9".repeat(64)}`;
+  const fresh = { ...catalog, catalog_epoch: epoch,
+    entries: catalog.entries.map(entry => ({ ...entry, catalog_epoch: epoch })) };
+  const hybrid = parseReplaySegmentPreparePlan({ ...segmentPlanResponse(), hedge_inputs: {
+    ...exactHedgeInputPlan(), capability_state: "AVAILABLE_APPROX",
+    reason: "PINNED_HYBRID_PUBLIC_AND_SIMULATION_INPUTS",
+    public_fidelity: "VERSIONED_HYBRID_PUBLIC_INPUT", fallback_applied: true,
+    historical_l2_ref: null,
+  } });
+  let selected = 0;
+  const api = {
+    async marketCatalog() { return fresh; },
+    async planInitialMarket(_id: string, selection: { catalog_epoch: string }) {
+      return selection.catalog_epoch === epoch ? hybrid : parseReplaySegmentPreparePlan(segmentPlanResponse());
+    },
+    async selectInitialMarket(_id: string, selection: { catalog_epoch: string; hedge_public_history_ref: unknown }) {
+      selected += 1;
+      if (selection.catalog_epoch !== epoch) throw new ReplayV2ApiError("CATALOG_EPOCH_MISMATCH", "stale select", { status: 409 });
+      assert.deepEqual(selection.hedge_public_history_ref, hybrid.hedge_inputs.hedge_public_history_ref);
+      return parseTrainingRunMarketSelectionResponse({ protocol: "replay.v3", initialized: true, run: runCard() });
+    },
+  };
+  await assert.rejects(selectReplayInitialMarketWithEpochRetry({
+    api, runId: "run-new-hybrid", catalog, entry: catalog.entries[0]!,
+  }), reason => {
+    assert.ok(reason instanceof ReplayInitialMarketDowngradeRequired);
+    assert.equal(reason.catalog, fresh);
+    assert.equal(reason.entry, fresh.entries[0]);
+    assert.match(reason.message, /HEDGE_HYBRID/);
+    return true;
+  });
+  assert.equal(selected, 1, "the refreshed hybrid selection must wait for the explicit prompt");
+  await selectReplayInitialMarketWithEpochRetry({
+    api, runId: "run-new-hybrid", catalog: fresh, entry: fresh.entries[0]!, allowHedgeHybrid: true,
+  });
+  assert.equal(selected, 2);
 });
 
 async function settle(): Promise<void> {

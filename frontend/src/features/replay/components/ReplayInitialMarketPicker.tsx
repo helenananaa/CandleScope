@@ -7,6 +7,7 @@ import type { TrainingRunCard } from "../replayV2Types.js";
 import { defaultReplayV2Api, ReplayV2ApiError } from "../replayV2Api.js";
 import {
   prepareReplayInitialMarketSelection,
+  ReplayInitialMarketDowngradeRequired,
   selectReplayInitialMarketWithEpochRetry,
 } from "../replayInitialMarket.js";
 import {
@@ -192,6 +193,8 @@ export default function ReplayInitialMarketPicker({
     setError(null);
     if (!confirmed) setDowngrade(null);
     try {
+      let activeCatalog = catalog;
+      let activeEntry = entry;
       if (!confirmed) {
         const prepared = await prepareReplayInitialMarketSelection({
           api: defaultReplayV2Api,
@@ -199,8 +202,11 @@ export default function ReplayInitialMarketPicker({
           catalog,
           entry,
         });
+        activeCatalog = prepared.catalog;
+        activeEntry = prepared.entry;
+        setCatalog(activeCatalog);
         if (prepared.downgradeConfirmation !== null) {
-          setDowngrade({ entry, message: prepared.downgradeConfirmation });
+          setDowngrade({ entry: activeEntry, message: prepared.downgradeConfirmation });
           setSelecting(null);
           return;
         }
@@ -208,21 +214,25 @@ export default function ReplayInitialMarketPicker({
       const result = await selectReplayInitialMarketWithEpochRetry({
         api: defaultReplayV2Api,
         runId: run.run_id,
-        catalog,
-        entry,
+        catalog: activeCatalog,
+        entry: activeEntry,
+        allowHedgeHybrid: confirmed,
       });
       setCatalog(result.catalog);
       setDowngrade(null);
       onInitialized(result.response.run);
     } catch (reason) {
+      if (reason instanceof ReplayInitialMarketDowngradeRequired) {
+        setCatalog(reason.catalog);
+        setDowngrade({ entry: reason.entry, message: reason.message });
+        setSelecting(null);
+        return;
+      }
       const message = reason instanceof ReplayV2ApiError
         ? `${reason.code}: ${reason.message}`
         : reason instanceof Error ? describeError(reason, reason.message) : t("replay.picker.initFailed");
       setError(message);
       setSelecting(null);
-      if (reason instanceof ReplayV2ApiError && reason.code === "CATALOG_EPOCH_MISMATCH") {
-        loadCatalog();
-      }
     }
   };
 

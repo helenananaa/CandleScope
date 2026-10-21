@@ -19,6 +19,7 @@ import {
   replayBoundClosingCapacity,
   replayOrderSideCapacity,
   replayQuantityForShare,
+  replayOrderIsolatedAllocation,
 } from "../replayOrderSizing.js";
 import { replayOrderCtaState } from "../replayOrderCtaState.js";
 import { createReplayOrderAdvisoryScheduler } from "../replayOrderAdvisoryScheduler.js";
@@ -484,6 +485,13 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
   const activePositionSide: "LONG" | "SHORT" = reduceOnly
     ? side === "BUY" ? "SHORT" : "LONG"
     : side === "BUY" ? "LONG" : "SHORT";
+  const isolatedAllocation = replayOrderIsolatedAllocation({
+    marginMode: contract?.margin_mode,
+    positionMode,
+    allocations: contract?.isolated_allocations,
+    trackId: selectedTrackId,
+    positionSide: activePositionSide,
+  });
   const selectedPosition = portfolio?.positions.find((item) => (
     item.track_id === selectedTrackId
     && (positionMode !== "HEDGE" || item.position_side === activePositionSide)
@@ -519,11 +527,16 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
       ? recordText(selectedTrack?.account ?? {}, "available_equity", "")
       : portfolio?.available_equity,
   );
+  const tradePlanEligible = !reduceOnly && (orderType === "MARKET" || orderType === "LIMIT");
+  const previewPositionIntent = !reduceOnly
+    && (orderType === "MARKET" || (tradePlanEnabled && tradePlanEligible)) ? "OPEN" : "NET";
   const maxQuantitySizingKey = JSON.stringify([
     selectedTrackId,
+    isolatedAllocation,
     previewSide,
     orderType,
     reduceOnly,
+    previewPositionIntent,
     reduceOnly ? positionQty : null,
   ]);
   const rebasedMaxQuantity = maxQuantitySnapshot?.sizingKey === maxQuantitySizingKey
@@ -559,7 +572,6 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
     if (sizeMode === "NOTIONAL") return quantityForStep(input / referencePrice, quantityStep);
     return quantityForStep((input * leverage) / referencePrice, quantityStep);
   })();
-  const tradePlanEligible = !reduceOnly && (orderType === "MARKET" || orderType === "LIMIT");
   const tradePlanDraft = useMemo<ReplayTradePlanDraft | null>(() => (
     tradePlanEnabled && tradePlanEligible
       ? {
@@ -582,7 +594,6 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
   ]);
   const previewOrder = viewer.actions.previewOrder;
   const orderCapacity = viewer.actions.orderCapacity;
-  const previewPositionIntent = orderType === "MARKET" && !reduceOnly ? "OPEN" : "NET";
   const cursorReady = store.virtualTimeMs !== null;
   const cursorAdvisoryEpoch = JSON.stringify([
     store.revision,
@@ -592,6 +603,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
   const previewKey = JSON.stringify([
     cursorAdvisoryEpoch,
     selectedTrackId,
+    isolatedAllocation,
     previewPositionIntent,
     clientOrderId,
     previewSide,
@@ -606,9 +618,11 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
   ]);
   const maxQuantityContextKey = JSON.stringify([
     selectedTrackId,
+    isolatedAllocation,
     previewSide,
     orderType,
     reduceOnly,
+    previewPositionIntent,
     price,
     leverage,
     reduceOnly ? positionQty : null,
@@ -691,7 +705,8 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
       if (scheduled && !settled) capacityScheduler.forget(maxQuantityContextKey);
     };
   // Cursor-driven equity is deliberately sampled only when this draft context
-  // changes. The cached cap is conservatively rebased between those requests.
+  // changes, including explicit funding of the selected isolated leg. The
+  // cached cap is conservatively rebased between those requests.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     capacityScheduler,
@@ -991,7 +1006,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
       leverage: String(leverage),
       ...(positionMode === "HEDGE" ? { position_side: targetPositionSide } : {}),
     };
-    const intent = orderType === "MARKET" && !reduceOnly ? "OPEN" : "NET";
+    const intent = previewPositionIntent;
     const planForSide = tradePlanEnabled && tradePlanEligible && !reduceOnly
       ? tradePlanDraft
       : null;
@@ -1014,18 +1029,29 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
       leverage: String(leverage),
       ...(positionMode === "HEDGE" ? { position_side: targetPositionSide } : {}),
     };
+    const sideAllocation = replayOrderIsolatedAllocation({
+      marginMode: contract?.margin_mode,
+      positionMode,
+      allocations: contract?.isolated_allocations,
+      trackId: selectedTrackId,
+      positionSide: targetPositionSide,
+    });
     const sideSizingKey = JSON.stringify([
       selectedTrackId,
+      sideAllocation,
       sideForContext,
       orderType,
       reduceOnly,
+      intent,
       reduceOnly ? targetPositionQty : null,
     ]);
     const sideContextKey = JSON.stringify([
       selectedTrackId,
+      sideAllocation,
       sideForContext,
       orderType,
       reduceOnly,
+      intent,
       price,
       leverage,
       reduceOnly ? targetPositionQty : null,
@@ -1378,8 +1404,8 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
 
           <dl className="replay-order-preview" aria-label={t("replay.paper.orderPreview")}>
             <div><dt>{t("replay.paper.notionalVal")}</dt><dd>{previewPending ? t("replay.paper.checking") : `${formatDecimal(preview?.estimated_notional, 2)} ${settlementAsset}`}</dd></div>
-            <div><dt>{t("replay.paper.orderBudget")}</dt><dd>{formatDecimal(preview?.reserved_margin, 2)} {settlementAsset}</dd></div>
-            <div><dt>{t("replay.paper.feeCap")}</dt><dd>{formatDecimal(preview?.estimated_fee, 4)} {settlementAsset}</dd></div>
+            <div><dt>{t("replay.paper.orderBudget")}</dt><dd>{formatDecimal(preview?.reserved_margin, 8)} {settlementAsset}</dd></div>
+            <div><dt>{t("replay.paper.feeCap")}</dt><dd>{formatDecimal(preview?.estimated_fee, 8)} {settlementAsset}</dd></div>
           </dl>
 
           <details className="replay-trade-plan replay-disclosure" open={tradePlanEnabled && tradePlanEligible}>
@@ -1860,7 +1886,12 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
                     )}
                   </dl>
                   {!selected && (
-                    <button type="button" disabled={viewer.viewerPending} onClick={() => void viewer.actions.selectTrack(item.track_id).catch(() => undefined)}>
+                    <button type="button" disabled={viewer.viewerPending} onClick={() => {
+                      const activate = viewer.actions.openTrack
+                        ? viewer.actions.openTrack(item.track_id, "current")
+                        : viewer.actions.selectTrack(item.track_id);
+                      void activate.catch(() => undefined);
+                    }}>
                       {t("replay.wb.switchTrack")}
                     </button>
                   )}
