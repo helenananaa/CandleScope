@@ -1,4 +1,8 @@
 export const workbenchEnglish = {
+  "native.orderComment": "Order comment",
+  "native.orderAlertMessage": "Fill alert message",
+  "native.orderAlertEnabled": "Fill alert enabled",
+  "native.orderFillRole": "Fill leg",
   "native.cost.title": "Cost scenarios",
   "native.cost.help": "Each scenario reruns the strategy and account independently. Costs can change trading decisions. Use these results to check robustness.",
   "native.cost.enable": "Run independent cost scenarios",

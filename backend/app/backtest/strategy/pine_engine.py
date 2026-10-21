@@ -210,6 +210,8 @@ class PineEngineProvider:
             "parameters": dict(context.get("parameters") or {}),
             **({"execution_schedule_contract": SCHEDULE_CONTRACT} if self.scheduled else {}),
             **({"closing_ticks": True} if self.process_on_close else {}),
+            **({"order_metadata_contract": self.runtime_identity["order_metadata_contract"]}
+               if self.order_mode and self.runtime_identity.get("order_metadata_contract") else {}),
             **({"risk_contract": STOP_CONTRACT if self.stop_functions else RISK_CONTRACT} if self.entry_risk else {}),
         }
         from app.backtest.errors import BacktestError
@@ -380,6 +382,8 @@ class PineEngineProvider:
             if warmup or (not intents and not self.entry_risk):
                 return None
             payload = {"contract": ORDER_CONTRACT, "intents": intents, "pyramiding": result.get("pyramiding", 1)}
+            if self.wire.get("order_metadata_contract"):
+                payload["order_metadata_contract"] = self.wire["order_metadata_contract"]
             if self.entry_risk:
                 payload["risk_rules"] = self.risk_configuration
             return StrategyOutput(frame.sequence, "ORDER_INTENT", payload, self.state_hash, canonical_hash(payload))

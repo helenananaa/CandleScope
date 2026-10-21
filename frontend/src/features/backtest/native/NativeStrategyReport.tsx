@@ -120,6 +120,8 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
   const preferred = ["side", "direction", "entryTime", "entry_time", "entry_time_ms", "entryPrice", "entry_price", "exitTime", "exit_time", "exit_time_ms", "exitPrice", "exit_price", "qty", "quantity", "profit", "net_pnl"];
   const columns = [...preferred.filter((key) => sourceColumns.includes(key)), ...sourceColumns.filter((key) => !preferred.includes(key))];
   const labels: Record<string, string> = {
+    pine_comment: t("native.orderComment"), pine_alert_message: t("native.orderAlertMessage"),
+    pine_alert_enabled: t("native.orderAlertEnabled"), pine_fill_role: t("native.orderFillRole"),
     side: t("chartTester.result.side"), direction: t("chartTester.result.side"), entry_time_ms: t("backtest.openTime"), exit_time_ms: t("backtest.closeTime"),
     entry_price: t("chartTester.result.entry"), exit_price: t("chartTester.result.exit"), net_pnl: t("strategyDock.pnl"),
     entryTime: t("backtest.openTime"), entry_time: t("backtest.openTime"),

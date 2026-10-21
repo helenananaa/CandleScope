@@ -30,6 +30,7 @@ def host_identity():
     files.extend(Path(__file__).with_name(name) for name in ("pine_risk_state.py", "pine_risk_stops.py"))
     files.append(Path(__file__).with_name("pine_workbench.py"))
     files.append(Path(__file__).with_name("pine_sizing.py"))
+    files.append(Path(__file__).with_name("pine_order_metadata.py"))
     files.append(Path(__file__).with_name("external_support.py"))
     files.append(Path(__file__).with_name("pine_bar_clock.py"))
     files.append(Path(__file__).with_name("pine_workbench_v2.py"))
@@ -134,6 +135,7 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
     accounts,history,latest=[],[],{}
     orders = ExternalOrders(kernel, price_tick=settings.get("price_tick"),
                             fidelity="PINE_BAR_PATH" if wire.get("pine_bar_path_contract") else fidelity)
+    orders.negotiate_metadata(wire.get("order_metadata_contract"))
     clock,last_request,cursor={},None,0
     if resume is not None:
         from .external_replay import validate_state
@@ -213,6 +215,7 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
         from .external_market import run_print_clock
         clock=run_print_clock(kernel,wire,strategy,cancelled,state=clock,target=target)
     report = json.loads(json.dumps(asdict(kernel.result()), default=str))
+    from .pine_order_metadata import report_fields, enrich_orders
     result={"execution_mode": "CANDLESCOPE", "account_authority": "candlescope", "identity": wire["identity"],
             "account_model": kernel.account_model,
             "evaluation_contract": latest.get("evaluation_contract", "historical-prefix/1"),
@@ -220,10 +223,12 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
             "fill_model": kernel.fill_policy, "fidelity": ("AGG_TRADE_TAPE" if fidelity == "TRADE_TAPE" and kernel.source_kind == "AGG_TRADE" else fidelity),
             "trades": [{**fill, "time": fill["event_time_ms"] / 1000,
                         "script_order_id": orders.bindings[fill["order_id"]][0],
-                        "closed_entries": allocation["closed"], "opened_entry": allocation["opened"]}
+                        "closed_entries": allocation["closed"], "opened_entry": allocation["opened"],
+                        **report_fields(allocation.get("annotation", {}))}
                        for fill, allocation in zip(report["fills"], orders.allocations, strict=True)],
             "closed_trades": closed_trades(report["fills"]),
-            "orders": [{**order,"script_order_id":orders.bindings[order["order_id"]][0]} for order in report["orders"]],
+            "orders": enrich_orders([{**order,"script_order_id":orders.bindings[order["order_id"]][0]} for order in report["orders"]],
+                orders.report().get("order_annotations", {})),
             "position": report["ledger"]["account"],
             "equity": [{"time": row["event_time_ms"] / 1000, "value": float(row["equity"])} for row in report["equity_curve"]],
             "graphics": latest.get("graphics", []), "diagnostics": report["rejected"],

@@ -70,6 +70,11 @@ class PineHostPlanner(PyneHostPlanner):
         if not isinstance(intents, list) or len(intents) > 64:
             raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "at most 64 Pine order intents")
         self.orders.feedback()
+        from app.backtest.pine_order_metadata import CONTRACT as METADATA_CONTRACT
+        contract = payload.get("order_metadata_contract")
+        if contract is not None and contract != METADATA_CONTRACT:
+            raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "unknown Pine metadata contract")
+        self.orders.negotiate_metadata(contract)
         self.orders.configure(payload["pyramiding"])
         if "risk_rules" in payload:
             self.stop_rules.configure(payload["risk_rules"])

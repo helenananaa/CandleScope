@@ -20,6 +20,7 @@ MODULES = (
     "test_chart_pine_v2_bar", "test_pine_workbench_v2_bar", "test_pine_workbench_preparation",
     "test_pine_legacy_market_identity",
     "test_pine_default_sizing", "test_pine_sizing_contract",
+    "test_pine_order_metadata", "test_pine_metadata_execution",
     "test_pine_workbench_contract", "test_pine_workbench_control", "test_chart_pine_risk_stops",
     "test_chart_pine_liquidation", "test_v2_margin_repricing", "test_pine_workbench_costs",
     "test_pine_cost_sensitivity", "test_workbench_default_upgrade", "test_external_replay",
@@ -30,6 +31,7 @@ SCHEMAS = {
     "EXTERNAL_ORDER_SCHEMA_VERSION": 2, "EXTERNAL_CLOSING_TICK_SCHEMA_VERSION": 1,
     "STRATEGY_RISK_CONFIGURATION_SCHEMA_VERSION": 1, "EXTERNAL_SCHEDULE_SCHEMA_VERSION": 1,
     "EXTERNAL_SIZING_SCHEMA_VERSION": 1,
+    "EXTERNAL_ORDER_METADATA_SCHEMA_VERSION": 1,
 }
 PROBE = """
 import hashlib, json

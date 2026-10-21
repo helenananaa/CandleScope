@@ -17,6 +17,7 @@ class ExternalOrders:
         self.staged_bindings = {}
         self.lots, self.allocations = [], []
         self.pyramiding = None
+        self.metadata_contract = None
         from .pine_entry_risk import PineEntryRisk
         self.entry_risk = PineEntryRisk()
         self.risk_stops = None
@@ -42,6 +43,12 @@ class ExternalOrders:
         if self.pyramiding is not None and self.pyramiding != limit:
             raise BacktestError("EXTERNAL_NONCAUSAL_PREFIX", "pyramiding changed during the run")
         self.pyramiding = limit
+
+    def negotiate_metadata(self, contract):
+        from .pine_order_metadata import CONTRACT
+        if contract not in (None, CONTRACT) or (self.metadata_contract is not None and contract != self.metadata_contract):
+            raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine order metadata contract changed")
+        self.metadata_contract = contract
 
     def path_levels(self):
         """Visit a dormant trailing activation before ratcheting its watermark."""
@@ -230,9 +237,11 @@ class ExternalOrders:
                     self.cancel_order(order, "EXTERNAL_ENTRY_CLOSED")
         if self.owned() != after or after != self.kernel.account.position_qty:
             raise BacktestError("EXTERNAL_ACCOUNT_MISMATCH", "entry allocations differ from host position")
+        from .pine_order_metadata import fill_annotation
+        annotation = fill_annotation(detail.get("metadata"), detail.get("metadata_role", "close"))
         self.allocations.append({"order_id":order_id,"sequence":fill["sequence"],"closed":closed,
             "opened": {"entry_id":script_id,"qty":str(opening)} if opening else None,
-            "position_qty":str(after)})
+            "position_qty":str(after), **({"annotation": annotation} if annotation else {})})
 
     def _apply_oca(self, filled, detail, qty):
         group = detail.get("oca_name"), detail.get("oca_type", "none")
@@ -294,6 +303,9 @@ class ExternalOrders:
             return available * Decimal(str(intent.get("qty_percent") or 100)) / 100
         for intent in intents:
             action, script_id = intent["action"], intent["id"]
+            from .pine_order_metadata import declaration
+            metadata = declaration(intent, self.metadata_contract)
+            annotations = {"metadata": metadata} if metadata is not None else {}
             if action in {"cancel", "cancel_all"}:
                 cancel(script_id if action == "cancel" else None)
                 continue
@@ -329,6 +341,7 @@ class ExternalOrders:
                 if (oca_name is not None and not isinstance(oca_name,str)) or oca_type not in {"none","cancel","reduce"}:
                     raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "invalid script OCA group")
                 staged.append((order,script_id,{"kind":action,"remaining":opening,"direction":direction,
+                    **annotations, **({"metadata_role": action} if annotations else {}),
                     **({"oca_name":oca_name,"oca_type":oca_type} if oca_name and oca_type != "none" else {})}))
                 continue
             trail_watermark = None
@@ -364,7 +377,8 @@ class ExternalOrders:
                 continue
             qty = quantity(intent, abs(position))
             base = {"side":"SELL" if position > 0 else "BUY","qty":str(qty),"reduce_only":True}
-            detail = {"kind":"exit" if action == "exit" else "close","owner":owner,"remaining":qty}
+            detail = {"kind":"exit" if action == "exit" else "close","owner":owner,"remaining":qty,
+                **annotations, **({"metadata_role": "close"} if annotations else {})}
             if action != "exit":
                 staged.append(({**base,"type":"MARKET"},script_id,detail))
             else:
@@ -372,6 +386,8 @@ class ExternalOrders:
                 for name,kind,distance in (("limit","LIMIT","profit"),("stop","STOP","loss")):
                     if intent.get(name) is not None or intent.get(distance) is not None:
                         meta = dict(detail)
+                        if annotations:
+                            meta["metadata_role"] = distance
                         if intent.get(distance) is not None:
                             meta["distance"] = Decimal(str(intent[distance]))
                         price = intent.get(name)
@@ -382,6 +398,8 @@ class ExternalOrders:
                 if intent.get("trail_offset") is not None:
                     meta = {**detail,"trailing":True,"watermark":trail_watermark,"triggered":trail_triggered,
                             **{key:Decimal(str(intent[key])) for key in ("trail_price","trail_points","trail_offset") if intent.get(key) is not None}}
+                    if annotations:
+                        meta["metadata_role"] = "trailing"
                     direction = Decimal(1) if position > 0 else Decimal(-1)
                     activation = meta.get("trail_price")
                     if activation is None:
@@ -407,6 +425,7 @@ class ExternalOrders:
         return encode({"schema": "candlescope.external-orders/1", "bindings": self.bindings,
             "details": self.details, "lots": self.lots, "allocations": self.allocations,
             "pyramiding": self.pyramiding, "staged_bindings": self.staged_bindings,
+            **({"metadata_contract": self.metadata_contract} if self.metadata_contract else {}),
             **({"pine_entry_risk": self.entry_risk.configuration} if self.entry_risk.configuration is not None else {})})
 
     def restore(self, payload):
@@ -424,6 +443,12 @@ class ExternalOrders:
         if payload.get("schema") != "candlescope.external-orders/1":
             raise BacktestError("CHECKPOINT_CORRUPT", "order allocation schema differs")
         value = decode(payload)
+        self.negotiate_metadata(value.get("metadata_contract"))
+        from .pine_order_metadata import declaration, fill_annotation
+        for detail in [*value["details"].values(), *(item[1] for item in value.get("staged_bindings", {}).values())]:
+            if "metadata" in detail:
+                metadata = declaration({"action": detail["kind"], "metadata": detail["metadata"]}, self.metadata_contract)
+                fill_annotation(metadata, detail.get("metadata_role", "close"))
         if value.get("pine_entry_risk") is not None:
             self.entry_risk.configure(value["pine_entry_risk"])
         elif self.entry_risk.configuration is not None:
@@ -437,8 +462,11 @@ class ExternalOrders:
         self.feedback()
 
     def report(self):
+        annotations = {key: {"metadata": dict(detail["metadata"]), "role": detail["metadata_role"]}
+            for key, detail in self.details.items() if detail.get("metadata") is not None}
         return {"model":"HOST_NET_AVERAGE_COST_ENTRY_QUANTITY_FIFO_V1", "price_tick":None if self.price_tick is None else str(self.price_tick),
                 "open_entries":[{**lot,"qty":str(lot["qty"]),"price":str(lot["price"])} for lot in self.lots],
                 "fill_allocations":self.allocations,
+                **({"order_annotations": annotations} if annotations else {}),
                 **({"risk_contract":"candlescope.pine-entry-risk/1", "risk_configuration":self.entry_risk.configuration}
                     if self.entry_risk.configuration is not None else {})}

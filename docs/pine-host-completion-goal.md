@@ -13,6 +13,16 @@ checkout's Replay/runtime-cache work was separately committed through `83105c0f`
 
 ## Active source and runtime identities (2026-10-20)
 
+Closeout on 2026-10-21 includes default sizing and order annotations, while
+nonunit multipliers, growing requests and later tick schedulers remain future
+scope. Core annotations are committed at `f9e7ba148`; the matching fresh wheel
+passed 1,863 Python tests, 14 focused Rust checks, all-target Clippy and generated
+WASM/Node smoke. Host SDK `698dd830` fixes UTF-8 native IPC and passed all 121
+SDK tests. Annotation execution, pending cancellation, report UI and replay
+evidence are described in [Pine annotations](pine-order-metadata.md).
+The interrupted historical attempt `historical-20261020-05` is retained as
+incomplete; final closeout requires the new expanded historical receipt.
+
 - The repeatable historical profile at Host `e0ab1718` passed 307 cases, with
   zero skips and stable source/runtime/registry hashes. A subsequent lookup-side
   legacy market-identity repair passed 83 boundary checks, including a persisted

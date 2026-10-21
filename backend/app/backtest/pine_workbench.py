@@ -9,6 +9,9 @@ CONTRACT = "candlescope.pine-workbench-control/1"
 
 def freeze_control(native, plugin, wire, payload):
     identity = wire["identity"]
+    from .pine_order_metadata import CONTRACT as METADATA_CONTRACT
+    if identity.get("order_metadata_contract") == METADATA_CONTRACT:
+        wire["order_metadata_contract"] = METADATA_CONTRACT
     if identity.get("workbench_control") != CONTRACT:
         return  # Older adapters keep their existing explicit unsupported diagnostics.
     probe = {key: value for key, value in wire.items()

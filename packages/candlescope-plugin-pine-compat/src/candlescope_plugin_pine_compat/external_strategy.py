@@ -25,7 +25,7 @@ def describe():
         raise ValueError("EXTERNAL_RUNTIME_UNAVAILABLE: install external-broker/1 runtime")
     return {
         **identity(
-            "candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-external/10"
+            "candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-external/11"
         ),
         "workbench_control": "candlescope.pine-workbench-control/1",
         "external_replay": "candlescope.external-replay/1",
@@ -35,6 +35,8 @@ def describe():
            if getattr(pine_compat, "EXTERNAL_CLOSING_TICK_SCHEMA_VERSION", 0) == 1 else {}),
         "external_orders": getattr(pine_compat, "EXTERNAL_ORDER_SCHEMA_VERSION", 1),
         "external_sizing": getattr(pine_compat, "EXTERNAL_SIZING_SCHEMA_VERSION", 0),
+        **({"order_metadata_contract": "candlescope.pine-order-metadata/1"}
+           if getattr(pine_compat, "EXTERNAL_ORDER_METADATA_SCHEMA_VERSION", 0) == 1 else {}),
         "prefix_append": PREFIX_CONTRACT,
         "prefix_passes": PASSES_CONTRACT,
         "prefix_clocks": CLOCKS_CONTRACT,
@@ -129,6 +131,12 @@ def execute(request):
     accounts = [{**item, "time": item["time"] * 1000} for item in request["accounts"][start:]]
     supplied = request_environment(request)
     closing = {"closing_ticks": True} if request.get("closing_ticks") is True else {}
+    annotations = {}
+    if request.get("order_metadata_contract") is not None:
+        if (request["order_metadata_contract"] != "candlescope.pine-order-metadata/1"
+            or getattr(pine_compat, "EXTERNAL_ORDER_METADATA_SCHEMA_VERSION", 0) != 1):
+            raise ValueError("EXTERNAL_UNSUPPORTED: unknown order metadata contract")
+        annotations = {"order_metadata": True}
     try:
         if incremental:
             if _session is None:
@@ -138,6 +146,7 @@ def execute(request):
                     chart_timeframe=request["context"]["timeframe"],
                     request_bars=supplied,
                     **closing,
+                    **annotations,
                     **risk,
                     **({"scheduled": True} if "execution_schedule" in evaluations else {}),
                 )
@@ -161,6 +170,7 @@ def execute(request):
                     **evaluations,
                     request_bars=request_bars,
                     **closing,
+                    **annotations,
                     **risk,
                     **({"execution_times": clocks} if clocks is not None else {}),
                 ),

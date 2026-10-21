@@ -62,7 +62,13 @@ def build_report(
     def copy_row(item):
         return dict(item) if explanation_enabled else copy.deepcopy(dict(item))
     fills = [copy_row(item) for item in payload.get("fills") or []]
+    if pine_orders is not None:
+        from .pine_order_metadata import enrich_fills
+        fills = enrich_fills(fills, pine_orders.get("fill_allocations", []))
     orders = [copy_row(item) for item in payload.get("orders") or []]
+    if pine_orders is not None:
+        from .pine_order_metadata import enrich_orders
+        orders = enrich_orders(orders, pine_orders.get("order_annotations", {}))
     rejected_orders = [
         copy_row(item) for item in payload.get("rejected") or []
     ]
