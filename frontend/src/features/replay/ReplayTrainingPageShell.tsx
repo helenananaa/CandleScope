@@ -596,7 +596,13 @@ export default function ReplayTrainingPageShell({
   ]);
 
   const displayedSeriesStore = review === null ? viewer.seriesStore : reviewSeriesStore;
+  const ensureIndicatorViewport = review === null
+    ? indicators.actions.ensureVisibleIndicatorRange
+    : reviewIndicators.actions.ensureVisibleIndicatorRange;
   const handleVisibleRangeChange = useCallback((range: ChartSurfaceVisibleRange) => {
+    // Linked/restore ranges settle on the next draw. Also accept the persisted
+    // range so display math follows programmatic navigation and review views.
+    ensureIndicatorViewport(range);
     if (integrityRuntime.review !== null) return;
     runtime.marketData.actions.onVisibleRangeChange(range);
     cell?.onVisibleRangeChange(range);
@@ -608,7 +614,7 @@ export default function ReplayTrainingPageShell({
     if (range.barSpacing !== undefined) value.bar_spacing_ppm = Math.round(range.barSpacing * 1_000_000);
     if (range.rightOffset !== undefined) value.right_offset_ppm = Math.round(range.rightOffset * 1_000_000);
     integrityRuntime.actions.offerViewAction("VISIBLE_RANGE", "main-chart-range", value);
-  }, [cell, integrityRuntime.actions, integrityRuntime.review, runtime.marketData.actions]);
+  }, [cell, ensureIndicatorViewport, integrityRuntime.actions, integrityRuntime.review, runtime.marketData.actions]);
 
   useEffect(() => {
     if (cell?.active === false) return;
@@ -967,6 +973,7 @@ export default function ReplayTrainingPageShell({
       tickMarkFormatter={formatChartTick}
       tickMarkMaxCharacterLength={replayTimeAxisMaxCharacterLength(publicTimePolicy)}
       dataMeta={viewerDataMeta}
+      onViewportRangeChange={ensureIndicatorViewport}
       onVisibleRangeChange={handleVisibleRangeChange}
       onUserViewportRangeChange={review === null ? cell?.onUserViewportRangeChange ?? null : null}
       drawingTool={review === null ? drawings.view.drawingTool : null}

@@ -494,6 +494,9 @@ test("v2 composition reuses the shared indicator product without hosted/cache re
   assert.match(cells, /useReplaySharedIndicatorRuntime\(runtime, viewer, scope, persistence\)/);
   assert.match(cells, /controlled: true/);
   assert.match(workspace, /<IndicatorPanel/);
+  assert.match(workspace, /const ensureIndicatorViewport = review === null[\s\S]*indicators\.actions\.ensureVisibleIndicatorRange[\s\S]*reviewIndicators\.actions\.ensureVisibleIndicatorRange/);
+  assert.match(workspace, /onViewportRangeChange=\{ensureIndicatorViewport\}/);
+  assert.match(workspace, /ensureIndicatorViewport\(range\);[\s\S]*if \(integrityRuntime\.review !== null\) return/);
   assert.match(workspace, /allowedScriptLanguages=\{\["pyne", "pine", "frontend-js"\]\}/);
   assert.doesNotMatch(workspace, /ReplayIndicatorPanel/);
   for (const prop of [

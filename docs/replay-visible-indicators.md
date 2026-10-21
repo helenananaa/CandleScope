@@ -10,6 +10,12 @@ back to a bounded recent window before the chart reports its viewport. Only
 builtin display jobs use this selection. Caller-provided script inputs retain
 their existing full bounded window.
 
+The replay and read-only review surfaces forward both immediate viewport events
+and the settled saved range to the indicator scheduler. The settled callback
+also covers linked/programmatic navigation, whose time coordinates become
+available on the following chart draw. A bounded hook alone is insufficient
+without these production chart connections.
+
 The server uses the same warmup budgets as live display: period minus one for
 MA/BOLL, three periods for RSI/ATR, five for EMA, and five slow periods plus
 three signal periods for MACD. This is a versioned display initialization
@@ -52,6 +58,9 @@ formula with its bounded warmup, checks exact overlapping values across pan,
 zoom, period/calendar round trips and reopen, checks forming tails/gaps/cancel,
 and confirms the legacy checkpoint table and account snapshot remain unchanged.
 Real HTTP/Node probes exercise both legacy full-origin and display clients.
+A real SingleChartPanes browser fixture checks the actual range callbacks,
+zoom-in/out/linked moves and multi-sample mouse drag before asserting bounded
+compute requests; a composition contract checks that replay/review wire them.
 The owned Chromium fixture covers real React lifecycles, continuous playback,
 rewind cancellation, controlled multi-chart restore and script-input isolation.
 Normal packaged-app cold preparation and complete-exit/restart qualification
