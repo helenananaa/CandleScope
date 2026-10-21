@@ -36,7 +36,7 @@ Development package versions do not identify the source or native binary.
 | Replay snapshot, seek, restart and transaction recovery | connected | connected | connected | connected | open | `pine-workbench-replay.md`; source/implementation identity must match frozen inputs |
 | Independent cost scenarios and unavailable-model disclosures | connected | connected | connected | connected | open | `pine-workbench-costs.md`; independent account and strategy runs, shared deadline, AUTO/SKIP |
 | Automatic BAR preparation, account-file lifecycle and retry identity | connected | connected | connected | connected | open | `test_pine_workbench_preparation.py`, `workbenchAccountInputs.test.ts`, `pine-workbench-default-upgrade.md` |
-| Fixed/cash/equity defaults from authoritative Host accounts | connected | connected | connected | connected | open | `pine-default-sizing.md`; controlled installed-worker and entry evidence, new complete historical profile pending |
+| Fixed/cash/equity defaults from authoritative Host accounts | connected | connected | connected | connected | open | `pine-default-sizing.md`; final 392-case installed-worker profile and controlled entry evidence |
 | Order comments, leg-specific alert information and alert-disable flags | connected | connected | connected | connected | open | `pine-order-metadata.md`; explicit negotiation, actual-fill binding and restore; no external notification delivery |
 | Nonunit multipliers | partial | partial | open | open | open | Stage 3; native support must not be mistaken for external-profile admission |
 | Incremental requested-context growth | partial | partial | partial | partial | open | Base external sessions retain state; growing request providers still rebase and lack scalable qualification |
@@ -132,7 +132,8 @@ passed 7,929 Rust workspace and 1,838 fresh-wheel Python checks. All 12 real
 chart/Workbench account combinations passed, plus production-panel cash/equity
 runs and stale-result disclosure. See `pine-default-sizing.md` for exact scope
 and artifact identity. The historical runner now also requires sizing schema 1
-and includes the new sizing modules; that expanded profile needs its own result.
+and includes the new sizing modules; the final annotation-worker profile below
+provides complete expanded qualification without relabeling the earlier wheel.
 At that checkpoint, order metadata, nonunit multipliers, growing requests,
 later schedulers and complete packaged application acceptance remained open.
 
@@ -141,6 +142,8 @@ through chart/Workbench actual fills, report tables and saved-prefix replay.
 Its SDK repair makes native JSON IPC explicitly UTF-8 on Windows. See
 `pine-order-metadata.md` for precise checks and source/artifact identities.
 The interrupted default-sizing profile is retained without a passing claim;
-the final expanded profile adds annotation contract and execution cases.
+the final 26-module profile at Host `236f24c0` passed all 392 cases, zero
+failures/errors/skips, with unchanged source/runtime/registry fingerprints.
+Its receipt is `output/pine-host/completion-goal/historical-20261021-closeout/receipt.json`.
 Nonunit multipliers, growing requests, scheduling and packaged/reference/resource
 gates remain separate work.

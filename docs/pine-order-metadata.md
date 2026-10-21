@@ -61,13 +61,17 @@ The core wheel SHA256 is
 Core evidence is retained in `.local/host-completion/order-metadata/`; Host,
 bridge and rebuilt SDK artifacts are retained in
 `output/pine-host/completion-goal/order-metadata/`. Failed diagnostics are kept:
-the normalized exit-slot guard, UTF-8 transport failure and two fixture
-expectations corrected to follow actual mixed exit legs / callback repetition.
+the normalized exit-slot guard, UTF-8 transport failure and fixture diagnostics
+for mixed exit legs, callback repetition and existing V2 admission requirements.
 
 The default-sizing 24-module historical attempt was interrupted with no live
 process and no complete result; its original `historical-20261020-05` receipt
-and log remain intact beside an interruption observation. The expanded final
-historical profile requires a new receipt. This controlled component entry
+and log remain intact beside an interruption observation. The final 26-module
+profile at Host `236f24c0` passed all 392 cases, zero failures/errors/skips,
+in 939.735 seconds including fingerprint checks. Source, all runtime files and
+the registry remained unchanged. Receipt:
+`output/pine-host/completion-goal/historical-20261021-closeout/receipt.json`.
+This controlled component entry
 evidence is separate from full application packaging, resource qualification
 and official TradingView output comparison. Multipliers, growing requests and
 later tick schedulers remain open in the capability ledger.

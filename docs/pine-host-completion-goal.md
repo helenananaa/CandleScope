@@ -11,7 +11,7 @@ checkpoint counts below retain their own identities and do not qualify later
 changes. The current committed cost checkpoint is `60ae8629`; the original main
 checkout's Replay/runtime-cache work was separately committed through `83105c0f`.
 
-## Active source and runtime identities (2026-10-20)
+## Current round closeout (2026-10-21)
 
 Closeout on 2026-10-21 includes default sizing and order annotations, while
 nonunit multipliers, growing requests and later tick schedulers remain future
@@ -21,7 +21,14 @@ WASM/Node smoke. Host SDK `698dd830` fixes UTF-8 native IPC and passed all 121
 SDK tests. Annotation execution, pending cancellation, report UI and replay
 evidence are described in [Pine annotations](pine-order-metadata.md).
 The interrupted historical attempt `historical-20261020-05` is retained as
-incomplete; final closeout requires the new expanded historical receipt.
+incomplete. The final profile at Host `236f24c0` passed all 392 cases, with zero
+failures/errors/skips and stable source/runtime/registry files, in 939.735 seconds
+including fingerprint checks. Receipt:
+`output/pine-host/completion-goal/historical-20261021-closeout/receipt.json`.
+This closes the current requested round; the full original Goal remains active
+and incomplete for the later capabilities and independent qualification stages.
+
+## Preceding checkpoint identities (2026-10-20)
 
 - The repeatable historical profile at Host `e0ab1718` passed 307 cases, with
   zero skips and stable source/runtime/registry hashes. A subsequent lookup-side

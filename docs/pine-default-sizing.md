@@ -1,5 +1,10 @@
 # Pine defaults from Host accounts
 
+This document preserves the default-sizing checkpoint's source/artifact identity.
+The later [annotation worker](pine-order-metadata.md) retains this sizing contract
+and passed the final 392-case historical profile on 2026-10-21. Its core/SDK/bridge
+hashes are separate from the earlier wheels named below.
+
 The development worker exposes `external_sizing: 1`, with chart adapter
 `pine-chart/6` and external adapter `pine-external/10`. It requires a core
 exporting `EXTERNAL_SIZING_SCHEMA_VERSION == 1`; package version alone cannot
@@ -56,6 +61,7 @@ The freshly built core wheel has SHA256
 `b1e0cac313b461874d702583948809f5c3fb0c72e086841ed1ecd341f3db49a4`.
 The development worker registry and bridge wheel are retained under
 `output/pine-host/completion-goal/default-sizing-candidate/`. Global activation,
-released catalogs and default desktop build pins were not changed. The new
-full historical profile must separately verify this worker and source; older
+released catalogs and default desktop build pins were not changed. Its own full
+profile attempt was interrupted and retained; final complete qualification uses
+the later annotation worker's matching sources and 392-case receipt. Older
 313-case evidence belongs to the preceding fixed-default worker.
