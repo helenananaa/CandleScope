@@ -362,9 +362,20 @@ def test_requested_inputs_and_imports_restore_without_revealing_future_context_r
         state=service._host_state(key)
     request=state["last_request"]
     assert len(request["bars"])==2
-    contexts=([row for group in request["execution_passes"] for item in group for row in item.get("request_data",[])]
-        if callbacks else request["contexts"])
-    assert contexts and all(bar["time"]<120 for context in contexts for bar in context["bars"])
+    if request.get("request_update_contract") == "candlescope.pine-request-updates/1":
+        assert request["contexts"] and all(not context["bars"] for context in request["contexts"])
+        observations=([dict(observed_at_ms=item["request_observed_at_ms"],updates=item["request_updates"])
+                       for group in request["execution_passes"] for item in group]
+                      if callbacks else request["request_updates"])
+        updates=[item for observation in observations for item in observation["updates"]]
+        assert [(item["bar"]["time"],item["bar"]["close"],item["available_at_ms"]) for item in updates]==[(0,100,119999)]
+        assert all(item["available_at_ms"]<=observation["observed_at_ms"]<=119999
+                   for observation in observations for item in observation["updates"])
+        assert state["clock"]["request_feed"]["cursors"]==[1]
+    else:
+        contexts=([row for group in request["execution_passes"] for item in group for row in item.get("request_data",[])]
+            if callbacks else request["contexts"])
+        assert contexts and all(bar["time"]<120 for context in contexts for bar in context["bars"])
     saved=service.snapshot(key,first["revision"])
     service.command(key,saved["revision"],"seek",6)
     later=settle(service,key)

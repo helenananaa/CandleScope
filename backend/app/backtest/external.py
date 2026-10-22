@@ -6,6 +6,7 @@ No native fills are accepted. The kernel remains the only accounting authority.
 from __future__ import annotations
 
 from dataclasses import asdict
+from copy import deepcopy
 from decimal import Decimal
 import json
 import time
@@ -36,6 +37,7 @@ def host_identity():
     files.append(Path(__file__).with_name("pine_workbench_v2.py"))
     files.append(Path(__file__).with_name("native_contracts.py"))
     files.append(Path(__file__).with_name("pine_contract_metadata.py"))
+    files.append(Path(__file__).with_name("pine_request_updates.py"))
     files.append(Path(__file__).with_name("workbench_sensitivity.py"))
     for path in files:
         checksum.update(path.name.encode())
@@ -165,6 +167,12 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
         last_request=request
         return runner(plugin,request,**kwargs)
 
+    from .pine_request_updates import from_wire as requested_feed_from_wire, validate_replay as validate_requested_replay
+    request_feed = requested_feed_from_wire(wire) if not wire.get("fill_recalculation") else None
+    request_groups = deepcopy((last_request or {}).get("request_updates", [])) if request_feed is not None else []
+    if request_feed is not None and resume is not None:
+        validate_requested_replay(request_feed, clock.get("request_feed"), request_groups)
+
     def strategy(_window, event):
         nonlocal latest
         if cancelled.is_set():
@@ -181,8 +189,15 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
         request = {**{key: value for key, value in wire.items() if key != "execution_events"}, "bars": wire["bars"][:count], "accounts": accounts}
         if "execution_times" in wire:
             request["execution_times"] = wire["execution_times"][:count]
-        request["contexts"] = visible_contexts(wire, interval.next_ms(wire["bars"][count - 1]["time"] * 1000))
+        boundary = interval.next_ms(wire["bars"][count - 1]["time"] * 1000)
+        if request_feed is not None:
+            request_groups.append(dict(observed_at_ms=boundary - 1, updates=request_feed.advance(boundary - 1)))
+            request.update(contexts=request_feed.empty_contexts(), request_updates=request_groups)
+        else:
+            request["contexts"] = visible_contexts(wire, boundary)
         latest = evaluate(plugin, request, cancelled=cancelled, timeout=max(0.1, deadline - time.monotonic()))
+        if request_feed is not None:
+            clock["request_feed"] = request_feed.snapshot()
         if latest.get("contract") != "external-broker/1" or latest.get("identity") != wire["identity"] or latest.get("account_authority") != "candlescope" or latest.get("execution_mode") != "CANDLESCOPE":
             raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "external runtime returned the wrong account contract")
         if latest.get("raw_output", {}).get("strategy"):
@@ -217,6 +232,8 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
     else:
         from .external_market import run_print_clock
         clock=run_print_clock(kernel,wire,strategy,cancelled,state=clock,target=target)
+    if request_feed is not None:
+        clock["request_feed"] = request_feed.snapshot()
     report = json.loads(json.dumps(asdict(kernel.result()), default=str))
     from .pine_order_metadata import report_fields, enrich_orders
     result={"execution_mode": "CANDLESCOPE", "account_authority": "candlescope", "identity": wire["identity"],

@@ -13,6 +13,7 @@ from .errors import BacktestError
 
 SCHEDULE_CONTRACT = "candlescope.pine-execution-schedule/1"
 PREFIX_SCHEDULE_CONTRACT = "candlescope.pine-prefix-schedule/1"
+REQUEST_UPDATE_CONTRACT = "candlescope.pine-request-updates/1"
 
 
 class SessionWorker:
@@ -35,6 +36,10 @@ class SessionWorker:
         self.supported = True if evaluator else self.request({**wire, "operation": "open"}, cancelled).get("supported") is True
 
     def request(self, payload, cancelled, timeout=120):
+        if payload.get("request_updates") is not None or payload.get("request_update_contract") is not None:
+            if (self.identity.get("request_update_contract") != REQUEST_UPDATE_CONTRACT
+                    or payload.get("request_update_contract") != REQUEST_UPDATE_CONTRACT):
+                raise BacktestError("EXTERNAL_UNSUPPORTED", "Pine requested updates were not negotiated")
         if payload.get("execution_schedule") is not None or payload.get("execution_schedule_contract") is not None:
             if (self.identity.get("execution_schedule_contract") != SCHEDULE_CONTRACT
                     or payload.get("execution_schedule_contract") != SCHEDULE_CONTRACT
@@ -80,6 +85,8 @@ class SessionWorker:
                     raise BacktestError("NATIVE_IDENTITY_MISMATCH", "unexpected session runtime")
                 if payload.get("execution_schedule") is not None and result.get("execution_schedule_contract") != SCHEDULE_CONTRACT:
                     raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine execution schedule acknowledgement missing")
+                if payload.get("request_update_contract") is not None and result.get("request_update_contract") != REQUEST_UPDATE_CONTRACT:
+                    raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine requested-update acknowledgement missing")
                 return result
         except Exception:
             self.close()
@@ -94,6 +101,7 @@ class SessionWorker:
         bars, accounts, passes = payload.get("bars"), payload.get("accounts"), payload.get("execution_passes")
         clocks = payload.get("execution_times")
         schedule = payload.get("execution_schedule")
+        updates = payload.get("request_updates")
         if (not isinstance(bars, list) or not isinstance(accounts, list) or len(bars) != len(accounts)
                 or any(payload.get(key) for key in ("libraries", "magnifier"))
                 or (clocks is not None and (self.identity.get("prefix_clocks") != "candlescope.pine-prefix-clocks/1"
@@ -101,14 +109,17 @@ class SessionWorker:
                 or (passes is not None and (self.identity.get("prefix_passes") != "candlescope.pine-prefix-passes/1"
                     or not isinstance(passes, list) or len(passes) != len(bars)))
                 or (schedule is not None and (self.identity.get("prefix_schedule") != PREFIX_SCHEDULE_CONTRACT
-                    or not isinstance(schedule, list) or len(schedule) != len(bars)))):
+                    or not isinstance(schedule, list) or len(schedule) != len(bars)))
+                or (updates is not None and (self.identity.get("request_update_contract") != REQUEST_UPDATE_CONTRACT
+                    or payload.get("request_update_contract") != REQUEST_UPDATE_CONTRACT
+                    or not isinstance(updates, list) or len(updates) != len(bars)))):
             self._prefix_state = None
             return payload
-        static = {key: value for key, value in payload.items() if key not in {"bars", "accounts", "execution_passes", "execution_times", "execution_schedule"}}
+        static = {key: value for key, value in payload.items() if key not in {"bars", "accounts", "execution_passes", "execution_times", "execution_schedule", "request_updates"}}
         previous = self._prefix_state
-        self._prefix_state = deepcopy((static, bars, accounts, passes, clocks, schedule))
+        self._prefix_state = deepcopy((static, bars, accounts, passes, clocks, schedule, updates))
         if previous is not None:
-            old_static, old_bars, old_accounts, old_passes, old_clocks, old_schedule = previous
+            old_static, old_bars, old_accounts, old_passes, old_clocks, old_schedule, old_updates = previous
             count = len(old_bars)
             stable_passes = passes is None and old_passes is None or (passes is not None and old_passes is not None
                 and passes[:count] == old_passes and all(group and group[-1].get("confirmed") is True for group in old_passes))
@@ -117,12 +128,15 @@ class SessionWorker:
             stable_schedule = schedule is None and old_schedule is None or (
                 schedule is not None and old_schedule is not None and schedule[:count] == old_schedule
                 and all(group and group[-1].get("evaluation", {}).get("confirmed") is True for group in old_schedule))
+            stable_updates = updates is None and old_updates is None or (
+                updates is not None and old_updates is not None and updates[:count] == old_updates)
             if (static == old_static and len(bars) > count and bars[:count] == old_bars
-                    and accounts[:count] == old_accounts and stable_passes and stable_clocks and stable_schedule):
+                    and accounts[:count] == old_accounts and stable_passes and stable_clocks and stable_schedule and stable_updates):
                 return {"operation": "append_prefix", "prefix_base": count,
                         "bars": bars[count:], "accounts": accounts[count:],
                         **({"execution_passes": passes[count:]} if passes is not None else {}),
                         **({"execution_schedule": schedule[count:]} if schedule is not None else {}),
+                        **({"request_updates": updates[count:]} if updates is not None else {}),
                         **({"execution_times": clocks[count:]} if clocks is not None else {})}
         return payload
 

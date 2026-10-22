@@ -19,6 +19,10 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
     target=len(wire["bars"]) if target is None else target
     groups,accounts,history,latest=(state.get(name,default) for name,default in
         (("groups",[]),("accounts",[]),("history",[]),("latest",{})))
+    from .pine_request_updates import from_wire, pass_observations, validate_replay
+    request_feed = from_wire(wire)
+    if request_feed is not None and state:
+        validate_replay(request_feed, state.get("request_feed"), pass_observations(groups, scheduled=False))
     cursor,visible,active_event=state.get("bar_cursor",0),None,None
     last_sequence,event_cursor=state.get("last_sequence",0),state.get("event_cursor",0)
     end=interval.next_ms(wire["bars"][target-1]["time"]*1000)
@@ -50,7 +54,10 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
             # A fill at boundary-1 may be followed by more prints with the same
             # millisecond. Only the confirmed close has consumed all of them.
             boundary = event.event_time_ms + (1 if confirmed else 0)
-            groups[cursor][-1]["request_data"] = visible_contexts(wire, boundary)
+            if request_feed is not None:
+                groups[cursor][-1].update(request_observed_at_ms=boundary-1, request_updates=request_feed.advance(boundary-1))
+            else:
+                groups[cursor][-1]["request_data"] = visible_contexts(wire, boundary)
         request = {key: value for key, value in wire.items() if key != "execution_events"}
         request.update(bars=[*wire["bars"][:cursor], deepcopy(visible)], accounts=accounts, execution_passes=groups,
             contexts=[{**context, "bars": []} for context in wire.get("contexts", [])])
@@ -142,4 +149,5 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
     finally:
         kernel.execution_reporter = prior_reporter
     return latest,history,accounts,groups,{"bar_cursor":cursor,"last_sequence":last_sequence,
-        "event_cursor":event_cursor,"groups":groups,"accounts":accounts,"history":history,"latest":latest}
+        "event_cursor":event_cursor,"groups":groups,"accounts":accounts,"history":history,"latest":latest,
+        **({"request_feed":request_feed.snapshot()} if request_feed is not None else {})}

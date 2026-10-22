@@ -49,6 +49,24 @@ freshly rebuilt SDK/bridge wheels and that corrected core, with zero skips and
 stable source/runtime/registry fingerprints. Phase 2 is delivered on this PR;
 release and independent reference qualification remain open.
 
+Phase 3 is implemented and qualified. Core `207e4fa714` passes 7,966 Rust,
+1,941 installed-wheel Python and 172 tooling checks, plus formatting, strict
+Clippy, structure/host parity and generated WASM/Node checks. Its atomic requested
+observations, per-pass transcripts and transitive generic realtime-cache repair
+retain direct incremental checkpoints. The frozen Host candidate passes all
+615 selected cases across 44 modules, with zero failures/errors/skips and stable
+3,667-source/runtime/registry fingerprints, in 1,404.578 seconds. Both bridges,
+chart/Workbench clocks, immutable prefixes and durable reconstruction use the
+negotiated contract; see [requested updates](pine-request-updates.md). A fixed
+512-bar recipe reduces encoded request input from 34,819,850 to 915,663 bytes;
+this measures input transport only, not total latency or throughput. Only summary
+documents changed after the complete gate, with the delta recorded separately.
+
+Phase 4 is next: V2 historical-account trade/book combinations, then realtime
+and every-history-tick schedules. Workload, official-reference, packaged use and
+release acceptance in phase 5 remain required. Released engine/plugin locks and
+default desktop activation are unchanged.
+
 The previous round's closeout below is a historical checkpoint, not completion
 of this full Goal.
 

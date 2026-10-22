@@ -14,6 +14,8 @@ from .prefix_transport import PASSES_CONTRACT, CLOCKS_CONTRACT, PrefixInput
 from .strategy_time import engine_bars
 from .entry_risk import options as risk_options, available as risk_available, STOP_CONTRACT
 from .execution_schedule import CONTRACT as SCHEDULE_CONTRACT, capabilities as schedule_capabilities, execution_input
+from .request_updates import CONTRACT as REQUEST_UPDATE_CONTRACT, capabilities as request_update_capabilities
+from .request_updates import validate_contract as validate_request_updates, closed_schedule, eligible as request_updates_eligible
 
 _prefix = PrefixInput()
 _session = None
@@ -30,6 +32,7 @@ def describe():
         "workbench_control": "candlescope.pine-workbench-control/1",
         "external_replay": "candlescope.external-replay/1",
         **schedule_capabilities(),
+        **request_update_capabilities(),
         **({"risk_stop_contract": STOP_CONTRACT} if risk_available() else {}),
         **({"closing_tick_contract": "candlescope.pine-closing-tick/1"}
            if getattr(pine_compat, "EXTERNAL_CLOSING_TICK_SCHEMA_VERSION", 0) == 1 else {}),
@@ -73,14 +76,17 @@ def request_environment(request):
         supplied["$chart"] = {**supplied.get("$chart", {}), **grid}
     return supplied
 
-def execute(request):
+def _execute(request):
     global _session, _session_count
     appending = request.get("operation") == "append_prefix"
     request = _prefix.decode(request)
+    standalone_updates = validate_request_updates(request)
     if not appending:
         _session = None
         _session_count = 0
     program, analysis = prepare(request["source"], library_sources({"pineLibrarySources": request.get("libraries", {})}))
+    if request.get("request_update_contract") is not None and not request_updates_eligible(analysis):
+        raise ValueError("PINE_REQUEST_UPDATE_UNSUPPORTED: synthetic event-series requests retain their legacy input contract")
     risk = risk_options(request, analysis)
     require_price_grid(analysis, request)
     require_quote_currency(analysis, program.host_requirements(), request, external=True)
@@ -99,6 +105,7 @@ def execute(request):
         if requirements.get("account") is None:
             raise ValueError("EXTERNAL_UNSUPPORTED: Workbench Host execution requires a Pine strategy")
         return {"contract": "candlescope.pine-workbench-control/1", "execution": requirements["execution"],
+            **({"request_update_contract": REQUEST_UPDATE_CONTRACT} if request_updates_eligible(analysis) else {}),
             **({"default_quantity": requirements["account"]["defaultQuantity"]}
                if getattr(pine_compat, "EXTERNAL_SIZING_SCHEMA_VERSION", 0) == 1 else {}),
             **({"risk_rules": program.strategy_risk_configuration(input_overrides=parameters or None,
@@ -128,7 +135,7 @@ def execute(request):
         if (not isinstance(clocks, list) or len(clocks) != len(request["bars"])
                 or any(type(value) is not int or not 0 <= value <= 9_007_199_254_740_991 for value in clocks)):
             raise ValueError("EXTERNAL_CLOCK_INVALID: one integer millisecond timestamp is required per bar")
-    evaluations = execution_input(request, start)
+    evaluations = closed_schedule(request, start) if standalone_updates else execution_input(request, start)
     accounts = [{**item, "time": item["time"] * 1000} for item in request["accounts"][start:]]
     supplied = request_environment(request)
     closing = {"closing_ticks": True} if request.get("closing_ticks") is True else {}
@@ -186,6 +193,10 @@ def execute(request):
         raise
     if result["output"].get("diagnostics"):
         raise ValueError(str(result["output"]["diagnostics"]))
+    if standalone_updates:
+        # Implicit close-only schedule preserves the public bar-only coordinates.
+        for intent in result["intents"]:
+            intent.pop("pass_index", None)
     return {
         "contract": result["protocol"],
         "pyramiding": result.get("pyramiding", 1),
@@ -196,7 +207,18 @@ def execute(request):
         "execution_mode": "CANDLESCOPE",
         "account_authority": "candlescope",
         **({"execution_schedule_contract": SCHEDULE_CONTRACT} if "execution_schedule" in evaluations else {}),
+        **({"request_update_contract": REQUEST_UPDATE_CONTRACT} if request.get("request_update_contract") else {}),
+        **({"evaluation_contract": REQUEST_UPDATE_CONTRACT} if request.get("request_update_contract") else {}),
     }
+
+
+def execute(request):
+    global _session, _session_count, _prefix
+    try:
+        return _execute(request)
+    except Exception:
+        _session, _session_count, _prefix = None, 0, PrefixInput()
+        raise
 
 
 if __name__ == "__main__":

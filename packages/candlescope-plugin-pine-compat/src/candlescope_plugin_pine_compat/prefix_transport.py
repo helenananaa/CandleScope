@@ -52,6 +52,12 @@ class PrefixInput:
                 raise ValueError("PINE_PREFIX_INVALID: append requires matching execution clocks")
         elif clocks is not None:
             raise ValueError("PINE_PREFIX_INVALID: execution clock mode changed")
+        updates = request.get("request_updates")
+        if self.request.get("request_updates") is not None:
+            if not isinstance(updates, list) or len(updates) != len(bars):
+                raise ValueError("PINE_PREFIX_INVALID: append requires matching requested update groups")
+        elif updates is not None:
+            raise ValueError("PINE_PREFIX_INVALID: requested update mode changed")
         self.request["bars"].extend(deepcopy(bars))
         self.request["accounts"].extend(deepcopy(accounts))
         if passes is not None:
@@ -60,4 +66,6 @@ class PrefixInput:
             self.request["execution_schedule"].extend(deepcopy(schedule))
         if clocks is not None:
             self.request["execution_times"].extend(deepcopy(clocks))
+        if updates is not None:
+            self.request["request_updates"].extend(deepcopy(updates))
         return self.request

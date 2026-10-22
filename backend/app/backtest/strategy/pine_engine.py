@@ -141,6 +141,8 @@ class PineEngineProvider:
         self.context = {}
         self.runtime_identity = None
         self.default_quantity = None
+        self.request_feed = None
+        self.request_groups = []
         self.state_hash = canonical_hash([])
 
     def describe(self):
@@ -220,6 +222,14 @@ class PineEngineProvider:
             self.requested_streams = load_contexts(context.get("pineLocalDataRoot"), context.get("pineRequestedContexts", []))
         except BacktestError as exc:
             raise StrategyProviderError(exc.code, str(exc)) from exc
+        from app.backtest.pine_request_updates import CONTRACT as REQUEST_UPDATE_CONTRACT, RequestedObservationFeed
+        self.request_feed = None
+        self.request_groups = []
+        if self.requested_streams and frozen.get("requestUpdateContract") == REQUEST_UPDATE_CONTRACT:
+            if current.get("request_update_contract") != REQUEST_UPDATE_CONTRACT:
+                raise StrategyProviderError("FIDELITY_UNSUPPORTED", "Pine requested-update capability differs")
+            self.request_feed = RequestedObservationFeed(self.requested_streams)
+            self.wire["request_update_contract"] = REQUEST_UPDATE_CONTRACT
         self.worker = SessionWorker(runtime, self.wire, self.cancelled, evaluator=True)
         self.bars, self.accounts, self.history, self.entry_id = [], [], [], None
         self.execution_times = []
@@ -310,21 +320,27 @@ class PineEngineProvider:
         cutoff = int(row.get("close_time_ms", frame.event_time_ms))
         if not schedule_context or schedule_context["bar_state"] != "historical":
             cutoff = min(frame.watermark_ms - (0 if confirmed else 1), cutoff)
-        contexts = visible_contexts(self.requested_streams, cutoff)
+        contexts = (self.request_feed.empty_contexts() if self.request_feed is not None
+                    else visible_contexts(self.requested_streams, cutoff))
+        requested = (dict(request_observed_at_ms=cutoff, request_updates=self.request_feed.advance(cutoff))
+                     if self.request_feed is not None else None)
         if self.pass_mode:
             self.execution_passes[index].append({"bar": dict(bar), "account": dict(account), "confirmed": confirmed,
-                "event_time_ms": frame.event_time_ms, "request_data": [
+                "event_time_ms": frame.event_time_ms, **(requested if requested is not None else {"request_data": [
                     {key: value for key, value in context.items() if key in {"symbol", "timeframe", "bars"}}
-                    for context in contexts]})
+                    for context in contexts]})})
             if self.scheduled:
                 self.execution_contexts[index].append(schedule_context)
             contexts = [{**context, "bars": []} for context in contexts]
+        elif requested is not None:
+            self.request_groups.append(dict(observed_at_ms=cutoff, updates=requested["request_updates"]))
         result = self.worker.request(
             {
                 **self.wire,
                 "bars": self.bars,
                 "accounts": self.accounts,
                 **({"contexts": contexts} if contexts else {}),
+                **({"request_updates": self.request_groups} if self.request_feed is not None and not self.pass_mode else {}),
                 **({"execution_times": self.execution_times} if self.needs_clock else {}),
                 **({"execution_schedule": encode_schedule(self.execution_passes, self.execution_contexts)} if self.scheduled
                    else {"execution_passes": self.execution_passes} if self.pass_mode else {}),
@@ -345,6 +361,7 @@ class PineEngineProvider:
             result.get("contract") != "external-broker/1"
             or result.get("account_authority") != "candlescope"
             or (self.scheduled and result.get("execution_schedule_contract") != SCHEDULE_CONTRACT)
+            or (self.request_feed is not None and result.get("request_update_contract") != self.wire["request_update_contract"])
         ):
             raise StrategyProviderError(
                 "PROVIDER_PROTOCOL_VIOLATION",
@@ -498,6 +515,8 @@ class PineEngineProvider:
             "history": self.history,
             "entry_id": self.entry_id,
             "state_hash": self.state_hash,
+            **({"request_feed": self.request_feed.snapshot(), "request_updates": self.request_groups}
+               if self.request_feed is not None else {}),
             **({"risk_rules": self.risk_configuration} if self.entry_risk else {}),
             **({"execution_times": self.execution_times} if self.needs_clock else {}),
             **({"execution_schedule": encode_schedule(self.execution_passes, self.execution_contexts)} if self.scheduled
@@ -531,6 +550,25 @@ class PineEngineProvider:
             if not isinstance(clocks, list) or len(clocks) != len(self.bars):
                 raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "restored Pine execution clocks are missing")
             self.execution_times = list(clocks)
+        if self.request_feed is not None:
+            try:
+                self.request_groups = payload.get("request_updates", [])
+                if self.pass_mode:
+                    if self.request_groups:
+                        raise ValueError("mixed requested transcript modes")
+                    observations = [dict(observed_at_ms=item["request_observed_at_ms"], updates=item["request_updates"])
+                                    for group in self.execution_passes for item in group]
+                else:
+                    if len(self.request_groups) != len(self.bars):
+                        raise ValueError("requested transcript count differs")
+                    observations = self.request_groups
+                self.request_feed.replay(observations)
+                if self.request_feed.snapshot() != payload.get("request_feed"):
+                    raise ValueError("requested observation cursor differs")
+            except (KeyError, ValueError, TypeError) as exc:
+                raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "restored Pine requested transcript differs") from exc
+        elif "request_feed" in payload or "request_updates" in payload:
+            raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "restored Pine requested mode differs")
 
     def identity(self):
         return {

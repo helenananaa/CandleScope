@@ -2,6 +2,7 @@
 import pine_compat
 
 from .strategy_time import engine_bars
+from .request_updates import engine_updates
 
 CONTRACT = "candlescope.pine-execution-schedule/1"
 PREFIX_CONTRACT = "candlescope.pine-prefix-schedule/1"
@@ -14,14 +15,21 @@ def capabilities():
 
 
 def engine_pass(item):
+    updates = engine_updates(item["request_updates"]) if "request_updates" in item else None
+    observed = item.get("request_observed_at_ms")
+    if "request_observed_at_ms" in item:
+        if (updates is None or type(observed) is not int
+                or any(update["available_at_ms"] > observed for update in updates)):
+            raise ValueError("PINE_REQUEST_UPDATE_INVALID: invalid requested observation boundary")
     return {
-        **item,
+        **{key: value for key, value in item.items() if key != "request_observed_at_ms"},
         "bar": engine_bars([item["bar"]])[0],
         "account": {**item["account"], "time": item["account"]["time"] * 1000},
         **({"request_data": [
             {"symbol": stream["symbol"], "timeframe": stream["timeframe"], "bars": engine_bars(stream["bars"])}
             for stream in item["request_data"]
         ]} if "request_data" in item else {}),
+        **({"request_updates": updates} if updates is not None else {}),
     }
 
 

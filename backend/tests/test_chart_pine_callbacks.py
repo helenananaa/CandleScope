@@ -218,7 +218,13 @@ if barstate.isconfirmed and bar_index==1 and remote==100.25
         output = provider.step(observation(1,2,False,2))
         assert [item["action"] for item in output.payload["intents"]] == ["exit"]
         snapshot = deepcopy(provider.snapshot())
-        assert snapshot["execution_passes"][1][0]["request_data"][0]["bars"] == []
+        first_pass=snapshot["execution_passes"][1][0]
+        if "request_updates" in first_pass:
+            assert first_pass["request_updates"] == []
+            assert first_pass["request_observed_at_ms"] == 119998
+            assert snapshot["request_feed"]["cursors"] == [0]
+        else:
+            assert first_pass["request_data"][0]["bars"] == []
         restored.restore(snapshot)
         confirmed = observation(1,3,True,2)
         result = provider.step(confirmed)

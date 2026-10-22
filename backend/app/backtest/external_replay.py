@@ -44,6 +44,22 @@ def validate_state(wire,state):
                     or chart.get("sequence") != expected.sequence or chart.get("time_ms") != expected.event_time_ms
                     or v2.get("contract") != wire["pine_v2_bar_contract"]):
                 raise BacktestError("NATIVE_IDENTITY_MISMATCH", "Pine V2 account source cursor differs")
+    if wire.get("request_update_contract"):
+        from .pine_request_updates import from_wire, pass_observations, validate_replay
+        try:
+            feed = from_wire(wire)
+            last = state.get("last_request") or {}
+            if wire.get("pine_bar_path_contract"):
+                observations = pass_observations(last.get("execution_schedule", []), scheduled=True)
+            elif wire.get("fill_recalculation"):
+                observations = pass_observations(last.get("execution_passes", []), scheduled=False)
+            else:
+                observations = last.get("request_updates", [])
+                if len(observations) != cursor:
+                    raise ValueError("requested transcript count differs")
+            validate_replay(feed, (state.get("clock") or {}).get("request_feed"), observations)
+        except (KeyError, ValueError, TypeError) as exc:
+            raise BacktestError("NATIVE_IDENTITY_MISMATCH", "requested observation checkpoint differs") from exc
 
 
 def make_state(wire,cursor,kernel,orders,accounts,history,latest,clock,last_request,*,risk_stops=None):

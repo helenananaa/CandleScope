@@ -56,8 +56,11 @@ preparation, before its market-data acquisition.
 V2 freezes its opening price grid from the historical account rules before
 compiling Workbench controls. Explicit conflicting chart metadata rejects;
 the generic matching tick cannot override the historical grid. Relative and
-trailing Host prices read actual account rules. Nonunit Pine metadata and
-changing historical grids remain unsupported by this profile.
+trailing Host prices read actual account rules. The opening historical rules also bind linear point value, exact quantity step
+and independent minimum through the bounded [contract profile](pine-contract-rules.md).
+Nonunit linear multipliers are supported. Point value and the chart price grid
+must remain fixed within one frozen run; historical account admission continues
+to consume the observed rule events.
 
 Controlled browser qualification mounts the actual Workbench panel and submits
 to an isolated real backend/Pine worker. It is not a packaged-app release or an
@@ -65,7 +68,7 @@ exchange-data acceptance test. Independent complete-endpoint Workbench cost
 matrices now reexecute Pine and fresh Host accounts (`pine-workbench-costs.md`),
 with an explicit SKIP control and replay endpoint verification.
 The synthetic OHLC path, volume proxy and declared CandleScope liquidation model
-do not establish TradingView equivalence. Nonunit Pine metadata remains rejected.
+do not establish TradingView equivalence.
 Working-order margin now reprices causally across price gaps, retaining booked
 fills and cancelling unfunded remainders under the declared CandleScope policy;
 see `pine-v2-margin-repricing.md` for collateral, maintenance and replay boundaries.

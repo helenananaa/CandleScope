@@ -15,6 +15,10 @@ def run_bar_clock(kernel, orders, wire, plugin, runner, cancelled, deadline, *, 
     cursor = state.get("bar_cursor", 0)
     groups, accounts, history, latest = (state.get(name, default) for name, default in
         (("groups", []), ("accounts", []), ("history", []), ("latest", {})))
+    from .pine_request_updates import from_wire, pass_observations, validate_replay
+    request_feed = from_wire(wire)
+    if request_feed is not None and state:
+        validate_replay(request_feed, state.get("request_feed"), pass_observations(groups, scheduled=True))
     if (wire.get("pine_bar_path_contract") != CONTRACT
             or wire.get("execution_schedule_contract") != SCHEDULE_CONTRACT
             or len(groups) != cursor or len(accounts) != cursor
@@ -50,7 +54,11 @@ def run_bar_clock(kernel, orders, wire, plugin, runner, cancelled, deadline, *, 
         # Requested streams use that same chart-close cutoff, independently of
         # the artificial interpolation used to timestamp intrabar fills.
         if wire.get("contexts"):
-            evaluation["request_data"] = visible_contexts(wire, bar_event(wire, cursor, 0).event_time_ms + 1)
+            observed = bar_event(wire, cursor, 0).event_time_ms
+            if request_feed is not None:
+                evaluation.update(request_observed_at_ms=observed, request_updates=request_feed.advance(observed))
+            else:
+                evaluation["request_data"] = visible_contexts(wire, observed + 1)
         groups[cursor].append({"evaluation": evaluation,
             "context": {"bar_state": "historical", "trigger": trigger, "is_new": True}})
         request = {key: value for key, value in wire.items() if key not in {
@@ -123,6 +131,8 @@ def run_bar_clock(kernel, orders, wire, plugin, runner, cancelled, deadline, *, 
     passes = [[row["evaluation"] for row in group] for group in groups]
     clock = {"contract": CONTRACT, "bar_cursor": cursor, "last_sequence": kernel.path_sequence,
              "groups": groups, "accounts": accounts, "history": history, "latest": latest}
+    if request_feed is not None:
+        clock["request_feed"] = request_feed.snapshot()
     if wire.get("pine_v2_bar_contract"):
         clock["source_sequence"] = kernel.source_sequence
     return latest, history, accounts, passes, clock

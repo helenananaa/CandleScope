@@ -21,6 +21,11 @@ def freeze_control(native, plugin, wire, payload):
         **({"risk_contract": RISK_CONTRACT} if identity.get("risk_stop_contract") == RISK_CONTRACT else {})}, timeout=30)
     if response.get("identity") != identity or response.get("contract") != CONTRACT:
         raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Workbench control identity differs")
+    from .pine_request_updates import CONTRACT as REQUEST_UPDATE_CONTRACT
+    if wire.get("contexts") and response.get("request_update_contract") == REQUEST_UPDATE_CONTRACT:
+        if identity.get("request_update_contract") != REQUEST_UPDATE_CONTRACT:
+            raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Workbench requested update capability differs")
+        wire["request_update_contract"] = REQUEST_UPDATE_CONTRACT
     execution = response.get("execution")
     if not isinstance(execution, dict):
         raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine execution requirements missing")

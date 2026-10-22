@@ -113,5 +113,10 @@ def test_historical_fill_requests_use_final_bar_visibility_not_synthetic_waterma
     group = record["result"]["raw_output"]["execution_schedule"][1]
     assert group[0]["context"]["trigger"] == "order_fill"
     assert group[0]["evaluation"]["event_time_ms"] == 60000
-    assert all([row["time"] for row in item["evaluation"]["request_data"][0]["bars"]] == [0] for item in group)
+    if "request_updates" in group[0]["evaluation"]:
+        assert all(item["evaluation"]["request_observed_at_ms"]==119999 for item in group)
+        updates=[update for item in group for update in item["evaluation"]["request_updates"]]
+        assert [(item["bar"]["time"],item["bar"]["close"],item["available_at_ms"]) for item in updates]==[(0,100,119999)]
+    else:
+        assert all([row["time"] for row in item["evaluation"]["request_data"][0]["bars"]] == [0] for item in group)
     assert record["result"]["graphics"][3]["values"][1] == 100

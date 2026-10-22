@@ -12,6 +12,7 @@ from .libraries import library_sources
 from .entry_risk import CONTRACT as RISK_CONTRACT, available as risk_available
 from .entry_risk import STOP_CONTRACT
 from .execution_schedule import capabilities as schedule_capabilities
+from .request_updates import CONTRACT as REQUEST_UPDATE_CONTRACT, capabilities as request_update_capabilities, eligible as request_updates_eligible
 
 
 def describe():
@@ -20,6 +21,7 @@ def describe():
         **({"order_metadata_contract": "candlescope.pine-order-metadata/1"}
            if getattr(pine_compat, "EXTERNAL_ORDER_METADATA_SCHEMA_VERSION", 0) == 1 else {}),
         **schedule_capabilities(),
+        **request_update_capabilities(),
         "external_orders": getattr(pine_compat, "EXTERNAL_ORDER_SCHEMA_VERSION", 1),
         "external_sizing": getattr(pine_compat, "EXTERNAL_SIZING_SCHEMA_VERSION", 0),
         "contract_metadata_schema": getattr(pine_compat, "CONTRACT_METADATA_SCHEMA_VERSION", 0),
@@ -49,6 +51,7 @@ def execute(request):
             "requirements": requirements,
             "pyramiding": profile.get("pyramiding", 1),
             "profileError": profile.get("profileError"),
+            **({"request_update_contract": REQUEST_UPDATE_CONTRACT} if request_updates_eligible(analysis) else {}),
         }
     return evaluate(request)
 

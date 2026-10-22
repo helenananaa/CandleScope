@@ -2,6 +2,11 @@ import pytest
 from tests.test_native_backtests import runtime as runtime, terminal, pytestmark as pytestmark
 from tests.test_external_strategy_v2 import tape
 
+
+def requested_rows(event):
+    return ([item["bar"] for item in event["request_updates"]] if "request_updates" in event
+            else event["request_data"][0]["bars"])
+
 PINE = """//@version=6
 strategy("Fill feedback", calc_on_order_fills=true)
 if bar_index == 0 and barstate.isconfirmed
@@ -59,7 +64,7 @@ def test_fill_callbacks_use_actual_account_visible_prices_and_next_event(runtime
         assert report["graphics"][0]["values"][1:] == [10,10,15,20,12.5,5,10,15,11.5]
 
 
-def test_fill_profile_requires_incremental_callback_and_explicit_opt_in(runtime):
+def test_pyne_fill_profile_requires_incremental_callback_and_explicit_opt_in(runtime):
     host, payload = runtime
     record = run(host, payload, "pyne", PYNE.replace("def on_fill(ctx, bar):", "def unused(ctx, bar):"), "TRADE_TAPE")
     assert record["state"] == "FAILED" and record["result"] is None
@@ -162,13 +167,13 @@ def on_fill(ctx, bar):
     groups = report["raw_output"]["execution_passes"]
     first_fill_intents = [item for item in report["raw_output"]["intent_history"] if item.get("bar_index") == 1 and item.get("pass_index") == 0]
     assert [item["action"] for item in first_fill_intents] == ["exit"]
-    assert [p["request_data"][0]["bars"] for p in groups[1][:2]] == [[], []]
-    assert len(groups[1][-1]["request_data"][0]["bars"]) == 1
+    assert [requested_rows(p) for p in groups[1][:2]] == [[], []]
+    assert len(requested_rows(groups[1][-1])) == 1
     assert [fill["event_time_ms"] for fill in report["trades"]] == [60000,70000,120000,130000]
     for group in groups:
         for event in group:
             assert all((bar["time"]+120)*1000 <= event["event_time_ms"]+int(event["confirmed"])
-                       for bar in event["request_data"][0]["bars"])
+                       for bar in requested_rows(event))
     assert report["account_authority"] == "candlescope"
     assert not report["raw_output"]["strategy_output"].get("strategy")
 
@@ -210,6 +215,6 @@ def on_fill(ctx, bar):
     report = record["result"]
     passes = report["raw_output"]["execution_passes"][1]
     assert passes[0]["event_time_ms"] == 119999 and not passes[0]["confirmed"]
-    assert passes[0]["request_data"][0]["bars"] == []
-    assert passes[-1]["confirmed"] and len(passes[-1]["request_data"][0]["bars"]) == 1
+    assert requested_rows(passes[0]) == []
+    assert passes[-1]["confirmed"] and len(requested_rows(passes[-1])) == 1
     assert [fill["event_time_ms"] for fill in report["trades"]] == [119999,130000]
