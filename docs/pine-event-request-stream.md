@@ -50,6 +50,12 @@ scenario independently rediscovers its own stable window. The Host identity bind
 both its source coordinator and the installed shared SDK builder, independently
 of the worker SDK identity.
 
+Physical print quantities accumulate as exact decimals before conversion to the
+Pine numeric observation. Three positive `0.1` prints therefore expose `0.3`,
+without falsely exceeding a frozen `0.3` total. The strict Core bounds and exact
+confirmed-tuple checks remain in force. This is covered across the three account
+models and all four print/book clocks, including seek and restored continuation.
+
 Provider misses are read from structured Core state. A script's `runtime.error()`
 text is never treated as evidence of missing data. The typed status leaves the
 failed runtime poisoned; only a new evaluator can consume an amended plan.

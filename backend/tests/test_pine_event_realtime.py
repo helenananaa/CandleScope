@@ -132,3 +132,53 @@ def test_bounded_realtime_event_window_keeps_skipped_account_prefix_and_replays_
         state=settle(replay,key)
         assert state.get("error") is None,state
     assert state["result"]==result
+
+
+@pytest.mark.parametrize("mode",["TRADE_TAPE","BOOK_ASSISTED","BOOK_DEPTH","BOOK_SAMPLED"])
+@pytest.mark.parametrize("account",["LINEAR_PERP_ONE_WAY_V1","SPOT_CASH_V1","LINEAR_PERP_ONE_WAY_V2"])
+def test_decimal_print_volume_preserves_exact_frozen_totals_on_all_event_account_clocks(runtime,tmp_path,mode,account):
+    from app.local_data.service import LocalImportOptions
+    from tests.test_pine_print_ticks import config
+    from tests.test_native_replay import settle
+    host,main=runtime
+    prices=(10,13,15,12)
+    csv=tmp_path/"decimal-print-bars.csv"
+    csv.write_text('time,open,high,low,close,volume\n'+'\n'.join(
+        f'{i*60000},{p},{p+1},{p-1},{p-1},0.3' for i,p in enumerate(prices)))
+    manifest=host.local_data.import_csv(csv,LocalImportOptions(name="decimal event prints",symbol="BTCUSDT",interval="1m",timestamp_unit="ms"))
+    preview=host.preview_snapshot(dataset_id=manifest["dataset_id"],data_epoch=manifest["data_epoch"],
+        start_time_ms=0,end_time_ms=239999,interval="1m")
+    main={**main,"dataset_id":manifest["dataset_id"],"data_epoch":manifest["data_epoch"],
+        "snapshot_hash":preview["snapshot_hash"],"end_time_ms":239999}
+    value=config(main,mode,False,account)
+    value["source"]='//@version=6\nstrategy("decimal prints",calc_on_every_tick=true)\nr=ticker.renko(syminfo.tickerid,"Traditional",1)\nplot(request.security(r,timeframe.period,close))\nplot(volume)\n'
+    rows=[]
+    for index,opening in enumerate(prices):
+        for tick,price in enumerate((opening,opening+1,opening-1)):
+            sequence=index*3+tick+1
+            stamp=index*60000+tick*10000
+            if mode!="TRADE_TAPE":
+                observed=stamp-1 if stamp else 0
+                book=dict(snapshot=True)
+                if mode=="BOOK_ASSISTED":book.update(book_sequence=sequence,bid=str(price-.1),ask=str(price+.1))
+                else:
+                    book.update(bids=[[str(price-.5),"5"]],asks=[[str(price+.5),"5"]])
+                    if mode=="BOOK_DEPTH":book.update(book_sequence=sequence,depth_complete=True)
+                    else:book.update(sample_index=sequence,sample_time_ms=observed if stamp else -1,
+                        depth_complete=False,depth_scope="BOUNDED_SAMPLED")
+                rows.append(dict(time_ms=observed,role="ORDER_BOOK",payload=book))
+            rows.append(dict(time_ms=stamp,role="TRADES",payload=dict(source_event_kind="AGG_TRADE",
+                source_sequence=sequence,tie_break=f"AGG_TRADE:{sequence}",price=str(price),qty="0.1",aggressor_side="BUY")))
+    value["execution_data"].update(events=rows)
+    record=terminal(host.native,host.native.create(value,"decimal-event-volume")["run_id"],timeout=45)
+    assert record["state"]=="COMPLETED",record.get("error")
+    groups=record["result"]["raw_output"]["execution_schedule"]
+    assert [[item["evaluation"]["bar"]["volume"] for item in group] for group in groups]==[[.1,.2,.3,.3]]*4
+    replay=host.native.replay
+    created=replay.create(record["run_id"])
+    key=created["replay_id"]
+    for target in (1,created["total"]):
+        replay.command(key,replay.get(key)["revision"],"seek",target)
+        state=settle(replay,key)
+        assert state.get("error") is None,state
+    assert state["result"]==record["result"]

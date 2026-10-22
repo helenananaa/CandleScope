@@ -1,5 +1,6 @@
 """Workbench observed-print Pine streams over authoritative tape/book accounts."""
 from copy import deepcopy
+from decimal import Decimal
 import time
 
 from app.data_engine.interval_policy import parse_interval_spec
@@ -121,6 +122,9 @@ class PrintTickClock:
         self.last_sequence=state.get("last_sequence",0)
         self.event_cursor=state.get("event_cursor",0)
         self.visible=None
+        # Checkpoints are taken at closed bars; an open bar's exact quantity
+        # accumulator is reconstructed only by replaying its physical prints.
+        self.visible_volume=Decimal(0)
         self.feed=from_wire(wire)
         if self.feed is not None and state:
             validate_replay(self.feed,state.get("request_feed"),pass_observations(self.groups,scheduled=True))
@@ -211,12 +215,15 @@ def run_clock(stream,kernel,orders,wire,*,state=None,target=None):
             kernel._apply_book(event)
             if kernel.market_observer is not None: kernel.market_observer(event)
         else:
-            price,qty=float(event.payload["price"]),float(event.payload["qty"])
+            price=float(event.payload["price"])
+            qty=Decimal(str(event.payload["qty"]))
             if clock.visible is None:
-                clock.visible=dict(time=wire["bars"][clock.cursor]["time"],open=price,high=price,low=price,close=price,volume=qty)
+                clock.visible_volume=qty
+                clock.visible=dict(time=wire["bars"][clock.cursor]["time"],open=price,high=price,low=price,close=price,volume=float(qty))
             else:
+                clock.visible_volume+=qty
                 clock.visible.update(high=max(clock.visible["high"],price),low=min(clock.visible["low"],price),
-                    close=price,volume=clock.visible["volume"]+qty)
+                    close=price,volume=float(clock.visible_volume))
             if wire.get("pine_v2_print_contract"): kernel._market_event_count+=1
             observe_market(kernel,event)
             kernel._match(event)
