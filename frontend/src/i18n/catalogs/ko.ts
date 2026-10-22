@@ -34,6 +34,7 @@ export const ko = {
   "native.account.events": "계좌 이벤트",
   "native.account.clear": "계좌 파일 지우기",
   "native.account.participation": "봉 거래량으로 체결 제한",
+  "native.account.bookCapacity": "기록된 호가창 모드는 자체 체결 용량 모델을 사용합니다. 거래량 참여 제한을 끄세요.",
   "native.account.rate": "거래량 참여율 (0–1)",
   "native.account.pathHelp": "Pine 봉 체결 재계산이 필요합니다. OHLC 경로와 체결 한도는 근사치이며 TradingView 체결 또는 청산과의 일치를 입증하지 않습니다.",
   "native.account.invalidData": "시간순으로 정렬된 올바른 과거 계좌 이벤트 JSON을 선택하세요.",

@@ -34,6 +34,7 @@ export const ptBR = {
   "native.account.events": "eventos da conta",
   "native.account.clear": "Limpar arquivo da conta",
   "native.account.participation": "Limitar execuções pelo volume do candle",
+  "native.account.bookCapacity": "Os modos de livro de ofertas gravado usam seu próprio modelo de capacidade. Desative a participação no volume.",
   "native.account.rate": "Participação no volume (0–1)",
   "native.account.pathHelp": "Requer recálculo de execuções por candle no Pine. Os caminhos OHLC e a capacidade são aproximações; não comprovam equivalência com execuções ou liquidações do TradingView.",
   "native.account.invalidData": "Selecione um JSON válido com os eventos históricos da conta em ordem temporal.",
