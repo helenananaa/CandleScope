@@ -53,9 +53,29 @@ checks passed, including three book modes, historical V2 marks/funding and
 non-unit multiplier observation, plus interruption recovery without rematching
 old physical events. The broader runtime/context checks passed 69 cases. Research
 frontend tests passed 36 cases; type checks and 30-locale i18n validation passed.
-These controlled results are separate from the publication worktree's full
-81-module qualification, which must include the new chart book path.
+The publication worktree's full 81-module qualification then passed all 1,009
+selected cases (16 Pyne deselected), including the new chart book path, with no
+failures, errors or skips. This immutable gate used source
+`56b8055822edd69ca4cb3b0abbc29bb707b00f45` and the actual managed candidate above:
+1,535.78 seconds pytest and 1,541.36 seconds total. All 3,723 recorded source
+files, installed runtime and registry remained unchanged during that gate.
 
-Resources/long-history qualification, rendered browser/packaged desktop UI and
+The browser follow-up at `cb6d29f788514a2524cd8317432dbb4275443c34` changes only
+eight frontend files and the chart-book documentation. A source-hash comparison
+against the full gate confirms no backend or package file changed. Research
+and i18n tests pass 76 cases on this publication source. The isolated browser
+completed all three book modes through real HTTP/queued installed Pine workers.
+A saved BOOK_DEPTH Run recreated without re-uploading has the same snapshot and
+config hashes and fills. A saved BOOK_SAMPLED report and all three chart bars
+remain readable after backend restart and page reload. An invalid replacement
+file clears the old input and disables creation. The real strategy descriptor
+uses `provider_kind: PINE_ENGINE`; a retained failing fixture exposed the old
+hidden control. Korean and Brazilian Portuguese catalog failures from the
+earlier macOS gate are retained, and the corrected 40-case i18n suite passes.
+This is composed backend/frontend evidence, not a full Host gate at the later
+frontend commit. The browser API uses deterministic fixtures and omits general
+indicator and local-data routes; it is not packaged desktop acceptance.
+
+Resources/long-history qualification, packaged desktop UI and
 recovery acceptance, cross-platform wheels and a separately versioned public
 release remain delivery gates.
