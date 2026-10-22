@@ -1,7 +1,18 @@
 """Host entry point for the shared deterministic frozen event-source contract."""
-from candlescope_plugin_sdk.event_requests import CONTRACT, build_renko_stream, renko_descriptor
 from copy import deepcopy
 from app.data_engine.interval_policy import parse_interval_spec
+
+CONTRACT = "candlescope.pine-event-requests/1"
+
+
+def renko_descriptor(symbol):
+    from candlescope_plugin_sdk.event_requests import renko_descriptor as decode
+    return decode(symbol)
+
+
+def build_renko_stream(symbol,timeframe,physical_streams):
+    from candlescope_plugin_sdk.event_requests import build_renko_stream as build
+    return build(symbol,timeframe,physical_streams)
 
 def frozen_sources(context, bars, interval, requested):
     spec = parse_interval_spec(interval)

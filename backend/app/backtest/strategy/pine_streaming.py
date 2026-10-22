@@ -24,6 +24,9 @@ def ensure(provider, runtime, symbol, timeframe, contexts):
                 if provider.runtime_identity.get("request_window_plan_contract")!=WINDOW_CONTRACT:
                     raise StrategyProviderError("FIDELITY_UNSUPPORTED","historical requested streams require window planning")
                 opening["requested_history"]=provider.request_feed.window_history()
+            from app.backtest.pine_event_requests import attach
+            attach(opening,provider.runtime_identity,provider.wire.get("event_request_contract"),
+                provider.context["pineHistoricalBars"],provider.context["pineChartInterval"],provider.requested_streams)
         provider.stream=PineStream(runtime,{key:provider.wire[key] for key in ("protocol","identity")},
             opening,provider.cancelled)
     elif provider._stream_environment!=opening:
@@ -71,6 +74,12 @@ def restore(provider,payload,runtime):
     expected=(provider.request_feed.window_history() if not provider.realtime_streaming and provider.request_feed is not None else None)
     if saved["opening"].get("requested_history")!=expected:
         raise StrategyProviderError("IDENTITY_MUTATION","restored requested window endpoints differ")
+    if provider.wire.get("event_request_contract"):
+        from app.backtest.pine_event_requests import frozen_sources
+        sources=frozen_sources(saved["opening"]["context"],provider.context["pineHistoricalBars"],
+            provider.context["pineChartInterval"],provider.requested_streams)
+        if saved["opening"].get("event_sources")!=sources:
+            raise StrategyProviderError("IDENTITY_MUTATION","restored physical event sources differ")
     from app.backtest.pine_stream import WINDOW_FEEDBACK_CONTRACT,canonical_observations
     feedback=(WINDOW_FEEDBACK_CONTRACT if not provider.realtime_streaming
               and provider.runtime_identity.get("window_feedback_contract")==WINDOW_FEEDBACK_CONTRACT else None)
@@ -97,4 +106,4 @@ def restore(provider,payload,runtime):
         provider.stream.close()
         provider.stream=None
         raise StrategyProviderError("LOOKAHEAD_VIOLATION","restored chart window was not sealed")
-    provider._stream_environment={key:value for key,value in saved["opening"].items() if key not in {"historical_plan","requested_history","window_feedback_contract"}}
+    provider._stream_environment={key:value for key,value in saved["opening"].items() if key not in {"historical_plan","requested_history","window_feedback_contract","event_sources"}}

@@ -225,6 +225,8 @@ def compile_revision(payload: Mapping[str, object], *, now_ms: int) -> dict[str,
                 "processOnClose": pine_analysis["requirements"]["execution"].get("processOrdersOnClose", False),
                 **({"requestUpdateContract": pine_analysis["request_update_contract"]}
                    if pine_analysis.get("request_update_contract") else {}),
+                **({"eventRequestContract": pine_analysis["event_request_contract"]}
+                   if pine_analysis.get("event_request_contract") else {}),
                 **({"executionScheduleContract": pine_analysis["identity"]["execution_schedule_contract"]}
                    if pine_analysis["identity"].get("execution_schedule_contract") else {}),
                 **({"entryRisk": True} if any(item["feature"].startswith("strategy.risk.")

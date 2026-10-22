@@ -22,6 +22,11 @@ def freeze_control(native, plugin, wire, payload):
     if response.get("identity") != identity or response.get("contract") != CONTRACT:
         raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Workbench control identity differs")
     from .pine_request_updates import CONTRACT as REQUEST_UPDATE_CONTRACT
+    from .pine_event_requests import CONTRACT as EVENT_CONTRACT
+    if response.get("event_request_contract") is not None:
+        if response["event_request_contract"]!=EVENT_CONTRACT or identity.get("event_request_contract")!=EVENT_CONTRACT:
+            raise BacktestError("EXTERNAL_PROTOCOL_ERROR","Workbench event request capability differs")
+        wire["event_request_contract"]=EVENT_CONTRACT
     if wire.get("contexts") and response.get("request_update_contract") == REQUEST_UPDATE_CONTRACT:
         if identity.get("request_update_contract") != REQUEST_UPDATE_CONTRACT:
             raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Workbench requested update capability differs")

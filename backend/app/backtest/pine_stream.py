@@ -75,6 +75,21 @@ class PineStream:
                     or result.get("stream_schema") != 1):
                 raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "invalid Pine stream response")
             operation = command["operation"]
+            event_contract=self.opening.get("event_request_contract")
+            if event_contract is not None:
+                from .pine_event_requests import CONTRACT as EVENT_CONTRACT
+                event_status=result.get("event_request_state")
+                if (event_contract!=EVENT_CONTRACT or self.wire["identity"].get("event_request_contract")!=EVENT_CONTRACT
+                        or result.get("event_request_contract")!=EVENT_CONTRACT or not isinstance(event_status,dict)
+                        or set(event_status)!={"contract","pending","requires_discovery","streams"}
+                        or event_status.get("contract")!=EVENT_CONTRACT
+                        or any(type(event_status.get(name)) is not bool for name in ("pending","requires_discovery"))
+                        or not isinstance(event_status.get("streams"),list) or len(event_status["streams"])>16
+                        or any(not isinstance(item,dict) or set(item)!={"symbol","timeframe","recipe_hash","cursor"}
+                            or type(item.get("cursor")) is not int or item["cursor"]<0
+                            or any(not isinstance(item.get(name),str) or not item[name] for name in ("symbol","timeframe","recipe_hash"))
+                            for item in event_status.get("streams",[]))):
+                    raise BacktestError("EXTERNAL_PROTOCOL_ERROR","invalid Pine event request state")
             reset = operation == "stream_rebase"
             feedback = self.opening.get("window_feedback_contract") == WINDOW_FEEDBACK_CONTRACT
             status = result.get("window_status")

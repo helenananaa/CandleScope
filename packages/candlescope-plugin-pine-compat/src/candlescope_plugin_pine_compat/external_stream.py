@@ -7,8 +7,9 @@ from .entry_risk import options as risk_options
 from .execution_schedule import CONTRACT as SCHEDULE, TICK_CONTRACT, engine_pass, capabilities as schedules
 from .host_inputs import require_price_grid, require_quote_currency
 from .libraries import library_sources
-from .request_updates import CONTRACT as REQUESTS, eligible as requested_eligible, validate_contract
+from .request_updates import CONTRACT as REQUESTS, eligible_stream as requested_eligible, validate_contract
 from .strategy_time import engine_bars
+from .event_stream import EventRequests, CONTRACT as EVENT_CONTRACT
 
 CONTRACT = "candlescope.pine-external-stream/1"
 WINDOW_CONTRACT = "candlescope.pine-request-window-plan/1"
@@ -34,17 +35,25 @@ def capabilities():
 
 
 class Stream:
-    def __init__(self, request, prepare, environment):
+    def __init__(self, request, prepare, environment, *, event_state=None):
+        self.opening=deepcopy(request)
+        self.prepare,self.environment=prepare,environment
         allowed = {"protocol", "identity", "operation", "source", "libraries", "parameters", "context", "contexts",
                    "host_settings", "risk_contract", "closing_ticks", "order_metadata_contract", "currency_rates",
                    "request_update_contract", "historical_plan", "requested_history", "execution_schedule_contract", "execution_tick_contract",
-                   "external_stream_contract", "window_feedback_contract"}
+                   "external_stream_contract", "window_feedback_contract", "event_request_contract", "event_sources"}
         if set(request) - allowed:
             raise ValueError("PINE_STREAM_INVALID: unknown opening fields")
         if (request.get("external_stream_contract") != CONTRACT or not capabilities()
                 or request.get("execution_schedule_contract") != SCHEDULE
                 or request.get("execution_tick_contract") != TICK_CONTRACT):
             raise ValueError("PINE_STREAM_UNSUPPORTED: explicit stream and tick contracts required")
+        self.events=event_state
+        if request.get("event_request_contract") is not None:
+            self.events=self.events or EventRequests(request)
+            request=self.events.augment(request)
+        elif "event_sources" in request:
+            raise ValueError("PINE_EVENT_REQUEST_UNSUPPORTED: event sources were not negotiated")
         if "requested_history" in request and ("historical_plan" not in request
                 or capabilities().get("request_window_plan_contract")!=WINDOW_CONTRACT):
             raise ValueError("PINE_STREAM_UNSUPPORTED: requested window planning requires known historical endpoints")
@@ -117,10 +126,16 @@ class Stream:
                 raise ValueError("PINE_STREAM_INVALID: exact seconds and milliseconds required")
             if self.requested is None and any(key in evaluation for key in ("request_updates", "request_observed_at_ms")):
                 raise ValueError("PINE_STREAM_INVALID: requested updates were not negotiated")
+            if self.events is not None:
+                observation=self.events.observe(observation,self.engine.cursor,self.skip)
+                evaluation=observation["evaluation"]
             observation["evaluation"] = engine_pass(evaluation)
             try:
                 result = self.engine.observe(observation, snapshot=False)
             except ValueError:
+                if self.events is not None and self.events.resolve(self.engine.failed_request_context()):
+                    self.passes += 1
+                    return self.pack({"intents":[],"intent_base":self.intents})
                 status = self.engine.window_status() if self.feedback else None
                 if not status or not status.get("rebase_required"):
                     raise
@@ -132,7 +147,17 @@ class Stream:
         elif operation == "stream_rebase":
             if not self.feedback or type(request.get("seal")) is not bool:
                 raise ValueError("PINE_STREAM_INVALID: negotiated feedback and boolean seal required")
-            self.skip = self.engine.rebase_window(seal=request["seal"])
+            if self.events is not None and self.events.pending:
+                if request["seal"]:
+                    raise ValueError("PINE_EVENT_REQUEST_INVALID: interrupted event trial cannot be sealed")
+                events=self.events
+                events.reset()
+                self.__init__(self.opening,self.prepare,self.environment,event_state=events)
+            else:
+                self.skip = self.engine.rebase_window(seal=request["seal"])
+                if self.events is not None:
+                    self.events.reset()
+                    self.events.discovery=not request["seal"]
             self.intents = self.passes = 0
             self.state = None
             result = {"intents":[], "intent_base":0}
@@ -152,12 +177,18 @@ class Stream:
         return self.pack(result)
 
     def pack(self, result=None):
+        status=self.engine.window_status() if self.feedback else None
+        if self.events is not None:
+            status={**status,"requires_discovery":status["requires_discovery"] or self.events.discovery,
+                    "rebase_required":status["rebase_required"] or self.events.pending}
         return {"contract": "external-broker/1", "account_authority": "candlescope",
                 "execution_mode": "CANDLESCOPE", "external_stream_contract": CONTRACT,
                 "execution_schedule_contract": SCHEDULE, "execution_tick_contract": TICK_CONTRACT,
                 **({"request_update_contract": REQUESTS} if self.requested else {}),
+                **({"event_request_contract":EVENT_CONTRACT,"event_request_state":self.events.status()}
+                   if self.events is not None else {}),
                 **({"window_feedback_contract":FEEDBACK_CONTRACT,
-                    "window_status":self.engine.window_status()} if self.feedback else {}),
+                    "window_status":status} if self.feedback else {}),
                 "bar_cursor": self.engine.cursor, "bar_open": self.engine.bar_open,
                 "pass_cursor": self.passes, "intent_cursor": self.intents, "input_skip": self.skip,
                 **self.profile, "stream_schema": 1, "intent_base": 0,

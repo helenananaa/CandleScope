@@ -17,6 +17,11 @@ def eligible(analysis):
         for item in analysis.get("compatibility", {}).get("supported", []))
 
 
+def eligible_stream(analysis):
+    from .event_stream import required
+    return eligible(analysis) or bool(capabilities()) and required(analysis)
+
+
 def validate_contract(request):
     contract = request.get("request_update_contract")
     groups = request.get("request_updates")

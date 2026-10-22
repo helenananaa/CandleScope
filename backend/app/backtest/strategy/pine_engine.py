@@ -233,6 +233,8 @@ class PineEngineProvider:
                if self.order_mode and self.runtime_identity.get("order_metadata_contract") else {}),
             **({"risk_contract": STOP_CONTRACT if self.stop_functions else RISK_CONTRACT} if self.entry_risk else {}),
         }
+        if self.streaming and frozen.get("eventRequestContract") is not None:
+            self.wire["event_request_contract"]=frozen["eventRequestContract"]
         from app.backtest.errors import BacktestError
         from app.backtest.pine_requested_data import load_contexts
         try:

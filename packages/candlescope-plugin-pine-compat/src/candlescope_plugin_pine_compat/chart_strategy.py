@@ -14,6 +14,7 @@ from .entry_risk import STOP_CONTRACT
 from .execution_schedule import capabilities as schedule_capabilities
 from .request_updates import CONTRACT as REQUEST_UPDATE_CONTRACT, capabilities as request_update_capabilities, eligible as request_updates_eligible
 from .external_stream import capabilities as stream_capabilities
+from .event_stream import capabilities as event_capabilities, required as event_required
 
 
 def describe():
@@ -24,6 +25,7 @@ def describe():
         **schedule_capabilities(),
         **stream_capabilities(),
         **request_update_capabilities(),
+        **event_capabilities(),
         "external_orders": getattr(pine_compat, "EXTERNAL_ORDER_SCHEMA_VERSION", 1),
         "external_sizing": getattr(pine_compat, "EXTERNAL_SIZING_SCHEMA_VERSION", 0),
         "contract_metadata_schema": getattr(pine_compat, "CONTRACT_METADATA_SCHEMA_VERSION", 0),
@@ -43,6 +45,8 @@ def execute(request):
     if request.get("operation") == "analyze":
         program, analysis = prepare(request["source"], library_sources({"pineLibrarySources": request.get("libraries", {})}))
         requirements = program.host_requirements()
+        events=event_required(analysis) and any(requirements["execution"].get(name)
+            for name in ("calcOnEveryTick","calcOnEveryHistoryTick"))
         # The empty prefix exposes declared broker settings without making trades.
         scheduled=bool(stream_capabilities()) and any(requirements["execution"].get(name)
             for name in ("calcOnEveryTick","calcOnEveryHistoryTick"))
@@ -55,7 +59,8 @@ def execute(request):
             "requirements": requirements,
             "pyramiding": profile.get("pyramiding", 1),
             "profileError": profile.get("profileError"),
-            **({"request_update_contract": REQUEST_UPDATE_CONTRACT} if request_updates_eligible(analysis) else {}),
+            **({"request_update_contract": REQUEST_UPDATE_CONTRACT} if request_updates_eligible(analysis) or events else {}),
+            **(event_capabilities() if events else {}),
         }
     return evaluate(request)
 

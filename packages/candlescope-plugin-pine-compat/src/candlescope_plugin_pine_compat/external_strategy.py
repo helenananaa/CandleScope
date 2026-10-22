@@ -17,6 +17,7 @@ from .execution_schedule import CONTRACT as SCHEDULE_CONTRACT, TICK_CONTRACT, ca
 from .request_updates import CONTRACT as REQUEST_UPDATE_CONTRACT, capabilities as request_update_capabilities
 from .request_updates import validate_contract as validate_request_updates, closed_schedule, eligible as request_updates_eligible
 from .external_stream import capabilities as stream_capabilities
+from .event_stream import capabilities as event_capabilities, required as event_required
 
 _prefix = PrefixInput()
 _session = None
@@ -35,6 +36,7 @@ def describe():
         **schedule_capabilities(),
         **stream_capabilities(),
         **request_update_capabilities(),
+        **event_capabilities(),
         **({"risk_stop_contract": STOP_CONTRACT} if risk_available() else {}),
         **({"closing_tick_contract": "candlescope.pine-closing-tick/1"}
            if getattr(pine_compat, "EXTERNAL_CLOSING_TICK_SCHEMA_VERSION", 0) == 1 else {}),
@@ -104,10 +106,13 @@ def _execute(request):
     if request.get("operation") == "host_control":
         environment = request_environment(request)
         requirements = program.host_requirements()
+        events=event_required(analysis) and any(requirements["execution"].get(name)
+            for name in ("calcOnEveryTick","calcOnEveryHistoryTick"))
         if requirements.get("account") is None:
             raise ValueError("EXTERNAL_UNSUPPORTED: Workbench Host execution requires a Pine strategy")
         return {"contract": "candlescope.pine-workbench-control/1", "execution": requirements["execution"],
-            **({"request_update_contract": REQUEST_UPDATE_CONTRACT} if request_updates_eligible(analysis) else {}),
+            **({"request_update_contract": REQUEST_UPDATE_CONTRACT} if request_updates_eligible(analysis) or events else {}),
+            **(event_capabilities() if events else {}),
             **({"default_quantity": requirements["account"]["defaultQuantity"]}
                if getattr(pine_compat, "EXTERNAL_SIZING_SCHEMA_VERSION", 0) == 1 else {}),
             **({"risk_rules": program.strategy_risk_configuration(input_overrides=parameters or None,

@@ -41,7 +41,7 @@ def open_stream(plugin,wire,cancelled,deadline,*,resume=None):
             or wire["identity"].get("external_stream_contract")!=STREAM_CONTRACT):
         raise BacktestError("EXTERNAL_UNSUPPORTED","historical Pine ticks require the negotiated BAR stream")
     names={"protocol","identity","source","parameters","libraries","context","contexts","host_settings",
-           "risk_contract","closing_ticks","order_metadata_contract","currency_rates","request_update_contract"}
+           "risk_contract","closing_ticks","order_metadata_contract","currency_rates","request_update_contract","event_request_contract"}
     opening={key:deepcopy(value) for key,value in wire.items() if key in names and key not in {"protocol","identity"}}
     if wire.get("request_update_contract"):
         opening["contexts"]=[{**item,"bars":[]} for item in opening.get("contexts",[])]
@@ -53,6 +53,8 @@ def open_stream(plugin,wire,cancelled,deadline,*,resume=None):
         if wire["identity"].get("request_window_plan_contract")!=WINDOW_CONTRACT:
             raise BacktestError("EXTERNAL_UNSUPPORTED","historical requested streams require window planning")
         opening["requested_history"]=window_history(wire.get("contexts",[]))
+    from .pine_event_requests import attach_workbench
+    attach_workbench(opening,wire)
     transport={"protocol":wire["protocol"],"identity":wire["identity"]}
     if resume is None:
         stream=PineStream(plugin,transport,opening,cancelled,deadline=deadline)
