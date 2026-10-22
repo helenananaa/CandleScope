@@ -17,7 +17,7 @@ from .request_updates import CONTRACT as REQUEST_UPDATE_CONTRACT, capabilities a
 
 def describe():
     return {
-        **identity("candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-chart/7"),
+        **identity("candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-chart/8"),
         **({"order_metadata_contract": "candlescope.pine-order-metadata/1"}
            if getattr(pine_compat, "EXTERNAL_ORDER_METADATA_SCHEMA_VERSION", 0) == 1 else {}),
         **schedule_capabilities(),

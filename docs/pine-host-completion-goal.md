@@ -76,6 +76,18 @@ official-reference, packaged use and release acceptance in phase 5 remain
 required. Released engine/plugin locks and default desktop activation are
 unchanged.
 
+The native history-tick and explicit-account schedule foundations now have
+fresh standard-chart reference observations and controlled adapter/IPC checks;
+see [tick transport](pine-tick-schedule-foundation.md). This does not complete
+the Host clock drivers or persistent same-bar streaming. The corrected candidate
+passes 7,982 Rust, 1,956 Python and 172 tooling checks; installed Host validation
+passes 688 cases across 51 modules with no skips and unchanged source/runtime
+fingerprints. Ordinary indicator requested-data growth still resets realtime
+state; provider-only transactions and a causal Host lifecycle are required to
+preserve varip without evaluating one combined observation twice. The formal
+desktop source pin and its Renko patch also require migration and actual-package
+qualification. Earlier passing receipts keep their own identities.
+
 The previous round's closeout below is a historical checkpoint, not completion
 of this full Goal.
 

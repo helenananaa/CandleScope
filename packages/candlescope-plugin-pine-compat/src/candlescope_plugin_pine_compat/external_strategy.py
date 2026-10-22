@@ -13,7 +13,7 @@ from .prefix_transport import CONTRACT as PREFIX_CONTRACT
 from .prefix_transport import PASSES_CONTRACT, CLOCKS_CONTRACT, PrefixInput
 from .strategy_time import engine_bars
 from .entry_risk import options as risk_options, available as risk_available, STOP_CONTRACT
-from .execution_schedule import CONTRACT as SCHEDULE_CONTRACT, capabilities as schedule_capabilities, execution_input
+from .execution_schedule import CONTRACT as SCHEDULE_CONTRACT, TICK_CONTRACT, capabilities as schedule_capabilities, execution_input
 from .request_updates import CONTRACT as REQUEST_UPDATE_CONTRACT, capabilities as request_update_capabilities
 from .request_updates import validate_contract as validate_request_updates, closed_schedule, eligible as request_updates_eligible
 
@@ -27,7 +27,7 @@ def describe():
         raise ValueError("EXTERNAL_RUNTIME_UNAVAILABLE: install external-broker/1 runtime")
     return {
         **identity(
-            "candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-external/11"
+            "candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-external/12"
         ),
         "workbench_control": "candlescope.pine-workbench-control/1",
         "external_replay": "candlescope.external-replay/1",
@@ -207,6 +207,7 @@ def _execute(request):
         "execution_mode": "CANDLESCOPE",
         "account_authority": "candlescope",
         **({"execution_schedule_contract": SCHEDULE_CONTRACT} if "execution_schedule" in evaluations else {}),
+        **({"execution_tick_contract": TICK_CONTRACT} if request.get("execution_tick_contract") == TICK_CONTRACT else {}),
         **({"request_update_contract": REQUEST_UPDATE_CONTRACT} if request.get("request_update_contract") else {}),
         **({"evaluation_contract": REQUEST_UPDATE_CONTRACT} if request.get("request_update_contract") else {}),
     }

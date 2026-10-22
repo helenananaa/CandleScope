@@ -46,6 +46,10 @@ class PrefixInput:
                 raise ValueError("PINE_PREFIX_INVALID: append requires matching execution schedule")
         elif schedule is not None or request.get("execution_schedule_contract") is not None:
             raise ValueError("PINE_PREFIX_INVALID: execution schedule mode changed")
+        if "execution_tick_contract" in request and (
+                request["execution_tick_contract"] is None
+                or request["execution_tick_contract"] != self.request.get("execution_tick_contract")):
+            raise ValueError("PINE_PREFIX_INVALID: tick schedule mode changed")
         clocks = request.get("execution_times")
         if self.request.get("execution_times") is not None:
             if not isinstance(clocks, list) or len(clocks) != len(bars):

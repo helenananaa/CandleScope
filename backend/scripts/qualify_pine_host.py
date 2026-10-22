@@ -34,10 +34,13 @@ MODULES = (
     "test_chart_pine_callbacks", "test_external_feedback", "test_external_requested_data",
     "test_pine_print_account", "test_pine_physical_admission", "test_pine_workbench_v2_print",
     "test_pine_workbench_v2_print_costs", "test_pine_v2_book_settlement", "test_pine_workbench_v2_print_preparation",
+    "test_pine_tick_transport",
 )
 SCHEMAS = {
     "CONTRACT_METADATA_SCHEMA_VERSION": 1,
     "EXTERNAL_REQUEST_UPDATE_SCHEMA_VERSION": 1,
+    "EXTERNAL_TICK_SCHEDULE_SCHEMA_VERSION": 1,
+    "MAX_STRATEGY_OBSERVATIONS_PER_BAR": 100_000,
     "EXTERNAL_CLOCK_SCHEMA_VERSION": 1, "SYMBOL_METADATA_SCHEMA_VERSION": 1,
     "EXTERNAL_ORDER_SCHEMA_VERSION": 2, "EXTERNAL_CLOSING_TICK_SCHEMA_VERSION": 1,
     "STRATEGY_RISK_CONFIGURATION_SCHEMA_VERSION": 1, "EXTERNAL_SCHEDULE_SCHEMA_VERSION": 1,
@@ -102,7 +105,7 @@ def main(argv=None):
     python = Path(os.path.abspath(args.runtime_python))
     registry, output = args.runtime_registry.resolve(), args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
-    receipt = {"schema": "candlescope.pine-host-qualification/1", "profile": "historical-bar-print-causal-requests",
+    receipt = {"schema": "candlescope.pine-host-qualification/1", "profile": "historical-bar-print-tick-transport-foundation",
                "status": "RUNNING", "host_head": subprocess.check_output(
                    ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                "runtime_python": str(python), "runtime_registry": str(registry),

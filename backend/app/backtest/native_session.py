@@ -10,6 +10,7 @@ import time
 from copy import deepcopy
 from .native import MAX_BYTES, PROTOCOL, encoded
 from .errors import BacktestError
+TICK_CONTRACT = "candlescope.pine-tick-schedule/1"
 
 SCHEDULE_CONTRACT = "candlescope.pine-execution-schedule/1"
 PREFIX_SCHEDULE_CONTRACT = "candlescope.pine-prefix-schedule/1"
@@ -36,6 +37,11 @@ class SessionWorker:
         self.supported = True if evaluator else self.request({**wire, "operation": "open"}, cancelled).get("supported") is True
 
     def request(self, payload, cancelled, timeout=120):
+        if "execution_tick_contract" in payload:
+            if (payload["execution_tick_contract"] != TICK_CONTRACT
+                    or self.identity.get("execution_tick_contract") != TICK_CONTRACT
+                    or payload.get("execution_schedule") is None):
+                raise BacktestError("EXTERNAL_UNSUPPORTED", "Pine tick schedule was not negotiated")
         if payload.get("request_updates") is not None or payload.get("request_update_contract") is not None:
             if (self.identity.get("request_update_contract") != REQUEST_UPDATE_CONTRACT
                     or payload.get("request_update_contract") != REQUEST_UPDATE_CONTRACT):
@@ -87,6 +93,8 @@ class SessionWorker:
                     raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine execution schedule acknowledgement missing")
                 if payload.get("request_update_contract") is not None and result.get("request_update_contract") != REQUEST_UPDATE_CONTRACT:
                     raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine requested-update acknowledgement missing")
+                if payload.get("execution_tick_contract") is not None and result.get("execution_tick_contract") != TICK_CONTRACT:
+                    raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine tick schedule acknowledgement missing")
                 return result
         except Exception:
             self.close()

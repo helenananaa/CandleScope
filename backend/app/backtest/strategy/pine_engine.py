@@ -113,7 +113,7 @@ def analyze(source, libraries=None):
         or (requirements.get("account") or {}).get("declaredCurrency")
         or any(
             execution.get(key)
-            for key in ("calcOnEveryTick",)
+            for key in ("calcOnEveryTick", "calcOnEveryHistoryTick")
         )
         or (execution.get("calcOnOrderFills") and result["identity"].get("fill_callbacks") != CALLBACK_CONTRACT)
         or (execution.get("processOrdersOnClose") and result["identity"].get("closing_tick_contract") != CLOSING_CONTRACT)
