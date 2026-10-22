@@ -13,7 +13,8 @@ class ChartClosingTicks:
         match_closing_tick(execution, bar, sequence, on_fill=self.on_fill if self.callbacks else None)
 
     def on_fill(self, bar, tick):
-        intents = self.callbacks.observe(bar, confirmed=True)
+        intents = (self.callbacks.observe_closing_fill(bar) if hasattr(self.callbacks,"observe_closing_fill")
+                   else self.callbacks.observe(bar, confirmed=True))
         wire = getattr(intents, "decision", None) or {}
         decision = _decision_record(intents, sequence=wire.get("sequence", bar.sequence), watermark_ms=bar.event_time_ms)
         decision.update(trigger="CLOSE_FILL", signal_sequence=bar.sequence, source_sequence=tick.sequence,

@@ -1168,7 +1168,7 @@ class BacktestService:
         normalized_execution = json.loads(identity.execution_json)
         if normalized_execution.get("pine_runtime_identity"):
             stored_payload["pine_runtime_identity"] = normalized_execution["pine_runtime_identity"]
-        for name in ("pine_chart_metadata", "pine_contexts", "pine_local_data_root", "pine_order_runtime_identity", "pine_fill_callbacks", "pine_process_on_close", "pine_risk_windows", "pine_bar_path_contract", "pine_v2_bar_contract", "pine_history_ticks"):
+        for name in ("pine_chart_metadata", "pine_contexts", "pine_local_data_root", "pine_order_runtime_identity", "pine_fill_callbacks", "pine_process_on_close", "pine_risk_windows", "pine_bar_path_contract", "pine_v2_bar_contract", "pine_history_ticks", "pine_realtime_ticks"):
             stored_payload.pop(name, None)
             if name in normalized_execution:
                 stored_payload[name] = normalized_execution[name]
@@ -3169,6 +3169,9 @@ class BacktestService:
                     "pineChartMarketType": config.get("market_type"),
                     "pineRequestedContexts": config.get("pine_contexts", []),
                     "pineLocalDataRoot": config.get("pine_local_data_root"),
+                    **({"pineExecutionScheduleContract":"candlescope.pine-execution-schedule/1",
+                        "pineStreamContract":"candlescope.pine-external-stream/1","pineRealtimeTicks":True}
+                       if config.get("pine_realtime_ticks") else {}),
                 }
             )
             event_bytes = _event_wire_bytes(events)
@@ -3217,8 +3220,8 @@ class BacktestService:
                         "CHECKPOINT_CORRUPT",
                         "checkpoint mode does not match dual-clock run",
                     )
-                kernel.restore(payload["engine"])
                 session.restore(payload["provider"])
+                kernel.restore(payload["engine"])
                 session.generation = int(record["generation"])
                 planner.restore(payload.get("planner") or {})
                 resume_sequence = int(payload["sequence"])
@@ -3241,9 +3244,11 @@ class BacktestService:
             collected_chart_bars = []
 
             callbacks = None
-            if config.get("pine_fill_callbacks"):
+            if config.get("pine_fill_callbacks") or config.get("pine_realtime_ticks"):
                 from .pine_callbacks import ChartFillCallbacks
-                callbacks = ChartFillCallbacks(session, adapter, planner, kernel,
+                from .pine_realtime_ticks import ChartRealtimeTicks
+                callback_type=ChartRealtimeTicks if config.get("pine_realtime_ticks") else ChartFillCallbacks
+                callbacks = callback_type(session, adapter, planner, kernel,
                     market=observation_market or {"venue": "local", "symbol": str(record["dataset_id"])},
                     warmup=warmup_events, deadline=deadline,
                     features=lambda bar: self._observation_features(provider, bar=bar, trade=None),
@@ -3252,7 +3257,7 @@ class BacktestService:
             closing = None
             if config.get("pine_process_on_close"):
                 from .pine_closing import ChartClosingTicks
-                closing = ChartClosingTicks(kernel, callbacks)
+                closing = ChartClosingTicks(kernel, callbacks if not config.get("pine_realtime_ticks") or config.get("pine_fill_callbacks") else None)
 
             def strategy(
                 _visible: tuple[MarketEvent, ...], bar: MarketEvent
@@ -3343,7 +3348,8 @@ class BacktestService:
                 warmup_events=0,
                 finalize=True,
                 checkpoint_callback=checkpoint_after,
-                **({"fill_callback": callbacks.on_fill} if callbacks is not None else {}),
+                **({"fill_callback": callbacks.on_fill} if callbacks is not None and not config.get("pine_realtime_ticks") else {}),
+                **({"tick_callback":callbacks.on_tick} if config.get("pine_realtime_ticks") else {}),
                 **({"close_callback": closing.process} if closing is not None else {}),
             )
             cost_sensitivity = self._build_cost_sensitivity(config, kernel, events, result, provider=provider, planner=planner, input_plan=adapter.input_plan,
@@ -4529,7 +4535,15 @@ class BacktestService:
             execution_config["pine_runtime_identity"] = compiled_pine["dependencyHash"]
             fill_callbacks = json.loads(compiled_pine["executionSource"]).get("fillCallbacks") is True
             history_ticks = json.loads(compiled_pine["executionSource"]).get("historyTicks") is True
-            if history_ticks:
+            realtime_ticks = json.loads(compiled_pine["executionSource"]).get("realtimeTicks") is True
+            if realtime_ticks and fidelity!="AGG_TRADE_EXECUTION" and not (history_ticks and fidelity=="BAR_APPROX"):
+                raise BacktestError("FIDELITY_UNSUPPORTED","realtime Pine ticks require aggregate-trade execution; historical BAR ticks require calc_on_every_history_tick")
+            if realtime_ticks and fidelity=="AGG_TRADE_EXECUTION":
+                envelope=json.loads(compiled_pine["executionSource"])
+                if (output_mode!="ORDER_INTENT" or envelope["identity"].get("external_stream_contract")!="candlescope.pine-external-stream/1"):
+                    raise BacktestError("FIDELITY_UNSUPPORTED","realtime Pine ticks require the negotiated aggregate-trade stream and ORDER_INTENT")
+                execution_config["pine_realtime_ticks"]=True
+            if history_ticks and not execution_config.get("pine_realtime_ticks"):
                 envelope=json.loads(compiled_pine["executionSource"])
                 if (fidelity!="BAR_APPROX" or output_mode!="ORDER_INTENT"
                         or envelope["identity"].get("external_stream_contract")!="candlescope.pine-external-stream/1"):

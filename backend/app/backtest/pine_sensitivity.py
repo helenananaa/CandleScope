@@ -61,13 +61,15 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
                 callback_type=ChartHistoricalTicks if config.get("pine_history_ticks") else ChartHistoricalBarCallbacks
                 historical_callbacks = callback_type(session, adapter, shadow_planner, replay,
                     market=market, warmup=warmup, features=features, control=control, deadline=deadline)
-            elif config.get("pine_fill_callbacks"):
-                callbacks = ChartFillCallbacks(session, adapter, shadow_planner, replay,
+            elif config.get("pine_fill_callbacks") or config.get("pine_realtime_ticks"):
+                from .pine_realtime_ticks import ChartRealtimeTicks
+                callback_type=ChartRealtimeTicks if config.get("pine_realtime_ticks") else ChartFillCallbacks
+                callbacks = callback_type(session, adapter, shadow_planner, replay,
                     market=market, warmup=warmup, features=features, control=control, deadline=deadline)
             closing = None
             if config.get("pine_process_on_close") and historical_callbacks is None:
                 from .pine_closing import ChartClosingTicks
-                closing = ChartClosingTicks(replay, callbacks)
+                closing = ChartClosingTicks(replay, callbacks if not config.get("pine_realtime_ticks") or config.get("pine_fill_callbacks") else None)
 
             def strategy(_visible, event):
                 nonlocal observed
@@ -89,7 +91,8 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
                     context=None if shadow_planner.config is None else _planning_context(account_kernel, event))
 
             result = replay.run(events, strategy, warmup_events=0, finalize=True,
-                **({"fill_callback": callbacks.on_fill} if callbacks is not None else {}),
+                **({"fill_callback": callbacks.on_fill} if callbacks is not None and not config.get("pine_realtime_ticks") else {}),
+                **({"tick_callback":callbacks.on_tick} if config.get("pine_realtime_ticks") else {}),
                 **({"fill_callback": historical_callbacks.on_fill} if historical_callbacks is not None else {}),
                 **({"vertex_callback":historical_callbacks.on_vertex} if config.get("pine_history_ticks") else {}),
                 **({"close_callback": closing.process} if closing is not None else {}))

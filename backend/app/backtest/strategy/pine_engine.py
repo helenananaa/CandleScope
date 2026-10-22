@@ -112,7 +112,7 @@ def analyze(source, libraries=None):
         or any(item.get("function") not in {"security", "request.security", "request.security_lower_tf"}
                for item in requirements.get("requests", []))
         or (requirements.get("account") or {}).get("declaredCurrency")
-        or execution.get("calcOnEveryTick")
+        or (execution.get("calcOnEveryTick") and result["identity"].get("external_stream_contract")!=STREAM_CONTRACT)
         or (execution.get("calcOnEveryHistoryTick") and result["identity"].get("external_stream_contract")!=STREAM_CONTRACT)
         or (execution.get("calcOnOrderFills") and result["identity"].get("fill_callbacks") != CALLBACK_CONTRACT)
         or (execution.get("processOrdersOnClose") and result["identity"].get("closing_tick_contract") != CLOSING_CONTRACT)
@@ -137,6 +137,7 @@ class PineEngineProvider:
         self.stream = None
         self._closed_stream_checkpoint = None
         self.streaming = False
+        self.realtime_streaming = False
         self.cancelled = threading.Event()
         self.bars, self.accounts, self.history = [], [], []
         self.entry_id = None
@@ -189,10 +190,14 @@ class PineEngineProvider:
         schedule_contract = context.get("pineExecutionScheduleContract")
         self.scheduled = schedule_contract is not None
         self.streaming = context.get("pineStreamContract") is not None
+        self.realtime_streaming = context.get("pineRealtimeTicks") is True
         if self.streaming and (context["pineStreamContract"]!=STREAM_CONTRACT or not self.scheduled
                 or self.runtime_identity.get("external_stream_contract")!=STREAM_CONTRACT
-                or frozen.get("historyTicks") is not True or not isinstance(context.get("pineHistoricalBars"),list)):
-            raise StrategyProviderError("FIDELITY_UNSUPPORTED","chart history ticks require an explicit stream and fixed history")
+                or (frozen.get("realtimeTicks") is not True if self.realtime_streaming else
+                    frozen.get("historyTicks") is not True or not isinstance(context.get("pineHistoricalBars"),list))):
+            raise StrategyProviderError("FIDELITY_UNSUPPORTED","chart ticks require a negotiated stream and compatible clock")
+        if self.realtime_streaming and not self.streaming:
+            raise StrategyProviderError("FIDELITY_UNSUPPORTED","realtime ticks require the explicit stream")
         if self.streaming:
             self.context.pop("inputPlan",None)
         self.pass_mode = self.fill_callbacks or self.scheduled
@@ -610,10 +615,13 @@ class PineEngineProvider:
             close_callbacks = sum(item["trigger"] == "closing_fill" for group in self.execution_contexts for item in group)
         skip=(self.stream.input_skip if self.stream is not None else (self._closed_stream_checkpoint or {}).get("input_skip",0)) if self.streaming else 0
         return {"pineExecution": {
-            "profile": "HISTORICAL_OHLC_TICK_STREAM" if self.streaming else "EXPLICIT_HOST_EXECUTION_SCHEDULE" if self.scheduled else "CAUSAL_AGG_TRADE_FILL_PASSES" if self.fill_callbacks else "CONFIRMED_BAR_CLOSE",
+            "profile": "OBSERVED_AGG_TRADE_TICK_STREAM" if self.realtime_streaming else "HISTORICAL_OHLC_TICK_STREAM" if self.streaming else "EXPLICIT_HOST_EXECUTION_SCHEDULE" if self.scheduled else "CAUSAL_AGG_TRADE_FILL_PASSES" if self.fill_callbacks else "CONFIRMED_BAR_CLOSE",
             **({"executionScheduleContract": SCHEDULE_CONTRACT} if self.scheduled else {}),
-            **({"externalStreamContract":STREAM_CONTRACT,"historicalTickCount":sum(len(group) for group in self.execution_passes[skip:]),
-                "historicalObservationCount":sum(len(group) for group in self.execution_passes),"inputSkip":skip} if self.streaming else {}),
+            **({"externalStreamContract":STREAM_CONTRACT,
+                **({"realtimeTickCount":sum(item["trigger"]=="realtime_tick" for group in self.execution_contexts for item in group),
+                    "confirmationCount":sum(item["trigger"]=="bar_close" for group in self.execution_contexts for item in group)} if self.realtime_streaming else
+                   {"historicalTickCount":sum(len(group) for group in self.execution_passes[skip:]),
+                    "historicalObservationCount":sum(len(group) for group in self.execution_passes)}),"inputSkip":skip} if self.streaming else {}),
             "accountAuthority": "candlescope", "tradingViewEquivalent": False,
             **({"defaultQuantity": dict(self.default_quantity)} if self.default_quantity is not None else {}),
             "barCount": len(self.bars),

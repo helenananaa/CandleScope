@@ -39,6 +39,7 @@ MODULES = (
     "test_pine_stream",
     "test_pine_history_tick_workbench", "test_pine_history_tick_clock", "test_pine_history_vertices",
     "test_chart_pine_history_ticks",
+    "test_chart_pine_realtime_ticks", "test_pine_realtime_tick_kernel",
     "test_chart_pine_engine",
     "test_chart_pine_closing", "test_chart_pine_generic_orders", "test_chart_pine_orders",
     "test_pine_book_closing", "test_pine_closing_tick_kernel", "test_pine_entry_risk",

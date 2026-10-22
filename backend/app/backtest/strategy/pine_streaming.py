@@ -14,7 +14,8 @@ def ensure(provider, runtime, symbol, timeframe, contexts):
         contexts=contexts)
     if provider.stream is None:
         provider._stream_environment=deepcopy(opening)
-        opening["historical_plan"]=provider.context["pineHistoricalBars"]
+        if not provider.realtime_streaming:
+            opening["historical_plan"]=provider.context["pineHistoricalBars"]
         provider.stream=PineStream(runtime,{key:provider.wire[key] for key in ("protocol","identity")},
             opening,provider.cancelled)
     elif provider._stream_environment!=opening:
@@ -30,7 +31,8 @@ def observe(provider,runtime,symbol,timeframe,contexts,index,pass_index):
         if stream.bar_open: stream.commit()
         if stream.cursor!=index-stream.input_skip:
             raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION","chart and Pine stream cursors differ")
-        stream.begin(provider.context["pineHistoricalBars"][index],bar_state="historical")
+        stream.begin(provider.bars[index] if provider.realtime_streaming else provider.context["pineHistoricalBars"][index],
+                     bar_state="realtime" if provider.realtime_streaming else "historical")
     observation=dict(evaluation=provider.execution_passes[index][-1],context=provider.execution_contexts[index][-1])
     return stream.observe(observation)
 
