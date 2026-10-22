@@ -78,7 +78,10 @@ unchanged.
 
 The native history-tick and explicit-account schedule foundations now have
 fresh standard-chart reference observations and controlled adapter/IPC checks;
-see [tick transport](pine-tick-schedule-foundation.md). This does not complete
+see [tick transport](pine-tick-schedule-foundation.md). The additive
+[external stream](pine-external-stream.md) now carries individual observations
+and validates replay across worker restarts. Its application clock/coordinator
+integration remains required. This does not complete
 the Host clock drivers or persistent same-bar streaming. The corrected candidate
 passes 7,982 Rust, 1,956 Python and 172 tooling checks; installed Host validation
 passes 688 cases across 51 modules with no skips and unchanged source/runtime

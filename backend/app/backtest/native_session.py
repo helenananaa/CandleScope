@@ -15,6 +15,7 @@ TICK_CONTRACT = "candlescope.pine-tick-schedule/1"
 SCHEDULE_CONTRACT = "candlescope.pine-execution-schedule/1"
 PREFIX_SCHEDULE_CONTRACT = "candlescope.pine-prefix-schedule/1"
 REQUEST_UPDATE_CONTRACT = "candlescope.pine-request-updates/1"
+STREAM_CONTRACT = "candlescope.pine-external-stream/1"
 
 
 class SessionWorker:
@@ -37,7 +38,11 @@ class SessionWorker:
         self.supported = True if evaluator else self.request({**wire, "operation": "open"}, cancelled).get("supported") is True
 
     def request(self, payload, cancelled, timeout=120):
-        if "execution_tick_contract" in payload:
+        streaming = payload.get("operation", "").startswith("stream_")
+        if streaming and (payload.get("external_stream_contract") != STREAM_CONTRACT
+                or self.identity.get("external_stream_contract") != STREAM_CONTRACT):
+            raise BacktestError("EXTERNAL_UNSUPPORTED", "Pine external stream was not negotiated")
+        if not streaming and "execution_tick_contract" in payload:
             if (payload["execution_tick_contract"] != TICK_CONTRACT
                     or self.identity.get("execution_tick_contract") != TICK_CONTRACT
                     or payload.get("execution_schedule") is None):
@@ -46,7 +51,7 @@ class SessionWorker:
             if (self.identity.get("request_update_contract") != REQUEST_UPDATE_CONTRACT
                     or payload.get("request_update_contract") != REQUEST_UPDATE_CONTRACT):
                 raise BacktestError("EXTERNAL_UNSUPPORTED", "Pine requested updates were not negotiated")
-        if payload.get("execution_schedule") is not None or payload.get("execution_schedule_contract") is not None:
+        if not streaming and (payload.get("execution_schedule") is not None or payload.get("execution_schedule_contract") is not None):
             if (self.identity.get("execution_schedule_contract") != SCHEDULE_CONTRACT
                     or payload.get("execution_schedule_contract") != SCHEDULE_CONTRACT
                     or payload.get("execution_schedule") is None or payload.get("execution_passes") is not None):
@@ -89,6 +94,10 @@ class SessionWorker:
                     raise BacktestError("NATIVE_EXECUTION_FAILED", "native session rejected the operation", details=result)
                 if result.get("identity") != self.identity:
                     raise BacktestError("NATIVE_IDENTITY_MISMATCH", "unexpected session runtime")
+                if streaming and (result.get("external_stream_contract") != STREAM_CONTRACT
+                        or result.get("execution_schedule_contract") != SCHEDULE_CONTRACT
+                        or result.get("execution_tick_contract") != TICK_CONTRACT):
+                    raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine stream acknowledgement missing")
                 if payload.get("execution_schedule") is not None and result.get("execution_schedule_contract") != SCHEDULE_CONTRACT:
                     raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine execution schedule acknowledgement missing")
                 if payload.get("request_update_contract") is not None and result.get("request_update_contract") != REQUEST_UPDATE_CONTRACT:

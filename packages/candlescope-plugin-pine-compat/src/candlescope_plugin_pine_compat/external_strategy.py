@@ -16,6 +16,7 @@ from .entry_risk import options as risk_options, available as risk_available, ST
 from .execution_schedule import CONTRACT as SCHEDULE_CONTRACT, TICK_CONTRACT, capabilities as schedule_capabilities, execution_input
 from .request_updates import CONTRACT as REQUEST_UPDATE_CONTRACT, capabilities as request_update_capabilities
 from .request_updates import validate_contract as validate_request_updates, closed_schedule, eligible as request_updates_eligible
+from .external_stream import capabilities as stream_capabilities
 
 _prefix = PrefixInput()
 _session = None
@@ -27,11 +28,12 @@ def describe():
         raise ValueError("EXTERNAL_RUNTIME_UNAVAILABLE: install external-broker/1 runtime")
     return {
         **identity(
-            "candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-external/12"
+            "candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-external/13"
         ),
         "workbench_control": "candlescope.pine-workbench-control/1",
         "external_replay": "candlescope.external-replay/1",
         **schedule_capabilities(),
+        **stream_capabilities(),
         **request_update_capabilities(),
         **({"risk_stop_contract": STOP_CONTRACT} if risk_available() else {}),
         **({"closing_tick_contract": "candlescope.pine-closing-tick/1"}
@@ -216,9 +218,18 @@ def _execute(request):
 def execute(request):
     global _session, _session_count, _prefix
     try:
+        if request.get("operation", "").startswith("stream_"):
+            from .external_stream import execute as stream_execute
+            _session, _session_count, _prefix = None, 0, PrefixInput()
+            return stream_execute(request, prepare, request_environment)
+        from . import external_stream
+        if external_stream._active is not None:
+            raise ValueError("PINE_STREAM_INVALID: legacy evaluation cannot replace an active stream")
         return _execute(request)
     except Exception:
         _session, _session_count, _prefix = None, 0, PrefixInput()
+        from . import external_stream
+        external_stream._active = None
         raise
 
 

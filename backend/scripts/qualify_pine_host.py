@@ -36,8 +36,10 @@ MODULES = (
     "test_pine_workbench_v2_print_costs", "test_pine_v2_book_settlement", "test_pine_workbench_v2_print_preparation",
     "test_pine_tick_transport",
     "test_pine_indicator_observations",
+    "test_pine_stream",
 )
 SCHEMAS = {
+    "EXTERNAL_STREAM_SCHEMA_VERSION": 1,
     "REALTIME_REQUEST_FEED_SCHEMA_VERSION": 1,
     "CONTRACT_METADATA_SCHEMA_VERSION": 1,
     "EXTERNAL_REQUEST_UPDATE_SCHEMA_VERSION": 1,
@@ -107,7 +109,7 @@ def main(argv=None):
     python = Path(os.path.abspath(args.runtime_python))
     registry, output = args.runtime_registry.resolve(), args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
-    receipt = {"schema": "candlescope.pine-host-qualification/1", "profile": "historical-bar-print-tick-transport-indicator-observations",
+    receipt = {"schema": "candlescope.pine-host-qualification/1", "profile": "historical-bar-print-tick-transport-indicator-observations-stream-recovery",
                "status": "RUNNING", "host_head": subprocess.check_output(
                    ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                "runtime_python": str(python), "runtime_registry": str(registry),
