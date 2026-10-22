@@ -98,7 +98,8 @@ def validate_execution(events, bars, interval, mode):
 
 def run_print_clock(kernel, wire, strategy, cancelled, *, state=None, target=None):
     interval = parse_interval_spec(wire["interval"])
-    events = [MarketEvent(**item) for item in wire["execution_events"]]
+    from .pine_print_account import events as physical_events, apply_account, observe_market, record_decision, AUXILIARY
+    events = physical_events(wire)
     kernel.source_kind = assert_trade_stream(tuple(e for e in events if e.role == "TRADES"))
     state=state or {}
     target=len(wire["bars"]) if target is None else target
@@ -109,13 +110,11 @@ def run_print_clock(kernel, wire, strategy, cancelled, *, state=None, target=Non
         nonlocal bar_cursor
         bar = wire["bars"][bar_cursor]
         time_ms = interval.next_ms(bar["time"] * 1000) - 1
-        kernel.account.mark = Decimal(str(bar["close"]))
         decision_event = MarketEvent(last_sequence, time_ms, "TRADES", {"price": str(bar["close"]), "qty": "0"})
         kernel._last_event = decision_event
-        if kernel.market_observer is not None:
-            kernel.market_observer(decision_event)
+        observe_market(kernel, decision_event)
         intents = strategy((), decision_event)
-        kernel.decisions.append({"sequence": last_sequence, "watermark_ms": time_ms, "intents": intents, "signal_bar": bar_cursor})
+        record_decision(kernel, {"sequence": last_sequence, "watermark_ms": time_ms, "intents": intents, "signal_bar": bar_cursor})
         kernel._enqueue_many(intents, current_sequence=last_sequence)
         if wire.get("closing_ticks"):
             from .pine_workbench import bar_event
@@ -132,14 +131,16 @@ def run_print_clock(kernel, wire, strategy, cancelled, *, state=None, target=Non
         while bar_cursor < len(wire["bars"]) and interval.next_ms(wire["bars"][bar_cursor]["time"] * 1000) <= event.event_time_ms:
             decide()
         kernel._last_event = event
-        if event.role == "ORDER_BOOK":
+        if event.role in AUXILIARY:
+            apply_account(kernel, event, record_equity=kernel._market_event_count > 0)
+        elif event.role == "ORDER_BOOK":
             kernel._apply_book(event)
             if kernel.market_observer is not None:
                 kernel.market_observer(event)
         else:
-            kernel.account.mark = Decimal(str(event.payload["price"]))
-            if kernel.market_observer is not None:
-                kernel.market_observer(event)
+            if wire.get("pine_v2_print_contract"):
+                kernel._market_event_count += 1
+            observe_market(kernel, event)
             kernel._match(event)
             kernel.equity_curve.append({"sequence": event.sequence, "event_time_ms": event.event_time_ms,
                 "equity": str(kernel.account.equity()), "position_qty": str(kernel.account.position_qty)})

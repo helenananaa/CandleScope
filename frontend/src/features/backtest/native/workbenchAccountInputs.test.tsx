@@ -28,7 +28,10 @@ test("manual and automatic submission preserve BAR callbacks and the same frozen
   assert.equal(manual.account_data, data);
   assert.equal(manual.participation_rate, .5);
   assert.equal(manual.funding_mode, "HISTORICAL_REQUIRED");
-  assert.equal(automaticHostExecution("CANDLESCOPE", host, "TRADE_TAPE", true, null, options), undefined);
+  const tape = automaticHostExecution("CANDLESCOPE", host, "TRADE_TAPE", true, null, options);
+  assert.equal(tape?.account_data, data);
+  assert.equal(tape?.participation_rate, .5);
+  assert.equal(tape?.bar_path_scenario, undefined);
   assert.throws(() => executionInputs("CANDLESCOPE", host, "BAR_APPROX", false, null, options));
 });
 
@@ -64,4 +67,23 @@ test("account controls expose real input fields and an explicit missing-upload s
   assert.match(html, /LINEAR_PERP_ONE_WAY_V2/);
   assert.match(html, /role="alert"/);
   assert.match(html, /Select the account file again/);
+});
+
+
+test("V2 physical profiles preserve account fields, callbacks and report freshness", () => {
+  const draft = { ...account, participationEnabled: false };
+  const host = defaultExecutionDraft().hostSettings;
+  for (const fidelity of ["TRADE_TAPE", "BOOK_ASSISTED", "BOOK_DEPTH", "BOOK_SAMPLED"]) {
+    for (const callbacks of [false, true]) {
+      const result = executionInputs("CANDLESCOPE", host, fidelity, callbacks, {}, { language: "pine", account: draft, accountData: data });
+      assert.equal(result.account_data, data);
+      assert.equal(result.fill_recalculation, callbacks);
+      assert.equal(result.bar_path_scenario, undefined);
+      assert.equal(workbenchAccountError(draft, data, "ready", "pine", fidelity, callbacks, "futures"), "");
+      const current = { ...defaultExecutionDraft(), fidelity, fillRecalculation: callbacks, account: draft };
+      assert.equal(executionSettingsChanged({ ...result }, current, true, true), false);
+    }
+  }
+  for (const fidelity of ["BOOK_ASSISTED", "BOOK_DEPTH", "BOOK_SAMPLED"])
+    assert.throws(() => executionInputs("CANDLESCOPE", host, fidelity, true, {}, { language: "pine", account, accountData: data }), /capacity|容量/);
 });

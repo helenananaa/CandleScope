@@ -61,8 +61,9 @@ class AutomaticHostExecution(WorkbenchBarSettings):
 
     @model_validator(mode="after")
     def check_callbacks(self):
+        self.validate_physical_account_profile(self.execution_fidelity)
         if ((self.account_model == "LINEAR_PERP_ONE_WAY_V2" or self.execution_model_revision is not None)
-                and (self.execution_fidelity != "BAR_APPROX" or not self.fill_recalculation)):
+                and self.execution_fidelity == "BAR_APPROX" and not self.fill_recalculation):
             raise ValueError("V2 account/capacity requires historical BAR fill callbacks")
         return self
 
@@ -116,6 +117,7 @@ class NativePreparationPayload(BaseModel):
     def check_bar_profile(self):
         execution = self.execution
         if execution is not None:
+            execution.validate_physical_account_profile(execution.execution_fidelity, self.language)
             if (execution.execution_fidelity == "BAR_APPROX" and execution.fill_recalculation and self.language != "pine"):
                 raise ValueError("historical BAR callbacks require Pine")
             if execution.account_model == "LINEAR_PERP_ONE_WAY_V2":

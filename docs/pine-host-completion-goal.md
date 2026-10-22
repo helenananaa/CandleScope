@@ -62,10 +62,19 @@ negotiated contract; see [requested updates](pine-request-updates.md). A fixed
 this measures input transport only, not total latency or throughput. Only summary
 documents changed after the complete gate, with the delta recorded separately.
 
-Phase 4 is next: V2 historical-account trade/book combinations, then realtime
-and every-history-tick schedules. Workload, official-reference, packaged use and
-release acceptance in phase 5 remain required. Released engine/plugin locks and
-default desktop activation are unchanged.
+Phase 4 now connects the Workbench V2 historical account to all four physical
+print/book profiles, with callbacks, actual settlement receipts, requested-data
+boundaries, checkpoint reconstruction, cost reexecution and manual/automatic
+controls. Its immutable-source gate passes all 664 selected cases across 50
+modules, with zero failures/errors/skips, in 1,251.156 seconds. All 3,675 source
+files, installed runtime and registry remain unchanged during the gate. Frontend
+validation passes 16 tests, both TypeScript projects, scoped ESLint and all 30
+locale catalogs. See
+[V2 physical accounts](pine-v2-print-account.md). Chart book admission and actual
+realtime/every-history-tick schedules remain to finish. Workload,
+official-reference, packaged use and release acceptance in phase 5 remain
+required. Released engine/plugin locks and default desktop activation are
+unchanged.
 
 The previous round's closeout below is a historical checkpoint, not completion
 of this full Goal.
@@ -562,7 +571,7 @@ that observation. The corrected allocation group passes.
    frozen identities (`pine-workbench-default-upgrade.md`). Independent complete-endpoint
    Workbench cost matrices now reexecute Pine and fresh accounts, with AUTO/SKIP
    controls, replay parity and worker cleanup (`pine-workbench-costs.md`). V2
-   historical-account print/book paths remain to connect. Working-order margin now
+   historical-account print/book paths are connected as described above. Working-order margin now
    reprices across gaps with FIFO cancellation of unfunded remainders while
    preserving booked fills and valid negative initial-margin availability;
    see `pine-v2-margin-repricing.md`. This does not qualify an exchange-specific

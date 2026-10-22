@@ -81,7 +81,7 @@ export function executionSettingsChanged(config: FrozenExecutionSettings, curren
     .some((field) => settings[field] !== current.hostSettings[field])) return true;
   if ((config.fill_recalculation ?? false) !== current.fillRecalculation) return true;
   try {
-    const desired = workbenchAccountInputs(current.account, current.account?.accountModel === "LINEAR_PERP_ONE_WAY_V2" ? {} : undefined);
+    const desired = workbenchAccountInputs(current.account, current.account?.accountModel === "LINEAR_PERP_ONE_WAY_V2" ? {} : undefined, current.fidelity);
     for (const key of ["account_model", "execution_model_revision", "participation_rate", "bar_path_scenario"] as const) {
       const actual = key === "account_model" && config[key] !== "LINEAR_PERP_ONE_WAY_V2" ? undefined : config[key] ?? undefined;
       if (actual !== desired[key]) return true;

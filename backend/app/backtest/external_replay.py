@@ -20,11 +20,22 @@ def validate_state(wire,state):
     if wire["execution_fidelity"]!="BAR_APPROX":
         clock=state.get("clock") or {}
         event_cursor=clock.get("event_cursor")
-        events=wire["execution_events"]
+        events = wire["execution_events"]
+        if wire.get("pine_v2_print_contract"):
+            from .pine_print_account import events as physical_events
+            events = [{"sequence": row.sequence, "event_time_ms": row.event_time_ms, "role": row.role}
+                      for row in physical_events(wire)]
         if (clock.get("bar_cursor")!=cursor or type(event_cursor) is not int
                 or not 1<=event_cursor<=len(events)
                 or clock.get("last_sequence")!=events[event_cursor-1]["sequence"]):
             raise BacktestError("NATIVE_IDENTITY_MISMATCH","external execution cursor differs")
+        if wire.get("pine_v2_print_contract"):
+            from app.data_engine.interval_policy import parse_interval_spec
+            end = parse_interval_spec(wire["interval"]).next_ms(wire["bars"][cursor - 1]["time"] * 1000)
+            expected_cursor = sum(row["event_time_ms"] < end for row in events)
+            expected_prints = sum(row["role"] == "TRADES" for row in events[:expected_cursor])
+            if event_cursor != expected_cursor or state.get("kernel", {}).get("market_event_count") != expected_prints:
+                raise BacktestError("NATIVE_IDENTITY_MISMATCH", "V2 physical/account checkpoint horizon differs")
     if wire.get("pine_bar_path_contract"):
         clock = state.get("clock") or {}
         path = state.get("kernel", {}).get("pine_bar_path") or {}

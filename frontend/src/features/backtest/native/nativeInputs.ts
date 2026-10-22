@@ -6,8 +6,8 @@ import { workbenchAccountInputs, type WorkbenchAccountDraft, type WorkbenchAccou
 type WorkbenchOptions = { language?: "pine" | "pyne"; account?: WorkbenchAccountDraft; accountData?: unknown; costSensitivityMode?: "AUTO" | "SKIP" };
 function hostOptions(fidelity: string, callbacks: boolean, options: WorkbenchOptions = {}) {
   const fill = callbacks && (options.language !== "pyne" || fidelity !== "BAR_APPROX");
-  const account = workbenchAccountInputs(options.account, options.accountData);
-  if (Object.keys(account).length && (options.language === "pyne" || fidelity !== "BAR_APPROX" || !fill))
+  const account = workbenchAccountInputs(options.account, options.accountData, fidelity);
+  if (Object.keys(account).length && (options.language === "pyne" || (fidelity === "BAR_APPROX" && !fill)))
     throw new Error("V2 account/capacity requires Pine historical BAR fill callbacks");
   return { fill_recalculation: fill, ...account,
     ...(options.language !== "pyne" && options.costSensitivityMode ? { cost_sensitivity_mode: options.costSensitivityMode } : {}) };

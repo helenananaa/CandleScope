@@ -42,7 +42,7 @@ export interface WorkbenchAccountPayload {
   account_model?: string; leverage?: number; funding_mode?: string; account_data?: unknown;
   execution_model_revision?: string; participation_rate?: number; bar_path_scenario?: string;
 }
-export function workbenchAccountInputs(draft?: WorkbenchAccountDraft, data?: unknown): WorkbenchAccountPayload {
+export function workbenchAccountInputs(draft?: WorkbenchAccountDraft, data?: unknown, fidelity = "BAR_APPROX"): WorkbenchAccountPayload {
   if (!draft) return {};
   if (!["AUTO", "LINEAR_PERP_ONE_WAY_V2"].includes(draft.accountModel)) throw new Error(t("native.account.invalidSettings"));
   const result: WorkbenchAccountPayload = {};
@@ -57,7 +57,13 @@ export function workbenchAccountInputs(draft?: WorkbenchAccountDraft, data?: unk
     if (!Number.isFinite(draft.participationRate) || draft.participationRate <= 0 || draft.participationRate > 1)
       throw new Error(t("native.account.invalidSettings"));
     Object.assign(result, { execution_model_revision: "EXECUTION_REALISM_V2", participation_rate: draft.participationRate,
-      bar_path_scenario: "OHLC_NEAREST_EXTREME_PATH_V2" });
+      ...(fidelity === "BAR_APPROX" ? { bar_path_scenario: "OHLC_NEAREST_EXTREME_PATH_V2" } : {}) });
+  }
+  if (Object.keys(result).length && fidelity !== "BAR_APPROX") {
+    if (result.account_model !== "LINEAR_PERP_ONE_WAY_V2" || !["TRADE_TAPE", "BOOK_ASSISTED", "BOOK_DEPTH", "BOOK_SAMPLED"].includes(fidelity))
+      throw new Error(t("native.account.barRequired"));
+    if (draft.participationEnabled && fidelity !== "TRADE_TAPE")
+      throw new Error(t("native.account.bookCapacity"));
   }
   return result;
 }
@@ -66,8 +72,8 @@ export function workbenchAccountError(draft: WorkbenchAccountDraft, data: unknow
   try {
     if (draft.accountModel === "LINEAR_PERP_ONE_WAY_V2" && state !== "ready")
       return t(state === "missing" ? "native.account.uploadMissing" : state === "loading" ? "native.account.loading" : "native.account.invalidData");
-    const inputs = workbenchAccountInputs(draft, data);
-    if (Object.keys(inputs).length && (language !== "pine" || fidelity !== "BAR_APPROX" || !callbacks))
+    const inputs = workbenchAccountInputs(draft, data, fidelity);
+    if (Object.keys(inputs).length && (language !== "pine" || (fidelity === "BAR_APPROX" && !callbacks)))
       return t("native.account.barRequired");
     if (draft.accountModel === "LINEAR_PERP_ONE_WAY_V2") {
       if (marketType === "spot") return t("native.account.perpRequired");

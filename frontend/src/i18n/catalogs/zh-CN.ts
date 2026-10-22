@@ -1,4 +1,5 @@
 export const zhCN = {
+  "native.account.bookCapacity": "盘口模式使用自身的容量模型，请关闭成交量参与率。",
   "native.cost.title": "成本情景",
   "native.cost.help": "每个情景独立重跑策略与账户，成本变化可能改变交易决策。用于检查策略稳健性。",
   "native.cost.enable": "运行独立成本情景",

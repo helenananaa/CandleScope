@@ -1,4 +1,5 @@
 export const workbenchEnglish = {
+  "native.account.bookCapacity": "Recorded book modes use their own capacity model. Turn off volume participation.",
   "native.orderComment": "Order comment",
   "native.orderAlertMessage": "Fill alert message",
   "native.orderAlertEnabled": "Fill alert enabled",

@@ -144,10 +144,26 @@ class WorkbenchBarSettings(BaseModel):
         return self
 
 
+    def validate_physical_account_profile(self, fidelity, language="pine"):
+        if fidelity == "BAR_APPROX" or (self.account_model != "LINEAR_PERP_ONE_WAY_V2" and self.execution_model_revision is None):
+            return
+        if language != "pine" or self.account_model != "LINEAR_PERP_ONE_WAY_V2":
+            raise ValueError("physical historical account settings require Pine and V2")
+        if self.bar_path_scenario is not None:
+            raise ValueError("physical clocks cannot use a synthetic BAR path")
+        if self.execution_model_revision is not None and fidelity != "TRADE_TAPE":
+            raise ValueError("book capacity retains its declared physical policy")
+
+
 class ExternalRunRequest(NativeRunRequest, WorkbenchBarSettings):
     execution_mode: Literal["CANDLESCOPE"] = "CANDLESCOPE"
     execution_fidelity: Literal["BAR_APPROX", "TRADE_TAPE", "BOOK_ASSISTED", "BOOK_DEPTH", "BOOK_SAMPLED"] = "BAR_APPROX"
     fill_recalculation: bool = False
+
+    @model_validator(mode="after")
+    def check_physical_account_profile(self):
+        self.validate_physical_account_profile(self.execution_fidelity, self.language)
+        return self
     execution_data: ExecutionData | None = None
     host_settings: HostMatchingSettings = Field(default_factory=HostMatchingSettings)
 

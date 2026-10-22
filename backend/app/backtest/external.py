@@ -38,6 +38,7 @@ def host_identity():
     files.append(Path(__file__).with_name("native_contracts.py"))
     files.append(Path(__file__).with_name("pine_contract_metadata.py"))
     files.append(Path(__file__).with_name("pine_request_updates.py"))
+    files.append(Path(__file__).with_name("pine_print_account.py"))
     files.append(Path(__file__).with_name("workbench_sensitivity.py"))
     for path in files:
         checksum.update(path.name.encode())
@@ -123,9 +124,15 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
             if wire["pine_v2_bar_contract"] != V2_CONTRACT:
                 raise BacktestError("EXTERNAL_UNSUPPORTED", "invalid Pine V2 BAR contract")
             kernel_type = PineV2BarKernel
-    kernel = kernel_type(**({"process_orders_on_close": True} if issubclass(kernel_type, SimulationKernel) and wire.get("closing_ticks") else {}),
+    print_kwargs = {}
+    if (wire.get("pine_v2_print_contract") and fidelity == "TRADE_TAPE"
+            and wire["pine_v2_settings"].get("execution_model_revision") == "EXECUTION_REALISM_V2"):
+        from app.simulation.execution_realism import TRADE_FILL_POLICY_V2
+        print_kwargs["fill_policy"] = TRADE_FILL_POLICY_V2
+    kernel = kernel_type(**print_kwargs, **({"process_orders_on_close": True} if issubclass(kernel_type, SimulationKernel) and wire.get("closing_ticks") else {}),
                               **({key: (Decimal(value) if key in {"leverage", "participation_rate"} and value is not None else value)
-                                  for key, value in wire["pine_v2_settings"].items()} if wire.get("pine_v2_bar_contract") else {}),
+                                  for key, value in wire["pine_v2_settings"].items()
+                                  if key != "bar_path_scenario" or not wire.get("pine_v2_print_contract")} if wire.get("pine_v2_bar_contract") or wire.get("pine_v2_print_contract") else {}),
                               account_model=wire.get("account_model", "LINEAR_PERP_ONE_WAY_V1"),
                               initial_balance=Decimal(str(settings["initial_balance"])),
                               slippage_bps=Decimal(str(settings["slippage_bps"])),
@@ -186,7 +193,7 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
                          "position_avg_price": None if account.entry_price is None else float(account.entry_price),
                          "equity": float(account.equity()), "initial_capital": float(kernel.initial_balance),
                          "netprofit": float(account_feedback_profit(account, kernel.initial_balance)), "openprofit": float(account.unrealized())})
-        request = {**{key: value for key, value in wire.items() if key != "execution_events"}, "bars": wire["bars"][:count], "accounts": accounts}
+        request = {**{key: value for key, value in wire.items() if key not in {"execution_events", "account_events", "account_provenance", "pine_v2_settings"}}, "bars": wire["bars"][:count], "accounts": accounts}
         if "execution_times" in wire:
             request["execution_times"] = wire["execution_times"][:count]
         boundary = interval.next_ms(wire["bars"][count - 1]["time"] * 1000)
@@ -274,6 +281,13 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
                 capacity_policy="SHARED_BAR_VOLUME_PARTICIPATION" if kernel.execution_model_revision else "UNCAPPED",
                 mark_authority="HISTORICAL_MARK_INDEX" if kernel.account_model == "LINEAR_PERP_ONE_WAY_V2" else "PATH_MARK")
             result["raw_output"]["account_provenance"] = wire.get("account_provenance", {})
+    if wire.get("pine_v2_print_contract"):
+        result["raw_output"]["pine_v2_print_account"] = {
+            "contract": wire["pine_v2_print_contract"], "mark_authority": "HISTORICAL_MARK_INDEX",
+            "account_event_order": "ACCOUNT_BEFORE_MARKET_ON_TIES",
+            "pre_print_account_fill_callback": "NEXT_OBSERVED_PRINT",
+            "physical_capacity_policy": kernel.fill_policy, "official_oracle_verified": False}
+        result["raw_output"]["account_provenance"] = wire.get("account_provenance", {})
     if wire.get("closing_ticks"):
         result["raw_output"]["closing_tick_contract"] = "candlescope.pine-closing-tick/1"
         result["raw_output"]["closing_execution"] = {

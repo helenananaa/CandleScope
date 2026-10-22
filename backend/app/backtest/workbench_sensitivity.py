@@ -138,6 +138,8 @@ def build_matrix(plugin, wire, runner, cancelled, primary, *, deadline):
             baseline,
             status="NOT_APPLICABLE_BAR_CLOCK"
             if bar_clock
+            else "NOT_APPLICABLE_WORKBENCH_LATENCY_CONTRACT"
+            if wire.get("pine_v2_print_contract")
             else "NOT_APPLICABLE_LEGACY_EXECUTION_MODEL",
         )
     )

@@ -1,7 +1,6 @@
 """Fill-by-fill callbacks driven by authoritative host executions and visible tape."""
 from __future__ import annotations
 from copy import deepcopy
-from decimal import Decimal
 import time
 from app.market_dataset.snapshot import MarketEvent
 from app.data_engine.interval_policy import parse_interval_spec
@@ -13,7 +12,8 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
     if wire["execution_fidelity"] == "BAR_APPROX":
         raise BacktestError("EXTERNAL_UNSUPPORTED", "fill callbacks require a frozen trade tape")
     interval = parse_interval_spec(wire["interval"])
-    events = [MarketEvent(**item) for item in wire["execution_events"]]
+    from .pine_print_account import events as physical_events, apply_account, observe_market, record_decision, AUXILIARY
+    events = physical_events(wire)
     kernel.source_kind = assert_trade_stream(tuple(event for event in events if event.role == "TRADES"))
     state=state or {}
     target=len(wire["bars"]) if target is None else target
@@ -24,6 +24,7 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
     if request_feed is not None and state:
         validate_replay(request_feed, state.get("request_feed"), pass_observations(groups, scheduled=False))
     cursor,visible,active_event=state.get("bar_cursor",0),None,None
+    pending_account_callbacks = 0
     last_sequence,event_cursor=state.get("last_sequence",0),state.get("event_cursor",0)
     end=interval.next_ms(wire["bars"][target-1]["time"]*1000)
 
@@ -58,7 +59,7 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
                 groups[cursor][-1].update(request_observed_at_ms=boundary-1, request_updates=request_feed.advance(boundary-1))
             else:
                 groups[cursor][-1]["request_data"] = visible_contexts(wire, boundary)
-        request = {key: value for key, value in wire.items() if key != "execution_events"}
+        request = {key: value for key, value in wire.items() if key not in {"execution_events", "account_events", "account_provenance", "pine_v2_settings"}}
         request.update(bars=[*wire["bars"][:cursor], deepcopy(visible)], accounts=accounts, execution_passes=groups,
             contexts=[{**context, "bars": []} for context in wire.get("contexts", [])])
         if "execution_times" in wire:
@@ -80,7 +81,7 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
         from .pine_workbench import check_risk_response
         check_risk_response(orders, wire, latest)
         intents = orders.translate(current, event.sequence)
-        kernel.decisions.append({"sequence": event.sequence, "watermark_ms": event.event_time_ms,
+        record_decision(kernel, {"sequence": event.sequence, "watermark_ms": event.event_time_ms,
             "intents": intents, "signal_bar": cursor, "pass_index": pass_index,
             "trigger": "BAR_CLOSE" if confirmed else "ORDER_FILL"})
         # Newly emitted orders cannot consume the event that caused this callback.
@@ -88,15 +89,19 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
 
     prior_reporter = kernel.execution_reporter
     def report(event):
+        nonlocal pending_account_callbacks
         prior_reporter(event)
         if event.get("fill") and kernel._last_event.payload.get("execution_phase") != "PINE_BAR_CLOSE":
-            evaluate(active_event, False)
+            if visible is None:
+                pending_account_callbacks += 1
+            else:
+                evaluate(active_event, False)
     kernel.execution_reporter = report
 
     def close_bar():
         nonlocal cursor, visible
-        if visible is None:
-            raise BacktestError("DATA_GAP_REJECTED", "missing visible chart bar")
+        if visible is None or pending_account_callbacks:
+            raise BacktestError("DATA_GAP_REJECTED", "missing visible chart bar or undelivered account callback")
         visible = deepcopy(wire["bars"][cursor])  # All prints have arrived; use the frozen canonical bar.
         boundary = interval.next_ms(visible["time"] * 1000) - 1
         event = MarketEvent(last_sequence, boundary, "TRADES", {"price": str(visible["close"]), "qty": "0"})
@@ -124,7 +129,9 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
                 close_bar()
             active_event = event
             kernel._last_event = event
-            if event.role == "ORDER_BOOK":
+            if event.role in AUXILIARY:
+                apply_account(kernel, event, record_equity=kernel._market_event_count > 0)
+            elif event.role == "ORDER_BOOK":
                 kernel._apply_book(event)
                 if kernel.market_observer is not None:
                     kernel.market_observer(event)
@@ -134,9 +141,12 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
                     visible = dict(time=wire["bars"][cursor]["time"], open=price, high=price, low=price, close=price, volume=qty)
                 else:
                     visible.update(high=max(visible["high"], price), low=min(visible["low"], price), close=price, volume=visible["volume"]+qty)
-                kernel.account.mark = Decimal(str(event.payload["price"]))
-                if kernel.market_observer is not None:
-                    kernel.market_observer(event)
+                if wire.get("pine_v2_print_contract"):
+                    kernel._market_event_count += 1
+                observe_market(kernel, event)
+                for _ in range(pending_account_callbacks):
+                    evaluate(event, False)
+                pending_account_callbacks = 0
                 kernel._match(event)
                 kernel.equity_curve.append({"sequence": event.sequence, "event_time_ms": event.event_time_ms,
                     "equity": str(kernel.account.equity()), "position_qty": str(kernel.account.position_qty)})
