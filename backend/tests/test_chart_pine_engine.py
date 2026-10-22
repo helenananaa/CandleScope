@@ -169,10 +169,10 @@ def test_real_engine_runs_arbitrary_sma_with_actual_account_and_restores():
         restored.close()
 
 
-@pytest.mark.parametrize("flag", ["calc_on_every_tick"])
-def test_native_broker_and_intrabar_profiles_are_not_silently_downgraded(flag):
-    with pytest.raises(StrategyProviderError, match="FIDELITY_UNSUPPORTED"):
-        analyze(SOURCE.replace('strategy("SMA")', f'strategy("SMA", {flag}=true)'))
+def test_realtime_ticks_negotiate_the_stream_while_unconnected_native_broker_profiles_are_rejected():
+    receipt=analyze(SOURCE.replace('strategy("SMA")', 'strategy("SMA",calc_on_every_tick=true)'))
+    assert receipt["requirements"]["execution"]["calcOnEveryTick"] is True
+    assert receipt["identity"]["external_stream_contract"]=="candlescope.pine-external-stream/1"
     with pytest.raises(StrategyProviderError, match="FIDELITY_UNSUPPORTED"):
         analyze(SOURCE.replace('strategy("SMA")', 'strategy("SMA",use_bar_magnifier=true)'))
 

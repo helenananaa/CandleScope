@@ -64,6 +64,14 @@ def test_supervised_whole_run_worker_executes_realtime_ticks_and_cost_scenarios(
     assert result["report"]["cost_sensitivity"]["baseline_reexecution_verified"] is True
 
 
+def test_realtime_declaration_cannot_be_silently_run_on_an_unconnected_bar_close_clock(service):
+    from app.backtest.errors import BacktestError
+    from tests.test_chart_pine_bar_callbacks import config as bar_config
+    value=bar_config(service,source=SOURCE)
+    with pytest.raises(BacktestError,match="realtime Pine ticks require aggregate-trade"):
+        service.create_run(value,idempotency_key="unconnected-tick-clock",now_ms=3)
+
+
 def test_trade_checkpoint_restores_open_bar_and_never_rematches_its_recorded_fills(service):
     value=payload(service,SOURCE)
     baseline=execute(service,service.create_run(value,idempotency_key="ticks-baseline",now_ms=3))
