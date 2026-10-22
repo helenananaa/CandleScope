@@ -20,3 +20,18 @@ is unchanged. Targeted actual-worker checks cover both clocks, changing equity,
 positions, average-price nulls, malformed feedback, full correction, schedules
 and requested updates. These checks do not replace the combined Host gate or
 long-session resource qualification.
+
+`candlescope.session-identity/1` additionally bounds the identity envelope as
+capabilities grow. Each evaluator or historical-session process first validates
+the full installed-code identity. Only subsequent messages may reference its
+canonical UTF-8 JSON SHA-256. The worker restores the full identity before
+dispatch, and the Host restores it in the public response. Request and response
+references must match the same process binding. Unbound, unnegotiated, changed
+or mixed full/reference identities terminate the worker. Legacy workers retain
+full identity exchanges; stateless calls never accept a reference. Account and
+prefix comparison, execution results and correction rebases remain unchanged.
+
+The realtime event capability expansion exposed the same fixed-envelope cost:
+the retained managed full gate passed 1,001 cases before failing at 76,243 input
+bytes versus 244,420 full-prefix bytes. An actual Core 0.3.3 CI binary separately
+reproduces that failure. The original 30-percent budget remains in force.

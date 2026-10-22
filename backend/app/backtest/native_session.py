@@ -8,7 +8,7 @@ import tempfile
 import threading
 import time
 from copy import deepcopy
-from .native import MAX_BYTES, PROTOCOL, encoded
+from .native import MAX_BYTES, PROTOCOL, encoded, digest
 from .errors import BacktestError
 TICK_CONTRACT = "candlescope.pine-tick-schedule/1"
 
@@ -16,6 +16,7 @@ SCHEDULE_CONTRACT = "candlescope.pine-execution-schedule/1"
 PREFIX_SCHEDULE_CONTRACT = "candlescope.pine-prefix-schedule/1"
 REQUEST_UPDATE_CONTRACT = "candlescope.pine-request-updates/1"
 STREAM_CONTRACT = "candlescope.pine-external-stream/1"
+SESSION_IDENTITY_CONTRACT = "candlescope.session-identity/1"
 
 
 class SessionWorker:
@@ -23,7 +24,10 @@ class SessionWorker:
         self._close_lock = threading.Lock()
         self._closed = False
         self.close_errors = []
-        self.identity = wire["identity"]
+        self.identity = deepcopy(wire["identity"])
+        self._identity_ref = digest(self.identity)
+        self._identity_ref_enabled = self.identity.get("session_identity") == SESSION_IDENTITY_CONTRACT
+        self._identity_bound = False
         self._prefix_enabled = evaluator and self.identity.get("prefix_append") in {
             "candlescope.pine-prefix/1", "candlescope.pine-prefix/2"}
         self._prefix_state = None
@@ -39,6 +43,8 @@ class SessionWorker:
         self.supported = True if evaluator else self.request({**wire, "operation": "open"}, cancelled).get("supported") is True
 
     def request(self, payload, cancelled, timeout=120):
+        if "identity_ref" in payload:
+            raise BacktestError("NATIVE_IDENTITY_MISMATCH", "session identity references belong to the transport")
         streaming = payload.get("operation", "").startswith("stream_")
         if streaming and (payload.get("external_stream_contract") != STREAM_CONTRACT
                 or self.identity.get("external_stream_contract") != STREAM_CONTRACT):
@@ -59,7 +65,10 @@ class SessionWorker:
                 raise BacktestError("EXTERNAL_UNSUPPORTED", "explicit Pine execution schedule was not negotiated")
         response = queue.Queue(maxsize=1)
         wire_payload = self._prefix_payload(payload) if self._prefix_enabled else payload
-        raw = (encoded({**wire_payload, "protocol": PROTOCOL, "identity": self.identity}) + "\n").encode("utf-8")
+        header = ({"identity_ref": self._identity_ref} if self._identity_ref_enabled and self._identity_bound
+                  else {"identity": self.identity})
+        envelope = {key: value for key, value in wire_payload.items() if key not in {"identity", "protocol"}}
+        raw = (encoded({**envelope, "protocol": PROTOCOL, **header}) + "\n").encode("utf-8")
         self.input_bytes += len(raw)
         if len(raw) > MAX_BYTES:
             self.close()
@@ -93,7 +102,13 @@ class SessionWorker:
                     raise result
                 if not isinstance(result, dict) or result.get("ok") is not True:
                     raise BacktestError("NATIVE_EXECUTION_FAILED", "native session rejected the operation", details=result)
-                if result.get("identity") != self.identity:
+                if "identity_ref" in result:
+                    if (not self._identity_ref_enabled or not self._identity_bound or "identity" in result
+                            or result["identity_ref"] != self._identity_ref):
+                        raise BacktestError("NATIVE_IDENTITY_MISMATCH", "unexpected session identity reference")
+                    result = {key: value for key, value in result.items() if key != "identity_ref"}
+                    result["identity"] = deepcopy(self.identity)
+                if digest(result.get("identity")) != self._identity_ref:
                     raise BacktestError("NATIVE_IDENTITY_MISMATCH", "unexpected session runtime")
                 if streaming and (result.get("external_stream_contract") != STREAM_CONTRACT
                         or result.get("execution_schedule_contract") != SCHEDULE_CONTRACT
@@ -105,6 +120,7 @@ class SessionWorker:
                     raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine requested-update acknowledgement missing")
                 if payload.get("execution_tick_contract") is not None and result.get("execution_tick_contract") != TICK_CONTRACT:
                     raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine tick schedule acknowledgement missing")
+                self._identity_bound = True
                 return result
         except Exception:
             self.close()

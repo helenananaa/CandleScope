@@ -2,6 +2,7 @@ import sys
 import threading
 import pytest
 from app.backtest.native_session import SessionWorker
+from app.backtest.native import digest
 
 
 def test_timeout_reaps_persistent_child():
@@ -86,3 +87,51 @@ def test_terminated_pipe_close_error_does_not_mask_timeout_or_skip_other_streams
     assert worker.process.stdout.closed and worker.stderr.closed and stream.closed
     assert worker.close_errors == [{"stream": "stdin", "errno": 22}]
     worker.close()
+
+
+@pytest.mark.parametrize("contract", [False, True])
+def test_real_worker_binds_full_identity_before_references_and_preserves_public_responses(contract):
+    identity = {"engine": "unchanged", **({"session_identity": "candlescope.session-identity/1"} if contract else {})}
+    script = '''import json,sys
+for index,line in enumerate(sys.stdin):
+    request=json.loads(line)
+    if index==0 or "identity_ref" not in request:
+        assert "identity" in request
+        response={"ok":True,"identity":request["identity"],"index":index}
+    else:
+        assert "identity" not in request
+        response={"ok":True,"identity_ref":request["identity_ref"],"index":index}
+    print(json.dumps(response),flush=True)
+'''
+    worker = SessionWorker({"command": [sys.executable, "-u", "-c", script]},
+                           {"identity": identity}, threading.Event(), evaluator=True)
+    try:
+        for index in range(3):
+            response = worker.request({"operation": "execute"}, threading.Event())
+            assert response == {"ok": True, "identity": identity, "index": index}
+    finally:
+        worker.close()
+
+
+@pytest.mark.parametrize("failure", ["changed", "mixed", "unbound", "unnegotiated"])
+def test_invalid_wire_identity_reference_reaps_the_actual_child(failure):
+    identity = {"engine": "unchanged", **({"session_identity": "candlescope.session-identity/1"}
+                                          if failure != "unnegotiated" else {})}
+    reference = digest(identity)
+    script = f'''import json,sys
+for index,line in enumerate(sys.stdin):
+    request=json.loads(line)
+    if index==0 and {failure!r}!="unbound":
+        result={{"ok":True,"identity":request["identity"]}}
+    else:
+        result={{"ok":True,"identity_ref":{reference!r} if {failure!r}!="changed" else "sha256:changed"}}
+        if {failure!r}=="mixed":result["identity"]={identity!r}
+    print(json.dumps(result),flush=True)
+'''
+    worker = SessionWorker({"command": [sys.executable, "-u", "-c", script]},
+                           {"identity": identity}, threading.Event(), evaluator=True)
+    if failure != "unbound":
+        worker.request({"operation": "execute"}, threading.Event())
+    with pytest.raises(ValueError, match="NATIVE_IDENTITY_MISMATCH"):
+        worker.request({"operation": "execute"}, threading.Event())
+    assert worker.process.poll() is not None and worker.stderr.closed
