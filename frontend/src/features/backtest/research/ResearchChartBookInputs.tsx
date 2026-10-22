@@ -14,13 +14,14 @@ export default function ResearchChartBookInputs({ runtime, onLoadingChange }: {
   owner.current = JSON.stringify([view.runDraftText,view.selectedRevisionId,view.selectedDatasetId,
     view.startTimeMs,view.endTimeMs,view.session]);
   const revision = view.revisions.find((row) => row.revision_id === view.selectedRevisionId);
-  const pine = revision?.base_revision_id === "pine-engine-chart-v1" || revision?.language === "PINE_ENGINE";
+  const pine = revision?.provider_kind === "PINE_ENGINE"
+    || revision?.base_revision_id === "pine-engine-chart-v1" || revision?.language === "PINE_ENGINE";
   if (!view.advancedEnabled || !pine || view.selectedTask !== "PRECISE_EXECUTION") return null;
   let draft: Record<string, unknown> | null;
   try { draft = parseResearchObjectJson(view.runDraftText, "Run draft"); } catch { draft = null; }
   const mode = String(draft?.fidelity_mode ?? "BAR_APPROX");
   const events = (draft?.execution_data as { events?: unknown[] } | null)?.events;
-  return <fieldset className="research-advanced-details" disabled={view.busy || loading || !draft}>
+  return <fieldset className="research-advanced-details research-chart-book-inputs" disabled={view.busy || loading || !draft}>
     <label className="research-field">
       <span>{t("native.external.fidelity")}</span>
       <select value={mode} onChange={(event) => {
@@ -53,14 +54,21 @@ export default function ResearchChartBookInputs({ runtime, onLoadingChange }: {
                 return;
               }
               runtime.actions.setRunDraftText(researchObjectJson({ ...selected, execution_data: data }));
-            } catch { setError(t("research.book.invalid")); }
+            } catch {
+              if (selection === owner.current) {
+                const next = { ...selected };
+                delete next.execution_data;
+                runtime.actions.setRunDraftText(researchObjectJson(next));
+                setError(t("research.book.invalid"));
+              } else setError(t("research.book.changed"));
+            }
             finally { setLoading(false); onLoadingChange?.(false); input.value = ""; }
           })();
         }} />
       </label>
-      <p role="status">{loading ? t("research.book.loading") : Array.isArray(events)
+      <p className="research-panel-copy" role="status">{loading ? t("research.book.loading") : Array.isArray(events)
         ? t("research.book.loaded", { count: events.length }) : t("research.book.required")}</p>
-      {error && <p role="alert">{error}</p>}
+      {error && <p className="research-panel-copy" role="alert">{error}</p>}
     </>}
   </fieldset>;
 }

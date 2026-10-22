@@ -52,8 +52,22 @@ reconstruct the Pine stream, restore the physical account and reject rematching
 any recorded prefix. Frontend tests cover mode/data identity, file validation,
 owned fields and the actual upload control. The frontend invalidates snapshots
 on edits and discards file reads if their strategy, market or range changed.
+The Pine control recognizes the real strategy-list `provider_kind` descriptor.
+An invalid replacement file clears the old physical input and disables creation
+until a valid replacement snapshot is available.
+
+On 2026-10-22, a rendered browser against the real local API and installed
+candidate worker completed all three book modes using deterministic three-bar,
+24-observation fixtures. Reloading the saved BOOK_DEPTH Run and creating another
+Run without re-uploading produced identical snapshot/config hashes and fills.
+The completed BOOK_SAMPLED report/chart also survived a backend restart and fresh
+page load. Replacing valid data with an invalid file showed the error and disabled
+the create action. These are controlled browser checks; their isolated API omits
+indicator diagnostics and general local-dataset/preset routes. Its initial LIVE
+flag caused expected missing live-market requests; the restart sets the actual
+`LOCAL_OFFLINE` runtime mode and retains the same database and completed Runs.
 
 These controls are distinct from full current-head Host qualification, rendered
-browser/desktop acceptance, long-history/resource qualification, cross-platform
+desktop acceptance, long-history/resource qualification, cross-platform
 bundles and a public release. Those delivery gates remain required. No test here
 establishes exact exchange queue priority or arbitrary TradingView equivalence.

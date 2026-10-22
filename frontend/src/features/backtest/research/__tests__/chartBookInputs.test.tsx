@@ -51,7 +51,7 @@ test("editing a completed Pine Run preserves its data and removes Host-derived e
 
 test("advanced Pine chart research exposes a physical file control only when book execution is selected", () => {
   const runtime = structuralMock<BacktestResearchRuntime>({ view: { advancedEnabled: true, selectedTask: "PRECISE_EXECUTION",
-    selectedRevisionId: "pine", revisions: [{ revision_id: "pine", language: "PINE_ENGINE" }], runDraftText: JSON.stringify({ fidelity_mode: "BOOK_DEPTH" }),
+    selectedRevisionId: "pine", revisions: [{ revision_id: "pine", provider_kind: "PINE_ENGINE" }], runDraftText: JSON.stringify({ fidelity_mode: "BOOK_DEPTH" }),
     session: { exchange: "binance", marketType: "usdm", symbol: "BTCUSDT", interval: "1m" },
     capabilities: { fidelity_modes: [...chartBookModes] } }, actions: {} });
   const html = renderToStaticMarkup(<ResearchChartBookInputs runtime={runtime} />);
@@ -63,4 +63,6 @@ test("advanced Pine chart research exposes a physical file control only when boo
   assert.doesNotMatch(renderToStaticMarkup(<ResearchChartBookInputs runtime={native} />), /type="file"/);
   const disabled = { ...runtime, view: { ...runtime.view, advancedEnabled: false } };
   assert.equal(renderToStaticMarkup(<ResearchChartBookInputs runtime={disabled} />), "");
+  const other = { ...runtime, view: { ...runtime.view, revisions: [{ ...runtime.view.revisions[0]!, provider_kind: "EXTERNAL_PROVIDER" }] } };
+  assert.equal(renderToStaticMarkup(<ResearchChartBookInputs runtime={other} />), "");
 });

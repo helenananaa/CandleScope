@@ -3,6 +3,12 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
   ...workbenchEnglish,
+  "research.book.help": "Envie negócios agregados e observações do livro em ordem, para o mercado e período exatos do gráfico. O aplicativo valida OHLCV, continuidade e profundidade disponível e congela o arquivo com o snapshot. Os modos de livro mantêm suas próprias regras de capacidade de execução.",
+  "research.book.invalid": "Arquivo de livro inválido. Envie um JSON de até 32 MiB com os campos exigidos de mercado, procedência e eventos ordenados, incluindo identificadores de origem dos negócios agregados e observações do livro.",
+  "research.book.loading": "Lendo os dados de mercado congelados…",
+  "research.book.loaded": "{count} observações de mercado carregadas. O snapshot precisa passar pela validação antes da execução.",
+  "research.book.required": "Selecione o arquivo de negócios e livro de ofertas para criar um snapshot reproduzível.",
+  "research.book.changed": "A estratégia, o mercado ou o período mudou durante a leitura. Selecione novamente o arquivo para os dados atuais.",
   "native.cost.title": "Cenários de custos",
   "native.cost.help": "Cada cenário executa a estratégia e a conta separadamente. Os custos podem alterar as decisões de negociação. Use os resultados para avaliar a robustez.",
   "native.cost.enable": "Executar cenários independentes de custos",

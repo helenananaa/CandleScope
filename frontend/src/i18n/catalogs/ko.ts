@@ -3,6 +3,12 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
   ...workbenchEnglish,
+  "research.book.help": "현재 차트의 시장과 기간에 맞는 순서대로 정렬된 집계 체결 및 호가 관측을 업로드하세요. 호스트가 OHLCV, 연속성과 가용 잔량을 검사한 뒤 파일을 스냅샷과 함께 고정합니다. 호가 모드는 자체 체결 용량 규칙을 사용합니다.",
+  "research.book.invalid": "호가 파일이 유효하지 않습니다. symbol, exchange, market_type, provenance, 정렬된 events와 집계 체결 출처 번호 및 호가 관측이 포함된 32 MiB 이하의 JSON을 업로드하세요.",
+  "research.book.loading": "고정된 시장 데이터를 읽는 중…",
+  "research.book.loaded": "시장 관측 {count}개를 불러왔습니다. 실행하려면 스냅샷 검증을 통과해야 합니다.",
+  "research.book.required": "재현 가능한 스냅샷을 만들 체결 및 호가 기록 파일을 선택하세요.",
+  "research.book.changed": "파일을 읽는 동안 전략, 시장 또는 기간이 변경되었습니다. 현재 입력에 맞는 파일을 다시 선택하세요.",
   "native.cost.title": "비용 시나리오",
   "native.cost.help": "각 시나리오는 전략과 계좌를 독립적으로 다시 실행합니다. 비용에 따라 거래 결정이 달라질 수 있습니다. 결과로 전략의 견고성을 확인하세요.",
   "native.cost.enable": "독립 비용 시나리오 실행",
