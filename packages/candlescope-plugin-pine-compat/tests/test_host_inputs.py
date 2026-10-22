@@ -65,7 +65,7 @@ def test_missing_metadata_is_explicit_and_actual_grid_changes_mintick():
         {"priceTickSize": "nan"},
         {"priceTickSize": True},
         {"priceTickSize": ".1", "quantityPrecision": True},
-        {"priceTickSize": ".1", "pointValue": 100},
+        {"priceTickSize": ".1", "pointValue": 0},
         {"priceTickSize": ".1", "timezone": "UTC"},
     ],
 )
@@ -208,6 +208,20 @@ plot(request.security("OKX:ETH-USDT","1",syminfo.mincontract))
     for metadata in (None, {"priceTickSize": ".25"}):
         with pytest.raises(ValueError, match="PINE_HOST_METADATA_REQUIRED"):
             execute({**data, "contexts": [{**context, "metadata": metadata}]})
+
+
+@pytest.mark.parametrize("field,value", [("minContract", "2"), ("quantityStep", ".25"), ("quantityPrecision", 2)])
+def test_mincontract_requires_quantity_metadata_for_chart_and_requested_symbols(field, value):
+    from candlescope_plugin_pine_compat.host_inputs import require_price_grid
+
+    analysis = {"compatibility": {"supported": [{"feature": "syminfo.mincontract"}]}}
+    request = {"context": {"symbol": "A", "metadata": {field: value}},
+               "contexts": [{"symbol": "B", "metadata": {field: value}}]}
+    require_price_grid(analysis, request)
+    with pytest.raises(ValueError, match="PINE_HOST_METADATA_REQUIRED"):
+        require_price_grid(analysis, {**request, "context": {"symbol": "A"}})
+    with pytest.raises(ValueError, match="PINE_HOST_METADATA_REQUIRED"):
+        require_price_grid(analysis, {**request, "contexts": [{"symbol": "B"}]})
 
 
 def test_requested_symbol_metadata_rejects_contradictory_timeframes_and_old_runtime(monkeypatch):

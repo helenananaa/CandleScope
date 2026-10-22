@@ -7,6 +7,7 @@ import time
 
 from app.data_engine.interval_policy import parse_interval_spec
 from app.exchanges.symbol_catalog import get_cached_symbol_metadata
+from app.backtest.pine_contract_metadata import catalog_chart_metadata, catalog_contract_profile
 
 
 def indicator_host_options(request, options):
@@ -15,13 +16,12 @@ def indicator_host_options(request, options):
     metadata = get_cached_symbol_metadata(
         request.exchange, request.market_type, request.symbol
     )
-    if metadata and metadata.get("priceTickSize"):
-        options.setdefault(
-            "pineChartMetadata", {"priceTickSize": metadata["priceTickSize"]}
-        )
-        quote = metadata.get("quoteAsset")
-        if isinstance(quote, str) and re.fullmatch(r"[A-Z]{1,20}", quote) and isinstance(options["pineChartMetadata"], dict):
-            options["pineChartMetadata"] = {"currency": quote, **options["pineChartMetadata"]}
+    chart = catalog_chart_metadata(metadata, options.get("pineChartMetadata"))
+    if chart is not None:
+        options["pineChartMetadata"] = chart
+    profile = catalog_contract_profile(metadata)
+    if profile:
+        options["pineContractProfile"] = profile
     return options
 
 
@@ -51,7 +51,7 @@ def requested_data(request, requirements, data_manager):
         contexts = requested_contexts(request, requests)
     except ValueError as exc:
         return {"pineRequestError": str(exc)}
-    supplied, symbol_metadata = {}, {}
+    supplied, symbol_metadata, symbol_profiles = {}, {}, {}
     total = 0
     for symbol, timeframe, market_type in contexts:
         venue, separator, ticker = symbol.partition(":")
@@ -72,11 +72,12 @@ def requested_data(request, requirements, data_manager):
         explicit_metadata = next((item.get("metadata") for item in request.options.get("pineRequestContexts", [])
             if (item["symbol"], item["timeframe"]) == (symbol, timeframe)), None)
         metadata = get_cached_symbol_metadata(venue.lower(), market_type, ticker)
-        frozen = explicit_metadata
-        if frozen is None and metadata and metadata.get("priceTickSize"):
-            frozen = {"priceTickSize": metadata["priceTickSize"]}
-            if metadata.get("quoteAsset"):
-                frozen["currency"] = metadata["quoteAsset"]
+        frozen = catalog_chart_metadata(metadata, explicit_metadata)
+        profile = catalog_contract_profile(metadata)
+        if profile:
+            if symbol in symbol_profiles and symbol_profiles[symbol] != profile:
+                return {"pineRequestError": "One requested symbol cannot have conflicting contract profiles."}
+            symbol_profiles[symbol] = profile
         if frozen:
             if symbol in symbol_metadata and symbol_metadata[symbol] != frozen:
                 return {"pineRequestError": "One requested symbol cannot have conflicting metadata."}
@@ -123,7 +124,8 @@ def requested_data(request, requirements, data_manager):
         supplied[key] = rows
         total += len(rows)
     return {"pineRequestBars": supplied,
-        **({"pineRequestSymbolMetadata": symbol_metadata} if symbol_metadata else {})}
+        **({"pineRequestSymbolMetadata": symbol_metadata} if symbol_metadata else {}),
+        **({"pineRequestSymbolProfiles": symbol_profiles} if symbol_profiles else {})}
 
 
 def requested_contexts(request, requirements):

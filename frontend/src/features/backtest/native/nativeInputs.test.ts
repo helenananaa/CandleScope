@@ -49,6 +49,16 @@ test("requested instrument metadata is frozen and survives draft restore", async
   assert.deepEqual(contexts[0]?.metadata, { priceTickSize: ".25", currency: "USDT", quantityPrecision: 3 });
   await assert.rejects(freezePineChartContexts([{ ...selection.contexts[0]!, priceTickSize: "" }], main, mockApi([dataset], [])), /actual price tick/);
 });
+
+test("contract rules survive draft restoration and reach requested-symbol metadata", async () => {
+  const rules = { priceTickSize: ".1", pointValue: "50", quantityStep: ".25", minContract: "2" };
+  const selection = { ...emptyAdvancedInputs(), ...rules, contexts: [{ dataset, symbol: "OKX:ETHUSDT", ...rules }] };
+  assert.deepEqual(restoreAdvancedInputs(selection, true), selection);
+  const result = await freezeAdvancedInputs(selection, "pine", main, mockApi([dataset], []));
+  assert.deepEqual(result.contexts[0]?.metadata, { ...rules, pointValue: 50 });
+  await assert.rejects(freezeAdvancedInputs(selection, "pyne", main), /requires Pine/);
+  assert.throws(() => restoreAdvancedInputs({ ...selection, contexts: [{ ...selection.contexts[0], quantityStep: .25 }] }, true), /malformed/);
+});
 function mockApi(datasets: InputDataset[], calls: unknown[]) {
   return (async (path: string, body?: unknown) => {
     calls.push({ path, body });

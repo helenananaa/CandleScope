@@ -416,7 +416,7 @@ def _fills_csv(fills: list[Mapping[str, Any]]) -> str:
     if not traced:
         lines = [
             "order_id,sequence,event_time_ms,side,action,position_before,"
-            "position_after,price,qty,fee,reason"
+            "position_after,price,qty,fee,reason,contract_multiplier"
         ]
         for fill in fills:
             lines.append(
@@ -433,6 +433,7 @@ def _fills_csv(fills: list[Mapping[str, Any]]) -> str:
                         str(fill.get("qty") or ""),
                         str(fill.get("fee") or "0"),
                         str(fill.get("reason") or ""),
+                        str(fill.get("contract_multiplier", "1")),
                     ]
                 )
             )
@@ -440,7 +441,7 @@ def _fills_csv(fills: list[Mapping[str, Any]]) -> str:
     lines = [
         "order_id,sequence,event_time_ms,side,action,position_before,"
         "position_after,price,qty,fee,reason,source_event_kind,source_sequence,"
-        "source_event_time_ms,source_event_hash"
+        "source_event_time_ms,source_event_hash,contract_multiplier"
     ]
     for fill in fills:
         lines.append(
@@ -461,6 +462,7 @@ def _fills_csv(fills: list[Mapping[str, Any]]) -> str:
                     str(fill.get("source_sequence") or ""),
                     str(fill.get("source_event_time_ms") or ""),
                     str(fill.get("source_event_hash") or ""),
+                    str(fill.get("contract_multiplier", "1")),
                 ]
             )
         )
@@ -485,6 +487,9 @@ def build_round_trip_trades(fills: list[Mapping[str, Any]]) -> list[dict[str, An
         sign = Decimal("1") if side == "BUY" else Decimal("-1")
         qty = Decimal(str(fill.get("qty") or "0"))
         price = Decimal(str(fill.get("price") or "0"))
+        multiplier = Decimal(str(fill.get("contract_multiplier", "1")))
+        if not multiplier.is_finite() or multiplier <= 0:
+            raise ValueError("invalid fill contract multiplier")
         fee = abs(Decimal(str(fill.get("fee") or "0")))
         if qty <= 0 or price <= 0:
             continue
@@ -499,6 +504,7 @@ def build_round_trip_trades(fills: list[Mapping[str, Any]]) -> list[dict[str, An
                 (price - Decimal(str(lot["price"])))
                 * closed
                 * Decimal(str(lot["sign"]))
+                * multiplier
             )
             total_fee = entry_fee + exit_fee
             trade_id = f"trade-{len(trades) + 1}"

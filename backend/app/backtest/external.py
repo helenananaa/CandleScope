@@ -35,6 +35,7 @@ def host_identity():
     files.append(Path(__file__).with_name("pine_bar_clock.py"))
     files.append(Path(__file__).with_name("pine_workbench_v2.py"))
     files.append(Path(__file__).with_name("native_contracts.py"))
+    files.append(Path(__file__).with_name("pine_contract_metadata.py"))
     files.append(Path(__file__).with_name("workbench_sensitivity.py"))
     for path in files:
         checksum.update(path.name.encode())
@@ -127,6 +128,8 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
                               initial_balance=Decimal(str(settings["initial_balance"])),
                               slippage_bps=Decimal(str(settings["slippage_bps"])),
                               taker_fee_bps=Decimal(str(settings["taker_fee_bps"])))
+    from .pine_contract_metadata import configure_legacy_account
+    configure_legacy_account(kernel, wire)
     interval = parse_interval_spec(wire["interval"])
     capture=target is not None
     target=len(wire["bars"]) if target is None else target

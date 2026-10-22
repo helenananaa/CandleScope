@@ -40,6 +40,8 @@ class LinearPerpetualAccountV2:
     tick: Decimal | None = None
     step: Decimal | None = None
     min_notional: Decimal | None = None
+    min_quantity: Decimal | None = None
+    max_quantity: Decimal | None = None
     rule_version: str | None = None
     maintenance_tiers: tuple[MaintenanceTier, ...] = ()
     cumulative_realized_pnl: Decimal = Decimal("0")
@@ -439,6 +441,8 @@ class LinearPerpetualAccountV2:
             "ledger_tail_hash": self.ledger_tail_hash,
             "event_ordinal": self._event_ordinal,
             "rules": {
+                **({"min_quantity": str(self.min_quantity)} if self.min_quantity is not None else {}),
+                **({"max_quantity": str(self.max_quantity)} if self.max_quantity is not None else {}),
                 "tick": None if self.tick is None else str(self.tick),
                 "step": None if self.step is None else str(self.step),
                 "min_notional": None
@@ -518,6 +522,8 @@ class LinearPerpetualAccountV2:
         )
         self._event_ordinal = int(payload.get("event_ordinal") or 0)
         rules = payload.get("rules") or {}
+        from .instrument_rules import quantity_bounds
+        self.min_quantity, self.max_quantity = quantity_bounds(rules, code="CHECKPOINT_CORRUPT")
         self.tick = None if rules.get("tick") is None else Decimal(str(rules["tick"]))
         self.step = None if rules.get("step") is None else Decimal(str(rules["step"]))
         self.min_notional = (
@@ -559,6 +565,8 @@ class LinearPerpetualAccountV2:
 
     def _apply_rules(self, event: MarketEvent) -> None:
         payload = event.payload
+        from .instrument_rules import positive_rule, quantity_bounds
+        min_quantity, max_quantity = quantity_bounds(payload)
         multiplier = payload.get("contract_multiplier", payload.get("multiplier"))
         if multiplier is None:
             raise MarketDatasetError(
@@ -586,10 +594,13 @@ class LinearPerpetualAccountV2:
                     code="DATA_QUALITY_FAILED",
                 )
             expected = tier.cap
-        self.multiplier = Decimal(str(multiplier))
-        self.tick = self._optional(payload.get("price_tick", payload.get("tick")))
-        self.step = self._optional(payload.get("quantity_step", payload.get("step")))
-        self.min_notional = self._optional(payload.get("min_notional"))
+        multiplier = positive_rule(multiplier, "contract multiplier", required=True)
+        tick = positive_rule(payload.get("price_tick", payload.get("tick")), "price tick")
+        step = positive_rule(payload.get("quantity_step", payload.get("step")), "quantity step")
+        min_notional = positive_rule(payload.get("min_notional"), "minimum notional")
+        self.multiplier, self.tick, self.step = multiplier, tick, step
+        self.min_notional = min_notional
+        self.min_quantity, self.max_quantity = min_quantity, max_quantity
         self.rule_version = str(
             payload.get("rule_version", payload.get("version")) or ""
         )

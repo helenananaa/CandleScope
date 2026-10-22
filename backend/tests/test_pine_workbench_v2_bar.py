@@ -196,7 +196,7 @@ if strategy.position_size>0
     assert [D(row["price"]) for row in record["result"]["trades"]] == [D(10), D("10.8")]
 
 
-@pytest.mark.parametrize("change", ["missing", "late", "symbol", "order", "multiplier", "tick", "profile"])
+@pytest.mark.parametrize("change", ["missing", "late", "symbol", "order", "multiplier", "multiplier_change", "metadata_multiplier", "tick", "profile"])
 def test_workbench_v2_invalid_inputs_fail_before_matching(runtime, change):
     host, main = runtime
     value = config(main)
@@ -209,7 +209,12 @@ def test_workbench_v2_invalid_inputs_fail_before_matching(runtime, change):
     elif change == "order":
         value["account_data"]["events"].reverse()
     elif change == "multiplier":
-        value["account_data"]["events"][0]["payload"]["contract_multiplier"] = "5"
+        value["account_data"]["events"][0]["payload"]["contract_multiplier"] = "0"
+    elif change == "multiplier_change":
+        value["account_data"]["events"].append({"time_ms": 60000, "role": "INSTRUMENT_RULES",
+            "payload": {**value["account_data"]["events"][0]["payload"], "contract_multiplier": "5"}})
+    elif change == "metadata_multiplier":
+        value["context"]["metadata"]["pointValue"] = 5
     elif change == "tick":
         value["context"]["metadata"]["priceTickSize"] = "1/4"
     else:

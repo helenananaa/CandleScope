@@ -1,3 +1,4 @@
+import { pineContractMetadata } from "../../indicators/pineContractMetadata.js";
 import { diagnosticLocation } from "./nativeDiagnostics.js";
 import NativeStrategyComparison from "./NativeStrategyComparison.js";
 import { recordStrategyRun, strategyRunIds, strategyInstanceScope, type NativeStrategyInstance } from "./nativeStrategyCollection.js";
@@ -283,9 +284,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       try { params = JSON.parse(parameters); } catch { throw new Error(t("native.parametersInvalid")); }
       if (!params || Array.isArray(params) || typeof params !== "object") throw new Error(t("native.parametersInvalid"));
       const context = props.session;
-      const pineMetadata = language === "pine" && advanced.priceTickSize ? { priceTickSize: advanced.priceTickSize,
-        ...(advanced.currency ? { currency: advanced.currency } : {}),
-        ...(advanced.quantityPrecision ? { quantityPrecision: Number(advanced.quantityPrecision) } : {}) } : undefined;
+      const pineMetadata = language === "pine" ? pineContractMetadata(advanced) : undefined;
       const execution = executionInputs(mode, hostSettings, fidelity, fillRecalculation, executionData, accountOptions);
       const automaticExecution = automaticHostExecution(mode, hostSettings, fidelity, fillRecalculation, executionData, accountOptions);
       const prepareRun = async (route: string, submission: Record<string, unknown>) => {

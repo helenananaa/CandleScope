@@ -1,7 +1,8 @@
 import type { IndicatorParams } from "./indicatorTypes.js";
+import { validatePineContractMetadata, type PineContractMetadata } from "./pineContractMetadata.js";
 
 export interface PineRequestedContext { symbol: string; timeframe: string; marketType?: string;
-  metadata?: { priceTickSize: string; currency?: string; quantityPrecision?: number; pointValue?: number } }
+  metadata?: PineContractMetadata }
 
 export function parsePineContexts(text: string): PineRequestedContext[] {
   const value: unknown = JSON.parse(text || "[]");
@@ -17,16 +18,7 @@ export function parsePineContexts(text: string): PineRequestedContext[] {
       || (item.marketType !== undefined && (typeof item.marketType !== "string" || !/^[A-Za-z0-9_-]{1,40}$/.test(item.marketType))))
       throw new Error("Use symbol, Pine timeframe and optional marketType");
     if (item.metadata !== undefined) {
-      const raw = item.metadata;
-      if (!raw || typeof raw !== "object" || Array.isArray(raw))
-        throw new Error("Use the actual requested price tick, quote currency and quantity precision");
-      const metadata = raw as Record<string, unknown>;
-      if (Object.keys(metadata).some((key) => !["priceTickSize", "currency", "quantityPrecision", "pointValue"].includes(key))
-          || typeof metadata.priceTickSize !== "string" || !Number.isFinite(Number(metadata.priceTickSize)) || Number(metadata.priceTickSize) <= 0
-          || (metadata.currency !== undefined && (typeof metadata.currency !== "string" || !/^[A-Z]{1,20}$/.test(metadata.currency)))
-          || (metadata.quantityPrecision !== undefined && (typeof metadata.quantityPrecision !== "number" || !Number.isInteger(metadata.quantityPrecision) || metadata.quantityPrecision < 0 || metadata.quantityPrecision > 9))
-          || (metadata.pointValue !== undefined && metadata.pointValue !== 1))
-        throw new Error("Use the actual requested price tick, quote currency and quantity precision");
+      validatePineContractMetadata(item.metadata);
     }
     const key = JSON.stringify([item.symbol, item.timeframe]);
     if (seen.has(key) && seen.get(key) !== item.marketType) throw new Error("Conflicting market types for one context");

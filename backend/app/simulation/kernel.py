@@ -63,6 +63,7 @@ class SimulatedFill:
     action: str = ""
     position_before: Decimal = Decimal("0")
     position_after: Decimal = Decimal("0")
+    contract_multiplier: Decimal = Decimal("1")
 
 
 @dataclass(frozen=True, slots=True)
@@ -379,6 +380,7 @@ class SimulationKernel:
                 qty=Decimal(str(item["qty"])),
                 fee=Decimal(str("0" if item.get("fee") is None else item["fee"])),
                 reason=str(item["reason"]),
+                contract_multiplier=Decimal(str(item.get("contract_multiplier", "1"))),
                 action=str(item.get("action") or ""),
                 position_before=Decimal(
                     str(
@@ -813,6 +815,9 @@ class SimulationKernel:
             price_tick=price_tick,
             qty_step=qty_step,
             min_notional=min_notional,
+            contract_multiplier=getattr(self.account, "multiplier", Decimal("1")),
+            min_quantity=getattr(self.account, "min_quantity", None),
+            max_quantity=getattr(self.account, "max_quantity", None),
             allow_reduce_only_below_min_notional=(
                 self.host_policy_revision is not None
             ),
@@ -1078,6 +1083,7 @@ class SimulationKernel:
                 action=_fill_action(position_before, position_after),
                 position_before=position_before,
                 position_after=position_after,
+                contract_multiplier=getattr(self.account, "multiplier", Decimal(1)),
             )
             self.fills.append(fill)
             if self.execution_model_revision == EXECUTION_REALISM_V2:
@@ -1138,7 +1144,7 @@ class SimulationKernel:
     _fill_source_events: list[MarketEvent] = field(default_factory=list)
 
     def _execution_fee(self, price, quantity, fee_bps):
-        multiplier = (self.account.multiplier or Decimal(1)) if isinstance(self.account, LinearPerpetualAccountV2) else Decimal(1)
+        multiplier = getattr(self.account, "multiplier", Decimal(1)) or Decimal(1)
         return price * quantity * multiplier * fee_bps / Decimal("10000")
 
     def _lifecycle(
@@ -1238,6 +1244,9 @@ def reject_intent(
     price_tick: Decimal | None = None,
     qty_step: Decimal | None = None,
     min_notional: Decimal | None = None,
+    contract_multiplier: Decimal = Decimal("1"),
+    min_quantity: Decimal | None = None,
+    max_quantity: Decimal | None = None,
     allow_reduce_only_below_min_notional: bool = False,
     allow_ioc: bool = False,
 ) -> str | None:
@@ -1254,6 +1263,12 @@ def reject_intent(
         return "UNSUPPORTED_TYPE"
     if not qty.is_finite() or qty <= 0:
         return "NON_POSITIVE_QTY"
+    if not isinstance(contract_multiplier, Decimal) or not contract_multiplier.is_finite() or contract_multiplier <= 0:
+        return "INVALID_CONTRACT_MULTIPLIER"
+    if min_quantity is not None and qty < min_quantity:
+        return "MIN_QTY"
+    if max_quantity is not None and qty > max_quantity:
+        return "MAX_QTY"
     if tif not in ({"GTC", "IOC"} if allow_ioc else {"GTC"}):
         return "UNSUPPORTED_TIF"
     limit_price, limit_error = _validated_price(intent.get("limit_price"))
@@ -1271,7 +1286,7 @@ def reject_intent(
     if (
         min_notional is not None
         and reference_price is not None
-        and reference_price * qty < min_notional
+        and reference_price * qty * contract_multiplier < min_notional
         and not (
             allow_reduce_only_below_min_notional
             and bool(intent.get("reduce_only") or False)

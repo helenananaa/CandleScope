@@ -35,6 +35,7 @@ def describe():
            if getattr(pine_compat, "EXTERNAL_CLOSING_TICK_SCHEMA_VERSION", 0) == 1 else {}),
         "external_orders": getattr(pine_compat, "EXTERNAL_ORDER_SCHEMA_VERSION", 1),
         "external_sizing": getattr(pine_compat, "EXTERNAL_SIZING_SCHEMA_VERSION", 0),
+        "contract_metadata_schema": getattr(pine_compat, "CONTRACT_METADATA_SCHEMA_VERSION", 0),
         **({"order_metadata_contract": "candlescope.pine-order-metadata/1"}
            if getattr(pine_compat, "EXTERNAL_ORDER_METADATA_SCHEMA_VERSION", 0) == 1 else {}),
         "prefix_append": PREFIX_CONTRACT,

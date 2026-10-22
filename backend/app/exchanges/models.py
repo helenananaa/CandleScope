@@ -463,6 +463,11 @@ class SymbolInfo:
     entitlement: str = "unknown"
     delay_seconds: int | None = None
     redistribution: str = "unknown"
+    quantity_step: str = ""
+    min_quantity: str = ""
+    quantity_origin: str = ""
+    quantity_rule_model: str = ""
+    contract_value_model: str = ""
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -511,6 +516,9 @@ class SymbolInfo:
             raise ValueError("option_right must be call, put, or empty")
         for field_name, allow_zero in (
             ("contract_multiplier", False),
+            ("quantity_step", False),
+            ("min_quantity", False),
+            ("quantity_origin", True),
             ("option_strike", True),
         ):
             text = str(getattr(self, field_name) or "").strip()
@@ -524,6 +532,14 @@ class SymbolInfo:
                 if not parsed.is_finite() or parsed < 0 or (parsed == 0 and not allow_zero):
                     raise ValueError(f"{field_name} must be a valid decimal string")
             setattr(self, field_name, text)
+        for name, admitted in (
+            ("contract_value_model", {"", "linear", "inverse", "unknown"}),
+            ("quantity_rule_model", {"", "fixed_step", "significant_digits", "unknown"}),
+        ):
+            value = str(getattr(self, name) or "").strip().lower()
+            if value not in admitted:
+                raise ValueError(f"unsupported {name}")
+            setattr(self, name, value)
         if self.delay_seconds is not None:
             if isinstance(self.delay_seconds, bool) or not isinstance(
                 self.delay_seconds,
@@ -570,6 +586,11 @@ class SymbolInfo:
             "delaySeconds": self.delay_seconds,
             "redistribution": self.redistribution,
         }
+        for field, key in (("quantity_step", "quantityStep"), ("min_quantity", "minQuantity"),
+                           ("quantity_origin", "quantityOrigin"), ("quantity_rule_model", "quantityRuleModel"),
+                           ("contract_value_model", "contractValueModel")):
+            if value := getattr(self, field):
+                data[key] = value
         if self.contract_type:
             data["contractType"] = self.contract_type
         if self.price_tick_size:

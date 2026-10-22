@@ -67,7 +67,7 @@ def test_stateless_forming_and_changed_parameters_do_not_reuse_state():
     source = '//@version=6\nindicator("x")\nx=input.int(2)\nplot(close*x)\n'
     plugin = PineCompatRuntimePlugin()
     analysis = plugin.analyze(AnalyzeRequest(source=source, context=CONTEXT))
-    assert analysis.ok and analysis.meta["hostRequirements"]["schemaVersion"] in {2, 3}
+    assert analysis.ok and analysis.meta["hostRequirements"]["schemaVersion"] in {2, 3, 4}
     key = str(analysis.inputs[0]["callSiteId"])
     bars = [bar(0, 10), bar(1, 20, False)]
     first = execute(plugin, bars, source=source)

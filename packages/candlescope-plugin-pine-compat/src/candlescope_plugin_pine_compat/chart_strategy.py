@@ -22,6 +22,7 @@ def describe():
         **schedule_capabilities(),
         "external_orders": getattr(pine_compat, "EXTERNAL_ORDER_SCHEMA_VERSION", 1),
         "external_sizing": getattr(pine_compat, "EXTERNAL_SIZING_SCHEMA_VERSION", 0),
+        "contract_metadata_schema": getattr(pine_compat, "CONTRACT_METADATA_SCHEMA_VERSION", 0),
         **({"entry_risk_contract": RISK_CONTRACT} if risk_available() else {}),
         **({"risk_stop_contract": STOP_CONTRACT} if risk_available() else {}),
         "fill_callbacks": "candlescope.pine-fill-callbacks/1",

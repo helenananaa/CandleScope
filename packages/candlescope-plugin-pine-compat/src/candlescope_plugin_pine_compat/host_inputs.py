@@ -6,16 +6,18 @@ from collections.abc import Mapping
 from fractions import Fraction
 from typing import Any
 import re
+import math
 
 from .currency_inputs import currency_rates
+from .contract_metadata import quantity_decimal, require_contract_capability
 
 
-def chart_metadata(value: Any) -> dict[str, int | str] | None:
+def chart_metadata(value: Any) -> dict[str, int | float | str] | None:
     if value is None:
         return None
     if not isinstance(value, Mapping):
         raise TypeError("PINE_HOST_METADATA_INVALID: chart metadata must be an object")
-    unknown = set(value) - {"priceTickSize", "quantityPrecision", "pointValue", "currency"}
+    unknown = set(value) - {"priceTickSize", "quantityPrecision", "pointValue", "currency", "quantityStep", "minContract"}
     if unknown:
         raise ValueError(
             "PINE_HOST_METADATA_INVALID: unknown fields: " + ", ".join(sorted(unknown))
@@ -45,11 +47,20 @@ def chart_metadata(value: Any) -> dict[str, int | str] | None:
             )
         result["quantityPrecision"] = precision
     if value.get("pointValue") is not None:
-        if isinstance(value["pointValue"], bool) or value["pointValue"] != 1:
-            raise ValueError(
-                "PINE_HOST_METADATA_UNSUPPORTED: this engine only supports pointValue=1"
-            )
-        result["pointValue"] = 1
+        point = value["pointValue"]
+        try:
+            valid = type(point) in (int, float) and math.isfinite(point) and point > 0
+        except OverflowError:
+            valid = False
+        if not valid:
+            raise ValueError("PINE_HOST_METADATA_INVALID: pointValue must be positive and finite")
+        result["pointValue"] = point
+    for key in ("quantityStep", "minContract"):
+        if value.get(key) is not None:
+            places = quantity_decimal(value[key], key)
+            if key == "quantityStep" and value.get("quantityPrecision") is not None and places > value["quantityPrecision"]:
+                raise ValueError("PINE_HOST_METADATA_INVALID: quantityStep exceeds quantityPrecision")
+            result[key] = value[key]
     return result
 
 
@@ -75,6 +86,7 @@ def native_request_bars(request, supplied):
     if grid is not None:
         supplied["$chart"] = grid
     symbols = requested_metadata(request)
+    require_contract_capability(grid, *symbols.values())
     if symbols:
         import pine_compat
         if getattr(pine_compat, "SYMBOL_METADATA_SCHEMA_VERSION", 0) != 1:
@@ -103,15 +115,25 @@ def indicator_request_bars(analysis, options, chart_symbol, supplied):
     metadata = options.get("pineRequestSymbolMetadata", {})
     if not isinstance(metadata, Mapping) or len(metadata) > 16:
         raise ValueError("PINE_HOST_METADATA_INVALID: requested metadata must map at most 16 symbols")
-    contexts = [{"symbol": key.rsplit(":", 1)[0], "metadata": metadata.get(key.rsplit(":", 1)[0])}
+    contexts = [{"symbol": key.rsplit(":", 1)[0], "metadata": metadata.get(key.rsplit(":", 1)[0]), "contract_profile": options.get("pineRequestSymbolProfiles", {}).get(key.rsplit(":", 1)[0])}
         for key in supplied]
-    request = {"context": {"symbol": chart_symbol, "metadata": options.get("pineChartMetadata")}, "contexts": contexts}
+    request = {"context": {"symbol": chart_symbol, "metadata": options.get("pineChartMetadata"), "contract_profile": options.get("pineContractProfile")}, "contexts": contexts}
     require_price_grid(analysis, request)
     require_quote_currency(analysis, {}, request)
     return native_request_bars(request, supplied)
 
 
 def require_price_grid(analysis, request):
+    profile = request.get("context", {}).get("contract_profile") or {}
+    if analysis.get("scriptMode") == "strategy":
+        if profile.get("model") in {"inverse", "unknown"}:
+            raise ValueError("PINE_HOST_METADATA_UNSUPPORTED: this strategy requires a known linear contract")
+        if profile.get("quantityModel") in {"significant_digits", "offset_step", "unknown"}:
+            raise ValueError("PINE_HOST_METADATA_UNSUPPORTED: this strategy requires a fixed quantity grid with zero-aligned steps")
+        if profile.get("model") == "linear" and (request.get("context", {}).get("metadata") or {}).get("pointValue") is None:
+            raise ValueError("PINE_HOST_METADATA_REQUIRED: the catalog's actual linear multiplier is missing")
+        if profile.get("model") == "linear" and not any((request.get("context", {}).get("metadata") or {}).get(key) is not None for key in ("quantityStep", "quantityPrecision")):
+            raise ValueError("PINE_HOST_METADATA_REQUIRED: the catalog's actual quantity grid is missing")
     features = {
         item.get("feature") for item in analysis.get("compatibility", {}).get("supported", [])
     }
@@ -125,13 +147,21 @@ def require_price_grid(analysis, request):
         )
     needs_grid = features & {"syminfo.mintick", "syminfo.minmove", "syminfo.pricescale", "math.round_to_mintick", "format.mintick"}
     needs_quantity = "syminfo.mincontract" in features
-    if needs_quantity and (request.get("context", {}).get("metadata") or {}).get("quantityPrecision") is None:
-        raise ValueError("PINE_HOST_METADATA_REQUIRED: freeze the chart's actual quantity precision before using syminfo.mincontract")
+    needs_point = "syminfo.pointvalue" in features
+    if needs_point and profile and (request.get("context", {}).get("metadata") or {}).get("pointValue") is None:
+        raise ValueError("PINE_HOST_METADATA_REQUIRED: the chart's actual point value and price grid are missing")
+    def has_quantity(metadata):
+        return any(metadata.get(key) is not None for key in ("minContract", "quantityStep", "quantityPrecision"))
+
+    if needs_quantity and not has_quantity(request.get("context", {}).get("metadata") or {}):
+        raise ValueError("PINE_HOST_METADATA_REQUIRED: freeze the chart's actual minimum contract, quantity step or legacy precision before using syminfo.mincontract")
     for context in request.get("contexts", []):
         if context["symbol"] == request.get("context", {}).get("symbol"):
             continue
         metadata = context.get("metadata") or {}
-        if (needs_grid and not metadata.get("priceTickSize")) or (needs_quantity and metadata.get("quantityPrecision") is None):
+        if needs_point and context.get("contract_profile") and metadata.get("pointValue") is None:
+            raise ValueError("PINE_HOST_METADATA_REQUIRED: requested point value and price grid are missing for " + context["symbol"])
+        if (needs_grid and not metadata.get("priceTickSize")) or (needs_quantity and not has_quantity(metadata)):
             raise ValueError("PINE_HOST_METADATA_REQUIRED: freeze requested symbol metadata for " + context["symbol"])
 
 

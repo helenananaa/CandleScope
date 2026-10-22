@@ -36,6 +36,19 @@ production-function probes also confirm that the current minimum-notional
 admission omits contract multiplier in both BAR and trade call paths. Its repair
 must accompany metadata, sizing, native accounting and actual quantity rules;
 lifting the existing nonunit-multiplier rejection alone is insufficient.
+The phase-2 development checkpoint now connects linear multiplier valuation,
+exact quantity grids, Host min/max/minimum-notional checks, V1/V2 metadata,
+per-fill valuation receipts, chart/Workbench reports and frontend inputs. Actual
+installed-worker chart and Workbench cases pass for multipliers 50/.01 across
+explicit/cash/equity sizing, with controlled recovery and cost reexecution;
+see [contract rules](pine-contract-rules.md). Core phase 2 is committed and pushed
+at `3ef79760d`, with all 7,960 Rust, 1,916 Python and 172 tooling checks and the
+WASM/Node gate passing. Host's prior 528-case immutable qualification passed;
+the subsequent catalog metadata fix now passes all 570 selected cases with
+freshly rebuilt SDK/bridge wheels and that corrected core, with zero skips and
+stable source/runtime/registry fingerprints. Phase 2 is delivered on this PR;
+release and independent reference qualification remain open.
+
 The previous round's closeout below is a historical checkpoint, not completion
 of this full Goal.
 
@@ -476,13 +489,12 @@ that observation. The corrected allocation group passes.
    and Pine risk-rule semantics through the authoritative Host matcher. Chart
    entry direction and maximum-position rules are now wired through the
    explicit entry-risk development contract; see `pine-entry-risk.md`. Four
-   session/equity halt rules require the separate explicit stop contract. The new core configuration schema
-   is a prerequisite and does not fix native conditional rule registration or
-   duplicate-rule aggregation. Candidate qualification is tracked separately
-   from the retained 3a08561b installed-environment receipt.
-   The unchanged-core native probe in `native-risk-preflight.json` reproduces
-   conditional cap 2 yielding position 10 and duplicate caps 2/5 yielding 5;
-   these remain genuine core work despite the completed Host rule enforcement.
+   session/equity halt rules require the separate explicit stop contract. The retained `native-risk-preflight.json` reproduces the earlier native
+   conditional-registration and duplicate-rule defects. Core `7adcca2a3` fixes
+   both through declarative registration and conservative aggregation. Core
+   `3ef79760d` and the phase-2 Host receipt above now qualify that development
+   implementation with linear contract rules; earlier worker receipts retain
+   their own identities.
    The four-stop chart contract now connects market/account/fill observations,
    cancellation and real-capacity reducing closes (`pine-risk-stops.md`). Other
    venue calendars, multi-day BAR consecutive-loss windows, partial-fill official
@@ -544,15 +556,18 @@ that observation. The corrected allocation group passes.
 3. Remaining display destinations and symbol/session/chart metadata, keeping
    unsupported diagnostics until the real host capability is connected. The
    tick-only bridge uses a reduced rational grid; exact TradingView minmove/
-   pricescale representation and arbitrary lot steps need richer host metadata.
+   pricescale representation still needs reference qualification. Bounded exact
+   decimal lot steps and independent minima are now connected; inverse,
+   significant-digit and nonzero-offset quantity profiles remain unsupported.
    Metadata admission currently requires all selected foreign contexts when a
    corresponding builtin is used anywhere in the script; expression-scoped
    requirements would avoid unnecessary admission failures.
 4. Re-audit current core gaps and implement selected missing language/request/
    account semantics. The current round connects negotiated comments/alert
    metadata, zero-quantity no-op parity and Host-account default sizing; see
-   `pine-order-metadata.md` and `pine-default-sizing.md`. Current development core already provides FX conversion;
-   nonunit contract multipliers remain unsupported.
+   `pine-order-metadata.md` and `pine-default-sizing.md`. Current development core and Host now provide FX conversion and the
+   bounded linear multiplier/quantity profile described above. Inverse contract
+   accounting remains unsupported.
 5. Continue broader product and official-reference qualification. Current tests
    do not establish arbitrary TradingView script, pixel, broker-fill,
    protected-library or live-tick equivalence.

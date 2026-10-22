@@ -10,6 +10,7 @@ from app.simulation.execution_realism import PINE_BAR_PATH_SCENARIO
 from .errors import BacktestError
 from .native_contracts import WorkbenchBarSettings
 from .pine_workbench import bar_event
+from .pine_contract_metadata import bind_account_metadata
 
 
 def _settings(payload):
@@ -23,6 +24,8 @@ def _settings(payload):
 def freeze_grid(wire, payload):
     settings = _settings(payload)
     if settings.account_model != "LINEAR_PERP_ONE_WAY_V2":
+        if wire.get("account_model") == "SPOT_CASH_V1" and (wire["context"].get("metadata") or {}).get("pointValue", 1) != 1:
+            raise BacktestError("FIDELITY_UNSUPPORTED", "spot cash accounting requires unit pointValue")
         return settings
     account = LinearPerpetualAccountV2(funding_mode=settings.funding_mode)
     opening = wire["bars"][0]["time"] * 1000
@@ -34,11 +37,12 @@ def freeze_grid(wire, payload):
         account.validate_ready()
     except MarketDatasetError as exc:
         raise BacktestError(exc.code, str(exc)) from exc
-    explicit = (payload.get("context", {}).get("metadata") or {}).get("priceTickSize")
-    if explicit is not None and Fraction(str(explicit)) != Fraction(account.tick):
-        raise BacktestError("DATA_SNAPSHOT_MISMATCH", "historical tick differs from explicit Pine metadata")
-    wire["context"] = {**wire["context"], "metadata": {
-        **(wire["context"].get("metadata") or {}), "priceTickSize": str(account.tick)}}
+    supplied = payload.get("context", {}).get("metadata") or {}
+    metadata = bind_account_metadata(account, supplied)
+    cached = wire["context"].get("metadata") or {}
+    if "currency" not in metadata and cached.get("currency"):
+        metadata["currency"] = cached["currency"]
+    wire["context"] = {**wire["context"], "metadata": metadata}
     wire["host_settings"] = {**wire["host_settings"], "price_tick": str(account.tick)}
     return settings
 
@@ -93,9 +97,10 @@ def freeze_account(wire, payload, *, settings=None):
             account.apply(MarketEvent(index + 1, row.time_ms, row.role, row.payload))
             roles.add(row.role)
             if row.role == "INSTRUMENT_RULES":
-                if account.multiplier != 1:
-                    raise BacktestError("FIDELITY_UNSUPPORTED", "nonunit Pine contract metadata remains unsupported")
-                metadata_tick = (wire["context"].get("metadata") or {}).get("priceTickSize")
+                metadata = wire["context"].get("metadata") or {}
+                if Fraction(str(metadata.get("pointValue", 1))) != Fraction(account.multiplier):
+                    raise BacktestError("FIDELITY_UNSUPPORTED", "Pine pointValue must remain constant within one frozen run")
+                metadata_tick = metadata.get("priceTickSize")
                 if metadata_tick is not None and Fraction(str(metadata_tick)) != Fraction(account.tick):
                     raise BacktestError("DATA_SNAPSHOT_MISMATCH", "historical tick differs from Pine chart metadata")
         account.validate_ready()

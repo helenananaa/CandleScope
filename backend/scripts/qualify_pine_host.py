@@ -25,8 +25,14 @@ MODULES = (
     "test_chart_pine_liquidation", "test_v2_margin_repricing", "test_pine_workbench_costs",
     "test_pine_cost_sensitivity", "test_workbench_default_upgrade", "test_external_replay",
     "test_chart_pine_entry_risk", "test_chart_pine_requested_data", "test_native_session_transport",
+    "test_contract_quantity_rules", "test_pine_contract_metadata", "test_legacy_contract_rules",
+    "test_chart_pine_contracts", "test_pine_contract_execution", "test_external_report",
+    "test_account_liquidation_execution", "test_backtest_host_policy_m5",
+    "test_catalog_contract_rules", "test_catalog_contract_adapters",
+    "test_pine_catalog_contracts", "test_pine_catalog_native", "test_pine_host_inputs",
 )
 SCHEMAS = {
+    "CONTRACT_METADATA_SCHEMA_VERSION": 1,
     "EXTERNAL_CLOCK_SCHEMA_VERSION": 1, "SYMBOL_METADATA_SCHEMA_VERSION": 1,
     "EXTERNAL_ORDER_SCHEMA_VERSION": 2, "EXTERNAL_CLOSING_TICK_SCHEMA_VERSION": 1,
     "STRATEGY_RISK_CONFIGURATION_SCHEMA_VERSION": 1, "EXTERNAL_SCHEDULE_SCHEMA_VERSION": 1,

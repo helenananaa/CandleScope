@@ -222,8 +222,18 @@ class NativeBacktests:
                 requested = self.runtime.local_data.get_manifest(context["dataset_id"])
                 if pair[0].split(":")[-1] != requested["symbol"] or pair[1] != timeframe(context["interval"]):
                     raise BacktestError("DATA_SNAPSHOT_MISMATCH", "requested metadata differs from frozen dataset")
+                context_metadata = context.get("metadata")
+                context_profile = {}
+                if payload["language"] == "pine":
+                    from app.exchanges.symbol_catalog import get_cached_symbol_metadata
+                    from .pine_contract_metadata import catalog_chart_metadata, catalog_contract_profile
+                    cached = get_cached_symbol_metadata(context.get("exchange", "binance"),
+                                                        context.get("market_type", "usdm"), requested["symbol"])
+                    context_metadata = catalog_chart_metadata(cached, context_metadata)
+                    context_profile = catalog_contract_profile(cached)
                 contexts.append({"symbol": pair[0], "timeframe": pair[1], "bars": self._freeze(context),
-                    **({"metadata": context["metadata"]} if context.get("metadata") else {})})
+                    **({"metadata": context_metadata} if context_metadata else {}),
+                    **({"contract_profile": context_profile} if context_profile else {})})
             magnifier = None
             if payload.get("magnifier"):
                 if payload["language"] != "pine":
@@ -259,13 +269,15 @@ class NativeBacktests:
             if payload["language"] == "pine":
                 from app.exchanges.symbol_catalog import get_cached_symbol_metadata
                 chart = dict(wire["context"])
-                if not chart.get("metadata"):
-                    metadata = get_cached_symbol_metadata(payload.get("exchange", "binance"),
-                                                          payload.get("market_type", "usdm"), manifest["symbol"])
-                    if metadata and metadata.get("priceTickSize"):
-                        chart["metadata"] = {"priceTickSize": metadata["priceTickSize"]}
-                        if metadata.get("quoteAsset"):
-                            chart["metadata"]["currency"] = metadata["quoteAsset"]
+                from .pine_contract_metadata import catalog_chart_metadata, catalog_contract_profile
+                metadata = get_cached_symbol_metadata(payload.get("exchange", "binance"),
+                                                      payload.get("market_type", "usdm"), manifest["symbol"])
+                bound = catalog_chart_metadata(metadata, chart.get("metadata"))
+                if bound is not None:
+                    chart["metadata"] = bound
+                profile = catalog_contract_profile(metadata)
+                if profile:
+                    chart["contract_profile"] = profile
                 wire["context"] = chart
                 clock_interval = parse_interval_spec(payload["interval"])
                 wire["execution_times"] = [clock_interval.next_ms(bar["time"] * 1000) - 1 for bar in bars]

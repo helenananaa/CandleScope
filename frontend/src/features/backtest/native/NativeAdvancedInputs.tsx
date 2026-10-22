@@ -49,6 +49,8 @@ export function NativeAdvancedInputs({ value, onChange, language, disabled, exch
           onChange={(event) => onChange({ ...value, contexts: value.contexts.map((row, i) => i === index ? { ...row, currency: event.target.value } : row) })} /></label>
         <label>{t("native.inputs.quantityPrecision")}<input type="number" min="0" max="9" step="1" value={item.quantityPrecision ?? ""}
           onChange={(event) => onChange({ ...value, contexts: value.contexts.map((row, i) => i === index ? { ...row, quantityPrecision: event.target.value } : row) })} /></label>
+        {(["pointValue", "quantityStep", "minContract"] as const).map(key => <label key={key}>{t(`native.inputs.${key}`)}<input inputMode="decimal" value={item[key] ?? ""}
+          onChange={(event) => onChange({ ...value, contexts: value.contexts.map((row, i) => i === index ? { ...row, [key]: event.target.value } : row) })} /></label>)}
       </>}
     </fieldset>)}
     {language === "pine" && !contextsOnly && <>
@@ -56,6 +58,8 @@ export function NativeAdvancedInputs({ value, onChange, language, disabled, exch
         onChange={(event) => onChange({ ...value, currency: event.target.value })} /></label>
       <label>{t("native.inputs.quantityPrecision")}<input type="number" min="0" max="9" step="1" disabled={disabled} value={value.quantityPrecision ?? ""}
         onChange={(event) => onChange({ ...value, quantityPrecision: event.target.value })} /></label>
+      {(["pointValue", "quantityStep", "minContract"] as const).map(key => <label key={key}>{t(`native.inputs.${key}`)}<input inputMode="decimal" disabled={disabled} value={value[key] ?? ""}
+        onChange={(event) => onChange({ ...value, [key]: event.target.value })} /></label>)}
       {native && <><label>{t("native.inputs.magnifier")}<select disabled={disabled} value={value.magnifier?.dataset_id ?? ""} onChange={(event) => onChange({ ...value,
         magnifier: datasets.find((item) => item.dataset_id === event.target.value) ?? null })}>
         <option value="">{t("native.inputs.none")}</option>{datasets.map((item) => <option key={item.dataset_id} value={item.dataset_id}>{item.name} · {item.symbol} · {item.interval}</option>)}

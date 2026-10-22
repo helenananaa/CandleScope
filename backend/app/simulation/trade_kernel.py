@@ -344,6 +344,7 @@ class TradeSimulationKernel:
                 qty=Decimal(str(item["qty"])),
                 fee=Decimal(str("0" if item.get("fee") is None else item["fee"])),
                 reason=str(item["reason"]),
+                contract_multiplier=Decimal(str(item.get("contract_multiplier", "1"))),
                 action=str(item.get("action") or ""),
                 position_before=Decimal(
                     str(
@@ -670,6 +671,9 @@ class TradeSimulationKernel:
     def _enqueue(self, intent: Mapping[str, object], *, current_sequence: int) -> None:
         reason = reject_intent(
             intent,
+            contract_multiplier=getattr(self.account, "multiplier", Decimal("1")),
+            min_quantity=getattr(self.account, "min_quantity", None),
+            max_quantity=getattr(self.account, "max_quantity", None),
             current_price=(
                 self.account.mark
                 if isinstance(self.account, LinearPerpetualAccountV2)
@@ -964,6 +968,7 @@ class TradeSimulationKernel:
                 action=_fill_action(position_before, position_after),
                 position_before=position_before,
                 position_after=position_after,
+                contract_multiplier=getattr(self.account, "multiplier", Decimal(1)),
             )
             self.fills.append(fill)
             if self.execution_model_revision == EXECUTION_REALISM_V2:
@@ -1020,7 +1025,7 @@ class TradeSimulationKernel:
         return fill_qty
 
     def _execution_fee(self, price, quantity, fee_bps):
-        multiplier = (self.account.multiplier or Decimal(1)) if isinstance(self.account, LinearPerpetualAccountV2) else Decimal(1)
+        multiplier = getattr(self.account, "multiplier", Decimal(1)) or Decimal(1)
         return price * quantity * multiplier * fee_bps / Decimal("10000")
 
     def _lifecycle(

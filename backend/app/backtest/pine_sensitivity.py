@@ -35,6 +35,9 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
             "latency_ms": replay.latency_ms, "latency_events": replay.latency_events}
         account_kernel = replay.execution if isinstance(replay, DualClockSimulationKernel) else replay
         source_kernel = kernel.execution if isinstance(kernel, DualClockSimulationKernel) else kernel
+        from .pine_contract_metadata import configure_legacy_account
+        configure_legacy_account(account_kernel, {"account_model": config.get("account_model"),
+            "context": {"metadata": config.get("pine_chart_metadata")}})
         # Preserve production evidence/curve modes when verifying the baseline.
         replay.scale_stream_decisions = kernel.scale_stream_decisions
         replay.equity_curve_mode = kernel.equity_curve_mode

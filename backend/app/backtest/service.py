@@ -1168,7 +1168,7 @@ class BacktestService:
         normalized_execution = json.loads(identity.execution_json)
         if normalized_execution.get("pine_runtime_identity"):
             stored_payload["pine_runtime_identity"] = normalized_execution["pine_runtime_identity"]
-        for name in ("pine_contexts", "pine_local_data_root", "pine_order_runtime_identity", "pine_fill_callbacks", "pine_process_on_close", "pine_risk_windows", "pine_bar_path_contract", "pine_v2_bar_contract"):
+        for name in ("pine_chart_metadata", "pine_contexts", "pine_local_data_root", "pine_order_runtime_identity", "pine_fill_callbacks", "pine_process_on_close", "pine_risk_windows", "pine_bar_path_contract", "pine_v2_bar_contract"):
             stored_payload.pop(name, None)
             if name in normalized_execution:
                 stored_payload[name] = normalized_execution[name]
@@ -2715,7 +2715,7 @@ class BacktestService:
                     "seed": config.get("seed"),
                     "outputMode": config.get("output_mode") or "TARGET_POSITION",
                     "tradeExplanationEnabled": self.settings.trade_explanation_effective,
-                    "pineChartMetadata": {"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None,
+                    "pineChartMetadata": config.get("pine_chart_metadata") or ({"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None),
                     "pineChartInterval": config.get("signal_interval") or config.get("interval"),
                     "pineChartMarketType": config.get("market_type"),
                     "pineRequestedContexts": config.get("pine_contexts", []),
@@ -2790,6 +2790,10 @@ class BacktestService:
                 if kernel.equity_curve_event_interval < 10_000:
                     kernel.equity_curve_event_interval = 10_000
                 kernel.scale_stream_decisions = True
+            if config.get("pine_runtime_identity"):
+                from .pine_contract_metadata import configure_legacy_account
+                configure_legacy_account(getattr(kernel, "execution", kernel), {
+                    "account_model": config.get("account_model"), "context": {"metadata": config.get("pine_chart_metadata")}})
             planner.bind_kernel(kernel)
             checkpoint = self.repository.latest_checkpoint(run_id)
             if checkpoint is not None:
@@ -3147,7 +3151,7 @@ class BacktestService:
                     "signalClock": SIGNAL_CLOCK,
                     "executionClock": EXECUTION_CLOCK,
                     "tradeExplanationEnabled": self.settings.trade_explanation_effective,
-                    "pineChartMetadata": {"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None,
+                    "pineChartMetadata": config.get("pine_chart_metadata") or ({"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None),
                     "pineChartInterval": config.get("signal_interval") or config.get("interval"),
                     "pineChartMarketType": config.get("market_type"),
                     "pineRequestedContexts": config.get("pine_contexts", []),
@@ -3184,6 +3188,10 @@ class BacktestService:
                 execution_reporter=self._execution_reporter(session),
             )
             resume_sequence = 0
+            if config.get("pine_runtime_identity"):
+                from .pine_contract_metadata import configure_legacy_account
+                configure_legacy_account(getattr(kernel, "execution", kernel), {
+                    "account_model": config.get("account_model"), "context": {"metadata": config.get("pine_chart_metadata")}})
             planner.bind_kernel(kernel)
             checkpoint = self.repository.latest_checkpoint(run_id)
             if checkpoint is not None:
@@ -3477,7 +3485,7 @@ class BacktestService:
                     "seed": config.get("seed"),
                     "outputMode": config.get("output_mode") or "TARGET_POSITION",
                     "tradeExplanationEnabled": self.settings.trade_explanation_effective,
-                    "pineChartMetadata": {"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None,
+                    "pineChartMetadata": config.get("pine_chart_metadata") or ({"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None),
                     "pineChartInterval": config.get("signal_interval") or config.get("interval"),
                     "pineChartMarketType": config.get("market_type"),
                     "pineRequestedContexts": config.get("pine_contexts", []),
@@ -3573,6 +3581,10 @@ class BacktestService:
                 **_execution_kernel_kwargs(config),
                 execution_reporter=self._execution_reporter(session),
             )
+            if config.get("pine_runtime_identity"):
+                from .pine_contract_metadata import configure_legacy_account
+                configure_legacy_account(getattr(kernel, "execution", kernel), {
+                    "account_model": config.get("account_model"), "context": {"metadata": config.get("pine_chart_metadata")}})
             planner.bind_kernel(kernel)
             checkpoint = self.repository.latest_checkpoint(run_id)
             if checkpoint is not None:
@@ -4528,6 +4540,21 @@ class BacktestService:
                 execution_config["pine_order_runtime_identity"] = host_identity()
             if fidelity not in {"BAR_APPROX", "AGG_TRADE_EXECUTION"}:
                 raise BacktestError("FIDELITY_UNSUPPORTED", "chart Pine requires closed-bar observations")
+        if payload.get("pine_chart_metadata") is not None:
+            from .native_contracts import PineChartMetadata
+            if persisted_execution is None or persisted_execution["base_revision_id"] != PINE_ENGINE_REVISION:
+                raise BacktestError("FIDELITY_UNSUPPORTED", "Pine contract metadata requires PINE_ENGINE")
+            try:
+                metadata = PineChartMetadata.model_validate(payload["pine_chart_metadata"]).model_dump(exclude_none=True)
+            except ValueError as exc:
+                raise BacktestError("SCHEMA_UNKNOWN_FIELD", "invalid Pine contract metadata") from exc
+            from fractions import Fraction
+            for field, config_field in (("priceTickSize", "price_tick"), ("quantityStep", "qty_step")):
+                if metadata.get(field) is not None and payload.get(config_field) is not None and Fraction(metadata[field]) != Fraction(str(payload[config_field])):
+                    raise BacktestError("DATA_SNAPSHOT_MISMATCH", f"Pine {field} differs from Host {config_field}")
+            if account_model == "SPOT_CASH_V1" and metadata.get("pointValue", 1) != 1:
+                raise BacktestError("FIDELITY_UNSUPPORTED", "spot cash accounting requires unit pointValue")
+            execution_config["pine_chart_metadata"] = metadata
         if payload.get("pine_contexts"):
             from .pine_requested_data import normalize_contexts
             if persisted_execution is None or persisted_execution["base_revision_id"] != PINE_ENGINE_REVISION:
@@ -5525,7 +5552,9 @@ def _trade_chart_bar(bar: MarketEvent) -> dict[str, object]:
 def _pine_account_view(kernel):
     account = kernel.account
     from .external import account_feedback_profit
-    return {"position_size": float(account.position_qty),
+    from .pine_contract_metadata import observed_contract_metadata
+    metadata = observed_contract_metadata(kernel)
+    return {**({"_contract_metadata": metadata} if metadata is not None else {}), "position_size": float(account.position_qty),
             "position_avg_price": None if account.entry_price is None else float(account.entry_price),
             "equity": float(account.equity()), "initial_capital": float(kernel.initial_balance),
             "netprofit": float(account_feedback_profit(account, kernel.initial_balance)),

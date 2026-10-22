@@ -27,6 +27,8 @@ class PineChartMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     priceTickSize: str = Field(min_length=1, max_length=80)
     quantityPrecision: int | None = Field(default=None, ge=0, le=9, strict=True)
+    quantityStep: str | None = Field(default=None, min_length=1, max_length=80, strict=True)
+    minContract: str | None = Field(default=None, min_length=1, max_length=80, strict=True)
     pointValue: float | None = Field(default=None, gt=0, strict=True)
     currency: str | None = Field(default=None, pattern=r"^[A-Z]{1,20}$")
 
@@ -40,8 +42,13 @@ class PineChartMetadata(BaseModel):
             raise ValueError("priceTickSize must be a positive finite decimal") from exc
         if tick <= 0 or max(tick.numerator, tick.denominator) > 4_294_967_295:
             raise ValueError("priceTickSize exceeds the Pine runtime price grid")
-        if self.pointValue is not None and self.pointValue != 1:
-            raise ValueError("this Pine runtime only supports pointValue=1")
+        from .pine_contract_metadata import quantity_decimal
+        if self.quantityStep is not None:
+            places = quantity_decimal(self.quantityStep, "quantityStep")
+            if self.quantityPrecision is not None and places > self.quantityPrecision:
+                raise ValueError("quantityStep exceeds quantityPrecision")
+        if self.minContract is not None:
+            quantity_decimal(self.minContract, "minContract")
         return self
 
 

@@ -242,6 +242,14 @@ class PineEngineProvider:
         }
         bar["time"] = int(row.get("open_time_ms", frame.event_time_ms)) // 1000
         account = dict(frame.account_view)
+        actual_metadata = account.pop("_contract_metadata", None)
+        if actual_metadata is not None:
+            from app.backtest.pine_contract_metadata import bind_observed_metadata
+            from app.backtest.errors import BacktestError
+            try:
+                self.context["pineChartMetadata"] = bind_observed_metadata(actual_metadata, self.context.get("pineChartMetadata") or {})
+            except BacktestError as exc:
+                raise StrategyProviderError(exc.code, str(exc)) from exc
         account["time"] = bar["time"]
         confirmed, pass_index = True, None
         if self.pass_mode:

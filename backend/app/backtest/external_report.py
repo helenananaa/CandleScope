@@ -7,19 +7,25 @@ are allocated by closed/opened quantity, as is the average-cost host account.
 from decimal import Decimal
 
 
-def closed_trades(fills):
+def closed_trades(fills, *, contract_multiplier=Decimal(1)):
+    """Use the frozen linear contract multiplier; fees are already account money."""
+    if not contract_multiplier.is_finite() or contract_multiplier <= 0:
+        raise ValueError("closed-trade contract multiplier must be finite and positive")
     zero = Decimal(0)
     position, basis = zero, zero
     episode = None
     completed = []
     for fill in fills:
         qty, price, fee = (Decimal(str(fill[key])) for key in ("qty", "price", "fee"))
+        multiplier = Decimal(str(fill.get("contract_multiplier", contract_multiplier)))
+        if not multiplier.is_finite() or multiplier <= 0:
+            raise ValueError("invalid fill contract multiplier")
         direction = Decimal(1) if fill["side"] == "BUY" else Decimal(-1)
         closing = min(abs(position), qty) if position * direction < 0 else zero
         opening = qty - closing
         close_fee = fee * closing / qty
         if closing:
-            episode["profit"] += (price - basis) * closing * (1 if position > 0 else -1) - close_fee
+            episode["profit"] += (price - basis) * closing * multiplier * (1 if position > 0 else -1) - close_fee
             episode["exit_value"] += price * closing
             episode["closed_qty"] += closing
             position += direction * closing
@@ -31,7 +37,7 @@ def closed_trades(fills):
                     "entryPrice": str(episode["entry_value"] / episode["opened_qty"]),
                     "exitPrice": str(episode["exit_value"] / episode["closed_qty"]),
                     "qty": str(episode["closed_qty"]), "profit": str(episode["profit"]),
-                    "return_percent": str(episode["profit"] / episode["entry_value"] * 100),
+                    "return_percent": str(episode["profit"] / episode["entry_notional"] * 100),
                     "basis": "host-net-position-episode/1",
                 })
                 episode, basis = None, zero
@@ -40,10 +46,12 @@ def closed_trades(fills):
                 episode = {"side": "long" if direction > 0 else "short",
                            "entry_time_ms": fill["event_time_ms"], "profit": zero,
                            "entry_value": zero, "exit_value": zero,
+                           "entry_notional": zero,
                            "opened_qty": zero, "closed_qty": zero}
             basis = (basis * abs(position) + price * opening) / (abs(position) + opening)
             episode["profit"] -= fee - close_fee
             episode["entry_value"] += price * opening
+            episode["entry_notional"] += price * opening * multiplier
             episode["opened_qty"] += opening
             position += direction * opening
     return completed

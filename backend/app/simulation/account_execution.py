@@ -50,7 +50,7 @@ def publish_account_liquidation(kernel):
     order = SimulatedOrder(order_id, side, "MARKET", Decimal(0), event.sequence,
         status="FILLED", fill_price=price, fill_sequence=event.sequence, reduce_only=True)
     fill = SimulatedFill(order_id, event.sequence, entry["event_time_ms"], side,
-        price, abs(before), Decimal(0), REASON, "CLOSE", before, Decimal(0))
+        price, abs(before), Decimal(0), REASON, "CLOSE", before, Decimal(0), account.multiplier)
     receipt = {"contract": CONTRACT, "ledger_entry_hash": entry["entry_hash"],
         "ledger_ordinal": entry["ordinal"], **deepcopy(detail)}
     kernel.orders.append(order)

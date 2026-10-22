@@ -1,4 +1,5 @@
 import { nativeApi, nativeTimeframe } from "./nativeBacktestApi.js";
+import { contractDraftKeys, pineContractMetadata, type PineContractDraft } from "../../indicators/pineContractMetadata.js";
 import { parsePineCurrencyRates } from "../../indicators/pineCurrencyModel.js";
 import { workbenchAccountInputs, type WorkbenchAccountDraft, type WorkbenchAccountPayload } from "./workbenchAccountInputs.js";
 
@@ -17,8 +18,8 @@ export interface InputDataset {
   first_open_ms: number; last_close_ms: number;
   exchange?: string; market_type?: string;
 }
-export interface ContextChoice { dataset: InputDataset; symbol: string; marketType?: string; priceTickSize?: string; currency?: string; quantityPrecision?: string }
-export interface AdvancedInputs { contexts: ContextChoice[]; magnifier: InputDataset | null; libraries: string; priceTickSize?: string; currency?: string; currencyRates?: string; quantityPrecision?: string }
+export interface ContextChoice extends PineContractDraft { dataset: InputDataset; symbol: string; marketType?: string }
+export interface AdvancedInputs extends PineContractDraft { contexts: ContextChoice[]; magnifier: InputDataset | null; libraries: string; currencyRates?: string }
 export const emptyAdvancedInputs = (): AdvancedInputs => ({ contexts: [], magnifier: null, libraries: "{}" });
 
 export function restoreAdvancedInputs(value: unknown, strictContexts = false): AdvancedInputs {
@@ -40,12 +41,12 @@ export function restoreAdvancedInputs(value: unknown, strictContexts = false): A
     const item = candidate as Record<string, unknown>;
     if (typeof item.symbol === "string" && dataset(item.dataset))
       contexts.push({ symbol: item.symbol, dataset: { ...item.dataset },
-        ...Object.fromEntries(["marketType", "priceTickSize", "currency", "quantityPrecision"]
+        ...Object.fromEntries(["marketType", ...contractDraftKeys]
           .filter((key) => typeof (item as Record<string, unknown>)[key] === "string")
           .map((key) => [key, (item as Record<string, unknown>)[key]])) });
   }
   if (strictContexts && Array.isArray(raw.contexts) && (contexts.length !== raw.contexts.length
-      || raw.contexts.some((item: Record<string, unknown>) => ["marketType", "priceTickSize", "currency", "quantityPrecision"]
+      || raw.contexts.some((item: Record<string, unknown>) => ["marketType", ...contractDraftKeys]
         .some((key) => item[key] !== undefined && typeof item[key] !== "string"))))
     throw new Error("NATIVE_INPUT_INVALID: malformed requested context selection");
   return { contexts, magnifier: dataset(raw.magnifier) ? { ...raw.magnifier } : null,
@@ -54,6 +55,7 @@ export function restoreAdvancedInputs(value: unknown, strictContexts = false): A
     ...(typeof raw.currency === "string" ? { currency: raw.currency } : {}),
     ...(typeof raw.currencyRates === "string" ? { currencyRates: raw.currencyRates } : {}),
     ...(typeof raw.quantityPrecision === "string" ? { quantityPrecision: raw.quantityPrecision } : {}),
+    ...Object.fromEntries(["pointValue", "quantityStep", "minContract"].filter(key => typeof raw[key] === "string").map(key => [key, raw[key]])),
   };
 }
 export interface MainRange { start_time_ms: number; end_time_ms: number; exchange: string; market_type: string }
@@ -74,17 +76,7 @@ async function freezeContextChoices(choices: ContextChoice[], main: Pick<MainRan
       throw new Error("DATA_SNAPSHOT_MISMATCH: requested market differs from dataset provenance");
     const reference = { dataset_id: current.dataset_id, data_epoch: current.data_epoch, interval: current.interval,
       exchange, market_type: marketType, start_time_ms: current.first_open_ms, end_time_ms: current.last_close_ms };
-    if ((choice.currency || choice.quantityPrecision) && !choice.priceTickSize)
-      throw new Error("NATIVE_INPUT_INVALID: requested symbol metadata requires its actual price tick");
-    if (choice.currency && !/^[A-Z]{1,20}$/.test(choice.currency))
-      throw new Error("NATIVE_INPUT_INVALID: requested quote currency must be an uppercase code");
-    if (choice.quantityPrecision && !/^[0-9]$/.test(choice.quantityPrecision))
-      throw new Error("NATIVE_INPUT_INVALID: quantity precision must be 0..9");
-    if (choice.priceTickSize && (!Number.isFinite(Number(choice.priceTickSize)) || Number(choice.priceTickSize) <= 0))
-      throw new Error("NATIVE_INPUT_INVALID: requested price tick must be positive and finite");
-    const metadata = choice.priceTickSize ? { priceTickSize: choice.priceTickSize,
-      ...(choice.currency ? { currency: choice.currency } : {}),
-      ...(choice.quantityPrecision ? { quantityPrecision: Number(choice.quantityPrecision) } : {}) } : undefined;
+    const metadata = pineContractMetadata(choice);
     const snapshot = await api<{ snapshot_hash: string }>("/datasets/snapshot", reference, undefined, signal);
     return { ...reference, snapshot_hash: snapshot.snapshot_hash, symbol, timeframe: nativeTimeframe(current.interval),
       ...(metadata ? { metadata } : {}) };
@@ -115,11 +107,8 @@ export function executionInputs(mode: "NATIVE" | "CANDLESCOPE", hostSettings: Re
 
 export async function freezeAdvancedInputs(selection: AdvancedInputs, language: "pine" | "pyne", main: MainRange, api = nativeApi) {
   const rates = parsePineCurrencyRates(selection.currencyRates ?? "");
-  if (selection.currency && (!/^[A-Z]{1,20}$/.test(selection.currency) || !selection.priceTickSize))
-    throw new Error("NATIVE_INPUT_INVALID: quote currency requires an uppercase code and the actual price tick");
-  if (selection.quantityPrecision && (!/^[0-9]$/.test(selection.quantityPrecision) || !selection.priceTickSize))
-    throw new Error("NATIVE_INPUT_INVALID: quantity precision requires 0..9 and the actual price tick");
-  if (language !== "pine" && selection.contexts.some((item) => item.priceTickSize || item.currency || item.quantityPrecision))
+  pineContractMetadata(selection);
+  if (language !== "pine" && (contractDraftKeys.some(key => selection[key]) || selection.contexts.some(item => contractDraftKeys.some(key => item[key]))))
     throw new Error("NATIVE_INPUT_UNSUPPORTED: requested instrument metadata requires Pine");
   const currencyInputs = rates ? { currency_rates: rates } : {};
   const libraries: unknown = JSON.parse(selection.libraries);
