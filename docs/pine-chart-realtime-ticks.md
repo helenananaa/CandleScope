@@ -29,5 +29,6 @@ whole-run execution, callback opt-in/out, both tick flags, same-timestamp print
 ordering, requested-data reveal, repeated closing fills and intrabar recovery.
 These are frozen source-stream replays. They do not establish a connected
 exchange subscription, arbitrary TradingView feeds or broker-fill equivalence.
-Workbench physical tick scheduling, chart book admission, dynamic historical
-window discovery, total resources and formal packaged acceptance remain work.
+Workbench physical ticks have their own [clock and qualification](pine-workbench-print-ticks.md).
+Chart book admission, dynamic historical window discovery, total resources and
+formal packaged acceptance remain work.

@@ -52,5 +52,6 @@ Controlled coverage includes actual Workbench V1, spot and V2 submissions,
 native OHLC/account/TA controls, observed requested data, shared capacity,
 next-open/closing fills, V2 liquidation without duplicate executions,
 calculation-window skips and durable snapshot/restore endpoint parity.
-Long-history resource qualification, chart/provider adoption, physical/live
-ticks, dynamic discovery and formal packaged acceptance remain separate work.
+Chart history and [physical print ticks](pine-workbench-print-ticks.md) have their
+own connected clocks. Long-history resources, connected live acceptance,
+dynamic discovery and formal packaged acceptance remain separate work.

@@ -70,8 +70,8 @@ modules, with zero failures/errors/skips, in 1,251.156 seconds. All 3,675 source
 files, installed runtime and registry remain unchanged during the gate. Frontend
 validation passes 16 tests, both TypeScript projects, scoped ESLint and all 30
 locale catalogs. See
-[V2 physical accounts](pine-v2-print-account.md). Chart book admission and actual
-realtime/every-history-tick schedules remain to finish. Workload,
+[V2 physical accounts](pine-v2-print-account.md). The newer schedule and
+application-clock checkpoints are described below. Chart book admission, workload,
 official-reference, packaged use and release acceptance in phase 5 remain
 required. Released engine/plugin locks and default desktop activation are
 unchanged.
@@ -80,9 +80,9 @@ The native history-tick and explicit-account schedule foundations now have
 fresh standard-chart reference observations and controlled adapter/IPC checks;
 see [tick transport](pine-tick-schedule-foundation.md). The additive
 [external stream](pine-external-stream.md) now carries individual observations
-and validates replay across worker restarts. Its application clock/coordinator
-integration remains required. This does not complete
-the Host clock drivers or persistent same-bar streaming. The corrected candidate
+and validates replay across worker restarts. Both chart and Workbench now have
+persistent same-bar execution and application clock/coordinator paths. The
+earlier corrected foundation candidate
 passes 7,982 Rust, 1,956 Python and 172 tooling checks; installed Host validation
 passes 688 cases across 51 modules with no skips and unchanged source/runtime
 fingerprints. The ordinary indicator follow-up now uses provider-only
@@ -96,6 +96,35 @@ checks. See
 [indicator observations](pine-indicator-observations.md). The formal
 desktop source pin and its Renko patch also require migration and actual-package
 qualification. Earlier passing receipts keep their own identities.
+
+The completed historical application-clock checkpoint at `4df10ab2` passes all
+879 selected cases across 71 modules, with zero failures/errors/skips, unchanged
+3,696 source/runtime/registry fingerprints and an exact byte link to qualified
+core `b840eee14` (7,996 Rust, 1,978 Python and 172 tooling checks). Both chart and
+Workbench provide four historical OHLC observations with authoritative accounts,
+known calculation-window skips, independent costs and durable reconstruction.
+Bounded fresh TradingView completed-bar samples exposed and now constrain the
+canonical historical requested-context reveal boundary; realtime data still
+uses actual observation time. See [chart history ticks](pine-chart-history-ticks.md)
+and [Workbench history ticks](pine-history-tick-workbench.md).
+
+The observed-print follow-up now connects chart aggregate-trade execution and
+Workbench tape/book execution to persistent realtime Pine streams. Existing
+matchers settle prior orders before each tick observation; new orders wait for
+a later physical print. V2 historical marks/funding/liquidation and actual
+capacity policies remain authoritative. Completed-bar Workbench checkpoints and
+open-bar chart checkpoints reconstruct Pine before restoring their ledgers.
+Controlled cases cover independent costs, process restart, request availability,
+consecutive closing fills and same-ms sampled-book rejection without relaxing
+the matching policy. This follow-up still requires its full combined candidate
+gate against the exact new core binary. See [chart observed ticks](pine-chart-realtime-ticks.md)
+and [Workbench observed ticks](pine-workbench-print-ticks.md).
+
+Required work still includes chart book admission, unresolved dynamic historical
+window feedback/rebase, workload resources, connected live product acceptance,
+the production Renko patch/pin migration, the actual packaged binary and release
+delivery. The Goal remains active; controlled source-stream replays do not prove
+an exchange subscription or arbitrary TradingView/broker equivalence.
 
 The previous round's closeout below is a historical checkpoint, not completion
 of this full Goal.
