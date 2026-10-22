@@ -134,8 +134,8 @@ export async function checkCanonicalReplayIndicators() {
     assert(gets === 1 && posts <= 3, "cold epoch caused repeated history reloads");
     const initialized = posts;
     await act(async () => { store.replace(rows.slice(47).map(replayDisplayBarToKline)); });
-    await settle("local forward append");
-    assert(posts === initialized, "recursive append reseeded through HTTP");
+    await settle("forward append uses shared display anchors");
+    assert(posts > initialized && gets === 1, "display append must consult shared anchors without reloading history");
     await act(async () => { store.replace(rows.slice(110).map(replayDisplayBarToKline)); });
     await settle("short independent window");
     await act(async () => root.render(<Review scope="review-1" />));
