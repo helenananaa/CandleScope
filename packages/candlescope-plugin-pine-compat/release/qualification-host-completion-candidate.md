@@ -10,7 +10,8 @@ The engine base is `232b93dd109108d227a522ef3f3bcb32ed31a002`, with the
 `199aca438a150a436d6724ceee0afd4595a76b92`. The exact source passed 7,999 Rust
 workspace tests, 2,003 installed-wheel Python tests, strict all-target Clippy,
 format, structure, host parity and generated WASM/Node smoke checks. The tooling
-suite ran 172 cases: 171 passed and one platform-dependent case skipped.
+suite ran 172 cases: 171 passed and one historical Linux-wheel identity control
+skipped because its retained 0.3.0rc1 artifact is absent in the isolated checkout.
 
 The installed native SHA-256 is
 `b0142f11d986f35a043a294cd844608140540b3ef4f2fa493947bc4d3119ca3f`.
@@ -31,8 +32,22 @@ the independent minimum/step quantity contract, so the candidate pins its new
 analysis digest. An initial stale-analysis-hash installation was rejected and
 its failed bundle and log were retained.
 
-Full Host regression against this managed bundle, resources/long-history
-qualification, packaged desktop UI and recovery acceptance, cross-platform
-wheels and a separately versioned public release remain delivery gates. The
-previous full Host result (970 cases) used the unpatched engine and cannot be
-substituted for this candidate's full regression.
+Full Host regression against this exact managed bundle passed 970 selected cases
+across 78 modules, with no failures, errors or skips (16 Pyne cases deselected).
+The source at `20772e0ac99ff5d707c8ba38e9e007a594f5ae22`, installed runtime and
+registry remained unchanged: 1,317.21 seconds pytest, 1,331.25 seconds total.
+This is distinct from the earlier full result on the unpatched engine.
+
+A deeply nested managed install exposed Windows' executable path limit in the
+native batch/session and qualification launches. Passing the same venv executable
+as the explicit application name repairs it without selecting the base Python.
+On the publication worktree, 59 checks passed against the actual 262-character
+managed runtime path, covering long-path batch/session identity and reaping,
+existing dual-clock/V2 regressions and an actual supervised Pine/cost worker.
+The separate short-root managed installation supplied the full 970-case gate.
+
+The additional chart book kernel foundation has controlled checks for physical
+liquidity, clock visibility and recovery. Its application admission remains a
+separate stage. Resources/long-history qualification, packaged desktop UI and
+recovery acceptance, cross-platform wheels and a separately versioned public
+release remain delivery gates.
