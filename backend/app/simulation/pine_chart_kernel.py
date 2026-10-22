@@ -34,7 +34,7 @@ class PineChartBarKernel(PineBarKernel):
         self.source_sequence, self.source_time_ms, self.chart_bar_count = state["sequence"], state["time_ms"], state["bar_count"]
 
     def run(self, events, strategy, *, warmup_events=0, finalize=False,
-            checkpoint_callback=None, fill_callback=None, **options):
+            checkpoint_callback=None, fill_callback=None, vertex_callback=None, **options):
         if fill_callback is None or warmup_events or options:
             raise MarketDatasetError("chart BAR path requires its explicit callback clock", code="FIDELITY_UNSUPPORTED")
         active = None
@@ -48,7 +48,7 @@ class PineChartBarKernel(PineBarKernel):
             self.account.mark = Decimal(self._last_event.payload["price"])
             if prior_reporter is not None:
                 prior_reporter(value)
-            if value.get("fill"):
+            if value.get("fill") and vertex_callback is None:
                 trigger = "closing_fill" if self._last_event.payload["execution_phase"] == "PINE_BAR_CLOSE" else "order_fill"
                 apply(fill_callback(active, self._last_event, trigger), self._last_event)
 
@@ -81,7 +81,8 @@ class PineChartBarKernel(PineBarKernel):
                         raise MarketDatasetError("chart BAR sequence gap", code="DATA_GAP_REJECTED")
                     self.ambiguity_count += 1
                 active = event
-                self.walk_bar(event, close)
+                self.walk_bar(event, close, on_vertex=(
+                    (lambda point, index: vertex_callback(active, point, index)) if vertex_callback is not None else None))
                 self.source_sequence, self.source_time_ms = event.sequence, event.event_time_ms
                 self.chart_bar_count += 1
                 if checkpoint_callback is not None:

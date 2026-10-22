@@ -33,7 +33,9 @@ deep-copies the frozen opening, commands, per-response hashes and final cursors.
 Recovery starts a new worker, replays each command and checks every response
 before returning the reconstructed evaluator. It does not call a matcher or
 settle fills. A run coordinator must pair this with the same ledger checkpoint;
-the general Workbench/chart durable coordinators still need to adopt this path.
+the historical Workbench coordinator now adopts this path as described in
+[historical ticks](pine-history-tick-workbench.md). Chart and physical/live
+clock adoption remain separate work.
 Errors, cancellation, identity/acknowledgement failures and replay differences
 close and reap the worker. An optional run deadline also bounds replay.
 

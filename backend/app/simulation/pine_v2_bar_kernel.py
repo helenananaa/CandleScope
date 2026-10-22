@@ -105,7 +105,7 @@ class PineV2BarKernel(PineChartBarKernel):
                 return value, stamp, False
         return price, timestamp, endpoint
 
-    def _match_point(self, event, *, vertex):
+    def _match_point(self, event, *, vertex, order_ids=None):
         from .v2_margin import reprice
         reprice(self, event)
         price = Decimal(event.payload["price"])
@@ -113,6 +113,8 @@ class PineV2BarKernel(PineChartBarKernel):
         for _ in range(10000):
             progress = False
             for order in tuple(self._live_orders()):
+                if order_ids is not None and order.order_id not in order_ids:
+                    continue
                 if order.eligible_after_sequence > event.sequence or not self._prepare(order, event):
                     continue
                 if order.order_id not in eligible:
@@ -133,7 +135,8 @@ class PineV2BarKernel(PineChartBarKernel):
                     self.account.validate_ready()
                 fill_price = price if limit else price + price * self.slippage_bps / 10000 * (1 if order.side == "BUY" else -1)
                 reason = ("PINE_BAR_CLOSE" if event.payload["execution_phase"] == "PINE_BAR_CLOSE" else
-                          "LIMIT_TOUCH" if limit else "STOP_TOUCH" if order.type == "STOP" else "MARKET_NEXT_VERTEX")
+                          "LIMIT_TOUCH" if limit else "STOP_TOUCH" if order.type == "STOP" else
+                          "MARKET_OBSERVATION_VERTEX" if order_ids is not None else "MARKET_NEXT_VERTEX")
                 used = self._fill(order, event.sequence, fill_price, reason, capacity)
                 if self._capacity_left is not None:
                     self._capacity_left -= used
@@ -234,7 +237,8 @@ class PineV2BarKernel(PineChartBarKernel):
         result = SimulationKernel.result(self)
         return replace(result, report_hash="sha256:" + sha256_hex({"parent": result.report_hash, "path_contract": CONTRACT}))
 
-    def run(self, events, strategy, *, warmup_events=0, finalize=False, checkpoint_callback=None, fill_callback=None, **options):
+    def run(self, events, strategy, *, warmup_events=0, finalize=False, checkpoint_callback=None, fill_callback=None,
+            vertex_callback=None, **options):
         if fill_callback is None or warmup_events or options or self._failed_bar:
             raise MarketDatasetError("Pine V2 requires its historical callback clock", code="FIDELITY_UNSUPPORTED")
         prior = self.execution_reporter
@@ -246,7 +250,8 @@ class PineV2BarKernel(PineChartBarKernel):
             self._enqueue_many(plan, current_sequence=point.sequence)
 
         def callback(bar, point, trigger):
-            apply(fill_callback(bar, point, trigger), point)
+            if vertex_callback is None:
+                apply(fill_callback(bar, point, trigger), point)
 
         def report(value):
             if prior is not None:
@@ -298,7 +303,8 @@ class PineV2BarKernel(PineChartBarKernel):
                 if not volume.is_finite() or volume < 0:
                     raise MarketDatasetError("invalid Pine V2 bar volume", code="DATA_QUALITY_FAILED")
                 self._capacity_left = volume * self.participation_rate if self.execution_model_revision == EXECUTION_REALISM_V2 else None
-                self.walk_bar(source, close)
+                self.walk_bar(source, close, on_vertex=(
+                    (lambda point, index: vertex_callback(source, point, index)) if vertex_callback is not None else None))
                 if self._auxiliary_cursor != len(self._auxiliary):
                     raise MarketDatasetError("Pine account event beyond its bar", code="DATA_QUALITY_FAILED")
                 self.source_sequence, self.source_time_ms = source.sequence, source.event_time_ms

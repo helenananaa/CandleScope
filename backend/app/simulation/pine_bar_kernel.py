@@ -69,13 +69,15 @@ class PineBarKernel(SimulationKernel):
     def _prepare(self, order, event):
         return (order.status in LIVE and (self.order_policy is None or self.order_policy(order, event)))
 
-    def _match_point(self, event, *, vertex):
+    def _match_point(self, event, *, vertex, order_ids=None):
         price = Decimal(event.payload["price"])
         # Re-read orders after every fill: allocation, OCA, cancellation and
         # callback amendments all operate on the same authoritative account.
         for _ in range(10000):
             progress = False
             for order in tuple(self._live_orders()):
+                if order_ids is not None and order.order_id not in order_ids:
+                    continue
                 if order.eligible_after_sequence > event.sequence or not self._prepare(order, event):
                     continue
                 if order.type == "STOP_LIMIT" and not order.activated and triggers_stop(order, price):
@@ -89,7 +91,8 @@ class PineBarKernel(SimulationKernel):
                 if not limit:
                     fill_price += price * self.slippage_bps / 10000 * (1 if order.side == "BUY" else -1)
                 reason = ("PINE_BAR_CLOSE" if event.payload["execution_phase"] == "PINE_BAR_CLOSE"
-                          else "LIMIT_TOUCH" if limit else "STOP_TOUCH" if order.type == "STOP" else "MARKET_NEXT_VERTEX")
+                          else "LIMIT_TOUCH" if limit else "STOP_TOUCH" if order.type == "STOP" else
+                          "MARKET_OBSERVATION_VERTEX" if order_ids is not None else "MARKET_NEXT_VERTEX")
                 self._fill(order, event.sequence, fill_price, reason)
                 # _fill publishes synchronously; restore the observation mark
                 # even when transaction slippage moved the ledger's mark.
@@ -99,6 +102,21 @@ class PineBarKernel(SimulationKernel):
             if not progress:
                 return
         raise MarketDatasetError("Pine BAR matching budget exceeded", code="BUDGET_EXCEEDED")
+
+    def match_observation_markets(self, event):
+        """Settle only markets created by this historical vertex observation.
+
+        Price orders and orders created by fill callbacks keep their next-event
+        eligibility. V2 still owns margin, partial fills and shared bar capacity.
+        """
+        if event is not self._last_event or not event.payload.get("path_vertex"):
+            raise MarketDatasetError("observation matching requires the current vertex", code="FIDELITY_UNSUPPORTED")
+        selected = {order.order_id: order.eligible_after_sequence for order in tuple(self._live_orders())
+                    if order.type == "MARKET" and order.eligible_after_sequence == event.sequence+1}
+        for order in tuple(self._live_orders()):
+            if order.order_id in selected:
+                order.eligible_after_sequence = event.sequence
+        self._match_point(event, vertex=True, order_ids=set(selected))
 
     def _levels(self, start, end):
         event = self._last_event
@@ -118,7 +136,7 @@ class PineBarKernel(SimulationKernel):
     def _interleave_point(self, start, finish, begin_ms, end_ms, price, timestamp, endpoint):
         return price, timestamp, endpoint
 
-    def walk_bar(self, bar, on_close):
+    def walk_bar(self, bar, on_close, *, on_vertex=None):
         """Match four OHLC vertices and continuous price-order crossings.
 
         Historical script OHLCV is supplied separately by the Host clock.
@@ -134,7 +152,9 @@ class PineBarKernel(SimulationKernel):
         vertices = [values[name] for name in ("open", first, second, "close")]
         begin, end = int(bar.payload["open_time_ms"]), int(bar.payload["close_time_ms"])
         times = [begin + (end - begin) * index // 3 for index in range(4)]
-        self._point(vertices[0], times[0], vertex=True)
+        point = self._point(vertices[0], times[0], vertex=True)
+        if on_vertex is not None:
+            on_vertex(point, 0)
         for index in range(1, 4):
             start, finish = vertices[index - 1], vertices[index]
             position = start
@@ -146,9 +166,11 @@ class PineBarKernel(SimulationKernel):
                     (times[index] - times[index - 1]) * abs(next_price - start) / abs(finish - start))
                 next_price, timestamp, endpoint = self._interleave_point(
                     start, finish, times[index - 1], times[index], next_price, timestamp, endpoint)
-                self._point(next_price, timestamp, vertex=endpoint)
+                point = self._point(next_price, timestamp, vertex=endpoint)
                 position = next_price
                 if endpoint:
+                    if on_vertex is not None:
+                        on_vertex(point, index)
                     break
             else:
                 raise MarketDatasetError("Pine BAR crossing budget exceeded", code="BUDGET_EXCEEDED")

@@ -46,6 +46,17 @@ def validate_state(wire,state):
                 or clock.get("last_sequence") != path.get("sequence")
                 or not same_json(clock.get("groups"), state["last_request"].get("execution_schedule"))):
             raise BacktestError("NATIVE_IDENTITY_MISMATCH", "Pine BAR path replay cursor differs")
+        if wire.get("pine_history_tick_contract"):
+            stream=clock.get("stream") or {}
+            skip=stream.get("input_skip")
+            if (clock.get("history_tick_contract")!=wire["pine_history_tick_contract"]
+                    or type(skip) is not int or not 0<=skip<=len(wire["bars"])
+                    or type(stream.get("cursor")) is not int or stream["cursor"]!=max(0,cursor-skip)
+                    or stream.get("bar_open") is not False
+                    or not same_json(clock.get("accounts"),state.get("accounts"))
+                    or not same_json(clock.get("history"),state.get("history"))
+                    or any(len(group)!=(0 if index<skip else 4) for index,group in enumerate(clock["groups"]))):
+                raise BacktestError("NATIVE_IDENTITY_MISMATCH","historical Pine tick checkpoint differs")
         if wire.get("pine_v2_bar_contract"):
             chart = state.get("kernel", {}).get("pine_chart_bar") or {}
             v2 = state.get("kernel", {}).get("pine_v2_bar") or {}

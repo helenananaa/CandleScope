@@ -40,6 +40,7 @@ def host_identity():
     files.append(Path(__file__).with_name("pine_request_updates.py"))
     files.append(Path(__file__).with_name("pine_print_account.py"))
     files.append(Path(__file__).with_name("workbench_sensitivity.py"))
+    files.extend(Path(__file__).with_name(name) for name in ("pine_stream.py","pine_history_tick_clock.py","pine_history_tick_execution.py"))
     for path in files:
         checksum.update(path.name.encode())
         checksum.update(path.read_bytes())
@@ -78,6 +79,13 @@ def run_external_host(plugin, wire, runner, cancelled, **options):
     from .native_session import SessionWorker
     options.setdefault("deadline", time.monotonic() + 120)
     options.setdefault("_scenario_runner", runner)
+    if wire.get("pine_history_tick_contract"):
+        from .pine_history_tick_execution import open_stream
+        stream=open_stream(plugin,wire,cancelled,options["deadline"],resume=options.get("resume"))
+        try:
+            return _run_external_host(plugin,wire,runner,cancelled,_pine_stream=stream,**options)
+        finally:
+            stream.close()
     if runner is invoke and persistent_evaluator(wire["identity"]):
         worker = SessionWorker(plugin, wire, cancelled, evaluator=True)
         try:
@@ -93,7 +101,7 @@ def run_external_host(plugin, wire, runner, cancelled, **options):
 
 
 def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=None,
-                       deadline=None, _cost_scenario=False, _scenario_runner=None):
+                       deadline=None, _cost_scenario=False, _scenario_runner=None, _pine_stream=None):
     if wire.get("host_runtime_identity") != host_identity():
         raise BacktestError("NATIVE_IDENTITY_MISMATCH", "host matching code changed after submission")
     from .workbench_sensitivity import validate_contract, check_control
@@ -116,7 +124,8 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
                    "TRADE_TAPE":TradeSimulationKernel,"BOOK_DEPTH":DepthQueueKernel,"BOOK_SAMPLED":SampledBookKernel}[fidelity]
     if wire.get("pine_bar_path_contract"):
         from app.simulation.pine_bar_kernel import PineBarKernel, CONTRACT as PATH_CONTRACT
-        if fidelity != "BAR_APPROX" or wire["pine_bar_path_contract"] != PATH_CONTRACT or not wire.get("fill_recalculation"):
+        if (fidelity != "BAR_APPROX" or wire["pine_bar_path_contract"] != PATH_CONTRACT
+                or not (wire.get("fill_recalculation") or wire.get("pine_history_tick_contract"))):
             raise BacktestError("EXTERNAL_UNSUPPORTED", "invalid Pine BAR path contract")
         kernel_type = PineBarKernel
         if wire.get("pine_v2_bar_contract"):
@@ -164,10 +173,11 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
         clock,last_request=resume["clock"],resume["last_request"]
         # Rebuild only the evaluator transcript. Restored fills, fees, depth and
         # ownership stay in the Host kernel and must never be matched again.
-        reproduced=runner(plugin,last_request,cancelled=cancelled,timeout=120)
-        from .native_replay_storage import same_json
-        if not same_json(reproduced,latest):
-            raise BacktestError("EXTERNAL_NONCAUSAL_PREFIX","restored evaluator transcript changed")
+        if _pine_stream is None:
+            reproduced=runner(plugin,last_request,cancelled=cancelled,timeout=120)
+            from .native_replay_storage import same_json
+            if not same_json(reproduced,latest):
+                raise BacktestError("EXTERNAL_NONCAUSAL_PREFIX","restored evaluator transcript changed")
 
     def evaluate(plugin,request,**kwargs):
         nonlocal last_request
@@ -175,7 +185,7 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
         return runner(plugin,request,**kwargs)
 
     from .pine_request_updates import from_wire as requested_feed_from_wire, validate_replay as validate_requested_replay
-    request_feed = requested_feed_from_wire(wire) if not wire.get("fill_recalculation") else None
+    request_feed = requested_feed_from_wire(wire) if not (wire.get("fill_recalculation") or _pine_stream is not None) else None
     request_groups = deepcopy((last_request or {}).get("request_updates", [])) if request_feed is not None else []
     if request_feed is not None and resume is not None:
         validate_requested_replay(request_feed, clock.get("request_feed"), request_groups)
@@ -226,7 +236,11 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
                                    **{key: str(bar[key]) for key in ("open", "high", "low", "close", "volume")}})
               for index, bar in enumerate(wire["bars"])]
     execution_passes = None
-    if wire.get("pine_bar_path_contract"):
+    if wire.get("pine_history_tick_contract"):
+        from .pine_history_tick_execution import run_clock
+        latest,history,accounts,execution_passes,clock,last_request=run_clock(
+            _pine_stream,kernel,orders,wire,state=clock,target=target)
+    elif wire.get("pine_bar_path_contract"):
         from .pine_bar_clock import run_bar_clock
         latest,history,accounts,execution_passes,clock=run_bar_clock(kernel,orders,wire,plugin,evaluate,cancelled,deadline,state=clock,target=target)
     elif wire.get("fill_recalculation"):

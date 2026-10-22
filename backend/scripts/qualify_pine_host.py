@@ -37,6 +37,7 @@ MODULES = (
     "test_pine_tick_transport",
     "test_pine_indicator_observations",
     "test_pine_stream",
+    "test_pine_history_tick_workbench", "test_pine_history_tick_clock", "test_pine_history_vertices",
 )
 SCHEMAS = {
     "EXTERNAL_STREAM_SCHEMA_VERSION": 1,
