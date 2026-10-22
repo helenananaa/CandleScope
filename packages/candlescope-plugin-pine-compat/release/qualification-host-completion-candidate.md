@@ -46,8 +46,16 @@ managed runtime path, covering long-path batch/session identity and reaping,
 existing dual-clock/V2 regressions and an actual supervised Pine/cost worker.
 The separate short-root managed installation supplied the full 970-case gate.
 
-The additional chart book kernel foundation has controlled checks for physical
-liquidity, clock visibility and recovery. Its application admission remains a
-separate stage. Resources/long-history qualification, packaged desktop UI and
+The chart book follow-up connects actual frozen inputs/identity, HTTP admission,
+queued/colocated execution, independent costs, readback and the advanced research
+upload control. In the isolated development checkout, 21 admission/actual-Pine
+checks passed, including three book modes, historical V2 marks/funding and
+non-unit multiplier observation, plus interruption recovery without rematching
+old physical events. The broader runtime/context checks passed 69 cases. Research
+frontend tests passed 36 cases; type checks and 30-locale i18n validation passed.
+These controlled results are separate from the publication worktree's full
+81-module qualification, which must include the new chart book path.
+
+Resources/long-history qualification, rendered browser/packaged desktop UI and
 recovery acceptance, cross-platform wheels and a separately versioned public
 release remain delivery gates.
