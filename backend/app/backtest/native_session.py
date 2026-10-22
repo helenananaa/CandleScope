@@ -31,7 +31,7 @@ class SessionWorker:
         self.stderr = tempfile.TemporaryFile()
         command = [*plugin["command"], "--worker"] if evaluator else [*plugin["command"][:-1], plugin["command"][-1].replace(".native_strategy", ".native_session")]
         try:
-            self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            self.process = subprocess.Popen(command, executable=command[0], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=self.stderr, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         except Exception:
             self.stderr.close()

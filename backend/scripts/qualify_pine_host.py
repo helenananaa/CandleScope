@@ -24,7 +24,7 @@ MODULES = (
     "test_pine_workbench_contract", "test_pine_workbench_control", "test_chart_pine_risk_stops",
     "test_chart_pine_liquidation", "test_v2_margin_repricing", "test_pine_workbench_costs",
     "test_pine_cost_sensitivity", "test_workbench_default_upgrade", "test_external_replay",
-    "test_chart_pine_entry_risk", "test_chart_pine_requested_data", "test_native_session_transport",
+    "test_chart_pine_entry_risk", "test_chart_pine_requested_data", "test_native_session_transport", "test_native_windows_path",
     "test_contract_quantity_rules", "test_pine_contract_metadata", "test_legacy_contract_rules",
     "test_chart_pine_contracts", "test_pine_contract_execution", "test_external_report",
     "test_account_liquidation_execution", "test_backtest_host_policy_m5",
@@ -136,7 +136,7 @@ def main(argv=None):
     save()
     try:
         validate_registry(registry, python)
-        runtime = json.loads(subprocess.check_output([str(python), "-I", "-c", PROBE], text=True))
+        runtime = json.loads(subprocess.check_output([str(python), "-I", "-c", PROBE], executable=str(python), text=True))
         if runtime["schemas"] != SCHEMAS or not runtime["files"]:
             raise ValueError("installed runtime does not expose the required Pine Host contracts")
         sources = source_snapshot()

@@ -70,7 +70,9 @@ def invoke(plugin, payload, cancelled=None, timeout=120):
     with tempfile.TemporaryFile() as inp, tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
         inp.write(raw)
         inp.seek(0)
-        process = subprocess.Popen(plugin["command"], stdin=inp, stdout=out, stderr=err,
+        # Explicit application name avoids Windows' MAX_PATH argv[0] limit and
+        # preserves the managed venv launcher instead of resolving its base Python.
+        process = subprocess.Popen(plugin["command"], executable=plugin["command"][0], stdin=inp, stdout=out, stderr=err,
                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         deadline = time.monotonic() + timeout
         try:
