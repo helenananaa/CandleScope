@@ -14,11 +14,15 @@ def ensure(provider, runtime, symbol, timeframe, contexts):
         contexts=contexts)
     if provider.stream is None:
         provider._stream_environment=deepcopy(opening)
-        if not provider.realtime_streaming:
+        planned=not provider.realtime_streaming or bool(provider.wire.get("event_request_contract"))
+        if planned:
             from app.backtest.pine_stream import WINDOW_FEEDBACK_CONTRACT
             if provider.runtime_identity.get("window_feedback_contract")==WINDOW_FEEDBACK_CONTRACT:
                 opening["window_feedback_contract"]=WINDOW_FEEDBACK_CONTRACT
             opening["historical_plan"]=provider.context["pineHistoricalBars"]
+            if provider.realtime_streaming:
+                from app.backtest.pine_event_requests import realtime_plan
+                realtime_plan(opening,provider.runtime_identity)
             if provider.request_feed is not None:
                 from app.backtest.pine_request_updates import WINDOW_CONTRACT
                 if provider.runtime_identity.get("request_window_plan_contract")!=WINDOW_CONTRACT:
@@ -71,7 +75,8 @@ def restore(provider,payload,runtime):
             raise StrategyProviderError("IDENTITY_MUTATION","restored Pine stream source or settings differ")
     if saved["opening"].get("context",{}).get("metadata")!=provider.context.get("pineChartMetadata"):
         raise StrategyProviderError("IDENTITY_MUTATION","restored Pine stream metadata differs")
-    expected=(provider.request_feed.window_history() if not provider.realtime_streaming and provider.request_feed is not None else None)
+    planned=not provider.realtime_streaming or bool(provider.wire.get("event_request_contract"))
+    expected=(provider.request_feed.window_history() if planned and provider.request_feed is not None else None)
     if saved["opening"].get("requested_history")!=expected:
         raise StrategyProviderError("IDENTITY_MUTATION","restored requested window endpoints differ")
     if provider.wire.get("event_request_contract"):
@@ -81,10 +86,15 @@ def restore(provider,payload,runtime):
         if saved["opening"].get("event_sources")!=sources:
             raise StrategyProviderError("IDENTITY_MUTATION","restored physical event sources differ")
     from app.backtest.pine_stream import WINDOW_FEEDBACK_CONTRACT,canonical_observations
-    feedback=(WINDOW_FEEDBACK_CONTRACT if not provider.realtime_streaming
+    feedback=(WINDOW_FEEDBACK_CONTRACT if planned
               and provider.runtime_identity.get("window_feedback_contract")==WINDOW_FEEDBACK_CONTRACT else None)
     if saved["opening"].get("window_feedback_contract")!=feedback:
         raise StrategyProviderError("IDENTITY_MUTATION","restored window feedback negotiation differs")
+    from app.backtest.pine_stream import REALTIME_WINDOW_CONTRACT
+    realtime=provider.realtime_streaming and planned
+    if (saved["opening"].get("plan_state")!=("realtime" if realtime else None)
+            or saved["opening"].get("realtime_window_plan_contract")!=(REALTIME_WINDOW_CONTRACT if realtime else None)):
+        raise StrategyProviderError("IDENTITY_MUTATION","restored realtime window negotiation differs")
     planned=[dict(evaluation=item,context=context) for index,(group,contexts) in
         enumerate(zip(provider.execution_passes,provider.execution_contexts,strict=True))
         if index>=saved["input_skip"] for item,context in zip(group,contexts,strict=True)]
@@ -106,4 +116,4 @@ def restore(provider,payload,runtime):
         provider.stream.close()
         provider.stream=None
         raise StrategyProviderError("LOOKAHEAD_VIOLATION","restored chart window was not sealed")
-    provider._stream_environment={key:value for key,value in saved["opening"].items() if key not in {"historical_plan","requested_history","window_feedback_contract","event_sources"}}
+    provider._stream_environment={key:value for key,value in saved["opening"].items() if key not in {"historical_plan","requested_history","window_feedback_contract","event_sources","plan_state","realtime_window_plan_contract"}}

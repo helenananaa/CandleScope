@@ -14,6 +14,7 @@ from .event_stream import EventRequests, CONTRACT as EVENT_CONTRACT
 CONTRACT = "candlescope.pine-external-stream/1"
 WINDOW_CONTRACT = "candlescope.pine-request-window-plan/1"
 FEEDBACK_CONTRACT = "candlescope.pine-window-feedback/1"
+REALTIME_WINDOW_CONTRACT = "candlescope.pine-realtime-window/1"
 OPERATIONS = {"stream_open", "stream_begin", "stream_observe", "stream_commit", "stream_snapshot", "stream_rebase"}
 _active = None
 
@@ -30,7 +31,10 @@ def capabilities():
         return {"external_stream_contract": CONTRACT,
                 **({"request_window_plan_contract":WINDOW_CONTRACT} if type(window) is int and window==1 else {}),
                 **({"window_feedback_contract":FEEDBACK_CONTRACT} if type(feedback) is int and feedback==1
-                   and all(callable(getattr(session,name,None)) for name in ("window_status","rebase_window")) else {})}
+                   and all(callable(getattr(session,name,None)) for name in ("window_status","rebase_window")) else {}),
+                **({"realtime_window_plan_contract":REALTIME_WINDOW_CONTRACT}
+                   if type(feedback) is int and feedback==1 and all(callable(getattr(session,name,None))
+                   for name in ("window_status","rebase_window","initialize_realtime_history")) else {})}
     return {}
 
 
@@ -41,13 +45,25 @@ class Stream:
         allowed = {"protocol", "identity", "operation", "source", "libraries", "parameters", "context", "contexts",
                    "host_settings", "risk_contract", "closing_ticks", "order_metadata_contract", "currency_rates",
                    "request_update_contract", "historical_plan", "requested_history", "execution_schedule_contract", "execution_tick_contract",
-                   "external_stream_contract", "window_feedback_contract", "event_request_contract", "event_sources"}
+                   "external_stream_contract", "window_feedback_contract", "event_request_contract", "event_sources",
+                   "plan_state", "realtime_window_plan_contract"}
         if set(request) - allowed:
             raise ValueError("PINE_STREAM_INVALID: unknown opening fields")
         if (request.get("external_stream_contract") != CONTRACT or not capabilities()
                 or request.get("execution_schedule_contract") != SCHEDULE
                 or request.get("execution_tick_contract") != TICK_CONTRACT):
             raise ValueError("PINE_STREAM_UNSUPPORTED: explicit stream and tick contracts required")
+        self.plan_state=request.get("plan_state","historical")
+        if self.plan_state not in ("historical","realtime"):
+            raise ValueError("PINE_STREAM_INVALID: unknown planned bar state")
+        realtime_contract=request.get("realtime_window_plan_contract")
+        if self.plan_state=="realtime":
+            if (realtime_contract!=REALTIME_WINDOW_CONTRACT
+                    or capabilities().get("realtime_window_plan_contract")!=REALTIME_WINDOW_CONTRACT
+                    or "historical_plan" not in request or request.get("window_feedback_contract")!=FEEDBACK_CONTRACT):
+                raise ValueError("PINE_STREAM_UNSUPPORTED: realtime windows require qualified observed feedback")
+        elif realtime_contract is not None:
+            raise ValueError("PINE_STREAM_INVALID: realtime window contract requires realtime plan state")
         self.events=event_state
         if request.get("event_request_contract") is not None:
             self.events=self.events or EventRequests(request)
@@ -87,9 +103,14 @@ class Stream:
             request_bars=environment(request), scheduled=True,
             **({"closing_ticks": True} if request.get("closing_ticks") is True else {}),
             **annotations, **risk_options(request, analysis))
-        self.skip = self.engine.initialize_history(engine_bars(request["historical_plan"]),
-            **({"requested_history":request["requested_history"]} if "requested_history" in request else {}),
-            **({"observed_feedback":True} if self.feedback else {})) if "historical_plan" in request else 0
+        self.skip=0
+        if "historical_plan" in request:
+            options=({"requested_history":request["requested_history"]} if "requested_history" in request else {})
+            if self.plan_state=="realtime":
+                self.skip=self.engine.initialize_realtime_history(engine_bars(request["historical_plan"]),**options)
+            else:
+                self.skip=self.engine.initialize_history(engine_bars(request["historical_plan"]),
+                    **options,**({"observed_feedback":True} if self.feedback else {}))
         self.intents = 0
         self.passes = 0
         self.state = None
@@ -189,6 +210,8 @@ class Stream:
                    if self.events is not None else {}),
                 **({"window_feedback_contract":FEEDBACK_CONTRACT,
                     "window_status":status} if self.feedback else {}),
+                **({"realtime_window_plan_contract":REALTIME_WINDOW_CONTRACT,"plan_state":"realtime"}
+                   if self.plan_state=="realtime" else {}),
                 "bar_cursor": self.engine.cursor, "bar_open": self.engine.bar_open,
                 "pass_cursor": self.passes, "intent_cursor": self.intents, "input_skip": self.skip,
                 **self.profile, "stream_schema": 1, "intent_base": 0,

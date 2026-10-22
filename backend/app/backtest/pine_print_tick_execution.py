@@ -9,7 +9,7 @@ from .errors import BacktestError
 from .native_session import STREAM_CONTRACT
 from .pine_print_account import events as physical_events,apply_account,observe_market,record_decision,AUXILIARY,FIDELITIES
 from .pine_request_updates import from_wire,pass_observations,validate_replay
-from .pine_stream import PineStream
+from .pine_stream import PineStream,canonical_observations
 
 CONTRACT="candlescope.pine-print-tick/1"
 
@@ -19,15 +19,32 @@ def open_stream(plugin,wire,cancelled,deadline,*,resume=None):
             or wire["identity"].get("external_stream_contract")!=STREAM_CONTRACT):
         raise BacktestError("EXTERNAL_UNSUPPORTED","physical Pine ticks require the negotiated print stream")
     names={"source","parameters","libraries","context","contexts","host_settings","risk_contract",
-           "closing_ticks","order_metadata_contract","currency_rates","request_update_contract"}
+           "closing_ticks","order_metadata_contract","currency_rates","request_update_contract","event_request_contract"}
     opening={key:deepcopy(value) for key,value in wire.items() if key in names}
     if opening.get("contexts") and not wire.get("request_update_contract"):
         raise BacktestError("EXTERNAL_UNSUPPORTED","physical tick requests require observed append-only feeds")
     if wire.get("request_update_contract"):
         opening["contexts"]=[{**item,"bars":[]} for item in opening.get("contexts",[])]
+    if wire.get("event_request_contract"):
+        from .pine_event_requests import realtime_plan,attach_workbench
+        realtime_plan(opening,wire["identity"])
+        opening["historical_plan"]=deepcopy(wire["bars"])
+        if wire.get("request_update_contract"):
+            from .pine_request_updates import WINDOW_CONTRACT,window_history
+            if wire["identity"].get("request_window_plan_contract")!=WINDOW_CONTRACT:
+                raise BacktestError("EXTERNAL_UNSUPPORTED","event print requests require window planning")
+            opening["requested_history"]=window_history(wire.get("contexts",[]))
+        attach_workbench(opening,wire)
     transport={"protocol":wire["protocol"],"identity":wire["identity"]}
     if resume is None:
-        return PineStream(plugin,transport,opening,cancelled,deadline=deadline)
+        stream=PineStream(plugin,transport,opening,cancelled,deadline=deadline)
+        try:
+            from .pine_history_tick_execution import prepare_window
+            prepare_window(stream,plugin,wire,cancelled,deadline)
+            return stream
+        except Exception:
+            stream.close()
+            raise
     from .external_replay import validate_state
     validate_state(wire,resume)
     saved=(resume.get("clock") or {}).get("stream")
@@ -35,9 +52,10 @@ def open_stream(plugin,wire,cancelled,deadline,*,resume=None):
         raise BacktestError("NATIVE_IDENTITY_MISMATCH","physical Pine stream checkpoint differs")
     observed=[]
     def verify(command,result):
-        if command["operation"]=="stream_observe": observed.extend(result["intents"])
+        if command["operation"]=="stream_rebase": observed.clear()
+        elif command["operation"]=="stream_observe": observed.extend(result["intents"])
     stream=PineStream.restore(plugin,saved,cancelled,deadline=deadline,verify=verify)
-    if observed!=resume["history"]:
+    if observed!=resume["history"] or stream.last.get("window_status",{}).get("requires_discovery"):
         stream.close()
         raise BacktestError("EXTERNAL_NONCAUSAL_PREFIX","physical Pine replayed intents differ")
     return stream
@@ -78,18 +96,19 @@ def validate_state(wire,state):
     saved=clock.get("stream") or {}
     groups=clock.get("groups")
     cursor=state["cursor"]
-    if (clock.get("contract")!=CONTRACT or saved.get("cursor")!=cursor or saved.get("bar_open") is not False
-            or saved.get("input_skip")!=0 or saved.get("intents")!=len(state["history"])
+    skip=saved.get("input_skip")
+    if (clock.get("contract")!=CONTRACT or type(skip) is not int or not 0<=skip<=len(wire["bars"])
+            or saved.get("cursor")!=max(0,cursor-skip) or saved.get("bar_open") is not False
+            or saved.get("intents")!=len(state["history"])
             or not isinstance(groups,list) or len(groups)!=cursor
             or not same_json(groups,state["last_request"].get("execution_schedule"))
             or not same_json(clock.get("accounts"),state["accounts"])
             or not same_json(clock.get("history"),state["history"])):
         raise BacktestError("NATIVE_IDENTITY_MISMATCH","physical Pine tick checkpoint cursors differ")
     flat=[item for group in groups for item in group]
-    journal=[item.get("command",{}).get("observation") for item in saved.get("journal",[])
-             if item.get("command",{}).get("operation")=="stream_observe"]
-    if not same_json(flat,journal) or any(not group or group[-1]["evaluation"].get("account")!=state["accounts"][index]
-            or group[-1]["evaluation"].get("confirmed") is not True for index,group in enumerate(groups)):
+    if not same_json(flat,canonical_observations(saved)) or any(
+            bool(group) if index<skip else (not group or group[-1]["evaluation"].get("account")!=state["accounts"][index]
+            or group[-1]["evaluation"].get("confirmed") is not True) for index,group in enumerate(groups)):
         raise BacktestError("NATIVE_IDENTITY_MISMATCH","physical Pine transcript differs from its stream journal")
 
 
@@ -105,7 +124,7 @@ class PrintTickClock:
         self.feed=from_wire(wire)
         if self.feed is not None and state:
             validate_replay(self.feed,state.get("request_feed"),pass_observations(self.groups,scheduled=True))
-        if stream.bar_open or stream.cursor!=self.cursor or stream.input_skip:
+        if stream.bar_open or stream.cursor!=max(0,self.cursor-stream.input_skip):
             raise BacktestError("NATIVE_IDENTITY_MISMATCH","physical Pine and ledger cursors differ")
 
     def observe(self,event,*,confirmed=False,trigger="realtime_tick"):
@@ -114,7 +133,8 @@ class PrintTickClock:
         from .workbench_sensitivity import check_control
         check_control(self.stream.cancelled,self.stream.deadline)
         first=len(self.groups)==self.cursor
-        if first:
+        skipped=self.cursor<self.stream.input_skip
+        if first and not skipped:
             self.stream.begin(deepcopy(self.visible),bar_state="realtime")
         self.orders.feedback()
         account=self.kernel.account
@@ -122,6 +142,11 @@ class PrintTickClock:
             position_avg_price=None if account.entry_price is None else float(account.entry_price),
             equity=float(account.equity()),initial_capital=float(self.kernel.initial_balance),
             netprofit=float(account_feedback_profit(account,self.kernel.initial_balance)),openprofit=float(account.unrealized()))
+        if skipped:
+            if confirmed:
+                self.groups.append([])
+                self.accounts.append(feedback)
+            return
         evaluation=dict(bar=deepcopy(self.visible),account=feedback,event_time_ms=event.event_time_ms,confirmed=confirmed)
         if self.feed is not None:
             evaluation.update(request_observed_at_ms=event.event_time_ms,request_updates=self.feed.advance(event.event_time_ms))
@@ -160,7 +185,8 @@ class PrintTickClock:
                     if self.wire.get("fill_recalculation") else None)
             self.kernel._record_equity_point(dict(sequence=self.last_sequence,event_time_ms=source.event_time_ms,
                 equity=str(self.kernel.account.equity()),position_qty=str(self.kernel.account.position_qty)))
-        self.stream.commit()
+        if self.cursor>=self.stream.input_skip:
+            self.stream.commit()
         self.cursor+=1
         self.visible=None
 

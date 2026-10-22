@@ -40,7 +40,15 @@ def host_identity():
     files.append(Path(__file__).with_name("pine_request_updates.py"))
     files.append(Path(__file__).with_name("pine_print_account.py"))
     files.append(Path(__file__).with_name("workbench_sensitivity.py"))
-    files.extend(Path(__file__).with_name(name) for name in ("pine_stream.py","pine_history_tick_clock.py","pine_history_tick_execution.py","pine_print_tick_execution.py"))
+    files.extend(Path(__file__).with_name(name) for name in ("pine_stream.py","pine_history_tick_clock.py","pine_history_tick_execution.py","pine_print_tick_execution.py","pine_event_requests.py"))
+    # This shared builder also runs in the Host when freezing/restoring sources.
+    # Its installed bytes must be bound independently of the worker SDK hash.
+    try:
+        from candlescope_plugin_sdk import event_requests
+    except ImportError:
+        pass  # Older SDKs retain ordinary execution without event capability.
+    else:
+        files.append(Path(event_requests.__file__))
     for path in files:
         checksum.update(path.name.encode())
         checksum.update(path.read_bytes())

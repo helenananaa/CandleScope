@@ -13,6 +13,7 @@ from .native_session import SessionWorker, STREAM_CONTRACT, SCHEDULE_CONTRACT, T
 
 JOURNAL_CONTRACT = "candlescope.pine-stream-journal/1"
 WINDOW_FEEDBACK_CONTRACT = "candlescope.pine-window-feedback/1"
+REALTIME_WINDOW_CONTRACT = "candlescope.pine-realtime-window/1"
 
 
 class WindowRebaseRequired(BacktestError):
@@ -75,6 +76,12 @@ class PineStream:
                     or result.get("stream_schema") != 1):
                 raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "invalid Pine stream response")
             operation = command["operation"]
+            realtime=self.opening.get("plan_state")=="realtime"
+            if realtime and (self.opening.get("realtime_window_plan_contract")!=REALTIME_WINDOW_CONTRACT
+                    or self.wire["identity"].get("realtime_window_plan_contract")!=REALTIME_WINDOW_CONTRACT
+                    or result.get("realtime_window_plan_contract")!=REALTIME_WINDOW_CONTRACT
+                    or result.get("plan_state")!="realtime"):
+                raise BacktestError("EXTERNAL_PROTOCOL_ERROR","Pine realtime window acknowledgement differs")
             event_contract=self.opening.get("event_request_contract")
             if event_contract is not None:
                 from .pine_event_requests import CONTRACT as EVENT_CONTRACT

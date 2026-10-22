@@ -42,6 +42,8 @@ MODULES = (
     "test_chart_pine_realtime_ticks", "test_pine_realtime_tick_kernel",
     "test_pine_print_ticks",
     "test_pine_requested_window_stream",
+    "test_pine_event_requests", "test_pine_event_stream_transport", "test_chart_pine_event_stream",
+    "test_pine_event_realtime", "test_chart_pine_realtime_events_book",
     "test_pine_window_feedback", "test_pine_window_recovery",
     "test_backtest_dual_clock", "test_dual_clock_book", "test_chart_book_snapshot",
     "test_chart_pine_engine",
@@ -77,7 +79,9 @@ for module in (pine_compat, candlescope_plugin_pine_compat, candlescope_plugin_s
         if path.is_file() and path.suffix in {'.py', '.pyd', '.so'}:
             files[str(path.resolve())] = hashlib.sha256(path.read_bytes()).hexdigest()
 print(json.dumps({'schemas': {name: getattr(pine_compat, name, None)
-    for name in %r}, 'files': files}))
+    for name in %r}, 'files': files,
+    'realtime_window_plan': callable(getattr(pine_compat.ExternalSession,'initialize_realtime_history',None)),
+    'typed_request_failure': callable(getattr(pine_compat.ExternalSession,'failed_request_context',None))}))
 """ % (tuple(SCHEMAS),)
 
 
@@ -123,7 +127,7 @@ def main(argv=None):
     python = Path(os.path.abspath(args.runtime_python))
     registry, output = args.runtime_registry.resolve(), args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
-    receipt = {"schema": "candlescope.pine-host-qualification/1", "profile": "historical-bar-print-book-tick-transport-indicator-observations-stream-recovery",
+    receipt = {"schema": "candlescope.pine-host-qualification/1", "profile": "historical-realtime-bar-print-book-tick-event-window-recovery",
                "status": "RUNNING", "host_head": subprocess.check_output(
                    ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                "runtime_python": str(python), "runtime_registry": str(registry),
@@ -137,7 +141,8 @@ def main(argv=None):
     try:
         validate_registry(registry, python)
         runtime = json.loads(subprocess.check_output([str(python), "-I", "-c", PROBE], executable=str(python), text=True))
-        if runtime["schemas"] != SCHEMAS or not runtime["files"]:
+        if (runtime["schemas"] != SCHEMAS or not runtime["files"]
+                or runtime.get("realtime_window_plan") is not True or runtime.get("typed_request_failure") is not True):
             raise ValueError("installed runtime does not expose the required Pine Host contracts")
         sources = source_snapshot()
         registry_hash = digest(registry)
@@ -146,6 +151,7 @@ def main(argv=None):
                        source_files=len(sources), selection="not pyne")
         env = {**os.environ, "PYTHONPATH": str(ROOT / "backend"),
                "NATIVE_TEST_PYTHON": str(python), "NATIVE_TEST_PINE_PYTHON": str(python),
+               "PINE_EVENT_TEST_PYTHON": str(python),
                "CANDLESCOPE_NATIVE_RUNTIME_REGISTRY": str(registry)}
         command = [sys.executable, "-u", "-m", "pytest",
                    *(f"backend/tests/{name}.py" for name in MODULES),

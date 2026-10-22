@@ -15,17 +15,18 @@ class ChartWindowDiscovery:
         self.enabled=bool(enabled and isinstance(current,PineEngineProvider)
             and current.runtime_identity.get("window_feedback_contract")==WINDOW_FEEDBACK_CONTRACT)
         self.session,self.kernel,self.planner=session,kernel,planner
+        self.account_kernel=getattr(kernel,"execution",kernel)
         self.new_planner=new_planner
         self.deadline,self.control=deadline,control
         if self.enabled:
             self.initial_session=deepcopy(session.snapshot())
             self.initial_kernel=deepcopy(kernel.snapshot())
             self.base_execution_reporter=planner.orders.execution_reporter
-            self.base_market_observer=kernel.market_observer
+            self.base_market_observer=self.account_kernel.market_observer
 
     def pending(self):
         stream=self.provider.stream if self.enabled else None
-        return bool(stream is not None and stream.last.get("window_status",{}).get("requires_discovery"))
+        return bool(self.enabled and (stream is None or stream.last.get("window_status",{}).get("requires_discovery")))
 
     def execute(self,run,reset_bookkeeping):
         for _attempt in range(64):
@@ -58,8 +59,8 @@ class ChartWindowDiscovery:
             # A trial may have frozen order/risk capabilities already. Reusing
             # that planner would either retain state or relax its restore guard.
             self.planner=self.new_planner()
-            self.kernel.execution_reporter=self.base_execution_reporter
-            self.kernel.market_observer=self.base_market_observer
+            self.account_kernel.execution_reporter=self.base_execution_reporter
+            self.account_kernel.market_observer=self.base_market_observer
             self.planner.bind_kernel(self.kernel)
             self.provider.stream=stream
             self.provider._stream_environment=environment

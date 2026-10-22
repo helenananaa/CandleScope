@@ -64,6 +64,7 @@ class EventRequests:
         if self.root is None or self.root["bars"]!=request["historical_plan"]:
             raise ValueError("PINE_EVENT_SOURCE_INVALID: physical chart history differs")
         self.streams={}
+        self.plan_state=request.get("plan_state","historical")
         self.reset()
 
     def reset(self):
@@ -111,7 +112,9 @@ class EventRequests:
         if legacy:
             raise ValueError("PINE_EVENT_REQUEST_INVALID: legacy requested prices cannot mix with causal events")
         observed=evaluation.get("request_observed_at_ms",evaluation["event_time_ms"])
-        if value["context"]["bar_state"]=="historical":
+        if value["context"]["bar_state"]!=self.plan_state:
+            raise ValueError("PINE_EVENT_REQUEST_INVALID: observed bar state differs from frozen plan")
+        if self.plan_state=="historical":
             observed=self.root["closes"][cursor+skip]
         updates=list(evaluation.get("request_updates",[]))
         for key,stream in self.streams.items():

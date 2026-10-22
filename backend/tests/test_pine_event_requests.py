@@ -83,3 +83,14 @@ def test_invalid_physical_rows_cannot_be_disguised_as_synthetic_prices(change):
     physical["bars"][0].update(change)
     with pytest.raises(ValueError):
         build_renko_stream(SYMBOL,"1",[physical])
+
+
+def test_host_identity_binds_the_actual_shared_source_builder(tmp_path,monkeypatch):
+    from pathlib import Path
+    from candlescope_plugin_sdk import event_requests
+    from app.backtest.external import host_identity
+    before=host_identity()
+    changed=tmp_path/"event_requests.py"
+    changed.write_bytes(Path(event_requests.__file__).read_bytes()+b"\n# alternate source recipe\n")
+    monkeypatch.setattr(event_requests,"__file__",str(changed))
+    assert host_identity()!=before

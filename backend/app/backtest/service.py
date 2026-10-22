@@ -3175,6 +3175,9 @@ class BacktestService:
             except (TypeError, ValueError, json.JSONDecodeError):
                 config = {}
             planner = _new_host_planner(config, execution_reporter=self._execution_reporter(session))
+            from .pine_event_requests import chart_realtime_context
+            realtime_context=chart_realtime_context(config,events,max_bars=self.settings.max_bar_rows,
+                max_bytes=self.settings.worker_memory_mb*1024*1024)
             adapter.start(
                 {
                     "roles": ["BARS"],
@@ -3191,7 +3194,7 @@ class BacktestService:
                     "pineRequestedContexts": config.get("pine_contexts", []),
                     "pineLocalDataRoot": config.get("pine_local_data_root"),
                     **({"pineExecutionScheduleContract":"candlescope.pine-execution-schedule/1",
-                        "pineStreamContract":"candlescope.pine-external-stream/1","pineRealtimeTicks":True}
+                        "pineStreamContract":"candlescope.pine-external-stream/1","pineRealtimeTicks":True,**realtime_context}
                        if config.get("pine_realtime_ticks") else {}),
                 }
             )
@@ -3327,9 +3330,17 @@ class BacktestService:
             )
             last_order_count = len(kernel.execution.orders)
             last_fill_count = len(kernel.execution.fills)
+            from .pine_chart_window import ChartWindowDiscovery
+            window_discovery=ChartWindowDiscovery(provider,session,kernel,planner,
+                enabled=bool(realtime_context and resume_sequence==0),
+                new_planner=lambda:_new_host_planner(config,execution_reporter=self._execution_reporter(session)),
+                deadline=deadline,control=lambda:self._assert_execution_control(run_id,deadline=deadline,
+                    expected_generation=expected_generation))
 
             def checkpoint_after(event: MarketEvent) -> None:
                 nonlocal last_order_count, last_fill_count
+                if window_discovery.pending():
+                    return
                 fault_point = None
                 if self._fault_injector is not None:
                     order_count = len(kernel.execution.orders)
@@ -3364,17 +3375,26 @@ class BacktestService:
                         fault_point, run_id=run_id, sequence=event.sequence
                     )
 
-            result = kernel.run(
-                remaining_events,
-                strategy,
-                warmup_events=0,
-                finalize=True,
-                checkpoint_callback=checkpoint_after,
-                **({"end_time_ms":int(config["end_time_ms"])} if record["fidelity_mode"] in BOOK_MODES else {}),
-                **({"fill_callback": callbacks.on_fill} if callbacks is not None and not config.get("pine_realtime_ticks") else {}),
-                **({"tick_callback":callbacks.on_tick} if config.get("pine_realtime_ticks") else {}),
-                **({"close_callback": closing.process} if closing is not None else {}),
-            )
+            def run_window():
+                from .pine_event_requests import trial_events
+                # The first attempt has no stream yet; the frozen event plan
+                # requires discovery just as the later interrupted attempts do.
+                pending=bool(window_discovery.enabled and (window_discovery.provider.stream is None or window_discovery.pending()))
+                rows,cutoff=trial_events(remaining_events,adapter.input_plan,pending)
+                return kernel.run(rows,strategy,warmup_events=0,finalize=True,checkpoint_callback=checkpoint_after,
+                    **({"end_time_ms":cutoff} if cutoff is not None else
+                       {"end_time_ms":int(config["end_time_ms"])} if record["fidelity_mode"] in BOOK_MODES else {}),
+                    **({"fill_callback": callbacks.on_fill} if callbacks is not None and not config.get("pine_realtime_ticks") else {}),
+                    **({"tick_callback":callbacks.on_tick} if config.get("pine_realtime_ticks") else {}),
+                    **({"close_callback": closing.process} if closing is not None else {}))
+            def reset_window_bookkeeping():
+                nonlocal planner,last_order_count,last_fill_count
+                planner=window_discovery.planner
+                if callbacks is not None:
+                    callbacks.planner=planner
+                collected_chart_bars.clear()
+                last_order_count,last_fill_count=len(kernel.execution.orders),len(kernel.execution.fills)
+            result=window_discovery.execute(run_window,reset_window_bookkeeping)
             cost_sensitivity = self._build_cost_sensitivity(config, kernel, events, result, provider=provider, planner=planner, input_plan=adapter.input_plan,
                 market=observation_market or {"venue": "local", "symbol": str(record["dataset_id"])}, warmup=warmup_events,
                 deadline=deadline, control=lambda: self._assert_execution_control(run_id, deadline=deadline,

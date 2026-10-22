@@ -137,3 +137,73 @@ def test_event_stream_rejects_static_price_provider_bypassing_closed_cohorts():
     value["contexts"]=[dict(symbol="B",timeframe="1",bars=[value["historical_plan"][-1]])]
     with pytest.raises(ValueError,match="empty prices"):
         chart_strategy.execute({**value,"operation":"stream_open"})
+
+
+def test_realtime_event_plan_keeps_partial_chart_data_and_closed_request_cohorts_separate():
+    value=opening()
+    value["plan_state"]="realtime"
+    value["realtime_window_plan_contract"]=external_stream.REALTIME_WINDOW_CONTRACT
+    value["source"]='''//@version=6
+strategy("realtime events",calc_on_every_tick=true)
+varip int n=0
+n+=1
+r=ticker.renko("A","Traditional",1)
+plot(request.security(r,"1",ta.cum(close),calc_bars_count=1))
+plot(n)
+plot(last_bar_index)
+plot(request.security(syminfo.tickerid,timeframe.period,close))
+'''
+    for bar in value["historical_plan"]:
+        bar.update(high=bar["open"]+2,low=bar["open"]-1,close=bar["open"]+1)
+    # event_sources owns the same frozen physical tuple as the plan.
+    state=chart_strategy.execute({**value,"operation":"stream_open"})
+    def command(operation,**fields):
+        return chart_strategy.execute(dict(operation=operation,external_stream_contract=external_stream.CONTRACT,
+            bar_cursor=state["bar_cursor"],intent_base=state["intent_cursor"],**fields))
+    def play():
+        nonlocal state
+        for index,bar in enumerate(value["historical_plan"]):
+            partial={**bar,"high":bar["open"],"low":bar["open"],"close":bar["open"],"volume":1}
+            state=command("stream_begin",bar=partial,bar_state="realtime")
+            for closing,observed in ((False,partial),(True,bar)):
+                item=observation(observed)
+                item["context"]=dict(bar_state="realtime",trigger="bar_close" if closing else "realtime_tick",is_new=not closing)
+                item["evaluation"].update(confirmed=closing,event_time_ms=bar["time"]*1000+(59999 if closing else 0))
+                state=command("stream_observe",observation=item)
+                if state["window_status"]["rebase_required"]:
+                    return False
+                output=command("stream_snapshot")
+                assert output["output"]["plots"][2]["values"][-1]==index
+                assert output["output"]["plots"][3]["values"][-1]==observed["close"]
+            state=command("stream_commit")
+        return True
+    for _ in range(8):
+        if play():break
+        state=command("stream_rebase",seal=False)
+    else:pytest.fail("realtime event discovery did not converge")
+    state=command("stream_rebase",seal=True)
+    assert play()
+    state=command("stream_snapshot")
+    assert [plot["values"] for plot in state["output"]["plots"]]==[[None,None,16],[2,4,6],[0,1,2],[11,14,16]]
+
+
+def test_older_core_retains_historical_capabilities_without_advertising_realtime_windows(monkeypatch):
+    from types import SimpleNamespace
+    names=("begin_bar","observe","commit_bar","snapshot","initialize_history","window_status","rebase_window")
+    legacy=SimpleNamespace(**{name:getattr(pine_compat.ExternalSession,name) for name in names})
+    monkeypatch.setattr(pine_compat,"ExternalSession",legacy)
+    caps=external_stream.capabilities()
+    assert caps["window_feedback_contract"]==external_stream.FEEDBACK_CONTRACT
+    assert "realtime_window_plan_contract" not in caps
+    value=opening()
+    value.update(plan_state="realtime",realtime_window_plan_contract=external_stream.REALTIME_WINDOW_CONTRACT)
+    with pytest.raises(ValueError,match="qualified observed feedback"):
+        chart_strategy.execute({**value,"operation":"stream_open"})
+
+
+@pytest.mark.parametrize("change",[{},dict(realtime_window_plan_contract="unknown"),
+    dict(realtime_window_plan_contract=external_stream.REALTIME_WINDOW_CONTRACT,window_feedback_contract=None)])
+def test_realtime_plan_requires_explicit_contract_and_feedback(change):
+    value={**opening(),"plan_state":"realtime",**change}
+    with pytest.raises(ValueError,match="qualified observed feedback"):
+        chart_strategy.execute({**value,"operation":"stream_open"})

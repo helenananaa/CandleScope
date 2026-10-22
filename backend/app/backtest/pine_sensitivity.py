@@ -92,12 +92,16 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
 
             from .pine_chart_window import ChartWindowDiscovery
             window=ChartWindowDiscovery(fresh,session,replay,shadow_planner,
-                enabled=bool(config.get("pine_history_ticks")),
+                enabled=bool(config.get("pine_history_ticks") or config.get("pine_realtime_ticks") and context.get("pineHistoricalBars") is not None),
                 new_planner=lambda:_new_host_planner(shadow_config,execution_reporter=service._execution_reporter(session)),
                 deadline=deadline,control=control)
             def run_window():
-                return replay.run(events,strategy,warmup_events=0,finalize=True,
-                    **({'end_time_ms':int(config['end_time_ms'])} if config.get('fidelity_mode') in {'BOOK_ASSISTED','BOOK_DEPTH','BOOK_SAMPLED'} else {}),
+                from .pine_event_requests import trial_events
+                pending=bool(window.enabled and (window.provider.stream is None or window.pending()))
+                rows,cutoff=trial_events(events,context,pending)
+                return replay.run(rows,strategy,warmup_events=0,finalize=True,
+                    **({'end_time_ms':cutoff} if cutoff is not None else
+                       {'end_time_ms':int(config['end_time_ms'])} if config.get('fidelity_mode') in {'BOOK_ASSISTED','BOOK_DEPTH','BOOK_SAMPLED'} else {}),
                     **({"fill_callback": callbacks.on_fill} if callbacks is not None and not config.get("pine_realtime_ticks") else {}),
                     **({"tick_callback":callbacks.on_tick} if config.get("pine_realtime_ticks") else {}),
                     **({"fill_callback": historical_callbacks.on_fill} if historical_callbacks is not None else {}),
@@ -108,6 +112,8 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
                 shadow_planner=window.planner
                 if historical_callbacks is not None:
                     historical_callbacks.planner=shadow_planner
+                if callbacks is not None:
+                    callbacks.planner=shadow_planner
                 observed=0
             result=window.execute(run_window,reset_window)
             service._assert_provider_state_budget(session.snapshot())
