@@ -124,6 +124,7 @@ def requested_data(request, requirements, data_manager):
         supplied[key] = rows
         total += len(rows)
     return {"pineRequestBars": supplied,
+        "pineRequestObservation": {"contract": "candlescope.pine-indicator-observations/1", "observedAtMs": asof - 1},
         **({"pineRequestSymbolMetadata": symbol_metadata} if symbol_metadata else {}),
         **({"pineRequestSymbolProfiles": symbol_profiles} if symbol_profiles else {})}
 

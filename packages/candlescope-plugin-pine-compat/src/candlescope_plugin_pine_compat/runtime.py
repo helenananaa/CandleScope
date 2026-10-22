@@ -1412,6 +1412,7 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                     engine, request.source, runtime_bars, options,
                     session_id=session_id, forming=forming, execution_times=clocks,
                     calculation_bars_count=analysis.get("calculationBarsCount"),
+                    request_observation=request.options.get("pineRequestObservation"),
                 )
             else:
                 raw = engine.run_script(request.source, runtime_bars, **options,

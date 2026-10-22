@@ -82,9 +82,15 @@ see [tick transport](pine-tick-schedule-foundation.md). This does not complete
 the Host clock drivers or persistent same-bar streaming. The corrected candidate
 passes 7,982 Rust, 1,956 Python and 172 tooling checks; installed Host validation
 passes 688 cases across 51 modules with no skips and unchanged source/runtime
-fingerprints. Ordinary indicator requested-data growth still resets realtime
-state; provider-only transactions and a causal Host lifecycle are required to
-preserve varip without evaluating one combined observation twice. The formal
+fingerprints. The ordinary indicator follow-up now uses provider-only
+transactions and an observed Host lifecycle to preserve varip without evaluating
+one combined observation twice. Its targeted checks pass 39 Host cases through
+the installed SDK JSON-RPC worker and 118 bridge cases (12 optional Renko skips);
+its immutable full gate passes 691 cases across 52 modules with zero skips,
+unchanged source/runtime fingerprints and a separately recorded documentation
+summary. Core provider-only APIs pass 7,986 Rust, 1,965 Python and 172 tooling
+checks. See
+[indicator observations](pine-indicator-observations.md). The formal
 desktop source pin and its Renko patch also require migration and actual-package
 qualification. Earlier passing receipts keep their own identities.
 

@@ -7,6 +7,19 @@ from app.indicator.pine_host_inputs import requested_data
 from candlescope_plugin_sdk import Bar, ExecuteBatchRequest, MarketContext
 
 
+@pytest.mark.parametrize("boundary,expected", [(179998,[0,60000]),(179999,[0,60000,120000])])
+def test_observed_indicator_requests_preserve_the_inclusive_confirmation_boundary(boundary,expected):
+    bars=(Bar(time=120,open=1,high=1,low=1,close=1,volume=1,is_closed=False),)
+    request=ExecuteBatchRequest(source="",context=MarketContext("binance","spot","BTCUSDT","1m"),
+        bars=bars,options={"pineExecutionTimeMs":185000,"pineRevealedBoundaryMs":boundary})
+    requirements={"requests":[{"function":"request.security","symbol":{"kind":"literal","value":"BINANCE:ETHUSDT"},
+        "timeframe":{"kind":"literal","value":"1"}}]}
+    result=requested_data(request,requirements,SimpleNamespace(query=lambda *a,**k:SimpleNamespace(
+        bars=[replace(bars[0],time=t,is_closed=True) for t in (0,60,120,180)],missing_ranges=[])))
+    assert [row["time"] for row in result["pineRequestBars"]["BINANCE:ETHUSDT:1"]]==expected
+    assert result["pineRequestObservation"]=={"contract":"candlescope.pine-indicator-observations/1","observedAtMs":boundary}
+
+
 def test_local_requested_data_never_exposes_unconfirmed_remote_close():
     bars = (Bar(time=120, open=1, high=1, low=1, close=1, volume=1),)
     request = ExecuteBatchRequest(
