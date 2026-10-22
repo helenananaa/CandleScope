@@ -10,7 +10,10 @@ import sys
 import urllib.request
 from pathlib import Path
 
-from build_bundle import build_locked_bundle, load_release_lock
+if __package__:
+    from .build_bundle import build_locked_bundle, load_release_lock
+else:
+    from build_bundle import build_locked_bundle, load_release_lock
 
 
 def download(url: str, path: Path, expected: str) -> None:
@@ -19,6 +22,17 @@ def download(url: str, path: Path, expected: str) -> None:
     if hashlib.sha256(data).hexdigest() != expected.removeprefix("sha256:"):
         raise ValueError(f"Release asset digest mismatch: {path.name}")
     path.write_bytes(data)
+
+
+def materialize_sdk(record: dict, output: Path) -> Path:
+    """A first SDK release can qualify its exact source-built wheel before upload."""
+    path = output / record["artifactFilename"]
+    if path.exists():
+        if hashlib.sha256(path.read_bytes()).hexdigest() != record["sha256"].removeprefix("sha256:"):
+            raise ValueError(f"Built SDK wheel digest mismatch: {path.name}")
+    else:
+        download(record["releaseUrl"], path, record["sha256"])
+    return path
 
 
 def main() -> None:
@@ -39,8 +53,8 @@ def main() -> None:
     if asset["sha256"] != engine["sha256"].removeprefix("sha256:") or asset["size"] != engine["size"]:
         raise ValueError("Engine manifest asset mismatch")
     sdk = lock["wheels"]["candlescope-plugin-sdk"]
-    for record in (sdk, engine):
-        download(record["releaseUrl"], args.output / record["artifactFilename"], record["sha256"])
+    materialize_sdk(sdk, args.output)
+    download(engine["releaseUrl"], args.output / engine["artifactFilename"], engine["sha256"])
     bridge = lock["wheels"]["candlescope-plugin-pine-compat"]
     wheels = tuple(args.output / record["artifactFilename"] for record in (bridge, sdk, engine))
     bundle_path = args.output / f"candlescope-pine-compat-{lock['plugin']['version']}-cp312-{args.platform}.cspkg"
