@@ -46,6 +46,11 @@ def open_stream(plugin,wire,cancelled,deadline,*,resume=None):
     if wire.get("request_update_contract"):
         opening["contexts"]=[{**item,"bars":[]} for item in opening.get("contexts",[])]
     opening["historical_plan"]=deepcopy(wire["bars"])
+    if wire.get("request_update_contract"):
+        from .pine_request_updates import WINDOW_CONTRACT,window_history
+        if wire["identity"].get("request_window_plan_contract")!=WINDOW_CONTRACT:
+            raise BacktestError("EXTERNAL_UNSUPPORTED","historical requested streams require window planning")
+        opening["requested_history"]=window_history(wire.get("contexts",[]))
     transport={"protocol":wire["protocol"],"identity":wire["identity"]}
     if resume is None:
         return PineStream(plugin,transport,opening,cancelled,deadline=deadline)

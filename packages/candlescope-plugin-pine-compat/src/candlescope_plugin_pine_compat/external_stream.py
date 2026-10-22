@@ -11,6 +11,7 @@ from .request_updates import CONTRACT as REQUESTS, eligible as requested_eligibl
 from .strategy_time import engine_bars
 
 CONTRACT = "candlescope.pine-external-stream/1"
+WINDOW_CONTRACT = "candlescope.pine-request-window-plan/1"
 OPERATIONS = {"stream_open", "stream_begin", "stream_observe", "stream_commit", "stream_snapshot"}
 _active = None
 
@@ -22,7 +23,9 @@ def capabilities():
     if (type(schema) is int and schema == 1
             and schedules().get("execution_tick_contract") == TICK_CONTRACT
             and session is not None and all(callable(getattr(session, name, None)) for name in methods)):
-        return {"external_stream_contract": CONTRACT}
+        window=getattr(pine_compat,"EXTERNAL_REQUEST_WINDOW_PLAN_SCHEMA_VERSION",0)
+        return {"external_stream_contract": CONTRACT,
+                **({"request_window_plan_contract":WINDOW_CONTRACT} if type(window) is int and window==1 else {})}
     return {}
 
 
@@ -30,7 +33,7 @@ class Stream:
     def __init__(self, request, prepare, environment):
         allowed = {"protocol", "identity", "operation", "source", "libraries", "parameters", "context", "contexts",
                    "host_settings", "risk_contract", "closing_ticks", "order_metadata_contract", "currency_rates",
-                   "request_update_contract", "historical_plan", "execution_schedule_contract", "execution_tick_contract",
+                   "request_update_contract", "historical_plan", "requested_history", "execution_schedule_contract", "execution_tick_contract",
                    "external_stream_contract"}
         if set(request) - allowed:
             raise ValueError("PINE_STREAM_INVALID: unknown opening fields")
@@ -38,6 +41,9 @@ class Stream:
                 or request.get("execution_schedule_contract") != SCHEDULE
                 or request.get("execution_tick_contract") != TICK_CONTRACT):
             raise ValueError("PINE_STREAM_UNSUPPORTED: explicit stream and tick contracts required")
+        if "requested_history" in request and ("historical_plan" not in request
+                or capabilities().get("request_window_plan_contract")!=WINDOW_CONTRACT):
+            raise ValueError("PINE_STREAM_UNSUPPORTED: requested window planning requires known historical endpoints")
         program, analysis = prepare(request["source"], library_sources({"pineLibrarySources": request.get("libraries", {})}))
         require_price_grid(analysis, request)
         require_quote_currency(analysis, program.host_requirements(), request, external=True)
@@ -63,7 +69,8 @@ class Stream:
             request_bars=environment(request), scheduled=True,
             **({"closing_ticks": True} if request.get("closing_ticks") is True else {}),
             **annotations, **risk_options(request, analysis))
-        self.skip = self.engine.initialize_history(engine_bars(request["historical_plan"])) if "historical_plan" in request else 0
+        self.skip = self.engine.initialize_history(engine_bars(request["historical_plan"]),
+            **({"requested_history":request["requested_history"]} if "requested_history" in request else {})) if "historical_plan" in request else 0
         self.intents = 0
         self.passes = 0
         self.state = None

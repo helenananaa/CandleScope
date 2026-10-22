@@ -16,6 +16,11 @@ def ensure(provider, runtime, symbol, timeframe, contexts):
         provider._stream_environment=deepcopy(opening)
         if not provider.realtime_streaming:
             opening["historical_plan"]=provider.context["pineHistoricalBars"]
+            if provider.request_feed is not None:
+                from app.backtest.pine_request_updates import WINDOW_CONTRACT
+                if provider.runtime_identity.get("request_window_plan_contract")!=WINDOW_CONTRACT:
+                    raise StrategyProviderError("FIDELITY_UNSUPPORTED","historical requested streams require window planning")
+                opening["requested_history"]=provider.request_feed.window_history()
         provider.stream=PineStream(runtime,{key:provider.wire[key] for key in ("protocol","identity")},
             opening,provider.cancelled)
     elif provider._stream_environment!=opening:
@@ -60,6 +65,9 @@ def restore(provider,payload,runtime):
             raise StrategyProviderError("IDENTITY_MUTATION","restored Pine stream source or settings differ")
     if saved["opening"].get("context",{}).get("metadata")!=provider.context.get("pineChartMetadata"):
         raise StrategyProviderError("IDENTITY_MUTATION","restored Pine stream metadata differs")
+    expected=(provider.request_feed.window_history() if not provider.realtime_streaming and provider.request_feed is not None else None)
+    if saved["opening"].get("requested_history")!=expected:
+        raise StrategyProviderError("IDENTITY_MUTATION","restored requested window endpoints differ")
     count=len(provider.bars)
     if saved.get("cursor")!=max(0,count-saved["input_skip"]-int(saved["bar_open"])):
         raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION","restored chart and stream cursors differ")
@@ -71,4 +79,4 @@ def restore(provider,payload,runtime):
         provider.stream.close()
         provider.stream=None
         raise StrategyProviderError("LOOKAHEAD_VIOLATION","restored chart intents differ from the Pine transcript")
-    provider._stream_environment={key:value for key,value in saved["opening"].items() if key!="historical_plan"}
+    provider._stream_environment={key:value for key,value in saved["opening"].items() if key not in {"historical_plan","requested_history"}}

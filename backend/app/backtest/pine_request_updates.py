@@ -5,6 +5,12 @@ import hashlib
 import json
 
 CONTRACT = "candlescope.pine-request-updates/1"
+WINDOW_CONTRACT = "candlescope.pine-request-window-plan/1"
+
+
+def window_history(contexts):
+    return [dict(symbol=item["symbol"],timeframe=item["timeframe"],times_ms=[bar["time"]*1000 for bar in item["bars"]])
+            for item in contexts]
 
 
 def from_wire(wire):
@@ -91,6 +97,9 @@ class RequestedObservationFeed:
         return [dict(symbol=stream["symbol"], timeframe=stream["timeframe"], bars=[],
                      **({"metadata": deepcopy(stream["metadata"])} if stream.get("metadata") else {}))
                 for stream in self._streams]
+
+    def window_history(self):
+        return window_history(self._streams)
 
     def replay(self, observations):
         before = self.snapshot()
