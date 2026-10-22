@@ -62,13 +62,23 @@ class RequestedObservationFeed:
                 raise ValueError("PINE_REQUEST_UPDATE_INVALID: exact unique stream keys required")
             keys.add(key)
             bars, closes = stream["bars"], stream["closes"]
+            from .pine_event_requests import CONTRACT as EVENT_CONTRACT, renko_descriptor
+            event_rows = (stream.get("event_series_contract") == EVENT_CONTRACT
+                          and renko_descriptor(stream["symbol"]) is not None)
+            if stream.get("event_series_contract") is not None and not event_rows:
+                raise ValueError("PINE_REQUEST_UPDATE_INVALID: unsupported event-series contract")
             if len(bars) != len(closes):
                 raise ValueError("PINE_REQUEST_UPDATE_INVALID: one close timestamp per requested bar required")
             previous = previous_open = None
             for row, closed in zip(bars, closes, strict=True):
                 if (type(row["time"]) is not int or type(closed) is not int
-                        or closed < row["time"] * 1000 or previous is not None and closed <= previous
-                        or previous_open is not None and row["time"] <= previous_open):
+                        or closed < row["time"] * 1000
+                        or previous_open is not None and (row["time"] < previous_open
+                            or row["time"] == previous_open and not event_rows)
+                        or previous is not None and (closed < previous
+                            or closed == previous and not event_rows)
+                        or previous_open is not None and event_rows
+                            and ((row["time"] == previous_open) != (closed == previous))):
                     raise ValueError("PINE_REQUEST_UPDATE_INVALID: ordered complete requested bars required")
                 previous, previous_open = closed, row["time"]
         self.source_hash = _hash(self._streams)
