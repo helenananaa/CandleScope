@@ -218,6 +218,7 @@ def compile_revision(payload: Mapping[str, object], *, now_ms: int) -> dict[str,
             json.dumps({"schema": SOURCE_SCHEMA, "source": source, "identity": pine_analysis["identity"], "libraries": libraries,
                 "executionClock": pine_analysis["requirements"]["execution"]["clock"], "orderContract": ORDER_CONTRACT,
                 "fillCallbacks": pine_analysis["requirements"]["execution"].get("calcOnOrderFills", False),
+                "historyTicks": pine_analysis["requirements"]["execution"].get("calcOnEveryHistoryTick",False),
                 **({"defaultQuantity": pine_analysis["requirements"]["account"]["defaultQuantity"]}
                    if pine_analysis["identity"].get("external_sizing") == 1 else {}),
                 "processOnClose": pine_analysis["requirements"]["execution"].get("processOrdersOnClose", False),

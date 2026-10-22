@@ -162,7 +162,7 @@ def test_real_engine_runs_arbitrary_sma_with_actual_account_and_restores():
         closed = provider.step(frame(2, 5, position=2))
         assert closed.payload["targetExposure"] == "0"
         assert restored.step(frame(2, 5, position=2)) == closed
-        assert provider.identity()["runtime"]["adapter"] == "pine-chart/7"
+        assert provider.identity()["runtime"] == json.loads(execution_source)["identity"]
         assert provider.identity()["runtime"]["external_sizing"] == 1
     finally:
         provider.close()

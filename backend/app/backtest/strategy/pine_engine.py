@@ -28,6 +28,7 @@ SOURCE_SCHEMA = "candlescope.chart-pine/1"
 ORDER_CONTRACT = "candlescope.pine-orders/1"
 CALLBACK_CONTRACT = "candlescope.pine-fill-callbacks/1"
 CLOSING_CONTRACT = "candlescope.pine-closing-tick/1"
+STREAM_CONTRACT = "candlescope.pine-external-stream/1"
 
 
 def plugin():
@@ -111,10 +112,8 @@ def analyze(source, libraries=None):
         or any(item.get("function") not in {"security", "request.security", "request.security_lower_tf"}
                for item in requirements.get("requests", []))
         or (requirements.get("account") or {}).get("declaredCurrency")
-        or any(
-            execution.get(key)
-            for key in ("calcOnEveryTick", "calcOnEveryHistoryTick")
-        )
+        or execution.get("calcOnEveryTick")
+        or (execution.get("calcOnEveryHistoryTick") and result["identity"].get("external_stream_contract")!=STREAM_CONTRACT)
         or (execution.get("calcOnOrderFills") and result["identity"].get("fill_callbacks") != CALLBACK_CONTRACT)
         or (execution.get("processOrdersOnClose") and result["identity"].get("closing_tick_contract") != CLOSING_CONTRACT)
         or (any(feature == "strategy.order" or feature.startswith("strategy.oca.") for feature in features)
@@ -135,6 +134,9 @@ def analyze(source, libraries=None):
 class PineEngineProvider:
     def __init__(self):
         self.worker = None
+        self.stream = None
+        self._closed_stream_checkpoint = None
+        self.streaming = False
         self.cancelled = threading.Event()
         self.bars, self.accounts, self.history = [], [], []
         self.entry_id = None
@@ -157,8 +159,10 @@ class PineEngineProvider:
         from app.backtest.native_session import SessionWorker
 
         self.close()
+        self._closed_stream_checkpoint=None
         self.cancelled = threading.Event()
-        self.context = dict(context)
+        from copy import deepcopy
+        self.context = deepcopy(context)
         self.order_mode = context.get("outputMode") == "ORDER_INTENT"
         try:
             frozen = json.loads(context["source"])
@@ -184,6 +188,13 @@ class PineEngineProvider:
             ) from exc
         schedule_contract = context.get("pineExecutionScheduleContract")
         self.scheduled = schedule_contract is not None
+        self.streaming = context.get("pineStreamContract") is not None
+        if self.streaming and (context["pineStreamContract"]!=STREAM_CONTRACT or not self.scheduled
+                or self.runtime_identity.get("external_stream_contract")!=STREAM_CONTRACT
+                or frozen.get("historyTicks") is not True or not isinstance(context.get("pineHistoricalBars"),list)):
+            raise StrategyProviderError("FIDELITY_UNSUPPORTED","chart history ticks require an explicit stream and fixed history")
+        if self.streaming:
+            self.context.pop("inputPlan",None)
         self.pass_mode = self.fill_callbacks or self.scheduled
         if self.scheduled and (schedule_contract != SCHEDULE_CONTRACT or not self.order_mode
                 or frozen.get("executionScheduleContract") != SCHEDULE_CONTRACT
@@ -198,6 +209,7 @@ class PineEngineProvider:
         if frozen.get("requiresOrderMode") and not self.order_mode:
             raise StrategyProviderError("FIDELITY_UNSUPPORTED", "generic and OCA orders require ORDER_INTENT mode")
         runtime = plugin()
+        self.runtime_launch=runtime
         current = invoke(runtime, {"operation": "describe"}, timeout=15)["identity"]
         if current != self.runtime_identity:
             raise StrategyProviderError(
@@ -230,7 +242,7 @@ class PineEngineProvider:
                 raise StrategyProviderError("FIDELITY_UNSUPPORTED", "Pine requested-update capability differs")
             self.request_feed = RequestedObservationFeed(self.requested_streams)
             self.wire["request_update_contract"] = REQUEST_UPDATE_CONTRACT
-        self.worker = SessionWorker(runtime, self.wire, self.cancelled, evaluator=True)
+        self.worker = None if self.streaming else SessionWorker(runtime, self.wire, self.cancelled, evaluator=True)
         self.bars, self.accounts, self.history, self.entry_id = [], [], [], None
         self.execution_times = []
         self.execution_passes = []
@@ -239,7 +251,7 @@ class PineEngineProvider:
         self.risk_configuration = None
 
     def _evaluate(self, frame, *, warmup=False):
-        if self.worker is None or not frame.account_view:
+        if (self.worker is None and not self.streaming) or not frame.account_view:
             raise StrategyProviderError(
                 "PROVIDER_PROTOCOL_VIOLATION",
                 "Pine requires the authoritative Host account",
@@ -286,7 +298,7 @@ class PineEngineProvider:
                 if self.needs_clock:
                     self.execution_times[index] = frame.event_time_ms
             pass_index = len(self.execution_passes[index])
-            if pass_index >= 65:
+            if pass_index >= (100_000 if self.streaming else 65):
                 raise StrategyProviderError("BUDGET_EXCEEDED", "at most 64 fill callbacks and one close per bar")
         else:
             self.bars.append(bar)
@@ -318,7 +330,9 @@ class PineEngineProvider:
             timeframe = pine_timeframe(self.context["pineChartInterval"])
         from app.backtest.pine_requested_data import visible_contexts
         cutoff = int(row.get("close_time_ms", frame.event_time_ms))
-        if not schedule_context or schedule_context["bar_state"] != "historical":
+        if self.streaming:
+            cutoff=min(frame.event_time_ms,cutoff)
+        elif not schedule_context or schedule_context["bar_state"] != "historical":
             cutoff = min(frame.watermark_ms - (0 if confirmed else 1), cutoff)
         contexts = (self.request_feed.empty_contexts() if self.request_feed is not None
                     else visible_contexts(self.requested_streams, cutoff))
@@ -334,29 +348,33 @@ class PineEngineProvider:
             contexts = [{**context, "bars": []} for context in contexts]
         elif requested is not None:
             self.request_groups.append(dict(observed_at_ms=cutoff, updates=requested["request_updates"]))
-        result = self.worker.request(
-            {
-                **self.wire,
-                "bars": self.bars,
-                "accounts": self.accounts,
-                **({"contexts": contexts} if contexts else {}),
-                **({"request_updates": self.request_groups} if self.request_feed is not None and not self.pass_mode else {}),
-                **({"execution_times": self.execution_times} if self.needs_clock else {}),
-                **({"execution_schedule": encode_schedule(self.execution_passes, self.execution_contexts)} if self.scheduled
-                   else {"execution_passes": self.execution_passes} if self.pass_mode else {}),
-                "context": {
-                    "symbol": chart_symbol,
-                    "timeframe": timeframe,
-                    **(
-                        {"metadata": self.context["pineChartMetadata"]}
-                        if self.context.get("pineChartMetadata")
-                        else {}
-                    ),
+        if self.streaming:
+            from .pine_streaming import observe
+            result=observe(self,self.runtime_launch,chart_symbol,timeframe,contexts,index,pass_index)
+        else:
+            result = self.worker.request(
+                {
+                    **self.wire,
+                    "bars": self.bars,
+                    "accounts": self.accounts,
+                    **({"contexts": contexts} if contexts else {}),
+                    **({"request_updates": self.request_groups} if self.request_feed is not None and not self.pass_mode else {}),
+                    **({"execution_times": self.execution_times} if self.needs_clock else {}),
+                    **({"execution_schedule": encode_schedule(self.execution_passes, self.execution_contexts)} if self.scheduled
+                       else {"execution_passes": self.execution_passes} if self.pass_mode else {}),
+                    "context": {
+                        "symbol": chart_symbol,
+                        "timeframe": timeframe,
+                        **(
+                            {"metadata": self.context["pineChartMetadata"]}
+                            if self.context.get("pineChartMetadata")
+                            else {}
+                        ),
+                    },
                 },
-            },
-            self.cancelled,
-            timeout=5,
-        )
+                self.cancelled,
+                timeout=5,
+            )
         if (
             result.get("contract") != "external-broker/1"
             or result.get("account_authority") != "candlescope"
@@ -378,14 +396,16 @@ class PineEngineProvider:
         def ordinal(item):
             return (item["bar_index"], item.get("pass_index", -1)) if self.pass_mode else (item["bar_index"], -1)
         cursor = (index, pass_index) if self.pass_mode else (index, -1)
-        previous = [item for item in result["intents"] if ordinal(item) < cursor]
+        previous = self.history if self.streaming else [item for item in result["intents"] if ordinal(item) < cursor]
         if previous != self.history:
             raise StrategyProviderError(
                 "LOOKAHEAD_VIOLATION", "Pine changed an earlier decision"
             )
-        intents = [item for item in result["intents"] if ordinal(item) == cursor]
-        if (len(intents) > 64 or len(previous) + len(intents) != len(result["intents"])
-                or sum(item["bar_index"] == index for item in result["intents"]) > 64):
+        intents = result["intents"] if self.streaming else [item for item in result["intents"] if ordinal(item) == cursor]
+        if (len(intents)>64 or (self.streaming and (result["intent_base"]!=len(self.history)
+                or any(ordinal(item)!=(index-self.stream.input_skip,pass_index) for item in intents)))
+                or (not self.streaming and (len(previous)+len(intents)!=len(result["intents"])
+                    or sum(item["bar_index"]==index for item in result["intents"])>64))):
             raise StrategyProviderError(
                 "PROVIDER_PROTOCOL_VIOLATION", "invalid Pine intent prefix"
             )
@@ -508,6 +528,9 @@ class PineEngineProvider:
 
     def snapshot(self):
         from copy import deepcopy
+        if self.streaming:
+            from .pine_streaming import snapshot
+            stream_checkpoint=snapshot(self)
         return deepcopy({
             "context": self.context,
             "bars": self.bars,
@@ -515,6 +538,7 @@ class PineEngineProvider:
             "history": self.history,
             "entry_id": self.entry_id,
             "state_hash": self.state_hash,
+            **({"stream_checkpoint":stream_checkpoint} if self.streaming else {}),
             **({"request_feed": self.request_feed.snapshot(), "request_updates": self.request_groups}
                if self.request_feed is not None else {}),
             **({"risk_rules": self.risk_configuration} if self.entry_risk else {}),
@@ -538,7 +562,7 @@ class PineEngineProvider:
             if self.bars and not isinstance(self.risk_configuration, dict):
                 raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "restored Pine risk configuration missing")
         if self.scheduled:
-            self.execution_passes, self.execution_contexts = decode_schedule(payload.get("execution_schedule"), len(self.bars))
+            self.execution_passes, self.execution_contexts = decode_schedule(payload.get("execution_schedule"), len(self.bars),streaming=self.streaming)
         elif self.fill_callbacks:
             from copy import deepcopy
             passes = payload.get("execution_passes")
@@ -569,6 +593,9 @@ class PineEngineProvider:
                 raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "restored Pine requested transcript differs") from exc
         elif "request_feed" in payload or "request_updates" in payload:
             raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "restored Pine requested mode differs")
+        if self.streaming:
+            from .pine_streaming import restore
+            restore(self,payload,self.runtime_launch)
 
     def identity(self):
         return {
@@ -581,9 +608,12 @@ class PineEngineProvider:
         close_callbacks = sum(max(0, sum(item["confirmed"] for item in group) - 1) for group in self.execution_passes)
         if self.scheduled:
             close_callbacks = sum(item["trigger"] == "closing_fill" for group in self.execution_contexts for item in group)
+        skip=(self.stream.input_skip if self.stream is not None else (self._closed_stream_checkpoint or {}).get("input_skip",0)) if self.streaming else 0
         return {"pineExecution": {
-            "profile": "EXPLICIT_HOST_EXECUTION_SCHEDULE" if self.scheduled else "CAUSAL_AGG_TRADE_FILL_PASSES" if self.fill_callbacks else "CONFIRMED_BAR_CLOSE",
+            "profile": "HISTORICAL_OHLC_TICK_STREAM" if self.streaming else "EXPLICIT_HOST_EXECUTION_SCHEDULE" if self.scheduled else "CAUSAL_AGG_TRADE_FILL_PASSES" if self.fill_callbacks else "CONFIRMED_BAR_CLOSE",
             **({"executionScheduleContract": SCHEDULE_CONTRACT} if self.scheduled else {}),
+            **({"externalStreamContract":STREAM_CONTRACT,"historicalTickCount":sum(len(group) for group in self.execution_passes[skip:]),
+                "historicalObservationCount":sum(len(group) for group in self.execution_passes),"inputSkip":skip} if self.streaming else {}),
             "accountAuthority": "candlescope", "tradingViewEquivalent": False,
             **({"defaultQuantity": dict(self.default_quantity)} if self.default_quantity is not None else {}),
             "barCount": len(self.bars),
@@ -597,6 +627,10 @@ class PineEngineProvider:
         self.close()
 
     def close(self):
+        if self.stream is not None:
+            self._closed_stream_checkpoint=self.stream.checkpoint()
+            self.stream.close()
+            self.stream=None
         worker, self.worker = self.worker, None
         if worker is not None:
             worker.close()

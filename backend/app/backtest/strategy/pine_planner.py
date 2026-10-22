@@ -13,7 +13,7 @@ from .pyne_adapter import HostPlan, PyneHostPlanner
 def host_identity():
     from app.backtest.external import host_identity as execution_identity
     digest = hashlib.sha256()
-    for name in ("pine_planner.py", "pine_engine.py", "pyne_adapter.py", "host_policy.py", "host_adapter.py"):
+    for name in ("pine_planner.py", "pine_engine.py", "pine_streaming.py", "pyne_adapter.py", "host_policy.py", "host_adapter.py"):
         digest.update(name.encode())
         digest.update(Path(__file__).with_name(name).read_bytes())
     digest.update(Path(__file__).parent.parent.joinpath("pine_callbacks.py").read_bytes())

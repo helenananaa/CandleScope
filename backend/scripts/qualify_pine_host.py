@@ -38,6 +38,12 @@ MODULES = (
     "test_pine_indicator_observations",
     "test_pine_stream",
     "test_pine_history_tick_workbench", "test_pine_history_tick_clock", "test_pine_history_vertices",
+    "test_chart_pine_history_ticks",
+    "test_chart_pine_engine",
+    "test_chart_pine_closing", "test_chart_pine_generic_orders", "test_chart_pine_orders",
+    "test_pine_book_closing", "test_pine_closing_tick_kernel", "test_pine_entry_risk",
+    "test_pine_host_qualification", "test_pine_prefix_transport", "test_pine_replay_clock",
+    "test_pine_risk_state", "test_pine_risk_stops", "test_pine_strategy_adapter", "test_pine_subscription_identity",
 )
 SCHEMAS = {
     "EXTERNAL_STREAM_SCHEMA_VERSION": 1,

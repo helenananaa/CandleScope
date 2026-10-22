@@ -102,7 +102,7 @@ class PineStream:
                              input_skip=self.input_skip, last_sha256=digest(self.last)))
 
     @classmethod
-    def restore(cls, runtime, payload, cancelled, *, deadline=None):
+    def restore(cls, runtime, payload, cancelled, *, deadline=None, verify=None):
         saved = deepcopy(payload)
         if (saved.get("contract") != JOURNAL_CONTRACT or not isinstance(saved.get("journal"), list)
                 or any(type(saved.get(key)) is not int or saved[key]<0 for key in ("cursor", "intents", "passes", "input_skip"))
@@ -114,6 +114,7 @@ class PineStream:
                 result = stream._request(entry["command"])
                 if digest(result) != entry["result_sha256"]:
                     raise BacktestError("LOOKAHEAD_VIOLATION", "Pine stream replay changed an observed decision")
+                if verify is not None: verify(entry["command"],result)
             if stream.checkpoint() != saved:
                 raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine stream checkpoint cursor differs")
             return stream

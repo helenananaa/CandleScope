@@ -57,8 +57,9 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
                 return service._observation_features(fresh, bar=bar, trade=None)
             historical_callbacks = None
             if config.get("pine_bar_path_contract"):
-                from .pine_chart_bar import ChartHistoricalBarCallbacks
-                historical_callbacks = ChartHistoricalBarCallbacks(session, adapter, shadow_planner, replay,
+                from .pine_chart_bar import ChartHistoricalBarCallbacks,ChartHistoricalTicks
+                callback_type=ChartHistoricalTicks if config.get("pine_history_ticks") else ChartHistoricalBarCallbacks
+                historical_callbacks = callback_type(session, adapter, shadow_planner, replay,
                     market=market, warmup=warmup, features=features, control=control, deadline=deadline)
             elif config.get("pine_fill_callbacks"):
                 callbacks = ChartFillCallbacks(session, adapter, shadow_planner, replay,
@@ -90,6 +91,7 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
             result = replay.run(events, strategy, warmup_events=0, finalize=True,
                 **({"fill_callback": callbacks.on_fill} if callbacks is not None else {}),
                 **({"fill_callback": historical_callbacks.on_fill} if historical_callbacks is not None else {}),
+                **({"vertex_callback":historical_callbacks.on_vertex} if config.get("pine_history_ticks") else {}),
                 **({"close_callback": closing.process} if closing is not None else {}))
             service._assert_provider_state_budget(session.snapshot())
             check_deadline(deadline)

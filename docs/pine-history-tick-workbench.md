@@ -4,7 +4,8 @@ Development Workbench runs with `calc_on_every_history_tick=true` negotiate
 `candlescope.pine-history-tick/1` and the external observation stream. This
 selects the explicit OHLC path independently of fill-recalculation opt-in.
 Physical tape/book profiles retain explicit rejection pending their own clock
-integration. The chart strategy provider still has its separate admission gate.
+integration. The chart strategy provider now has its own connected BAR path;
+see [chart history ticks](pine-chart-history-ticks.md).
 
 The kernel matches prior orders, delivers one strategy observation at each
 OHLC vertex, then settles only newly eligible market orders at that vertex.

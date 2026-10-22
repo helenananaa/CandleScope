@@ -55,7 +55,8 @@ class PineChartBarKernel(PineBarKernel):
         def close(point):
             # The strategy receives canonical OHLCV, with the path close's
             # actual account; the provider observation clock is independent.
-            apply(strategy((active,), active), point)
+            plan=strategy((active,), active)
+            if vertex_callback is None or plan: apply(plan,point)
             if self.process_orders_on_close:
                 self.closing_tick()
 

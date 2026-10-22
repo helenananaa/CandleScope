@@ -44,8 +44,10 @@ def execute(request):
         program, analysis = prepare(request["source"], library_sources({"pineLibrarySources": request.get("libraries", {})}))
         requirements = program.host_requirements()
         # The empty prefix exposes declared broker settings without making trades.
+        scheduled=bool(stream_capabilities()) and any(requirements["execution"].get(name)
+            for name in ("calcOnEveryTick","calcOnEveryHistoryTick"))
         try:
-            profile = program.run_external([], [], **({"risk_rules": True} if risk_available() else {}), **({"closing_ticks": True} if requirements["execution"].get("processOrdersOnClose") and getattr(pine_compat,"EXTERNAL_CLOSING_TICK_SCHEMA_VERSION",0)==1 else {}), **({"execution_passes": []} if requirements["execution"].get("calcOnOrderFills") else {}))
+            profile = program.run_external([], [], **({"risk_rules": True} if risk_available() else {}), **({"closing_ticks": True} if requirements["execution"].get("processOrdersOnClose") and getattr(pine_compat,"EXTERNAL_CLOSING_TICK_SCHEMA_VERSION",0)==1 else {}), **({"execution_schedule":[]} if scheduled else {"execution_passes": []} if requirements["execution"].get("calcOnOrderFills") else {}))
         except ValueError as exc:
             profile = {"profileError": str(exc)}
         return {

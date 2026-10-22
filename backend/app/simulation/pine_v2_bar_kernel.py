@@ -266,7 +266,8 @@ class PineV2BarKernel(PineChartBarKernel):
                     callback(self._active_bar, point, "closing_fill" if point.payload["execution_phase"] == "PINE_BAR_CLOSE" else "order_fill")
 
         def close(point):
-            apply(strategy((self._active_bar,), self._active_bar), point)
+            plan=strategy((self._active_bar,), self._active_bar)
+            if vertex_callback is None or plan: apply(plan,point)
             if self.process_orders_on_close:
                 self.closing_tick()
 

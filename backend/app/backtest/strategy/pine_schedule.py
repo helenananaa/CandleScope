@@ -14,7 +14,7 @@ def frame_context(frame, enabled):
         return None
     if (not isinstance(context, dict) or set(context) != {"bar_state", "trigger", "is_new"}
             or context["bar_state"] not in {"historical", "realtime"}
-            or context["trigger"] not in {"bar_close", "order_fill", "closing_fill", "realtime_tick"}
+            or context["trigger"] not in {"bar_close", "order_fill", "closing_fill", "realtime_tick", "historical_tick"}
             or type(context["is_new"]) is not bool):
         raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "an explicit Pine execution context is required")
     return dict(context)
@@ -27,12 +27,12 @@ def encode(passes, contexts):
             for group, states in zip(passes, contexts)]
 
 
-def decode(schedule, count):
+def decode(schedule, count, *, streaming=False):
     if not isinstance(schedule, list) or len(schedule) != count:
         raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "restored Pine execution schedule is missing")
     passes, contexts = [], []
     for group in schedule:
-        if (not isinstance(group, list) or not 1 <= len(group) <= 65
+        if (not isinstance(group, list) or not 1 <= len(group) <= (100_000 if streaming else 65)
                 or any(not isinstance(item, dict) or set(item) != {"evaluation", "context"}
                        or not isinstance(item["evaluation"], dict) or not isinstance(item["context"], dict)
                        for item in group)):
