@@ -90,12 +90,25 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
                 return shadow_planner.plan(output,
                     context=None if shadow_planner.config is None else _planning_context(account_kernel, event))
 
-            result = replay.run(events, strategy, warmup_events=0, finalize=True,
-                **({"fill_callback": callbacks.on_fill} if callbacks is not None and not config.get("pine_realtime_ticks") else {}),
-                **({"tick_callback":callbacks.on_tick} if config.get("pine_realtime_ticks") else {}),
-                **({"fill_callback": historical_callbacks.on_fill} if historical_callbacks is not None else {}),
-                **({"vertex_callback":historical_callbacks.on_vertex} if config.get("pine_history_ticks") else {}),
-                **({"close_callback": closing.process} if closing is not None else {}))
+            from .pine_chart_window import ChartWindowDiscovery
+            window=ChartWindowDiscovery(fresh,session,replay,shadow_planner,
+                enabled=bool(config.get("pine_history_ticks")),
+                new_planner=lambda:_new_host_planner(shadow_config,execution_reporter=service._execution_reporter(session)),
+                deadline=deadline,control=control)
+            def run_window():
+                return replay.run(events,strategy,warmup_events=0,finalize=True,
+                    **({"fill_callback": callbacks.on_fill} if callbacks is not None and not config.get("pine_realtime_ticks") else {}),
+                    **({"tick_callback":callbacks.on_tick} if config.get("pine_realtime_ticks") else {}),
+                    **({"fill_callback": historical_callbacks.on_fill} if historical_callbacks is not None else {}),
+                    **({"vertex_callback":historical_callbacks.on_vertex} if config.get("pine_history_ticks") else {}),
+                    **({"close_callback": closing.process} if closing is not None else {}))
+            def reset_window():
+                nonlocal observed,shadow_planner
+                shadow_planner=window.planner
+                if historical_callbacks is not None:
+                    historical_callbacks.planner=shadow_planner
+                observed=0
+            result=window.execute(run_window,reset_window)
             service._assert_provider_state_budget(session.snapshot())
             check_deadline(deadline)
             control()

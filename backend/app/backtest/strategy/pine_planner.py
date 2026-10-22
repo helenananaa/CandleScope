@@ -19,6 +19,7 @@ def host_identity():
     digest.update(Path(__file__).parent.parent.joinpath("pine_callbacks.py").read_bytes())
     digest.update(Path(__file__).parent.parent.joinpath("pine_realtime_ticks.py").read_bytes())
     digest.update(Path(__file__).parent.parent.joinpath("pine_chart_bar.py").read_bytes())
+    digest.update(Path(__file__).parent.parent.joinpath("pine_chart_window.py").read_bytes())
     digest.update(Path(__file__).parent.parent.joinpath("pine_sensitivity.py").read_bytes())
     digest.update(Path(__file__).parent.parent.joinpath("pine_closing.py").read_bytes())
     digest.update(Path(__file__).parent.parent.joinpath("service.py").read_bytes())

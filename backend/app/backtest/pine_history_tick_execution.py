@@ -5,7 +5,7 @@ import time
 from .errors import BacktestError
 from .native_session import STREAM_CONTRACT
 from .pine_history_tick_clock import HistoryTickClock
-from .pine_stream import PineStream
+from .pine_stream import PineStream, WINDOW_FEEDBACK_CONTRACT, WindowRebaseRequired
 from .pine_workbench import bar_event
 
 CONTRACT="candlescope.pine-history-tick/1"
@@ -46,6 +46,8 @@ def open_stream(plugin,wire,cancelled,deadline,*,resume=None):
     if wire.get("request_update_contract"):
         opening["contexts"]=[{**item,"bars":[]} for item in opening.get("contexts",[])]
     opening["historical_plan"]=deepcopy(wire["bars"])
+    if wire["identity"].get("window_feedback_contract")==WINDOW_FEEDBACK_CONTRACT:
+        opening["window_feedback_contract"]=WINDOW_FEEDBACK_CONTRACT
     if wire.get("request_update_contract"):
         from .pine_request_updates import WINDOW_CONTRACT,window_history
         if wire["identity"].get("request_window_plan_contract")!=WINDOW_CONTRACT:
@@ -53,16 +55,55 @@ def open_stream(plugin,wire,cancelled,deadline,*,resume=None):
         opening["requested_history"]=window_history(wire.get("contexts",[]))
     transport={"protocol":wire["protocol"],"identity":wire["identity"]}
     if resume is None:
-        return PineStream(plugin,transport,opening,cancelled,deadline=deadline)
+        stream=PineStream(plugin,transport,opening,cancelled,deadline=deadline)
+        try:
+            prepare_window(stream,plugin,wire,cancelled,deadline)
+            return stream
+        except Exception:
+            stream.close()
+            raise
     from .external_replay import validate_state
     validate_state(wire,resume)
     saved=(resume.get("clock") or {}).get("stream")
     if not isinstance(saved,dict) or saved.get("opening")!=opening or saved.get("wire")!=transport:
         raise BacktestError("NATIVE_IDENTITY_MISMATCH","historical Pine stream checkpoint differs")
-    return PineStream.restore(plugin,saved,cancelled,deadline=deadline)
+    observed=[]
+    def verify(command,result):
+        if command["operation"]=="stream_rebase": observed.clear()
+        elif command["operation"]=="stream_observe": observed.extend(result["intents"])
+    stream=PineStream.restore(plugin,saved,cancelled,deadline=deadline,verify=verify)
+    if observed!=resume["history"] or stream.last.get("window_status",{}).get("requires_discovery"):
+        stream.close()
+        raise BacktestError("LOOKAHEAD_VIOLATION","restored historical Pine window or intents differ")
+    return stream
+
+
+def prepare_window(stream,plugin,wire,cancelled,deadline):
+    """Use disposable real Host ledgers; only the stable plan survives.
+
+    No account state, fees, orders or requested prices from a tentative run are
+    reused by the final execution. Journal replay reconstructs Pine only.
+    """
+    if not stream.last.get("window_status",{}).get("requires_discovery"):
+        return
+    from .external import _run_external_host
+    from .native import invoke
+    from .workbench_sensitivity import check_control
+    for _attempt in range(64):
+        check_control(cancelled,deadline)
+        try:
+            _run_external_host(plugin,wire,invoke,cancelled,deadline=deadline,
+                _cost_scenario=True,_pine_stream=stream)
+        except WindowRebaseRequired:
+            stream.rebase()
+        else:
+            stream.rebase(seal=True)
+            return
+    raise BacktestError("BUDGET_EXCEEDED","at most 64 observed Pine window discovery attempts")
 
 
 def run_clock(stream,kernel,orders,wire,*,state=None,target=None):
+    from .workbench_sensitivity import check_control
     state=deepcopy(state or {})
     cursor=state.get("bar_cursor",0)
     target=len(wire["bars"]) if target is None else target
@@ -76,11 +117,13 @@ def run_clock(stream,kernel,orders,wire,*,state=None,target=None):
         remaining=[event for event in events(wire) if event.sequence>kernel.source_sequence and event.event_time_ms<=last]
         def committed(source):
             nonlocal cursor
+            check_control(stream.cancelled,stream.deadline)
             if source.role=="BARS": cursor+=1
         kernel.run(remaining,lambda window,source:clock.close(source),fill_callback=lambda *_:[],
                    vertex_callback=clock.vertex,checkpoint_callback=committed,finalize=target==len(wire["bars"]))
     else:
         while cursor<target:
+            check_control(stream.cancelled,stream.deadline)
             source=bar_event(wire,cursor,cursor+1)
             def close(point):
                 clock.close(source)

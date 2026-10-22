@@ -2947,9 +2947,17 @@ class BacktestService:
 
             last_order_count = len(kernel.orders)
             last_fill_count = len(kernel.fills)
+            from .pine_chart_window import ChartWindowDiscovery
+            window_discovery=ChartWindowDiscovery(provider,session,kernel,planner,
+                enabled=bool(config.get("pine_history_ticks") and resume_sequence==0),
+                new_planner=lambda:_new_host_planner(config,execution_reporter=self._execution_reporter(session)),
+                deadline=deadline,control=lambda:self._assert_execution_control(run_id,deadline=deadline,
+                    expected_generation=expected_generation))
 
             def checkpoint_after(event: MarketEvent) -> None:
                 nonlocal last_order_count, last_fill_count
+                if window_discovery.pending():
+                    return
                 interval = int(config.get("checkpoint_interval") or self.settings.checkpoint_event_interval)
                 order_count = len(kernel.orders)
                 fill_count = len(kernel.fills)
@@ -2983,16 +2991,22 @@ class BacktestService:
                         fault_point, run_id=run_id, sequence=event.sequence
                     )
 
-            result = kernel.run(
-                remaining_events(),
-                strategy,
-                warmup_events=0,
-                finalize=True,
-                checkpoint_callback=checkpoint_after,
-                **({"fill_callback": historical_callbacks.on_fill} if historical_callbacks is not None else {}),
-                **({"vertex_callback":historical_callbacks.on_vertex} if config.get("pine_history_ticks") else {}),
-                **({"close_callback": closing.process} if closing is not None else {}),
-            )
+            def run_window():
+                return kernel.run(
+                    remaining_events(),strategy,warmup_events=0,finalize=True,
+                    checkpoint_callback=checkpoint_after,
+                    **({"fill_callback": historical_callbacks.on_fill} if historical_callbacks is not None else {}),
+                    **({"vertex_callback":historical_callbacks.on_vertex} if config.get("pine_history_ticks") else {}),
+                    **({"close_callback": closing.process} if closing is not None else {}))
+            def reset_window_bookkeeping():
+                nonlocal observed,streamed_last,streamed_count,last_order_count,last_fill_count,planner
+                planner=window_discovery.planner
+                if historical_callbacks is not None:
+                    historical_callbacks.planner=planner
+                observed=resume_bar_count
+                streamed_last,streamed_count=None,0
+                last_order_count,last_fill_count=len(kernel.orders),len(kernel.fills)
+            result=window_discovery.execute(run_window,reset_window_bookkeeping)
             cost_sensitivity = (
                 self._build_cost_sensitivity(config, kernel, events, result, provider=provider, planner=planner, input_plan=adapter.input_plan,
                     market=observation_market or {"venue": "local", "symbol": str(record["dataset_id"])}, warmup=warmup_events,
@@ -4453,8 +4467,10 @@ class BacktestService:
                     "AGG_TRADE_EXECUTION M2 requires gap_policy=REJECT",
                 )
         try:
-            pine_path = bool(persisted_revision is not None and persisted_revision["base_revision_id"] == PINE_ENGINE_REVISION
-                and json.loads(json.loads(str(persisted_revision["compiled_json"]))["executionSource"]).get("fillCallbacks"))
+            pine_path=False
+            if persisted_revision is not None and persisted_revision["base_revision_id"]==PINE_ENGINE_REVISION:
+                pine_execution=json.loads(json.loads(str(persisted_revision["compiled_json"]))["executionSource"])
+                pine_path=any(pine_execution.get(name) is True for name in ("fillCallbacks","historyTicks"))
             execution_realism = parse_execution_realism(payload, fidelity_mode=fidelity, pine_bar_path=pine_path)
         except MarketDatasetError as exc:
             raise BacktestError(exc.code, str(exc)) from exc

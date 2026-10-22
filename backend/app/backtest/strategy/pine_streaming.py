@@ -15,6 +15,9 @@ def ensure(provider, runtime, symbol, timeframe, contexts):
     if provider.stream is None:
         provider._stream_environment=deepcopy(opening)
         if not provider.realtime_streaming:
+            from app.backtest.pine_stream import WINDOW_FEEDBACK_CONTRACT
+            if provider.runtime_identity.get("window_feedback_contract")==WINDOW_FEEDBACK_CONTRACT:
+                opening["window_feedback_contract"]=WINDOW_FEEDBACK_CONTRACT
             opening["historical_plan"]=provider.context["pineHistoricalBars"]
             if provider.request_feed is not None:
                 from app.backtest.pine_request_updates import WINDOW_CONTRACT
@@ -68,15 +71,30 @@ def restore(provider,payload,runtime):
     expected=(provider.request_feed.window_history() if not provider.realtime_streaming and provider.request_feed is not None else None)
     if saved["opening"].get("requested_history")!=expected:
         raise StrategyProviderError("IDENTITY_MUTATION","restored requested window endpoints differ")
+    from app.backtest.pine_stream import WINDOW_FEEDBACK_CONTRACT,canonical_observations
+    feedback=(WINDOW_FEEDBACK_CONTRACT if not provider.realtime_streaming
+              and provider.runtime_identity.get("window_feedback_contract")==WINDOW_FEEDBACK_CONTRACT else None)
+    if saved["opening"].get("window_feedback_contract")!=feedback:
+        raise StrategyProviderError("IDENTITY_MUTATION","restored window feedback negotiation differs")
+    planned=[dict(evaluation=item,context=context) for index,(group,contexts) in
+        enumerate(zip(provider.execution_passes,provider.execution_contexts,strict=True))
+        if index>=saved["input_skip"] for item,context in zip(group,contexts,strict=True)]
+    if planned!=canonical_observations(saved):
+        raise StrategyProviderError("LOOKAHEAD_VIOLATION","restored chart observations differ from the Pine transcript")
     count=len(provider.bars)
     if saved.get("cursor")!=max(0,count-saved["input_skip"]-int(saved["bar_open"])):
         raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION","restored chart and stream cursors differ")
     observed=[]
     def verify(command,result):
-        if command["operation"]=="stream_observe": observed.extend(result["intents"])
+        if command["operation"]=="stream_rebase": observed.clear()
+        elif command["operation"]=="stream_observe": observed.extend(result["intents"])
     provider.stream=PineStream.restore(runtime,deepcopy(saved),provider.cancelled,verify=verify)
     if observed!=provider.history:
         provider.stream.close()
         provider.stream=None
         raise StrategyProviderError("LOOKAHEAD_VIOLATION","restored chart intents differ from the Pine transcript")
-    provider._stream_environment={key:value for key,value in saved["opening"].items() if key not in {"historical_plan","requested_history"}}
+    if provider.stream.last.get("window_status",{}).get("requires_discovery"):
+        provider.stream.close()
+        provider.stream=None
+        raise StrategyProviderError("LOOKAHEAD_VIOLATION","restored chart window was not sealed")
+    provider._stream_environment={key:value for key,value in saved["opening"].items() if key not in {"historical_plan","requested_history","window_feedback_contract"}}

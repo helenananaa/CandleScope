@@ -12,11 +12,28 @@ from .errors import BacktestError
 from .native_session import SessionWorker, STREAM_CONTRACT, SCHEDULE_CONTRACT, TICK_CONTRACT
 
 JOURNAL_CONTRACT = "candlescope.pine-stream-journal/1"
+WINDOW_FEEDBACK_CONTRACT = "candlescope.pine-window-feedback/1"
+
+
+class WindowRebaseRequired(BacktestError):
+    """Control transfer: discard the whole tentative ledger before retrying."""
+    def __init__(self):
+        super().__init__("PINE_WINDOW_REBASE_REQUIRED", "observed request window changed; discard tentative execution")
 
 
 def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"),
                                      ensure_ascii=False, allow_nan=False).encode("utf-8")).hexdigest()
+
+
+def canonical_observations(saved):
+    """Only observations after the final plan reset belong to the live ledger."""
+    observations=[]
+    for entry in saved.get("journal",[]):
+        command=entry.get("command",{})
+        if command.get("operation")=="stream_rebase": observations.clear()
+        elif command.get("operation")=="stream_observe": observations.append(command.get("observation"))
+    return observations
 
 
 class PineStream:
@@ -58,11 +75,26 @@ class PineStream:
                     or result.get("stream_schema") != 1):
                 raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "invalid Pine stream response")
             operation = command["operation"]
-            cursor = self.cursor + (operation == "stream_commit")
-            passes = 0 if operation in {"stream_open", "stream_begin"} else self.passes + (operation == "stream_observe")
-            opened = True if operation == "stream_begin" else False if operation in {"stream_open", "stream_commit"} else self.bar_open
+            reset = operation == "stream_rebase"
+            feedback = self.opening.get("window_feedback_contract") == WINDOW_FEEDBACK_CONTRACT
+            status = result.get("window_status")
+            if feedback and (result.get("window_feedback_contract") != WINDOW_FEEDBACK_CONTRACT
+                    or not isinstance(status,dict) or set(status)!={"schema_version","requires_discovery","rebase_required","input_skip"}
+                    or type(status.get("schema_version")) is not int or status["schema_version"]!=1
+                    or any(type(status.get(key)) is not bool for key in ("requires_discovery","rebase_required"))
+                    or type(status.get("input_skip")) is not int or status["input_skip"]<0
+                    or (status["rebase_required"] and operation!="stream_observe")):
+                raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "invalid Pine window feedback status")
+            if reset and not feedback:
+                raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine window feedback was not negotiated")
+            cursor = 0 if reset else self.cursor + (operation == "stream_commit")
+            passes = 0 if operation in {"stream_open", "stream_begin", "stream_rebase"} else self.passes + (operation == "stream_observe")
+            opened = True if operation == "stream_begin" else False if operation in {"stream_open", "stream_commit", "stream_rebase"} else self.bar_open
             delta = result["intents"]
-            if operation == "stream_snapshot" and command.get("include_intents", False):
+            if reset:
+                valid_intents = result["intent_base"] == 0 and not delta
+                total = 0
+            elif operation == "stream_snapshot" and command.get("include_intents", False):
                 valid_intents = result["intent_base"] == 0 and len(delta) == self.intents
                 total = self.intents
             else:
@@ -70,7 +102,8 @@ class PineStream:
                 total = self.intents + len(delta)
             if (result["bar_cursor"] != cursor or result["pass_cursor"] != passes
                     or result["bar_open"] != opened or not valid_intents or result["intent_cursor"] != total
-                    or (operation != "stream_open" and result["input_skip"] != self.input_skip)
+                    or (operation not in {"stream_open","stream_rebase"} and result["input_skip"] != self.input_skip)
+                    or (feedback and status["rebase_required"] and delta)
                     or any(item.get("bar_index") != self.cursor or item.get("pass_index") != self.passes
                            for item in delta if operation == "stream_observe")):
                 raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine stream cursor or intent delta differs")
@@ -88,7 +121,13 @@ class PineStream:
         return self._request(dict(operation="stream_begin", bar=deepcopy(bar), bar_state=bar_state))
 
     def observe(self, observation):
-        return self._request(dict(operation="stream_observe", observation=deepcopy(observation)))
+        result = self._request(dict(operation="stream_observe", observation=deepcopy(observation)))
+        if result.get("window_status",{}).get("rebase_required"):
+            raise WindowRebaseRequired()
+        return result
+
+    def rebase(self, *, seal=False):
+        return self._request(dict(operation="stream_rebase", seal=seal))
 
     def commit(self):
         return self._request(dict(operation="stream_commit"))

@@ -17,8 +17,7 @@ from tests.test_native_strategy_plugins import plugin, PINE, PYNE
 pytestmark = pytest.mark.skipif(not os.environ.get("NATIVE_TEST_PYTHON"), reason="requires installed native strategy plugins")
 
 
-@pytest.fixture
-def runtime(tmp_path):
+def runtime_at(tmp_path):
     csv = tmp_path / "bars.csv"
     csv.write_text("time,open,high,low,close,volume\n" + "\n".join(
         f"{i*60000},{v},{v+1},{v-1},{v},100" for i, v in enumerate([10,10,10,20,20,5,5,15,15,8])))
@@ -36,6 +35,11 @@ def runtime(tmp_path):
                "context": {"symbol": "BINANCE:BTCUSDT", "timeframe": "1"}}
     yield runtime, payload
     runtime.shutdown()
+
+
+@pytest.fixture
+def runtime(tmp_path):
+    yield from runtime_at(tmp_path)
 
 
 def terminal(native, run_id, *, timeout=25):

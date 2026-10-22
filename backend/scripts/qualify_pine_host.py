@@ -42,6 +42,7 @@ MODULES = (
     "test_chart_pine_realtime_ticks", "test_pine_realtime_tick_kernel",
     "test_pine_print_ticks",
     "test_pine_requested_window_stream",
+    "test_pine_window_feedback", "test_pine_window_recovery",
     "test_backtest_dual_clock",
     "test_chart_pine_engine",
     "test_chart_pine_closing", "test_chart_pine_generic_orders", "test_chart_pine_orders",
@@ -50,6 +51,7 @@ MODULES = (
     "test_pine_risk_state", "test_pine_risk_stops", "test_pine_strategy_adapter", "test_pine_subscription_identity",
 )
 SCHEMAS = {
+    "EXTERNAL_WINDOW_FEEDBACK_SCHEMA_VERSION": 1,
     "EXTERNAL_REQUEST_WINDOW_PLAN_SCHEMA_VERSION": 1,
     "EXTERNAL_STREAM_SCHEMA_VERSION": 1,
     "REALTIME_REQUEST_FEED_SCHEMA_VERSION": 1,

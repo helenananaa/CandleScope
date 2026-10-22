@@ -57,6 +57,10 @@ def validate_state(wire,state):
                     or not same_json(clock.get("history"),state.get("history"))
                     or any(len(group)!=(0 if index<skip else 4) for index,group in enumerate(clock["groups"]))):
                 raise BacktestError("NATIVE_IDENTITY_MISMATCH","historical Pine tick checkpoint differs")
+            from .pine_stream import canonical_observations
+            flat=[item for group in clock["groups"] for item in group]
+            if not same_json(flat,canonical_observations(stream)):
+                raise BacktestError("NATIVE_IDENTITY_MISMATCH","historical Pine observations differ from its stream journal")
         if wire.get("pine_v2_bar_contract"):
             chart = state.get("kernel", {}).get("pine_chart_bar") or {}
             v2 = state.get("kernel", {}).get("pine_v2_bar") or {}
