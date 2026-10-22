@@ -37,8 +37,12 @@ async def test_automatic_v2_trade_preparation_preserves_account_and_rejects_bad_
             assert bad.status_code==422 and not calls,bad.text
             response=await client.post("/data-preparations/native-strategy",json=body)
             assert response.status_code==202,response.text
-            job=await terminal(service,response.json()["id"])
+            # This path starts actual isolated interpreters. The shared helper's
+            # five seconds is for in-memory adapters; native calls retain their
+            # own bounded timeouts, independently of this integration wait.
+            job=await terminal(service,response.json()["id"],timeout=30)
             assert job["state"]=="READY",job.get("error")
+            assert job["attempts"]==0 and job.get("error") is None
             assert (await client.post("/data-preparations/native-strategy",json=body)).json()["id"]==job["id"]
         for _ in range(2000):
             record=runtime.native.get(job["result"]["native_run"]["run_id"])
