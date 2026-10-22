@@ -1,7 +1,7 @@
 """Append-only input transport for one isolated external evaluator process."""
 from copy import deepcopy
 
-CONTRACT = "candlescope.pine-prefix/1"
+CONTRACT = "candlescope.pine-prefix/2"
 PASSES_CONTRACT = "candlescope.pine-prefix-passes/1"
 CLOCKS_CONTRACT = "candlescope.pine-prefix-clocks/1"
 
@@ -23,6 +23,19 @@ class PrefixInput:
         ):
             raise ValueError("PINE_PREFIX_MISMATCH: evaluator prefix differs from the Host")
         bars, accounts = request.get("bars"), request.get("accounts")
+        if "account_deltas" in request:
+            deltas=request["account_deltas"]
+            previous=self.request.get("accounts",[])
+            if ("accounts" in request or self.request.get("identity",{}).get("prefix_append")!=CONTRACT
+                    or not previous or not isinstance(deltas,list)):
+                raise ValueError("PINE_PREFIX_INVALID: account deltas require negotiated v2 and a full seed")
+            accounts=[]
+            prior=previous[-1]
+            for delta in deltas:
+                if not isinstance(delta,dict) or set(delta)-set(prior):
+                    raise ValueError("PINE_PREFIX_INVALID: unknown account delta fields")
+                prior={**prior,**deepcopy(delta)}
+                accounts.append(prior)
         if (
             not isinstance(bars, list)
             or not isinstance(accounts, list)

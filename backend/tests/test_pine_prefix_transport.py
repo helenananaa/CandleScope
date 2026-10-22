@@ -4,6 +4,7 @@ import threading
 import pytest
 from app.backtest.native import PROTOCOL, encoded, invoke
 from app.backtest.native_session import SessionWorker
+from app.backtest.errors import BacktestError
 from app.backtest.strategy.pine_engine import plugin
 
 pytestmark = pytest.mark.skipif(
@@ -72,3 +73,27 @@ def test_real_worker_append_transport_matches_batch_and_reduces_input_bytes(cloc
             assert corrected["raw_output"]["plots"][-1]["values"][0] == request["execution_times"][0]
     finally:
         worker.close()
+
+
+def test_account_delta_transport_keeps_changed_equity_positions_nulls_and_full_rebases():
+    runtime=plugin()
+    identity=invoke(runtime,{"operation":"describe"})["identity"]
+    assert identity["prefix_append"]=="candlescope.pine-prefix/2"
+    wire=dict(protocol=PROTOCOL,identity=identity,parameters={},context=dict(symbol="A",timeframe="1"),
+        source='//@version=6\nstrategy("account deltas")\nplot(strategy.position_size)\nplot(strategy.position_avg_price)\nplot(strategy.equity)\nplot(strategy.netprofit)')
+    cancel=threading.Event();worker=SessionWorker(runtime,wire,cancel,evaluator=True)
+    bars=[];accounts=[]
+    try:
+        for i in range(8):
+            bars.append(dict(time=i*60,open=10,high=10,low=10,close=10,volume=1))
+            accounts.append(dict(time=i*60,position_size=i%3,position_avg_price=10 if i%3 else None,
+                equity=1000+i,initial_capital=1000,netprofit=i,openprofit=0))
+            request={**wire,"bars":bars,"accounts":accounts}
+            assert worker.request(request,cancel)==invoke(runtime,request)
+        accounts[0]["equity"]=1000.5;accounts[0]["netprofit"]=.5
+        assert worker.request(request,cancel)==invoke(runtime,request)
+        # Python bool equality with integer zero must never hide bad feedback.
+        bars.append(dict(time=480,open=10,high=10,low=10,close=10,volume=1))
+        accounts.append({**accounts[-1],"time":480,"openprofit":False})
+        with pytest.raises(BacktestError): worker.request(request,cancel)
+    finally: worker.close()

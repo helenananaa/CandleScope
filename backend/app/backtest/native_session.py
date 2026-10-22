@@ -24,7 +24,8 @@ class SessionWorker:
         self._closed = False
         self.close_errors = []
         self.identity = wire["identity"]
-        self._prefix_enabled = evaluator and self.identity.get("prefix_append") == "candlescope.pine-prefix/1"
+        self._prefix_enabled = evaluator and self.identity.get("prefix_append") in {
+            "candlescope.pine-prefix/1", "candlescope.pine-prefix/2"}
         self._prefix_state = None
         self.input_bytes = 0
         self.stderr = tempfile.TemporaryFile()
@@ -149,8 +150,19 @@ class SessionWorker:
                 updates is not None and old_updates is not None and updates[:count] == old_updates)
             if (static == old_static and len(bars) > count and bars[:count] == old_bars
                     and accounts[:count] == old_accounts and stable_passes and stable_clocks and stable_schedule and stable_updates):
+                account_payload={"accounts":accounts[count:]}
+                fields={"time","position_size","position_avg_price","equity","initial_capital","netprofit","openprofit"}
+                if (self.identity.get("prefix_append")=="candlescope.pine-prefix/2" and old_accounts
+                        and all(isinstance(account,dict) and set(account)==fields for account in accounts[count-1:])):
+                    prior=old_accounts[-1]
+                    deltas=[]
+                    for account in accounts[count:]:
+                        deltas.append({key:value for key,value in account.items()
+                                       if type(value) is not type(prior[key]) or value!=prior[key]})
+                        prior=account
+                    account_payload={"account_deltas":deltas}
                 return {"operation": "append_prefix", "prefix_base": count,
-                        "bars": bars[count:], "accounts": accounts[count:],
+                        "bars": bars[count:], **account_payload,
                         **({"execution_passes": passes[count:]} if passes is not None else {}),
                         **({"execution_schedule": schedule[count:]} if schedule is not None else {}),
                         **({"request_updates": updates[count:]} if updates is not None else {}),
