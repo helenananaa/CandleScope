@@ -337,3 +337,28 @@ def test_display_does_not_read_or_rewrite_legacy_math_checkpoint_table(tmp_path)
     compute(path, History(rows), rows[-100:])
     with cache._connect() as conn:
         assert conn.execute("SELECT * FROM checkpoints").fetchall() == before
+
+
+@pytest.mark.parametrize("name", ["MACD", "VOL"])
+def test_gap_keeps_histogram_colors_for_the_entire_visible_window(tmp_path, name):
+    rows = [
+        replace(bar(i), open=bar(i).high if i % 2 else bar(i).low)
+        for i in range(1000) if not 700 <= i < 710
+    ]
+    history = History(rows, gaps=((START + 700 * STEP, START + 710 * STEP - 1),))
+    path = tmp_path / "gap-colors.db"
+    window = rows[600:900]
+    result = compute(path, history, window, name)
+    histogram = next(s for s in result["payload"]["series"] if s["type"] == "histogram")
+    colors = {p["time"]: p["color"] for p in histogram["style"]["colorData"]}
+    source = {r.open_time_ms // 1000: r for r in window}
+    expected = {}
+    for point in histogram["data"]:
+        if point["value"] is None:
+            continue
+        row = source[point["time"]]
+        up = row.close >= row.open if name == "VOL" else point["value"] >= 0
+        expected[point["time"]] = "#22c55e" if up else "#ef4444"
+    assert colors == expected
+    reopened = compute(path, history, window, name)
+    assert reopened["payload"] == result["payload"]

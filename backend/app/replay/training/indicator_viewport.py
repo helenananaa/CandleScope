@@ -164,10 +164,17 @@ class ViewportReplayIndicators:
             nonlocal instance
             if last_close is not None and at != last_close + 1:
                 outputs = instance._outputs
+                colors = {
+                    field: getattr(instance, field)
+                    for field in ("_hist_color_data", "_color_data")
+                    if hasattr(instance, field)
+                }
                 instance = new_indicator(name, params)
                 if keep_outputs:
                     instance.retain_outputs(len(rows))
                     instance._outputs = outputs
+                    for field, value in colors.items():
+                        setattr(instance, field, value)
 
         check_cancelled()
         deadline = monotonic() + self.max_prefix_seconds
