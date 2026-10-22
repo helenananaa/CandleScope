@@ -170,8 +170,11 @@ class DualClockSimulationKernel:
         finalize: bool = False,
         checkpoint_callback: Callable[[MarketEvent], None] | None = None,
         fill_callback: Callable[[MarketEvent, MarketEvent], list[dict]] | None = None,
+        tick_callback: Callable[[MarketEvent, MarketEvent], list[dict]] | None = None,
         close_callback=None,
     ) -> SimulationResult:
+        if tick_callback is not None and fill_callback is not None:
+            raise MarketDatasetError("tick and fill callbacks must use one strategy clock", code="FIDELITY_UNSUPPORTED")
         if self.process_orders_on_close and close_callback is None:
             raise MarketDatasetError("closing-tick handler is required", code="FIDELITY_UNSUPPORTED")
         lazy_curve = getenv("BACKTEST_LAZY_DUAL_CURVE_ENABLED", "1").strip() == "1"
@@ -198,10 +201,10 @@ class DualClockSimulationKernel:
                         intents = []
                     decision = _decision_record(
                         intents,
-                        sequence=(getattr(intents, "decision", None) or {}).get("sequence", bar.sequence) if fill_callback else bar.sequence,
+                        sequence=(getattr(intents, "decision", None) or {}).get("sequence", bar.sequence) if fill_callback or tick_callback else bar.sequence,
                         watermark_ms=bar.event_time_ms,
                     )
-                    if fill_callback is not None:
+                    if fill_callback is not None or tick_callback is not None:
                         decision.update(trigger="BAR_CLOSE", signal_sequence=bar.sequence)
                     if self.scale_stream_decisions:
                         self._decision_chain_hash = "sha256:" + sha256_hex(
@@ -318,6 +321,22 @@ class DualClockSimulationKernel:
             if self.execution.market_observer is not None:
                 self.execution.market_observer(trade)
             with_execution_reports(lambda: self.execution._match(trade), trade)
+            if tick_callback is not None:
+                # This observation sees all prior orders settled on the current
+                # print. Its new orders become eligible only on a later print.
+                forming = self.builder.forming_bar(trade.event_time_ms)
+                intents = tick_callback(trade, forming)
+                wire = getattr(intents, "decision", None) or {}
+                decision = _decision_record(intents, sequence=wire.get("sequence", forming.sequence),
+                    watermark_ms=trade.event_time_ms)
+                decision.update(trigger="REALTIME_TICK", signal_sequence=forming.sequence,
+                    source_sequence=trade.sequence)
+                if self.scale_stream_decisions:
+                    self._decision_chain_hash = "sha256:" + sha256_hex({"previous":self._decision_chain_hash,"decision":decision})
+                    self._decision_count += 1
+                else:
+                    self.decisions.append(decision)
+                self.execution._enqueue_many(intents, current_sequence=trade.sequence)
             sample_curve = (
                 self.equity_curve_mode == "UTC_DAILY_CLOSE_V1"
                 or self.execution_model_revision is None
