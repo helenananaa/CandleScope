@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { PluginSettingsPanel } from '../plugins/PluginCenter.js';
 import DataWorkbenchModal from '../data-workbench/DataWorkbenchModal.js';
 import { t } from '../../i18n/index.js';
@@ -9,6 +9,10 @@ import SettingsModalStyles from './SettingsModalStyles.js';
 import { buildSettingsPanelViewModel } from './settingsPanelViewModel.js';
 import { SETTINGS_CATEGORIES, resolveSettingsTab } from './settingsTabRegistry.js';
 import { useSettingsRuntime } from './useSettingsRuntime.js';
+import { useControlCommands } from '../app-control/useControlCommands.js';
+import { maintenanceCommands } from '../app-control/maintenanceCommands.js';
+import { command } from '../app-control/commandRegistry.js';
+import { bool, choice, empty, object } from '../app-control/commandSchema.js';
 import type { MouseEvent } from 'react';
 import type { PluginPlatformRuntime } from '../plugins/pluginPlatformTypes.js';
 import type { SettingsCategory } from './settingsTypes.js';
@@ -77,6 +81,17 @@ export default function SettingsModal({
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
     }, [isOpen, nestedOpen, onClose]);
+  // Instance identity allows several cells to open settings for the same symbol.
+  const controlId = useId();
+  useControlCommands(() => maintenanceCommands(controlId, settingsRuntime, backendFeaturesEnabled), isOpen);
+  useControlCommands(() => ({ id: `settings-panel:${controlId}`, title: "Settings categories and tools", context: () => ({ activeCategory, pluginCenterOpen, dataWorkbenchOpen }), snapshot: () => ({ activeCategory, allowedCategories, backendFeaturesEnabled, dataWorkbenchEnabled, pluginCenterOpen, dataWorkbenchOpen }), commands: [
+    command("category", "Select an available settings category.", object({ category: choice(["appearance", "network", "exchanges", "data", "plugins", "about"]) }), ({ category }) => {
+      if (!allowedCategories.includes(category) || (!backendFeaturesEnabled && category !== "appearance" && category !== "about")) throw new Error("CATEGORY_UNAVAILABLE");
+      if (category === "plugins" && plugins) setPluginCenterOpen(true); else setActiveCategory(category);
+    }),
+    command("dataWorkbench", "Open/close the data workbench.", object({ open: bool }), ({ open }) => setDataWorkbenchOpen(open), { available: () => dataWorkbenchEnabled && backendFeaturesEnabled }),
+    command("close", "Close settings.", empty, () => onClose()),
+  ] }), isOpen);
 
     if (!isOpen) return null;
 

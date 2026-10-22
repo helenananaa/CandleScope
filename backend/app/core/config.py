@@ -1032,7 +1032,7 @@ CORS_ORIGINS = [
 # ═══════════════════════════════════════════════════════════════
 
 PROXY_SETTINGS_PATH = DATA_DIR / "proxy_settings.json"
-_VALID_PROXY_MODES = {"system", "custom", "none"}
+_VALID_PROXY_MODES = {"system", "custom", "none", "pool"}
 
 
 def normalize_proxy_settings(
@@ -1053,9 +1053,11 @@ def normalize_proxy_settings(
 def load_proxy_settings() -> dict:
     """Load persisted proxy settings from disk.
 
-    Returns ``{"mode": "system", "custom_proxy": None}`` if no
-    settings file exists or the file is corrupt.
+    Missing or corrupt legacy settings use system mode. An identifiable pool
+    config with invalid routes stays in pool mode with no usable routes, so
+    startup cannot silently connect through the system proxy or directly.
     """
+    data = None
     if PROXY_SETTINGS_PATH.exists():
         try:
             with open(PROXY_SETTINGS_PATH, "r", encoding="utf-8") as f:
@@ -1065,18 +1067,25 @@ def load_proxy_settings() -> dict:
                     data.get("mode"),
                     data.get("custom_proxy"),
                 )
-                return {"mode": mode, "custom_proxy": custom_proxy}
+                from app.core.proxy_pool import normalize_proxy_pool
+                routes, strategy = normalize_proxy_pool(data.get("routes"), data.get("strategy", "failover"))
+                return {"mode": mode, "custom_proxy": custom_proxy, "routes": routes, "strategy": strategy}
         except Exception:
             logger.debug("Failed to load proxy settings from %s", PROXY_SETTINGS_PATH)
+            if isinstance(data, dict) and data.get("mode") == "pool":
+                return {"mode": "pool", "custom_proxy": None, "routes": [], "strategy": "failover"}
     return {"mode": "system", "custom_proxy": None}
 
 
-def save_proxy_settings(mode: str, custom_proxy: str | None) -> None:
+def save_proxy_settings(mode: str, custom_proxy: str | None, *, routes: list[dict] | None = None,
+                        strategy: str = "failover") -> None:
     """Persist proxy settings to disk so they survive restarts."""
     mode, custom_proxy = normalize_proxy_settings(mode, custom_proxy)
+    from app.core.proxy_pool import normalize_proxy_pool
+    routes, strategy = normalize_proxy_pool(routes, strategy)
     PROXY_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(PROXY_SETTINGS_PATH, "w", encoding="utf-8") as f:
-        json.dump({"mode": mode, "custom_proxy": custom_proxy}, f)
+        json.dump({"mode": mode, "custom_proxy": custom_proxy, "routes": routes, "strategy": strategy}, f)
     logger.info("Proxy settings saved: mode=%s", mode)
 
 
@@ -1137,6 +1146,11 @@ def get_effective_proxy() -> str | None:
         return None
     if mode == "custom":
         return custom_proxy if custom_proxy else None
+    if mode == "pool":
+        routes = [route for route in settings.get("routes", []) if route.get("enabled", True)]
+        if not routes:
+            raise ValueError("no enabled proxy route")
+        return routes[0]["url"]
     # mode == "system"
     return _get_system_proxy()
 

@@ -21,6 +21,10 @@ import type { ChartSession } from "../chart-session/chartSessionTypes.js";
 import { createReplayChartRuntimePool, useSharedReplayChartRuntime } from "./replayChartRuntimePool.js";
 import { useReplayViewerRuntime } from "./useReplayViewerRuntime.js";
 import { useTrainingHub } from "./useTrainingHub.js";
+import { useControlCommands, usePageControlBridge } from "../app-control/useControlCommands.js";
+import { replayCommands } from "../app-control/replayCommands.js";
+import { settingsCommands } from "../app-control/settingsCommands.js";
+import { trainingHubCommands } from "../app-control/trainingHubCommands.js";
 
 export { default as ReplayInitialMarketPicker } from "./components/ReplayInitialMarketPicker.js";
 
@@ -34,6 +38,7 @@ const recordReplayCommit: ProfilerOnRenderCallback = (id, phase, actualDuration,
 
 function ReplayTrainingHubApp() {
   const runtime = useTrainingHub();
+  useControlCommands(() => trainingHubCommands(runtime));
   return <AppPageShell source="replay"><TrainingHubDialog runtime={runtime} /></AppPageShell>;
 }
 
@@ -81,6 +86,7 @@ function ReplayInitializedRun({
   const [pool] = useState(() => createReplayChartRuntimePool(getReplayControllerClientInstanceId(runId)));
   const replay = useSharedReplayChartRuntime(pool, sessionId, true);
   const viewer = useReplayViewerRuntime(replay, { onSelectedSessionChange, controllerOnly: true });
+  useControlCommands(() => replayCommands(runId, viewer));
   const [initialSession, setInitialSession] = useState<ChartSession | null>(null);
   useEffect(() => {
     const config = replay.store.sessionConfig;
@@ -156,6 +162,8 @@ function ReplayTrainingRunApp({
 export default function ReplayApp({ entry }: ReplayAppProps) {
   useLocale();
   const chartSettingsRuntime = useChartSettingsRuntime();
+  usePageControlBridge();
+  useControlCommands(() => settingsCommands(chartSettingsRuntime));
   return (
     <PageSettingsContext.Provider value={chartSettingsRuntime}>
       <ReplayEntrySurface entry={entry} chartSettingsRuntime={chartSettingsRuntime} />

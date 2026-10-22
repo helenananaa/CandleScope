@@ -114,6 +114,7 @@ import {
   configureChartWorkspaceCellsCandidate,
   type ChartWorkspaceCellConfiguration,
 } from "./chartWorkspaceBulkUpdate.js";
+import { applyControlWorkspaceCommand, type ControlWorkspaceCommand, type ControlWorkspaceReceipt } from "./chartWorkspaceControl.js";
 
 export type ChartWorkspaceSaveState = "loading" | "saving" | "saved" | "error";
 
@@ -184,6 +185,7 @@ export interface ChartWorkspaceRuntime {
       attachment: ChartStrategyAttachmentRecord | null,
     ): void;
     configureCells(configurations: readonly ChartWorkspaceCellConfiguration[]): void;
+    applyControlCommand(command: ControlWorkspaceCommand): void;
     createWindow(): void;
     closeWindow(windowId: ChartWindowId): void;
     updateWindowPlacement(
@@ -192,6 +194,7 @@ export interface ChartWorkspaceRuntime {
     ): void;
   };
   status: {
+    controlReceipt: ControlWorkspaceReceipt | null;
     saveState: ChartWorkspaceSaveState;
     persistenceMode: ChartWorkspacePersistenceMode | null;
     lastSavedAt: number | null;
@@ -216,6 +219,7 @@ interface PersistenceStatus {
 }
 
 interface WorkspaceRuntimeState {
+  controlReceipt?: ControlWorkspaceReceipt;
   library: ChartWorkspaceLibrarySnapshot;
   layoutHistoryByWorkspace: Partial<Record<ChartWorkspaceId, ChartWorkspaceLayoutHistory>>;
 }
@@ -990,6 +994,38 @@ export function useChartWorkspaceRuntime(
     ));
   }, [updateActiveDocument]);
 
+  const applyControlCommand = useCallback((command: ControlWorkspaceCommand) => {
+    setRuntimeState((current) => {
+      const workspace = activeWorkspace(current.library);
+      try {
+        if (workspace.id !== command.workspaceId) throw new Error("WORKSPACE_CHANGED");
+        if (!ready) throw new Error("WORKSPACE_NOT_READY");
+        if ((services.windowId ?? workspace.document.activeWindowId) !== command.windowId) {
+          throw new Error("WINDOW_UNAVAILABLE");
+        }
+        const edit = applyControlWorkspaceCommand(workspace.document, command, services.editOptions);
+        const ids = visibleCellIds(chartWorkspaceWindow(edit.document, command.windowId).layoutTree);
+        const receipt: ControlWorkspaceReceipt = { requestId: command.requestId, ok: true,
+          revision: edit.document.revision, cellIds: command.charts.map((chart, index) => chart.cellId ?? ids[index]!) };
+        if (edit.document === workspace.document) return { ...current, controlReceipt: receipt };
+        const history = current.layoutHistoryByWorkspace[workspace.id] ?? createEmptyChartWorkspaceLayoutHistory();
+        return {
+          ...current,
+          controlReceipt: receipt,
+          library: { ...current.library, workspaces: current.library.workspaces.map((item) => item.id === workspace.id
+            ? { ...item, document: edit.document, updatedAt: services.now() } : item) },
+          layoutHistoryByWorkspace: command.layout ? { ...current.layoutHistoryByWorkspace,
+            [workspace.id]: recordChartWorkspaceLayoutEdit(history, workspace.document, edit, command.windowId) }
+            : current.layoutHistoryByWorkspace,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return { ...current, controlReceipt: { requestId: command.requestId, ok: false,
+          revision: workspace.document.revision, cellIds: [], code: message, message } };
+      }
+    });
+  }, [ready, services]);
+
   const createWindow = useCallback(() => {
     if (!CHART_WORKSPACE_FEATURE_FLAGS.multiWindowEnabled) return;
     updateActiveDocument((current) => createChartWorkspaceWindowCandidate(current, {
@@ -1141,10 +1177,11 @@ export function useChartWorkspaceRuntime(
       updateCellNativeStrategies,
       updateCellStrategyTesterMode,
       configureCells,
+      applyControlCommand,
       createWindow,
       closeWindow,
       updateWindowPlacement,
     },
-    status: persistence,
+    status: { ...persistence, controlReceipt: runtimeState.controlReceipt ?? null },
   };
 }

@@ -125,7 +125,11 @@ def serve(host: str, port: int) -> None:
             if sock is not None:
                 sock.close()
             raise
-    server = uvicorn.Server(uvicorn.Config("app.main:app", host=host, port=port))
+    # Keep request/transport drain within the desktop host's 15 s stop budget.
+    # An unbounded listener wait (observed on Windows after clients disconnect)
+    # otherwise prevents lifespan cleanup from running before the host kills us.
+    server = uvicorn.Server(uvicorn.Config("app.main:app", host=host, port=port,
+                                         timeout_graceful_shutdown=5))
     threading.Thread(target=watch_parent, args=(server,), name="desktop-parent-pipe", daemon=True).start()
 
     async def run() -> None:

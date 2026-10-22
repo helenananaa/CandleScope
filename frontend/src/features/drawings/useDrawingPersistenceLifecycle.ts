@@ -908,6 +908,7 @@ export function useDrawingPersistenceLifecycle({
   ): () => void;
   subscribeVisibleSceneExactPaint(listener: (ack: DrawingScenePaintAck) => void): () => void;
   prepareUserMutationScope(): boolean;
+  readUserMutationScopeState(): DrawingMutationScopeState;
   prepareSurfaceDispose(): boolean;
   hitTestScene(x: number, y: number): DrawingDisplayHitResult | null;
   getSceneScreenBox(id: string): ScreenBox | null;
@@ -2943,6 +2944,7 @@ export function useDrawingPersistenceLifecycle({
     persistDrawings,
     prepareSurfaceDispose,
     prepareUserMutationScope,
+    readUserMutationScopeState,
     hitTestScene,
     getSceneScreenBox,
     getSceneScreenHandles,

@@ -7,6 +7,7 @@ import type {
   DrawingStylePatch,
 } from "../features/drawings/drawingInteractionController.js";
 import type { SurfaceViewportSnapshot } from "../features/chart-representation/chartRepresentationTypes.js";
+import type { DrawingEngineApi } from "../features/drawings/DrawingEngineHost.js";
 
 export interface ChartSurfaceVisibleRange {
   barSpacing?: number;
@@ -22,6 +23,7 @@ export interface ChartSurfaceLinkedTimeRange {
 }
 
 export interface ChartSurfaceHandle {
+  getDrawingPaneApis?(): ReadonlyMap<string, DrawingEngineApi>;
   getVisibleRange(): ChartSurfaceVisibleRange | null;
   setLinkedCrosshairTime(time: number | null): boolean;
   setLinkedVisibleTimeAnchor(time: number): boolean;
@@ -39,6 +41,7 @@ export interface ChartSurfaceHandle {
 
 export function useChartSurfaceRuntime() {
   const ref = useRef<ChartSurfaceHandle | null>(null);
+  const getDrawingPaneApis = useCallback(() => ref.current?.getDrawingPaneApis?.() ?? new Map<string, DrawingEngineApi>(), []);
 
   const getVisibleRange = useCallback(() => (
     callChartSurface(ref, "getVisibleRange", null)
@@ -98,6 +101,7 @@ export function useChartSurfaceRuntime() {
   ), []);
 
   const actions = useMemo(() => ({
+    getDrawingPaneApis,
     getVisibleRange,
     setLinkedCrosshairTime,
     setLinkedVisibleTimeAnchor,
@@ -112,6 +116,7 @@ export function useChartSurfaceRuntime() {
     updateSelectedDrawingStyle,
     getExportSnapshot,
   }), [
+    getDrawingPaneApis,
     captureViewportTransfer,
     clearAllDrawings,
     getExportSnapshot,

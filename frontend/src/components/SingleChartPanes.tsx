@@ -22,6 +22,7 @@ import { readablePaneMinimums, constrainReadablePaneHeights } from "./paneReadab
  * series shares the same time scale.
  */
 import { forwardRef, memo, useCallback, useEffect, useEffectEvent, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { getExtensionState, subscribeExtensions } from "../features/extensions/state.js";
 import type {
   ComponentType,
   MutableRefObject,
@@ -37,6 +38,7 @@ import type { DrawingFrameSnapshot } from "../chart-adapter/drawingFrameSnapshot
 import {
   applyChartPaneAppearance,
   buildChartPaneOptions,
+  getPaneThemeColors,
   buildCrosshairOptions,
 } from "../chart-adapter/chartPaneLifecycle";
 import {
@@ -871,6 +873,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   onPriceScaleModeChange,
   onAddAlertAtPrice = null,
 }: SingleChartPanesProps, ref) {
+  const extensionTheme = useSyncExternalStore(subscribeExtensions, () => getExtensionState().theme, () => null);
   const locale = useLocale();
   const drawingFontMetricRevision = useDrawingFontMetricRevision();
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -2551,7 +2554,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     mainSeriesReferenceRef.current = { series, signature };
   }, []);
 
+  const readSurfaceAppearance = useEffectEvent(() => ({ theme, customBg, timezone, upColor, downColor }));
   useEffect(() => {
+    const { theme, customBg, timezone, upColor, downColor } = readSurfaceAppearance();
     const container = containerRef.current;
     if (!container) return undefined;
     linkedViewportReadyStateRef.current = false;
@@ -3301,7 +3306,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       }
     });
     return () => cancelAnimationFrame(frameId);
-  }, [chartAdapter, customBg, dataMeta?.optimistic, dataMeta?.targetSeriesKey, interval, locale, notifyDrawingFrameInvalidation, theme, tickMarkFormatter, tickMarkMaxCharacterLength, timeFormatter, timezone]);
+  }, [chartAdapter, customBg, dataMeta?.optimistic, dataMeta?.targetSeriesKey, extensionTheme, interval, locale, notifyDrawingFrameInvalidation, theme, tickMarkFormatter, tickMarkMaxCharacterLength, timeFormatter, timezone]);
 
   // When the loaded window stops short of the newest bars, its last bar is not the
   // current price, so the axis price tag and price line would show a stale value.
@@ -4642,7 +4647,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart || !indicatorDatasetOwned) return;
-    const bgColor = theme === "light" ? "#ffffff" : (theme === "custom" ? customBg : "#0a0e17");
+    const bgColor = getPaneThemeColors({ theme, customBg }).bgColor;
     const activePaneIds = new Set(paneDescriptors.map((pane) => pane.id));
 
     for (const pane of paneDescriptors) {
@@ -4703,7 +4708,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       clearPaneAuxiliaryRenderState(chart, paneId, state);
       paneRenderStateRef.current.delete(paneId);
     }
-  }, [customBg, indicatorDatasetOwned, paneDescriptors, seriesReady, theme]);
+  }, [customBg, extensionTheme, indicatorDatasetOwned, paneDescriptors, seriesReady, theme]);
 
   useEffect(() => {
     // Main data and indicators commit in separate React effects. Removing old
@@ -5120,6 +5125,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   }, [onSelectedDrawingChange]);
 
   useImperativeHandle(ref, () => ({
+    getDrawingPaneApis: () => new Map(drawingApisByPaneRef.current),
     getVisibleRange: captureVisibleRange,
     setLinkedCrosshairTime,
     setLinkedVisibleTimeAnchor,

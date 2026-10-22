@@ -6,6 +6,7 @@
  */
 
 import type * as Monaco from "monaco-editor";
+import { bindExtensionEditorTheme } from "./extensionTheme.js";
 
 /**
  * Define and register the Pyne dark theme on a Monaco instance.
@@ -100,6 +101,7 @@ export function registerPyneTheme(monaco: typeof Monaco): void {
     },
   };
   monaco.editor.defineTheme("pyne-dark", theme);
+  bindExtensionEditorTheme(monaco);
 }
 
 /**

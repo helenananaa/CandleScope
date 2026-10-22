@@ -97,6 +97,8 @@ export function useSettingsRuntime({
   const actions: SettingsRuntimeActions = {
       proxy: {
         onProxyModeChange: proxyRuntime.handleProxyModeChange,
+        onProxyRoutesChange: proxyRuntime.handleProxyRoutesChange,
+        onProxyStrategyChange: proxyRuntime.handleProxyStrategyChange,
         onCustomProxyChange: proxyRuntime.handleCustomProxyChange,
         onProxyTest: proxyRuntime.handleProxyTest,
         onProxySave: proxyRuntime.handleProxySave,

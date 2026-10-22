@@ -1,5 +1,8 @@
 import { describeError } from "../../i18n/serverErrors.js";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
+import { useControlCommands } from "../app-control/useControlCommands.js";
+import { command } from "../app-control/commandRegistry.js";
+import { array, choice, empty, nullable, number, object, text } from "../app-control/commandSchema.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import {
   canStartDownload,
@@ -80,7 +83,7 @@ export function ManualHistoryDownloadPanel({
     : [];
   const tone = parentStateTone(jobState);
   const hasEnd = formHasEndTime(form);
-  const text = (key: Parameters<typeof manualHistoryText>[1], vars?: Readonly<Record<string, string>>) =>
+  const copyText = (key: Parameters<typeof manualHistoryText>[1], vars?: Readonly<Record<string, string>>) =>
     manualHistoryText(locale, key, vars);
 
   const summary = useMemo(() => {
@@ -151,7 +154,7 @@ export function ManualHistoryDownloadPanel({
   async function onPlan() {
     setError("");
     if (form.startMs == null) {
-      setError(text("startRequired"));
+      setError(copyText("startRequired"));
       return;
     }
     try {
@@ -208,11 +211,11 @@ export function ManualHistoryDownloadPanel({
     setArchiveResult((current) => ({ ...current, [id]: "" }));
     try {
       const result = await archiveManualHistoryJob(id);
-      setArchiveResult((current) => ({ ...current, [id]: text("archiveSucceeded", {
+      setArchiveResult((current) => ({ ...current, [id]: copyText("archiveSucceeded", {
         rows: String(result.rows ?? 0),
       }) }));
     } catch (reason) {
-      setArchiveResult((current) => ({ ...current, [id]: text("archiveFailed", {
+      setArchiveResult((current) => ({ ...current, [id]: copyText("archiveFailed", {
         reason: reason instanceof Error ? describeError(reason, reason.message) : String(reason),
       }) }));
     } finally {
@@ -223,7 +226,7 @@ export function ManualHistoryDownloadPanel({
   function onAddCustomInterval() {
     const normalized = normalizeCustomInterval(customIntervalDraft);
     if (!normalized) {
-      setError(text("customIntervalInvalid"));
+      setError(copyText("customIntervalInvalid"));
       return;
     }
     setError("");
@@ -251,10 +254,22 @@ export function ManualHistoryDownloadPanel({
     }
   }
 
+  const controlId = useId();
+  useControlCommands(() => ({ id: `manual-history:${controlId}`, title: "Plan-first market history downloads", context: () => ({ form, plan, jobId, jobState, archivingJob, flagEnabled, archiveEnabled }),
+    snapshot: () => ({ form, plan, job, recentJobs, collections, error, flagEnabled, archiveEnabled, archivingJob, archiveResult, startEnabled }), commands: [
+      command("form", "Set a start-only download draft and invalidate its previous plan.", object({ exchange: text(64), marketType: text(32), symbols: array(text(96), 128), intervals: array(text(32), 128), startMs: nullable(number(0, 1e15, true)) }), (input) => { const normalized = input.intervals.map(normalizeCustomInterval); if (normalized.some((value) => !value) || new Set(input.symbols).size !== input.symbols.length || new Set(normalized).size !== normalized.length) throw new Error("DOWNLOAD_FORM_INVALID"); const symbols = parseSymbolList(input.symbols.join(",")); if (symbols.length !== input.symbols.length) throw new Error("DOWNLOAD_SYMBOL_INVALID"); setForm({ ...input, symbols, intervals: normalized as string[] }); setSymbolDraft(symbols.join(", ")); setPlan(null); }, { available: () => flagEnabled }),
+      command("plan", "Inspect the download plan before starting.", empty, onPlan, { available: () => flagEnabled && isPlanFirstReady(form) }),
+      command("start", "Start the currently inspected plan using its domain plan hash.", empty, onStart, { available: () => startEnabled }),
+      command("cancel", "Cancel the active download job.", empty, onCancel, { available: () => !!jobId && ACTIVE_JOB_STATES.has(jobState), interrupt: true }),
+      command("refresh", "Refresh download records and protected collections.", empty, async () => { const [jobs, nextCollections] = await Promise.all([listManualHistoryJobs(), listManualHistoryCollections()]); setRecentJobs(jobs); setCollections(nextCollections); if (jobId) { const payload = await getManualHistoryJob(jobId); setJob((payload.job || payload) as Record<string, unknown>); } }),
+      command("selectJob", "Inspect a listed download job.", object({ jobId: text(128) }), async ({ jobId }) => { if (!recentJobs.some((item) => item.job_id === jobId)) throw new Error("JOB_UNAVAILABLE"); const payload = await getManualHistoryJob(jobId); setJob((payload.job || payload) as Record<string, unknown>); }),
+      command("archive", "Import a completed eligible job into replay storage.", object({ jobId: text(128) }), ({ jobId }) => { const item = recentJobs.find((item) => item.job_id === jobId); if (!item || !isGreenCompleteState(String(item.state))) throw new Error("JOB_NOT_COMPLETE"); return onArchive(jobId); }, { available: () => archiveEnabled && !archivingJob }),
+      command("releaseCollection", "Release a listed collection's protection with explicit confirmation.", object({ collectionId: text(128), confirmed: choice([true]) }), ({ collectionId }) => { const item = collections.find((item) => item.collection_id === collectionId); if (!item || item.status === "RELEASED") throw new Error("COLLECTION_UNAVAILABLE"); return onReleaseCollection(collectionId); }),
+    ] }));
   if (!flagEnabled) {
     return (
       <section className="dw-manual dw-manual-disabled" data-testid="manual-history-download-disabled">
-        {text("disabled")}
+        {copyText("disabled")}
       </section>
     );
   }
@@ -262,23 +277,23 @@ export function ManualHistoryDownloadPanel({
   const statusMessage = !jobState
     ? null
     : isGreenCompleteState(jobState)
-      ? text("succeeded")
+      ? copyText("succeeded")
       : jobState === "PARTIAL"
-        ? text("partialNotComplete")
+        ? copyText("partialNotComplete")
         : jobState === "BLOCKED_STORAGE"
-          ? text("blocked")
+          ? copyText("blocked")
           : jobState === "FAILED"
-            ? text("failed")
-            : text("jobState", { state: jobState });
+            ? copyText("failed")
+            : copyText("jobState", { state: jobState });
 
   return (
     <section className="dw-manual" data-testid="manual-history-download-panel">
-      <h3>{text("title")}</h3>
-      <p>{text("hint")}</p>
-      <p>{text("protected")}</p>
+      <h3>{copyText("title")}</h3>
+      <p>{copyText("hint")}</p>
+      <p>{copyText("protected")}</p>
       <p data-testid="manual-history-target-count">{summary}</p>
       <label>
-        {text("exchange")}
+        {copyText("exchange")}
         <select
           value={form.exchange}
           onChange={(event) => {
@@ -286,12 +301,12 @@ export function ManualHistoryDownloadPanel({
             setPlan(null);
           }}
         >
-          <option value="binance">{text("binance")}</option>
-          <option value="okx">{text("okx")}</option>
+          <option value="binance">{copyText("binance")}</option>
+          <option value="okx">{copyText("okx")}</option>
         </select>
       </label>
       <label>
-        {text("marketType")}
+        {copyText("marketType")}
         <select
           value={form.marketType}
           onChange={(event) => {
@@ -299,12 +314,12 @@ export function ManualHistoryDownloadPanel({
             setPlan(null);
           }}
         >
-          <option value="spot">{text("spot")}</option>
-          <option value="futures">{text("futures")}</option>
+          <option value="spot">{copyText("spot")}</option>
+          <option value="futures">{copyText("futures")}</option>
         </select>
       </label>
       <label>
-        {text("symbols")}
+        {copyText("symbols")}
         <textarea
           data-testid="manual-history-symbols"
           value={symbolDraft}
@@ -317,7 +332,7 @@ export function ManualHistoryDownloadPanel({
         />
       </label>
       <fieldset data-testid="manual-history-intervals">
-        <legend>{text("intervals")}</legend>
+        <legend>{copyText("intervals")}</legend>
         {MANUAL_HISTORY_INTERVAL_CHOICES.map((interval) => (
           <label key={interval}>
             <input
@@ -356,7 +371,7 @@ export function ManualHistoryDownloadPanel({
           ))}
       </fieldset>
       <label>
-        {text("customInterval")}
+        {copyText("customInterval")}
         <input
           data-testid="manual-history-custom-interval"
           value={customIntervalDraft}
@@ -369,10 +384,10 @@ export function ManualHistoryDownloadPanel({
         data-testid="manual-history-add-custom-interval"
         onClick={onAddCustomInterval}
       >
-        {text("addCustomInterval")}
+        {copyText("addCustomInterval")}
       </button>
       <label>
-        {text("startTime")}
+        {copyText("startTime")}
         <input
           data-testid="manual-history-start"
           type="datetime-local"
@@ -386,9 +401,9 @@ export function ManualHistoryDownloadPanel({
           }}
         />
       </label>
-      {hasEnd ? <p>{text("endNotAllowed")}</p> : null}
+      {hasEnd ? <p>{copyText("endNotAllowed")}</p> : null}
       <button className="dw-button dw-button-secondary" type="button" data-testid="manual-history-plan" onClick={() => void onPlan()}>
-        {text("previewPlan")}
+        {copyText("previewPlan")}
       </button>
       <button
         type="button"
@@ -397,7 +412,7 @@ export function ManualHistoryDownloadPanel({
         disabled={!startEnabled}
         onClick={() => void onStart()}
       >
-        {text("startDownload")}
+        {copyText("startDownload")}
       </button>
       <button
         type="button"
@@ -406,18 +421,18 @@ export function ManualHistoryDownloadPanel({
         disabled={!jobId}
         onClick={() => void onCancel()}
       >
-        {text("cancel")}
+        {copyText("cancel")}
       </button>
-      {ACTIVE_JOB_STATES.has(jobState) ? <p data-testid="manual-history-polling">{text("polling")}</p> : null}
+      {ACTIVE_JOB_STATES.has(jobState) ? <p data-testid="manual-history-polling">{copyText("polling")}</p> : null}
       {error ? <p data-testid="manual-history-error">{error}</p> : null}
       {plan ? (
         <div data-testid="manual-history-plan-summary">
-          <h4>{text("planSummary")}</h4>
-          <p>{text("planCanStart", { value: plan.can_start === true ? text("yes") : text("no") })}</p>
+          <h4>{copyText("planSummary")}</h4>
+          <p>{copyText("planCanStart", { value: plan.can_start === true ? copyText("yes") : copyText("no") })}</p>
           {planStorage ? (
             <p>
-              {text("estimatedStorage", {
-                value: String(planStorage.estimated_db_growth_bytes ?? text("unknown")),
+              {copyText("estimatedStorage", {
+                value: String(planStorage.estimated_db_growth_bytes ?? copyText("unknown")),
               })}
             </p>
           ) : null}
@@ -428,7 +443,7 @@ export function ManualHistoryDownloadPanel({
                 {target.source_interval !== target.canonical_interval
                   ? ` ← ${String(target.source_interval)}`
                   : ""}
-                {` · ${text("effectiveStart")}: ${String(target.effective_start_ms ?? text("unknown"))}`}
+                {` · ${copyText("effectiveStart")}: ${String(target.effective_start_ms ?? copyText("unknown"))}`}
               </li>
             ))}
           </ul>
@@ -444,7 +459,7 @@ export function ManualHistoryDownloadPanel({
               {jobTargets.map((target) => (
                 <li key={`${String(target.symbol)}:${String(target.canonical_interval)}`}>
                   {String(target.symbol)} · {String(target.canonical_interval)} · {String(target.state)}
-                  {` · ${text("sealedEnd")}: ${String(target.sealed_end_open_ms ?? text("unknown"))}`}
+                  {` · ${copyText("sealedEnd")}: ${String(target.sealed_end_open_ms ?? copyText("unknown"))}`}
                 </li>
               ))}
             </ul>
@@ -452,10 +467,10 @@ export function ManualHistoryDownloadPanel({
         </div>
       ) : null}
       <div data-testid="manual-history-recent-jobs">
-        <h4>{text("recentJobs")}</h4>
-        <p>{text("archiveHint")}</p>
-        {!archiveEnabled ? <p>{text("archiveUnavailable")}</p> : null}
-        {recentJobs.length === 0 ? <p>{text("none")}</p> : (
+        <h4>{copyText("recentJobs")}</h4>
+        <p>{copyText("archiveHint")}</p>
+        {!archiveEnabled ? <p>{copyText("archiveUnavailable")}</p> : null}
+        {recentJobs.length === 0 ? <p>{copyText("none")}</p> : (
           <ul>
             {recentJobs.map((item) => {
               const collection = collections.find((entry) => entry.collection_id === item.collection_id);
@@ -471,7 +486,7 @@ export function ManualHistoryDownloadPanel({
                   <button type="button" className="dw-button dw-button-secondary"
                     disabled={!archiveEnabled || Boolean(archivingJob)}
                     onClick={() => void onArchive(String(item.job_id))}>
-                    {archivingJob === item.job_id ? text("archiving") : text("archiveAction")}
+                    {archivingJob === item.job_id ? copyText("archiving") : copyText("archiveAction")}
                   </button>
                 ) : null}
                 {archiveResult[String(item.job_id)] ? (
@@ -484,8 +499,8 @@ export function ManualHistoryDownloadPanel({
         )}
       </div>
       <div data-testid="manual-history-collections">
-        <h4>{text("protectedCollections")}</h4>
-        {collections.length === 0 ? <p>{text("none")}</p> : (
+        <h4>{copyText("protectedCollections")}</h4>
+        {collections.length === 0 ? <p>{copyText("none")}</p> : (
           <ul>
             {collections.map((item) => {
               const collectionId = String(item.collection_id || "");
@@ -506,7 +521,7 @@ export function ManualHistoryDownloadPanel({
                     disabled={released}
                     onClick={() => void onReleaseCollection(collectionId)}
                   >
-                    {released ? text("released") : text("releaseProtection")}
+                    {released ? copyText("released") : copyText("releaseProtection")}
                   </button>
                 </li>
               );

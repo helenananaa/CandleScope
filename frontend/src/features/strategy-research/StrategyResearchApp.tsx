@@ -118,6 +118,12 @@ function dispatchImportedSource(
   dispatch({ type: "source/select", source: next });
 }
 
+import { useControlCommands, usePageControlBridge } from "../app-control/useControlCommands.js";
+import { settingsCommands } from "../app-control/settingsCommands.js";
+import { libraryCommands } from "../app-control/libraryCommands.js";
+import { command } from "../app-control/commandRegistry.js";
+import { bool, object, text } from "../app-control/commandSchema.js";
+
 export default function StrategyResearchApp({
   intent,
   libraryEnabled = RESEARCH_DATA_LIBRARY_ENABLED,
@@ -129,10 +135,14 @@ export default function StrategyResearchApp({
   const availability = useNativeAvailability();
   const [selectedNativeMode, setNativeMode] = useState<boolean | null>(["advanced", "deep-link", "handoff"].includes(intent.kind) ? false : null);
   const nativeMode = selectedNativeMode ?? availability === "available";
+  const [projectRestoreRevision, setProjectRestoreRevision] = useState(0);
   const [nativeRun, setNativeRun] = useState<import("../backtest/native/nativeBacktestApi.js").NativeRun | null>(null);
   const pageExportRef = useRef<HTMLDivElement | null>(null);
   const { settings, setSettings, resolvedTheme } = useChartSettingsRuntime();
   const library = useResearchDataLibrary();
+  usePageControlBridge();
+  useControlCommands(() => settingsCommands({ settings, setSettings, resolvedTheme }, "strategy-settings"));
+  useControlCommands(() => libraryCommands(library));
   const handoff = useMemo(() => intent.kind === "handoff" ? readResearchHandoff(intent.id) : null, [intent]);
   const [runtime] = useState(() => {
     const created = new StrategyResearchRuntime({
@@ -246,11 +256,22 @@ export default function StrategyResearchApp({
     importedManifest,
     (message) => library.setError(message),
   );
+  useControlCommands(() => ({ id: "research", title: "Strategy research source and mode",
+    context: () => ({ source: state.source.source, nativeMode, selectedInterval }),
+    snapshot: () => ({ state, nativeMode, selectedInterval, hostReady, runtimeMode: runtime.runtimeMode }), commands: [
+      command("selectDataset", "Bind the research source to a current dataset through the existing drawer action.", object({ datasetId: text(128) }), ({ datasetId }) => {
+        if (!library.datasets.some((item) => item.dataset_id === datasetId)) throw new Error("DATASET_UNAVAILABLE");
+        library.setSelectedId(datasetId); onSelectDataset(datasetId);
+      }),
+      command("library", "Open/close the research data drawer.", object({ visible: bool }), ({ visible }) => dispatch({ type: "source/libraryOpen", open: visible })),
+      command("nativeMode", "Switch between native strategies and the host strategy panel.", object({ native: bool }), ({ native }) => setNativeMode(native)),
+      command("interval", "Select an imported dataset display interval.", object({ interval: text(24) }), ({ interval }) => handleIntervalSelect(interval), { available: () => importedManifest !== null }),
+    ] }));
 
-  const analysisStore = useMemo(() => importedManifest === null ? null : new LocalAnalysisEventStore({
+  const analysisStore = useMemo(() => { void projectRestoreRevision; return importedManifest === null ? null : new LocalAnalysisEventStore({
     datasetId: importedManifest.dataset_id,
     dataEpoch: importedManifest.data_epoch,
-  }), [importedManifest]);
+  }); }, [importedManifest, projectRestoreRevision]);
   const subscribeAnalysis = useCallback((listener: () => void) => (
     analysisStore?.subscribe(listener) ?? (() => undefined)
   ), [analysisStore]);
@@ -383,6 +404,11 @@ export default function StrategyResearchApp({
     });
   }, [researchRun.result, researchRun.session, source, state.script.draftId, state.script.configuration]);
 
+  useControlCommands(() => ({ id: "research-panels", title: "Strategy research panels", context: () => ({ chartUiScope, settingsOpen, indicatorPanel, historyOpen }), snapshot: () => ({ settingsOpen, indicatorPanel, historyOpen, advancedError }), commands: [
+    command("settings", "Open/close research settings.", object({ open: bool }), ({ open }) => setSettingsOpen(open)),
+    command("indicators", "Open/close the indicator catalog for the selected chart scope.", object({ open: bool }), ({ open }) => setIndicatorPanel({ scope: chartUiScope, open })),
+    command("history", "Open/close strategy run history.", object({ open: bool }), ({ open }) => setHistoryOpen(open)),
+  ] }));
   const drawer = (
     <StrategyResearchDrawerBoundary
       fallback={<p className="strategy-research-error" role="alert">{t("strategy.drawerFailed")}</p>}
@@ -400,6 +426,7 @@ export default function StrategyResearchApp({
         onSelectDataset={onSelectDataset}
         onRevisionActivated={handleRevisionActivated}
         onSettingsImported={setSettings}
+        onProjectRestored={(manifest) => { dispatchImportedSource(dispatch, runtime.state.source.source, manifest); setProjectRestoreRevision((revision) => revision + 1); }}
         onImport={async (input) => {
           const dataset = await library.handleImport(input);
           if (dataset) {
@@ -617,7 +644,7 @@ export default function StrategyResearchApp({
     );
     return (
       <StrategyResearchImportedWorkspace
-        key={importedManifest.data_epoch}
+        key={`${importedManifest.dataset_id}:${importedManifest.data_epoch}:${projectRestoreRevision}`}
         manifest={importedManifest}
         interval={selectedInterval}
         indicatorPresets={library.indicatorPresets}

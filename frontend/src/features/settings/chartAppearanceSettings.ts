@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { getExtensionState, subscribeExtensions } from "../extensions/state.js";
 import {
   DEFAULT_LOCALE,
   setLocaleAsync,
@@ -226,6 +227,7 @@ export interface ChartSettingsRuntime {
 }
 
 export function useChartSettingsRuntime(): ChartSettingsRuntime {
+  const extension = useSyncExternalStore(subscribeExtensions, getExtensionState, getExtensionState);
   const [settings, updateSettings] = useState<ChartSettings>(loadSettings);
   const previousLocale = useRef(settings.locale);
   const persistRequested = useRef(false);
@@ -234,7 +236,7 @@ export function useChartSettingsRuntime(): ChartSettingsRuntime {
     updateSettings(action);
   }, []);
   const [systemTheme, setSystemTheme] = useState(getSystemTheme);
-  const resolvedTheme = settings.theme === "system" ? systemTheme : settings.theme;
+  const resolvedTheme = extension.theme?.base ?? (settings.theme === "system" ? systemTheme : settings.theme);
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return undefined;
@@ -299,5 +301,11 @@ export function useChartSettingsRuntime(): ChartSettingsRuntime {
     });
   }, [settings.locale]);
 
-  return { settings, setSettings, resolvedTheme };
+  const tokens = extension.theme?.tokens;
+  return { settings: tokens ? {
+    ...settings,
+    customBg: tokens["bg-primary"] ?? settings.customBg,
+    upColor: tokens["candle-up"] ?? settings.upColor,
+    downColor: tokens["candle-down"] ?? settings.downColor,
+  } : settings, setSettings, resolvedTheme };
 }

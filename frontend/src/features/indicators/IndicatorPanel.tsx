@@ -8,7 +8,10 @@
  */
 import { describeError } from "../../i18n/serverErrors.js";
 import { Icon } from "../../components/icons/Icon.js";
-import { useCallback, useState } from "react";
+import { useCallback, useId, useState } from "react";
+import { useControlCommands } from "../app-control/useControlCommands.js";
+import { command } from "../app-control/commandRegistry.js";
+import { array, bool, choice, empty, json, number, object, optional, record, schema, text } from "../app-control/commandSchema.js";
 import { t, type MessageKey } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { useRightDrawerResize } from "../../shared/useRightDrawerResize.js";
@@ -87,6 +90,8 @@ function categoryDisplayLabel(cat: string): string {
 }
 
 const SOURCE_OPTIONS = ["open", "high", "low", "close", "hl2", "hlc3", "ohlc4", "hlcc4"];
+const parameterFields = object({ key: optional(text(128)), name: optional(text(128)), label: optional(text(256, 0)), title: optional(text(256, 0)), tooltip: optional(text(2048, 0)), group: optional(text(128, 0)), inline: optional(text(128, 0)), type: optional(text(64)), default: optional(json), current: optional(json), min: optional(number()), max: optional(number()), minval: optional(number()), maxval: optional(number()), step: optional(number()), options: optional(array(text(256), 256)), confirm: optional(bool), active: optional(bool), display: optional(text(64)) });
+const parameterSchema = schema<IndicatorParameterSchema>(parameterFields.jsonSchema, (input) => { const result = parameterFields.parse(input); if (!result.key && !result.name) throw new Error("PARAMETER_NAME_REQUIRED"); return result as IndicatorParameterSchema; });
 const ENGINE_SCRIPT_MARKER = "# __ENGINE__:";
 
 type IndicatorPanelTab = "presets" | "active" | "editor";
@@ -687,6 +692,31 @@ export default function IndicatorPanel({
 
   const isActive = (presetId: string): boolean => activeIndicators.some((i) => i.id === presetId);
 
+  const controlId = useId();
+  useControlCommands(() => ({ id: `indicator-catalog:${controlId}`, title: "Indicator catalog and custom presets", context: () => ({ presets: presets.map((item) => item.id), customIndicators, active: activeIndicators.map((item) => item.id), allowedScriptLanguages, allowedSecurityModes }),
+    snapshot: () => ({ presets, customIndicators, presetsLoading, tab, searchQuery, allowCustomIndicators, allowedScriptLanguages, allowedSecurityModes, marketStudies }), commands: [
+      command("tab", "Select the indicator catalog/active/editor tab.", object({ tab: choice(["presets", "active", "editor"]) }), ({ tab }) => setTab(tab)),
+      command("search", "Search the catalog.", object({ query: text(256, 0) }), ({ query }) => setSearchQuery(query)),
+      command("addPreset", "Resolve a catalog preset and add it through the same support/runtime guards as the UI.", object({ presetId: text(128) }), async ({ presetId }) => {
+        const preset = [...presets, ...customIndicators].find((row) => row.id === presetId); if (!preset) throw new Error("PRESET_UNAVAILABLE");
+        const resolved = await resolvePresetForChart(preset); if (resolveIndicatorSupport?.(resolved).supported === false) throw new Error("INDICATOR_UNSUPPORTED");
+        if (activeIndicators.some((row) => row.id === resolved.id)) throw new Error("INDICATOR_ID_CONFLICT"); onAddIndicator(resolved);
+      }),
+      command("saveCustom", "Save a custom preset through the catalog service. Unsafe trust is not granted.", object({ id: optional(text(128)), name: text(128), description: text(2048, 0), script: text(48000, 0), language: choice(["pine", "pyne"]), securityMode: choice(["safe", "research"]), params: record, paramSchema: array(parameterSchema, 128), renderHints: record }), async (value) => {
+        if ((allowedScriptLanguages && !allowedScriptLanguages.includes(value.language)) || (allowedSecurityModes && !allowedSecurityModes.includes(value.securityMode))) throw new Error("SCRIPT_MODE_UNAVAILABLE");
+        return saveCustomIndicator({ ...value, kind: "script" });
+      }, { available: () => allowCustomIndicators }),
+      command("deleteCustom", "Delete an existing custom preset with explicit confirmation.", object({ presetId: text(128), confirmed: choice([true]) }), async ({ presetId }) => {
+        if (!customIndicators.some((row) => row.id === presetId)) throw new Error("CUSTOM_PRESET_UNAVAILABLE"); await deleteCustomIndicator(presetId);
+        if (activeIndicators.some((row) => row.id === presetId)) onRemoveIndicator(presetId);
+      }, { available: () => allowCustomIndicators }),
+      command("marketStudy", "Add/remove/toggle a supported chart market study.", object({ studyId: text(128), action: choice(["add", "remove", "toggle"]) }), ({ studyId, action }) => {
+        const item = marketStudies.find((row) => row.id === studyId); if (!item || (action === "add" && !item.supported)) throw new Error("STUDY_UNAVAILABLE");
+        const callback = action === "add" ? onAddMarketStudy : action === "remove" ? onRemoveMarketStudy : onToggleMarketStudyVisibility;
+        if (!callback) throw new Error("STUDY_UNAVAILABLE"); callback(studyId);
+      }),
+      command("close", "Close indicator panel.", empty, () => onClose()),
+    ] }), isOpen);
   if (!isOpen) return null;
 
   return (

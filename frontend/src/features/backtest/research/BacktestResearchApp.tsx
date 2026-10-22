@@ -2,6 +2,8 @@ import { t } from "../../../i18n/index.js";
 import ResearchMarketChart from "./ResearchMarketChart.js";
 import ResearchTaskPicker from "./ResearchTaskPicker.js";
 import { useBacktestResearchRuntime } from "./useBacktestResearchRuntime.js";
+import { useControlCommands, usePageControlBridge } from "../../app-control/useControlCommands.js";
+import { backtestCommands } from "../../app-control/backtestCommands.js";
 
 function ResearchStatus({
   error,
@@ -29,6 +31,8 @@ export default function BacktestResearchApp({
   search?: string;
 } = {}) {
   const runtime = useBacktestResearchRuntime(search === undefined ? {} : { search });
+  usePageControlBridge();
+  useControlCommands(() => backtestCommands(runtime));
   if (runtime.view.phase !== "READY") {
     return <ResearchStatus error={runtime.view.phase === "ERROR" ? runtime.view.error : null} onRetry={runtime.actions.refresh} />;
   }

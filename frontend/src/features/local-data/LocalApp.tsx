@@ -31,11 +31,21 @@ import {
 } from "../strategy-research/StrategyResearchChart.js";
 
 
+import { useControlCommands, usePageControlBridge } from "../app-control/useControlCommands.js";
+import { settingsCommands } from "../app-control/settingsCommands.js";
+import { libraryCommands } from "../app-control/libraryCommands.js";
+import { command } from "../app-control/commandRegistry.js";
+import { bool, choice, object, text } from "../app-control/commandSchema.js";
+
 export default function LocalApp() {
   useLocale();
+  const [projectRestoreRevision, setProjectRestoreRevision] = useState(0);
   const pageExportRef = useRef<HTMLDivElement | null>(null);
   const { settings, setSettings, resolvedTheme } = useChartSettingsRuntime();
   const library = useResearchDataLibrary();
+  usePageControlBridge();
+  useControlCommands(() => settingsCommands({ settings, setSettings, resolvedTheme }));
+  useControlCommands(() => libraryCommands(library));
   const {
     datasets,
     indicatorPresets,
@@ -61,11 +71,15 @@ export default function LocalApp() {
     selected,
     (message) => setError(message),
   );
+  useControlCommands(() => ({ id: "local-panels", title: "Local analysis page controls", context: () => ({ datasetId: selected?.dataset_id, epoch: selected?.data_epoch, selectedInterval, settingsOpen, indicatorPanelOpen }), snapshot: () => ({ selectedInterval, intervalScope, settingsOpen, indicatorPanelOpen }), commands: [
+    command("panel", "Open/close local chart settings or indicator catalog.", object({ panel: choice(["settings", "indicators"]), open: bool }), ({ panel, open }) => { if (panel === "settings") setSettingsOpen(open); else { if (!selected) throw new Error("DATASET_UNAVAILABLE"); setIndicatorPanelOpen(open); } }),
+    command("interval", "Select an imported data display interval through its existing policy.", object({ interval: text(24) }), ({ interval }) => handleIntervalSelect(interval), { available: () => selected !== null }),
+  ] }));
 
-  const analysisStore = useMemo(() => selected === null ? null : new LocalAnalysisEventStore({
+  const analysisStore = useMemo(() => { void projectRestoreRevision; return selected === null ? null : new LocalAnalysisEventStore({
     datasetId: selected.dataset_id,
     dataEpoch: selected.data_epoch,
-  }), [selected]);
+  }); }, [selected, projectRestoreRevision]);
   const subscribeAnalysis = useCallback((listener: () => void) => (
     analysisStore?.subscribe(listener) ?? (() => undefined)
   ), [analysisStore]);
@@ -104,6 +118,7 @@ export default function LocalApp() {
       events={analysisSnapshot.events}
       onChanged={refresh}
       onSettingsImported={setSettings}
+      onProjectRestored={() => setProjectRestoreRevision((revision) => revision + 1)}
       onError={setError}
     />
   );
@@ -196,7 +211,7 @@ export default function LocalApp() {
       workspace={(
         selected && analysisStore && selectedInterval ? (
           <StrategyResearchImportedWorkspace
-            key={selected.data_epoch}
+            key={`${selected.dataset_id}:${selected.data_epoch}:${projectRestoreRevision}`}
             manifest={selected}
             interval={selectedInterval}
             indicatorPresets={indicatorPresets}

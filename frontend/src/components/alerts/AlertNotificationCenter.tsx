@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useControlCommands } from "../../features/app-control/useControlCommands.js";
+import { command } from "../../features/app-control/commandRegistry.js";
+import { empty, object, text } from "../../features/app-control/commandSchema.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 
@@ -109,6 +112,10 @@ export default function AlertNotificationCenter({ onOpenAlerts }: AlertNotificat
     };
   }, [onOpenAlerts, publishDeliveryError, publishToast]);
 
+  useControlCommands(() => ({ id: "alert-notifications", title: "Alert notification center", context: () => toasts.map((toast) => toast.id), snapshot: () => ({ toasts }), commands: [
+    command("dismiss", "Dismiss a current notification toast.", object({ toastId: text(128) }), ({ toastId }) => { if (!toasts.some((toast) => toast.id === toastId)) throw new Error("TOAST_UNAVAILABLE"); dismiss(toastId); }),
+    command("openAlerts", "Open the existing alerts panel.", empty, onOpenAlerts),
+  ] }));
   if (toasts.length === 0) return null;
   return (
     <div className="alert-toast-stack" role="region" aria-live="polite" aria-label={t("alert.toastRegion")}>

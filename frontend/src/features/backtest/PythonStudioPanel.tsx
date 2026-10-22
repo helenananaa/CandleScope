@@ -3,6 +3,10 @@ import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import type { BacktestApiClient, BacktestSnapshot, StrategyRevisionRecord } from "./backtestApi.js";
 import { isPythonTrustedLocalEnabled } from "./backtestFlags.js";
+import { useControlCommands } from "../app-control/useControlCommands.js";
+import { command } from "../app-control/commandRegistry.js";
+import { array, bool, choice, empty, object, record, text } from "../app-control/commandSchema.js";
+import { readControlFile } from "../app-control/controlFiles.js";
 import {
   PYTHON_TEMPLATES,
   PYTHON_UNSUPPORTED,
@@ -248,6 +252,23 @@ export default function PythonStudioPanel({
       manifest: String(inspectResult?.manifest_hash ?? bundleIdentity?.manifest_hash ?? ""),
     };
   }, [bundleIdentity, inspectResult]);
+  useControlCommands(() => ({ id: "python-studio", title: "Python bundle editing, inspection and trust", context: () => ({ files, selectedRevisionId, runtimeMode, trustedConfirmed, loading }),
+    snapshot: () => ({ files, templateId, missing, inspectResult, bundleIdentity, smokePassed, runtimeMode, trustedConfirmed, trustedFlagEnabled, requiredAcknowledgements: TRUSTED_LOCAL_FACT_KEYS, coverage, canCreateRun, failure }), commands: [
+      command("template", "Apply an existing Python strategy template.", object({ id: choice(["sma_cross", "rsi_reversion", "breakout"]) }), ({ id }) => { const next = templateById(id); if (!next) throw new Error("TEMPLATE_UNAVAILABLE"); setTemplateId(id); applyFiles(next.files); }, { available: () => !loading }),
+      command("files", "Edit a typed bundle file map. The existing bundle service validates its paths, format and capability contract before freezing.", object({ files: record }), ({ files }) => {
+        if (Object.keys(files).length > 128 || Object.entries(files).some(([path, value]) => typeof value !== "string" || !path || path.length > 256 || path.startsWith("/") || path.includes("\\") || path.includes(":") || path.split("/").includes(".."))) throw new Error("BUNDLE_FILES_INVALID");
+        applyFiles(files as PythonBundleFileMap);
+      }, { available: () => !loading }),
+      command("importZip", "Import a staged Python bundle ZIP using the existing filesFromInput validation.", object({ fileRef: text(96) }), async ({ fileRef }) => { const next = await filesFromInput([await readControlFile(fileRef)]); if (assertRequiredBundleFiles(next).length) throw new Error("BUNDLE_INCOMPLETE"); applyFiles(next); }, { available: () => !loading }),
+      command("inspectBundle", "Inspect the current bundle through the existing backend.", empty, () => handleInspect(), { available: () => !loading && !missing.length }),
+      command("freeze", "Freeze an inspected bundle and create its immutable revision.", empty, () => handleFreeze(), { available: () => !loading && !!inspectResult }),
+      command("smoke", "Run the existing guarded Python smoke workflow with the current revision, snapshot and trust gate.", empty, () => handleSmoke(), { available: () => !loading && !!selectedRevisionId && !!snapshot && trustedReady }),
+      command("sandbox", "Use sandboxed local Python and revoke the trusted confirmation.", empty, () => { setRuntimeMode("SANDBOXED_LOCAL"); setTrustedConfirmed(false); }),
+      command("trustedLocal", "Select trusted local Python only with explicit app.trust launch scope, the existing feature flag, and all listed facts acknowledged.", object({ confirmed: bool, acknowledgements: array(choice(TRUSTED_LOCAL_FACT_KEYS), 5) }), ({ confirmed, acknowledgements }) => {
+        if (confirmed && (new Set(acknowledgements).size !== TRUSTED_LOCAL_FACT_KEYS.length || !TRUSTED_LOCAL_FACT_KEYS.every((key) => acknowledgements.includes(key)))) throw new Error("TRUST_ACKNOWLEDGEMENTS_REQUIRED");
+        setRuntimeMode("TRUSTED_LOCAL"); setTrustedConfirmed(confirmed);
+      }, { requiredScope: "app.trust", available: () => trustedFlagEnabled && !loading }),
+    ] }));
 
   return (
     <div className="backtest-strategy-help python-studio" data-testid="python-strategy-studio">

@@ -480,6 +480,7 @@ class CcxtPrimaryPlugin(CcxtUnifiedPlugin):
                 values,
                 "ccxt+rest://binance",
                 request_limit=params.get("limit"),
+                headers=getattr(exchange, "last_response_headers", None),
             )
 
     async def _fetch_binance_summary(
@@ -520,6 +521,7 @@ class CcxtPrimaryPlugin(CcxtUnifiedPlugin):
                 descriptor,
                 [make_unified_payload("derivatives_summary", value)],
                 "ccxt+rest://binance",
+                headers=getattr(exchange, "last_response_headers", None),
             )
 
     async def _fetch_okx_kline_raw(
@@ -558,7 +560,8 @@ class CcxtPrimaryPlugin(CcxtUnifiedPlugin):
                 raise RuntimeError(f"OKX CCXT REST error: {response!r}")
             values = response.get("data") if isinstance(response, dict) else None
             rows = list(reversed(values)) if isinstance(values, list) else []
-            return _raw_messages(descriptor, rows, "ccxt+rest://okx")
+            return _raw_messages(descriptor, rows, "ccxt+rest://okx",
+                                 headers=getattr(exchange, "last_response_headers", None))
 
     async def _fetch_okx_summary(
         self,
@@ -618,6 +621,7 @@ class CcxtPrimaryPlugin(CcxtUnifiedPlugin):
                 descriptor,
                 [make_unified_payload("derivatives_summary", value)],
                 "ccxt+rest://okx",
+                headers=getattr(exchange, "last_response_headers", None),
             )
 
 
@@ -748,6 +752,7 @@ def _raw_messages(
     endpoint: str,
     *,
     request_limit: int | None = None,
+    headers: dict | None = None,
 ) -> list[RawMessage]:
     rows = values if isinstance(values, list) else [values]
     received = int(time.time() * 1000)
@@ -759,6 +764,7 @@ def _raw_messages(
             received_at_ms=received,
             endpoint=endpoint,
             http_status=200,
+            http_headers=dict(headers or {}),
             request_limit=request_limit,
         )
         for value in rows

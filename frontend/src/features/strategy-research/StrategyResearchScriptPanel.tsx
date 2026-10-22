@@ -12,6 +12,9 @@ import {
 import { t } from "../../i18n/index.js";
 import { StrategyLanguageControls } from "../backtest/chart-tester/StrategyLanguageControls.js";
 import { strategyLanguageLabel } from "../backtest/chart-tester/strategyLanguageLabel.js";
+import { useControlCommands } from "../app-control/useControlCommands.js";
+import { command } from "../app-control/commandRegistry.js";
+import { choice, empty, nullable, number, object, optional, record, text } from "../app-control/commandSchema.js";
 import { StrategyConditionsEditor } from "../backtest/chart-tester/StrategyConditionsEditor.js";
 import { StrategyParametersEditor } from "../backtest/chart-tester/StrategyParametersEditor.js";
 import { DEFAULT_STRATEGY_RUN_SETTINGS, validStrategyRunSettings, type StrategyRunSettings } from "../../shared/strategyRunSettings.js";
@@ -275,6 +278,19 @@ export function StrategyResearchScriptPanel({
     });
   }, [cellScope, configuration, draft, onRun, session, source, pythonTrustedConfirmed]);
 
+  const controlReady = () => session !== null && sourceKind !== null && !["RUNNING", "QUEUED", "RESOLVING"].includes(runStatus);
+  useControlCommands(() => ({ id: `host-strategy:${cellScope}`, title: "Host strategy editor and saved drafts", context: () => ({ session, sourceKind, draftId, source, configuration, runStatus }),
+    snapshot: () => ({ session, sourceKind, draft, source, configuration, runStatus, needsData, recentDrafts, templates: CHART_STRATEGY_TEMPLATES, pane, openEditor }), commands: [
+      command("template", "Create a saved draft from an existing template.", object({ templateId: text(128) }), ({ templateId }) => { if (!CHART_STRATEGY_TEMPLATES.some((row) => row.id === templateId)) throw new Error("TEMPLATE_UNAVAILABLE"); return startDraft(templateId); }, { available: controlReady }),
+      command("selectDraft", "Select a currently listed draft.", object({ draftId: nullable(text(128)) }), ({ draftId }) => { if (draftId && !recentDrafts.some((row) => row.id === draftId)) throw new Error("DRAFT_UNAVAILABLE"); onDraftId(draftId); }, { available: controlReady }),
+      command("source", "Edit the saved strategy source; flush separately to verify persistence.", object({ source: text(48000, 0) }), ({ source }) => setSource(source), { available: () => controlReady() && !!draft }),
+      command("flush", "Flush the existing strategy draft persistence workflow.", empty, () => flushPendingDraft(), { available: () => !!draft }),
+      command("configure", "Edit known host run settings using the same validation as the UI.", object({ rangeMode: choice(["ALL_AVAILABLE", "CUSTOM"]), customRange: nullable(object({ startMs: number(0, 1e15, true), endMs: number(0, 1e15, true) })), parameters: optional(record), fidelityPreference: optional(choice(["FAST", "PRECISE"])), executionOverrides: optional(object({ initialBalance: text(64), equityPercent: text(64), leverage: text(64), feeBps: text(64), slippageBps: text(64) })) }), (value) => { if (!validStrategyRunSettings(value) || !onConfigure) throw new Error("RUN_SETTINGS_INVALID"); onConfigure(value); }, { available: () => controlReady() && !!onConfigure }),
+      command("pane", "Select editor pane.", object({ pane: choice(["parameters", "code", "conditions"]) }), ({ pane }) => { setPane(pane); setOpenEditor(true); }),
+      command("run", "Start the host strategy through its draft/session/attachment ownership workflow.", empty, () => run(), { available: () => controlReady() && !!draft && validStrategyRunSettings(configuration) }),
+      command("prepare", "Confirm the current missing-data preparation workflow.", empty, () => onConfirmNeedsData(), { available: () => controlReady() && needsData }),
+      command("openAdvanced", "Flush the draft and open advanced research.", empty, () => openAdvanced()),
+    ] }));
   if (session === null || sourceKind === null) {
     return <p data-testid="strategy-research-script-empty">{t("strategy.scriptSlot")}</p>;
   }
