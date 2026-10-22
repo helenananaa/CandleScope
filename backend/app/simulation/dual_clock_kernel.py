@@ -15,6 +15,7 @@ from .trade_bar_builder import TradeBarBuilder
 from .trade_kernel import TradeSimulationKernel, _wire_order
 from .linear_perp_account_v2 import LinearPerpetualAccountV2
 from .account_execution import publish_account_liquidation
+from .dual_clock_book import BOOK_MODES, apply_quote, execution_type, report_identity
 
 DualClockStrategyFn = Callable[[tuple[MarketEvent, ...], MarketEvent], list[dict]]
 
@@ -22,6 +23,7 @@ DualClockStrategyFn = Callable[[tuple[MarketEvent, ...], MarketEvent], list[dict
 @dataclass(slots=True)
 class DualClockSimulationKernel:
     signal_interval: str
+    execution_fidelity: str = field(default="AGG_TRADE_EXECUTION", kw_only=True)
     process_orders_on_close: bool = field(default=False, kw_only=True)
     gap_policy: str = "REJECT"
     max_events: int = 2_000_000
@@ -50,6 +52,8 @@ class DualClockSimulationKernel:
     decisions: list[dict[str, Any]] = field(default_factory=list)
     execution_event_count: int = 0
     _last_source_sequence: int | None = None
+    _last_book_sequence: int | None = None
+    _physical_event_count: int = 0
     frozen_intents: list[dict] = field(default_factory=list)
     _decision_chain_hash: str = "sha256:GENESIS"
     _decision_count: int = 0
@@ -59,7 +63,7 @@ class DualClockSimulationKernel:
     def __post_init__(self) -> None:
         self.builder = TradeBarBuilder(self.signal_interval, gap_policy=self.gap_policy)
         self.signal_interval = self.builder.interval
-        self.execution = TradeSimulationKernel(
+        self.execution = execution_type(self.execution_fidelity)(
             source_kind="AGG_TRADE",
             max_events=self.max_events,
             checkpoint_event_interval=0,
@@ -95,6 +99,10 @@ class DualClockSimulationKernel:
         extended = history_encoder is not None and getattr(history_encoder, "extended", False)
         return {
             "schemaVersion": "candlescope.dual-clock-kernel/1",
+            **({"execution_fidelity": self.execution_fidelity,
+                "last_book_sequence": self._last_book_sequence,
+                "physical_event_count": self._physical_event_count}
+               if self.execution_fidelity != "AGG_TRADE_EXECUTION" else {}),
             **({"account_fill_callbacks": {"pending": [dict(row) for row in self._pending_account_callbacks],
                 "delivered": self._account_callback_count}}
                 if self._pending_account_callbacks or self._account_callback_count else {}),
@@ -125,6 +133,7 @@ class DualClockSimulationKernel:
     def restore(self, payload: Mapping[str, Any]) -> None:
         if (
             payload.get("schemaVersion") != "candlescope.dual-clock-kernel/1"
+            or payload.get("execution_fidelity", "AGG_TRADE_EXECUTION") != self.execution_fidelity
             or bool(payload.get("process_orders_on_close")) != self.process_orders_on_close
             or payload.get("signal_interval") != self.signal_interval
             or payload.get("gap_policy") != self.gap_policy
@@ -135,6 +144,17 @@ class DualClockSimulationKernel:
                 "dual-clock checkpoint identity changed", code="CHECKPOINT_CORRUPT"
             )
         self.execution.restore(payload["execution"])
+        self._last_book_sequence = payload.get("last_book_sequence")
+        self._physical_event_count = payload.get("physical_event_count", 0)
+        if (type(self._physical_event_count) is not int
+                or not 0 <= self._physical_event_count <= self.max_events):
+            raise MarketDatasetError("invalid physical event count", code="CHECKPOINT_CORRUPT")
+        if self.execution_fidelity == "BOOK_ASSISTED":
+            observed = self.execution.last_bid is not None
+            if ((self._last_book_sequence is None) != (not observed)
+                    or (self._last_book_sequence is not None and
+                        (type(self._last_book_sequence) is not int or self._last_book_sequence < 0))):
+                raise MarketDatasetError("invalid chart book cursor", code="CHECKPOINT_CORRUPT")
         self.builder.restore(payload["bar_builder"])
         self.decisions = [dict(item) for item in payload.get("decisions") or []]
         if self.scale_stream_decisions:
@@ -179,6 +199,8 @@ class DualClockSimulationKernel:
             raise MarketDatasetError("closing-tick handler is required", code="FIDELITY_UNSUPPORTED")
         lazy_curve = getenv("BACKTEST_LAZY_DUAL_CURVE_ENABLED", "1").strip() == "1"
         trades = tuple(event for event in events if event.role == "TRADES")
+        if self.execution_fidelity in BOOK_MODES and len(events) + self._physical_event_count > self.max_events:
+            raise MarketDatasetError("physical book event budget exceeded", code="BUDGET_EXCEEDED")
         if len(trades) > self.max_events:
             raise MarketDatasetError(
                 "trade event budget exceeded", code="BUDGET_EXCEEDED"
@@ -273,6 +295,20 @@ class DualClockSimulationKernel:
             publish_account_liquidation(self.execution)
 
         for trade in events:
+            if self.execution_fidelity in BOOK_MODES:
+                previous = self.execution._last_event
+                if previous is not None and (trade.sequence <= previous.sequence or trade.event_time_ms < previous.event_time_ms):
+                    raise MarketDatasetError("physical book timeline did not advance", code="DATA_GAP_REJECTED")
+                self._physical_event_count += 1
+            if trade.role == "ORDER_BOOK":
+                # Close the previous bar with the quote visible before this
+                # update. The quote itself never creates a forming-bar tick.
+                emit(self.builder.close_before(trade.event_time_ms), trade)
+                self.execution._last_event = trade
+                with_execution_reports(lambda: apply_quote(self, trade), trade)
+                if checkpoint_callback is not None:
+                    checkpoint_callback(trade)
+                continue
             if trade.role in {"INSTRUMENT_RULES", "MARK_INDEX", "FUNDING"}:
                 emit(self.builder.close_before(trade.event_time_ms), trade)
                 self.execution._last_event = trade
@@ -397,6 +433,12 @@ class DualClockSimulationKernel:
                 "pending": [dict(row) for row in self._pending_account_callbacks]}
         ledger["signal_event_count"] = self.builder.signal_count
         ledger["execution_event_count"] = self.execution_event_count
+        if self.execution_fidelity in BOOK_MODES:
+            ledger["book_execution"] = {**report_identity(self.execution_fidelity),
+                "fill_policy": self.execution.fill_policy,
+                "physical_event_count": self._physical_event_count,
+                **({"sampled": self.execution.disclosure()}
+                   if self.execution_fidelity == "BOOK_SAMPLED" else {})}
         ledger_hash = sha256_hex(ledger)
         return SimulationResult(
             decision_hash=(
@@ -408,9 +450,7 @@ class DualClockSimulationKernel:
             ledger_hash=ledger_hash,
             report_hash=sha256_hex(
                 {
-                    "fidelity_mode": "AGG_TRADE_EXECUTION",
-                    "source_event_kind": "AGG_TRADE",
-                    "report_label": "AGGREGATED_TRADE_SEQUENCE",
+                    **report_identity(self.execution_fidelity),
                     "fills": fills,
                     "ledger": ledger,
                 }

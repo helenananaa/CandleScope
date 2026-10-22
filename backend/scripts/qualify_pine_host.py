@@ -43,7 +43,7 @@ MODULES = (
     "test_pine_print_ticks",
     "test_pine_requested_window_stream",
     "test_pine_window_feedback", "test_pine_window_recovery",
-    "test_backtest_dual_clock",
+    "test_backtest_dual_clock", "test_dual_clock_book",
     "test_chart_pine_engine",
     "test_chart_pine_closing", "test_chart_pine_generic_orders", "test_chart_pine_orders",
     "test_pine_book_closing", "test_pine_closing_tick_kernel", "test_pine_entry_risk",
