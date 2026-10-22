@@ -192,6 +192,7 @@ class DualClockSimulationKernel:
         fill_callback: Callable[[MarketEvent, MarketEvent], list[dict]] | None = None,
         tick_callback: Callable[[MarketEvent, MarketEvent], list[dict]] | None = None,
         close_callback=None,
+        end_time_ms: int | None = None,
     ) -> SimulationResult:
         if tick_callback is not None and fill_callback is not None:
             raise MarketDatasetError("tick and fill callbacks must use one strategy clock", code="FIDELITY_UNSUPPORTED")
@@ -405,6 +406,15 @@ class DualClockSimulationKernel:
             self._last_source_sequence = source_sequence
             if checkpoint_callback is not None:
                 checkpoint_callback(trade)
+        if end_time_ms is not None:
+            if (type(end_time_ms) is not int or (self.execution._last_event is not None
+                    and self.execution._last_event.event_time_ms > end_time_ms)):
+                raise MarketDatasetError('invalid frozen chart endpoint',code='DATA_QUALITY_FAILED')
+            sequence = self.execution._last_event.sequence + 1 if self.execution._last_event is not None else 1
+            # The frozen interval ending is a clock boundary, never a trade or
+            # new book observation. Unfilled orders still need a later print.
+            boundary=MarketEvent(sequence,end_time_ms+1,'CLOCK_BOUNDARY',{})
+            emit(self.builder.close_before(end_time_ms+1),boundary)
         self.execution._append_terminal_curve_point()
         if finalize:
             self.execution.finalize_orders()

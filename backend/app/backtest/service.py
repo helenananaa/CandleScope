@@ -57,6 +57,8 @@ from app.simulation.execution_realism import (
 from app.simulation.cost_sensitivity import build_cost_sensitivity_matrix
 
 from .errors import BacktestError
+from .chart_book import BOOK_MODES, DUAL_MODES, normalize_data
+from .chart_book import derive_chart_bars as derive_book_chart_bars
 from .checkpoint_codec import checkpoint_session, checkpoint_json
 from .identity import canonical_json, config_hash, parse_parameters, sha256_hex
 from .models import (
@@ -125,6 +127,8 @@ FIDELITY_MATRIX = {
     "AGG_TRADE_TAPE": ("AGG_TRADE", "AGGREGATED_TRADE_SEQUENCE"),
     "AGG_TRADE_EXECUTION": ("AGG_TRADE", "AGGREGATED_TRADE_SEQUENCE"),
     "BOOK_ASSISTED": ("TRADE_AND_L2", "BOOK_ASSISTED"),
+    "BOOK_DEPTH": ("TRADE_AND_L2", "BOOK_DEPTH"),
+    "BOOK_SAMPLED": ("TRADE_AND_L2", "BOOK_SAMPLED"),
     "QUEUE_EXACT": ("ORDER_LEVEL", "ORDER_LEVEL_REQUIRED"),
 }
 
@@ -198,8 +202,8 @@ class BacktestService:
         if self.settings.trade_tape_effective:
             fidelity_modes.append("AGG_TRADE_TAPE")
             fidelity_modes.append("AGG_TRADE_EXECUTION")
-        if self.settings.book_assisted_effective:
-            fidelity_modes.append("BOOK_ASSISTED")
+        if self.settings.book_assisted_effective and self.settings.trade_tape_effective:
+            fidelity_modes.extend(sorted(BOOK_MODES))
         return {
             "engine_version": ENGINE_VERSION,
             "schema_version": SCHEMA_VERSION,
@@ -1131,7 +1135,7 @@ class BacktestService:
             "source_event_kind": identity.source_event_kind,
             "engine_version": identity.engine_version,
         }
-        if identity.fidelity_mode == "AGG_TRADE_EXECUTION":
+        if identity.fidelity_mode in DUAL_MODES:
             result.update(
                 {
                     "signal_clock": identity.signal_clock,
@@ -1166,6 +1170,9 @@ class BacktestService:
         stored_payload = dict(payload)
         stored_payload["source_event_kind"] = identity.source_event_kind
         normalized_execution = json.loads(identity.execution_json)
+        stored_payload.pop('chart_book_data_hash',None)
+        if 'chart_book_data_hash' in normalized_execution:
+            stored_payload['chart_book_data_hash']=normalized_execution['chart_book_data_hash']
         if normalized_execution.get("pine_runtime_identity"):
             stored_payload["pine_runtime_identity"] = normalized_execution["pine_runtime_identity"]
         for name in ("pine_chart_metadata", "pine_contexts", "pine_local_data_root", "pine_order_runtime_identity", "pine_fill_callbacks", "pine_process_on_close", "pine_risk_windows", "pine_bar_path_contract", "pine_v2_bar_contract", "pine_history_ticks", "pine_realtime_ticks"):
@@ -1245,7 +1252,7 @@ class BacktestService:
                     )
                 }
             )
-        if identity.fidelity_mode == "AGG_TRADE_EXECUTION":
+        if identity.fidelity_mode in DUAL_MODES:
             stored_payload.update(
                 {
                     "signal_clock": identity.signal_clock,
@@ -3129,14 +3136,14 @@ class BacktestService:
             raise BacktestError("FLAG_DISABLED", "TRADE_TAPE backtests are disabled")
         record = self.get_run(run_id)
         current = RunState(record["state"])
-        if record["fidelity_mode"] != "AGG_TRADE_EXECUTION":
+        if record["fidelity_mode"] not in DUAL_MODES:
             raise BacktestError(
                 "FIDELITY_UNSUPPORTED",
-                "execute_dual_clock_run only supports AGG_TRADE_EXECUTION",
+                "execute_dual_clock_run requires a physical chart execution mode",
             )
         if not getattr(self, "_colocated_worker", False) and self._fault_injector is None and isinstance(events, tuple):
             from .colocated import provider_spec, execute
-            spec = provider_spec(provider, fidelity="AGG_TRADE_EXECUTION")
+            spec = provider_spec(provider, fidelity=str(record["fidelity_mode"]))
             if spec is not None:
                 return execute(self, run_id, spec, events, {
                     "now_ms": now_ms, "warmup_events": warmup_events,
@@ -3195,6 +3202,7 @@ class BacktestService:
                     "aggregate-trade snapshot exceeds worker memory ceiling",
                 )
             kernel = DualClockSimulationKernel(
+                execution_fidelity=str(record["fidelity_mode"]),
                 process_orders_on_close=bool(config.get("pine_process_on_close")),
                 signal_interval=str(config["signal_interval"]),
                 gap_policy="REJECT",
@@ -3362,6 +3370,7 @@ class BacktestService:
                 warmup_events=0,
                 finalize=True,
                 checkpoint_callback=checkpoint_after,
+                **({"end_time_ms":int(config["end_time_ms"])} if record["fidelity_mode"] in BOOK_MODES else {}),
                 **({"fill_callback": callbacks.on_fill} if callbacks is not None and not config.get("pine_realtime_ticks") else {}),
                 **({"tick_callback":callbacks.on_tick} if config.get("pine_realtime_ticks") else {}),
                 **({"close_callback": closing.process} if closing is not None else {}),
@@ -3420,17 +3429,19 @@ class BacktestService:
             chart_interval=str(config["signal_interval"]),
             chart_bars=(collected_chart_bars if reuse_chart_bars else [
                 _trade_chart_bar(bar)
-                for bar in derive_complete_trade_bars(events, str(config["signal_interval"]))
+                for bar in (derive_book_chart_bars(events,str(config['signal_interval']),int(config['end_time_ms']))
+                    if record['fidelity_mode'] in BOOK_MODES
+                    else derive_complete_trade_bars(events, str(config["signal_interval"])))
             ]),
             result_overrides={
-                "report_label": "AGGREGATED_TRADE_SEQUENCE",
+                "report_label": FIDELITY_MATRIX[str(record['fidelity_mode'])][1],
                 "strategy_metadata": strategy_metadata,
                 "signal_event_count": kernel.builder.signal_count,
                 "execution_event_count": kernel.execution_event_count,
                 "data_quality": dict((snapshot_evidence or {}).get("quality") or {}),
                 "contract_coverage": kernel.account.coverage(),
                 "fill_model": {
-                    "name": (
+                    "name": kernel.execution.fill_policy if record['fidelity_mode'] in BOOK_MODES else (
                         TRADE_FILL_POLICY_V2
                         if kernel.execution.execution_model_revision
                         == EXECUTION_REALISM_V2
@@ -3441,7 +3452,8 @@ class BacktestService:
                     "bar_builder": BAR_BUILDER_REVISION,
                     "signal_interval": kernel.signal_interval,
                     "timezone": BAR_TIMEZONE,
-                    "source_honesty": "aggTrade is aggregated; raw trades and queue position are unmodeled",
+                    "source_honesty": "aggregate prints with physical book liquidity; queue priority remains modeled" if record['fidelity_mode'] in BOOK_MODES else "aggTrade is aggregated; raw trades and queue position are unmodeled",
+                    **({'queue_exact':False,'book_execution':result.ledger['book_execution']} if record['fidelity_mode'] in BOOK_MODES else {}),
                     **_execution_fill_model(config),
                     "slippage_bps": str(kernel.execution.slippage_bps),
                     "taker_fee_bps": str(kernel.execution.taker_fee_bps),
@@ -4092,11 +4104,11 @@ class BacktestService:
         if fidelity_mode == "BAR_APPROX" and not self.settings.bar_enabled:
             raise BacktestError("FLAG_DISABLED", "BACKTEST_BAR_ENABLED is 0")
         if (
-            fidelity_mode in {"TRADE_TAPE", "AGG_TRADE_TAPE", "AGG_TRADE_EXECUTION"}
+            fidelity_mode in {"TRADE_TAPE", "AGG_TRADE_TAPE", *DUAL_MODES}
             and not self.settings.trade_tape_enabled
         ):
             raise BacktestError("FLAG_DISABLED", "BACKTEST_TRADE_TAPE_ENABLED is 0")
-        if fidelity_mode == "BOOK_ASSISTED" and not self.settings.book_assisted_enabled:
+        if fidelity_mode in BOOK_MODES and not self.settings.book_assisted_enabled:
             raise BacktestError("FLAG_DISABLED", "BACKTEST_BOOK_ASSISTED_ENABLED is 0")
 
     def _assert_active_budget(self) -> None:
@@ -4166,6 +4178,17 @@ class BacktestService:
         fidelity = str(payload.get("fidelity_mode") or "")
         if fidelity not in FIDELITY_MATRIX:
             raise BacktestError("FIDELITY_UNSUPPORTED", f"unknown fidelity {fidelity}")
+        book_data_hash=None
+        if fidelity in BOOK_MODES:
+            _,book_data_hash=normalize_data(payload.get('execution_data'),max_events=self.settings.max_trade_events,
+                max_bytes=self.settings.worker_memory_mb*1024*1024)
+            if (payload.get('execution_model_revision') or payload.get('participation_rate') is not None
+                    or payload.get('bar_path_scenario') is not None
+                    or _config_decimal(payload,'latency_ms','0') != 0
+                    or _config_decimal(payload,'latency_events','0') != 0):
+                raise BacktestError('FIDELITY_UNSUPPORTED','book capacity retains its declared physical policy')
+        elif payload.get('execution_data') is not None:
+            raise BacktestError('FIDELITY_MISLABEL','frozen book data requires a chart book mode')
         source_kind, _label = FIDELITY_MATRIX[fidelity]
         requested_kind = str(payload.get("source_event_kind") or source_kind)
         if requested_kind != source_kind:
@@ -4419,7 +4442,7 @@ class BacktestService:
                             "roles": [
                                 (
                                     "BARS"
-                                    if fidelity in {"BAR_APPROX", "AGG_TRADE_EXECUTION"}
+                                    if fidelity in {"BAR_APPROX", *DUAL_MODES}
                                     else "TRADES"
                                 )
                             ],
@@ -4440,7 +4463,7 @@ class BacktestService:
             "bar_builder": None,
             "timezone": None,
         }
-        if fidelity == "AGG_TRADE_EXECUTION":
+        if fidelity in DUAL_MODES:
             interval = parse_interval_spec(
                 str(payload.get("signal_interval") or payload.get("interval") or "")
             )
@@ -4504,6 +4527,8 @@ class BacktestService:
             "exchange": str(payload.get("exchange") or "binance"),
             "market_type": str(payload.get("market_type") or "usdm"),
         }
+        if book_data_hash is not None:
+            execution_config['chart_book_data_hash']=book_data_hash
         if payload.get("checkpoint_policy") is not None or payload.get("checkpoint_interval") is not None:
             policy = payload.get("checkpoint_policy") or "INTERVAL"
             interval = payload.get("checkpoint_interval")
@@ -4552,9 +4577,9 @@ class BacktestService:
             fill_callbacks = json.loads(compiled_pine["executionSource"]).get("fillCallbacks") is True
             history_ticks = json.loads(compiled_pine["executionSource"]).get("historyTicks") is True
             realtime_ticks = json.loads(compiled_pine["executionSource"]).get("realtimeTicks") is True
-            if realtime_ticks and fidelity!="AGG_TRADE_EXECUTION" and not (history_ticks and fidelity=="BAR_APPROX"):
+            if realtime_ticks and fidelity not in DUAL_MODES and not (history_ticks and fidelity=="BAR_APPROX"):
                 raise BacktestError("FIDELITY_UNSUPPORTED","realtime Pine ticks require aggregate-trade execution; historical BAR ticks require calc_on_every_history_tick")
-            if realtime_ticks and fidelity=="AGG_TRADE_EXECUTION":
+            if realtime_ticks and fidelity in DUAL_MODES:
                 envelope=json.loads(compiled_pine["executionSource"])
                 if (output_mode!="ORDER_INTENT" or envelope["identity"].get("external_stream_contract")!="candlescope.pine-external-stream/1"):
                     raise BacktestError("FIDELITY_UNSUPPORTED","realtime Pine ticks require the negotiated aggregate-trade stream and ORDER_INTENT")
@@ -4577,7 +4602,7 @@ class BacktestService:
             if process_close:
                 execution_config["pine_process_on_close"] = True
             if fill_callbacks:
-                if fidelity not in {"BAR_APPROX", "AGG_TRADE_EXECUTION"} or output_mode != "ORDER_INTENT":
+                if fidelity not in {"BAR_APPROX", *DUAL_MODES} or output_mode != "ORDER_INTENT":
                     raise BacktestError("FIDELITY_UNSUPPORTED", "Pine fill callbacks require ORDER_INTENT and BAR or aggregate-trade execution")
                 if fidelity == "BAR_APPROX":
                     envelope = json.loads(compiled_pine["executionSource"])
@@ -4590,7 +4615,7 @@ class BacktestService:
             if output_mode == "ORDER_INTENT" or process_close:
                 from .strategy.pine_planner import host_identity
                 execution_config["pine_order_runtime_identity"] = host_identity()
-            if fidelity not in {"BAR_APPROX", "AGG_TRADE_EXECUTION"}:
+            if fidelity not in {"BAR_APPROX", *DUAL_MODES}:
                 raise BacktestError("FIDELITY_UNSUPPORTED", "chart Pine requires closed-bar observations")
         if payload.get("pine_chart_metadata") is not None:
             from .native_contracts import PineChartMetadata
@@ -4660,7 +4685,7 @@ class BacktestService:
             )
         if host_policy is not None:
             execution_config.update(host_policy.identity())
-        if fidelity == "AGG_TRADE_EXECUTION":
+        if fidelity in DUAL_MODES:
             execution_config.update(signal_identity)
         if contract_data_mode == "HISTORICAL_CONTRACT_V1":
             execution_config["contract_data_mode"] = contract_data_mode
@@ -4724,7 +4749,7 @@ class BacktestService:
     def _build_cost_sensitivity(self, config, kernel, events, result, **pine_context):
         if config.get("cost_sensitivity_mode", "FULL") == "SKIP":
             return {"status": "SKIPPED_BY_REQUEST", "scenarios": []}
-        if kernel.execution_model_revision != EXECUTION_REALISM_V2 and not config.get("pine_bar_path_contract"):
+        if kernel.execution_model_revision != EXECUTION_REALISM_V2 and not config.get("pine_bar_path_contract") and config.get("fidelity_mode") not in BOOK_MODES:
             return {}
         if config.get("pine_runtime_identity"):
             from .pine_sensitivity import build_matrix

@@ -20,25 +20,28 @@ def execution_type(mode):
         raise MarketDatasetError('unsupported chart execution fidelity', code='FIDELITY_UNSUPPORTED') from None
 
 
+def validate_assisted_quote(payload, previous):
+    sequence = payload.get('book_sequence')
+    if type(sequence) is not int or sequence < 0:
+        raise MarketDatasetError('invalid book sequence', code='DATA_QUALITY_FAILED')
+    if previous is None and payload.get('snapshot') is not True:
+        raise MarketDatasetError('initial book snapshot is required', code='DATA_ROLE_MISSING')
+    if previous is not None and (sequence != previous + 1 or payload.get('reset')):
+        raise MarketDatasetError('book continuity changed', code='DATA_GAP_REJECTED')
+    try:
+        bid, ask = Decimal(str(payload.get('bid'))), Decimal(str(payload.get('ask')))
+    except InvalidOperation:
+        raise MarketDatasetError('invalid book quote', code='DATA_QUALITY_FAILED') from None
+    if not bid.is_finite() or not ask.is_finite() or bid <= 0 or ask < bid:
+        raise MarketDatasetError('book must be positive and uncrossed', code='DATA_QUALITY_FAILED')
+    return sequence
+
+
 def apply_quote(dual, event):
     if dual.execution_fidelity not in BOOK_MODES:
         raise MarketDatasetError('book update requires a physical book kernel', code='FIDELITY_MISLABEL')
     if dual.execution_fidelity == 'BOOK_ASSISTED':
-        payload = event.payload
-        sequence = payload.get('book_sequence')
-        if type(sequence) is not int or sequence < 0:
-            raise MarketDatasetError('invalid book sequence', code='DATA_QUALITY_FAILED')
-        previous = dual._last_book_sequence
-        if previous is None and payload.get('snapshot') is not True:
-            raise MarketDatasetError('initial book snapshot is required', code='DATA_ROLE_MISSING')
-        if previous is not None and (sequence != previous + 1 or payload.get('reset')):
-            raise MarketDatasetError('book continuity changed', code='DATA_GAP_REJECTED')
-        try:
-            bid, ask = Decimal(str(payload.get('bid'))), Decimal(str(payload.get('ask')))
-        except InvalidOperation:
-            raise MarketDatasetError('invalid book quote', code='DATA_QUALITY_FAILED') from None
-        if not bid.is_finite() or not ask.is_finite() or bid <= 0 or ask <= bid:
-            raise MarketDatasetError('book must be positive and uncrossed', code='DATA_QUALITY_FAILED')
+        sequence=validate_assisted_quote(event.payload,dual._last_book_sequence)
         dual.execution._match(event)
         dual._last_book_sequence = sequence
     else:

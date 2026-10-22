@@ -42,6 +42,8 @@ LABELS = {
     "AGG_TRADE_TAPE": "AGGREGATED_TRADE_SEQUENCE",
     "AGG_TRADE_EXECUTION": "AGGREGATED_TRADE_SEQUENCE",
     "BOOK_ASSISTED": "BOOK_ASSISTED",
+    "BOOK_DEPTH": "BOOK_DEPTH",
+    "BOOK_SAMPLED": "BOOK_SAMPLED",
     "QUEUE_EXACT": "ORDER_LEVEL_REQUIRED",
 }
 
@@ -253,6 +255,8 @@ def build_report(
             "fill_count": sum(item.get("reason") == REASON for item in fills),
             "close_auction_is_historical_fact": False,
         }
+        if fidelity in {'BOOK_ASSISTED','BOOK_DEPTH','BOOK_SAMPLED'}:
+            closing.update(price='VISIBLE_BOOK_AT_SIMULATED_CLOSE',liquidity='REMAINING_DECLARED_BOOK_CAPACITY')
         report["report_label"] += "_WITH_SIMULATED_CLOSE"
         report["identity"]["closing_tick_contract"] = CONTRACT
         report["fill_model"] = {**report["fill_model"], "closing_tick": closing}
@@ -298,7 +302,12 @@ def build_report(
             "complete": traced == len(fills),
         }
     strategy_metadata = payload.get("strategy_metadata")
-    if fidelity == "AGG_TRADE_EXECUTION":
+    from .chart_book import DUAL_MODES,BOOK_MODES
+    if fidelity in BOOK_MODES:
+        report['unmodeled']=['exchange queue priority','hidden liquidity','unobserved book modifications']
+        report['suitable_for']=['completed-bar and observed-print signals','conservative physical book execution']
+        report['cost_sensitivity']=copy.deepcopy(payload.get('cost_sensitivity') or {})
+    if fidelity in DUAL_MODES:
         report["identity"].update(
             {
                 "signal_clock": config.get("signal_clock"),

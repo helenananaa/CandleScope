@@ -210,6 +210,7 @@ def _clone_kernel(kernel: Any, *, _bar_sensitivity=False, **overrides: object) -
     if isinstance(kernel, DualClockSimulationKernel):
         return DualClockSimulationKernel(
             signal_interval=kernel.signal_interval,
+            execution_fidelity=kernel.execution_fidelity,
             gap_policy=kernel.gap_policy,
             max_events=kernel.max_events,
             checkpoint_event_interval=0,

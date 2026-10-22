@@ -43,7 +43,7 @@ MODULES = (
     "test_pine_print_ticks",
     "test_pine_requested_window_stream",
     "test_pine_window_feedback", "test_pine_window_recovery",
-    "test_backtest_dual_clock", "test_dual_clock_book",
+    "test_backtest_dual_clock", "test_dual_clock_book", "test_chart_book_snapshot",
     "test_chart_pine_engine",
     "test_chart_pine_closing", "test_chart_pine_generic_orders", "test_chart_pine_orders",
     "test_pine_book_closing", "test_pine_closing_tick_kernel", "test_pine_entry_risk",
@@ -123,7 +123,7 @@ def main(argv=None):
     python = Path(os.path.abspath(args.runtime_python))
     registry, output = args.runtime_registry.resolve(), args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
-    receipt = {"schema": "candlescope.pine-host-qualification/1", "profile": "historical-bar-print-tick-transport-indicator-observations-stream-recovery",
+    receipt = {"schema": "candlescope.pine-host-qualification/1", "profile": "historical-bar-print-book-tick-transport-indicator-observations-stream-recovery",
                "status": "RUNNING", "host_head": subprocess.check_output(
                    ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                "runtime_python": str(python), "runtime_registry": str(registry),

@@ -1,4 +1,10 @@
 export const zhCN = {
+  "research.book.help": "上传与当前图表市场、区间一致的聚合逐笔和盘口观测。宿主校验 OHLCV、连续性和可见深度后，将文件与快照一起冻结。盘口模式使用自身的容量规则。",
+  "research.book.invalid": "盘口文件无效。请上传不超过 32 MiB 的 JSON，包含 symbol、exchange、market_type、provenance 和有序 events，以及聚合逐笔来源序号和盘口观测。",
+  "research.book.loading": "正在读取固定行情数据…",
+  "research.book.loaded": "已载入 {count} 条市场观测；快照校验通过后才能运行。",
+  "research.book.required": "请选择已有的逐笔和盘口文件，以创建可复现的快照。",
+  "research.book.changed": "读取文件时策略、市场或区间发生了变化，请为当前输入重新选择文件。",
   "native.account.bookCapacity": "盘口模式使用自身的容量模型，请关闭成交量参与率。",
   "native.cost.title": "成本情景",
   "native.cost.help": "每个情景独立重跑策略与账户，成本变化可能改变交易决策。用于检查策略稳健性。",

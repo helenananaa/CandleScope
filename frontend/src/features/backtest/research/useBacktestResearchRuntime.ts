@@ -405,6 +405,7 @@ export function useBacktestResearchRuntime(options: {
           ? "LINEAR_PERP_ONE_WAY_V2"
           : String(draftConfig.account_model ?? "LINEAR_PERP_ONE_WAY_V1"),
         funding_mode: String(draftConfig.funding_mode ?? "OFF"),
+        ...(draftConfig.execution_data !== undefined ? { execution_data: draftConfig.execution_data } : {}),
       }, controller.signal).then((next) => {
         if (!controller.signal.aborted) setSnapshot(next);
       }).catch((reason: unknown) => {

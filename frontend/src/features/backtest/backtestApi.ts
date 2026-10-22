@@ -269,6 +269,7 @@ export interface BacktestDataset {
 }
 
 export interface SnapshotPreviewRequest {
+  execution_data?: unknown;
   dataset_id: string;
   data_epoch: string;
   start_time_ms: number;

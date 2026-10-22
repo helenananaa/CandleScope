@@ -1,4 +1,10 @@
 export const workbenchEnglish = {
+  "research.book.help": "Upload ordered aggregate prints and book observations for this exact chart market and range. The Host checks OHLCV, continuity and available depth, then freezes the file with the snapshot. Book modes retain their physical capacity policy.",
+  "research.book.invalid": "Invalid book file. Supply symbol, exchange, market_type, provenance and ordered events in JSON (up to 32 MiB), with aggregate print source IDs and book observations.",
+  "research.book.loading": "Reading frozen market data…",
+  "research.book.loaded": "Loaded {count} physical observations. The snapshot must pass validation before running.",
+  "research.book.required": "Select the recorded trade and book file to create a reproducible snapshot.",
+  "research.book.changed": "The strategy, market or range changed while reading. Select the file again for the current inputs.",
   "native.account.bookCapacity": "Recorded book modes use their own capacity model. Turn off volume participation.",
   "native.orderComment": "Order comment",
   "native.orderAlertMessage": "Fill alert message",

@@ -9,6 +9,7 @@ import type {
   BacktestRunRecord,
 } from "../backtestTypes.js";
 import { editableResearchRunConfig, externalRunDraft, isExternalRevision } from "./externalProviderModel.js";
+import { chartSourceKind } from "./chartBookInputs.js";
 
 const DAY_MS = 86_400_000;
 const SAFE_REPLAY_RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
@@ -129,7 +130,7 @@ export function composeResearchRunDraft(input: {
     data_epoch: input.snapshot?.data_epoch ?? input.dataset?.data_epoch ?? "",
     snapshot_hash: input.snapshot?.snapshot_hash ?? "",
     fidelity_mode: fidelityMode,
-    source_event_kind: fidelityMode === "BAR_APPROX" ? "BAR" : "AGG_TRADE",
+    source_event_kind: chartSourceKind(fidelityMode),
     start_time_ms: input.startTimeMs,
     end_time_ms: input.endTimeMs,
     interval: input.dataset?.interval ?? input.session.interval,
@@ -261,7 +262,7 @@ export function normalizeResearchRunDraft(input: {
     market_type: input.session.marketType,
     symbol: input.session.symbol,
     fidelity_mode: fidelityMode,
-    source_event_kind: fidelityMode === "BAR_APPROX" ? "BAR" : "AGG_TRADE",
+    source_event_kind: chartSourceKind(fidelityMode),
   };
 }
 

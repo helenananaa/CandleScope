@@ -4,7 +4,18 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from .native_contracts import RequestedNativeData, PineChartMetadata
+from .native_contracts import RequestedNativeData, PineChartMetadata, ExecutionData, ExecutionEvent
+
+
+class ChartBookEvent(ExecutionEvent):
+    time_ms: int = Field(strict=True)
+
+
+class ChartBookData(ExecutionData):
+    exchange: str = Field(min_length=1, max_length=40)
+    market_type: str = Field(min_length=1, max_length=40)
+    events: list[ChartBookEvent] = Field(min_length=1, max_length=500_000)
+    provenance: dict[str, Any] = Field(min_length=1)
 
 
 class RunCreateRequest(BaseModel):
@@ -15,6 +26,7 @@ class RunCreateRequest(BaseModel):
     data_epoch: str = Field(min_length=8, max_length=80)
     snapshot_hash: str = Field(min_length=8, max_length=80)
     fidelity_mode: str
+    execution_data: ChartBookData | None = None
     source_event_kind: str | None = None
     start_time_ms: int
     end_time_ms: int
@@ -161,6 +173,7 @@ class SnapshotPreviewRequest(BaseModel):
     end_time_ms: int
     interval: str | None = Field(default=None, max_length=16)
     fidelity_mode: str = "BAR_APPROX"
+    execution_data: ChartBookData | None = None
     exchange: str = Field(default="binance", min_length=1, max_length=40)
     market_type: str = Field(default="usdm", min_length=1, max_length=40)
     contract_data_mode: str = Field(default="LEGACY_FIXED_V1", max_length=40)

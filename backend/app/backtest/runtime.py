@@ -37,6 +37,7 @@ from app.simulation.contract_accounting import merge_contract_timeline
 from .identity import canonical_json
 
 from .errors import BacktestError
+from .chart_book import BOOK_MODES, DUAL_MODES
 from .chart_context import ChartBacktestContextResolver
 from .service import BacktestService
 from .strategy.isolated import IsolatedStrategyProvider
@@ -203,7 +204,18 @@ class BacktestRuntime:
         contract_data_mode: str = "LEGACY_FIXED_V1",
         account_model: str = "LINEAR_PERP_ONE_WAY_V1",
         funding_mode: str = "OFF",
+        execution_data: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        if fidelity_mode in BOOK_MODES:
+            from .chart_book import freeze
+            preview,_,_ = freeze(self,dict(dataset_id=dataset_id,data_epoch=data_epoch,
+                start_time_ms=start_time_ms,end_time_ms=end_time_ms,interval=interval,
+                fidelity_mode=fidelity_mode,exchange=exchange,market_type=market_type,
+                contract_data_mode=contract_data_mode,account_model=account_model,
+                funding_mode=funding_mode,execution_data=execution_data),allow_incomplete_contract=True)
+            return preview
+        if execution_data is not None:
+            raise BacktestError('FIDELITY_MISLABEL', 'frozen book data requires a chart book mode')
         if fidelity_mode in {"AGG_TRADE_TAPE", "AGG_TRADE_EXECUTION"}:
             manifest = self._manifest(dataset_id)
             dataset = self._freeze_trade_dataset(
@@ -365,11 +377,15 @@ class BacktestRuntime:
         config = json.loads(str(record["config_json"]))
         interval = str(
             config.get("signal_interval")
-            if record["fidelity_mode"] == "AGG_TRADE_EXECUTION"
+            if record["fidelity_mode"] in DUAL_MODES
             else config.get("interval")
             or self._manifest(str(record["dataset_id"]))["interval"]
         )
-        if record["fidelity_mode"] == "BAR_APPROX":
+        if record['fidelity_mode'] in BOOK_MODES:
+            from .chart_book import freeze,require_identity
+            preview,_,bars=freeze(self,config)
+            require_identity(record,preview)
+        elif record["fidelity_mode"] == "BAR_APPROX":
             ref = self._dataset_ref(
                 dataset_id=record["dataset_id"],
                 data_epoch=record["data_epoch"],
@@ -864,6 +880,15 @@ class BacktestWorker:
                         ),
                     },
                 )
+            elif record['fidelity_mode'] in BOOK_MODES:
+                from .chart_book import freeze,require_identity
+                preview,events,_=freeze(self,config)
+                require_identity(record,preview)
+                if config.get('chart_book_data_hash')!=preview['execution_data_hash']:
+                    raise BacktestError('DATA_SNAPSHOT_MISMATCH','frozen book input digest changed')
+                service.execute_dual_clock_run(run_id,events=events,provider=provider,
+                    observation_market=observation_market,
+                    snapshot_evidence={'quality':preview['quality']})
             elif record["fidelity_mode"] in {"AGG_TRADE_TAPE", "AGG_TRADE_EXECUTION"}:
                 if self.trade_archive is None:
                     raise MarketDatasetError(

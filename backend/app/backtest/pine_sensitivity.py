@@ -97,6 +97,7 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
                 deadline=deadline,control=control)
             def run_window():
                 return replay.run(events,strategy,warmup_events=0,finalize=True,
+                    **({'end_time_ms':int(config['end_time_ms'])} if config.get('fidelity_mode') in {'BOOK_ASSISTED','BOOK_DEPTH','BOOK_SAMPLED'} else {}),
                     **({"fill_callback": callbacks.on_fill} if callbacks is not None and not config.get("pine_realtime_ticks") else {}),
                     **({"tick_callback":callbacks.on_tick} if config.get("pine_realtime_ticks") else {}),
                     **({"fill_callback": historical_callbacks.on_fill} if historical_callbacks is not None else {}),
@@ -141,7 +142,10 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
         replay = _clone_kernel(kernel, slippage_bps=kernel.slippage_bps * multiplier,
             taker_fee_bps=kernel.taker_fee_bps * multiplier, maker_fee_bps=kernel.maker_fee_bps * multiplier)
         scenarios.append(summarize(label, assumptions(str(multiplier)), *evaluate(replay)))
-    if isinstance(kernel, SimulationKernel):
+    if config.get('fidelity_mode') in {'BOOK_ASSISTED','BOOK_DEPTH','BOOK_SAMPLED'}:
+        scenarios.append(summarize('LATENCY_PLUS_ONE_TIER', assumptions(), baseline, baseline_policy, metadata,
+            status='NOT_APPLICABLE_PHYSICAL_BOOK_POLICY'))
+    elif isinstance(kernel, SimulationKernel):
         scenarios.append(summarize("LATENCY_PLUS_ONE_TIER", assumptions(), baseline, baseline_policy, metadata,
             status="NOT_APPLICABLE_BAR_CLOCK"))
     else:
@@ -149,7 +153,8 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
         scenarios.append(summarize("LATENCY_PLUS_ONE_TIER", assumptions(latency=True), *evaluate(replay)))
     if rate is None:
         scenarios.append(summarize("PARTICIPATION_DOWN_ONE_TIER", assumptions(), baseline, baseline_policy, metadata,
-            status="NOT_APPLICABLE_OHLC_PATH_NO_TAPE_CAPACITY"))
+            status=('NOT_APPLICABLE_PHYSICAL_BOOK_CAPACITY' if config.get('fidelity_mode') in {'BOOK_ASSISTED','BOOK_DEPTH','BOOK_SAMPLED'}
+                    else 'NOT_APPLICABLE_OHLC_PATH_NO_TAPE_CAPACITY')))
     else:
         replay = _clone_kernel(kernel, participation_rate=rate / 2)
         scenarios.append(summarize("PARTICIPATION_DOWN_ONE_TIER", assumptions(participation=rate / 2), *evaluate(replay)))
