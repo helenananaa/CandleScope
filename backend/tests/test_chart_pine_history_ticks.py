@@ -138,20 +138,31 @@ def test_provider_half_bar_reconstruction_keeps_exact_future_intents_and_account
         recovered.close()
 
 
-def test_chart_requested_history_uses_each_tick_availability_and_recovers_its_feed_cursor(service,runtime):
+def test_chart_requested_history_uses_canonical_visibility_and_recovers_its_feed_cursor(service,runtime):
     from tests.test_native_additional_inputs import additional
     host,_=runtime
     reference=additional(host,"chart-tick-foreign","ETHUSDT","2m",120000,[100,200,300,400,500])
     source=SOURCE+'\nplot(request.security("BINANCE:ETHUSDT","2",close))\n'
+    source+='''
+varip array<float> requestedSeen=array.new_float(4,na)
+array.set(requestedSeen,(n-1)%4,request.security("BINANCE:ETHUSDT","2",close))
+plot(array.get(requestedSeen,0))
+plot(array.get(requestedSeen,1))
+plot(array.get(requestedSeen,2))
+plot(array.get(requestedSeen,3))
+'''
     service.pine_local_data_root=str(host.local_data.root)
     value=config(service,source=source,pine_contexts=[{**reference,"symbol":"BINANCE:ETHUSDT","timeframe":"2"}])
     provider=RecordingProvider()
     execute(service,value,"chart-foreign-ticks",provider)
     saved=provider.snapshot()
     groups=saved["execution_schedule"]
-    assert [len(item["evaluation"]["request_updates"]) for item in groups[1]]==[0,0,0,1]
+    assert [item["evaluation"]["request_observed_at_ms"] for item in groups[1]]==[119999]*4
+    assert [len(item["evaluation"]["request_updates"]) for item in groups[1]]==[1,0,0,0]
     recovered=PineEngineProvider()
     try:
         recovered.restore(saved)
         assert recovered.snapshot()==saved
+        output=recovered.stream.output()["output"]
+        assert [plot["values"] for plot in output["plots"][-5:]]==[[None,100,100,200,200]]*5
     finally: recovered.close()

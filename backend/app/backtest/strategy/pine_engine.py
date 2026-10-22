@@ -330,7 +330,7 @@ class PineEngineProvider:
             timeframe = pine_timeframe(self.context["pineChartInterval"])
         from app.backtest.pine_requested_data import visible_contexts
         cutoff = int(row.get("close_time_ms", frame.event_time_ms))
-        if self.streaming:
+        if self.streaming and (not schedule_context or schedule_context["bar_state"] != "historical"):
             cutoff=min(frame.event_time_ms,cutoff)
         elif not schedule_context or schedule_context["bar_state"] != "historical":
             cutoff = min(frame.watermark_ms - (0 if confirmed else 1), cutoff)

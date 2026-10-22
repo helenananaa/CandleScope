@@ -35,7 +35,8 @@ chart bars, with interrupted intrabar work discarded and reconstructed.
 Independent cost scenarios use fresh providers, accounts and the same clock.
 Tests cover direct/serial adapters, the supervised whole-run process, V1/spot/V2,
 calculation-window skips, actual half-bar feedback reconstruction, interrupted
-kernel recovery, and foreign requested data delivered only at its observation
-availability. These are controlled installed-worker results. Physical/live tick
+kernel recovery, and foreign requested data revealed at the canonical historical
+chart close on every synthetic vertex, with append-only deltas. Realtime clocks
+retain actual observation limits. These are controlled installed-worker results. Physical/live tick
 clocks, dynamic discovery, total resource qualification, TradingView-wide
 consistency and the formal packaged binary remain separate work.

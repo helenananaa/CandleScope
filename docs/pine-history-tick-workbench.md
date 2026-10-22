@@ -23,12 +23,14 @@ funding, liquidation, working-order margin and shared participation capacity.
 The original minimum-notional policy is retained, including its reduce-only
 behavior; no account rule is relaxed to force a native-broker comparison.
 
-Foreign requested feeds advance at each synthetic observation timestamp.
-Higher-timeframe rows are delivered only once their close becomes available;
-later observations carry empty update deltas. Core separately owns canonical
-same-context expression semantics. This differs from the older fill-only BAR
-profile, which supplies completed historical chart visibility to callbacks.
-The exact wider TradingView requested-context property remains unqualified.
+Historical requested feeds use the canonical chart close at every synthetic
+vertex. Eligible rows arrive once at the first vertex; later vertices carry
+empty deltas. Requested scalars and lower-timeframe arrays retain ordinary
+historical merge rules while account and order observations remain progressive.
+Bounded fresh TradingView samples support this property for completed bars and
+same/lower/higher requested contexts. Realtime data still uses the actual
+observed clock; later chart bars remain unavailable. These samples do not
+establish arbitrary script, feed or broker equivalence.
 
 The fixed historical plan supplies endpoint metadata and calculation windows
 without future account frames. Skipped bars still apply actual Host account

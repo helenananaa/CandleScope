@@ -49,10 +49,9 @@ class HistoryTickClock:
         evaluation = dict(bar=deepcopy(self.visible),account=feedback,
                           event_time_ms=point.event_time_ms,confirmed=ordinal==3)
         if self.feed is not None:
-            # Unlike historical fill-only recalculation, explicit history ticks
-            # reveal foreign feeds at each observation's matching clock. Core
-            # separately owns canonical same-context expression semantics.
-            observed = point.event_time_ms
+            # Historical requested contexts use the completed chart boundary at
+            # every synthetic vertex; the account/order path remains progressive.
+            observed = source.event_time_ms
             evaluation.update(request_observed_at_ms=observed,request_updates=self.feed.advance(observed))
         observation = dict(evaluation=evaluation,context=dict(bar_state="historical",trigger="historical_tick",is_new=True))
         result = self.stream.observe(observation)

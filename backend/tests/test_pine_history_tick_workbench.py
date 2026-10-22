@@ -116,20 +116,28 @@ plot(strategy.position_size)
     assert all(len(group)==4 for group in result["raw_output"]["execution_schedule"])
 
 
-def test_requested_streams_follow_tick_availability_and_restore_without_resending_old_updates(runtime):
+def test_requested_streams_use_canonical_history_and_restore_without_resending_old_updates(runtime):
     from tests.test_native_additional_inputs import additional
     host,main=runtime
     value=config(main)
     value["contexts"]=[{**additional(host,"tick-foreign","ETHUSDT","2m",120000,[100,200,300,400,500]),
         "symbol":"BINANCE:ETHUSDT","timeframe":"2","metadata":{"priceTickSize":".25"}}]
     value["source"]+='\nplot(request.security("BINANCE:ETHUSDT","2",close))\n'
+    value["source"]+='''
+varip array<float> requestedSeen=array.new_float(4,na)
+array.set(requestedSeen,(n-1)%4,request.security("BINANCE:ETHUSDT","2",close))
+plot(array.get(requestedSeen,0))
+plot(array.get(requestedSeen,1))
+plot(array.get(requestedSeen,2))
+plot(array.get(requestedSeen,3))
+'''
     record=terminal(host.native,host.native.create(value,"tick-requests")["run_id"])
     assert record["state"]=="COMPLETED",record.get("error")
     result=record["result"]
-    assert result["graphics"][-1]["values"]==[None,100,100,200,200,300,300,400,400,500]
+    assert [plot["values"] for plot in result["graphics"][-5:]]==[[None,100,100,200,200,300,300,400,400,500]]*5
     group=result["raw_output"]["execution_schedule"][1]
-    assert [item["evaluation"]["request_observed_at_ms"] for item in group]==[60000,79999,99999,119999]
-    assert [len(item["evaluation"]["request_updates"]) for item in group]==[0,0,0,1]
+    assert [item["evaluation"]["request_observed_at_ms"] for item in group]==[119999]*4
+    assert [len(item["evaluation"]["request_updates"]) for item in group]==[1,0,0,0]
     replay=host.native.replay
     created=replay.create(record["run_id"])
     key=created["replay_id"]
