@@ -1,0 +1,211 @@
+"""Workbench observed-print Pine streams over authoritative tape/book accounts."""
+from copy import deepcopy
+import time
+
+from app.data_engine.interval_policy import parse_interval_spec
+from app.market_dataset.snapshot import MarketEvent
+from app.market_dataset.trades import assert_trade_stream
+from .errors import BacktestError
+from .native_session import STREAM_CONTRACT
+from .pine_print_account import events as physical_events,apply_account,observe_market,record_decision,AUXILIARY,FIDELITIES
+from .pine_request_updates import from_wire,pass_observations,validate_replay
+from .pine_stream import PineStream
+
+CONTRACT="candlescope.pine-print-tick/1"
+
+
+def open_stream(plugin,wire,cancelled,deadline,*,resume=None):
+    if (wire.get("pine_print_tick_contract")!=CONTRACT or wire.get("execution_fidelity") not in FIDELITIES
+            or wire["identity"].get("external_stream_contract")!=STREAM_CONTRACT):
+        raise BacktestError("EXTERNAL_UNSUPPORTED","physical Pine ticks require the negotiated print stream")
+    names={"source","parameters","libraries","context","contexts","host_settings","risk_contract",
+           "closing_ticks","order_metadata_contract","currency_rates","request_update_contract"}
+    opening={key:deepcopy(value) for key,value in wire.items() if key in names}
+    if opening.get("contexts") and not wire.get("request_update_contract"):
+        raise BacktestError("EXTERNAL_UNSUPPORTED","physical tick requests require observed append-only feeds")
+    if wire.get("request_update_contract"):
+        opening["contexts"]=[{**item,"bars":[]} for item in opening.get("contexts",[])]
+    transport={"protocol":wire["protocol"],"identity":wire["identity"]}
+    if resume is None:
+        return PineStream(plugin,transport,opening,cancelled,deadline=deadline)
+    from .external_replay import validate_state
+    validate_state(wire,resume)
+    saved=(resume.get("clock") or {}).get("stream")
+    if not isinstance(saved,dict) or saved.get("opening")!=opening or saved.get("wire")!=transport:
+        raise BacktestError("NATIVE_IDENTITY_MISMATCH","physical Pine stream checkpoint differs")
+    observed=[]
+    def verify(command,result):
+        if command["operation"]=="stream_observe": observed.extend(result["intents"])
+    stream=PineStream.restore(plugin,saved,cancelled,deadline=deadline,verify=verify)
+    if observed!=resume["history"]:
+        stream.close()
+        raise BacktestError("EXTERNAL_NONCAUSAL_PREFIX","physical Pine replayed intents differ")
+    return stream
+
+
+class ReplayWorker:
+    supported=True
+
+    def __init__(self,plugin,wire):
+        self.plugin,self.wire,self.stream=plugin,wire,None
+        self.history=None
+
+    def execute(self,runner,cancelled,*,resume,target):
+        deadline=time.monotonic()+120
+        saved=(resume or {}).get("clock",{}).get("stream")
+        if not (self.stream is not None and isinstance(saved,dict)
+                and not self.stream.bar_open and self.stream.checkpoint()==saved
+                and self.history==resume.get("history")):
+            self.close()
+            self.stream=open_stream(self.plugin,self.wire,cancelled,deadline,resume=resume)
+        self.stream.cancelled,self.stream.deadline=cancelled,deadline
+        from .external import _run_external_host
+        result,state=_run_external_host(self.plugin,self.wire,runner,cancelled,resume=resume,target=target,
+            deadline=deadline,_scenario_runner=runner,_pine_stream=self.stream)
+        self.history=deepcopy(state["history"])
+        return result,state
+
+    def close(self):
+        if self.stream is not None:
+            self.stream.close()
+            self.stream=None
+        self.history=None
+
+
+def validate_state(wire,state):
+    from .native_replay_storage import same_json
+    clock=state.get("clock") or {}
+    saved=clock.get("stream") or {}
+    groups=clock.get("groups")
+    cursor=state["cursor"]
+    if (clock.get("contract")!=CONTRACT or saved.get("cursor")!=cursor or saved.get("bar_open") is not False
+            or saved.get("input_skip")!=0 or saved.get("intents")!=len(state["history"])
+            or not isinstance(groups,list) or len(groups)!=cursor
+            or not same_json(groups,state["last_request"].get("execution_schedule"))
+            or not same_json(clock.get("accounts"),state["accounts"])
+            or not same_json(clock.get("history"),state["history"])):
+        raise BacktestError("NATIVE_IDENTITY_MISMATCH","physical Pine tick checkpoint cursors differ")
+    flat=[item for group in groups for item in group]
+    journal=[item.get("command",{}).get("observation") for item in saved.get("journal",[])
+             if item.get("command",{}).get("operation")=="stream_observe"]
+    if not same_json(flat,journal) or any(not group or group[-1]["evaluation"].get("account")!=state["accounts"][index]
+            or group[-1]["evaluation"].get("confirmed") is not True for index,group in enumerate(groups)):
+        raise BacktestError("NATIVE_IDENTITY_MISMATCH","physical Pine transcript differs from its stream journal")
+
+
+class PrintTickClock:
+    def __init__(self,stream,kernel,orders,wire,*,state=None):
+        self.stream,self.kernel,self.orders,self.wire=stream,kernel,orders,wire
+        state=deepcopy(state or {})
+        self.groups,self.accounts,self.history=(state.get(key,[]) for key in ("groups","accounts","history"))
+        self.cursor=state.get("bar_cursor",0)
+        self.last_sequence=state.get("last_sequence",0)
+        self.event_cursor=state.get("event_cursor",0)
+        self.visible=None
+        self.feed=from_wire(wire)
+        if self.feed is not None and state:
+            validate_replay(self.feed,state.get("request_feed"),pass_observations(self.groups,scheduled=True))
+        if stream.bar_open or stream.cursor!=self.cursor or stream.input_skip:
+            raise BacktestError("NATIVE_IDENTITY_MISMATCH","physical Pine and ledger cursors differ")
+
+    def observe(self,event,*,confirmed=False,trigger="realtime_tick"):
+        from .external import account_feedback_profit
+        from .pine_workbench import check_risk_response
+        from .workbench_sensitivity import check_control
+        check_control(self.stream.cancelled,self.stream.deadline)
+        first=len(self.groups)==self.cursor
+        if first:
+            self.stream.begin(deepcopy(self.visible),bar_state="realtime")
+        self.orders.feedback()
+        account=self.kernel.account
+        feedback=dict(time=self.visible["time"],position_size=float(account.position_qty),
+            position_avg_price=None if account.entry_price is None else float(account.entry_price),
+            equity=float(account.equity()),initial_capital=float(self.kernel.initial_balance),
+            netprofit=float(account_feedback_profit(account,self.kernel.initial_balance)),openprofit=float(account.unrealized()))
+        evaluation=dict(bar=deepcopy(self.visible),account=feedback,event_time_ms=event.event_time_ms,confirmed=confirmed)
+        if self.feed is not None:
+            evaluation.update(request_observed_at_ms=event.event_time_ms,request_updates=self.feed.advance(event.event_time_ms))
+        observation=dict(evaluation=evaluation,context=dict(bar_state="realtime",trigger=trigger,is_new=first))
+        result=self.stream.observe(observation)
+        current=result["intents"]
+        if len(current)>64:
+            raise BacktestError("BUDGET_EXCEEDED","at most 64 intents per observed Pine tick")
+        self.orders.configure(result.get("pyramiding",1))
+        check_risk_response(self.orders,self.wire,result)
+        if first:
+            self.groups.append([])
+            self.accounts.append(None)
+        self.groups[-1].append(deepcopy(observation))
+        self.accounts[-1]=feedback
+        self.history.extend(current)
+        intents=self.orders.translate(current,event.sequence)
+        record_decision(self.kernel,dict(sequence=event.sequence,watermark_ms=event.event_time_ms,intents=intents,
+            signal_bar=self.cursor,pass_index=len(self.groups[-1])-1,trigger=trigger.upper()))
+        self.kernel._enqueue_many(intents,current_sequence=event.sequence)
+
+    def close_bar(self):
+        if self.visible is None:
+            raise BacktestError("DATA_GAP_REJECTED","physical Pine chart bar has no observed prints")
+        from .pine_workbench import bar_event
+        source=bar_event(self.wire,self.cursor,self.last_sequence)
+        self.visible=deepcopy(self.wire["bars"][self.cursor])
+        event=MarketEvent(self.last_sequence,source.event_time_ms,"TRADES",dict(price=str(self.visible["close"]),qty="0"))
+        self.kernel._last_event=event
+        observe_market(self.kernel,event)
+        self.observe(event,confirmed=True,trigger="bar_close")
+        if self.wire.get("closing_ticks"):
+            from app.simulation.closing_tick import match_closing_tick
+            match_closing_tick(self.kernel,source,self.last_sequence,
+                on_fill=(lambda _bar,tick:self.observe(tick,confirmed=True,trigger="closing_fill"))
+                    if self.wire.get("fill_recalculation") else None)
+            self.kernel._record_equity_point(dict(sequence=self.last_sequence,event_time_ms=source.event_time_ms,
+                equity=str(self.kernel.account.equity()),position_qty=str(self.kernel.account.position_qty)))
+        self.stream.commit()
+        self.cursor+=1
+        self.visible=None
+
+
+def run_clock(stream,kernel,orders,wire,*,state=None,target=None):
+    clock=PrintTickClock(stream,kernel,orders,wire,state=state)
+    interval=parse_interval_spec(wire["interval"])
+    events=physical_events(wire)
+    kernel.source_kind=assert_trade_stream(tuple(event for event in events if event.role=="TRADES"))
+    target=len(wire["bars"]) if target is None else target
+    end=interval.next_ms(wire["bars"][target-1]["time"]*1000)
+    from .workbench_sensitivity import check_control
+    for event in events[clock.event_cursor:]:
+        if event.event_time_ms>=end: break
+        check_control(stream.cancelled,stream.deadline)
+        while interval.next_ms(wire["bars"][clock.cursor]["time"]*1000)<=event.event_time_ms:
+            clock.close_bar()
+        kernel._last_event=event
+        if event.role in AUXILIARY:
+            apply_account(kernel,event,record_equity=kernel._market_event_count>0)
+        elif event.role=="ORDER_BOOK":
+            kernel._apply_book(event)
+            if kernel.market_observer is not None: kernel.market_observer(event)
+        else:
+            price,qty=float(event.payload["price"]),float(event.payload["qty"])
+            if clock.visible is None:
+                clock.visible=dict(time=wire["bars"][clock.cursor]["time"],open=price,high=price,low=price,close=price,volume=qty)
+            else:
+                clock.visible.update(high=max(clock.visible["high"],price),low=min(clock.visible["low"],price),
+                    close=price,volume=clock.visible["volume"]+qty)
+            if wire.get("pine_v2_print_contract"): kernel._market_event_count+=1
+            observe_market(kernel,event)
+            kernel._match(event)
+            clock.observe(event)
+            kernel.equity_curve.append(dict(sequence=event.sequence,event_time_ms=event.event_time_ms,
+                equity=str(kernel.account.equity()),position_qty=str(kernel.account.position_qty)))
+        clock.last_sequence=event.sequence
+        clock.event_cursor+=1
+    while clock.cursor<target: clock.close_bar()
+    if target==len(wire["bars"]): kernel.finalize_orders()
+    output=stream.output()
+    latest={**output,"raw_output":output["output"],"graphics":output["output"].get("plots",[]),"intents":deepcopy(clock.history)}
+    saved=dict(contract=CONTRACT,bar_cursor=clock.cursor,last_sequence=clock.last_sequence,event_cursor=clock.event_cursor,
+        groups=clock.groups,accounts=clock.accounts,history=clock.history,stream=stream.checkpoint(),latest=latest)
+    if clock.feed is not None: saved["request_feed"]=clock.feed.snapshot()
+    last_request=dict(bars=deepcopy(wire["bars"][:clock.cursor]),execution_schedule=deepcopy(clock.groups))
+    passes=[[item["evaluation"] for item in group] for group in clock.groups]
+    return latest,clock.history,clock.accounts,passes,saved,last_request

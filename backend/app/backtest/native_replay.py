@@ -201,8 +201,11 @@ class NativeReplay:
                 if evicted is not None:
                     evicted.close()
             self.workers[key] = None  # Reserve a slot before launching outside the lock.
-        if external and wire.get("pine_history_tick_contract"):
-            from .pine_history_tick_execution import ReplayWorker
+        if external and (wire.get("pine_history_tick_contract") or wire.get("pine_print_tick_contract")):
+            if wire.get("pine_print_tick_contract"):
+                from .pine_print_tick_execution import ReplayWorker
+            else:
+                from .pine_history_tick_execution import ReplayWorker
             worker=ReplayWorker(plugin,wire)
         else:
             worker = SessionWorker(plugin, wire, cancelled,evaluator=external)
@@ -241,7 +244,7 @@ class NativeReplay:
                 else:
                     if external:
                         from .external import _run_external_host
-                        if wire.get("pine_history_tick_contract"):
+                        if wire.get("pine_history_tick_contract") or wire.get("pine_print_tick_contract"):
                             if worker:
                                 result,external_state=worker.execute(self.native.runner,cancelled,resume=external_state,target=count)
                             else:

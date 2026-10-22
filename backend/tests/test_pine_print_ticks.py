@@ -1,0 +1,195 @@
+"""Workbench actual print/book tick execution and evaluator-before-ledger recovery."""
+from decimal import Decimal
+from copy import deepcopy
+
+import pytest
+
+from tests.test_native_backtests import runtime as runtime,terminal,pytestmark as pytestmark
+from tests.test_external_replay import payload
+from tests.test_pine_workbench_v2_print import config as v2_config
+from tests.test_native_replay import settle
+
+
+SOURCE='''//@version=6
+strategy("physical ticks",calc_on_every_tick=true%s)
+varip int n=0
+n+=1
+if n==1
+    strategy.entry("L",strategy.long,qty=1)
+if strategy.position_size>0
+    strategy.close_all()
+plot(n)
+plot(strategy.position_size)
+plot(close)
+plot(volume)
+'''
+MODES=("TRADE_TAPE","BOOK_ASSISTED","BOOK_DEPTH","BOOK_SAMPLED")
+
+
+def config(main,mode,callbacks,account):
+    value=v2_config(main,mode,callbacks) if account=="LINEAR_PERP_ONE_WAY_V2" else payload(main,mode,callbacks)
+    if account!="LINEAR_PERP_ONE_WAY_V2": value["account_model"]=account
+    if account=="SPOT_CASH_V1": value["market_type"]="spot"
+    value["source"]=SOURCE % (",calc_on_order_fills=true" if callbacks else "")
+    value["cost_sensitivity_mode"]="SKIP"
+    return value
+
+
+@pytest.mark.parametrize("account",["LINEAR_PERP_ONE_WAY_V1","SPOT_CASH_V1","LINEAR_PERP_ONE_WAY_V2"])
+@pytest.mark.parametrize("mode",MODES)
+@pytest.mark.parametrize("callbacks",[False,True])
+def test_actual_print_ticks_observe_partial_bars_and_settled_accounts_without_duplicate_fill_executions(runtime,account,mode,callbacks):
+    host,main=runtime
+    record=terminal(host.native,host.native.create(config(main,mode,callbacks,account),"physical-ticks")["run_id"])
+    assert record["state"]=="COMPLETED",record.get("error")
+    result=record["result"]
+    groups=result["raw_output"]["execution_schedule"]
+    assert [len(group) for group in groups]==[5]*10
+    assert [plot["values"] for plot in result["graphics"][:1]]==[list(range(5,51,5))]
+    first=groups[0]
+    assert [row["evaluation"]["bar"]["volume"] for row in first]==[25,50,75,100,100]
+    assert [row["evaluation"]["account"]["position_size"] for row in first]==[0,1,0,0,0]
+    assert [row["context"]["trigger"] for row in first]==["realtime_tick"]*4+["bar_close"]
+    assert [row["context"]["is_new"] for row in first]==[True,False,False,False,False]
+    assert all(row["context"]["bar_state"]=="realtime" for group in groups for row in group)
+    assert [fill["event_time_ms"] for fill in result["trades"]]==[10000,20000]
+    assert Decimal(result["position"]["position_qty"])==0
+
+
+@pytest.mark.parametrize("mode",MODES)
+def test_physical_tick_replay_reuses_or_reconstructs_the_exact_stream_without_rematching_history(runtime,monkeypatch,mode):
+    host,main=runtime
+    record=terminal(host.native,host.native.create(config(main,mode,True,"LINEAR_PERP_ONE_WAY_V2"),"tick-replay")["run_id"])
+    assert record["state"]=="COMPLETED",record.get("error")
+    replay=host.native.replay
+    created=replay.create(record["run_id"])
+    key=created["replay_id"]
+    def seek(target):
+        replay.command(key,replay.get(key)["revision"],"seek",target)
+        state=settle(replay,key)
+        assert state.get("error") is None,state
+        return state
+    first=seek(1)
+    from app.simulation.trade_kernel import TradeSimulationKernel
+    from app.simulation.book_kernel import BookAssistedKernel
+    from app.simulation.depth_kernel import DepthQueueKernel
+    from app.simulation.sampled_book_kernel import SampledBookKernel
+    cls=dict(TRADE_TAPE=TradeSimulationKernel,BOOK_ASSISTED=BookAssistedKernel,BOOK_DEPTH=DepthQueueKernel,BOOK_SAMPLED=SampledBookKernel)[mode]
+    original_match,original_restore=cls._match,cls.restore
+    restored=[]
+    def track_restore(kernel,state):
+        result=original_restore(kernel,state)
+        restored.append((kernel,state["last_event"]["sequence"]))
+        return result
+    def match_only_later_source(kernel,event):
+        cutoff=next((sequence for item,sequence in restored if item is kernel),None)
+        if cutoff is not None: assert event.sequence>cutoff,"recovered account matched a recorded physical event"
+        return original_match(kernel,event)
+    monkeypatch.setattr(cls,"restore",track_restore)
+    monkeypatch.setattr(cls,"_match",match_only_later_source)
+    snapshot=replay.snapshot(key,first["revision"])["snapshots"][0]["snapshot_id"]
+    third=seek(3)
+    replay.restore(key,third["revision"],snapshot)
+    assert seek(3)["result"]==third["result"]
+    from app.backtest.native_replay import NativeReplay
+    replay.shutdown()
+    replay=host.native.replay=NativeReplay(host.native)
+    assert seek(created["total"])["result"]==record["result"]
+
+
+@pytest.mark.parametrize("mode,participation",[(mode,None) for mode in MODES]+[("TRADE_TAPE",.2)])
+def test_cost_scenarios_and_funding_reexecute_the_same_observed_tick_clock(runtime,mode,participation):
+    host,main=runtime
+    value=config(main,mode,True,"LINEAR_PERP_ONE_WAY_V2")
+    value["source"]=value["source"].replace('if strategy.position_size>0\n    strategy.close_all()\n','')
+    value["cost_sensitivity_mode"]="AUTO"
+    if participation is not None: value.update(execution_model_revision="EXECUTION_REALISM_V2",participation_rate=participation)
+    record=terminal(host.native,host.native.create(value,"physical-tick-costs")["run_id"])
+    assert record["state"]=="COMPLETED",record.get("error")
+    result=record["result"]
+    assert result["cost_sensitivity"]["baseline_reexecution_verified"] is True
+    assert result["position"]["funding_event_count"]==1 and Decimal(result["position"]["funding_paid"])<0
+    group=result["raw_output"]["execution_schedule"][1]
+    assert [row["evaluation"]["event_time_ms"] for row in group]==[60000,70000,80000,90000,119999]
+    assert group[3]["evaluation"]["account"]["netprofit"]<group[2]["evaluation"]["account"]["netprofit"]
+
+
+@pytest.mark.parametrize("mode,fresh",[(mode,False) for mode in MODES]+[("BOOK_SAMPLED",True)])
+def test_simulated_closing_fill_chains_keep_one_confirmation_and_explicit_feedback(runtime,mode,fresh):
+    host,main=runtime
+    value=config(main,mode,True,"LINEAR_PERP_ONE_WAY_V2")
+    value["source"]=value["source"].replace('calc_on_every_tick=true','calc_on_every_tick=true,process_orders_on_close=true')
+    value["source"]=value["source"].replace('if n==1','if n==5 and barstate.isconfirmed')
+    if fresh:
+        # A same-ms sampled quote has no known cross-stream ordering. A quote
+        # observed strictly before the close may supply its existing liquidity.
+        quote=next(row for row in value["execution_data"]["events"] if row["role"]=="ORDER_BOOK" and row["time_ms"]==59999)
+        quote["time_ms"]=quote["payload"]["sample_time_ms"]=59998
+    record=terminal(host.native,host.native.create(value,"physical-tick-closing")["run_id"])
+    assert record["state"]=="COMPLETED",record.get("error")
+    result=record["result"]
+    group=result["raw_output"]["execution_schedule"][0]
+    if mode=="BOOK_SAMPLED" and not fresh:
+        assert [row["event_time_ms"] for row in result["trades"]]==[60000,70000]
+        assert [row["context"]["trigger"] for row in group]==["realtime_tick"]*4+["bar_close"]
+        return
+    assert [row["event_time_ms"] for row in result["trades"]]==[59999,59999]
+    assert [row["context"]["trigger"] for row in group]==["realtime_tick"]*4+["bar_close"]+["closing_fill"]*2
+    assert [row["evaluation"]["account"]["position_size"] for row in group[-3:]]==[0,1,0]
+
+
+def test_changed_observation_transcript_cannot_replace_the_committed_stream_journal(runtime):
+    from app.backtest.errors import BacktestError
+    from app.backtest.external_replay import validate_state
+    from app.backtest.native import digest
+    host,main=runtime
+    record=terminal(host.native,host.native.create(config(main,"TRADE_TAPE",True,"LINEAR_PERP_ONE_WAY_V2"),"tick-journal")["run_id"])
+    assert record["state"]=="COMPLETED",record.get("error")
+    replay=host.native.replay
+    created=replay.create(record["run_id"])
+    key=created["replay_id"]
+    replay.command(key,created["revision"],"seek",1)
+    assert settle(replay,key).get("error") is None
+    with host.native.lock:
+        state=deepcopy(replay._host_state(key))
+        wire=deepcopy(replay._input(record["run_id"]))
+    state["clock"]["groups"][0][0]["evaluation"]["account"]["equity"]+=1
+    state["last_request"]["execution_schedule"]=deepcopy(state["clock"]["groups"])
+    state["checksum"]=digest({key:value for key,value in state.items() if key!="checksum"})
+    with pytest.raises(BacktestError,match="transcript differs"):
+        validate_state(wire,state)
+
+
+def test_requested_rows_follow_actual_print_times_and_confirmation_then_recover_the_same_feed(runtime):
+    from tests.test_native_additional_inputs import additional
+    host,main=runtime
+    value=config(main,"TRADE_TAPE",False,"LINEAR_PERP_ONE_WAY_V2")
+    value["contexts"]=[{**additional(host,"print-tick-foreign","ETHUSDT","2m",120000,[100,200,300,400,500]),
+        "symbol":"BINANCE:ETHUSDT","timeframe":"2","metadata":{"priceTickSize":".25"}}]
+    value["source"]+='''
+r=request.security("BINANCE:ETHUSDT","2",close)
+varip array<float> seen=array.new_float(5,na)
+array.set(seen,(n-1)%5,r)
+plot(array.get(seen,0))
+plot(array.get(seen,1))
+plot(array.get(seen,2))
+plot(array.get(seen,3))
+plot(array.get(seen,4))
+'''
+    record=terminal(host.native,host.native.create(value,"physical-tick-requested")["run_id"])
+    assert record["state"]=="COMPLETED",record.get("error")
+    result=record["result"]
+    plots=result["graphics"][-5:]
+    assert [plot["values"] for plot in plots[:4]]==[[None,None,100,100,200,200,300,300,400,400]]*4
+    assert plots[4]["values"]==[None,100,100,200,200,300,300,400,400,500]
+    group=result["raw_output"]["execution_schedule"][1]
+    assert [row["evaluation"]["request_observed_at_ms"] for row in group]==[60000,70000,80000,90000,119999]
+    assert [len(row["evaluation"]["request_updates"]) for row in group]==[0,0,0,0,1]
+    replay=host.native.replay
+    created=replay.create(record["run_id"])
+    key=created["replay_id"]
+    for target in (1,5,created["total"]):
+        replay.command(key,replay.get(key)["revision"],"seek",target)
+        state=settle(replay,key)
+        assert state.get("error") is None,state
+    assert state["result"]==record["result"]

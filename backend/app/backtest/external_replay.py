@@ -66,12 +66,15 @@ def validate_state(wire,state):
                     or chart.get("sequence") != expected.sequence or chart.get("time_ms") != expected.event_time_ms
                     or v2.get("contract") != wire["pine_v2_bar_contract"]):
                 raise BacktestError("NATIVE_IDENTITY_MISMATCH", "Pine V2 account source cursor differs")
+    if wire.get("pine_print_tick_contract"):
+        from .pine_print_tick_execution import validate_state as validate_print_ticks
+        validate_print_ticks(wire,state)
     if wire.get("request_update_contract"):
         from .pine_request_updates import from_wire, pass_observations, validate_replay
         try:
             feed = from_wire(wire)
             last = state.get("last_request") or {}
-            if wire.get("pine_bar_path_contract"):
+            if wire.get("pine_bar_path_contract") or wire.get("pine_print_tick_contract"):
                 observations = pass_observations(last.get("execution_schedule", []), scheduled=True)
             elif wire.get("fill_recalculation"):
                 observations = pass_observations(last.get("execution_passes", []), scheduled=False)

@@ -40,7 +40,7 @@ def host_identity():
     files.append(Path(__file__).with_name("pine_request_updates.py"))
     files.append(Path(__file__).with_name("pine_print_account.py"))
     files.append(Path(__file__).with_name("workbench_sensitivity.py"))
-    files.extend(Path(__file__).with_name(name) for name in ("pine_stream.py","pine_history_tick_clock.py","pine_history_tick_execution.py"))
+    files.extend(Path(__file__).with_name(name) for name in ("pine_stream.py","pine_history_tick_clock.py","pine_history_tick_execution.py","pine_print_tick_execution.py"))
     for path in files:
         checksum.update(path.name.encode())
         checksum.update(path.read_bytes())
@@ -79,8 +79,11 @@ def run_external_host(plugin, wire, runner, cancelled, **options):
     from .native_session import SessionWorker
     options.setdefault("deadline", time.monotonic() + 120)
     options.setdefault("_scenario_runner", runner)
-    if wire.get("pine_history_tick_contract"):
-        from .pine_history_tick_execution import open_stream
+    if wire.get("pine_history_tick_contract") or wire.get("pine_print_tick_contract"):
+        if wire.get("pine_print_tick_contract"):
+            from .pine_print_tick_execution import open_stream
+        else:
+            from .pine_history_tick_execution import open_stream
         stream=open_stream(plugin,wire,cancelled,options["deadline"],resume=options.get("resume"))
         try:
             return _run_external_host(plugin,wire,runner,cancelled,_pine_stream=stream,**options)
@@ -236,7 +239,11 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
                                    **{key: str(bar[key]) for key in ("open", "high", "low", "close", "volume")}})
               for index, bar in enumerate(wire["bars"])]
     execution_passes = None
-    if wire.get("pine_history_tick_contract"):
+    if wire.get("pine_print_tick_contract"):
+        from .pine_print_tick_execution import run_clock
+        latest,history,accounts,execution_passes,clock,last_request=run_clock(
+            _pine_stream,kernel,orders,wire,state=clock,target=target)
+    elif wire.get("pine_history_tick_contract"):
         from .pine_history_tick_execution import run_clock
         latest,history,accounts,execution_passes,clock,last_request=run_clock(
             _pine_stream,kernel,orders,wire,state=clock,target=target)
@@ -302,6 +309,8 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
             "pre_print_account_fill_callback": "NEXT_OBSERVED_PRINT",
             "physical_capacity_policy": kernel.fill_policy, "official_oracle_verified": False}
         result["raw_output"]["account_provenance"] = wire.get("account_provenance", {})
+    if wire.get("pine_print_tick_contract"):
+        result["raw_output"].update(pine_print_tick_contract=wire["pine_print_tick_contract"],execution_schedule=clock["groups"])
     if wire.get("closing_ticks"):
         result["raw_output"]["closing_tick_contract"] = "candlescope.pine-closing-tick/1"
         result["raw_output"]["closing_execution"] = {

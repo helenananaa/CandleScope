@@ -60,7 +60,17 @@ def freeze_control(native, plugin, wire, payload):
         "risk_rules": deepcopy(configuration)}
     if quantity is not None:
         wire["pine_host_control"]["default_quantity"] = quantity
-    if execution.get("calcOnEveryHistoryTick"):
+    if execution.get("calcOnEveryTick") and wire["execution_fidelity"]!="BAR_APPROX":
+        from .native_session import STREAM_CONTRACT,SCHEDULE_CONTRACT,TICK_CONTRACT
+        from .pine_print_tick_execution import CONTRACT as PRINT_CONTRACT
+        from .pine_print_account import FIDELITIES
+        if (wire["execution_fidelity"] not in FIDELITIES or identity.get("external_stream_contract")!=STREAM_CONTRACT
+                or identity.get("execution_schedule_contract")!=SCHEDULE_CONTRACT
+                or identity.get("execution_tick_contract")!=TICK_CONTRACT):
+            raise BacktestError("EXTERNAL_UNSUPPORTED","physical Pine ticks require the negotiated print stream")
+        wire.update(pine_print_tick_contract=PRINT_CONTRACT,execution_schedule_contract=SCHEDULE_CONTRACT,
+                    execution_tick_contract=TICK_CONTRACT)
+    if execution.get("calcOnEveryHistoryTick") and not wire.get("pine_print_tick_contract"):
         from .native_session import STREAM_CONTRACT, SCHEDULE_CONTRACT, TICK_CONTRACT
         from .pine_history_tick_execution import CONTRACT as HISTORY_CONTRACT
         from app.simulation.pine_bar_kernel import CONTRACT as PATH_CONTRACT
