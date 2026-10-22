@@ -116,9 +116,19 @@ capacity policies remain authoritative. Completed-bar Workbench checkpoints and
 open-bar chart checkpoints reconstruct Pine before restoring their ledgers.
 Controlled cases cover independent costs, process restart, request availability,
 consecutive closing fills and same-ms sampled-book rejection without relaxing
-the matching policy. This follow-up still requires its full combined candidate
-gate against the exact new core binary. See [chart observed ticks](pine-chart-realtime-ticks.md)
+the matching policy. Its frozen `c4c25235` gate passes 949 cases across 75 modules
+with zero failures/errors/skips, unchanged 3,703 source/runtime/registry
+fingerprints and exact qualified core `872ae4b8c` bytes. Core passes 7,996 Rust,
+1,980 Python and 172 tooling tests plus formatting, Clippy, structure/host parity
+and generated WASM/Node. See [chart observed ticks](pine-chart-realtime-ticks.md)
 and [Workbench observed ticks](pine-workbench-print-ticks.md).
+
+A further requested-window prefix-origin defect is reproduced in independent
+core and actual chart controls. The [time-only requested window plan](pine-request-window-plan.md)
+now repairs it without supplying future prices or account frames. Targeted
+controls cover nested/lower requests, future rejection, realtime continuation
+and chart/Workbench skipped-window recovery. This newer capability still needs
+its complete combined candidate gate and does not enable dynamic discovery.
 
 Required work still includes chart book admission, unresolved dynamic historical
 window feedback/rebase, workload resources, connected live product acceptance,
