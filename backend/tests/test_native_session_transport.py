@@ -17,6 +17,7 @@ time.sleep(20)
         worker.request({"operation": "advance", "target": 1}, threading.Event(), timeout=.1)
     assert worker.process.poll() is not None
     assert worker.stderr.closed
+    assert not worker._io_thread.is_alive()
 
 
 def test_cancelled_session_reaps_child():
@@ -32,6 +33,7 @@ time.sleep(20)
     with pytest.raises(ValueError, match="NATIVE_CANCELLED"):
         worker.advance(1, event)
     assert worker.process.poll() is not None
+    assert not worker._io_thread.is_alive()
 
 
 @pytest.mark.parametrize("cancel", [False, True])
@@ -44,6 +46,7 @@ def test_evaluator_timeout_or_cancel_reaps_child_without_open_handshake(cancel):
     with pytest.raises(ValueError, match="NATIVE_CANCELLED" if cancel else "NATIVE_TIMEOUT"):
         worker.request({"operation": "execute"}, event, timeout=.1)
     assert worker.process.poll() is not None and worker.stderr.closed
+    assert not worker._io_thread.is_alive()
 
 
 def test_concurrent_close_reaps_child_and_releases_all_streams_once():
@@ -91,7 +94,8 @@ def test_terminated_pipe_close_error_does_not_mask_timeout_or_skip_other_streams
 
 @pytest.mark.parametrize("contract", [False, True])
 def test_real_worker_binds_full_identity_before_references_and_preserves_public_responses(contract):
-    identity = {"engine": "unchanged", **({"session_identity": "candlescope.session-identity/1"} if contract else {})}
+    identity = {"engine": "unchanged", "nested":{"value":"unchanged"},
+                **({"session_identity": "candlescope.session-identity/1"} if contract else {})}
     script = '''import json,sys
 for index,line in enumerate(sys.stdin):
     request=json.loads(line)
@@ -109,6 +113,7 @@ for index,line in enumerate(sys.stdin):
         for index in range(3):
             response = worker.request({"operation": "execute"}, threading.Event())
             assert response == {"ok": True, "identity": identity, "index": index}
+            response["identity"]["nested"]["value"] = "caller mutation"
     finally:
         worker.close()
 
@@ -135,3 +140,51 @@ for index,line in enumerate(sys.stdin):
     with pytest.raises(ValueError, match="NATIVE_IDENTITY_MISMATCH"):
         worker.request({"operation": "execute"}, threading.Event())
     assert worker.process.poll() is not None and worker.stderr.closed
+
+
+def test_reused_transport_preserves_ordered_responses_and_closes_its_thread():
+    script = '''import json,sys
+for line in sys.stdin:
+    request=json.loads(line)
+    print(json.dumps(dict(ok=True,identity=request['identity'],ordinal=request['ordinal'])),flush=True)
+'''
+    worker = SessionWorker({"command":[sys.executable,"-u","-c",script]},
+                           {"identity":{}},threading.Event(),evaluator=True)
+    transport = worker._io_thread
+    try:
+        for ordinal in range(500):
+            assert worker.request({"operation":"execute","ordinal":ordinal},threading.Event())["ordinal"] == ordinal
+            assert worker._io_thread is transport and transport.is_alive()
+    finally:
+        worker.close()
+    assert not transport.is_alive()
+    assert worker.process.poll() is not None
+    with pytest.raises(ValueError,match="session is closed"):
+        worker.request({"operation":"execute","ordinal":500},threading.Event())
+
+
+def test_concurrent_callers_cannot_mix_inflight_protocol_responses():
+    script = '''import json,sys,time
+for line in sys.stdin:
+    request=json.loads(line)
+    time.sleep(.001)
+    print(json.dumps(dict(ok=True,identity=request['identity'],ordinal=request['ordinal'])),flush=True)
+'''
+    worker = SessionWorker({"command":[sys.executable,"-u","-c",script]},
+                           {"identity":{}},threading.Event(),evaluator=True)
+    failures = []
+    def call(ordinal):
+        try:
+            assert worker.request({"operation":"execute","ordinal":ordinal},threading.Event())["ordinal"] == ordinal
+        except Exception as exc:
+            failures.append(exc)
+    try:
+        threads = [threading.Thread(target=call,args=(ordinal,)) for ordinal in range(12)]
+        for thread in threads: thread.start()
+        for thread in threads:
+            thread.join(timeout=5)
+            assert not thread.is_alive()
+        assert failures == []
+    finally:
+        worker.close()
+    assert not worker._io_thread.is_alive()

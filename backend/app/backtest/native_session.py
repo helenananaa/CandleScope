@@ -22,9 +22,12 @@ SESSION_IDENTITY_CONTRACT = "candlescope.session-identity/1"
 class SessionWorker:
     def __init__(self, plugin, wire, cancelled, *, evaluator=False):
         self._close_lock = threading.Lock()
+        self._request_lock = threading.Lock()
         self._closed = False
+        self._pending = queue.Queue(maxsize=1)
         self.close_errors = []
         self.identity = deepcopy(wire["identity"])
+        self._identity_json = encoded(self.identity)
         self._identity_ref = digest(self.identity)
         self._identity_ref_enabled = self.identity.get("session_identity") == SESSION_IDENTITY_CONTRACT
         self._identity_bound = False
@@ -40,7 +43,31 @@ class SessionWorker:
         except Exception:
             self.stderr.close()
             raise
+        self._io_thread = threading.Thread(target=self._exchange, name="native-worker-io", daemon=True)
+        try:
+            self._io_thread.start()
+        except Exception:
+            self.close()
+            raise
         self.supported = True if evaluator else self.request({**wire, "operation": "open"}, cancelled).get("supported") is True
+
+    def _exchange(self):
+        while True:
+            pending = self._pending.get()
+            if pending is None:
+                return
+            raw, response = pending
+            try:
+                self.process.stdin.write(raw)
+                self.process.stdin.flush()
+                line = self.process.stdout.readline(MAX_BYTES + 1)
+                if len(line) > MAX_BYTES:
+                    raise BacktestError("BUDGET_EXCEEDED", "native session output exceeds 64 MiB")
+                response.put(json.loads(line))
+            except Exception as exc:
+                response.put(exc)
+            if self._closed:
+                return
 
     def request(self, payload, cancelled, timeout=120):
         if "identity_ref" in payload:
@@ -63,6 +90,17 @@ class SessionWorker:
                     or payload.get("execution_schedule_contract") != SCHEDULE_CONTRACT
                     or payload.get("execution_schedule") is None or payload.get("execution_passes") is not None):
                 raise BacktestError("EXTERNAL_UNSUPPORTED", "explicit Pine execution schedule was not negotiated")
+        started = time.monotonic()
+        if not self._request_lock.acquire(timeout=max(0, timeout)):
+            raise BacktestError("NATIVE_TIMEOUT", "native session exceeded host deadline waiting for transport")
+        try:
+            return self._request_serial(payload, cancelled, timeout-(time.monotonic()-started), streaming)
+        finally:
+            self._request_lock.release()
+
+    def _request_serial(self, payload, cancelled, timeout, streaming):
+        if self._closed:
+            raise BacktestError("NATIVE_RUNTIME_UNAVAILABLE", "native session is closed")
         response = queue.Queue(maxsize=1)
         wire_payload = self._prefix_payload(payload) if self._prefix_enabled else payload
         header = ({"identity_ref": self._identity_ref} if self._identity_ref_enabled and self._identity_bound
@@ -73,18 +111,10 @@ class SessionWorker:
         if len(raw) > MAX_BYTES:
             self.close()
             raise BacktestError("BUDGET_EXCEEDED", "native session input exceeds 64 MiB")
-        def exchange():
-            try:
-                self.process.stdin.write(raw)
-                self.process.stdin.flush()
-                line = self.process.stdout.readline(MAX_BYTES + 1)
-                if len(line) > MAX_BYTES:
-                    raise BacktestError("BUDGET_EXCEEDED", "native session output exceeds 64 MiB")
-                response.put(json.loads(line))
-            except Exception as exc:
-                response.put(exc)
-        worker = threading.Thread(target=exchange, daemon=True)
-        worker.start()
+        # One bounded exchange and one response at a time. The transport thread
+        # survives successful calls; request-scoped queues prevent stale replies
+        # from crossing cancellation/timeout boundaries.
+        self._pending.put_nowait((raw, response))
         deadline = time.monotonic() + timeout
         try:
             while True:
@@ -107,7 +137,7 @@ class SessionWorker:
                             or result["identity_ref"] != self._identity_ref):
                         raise BacktestError("NATIVE_IDENTITY_MISMATCH", "unexpected session identity reference")
                     result = {key: value for key, value in result.items() if key != "identity_ref"}
-                    result["identity"] = deepcopy(self.identity)
+                    result["identity"] = json.loads(self._identity_json)
                 if digest(result.get("identity")) != self._identity_ref:
                     raise BacktestError("NATIVE_IDENTITY_MISMATCH", "unexpected session runtime")
                 if streaming and (result.get("external_stream_contract") != STREAM_CONTRACT
@@ -125,8 +155,6 @@ class SessionWorker:
         except Exception:
             self.close()
             raise
-        finally:
-            worker.join(timeout=2)
 
     def advance(self, target, cancelled):
         return self.request({"operation": "advance", "target": target}, cancelled)
@@ -191,6 +219,7 @@ class SessionWorker:
         with self._close_lock:
             if self._closed:
                 return
+            self._closed = True
             if self.process.poll() is None:
                 self.process.kill()
             self.process.wait()
@@ -203,4 +232,9 @@ class SessionWorker:
                         # close/flush. Preserve the original timeout/cancel
                         # and still release every remaining stream.
                         self.close_errors.append({"stream": name, "errno": exc.errno})
-            self._closed = True
+            try:
+                self._pending.put_nowait(None)
+            except queue.Full:
+                pass  # A queued exchange observes _closed after the killed pipe.
+            if self._io_thread.ident is not None and self._io_thread is not threading.current_thread():
+                self._io_thread.join(timeout=2)

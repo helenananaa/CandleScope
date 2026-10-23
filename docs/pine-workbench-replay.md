@@ -41,7 +41,42 @@ agreement and book-state contracts. Changing matching code or a sampled-book age
 policy requires the original implementation or a fresh run. Cancellation,
 transcript mismatch, checkpoint size overflow and journal-write failures leave
 the last committed account/cursor visible. Account checkpoints have a 64 MiB
-ceiling, and ordinary worker IPC/deadline limits remain in force.
+ceiling on their complete stored representation, and ordinary worker IPC/deadline
+limits remain in force. Large private account journals and snapshots use the
+self-contained `candlescope.replay-checkpoint-zlib/1` storage envelope. It retains
+every field, the decoded byte count and SHA-256, and the original complete
+financial/transcript checksum. The decoder rejects truncated or trailing streams,
+size/hash mismatches and decoded values over 256 MiB. Legacy plain JSON remains
+readable. No external blob store or omitted report arrays are involved. Snapshot
+serialization borrows the private journal only while holding the native lock;
+mutable execution paths still receive detached account state.
+
+The desktop controls poll `GET /backtests/native/replays/{id}?if_revision=N`.
+An unchanged public revision returns metadata plus `result_unchanged=true` and
+omits `result`; the caller retains its exact matching report. A changed revision
+returns the complete current report. Result-journal revision checks also apply to
+conditional polls. Default GET and export always return the full report and
+validate its stored journal before materializing it. Complete repeated reads
+reuse bounded encoded views, with a fresh detached JSON value for every caller.
+These changes address repeated report-copy overhead; resource qualification still
+requires the complete fresh-process Host matrix and its frozen budgets.
+
+Full backtest controls likewise poll `/backtests/{native|external}/runs/{id}`
+with `if_state=<cached state>`. An unchanged state returns the existing compact
+run summary with `run_unchanged=true`; the caller retains its frozen configuration
+and report. A state transition, default GET and export return the complete run.
+This avoids parsing large uploaded physical-event inputs on every status poll.
+The native and evaluator transports reuse one bounded I/O thread per worker,
+serialize in-flight calls, and retain per-request response queues. Shutdown,
+timeout and cancellation reap the process, close all pipes and join that thread.
+
+Window discovery still executes every tentative market observation against a
+fresh Host ledger and validates the final evaluator snapshot before sealing the
+window. Since that ledger is then discarded, discovery skips construction of
+unused Host reports and durable transcript copies. The private discovery flag
+rejects capture or resumed execution; final runs, cost scenarios and replay
+continue to construct their complete reports and checkpoints. Journaled commands
+take one owned copy before the transport, preserving caller-mutation isolation.
 
 Controlled tests cover all nine supported mode/callback combinations, spot cash
 and inventory, pending queues/liquidity, backward seek, replay-service/interpreter-

@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULES = (
-    "test_pine_schedule_transport", "test_pine_bar_kernel", "test_pine_bar_workbench",
+    "test_native_replay_views", "test_native_run_polling", "test_pine_schedule_transport", "test_pine_bar_kernel", "test_pine_bar_workbench",
     "test_chart_pine_bar_callbacks", "test_pine_chart_kernel", "test_pine_v2_bar_kernel",
     "test_chart_pine_v2_bar", "test_pine_workbench_v2_bar", "test_pine_workbench_preparation",
     "test_pine_legacy_market_identity",
@@ -34,7 +34,7 @@ MODULES = (
     "test_chart_pine_callbacks", "test_external_feedback", "test_external_requested_data",
     "test_pine_print_account", "test_pine_physical_admission", "test_pine_workbench_v2_print",
     "test_pine_workbench_v2_print_costs", "test_pine_v2_book_settlement", "test_pine_workbench_v2_print_preparation",
-    "test_pine_tick_transport",
+    "test_pine_tick_transport", "test_native_checkpoint",
     "test_pine_indicator_observations",
     "test_pine_stream",
     "test_pine_history_tick_workbench", "test_pine_history_tick_clock", "test_pine_history_vertices",

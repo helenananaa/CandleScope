@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { t } from "../../../i18n/index.js";
 import { nativeApi, type NativeResult } from "./nativeBacktestApi.js";
+import { pollNativeReplay } from "./nativeReplayPolling.js";
 
 export interface NativeReplayRecord {
   replay_id: string;
@@ -33,7 +34,7 @@ export function NativeReplayControls({ runId, replay, onChange, hostAccount = fa
     if (!replay || replay.state !== "RUNNING") return;
     const abort = new AbortController();
     const timer = window.setTimeout(() => {
-      void nativeApi<NativeReplayRecord>(`/native/replays/${replay.replay_id}`, undefined, undefined, abort.signal)
+      void pollNativeReplay(replay, abort.signal)
         .then(onChange).catch((reason) => { if (!abort.signal.aborted) setError(String(reason)); });
     }, 500);
     return () => { window.clearTimeout(timer); abort.abort(); };

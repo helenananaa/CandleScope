@@ -26,7 +26,7 @@ def host_identity():
     import app.simulation.kernel as kernel_module
     files = [Path(__file__), Path(__file__).with_name("native_session.py"), Path(__file__).with_name("external_orders.py"), Path(__file__).with_name("external_report.py"), Path(__file__).with_name("external_market.py"), Path(__file__).with_name("external_feedback.py"), Path(__file__).with_name("external_incremental.py"), Path(__file__).with_name("external_replay.py"), *sorted(Path(kernel_module.__file__).parent.rglob("*.py"))]
     checksum = hashlib.sha256()
-    files.extend(Path(__file__).with_name(name) for name in ("native_replay.py","native_replay_storage.py"))
+    files.extend(Path(__file__).with_name(name) for name in ("native_replay.py","native_replay_storage.py","native_replay_views.py","native_checkpoint.py"))
     files.append(Path(__file__).with_name("pine_entry_risk.py"))
     files.extend(Path(__file__).with_name(name) for name in ("pine_risk_state.py", "pine_risk_stops.py"))
     files.append(Path(__file__).with_name("pine_workbench.py"))
@@ -112,7 +112,8 @@ def run_external_host(plugin, wire, runner, cancelled, **options):
 
 
 def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=None,
-                       deadline=None, _cost_scenario=False, _scenario_runner=None, _pine_stream=None):
+                       deadline=None, _cost_scenario=False, _scenario_runner=None, _pine_stream=None,
+                       _discovery_only=False):
     if wire.get("host_runtime_identity") != host_identity():
         raise BacktestError("NATIVE_IDENTITY_MISMATCH", "host matching code changed after submission")
     from .workbench_sensitivity import validate_contract, check_control
@@ -161,6 +162,8 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
     configure_legacy_account(kernel, wire)
     interval = parse_interval_spec(wire["interval"])
     capture=target is not None
+    if _discovery_only and (capture or resume is not None or not _cost_scenario or _pine_stream is None):
+        raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "window discovery requires a disposable fresh account")
     target=len(wire["bars"]) if target is None else target
     if type(target) is not int or not 1<=target<=len(wire["bars"]):
         raise BacktestError("NATIVE_REPLAY_RANGE","invalid external chart cursor")
@@ -249,12 +252,16 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
     execution_passes = None
     if wire.get("pine_print_tick_contract"):
         from .pine_print_tick_execution import run_clock
-        latest,history,accounts,execution_passes,clock,last_request=run_clock(
-            _pine_stream,kernel,orders,wire,state=clock,target=target)
+        execution=run_clock(_pine_stream,kernel,orders,wire,state=clock,target=target,discovery_only=_discovery_only)
+        if _discovery_only:
+            return None
+        latest,history,accounts,execution_passes,clock,last_request=execution
     elif wire.get("pine_history_tick_contract"):
         from .pine_history_tick_execution import run_clock
-        latest,history,accounts,execution_passes,clock,last_request=run_clock(
-            _pine_stream,kernel,orders,wire,state=clock,target=target)
+        execution=run_clock(_pine_stream,kernel,orders,wire,state=clock,target=target,discovery_only=_discovery_only)
+        if _discovery_only:
+            return None
+        latest,history,accounts,execution_passes,clock,last_request=execution
     elif wire.get("pine_bar_path_contract"):
         from .pine_bar_clock import run_bar_clock
         latest,history,accounts,execution_passes,clock=run_bar_clock(kernel,orders,wire,plugin,evaluate,cancelled,deadline,state=clock,target=target)

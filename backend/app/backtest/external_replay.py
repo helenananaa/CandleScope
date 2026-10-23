@@ -92,14 +92,15 @@ def validate_state(wire,state):
 
 
 def make_state(wire,cursor,kernel,orders,accounts,history,latest,clock,last_request,*,risk_stops=None):
-    from .native import MAX_BYTES,digest,encoded
+    from .native import MAX_BYTES,digest
+    from .native_checkpoint import pack
     value=json.loads(json.dumps(dict(contract=CONTRACT,input_hash=digest(wire),
         host_runtime_identity=wire["host_runtime_identity"],cursor=cursor,
         kernel=kernel.snapshot(),orders=orders.snapshot(),accounts=accounts,history=history,
         latest=latest,clock=clock,last_request=last_request,
         **({"pine_risk_stops":risk_stops.snapshot()} if risk_stops is not None and risk_stops.state is not None else {})),default=str,allow_nan=False))
     value["checksum"]=digest(value)
-    if len(encoded(value).encode("utf-8"))>MAX_BYTES:
+    if len(pack(value).encode("utf-8"))>MAX_BYTES:
         raise BacktestError("BUDGET_EXCEEDED","external account checkpoint exceeds 64 MiB")
     validate_state(wire,value)
     return value

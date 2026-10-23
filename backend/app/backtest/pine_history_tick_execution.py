@@ -95,7 +95,7 @@ def prepare_window(stream,plugin,wire,cancelled,deadline):
         check_control(cancelled,deadline)
         try:
             _run_external_host(plugin,wire,invoke,cancelled,deadline=deadline,
-                _cost_scenario=True,_pine_stream=stream)
+                _cost_scenario=True,_pine_stream=stream,_discovery_only=True)
         except WindowRebaseRequired:
             stream.rebase()
         else:
@@ -104,7 +104,7 @@ def prepare_window(stream,plugin,wire,cancelled,deadline):
     raise BacktestError("BUDGET_EXCEEDED","at most 64 observed Pine window discovery attempts")
 
 
-def run_clock(stream,kernel,orders,wire,*,state=None,target=None):
+def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=False):
     from .workbench_sensitivity import check_control
     state=deepcopy(state or {})
     cursor=state.get("bar_cursor",0)
@@ -134,6 +134,8 @@ def run_clock(stream,kernel,orders,wire,*,state=None,target=None):
             cursor+=1
         if target==len(wire["bars"]): kernel.finalize_orders()
     latest=clock.output()
+    if discovery_only:
+        return None
     latest["intents"]=deepcopy(clock.history)
     saved=dict(contract=wire["pine_bar_path_contract"],history_tick_contract=CONTRACT,bar_cursor=cursor,
                last_sequence=kernel.path_sequence,groups=clock.groups,accounts=clock.accounts,history=clock.history,

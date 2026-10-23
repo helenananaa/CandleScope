@@ -59,6 +59,8 @@ class PineStream:
             raise
 
     def _request(self, command, *, record=True):
+        if record:
+            command = deepcopy(command)
         payload = {**self.wire, **command, "external_stream_contract": STREAM_CONTRACT}
         if command["operation"] != "stream_open":
             payload.update(bar_cursor=self.cursor, intent_base=self.intents)
@@ -133,17 +135,17 @@ class PineStream:
             self.input_skip = result["input_skip"]
             self.last = result
             if record:
-                self.journal.append({"command": deepcopy(command), "result_sha256": digest(result)})
+                self.journal.append({"command": command, "result_sha256": digest(result)})
             return result
         except Exception:
             self.close()
             raise
 
     def begin(self, bar, *, bar_state):
-        return self._request(dict(operation="stream_begin", bar=deepcopy(bar), bar_state=bar_state))
+        return self._request(dict(operation="stream_begin", bar=bar, bar_state=bar_state))
 
     def observe(self, observation):
-        result = self._request(dict(operation="stream_observe", observation=deepcopy(observation)))
+        result = self._request(dict(operation="stream_observe", observation=observation))
         if result.get("window_status",{}).get("rebase_required"):
             raise WindowRebaseRequired()
         return result

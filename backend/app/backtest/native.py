@@ -323,8 +323,15 @@ class NativeBacktests:
             self.pool.submit(self._execute, run_id, plugin, wire, cancel)
             return record
 
-    def get(self, run_id):
+    def get(self, run_id, *, if_state=None):
         with self.lock:
+            if if_state is not None:
+                row = self.db.execute("SELECT record FROM native_run_summaries WHERE id=?", (run_id,)).fetchone()
+                if not row:
+                    raise BacktestError("RUN_NOT_FOUND", "native run not found")
+                summary = json.loads(row[0])
+                if summary["state"] == if_state:
+                    return {**summary, "run_unchanged": True}
             row = self.db.execute("SELECT record FROM runs WHERE id=?", (run_id,)).fetchone()
             if not row:
                 raise BacktestError("RUN_NOT_FOUND", "native run not found")

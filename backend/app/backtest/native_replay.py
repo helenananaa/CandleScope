@@ -28,6 +28,8 @@ class NativeReplay:
         self.workers = {}
         self.closed = False
         self._inputs = OrderedDict()
+        from .native_replay_views import ResultViews
+        self.views = ResultViews()
         db = native.db
         db.execute("CREATE TABLE IF NOT EXISTS native_replays (id TEXT PRIMARY KEY, record TEXT NOT NULL)")
         db.execute("CREATE TABLE IF NOT EXISTS native_replay_snapshots (id TEXT PRIMARY KEY, record TEXT NOT NULL)")
@@ -59,11 +61,13 @@ class NativeReplay:
                         header["_externalStateRevision"]=previous["_externalStateRevision"]
                 header["_resultRevision"] = self.results.save(record["replay_id"], body)
                 self.native.db.execute("INSERT OR REPLACE INTO native_replays VALUES (?,?)", (record["replay_id"], encoded(header)))
+            self.views.discard(record["replay_id"])
         except BaseException:
             self.results.cache.clear()
+            self.views.discard()
             raise
 
-    def get(self, key):
+    def get(self, key, *, if_revision=None):
         with self.native.lock:
             row = self.native.db.execute("SELECT record FROM native_replays WHERE id=?", (key,)).fetchone()
             if not row:
@@ -73,16 +77,22 @@ class NativeReplay:
             storage = record.pop("_resultStorage", None)
             result_revision = record.pop("_resultRevision", None)
             if storage is not None:
-                from .native import digest
                 from .native_replay_storage import SCHEMA
                 if storage != SCHEMA:
                     raise ValueError("unsupported native replay result storage")
                 if type(result_revision) is not int:
                     raise ValueError("native replay result revision is missing")
-                result = copy.deepcopy(self.results.load(key, expected_revision=result_revision))
+                if if_revision is not None and if_revision == record["revision"]:
+                    self.results.check_revision(key, expected_revision=result_revision)
+                    record.pop("result", None)
+                    return {**record, "result_unchanged": True}
+                # Validate the stored revision even when an encoded view is
+                # cached; a cold journal still verifies its checksums first.
+                result = self.results.load(key, expected_revision=result_revision)
                 if result is not None:
-                    result["bars"] = copy.deepcopy(self._input(record["run_id"])["bars"][:record["cursor"]])
-                    result["report_hash"] = digest(result)
+                    view_key = (key, record["run_id"], record["input_hash"], result_revision, record["cursor"])
+                    result = self.views.read(view_key, result,
+                        self._input(record["run_id"])["bars"][:record["cursor"]])
                 record["result"] = result
             return record
 
@@ -91,15 +101,15 @@ class NativeReplay:
             return [{k: v for k, v in json.loads(row[0]).items() if k not in {"result", "_resultStorage", "_resultRevision", "_externalStateRevision"}}
                     for row in self.native.db.execute("SELECT record FROM native_replays ORDER BY rowid DESC LIMIT 100")]
 
-    def _host_state(self,key):
+    def _host_state(self,key,*,detached=True):
         raw=self.native.db.execute("SELECT record FROM native_replays WHERE id=?",(key,)).fetchone()
         header=json.loads(raw[0])
         revision=header.get("_externalStateRevision")
-        state=None if revision is None else copy.deepcopy(self.results.load("host:"+key,expected_revision=revision))
+        state=None if revision is None else self.results.load("host:"+key,expected_revision=revision)
         if header.get("execution_mode")=="CANDLESCOPE" and ((header["cursor"]==0 and state is not None)
                 or (header["cursor"] and (not state or state.get("cursor")!=header["cursor"]))):
             raise BacktestError("NATIVE_IDENTITY_MISMATCH","external account state does not match replay cursor")
-        return state
+        return copy.deepcopy(state) if detached else state
 
     def _input(self, run_id):
         if run_id in self._inputs:
@@ -297,7 +307,8 @@ class NativeReplay:
                 self.jobs.pop(key, None)
 
     def snapshot(self, key, revision):
-        from .native import digest, encoded
+        from .native import MAX_BYTES, digest
+        from .native_checkpoint import pack
         with self.native.lock:
             record = self._current(key, revision)
             if key in self.jobs or record["state"] == "RUNNING":
@@ -305,9 +316,15 @@ class NativeReplay:
             checkpoint_id = "nrs_" + uuid.uuid4().hex
             checkpoint = {"replay_id": key, "input_hash": record["input_hash"], "cursor": record["cursor"], "result": record["result"]}
             if record.get("execution_mode")=="CANDLESCOPE":
-                checkpoint["external_state"]=self._host_state(key)
+                # Only serialize the borrowed journal value while holding the
+                # native lock. It never escapes this call or reaches a mutable
+                # execution path; normal callers still receive a detached copy.
+                checkpoint["external_state"]=self._host_state(key,detached=False)
             checkpoint["checksum"] = digest(checkpoint)
-            self.native.db.execute("INSERT INTO native_replay_snapshots VALUES (?,?)", (checkpoint_id, encoded(checkpoint)))
+            stored = pack(checkpoint)
+            if len(stored.encode("utf-8")) > MAX_BYTES:
+                raise BacktestError("BUDGET_EXCEEDED", "replay checkpoint exceeds 64 MiB")
+            self.native.db.execute("INSERT INTO native_replay_snapshots VALUES (?,?)", (checkpoint_id, stored))
             record["snapshots"].append({"snapshot_id": checkpoint_id, "cursor": record["cursor"]})
             record["revision"] += 1
             self._save(record)
@@ -315,6 +332,7 @@ class NativeReplay:
 
     def restore(self, key, revision, checkpoint_id):
         from .native import digest
+        from .native_checkpoint import unpack
         with self.native.lock:
             record = self._current(key, revision)
             if key in self.jobs:
@@ -322,7 +340,7 @@ class NativeReplay:
             row = self.native.db.execute("SELECT record FROM native_replay_snapshots WHERE id=?", (checkpoint_id,)).fetchone()
             if not row:
                 raise BacktestError("RUN_NOT_FOUND", "checkpoint not found")
-            checkpoint = json.loads(row[0])
+            checkpoint = unpack(row[0])
             checksum = checkpoint.pop("checksum")
             if digest(checkpoint) != checksum or checkpoint["replay_id"] != key or checkpoint["input_hash"] != record["input_hash"]:
                 raise BacktestError("NATIVE_IDENTITY_MISMATCH", "checkpoint does not belong to this replay")
@@ -352,4 +370,5 @@ class NativeReplay:
                 worker.close()
         self.workers.clear()
         self.results.cache.clear()
+        self.views.discard()
         self._inputs.clear()

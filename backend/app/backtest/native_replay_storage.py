@@ -3,6 +3,7 @@
 Public results and checkpoints remain complete JSON values. Storage keeps a
 full base plus at most 63 structural deltas; no runtime is needed for recovery.
 Unchanged historical arrays are compared, not encoded/hashed/written each step.
+Large private account bases/deltas use self-contained lossless compression.
 """
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ import math
 from collections import OrderedDict
 
 from .native import encoded
+from .native_checkpoint import pack, unpack
 
 SCHEMA = "native.replay-result/1"
 MAX_DELTAS = 64
@@ -96,12 +98,7 @@ class ResultJournal:
             self.cache.popitem(last=False)
 
     def load(self, key, *, expected_revision=None):
-        row = self.db.execute("SELECT revision,base_revision FROM native_replay_result_bases WHERE id=?", (key,)).fetchone()
-        if row is None:
-            raise ValueError("native replay result base is missing")
-        revision, base_revision = row
-        if expected_revision is not None and revision != expected_revision:
-            raise ValueError("native replay result revision does not match its cursor")
+        revision, base_revision = self.check_revision(key, expected_revision=expected_revision)
         cached = self.cache.get(key)
         if cached is not None and cached[0] == revision:
             self.cache.move_to_end(key)
@@ -109,19 +106,29 @@ class ResultJournal:
         raw, expected_hash = self.db.execute("SELECT payload,checksum FROM native_replay_result_bases WHERE id=?", (key,)).fetchone()
         if checksum(raw) != expected_hash:
             raise ValueError("native replay result base checksum mismatch")
-        value = json.loads(raw)
+        value = unpack(raw) if key.startswith("host:") else json.loads(raw)
         expected = base_revision + 1
         for sequence, patch, expected_hash in self.db.execute("SELECT revision,payload,checksum FROM native_replay_result_deltas WHERE id=? ORDER BY revision", (key,)):
             if sequence != expected:
                 raise ValueError("native replay result journal has a gap")
             if checksum(patch) != expected_hash:
                 raise ValueError("native replay result delta checksum mismatch")
-            value = apply_changes(value, json.loads(patch))
+            value = apply_changes(value, unpack(patch) if key.startswith("host:") else json.loads(patch))
             expected += 1
         if expected != revision + 1:
             raise ValueError("native replay result journal is incomplete")
         self._remember(key, revision, value)
         return value
+
+    def check_revision(self, key, *, expected_revision=None):
+        """Check metadata without decoding a report for a conditional poll."""
+        row = self.db.execute("SELECT revision,base_revision FROM native_replay_result_bases WHERE id=?", (key,)).fetchone()
+        if row is None:
+            raise ValueError("native replay result base is missing")
+        revision, base_revision = row
+        if expected_revision is not None and revision != expected_revision:
+            raise ValueError("native replay result revision does not match its cursor")
+        return revision, base_revision
 
     def save(self, key, value):
         row = self.db.execute("SELECT revision,base_revision FROM native_replay_result_bases WHERE id=?", (key,)).fetchone()
@@ -130,14 +137,15 @@ class ResultJournal:
             return row[0]
         revision = row[0] + 1 if row else 0
         if row is None or revision - row[1] >= MAX_DELTAS:
-            raw = encoded(value)
+            raw = pack(value) if key.startswith("host:") else encoded(value)
             self.db.execute("INSERT OR REPLACE INTO native_replay_result_bases VALUES (?,?,?,?,?)", (key, revision, revision, raw, checksum(raw)))
             self.db.execute("DELETE FROM native_replay_result_deltas WHERE id=?", (key,))
-            detached = json.loads(raw)
+            detached = unpack(raw) if key.startswith("host:") else json.loads(raw)
         else:
-            raw = encoded(difference(previous, value))
+            changes = difference(previous, value)
+            raw = pack(changes) if key.startswith("host:") else encoded(changes)
             self.db.execute("INSERT INTO native_replay_result_deltas VALUES (?,?,?,?)", (key, revision, raw, checksum(raw)))
             self.db.execute("UPDATE native_replay_result_bases SET revision=? WHERE id=?", (revision, key))
-            detached = apply_changes(previous, json.loads(raw))
+            detached = apply_changes(previous, unpack(raw) if key.startswith("host:") else json.loads(raw))
         self._remember(key, revision, detached)
         return revision

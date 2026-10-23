@@ -54,11 +54,18 @@ def test_actual_worker_keeps_forming_state_and_replays_identical_deltas_after_re
     stream=PineStream(runtime,wire,dict(source=SOURCE,parameters={},context=dict(symbol="A",timeframe="1")),cancel)
     recovered=None
     try:
-        stream.begin(observation(0,0)["evaluation"]["bar"],bar_state="realtime")
+        bar=observation(0,0)["evaluation"]["bar"]
+        stream.begin(bar,bar_state="realtime")
+        bar["close"]=999
         for ordinal in range(2):
-            result=stream.observe(observation(0,ordinal))
+            observed=observation(0,ordinal)
+            result=stream.observe(observed)
+            observed["evaluation"]["account"]["position_size"]=999
             assert len(result["intents"])==1 and result["intent_base"]==ordinal and "output" not in result
         saved=stream.checkpoint()
+        assert saved["journal"][0]["command"]["bar"]["close"]==10
+        assert [item["command"]["observation"]["evaluation"]["account"]["position_size"]
+                for item in saved["journal"][1:]]==[0,1]
         # Caller mutation cannot rewrite the durable checkpoint or its transcript.
         edited=deepcopy(saved);edited["journal"][1]["command"]["observation"]["evaluation"]["account"]["position_size"]=99
         with pytest.raises(BacktestError): PineStream.restore(runtime,edited,cancel)

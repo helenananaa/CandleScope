@@ -9,6 +9,7 @@ import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { nativeApi, nativeTerminal, nativeTimeframe, type NativeCapabilities, type NativeRun } from "./nativeBacktestApi.js";
 import { NativeStrategyReport } from "./NativeStrategyReport.js";
+import { pollNativeRun } from "./nativeRunPolling.js";
 import "./nativeStrategy.css";
 import { NativeAdvancedInputs } from "./NativeAdvancedInputs.js";
 import { NativePreparationContexts } from "./NativePreparationContexts.js";
@@ -265,7 +266,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
     if (!run || nativeTerminal(run.state)) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      void nativeApi<NativeRun>(`${run.execution_mode === "CANDLESCOPE" ? "/external/runs" : "/native/runs"}/${run.run_id}`, undefined, undefined, controller.signal)
+      void pollNativeRun(run, controller.signal)
         .then((value) => { if (!controller.signal.aborted) receiveRun(value); })
         .catch((reason) => { if (!controller.signal.aborted) { setError(String(reason)); setBusy(false); } });
     }, 700);

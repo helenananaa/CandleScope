@@ -195,7 +195,7 @@ class PrintTickClock:
         self.visible=None
 
 
-def run_clock(stream,kernel,orders,wire,*,state=None,target=None):
+def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=False):
     clock=PrintTickClock(stream,kernel,orders,wire,state=state)
     interval=parse_interval_spec(wire["interval"])
     events=physical_events(wire)
@@ -235,6 +235,8 @@ def run_clock(stream,kernel,orders,wire,*,state=None,target=None):
     while clock.cursor<target: clock.close_bar()
     if target==len(wire["bars"]): kernel.finalize_orders()
     output=stream.output()
+    if discovery_only:
+        return None
     latest={**output,"raw_output":output["output"],"graphics":output["output"].get("plots",[]),"intents":deepcopy(clock.history)}
     saved=dict(contract=CONTRACT,bar_cursor=clock.cursor,last_sequence=clock.last_sequence,event_cursor=clock.event_cursor,
         groups=clock.groups,accounts=clock.accounts,history=clock.history,stream=stream.checkpoint(),latest=latest)
