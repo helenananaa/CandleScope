@@ -24,7 +24,10 @@ class SessionWorker:
         self._close_lock = threading.Lock()
         self._request_lock = threading.Lock()
         self._closed = False
-        self._pending = queue.Queue(maxsize=1)
+        # The request lock allows only one exchange in flight; close can add
+        # only one sentinel. SimpleQueue avoids three Conditions per response
+        # while keeping this transport bounded by its serialized ownership.
+        self._pending = queue.SimpleQueue()
         self.close_errors = []
         self.identity = deepcopy(wire["identity"])
         self._identity_json = encoded(self.identity)
@@ -58,18 +61,21 @@ class SessionWorker:
                 return
             raw, response = pending
             try:
-                self.process.stdin.write(raw)
-                self.process.stdin.flush()
-                line = self.process.stdout.readline(MAX_BYTES + 1)
-                if len(line) > MAX_BYTES:
-                    raise BacktestError("BUDGET_EXCEEDED", "native session output exceeds 64 MiB")
-                response.put(json.loads(line))
+                response.put(raw() if callable(raw) else self._exchange_one(raw))
             except Exception as exc:
                 response.put(exc)
             if self._closed:
                 return
 
-    def request(self, payload, cancelled, timeout=120):
+    def _exchange_one(self, raw):
+        self.process.stdin.write(raw)
+        self.process.stdin.flush()
+        line = self.process.stdout.readline(MAX_BYTES + 1)
+        if len(line) > MAX_BYTES:
+            raise BacktestError("BUDGET_EXCEEDED", "native session output exceeds 64 MiB")
+        return json.loads(line)
+
+    def _check_payload(self, payload):
         if "identity_ref" in payload:
             raise BacktestError("NATIVE_IDENTITY_MISMATCH", "session identity references belong to the transport")
         streaming = payload.get("operation", "").startswith("stream_")
@@ -90,6 +96,10 @@ class SessionWorker:
                     or payload.get("execution_schedule_contract") != SCHEDULE_CONTRACT
                     or payload.get("execution_schedule") is None or payload.get("execution_passes") is not None):
                 raise BacktestError("EXTERNAL_UNSUPPORTED", "explicit Pine execution schedule was not negotiated")
+        return streaming
+
+    def request(self, payload, cancelled, timeout=120):
+        streaming = self._check_payload(payload)
         started = time.monotonic()
         if not self._request_lock.acquire(timeout=max(0, timeout)):
             raise BacktestError("NATIVE_TIMEOUT", "native session exceeded host deadline waiting for transport")
@@ -101,16 +111,12 @@ class SessionWorker:
     def _request_serial(self, payload, cancelled, timeout, streaming):
         if self._closed:
             raise BacktestError("NATIVE_RUNTIME_UNAVAILABLE", "native session is closed")
-        response = queue.Queue(maxsize=1)
-        wire_payload = self._prefix_payload(payload) if self._prefix_enabled else payload
-        header = ({"identity_ref": self._identity_ref} if self._identity_ref_enabled and self._identity_bound
-                  else {"identity": self.identity})
-        envelope = {key: value for key, value in wire_payload.items() if key not in {"identity", "protocol"}}
-        raw = (encoded({**envelope, "protocol": PROTOCOL, **header}) + "\n").encode("utf-8")
-        self.input_bytes += len(raw)
-        if len(raw) > MAX_BYTES:
+        response = queue.SimpleQueue()
+        try:
+            raw = self._encode_payload(payload)
+        except Exception:
             self.close()
-            raise BacktestError("BUDGET_EXCEEDED", "native session input exceeds 64 MiB")
+            raise
         # One bounded exchange and one response at a time. The transport thread
         # survives successful calls; request-scoped queues prevent stale replies
         # from crossing cancellation/timeout boundaries.
@@ -130,31 +136,97 @@ class SessionWorker:
                     continue
                 if isinstance(result, Exception):
                     raise result
-                if not isinstance(result, dict) or result.get("ok") is not True:
-                    raise BacktestError("NATIVE_EXECUTION_FAILED", "native session rejected the operation", details=result)
-                if "identity_ref" in result:
-                    if (not self._identity_ref_enabled or not self._identity_bound or "identity" in result
-                            or result["identity_ref"] != self._identity_ref):
-                        raise BacktestError("NATIVE_IDENTITY_MISMATCH", "unexpected session identity reference")
-                    result = {key: value for key, value in result.items() if key != "identity_ref"}
-                    result["identity"] = json.loads(self._identity_json)
-                elif digest(result.get("identity")) != self._identity_ref:
-                    raise BacktestError("NATIVE_IDENTITY_MISMATCH", "unexpected session runtime")
-                if streaming and (result.get("external_stream_contract") != STREAM_CONTRACT
-                        or result.get("execution_schedule_contract") != SCHEDULE_CONTRACT
-                        or result.get("execution_tick_contract") != TICK_CONTRACT):
-                    raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine stream acknowledgement missing")
-                if payload.get("execution_schedule") is not None and result.get("execution_schedule_contract") != SCHEDULE_CONTRACT:
-                    raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine execution schedule acknowledgement missing")
-                if payload.get("request_update_contract") is not None and result.get("request_update_contract") != REQUEST_UPDATE_CONTRACT:
-                    raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine requested-update acknowledgement missing")
-                if payload.get("execution_tick_contract") is not None and result.get("execution_tick_contract") != TICK_CONTRACT:
-                    raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine tick schedule acknowledgement missing")
-                self._identity_bound = True
-                return result
+                return self._validate_result(payload, result, streaming)
         except Exception:
             self.close()
             raise
+
+    def _encode_payload(self, payload):
+        wire_payload = self._prefix_payload(payload) if self._prefix_enabled else payload
+        header = ({"identity_ref": self._identity_ref} if self._identity_ref_enabled and self._identity_bound
+                  else {"identity": self.identity})
+        envelope = {key: value for key, value in wire_payload.items() if key not in {"identity", "protocol"}}
+        raw = (encoded({**envelope, "protocol": PROTOCOL, **header}) + "\n").encode("utf-8")
+        self.input_bytes += len(raw)
+        if len(raw) > MAX_BYTES:
+            raise BacktestError("BUDGET_EXCEEDED", "native session input exceeds 64 MiB")
+        return raw
+
+    def _validate_result(self, payload, result, streaming):
+        if not isinstance(result, dict) or result.get("ok") is not True:
+            raise BacktestError("NATIVE_EXECUTION_FAILED", "native session rejected the operation", details=result)
+        if "identity_ref" in result:
+            if (not self._identity_ref_enabled or not self._identity_bound or "identity" in result
+                    or result["identity_ref"] != self._identity_ref):
+                raise BacktestError("NATIVE_IDENTITY_MISMATCH", "unexpected session identity reference")
+            result = {key: value for key, value in result.items() if key != "identity_ref"}
+            result["identity"] = json.loads(self._identity_json)
+        elif digest(result.get("identity")) != self._identity_ref:
+            raise BacktestError("NATIVE_IDENTITY_MISMATCH", "unexpected session runtime")
+        if streaming and (result.get("external_stream_contract") != STREAM_CONTRACT
+                or result.get("execution_schedule_contract") != SCHEDULE_CONTRACT
+                or result.get("execution_tick_contract") != TICK_CONTRACT):
+            raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine stream acknowledgement missing")
+        if payload.get("execution_schedule") is not None and result.get("execution_schedule_contract") != SCHEDULE_CONTRACT:
+            raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine execution schedule acknowledgement missing")
+        if payload.get("request_update_contract") is not None and result.get("request_update_contract") != REQUEST_UPDATE_CONTRACT:
+            raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine requested-update acknowledgement missing")
+        if payload.get("execution_tick_contract") is not None and result.get("execution_tick_contract") != TICK_CONTRACT:
+            raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine tick schedule acknowledgement missing")
+        self._identity_bound = True
+        return result
+
+    def request_chain(self, payloads, cancelled, timeout=120):
+        """Replay at most eight frozen stream commands without Host callbacks.
+
+        Every command retains its own wire line, response and identity checks.
+        Later cursors come from the preceding acknowledgement; callers must
+        validate every returned decision before publishing any restored state.
+        No ledger or matching work runs on the I/O thread.
+        """
+        if not 1 <= len(payloads) <= 8 or any(payload.get("operation") not in {
+                "stream_begin", "stream_observe", "stream_commit", "stream_rebase", "stream_snapshot"} for payload in payloads):
+            raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "invalid Pine stream command chain")
+        for payload in payloads:
+            self._check_payload(payload)
+        started = time.monotonic()
+        if not self._request_lock.acquire(timeout=max(0, timeout)):
+            raise BacktestError("NATIVE_TIMEOUT", "native session exceeded host deadline waiting for transport")
+        try:
+            if self._closed:
+                raise BacktestError("NATIVE_RUNTIME_UNAVAILABLE", "native session is closed")
+            def exchange():
+                results = []
+                for payload in payloads:
+                    if results:
+                        previous = results[-1]
+                        payload = {**payload, "bar_cursor": previous["bar_cursor"],
+                                   "intent_base": previous["intent_cursor"]}
+                    result = self._exchange_one(self._encode_payload(payload))
+                    results.append(self._validate_result(payload, result, True))
+                return results
+            response = queue.SimpleQueue()
+            self._pending.put_nowait((exchange, response))
+            deadline = started + timeout
+            while True:
+                if cancelled.is_set():
+                    raise BacktestError("NATIVE_CANCELLED", "native session cancelled")
+                if time.monotonic() > deadline:
+                    raise BacktestError("NATIVE_TIMEOUT", "native session exceeded host deadline")
+                if os.fstat(self.stderr.fileno()).st_size > MAX_BYTES:
+                    raise BacktestError("BUDGET_EXCEEDED", "native session stderr exceeds 64 MiB")
+                try:
+                    results = response.get(timeout=.05)
+                except queue.Empty:
+                    continue
+                if isinstance(results, Exception):
+                    raise results
+                return results
+        except Exception:
+            self.close()
+            raise
+        finally:
+            self._request_lock.release()
 
     def advance(self, target, cancelled):
         return self.request({"operation": "advance", "target": target}, cancelled)
@@ -232,9 +304,6 @@ class SessionWorker:
                         # close/flush. Preserve the original timeout/cancel
                         # and still release every remaining stream.
                         self.close_errors.append({"stream": name, "errno": exc.errno})
-            try:
-                self._pending.put_nowait(None)
-            except queue.Full:
-                pass  # A queued exchange observes _closed after the killed pipe.
+            self._pending.put_nowait(None)
             if self._io_thread.ident is not None and self._io_thread is not threading.current_thread():
                 self._io_thread.join(timeout=2)

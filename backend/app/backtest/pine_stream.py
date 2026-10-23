@@ -58,8 +58,8 @@ class PineStream:
             self.close()
             raise
 
-    def _request(self, command, *, record=True):
-        if record:
+    def _request(self, command, *, record=True, _result=None, _owned_command=False):
+        if record and not _owned_command:
             command = deepcopy(command)
         payload = {**self.wire, **command, "external_stream_contract": STREAM_CONTRACT}
         if command["operation"] != "stream_open":
@@ -68,7 +68,7 @@ class PineStream:
             timeout = 120 if self.deadline is None else min(120, self.deadline-time.monotonic())
             if timeout <= 0:
                 raise BacktestError("NATIVE_TIMEOUT", "Pine stream execution deadline exceeded")
-            result = self.worker.request(payload, self.cancelled, timeout=timeout)
+            result = self.worker.request(payload, self.cancelled, timeout=timeout) if _result is None else _result
             integers = ("bar_cursor", "pass_cursor", "intent_cursor", "intent_base", "input_skip")
             if (any(type(result.get(key)) is not int or result[key] < 0 for key in integers)
                     or type(result.get("bar_open")) is not bool
@@ -144,6 +144,30 @@ class PineStream:
     def begin(self, bar, *, bar_state):
         return self._request(dict(operation="stream_begin", bar=bar, bar_state=bar_state))
 
+    def _request_many(self, commands):
+        commands = deepcopy(commands)
+        payloads = [{**self.wire, **command, "external_stream_contract": STREAM_CONTRACT,
+                     "bar_cursor": self.cursor, "intent_base": self.intents} for command in commands]
+        try:
+            timeout = 120 if self.deadline is None else min(120, self.deadline-time.monotonic())
+            if timeout <= 0:
+                raise BacktestError("NATIVE_TIMEOUT", "Pine stream execution deadline exceeded")
+            results = self.worker.request_chain(payloads, self.cancelled, timeout=timeout)
+            return [self._request(command, _result=result, _owned_command=True)
+                    for command, result in zip(commands, results, strict=True)]
+        except Exception:
+            self.close()
+            raise
+
+    def begin_and_observe(self, bar, *, bar_state, observation):
+        # begin has no Host matching callback. Both original protocol commands
+        # and their individually checked acknowledgements remain in the journal.
+        result = self._request_many([dict(operation="stream_begin", bar=bar, bar_state=bar_state),
+                                     dict(operation="stream_observe", observation=observation)])[-1]
+        if result.get("window_status", {}).get("rebase_required"):
+            raise WindowRebaseRequired()
+        return result
+
     def observe(self, observation):
         result = self._request(dict(operation="stream_observe", observation=observation))
         if result.get("window_status",{}).get("rebase_required"):
@@ -174,11 +198,13 @@ class PineStream:
             raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "invalid Pine stream journal")
         stream = cls(runtime, saved["wire"], saved["opening"], cancelled, deadline=deadline)
         try:
-            for entry in saved["journal"]:
-                result = stream._request(entry["command"])
-                if digest(result) != entry["result_sha256"]:
-                    raise BacktestError("LOOKAHEAD_VIOLATION", "Pine stream replay changed an observed decision")
-                if verify is not None: verify(entry["command"],result)
+            for start in range(0, len(saved["journal"]), 8):
+                entries = saved["journal"][start:start+8]
+                results = stream._request_many([entry["command"] for entry in entries])
+                for entry, result in zip(entries, results, strict=True):
+                    if digest(result) != entry["result_sha256"]:
+                        raise BacktestError("LOOKAHEAD_VIOLATION", "Pine stream replay changed an observed decision")
+                    if verify is not None: verify(entry["command"],result)
             if stream.checkpoint(detached=False) != saved:
                 raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine stream checkpoint cursor differs")
             return stream

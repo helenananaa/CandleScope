@@ -142,8 +142,6 @@ class PrintTickClock:
         check_control(self.stream.cancelled,self.stream.deadline)
         first=len(self.groups)==self.cursor
         skipped=self.cursor<self.stream.input_skip
-        if first and not skipped:
-            self.stream.begin(deepcopy(self.visible),bar_state="realtime")
         self.orders.feedback()
         account=self.kernel.account
         feedback=dict(time=self.visible["time"],position_size=float(account.position_qty),
@@ -159,7 +157,8 @@ class PrintTickClock:
         if self.feed is not None:
             evaluation.update(request_observed_at_ms=event.event_time_ms,request_updates=self.feed.advance(event.event_time_ms))
         observation=dict(evaluation=evaluation,context=dict(bar_state="realtime",trigger=trigger,is_new=first))
-        result=self.stream.observe(observation)
+        result=(self.stream.begin_and_observe(self.visible,bar_state="realtime",observation=observation)
+                if first else self.stream.observe(observation))
         current=result["intents"]
         if len(current)>64:
             raise BacktestError("BUDGET_EXCEEDED","at most 64 intents per observed Pine tick")

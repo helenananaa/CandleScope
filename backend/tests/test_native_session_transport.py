@@ -188,3 +188,41 @@ for line in sys.stdin:
     finally:
         worker.close()
     assert not worker._io_thread.is_alive()
+
+@pytest.mark.parametrize("failure", [None, "identity", "timeout", "cancel"])
+def test_stream_chain_keeps_each_acknowledgement_and_stops_on_transport_failure(failure):
+    from app.backtest.native_session import STREAM_CONTRACT, SCHEDULE_CONTRACT, TICK_CONTRACT
+    identity = {"external_stream_contract": STREAM_CONTRACT}
+    script = f'''import sys,json,time
+for index,line in enumerate(sys.stdin):
+    request=json.loads(line)
+    if index and {failure!r} in ("timeout","cancel"):time.sleep(20)
+    assert request['bar_cursor']==index and request['intent_base']==index*2
+    response=dict(ok=True,identity=request['identity'],external_stream_contract={STREAM_CONTRACT!r},
+        execution_schedule_contract={SCHEDULE_CONTRACT!r},execution_tick_contract={TICK_CONTRACT!r},
+        bar_cursor=index+1,intent_cursor=(index+1)*2,ordinal=index)
+    if index==1 and {failure!r}=="identity":response['identity']={{'changed':True}}
+    print(json.dumps(response),flush=True)
+'''
+    worker=SessionWorker({"command":[sys.executable,"-u","-c",script]},
+                         {"identity":identity},threading.Event(),evaluator=True)
+    event=threading.Event()
+    timer=threading.Timer(.1,event.set) if failure=="cancel" else None
+    if timer:timer.start()
+    payloads=[dict(operation="stream_commit",external_stream_contract=STREAM_CONTRACT,
+                   bar_cursor=0,intent_base=0) for _ in range(8)]
+    try:
+        if failure:
+            with pytest.raises(ValueError,match={"identity":"NATIVE_IDENTITY_MISMATCH",
+                    "timeout":"NATIVE_TIMEOUT","cancel":"NATIVE_CANCELLED"}[failure]):
+                worker.request_chain(payloads,event,timeout=.2 if failure=="timeout" else 5)
+            assert worker.process.poll() is not None and not worker._io_thread.is_alive()
+        else:
+            results=worker.request_chain(payloads,event)
+            assert [r['ordinal'] for r in results]==list(range(8))
+            assert [r['intent_cursor'] for r in results]==list(range(2,18,2))
+            assert all(r['identity']==identity for r in results)
+            assert all(p['bar_cursor']==0 and p['intent_base']==0 for p in payloads)
+    finally:
+        if timer:timer.cancel()
+        worker.close()
