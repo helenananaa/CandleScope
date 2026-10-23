@@ -29,7 +29,7 @@ OFFICIAL_SHA256 = (
     "sha256:889ffeb4a70b330c1cf529b66422fe0c11c303b781968b12e8156fbb854f3918"
 )
 OFFICIAL_PINE_SHA256 = (
-    "sha256:21da8fb0a29c9455893eca17f6452e5891a0b098cef3180c86e8716f90021121"
+    "sha256:fb25dcc4a7b21cae415254a10050a36dc4017098887c10ef8647f99be3ef1c4d"
 )
 
 
@@ -264,7 +264,7 @@ def test_checked_in_release_lock_pins_the_stable_adapter_assets() -> None:
     pine = by_runtime["candlescope.pine-compat"]
     assert pine.version == "0.3.3"
     assert pine.sha256 == OFFICIAL_PINE_SHA256
-    assert pine.size == 5_227_468
+    assert pine.size == 5_230_066
     assert pine.url.endswith(
         "/candlescope-plugin-pine-compat-v0.3.3/"
         "candlescope-pine-compat-0.3.3-cp312-win_amd64.cspkg"
