@@ -179,6 +179,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange, e
     const pending = viewer.viewerPending || viewer.controlPending !== null;
     const activate = () => {
       if (pending || selected || !sameScope) return;
+      setCatalogError(null);
       const action = track === null
         ? (viewer.actions.addTrack && viewer.actions.openTrack
           ? viewer.actions.addTrack({ exchange: identity.exchange, marketType: identity.marketType, symbol: identity.symbol })
@@ -290,7 +291,9 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange, e
               />
             </label>
             {!embedded && <small>{t("replay.watchlist.hint")}</small>}
-            {addingMarket !== null && <p role="status">{t("replay.watchlist.preparing")}</p>}
+            {viewer.marketPreparation ? <p role="status">
+              {t("preparation.title")} · {viewer.marketPreparation.completed} / {viewer.marketPreparation.total}
+            </p> : addingMarket !== null && <p role="status">{t("replay.watchlist.preparing")}</p>}
             {catalogError !== null && <p role="alert">
               {catalogError}
               {embedded && <button
