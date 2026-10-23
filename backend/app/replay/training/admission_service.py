@@ -58,6 +58,7 @@ class TrainingAdmissionService:
         *,
         preparation_id: str | None = None,
         _market_identity: tuple[str, str, str] | None = None,
+        _preparation_market_identity: tuple[str, str, str] | None = None,
         _progressive_initial_horizon_ms: int | None = None,
     ) -> dict[str, object]:
         if not isinstance(request, TrainingRunSetupRequest):
@@ -88,6 +89,8 @@ class TrainingAdmissionService:
                     "created": False,
                     "run": await self.store.get_run(run_id),
                 }
+        if _preparation_market_identity is not None:
+            await self.replay_service.prepare_instrument_metadata(*_preparation_market_identity)
         settings = admission_rules_ops.progressive_admission_settings(
             request, _progressive_initial_horizon_ms
         )

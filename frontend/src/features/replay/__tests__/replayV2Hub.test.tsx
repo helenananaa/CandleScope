@@ -41,7 +41,8 @@ import {
 import { parseReplaySegmentPreparePlan } from "../replaySegmentTypes.js";
 import { parseReplayCapabilities, parseReplayCatalog } from "../replayParser.js";
 import { enabledCapabilities } from "./fixtures.js";
-import { PreparedReplayDeletedError } from "../../data-preparation/api.js";
+import type { PreparationJob } from "../../data-preparation/api.js";
+import { PreparationApiError, PreparedReplayDeletedError } from "../../data-preparation/api.js";
 
 
 function runCard(overrides: Record<string, unknown> = {}) {
@@ -749,7 +750,12 @@ test("automatic BAR preparation accepts an empty archive and submits the frozen 
   assert.deepEqual(calls, [`${draft.symbol}:${draft.requestedStartMs}`, "navigate:run-1"]);
 });
 
-test("reloaded automatic preparation retains its draft and reuses an uncertain submission", async () => {
+for (const [failure, code] of [
+  [new Error("connection lost after submission"), "TRAINING_HUB_ERROR"],
+  [new PreparationApiError("INSTRUMENT_METADATA_UNAVAILABLE", "Instrument identity is not ready", 200),
+    "INSTRUMENT_METADATA_UNAVAILABLE"],
+] as const) {
+test(`reloaded automatic preparation retains its draft and reuses a submission (${code})`, async () => {
   const saved = new Map<string, string>();
   const draftStorage = { getItem: (key: string) => saved.get(key) ?? null,
     setItem: (key: string, text: string) => { saved.set(key, text); } };
@@ -762,7 +768,7 @@ test("reloaded automatic preparation retains its draft and reuses an uncertain s
     async createRun() { throw new Error("unexpected manual creation"); },
     async prepareReplay(_setup, _market, _progress, _signal, key) {
       keys.push(key);
-      throw new Error("connection lost after submission");
+      throw failure;
     },
   };
   const first = new TrainingHubLifecycle({ api, draftStorage });
@@ -770,6 +776,7 @@ test("reloaded automatic preparation retains its draft and reuses an uncertain s
   const draft = { ...first.getSnapshot().draft!, name: "恢复未完成准备", indicatorWarmupBars: 321 };
   first.setDraft(draft);
   await first.createRun(draft);
+  assert.equal(first.getSnapshot().error?.code, code);
   first.dispose();
   const reopened = new TrainingHubLifecycle({ api, draftStorage });
   try {
@@ -785,6 +792,7 @@ test("reloaded automatic preparation retains its draft and reuses an uncertain s
     assert.notEqual(keys[2], keys[0]);
   } finally { reopened.dispose(); }
 });
+}
 
 test("a saved submission whose prepared run was deleted creates one fresh run", async () => {
   const saved = new Map<string, string>();
@@ -1478,6 +1486,16 @@ test("hub markup exposes saves, native actions, filters and explicit unavailable
       continueRun() {},
     },
   } satisfies TrainingHubRuntime;
+  for (const [state, label] of [["FAILED", "需要处理"], ["BLOCKED_STORAGE", "需要处理"],
+    ["CANCELLED", "已取消"], ["READY", "已准备好"]] as const) {
+    const stoppedHtml = renderToStaticMarkup(<TrainingHubDialog runtime={{ ...runtime,
+      automaticPreparationAvailable: true,
+      preparationJob: { id: "first-launch", state, completed: 1, total: 3 } as PreparationJob,
+    }} />);
+    assert.ok(stoppedHtml.includes(`<p>${label} · 1/3</p>`));
+    assert.doesNotMatch(stoppedHtml, /<p>正在准备历史数据/);
+    assert.doesNotMatch(stoppedHtml, /关闭页面后继续准备/);
+  }
   const marketRandomHtml = renderToStaticMarkup(<TrainingHubDialog runtime={{ ...runtime,
     automaticPreparationAvailable: true,
     draft: { ...draft, startMode: "RANDOM", randomScope: "MARKET", requestedStartMs: null,

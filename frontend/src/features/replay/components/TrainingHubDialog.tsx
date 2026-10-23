@@ -144,6 +144,11 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
     || runtime.operation === "plan"
     || runtime.operation === "create-context";
   const canLeavePreparation = runtime.automaticPreparationAvailable && runtime.operation === "create";
+  const preparationActive = runtime.preparationJob?.state === "RUNNING"
+    || runtime.preparationJob?.state === "QUEUED";
+  const preparationStatus = runtime.preparationJob?.state === "READY" ? "preparation.ready"
+    : runtime.preparationJob?.state === "CANCELLED" ? "preparation.cancelled"
+    : preparationActive ? "preparation.title" : "preparation.needsAttention";
   const busyLabel = runtime.operation === "create"
     ? t("replay.hub.creating")
     : runtime.operation === "create-context"
@@ -231,7 +236,7 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
                     </select></label>
                   <label className="training-hub-field"><span>{t("replay.hub.symbol")}</span>
                     <input disabled={busy} value={draft.symbol} onChange={(event) => patchDraft(runtime, { symbol: event.target.value.trim().toUpperCase() })} /></label>
-                  <p>{t("preparation.background")}</p>
+                  {(!runtime.preparationJob || preparationActive) && <p>{t("preparation.background")}</p>}
                 </div>}
                 <label className="training-hub-field training-hub-field-wide">
                   <span>{t("replay.hub.archiveName")}</span>
@@ -679,10 +684,10 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
             </div>
             <div className="training-hub-create-actions">
               {runtime.preparationJob && <div role="status" aria-live="polite">
-                <p>{t("preparation.title")} · {runtime.preparationJob.completed}/{runtime.preparationJob.total}</p>
+                <p>{t(preparationStatus)} · {runtime.preparationJob.completed}/{runtime.preparationJob.total}</p>
                 <PreparationWaiting job={runtime.preparationJob} />
-                <p>{t("preparation.background")}</p>
-                {busy && <button type="button" disabled={runtime.preparationJob.cancel_requested || runtime.preparationJob.stage === "STARTING"}
+                {preparationActive && <p>{t("preparation.background")}</p>}
+                {busy && preparationActive && <button type="button" disabled={runtime.preparationJob.cancel_requested || runtime.preparationJob.stage === "STARTING"}
                   onClick={() => void preparationRequest(`/${runtime.preparationJob!.id}/cancel`, { method: "POST" }).catch(() => undefined)}>{t("preparation.cancel")}</button>}
               </div>}
               <button

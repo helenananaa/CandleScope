@@ -2,6 +2,9 @@ import pytest
 
 from app.replay.training import terminal_cohort, multi_interval_advance
 from app.replay.training.models import ReplayV2CommandType as C
+from app.replay.service import ReplayService
+from app.replay.storage import ReplaySQLiteStore
+from app.replay.errors import ReplayDomainError, ReplayErrorCode
 from tests.fixtures.replay.multi_interval_fakes import make_multi
 from tests.fixtures.replay.shared_market_fakes import install_shared_market
 
@@ -66,11 +69,13 @@ async def test_terminal_cohort_matches_individual_steps(
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("failure", ["checkpoint", "time"])
+@pytest.mark.parametrize("margin", ["CROSS", "ISOLATED"])
 async def test_terminal_group_rollback_restores_every_actor_and_publishes_nothing(
-    tmp_path, monkeypatch, failure
+    tmp_path, monkeypatch, failure, margin
 ):
     install_shared_market(monkeypatch, tmp_path / "market")
-    service, run, session, send = await make_multi(tmp_path / "run", horizon=12)
+    service, run, session, send = await make_multi(
+        tmp_path / "run", horizon=12, margin_mode=margin, sides=("LONG", "SHORT"))
     try:
         await service.training.prepare_indexed_run(run)
         plan = await service.plan_source_chunk(
@@ -137,5 +142,21 @@ async def test_terminal_group_rollback_restores_every_actor_and_publishes_nothin
         assert (
             await service.training.store.get_market_track_heads(run) == committed_heads
         )
+        settings, repository = service.settings, service._repository
+        await service.shutdown(step_timeout=5)
+        # An unexpected persistence/invariant failure must stay quarantined
+        # after restart while preserving the last complete account boundary.
+        service = ReplayService(settings=settings, repository=repository,
+                                store=ReplaySQLiteStore(settings.db_path))
+        await service.start()
+        assert await service.training.store.get_market_track_heads(run) == committed_heads
+        for sid, prior in snapshots.items():
+            with pytest.raises(ReplayDomainError) as unavailable:
+                await service.get_session(sid)
+            assert unavailable.value.code is ReplayErrorCode.PERSISTENCE_DEGRADED
+            record = await service.store.get_session(sid)
+            assert record["degraded_reason"]
+            assert record["state_hash"] == prior["state_hash"]
+        assert (await service.training.audit_account(run))["status"] == "PASS"
     finally:
         await service.shutdown(step_timeout=5)
