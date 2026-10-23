@@ -635,9 +635,17 @@ async def startup_event() -> None:
         app.state.data_preparation_service = preparation
         await preparation.start()
         from app.data_preparation.replay_context import ReplayHistoryContext
-        if getattr(app.state, "replay_service", None) is not None:
-            app.state.replay_service.history_context = ReplayHistoryContext(preparation)
+        from app.data_preparation.replay_origin import ReplayOriginResolver
         data_manager = getattr(app.state, "data_manager", None)
+        market_runtime = getattr(app.state, "data_engine_runtime", None)
+        if getattr(app.state, "replay_service", None) is not None:
+            app.state.replay_service.history_context = ReplayHistoryContext(
+                preparation,
+                origin_resolver=ReplayOriginResolver(
+                    factory=getattr(market_runtime, "ingestion_factory", None),
+                    policy=getattr(data_manager, "history_policy", None),
+                ),
+            )
         try:
             if data_manager is not None:
                 from app.plugin_market_v2 import DataManagerConsumerPort
