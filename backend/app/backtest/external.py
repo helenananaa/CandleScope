@@ -252,13 +252,15 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
     execution_passes = None
     if wire.get("pine_print_tick_contract"):
         from .pine_print_tick_execution import run_clock
-        execution=run_clock(_pine_stream,kernel,orders,wire,state=clock,target=target,discovery_only=_discovery_only)
+        execution=run_clock(_pine_stream,kernel,orders,wire,state=clock,target=target,
+            discovery_only=_discovery_only,capture_checkpoint=capture)
         if _discovery_only:
             return None
         latest,history,accounts,execution_passes,clock,last_request=execution
     elif wire.get("pine_history_tick_contract"):
         from .pine_history_tick_execution import run_clock
-        execution=run_clock(_pine_stream,kernel,orders,wire,state=clock,target=target,discovery_only=_discovery_only)
+        execution=run_clock(_pine_stream,kernel,orders,wire,state=clock,target=target,
+            discovery_only=_discovery_only,capture_checkpoint=capture)
         if _discovery_only:
             return None
         latest,history,accounts,execution_passes,clock,last_request=execution

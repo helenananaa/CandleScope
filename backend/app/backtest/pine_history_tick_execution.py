@@ -104,7 +104,7 @@ def prepare_window(stream,plugin,wire,cancelled,deadline):
     raise BacktestError("BUDGET_EXCEEDED","at most 64 observed Pine window discovery attempts")
 
 
-def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=False):
+def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=False,capture_checkpoint=True):
     from .workbench_sensitivity import check_control
     state=deepcopy(state or {})
     cursor=state.get("bar_cursor",0)
@@ -137,11 +137,13 @@ def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=
     if discovery_only:
         return None
     latest["intents"]=deepcopy(clock.history)
+    passes=[[item["evaluation"] for item in group] for group in clock.groups]
+    if not capture_checkpoint:
+        return latest,clock.history,clock.accounts,passes,{"groups":clock.groups},None
     saved=dict(contract=wire["pine_bar_path_contract"],history_tick_contract=CONTRACT,bar_cursor=cursor,
                last_sequence=kernel.path_sequence,groups=clock.groups,accounts=clock.accounts,history=clock.history,
                stream=stream.checkpoint(),latest=latest)
     if clock.feed is not None: saved["request_feed"]=clock.feed.snapshot()
     if wire.get("pine_v2_bar_contract"): saved["source_sequence"]=kernel.source_sequence
     last_request=dict(bars=deepcopy(wire["bars"][:cursor]),execution_schedule=deepcopy(clock.groups))
-    passes=[[item["evaluation"] for item in group] for group in clock.groups]
     return latest,clock.history,clock.accounts,passes,saved,last_request

@@ -138,7 +138,7 @@ class SessionWorker:
                         raise BacktestError("NATIVE_IDENTITY_MISMATCH", "unexpected session identity reference")
                     result = {key: value for key, value in result.items() if key != "identity_ref"}
                     result["identity"] = json.loads(self._identity_json)
-                if digest(result.get("identity")) != self._identity_ref:
+                elif digest(result.get("identity")) != self._identity_ref:
                     raise BacktestError("NATIVE_IDENTITY_MISMATCH", "unexpected session runtime")
                 if streaming and (result.get("external_stream_contract") != STREAM_CONTRACT
                         or result.get("execution_schedule_contract") != SCHEDULE_CONTRACT

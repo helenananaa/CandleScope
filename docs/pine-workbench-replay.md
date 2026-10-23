@@ -75,7 +75,9 @@ fresh Host ledger and validates the final evaluator snapshot before sealing the
 window. Since that ledger is then discarded, discovery skips construction of
 unused Host reports and durable transcript copies. The private discovery flag
 rejects capture or resumed execution; final runs, cost scenarios and replay
-continue to construct their complete reports and checkpoints. Journaled commands
+continue to construct their complete reports. Durable replay also retains its
+complete checkpoint; ordinary batch execution avoids an unused private
+checkpoint copy. Journaled commands
 take one owned copy before the transport, preserving caller-mutation isolation.
 
 Controlled tests cover all nine supported mode/callback combinations, spot cash

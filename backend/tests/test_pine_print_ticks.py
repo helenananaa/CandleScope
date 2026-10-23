@@ -35,6 +35,34 @@ def config(main,mode,callbacks,account):
     return value
 
 
+@pytest.mark.parametrize("mode",["BAR_APPROX","TRADE_TAPE","BOOK_DEPTH"])
+def test_batch_avoids_unused_private_checkpoint_with_exact_complete_report_parity(runtime,monkeypatch,mode):
+    from app.backtest import pine_history_tick_execution, pine_print_tick_execution
+    from app.backtest.native import encoded
+    from app.backtest.pine_stream import PineStream
+    from tests.test_pine_history_tick_workbench import config as history_config
+    host,main=runtime
+    value=(history_config(main,"LINEAR_PERP_ONE_WAY_V2") if mode=="BAR_APPROX"
+           else config(main,mode,False,"LINEAR_PERP_ONE_WAY_V2"))
+    value["cost_sensitivity_mode"]="SKIP"
+    clock=pine_history_tick_execution if mode=="BAR_APPROX" else pine_print_tick_execution
+    run_clock=clock.run_clock
+    def materialize_private_state(*args,**kwargs):
+        kwargs["capture_checkpoint"]=True
+        return run_clock(*args,**kwargs)
+    with monkeypatch.context() as patch:
+        patch.setattr(clock,"run_clock",materialize_private_state)
+        control=terminal(host.native,host.native.create(value,"batch-with-private-copy")["run_id"])
+    assert control["state"]=="COMPLETED",control.get("error")
+    def unused_checkpoint(*args,**kwargs):
+        raise AssertionError("batch built an unused private evaluator checkpoint")
+    with monkeypatch.context() as patch:
+        patch.setattr(PineStream,"checkpoint",unused_checkpoint)
+        optimized=terminal(host.native,host.native.create(value,"batch-without-private-copy")["run_id"])
+    assert optimized["state"]=="COMPLETED",optimized.get("error")
+    assert encoded(optimized["result"])==encoded(control["result"])
+
+
 @pytest.mark.parametrize("account",["LINEAR_PERP_ONE_WAY_V1","SPOT_CASH_V1","LINEAR_PERP_ONE_WAY_V2"])
 @pytest.mark.parametrize("mode",MODES)
 @pytest.mark.parametrize("callbacks",[False,True])

@@ -195,7 +195,7 @@ class PrintTickClock:
         self.visible=None
 
 
-def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=False):
+def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=False,capture_checkpoint=True):
     clock=PrintTickClock(stream,kernel,orders,wire,state=state)
     interval=parse_interval_spec(wire["interval"])
     events=physical_events(wire)
@@ -238,9 +238,11 @@ def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=
     if discovery_only:
         return None
     latest={**output,"raw_output":output["output"],"graphics":output["output"].get("plots",[]),"intents":deepcopy(clock.history)}
+    passes=[[item["evaluation"] for item in group] for group in clock.groups]
+    if not capture_checkpoint:
+        return latest,clock.history,clock.accounts,passes,{"groups":clock.groups},None
     saved=dict(contract=CONTRACT,bar_cursor=clock.cursor,last_sequence=clock.last_sequence,event_cursor=clock.event_cursor,
         groups=clock.groups,accounts=clock.accounts,history=clock.history,stream=stream.checkpoint(),latest=latest)
     if clock.feed is not None: saved["request_feed"]=clock.feed.snapshot()
     last_request=dict(bars=deepcopy(wire["bars"][:clock.cursor]),execution_schedule=deepcopy(clock.groups))
-    passes=[[item["evaluation"] for item in group] for group in clock.groups]
     return latest,clock.history,clock.accounts,passes,saved,last_request
