@@ -177,3 +177,26 @@ def test_snapshot_serializes_private_state_without_exposing_a_mutable_alias(repl
     service._save(saved, external_state={"cursor":2, "ledger":{"balance":"90.25"}})
     after, = service.native.db.execute("SELECT record FROM native_replay_snapshots").fetchone()
     assert after == stored
+
+
+def test_owned_job_state_cannot_mutate_the_persisted_account_or_a_later_reader(replay):
+    service,record,_=replay
+    save(service,record,2,7)
+    record["execution_mode"]="CANDLESCOPE"
+    service._save(record,external_state={"cursor":2,"ledger":{"balance":"100.50"}})
+    with service.native.lock:
+        owned=service._take_host_state(record["replay_id"])
+        assert "host:"+record["replay_id"] not in service.results.cache
+    owned["ledger"]["balance"]="0"
+    assert service._host_state(record["replay_id"])["ledger"]["balance"]=="100.50"
+
+
+def test_executor_metadata_read_still_checks_cold_result_integrity(replay):
+    service,record,_=replay
+    save(service,record,2,7)
+    header=service.get(record["replay_id"],_metadata_only=True)
+    assert header["result"] is None and header["cursor"]==2
+    service.results.cache.clear()
+    service.native.db.execute("UPDATE native_replay_result_bases SET checksum='broken' WHERE id=?",(record["replay_id"],))
+    with pytest.raises(ValueError,match="checksum"):
+        service.get(record["replay_id"],_metadata_only=True)

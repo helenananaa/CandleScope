@@ -89,6 +89,17 @@ writes over 1 MiB defer parsed cache materialization to the next verified read;
 small incremental deltas retain their warm cache. On-disk base/delta checksums,
 revisions, complete restoration and default GET/export content are unchanged.
 
+An active replay job takes ownership of its validated private cached state.
+After reconstructing and checking the interpreter, kernel, allocations and risk,
+the job releases the consumed input before continuing. Public restore helpers
+retain caller ownership; failed continuation leaves the committed database and
+visible cursor/report intact. Executor metadata reads still validate the result
+journal before avoiding an unused report copy. Restoring a snapshot identical to
+a full private base verifies the stored byte checksum and absence of deltas
+before avoiding a second parsed account. JSON decompression releases its byte
+buffer before building the parsed graph, and full identity/cursor/checksum checks
+remain in force.
+
 Controlled tests cover all nine supported mode/callback combinations, spot cash
 and inventory, pending queues/liquidity, backward seek, replay-service/interpreter-
 worker restart, requested data,

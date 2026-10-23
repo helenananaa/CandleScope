@@ -166,8 +166,8 @@ class PineStream:
         return deepcopy(value) if detached else value
 
     @classmethod
-    def restore(cls, runtime, payload, cancelled, *, deadline=None, verify=None):
-        saved = deepcopy(payload)
+    def restore(cls, runtime, payload, cancelled, *, deadline=None, verify=None, _owned_checkpoint=False):
+        saved = payload if _owned_checkpoint else deepcopy(payload)
         if (saved.get("contract") != JOURNAL_CONTRACT or not isinstance(saved.get("journal"), list)
                 or any(type(saved.get(key)) is not int or saved[key]<0 for key in ("cursor", "intents", "passes", "input_skip"))
                 or type(saved.get("bar_open")) is not bool):

@@ -12,7 +12,7 @@ from app.backtest.native_replay_storage import ResultJournal, same_json
 
 
 def test_large_checkpoint_round_trip_preserves_complete_json_without_aliasing():
-    value = {"rows": [{"text":"观察"*90, "values":[True, 1, 1.0, -0.0]} for _ in range(6000)]}
+    value = {"rows": [{"text":"观察"*90, "values":[True, 1, 1.0, -0.0]} for _ in range(6000)],"emoji":"🙂"}
     value["checksum"] = digest(value)
     stored = codec.pack(value)
     assert len(stored.encode()) < len(encoded(value).encode()) // 10
@@ -66,4 +66,27 @@ def test_host_journal_recovers_compressed_base_and_delta_from_only_its_database(
     db.execute("UPDATE native_replay_result_deltas SET checksum='broken'")
     with pytest.raises(ValueError, match="checksum"):
         ResultJournal(db).load("host:replay")
+    db.close()
+
+
+def test_identical_private_base_restore_checks_stored_bytes_and_rejects_stray_deltas(monkeypatch):
+    import sqlite3
+    from app.backtest import native_replay_storage as storage
+    monkeypatch.setattr(storage,"PRIVATE_CACHE_WRITE_BYTES",64)
+    db=sqlite3.connect(":memory:")
+    journal=ResultJournal(db)
+    value={"rows":["immutable account"*100 for _ in range(1500)],"numbers":[True,1,1.0,-0.0]}
+    assert journal.save("host:restore",value)==0
+    with monkeypatch.context() as patch:
+        patch.setattr(storage,"unpack",lambda _:pytest.fail("identical base was unnecessarily decoded"))
+        assert journal.save("host:restore",value,compare_base_bytes=True)==0
+        raw,expected=db.execute("SELECT payload,checksum FROM native_replay_result_bases").fetchone()
+        db.execute("UPDATE native_replay_result_bases SET checksum='broken'")
+        with pytest.raises(ValueError,match="checksum"):
+            journal.save("host:restore",value,compare_base_bytes=True)
+    db.execute("UPDATE native_replay_result_bases SET checksum=?",(expected,))
+    assert same_json(journal.load("host:restore"),value)
+    db.execute("INSERT INTO native_replay_result_deltas VALUES (?,?,?,?)",("host:restore",1,"[]",storage.checksum("[]")))
+    with pytest.raises(ValueError,match="journal"):
+        journal.save("host:restore",value,compare_base_bytes=True)
     db.close()

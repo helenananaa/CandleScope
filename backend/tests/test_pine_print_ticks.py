@@ -63,6 +63,68 @@ def test_batch_avoids_unused_private_checkpoint_with_exact_complete_report_parit
     assert encoded(optimized["result"])==encoded(control["result"])
 
 
+@pytest.mark.parametrize("mode",["BAR_APPROX","TRADE_TAPE","BOOK_DEPTH"])
+def test_consumed_job_resume_failure_keeps_committed_account_and_public_resume_detached(runtime,monkeypatch,mode):
+    import threading
+    import time
+    from app.backtest import external
+    from app.backtest.errors import BacktestError
+    from app.backtest.native import encoded,digest,invoke
+    from app.backtest.native_replay import NativeReplay
+    from app.backtest.pine_history_tick_clock import HistoryTickClock
+    from app.backtest.pine_print_tick_execution import PrintTickClock
+    from tests.test_pine_history_tick_workbench import config as history_config
+    host,main=runtime
+    value=(history_config(main,"LINEAR_PERP_ONE_WAY_V2") if mode=="BAR_APPROX"
+           else config(main,mode,False,"LINEAR_PERP_ONE_WAY_V2"))
+    value["cost_sensitivity_mode"]="SKIP"
+    origin=terminal(host.native,host.native.create(value,"owned-resume")["run_id"])
+    assert origin["state"]=="COMPLETED",origin.get("error")
+    replay=host.native.replay
+    created=replay.create(origin["run_id"]);key=created["replay_id"]
+    replay.command(key,created["revision"],"seek",3)
+    middle=settle(replay,key)
+    before=encoded(replay._host_state(key))
+    replay.shutdown()
+    host.native.replay=replay=NativeReplay(host.native)
+    consumed=[]
+    run=external._run_external_host
+    def observed_run(*args,**kwargs):
+        owned=kwargs.get("_consume_resume")
+        resume=kwargs.get("resume")
+        try: return run(*args,**kwargs)
+        finally:
+            if owned: consumed.append(resume=={})
+    def fail_after_restore(*args,**kwargs):
+        raise BacktestError("CONTROLLED_RESUME_FAILURE","after restored account and transcript checks")
+    with monkeypatch.context() as patch:
+        patch.setattr(external,"_run_external_host",observed_run)
+        patch.setattr(HistoryTickClock if mode=="BAR_APPROX" else PrintTickClock,
+                      "vertex" if mode=="BAR_APPROX" else "observe",fail_after_restore)
+        replay.command(key,replay.get(key)["revision"],"seek",created["total"])
+        deadline=time.monotonic()+20
+        while time.monotonic()<deadline:
+            with host.native.lock:
+                if key not in replay.jobs: break
+            time.sleep(.02)
+        else: pytest.fail("controlled resumed operation did not stop")
+    failed=replay.get(key)
+    assert failed["state"]=="FAILED" and "CONTROLLED_RESUME_FAILURE" in failed["error"]["message"]
+    assert consumed==[True]
+    assert failed["cursor"]==3 and encoded(failed["result"])==encoded(middle["result"])
+    assert encoded(replay._host_state(key))==before
+    # The public helper retains caller ownership and its complete input value.
+    checkpoint=replay._host_state(key)
+    wire=replay._input(origin["run_id"])
+    result,_=external.run_external_host(origin["runtime_launch"],wire,invoke,threading.Event(),
+        resume=checkpoint,target=created["total"])
+    assert encoded(checkpoint)==before
+    result["bars"]=wire["bars"];result["report_hash"]=digest(result)
+    assert encoded(result)==encoded(origin["result"])
+    replay.command(key,failed["revision"],"seek",created["total"])
+    assert encoded(settle(replay,key)["result"])==encoded(origin["result"])
+
+
 @pytest.mark.parametrize("account",["LINEAR_PERP_ONE_WAY_V1","SPOT_CASH_V1","LINEAR_PERP_ONE_WAY_V2"])
 @pytest.mark.parametrize("mode",MODES)
 @pytest.mark.parametrize("callbacks",[False,True])

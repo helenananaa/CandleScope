@@ -17,18 +17,20 @@ class ReplayWorker:
     def __init__(self,plugin,wire):
         self.plugin,self.wire,self.stream=plugin,wire,None
 
-    def execute(self,runner,cancelled,*,resume,target):
+    def execute(self,runner,cancelled,*,resume,target,resume_owned=False):
         deadline=time.monotonic()+120
         saved=(resume or {}).get("clock",{}).get("stream")
         reusable=(self.stream is not None and isinstance(saved,dict)
                   and not self.stream.bar_open and self.stream.checkpoint(detached=False)==saved)
         if not reusable:
             self.close()
-            self.stream=open_stream(self.plugin,self.wire,cancelled,deadline,resume=resume)
+            self.stream=open_stream(self.plugin,self.wire,cancelled,deadline,resume=resume,_resume_owned=resume_owned)
         self.stream.cancelled,self.stream.deadline=cancelled,deadline
+        del saved
         from .external import _run_external_host
         return _run_external_host(self.plugin,self.wire,runner,cancelled,resume=resume,target=target,
-            deadline=deadline,_scenario_runner=runner,_pine_stream=self.stream)
+            deadline=deadline,_scenario_runner=runner,_pine_stream=self.stream,
+            _consume_resume=resume_owned and resume is not None)
 
     def close(self):
         if self.stream is not None:
@@ -36,7 +38,7 @@ class ReplayWorker:
             self.stream=None
 
 
-def open_stream(plugin,wire,cancelled,deadline,*,resume=None):
+def open_stream(plugin,wire,cancelled,deadline,*,resume=None,_resume_owned=False):
     if (wire.get("pine_history_tick_contract")!=CONTRACT or wire.get("execution_fidelity")!="BAR_APPROX"
             or wire["identity"].get("external_stream_contract")!=STREAM_CONTRACT):
         raise BacktestError("EXTERNAL_UNSUPPORTED","historical Pine ticks require the negotiated BAR stream")
@@ -73,7 +75,7 @@ def open_stream(plugin,wire,cancelled,deadline,*,resume=None):
     def verify(command,result):
         if command["operation"]=="stream_rebase": observed.clear()
         elif command["operation"]=="stream_observe": observed.extend(result["intents"])
-    stream=PineStream.restore(plugin,saved,cancelled,deadline=deadline,verify=verify)
+    stream=PineStream.restore(plugin,saved,cancelled,deadline=deadline,verify=verify,_owned_checkpoint=_resume_owned)
     if observed!=resume["history"] or stream.last.get("window_status",{}).get("requires_discovery"):
         stream.close()
         raise BacktestError("LOOKAHEAD_VIOLATION","restored historical Pine window or intents differ")

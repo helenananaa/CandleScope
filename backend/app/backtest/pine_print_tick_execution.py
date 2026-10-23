@@ -15,7 +15,7 @@ from .pine_stream import PineStream,canonical_observations
 CONTRACT="candlescope.pine-print-tick/1"
 
 
-def open_stream(plugin,wire,cancelled,deadline,*,resume=None):
+def open_stream(plugin,wire,cancelled,deadline,*,resume=None,_resume_owned=False):
     if (wire.get("pine_print_tick_contract")!=CONTRACT or wire.get("execution_fidelity") not in FIDELITIES
             or wire["identity"].get("external_stream_contract")!=STREAM_CONTRACT):
         raise BacktestError("EXTERNAL_UNSUPPORTED","physical Pine ticks require the negotiated print stream")
@@ -55,7 +55,7 @@ def open_stream(plugin,wire,cancelled,deadline,*,resume=None):
     def verify(command,result):
         if command["operation"]=="stream_rebase": observed.clear()
         elif command["operation"]=="stream_observe": observed.extend(result["intents"])
-    stream=PineStream.restore(plugin,saved,cancelled,deadline=deadline,verify=verify)
+    stream=PineStream.restore(plugin,saved,cancelled,deadline=deadline,verify=verify,_owned_checkpoint=_resume_owned)
     if observed!=resume["history"] or stream.last.get("window_status",{}).get("requires_discovery"):
         stream.close()
         raise BacktestError("EXTERNAL_NONCAUSAL_PREFIX","physical Pine replayed intents differ")
@@ -69,18 +69,20 @@ class ReplayWorker:
         self.plugin,self.wire,self.stream=plugin,wire,None
         self.history=None
 
-    def execute(self,runner,cancelled,*,resume,target):
+    def execute(self,runner,cancelled,*,resume,target,resume_owned=False):
         deadline=time.monotonic()+120
         saved=(resume or {}).get("clock",{}).get("stream")
         if not (self.stream is not None and isinstance(saved,dict)
                 and not self.stream.bar_open and self.stream.checkpoint(detached=False)==saved
                 and self.history==resume.get("history")):
             self.close()
-            self.stream=open_stream(self.plugin,self.wire,cancelled,deadline,resume=resume)
+            self.stream=open_stream(self.plugin,self.wire,cancelled,deadline,resume=resume,_resume_owned=resume_owned)
         self.stream.cancelled,self.stream.deadline=cancelled,deadline
+        del saved
         from .external import _run_external_host
         result,state=_run_external_host(self.plugin,self.wire,runner,cancelled,resume=resume,target=target,
-            deadline=deadline,_scenario_runner=runner,_pine_stream=self.stream)
+            deadline=deadline,_scenario_runner=runner,_pine_stream=self.stream,
+            _consume_resume=resume_owned and resume is not None)
         self.history=deepcopy(state["history"])
         return result,state
 

@@ -131,8 +131,21 @@ class ResultJournal:
             raise ValueError("native replay result revision does not match its cursor")
         return revision, base_revision
 
-    def save(self, key, value):
+    def save(self, key, value, *, compare_base_bytes=False):
         row = self.db.execute("SELECT revision,base_revision FROM native_replay_result_bases WHERE id=?", (key,)).fetchone()
+        if compare_base_bytes and key.startswith("host:") and row and row[0] == row[1]:
+            # A validated snapshot can equal the current full base exactly.
+            # Verify stored bytes and the absence of deltas before avoiding a
+            # second complete parsed account merely to establish equality.
+            raw, expected_hash = self.db.execute("SELECT payload,checksum FROM native_replay_result_bases WHERE id=?", (key,)).fetchone()
+            if checksum(raw) != expected_hash:
+                raise ValueError("native replay result base checksum mismatch")
+            has_deltas = self.db.execute("SELECT 1 FROM native_replay_result_deltas WHERE id=? LIMIT 1", (key,)).fetchone()
+            if has_deltas:
+                raise ValueError("native replay result journal has unexpected deltas")
+            if raw == pack(value):
+                self.cache.pop(key, None)
+                return row[0]
         previous = self.load(key) if row else None
         if row and same_json(previous, value):
             return row[0]

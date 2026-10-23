@@ -52,4 +52,8 @@ def unpack(raw):
     if (len(decoded) != size or not decoder.eof or decoder.unused_data or decoder.unconsumed_tail
             or hashlib.sha256(decoded).hexdigest() != value.get("decoded_sha256")):
         raise ValueError("replay checkpoint size or checksum mismatch")
-    return json.loads(decoded)
+    # Avoid retaining both the decompressed bytes and json.loads' implicit
+    # Unicode copy while constructing a large parsed checkpoint graph.
+    text = decoded.decode("utf-8")
+    del decoded, compressed, value, decoder
+    return json.loads(text)

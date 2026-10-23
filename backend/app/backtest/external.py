@@ -113,7 +113,7 @@ def run_external_host(plugin, wire, runner, cancelled, **options):
 
 def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=None,
                        deadline=None, _cost_scenario=False, _scenario_runner=None, _pine_stream=None,
-                       _discovery_only=False):
+                       _discovery_only=False, _consume_resume=False):
     if wire.get("host_runtime_identity") != host_identity():
         raise BacktestError("NATIVE_IDENTITY_MISMATCH", "host matching code changed after submission")
     from .workbench_sensitivity import validate_contract, check_control
@@ -192,6 +192,14 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
             from .native_replay_storage import same_json
             if not same_json(reproduced,latest):
                 raise BacktestError("EXTERNAL_NONCAUSAL_PREFIX","restored evaluator transcript changed")
+        elif _consume_resume:
+            # Only a job-owned checkpoint may be consumed. All identity,
+            # transcript, kernel, allocation and risk restoration checks above
+            # have finished; matching clocks clone their mutable inputs next.
+            clock={key:value for key,value in clock.items() if key not in {"stream","latest"}}
+            accounts,history,latest=[],[],{}
+            last_request=None
+            resume.clear()
 
     def evaluate(plugin,request,**kwargs):
         nonlocal last_request
