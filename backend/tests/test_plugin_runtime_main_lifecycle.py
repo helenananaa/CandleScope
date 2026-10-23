@@ -215,6 +215,74 @@ def _patch_startup_dependencies(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("rolling", [False, True])
+async def test_startup_prepared_history_uses_provider_origin_and_retention_policy(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, rolling: bool
+) -> None:
+    from app.data_engine.ingestion.models import StreamType
+    from app.data_preparation.models import PreparationError
+    from app.replay.catalog import ReplaySeriesIdentity
+
+    _patch_startup_dependencies(monkeypatch, _Host(), tmp_path / "plugins")
+    calls = []
+    identity = ReplaySeriesIdentity("binance", "spot", "QAORIGINUSDT")
+
+    class Provider:
+        async def fetch_market(self, descriptor, **kwargs):
+            calls.append((descriptor, kwargs))
+            return [SimpleNamespace(
+                exchange=identity.exchange, market_type=identity.market_type,
+                symbol=identity.symbol, event_type=StreamType.KLINE,
+                data={"open_time": 180_000},
+            )]
+
+    policy = SimpleNamespace(
+        series_key=lambda **kwargs: kwargs,
+        resolve=lambda _: SimpleNamespace(availability=SimpleNamespace(
+            rolling_retention_ms=60_000 if rolling else None,
+            data_start=None, upstream_start=None,
+        )),
+    )
+    replay = SimpleNamespace()
+
+    async def no_op(**_kwargs):
+        pass
+
+    async def init_replay():
+        main_module.app.state.replay_service = replay
+
+    async def init_data():
+        main_module.app.state.data_manager = SimpleNamespace(history_policy=policy)
+        main_module.app.state.data_engine_runtime = SimpleNamespace(
+            ingestion_factory=Provider(), backfill_coordinator=None, shutdown=no_op,
+        )
+
+    monkeypatch.setattr(main_module, "_init_replay_runtime", init_replay)
+    monkeypatch.setattr(main_module, "_init_data_manager", init_data)
+    await main_module.startup_event()
+    try:
+        resolver = replay.history_context.origin_resolver
+        if rolling:
+            with pytest.raises(PreparationError, match="rolling retention"):
+                await resolver(identity, 3_000_000)
+            assert not calls
+        else:
+            assert await resolver(identity, 3_000_000) == 180_000
+            assert len(calls) == 1
+            assert calls[0][0].symbol == identity.symbol
+            assert calls[0][1] == {
+                "limit": 1, "start_ms": 0, "end_ms": 3_059_999,
+                "history": True, "defer_on_rate_limit": True,
+            }
+            # Wiring a provider must not turn unknown pagination into a proof.
+            with pytest.raises(PreparationError, match="verified history origin"):
+                await resolver(ReplaySeriesIdentity("other", "spot", identity.symbol), 3_000_000)
+            assert len(calls) == 1
+    finally:
+        await main_module.shutdown_event()
+
+
+@pytest.mark.anyio
 async def test_application_lifecycle_owns_plugin_host_and_health_summary(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
