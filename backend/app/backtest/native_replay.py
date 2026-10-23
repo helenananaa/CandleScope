@@ -48,7 +48,8 @@ class NativeReplay:
                 self._save(self.get(key) | {"state": "INTERRUPTED", "revision": record["revision"]})
         db.commit()
 
-    def _save(self, record, *, external_state=_KEEP_STATE, restoring=False, external_validation=None):
+    def _save(self, record, *, external_state=_KEEP_STATE, restoring=False, external_validation=None,
+              consume_external_state=False):
         from .native import encoded
         from .native_replay_storage import SCHEMA
         header = {**record, "result": None, "_resultStorage": SCHEMA}
@@ -60,6 +61,13 @@ class NativeReplay:
                     header["_externalStateRevision"]=self.results.save("host:"+record["replay_id"],external_state,
                         **({"compare_base_bytes":True} if restoring else {}),
                         **({"validated_base":external_validation} if external_validation is not None else {}))
+                    if consume_external_state and external_state is not None:
+                        # A seek owns this detached checkpoint and has no next
+                        # step to resume. Once encoded in the transaction, its
+                        # graph need not overlap public-result cache creation.
+                        # A later failure rolls back the DB and drops the job;
+                        # recovery still reads the prior committed checkpoint.
+                        external_state.clear()
                 else:
                     old=self.native.db.execute("SELECT record FROM native_replays WHERE id=?",(record["replay_id"],)).fetchone()
                     if old and "_externalStateRevision" in (previous:=json.loads(old[0])):
@@ -316,7 +324,8 @@ class NativeReplay:
                     record = current
                     record.update(cursor=count, result=result, method=method, revision=record["revision"] + 1,
                                   state="COMPLETED" if count == record["total"] else "RUNNING" if action == "play" else "PAUSED")
-                    self._save(record,**({"external_state":external_state,"external_validation":external_validation} if external else {}))
+                    self._save(record,**({"external_state":external_state,"external_validation":external_validation,
+                        "consume_external_state":action=="seek"} if external else {}))
                 if action == "play" and cancelled.wait(0.1):
                     return
             with self.native.lock:

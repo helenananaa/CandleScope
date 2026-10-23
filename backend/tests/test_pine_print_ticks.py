@@ -148,13 +148,15 @@ def test_cold_large_seek_replaces_only_the_verified_private_base(runtime, monkey
     replay.shutdown()
     host.native.replay = replay = native_replay.NativeReplay(host.native)
     replay.restore(key, replay.get(key)["revision"], snapshot)
-    loads, saves = [], []
+    loads, saves, owned_states = [], [], []
     load, save = replay.results.load, replay.results.save
     def observed_load(name, **options):
         if name == "host:" + key: loads.append(options)
         return load(name, **options)
     def observed_save(name, value, **options):
-        if name == "host:" + key: saves.append(options)
+        if name == "host:" + key:
+            saves.append(options)
+            owned_states.append(value)
         return save(name, value, **options)
     # Exercise the large-seek policy with this small semantic fixture. The
     # original threshold is independently exercised by the 16K resource matrix.
@@ -167,10 +169,61 @@ def test_cold_large_seek_replaces_only_the_verified_private_base(runtime, monkey
     assert encoded(final["result"]) == encoded(origin["result"])
     assert len(loads) == 1 and loads[0]["validation"] is True
     assert len(saves) == 1 and saves[0]["validated_base"] is not None
+    assert owned_states == [{}]
     revision, base = host.native.db.execute("SELECT revision,base_revision FROM native_replay_result_bases WHERE id=?", ("host:" + key,)).fetchone()
     assert revision == base
     assert not host.native.db.execute("SELECT * FROM native_replay_result_deltas WHERE id=?", ("host:" + key,)).fetchall()
     assert replay._host_state(key)["cursor"] == created["total"]
+
+
+def test_consumed_seek_checkpoint_rolls_back_when_public_result_write_fails(runtime, monkeypatch):
+    import time
+    from app.backtest import native_replay
+    from app.backtest.native import encoded
+    host, main = runtime
+    origin = terminal(host.native, host.native.create(config(main, "BOOK_DEPTH", False,
+        "LINEAR_PERP_ONE_WAY_V2"), "consume-before-public-save")["run_id"])
+    assert origin["state"] == "COMPLETED", origin.get("error")
+    replay = host.native.replay
+    created = replay.create(origin["run_id"]); key = created["replay_id"]
+    replay.command(key, created["revision"], "seek", 3)
+    middle = settle(replay, key)
+    before = encoded(replay._host_state(key))
+    # Default callers retain their checkpoint. Only the exclusive seek job
+    # opts into consuming its detached, newly produced state.
+    caller_state = replay._host_state(key)
+    with host.native.lock:
+        replay._save(middle, external_state=caller_state)
+    assert encoded(caller_state) == before
+    save = replay.results.save
+    owned_states, failed = [], []
+    def fail_after_private_save(name, value, **options):
+        if name == "host:" + key:
+            result = save(name, value, **options)
+            owned_states.append(value)
+            return result
+        if name == key and owned_states and not failed:
+            assert owned_states == [{}]
+            failed.append(True)
+            raise RuntimeError("controlled public result write failure")
+        return save(name, value, **options)
+    with monkeypatch.context() as patch:
+        patch.setattr(native_replay, "PRIVATE_REBASE_MIN_BARS", 2)
+        patch.setattr(replay.results, "save", fail_after_private_save)
+        replay.command(key, middle["revision"], "seek", created["total"])
+        deadline = time.monotonic() + 25
+        while time.monotonic() < deadline:
+            with host.native.lock:
+                if key not in replay.jobs: break
+            time.sleep(.02)
+        else: pytest.fail("failed public save did not stop the seek")
+    record = replay.get(key)
+    assert failed == [True] and owned_states == [{}]
+    assert record["state"] == "FAILED" and "controlled public result write failure" in record["error"]["message"]
+    assert record["cursor"] == middle["cursor"] and record["result"] == middle["result"]
+    assert encoded(replay._host_state(key)) == before
+    replay.command(key, record["revision"], "seek", created["total"])
+    assert settle(replay, key)["result"] == origin["result"]
 
 
 def test_changed_private_storage_after_resume_validation_cannot_publish_a_new_cursor(runtime, monkeypatch):

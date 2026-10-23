@@ -111,11 +111,21 @@ stale revisions and transaction failures preserve the committed public cursor.
 Small seeks and sequential playback retain structural deltas. This optimization
 does not itself establish resource or packaged-application qualification.
 
+Once a seek has written its private checkpoint inside the transaction, it
+releases that exclusively owned, detached temporary state before building the
+public-result cache. The same transaction still covers both writes and the
+cursor; failure restores the prior committed checkpoint for retry. Playback
+retains its next-step state, and default save callers retain their input objects.
+
 The 2026-10-23 validated-base change passed 132 installed-worker checkpoint,
 external/native replay, history-tick, physical-tick and view regression cases,
 with no skips. A separate 60-case storage/view run passed with overlapping
 coverage. Actual-worker cases compare complete cold-restored results and reject
 storage rewritten after execution even when its stored checksum is recomputed.
+The subsequent temporary-state release passed 57 installed recovery, replay and
+view cases (37 unrelated batch/cost/closing cases deselected), including a public
+write failure after private persistence and complete retry equality. Its focused
+eight-case ownership/failure run overlaps that regression.
 
 Controlled tests cover all nine supported mode/callback combinations, spot cash
 and inventory, pending queues/liquidity, backward seek, replay-service/interpreter-
