@@ -582,6 +582,13 @@ class TrainingRunService:
     ) -> dict[str, object]:
         return await self._admission_service.market_catalog(run_id, _catalog_cache=_catalog_cache, _admission_cache=_admission_cache)
 
+    async def market_track_history(
+        self, run_id: str, *, exchange: str, market_type: str, symbol: str,
+    ) -> dict[str, object]:
+        return await self._admission_service.market_track_history(
+            run_id, exchange=exchange, market_type=market_type, symbol=symbol,
+        )
+
     async def market_track_plan(
         self,
         run_id: str,

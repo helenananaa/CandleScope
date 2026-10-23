@@ -4,6 +4,7 @@ import { describeError } from "../../i18n/serverErrors.js";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { recordPerfEvent } from "../../runtime/performance/perfMarks.js";
+import type { PreparationJob } from "../data-preparation/api.js";
 
 import type { WindowDelta, WindowDeltaType } from "../market-data/klineContracts.js";
 import { WINDOW_DELTA_TYPES } from "../market-data/window/windowDeltas.js";
@@ -362,6 +363,7 @@ export interface ReplayViewerRuntime {
   readonly eventStopMessage?: string | null;
   readonly controlPending: ReplayV2Command | null;
   readonly viewerPending: boolean;
+  readonly marketPreparation?: PreparationJob | null;
   readonly progress: Readonly<Record<string, ReplayV2Json>> | null;
   readonly periodSummary: ReplayPeriodSummaryStatusResponse | null;
   readonly summaryPreparing: boolean;
@@ -450,6 +452,9 @@ export function useReplayViewerRuntime(
   useEffect(() => { setEventStopMessage(null); }, [viewerState?.run_id]);
   const [controlPending, setControlPending] = useState<ReplayV2Command | null>(null);
   const [viewerPending, setViewerPending] = useState(false);
+  const [marketPreparation, setMarketPreparation] = useState<PreparationJob | null>(null);
+  const marketPreparationRef = useRef<AbortController | null>(null);
+  useEffect(() => () => marketPreparationRef.current?.abort(), [viewerState?.run_id]);
   const [progress, setProgress] = useState<Readonly<Record<string, ReplayV2Json>> | null>(null);
   const [periodSummary, setPeriodSummary] = useState<ReplayPeriodSummaryStatusResponse | null>(null);
   const [summaryPreparing, setSummaryPreparing] = useState(false);
@@ -973,6 +978,7 @@ export function useReplayViewerRuntime(
     type: ReplayPhase3ControlType,
     payload: Readonly<Record<string, ReplayV2Json>>,
   ): Promise<ReplayV2CommandResult> => {
+    if (marketPreparationRef.current !== null) throw new Error("market history preparation is pending");
     if (controlRef.current !== null) throw new Error("another replay.v3 control is pending");
     const viewer = viewerRef.current;
     if (viewer === null) throw new Error("ViewerState is unavailable");
@@ -1229,12 +1235,29 @@ export function useReplayViewerRuntime(
   }): Promise<ReplayTrainingMarketTrack> => {
     const viewer = viewerRef.current;
     if (viewer === null) throw new Error("ViewerState is unavailable");
-    const plan = await defaultReplayV2Api.planMarketTrack(viewer.run_id, {
-      exchange: identity.exchange,
-      marketType: identity.marketType,
-      symbol: identity.symbol,
-      subscriptionTier: "NONE",
-    });
+    if (controlRef.current !== null || viewerCommandRef.current !== null) throw new Error("another replay operation is pending");
+    const observer = new AbortController();
+    marketPreparationRef.current = observer;
+    viewerCommandRef.current = "market-preparation";
+    setViewerPending(true);
+    let plan;
+    try {
+      plan = await defaultReplayV2Api.planMarketTrack(viewer.run_id, {
+        exchange: identity.exchange,
+        marketType: identity.marketType,
+        symbol: identity.symbol,
+        subscriptionTier: "NONE",
+      }, observer.signal, setMarketPreparation);
+      observer.signal.throwIfAborted();
+      if (viewerRef.current?.run_id !== viewer.run_id) throw new Error("training changed while preparing history");
+    } finally {
+      if (marketPreparationRef.current === observer) {
+        marketPreparationRef.current = null;
+        viewerCommandRef.current = null;
+        setMarketPreparation(null);
+        setViewerPending(false);
+      }
+    }
     await submitTrackCommand(
       "add_track",
       { plan_id: plan.plan_id },
@@ -1423,6 +1446,7 @@ export function useReplayViewerRuntime(
     eventStopMessage,
     controlPending,
     viewerPending,
+    marketPreparation,
     progress,
     periodSummary,
     summaryPreparing,
