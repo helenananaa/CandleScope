@@ -28,12 +28,34 @@ tests on all four platforms pass; Windows/Linux each have separate fresh
 7,999-case Rust gate and structural/Clippy/WASM checks. Earlier source and
 binary qualifications below retain their own identities.
 
-Stage 5 is active. The newest combined development Host attempt passed 1,001
-cases before its unchanged input-byte budget exposed repeated identity overhead.
-The process-bound identity-reference repair is committed on PR #81; the actual
-new 0.3.3 bridge / 0.2.1 SDK managed candidate passes byte-budget, full-output,
-correction, transport and recovery controls. The complete repaired-package Host
-gate remains required. The complete fresh Core resource matrix now passes all
+Stage 5 is active. The preceding complete Host gate at `7731c909` passed 1,059
+selected cases; a fresh full gate for the current source remains required.
+The current managed 0.3.3 bridge / 0.2.1 SDK candidate passes 32 real-child
+transport tests, 181 bridge tests and 67 installed Pine stream, physical-tick,
+history-clock and window-recovery tests. SDK identity ownership was separately
+checked by its 160-case gate. Complete reports match serial execution controls.
+Negotiated external-stream chains carry at most eight frozen commands in one
+bounded frame while retaining every original acknowledgement, cursor and
+decision hash. Legacy workers and large combined inputs use individual frames.
+No Host matching callback runs inside a chain. Observation ownership and
+immutable closed-bar storage avoid redundant copies; public reports and
+checkpoint observations remain complete.
+
+The focused 16,384-bar depth/Renko/V2 trial completed all 81,920 observations:
+full run 109.406 s, midpoint 99.344 s, snapshot 7.156 s and cold restore/final
+seek 124.547 s. Cold continuation equals the complete run. The retained full
+financial/plot control also matches: an initial hash failure was traced to the
+reference helper's final LF versus the Windows writer's CRLF, with every JSON
+field equal; the failed receipt and separate byte-level audit are retained.
+The trial still fails its unchanged 2 GiB process-tree memory ceiling, peaking
+at 3,861,323,776 bytes. Stage attribution identifies large checkpoint
+construction and overlapping restored/stored graphs; this is not resource
+qualification. All 72 fresh trials, packaged Windows UI/restart acceptance and
+plugin/application publication remain pending. Four new deterministic CSPKGs
+and their locks/catalog bind this candidate, but the plugin release is not yet
+published. The stable Core binary is unchanged.
+
+The complete fresh Core resource matrix passes all
 216 Windows/Linux Rust/Python/WASM trials under the original frozen budgets,
 with no cross-surface or session-isolation mismatches. Host long-history/IPC/
 checkpoint workloads have separate budgets frozen before measurement. Formal

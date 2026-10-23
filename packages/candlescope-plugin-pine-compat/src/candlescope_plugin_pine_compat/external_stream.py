@@ -12,10 +12,12 @@ from .strategy_time import engine_bars
 from .event_stream import EventRequests, CONTRACT as EVENT_CONTRACT
 
 CONTRACT = "candlescope.pine-external-stream/1"
+CHAIN_CONTRACT = "candlescope.pine-external-stream-chain/1"
 WINDOW_CONTRACT = "candlescope.pine-request-window-plan/1"
 FEEDBACK_CONTRACT = "candlescope.pine-window-feedback/1"
 REALTIME_WINDOW_CONTRACT = "candlescope.pine-realtime-window/1"
-OPERATIONS = {"stream_open", "stream_begin", "stream_observe", "stream_commit", "stream_snapshot", "stream_rebase"}
+CHAIN_OPERATIONS = {"stream_begin", "stream_observe", "stream_commit", "stream_rebase"}
+OPERATIONS = {"stream_open", "stream_snapshot", "stream_chain", *CHAIN_OPERATIONS}
 _active = None
 
 
@@ -29,6 +31,7 @@ def capabilities():
         window=getattr(pine_compat,"EXTERNAL_REQUEST_WINDOW_PLAN_SCHEMA_VERSION",0)
         feedback=getattr(pine_compat,"EXTERNAL_WINDOW_FEEDBACK_SCHEMA_VERSION",0)
         return {"external_stream_contract": CONTRACT,
+                "external_stream_chain_contract": CHAIN_CONTRACT,
                 **({"request_window_plan_contract":WINDOW_CONTRACT} if type(window) is int and window==1 else {}),
                 **({"window_feedback_contract":FEEDBACK_CONTRACT} if type(feedback) is int and feedback==1
                    and all(callable(getattr(session,name,None)) for name in ("window_status","rebase_window")) else {}),
@@ -119,6 +122,8 @@ class Stream:
 
     def execute(self, request):
         operation = request["operation"]
+        if operation == "stream_chain":
+            return self.chain(request)
         allowed = {"operation", "protocol", "identity", "external_stream_contract", "bar_cursor", "intent_base"}
         allowed |= {"stream_begin": {"bar", "bar_state"}, "stream_observe": {"observation"},
                     "stream_snapshot": {"include_intents"}, "stream_rebase": {"seal"}}.get(operation, set())
@@ -136,10 +141,15 @@ class Stream:
             self.passes, self.state = 0, request["bar_state"]
             result = {"intents": [], "intent_base": self.intents}
         elif operation == "stream_observe":
-            observation = deepcopy(request["observation"])
+            observation = request["observation"]
             if (not isinstance(observation, dict) or set(observation) != {"evaluation", "context"}
                     or not isinstance(observation["evaluation"], dict) or not isinstance(observation["context"], dict)):
                 raise ValueError("PINE_STREAM_INVALID: evaluation and context required")
+            # Only the observation/evaluation mappings are changed below.
+            # engine_pass constructs converted bars, accounts and updates;
+            # ExternalSession.observe serializes them into owned Rust values.
+            # No caller-owned mapping is mutated or retained by that call.
+            observation = {**observation, "evaluation": dict(observation["evaluation"])}
             evaluation = observation["evaluation"]
             if (type(evaluation.get("confirmed")) is not bool or type(evaluation.get("event_time_ms")) is not int
                     or type(evaluation.get("bar", {}).get("time")) is not int
@@ -148,7 +158,7 @@ class Stream:
             if self.requested is None and any(key in evaluation for key in ("request_updates", "request_observed_at_ms")):
                 raise ValueError("PINE_STREAM_INVALID: requested updates were not negotiated")
             if self.events is not None:
-                observation=self.events.observe(observation,self.engine.cursor,self.skip)
+                observation=self.events.observe(observation,self.engine.cursor,self.skip,_owned=True)
                 evaluation=observation["evaluation"]
             observation["evaluation"] = engine_pass(evaluation)
             try:
@@ -196,6 +206,30 @@ class Stream:
                 raise ValueError("PINE_STREAM_CURSOR: engine intent cursor differs")
             self.intents += len(result["intents"])
         return self.pack(result)
+
+    def chain(self, request):
+        """Execute bounded frozen commands, with every original acknowledgement.
+
+        No Host callback can occur inside a chain. The caller validates the
+        complete returned transcript before it publishes any ledger state.
+        """
+        header = {"operation", "protocol", "identity", "external_stream_contract",
+                  "external_stream_chain_contract", "bar_cursor", "intent_base", "commands"}
+        commands = request.get("commands")
+        if (set(request) - header or request.get("external_stream_chain_contract") != CHAIN_CONTRACT
+                or type(request.get("bar_cursor")) is not int or request["bar_cursor"] != self.engine.cursor
+                or type(request.get("intent_base")) is not int or request["intent_base"] != self.intents
+                or not isinstance(commands, list) or not 1 <= len(commands) <= 8
+                or any(not isinstance(command, dict) or command.get("operation") not in CHAIN_OPERATIONS
+                       or set(command) & (header - {"operation"}) for command in commands)):
+            raise ValueError("PINE_STREAM_INVALID: invalid bounded stream command chain")
+        results = []
+        for command in commands:
+            results.append(self.execute({**command, "external_stream_contract": CONTRACT,
+                "bar_cursor": self.engine.cursor, "intent_base": self.intents}))
+        return {"external_stream_contract": CONTRACT, "execution_schedule_contract": SCHEDULE,
+                "execution_tick_contract": TICK_CONTRACT, "external_stream_chain_contract": CHAIN_CONTRACT,
+                "results": results}
 
     def pack(self, result=None):
         status=self.engine.window_status() if self.feedback else None

@@ -67,7 +67,14 @@ def test_bridges_keep_one_native_session_and_only_return_new_intents(route, stat
         bar,group=data(index,state)
         command("stream_begin",index,bar=bar,bar_state=state)
         for ordinal,observation in enumerate(group):
+            original = deepcopy(observation)
             result=command("stream_observe",index,observation=observation)
+            assert observation == original
+            retained = native.snapshot(include_intents=True)
+            observation["evaluation"]["bar"]["close"] = -999
+            observation["evaluation"]["account"]["equity"] = -999
+            observation["context"]["trigger"] = "changed-after-call"
+            assert native.snapshot(include_intents=True) == retained
             assert "output" not in result and result["pass_cursor"] == ordinal+1
             assert result["intent_base"] == len(intents) and len(result["intents"]) == 1
             intents.extend(result["intents"])
@@ -109,6 +116,58 @@ def test_old_core_does_not_advertise_the_stream_contract(monkeypatch):
     assert external_stream.capabilities() == {}
 
 
+@pytest.mark.parametrize("route", [chart_strategy.execute, external_strategy.execute])
+@pytest.mark.parametrize("state", ["historical", "realtime"])
+def test_bounded_chain_returns_every_original_acknowledgement_and_final_native_state(route, state):
+    def run(chained):
+        external_stream._active = None
+        result = route(dict(opening(state), operation="stream_open"))
+        acknowledgements = []
+        for index in range(2):
+            bar, observations = data(index, state)
+            commands = [dict(operation="stream_begin", bar=bar, bar_state=state),
+                        *(dict(operation="stream_observe", observation=item) for item in observations),
+                        dict(operation="stream_commit")]
+            original = deepcopy(commands)
+            if chained:
+                envelope = route(dict(operation="stream_chain", external_stream_contract=external_stream.CONTRACT,
+                    external_stream_chain_contract=external_stream.CHAIN_CONTRACT,
+                    bar_cursor=result["bar_cursor"], intent_base=result["intent_cursor"], commands=commands))
+                assert envelope["external_stream_chain_contract"] == external_stream.CHAIN_CONTRACT
+                acknowledgements.extend(envelope["results"])
+                result = envelope["results"][-1]
+            else:
+                for command in commands:
+                    result = route(dict(command, external_stream_contract=external_stream.CONTRACT,
+                        bar_cursor=result["bar_cursor"], intent_base=result["intent_cursor"]))
+                    acknowledgements.append(result)
+            assert commands == original
+        output = route(dict(operation="stream_snapshot", external_stream_contract=external_stream.CONTRACT,
+            bar_cursor=2, intent_base=result["intent_cursor"], include_intents=True))
+        return acknowledgements, output
+    assert run(True) == run(False)
+
+
+@pytest.mark.parametrize("failure", ["empty", "over-budget", "nested", "identity", "cursor", "contract", "bad-second"])
+def test_bad_chain_discards_native_state_without_returning_partial_success(failure):
+    route = external_strategy.execute
+    route(dict(opening("realtime"), operation="stream_open"))
+    bar, observations = data(0, "realtime")
+    commands = [dict(operation="stream_begin", bar=bar, bar_state="realtime"),
+                dict(operation="stream_observe", observation=observations[0])]
+    request = dict(operation="stream_chain", external_stream_contract=external_stream.CONTRACT,
+        external_stream_chain_contract=external_stream.CHAIN_CONTRACT, bar_cursor=0, intent_base=0, commands=commands)
+    if failure == "empty": request["commands"] = []
+    if failure == "over-budget": request["commands"] = commands * 5
+    if failure == "nested": commands[1] = dict(operation="stream_chain", commands=[])
+    if failure == "identity": commands[1]["identity"] = {}
+    if failure == "cursor": request["bar_cursor"] = True
+    if failure == "contract": request["external_stream_chain_contract"] = "wrong"
+    if failure == "bad-second": observations[0]["evaluation"]["event_time_ms"] = False
+    with pytest.raises(ValueError): route(request)
+    assert external_stream._active is None
+
+
 @pytest.mark.parametrize("unknown", ["bars", "accounts", "execution_schedule", "execution_passes", "request_updates"])
 def test_stream_open_cannot_silently_ignore_legacy_execution_fields(unknown):
     request=opening("realtime")
@@ -147,7 +206,14 @@ def test_requested_transactions_advance_without_replaying_previous_observations(
                 update=bar|dict(open=100*(index+1),high=100*(index+1),low=100*(index+1),close=100*(index+1))
                 updates=[dict(symbol="B",timeframe="1",kind="confirmed",available_at_ms=observed,bar=update)]
             frame["evaluation"].update(request_observed_at_ms=observed,request_updates=updates)
+            original = deepcopy(frame)
             result=command("stream_observe",index,observation=frame)
+            assert frame == original
+            retained = external_stream._active.engine.snapshot(include_intents=True)
+            if updates:
+                updates[0]["bar"]["close"] = -999
+            frame["evaluation"]["account"]["equity"] = -999
+            assert external_stream._active.engine.snapshot(include_intents=True) == retained
             intents.extend(result["intents"])
         command("stream_commit",index)
     output=command("stream_snapshot",2)["output"]

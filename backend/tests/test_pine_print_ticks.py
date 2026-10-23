@@ -47,12 +47,15 @@ def test_batch_avoids_unused_private_checkpoint_with_exact_complete_report_parit
     value["cost_sensitivity_mode"]="SKIP"
     clock=pine_history_tick_execution if mode=="BAR_APPROX" else pine_print_tick_execution
     run_clock=clock.run_clock
+    observe=PineStream.observe
     def materialize_private_state(*args,**kwargs):
         kwargs["capture_checkpoint"]=True
+        kwargs["compact_groups"]=False
         return run_clock(*args,**kwargs)
     with monkeypatch.context() as patch:
         patch.setattr(clock,"run_clock",materialize_private_state)
-        patch.setattr(PineStream,"_request_many",lambda self,commands:[self._request(command) for command in commands])
+        patch.setattr(PineStream,"_request_many",lambda self,commands,**kwargs:[self._request(command) for command in commands])
+        patch.setattr(PineStream,"observe",lambda self,observation,**kwargs:observe(self,observation))
         control=terminal(host.native,host.native.create(value,"batch-with-private-copy")["run_id"])
     assert control["state"]=="COMPLETED",control.get("error")
     def unused_checkpoint(*args,**kwargs):

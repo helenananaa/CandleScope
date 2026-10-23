@@ -5,6 +5,21 @@ from app.backtest.native_session import SessionWorker
 from app.backtest.native import digest
 
 
+def test_file_size_guard_observes_growth_without_moving_shared_offset():
+    import os
+    import tempfile
+    from app.backtest.native_session import _file_size
+    with tempfile.TemporaryFile() as stream:
+        stream.write(b"first")
+        stream.flush()
+        stream.seek(2)
+        assert _file_size(stream) == os.fstat(stream.fileno()).st_size == 5
+        assert stream.tell() == 2
+        stream.truncate(8192)
+        assert _file_size(stream) == os.fstat(stream.fileno()).st_size == 8192
+        assert stream.tell() == 2
+
+
 def test_timeout_reaps_persistent_child():
     script = """import json,sys,time
 request=json.loads(sys.stdin.readline())
@@ -189,6 +204,44 @@ for line in sys.stdin:
         worker.close()
     assert not worker._io_thread.is_alive()
 
+
+@pytest.mark.parametrize("blocked_write", [False, True])
+@pytest.mark.parametrize("cancel", [False, True])
+def test_transport_interrupts_blocked_pipe_io_and_preserves_reason(blocked_write, cancel):
+    event = threading.Event()
+    script = "import sys,time; " + ("" if blocked_write else "sys.stdin.readline(); ") + "time.sleep(20)"
+    worker = SessionWorker({"command": [sys.executable, "-u", "-c", script]},
+                           {"identity": {}}, event, evaluator=True)
+    timer = threading.Timer(.2, event.set) if cancel else None
+    if timer:
+        timer.start()
+    try:
+        with pytest.raises(ValueError, match="NATIVE_CANCELLED" if cancel else "NATIVE_TIMEOUT"):
+            worker.request({"operation": "execute", "data": "x" * (2*1024*1024 if blocked_write else 1)},
+                           event, timeout=5 if cancel else .2)
+        assert worker.process.poll() is not None
+        assert all(stream.closed for stream in (worker.process.stdin, worker.process.stdout, worker.stderr))
+        assert not worker._io_thread.is_alive()
+    finally:
+        if timer:
+            timer.cancel()
+        worker.close()
+
+
+def test_transport_reaps_child_that_fills_stderr_without_reply(monkeypatch):
+    from app.backtest import native_session
+    monkeypatch.setattr(native_session, "MAX_BYTES", 4096)
+    script = "import sys,time; sys.stdin.readline(); sys.stderr.write('x'*8192); sys.stderr.flush(); time.sleep(20)"
+    worker = SessionWorker({"command": [sys.executable, "-u", "-c", script]},
+                           {"identity": {}}, threading.Event(), evaluator=True)
+    try:
+        with pytest.raises(ValueError, match="stderr exceeds"):
+            worker.request({"operation": "execute"}, threading.Event(), timeout=5)
+        assert worker.process.poll() is not None and worker.stderr.closed
+        assert not worker._io_thread.is_alive()
+    finally:
+        worker.close()
+
 @pytest.mark.parametrize("failure", [None, "identity", "timeout", "cancel"])
 def test_stream_chain_keeps_each_acknowledgement_and_stops_on_transport_failure(failure):
     from app.backtest.native_session import STREAM_CONTRACT, SCHEDULE_CONTRACT, TICK_CONTRACT
@@ -225,4 +278,71 @@ for index,line in enumerate(sys.stdin):
             assert all(p['bar_cursor']==0 and p['intent_base']==0 for p in payloads)
     finally:
         if timer:timer.cancel()
+        worker.close()
+
+
+@pytest.mark.parametrize("failure", [None, "count", "nested-identity", "contract", "identity", "timeout", "cancel", "oversize"])
+def test_negotiated_chain_bounds_frames_and_validates_all_acknowledgements(monkeypatch, failure):
+    from app.backtest import native_session as transport
+    identity = {"external_stream_contract": transport.STREAM_CONTRACT,
+                "external_stream_chain_contract": transport.STREAM_CHAIN_CONTRACT,
+                "session_identity": transport.SESSION_IDENTITY_CONTRACT}
+    contracts = dict(external_stream_contract=transport.STREAM_CONTRACT,
+                     execution_schedule_contract=transport.SCHEDULE_CONTRACT,
+                     execution_tick_contract=transport.TICK_CONTRACT)
+    script = f'''import sys,json,time
+cursor=0
+contracts={contracts!r}
+for line in sys.stdin:
+    request=json.loads(line)
+    header={{'identity':request['identity']}} if 'identity' in request else {{'identity_ref':request['identity_ref']}}
+    if request['operation']=='stream_open':
+        response=dict(ok=True,**contracts,**header,bar_cursor=0,intent_cursor=0)
+    elif request['operation']=='stream_chain':
+        if {failure!r} in ('timeout','cancel'):time.sleep(20)
+        assert request['bar_cursor']==cursor and request['intent_base']==cursor*2
+        rows=[]
+        for command in request['commands']:
+            assert command['operation']=='stream_commit'
+            cursor+=1
+            rows.append(dict(**contracts,bar_cursor=cursor,intent_cursor=cursor*2,batched=True))
+        if {failure!r}=='count':rows.pop()
+        if {failure!r}=='nested-identity':rows[1]['identity']={{}}
+        if {failure!r}=='contract':rows[1]['execution_tick_contract']='wrong'
+        if {failure!r}=='identity':header={{'identity_ref':'wrong'}}
+        response=dict(ok=True,**contracts,**header,external_stream_chain_contract={transport.STREAM_CHAIN_CONTRACT!r},results=rows)
+    else:
+        assert request['operation']=='stream_commit'
+        assert request['bar_cursor']==cursor and request['intent_base']==cursor*2
+        cursor+=1
+        response=dict(ok=True,**contracts,**header,bar_cursor=cursor,intent_cursor=cursor*2,batched=False)
+    print(json.dumps(response),flush=True)
+'''
+    event = threading.Event()
+    worker = SessionWorker({"command": [sys.executable, "-u", "-c", script]},
+                           {"identity": identity}, event, evaluator=True)
+    timer = None
+    try:
+        worker.request(dict(operation="stream_open", **contracts), event)
+        if failure == "oversize": monkeypatch.setattr(transport, "MAX_BYTES", 4000)
+        if failure == "cancel":
+            timer = threading.Timer(.1, event.set)
+            timer.start()
+        payloads = [dict(operation="stream_commit", external_stream_contract=transport.STREAM_CONTRACT,
+            bar_cursor=0, intent_base=0, **({"padding": "x"*1000} if failure == "oversize" else {})) for _ in range(8)]
+        if failure not in {None, "oversize"}:
+            code = {"identity": "NATIVE_IDENTITY_MISMATCH", "timeout": "NATIVE_TIMEOUT", "cancel": "NATIVE_CANCELLED"}.get(failure, "EXTERNAL_PROTOCOL_ERROR")
+            with pytest.raises(ValueError, match=code):
+                worker.request_chain(payloads, event, timeout=.2 if failure == "timeout" else 5)
+            assert worker.process.poll() is not None and not worker._io_thread.is_alive()
+        else:
+            results = worker.request_chain(payloads, event)
+            assert [result["bar_cursor"] for result in results] == list(range(1, 9))
+            assert all(result["batched"] == (failure is None) for result in results)
+            assert all(result["identity"] == identity for result in results)
+            results[0]["identity"]["session_identity"] = "caller mutation"
+            assert results[1]["identity"] == worker.identity == identity
+            assert all(payload["bar_cursor"] == payload["intent_base"] == 0 for payload in payloads)
+    finally:
+        if timer: timer.cancel()
         worker.close()

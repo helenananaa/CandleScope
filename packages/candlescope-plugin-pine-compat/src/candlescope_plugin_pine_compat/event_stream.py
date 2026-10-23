@@ -105,8 +105,10 @@ class EventRequests:
         self.discovery=True
         return True
 
-    def observe(self, observation, cursor, skip):
-        value=deepcopy(observation)
+    def observe(self, observation, cursor, skip, *, _owned=False):
+        # Stream.execute already owns the mappings modified here. Public
+        # callers keep the default isolation from both input and returned data.
+        value=observation if _owned else deepcopy(observation)
         evaluation=value["evaluation"]
         legacy=evaluation.pop("request_data",None)
         if legacy:

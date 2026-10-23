@@ -41,6 +41,23 @@ def isolate():
     external_stream._active=None
 
 
+def test_owned_event_observation_matches_detached_path_and_public_input_stays_isolated():
+    from candlescope_plugin_pine_compat.event_stream import EventRequests
+    value=opening()
+    public,owned=EventRequests(value),EventRequests(value)
+    key=json.dumps(dict(chart="renko",style="Traditional",param=1,symbol="A"))
+    for state in (public,owned):
+        assert state.resolve((key,"1"))
+    original=observation(value["historical_plan"][-1])
+    frozen=deepcopy(original)
+    detached=public.observe(original,2,0)
+    consumed=owned.observe(deepcopy(original),2,0,_owned=True)
+    assert detached==consumed and public.status()==owned.status()
+    detached["context"]["trigger"]="caller mutation"
+    detached["evaluation"]["account"]["equity"]=0
+    assert original==frozen
+
+
 @pytest.mark.parametrize("route",[chart_strategy.execute,external_strategy.execute])
 def test_event_discovery_discards_partial_intents_and_replays_a_stable_causal_window(route):
     assert available(), "requires the newly qualified event-window Core"

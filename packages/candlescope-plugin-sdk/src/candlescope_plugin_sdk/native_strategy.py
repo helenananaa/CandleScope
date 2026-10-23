@@ -26,7 +26,8 @@ class _SessionIdentity:
     """References belong to one worker after its first full identity exchange."""
 
     def __init__(self, current):
-        self.current = current
+        self.current = deepcopy(current)
+        self._current_json = json.dumps(current, ensure_ascii=False, allow_nan=False)
         self.reference = identity_reference(current)
         self.enabled = current.get("session_identity") == SESSION_IDENTITY_CONTRACT
         self.bound = False
@@ -40,7 +41,7 @@ class _SessionIdentity:
                     or request["identity_ref"] != self.reference):
                 raise ValueError("NATIVE_IDENTITY_MISMATCH: unbound or changed session identity")
             return {**{key: value for key, value in request.items() if key != "identity_ref"},
-                    "identity": deepcopy(self.current)}, True
+                    "identity": json.loads(self._current_json)}, True
         if identity_reference(request.get("identity")) != self.reference:
             raise ValueError("NATIVE_IDENTITY_MISMATCH: session runtime changed")
         self.bound = True

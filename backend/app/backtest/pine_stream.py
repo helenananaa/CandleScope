@@ -38,6 +38,18 @@ def canonical_observations(saved):
     return observations
 
 
+def seal_observation_group(groups):
+    """Keep every closed-bar observation without a long-lived dict graph."""
+    groups[-1] = encoded(groups[-1])
+
+
+def materialize_observation_groups(groups):
+    """Restore the complete public schedule at a report/checkpoint boundary."""
+    for index, group in enumerate(groups):
+        if isinstance(group, str):
+            groups[index] = json.loads(group)
+
+
 class PineStream:
     def __init__(self, runtime, wire, opening, cancelled, *, deadline=None):
         self.cancelled = cancelled
@@ -147,8 +159,9 @@ class PineStream:
     def begin(self, bar, *, bar_state):
         return self._request(dict(operation="stream_begin", bar=bar, bar_state=bar_state))
 
-    def _request_many(self, commands):
-        commands = deepcopy(commands)
+    def _request_many(self, commands, *, _owned_commands=False):
+        if not _owned_commands:
+            commands = deepcopy(commands)
         payloads = [{**self.wire, **command, "external_stream_contract": STREAM_CONTRACT,
                      "bar_cursor": self.cursor, "intent_base": self.intents} for command in commands]
         try:
@@ -162,17 +175,21 @@ class PineStream:
             self.close()
             raise
 
-    def begin_and_observe(self, bar, *, bar_state, observation):
+    def begin_and_observe(self, bar, *, bar_state, observation, _owned=False):
         # begin has no Host matching callback. Both original protocol commands
         # and their individually checked acknowledgements remain in the journal.
         result = self._request_many([dict(operation="stream_begin", bar=bar, bar_state=bar_state),
-                                     dict(operation="stream_observe", observation=observation)])[-1]
+                                     dict(operation="stream_observe", observation=observation)],
+                                     _owned_commands=_owned)[-1]
         if result.get("window_status", {}).get("rebase_required"):
             raise WindowRebaseRequired()
         return result
 
-    def observe(self, observation):
-        result = self._request(dict(operation="stream_observe", observation=observation))
+    def observe(self, observation, *, _owned=False):
+        # Internal clocks own these snapshots until the checked response and
+        # immutable journal encoding finish. Public callers retain detachment.
+        result = self._request(dict(operation="stream_observe", observation=observation),
+                               _owned_command=_owned)
         if result.get("window_status",{}).get("rebase_required"):
             raise WindowRebaseRequired()
         return result
@@ -221,7 +238,7 @@ class PineStream:
         try:
             for start in range(0, len(saved["journal"]), 8):
                 entries = saved["journal"][start:start+8]
-                results = stream._request_many([entry["command"] for entry in entries])
+                results = stream._request_many([entry["command"] for entry in entries], _owned_commands=True)
                 for entry, result in zip(entries, results, strict=True):
                     if digest(result) != entry["result_sha256"]:
                         raise BacktestError("LOOKAHEAD_VIOLATION", "Pine stream replay changed an observed decision")

@@ -15,15 +15,15 @@
       "version": "0.3.3",
       "source": "local-release-build",
       "artifactFilename": "candlescope_plugin_pine_compat-0.3.3-py3-none-any.whl",
-      "sha256": "sha256:1d245b136363621cfa04bb62142a889bec05f9f3e4afc2ccfdbe3aedbd706bf9",
-      "size": 175316
+      "sha256": "sha256:b40aa790cb5fc1f1394c8b1d316a5082ed98a812a93caa6003209897900a69f4",
+      "size": 177809
     },
     "candlescope-plugin-sdk": {
       "version": "0.2.1",
       "source": "local-release-build",
       "artifactFilename": "candlescope_plugin_sdk-0.2.1-py3-none-any.whl",
-      "sha256": "sha256:ac496e606bda0424f1ac3fd890391b570c36a216841e45419f36c6ef74a7955e",
-      "size": 471593,
+      "sha256": "sha256:640b282598d9fc61290e01f2002a5af0e2b6fe17a5a3df356a12ca383392cdf0",
+      "size": 471698,
       "releaseUrl": "https://github.com/helenananaa/CandleScope/releases/download/candlescope-plugin-pine-compat-v0.3.3/candlescope_plugin_sdk-0.2.1-py3-none-any.whl"
     },
     "pine-compat-runtime": {

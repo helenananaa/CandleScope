@@ -11,6 +11,22 @@ CURRENT = {"session_identity": "candlescope.session-identity/1", "engine": "froz
 PROTOCOL = "candlescope.native-strategy/1"
 
 
+def test_cached_identity_keeps_each_decoded_request_detached():
+    from copy import deepcopy
+    from candlescope_plugin_sdk.native_strategy import _SessionIdentity
+    current = {**CURRENT, "nested": {"values": [False, 0, "开仓"]}}
+    frozen = deepcopy(current)
+    binding = _SessionIdentity(current)
+    binding.decode({"protocol": PROTOCOL, "identity": frozen})
+    current["nested"]["values"].append("outside mutation")
+    request = {"protocol": PROTOCOL, "identity_ref": reference(frozen)}
+    decoded, referenced = binding.decode(request)
+    assert referenced and decoded["identity"] == frozen
+    decoded["identity"]["nested"]["values"].append("adapter mutation")
+    assert binding.decode(request)[0]["identity"] == frozen
+    assert binding.encode({}, False)["identity"] == frozen
+
+
 def reference(value):
     return "sha256:" + hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False,
         separators=(",", ":"), allow_nan=False).encode()).hexdigest()

@@ -48,7 +48,8 @@ def observation(index, ordinal, count=4):
 
 @installed
 @pytest.mark.parametrize("route",["chart_strategy","external_strategy"])
-def test_actual_worker_keeps_forming_state_and_replays_identical_deltas_after_restart(route):
+@pytest.mark.parametrize("owned",[False,True])
+def test_actual_worker_keeps_forming_state_and_replays_identical_deltas_after_restart(route,owned):
     runtime,wire=runtime_for(route)
     cancel=threading.Event()
     stream=PineStream(runtime,wire,dict(source=SOURCE,parameters={},context=dict(symbol="A",timeframe="1")),cancel)
@@ -59,7 +60,7 @@ def test_actual_worker_keeps_forming_state_and_replays_identical_deltas_after_re
         bar["close"]=999
         for ordinal in range(2):
             observed=observation(0,ordinal)
-            result=stream.observe(observed)
+            result=stream.observe(observed,_owned=owned)
             observed["evaluation"]["account"]["position_size"]=999
             assert len(result["intents"])==1 and result["intent_base"]==ordinal and "output" not in result
         saved=stream.checkpoint()

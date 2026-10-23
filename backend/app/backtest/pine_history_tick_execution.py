@@ -106,7 +106,7 @@ def prepare_window(stream,plugin,wire,cancelled,deadline):
     raise BacktestError("BUDGET_EXCEEDED","at most 64 observed Pine window discovery attempts")
 
 
-def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=False,capture_checkpoint=True):
+def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=False,capture_checkpoint=True,compact_groups=True):
     from .workbench_sensitivity import check_control
     state=state or {}
     cursor=state.get("bar_cursor",0)
@@ -114,7 +114,7 @@ def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=
     if (stream.bar_open or stream.cursor+stream.input_skip!=max(cursor,stream.input_skip)
             or state.get("last_sequence",0)!=kernel.path_sequence):
         raise BacktestError("NATIVE_IDENTITY_MISMATCH","historical Pine stream and ledger cursors differ")
-    clock=HistoryTickClock(stream,kernel,orders,wire,state=state)
+    clock=HistoryTickClock(stream,kernel,orders,wire,state=state,_compact_groups=compact_groups)
     if wire.get("pine_v2_bar_contract"):
         from .pine_workbench_v2 import events
         last=bar_event(wire,target-1,0).event_time_ms
@@ -138,6 +138,8 @@ def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=
     latest=clock.output()
     if discovery_only:
         return None
+    from .pine_stream import materialize_observation_groups
+    materialize_observation_groups(clock.groups)
     latest["intents"]=deepcopy(clock.history)
     passes=[[item["evaluation"] for item in group] for group in clock.groups]
     if not capture_checkpoint:

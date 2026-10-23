@@ -16,7 +16,26 @@ SCHEDULE_CONTRACT = "candlescope.pine-execution-schedule/1"
 PREFIX_SCHEDULE_CONTRACT = "candlescope.pine-prefix-schedule/1"
 REQUEST_UPDATE_CONTRACT = "candlescope.pine-request-updates/1"
 STREAM_CONTRACT = "candlescope.pine-external-stream/1"
+STREAM_CHAIN_CONTRACT = "candlescope.pine-external-stream-chain/1"
 SESSION_IDENTITY_CONTRACT = "candlescope.session-identity/1"
+
+if os.name == "nt":
+    import ctypes
+    import msvcrt
+    _get_file_size = ctypes.WinDLL("kernel32", use_last_error=True).GetFileSizeEx
+    _get_file_size.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_longlong)]
+    _get_file_size.restype = ctypes.c_int
+
+
+def _file_size(stream):
+    # The stderr guard needs only length. Querying the existing Windows handle
+    # avoids fstat's unrelated metadata work and never changes the shared offset.
+    if os.name == "nt":
+        size = ctypes.c_longlong()
+        if not _get_file_size(msvcrt.get_osfhandle(stream.fileno()), ctypes.byref(size)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return size.value
+    return os.fstat(stream.fileno()).st_size
 
 
 class SessionWorker:
@@ -34,6 +53,7 @@ class SessionWorker:
         self._identity_ref = digest(self.identity)
         self._identity_ref_enabled = self.identity.get("session_identity") == SESSION_IDENTITY_CONTRACT
         self._identity_bound = False
+        self._stream_chain_enabled = evaluator and self.identity.get("external_stream_chain_contract") == STREAM_CHAIN_CONTRACT
         self._prefix_enabled = evaluator and self.identity.get("prefix_append") in {
             "candlescope.pine-prefix/1", "candlescope.pine-prefix/2"}
         self._prefix_state = None
@@ -128,7 +148,7 @@ class SessionWorker:
                     raise BacktestError("NATIVE_CANCELLED", "native session cancelled")
                 if time.monotonic() > deadline:
                     raise BacktestError("NATIVE_TIMEOUT", "native session exceeded host deadline")
-                if os.fstat(self.stderr.fileno()).st_size > MAX_BYTES:
+                if _file_size(self.stderr) > MAX_BYTES:
                     raise BacktestError("BUDGET_EXCEEDED", "native session stderr exceeds 64 MiB")
                 try:
                     result = response.get(timeout=.05)
@@ -141,15 +161,17 @@ class SessionWorker:
             self.close()
             raise
 
-    def _encode_payload(self, payload):
+    def _encode_payload(self, payload, *, _bounded_chain=False):
         wire_payload = self._prefix_payload(payload) if self._prefix_enabled else payload
         header = ({"identity_ref": self._identity_ref} if self._identity_ref_enabled and self._identity_bound
                   else {"identity": self.identity})
         envelope = {key: value for key, value in wire_payload.items() if key not in {"identity", "protocol"}}
         raw = (encoded({**envelope, "protocol": PROTOCOL, **header}) + "\n").encode("utf-8")
-        self.input_bytes += len(raw)
         if len(raw) > MAX_BYTES:
+            if _bounded_chain:
+                return None
             raise BacktestError("BUDGET_EXCEEDED", "native session input exceeds 64 MiB")
+        self.input_bytes += len(raw)
         return raw
 
     def _validate_result(self, payload, result, streaming):
@@ -179,7 +201,9 @@ class SessionWorker:
     def request_chain(self, payloads, cancelled, timeout=120):
         """Replay at most eight frozen stream commands without Host callbacks.
 
-        Every command retains its own wire line, response and identity checks.
+        Negotiated workers accept one bounded frame containing all commands;
+        older workers retain one wire line per command. Every acknowledgement
+        is bound to the checked worker identity and returned to the caller.
         Later cursors come from the preceding acknowledgement; callers must
         validate every returned decision before publishing any restored state.
         No ledger or matching work runs on the I/O thread.
@@ -196,6 +220,11 @@ class SessionWorker:
             if self._closed:
                 raise BacktestError("NATIVE_RUNTIME_UNAVAILABLE", "native session is closed")
             def exchange():
+                if (self._stream_chain_enabled and self._identity_ref_enabled and self._identity_bound
+                        and all(payload["operation"] != "stream_snapshot" for payload in payloads)):
+                    chained = self._exchange_stream_chain(payloads)
+                    if chained is not None:
+                        return chained
                 results = []
                 for payload in payloads:
                     if results:
@@ -213,7 +242,7 @@ class SessionWorker:
                     raise BacktestError("NATIVE_CANCELLED", "native session cancelled")
                 if time.monotonic() > deadline:
                     raise BacktestError("NATIVE_TIMEOUT", "native session exceeded host deadline")
-                if os.fstat(self.stderr.fileno()).st_size > MAX_BYTES:
+                if _file_size(self.stderr) > MAX_BYTES:
                     raise BacktestError("BUDGET_EXCEEDED", "native session stderr exceeds 64 MiB")
                 try:
                     results = response.get(timeout=.05)
@@ -227,6 +256,28 @@ class SessionWorker:
             raise
         finally:
             self._request_lock.release()
+
+    def _exchange_stream_chain(self, payloads):
+        reserved = {"protocol", "identity", "external_stream_contract", "bar_cursor", "intent_base"}
+        payload = {**payloads[0], "operation": "stream_chain", "external_stream_chain_contract": STREAM_CHAIN_CONTRACT,
+                   "commands": [{key: value for key, value in item.items() if key not in reserved}
+                                for item in payloads]}
+        # Operation-specific fields belong only to their original command.
+        payload = {key: value for key, value in payload.items()
+                   if key in reserved | {"operation", "external_stream_chain_contract", "commands"}}
+        raw = self._encode_payload(payload, _bounded_chain=True)
+        if raw is None:
+            return None
+        result = self._validate_result(payload, self._exchange_one(raw), True)
+        rows = result.get("results")
+        if (result.get("external_stream_chain_contract") != STREAM_CHAIN_CONTRACT
+                or not isinstance(rows, list) or len(rows) != len(payloads)
+                or any(not isinstance(row, dict) or set(row) & {"ok", "identity", "identity_ref"} for row in rows)):
+            raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "invalid Pine stream command acknowledgements")
+        # Each result receives its own detached full identity as on the legacy
+        # path. Only the verified outer envelope supplies that identity.
+        return [self._validate_result(original, {**row, "ok": True, "identity_ref": self._identity_ref}, True)
+                for original, row in zip(payloads, rows, strict=True)]
 
     def advance(self, target, cancelled):
         return self.request({"operation": "advance", "target": target}, cancelled)

@@ -9,11 +9,13 @@ from .errors import BacktestError
 from .external import account_feedback_profit
 from .pine_request_updates import from_wire, pass_observations, validate_replay
 from .pine_workbench import check_risk_response
+from .pine_stream import seal_observation_group
 
 
 class HistoryTickClock:
-    def __init__(self, stream, kernel, orders, wire, *, state=None):
+    def __init__(self, stream, kernel, orders, wire, *, state=None, _compact_groups=False):
         self.stream, self.kernel, self.orders, self.wire = stream, kernel, orders, wire
+        self._compact_groups = _compact_groups
         self.feed = from_wire(wire)
         self.positions = {bar["time"]: index for index, bar in enumerate(wire["bars"])}
         restoring = bool(state)
@@ -56,12 +58,12 @@ class HistoryTickClock:
             observed = source.event_time_ms
             evaluation.update(request_observed_at_ms=observed,request_updates=self.feed.advance(observed))
         observation = dict(evaluation=evaluation,context=dict(bar_state="historical",trigger="historical_tick",is_new=True))
-        result = self.stream.observe(observation)
+        result = self.stream.observe(observation,_owned=True)
         current = result["intents"]
         if len(current)>64:
             raise BacktestError("BUDGET_EXCEEDED", "at most 64 intents per Pine observation")
         # Bar, feedback and requested deltas are owned snapshots created above;
-        # PineStream independently detaches its command before transport.
+        # PineStream encodes its immutable command before returning.
         self.groups[-1].append(observation)
         self.accounts[-1] = feedback
         self.history.extend(current)
@@ -85,6 +87,8 @@ class HistoryTickClock:
                 position_avg_price=None if account.entry_price is None else float(account.entry_price),
                 equity=float(account.equity()),initial_capital=float(self.kernel.initial_balance),
                 netprofit=float(account_feedback_profit(account,self.kernel.initial_balance)),openprofit=float(account.unrealized())))
+        if self._compact_groups:
+            seal_observation_group(self.groups)
         return []
 
     def output(self):

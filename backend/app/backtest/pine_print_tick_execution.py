@@ -10,7 +10,7 @@ from .errors import BacktestError
 from .native_session import STREAM_CONTRACT
 from .pine_print_account import events as physical_events,apply_account,observe_market,record_decision,AUXILIARY,FIDELITIES
 from .pine_request_updates import from_wire,pass_observations,validate_replay
-from .pine_stream import PineStream,canonical_observations
+from .pine_stream import PineStream,canonical_observations,seal_observation_group,materialize_observation_groups
 
 CONTRACT="candlescope.pine-print-tick/1"
 
@@ -116,8 +116,9 @@ def validate_state(wire,state):
 
 
 class PrintTickClock:
-    def __init__(self,stream,kernel,orders,wire,*,state=None):
+    def __init__(self,stream,kernel,orders,wire,*,state=None,_compact_groups=False):
         self.stream,self.kernel,self.orders,self.wire=stream,kernel,orders,wire
+        self._compact_groups=_compact_groups
         restoring=bool(state)
         state=deepcopy({key:value for key,value in (state or {}).items()
             if key in {"groups","accounts","history","bar_cursor","last_sequence","event_cursor","request_feed"}})
@@ -153,12 +154,14 @@ class PrintTickClock:
                 self.groups.append([])
                 self.accounts.append(feedback)
             return
-        evaluation=dict(bar=deepcopy(self.visible),account=feedback,event_time_ms=event.event_time_ms,confirmed=confirmed)
+        # Visible bars contain only scalar OHLCV values. Each observation owns
+        # its mapping while subsequent prints advance the clock's mapping.
+        evaluation=dict(bar=dict(self.visible),account=feedback,event_time_ms=event.event_time_ms,confirmed=confirmed)
         if self.feed is not None:
             evaluation.update(request_observed_at_ms=event.event_time_ms,request_updates=self.feed.advance(event.event_time_ms))
         observation=dict(evaluation=evaluation,context=dict(bar_state="realtime",trigger=trigger,is_new=first))
-        result=(self.stream.begin_and_observe(self.visible,bar_state="realtime",observation=observation)
-                if first else self.stream.observe(observation))
+        result=(self.stream.begin_and_observe(self.visible,bar_state="realtime",observation=observation,_owned=True)
+                if first else self.stream.observe(observation,_owned=True))
         current=result["intents"]
         if len(current)>64:
             raise BacktestError("BUDGET_EXCEEDED","at most 64 intents per observed Pine tick")
@@ -168,7 +171,7 @@ class PrintTickClock:
             self.groups.append([])
             self.accounts.append(None)
         # This new observation already owns its bar, scalar feedback and feed
-        # deltas; the evaluator journal takes its own detached command.
+        # deltas; the evaluator journal encodes the command before returning.
         self.groups[-1].append(observation)
         self.accounts[-1]=feedback
         self.history.extend(current)
@@ -196,12 +199,14 @@ class PrintTickClock:
                 equity=str(self.kernel.account.equity()),position_qty=str(self.kernel.account.position_qty)))
         if self.cursor>=self.stream.input_skip:
             self.stream.commit()
+        if self._compact_groups:
+            seal_observation_group(self.groups)
         self.cursor+=1
         self.visible=None
 
 
-def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=False,capture_checkpoint=True):
-    clock=PrintTickClock(stream,kernel,orders,wire,state=state)
+def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=False,capture_checkpoint=True,compact_groups=True):
+    clock=PrintTickClock(stream,kernel,orders,wire,state=state,_compact_groups=compact_groups)
     interval=parse_interval_spec(wire["interval"])
     events=physical_events(wire)
     kernel.source_kind=assert_trade_stream(tuple(event for event in events if event.role=="TRADES"))
@@ -242,6 +247,7 @@ def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=
     output=stream.output()
     if discovery_only:
         return None
+    materialize_observation_groups(clock.groups)
     latest={**output,"raw_output":output["output"],"graphics":output["output"].get("plots",[]),"intents":deepcopy(clock.history)}
     passes=[[item["evaluation"] for item in group] for group in clock.groups]
     if not capture_checkpoint:
