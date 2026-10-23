@@ -332,12 +332,20 @@ export function useReplaySharedIndicatorRuntime(
   const sourceSequence = tapeObservation === undefined ? runtime.store.sourceSequence : tapeObservation?.sourceSequence ?? 0;
   const historyEpoch = tapeObservation?.historyEpoch;
   const playing = runtime.store.state === "PLAYING";
+  // Capture input rows with this exact displayed observation. A delayed
+  // calculation must never read a newer mutable window using an older cursor.
+  const currentIndicatorBars = useMemo(() => {
+    void seriesRevision;
+    void sourceSequence;
+    return selectRevealedIndicatorBars(excludeIncompleteReplayHistory(seriesStore.snapshot(), cursorMs), cursorMs);
+  }, [cursorMs, seriesRevision, seriesStore, sourceSequence]);
   const latestIndicatorBoundaryRef = useRef({
     revision: seriesRevision,
     structureRevision: seriesStructureRevision,
     cursorMs,
     sourceSequence,
     historyEpoch,
+    bars: currentIndicatorBars,
   });
   const [sampledIndicatorBoundary, setSampledIndicatorBoundary] = useState({
     revision: seriesRevision,
@@ -345,6 +353,7 @@ export function useReplaySharedIndicatorRuntime(
     cursorMs,
     sourceSequence,
     historyEpoch,
+    bars: currentIndicatorBars,
   });
   const indicatorRefreshTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const canonicalPreparingRef = useRef(false);
@@ -356,6 +365,7 @@ export function useReplaySharedIndicatorRuntime(
       cursorMs,
       sourceSequence,
       historyEpoch,
+      bars: currentIndicatorBars,
     };
     if (!playing) {
       wasPlayingRef.current = false;
@@ -390,7 +400,7 @@ export function useReplaySharedIndicatorRuntime(
           : latest
       ));
     }, REPLAY_INDICATOR_PLAYING_REFRESH_MS);
-  }, [cursorMs, sourceSequence, historyEpoch, playing, seriesRevision, seriesStructureRevision]);
+  }, [cursorMs, sourceSequence, historyEpoch, playing, seriesRevision, seriesStructureRevision, currentIndicatorBars]);
   useEffect(() => () => {
     if (indicatorRefreshTimerRef.current !== null) {
       globalThis.clearTimeout(indicatorRefreshTimerRef.current);
@@ -414,10 +424,7 @@ export function useReplaySharedIndicatorRuntime(
     : cursorMs;
   const indicatorSourceSequence = usePlaybackSample ? sampledIndicatorBoundary.sourceSequence : sourceSequence;
   const indicatorHistoryEpoch = usePlaybackSample ? sampledIndicatorBoundary.historyEpoch : historyEpoch;
-  const indicatorBars = useMemo(() => {
-    void indicatorRevision;
-    return selectRevealedIndicatorBars(excludeIncompleteReplayHistory(seriesStore.snapshot(), indicatorCursorMs), indicatorCursorMs);
-  }, [indicatorCursorMs, indicatorRevision, seriesStore]);
+  const indicatorBars = usePlaybackSample ? sampledIndicatorBoundary.bars : currentIndicatorBars;
   const selectedTrackId = viewer.viewerState?.selected_track_id ?? null;
   const selectedTrack = viewer.marketTracks?.tracks.find(
     (track) => track.track_id === selectedTrackId,
@@ -487,6 +494,7 @@ export function useReplaySharedIndicatorRuntime(
   const canonicalScopeKey = `${sourceScopeKey}|${canonical.sourceKey}`;
   const outputBarTimes = useMemo(() => indicatorBars.map(bar => bar.time), [indicatorBars]);
   const providedBars = useProvidedBarsIndicatorRuntime({
+    visibleRangePriority: true,
     computeBatch,
     bars: indicatorBars,
     outputBarTimes,

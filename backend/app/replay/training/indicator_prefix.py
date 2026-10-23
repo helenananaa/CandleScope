@@ -95,6 +95,44 @@ def prefix_start(history, name: str, params: dict, before: int) -> int:
     return max(history.origin_ms, cursor)
 
 
+def validated_render_bars(history, rows):
+    """Validate the complete requested source window before publishing math."""
+    if not rows or len(rows) > 10_000:
+        raise ValueError("indicator render window must contain 1..10000 bars")
+    before = rows[0].open_time_ms
+    if before < history.origin_ms:
+        raise ValueError("indicator window precedes its canonical origin")
+    if before > getattr(history, "closed_before_ms", history.revealed_boundary_ms):
+        raise ValueError("indicator prefix is ahead of the selected source sequence")
+    previous = before - 1
+    render_bars = []
+    for index, row in enumerate(rows):
+        if (
+            row.open_time_ms <= previous
+            or row.open_time_ms > history.revealed_boundary_ms
+            or row.close_time_ms < row.open_time_ms
+            or not row.open_time_ms
+            <= row.first_base_open_ms
+            <= row.last_base_open_ms
+            <= row.close_time_ms
+            or row.last_base_open_ms > history.revealed_boundary_ms
+            or (row.is_closed and row.close_time_ms > history.revealed_boundary_ms)
+            or (
+                not row.is_closed
+                and (
+                    index != len(rows) - 1
+                    or row.close_time_ms < history.revealed_boundary_ms
+                )
+            )
+        ):
+            raise ValueError(
+                "indicator render window crossed its revealed boundary"
+            )
+        render_bars.append(indicator_bar(row))
+        previous = row.close_time_ms
+    return render_bars
+
+
 class CanonicalReplayIndicators:
     def __init__(
         self,
@@ -131,34 +169,7 @@ class CanonicalReplayIndicators:
             # A later public clock does not prove an unconsumed tape bucket
             # closed. Recheck before loading a checkpoint from a later review.
             raise ValueError("indicator prefix is ahead of the selected source sequence")
-        # Validate the entire render request before publishing even a prefix
-        # checkpoint. The last unclosed row is evaluated on a disposable state.
-        previous = before - 1
-        render_bars = []
-        for index, row in enumerate(rows):
-            if (
-                row.open_time_ms <= previous
-                or row.open_time_ms > history.revealed_boundary_ms
-                or row.close_time_ms < row.open_time_ms
-                or not row.open_time_ms
-                <= row.first_base_open_ms
-                <= row.last_base_open_ms
-                <= row.close_time_ms
-                or row.last_base_open_ms > history.revealed_boundary_ms
-                or (row.is_closed and row.close_time_ms > history.revealed_boundary_ms)
-                or (
-                    not row.is_closed
-                    and (
-                        index != len(rows) - 1
-                        or row.close_time_ms < history.revealed_boundary_ms
-                    )
-                )
-            ):
-                raise ValueError(
-                    "indicator render window crossed its revealed boundary"
-                )
-            render_bars.append(indicator_bar(row))
-            previous = row.close_time_ms
+        render_bars = validated_render_bars(history, rows)
         identity = checkpoint_key(history.identity, name, params)
         start = prefix_start(history, name, params, before)
         saved = self.checkpoints.load(identity, before, start)

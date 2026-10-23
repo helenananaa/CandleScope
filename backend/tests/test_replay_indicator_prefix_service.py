@@ -15,12 +15,13 @@ from tests.test_replay_v2_training_history import _create_run, _service
 pytestmark = pytest.mark.anyio
 
 
+@pytest.mark.parametrize("display_math", ["canonical", "viewport-v1"])
 @pytest.mark.parametrize(
     "disclosure,interval",
     [("NONE", "1m"), ("HIDE_ALL", "1m"), ("NONE", "2m"), ("HIDE_ALL", "3m")],
 )
 async def test_real_history_http_window_and_service_restart(
-    tmp_path, disclosure, interval
+    tmp_path, disclosure, interval, display_math
 ):
     path = tmp_path / "real-prefix.db"
     service, _ = await _service(path)
@@ -44,6 +45,7 @@ async def test_real_history_http_window_and_service_restart(
         )
         assert len(page["bars"]) >= 3
         payload = {
+            "display_math": display_math,
             "track_id": "track-1",
             "display_interval": interval,
             "revealed_boundary_ms": boundary,
@@ -65,14 +67,14 @@ async def test_real_history_http_window_and_service_restart(
         expected = reference(
             "EMA",
             {"period": 2},
-            [ReplayDisplayBar.from_dict(row) for row in page["bars"]],
+            [ReplayDisplayBar.from_dict(row) for row in (page["bars"][-12:] if display_math == "viewport-v1" else page["bars"])],
         )
         first = payload["bars"][0]["open_time_ms"] // 1000
         assert lines(result["payload"]) == [
             (name, [point for point in points if point["time"] >= first])
             for name, points in lines(expected)
         ]
-        assert result["prefix_rows_read"] == len(page["bars"]) - 2
+        assert result["prefix_rows_read"] == (min(10, len(page["bars"]) - 2) if display_math == "viewport-v1" else len(page["bars"]) - 2)
         assert (await service.get_session("adapter-1"))["snapshot"] == before
         shorter = await service.training.canonical_indicator_compute(
             "adapter-1", **{**payload, "bars": page["bars"][-1:]}

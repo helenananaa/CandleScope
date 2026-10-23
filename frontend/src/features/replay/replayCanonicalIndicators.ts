@@ -285,7 +285,7 @@ export class ReplayCanonicalIndicators {
         ...(signal ? { signal } : {}), body: JSON.stringify({ track_id: binding.trackId, display_interval: binding.identity.display_interval,
           revealed_boundary_ms: binding.revealedBoundaryMs, data_epoch: binding.dataEpoch, history_epoch: this.epoch,
           ...(binding.identity.source_kind === "AGG_TRADE" ? { source_sequence: binding.sourceSequence } : {}),
-          name: job.request.name, params: job.request.params ?? {}, bars }),
+          name: job.request.name, params: job.request.params ?? {}, bars, display_math: "viewport-v1" }),
       });
       const body = record(await response.json());
       signal?.throwIfAborted();

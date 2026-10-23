@@ -312,6 +312,7 @@ class ReplayReviewControlPayload(_StrictModel):
 
 
 class ReplayCanonicalIndicatorPayload(_StrictModel):
+    display_math: Literal["canonical", "viewport-v1"] = "canonical"
     track_id: str = Field(min_length=1, max_length=128)
     display_interval: str = Field(min_length=1, max_length=32)
     revealed_boundary_ms: int = Field(ge=0, le=MAX_TIMESTAMP_MS)
