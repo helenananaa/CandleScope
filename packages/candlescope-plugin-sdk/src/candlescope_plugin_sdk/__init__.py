@@ -35,7 +35,7 @@ from .models import (
 from .runtime import BaseRuntimePlugin, RuntimeDispatcher
 from .server import JsonLineRuntimeServer, serve_runtime
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 __all__ = [
     "AnalyzeRequest",

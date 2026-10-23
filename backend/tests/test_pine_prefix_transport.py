@@ -62,6 +62,7 @@ def test_real_worker_append_transport_matches_batch_and_reduces_input_bytes(cloc
             full_bytes += len((encoded(request) + "\n").encode())
             result = worker.request(request, cancelled)
         assert result == invoke(runtime, request)
+        print(f"prefix input bytes: clocked={clocked} actual={worker.input_bytes} full={full_bytes} ratio={worker.input_bytes/full_bytes:.6f}")
         assert worker.input_bytes < full_bytes * 0.3
         # A historical correction goes through a full rebase, never an append.
         request["bars"][0] = {**request["bars"][0], "close": 10.5}

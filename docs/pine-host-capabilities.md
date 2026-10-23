@@ -7,9 +7,10 @@ usable under `E:/projects/pine-interpreter/AGENTS.md`.
 
 ## Scope and evidence levels
 
-The first acceptance scope is local historical strategies on time-based bars,
-with fixed sizing, unit contract multiplier, spot cash or the declared linear
-perpetual account models. CandleScope owns market data, matching, accounts,
+The current implementation scope covers local historical and frozen realtime
+strategies on time-based bars, fixed/cash/equity sizing, exact linear contract
+multipliers and quantity rules, spot cash and the declared linear perpetual
+account models. CandleScope owns market data, matching, accounts,
 workers and durable recovery. The interpreter owns Pine evaluation, state,
 rollback and host-neutral input/output contracts.
 
@@ -30,19 +31,39 @@ Development package versions do not identify the source or native binary.
 | Actual account feedback, clocks and requested symbols | connected | connected | connected | partial | open | `pine-host-inputs`, `chart_pine_requested_data`; metadata/calendar and per-expression admission gaps remain |
 | Market/limit/stop/stop-limit, entry/exit/generic orders and OCA | connected | connected | connected | connected | open | `pine-chart-orders.md`, `pine-default-sizing.md`; external comments/alerts remain open |
 | Historical BAR fill callbacks and simulated closing ticks | connected | connected | connected | connected | open | `pine-chart-bar-callbacks.md`, `pine-bar-path.md`; declared synthetic OHLC path, not physical liquidity |
-| V2 historical marks/rules/funding, margin and shared BAR capacity | connected | connected | connected | connected | open | `pine-v2-bar-path.md`, `pine-workbench-v2-bar.md`, `pine-v2-margin-repricing.md`; unit multiplier and fixed opening tick only |
-| Six risk rules through actual Host accounts | partial | connected | connected | connected | open | `pine-risk-stops.md`, `pine-workbench-controls.md`; bounded calendars/expressions, positive limits; native rule aggregation remains open |
+| V2 historical marks/rules/funding, margin and shared BAR capacity | connected | connected | connected | connected | open | `pine-v2-bar-path.md`, `pine-workbench-v2-bar.md`, `pine-v2-margin-repricing.md`, `pine-contract-rules.md`; exact linear multipliers and frozen historical rule changes |
+| Six risk rules through actual Host accounts | connected | connected | connected | connected | open | `pine-risk-stops.md`, `pine-workbench-controls.md`; native declarations register independently of branch execution and repeated limits aggregate conservatively; bounded Host calendars/expressions remain explicit |
 | Actual account liquidation feedback and ownership | partial | connected | connected | partial | open | `pine-account-liquidation.md`; declared mark-settlement model, no venue/official liquidation qualification |
 | Replay snapshot, seek, restart and transaction recovery | connected | connected | connected | connected | open | `pine-workbench-replay.md`; source/implementation identity must match frozen inputs |
 | Independent cost scenarios and unavailable-model disclosures | connected | connected | connected | connected | open | `pine-workbench-costs.md`; independent account and strategy runs, shared deadline, AUTO/SKIP |
 | Automatic BAR preparation, account-file lifecycle and retry identity | connected | connected | connected | connected | open | `test_pine_workbench_preparation.py`, `workbenchAccountInputs.test.ts`, `pine-workbench-default-upgrade.md` |
 | Fixed/cash/equity defaults from authoritative Host accounts | connected | connected | connected | connected | open | `pine-default-sizing.md`; final 392-case installed-worker profile and controlled entry evidence |
 | Order comments, leg-specific alert information and alert-disable flags | connected | connected | connected | connected | open | `pine-order-metadata.md`; explicit negotiation, actual-fill binding and restore; no external notification delivery |
-| Nonunit multipliers | partial | partial | open | open | open | Stage 3; native support must not be mistaken for external-profile admission |
-| Incremental requested-context growth | partial | partial | partial | partial | open | Base external sessions retain state; growing request providers still rebase and lack scalable qualification |
-| V2 historical-account trade/book combination | connected | partial | open | open | open | Stage 4; legacy trade/book execution exists separately, V2 BAR options currently reject there |
-| Realtime and every-history-tick strategy scheduling | partial | partial | open | open | open | `pine-external-schedule-foundation.md`; explicit context foundation exists, concrete schedulers remain open |
+| Nonunit multipliers and quantity rules | connected | connected | connected | connected | open | `pine-contract-rules.md`; exact linear point value, independent minima and decimal increments; inverse accounting stays unsupported |
+| Incremental requested-context growth | connected | connected | connected | connected | open | `pine-external-stream.md`, `pine-window-feedback.md`, `pine-event-request-stream.md`; causal deltas and bounded window discovery with discarded trial ledgers; large-history Host resources remain unqualified |
+| V2 historical-account trade/book combination | connected | connected | connected | connected | open | `pine-chart-book-execution.md`, `test_pine_workbench_v2_print`; all four declared physical clocks retain account marks/rules/funding and capacity |
+| Realtime and every-history-tick strategy scheduling | connected | connected | connected | connected | open | `pine-chart-history-ticks.md`, `pine-chart-realtime-ticks.md`, `pine-event-request-stream.md`; synthetic historical vertices and actual frozen print observations; no connected live-feed qualification |
 | Official output, large-history resources and final packaged delivery | partial | partial | partial | partial | open | Stage 5; historical named evidence cannot qualify the current complete stack |
+
+Current delivery boundary, 2026-10-23: Core 0.3.3 is formally released at
+`c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc`. Its four wheels are promoted
+unchanged from qualified source `28f54b97a`; all four installed-wheel CI jobs
+pass, with separate fresh Windows/Linux 2,029-case controls. The complete Core
+resource matrix passes 216 fresh Windows/Linux Rust/Python/WASM trials under
+unchanged budgets, with zero cross-surface or session-isolation mismatches.
+macOS has installed-wheel compatibility evidence, without resource measurements.
+Formal Host platform locks and the desktop recipe now pin the actual stable
+manifest and wheel hashes. SDK 0.2.1 passes 159 cases and fresh-wheel smoke.
+The earlier combined managed Host attempt passed
+1,001 cases before the unchanged 30-percent prefix input budget rejected repeated
+identity overhead. A negotiated process-bound identity reference repairs that
+overhead: the actual new managed CI candidate uses 13,817/246,500 unclocked and
+15,192/259,380 clocked input bytes, with complete-output and correction parity.
+The original threshold is unchanged. Controlled child/transport/recovery checks
+pass, but the new exact formal package still requires a complete combined Host
+gate, Host long-history/resource qualification, packaged desktop UI/recovery
+and plugin/application release delivery. Existing reference samples do
+not establish new arbitrary Renko construction or connected exchange equivalence.
 
 ## Ordered delivery gates
 

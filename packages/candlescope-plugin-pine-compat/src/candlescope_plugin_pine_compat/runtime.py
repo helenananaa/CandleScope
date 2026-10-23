@@ -43,10 +43,10 @@ from .sessions import PineSessions
 RUNTIME_ID = "candlescope.pine-compat"
 PLUGIN_NAME = "Pine Compatibility Runtime"
 PLUGIN_PACKAGE = "candlescope-plugin-pine-compat"
-PLUGIN_VERSION = "0.3.2"
+PLUGIN_VERSION = "0.3.3"
 ENGINE_PACKAGE = "pine-compat-runtime"
 ENGINE_MODULE = "pine_compat"
-EXPECTED_ENGINE_VERSION = "0.3.2"
+EXPECTED_ENGINE_VERSION = "0.3.3"
 INCREMENTAL_ENGINE_VERSION = "0.3.2+external.1"
 UNKNOWN_SOURCE_VERSION = "0.0.0+unknown"
 

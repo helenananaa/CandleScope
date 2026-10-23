@@ -18,6 +18,32 @@ the original main checkout and the earlier candidate evidence. Delivery order:
 5. Qualify official-reference comparisons, workload-specific resources,
    interruption/recovery, release artifacts and actual packaged application use.
 
+Current boundary, 2026-10-23: phases 1-4 have implementation and controlled
+account/clock/recovery evidence, including chart book admission, historical
+window discovery and realtime Renko requests. Core 0.3.3 is formally released
+at `c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc`, promoting the exact four
+qualified CI wheels from `28f54b97a`. Full Linux/Windows CI and installed-wheel
+tests on all four platforms pass; Windows/Linux each have separate fresh
+2,029-case controls. The completed semantic implementation passed the full
+7,999-case Rust gate and structural/Clippy/WASM checks. Earlier source and
+binary qualifications below retain their own identities.
+
+Stage 5 is active. The newest combined development Host attempt passed 1,001
+cases before its unchanged input-byte budget exposed repeated identity overhead.
+The process-bound identity-reference repair is committed on PR #81; the actual
+new 0.3.3 bridge / 0.2.1 SDK managed candidate passes byte-budget, full-output,
+correction, transport and recovery controls. The complete repaired-package Host
+gate remains required. The complete fresh Core resource matrix now passes all
+216 Windows/Linux Rust/Python/WASM trials under the original frozen budgets,
+with no cross-surface or session-isolation mismatches. Host long-history/IPC/
+checkpoint workloads have separate budgets frozen before measurement. Formal
+platform locks and the desktop recipe now pin the actual stable Core release;
+the production Renko source patch is no longer required for that engine.
+Host resources, actual packaged UI/recovery and plugin/application release
+delivery remain open. Bounded prior
+TradingView references do not qualify arbitrary Renko construction, exchange
+queue priority or connected live feeds.
+
 Phase 1 is implemented and committed at core `7adcca2a3` on PR #18. Native risk
 registration is independent of branch/declaration order; duplicate limits retain
 the strictest constraints and immutable arguments use the real chart/calendar
@@ -127,12 +153,17 @@ A further requested-window prefix-origin defect is reproduced in independent
 core and actual chart controls. The [time-only requested window plan](pine-request-window-plan.md)
 now repairs it without supplying future prices or account frames. Targeted
 controls cover nested/lower requests, future rejection, realtime continuation
-and chart/Workbench skipped-window recovery. This newer capability still needs
-its complete combined candidate gate and does not enable dynamic discovery.
+and chart/Workbench skipped-window recovery. The subsequent observed-window
+contract also connects dynamic historical discovery through complete actual-
+account trial resets; see [window feedback](pine-window-feedback.md). Realtime
+event windows negotiate their own causal reservation mode without supplying
+future chart prices; see [event request streaming](pine-event-request-stream.md).
+Current exact-package combined qualification remains separate from these
+implementation controls.
 
-Required work still includes chart book admission, unresolved dynamic historical
-window feedback/rebase, workload resources, connected live product acceptance,
-the production Renko patch/pin migration, the actual packaged binary and release
+Required work still includes complete repaired-package qualification, workload
+Host resources, connected live product acceptance where claimed, SDK/plugin
+publication, the actual packaged binary and release
 delivery. The Goal remains active; controlled source-stream replays do not prove
 an exchange subscription or arbitrary TradingView/broker equivalence.
 

@@ -1,6 +1,7 @@
 """Replay HTTP -> durable cursor -> isolated installed Pine -> local providers."""
 
 import os
+import subprocess
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -93,8 +94,12 @@ async def test_forming_chart_replay_uses_captured_clock_across_retry_and_process
     start = ((context.revealedBoundaryMs - 120_000) // 300_000) * 300_000
     boundary = start + 119_999
     context = context.model_copy(update={"revealedBoundaryMs": boundary})
+    python = os.environ["NATIVE_TEST_PINE_PYTHON"]
+    version = subprocess.check_output([python, "-I", "-c",
+        "from importlib.metadata import version; print(version('candlescope-plugin-pine-compat'))"],
+        executable=python, text=True).strip()
     registry = runtime_registry_from_wire({"schemaVersion": 1, "plugins": [{
-        "id": "candlescope.pine-compat", "package": "candlescope-plugin-pine-compat", "version": "0.3.2",
+        "id": "candlescope.pine-compat", "package": "candlescope-plugin-pine-compat", "version": version,
         "enabled": True, "autoStart": False, "required": False,
         "launch": {"executable": os.environ["NATIVE_TEST_PINE_PYTHON"],
             "args": ["-I", "-u", "-m", "candlescope_plugin_pine_compat"], "workingDirectory": str(tmp_path)},
