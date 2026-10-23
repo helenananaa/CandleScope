@@ -101,6 +101,44 @@ def test_retention_is_byte_bounded_and_oversized_views_remain_complete():
     assert not views.entries and views.bytes == 0
 
 
+@pytest.mark.parametrize("text,limit,capacity", [
+    ("x"*512, 256, 2), ("观察🙂"*250, 1200, 2), ("x"*32, 4096, 0)])
+def test_uncached_complete_views_decode_text_without_an_extra_full_utf8_buffer(monkeypatch,text,limit,capacity):
+    shared = [{"value": 1}]
+    body = {"text": text, "left": shared, "right": shared}
+    views = ResultViews(max_bytes=limit, capacity=capacity)
+    loads, observed = json.loads, []
+    def decode(value, *args, **kwargs):
+        observed.append(type(value))
+        return loads(value, *args, **kwargs)
+    monkeypatch.setattr(json, "loads", decode)
+    expected = {**body, "bars": []}
+    expected["report_hash"] = digest(expected)
+    first = views.read(("uncached",), body, [])
+    assert first == expected and observed == [str]
+    assert not views.entries and views.bytes == 0
+    first["left"][0]["value"] = 99
+    assert first["right"][0]["value"] == body["left"][0]["value"] == 1
+    assert views.read(("uncached",), body, []) == expected
+    assert observed == [str, str]
+
+
+@pytest.mark.parametrize("shortfall", [0, 1])
+def test_unicode_view_cache_limit_counts_exact_utf8_bytes(shortfall):
+    body = {"text": "观察🙂"*50}
+    expected = {**body, "bars": []}
+    expected["report_hash"] = digest(expected)
+    raw = encoded(expected).encode("utf-8")
+    views = ResultViews(max_bytes=len(raw)-shortfall)
+    assert views.read(("unicode",), body, []) == expected
+    if shortfall:
+        assert not views.entries and views.bytes == 0
+    else:
+        assert views.entries[("unicode",)][1] == raw
+        assert views.bytes == len(raw)
+        assert views.read(("unicode",), body, []) == expected
+
+
 def test_conditional_poll_avoids_materializing_an_unchanged_report(replay, monkeypatch):
     service, record, _ = replay
     save(service, record, 2, 7)

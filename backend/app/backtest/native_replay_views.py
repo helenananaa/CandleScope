@@ -2,7 +2,8 @@
 from collections import OrderedDict
 import json
 
-from .native import MAX_BYTES, digest, encoded
+from .native import MAX_BYTES, encoded
+from .native_checkpoint import checkpoint_digest as digest
 
 
 class ResultViews:
@@ -28,13 +29,22 @@ class ResultViews:
             self.bytes -= len(self.entries.pop(key)[1])
         value = {**body, "bars": bars}
         value["report_hash"] = digest(value)
-        raw = encoded(value).encode("utf-8")
-        if len(raw) <= self.max_bytes and self.capacity > 0:
-            while self.entries and (len(self.entries) >= self.capacity or self.bytes + len(raw) > self.max_bytes):
+        text = encoded(value)
+        size = len(text)
+        if self.capacity > 0 and size <= self.max_bytes:
+            # Count non-ASCII UTF-8 in bounded chunks before deciding whether
+            # to retain bytes. Oversized complete views decode the existing
+            # text directly instead of holding a second full byte buffer.
+            if not text.isascii():
+                size = sum(len(text[start:start+65536].encode("utf-8"))
+                           for start in range(0, len(text), 65536))
+        if self.capacity > 0 and size <= self.max_bytes:
+            raw = text.encode("utf-8")
+            while self.entries and (len(self.entries) >= self.capacity or self.bytes + size > self.max_bytes):
                 _, (_, removed) = self.entries.popitem(last=False)
                 self.bytes -= len(removed)
             self.entries[key] = (body, raw)
-            self.bytes += len(raw)
+            self.bytes += size
         # Decode on every read so a caller cannot mutate the journal or another
         # caller's view. No unchanged arrays are walked and hashed again.
-        return json.loads(raw)
+        return json.loads(text)

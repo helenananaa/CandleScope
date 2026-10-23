@@ -61,6 +61,18 @@ reuse bounded encoded views, with a fresh detached JSON value for every caller.
 These changes address repeated report-copy overhead; resource qualification still
 requires the complete fresh-process Host matrix and its frozen budgets.
 
+Complete views above the encoded-cache byte limit decode their canonical JSON
+text directly, avoiding a second full UTF-8 buffer that would not be retained.
+Non-ASCII cache admission counts exact UTF-8 bytes in bounded chunks; cached
+views retain the original byte limit, eviction rules and detached reads. View
+hashing uses the same strict canonical bytes incrementally. The oversized path
+still returns every field and preserves independent containers and callers.
+This change passed 46 view/encoding unit cases and 18 installed Pine/Pyne replay,
+cold recovery, failure/rollback and HTTP export cases without skips. A separate
+isolated read of the retained 16K complete report preserved its entire value and
+reduced the observed process peak by about 64 MiB; that probe is not whole-Host
+resource qualification.
+
 Full backtest controls likewise poll `/backtests/{native|external}/runs/{id}`
 with `if_state=<cached state>`. An unchanged state returns the existing compact
 run summary with `run_unchanged=true`; the caller retains its frozen configuration
