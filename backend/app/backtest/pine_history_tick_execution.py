@@ -21,7 +21,7 @@ class ReplayWorker:
         deadline=time.monotonic()+120
         saved=(resume or {}).get("clock",{}).get("stream")
         reusable=(self.stream is not None and isinstance(saved,dict)
-                  and not self.stream.bar_open and self.stream.checkpoint(detached=False)==saved)
+                  and not self.stream.bar_open and self.stream.matches_checkpoint(saved))
         if not reusable:
             self.close()
             self.stream=open_stream(self.plugin,self.wire,cancelled,deadline,resume=resume,_resume_owned=resume_owned)

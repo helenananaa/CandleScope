@@ -66,6 +66,13 @@ def test_actual_worker_keeps_forming_state_and_replays_identical_deltas_after_re
         assert saved["journal"][0]["command"]["bar"]["close"]==10
         assert [item["command"]["observation"]["evaluation"]["account"]["position_size"]
                 for item in saved["journal"][1:]]==[0,1]
+        inspected=stream.checkpoint()
+        inspected["journal"][0]["command"]["bar"]["close"]=999
+        inspected["opening"]["source"]="caller mutation"
+        inspected["wire"]["identity"]["adapter"]="caller mutation"
+        assert stream.matches_checkpoint(saved) and stream.checkpoint()==saved
+        assert not stream.matches_checkpoint(inspected)
+        assert not stream.matches_checkpoint({**saved,"unknown":True})
         # Caller mutation cannot rewrite the durable checkpoint or its transcript.
         edited=deepcopy(saved);edited["journal"][1]["command"]["observation"]["evaluation"]["account"]["position_size"]=99
         with pytest.raises(BacktestError): PineStream.restore(runtime,edited,cancel)

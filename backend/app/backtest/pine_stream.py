@@ -9,6 +9,7 @@ import json
 import time
 
 from .errors import BacktestError
+from .native import encoded
 from .native_session import SessionWorker, STREAM_CONTRACT, SCHEDULE_CONTRACT, TICK_CONTRACT
 
 JOURNAL_CONTRACT = "candlescope.pine-stream-journal/1"
@@ -43,7 +44,9 @@ class PineStream:
         self.deadline = deadline
         self.worker = SessionWorker(runtime, wire, cancelled, evaluator=True)
         self.wire = deepcopy(wire)
-        self.journal = []
+        # Retain complete immutable entries without keeping a second nested
+        # observation graph alive beside the matching clock's observations.
+        self._journal = []
         self.cursor = self.intents = self.passes = 0
         self.bar_open = False
         self.input_skip = 0
@@ -135,7 +138,7 @@ class PineStream:
             self.input_skip = result["input_skip"]
             self.last = result
             if record:
-                self.journal.append({"command": command, "result_sha256": digest(result)})
+                self._journal.append(encoded({"command": command, "result_sha256": digest(result)}))
             return result
         except Exception:
             self.close()
@@ -183,11 +186,29 @@ class PineStream:
     def output(self, *, include_intents=False):
         return self._request(dict(operation="stream_snapshot", include_intents=include_intents))
 
-    def checkpoint(self,*,detached=True):
-        value=dict(contract=JOURNAL_CONTRACT, wire=self.wire, opening=self.opening, journal=self.journal,
+    def _checkpoint_header(self):
+        return dict(contract=JOURNAL_CONTRACT, wire=self.wire, opening=self.opening,
                              cursor=self.cursor, intents=self.intents, passes=self.passes, bar_open=self.bar_open,
                              input_skip=self.input_skip, last_sha256=digest(self.last))
-        return deepcopy(value) if detached else value
+
+    def checkpoint(self,*,detached=True):
+        value=self._checkpoint_header()
+        if detached:
+            value=deepcopy(value)
+        # Each decoded entry is already owned by this new checkpoint. Public
+        # mutation can never alter the immutable active transcript.
+        value["journal"]=[json.loads(entry) for entry in self._journal]
+        return value
+
+    def matches_checkpoint(self, saved):
+        if (not isinstance(saved,dict)
+                or self._checkpoint_header()!={key:value for key,value in saved.items() if key!="journal"}
+                or not isinstance(saved.get("journal"),list) or len(saved["journal"])!=len(self._journal)):
+            return False
+        try:
+            return all(encoded(entry)==original for entry,original in zip(saved["journal"],self._journal,strict=True))
+        except (TypeError,ValueError):
+            return False
 
     @classmethod
     def restore(cls, runtime, payload, cancelled, *, deadline=None, verify=None, _owned_checkpoint=False):
@@ -205,7 +226,7 @@ class PineStream:
                     if digest(result) != entry["result_sha256"]:
                         raise BacktestError("LOOKAHEAD_VIOLATION", "Pine stream replay changed an observed decision")
                     if verify is not None: verify(entry["command"],result)
-            if stream.checkpoint(detached=False) != saved:
+            if not stream.matches_checkpoint(saved):
                 raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine stream checkpoint cursor differs")
             return stream
         except Exception:
