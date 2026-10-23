@@ -13,14 +13,16 @@ from .pine_stream import seal_observation_group
 
 
 class HistoryTickClock:
-    def __init__(self, stream, kernel, orders, wire, *, state=None, _compact_groups=False):
+    def __init__(self, stream, kernel, orders, wire, *, state=None, _compact_groups=False, _owned_state=False):
         self.stream, self.kernel, self.orders, self.wire = stream, kernel, orders, wire
         self._compact_groups = _compact_groups
         self.feed = from_wire(wire)
         self.positions = {bar["time"]: index for index, bar in enumerate(wire["bars"])}
         restoring = bool(state)
-        state = deepcopy({key:value for key,value in (state or {}).items()
-                          if key in {"groups","accounts","history","request_feed"}})
+        state = {key:value for key,value in (state or {}).items()
+                 if key in {"groups","accounts","history","request_feed"}}
+        if not _owned_state:
+            state = deepcopy(state)
         self.groups, self.accounts, self.history = (state.get(key,[]) for key in ("groups","accounts","history"))
         if self.feed is not None and restoring:
             validate_replay(self.feed,state.get("request_feed"),pass_observations(self.groups,scheduled=True))

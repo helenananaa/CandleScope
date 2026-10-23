@@ -17,7 +17,7 @@ class ReplayWorker:
     def __init__(self,plugin,wire):
         self.plugin,self.wire,self.stream=plugin,wire,None
 
-    def execute(self,runner,cancelled,*,resume,target,resume_owned=False):
+    def execute(self,runner,cancelled,*,resume,target,resume_owned=False,capture_owned=False):
         deadline=time.monotonic()+120
         saved=(resume or {}).get("clock",{}).get("stream")
         reusable=(self.stream is not None and isinstance(saved,dict)
@@ -30,7 +30,7 @@ class ReplayWorker:
         from .external import _run_external_host
         return _run_external_host(self.plugin,self.wire,runner,cancelled,resume=resume,target=target,
             deadline=deadline,_scenario_runner=runner,_pine_stream=self.stream,
-            _consume_resume=resume_owned and resume is not None)
+            _consume_resume=resume_owned and resume is not None,_capture_owned=capture_owned)
 
     def close(self):
         if self.stream is not None:
@@ -106,7 +106,8 @@ def prepare_window(stream,plugin,wire,cancelled,deadline):
     raise BacktestError("BUDGET_EXCEEDED","at most 64 observed Pine window discovery attempts")
 
 
-def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=False,capture_checkpoint=True,compact_groups=True):
+def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=False,capture_checkpoint=True,
+              compact_groups=True,_capture_owned=False,_consume_state=False):
     from .workbench_sensitivity import check_control
     state=state or {}
     cursor=state.get("bar_cursor",0)
@@ -114,7 +115,8 @@ def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=
     if (stream.bar_open or stream.cursor+stream.input_skip!=max(cursor,stream.input_skip)
             or state.get("last_sequence",0)!=kernel.path_sequence):
         raise BacktestError("NATIVE_IDENTITY_MISMATCH","historical Pine stream and ledger cursors differ")
-    clock=HistoryTickClock(stream,kernel,orders,wire,state=state,_compact_groups=compact_groups)
+    clock=HistoryTickClock(stream,kernel,orders,wire,state=state,_compact_groups=compact_groups,
+        _owned_state=_consume_state)
     if wire.get("pine_v2_bar_contract"):
         from .pine_workbench_v2 import events
         last=bar_event(wire,target-1,0).event_time_ms
@@ -146,10 +148,10 @@ def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=
         return latest,clock.history,clock.accounts,passes,{"groups":clock.groups},None
     saved=dict(contract=wire["pine_bar_path_contract"],history_tick_contract=CONTRACT,bar_cursor=cursor,
                last_sequence=kernel.path_sequence,groups=clock.groups,accounts=clock.accounts,history=clock.history,
-               stream=stream.checkpoint(detached=False,compact=True),latest=latest)
+               stream=stream.checkpoint(detached=_capture_owned,compact=True),latest=latest)
     if clock.feed is not None: saved["request_feed"]=clock.feed.snapshot()
     if wire.get("pine_v2_bar_contract"): saved["source_sequence"]=kernel.source_sequence
-    # The coordinator's make_state JSON boundary detaches these values before
-    # another command can advance this worker-owned stream.
+    # Exclusive replay capture transfers the finished clock graphs and freezes
+    # the live stream header here. Default capture detaches all values later.
     last_request=dict(bars=wire["bars"][:cursor],execution_schedule=clock.groups)
     return latest,clock.history,clock.accounts,passes,saved,last_request

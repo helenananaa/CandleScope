@@ -113,7 +113,7 @@ def run_external_host(plugin, wire, runner, cancelled, **options):
 
 def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=None,
                        deadline=None, _cost_scenario=False, _scenario_runner=None, _pine_stream=None,
-                       _discovery_only=False, _consume_resume=False):
+                       _discovery_only=False, _consume_resume=False, _capture_owned=False):
     if wire.get("host_runtime_identity") != host_identity():
         raise BacktestError("NATIVE_IDENTITY_MISMATCH", "host matching code changed after submission")
     from .workbench_sensitivity import validate_contract, check_control
@@ -162,6 +162,8 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
     configure_legacy_account(kernel, wire)
     interval = parse_interval_spec(wire["interval"])
     capture=target is not None
+    if _capture_owned and (not capture or _pine_stream is None or _discovery_only):
+        raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "owned checkpoint requires a captured Pine replay")
     if _discovery_only and (capture or resume is not None or not _cost_scenario or _pine_stream is None):
         raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "window discovery requires a disposable fresh account")
     target=len(wire["bars"]) if target is None else target
@@ -195,7 +197,7 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
         elif _consume_resume:
             # Only a job-owned checkpoint may be consumed. All identity,
             # transcript, kernel, allocation and risk restoration checks above
-            # have finished; matching clocks clone their mutable inputs next.
+            # have finished; matching clocks take the job's mutable histories.
             clock={key:value for key,value in clock.items() if key not in {"stream","latest"}}
             accounts,history,latest=[],[],{}
             last_request=None
@@ -261,14 +263,16 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
     if wire.get("pine_print_tick_contract"):
         from .pine_print_tick_execution import run_clock
         execution=run_clock(_pine_stream,kernel,orders,wire,state=clock,target=target,
-            discovery_only=_discovery_only,capture_checkpoint=capture)
+            discovery_only=_discovery_only,capture_checkpoint=capture,_capture_owned=_capture_owned,
+            _consume_state=_consume_resume)
         if _discovery_only:
             return None
         latest,history,accounts,execution_passes,clock,last_request=execution
     elif wire.get("pine_history_tick_contract"):
         from .pine_history_tick_execution import run_clock
         execution=run_clock(_pine_stream,kernel,orders,wire,state=clock,target=target,
-            discovery_only=_discovery_only,capture_checkpoint=capture)
+            discovery_only=_discovery_only,capture_checkpoint=capture,_capture_owned=_capture_owned,
+            _consume_state=_consume_resume)
         if _discovery_only:
             return None
         latest,history,accounts,execution_passes,clock,last_request=execution
@@ -351,5 +355,6 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
             else build_matrix(plugin, wire, scenario_runner, cancelled, result, deadline=deadline))
     if capture:
         from .external_replay import make_state
-        return result,make_state(wire,target,kernel,orders,accounts,history,latest,clock,last_request,risk_stops=risk_stops)
+        return result,make_state(wire,target,kernel,orders,accounts,history,latest,clock,last_request,
+            risk_stops=risk_stops,_owned_output=_capture_owned)
     return result

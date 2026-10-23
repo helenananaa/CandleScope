@@ -99,12 +99,15 @@ def test_consumed_job_resume_failure_keeps_committed_account_and_public_resume_d
         try: return run(*args,**kwargs)
         finally:
             if owned: consumed.append(resume=={})
+    clock_type=HistoryTickClock if mode=="BAR_APPROX" else PrintTickClock
+    step_name="vertex" if mode=="BAR_APPROX" else "observe"
+    step=getattr(clock_type,step_name)
     def fail_after_restore(*args,**kwargs):
-        raise BacktestError("CONTROLLED_RESUME_FAILURE","after restored account and transcript checks")
+        step(*args,**kwargs)
+        raise BacktestError("CONTROLLED_RESUME_FAILURE","after mutating the resumed clock and account")
     with monkeypatch.context() as patch:
         patch.setattr(external,"_run_external_host",observed_run)
-        patch.setattr(HistoryTickClock if mode=="BAR_APPROX" else PrintTickClock,
-                      "vertex" if mode=="BAR_APPROX" else "observe",fail_after_restore)
+        patch.setattr(clock_type,step_name,fail_after_restore)
         replay.command(key,replay.get(key)["revision"],"seek",created["total"])
         deadline=time.monotonic()+20
         while time.monotonic()<deadline:

@@ -301,7 +301,7 @@ class NativeReplay:
                         if wire.get("pine_history_tick_contract") or wire.get("pine_print_tick_contract"):
                             if worker:
                                 result,external_state=worker.execute(self.native.runner,cancelled,resume=external_state,target=count,
-                                    resume_owned=True)
+                                    resume_owned=True,capture_owned=True)
                             else:
                                 from .external import run_external_host
                                 result,external_state=run_external_host(plugin,wire,self.native.runner,cancelled,

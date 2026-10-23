@@ -90,14 +90,27 @@ def validate_state(wire,state):
             raise BacktestError("NATIVE_IDENTITY_MISMATCH", "requested observation checkpoint differs") from exc
 
 
-def make_state(wire,cursor,kernel,orders,accounts,history,latest,clock,last_request,*,risk_stops=None):
+def make_state(wire,cursor,kernel,orders,accounts,history,latest,clock,last_request,*,risk_stops=None,
+               _owned_output=False):
     from .native import MAX_BYTES,digest
     from .native_checkpoint import pack,detached_json,checkpoint_digest
-    value=detached_json(dict(contract=CONTRACT,input_hash=digest(wire),
+    value=dict(contract=CONTRACT,input_hash=digest(wire),
         host_runtime_identity=wire["host_runtime_identity"],cursor=cursor,
-        kernel=kernel.snapshot(),orders=orders.snapshot(),accounts=accounts,history=history,
-        latest=latest,clock=clock,last_request=last_request,
-        **({"pine_risk_stops":risk_stops.snapshot()} if risk_stops is not None and risk_stops.state is not None else {})))
+        kernel=kernel.snapshot(),orders=orders.snapshot(),
+        **({"pine_risk_stops":risk_stops.snapshot()} if risk_stops is not None and risk_stops.state is not None else {}))
+    output=dict(accounts=accounts,history=history,latest=latest,clock=clock,last_request=last_request)
+    if _owned_output:
+        # Only an exclusive Pine replay job transfers its finished observations
+        # and feedback. The clock freezes the live stream header/journal; the
+        # last SDK output and source bars still belong to live owners, so keep
+        # those boundaries detached along with ledger snapshots and identity.
+        value=detached_json({**value,"latest":latest})
+        output.update(latest=value["latest"],clock={**clock,"latest":value["latest"]},
+            last_request={**last_request,"bars":detached_json(last_request["bars"])})
+        value.update(output)
+    else:
+        value.update(output)
+        value=detached_json(value)
     value["checksum"]=checkpoint_digest(value)
     if len(pack(value).encode("utf-8"))>MAX_BYTES:
         raise BacktestError("BUDGET_EXCEEDED","external account checkpoint exceeds 64 MiB")

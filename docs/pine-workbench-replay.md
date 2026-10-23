@@ -93,13 +93,23 @@ checkpoint copy. Journaled commands
 take one owned copy before the transport, preserving caller-mutation isolation.
 
 Replay retains the original report's seal/authority and required input settings
-instead of a second complete batch report/configuration. Captured clocks borrow
-their exclusively owned stream transcript until the existing final JSON
-normalization boundary detaches it; public stream snapshots remain detached.
-Matching clocks copy only their mutable histories and cursors. Private journal
+instead of a second complete batch report/configuration. Default capture and
+public stream snapshots remain detached. Exclusive Pine replay jobs transfer
+finished observation/feedback graphs into their private checkpoint, and their
+matching clocks consume already-validated owned resume histories. The live
+stream header/journal, last SDK output, source bars, ledger snapshots and identity
+retain independent copies. Stored journal caches still decode independently;
+they never adopt shared mutable report graphs. Private journal
 writes over 1 MiB defer parsed cache materialization to the next verified read;
 small incremental deltas retain their warm cache. On-disk base/delta checksums,
 revisions, complete restoration and default GET/export content are unchanged.
+
+The installed-runtime ownership regression passed 106 cases across external
+replay, print ticks, historical ticks, checkpoint ownership and window recovery.
+It includes full batch/warm/cold result equality, old-checkpoint retention,
+live-input mutation isolation and rollback after a resumed clock has advanced.
+This verifies the ownership boundaries; resource limits and the packaged UI
+still require their separate qualification runs.
 
 An active replay job takes ownership of its validated private cached state.
 After reconstructing and checking the interpreter, kernel, allocations and risk,

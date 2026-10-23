@@ -69,7 +69,7 @@ class ReplayWorker:
         self.plugin,self.wire,self.stream=plugin,wire,None
         self.history=None
 
-    def execute(self,runner,cancelled,*,resume,target,resume_owned=False):
+    def execute(self,runner,cancelled,*,resume,target,resume_owned=False,capture_owned=False):
         deadline=time.monotonic()+120
         saved=(resume or {}).get("clock",{}).get("stream")
         if not (self.stream is not None and isinstance(saved,dict)
@@ -82,7 +82,7 @@ class ReplayWorker:
         from .external import _run_external_host
         result,state=_run_external_host(self.plugin,self.wire,runner,cancelled,resume=resume,target=target,
             deadline=deadline,_scenario_runner=runner,_pine_stream=self.stream,
-            _consume_resume=resume_owned and resume is not None)
+            _consume_resume=resume_owned and resume is not None,_capture_owned=capture_owned)
         self.history=deepcopy(state["history"])
         return result,state
 
@@ -115,12 +115,14 @@ def validate_state(wire,state):
 
 
 class PrintTickClock:
-    def __init__(self,stream,kernel,orders,wire,*,state=None,_compact_groups=False):
+    def __init__(self,stream,kernel,orders,wire,*,state=None,_compact_groups=False,_owned_state=False):
         self.stream,self.kernel,self.orders,self.wire=stream,kernel,orders,wire
         self._compact_groups=_compact_groups
         restoring=bool(state)
-        state=deepcopy({key:value for key,value in (state or {}).items()
-            if key in {"groups","accounts","history","bar_cursor","last_sequence","event_cursor","request_feed"}})
+        state={key:value for key,value in (state or {}).items()
+            if key in {"groups","accounts","history","bar_cursor","last_sequence","event_cursor","request_feed"}}
+        if not _owned_state:
+            state=deepcopy(state)
         self.groups,self.accounts,self.history=(state.get(key,[]) for key in ("groups","accounts","history"))
         self.cursor=state.get("bar_cursor",0)
         self.last_sequence=state.get("last_sequence",0)
@@ -204,8 +206,10 @@ class PrintTickClock:
         self.visible=None
 
 
-def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=False,capture_checkpoint=True,compact_groups=True):
-    clock=PrintTickClock(stream,kernel,orders,wire,state=state,_compact_groups=compact_groups)
+def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=False,capture_checkpoint=True,
+              compact_groups=True,_capture_owned=False,_consume_state=False):
+    clock=PrintTickClock(stream,kernel,orders,wire,state=state,_compact_groups=compact_groups,
+        _owned_state=_consume_state)
     interval=parse_interval_spec(wire["interval"])
     events=physical_events(wire)
     kernel.source_kind=assert_trade_stream(tuple(event for event in events if event.role=="TRADES"))
@@ -252,9 +256,10 @@ def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=
     if not capture_checkpoint:
         return latest,clock.history,clock.accounts,passes,{"groups":clock.groups},None
     saved=dict(contract=CONTRACT,bar_cursor=clock.cursor,last_sequence=clock.last_sequence,event_cursor=clock.event_cursor,
-        groups=clock.groups,accounts=clock.accounts,history=clock.history,stream=stream.checkpoint(detached=False,compact=True),latest=latest)
+        groups=clock.groups,accounts=clock.accounts,history=clock.history,
+        stream=stream.checkpoint(detached=_capture_owned,compact=True),latest=latest)
     if clock.feed is not None: saved["request_feed"]=clock.feed.snapshot()
-    # make_state normalizes and detaches the complete account checkpoint before
-    # the exclusively owned interpreter can execute another command.
+    # Exclusive replay capture transfers the finished clock graphs and freezes
+    # the live stream header here. Default capture detaches all values later.
     last_request=dict(bars=wire["bars"][:clock.cursor],execution_schedule=clock.groups)
     return latest,clock.history,clock.accounts,passes,saved,last_request
