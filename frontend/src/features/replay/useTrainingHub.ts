@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { type PreparationJob, type PreparationCapabilities, type prepareReplay } from "../data-preparation/api.js";
-import { PreparedReplayDeletedError } from "../data-preparation/api.js";
+import { PreparationApiError, PreparedReplayDeletedError } from "../data-preparation/api.js";
 import { t } from "../../i18n/index.js";
 import { ReplayApiError } from "./replayApi.js";
 import type { ReplayCapabilities, ReplayCatalog } from "./replayTypes.js";
@@ -141,7 +141,7 @@ export interface TrainingHubLifecycleOptions {
 type Listener = () => void;
 
 function hubError(error: unknown): TrainingHubError {
-  if (error instanceof ReplayV2ApiError || error instanceof ReplayApiError) {
+  if (error instanceof ReplayV2ApiError || error instanceof ReplayApiError || error instanceof PreparationApiError) {
     return { code: error.code, message: error.message };
   }
   if (error instanceof Error) return { code: "TRAINING_HUB_ERROR", message: error.message };

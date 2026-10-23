@@ -191,6 +191,9 @@ class ReplayService:
         instrument_metadata_resolver: (
             Callable[[str, str, str], Mapping[str, object] | None] | None
         ) = None,
+        instrument_metadata_refresher: (
+            Callable[[str, str], Awaitable[object]] | None
+        ) = None,
     ) -> None:
         if not settings.enabled:
             raise ValueError(
@@ -198,6 +201,8 @@ class ReplayService:
             )
         self.settings = settings
         self.store = store
+        self._instrument_metadata_resolver = instrument_metadata_resolver
+        self._instrument_metadata_refresher = instrument_metadata_refresher
         if repository is not None:
             self._repository = repository
         else:
@@ -336,6 +341,28 @@ class ReplayService:
                 self._repository, now_ms=self._now_ms)
             self._progressive_history = history
         return history
+
+    async def prepare_instrument_metadata(self, exchange: str, market_type: str, symbol: str) -> None:
+        """Resolve the selected instrument before committing a prepared run.
+
+        First-launch catalog discovery is asynchronous. Published bars alone
+        do not establish the account's base/settlement identity. Join the Host
+        catalog's scoped singleflight without bypassing its retry/cooldown rules.
+        """
+        resolver = self._instrument_metadata_resolver
+        if resolver is None:
+            return
+        metadata = await asyncio.to_thread(resolver, exchange, market_type, symbol)
+        if metadata is None and self._instrument_metadata_refresher is not None:
+            await self._instrument_metadata_refresher(exchange, market_type)
+            metadata = await asyncio.to_thread(resolver, exchange, market_type, symbol)
+        if metadata is None:
+            from .training.errors import TrainingRunError
+            raise TrainingRunError(
+                "INSTRUMENT_METADATA_UNAVAILABLE",
+                "Instrument identity is not ready; retry preparation when the market catalog is available",
+                status_code=503,
+            )
 
     async def start(self) -> None:
         """Recover non-ended sessions without ever resuming PLAYING."""

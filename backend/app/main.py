@@ -255,11 +255,18 @@ async def _init_data_manager() -> None:
 async def _init_replay_runtime() -> None:
     """Start replay as an application sibling, independent of live DataEngine."""
 
-    from app.exchanges.symbol_catalog import get_cached_symbol_metadata
+    from app.exchanges.symbol_catalog import (
+        get_cached_symbol_metadata,
+        refresh_exchange_metadata,
+    )
     from app.replay.runtime import start_replay_runtime
+
+    async def refresh_instrument_metadata(exchange: str, market_type: str):
+        return await refresh_exchange_metadata(exchange, market_type=market_type)
 
     runtime = await start_replay_runtime(
         instrument_metadata_resolver=get_cached_symbol_metadata,
+        instrument_metadata_refresher=refresh_instrument_metadata,
     )
     app.state.replay_runtime = runtime
     app.state.replay_service = runtime.service

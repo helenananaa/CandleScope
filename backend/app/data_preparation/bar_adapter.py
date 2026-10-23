@@ -474,6 +474,7 @@ class BarPreparationAdapter:
         market_options = ({"_market_identity": (scope.exchange, scope.market_type, scope.symbol)}
                           if request.intent.get("submission", {}).get("random_by_market") else {})
         created = await self.replay_service.training.create_empty_run(setup, preparation_id=job_id,
+            _preparation_market_identity=(scope.exchange, scope.market_type, scope.symbol),
             _progressive_initial_horizon_ms=prefix, **market_options)
         if not created["run"].get("adapter_session_id"):
             requirement = request.requirements[0]

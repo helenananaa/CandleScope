@@ -143,10 +143,12 @@ async def test_mark_lowpoint_before_next_bar_keeps_exact_fallback(tmp_path, monk
 
 
 @pytest.mark.anyio
-async def test_cancelled_request_drains_atomic_phase_commit(tmp_path, monkeypatch):
+@pytest.mark.parametrize("margin", ["CROSS", "ISOLATED"])
+async def test_cancelled_request_drains_atomic_phase_commit(tmp_path, monkeypatch, margin):
     install_shared_market(monkeypatch, tmp_path / "market")
     service, run, session, send = await make_multi(
         tmp_path / "run", horizon=40, marks=["100"]*5+["80"]+["110"]*35,
+        margin_mode=margin,
     )
     release = threading.Event()
     entered = asyncio.Event()
@@ -184,6 +186,19 @@ async def test_cancelled_request_drains_atomic_phase_commit(tmp_path, monkeypatc
             await asyncio.wait_for(task, 10)
         after = await service.training.store.get_market_track_heads(run)
         assert all(t["cursor"]["virtual_time_ms"] == target for t in after)
+        assert (await service.training.audit_account(run))["status"] == "PASS"
+        from app.replay.service import ReplayService
+        from app.replay.storage import ReplaySQLiteStore
+        settings, repository = service.settings, service._repository
+        await service.shutdown(step_timeout=5)
+        service = ReplayService(settings=settings, repository=repository,
+                                store=ReplaySQLiteStore(settings.db_path))
+        await service.start()
+        assert await service.training.store.get_market_track_heads(run) == after
+        for track in after:
+            restored = (await service.get_session(track["adapter_session_id"]))["snapshot"]
+            assert restored["state"] == "PAUSED"
+            assert restored["cursor"]["virtual_time_ms"] == target
         assert (await service.training.audit_account(run))["status"] == "PASS"
     finally:
         release.set()
