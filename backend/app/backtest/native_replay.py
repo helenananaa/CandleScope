@@ -259,6 +259,7 @@ class NativeReplay:
 
     def _execute(self, key, action, target, cancelled):
         from .native import digest
+        from .native_checkpoint import checkpoint_digest
         try:
             with self.native.lock:
                 current = self.get(key,_metadata_only=True)
@@ -315,7 +316,7 @@ class NativeReplay:
                         raise BacktestError("NATIVE_IDENTITY_MISMATCH", "unexpected replay account authority")
                     if count == current["total"]:
                         result["bars"] = wire["bars"]
-                        result["report_hash"] = digest(result)
+                        result["report_hash"] = checkpoint_digest(result)
                         if result["report_hash"] != origin["result"]["report_hash"]:
                             raise BacktestError("NATIVE_REPLAY_PARITY_FAILED", "replay endpoint differs from frozen batch result")
                 with self.native.lock:

@@ -116,6 +116,8 @@ releases that exclusively owned, detached temporary state before building the
 public-result cache. The same transaction still covers both writes and the
 cursor; failure restores the prior committed checkpoint for retry. Playback
 retains its next-step state, and default save callers retain their input objects.
+Final endpoint parity hashes use the same canonical bytes through the incremental
+checkpoint encoder, avoiding overlapping full report strings and UTF-8 buffers.
 
 The 2026-10-23 validated-base change passed 132 installed-worker checkpoint,
 external/native replay, history-tick, physical-tick and view regression cases,
@@ -126,6 +128,9 @@ The subsequent temporary-state release passed 57 installed recovery, replay and
 view cases (37 unrelated batch/cost/closing cases deselected), including a public
 write failure after private persistence and complete retry equality. Its focused
 eight-case ownership/failure run overlaps that regression.
+Streaming endpoint hashing then passed 46 canonical-encoding, Pine/Pyne native
+replay and selected physical/history checkpoint cases without skips. Resource
+qualification still requires separate measured receipts under the frozen limits.
 
 Controlled tests cover all nine supported mode/callback combinations, spot cash
 and inventory, pending queues/liquidity, backward seek, replay-service/interpreter-
