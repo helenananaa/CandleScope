@@ -146,7 +146,7 @@ def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=
         return latest,clock.history,clock.accounts,passes,{"groups":clock.groups},None
     saved=dict(contract=wire["pine_bar_path_contract"],history_tick_contract=CONTRACT,bar_cursor=cursor,
                last_sequence=kernel.path_sequence,groups=clock.groups,accounts=clock.accounts,history=clock.history,
-               stream=stream.checkpoint(detached=False),latest=latest)
+               stream=stream.checkpoint(detached=False,compact=True),latest=latest)
     if clock.feed is not None: saved["request_feed"]=clock.feed.snapshot()
     if wire.get("pine_v2_bar_contract"): saved["source_sequence"]=kernel.source_sequence
     # The coordinator's make_state JSON boundary detaches these values before

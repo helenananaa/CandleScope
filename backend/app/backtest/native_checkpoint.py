@@ -8,6 +8,7 @@ decoded value, independently of the storage envelope checksum.
 import base64
 import hashlib
 import json
+import math
 import zlib
 
 from .native import MAX_BYTES, encoded
@@ -17,17 +18,131 @@ MAX_DECODED_BYTES = 256 * 1024 * 1024
 COMPRESS_FROM_BYTES = 1024 * 1024
 
 
+def detached_json(value):
+    """Normalize owned checkpoint data without expanding shared JSON graphs.
+
+    Mutable containers are detached from the caller. Repeated references within
+    the checkpoint share one detached copy; serialized values stay identical to
+    the previous JSON round trip. Non-JSON values retain that round trip's
+    default=str and key-conversion semantics.
+    """
+    memo, active = {}, set()
+
+    def clone(item):
+        kind = type(item)
+        if kind in (str, int, bool, type(None)):
+            return item
+        if kind is float:
+            if not math.isfinite(item):
+                raise ValueError("Out of range float values are not JSON compliant")
+            return item
+        if kind not in (dict, list, tuple) or (kind is dict and any(type(key) is not str for key in item)):
+            return json.loads(json.dumps(item, default=str, allow_nan=False))
+        key = id(item)
+        if key in active:
+            raise ValueError("Circular reference detected")
+        if key in memo:
+            return memo[key]
+        active.add(key)
+        result = {} if kind is dict else []
+        memo[key] = result
+        try:
+            if kind is dict:
+                result.update((name, clone(child)) for name, child in item.items())
+            else:
+                result.extend(clone(child) for child in item)
+        finally:
+            active.remove(key)
+        return result
+
+    return clone(value)
+
+
+def canonical_fragments(value):
+    """Yield the existing canonical JSON bytes, chunking large history arrays.
+
+    Short lists are traversed so delta-operation and plot wrappers do not hide
+    large arrays. History rows are encoded in C in groups of 512, retaining the
+    standard encoder's numeric, escaping and key-order rules.
+    """
+    active = set()
+
+    def fragments(item):
+        kind = type(item)
+        if kind is dict and all(type(key) is str for key in item):
+            if id(item) in active:
+                raise ValueError("Circular reference detected")
+            active.add(id(item))
+            try:
+                yield b"{"
+                for index, key in enumerate(sorted(item)):
+                    if index:
+                        yield b","
+                    yield (encoded(key) + ":").encode("utf-8")
+                    yield from fragments(item[key])
+                yield b"}"
+            finally:
+                active.remove(id(item))
+        elif kind in (list, tuple):
+            if id(item) in active:
+                raise ValueError("Circular reference detected")
+            active.add(id(item))
+            try:
+                yield b"["
+                if len(item) <= 16:
+                    for index, child in enumerate(item):
+                        if index:
+                            yield b","
+                        yield from fragments(child)
+                else:
+                    for start in range(0, len(item), 512):
+                        if start:
+                            yield b","
+                        yield encoded(item[start:start+512])[1:-1].encode("utf-8")
+                yield b"]"
+            finally:
+                active.remove(id(item))
+        else:
+            yield encoded(item).encode("utf-8")
+
+    yield from fragments(value)
+
+
+def checkpoint_digest(value):
+    checksum = hashlib.sha256()
+    for fragment in canonical_fragments(value):
+        checksum.update(fragment)
+    return "sha256:" + checksum.hexdigest()
+
+
 def pack(value):
-    raw = encoded(value).encode("utf-8")
-    if len(raw) > MAX_DECODED_BYTES:
-        raise ValueError("replay checkpoint decoded size exceeds 256 MiB")
-    if len(raw) < COMPRESS_FROM_BYTES:
-        return raw.decode("utf-8")
-    compressed = zlib.compress(raw, level=1)
-    envelope = encoded({"storage_schema": SCHEMA, "decoded_bytes": len(raw),
-        "decoded_sha256": hashlib.sha256(raw).hexdigest(),
-        "payload": base64.b64encode(compressed).decode("ascii")})
-    return envelope if len(envelope.encode("utf-8")) < len(raw) else raw.decode("utf-8")
+    size, checksum = 0, hashlib.sha256()
+    raw, compressed = [], []
+    compressor = None
+    for fragment in canonical_fragments(value):
+        size += len(fragment)
+        if size > MAX_DECODED_BYTES:
+            raise ValueError("replay checkpoint decoded size exceeds 256 MiB")
+        checksum.update(fragment)
+        if compressor is None:
+            raw.append(fragment)
+            if size < COMPRESS_FROM_BYTES:
+                continue
+            compressor = zlib.compressobj(level=1)
+            for part in raw:
+                compressed.append(compressor.compress(part))
+            raw.clear()
+        else:
+            compressed.append(compressor.compress(fragment))
+    if compressor is None:
+        return b"".join(raw).decode("utf-8")
+    compressed.append(compressor.flush())
+    envelope = encoded({"storage_schema": SCHEMA, "decoded_bytes": size,
+        "decoded_sha256": checksum.hexdigest(),
+        "payload": base64.b64encode(b"".join(compressed)).decode("ascii")})
+    # Incompressible values retain the legacy raw representation. Normal large
+    # histories avoid allocating their complete raw string and byte copy.
+    return envelope if len(envelope.encode("utf-8")) < size else encoded(value)
 
 
 def unpack(raw):

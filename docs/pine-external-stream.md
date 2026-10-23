@@ -28,8 +28,8 @@ retrieves plots and optionally complete intents. Host matching and account
 authority remain outside Core. Confirmation and history commitment are separate:
 closing-fill observations may arrive before commitment.
 
-`backend/app/backtest/pine_stream.py` owns the Host transcript. Its checkpoint
-deep-copies the frozen opening, commands, per-response hashes and final cursors.
+`backend/app/backtest/pine_stream.py` owns the Host transcript. Its default v1
+checkpoint detaches the frozen opening, commands, per-response hashes and final cursors.
 Recovery starts a new worker, replays each command and checks every response
 before returning the reconstructed evaluator. It does not call a matcher or
 settle fills. A run coordinator must pair this with the same ledger checkpoint;
@@ -38,6 +38,22 @@ the historical Workbench coordinator now adopts this path as described in
 clock adoption remain separate work.
 Errors, cancellation, identity/acknowledgement failures and replay differences
 close and reap the worker. An optional run deadline also bounds replay.
+
+Workbench tick checkpoints additionally use `candlescope.pine-stream-journal/2`
+internally. Every complete canonical command/hash entry is retained as a JSON
+string, avoiding a second decoded observation graph during checkpoint creation.
+Recovery accepts v1 and v2, decodes at most eight entries per command batch and
+still checks every acknowledgement, decision hash, cursor and final transcript.
+Ledger observations must exactly match the commands following the final rebase.
+The public default checkpoint remains v1 and caller mutation remains detached.
+
+Checkpoint normalization retains shared references only inside its newly
+detached construction graph. Serialized JSON values, including duplicated
+fields, remain complete. Canonical checkpoint hashing and compression process
+history arrays in chunks, with exact legacy JSON bytes and zlib envelopes
+covered by regression tests. Stored/decoded size limits are unchanged. These
+storage changes require independent long-history resource qualification; they
+do not establish a passing memory ceiling by themselves.
 
 Controlled tests exercise both bridges and actual SDK JSON-lines workers,
 ordinary rollback, varip/TA state, requested transactions, known historical

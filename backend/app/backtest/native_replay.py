@@ -328,8 +328,8 @@ class NativeReplay:
                 self.jobs.pop(key, None)
 
     def snapshot(self, key, revision):
-        from .native import MAX_BYTES, digest
-        from .native_checkpoint import pack
+        from .native import MAX_BYTES
+        from .native_checkpoint import pack, checkpoint_digest
         with self.native.lock:
             record = self._current(key, revision)
             if key in self.jobs or record["state"] == "RUNNING":
@@ -341,7 +341,7 @@ class NativeReplay:
                 # native lock. It never escapes this call or reaches a mutable
                 # execution path; normal callers still receive a detached copy.
                 checkpoint["external_state"]=self._host_state(key,detached=False)
-            checkpoint["checksum"] = digest(checkpoint)
+            checkpoint["checksum"] = checkpoint_digest(checkpoint)
             stored = pack(checkpoint)
             if len(stored.encode("utf-8")) > MAX_BYTES:
                 raise BacktestError("BUDGET_EXCEEDED", "replay checkpoint exceeds 64 MiB")
@@ -352,8 +352,7 @@ class NativeReplay:
             return record
 
     def restore(self, key, revision, checkpoint_id):
-        from .native import digest
-        from .native_checkpoint import unpack
+        from .native_checkpoint import unpack, checkpoint_digest
         with self.native.lock:
             record = self._current(key, revision)
             if key in self.jobs:
@@ -363,7 +362,7 @@ class NativeReplay:
                 raise BacktestError("RUN_NOT_FOUND", "checkpoint not found")
             checkpoint = unpack(row[0])
             checksum = checkpoint.pop("checksum")
-            if digest(checkpoint) != checksum or checkpoint["replay_id"] != key or checkpoint["input_hash"] != record["input_hash"]:
+            if checkpoint_digest(checkpoint) != checksum or checkpoint["replay_id"] != key or checkpoint["input_hash"] != record["input_hash"]:
                 raise BacktestError("NATIVE_IDENTITY_MISMATCH", "checkpoint does not belong to this replay")
             if record.get("execution_mode")=="CANDLESCOPE" and checkpoint["cursor"]:
                 from .external_replay import validate_state

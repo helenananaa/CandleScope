@@ -41,7 +41,7 @@ No Host matching callback runs inside a chain. Observation ownership and
 immutable closed-bar storage avoid redundant copies; public reports and
 checkpoint observations remain complete.
 
-The focused 16,384-bar depth/Renko/V2 trial completed all 81,920 observations:
+A focused 16,384-bar depth/Renko/V2 trial at the preceding checkpoint completed all 81,920 observations:
 full run 109.406 s, midpoint 99.344 s, snapshot 7.156 s and cold restore/final
 seek 124.547 s. Cold continuation equals the complete run. The retained full
 financial/plot control also matches: an initial hash failure was traced to the
@@ -54,6 +54,31 @@ qualification. All 72 fresh trials, packaged Windows UI/restart acceptance and
 plugin/application publication remain pending. Four new deterministic CSPKGs
 and their locks/catalog bind this candidate, but the plugin release is not yet
 published. The stable Core binary is unchanged.
+
+The follow-up storage candidate preserves complete private stream journals as
+canonical JSON strings, accepts both journal versions on restore, and detaches
+shared checkpoint graphs once. Its 101 selected installed-worker and storage
+tests pass. A separate original-matrix 16,384-bar depth/ordinary-request/V2 case
+completes all 81,920 observations and exact cold continuation: full 56.375 s,
+midpoint 41.110 s, snapshot 6.656 s, cold restore/final seek 108.422 s. It still
+fails memory at 2,516,754,432 bytes. This is a different request profile and is
+not a paired memory comparison with the Renko trial above. Two subsequent
+Renko attempts time out before checkpoint construction, so their memory and
+financial outcomes remain unverified; the failure receipts are retained.
+
+Stage attribution on the complete ordinary-request case identifies remaining
+serialization buffers and old-state loading during save. Incremental canonical
+hashing/compression now avoids whole-checkpoint string/byte copies. Its 29
+storage tests verify byte-identical standard JSON, hashes and legacy zlib
+envelopes, including chunk boundaries and corruption/size checks. Post-change
+installed validation passes 149 checkpoint/stream/Host-recovery cases and a
+separate 38-case storage/native-account replay run (with overlapping storage
+tests), without skips. Post-change resource qualification remains required. A stale official
+bootstrap test pin is also corrected to the actual built Windows CSPKG; local
+bootstrap validation passes 29 tests, with one separate symlink-creation test
+blocked by Windows privilege error 1314. The checksum-only correction at
+`a0a168e8` passes the four-platform plugin workflow; the storage changes still
+require their own fresh remote checks.
 
 The complete fresh Core resource matrix passes all
 216 Windows/Linux Rust/Python/WASM trials under the original frozen budgets,

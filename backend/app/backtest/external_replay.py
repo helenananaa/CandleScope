@@ -1,5 +1,4 @@
 """Host-owned replay checkpoints; interpreter reconstruction never rematches fills."""
-import json
 from .errors import BacktestError
 
 CONTRACT="candlescope.external-replay/1"
@@ -7,13 +6,14 @@ CONTRACT="candlescope.external-replay/1"
 
 def validate_state(wire,state):
     from .native import digest
+    from .native_checkpoint import checkpoint_digest
     from .external import host_identity
     content={key:value for key,value in state.items() if key!="checksum"}
     cursor=state.get("cursor")
     if (state.get("contract")!=CONTRACT or state.get("input_hash")!=digest(wire)
             or state.get("host_runtime_identity")!=wire["host_runtime_identity"]
             or wire["host_runtime_identity"]!=host_identity()
-            or state.get("checksum")!=digest(content) or type(cursor) is not int
+            or state.get("checksum")!=checkpoint_digest(content) or type(cursor) is not int
             or not 1<=cursor<=len(wire["bars"]) or len(state.get("accounts",[]))!=cursor
             or len((state.get("last_request") or {}).get("bars",[]))!=cursor):
         raise BacktestError("NATIVE_IDENTITY_MISMATCH","external account checkpoint identity differs")
@@ -57,9 +57,8 @@ def validate_state(wire,state):
                     or not same_json(clock.get("history"),state.get("history"))
                     or any(len(group)!=(0 if index<skip else 4) for index,group in enumerate(clock["groups"]))):
                 raise BacktestError("NATIVE_IDENTITY_MISMATCH","historical Pine tick checkpoint differs")
-            from .pine_stream import canonical_observations
-            flat=[item for group in clock["groups"] for item in group]
-            if not same_json(flat,canonical_observations(stream)):
+            from .pine_stream import observations_match
+            if not observations_match(stream,clock["groups"]):
                 raise BacktestError("NATIVE_IDENTITY_MISMATCH","historical Pine observations differ from its stream journal")
         if wire.get("pine_v2_bar_contract"):
             chart = state.get("kernel", {}).get("pine_chart_bar") or {}
@@ -93,13 +92,13 @@ def validate_state(wire,state):
 
 def make_state(wire,cursor,kernel,orders,accounts,history,latest,clock,last_request,*,risk_stops=None):
     from .native import MAX_BYTES,digest
-    from .native_checkpoint import pack
-    value=json.loads(json.dumps(dict(contract=CONTRACT,input_hash=digest(wire),
+    from .native_checkpoint import pack,detached_json,checkpoint_digest
+    value=detached_json(dict(contract=CONTRACT,input_hash=digest(wire),
         host_runtime_identity=wire["host_runtime_identity"],cursor=cursor,
         kernel=kernel.snapshot(),orders=orders.snapshot(),accounts=accounts,history=history,
         latest=latest,clock=clock,last_request=last_request,
-        **({"pine_risk_stops":risk_stops.snapshot()} if risk_stops is not None and risk_stops.state is not None else {})),default=str,allow_nan=False))
-    value["checksum"]=digest(value)
+        **({"pine_risk_stops":risk_stops.snapshot()} if risk_stops is not None and risk_stops.state is not None else {})))
+    value["checksum"]=checkpoint_digest(value)
     if len(pack(value).encode("utf-8"))>MAX_BYTES:
         raise BacktestError("BUDGET_EXCEEDED","external account checkpoint exceeds 64 MiB")
     validate_state(wire,value)

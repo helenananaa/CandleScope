@@ -10,7 +10,7 @@ from .errors import BacktestError
 from .native_session import STREAM_CONTRACT
 from .pine_print_account import events as physical_events,apply_account,observe_market,record_decision,AUXILIARY,FIDELITIES
 from .pine_request_updates import from_wire,pass_observations,validate_replay
-from .pine_stream import PineStream,canonical_observations,seal_observation_group,materialize_observation_groups
+from .pine_stream import PineStream,observations_match,seal_observation_group,materialize_observation_groups
 
 CONTRACT="candlescope.pine-print-tick/1"
 
@@ -108,8 +108,7 @@ def validate_state(wire,state):
             or not same_json(clock.get("accounts"),state["accounts"])
             or not same_json(clock.get("history"),state["history"])):
         raise BacktestError("NATIVE_IDENTITY_MISMATCH","physical Pine tick checkpoint cursors differ")
-    flat=[item for group in groups for item in group]
-    if not same_json(flat,canonical_observations(saved)) or any(
+    if not observations_match(saved,groups) or any(
             bool(group) if index<skip else (not group or group[-1]["evaluation"].get("account")!=state["accounts"][index]
             or group[-1]["evaluation"].get("confirmed") is not True) for index,group in enumerate(groups)):
         raise BacktestError("NATIVE_IDENTITY_MISMATCH","physical Pine transcript differs from its stream journal")
@@ -253,7 +252,7 @@ def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=
     if not capture_checkpoint:
         return latest,clock.history,clock.accounts,passes,{"groups":clock.groups},None
     saved=dict(contract=CONTRACT,bar_cursor=clock.cursor,last_sequence=clock.last_sequence,event_cursor=clock.event_cursor,
-        groups=clock.groups,accounts=clock.accounts,history=clock.history,stream=stream.checkpoint(detached=False),latest=latest)
+        groups=clock.groups,accounts=clock.accounts,history=clock.history,stream=stream.checkpoint(detached=False,compact=True),latest=latest)
     if clock.feed is not None: saved["request_feed"]=clock.feed.snapshot()
     # make_state normalizes and detaches the complete account checkpoint before
     # the exclusively owned interpreter can execute another command.

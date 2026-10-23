@@ -11,6 +11,89 @@ from app.backtest import native_checkpoint as codec
 from app.backtest.native_replay_storage import ResultJournal, same_json
 
 
+@pytest.mark.parametrize("count", [0, 1, 16, 17, 511, 512, 513, 1025])
+def test_streamed_checkpoint_bytes_and_hash_match_the_original_encoder(count):
+    shared = {"text": "观察🙂\n\\\"", "numbers": [True, 1, 1.0, -0.0, 1e-7, 1e20]}
+    value = {"rows": [shared] * count, "tuple": (shared, None),
+             "delta": [["set", [], {"rows": [shared] * count}]],
+             "keys": {"1": "converted"}}
+    raw = encoded(value).encode("utf-8")
+    assert b"".join(codec.canonical_fragments(value)) == raw
+    assert codec.checkpoint_digest(value) == digest(value)
+
+
+def test_streamed_checkpoint_preserves_numeric_key_encoding_and_mixed_key_rejection():
+    value = {1: "converted", 2: False}
+    assert b"".join(codec.canonical_fragments(value)) == encoded(value).encode("utf-8")
+    with pytest.raises(TypeError):
+        list(codec.canonical_fragments({1: "converted", "x": False}))
+
+
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_streamed_compression_preserves_the_exact_legacy_envelope(wrapped):
+    value = {"rows": [{"text": "观察" * 90, "values": [True, 1, 1.0, -0.0]} for _ in range(6000)]}
+    if wrapped:
+        value = [["set", [], value]]
+    raw = encoded(value).encode("utf-8")
+    expected = encoded({"storage_schema": codec.SCHEMA, "decoded_bytes": len(raw),
+        "decoded_sha256": hashlib.sha256(raw).hexdigest(),
+        "payload": base64.b64encode(zlib.compress(raw, level=1)).decode("ascii")})
+    assert codec.pack(value) == expected
+    assert same_json(codec.unpack(expected), value)
+
+
+def test_streamed_checkpoint_keeps_raw_fallback_and_enforces_decoded_limit(monkeypatch):
+    monkeypatch.setattr(codec, "COMPRESS_FROM_BYTES", 1)
+    assert codec.pack({"x": 1}) == encoded({"x": 1})
+    monkeypatch.setattr(codec, "MAX_DECODED_BYTES", 100)
+    with pytest.raises(ValueError, match="decoded size"):
+        codec.pack({"rows": list(range(100))})
+
+
+@pytest.mark.parametrize("kind", [dict, list])
+def test_streamed_checkpoint_rejects_cycles(kind):
+    value = kind()
+    if kind is dict:
+        value["self"] = value
+    else:
+        value.append(value)
+    with pytest.raises(ValueError, match="Circular"):
+        codec.pack(value)
+
+
+def test_detached_normalization_preserves_serialized_values_and_shared_container_ownership():
+    from decimal import Decimal
+    shared = [{"text": "观察🙂", "numbers": [True, 1, 1.0, -0.0], "decimal": Decimal("1.2300")}]
+    value = {"accounts": shared, "clock": {"accounts": shared}, "tuple": (shared, None),
+             "converted_keys": {1: "first", "1": "last", False: [Decimal("2.0")]}}
+    expected = json.loads(json.dumps(value, default=str, allow_nan=False))
+    result = codec.detached_json(value)
+    assert encoded(result) == encoded(expected)
+    assert result["accounts"] is result["clock"]["accounts"] is result["tuple"][0]
+    assert result["accounts"] is not shared and result["accounts"][0] is not shared[0]
+    shared[0]["numbers"].append(99)
+    assert encoded(result) == encoded(expected)
+    result["accounts"][0]["numbers"].append(100)
+    assert 100 not in shared[0]["numbers"]
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")])
+def test_detached_normalization_rejects_nonfinite_values(value):
+    with pytest.raises(ValueError):
+        codec.detached_json({"nested": [value]})
+
+
+@pytest.mark.parametrize("kind", [dict, list])
+def test_detached_normalization_rejects_cycles_instead_of_memoizing_them(kind):
+    value = kind()
+    if kind is dict:
+        value["self"] = value
+    else:
+        value.append(value)
+    with pytest.raises(ValueError, match="Circular"):
+        codec.detached_json(value)
+
+
 def test_large_checkpoint_round_trip_preserves_complete_json_without_aliasing():
     value = {"rows": [{"text":"观察"*90, "values":[True, 1, 1.0, -0.0]} for _ in range(6000)],"emoji":"🙂"}
     value["checksum"] = digest(value)

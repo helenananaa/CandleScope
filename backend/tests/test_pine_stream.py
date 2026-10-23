@@ -6,9 +6,9 @@ import threading
 import pytest
 
 from app.backtest.errors import BacktestError
-from app.backtest.native import PROTOCOL, invoke
+from app.backtest.native import PROTOCOL, invoke, encoded
 from app.backtest.native_session import SessionWorker, STREAM_CONTRACT
-from app.backtest.pine_stream import PineStream
+from app.backtest.pine_stream import PineStream, journal_entry, canonical_observations, observations_match, COMPACT_JOURNAL_CONTRACT, JOURNAL_CONTRACT
 from app.backtest.strategy.pine_engine import plugin
 
 
@@ -49,7 +49,8 @@ def observation(index, ordinal, count=4):
 @installed
 @pytest.mark.parametrize("route",["chart_strategy","external_strategy"])
 @pytest.mark.parametrize("owned",[False,True])
-def test_actual_worker_keeps_forming_state_and_replays_identical_deltas_after_restart(route,owned):
+@pytest.mark.parametrize("compact",[False,True])
+def test_actual_worker_keeps_forming_state_and_replays_identical_deltas_after_restart(route,owned,compact):
     runtime,wire=runtime_for(route)
     cancel=threading.Event()
     stream=PineStream(runtime,wire,dict(source=SOURCE,parameters={},context=dict(symbol="A",timeframe="1")),cancel)
@@ -63,19 +64,21 @@ def test_actual_worker_keeps_forming_state_and_replays_identical_deltas_after_re
             result=stream.observe(observed,_owned=owned)
             observed["evaluation"]["account"]["position_size"]=999
             assert len(result["intents"])==1 and result["intent_base"]==ordinal and "output" not in result
-        saved=stream.checkpoint()
-        assert saved["journal"][0]["command"]["bar"]["close"]==10
+        saved=stream.checkpoint(compact=compact)
+        assert journal_entry(saved,0)["command"]["bar"]["close"]==10
         assert [item["command"]["observation"]["evaluation"]["account"]["position_size"]
-                for item in saved["journal"][1:]]==[0,1]
+                for item in (journal_entry(saved,i) for i in range(1,len(saved["journal"]))) ]==[0,1]
         inspected=stream.checkpoint()
         inspected["journal"][0]["command"]["bar"]["close"]=999
         inspected["opening"]["source"]="caller mutation"
         inspected["wire"]["identity"]["adapter"]="caller mutation"
-        assert stream.matches_checkpoint(saved) and stream.checkpoint()==saved
+        assert stream.matches_checkpoint(saved) and stream.checkpoint(compact=compact)==saved
         assert not stream.matches_checkpoint(inspected)
         assert not stream.matches_checkpoint({**saved,"unknown":True})
         # Caller mutation cannot rewrite the durable checkpoint or its transcript.
-        edited=deepcopy(saved);edited["journal"][1]["command"]["observation"]["evaluation"]["account"]["position_size"]=99
+        edited=deepcopy(saved)
+        entry=journal_entry(edited,1);entry["command"]["observation"]["evaluation"]["account"]["position_size"]=99
+        edited["journal"][1]=encoded(entry) if compact else entry
         with pytest.raises(BacktestError): PineStream.restore(runtime,edited,cancel)
         stream.close()
         recovered=PineStream.restore(runtime,saved,cancel)
@@ -91,6 +94,47 @@ def test_actual_worker_keeps_forming_state_and_replays_identical_deltas_after_re
     finally:
         stream.close()
         if recovered is not None: recovered.close()
+
+
+@pytest.mark.parametrize("compact", [False, True])
+def test_journal_observations_keep_only_final_rebase_and_require_exact_group_length(compact):
+    commands = [dict(operation="stream_observe", observation={"old": True}),
+                dict(operation="stream_rebase"), dict(operation="stream_begin"),
+                dict(operation="stream_observe", observation={"value": 1}),
+                dict(operation="stream_observe", observation={"value": True}),
+                dict(operation="stream_commit")]
+    entries = [dict(command=command, result_sha256="receipt") for command in commands]
+    saved = dict(contract=COMPACT_JOURNAL_CONTRACT if compact else JOURNAL_CONTRACT,
+                 journal=[encoded(entry) for entry in entries] if compact else entries)
+    assert canonical_observations(saved) == [{"value": 1}, {"value": True}]
+    assert observations_match(saved, [[], [{"value": 1}, {"value": True}]])
+    assert not observations_match(saved, [[{"value": 1}]])
+    assert not observations_match(saved, [[{"value": 1}, {"value": True}, {}]])
+    assert not observations_match(saved, [[{"value": True}, {"value": 1}]])
+
+
+@installed
+@pytest.mark.parametrize("damage", ["json", "receipt", "noncanonical", "missing", "type"])
+def test_compact_checkpoint_rejects_corruption_before_returning_a_restored_stream(damage):
+    runtime, wire = runtime_for("external_strategy")
+    cancel = threading.Event()
+    stream = PineStream(runtime, wire, dict(source=SOURCE, parameters={}, context=dict(symbol="A", timeframe="1")), cancel)
+    try:
+        stream.begin(observation(0,0)["evaluation"]["bar"], bar_state="realtime")
+        stream.observe(observation(0,0))
+        saved = stream.checkpoint(compact=True)
+        if damage == "json": saved["journal"][0] = "{"
+        if damage == "receipt":
+            entry = journal_entry(saved,0); entry["result_sha256"] = "wrong"
+            saved["journal"][0] = encoded(entry)
+        if damage == "noncanonical": saved["journal"][0] += " "
+        if damage == "missing": saved["journal"].pop()
+        if damage == "type": saved["journal"][0] = journal_entry(saved,0)
+        assert not stream.matches_checkpoint(saved)
+        with pytest.raises(BacktestError):
+            PineStream.restore(runtime, saved, cancel)
+    finally:
+        stream.close()
 
 
 @installed

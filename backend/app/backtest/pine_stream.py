@@ -7,12 +7,14 @@ from copy import deepcopy
 import hashlib
 import json
 import time
+from itertools import zip_longest
 
 from .errors import BacktestError
 from .native import encoded
 from .native_session import SessionWorker, STREAM_CONTRACT, SCHEDULE_CONTRACT, TICK_CONTRACT
 
 JOURNAL_CONTRACT = "candlescope.pine-stream-journal/1"
+COMPACT_JOURNAL_CONTRACT = "candlescope.pine-stream-journal/2"
 WINDOW_FEEDBACK_CONTRACT = "candlescope.pine-window-feedback/1"
 REALTIME_WINDOW_CONTRACT = "candlescope.pine-realtime-window/1"
 
@@ -28,14 +30,46 @@ def digest(value):
                                      ensure_ascii=False, allow_nan=False).encode("utf-8")).hexdigest()
 
 
-def canonical_observations(saved):
+def journal_entry(saved, index):
+    """Decode one complete entry; compact journals never drop commands."""
+    entry = saved["journal"][index]
+    if saved.get("contract") == COMPACT_JOURNAL_CONTRACT:
+        if not isinstance(entry, str):
+            raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "invalid compact Pine journal entry")
+        try:
+            entry = json.loads(entry)
+        except ValueError as exc:
+            raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "invalid compact Pine journal JSON") from exc
+    if (not isinstance(entry, dict) or set(entry) != {"command", "result_sha256"}
+            or not isinstance(entry["command"], dict) or not isinstance(entry["result_sha256"], str)):
+        raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "invalid Pine journal entry")
+    return entry
+
+
+def iter_canonical_observations(saved):
     """Only observations after the final plan reset belong to the live ledger."""
-    observations=[]
-    for entry in saved.get("journal",[]):
-        command=entry.get("command",{})
-        if command.get("operation")=="stream_rebase": observations.clear()
-        elif command.get("operation")=="stream_observe": observations.append(command.get("observation"))
-    return observations
+    entries = saved.get("journal", [])
+    start = 0
+    for index in range(len(entries) - 1, -1, -1):
+        if journal_entry(saved, index)["command"].get("operation") == "stream_rebase":
+            start = index + 1
+            break
+    for index in range(start, len(entries)):
+        command = journal_entry(saved, index)["command"]
+        if command.get("operation") == "stream_observe":
+            yield command.get("observation")
+
+
+def canonical_observations(saved):
+    return list(iter_canonical_observations(saved))
+
+
+def observations_match(saved, groups):
+    from .native_replay_storage import same_json
+    missing = object()
+    return all(left is not missing and right is not missing and same_json(left, right)
+               for left, right in zip_longest((item for group in groups for item in group),
+                    iter_canonical_observations(saved), fillvalue=missing))
 
 
 def seal_observation_group(groups):
@@ -203,26 +237,31 @@ class PineStream:
     def output(self, *, include_intents=False):
         return self._request(dict(operation="stream_snapshot", include_intents=include_intents))
 
-    def _checkpoint_header(self):
-        return dict(contract=JOURNAL_CONTRACT, wire=self.wire, opening=self.opening,
+    def _checkpoint_header(self, *, compact=False):
+        return dict(contract=COMPACT_JOURNAL_CONTRACT if compact else JOURNAL_CONTRACT, wire=self.wire, opening=self.opening,
                              cursor=self.cursor, intents=self.intents, passes=self.passes, bar_open=self.bar_open,
                              input_skip=self.input_skip, last_sha256=digest(self.last))
 
-    def checkpoint(self,*,detached=True):
-        value=self._checkpoint_header()
+    def checkpoint(self,*,detached=True,compact=False):
+        value=self._checkpoint_header(compact=compact)
         if detached:
             value=deepcopy(value)
         # Each decoded entry is already owned by this new checkpoint. Public
         # mutation can never alter the immutable active transcript.
-        value["journal"]=[json.loads(entry) for entry in self._journal]
+        # Internal durable checkpoints can retain the immutable complete JSON
+        # entries. The default public shape remains the original decoded v1.
+        value["journal"]=list(self._journal) if compact else [json.loads(entry) for entry in self._journal]
         return value
 
     def matches_checkpoint(self, saved):
+        compact = isinstance(saved,dict) and saved.get("contract") == COMPACT_JOURNAL_CONTRACT
         if (not isinstance(saved,dict)
-                or self._checkpoint_header()!={key:value for key,value in saved.items() if key!="journal"}
+                or self._checkpoint_header(compact=compact)!={key:value for key,value in saved.items() if key!="journal"}
                 or not isinstance(saved.get("journal"),list) or len(saved["journal"])!=len(self._journal)):
             return False
         try:
+            if compact:
+                return saved["journal"] == self._journal
             return all(encoded(entry)==original for entry,original in zip(saved["journal"],self._journal,strict=True))
         except (TypeError,ValueError):
             return False
@@ -230,14 +269,14 @@ class PineStream:
     @classmethod
     def restore(cls, runtime, payload, cancelled, *, deadline=None, verify=None, _owned_checkpoint=False):
         saved = payload if _owned_checkpoint else deepcopy(payload)
-        if (saved.get("contract") != JOURNAL_CONTRACT or not isinstance(saved.get("journal"), list)
+        if (saved.get("contract") not in {JOURNAL_CONTRACT, COMPACT_JOURNAL_CONTRACT} or not isinstance(saved.get("journal"), list)
                 or any(type(saved.get(key)) is not int or saved[key]<0 for key in ("cursor", "intents", "passes", "input_skip"))
                 or type(saved.get("bar_open")) is not bool):
             raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "invalid Pine stream journal")
         stream = cls(runtime, saved["wire"], saved["opening"], cancelled, deadline=deadline)
         try:
             for start in range(0, len(saved["journal"]), 8):
-                entries = saved["journal"][start:start+8]
+                entries = [journal_entry(saved, index) for index in range(start, min(start+8, len(saved["journal"])))]
                 results = stream._request_many([entry["command"] for entry in entries], _owned_commands=True)
                 for entry, result in zip(entries, results, strict=True):
                     if digest(result) != entry["result_sha256"]:
