@@ -12,6 +12,7 @@ from app.data_preparation.repository import PreparationRepository
 from app.data_preparation.service import PreparationService
 from app.replay.service import ReplayService
 from app.replay.storage import ReplaySQLiteStore
+from app.replay.training.errors import TrainingRunError
 from app.replay.training.models import TrainingRunSetupRequest
 from tests.fixtures.replay.service_fakes import replay_settings
 from tests.test_data_preparation import START, async_test, bars, terminal
@@ -19,16 +20,16 @@ from tests.test_replay_v2_run_centric import _setup_payload
 
 
 @pytest.mark.parametrize("progressive", [True, False])
-@pytest.mark.parametrize("catalog", ["warm", "refresh", "recover"])
+@pytest.mark.parametrize("catalog", ["warm", "refresh", "recover", "recover_selection"])
 @async_test
 async def test_first_history_preparation_and_metadata_recovery(tmp_path, progressive, catalog):
-    available = catalog == "warm"
+    available = catalog in {"warm", "recover_selection"}
     refreshes = []
 
     async def refresh(exchange, market):
         nonlocal available
         refreshes.append((exchange, market))
-        if catalog == "refresh":
+        if catalog in {"refresh", "recover_selection"}:
             available = True
 
     replay = ReplayService(
@@ -43,6 +44,19 @@ async def test_first_history_preparation_and_metadata_recovery(tmp_path, progres
         instrument_metadata_refresher=refresh,
     )
     await replay.start()
+    if catalog == "recover_selection":
+        select_initial_market = replay.training.select_initial_market
+        interrupted = False
+
+        async def interrupt_selection(*args, **kwargs):
+            nonlocal available, interrupted
+            if not interrupted:
+                interrupted = True
+                available = False
+                raise TrainingRunError("INSTRUMENT_METADATA_UNAVAILABLE", "interrupted before first market binding", status_code=503)
+            return await select_initial_market(*args, **kwargs)
+
+        replay.training.select_initial_market = interrupt_selection
     inventory, acquisitions = {}, []
 
     class Coordinator:
@@ -77,7 +91,7 @@ async def test_first_history_preparation_and_metadata_recovery(tmp_path, progres
                 "display_interval": "1h", "progressive": progressive})
             assert response.status_code == 202, response.text
             job_id = response.json()["id"]
-            if catalog == "recover":
+            if catalog in {"recover", "recover_selection"}:
                 async def waiting():
                     while True:
                         job = repository.get(job_id)
@@ -94,7 +108,10 @@ async def test_first_history_preparation_and_metadata_recovery(tmp_path, progres
                 await service.shutdown()
                 # Restart after the persisted retry deadline with the original
                 # journal, published input and newly available catalog.
-                available = True
+                available = catalog == "recover"
+                if catalog == "recover_selection":
+                    committed = await replay.training.store.get_run(f"prepared-{job_id}")
+                    assert committed["adapter_session_id"] is None
                 repository = PreparationRepository(repository.path)
                 repository.now = lambda: failed["next_attempt_ms"] + 1
                 service = PreparationService(repository, adapter)
@@ -104,7 +121,7 @@ async def test_first_history_preparation_and_metadata_recovery(tmp_path, progres
             assert ready["state"] == "READY", ready
             assert ready["result"]["run"]["adapter_session_id"]
             assert acquisitions and len(acquisitions) == len(set(acquisitions))
-            if catalog == "recover":
+            if catalog in {"recover", "recover_selection"}:
                 assert all(acquisitions.count(item) == 1 for item in first_downloads)
             assert refreshes == ([] if catalog == "warm" else [("binance", "spot")])
             # A launch receipt lost after consumer commit can be replayed while

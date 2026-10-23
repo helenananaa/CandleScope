@@ -84,10 +84,16 @@ class TrainingAdmissionService:
                         "preparation belongs to another setup",
                         status_code=409,
                     )
+                run = await self.store.get_run(run_id)
+                if _preparation_market_identity is not None and not run.get("adapter_session_id"):
+                    # Run creation and initial market binding are separate
+                    # durable steps. Resume the identity dependency if a crash
+                    # left the prepared run awaiting its first market.
+                    await self.replay_service.prepare_instrument_metadata(*_preparation_market_identity)
                 return {
                     "protocol": REPLAY_V2_PROTOCOL,
                     "created": False,
-                    "run": await self.store.get_run(run_id),
+                    "run": run,
                 }
         if _preparation_market_identity is not None:
             await self.replay_service.prepare_instrument_metadata(*_preparation_market_identity)
