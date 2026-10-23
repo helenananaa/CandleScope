@@ -73,7 +73,7 @@ class ReplayWorker:
         deadline=time.monotonic()+120
         saved=(resume or {}).get("clock",{}).get("stream")
         if not (self.stream is not None and isinstance(saved,dict)
-                and not self.stream.bar_open and self.stream.checkpoint()==saved
+                and not self.stream.bar_open and self.stream.checkpoint(detached=False)==saved
                 and self.history==resume.get("history")):
             self.close()
             self.stream=open_stream(self.plugin,self.wire,cancelled,deadline,resume=resume)
@@ -116,7 +116,9 @@ def validate_state(wire,state):
 class PrintTickClock:
     def __init__(self,stream,kernel,orders,wire,*,state=None):
         self.stream,self.kernel,self.orders,self.wire=stream,kernel,orders,wire
-        state=deepcopy(state or {})
+        restoring=bool(state)
+        state=deepcopy({key:value for key,value in (state or {}).items()
+            if key in {"groups","accounts","history","bar_cursor","last_sequence","event_cursor","request_feed"}})
         self.groups,self.accounts,self.history=(state.get(key,[]) for key in ("groups","accounts","history"))
         self.cursor=state.get("bar_cursor",0)
         self.last_sequence=state.get("last_sequence",0)
@@ -126,7 +128,7 @@ class PrintTickClock:
         # accumulator is reconstructed only by replaying its physical prints.
         self.visible_volume=Decimal(0)
         self.feed=from_wire(wire)
-        if self.feed is not None and state:
+        if self.feed is not None and restoring:
             validate_replay(self.feed,state.get("request_feed"),pass_observations(self.groups,scheduled=True))
         if stream.bar_open or stream.cursor!=max(0,self.cursor-stream.input_skip):
             raise BacktestError("NATIVE_IDENTITY_MISMATCH","physical Pine and ledger cursors differ")
@@ -164,7 +166,9 @@ class PrintTickClock:
         if first:
             self.groups.append([])
             self.accounts.append(None)
-        self.groups[-1].append(deepcopy(observation))
+        # This new observation already owns its bar, scalar feedback and feed
+        # deltas; the evaluator journal takes its own detached command.
+        self.groups[-1].append(observation)
         self.accounts[-1]=feedback
         self.history.extend(current)
         intents=self.orders.translate(current,event.sequence)
@@ -242,7 +246,9 @@ def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=
     if not capture_checkpoint:
         return latest,clock.history,clock.accounts,passes,{"groups":clock.groups},None
     saved=dict(contract=CONTRACT,bar_cursor=clock.cursor,last_sequence=clock.last_sequence,event_cursor=clock.event_cursor,
-        groups=clock.groups,accounts=clock.accounts,history=clock.history,stream=stream.checkpoint(),latest=latest)
+        groups=clock.groups,accounts=clock.accounts,history=clock.history,stream=stream.checkpoint(detached=False),latest=latest)
     if clock.feed is not None: saved["request_feed"]=clock.feed.snapshot()
-    last_request=dict(bars=deepcopy(wire["bars"][:clock.cursor]),execution_schedule=deepcopy(clock.groups))
+    # make_state normalizes and detaches the complete account checkpoint before
+    # the exclusively owned interpreter can execute another command.
+    last_request=dict(bars=wire["bars"][:clock.cursor],execution_schedule=clock.groups)
     return latest,clock.history,clock.accounts,passes,saved,last_request

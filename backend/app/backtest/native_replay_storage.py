@@ -17,6 +17,7 @@ from .native_checkpoint import pack, unpack
 
 SCHEMA = "native.replay-result/1"
 MAX_DELTAS = 64
+PRIVATE_CACHE_WRITE_BYTES = 1024 * 1024
 
 
 def checksum(raw):
@@ -140,12 +141,18 @@ class ResultJournal:
             raw = pack(value) if key.startswith("host:") else encoded(value)
             self.db.execute("INSERT OR REPLACE INTO native_replay_result_bases VALUES (?,?,?,?,?)", (key, revision, revision, raw, checksum(raw)))
             self.db.execute("DELETE FROM native_replay_result_deltas WHERE id=?", (key,))
+            if key.startswith("host:") and len(raw.encode("utf-8")) > PRIVATE_CACHE_WRITE_BYTES:
+                self.cache.pop(key, None)
+                return revision
             detached = unpack(raw) if key.startswith("host:") else json.loads(raw)
         else:
             changes = difference(previous, value)
             raw = pack(changes) if key.startswith("host:") else encoded(changes)
             self.db.execute("INSERT INTO native_replay_result_deltas VALUES (?,?,?,?)", (key, revision, raw, checksum(raw)))
             self.db.execute("UPDATE native_replay_result_bases SET revision=? WHERE id=?", (revision, key))
+            if key.startswith("host:") and len(raw.encode("utf-8")) > PRIVATE_CACHE_WRITE_BYTES:
+                self.cache.pop(key, None)
+                return revision
             detached = apply_changes(previous, unpack(raw) if key.startswith("host:") else json.loads(raw))
         self._remember(key, revision, detached)
         return revision

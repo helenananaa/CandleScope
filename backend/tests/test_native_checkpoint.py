@@ -40,14 +40,28 @@ def test_corrupt_or_oversized_compression_cannot_replace_a_checkpoint(damage):
         codec.unpack(encoded(envelope))
 
 
-def test_host_journal_recovers_compressed_base_and_delta_from_only_its_database():
+def test_host_journal_recovers_compressed_base_and_delta_from_only_its_database(monkeypatch):
     import sqlite3
+    from app.backtest import native_replay_storage as storage
+    monkeypatch.setattr(storage,"PRIVATE_CACHE_WRITE_BYTES",64)
+    decoded=[]
+    unpack=storage.unpack
+    def observe_unpack(raw):
+        decoded.append(len(raw))
+        return unpack(raw)
+    monkeypatch.setattr(storage,"unpack",observe_unpack)
     db = sqlite3.connect(":memory:")
     journal = ResultJournal(db)
     first = {"history":["first"*250 for _ in range(1500)]}
     assert journal.save("host:replay", first) == 0
+    assert decoded==[] and "host:replay" not in journal.cache
+    assert same_json(journal.load("host:replay"),first)
+    decoded.clear()
     final = {"history":[*first["history"], *("second"*250 for _ in range(1500))]}
     assert journal.save("host:replay", final) == 1
+    # Persisting a private delta does not allocate another complete parsed
+    # account; the next reader reconstructs and validates the database instead.
+    assert decoded==[] and "host:replay" not in journal.cache
     assert same_json(ResultJournal(db).load("host:replay", expected_revision=1), final)
     db.execute("UPDATE native_replay_result_deltas SET checksum='broken'")
     with pytest.raises(ValueError, match="checksum"):

@@ -80,6 +80,15 @@ complete checkpoint; ordinary batch execution avoids an unused private
 checkpoint copy. Journaled commands
 take one owned copy before the transport, preserving caller-mutation isolation.
 
+Replay retains the original report's seal/authority and required input settings
+instead of a second complete batch report/configuration. Captured clocks borrow
+their exclusively owned stream transcript until the existing final JSON
+normalization boundary detaches it; public stream snapshots remain detached.
+Matching clocks copy only their mutable histories and cursors. Private journal
+writes over 1 MiB defer parsed cache materialization to the next verified read;
+small incremental deltas retain their warm cache. On-disk base/delta checksums,
+revisions, complete restoration and default GET/export content are unchanged.
+
 Controlled tests cover all nine supported mode/callback combinations, spot cash
 and inventory, pending queues/liquidity, backward seek, replay-service/interpreter-
 worker restart, requested data,

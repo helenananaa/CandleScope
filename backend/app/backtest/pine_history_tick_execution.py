@@ -21,7 +21,7 @@ class ReplayWorker:
         deadline=time.monotonic()+120
         saved=(resume or {}).get("clock",{}).get("stream")
         reusable=(self.stream is not None and isinstance(saved,dict)
-                  and not self.stream.bar_open and self.stream.checkpoint()==saved)
+                  and not self.stream.bar_open and self.stream.checkpoint(detached=False)==saved)
         if not reusable:
             self.close()
             self.stream=open_stream(self.plugin,self.wire,cancelled,deadline,resume=resume)
@@ -106,7 +106,7 @@ def prepare_window(stream,plugin,wire,cancelled,deadline):
 
 def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=False,capture_checkpoint=True):
     from .workbench_sensitivity import check_control
-    state=deepcopy(state or {})
+    state=state or {}
     cursor=state.get("bar_cursor",0)
     target=len(wire["bars"]) if target is None else target
     if (stream.bar_open or stream.cursor+stream.input_skip!=max(cursor,stream.input_skip)
@@ -142,8 +142,10 @@ def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=
         return latest,clock.history,clock.accounts,passes,{"groups":clock.groups},None
     saved=dict(contract=wire["pine_bar_path_contract"],history_tick_contract=CONTRACT,bar_cursor=cursor,
                last_sequence=kernel.path_sequence,groups=clock.groups,accounts=clock.accounts,history=clock.history,
-               stream=stream.checkpoint(),latest=latest)
+               stream=stream.checkpoint(detached=False),latest=latest)
     if clock.feed is not None: saved["request_feed"]=clock.feed.snapshot()
     if wire.get("pine_v2_bar_contract"): saved["source_sequence"]=kernel.source_sequence
-    last_request=dict(bars=deepcopy(wire["bars"][:cursor]),execution_schedule=deepcopy(clock.groups))
+    # The coordinator's make_state JSON boundary detaches these values before
+    # another command can advance this worker-owned stream.
+    last_request=dict(bars=wire["bars"][:cursor],execution_schedule=clock.groups)
     return latest,clock.history,clock.accounts,passes,saved,last_request

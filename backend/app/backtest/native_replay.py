@@ -232,6 +232,12 @@ class NativeReplay:
             with self.native.lock:
                 current = self.get(key)
                 origin = self.native.get(current["run_id"])
+                # Replay needs the original seal/authority and input settings,
+                # not a second resident copy of the complete batch report or
+                # uploaded physical-event configuration.
+                origin["result"] = {name: origin["result"].get(name) for name in ("account_authority", "report_hash")}
+                origin["config"] = {name: origin["config"][name] for name in ("language", "interval", "contexts")
+                                    if name in origin["config"]}
                 wire = self._input(current["run_id"])
                 external=origin["execution_mode"]=="CANDLESCOPE"
                 external_state=self._host_state(key) if external else None

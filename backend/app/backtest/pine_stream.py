@@ -159,10 +159,11 @@ class PineStream:
     def output(self, *, include_intents=False):
         return self._request(dict(operation="stream_snapshot", include_intents=include_intents))
 
-    def checkpoint(self):
-        return deepcopy(dict(contract=JOURNAL_CONTRACT, wire=self.wire, opening=self.opening, journal=self.journal,
+    def checkpoint(self,*,detached=True):
+        value=dict(contract=JOURNAL_CONTRACT, wire=self.wire, opening=self.opening, journal=self.journal,
                              cursor=self.cursor, intents=self.intents, passes=self.passes, bar_open=self.bar_open,
-                             input_skip=self.input_skip, last_sha256=digest(self.last)))
+                             input_skip=self.input_skip, last_sha256=digest(self.last))
+        return deepcopy(value) if detached else value
 
     @classmethod
     def restore(cls, runtime, payload, cancelled, *, deadline=None, verify=None):
@@ -178,7 +179,7 @@ class PineStream:
                 if digest(result) != entry["result_sha256"]:
                     raise BacktestError("LOOKAHEAD_VIOLATION", "Pine stream replay changed an observed decision")
                 if verify is not None: verify(entry["command"],result)
-            if stream.checkpoint() != saved:
+            if stream.checkpoint(detached=False) != saved:
                 raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine stream checkpoint cursor differs")
             return stream
         except Exception:

@@ -16,9 +16,11 @@ class HistoryTickClock:
         self.stream, self.kernel, self.orders, self.wire = stream, kernel, orders, wire
         self.feed = from_wire(wire)
         self.positions = {bar["time"]: index for index, bar in enumerate(wire["bars"])}
-        state = deepcopy(state or {})
+        restoring = bool(state)
+        state = deepcopy({key:value for key,value in (state or {}).items()
+                          if key in {"groups","accounts","history","request_feed"}})
         self.groups, self.accounts, self.history = (state.get(key,[]) for key in ("groups","accounts","history"))
-        if self.feed is not None and state:
+        if self.feed is not None and restoring:
             validate_replay(self.feed,state.get("request_feed"),pass_observations(self.groups,scheduled=True))
         self.visible = None
         self.index = None
@@ -58,7 +60,9 @@ class HistoryTickClock:
         current = result["intents"]
         if len(current)>64:
             raise BacktestError("BUDGET_EXCEEDED", "at most 64 intents per Pine observation")
-        self.groups[-1].append(deepcopy(observation))
+        # Bar, feedback and requested deltas are owned snapshots created above;
+        # PineStream independently detaches its command before transport.
+        self.groups[-1].append(observation)
         self.accounts[-1] = feedback
         self.history.extend(current)
         self.orders.configure(result.get("pyramiding",1))
