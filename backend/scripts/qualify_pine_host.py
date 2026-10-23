@@ -34,7 +34,7 @@ MODULES = (
     "test_chart_pine_callbacks", "test_external_feedback", "test_external_requested_data",
     "test_pine_print_account", "test_pine_physical_admission", "test_pine_workbench_v2_print",
     "test_pine_workbench_v2_print_costs", "test_pine_v2_book_settlement", "test_pine_workbench_v2_print_preparation",
-    "test_pine_tick_transport", "test_native_checkpoint",
+    "test_pine_tick_transport", "test_native_checkpoint", "test_native_checkpoint_validation",
     "test_pine_indicator_observations",
     "test_pine_stream",
     "test_pine_history_tick_workbench", "test_pine_history_tick_clock", "test_pine_history_vertices",

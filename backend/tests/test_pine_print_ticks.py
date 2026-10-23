@@ -129,6 +129,94 @@ def test_consumed_job_resume_failure_keeps_committed_account_and_public_resume_d
     assert encoded(settle(replay,key)["result"])==encoded(origin["result"])
 
 
+@pytest.mark.parametrize("mode", ["BAR_APPROX", "TRADE_TAPE", "BOOK_DEPTH"])
+def test_cold_large_seek_replaces_only_the_verified_private_base(runtime, monkeypatch, mode):
+    from app.backtest import native_replay
+    from app.backtest.native import encoded
+    from tests.test_pine_history_tick_workbench import config as history_config
+    host, main = runtime
+    value = (history_config(main, "LINEAR_PERP_ONE_WAY_V2") if mode == "BAR_APPROX"
+             else config(main, mode, False, "LINEAR_PERP_ONE_WAY_V2"))
+    value["cost_sensitivity_mode"] = "SKIP"
+    origin = terminal(host.native, host.native.create(value, "large-seek-base")["run_id"])
+    assert origin["state"] == "COMPLETED", origin.get("error")
+    replay = host.native.replay
+    created = replay.create(origin["run_id"]); key = created["replay_id"]
+    replay.command(key, created["revision"], "seek", 3)
+    middle = settle(replay, key)
+    snapshot = replay.snapshot(key, middle["revision"])["snapshots"][0]["snapshot_id"]
+    replay.shutdown()
+    host.native.replay = replay = native_replay.NativeReplay(host.native)
+    replay.restore(key, replay.get(key)["revision"], snapshot)
+    loads, saves = [], []
+    load, save = replay.results.load, replay.results.save
+    def observed_load(name, **options):
+        if name == "host:" + key: loads.append(options)
+        return load(name, **options)
+    def observed_save(name, value, **options):
+        if name == "host:" + key: saves.append(options)
+        return save(name, value, **options)
+    # Exercise the large-seek policy with this small semantic fixture. The
+    # original threshold is independently exercised by the 16K resource matrix.
+    with monkeypatch.context() as patch:
+        patch.setattr(native_replay, "PRIVATE_REBASE_MIN_BARS", 2)
+        patch.setattr(replay.results, "load", observed_load)
+        patch.setattr(replay.results, "save", observed_save)
+        replay.command(key, replay.get(key)["revision"], "seek", created["total"])
+        final = settle(replay, key)
+    assert encoded(final["result"]) == encoded(origin["result"])
+    assert len(loads) == 1 and loads[0]["validation"] is True
+    assert len(saves) == 1 and saves[0]["validated_base"] is not None
+    revision, base = host.native.db.execute("SELECT revision,base_revision FROM native_replay_result_bases WHERE id=?", ("host:" + key,)).fetchone()
+    assert revision == base
+    assert not host.native.db.execute("SELECT * FROM native_replay_result_deltas WHERE id=?", ("host:" + key,)).fetchall()
+    assert replay._host_state(key)["cursor"] == created["total"]
+
+
+def test_changed_private_storage_after_resume_validation_cannot_publish_a_new_cursor(runtime, monkeypatch):
+    import time
+    from app.backtest import native_replay
+    from app.backtest.native_replay_storage import checksum
+    host, main = runtime
+    origin = terminal(host.native, host.native.create(config(main, "BOOK_DEPTH", False,
+        "LINEAR_PERP_ONE_WAY_V2"), "changed-base")["run_id"])
+    assert origin["state"] == "COMPLETED", origin.get("error")
+    replay = host.native.replay
+    created = replay.create(origin["run_id"]); key = created["replay_id"]
+    replay.command(key, created["revision"], "seek", 3)
+    middle = settle(replay, key)
+    worker = replay.workers[key]
+    execute = worker.execute
+    original = host.native.db.execute("SELECT payload,checksum FROM native_replay_result_bases WHERE id=?", ("host:" + key,)).fetchone()
+    def changed_after_execution(*args, **options):
+        value = execute(*args, **options)
+        with host.native.lock, host.native.db:
+            raw = '{"changed":true}'
+            host.native.db.execute("UPDATE native_replay_result_bases SET payload=?,checksum=? WHERE id=?",
+                                   (raw, checksum(raw), "host:" + key))
+        return value
+    with monkeypatch.context() as patch:
+        patch.setattr(native_replay, "PRIVATE_REBASE_MIN_BARS", 2)
+        patch.setattr(worker, "execute", changed_after_execution)
+        replay.command(key, middle["revision"], "seek", created["total"])
+        deadline = time.monotonic() + 25
+        while time.monotonic() < deadline:
+            with host.native.lock:
+                if key not in replay.jobs: break
+            time.sleep(.02)
+        else: pytest.fail("changed-base replay did not stop")
+    failed = replay.get(key)
+    assert failed["state"] == "FAILED" and "checksum changed" in failed["error"]["message"]
+    assert failed["cursor"] == middle["cursor"] and failed["result"] == middle["result"]
+    # Repair only the deliberately damaged test row, then prove retry recovers
+    # from the original committed account instead of the rejected new state.
+    with host.native.lock, host.native.db:
+        host.native.db.execute("UPDATE native_replay_result_bases SET payload=?,checksum=? WHERE id=?",
+                               (*original, "host:" + key))
+    replay.command(key, failed["revision"], "seek", created["total"])
+    assert settle(replay, key)["result"] == origin["result"]
+
+
 @pytest.mark.parametrize("account",["LINEAR_PERP_ONE_WAY_V1","SPOT_CASH_V1","LINEAR_PERP_ONE_WAY_V2"])
 @pytest.mark.parametrize("mode",MODES)
 @pytest.mark.parametrize("callbacks",[False,True])

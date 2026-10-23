@@ -18,6 +18,9 @@ from app.data_engine.interval_policy import parse_interval_spec
 from .errors import BacktestError
 
 _KEEP_STATE=object()
+# Large seeks can replace the private base after rechecking the prior read's
+# validated bytes. Sequential play and small steps retain structural deltas.
+PRIVATE_REBASE_MIN_BARS=64
 
 
 class NativeReplay:
@@ -45,7 +48,7 @@ class NativeReplay:
                 self._save(self.get(key) | {"state": "INTERRUPTED", "revision": record["revision"]})
         db.commit()
 
-    def _save(self, record, *, external_state=_KEEP_STATE, restoring=False):
+    def _save(self, record, *, external_state=_KEEP_STATE, restoring=False, external_validation=None):
         from .native import encoded
         from .native_replay_storage import SCHEMA
         header = {**record, "result": None, "_resultStorage": SCHEMA}
@@ -55,7 +58,8 @@ class NativeReplay:
             with self.native.db:
                 if external_state is not _KEEP_STATE:
                     header["_externalStateRevision"]=self.results.save("host:"+record["replay_id"],external_state,
-                        **({"compare_base_bytes":True} if restoring else {}))
+                        **({"compare_base_bytes":True} if restoring else {}),
+                        **({"validated_base":external_validation} if external_validation is not None else {}))
                 else:
                     old=self.native.db.execute("SELECT record FROM native_replays WHERE id=?",(record["replay_id"],)).fetchone()
                     if old and "_externalStateRevision" in (previous:=json.loads(old[0])):
@@ -105,15 +109,22 @@ class NativeReplay:
             return [{k: v for k, v in json.loads(row[0]).items() if k not in {"result", "_resultStorage", "_resultRevision", "_externalStateRevision"}}
                     for row in self.native.db.execute("SELECT record FROM native_replays ORDER BY rowid DESC LIMIT 100")]
 
-    def _host_state(self,key,*,detached=True):
+    def _host_state(self,key,*,detached=True,validation=False):
         raw=self.native.db.execute("SELECT record FROM native_replays WHERE id=?",(key,)).fetchone()
         header=json.loads(raw[0])
         revision=header.get("_externalStateRevision")
-        state=None if revision is None else self.results.load("host:"+key,expected_revision=revision)
+        receipt=None
+        if revision is None:
+            state=None
+        elif validation:
+            state,receipt=self.results.load("host:"+key,expected_revision=revision,validation=True)
+        else:
+            state=self.results.load("host:"+key,expected_revision=revision)
         if header.get("execution_mode")=="CANDLESCOPE" and ((header["cursor"]==0 and state is not None)
                 or (header["cursor"] and (not state or state.get("cursor")!=header["cursor"]))):
             raise BacktestError("NATIVE_IDENTITY_MISMATCH","external account state does not match replay cursor")
-        return copy.deepcopy(state) if detached else state
+        state=copy.deepcopy(state) if detached else state
+        return (state,receipt) if validation else state
 
     def _input(self, run_id):
         if run_id in self._inputs:
@@ -128,11 +139,11 @@ class NativeReplay:
             self._inputs.popitem(last=False)
         return wire
 
-    def _take_host_state(self,key):
+    def _take_host_state(self,key,*,validation=False):
         # Active jobs exclude same-key snapshot/restore/write operations. The
         # cache's validated JSON value becomes this job's private owned input;
         # default inspection and public snapshots still return detached values.
-        state=self._host_state(key,detached=False)
+        state=self._host_state(key,detached=False,validation=validation)
         self.results.cache.pop("host:"+key,None)
         return state
 
@@ -252,7 +263,11 @@ class NativeReplay:
                                     if name in origin["config"]}
                 wire = self._input(current["run_id"])
                 external=origin["execution_mode"]=="CANDLESCOPE"
-                external_state=self._take_host_state(key) if external else None
+                external_validation=None
+                if external and action=="seek" and abs(target-current["cursor"])>=PRIVATE_REBASE_MIN_BARS:
+                    external_state,external_validation=self._take_host_state(key,validation=True)
+                else:
+                    external_state=self._take_host_state(key) if external else None
             if digest(wire) != current["input_hash"]:
                 raise BacktestError("NATIVE_IDENTITY_MISMATCH", "replay input changed")
             plugin = origin.get("runtime_launch") or self.native.resolver(origin["config"]["language"])
@@ -301,7 +316,7 @@ class NativeReplay:
                     record = current
                     record.update(cursor=count, result=result, method=method, revision=record["revision"] + 1,
                                   state="COMPLETED" if count == record["total"] else "RUNNING" if action == "play" else "PAUSED")
-                    self._save(record,**({"external_state":external_state} if external else {}))
+                    self._save(record,**({"external_state":external_state,"external_validation":external_validation} if external else {}))
                 if action == "play" and cancelled.wait(0.1):
                     return
             with self.native.lock:

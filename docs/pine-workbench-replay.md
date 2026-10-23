@@ -100,6 +100,23 @@ before avoiding a second parsed account. JSON decompression releases its byte
 buffer before building the parsed graph, and full identity/cursor/checksum checks
 remain in force.
 
+For seeks spanning at least 64 bars, the initial private-account read fully
+decodes its base and every delta and records their revisions and checksums in an
+in-process receipt bound to that journal and account. Saving the resulting
+checkpoint reserves the SQLite writer, checks the same stored bytes and complete
+delta sequence again, and writes a new full base in the public cursor transaction.
+It avoids reparsing the old account solely to calculate a structural delta.
+Recomputed database checksums do not bypass the original receipt; corruption,
+stale revisions and transaction failures preserve the committed public cursor.
+Small seeks and sequential playback retain structural deltas. This optimization
+does not itself establish resource or packaged-application qualification.
+
+The 2026-10-23 validated-base change passed 132 installed-worker checkpoint,
+external/native replay, history-tick, physical-tick and view regression cases,
+with no skips. A separate 60-case storage/view run passed with overlapping
+coverage. Actual-worker cases compare complete cold-restored results and reject
+storage rewritten after execution even when its stored checksum is recomputed.
+
 Controlled tests cover all nine supported mode/callback combinations, spot cash
 and inventory, pending queues/liquidity, backward seek, replay-service/interpreter-
 worker restart, requested data,

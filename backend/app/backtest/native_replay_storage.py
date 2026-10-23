@@ -11,6 +11,7 @@ import json
 import hashlib
 import math
 from collections import OrderedDict
+from dataclasses import dataclass
 
 from .native import encoded
 from .native_checkpoint import pack, unpack
@@ -18,6 +19,16 @@ from .native_checkpoint import pack, unpack
 SCHEMA = "native.replay-result/1"
 MAX_DELTAS = 64
 PRIVATE_CACHE_WRITE_BYTES = 1024 * 1024
+
+
+@dataclass(frozen=True, slots=True)
+class _ValidatedBase:
+    owner: object
+    key: str
+    revision: int
+    base_revision: int
+    base_checksum: str
+    deltas: tuple[tuple[int, str], ...]
 
 
 def checksum(raw):
@@ -89,6 +100,7 @@ class ResultJournal:
     def __init__(self, connection):
         self.db = connection
         self.cache = OrderedDict()
+        self._validation_owner = object()
         connection.execute("CREATE TABLE IF NOT EXISTS native_replay_result_bases (id TEXT PRIMARY KEY, revision INTEGER NOT NULL, base_revision INTEGER NOT NULL, payload TEXT NOT NULL, checksum TEXT NOT NULL)")
         connection.execute("CREATE TABLE IF NOT EXISTS native_replay_result_deltas (id TEXT NOT NULL, revision INTEGER NOT NULL, payload TEXT NOT NULL, checksum TEXT NOT NULL, PRIMARY KEY(id, revision))")
 
@@ -98,16 +110,25 @@ class ResultJournal:
         while len(self.cache) > 2:
             self.cache.popitem(last=False)
 
-    def load(self, key, *, expected_revision=None):
+    def load(self, key, *, expected_revision=None, validation=False):
+        if validation and not key.startswith("host:"):
+            raise ValueError("validated replacement requires a private account")
         revision, base_revision = self.check_revision(key, expected_revision=expected_revision)
-        cached = self.cache.get(key)
+        # A replacement receipt must describe bytes that this read actually
+        # decoded. A possibly stale cached graph cannot certify new DB bytes.
+        if validation:
+            self.cache.pop(key, None)
+        cached = None if validation else self.cache.get(key)
         if cached is not None and cached[0] == revision:
             self.cache.move_to_end(key)
             return cached[1]
         raw, expected_hash = self.db.execute("SELECT payload,checksum FROM native_replay_result_bases WHERE id=?", (key,)).fetchone()
         if checksum(raw) != expected_hash:
             raise ValueError("native replay result base checksum mismatch")
+        base_checksum = expected_hash
         value = unpack(raw) if key.startswith("host:") else json.loads(raw)
+        del raw
+        validated_deltas = []
         expected = base_revision + 1
         for sequence, patch, expected_hash in self.db.execute("SELECT revision,payload,checksum FROM native_replay_result_deltas WHERE id=? ORDER BY revision", (key,)):
             if sequence != expected:
@@ -115,10 +136,16 @@ class ResultJournal:
             if checksum(patch) != expected_hash:
                 raise ValueError("native replay result delta checksum mismatch")
             value = apply_changes(value, unpack(patch) if key.startswith("host:") else json.loads(patch))
+            if validation:
+                validated_deltas.append((sequence, expected_hash))
             expected += 1
+            del patch
         if expected != revision + 1:
             raise ValueError("native replay result journal is incomplete")
         self._remember(key, revision, value)
+        if validation:
+            return value, _ValidatedBase(self._validation_owner, key, revision, base_revision,
+                                         base_checksum, tuple(validated_deltas))
         return value
 
     def check_revision(self, key, *, expected_revision=None):
@@ -131,7 +158,40 @@ class ResultJournal:
             raise ValueError("native replay result revision does not match its cursor")
         return revision, base_revision
 
-    def save(self, key, value, *, compare_base_bytes=False):
+    def _replace_validated(self, key, value, receipt):
+        if (not isinstance(receipt, _ValidatedBase) or receipt.owner is not self._validation_owner
+                or receipt.key != key or not key.startswith("host:")):
+            raise ValueError("invalid private account validation receipt")
+        # Hold the SQLite writer reservation across the recheck and replacement,
+        # including callers whose surrounding connection context has not issued
+        # its first write yet. The caller owns commit/rollback as for save().
+        if not self.db.in_transaction:
+            self.db.execute("BEGIN IMMEDIATE")
+        if self.check_revision(key) != (receipt.revision, receipt.base_revision):
+            raise ValueError("validated native replay result revision changed")
+        raw, expected_hash = self.db.execute("SELECT payload,checksum FROM native_replay_result_bases WHERE id=?", (key,)).fetchone()
+        if checksum(raw) != expected_hash or expected_hash != receipt.base_checksum:
+            raise ValueError("validated native replay result base checksum changed")
+        del raw
+        count = 0
+        for sequence, patch, expected_hash in self.db.execute("SELECT revision,payload,checksum FROM native_replay_result_deltas WHERE id=? ORDER BY revision", (key,)):
+            if (count >= len(receipt.deltas) or (sequence, expected_hash) != receipt.deltas[count]
+                    or checksum(patch) != expected_hash):
+                raise ValueError("validated native replay result delta changed")
+            count += 1
+            del patch
+        if count != len(receipt.deltas):
+            raise ValueError("validated native replay result journal is incomplete")
+        revision = receipt.revision + 1
+        raw = pack(value)
+        self.db.execute("INSERT OR REPLACE INTO native_replay_result_bases VALUES (?,?,?,?,?)", (key, revision, revision, raw, checksum(raw)))
+        self.db.execute("DELETE FROM native_replay_result_deltas WHERE id=?", (key,))
+        self.cache.pop(key, None)
+        return revision
+
+    def save(self, key, value, *, compare_base_bytes=False, validated_base=None):
+        if validated_base is not None:
+            return self._replace_validated(key, value, validated_base)
         row = self.db.execute("SELECT revision,base_revision FROM native_replay_result_bases WHERE id=?", (key,)).fetchone()
         if compare_base_bytes and key.startswith("host:") and row and row[0] == row[1]:
             # A validated snapshot can equal the current full base exactly.
