@@ -971,6 +971,15 @@ WS_SEND_TIMEOUT_SECONDS = float(os.getenv("WS_SEND_TIMEOUT_SECONDS", "2"))
 EVENT_LOOP_LAG_INTERVAL_SECONDS = float(
     os.getenv("EVENT_LOOP_LAG_INTERVAL_SECONDS", "0.01")
 )
+# Full garbage collections stop the event loop for as long as they walk the
+# live heap.  Freeze the startup heap and exclude loaded CCXT market tables
+# from those passes (see app.core.gc_policy); set to 0 to compare.
+GC_FREEZE_STARTUP_HEAP = str(
+    os.getenv("GC_FREEZE_STARTUP_HEAP", "1")
+).strip().lower() in {"1", "true", "yes", "on"}
+GC_UNTRACK_MARKET_TABLES = str(
+    os.getenv("GC_UNTRACK_MARKET_TABLES", "1")
+).strip().lower() in {"1", "true", "yes", "on"}
 
 # Multi-chart K-line transport and process capacity.  These values are hard
 # safety ceilings: environment configuration may tighten them, never expand
