@@ -10,6 +10,7 @@ import {
   replayBoundClosingCapacity,
   replayOrderSideCapacity,
   replayQuantityForShare,
+  replayQuantityForStep,
 } from "../replayOrderSizing.js";
 
 test("percentage submission uses the target side capacity with exact quantity steps", () => {
@@ -211,4 +212,15 @@ test("unknown or invalid maximum does not flag excess capacity", () => {
     assert.equal(availability.sliderDisabled, true);
     assert.equal(availability.quantityExceedsCapacity, false);
   }
+});
+
+test("aligned maximum quantities survive draft and preview quantization", () => {
+  for (const quantity of ["39.27189899", "19.63594949", "0.00000003", "76.27649932"]) {
+    const displayed = replayQuantityForStep(Number(quantity), "0.00000001");
+    assert.equal(displayed, quantity);
+    assert.equal(replayQuantityForStep(Number(displayed), "0.00000001"), quantity);
+    assert.equal(displayed, replayQuantityForShare(quantity, 1, "0.00000001"));
+  }
+  assert.equal(replayQuantityForStep(1.009, "0.005"), "1.005");
+  assert.equal(replayQuantityForStep(0.000000029, "1e-8"), "0.00000002");
 });

@@ -2442,6 +2442,7 @@ export const ja = {
   "replay.liq.liqPrice": "清算価格",
   "replay.liq.bankruptcy": "破産価格",
   "replay.liq.takeover": "テイクオーバー価格",
+  "replay.liq.estimatedFeeAtTrigger": "発動時の推定清算手数料",
   "replay.liq.fee": "清算手数料",
   "replay.liq.l2": "L2 {fidelity} · {levels} レベル · 可視 {qty} · queue exact: false",
   "replay.liq.fill": "約定",

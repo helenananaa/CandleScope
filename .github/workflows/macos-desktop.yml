@@ -61,7 +61,7 @@ jobs:
           # Only the explicit ad-hoc identity is used; no certificate secrets.
           CSC_FOR_PULL_REQUEST: "true"
         run: npm run desktop:package:mac -- --${{ matrix.arch }}
-      - name: Regress shared market inputs and replay indicators with bundled Python
+      - name: Regress replay inputs, indicators and financial boundaries with bundled Python
         working-directory: backend
         env:
           PYTHONDONTWRITEBYTECODE: "1"
@@ -81,6 +81,12 @@ jobs:
             tests/test_replay_indicator_prefix_service.py \
             tests/test_replay_indicator_jobs.py \
             tests/test_replay_tape_indicator_history.py \
+            tests/test_replay_hedge_fixed_funding.py \
+            tests/test_replay_v2_training_hedge_phase5.py \
+            tests/test_replay_v2_training_hedge_phase6.py \
+            tests/test_replay_v2_training_hedge_phase8.py \
+            tests/test_replay_hedge_multitrack_liquidation_fork.py \
+            tests/test_replay_risk.py \
             --junitxml=../output/replay-range-regression.xml
       - name: Verify relocated ZIP and native runtime
         env:

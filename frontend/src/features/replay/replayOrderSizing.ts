@@ -24,6 +24,11 @@ export function replayQuantityForShare(maximum: string, share: number, step: str
   return `${digits.slice(0, -tick.scale)}.${digits.slice(-tick.scale)}`.replace(/\.?0+$/, "");
 }
 
+/** Use the same decimal grid for displayed drafts and submitted quantities. */
+export function replayQuantityForStep(value: string | number, stepText: string): string {
+  return replayQuantityForShare(String(value), 1, stepText) ?? "0";
+}
+
 export interface ReplayMaxQuantityRebaseInput {
   readonly previousMaxQuantity: number | null;
   readonly previousReferencePrice: number | null;

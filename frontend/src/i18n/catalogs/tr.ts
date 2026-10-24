@@ -2143,6 +2143,7 @@ export const tr = {
   "replay.liq.liqPrice": "Tasfiye fiyatı",
   "replay.liq.bankruptcy": "İflas fiyatı",
   "replay.liq.takeover": "Devralma fiyatı",
+  "replay.liq.estimatedFeeAtTrigger": "Tetikleme anındaki tahmini tasfiye ücreti",
   "replay.liq.fee": "Tasfiye ücreti",
   "replay.liq.l2": "L2 {fidelity} · {levels} kademe · görünen {qty} · queue exact: false",
   "replay.liq.fill": "Gerçekleşme",

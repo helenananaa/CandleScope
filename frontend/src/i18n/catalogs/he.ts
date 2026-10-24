@@ -2142,6 +2142,7 @@ export const he = {
   "replay.liq.liqPrice": "מחיר חיסול",
   "replay.liq.bankruptcy": "מחיר פשיטת רגל",
   "replay.liq.takeover": "מחיר השתלטות",
+  "replay.liq.estimatedFeeAtTrigger": "עמלת חיסול משוערת בעת ההפעלה",
   "replay.liq.fee": "עמלת חיסול",
   "replay.liq.l2": "L2 {fidelity} · {levels} רמות · גלוי {qty} · queue exact: false",
   "replay.liq.fill": "ביצוע",

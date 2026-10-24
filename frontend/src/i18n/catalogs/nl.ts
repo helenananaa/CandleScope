@@ -2142,6 +2142,7 @@ export const nl = {
   "replay.liq.liqPrice": "Liquidatieprijs",
   "replay.liq.bankruptcy": "Faillissementsprijs",
   "replay.liq.takeover": "Overnameprijs",
+  "replay.liq.estimatedFeeAtTrigger": "Geschatte liquidatiekosten bij activering",
   "replay.liq.fee": "Liquidatiekosten",
   "replay.liq.l2": "L2 {fidelity} · {levels} niveaus · zichtbaar {qty} · queue exact: false",
   "replay.liq.fill": "Fill",

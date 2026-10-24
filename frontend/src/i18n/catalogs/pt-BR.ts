@@ -2470,6 +2470,7 @@ export const ptBR = {
   "replay.liq.liqPrice": "Liquidação preço",
   "replay.liq.bankruptcy": "Preço de falência",
   "replay.liq.takeover": "Preço de assunção",
+  "replay.liq.estimatedFeeAtTrigger": "Taxa de liquidação estimada no acionamento",
   "replay.liq.fee": "Taxa de liquidação",
   "replay.liq.l2": "L2 {fidelity} · {levels} níveis · visível {qty} · fila exata: falso",
   "replay.liq.fill": "Preenchimento",

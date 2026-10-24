@@ -2142,6 +2142,7 @@ export const uk = {
   "replay.liq.liqPrice": "Ціна ліквідації",
   "replay.liq.bankruptcy": "Ціна банкрутства",
   "replay.liq.takeover": "Ціна перехоплення",
+  "replay.liq.estimatedFeeAtTrigger": "Оцінка комісії ліквідації при спрацюванні",
   "replay.liq.fee": "Комісія ліквідації",
   "replay.liq.l2": "L2 {fidelity} · {levels} рівнів · видимо {qty} · точна черга: false",
   "replay.liq.fill": "Виконання",

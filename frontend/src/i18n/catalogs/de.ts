@@ -2143,6 +2143,7 @@ export const de = {
   "replay.liq.liqPrice": "Liquidationspreis",
   "replay.liq.bankruptcy": "Insolvenzpreis",
   "replay.liq.takeover": "Übernahmepreis",
+  "replay.liq.estimatedFeeAtTrigger": "Geschätzte Liquidationsgebühr bei Auslösung",
   "replay.liq.fee": "Liquidationsgebühr",
   "replay.liq.l2": "L2 {fidelity} · {levels} Stufen · sichtbar {qty} · queue exact: false",
   "replay.liq.fill": "Ausführung",
