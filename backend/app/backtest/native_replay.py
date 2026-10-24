@@ -80,7 +80,7 @@ class NativeReplay:
             self.views.discard()
             raise
 
-    def get(self, key, *, if_revision=None, _metadata_only=False):
+    def get(self, key, *, if_revision=None, _metadata_only=False, _borrow_result=False):
         with self.native.lock:
             row = self.native.db.execute("SELECT record FROM native_replays WHERE id=?", (key,)).fetchone()
             if not row:
@@ -111,8 +111,13 @@ class NativeReplay:
                     return record
                 if result is not None:
                     view_key = (key, record["run_id"], record["input_hash"], result_revision, record["cursor"])
-                    result = self.views.read(view_key, result,
-                        self._input(record["run_id"])["bars"][:record["cursor"]])
+                    bars = self._input(record["run_id"])["bars"][:record["cursor"]]
+                    if _borrow_result:
+                        from .native_checkpoint import checkpoint_digest
+                        result = {**result, "bars": bars}
+                        result["report_hash"] = checkpoint_digest(result)
+                    else:
+                        result = self.views.read(view_key, result, bars)
                 record["result"] = result
             return record
 
@@ -180,8 +185,8 @@ class NativeReplay:
             self._save(record)
             return record
 
-    def _current(self, key, revision, *, _metadata_only=False):
-        record = self.get(key, _metadata_only=True) if _metadata_only else self.get(key)
+    def _current(self, key, revision, *, _metadata_only=False, _borrow_result=False):
+        record = self.get(key, _metadata_only=_metadata_only, _borrow_result=_borrow_result)
         if record["revision"] != revision:
             raise BacktestError("NATIVE_REPLAY_CONFLICT", "replay changed; refresh before retry")
         return record
@@ -326,6 +331,15 @@ class NativeReplay:
                 with self.native.lock:
                     if cancelled.is_set():
                         return
+                    if external and count == current["total"]:
+                        # Execution and endpoint parity are complete; the owned
+                        # checkpoint no longer needs its evaluator. Release it
+                        # before journal encoding and the public result copy.
+                        # A failed save still preserves the prior committed
+                        # cursor and follows the ordinary failure cleanup.
+                        finished_worker = self.workers.pop(key, None)
+                        if finished_worker:
+                            finished_worker.close()
                     record = current
                     record.update(cursor=count, result=result, method=method, revision=record["revision"] + 1,
                                   state="COMPLETED" if count == record["total"] else "RUNNING" if action == "play" else "PAUSED")
@@ -369,9 +383,12 @@ class NativeReplay:
 
     def snapshot(self, key, revision):
         from .native import MAX_BYTES
-        from .native_checkpoint import pack, checkpoint_digest
+        from .native_checkpoint import pack, checkpoint_digest, detached_json
         with self.native.lock:
-            record = self._current(key, revision)
+            # The checkpoint only serializes this borrowed public body while
+            # holding the lock. Detach the returned view after releasing the
+            # temporary private account graph, so both copies needn't overlap.
+            record = self._current(key, revision, _borrow_result=True)
             if key in self.jobs or record["state"] == "RUNNING":
                 raise BacktestError("NATIVE_REPLAY_BUSY", "pause before saving a checkpoint")
             checkpoint_id = "nrs_" + uuid.uuid4().hex
@@ -389,7 +406,10 @@ class NativeReplay:
             record["snapshots"].append({"snapshot_id": checkpoint_id, "cursor": record["cursor"]})
             record["revision"] += 1
             self._save(record)
-            return record
+            self.results.cache.pop("host:" + key, None)
+            checkpoint.clear()
+            del stored
+            return detached_json(record, preserve_aliases=False)
 
     def restore(self, key, revision, checkpoint_id):
         from .native_checkpoint import unpack, checkpoint_digest

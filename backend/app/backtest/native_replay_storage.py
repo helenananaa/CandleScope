@@ -221,7 +221,7 @@ class ResultJournal:
             raw = pack(value) if key.startswith("host:") else encoded(value)
             self.db.execute("INSERT OR REPLACE INTO native_replay_result_bases VALUES (?,?,?,?,?)", (key, revision, revision, raw, checksum(raw)))
             self.db.execute("DELETE FROM native_replay_result_deltas WHERE id=?", (key,))
-            if len(raw.encode("utf-8")) > cache_write_bytes:
+            if len(raw) > cache_write_bytes or len(raw.encode("utf-8")) > cache_write_bytes:
                 self.cache.pop(key, None)
                 return revision
             detached = unpack(raw) if key.startswith("host:") else json.loads(raw)
@@ -232,7 +232,7 @@ class ResultJournal:
             self.db.execute("UPDATE native_replay_result_bases SET revision=? WHERE id=?", (revision, key))
             # The caller already owns the complete result. Large writes stay
             # durable without decoding another graph just to warm this cache.
-            if len(raw.encode("utf-8")) > cache_write_bytes:
+            if len(raw) > cache_write_bytes or len(raw.encode("utf-8")) > cache_write_bytes:
                 self.cache.pop(key, None)
                 return revision
             detached = apply_changes(previous, unpack(raw) if key.startswith("host:") else json.loads(raw))

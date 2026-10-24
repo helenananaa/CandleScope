@@ -3,7 +3,7 @@ from collections import OrderedDict
 import json
 
 from .native import MAX_BYTES, encoded
-from .native_checkpoint import checkpoint_digest as digest, detached_json
+from .native_checkpoint import checkpoint_measure, detached_json
 
 
 class ResultViews:
@@ -28,7 +28,12 @@ class ResultViews:
         if cached is not None:
             self.bytes -= len(self.entries.pop(key)[1])
         value = {**body, "bars": bars}
-        value["report_hash"] = digest(value)
+        value["report_hash"], source_bytes = checkpoint_measure(value)
+        if self.capacity <= 0 or source_bytes > self.max_bytes:
+            # Hashing already counted the complete body. An oversized value
+            # cannot use this cache; avoid encoding a second full temporary
+            # string before building the caller's independent containers.
+            return detached_json(value, preserve_aliases=False)
         text = encoded(value)
         size = len(text)
         if self.capacity > 0 and size <= self.max_bytes:

@@ -161,3 +161,47 @@ def test_play_at_completed_endpoint_preserves_the_complete_durable_result(runtim
         final = settle(replay, key)
         assert final["state"] == "COMPLETED"
         assert encoded(final["result"]) == encoded(origin["result"])
+
+
+@pytest.mark.parametrize("mode", ["BAR_APPROX", "TRADE_TAPE", "BOOK_ASSISTED", "BOOK_DEPTH", "BOOK_SAMPLED"])
+def test_snapshot_detaches_after_private_release_and_completed_host_worker_can_reopen(runtime, monkeypatch, mode):
+    host, main = runtime
+    origin = terminal(host.native, host.native.create(configuration(main, mode), "endpoint-lifetime")["run_id"])
+    assert origin["state"] == "COMPLETED", origin.get("error")
+    replay = host.native.replay
+    created = replay.create(origin["run_id"])
+    key = created["replay_id"]
+
+    def seek(target):
+        replay.command(key, replay.get(key)["revision"], "seek", target)
+        return settle(replay, key)
+
+    middle = seek(3)
+    process = replay.workers[key].stream.worker.process
+    from app.backtest import native_checkpoint
+    detach = native_checkpoint.detached_json
+    returned_views = []
+
+    def after_private_release(*args, **kwargs):
+        assert "host:" + key not in replay.results.cache
+        returned_views.append(True)
+        return detach(*args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(native_checkpoint, "detached_json", after_private_release)
+        saved = replay.snapshot(key, middle["revision"])
+    assert returned_views == [True]
+    assert saved["result"] == middle["result"]
+    assert process.poll() is None  # A paused midpoint keeps its interpreter.
+    saved["result"]["bars"][0]["close"] = 999
+    saved["result"]["raw_output"]["strategy_output"]["plots"][0]["values"][0] = 999
+    assert replay.get(key)["result"] == middle["result"]
+
+    final = seek(created["total"])
+    assert encoded(final["result"]) == encoded(origin["result"])
+    assert key not in replay.workers and process.poll() is not None
+    assert seek(3)["result"] == middle["result"]
+    replacement = replay.workers[key].stream.worker.process
+    assert replacement.pid != process.pid and replacement.poll() is None
+    assert encoded(seek(created["total"])["result"]) == encoded(origin["result"])
+    assert key not in replay.workers and replacement.poll() is not None

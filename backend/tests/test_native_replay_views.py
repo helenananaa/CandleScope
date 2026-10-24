@@ -104,12 +104,14 @@ def test_retention_is_byte_bounded_and_oversized_views_remain_complete():
 
 @pytest.mark.parametrize("text,limit,capacity", [
     ("x"*512, 256, 2), ("观察🙂"*250, 1200, 2), ("x"*32, 4096, 0)])
-def test_uncached_complete_views_preserve_values_and_independent_containers(text,limit,capacity):
+def test_uncached_complete_views_preserve_values_and_independent_containers(text,limit,capacity,monkeypatch):
+    from app.backtest import native_replay_views
     shared = [{"value": 1}]
     body = {"text": text, "left": shared, "right": shared}
     views = ResultViews(max_bytes=limit, capacity=capacity)
     expected = {**body, "bars": []}
     expected["report_hash"] = digest(expected)
+    monkeypatch.setattr(native_replay_views, "encoded", lambda _: pytest.fail("uncached view encoded a redundant full buffer"))
     first = views.read(("uncached",), body, [])
     assert first == expected
     assert not views.entries and views.bytes == 0

@@ -110,11 +110,17 @@ def canonical_fragments(value):
     yield from fragments(value)
 
 
-def checkpoint_digest(value):
-    checksum = hashlib.sha256()
+def checkpoint_measure(value):
+    """Hash complete canonical JSON and count its bytes in the same pass."""
+    checksum, size = hashlib.sha256(), 0
     for fragment in canonical_fragments(value):
         checksum.update(fragment)
-    return "sha256:" + checksum.hexdigest()
+        size += len(fragment)
+    return "sha256:" + checksum.hexdigest(), size
+
+
+def checkpoint_digest(value):
+    return checkpoint_measure(value)[0]
 
 
 def pack(value):

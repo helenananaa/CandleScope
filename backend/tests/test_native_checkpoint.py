@@ -34,6 +34,7 @@ def test_streamed_checkpoint_bytes_and_hash_match_the_original_encoder(count):
     raw = encoded(value).encode("utf-8")
     assert b"".join(codec.canonical_fragments(value)) == raw
     assert codec.checkpoint_digest(value) == digest(value)
+    assert codec.checkpoint_measure(value) == (digest(value), len(raw))
 
 
 def test_streamed_checkpoint_preserves_numeric_key_encoding_and_mixed_key_rejection():
