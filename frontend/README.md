@@ -80,3 +80,23 @@ npm run smoke -- --url http://127.0.0.1:15173/
 ```
 
 On this Windows Codex desktop environment, use the bundled Node executable if `npm` or `node` is not available on `PATH`.
+
+## Desktop runtime cache
+
+`npm run desktop:package:dir` prepares Python in `.desktop-runtime/runtime`.
+After a successful replacement, the cache retains only the immediately previous
+runtime as `previous-*` for rollback. Failed preparation removes its own staging
+directory; failed promotion restores the active runtime. Dependencies and
+first-party plugin bundles are prepared before replacing the active runtime.
+Downloaded Python, plugin-build caches, control tools and other builds' staging
+directories are preserved.
+
+Promotion and backup pruning use an exclusive `runtime-promotion.lock`. If a
+process is terminated during promotion, verify that its recorded owner PID is
+no longer preparing a runtime before removing the stale lock and retrying.
+
+The filesystem lifecycle checks can run without downloading dependencies:
+
+```bash
+node --test scripts/desktop-runtime-cache.test.mjs scripts/prepare-desktop-runtime.test.mjs
+```
