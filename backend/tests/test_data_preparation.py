@@ -44,14 +44,14 @@ class Adapter:
         return {"chunks": len(chunks)}
 
 
-async def terminal(service, job_id):
+async def terminal(service, job_id, *, timeout=5):
     async def wait():
         while True:
             job = service.repository.get(job_id)
             if job["state"] in {"READY", "FAILED", "CANCELLED", "BLOCKED_STORAGE"}:
                 return job
             await asyncio.sleep(0.005)
-    return await asyncio.wait_for(wait(), 5)
+    return await asyncio.wait_for(wait(), timeout)
 
 
 def test_idempotency_conflict_and_frozen_ranges(tmp_path):

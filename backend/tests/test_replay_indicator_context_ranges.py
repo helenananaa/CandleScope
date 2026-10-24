@@ -28,7 +28,11 @@ async def test_prepared_viewport_reads_bounded_requested_range(
     monkeypatch.setattr(
         fixture, "REPLAY_START", fixture.START + 120_007 * fixture.MINUTE
     )
-    async with fixture.prepared_run(tmp_path, progressive, disclosure) as values:
+    # Initial packaged-runtime imports and immutable fixture publication are
+    # setup, not an indicator latency gate. Bound that setup independently.
+    async with fixture.prepared_run(
+        tmp_path, progressive, disclosure, prepare_timeout=30
+    ) as values:
         replay, _, session, *_ = values
         state = await replay.get_session_state(session)
         common = {
