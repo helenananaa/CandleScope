@@ -26,10 +26,13 @@ MODULES = {"pine": ("candlescope.pine-compat", "candlescope_plugin_pine_compat.n
            "pyne": ("candlescope.pyne", "candlescope_plugin_pyne.native_strategy")}
 TERMINAL = {"COMPLETED", "FAILED", "CANCELLED", "INTERRUPTED"}
 MAX_BYTES = 64 * 1024 * 1024
+_CANONICAL_ENCODER = json.JSONEncoder(sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
 
 
 def encoded(value):
-    return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    # JSONEncoder keeps traversal/cycle state local to each encode call. Reuse
+    # only its fixed settings across the frequent stream and journal writes.
+    return _CANONICAL_ENCODER.encode(value)
 
 
 def digest(value):

@@ -237,3 +237,29 @@ def test_public_write_cache_limit_counts_utf8_bytes_and_keeps_small_writes_detac
     assert same_json(journal.load("public"), expected)
     assert journal.save("public", expected) == 0
     db.close()
+
+
+def test_canonical_encoder_concurrent_calls_keep_independent_cycle_and_error_state():
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+
+    barrier = threading.Barrier(4)
+
+    def encode_many(index):
+        shared = {"text": '\u4e2d\u6587\U0001f4c8"\\', "zero": -0.0, "values": [None, True, 1, 1.0]}
+        value = {"index": index, "left": shared, "right": shared, "tuple": (2**64, "x")}
+        expected = json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+        cycle = []
+        cycle.append(cycle)
+        barrier.wait(timeout=10)
+        for _ in range(50):
+            with pytest.raises(ValueError, match="Circular reference"):
+                encoded(cycle)
+            with pytest.raises(ValueError):
+                encoded({"invalid": float("nan")})
+            assert encoded(value) == expected
+        return encoded(value)
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(encode_many, range(4)))
+    assert len(set(results)) == 4

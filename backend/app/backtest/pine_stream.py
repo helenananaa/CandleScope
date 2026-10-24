@@ -26,8 +26,7 @@ class WindowRebaseRequired(BacktestError):
 
 
 def digest(value):
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"),
-                                     ensure_ascii=False, allow_nan=False).encode("utf-8")).hexdigest()
+    return hashlib.sha256(encoded(value).encode("utf-8")).hexdigest()
 
 
 def _checked_result_digest(value, identity_json):
