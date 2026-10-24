@@ -198,6 +198,17 @@ passed 108 installed stream, ownership, event-window and transport cases without
 skips, including cold replay of complete results. This is not a claim of whole-run
 resource compliance.
 
+Negotiated identity-reference replies also reuse a copy plan made once from the
+canonical decoded identity. Each returned dict/list is new, including nested
+containers; only immutable JSON scalars are shared. Full identity/reference
+validation and the canonical identity bytes remain unchanged. An isolated test
+of the actual 1,813-byte identity reduced 100,000 copies from a mean 0.715 s to
+0.057 s, with exact values and independent mutable containers. The combined hash
+and identity-copy changes passed 120 installed Pine/Pyne replay, stream,
+ownership, event-window and transport cases without skips. The separate 35-case
+transport run overlaps this gate; a test-import failure was fixed and retained
+before those successful runs.
+
 Controlled tests cover all nine supported mode/callback combinations, spot cash
 and inventory, pending queues/liquidity, backward seek, replay-service/interpreter-
 worker restart, requested data,

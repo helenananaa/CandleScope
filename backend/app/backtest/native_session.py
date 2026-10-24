@@ -38,6 +38,32 @@ def _file_size(stream):
     return os.fstat(stream.fileno()).st_size
 
 
+def _json_container_copier(value):
+    """Prepare detached copies of a private, already decoded JSON container.
+
+    Immutable scalar values can be shared; each dict/list occurrence gets a
+    fresh container on every call. No returned value exposes the template.
+    """
+    template = value.copy()
+    children = []
+    items = template.items() if isinstance(template, dict) else enumerate(template)
+    for key, child in items:
+        if isinstance(child, (dict, list)):
+            children.append((key, _json_container_copier(child)))
+            template[key] = None
+    copy = template.copy
+    if not children:
+        return copy
+
+    def cloned():
+        result = copy()
+        for key, clone in children:
+            result[key] = clone()
+        return result
+
+    return cloned
+
+
 class SessionWorker:
     def __init__(self, plugin, wire, cancelled, *, evaluator=False):
         self._close_lock = threading.Lock()
@@ -52,6 +78,8 @@ class SessionWorker:
         self._identity_json = encoded(self.identity)
         self._identity_ref = digest(self.identity)
         self._identity_ref_enabled = self.identity.get("session_identity") == SESSION_IDENTITY_CONTRACT
+        self._identity_copy = (_json_container_copier(json.loads(self._identity_json))
+                               if self._identity_ref_enabled else None)
         self._identity_bound = False
         self._stream_chain_enabled = evaluator and self.identity.get("external_stream_chain_contract") == STREAM_CHAIN_CONTRACT
         self._prefix_enabled = evaluator and self.identity.get("prefix_append") in {
@@ -182,7 +210,7 @@ class SessionWorker:
                     or result["identity_ref"] != self._identity_ref):
                 raise BacktestError("NATIVE_IDENTITY_MISMATCH", "unexpected session identity reference")
             result = {key: value for key, value in result.items() if key != "identity_ref"}
-            result["identity"] = json.loads(self._identity_json)
+            result["identity"] = self._identity_copy()
         elif digest(result.get("identity")) != self._identity_ref:
             raise BacktestError("NATIVE_IDENTITY_MISMATCH", "unexpected session runtime")
         if streaming and (result.get("external_stream_contract") != STREAM_CONTRACT

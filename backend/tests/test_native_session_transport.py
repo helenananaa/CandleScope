@@ -1,8 +1,31 @@
 import sys
+import json
 import threading
 import pytest
 from app.backtest.native_session import SessionWorker
 from app.backtest.native import digest
+
+
+@pytest.mark.parametrize("value", [{}, [], {"signed": [-0.0, 0.0], "types": [1, True, 1.0, None],
+    "nested": [{"unicode": "中文\U0001f4c8", "empty": []}, {"leaf": {"n": 2**64}}]}])
+def test_identity_container_copier_preserves_exact_json_and_detaches_every_container(value):
+    from app.backtest.native import encoded
+    from app.backtest.native_session import _json_container_copier
+    raw=encoded(value)
+    clone=_json_container_copier(json.loads(raw))
+    first,second=clone(),clone()
+    assert encoded(first)==encoded(second)==raw
+    def containers(item):
+        if isinstance(item,(dict,list)):
+            yield item
+            for child in (item.values() if isinstance(item,dict) else item):
+                yield from containers(child)
+    first_containers=list(containers(first))
+    second_containers=list(containers(second))
+    assert {id(item) for item in first_containers}.isdisjoint(id(item) for item in second_containers)
+    assert len({id(item) for item in first_containers})==len(first_containers)
+    for item in first_containers:item.clear()
+    assert encoded(second)==encoded(clone())==raw
 
 
 def test_file_size_guard_observes_growth_without_moving_shared_offset():
@@ -109,7 +132,7 @@ def test_terminated_pipe_close_error_does_not_mask_timeout_or_skip_other_streams
 
 @pytest.mark.parametrize("contract", [False, True])
 def test_real_worker_binds_full_identity_before_references_and_preserves_public_responses(contract):
-    identity = {"engine": "unchanged", "nested":{"value":"unchanged"},
+    identity = {"engine": "unchanged", "nested":{"value":"unchanged", "lists":[{"values":[-0.0,0.0,1,True,1.0]}]},
                 **({"session_identity": "candlescope.session-identity/1"} if contract else {})}
     script = '''import json,sys
 for index,line in enumerate(sys.stdin):
@@ -128,7 +151,9 @@ for index,line in enumerate(sys.stdin):
         for index in range(3):
             response = worker.request({"operation": "execute"}, threading.Event())
             assert response == {"ok": True, "identity": identity, "index": index}
+            assert json.dumps(response["identity"],sort_keys=True)==json.dumps(identity,sort_keys=True)
             response["identity"]["nested"]["value"] = "caller mutation"
+            response["identity"]["nested"]["lists"][0]["values"].clear()
     finally:
         worker.close()
 
