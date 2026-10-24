@@ -104,23 +104,37 @@ def test_cached_close_column_rechecks_changed_source_bytes(tmp_path):
         repo.tape_indicator_closes_at_revision(revision, "BTCUSDT", "1m", **args)
 
 
+@pytest.mark.parametrize("buffered", [False, True])
 @pytest.mark.parametrize("name", ["RSI", "EMA", "MACD"])
-@pytest.mark.parametrize("interval,width", [("5m", 5), ("7m", 7), ("90m", 90)])
-def test_whole_pinned_month_math_matches_live_full_history(prepared, tmp_path, name, interval, width):
+@pytest.mark.parametrize("interval,width", [("1m", 1), ("5m", 5), ("7m", 7), ("90m", 90)])
+def test_whole_pinned_month_math_matches_live_full_history(prepared, tmp_path, name, interval, width, buffered, monkeypatch):
     from app.data_engine.interval_policy import compute_bucket_start_ms
     from app.replay.bars.builder import ReplayDisplayBar
-    from app.replay.training.indicator_checkpoint import IndicatorCheckpointStore
-    from app.replay.training.indicator_prefix import CanonicalReplayIndicators
+    from app.replay.training.indexed_indicator_closes import LocalIndicatorCloseBuffer
+    from app.replay.training.indicator_checkpoint import (
+        IndicatorCheckpointStore,
+        dump_state,
+        new_indicator,
+    )
+    from app.replay.training.indicator_prefix import (
+        CanonicalReplayIndicators,
+        indicator_bar,
+    )
 
+    from tests.test_replay_indicator_close_buffer import pin_local
     from tests.test_replay_indicator_prefix import lines, ready, reference
 
     repo, revision, source_rows = prepared
     context = history(repo, revision)
     context.snapshot.warmup_rows = ()
     context.revealed_boundary_ms = END
-    scalar = builder(interval); scalar.capacity = 10_000; scalar.append_history(source_rows)
+    scalar = builder(interval); scalar.capacity = 50_000; scalar.append_history(source_rows)
     rows = [ReplayDisplayBar.from_dict(raw) for raw in scalar.replace_projection()["bars"]
             if raw["open_time_ms"] >= START]  # Incomplete listing bucket cannot seed recursion.
+
+    if buffered:
+        pin_local(repo, revision)
+        monkeypatch.setattr(repo, "query_bars_at_revision", lambda *a, **kw: pytest.fail("local math prepared missing source"))
 
     class Prefix:
         origin_ms = compute_bucket_start_ms(START, width * MINUTE, interval=interval)
@@ -129,7 +143,11 @@ def test_whole_pinned_month_math_matches_live_full_history(prepared, tmp_path, n
             self.identity = {"contract": "test-pinned-column-month", "identity": {
                 **IDENTITY.to_dict(), "display_interval": interval}}
 
+            self.reader = LocalIndicatorCloseBuffer(context, interval, width * MINUTE, Event())
+
         def read_closes(self, start, stop):
+            if buffered:
+                return self.reader.read(start, stop)
             return read_indexed_closes(context, start, stop, interval, width * MINUTE, Event())
 
         def read(self, *_):
@@ -138,6 +156,10 @@ def test_whole_pinned_month_math_matches_live_full_history(prepared, tmp_path, n
     cache = tmp_path / "math.sqlite3"
     actual, _ = ready(CanonicalReplayIndicators(IndicatorCheckpointStore(cache)), Prefix(), name, {}, rows[-10:])
     expected = reference(name, {}, rows)
+    scalar_seed = new_indicator(name, {})
+    for row in rows[:-10]:
+        scalar_seed.update_closed(indicator_bar(row))
+    assert actual["math_seed"]["state"] == dump_state(scalar_seed)
     assert [(key, data[-10:]) for key, data in lines(expected)] == lines(actual["payload"])
     restored, _ = ready(CanonicalReplayIndicators(IndicatorCheckpointStore(cache)), Prefix(), name, {}, rows[-10:])
     assert restored["prefix_rows_read"] == 0

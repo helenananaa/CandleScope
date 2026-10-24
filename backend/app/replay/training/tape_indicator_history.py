@@ -77,19 +77,19 @@ class TapeIndicatorHistory:
             include_selection_boundary=True,
         )
         self.closed_before_ms = selected["selected_closed_before_ms"]
+        from .indexed_indicator_closes import LocalIndicatorCloseBuffer
+
+        self.close_buffer = LocalIndicatorCloseBuffer(
+            context_history, self.interval, self.interval_ms, cancelled,
+        )
 
     def read_closes(self, start_ms, stop_before_ms):
-        from .indexed_indicator_closes import read_indexed_closes
-
         if (
             start_ms < self.origin_ms
             or not start_ms < stop_before_ms <= self.closed_before_ms
         ):
             return None
-        return read_indexed_closes(
-            self.arguments["context_history"], start_ms, stop_before_ms,
-            self.interval, self.interval_ms, self.arguments["cancelled"],
-        )
+        return self.close_buffer.read(start_ms, stop_before_ms)
 
     def read(self, start_ms, stop_before_ms):
         if (
