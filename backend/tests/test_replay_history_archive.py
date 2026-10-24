@@ -683,8 +683,12 @@ async def test_failed_random_preparation_retries_immutable_remote_revision(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("history_mode", ["ALL_AVAILABLE", "DURATION"])
+@pytest.mark.parametrize("disclosure", ["NONE", "HIDE_ALL"])
 async def test_forward_cache_boundary_pages_same_revision_without_ending_run(
     tmp_path: Path,
+    history_mode: str,
+    disclosure: str,
 ) -> None:
     root = tmp_path / "replay-history"
     writer = ReplayHistoryArchiveWriter(root, now_ms=lambda: NOW_MS)
@@ -693,7 +697,7 @@ async def test_forward_cache_boundary_pages_same_revision_without_ending_run(
         "1m",
         [
             _batch(
-                list(range(12)),
+                list(range(-5, 12)),
                 price_base=100,
                 source_key="fixture-paged-forward-cache",
                 digest_character="9",
@@ -723,7 +727,7 @@ async def test_forward_cache_boundary_pages_same_revision_without_ending_run(
             warmup_bars=1,
             horizon_ms=3 * INTERVAL_MS,
             quality_mode="exact",
-            blind_mode=True,
+            blind_mode=disclosure != "NONE",
         )
         request = TrainingRunCreateRequest.from_dict(
             {
@@ -741,8 +745,8 @@ async def test_forward_cache_boundary_pages_same_revision_without_ending_run(
                 "requested_start_ms": START_MS + INTERVAL_MS,
                 "indicator_warmup_bars": 1,
                 "visible_history_lookback": {
-                    "mode": "ALL_AVAILABLE",
-                    "duration_ms": None,
+                    "mode": history_mode,
+                    "duration_ms": INTERVAL_MS if history_mode == "DURATION" else None,
                 },
                 "forward_cache_ms": 3 * INTERVAL_MS,
                 "random_seed": None,
@@ -752,7 +756,7 @@ async def test_forward_cache_boundary_pages_same_revision_without_ending_run(
                 "taker_fee_bps": "5",
                 "market_slippage_bps": "1",
                 "integrity_mode": "CHALLENGE",
-                "time_disclosure_policy": "HIDE_ALL",
+                "time_disclosure_policy": disclosure,
                 "book_mode": "OFF",
                 "margin_mode": "CROSS",
                 "position_mode": "ONE_WAY",
@@ -797,7 +801,8 @@ async def test_forward_cache_boundary_pages_same_revision_without_ending_run(
         assert cache_boundary["state"] == "PAUSED"
         assert cache_boundary["cursor"]["source_sequence"] == 3
         assert cache_boundary["cursor"]["at_end"] is False
-        assert cache_boundary["cursor"]["virtual_time_ms"] < START_MS
+        if disclosure != "NONE":
+            assert cache_boundary["cursor"]["virtual_time_ms"] < START_MS
         assert str(START_MS + 11 * INTERVAL_MS) not in json.dumps(
             cache_boundary,
             sort_keys=True,
@@ -816,7 +821,7 @@ async def test_forward_cache_boundary_pages_same_revision_without_ending_run(
         persisted = await service.store.load_dataset(session_id)
         assert persisted is not None
         initial_forward_upper = (
-            int(persisted["synthetic_origin_ms"])
+            replay_start_ms
             + int(persisted["actual_replay_end_ms"])
             - int(persisted["actual_replay_start_ms"])
             + INTERVAL_MS
@@ -837,6 +842,40 @@ async def test_forward_cache_boundary_pages_same_revision_without_ending_run(
             )
         report = await service.training.report(run_id)
         assert report["run_id"] == run_id
+        base_page = await service.training.history_page(
+            session_id,
+            track_id="track-1",
+            before_ms=replay_start_ms + 5 * INTERVAL_MS,
+            revealed_boundary_ms=revealed_boundary_ms,
+            limit=20,
+            data_epoch=str(paged_snapshot["data_epoch"]),
+            history_epoch=None,
+            display_interval="1m",
+        )
+        first_offset = -1 if history_mode == "DURATION" else -6
+        assert [bar["open_time_ms"] for bar in base_page["bars"]] == [
+            replay_start_ms + offset * INTERVAL_MS
+            for offset in range(first_offset, 5)
+        ]
+        assert base_page["bars"][-1]["close_time_ms"] + 1 == (
+            replay_start_ms + 5 * INTERVAL_MS
+        )
+        assert base_page["has_more"] is False
+        future_cursor_page = await service.training.history_page(
+            session_id, track_id="track-1",
+            before_ms=replay_start_ms + 20 * INTERVAL_MS,
+            revealed_boundary_ms=revealed_boundary_ms, limit=2,
+            data_epoch=str(paged_snapshot["data_epoch"]),
+            history_epoch=base_page["history_epoch"], display_interval="1m",
+        )
+        assert [bar["open_time_ms"] for bar in future_cursor_page["bars"]] == [
+            replay_start_ms + offset * INTERVAL_MS for offset in (4, 5)
+        ]
+        assert future_cursor_page["has_more"] is True
+        assert all(
+            bar["close_time_ms"] <= revealed_boundary_ms
+            for bar in future_cursor_page["bars"]
+        )
         revealed_page = await service.training.history_page(
             session_id,
             track_id="track-1",
@@ -850,10 +889,12 @@ async def test_forward_cache_boundary_pages_same_revision_without_ending_run(
         # The requested source start sits inside its native 5m candle.  Blind
         # projection maps that whole exchange bucket to the preceding public
         # slot instead of re-flooring the shifted 1m timestamps at replay start.
-        assert [bar["open_time_ms"] for bar in revealed_page["bars"]] == [
-            replay_start_ms - 5 * INTERVAL_MS
-        ]
-        revealed_bar = revealed_page["bars"][0]
+        last_bucket = (START_MS if disclosure == "NONE"
+                       else replay_start_ms - 5 * INTERVAL_MS)
+        expected_buckets = ([last_bucket] if history_mode == "DURATION"
+                            else [last_bucket - 5 * INTERVAL_MS, last_bucket])
+        assert [bar["open_time_ms"] for bar in revealed_page["bars"]] == expected_buckets
+        revealed_bar = revealed_page["bars"][-1]
         assert revealed_bar["open"] == "100"
         assert revealed_bar["close"] == "104.5"
         assert revealed_bar["component_count"] == 5
@@ -883,6 +924,11 @@ async def test_forward_cache_boundary_pages_same_revision_without_ending_run(
     finally:
         await service.shutdown(step_timeout=1.0)
 
+    # A newer catalog must not replace this Run's immutable source on reopen.
+    writer.import_batches(IDENTITY, "1m", [_batch(
+        list(range(-5, 12)), price_base=900,
+        source_key="newer-paged-forward-cache", digest_character="a",
+    )])
     recovered = await start_service()
     try:
         snapshot = (await recovered.get_session(session_id))["snapshot"]
@@ -890,6 +936,17 @@ async def test_forward_cache_boundary_pages_same_revision_without_ending_run(
         assert snapshot["cursor"]["source_sequence"] == 6
         assert snapshot["cursor"]["at_end"] is False
         assert recovered.training is not None
+        recovered_page = await recovered.training.history_page(
+            session_id,
+            track_id="track-1",
+            before_ms=replay_start_ms + 5 * INTERVAL_MS,
+            revealed_boundary_ms=revealed_boundary_ms,
+            limit=20,
+            data_epoch=str(snapshot["data_epoch"]),
+            history_epoch=base_page["history_epoch"],
+            display_interval="1m",
+        )
+        assert recovered_page == base_page
         public_times = await recovered.training.public_times(
             run_id,
             timeline_ms=(int(snapshot["cursor"]["virtual_time_ms"]),),
