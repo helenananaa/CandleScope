@@ -48,6 +48,9 @@ the subsequent 93-bar request. The complete sequence reproduces all payloads.
   eight, share one deadline and drain on cancellation; source generation and
   revealed-boundary checks remain in place. Host acquisition/rate-limit policy,
   execution, matching, funding and account reducers are unchanged.
+- Cache admission pressure retains an explicit retryable error. The frontend
+  retries it at most twice with unchanged source/window inputs and drains
+  cancellation; corrupt data and undeclared errors remain immediate failures.
 
 ## Fixed-input measurements
 
@@ -68,14 +71,16 @@ The last row uses exactly two configured workers in both versions; observed
 acquisition concurrency changes from one to two. It is a controlled scheduling
 regression. Live upstream latency and native frame presentation require their
 own observations. The drawing gate stays at 1 ms; its isolated local P95 is
-0.091 ms.
+0.093 ms after the final frontend recovery fix.
 
 ## Regression and sustained-load procedure
 
 Related backend coverage is 671 distinct cases, including preparation,
 interrupted-write recovery, HEDGE/multi-market risk, history/tape boundaries and
 indicators. A negative-price leap-month fixture was corrected to a later leap
-year and all 30 shared-market tests were rerun. Frontend replay: 608 passed.
+year and all 30 shared-market tests were rerun. Frontend replay: 611 passed,
+including cache-pressure recovery, finite retry exhaustion and cancellation.
+The new busy-error retry policy failed before the frontend fix and passed after.
 The macOS ARM64/x64 workflow runs shared-market and preparation tests with the
 bundled Python after packaging, in addition to its existing checks.
 
@@ -86,8 +91,9 @@ payload digests to a baseline and leaves the source untouched. A mounted-chart
 event subscription remains active during the load. Math checkpoints reset every
 cycle; market state resets every 20 cycles, the byte budget is reduced to 2 MiB
 every 50 cycles, and cancelled observers are joined before reuse. Raw latency,
-RSS and cache observations stream to disk so telemetry does not accumulate in
-the measured process. Final checks compare both session snapshots and shared
+RSS and cache observations stream to disk; per-request timing dictionaries do
+not accumulate during the measured load. A small RSS sample list remains for
+the final report. Final checks compare both session snapshots and shared
 portfolios and require zero remaining cache/executor work.
 
 The local workload contains 34 LTC/DOGE requests across 1m/7m/90m, four offset
@@ -95,6 +101,20 @@ chart windows, MA/RSI and 1m EMA200. Run at least 1800 seconds with `--seconds
 1800 --cycles 40 --reference <baseline-reference.json>`. The authoritative
 completion receipt is `soak-30m-subscribed/summary.json`; resource stability is
 assessed from its `resources.jsonl`. Short preflight runs are kept separately.
+
+The completed run lasted 1801.7 seconds: 3900 cycles, 132600 requests, 78
+cancelled observers and zero output differences. Both session snapshots and
+shared portfolios stayed exact, and executor active/pending/queued counters
+ended at zero. Sampled cache charge stayed at 39595756 bytes / 1836 entries;
+every pressure batch also enforced its 2 MiB limit. Mixed-load per-request P95
+was 379.6 ms; full 34-request batch P95 was 418.4 ms resident, 768.0 ms with a
+cold market cache, and 1226.3 ms under the deliberately reduced byte budget.
+
+Sampled RSS peaked at 213.2 MiB. First/last stable-third medians were
+207.1/210.4 MiB (+3.3 MiB, 1.58%). This includes allocator retention and the
+small resource-sample list; it does not establish zero multi-hour leakage.
+The shared-cache retained charge did not grow. `soak-analysis.json` preserves
+this distinction; broad native concurrency/resource acceptance stays open.
 
 After review, CI and this load gate pass, merge and build one normal package
 from the merged revision. Native preparation, rendered charts, controls,
