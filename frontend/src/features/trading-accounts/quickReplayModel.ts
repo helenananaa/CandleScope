@@ -1,0 +1,194 @@
+/**
+ * Quick replay: a cursor over already-loaded candles.
+ *
+ * Nothing after the cursor reaches the chart. Candles, fill markers, notes,
+ * position and P&L are all cut by the same `time < cursor` rule, so the exit
+ * and post-exit notes are simply absent until the cursor passes them. The
+ * cursor is always a step boundary in epoch seconds; a candle that opened at
+ * `t` is complete once `t + interval <= cursor`, and a candle still forming at
+ * the cursor is rebuilt from finer candles that closed before it.
+ */
+import type { JournalEntry, Trade, TradeLeg } from "./tradingTypes.js";
+
+export interface ReplayBar {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface ReplayEvent {
+  kind: "fill" | "note";
+  timeMs: number;
+  id: string;
+}
+
+export interface ReplayPosition {
+  qty: number;
+  avgEntry: number | null;
+  realized: number;
+  fees: number;
+  unrealized: number | null;
+  mfe: number;
+  mae: number;
+  lastPrice: number | null;
+}
+
+export const STANDARD_STEPS = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
+
+export function floorTo(timeSec: number, stepSec: number): number {
+  return Math.floor(timeSec / stepSec) * stepSec;
+}
+
+/** Bars visible at the cursor, with the forming bar rebuilt from finer bars. */
+export function visibleBars(
+  chartBars: readonly ReplayBar[],
+  fineBars: readonly ReplayBar[] | null,
+  cursorSec: number,
+  intervalSec: number,
+  stepSec: number,
+): ReplayBar[] {
+  const out: ReplayBar[] = [];
+  for (const bar of chartBars) {
+    if (bar.time + intervalSec <= cursorSec) out.push(bar);
+    else break;
+  }
+  if (stepSec >= intervalSec || !fineBars) return out;
+  const formingStart = floorTo(cursorSec, intervalSec);
+  if (formingStart === cursorSec) return out;
+  let partial: ReplayBar | null = null;
+  for (const bar of fineBars) {
+    if (bar.time < formingStart) continue;
+    if (bar.time + stepSec > cursorSec) break;
+    partial = partial === null
+      ? { ...bar, time: formingStart }
+      : {
+          time: formingStart,
+          open: partial.open,
+          high: Math.max(partial.high, bar.high),
+          low: Math.min(partial.low, bar.low),
+          close: bar.close,
+          volume: partial.volume + bar.volume,
+        };
+  }
+  if (partial) out.push(partial);
+  return out;
+}
+
+export function legsBefore(legs: readonly TradeLeg[], cursorSec: number): TradeLeg[] {
+  return legs.filter((leg) => leg.tsMs < cursorSec * 1000);
+}
+
+/** Position, P&L and excursions as they stood at the cursor. */
+export function positionAt(
+  trade: Pick<Trade, "direction" | "legs">,
+  bars: readonly ReplayBar[],
+  cursorSec: number,
+  intervalSec: number,
+): ReplayPosition {
+  const sign = trade.direction === "long" ? 1 : -1;
+  let qty = 0;
+  let cost = 0;
+  let realized = 0;
+  let fees = 0;
+  let firstFillSec: number | null = null;
+  let lastFillSec: number | null = null;
+  let enteredQty = 0;
+  let enteredCost = 0;
+  for (const leg of legsBefore(trade.legs, cursorSec)) {
+    const legQty = Number(leg.qty);
+    const price = Number(leg.price);
+    fees += Number(leg.fee);
+    if (firstFillSec === null) firstFillSec = Math.floor(leg.tsMs / 1000);
+    lastFillSec = Math.floor(leg.tsMs / 1000);
+    if (leg.role === "open" || leg.role === "add") {
+      qty += legQty;
+      cost += legQty * price;
+      enteredQty += legQty;
+      enteredCost += legQty * price;
+    } else {
+      const avg = qty > 0 ? cost / qty : price;
+      realized += (price - avg) * legQty * sign;
+      cost -= avg * legQty;
+      qty -= legQty;
+    }
+  }
+  const last = bars.at(-1) ?? null;
+  const lastPrice = last ? last.close : null;
+  const avgEntry = qty > 1e-12 ? cost / qty : null;
+  const unrealized = avgEntry !== null && lastPrice !== null ? (lastPrice - avgEntry) * qty * sign : null;
+  let mfe = 0;
+  let mae = 0;
+  const reference = enteredQty > 0 ? enteredCost / enteredQty : null;
+  const flat = qty <= 1e-12;
+  if (reference !== null && firstFillSec !== null) {
+    for (const bar of bars) {
+      // Candle-level estimate: entry and exit candles count in full.
+      if (bar.time + intervalSec <= firstFillSec) continue;
+      if (flat && lastFillSec !== null && bar.time > lastFillSec) continue;
+      const favorable = sign > 0 ? bar.high - reference : reference - bar.low;
+      const adverse = sign > 0 ? reference - bar.low : bar.high - reference;
+      mfe = Math.max(mfe, favorable);
+      mae = Math.max(mae, adverse);
+    }
+  }
+  return { qty, avgEntry, realized, fees, unrealized, mfe, mae, lastPrice };
+}
+
+export function replayEvents(trade: Trade, entries: readonly JournalEntry[]): ReplayEvent[] {
+  const events: ReplayEvent[] = trade.legs.map((leg) => ({ kind: "fill", timeMs: leg.tsMs, id: leg.fillId }));
+  for (const entry of entries) {
+    events.push({ kind: "note", timeMs: entry.marketTimeMs ?? entry.createdAtMs, id: entry.id });
+  }
+  return events.sort((left, right) => left.timeMs - right.timeMs);
+}
+
+/** Smallest step-aligned cursor that reveals an event at `timeMs`. */
+export function cursorRevealing(timeMs: number, stepSec: number): number {
+  return floorTo(Math.floor(timeMs / 1000), stepSec) + stepSec;
+}
+
+export function nextEventCursor(events: readonly ReplayEvent[], cursorSec: number, stepSec: number): number | null {
+  for (const event of events) {
+    const reveal = cursorRevealing(event.timeMs, stepSec);
+    if (reveal > cursorSec) return reveal;
+  }
+  return null;
+}
+
+export function previousEventCursor(events: readonly ReplayEvent[], cursorSec: number, stepSec: number): number | null {
+  let found: number | null = null;
+  for (const event of events) {
+    const reveal = cursorRevealing(event.timeMs, stepSec);
+    if (reveal < cursorSec) found = reveal;
+  }
+  return found;
+}
+
+/** Start just before the entry candle: the entry appears on the first step. */
+export function initialCursor(trade: Pick<Trade, "openedAtMs">, intervalSec: number): number {
+  return floorTo(Math.floor(trade.openedAtMs / 1000), intervalSec);
+}
+
+export function notesBefore<T extends { createdAtMs: number; marketTimeMs: number | null }>(
+  entries: readonly T[],
+  cursorSec: number,
+): T[] {
+  return entries.filter((entry) => (entry.marketTimeMs ?? entry.createdAtMs) < cursorSec * 1000);
+}
+
+/** Load window: warm-up history before entry, a short tail after the exit. */
+export function replayWindow(
+  trade: Pick<Trade, "openedAtMs" | "closedAtMs">,
+  intervalSec: number,
+  nowMs: number,
+  { warmupBars = 300, tailBars = 60 }: { warmupBars?: number; tailBars?: number } = {},
+): { startSec: number; endSec: number } {
+  const open = Math.floor(trade.openedAtMs / 1000);
+  const close = Math.floor((trade.closedAtMs ?? nowMs) / 1000);
+  const startSec = floorTo(open, intervalSec) - warmupBars * intervalSec;
+  const endSec = Math.min(Math.floor(nowMs / 1000), floorTo(close, intervalSec) + tailBars * intervalSec);
+  return { startSec, endSec };
+}

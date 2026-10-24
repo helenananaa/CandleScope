@@ -3,6 +3,7 @@ import { ChartLoadError } from "./ChartLoadError.js";
 import SingleChartPanes from "../components/SingleChartPanes.js";
 import { combineExternalMarkerSources } from "../chart-adapter/externalMarkerSource.js";
 import type { ExternalMarkerSource } from "../chart-adapter/externalMarkerSource.js";
+import type { ExternalPriceLineSource } from "../chart-adapter/externalPriceLineSource.js";
 import type { PluginChartLayerSource } from "../features/plugins/pluginChartLayerSource.js";
 import { useAdvancedMarketPanes } from "../features/advanced-market-data/useAdvancedMarketPanes.js";
 import { useTradeFlowPanes } from "../features/trade-flow/useTradeFlowPanes.js";
@@ -21,6 +22,10 @@ export interface ChartCellCanvasProps {
   tradeFlow: TradeFlowRuntime;
   strategyMarkerSource?: ExternalMarkerSource | null;
   pluginMarkerSource?: ExternalMarkerSource | null;
+  /** Read-only fills of the selected trading account on this symbol. */
+  accountMarkerSource?: ExternalMarkerSource | null;
+  /** Average entry and working stop / target of the open position. */
+  accountPriceLineSource?: ExternalPriceLineSource | null;
   pluginChartLayerSource?: PluginChartLayerSource | null;
   errorBoundary?: ComponentType<PropsWithChildren>;
   drawingInteractionReady?: boolean;
@@ -34,6 +39,8 @@ function ChartCellCanvas({
   tradeFlow,
   strategyMarkerSource = null,
   pluginMarkerSource = null,
+  accountMarkerSource = null,
+  accountPriceLineSource = null,
   pluginChartLayerSource = null,
   errorBoundary = ChartErrorBoundary,
   drawingInteractionReady = false,
@@ -49,8 +56,9 @@ function ChartCellCanvas({
       tradeFlow.view.markerSource,
       pluginMarkerSource,
       strategyMarkerSource,
+      accountMarkerSource,
     ]),
-    [pluginMarkerSource, strategyMarkerSource, tradeFlow.view.markerSource],
+    [accountMarkerSource, pluginMarkerSource, strategyMarkerSource, tradeFlow.view.markerSource],
   );
   const upstreamDrawingInteractionReadyChange =
     chart.chartProps.onDrawingInteractionReadyChange;
@@ -65,7 +73,9 @@ function ChartCellCanvas({
       drawingInteractionReady,
     ),
     onDrawingInteractionReadyChange: handleDrawingInteractionReadyChange,
+    externalPriceLineSource: accountPriceLineSource,
   }), [
+    accountPriceLineSource,
     chart.chartProps,
     drawingInteractionReady,
     handleDrawingInteractionReadyChange,
@@ -75,8 +85,8 @@ function ChartCellCanvas({
     [advancedPanes, tradeFlowPanes],
   );
   const markerSources = React.useMemo(
-    () => [tradeFlow.view.markerSource, pluginMarkerSource, strategyMarkerSource],
-    [pluginMarkerSource, strategyMarkerSource, tradeFlow.view.markerSource],
+    () => [tradeFlow.view.markerSource, pluginMarkerSource, strategyMarkerSource, accountMarkerSource],
+    [accountMarkerSource, pluginMarkerSource, strategyMarkerSource, tradeFlow.view.markerSource],
   );
 
   if (chart.error) {

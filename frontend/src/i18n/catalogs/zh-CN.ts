@@ -1,3 +1,4 @@
+import { tradingAccountsZhCN } from "./tradingAccountsMessages.js";
 export const zhCN = {
   "research.external.copyCommand": "复制启动命令",
   "research.external.commandCopied": "启动命令已复制。",
@@ -4799,6 +4800,7 @@ export const zhCN = {
   "aiControl.copyFailed": "复制失败，请检查剪贴板权限。",
   "aiControl.desktopOnly": "本地 MCP 仅在桌面应用中提供。",
   "aiControl.configuration": "显示连接配置",
+  ...tradingAccountsZhCN,
 } as const;
 
 export type MessageKey = keyof typeof zhCN;

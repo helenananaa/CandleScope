@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useSyncExternalStore } from "react";
+import React, { Suspense, lazy, useCallback, useMemo, useSyncExternalStore } from "react";
 import OrderBookDock from "../features/order-book/OrderBookDock.js";
 import type { OrderBookRuntime } from "../features/order-book/orderBookTypes.js";
 import TradeFlowDock from "../features/trade-flow/TradeFlowDock.js";
@@ -17,7 +17,12 @@ import {
   mergeMarketRailViews,
   subscribeMarketRailRegistry,
 } from "./marketRailRegistry.js";
+import type {
+  QuickReplayRequest,
+  TradingChartContext,
+} from "../features/trading-accounts/tradingTypes.js";
 import {
+  AccountsRailIcon,
   OrderBookRailIcon,
   ProfileRailIcon,
   TapeRailIcon,
@@ -27,6 +32,13 @@ import { t, type LocaleId } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
 import type { MarketRailViewDescriptor } from "./marketRailTypes.js";
 import MarketRightRailFrame from "./MarketRightRailFrame.js";
+
+const TradingAccountsPanel = lazy(() => import("../features/trading-accounts/TradingAccountsPanel.js"));
+
+export interface TradingRailBinding {
+  context: TradingChartContext;
+  onOpenQuickReplay(request: QuickReplayRequest): void;
+}
 
 export interface RightMarketRailProps {
   watchlist: WatchlistSidebarProps;
@@ -42,6 +54,8 @@ export interface RightMarketRailProps {
   onViewHeightChange: (viewId: string, height: number) => void;
   /** Optional plugin/extra view renderers keyed by view id. */
   renderExtraView?: (viewId: string, height: number) => React.ReactNode;
+  /** Chart context for the trading accounts view; omitted where unsupported. */
+  trading?: TradingRailBinding;
 }
 
 function builtInViews(locale: LocaleId): MarketRailViewDescriptor[] {
@@ -89,6 +103,17 @@ function builtInViews(locale: LocaleId): MarketRailViewDescriptor[] {
       maxHeight: MARKET_DOCK_MAX_HEIGHT,
       collapsedSummary: t("rail.profileSummary", {}, locale),
     },
+    {
+      id: LIVE_RAIL_VIEW_IDS.accounts,
+      title: t("rail.accounts", {}, locale),
+      icon: <AccountsRailIcon />,
+      order: 50,
+      sizing: "flex",
+      defaultHeight: 420,
+      minHeight: MARKET_RAIL_MIN_SIDEBAR_HEIGHT,
+      collapsedSummary: t("rail.accountsSummary", {}, locale),
+      hostOwned: true,
+    },
   ];
 }
 
@@ -104,6 +129,7 @@ function RightMarketRail({
   viewHeights,
   onViewHeightChange,
   renderExtraView,
+  trading,
 }: RightMarketRailProps) {
   const locale = useLocale();
   const contributed = useSyncExternalStore(
@@ -111,9 +137,13 @@ function RightMarketRail({
     listContributedMarketRailViews,
     listContributedMarketRailViews,
   );
+  const hasTrading = trading !== undefined;
   const views = useMemo(
-    () => mergeMarketRailViews(builtInViews(locale), contributed),
-    [contributed, locale],
+    () => mergeMarketRailViews(
+      builtInViews(locale).filter((view) => hasTrading || view.id !== LIVE_RAIL_VIEW_IDS.accounts),
+      contributed,
+    ),
+    [contributed, hasTrading, locale],
   );
 
   const closeView = useCallback((viewId: string) => {
@@ -163,8 +193,19 @@ function RightMarketRail({
         />
       );
     }
+    if (viewId === LIVE_RAIL_VIEW_IDS.accounts && trading) {
+      return (
+        <Suspense fallback={<div className="trading-panel" aria-busy="true" />}>
+          <TradingAccountsPanel
+            context={trading.context}
+            onOpenQuickReplay={trading.onOpenQuickReplay}
+            onRequestClose={() => closeView(LIVE_RAIL_VIEW_IDS.accounts)}
+          />
+        </Suspense>
+      );
+    }
     return renderExtraView?.(viewId, height) ?? null;
-  }, [closeView, orderBook, renderExtraView, tradeFlow, watchlist]);
+  }, [closeView, orderBook, renderExtraView, tradeFlow, trading, watchlist]);
 
   return (
     <MarketRightRailFrame

@@ -1,3 +1,4 @@
+import { tradingAccountsZhHant } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
@@ -4420,4 +4421,5 @@ export const zhHK = {
   "aiControl.copyFailed": "複製失敗，請檢查剪貼簿權限。",
   "aiControl.desktopOnly": "本機 MCP 僅在桌面應用程式中提供。",
   "aiControl.configuration": "顯示連線設定",
+  ...tradingAccountsZhHant,
 } as const satisfies MessageCatalog;

@@ -21,6 +21,11 @@ export interface MarketRailViewDescriptor {
   readonly collapsedSummary?: ReactNode;
   readonly badge?: string | number | null;
   readonly ariaLabel?: string;
+  /**
+   * Host-owned views (e.g. trading accounts, which can place orders) cannot
+   * be replaced by a plugin contribution with the same id.
+   */
+  readonly hostOwned?: boolean;
 }
 
 export interface MarketRailLayoutState {
