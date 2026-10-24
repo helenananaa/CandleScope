@@ -89,10 +89,14 @@ def run_external_host(plugin, wire, runner, cancelled, **options):
     options.setdefault("_scenario_runner", runner)
     if wire.get("pine_history_tick_contract") or wire.get("pine_print_tick_contract"):
         if wire.get("pine_print_tick_contract"):
-            from .pine_print_tick_execution import open_stream
+            from .pine_print_tick_execution import open_stream, _physical_source
+            source=_physical_source(wire)
+            options["_event_source"]=source
+            stream_options={"_event_source":source}
         else:
             from .pine_history_tick_execution import open_stream
-        stream=open_stream(plugin,wire,cancelled,options["deadline"],resume=options.get("resume"))
+            stream_options={}
+        stream=open_stream(plugin,wire,cancelled,options["deadline"],resume=options.get("resume"),**stream_options)
         try:
             return _run_external_host(plugin,wire,runner,cancelled,_pine_stream=stream,**options)
         finally:
@@ -113,7 +117,7 @@ def run_external_host(plugin, wire, runner, cancelled, **options):
 
 def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=None,
                        deadline=None, _cost_scenario=False, _scenario_runner=None, _pine_stream=None,
-                       _discovery_only=False, _consume_resume=False, _capture_owned=False):
+                       _discovery_only=False, _consume_resume=False, _capture_owned=False,_event_source=None):
     if wire.get("host_runtime_identity") != host_identity():
         raise BacktestError("NATIVE_IDENTITY_MISMATCH", "host matching code changed after submission")
     from .workbench_sensitivity import validate_contract, check_control
@@ -260,7 +264,7 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
         from .pine_print_tick_execution import run_clock
         execution=run_clock(_pine_stream,kernel,orders,wire,state=clock,target=target,
             discovery_only=_discovery_only,capture_checkpoint=capture,_capture_owned=_capture_owned,
-            _consume_state=_consume_resume)
+            _consume_state=_consume_resume,_event_source=_event_source)
         if _discovery_only:
             return None
         latest,history,accounts,execution_passes,clock,last_request=execution

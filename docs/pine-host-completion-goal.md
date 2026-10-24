@@ -648,94 +648,43 @@ excludes them and the parameterized Pyne profiles. An early allocation fixture
 also omitted the BAR kernel's last observed reference price; it now supplies
 that observation. The corrected allocation group passes.
 
-## Remaining goal work
+## Remaining goal work, 2026-10-24
 
-1. Finish chart script tick/history-tick callbacks, BAR fill-recalculation
-   and Pine risk-rule semantics through the authoritative Host matcher. Chart
-   entry direction and maximum-position rules are now wired through the
-   explicit entry-risk development contract; see `pine-entry-risk.md`. Four
-   session/equity halt rules require the separate explicit stop contract. The retained `native-risk-preflight.json` reproduces the earlier native
-   conditional-registration and duplicate-rule defects. Core `7adcca2a3` fixes
-   both through declarative registration and conservative aggregation. Core
-   `3ef79760d` and the phase-2 Host receipt above now qualify that development
-   implementation with linear contract rules; earlier worker receipts retain
-   their own identities.
-   The four-stop chart contract now connects market/account/fill observations,
-   cancellation and real-capacity reducing closes (`pine-risk-stops.md`). Other
-   venue calendars, multi-day BAR consecutive-loss windows, partial-fill official
-   oracle and broader fidelity qualification
-   remain open. The original default task runtime has not been replaced.
-   V2 automatic-liquidation ledger receipts now reconcile ownership, callbacks,
-   deferred observations and recovery (`pine-account-liquidation.md`). Their
-   declared full-position mark-settlement model still requires separate official
-   margin-liquidation and product qualification.
-   closed-bar rich orders and print-clock trailing stops are connected.
-   Requested datasets are connected; growing requested prefixes currently rebase
-   the evaluator and need a causal incremental provider-update contract for
-   scalable execution. Chart fill callbacks now have a causal observed-print
-   contract and forming-pass checkpoint recovery; TradingView historical final-
-   OHLCV callback parity remains unqualified. The current upstream docs also
-   describe `calc_on_every_history_tick`, requiring a fresh core/host audit.
-   The fresh installed-core probe and current official contract are now recorded
-   in `pine-bar-tick-preflight.md`: the history-tick declaration is a core gap,
-   while realtime ticks are accepted by the language but blocked by the external
-   contract. The next phase must separate historical bar state from final commit.
-   That core separation is now implemented in the explicit schedule foundation
-   (`pine-external-schedule-foundation.md`), together with heap/drawing and
-   price-flow rollback. Explicit transport, IPC acknowledgement, immutable prefix
-   comparison and chart-provider schedule checkpoints are now connected through
-   both bridges (`pine-external-schedule-transport.md`). Historical BAR fill
-   callbacks now use the shared OHLC path on chart V1/spot accounts, including
-   full historical observations, risk, independent cost reexecution and durable
-   complete-bar recovery (`pine-chart-bar-callbacks.md`). Chart V2 historical
-   account-event merging, actual mark authority, shared capacity, partial fills
-   and settlement callbacks now use their own contract (`pine-v2-bar-path.md`).
-   Realtime ticks and history-tick scheduling remain required.
-   V2 cost matrices now independently reexecute scripts and Host allocation;
-   larger-history performance and broader product acceptance remain to qualify.
-   Simulated closing ticks are connected for chart BAR and aggregate-trade runs,
-   including aggregate-trade closing fill callbacks. They do not prove actual
-   close-auction liquidity or TradingView broker-emulator equivalence.
-2. Workbench Pine Host-account replay, six-rule risk enforcement and closing
-   scheduling are connected for BAR/tape/book modes through the negotiated
-   control contract. Workbench historical BAR fill recalculation now has an
-   independent OHLC path matcher and explicit historical callback schedule;
-   see `pine-bar-path.md`. Chart V1/spot callbacks now share the matcher;
-   chart V2 integration is tracked in `pine-v2-bar-path.md`. Workbench V2 BAR API
-   and replay now consume frozen account data (`pine-workbench-v2-bar.md`);
-   settings UI/import and automatic BAR preparation now preserve its controls,
-   uploaded-input lifecycle and result staleness. Retry comparison also preserves
-   known additive defaults across old stored submissions without rewriting their
-   frozen identities (`pine-workbench-default-upgrade.md`). Independent complete-endpoint
-   Workbench cost matrices now reexecute Pine and fresh accounts, with AUTO/SKIP
-   controls, replay parity and worker cleanup (`pine-workbench-costs.md`). V2
-   historical-account print/book paths are connected as described above. Working-order margin now
-   reprices across gaps with FIFO cancellation of unfunded remainders while
-   preserving booked fills and valid negative initial-margin availability;
-   see `pine-v2-margin-repricing.md`. This does not qualify an exchange-specific
-   pretrade margin model or TradingView's broker emulator.
-   Pyne external-account
-   replay is not advertised. Native-account replay remains a separate path.
-   Larger-history account-journal/reconstruction performance and packaged
-   Workbench acceptance remain unqualified.
-3. Remaining display destinations and symbol/session/chart metadata, keeping
-   unsupported diagnostics until the real host capability is connected. The
-   tick-only bridge uses a reduced rational grid; exact TradingView minmove/
-   pricescale representation still needs reference qualification. Bounded exact
-   decimal lot steps and independent minima are now connected; inverse,
-   significant-digit and nonzero-offset quantity profiles remain unsupported.
-   Metadata admission currently requires all selected foreign contexts when a
-   corresponding builtin is used anywhere in the script; expression-scoped
-   requirements would avoid unnecessary admission failures.
-4. Re-audit current core gaps and implement selected missing language/request/
-   account semantics. The current round connects negotiated comments/alert
-   metadata, zero-quantity no-op parity and Host-account default sizing; see
-   `pine-order-metadata.md` and `pine-default-sizing.md`. Current development core and Host now provide FX conversion and the
-   bounded linear multiplier/quantity profile described above. Inverse contract
-   accounting remains unsupported.
-5. Continue broader product and official-reference qualification. Current tests
-   do not establish arbitrary TradingView script, pixel, broker-fill,
-   protected-library or live-tick equivalence.
+Phases 1-4 above are implemented with controlled evidence. Risk registration,
+linear contract multipliers and quantity rules, causal requested updates, V2
+physical accounts and realtime/history-tick scheduling are no longer missing
+implementations. Earlier checkpoint descriptions retain their historical scope.
+Stage 5 still requires:
+
+1. Bring the original 16,384-bar Renko/depth/V2 execution inside its frozen
+   deadline and qualify its complete replay, cold restoration, memory and size
+   limits. Ordinary-depth qualification at an earlier source does not qualify
+   the newer source or Renko. Preserve complete observations, reports and all
+   failed receipts; partial execution peaks do not qualify memory.
+2. Run the current complete 92-module installed-worker Host gate and all 72
+   fresh resource trials, including repetition and growth checks. Targeted
+   regression and earlier full-gate results retain their own source/runtime
+   identities and do not replace this qualification.
+3. Build and exercise the actual Windows application: production controls,
+   reports, full exit/restart and durable recovery with the qualified plugin.
+   Existing browser-plus-service checks are separate evidence.
+4. Publish and independently verify the four prepared plugin bundles against
+   their locks/catalog, finish the Host PR and deliver the runnable application.
+   Core 0.3.3 is already released; the Host/plugin release is still pending.
+5. Keep reference claims bounded to retained official samples. Controlled
+   fixtures do not establish arbitrary TradingView script, Renko, pixel,
+   broker-fill, protected-library, margin-liquidation or connected live-feed
+   equivalence.
+
+Declared limits also remain: inverse accounting, significant-digit/nonzero-offset
+quantity grids, broader exchange calendars and consecutive-loss windows,
+expression-scoped foreign-context metadata admission, and exact TradingView
+minmove/pricescale representation. The declared V2 mark-settlement model needs
+separate venue qualification. Pyne external-account replay is not advertised;
+its native-account replay is a separate path. Order comments and leg-specific
+alert information are preserved through fills and reports, but do not deliver
+external notifications. See `pine-host-capabilities.md`, `pine-contract-rules.md`,
+`pine-account-liquidation.md` and `pine-order-metadata.md` for those boundaries.
 
 Official context semantics reviewed against TradingView's
 [chart information](https://www.tradingview.com/pine-script-docs/concepts/chart-information/)

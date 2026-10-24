@@ -15,7 +15,23 @@ from .pine_stream import PineStream,observations_match,seal_observation_group,ma
 CONTRACT="candlescope.pine-print-tick/1"
 
 
-def open_stream(plugin,wire,cancelled,deadline,*,resume=None,_resume_owned=False):
+def _physical_source(wire):
+    """One private source for a logical execution's read-only clock passes.
+
+    Discovery discards its ledger, never changes these physical facts, and
+    can reuse the same detached V2 payloads. A new execution/seek gets a new
+    source. Materialize lazily at the original admission/deadline boundary.
+    """
+    rows=None
+    def source():
+        nonlocal rows
+        if rows is None:
+            rows=physical_events(wire)
+        return rows
+    return source
+
+
+def open_stream(plugin,wire,cancelled,deadline,*,resume=None,_resume_owned=False,_event_source=None):
     if (wire.get("pine_print_tick_contract")!=CONTRACT or wire.get("execution_fidelity") not in FIDELITIES
             or wire["identity"].get("external_stream_contract")!=STREAM_CONTRACT):
         raise BacktestError("EXTERNAL_UNSUPPORTED","physical Pine ticks require the negotiated print stream")
@@ -41,7 +57,7 @@ def open_stream(plugin,wire,cancelled,deadline,*,resume=None,_resume_owned=False
         stream=PineStream(plugin,transport,opening,cancelled,deadline=deadline)
         try:
             from .pine_history_tick_execution import prepare_window
-            prepare_window(stream,plugin,wire,cancelled,deadline)
+            prepare_window(stream,plugin,wire,cancelled,deadline,_event_source=_event_source)
             return stream
         except Exception:
             stream.close()
@@ -71,18 +87,20 @@ class ReplayWorker:
 
     def execute(self,runner,cancelled,*,resume,target,resume_owned=False,capture_owned=False):
         deadline=time.monotonic()+120
+        source=_physical_source(self.wire)
         saved=(resume or {}).get("clock",{}).get("stream")
         if not (self.stream is not None and isinstance(saved,dict)
                 and not self.stream.bar_open and self.stream.matches_checkpoint(saved)
                 and self.history==resume.get("history")):
             self.close()
-            self.stream=open_stream(self.plugin,self.wire,cancelled,deadline,resume=resume,_resume_owned=resume_owned)
+            self.stream=open_stream(self.plugin,self.wire,cancelled,deadline,resume=resume,_resume_owned=resume_owned,
+                _event_source=source)
         self.stream.cancelled,self.stream.deadline=cancelled,deadline
         del saved
         from .external import _run_external_host
         result,state=_run_external_host(self.plugin,self.wire,runner,cancelled,resume=resume,target=target,
             deadline=deadline,_scenario_runner=runner,_pine_stream=self.stream,
-            _consume_resume=resume_owned and resume is not None,_capture_owned=capture_owned)
+            _consume_resume=resume_owned and resume is not None,_capture_owned=capture_owned,_event_source=source)
         self.history=deepcopy(state["history"])
         return result,state
 
@@ -224,11 +242,11 @@ class PrintTickClock:
 
 
 def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=False,capture_checkpoint=True,
-              compact_groups=True,_capture_owned=False,_consume_state=False,_chain_commits=True):
+              compact_groups=True,_capture_owned=False,_consume_state=False,_chain_commits=True,_event_source=None):
     clock=PrintTickClock(stream,kernel,orders,wire,state=state,_compact_groups=compact_groups,
         _owned_state=_consume_state,_chain_commits=_chain_commits)
     interval=parse_interval_spec(wire["interval"])
-    events=physical_events(wire)
+    events=physical_events(wire) if _event_source is None else _event_source()
     kernel.source_kind=assert_trade_stream(tuple(event for event in events if event.role=="TRADES"))
     target=len(wire["bars"]) if target is None else target
     end=interval.next_ms(wire["bars"][target-1]["time"]*1000)

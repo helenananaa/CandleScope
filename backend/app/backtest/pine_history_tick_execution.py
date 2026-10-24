@@ -82,7 +82,7 @@ def open_stream(plugin,wire,cancelled,deadline,*,resume=None,_resume_owned=False
     return stream
 
 
-def prepare_window(stream,plugin,wire,cancelled,deadline):
+def prepare_window(stream,plugin,wire,cancelled,deadline,*,_event_source=None):
     """Use disposable real Host ledgers; only the stable plan survives.
 
     No account state, fees, orders or requested prices from a tentative run are
@@ -97,7 +97,7 @@ def prepare_window(stream,plugin,wire,cancelled,deadline):
         check_control(cancelled,deadline)
         try:
             _run_external_host(plugin,wire,invoke,cancelled,deadline=deadline,
-                _cost_scenario=True,_pine_stream=stream,_discovery_only=True)
+                _cost_scenario=True,_pine_stream=stream,_discovery_only=True,_event_source=_event_source)
         except WindowRebaseRequired:
             stream.rebase()
         else:

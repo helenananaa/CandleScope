@@ -223,6 +223,17 @@ The change passed 229 installed Pine/Pyne account, BAR/physical-tick, report,
 event-window and durable-recovery cases without skips, including malformed
 admission, equal-time ordering and detached coordinate projections.
 
+Window discovery and final physical execution now share one private, lazily
+constructed event source within that logical run. Each tentative ledger is
+still discarded, and every later execution or seek constructs a new source.
+Installed trade-tape and depth-book controls compare the complete result with
+separate source construction, check that every discovery and execution pass
+leaves the source unchanged, and verify isolation after caller mutation. This
+reduces three source constructions to one for those event-window cases; it does
+not establish a stable whole-run speedup or resource qualification.
+The combined installed Pine/Pyne account, clock, report, event-window and
+durable-recovery regression passes all 236 cases without skips (858.58 s).
+
 Controlled tests cover all nine supported mode/callback combinations, spot cash
 and inventory, pending queues/liquidity, backward seek, replay-service/interpreter-
 worker restart, requested data,
@@ -245,7 +256,8 @@ This is component plus real-service validation, not packaged-application proof.
 
 Pyne external-account replay remains unadvertised; existing Pyne native-account
 replay is separate. Workbench risk and closing scheduling now use the negotiated
-control contract. BAR fill recalculation, richer request-prefix updates and
-larger-history performance remain further work. These local checks
+control contract. BAR fill recalculation and causal requested-data updates are
+connected; current full regression, larger-history resources and packaged
+acceptance remain to qualify. These local checks
 do not establish packaged-app acceptance, real exchange queues or TradingView
 broker-emulator equivalence.
