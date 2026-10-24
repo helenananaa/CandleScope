@@ -2142,6 +2142,7 @@ export const cs = {
   "replay.liq.liqPrice": "Likvidační cena",
   "replay.liq.bankruptcy": "Bankrotová cena",
   "replay.liq.takeover": "Cena převzetí",
+  "replay.liq.estimatedFeeAtTrigger": "Odhad poplatku za likvidaci při aktivaci",
   "replay.liq.fee": "Poplatek za likvidaci",
   "replay.liq.l2": "L2 {fidelity} · {levels} úrovní · viditelné {qty} · přesnost fronty: false",
   "replay.liq.fill": "Plnění",

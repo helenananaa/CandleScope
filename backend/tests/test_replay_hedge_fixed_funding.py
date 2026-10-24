@@ -4,13 +4,90 @@ from dataclasses import replace
 from decimal import Decimal
 
 import pytest
-
 from app.replay.training.models import ReplayV2CommandType
-from tests.fixtures.replay.hedge_input_fakes import prepare_hedge_request, import_hedge_track_public_inputs
-from tests.test_replay_v2_training_phase5 import _acquire, _request, _command
+
+from tests.fixtures.replay.hedge_input_fakes import (
+    import_hedge_track_public_inputs,
+    prepare_hedge_request,
+)
+from tests.test_replay_v2_training_phase5 import _acquire, _command, _request
 from tests.test_replay_v2_training_phase6 import _risk_service, _sandbox_request, _send
 
 pytestmark = pytest.mark.anyio
+
+
+@pytest.mark.parametrize("rate", ["1", "-1"])
+@pytest.mark.parametrize("basis", ["STEP_BASE", "ADVANCE"])
+@pytest.mark.parametrize("optimized", [False, True])
+async def test_cross_market_funding_offsets_before_risk_and_survives_retry_restart(
+    tmp_path, rate, basis, optimized,
+):
+    """An intermediate debit exceeds equity, but the complete cohort is safe."""
+    database = tmp_path / "offsetting-funding.db"
+    options = {
+        "symbols": ("BTCUSDT", "ETHUSDT"),
+        "bar_prices": ["99.5"] * 20,
+        "settings_overrides": {"replay_fast_forward_optimization_enabled": optimized},
+    }
+    service = await _risk_service(database, **options)
+    try:
+        prepared = await prepare_hedge_request(
+            service,
+            replace(_sandbox_request(await _request(service), initial_equity="70"),
+                    market_type="futures"),
+            root=tmp_path, prefix="offsetting-funding", book_mode="OFF",
+            mark_prices=["100"] * 13, required_symbols=["BTCUSDT", "ETHUSDT"],
+        )
+        request = replace(prepared, funding_mode="SANDBOX_FIXED",
+                          fixed_funding_rate=rate, funding_interval_ms=60_000)
+        await import_hedge_track_public_inputs(
+            service, request, root=tmp_path, prefix="offsetting-funding",
+            symbol="ETHUSDT", mark_prices=["100"] * 13, include_book=False,
+        )
+        created = await service.training.create_run(request)
+        run, primary = created["run"]["run_id"], created["run"]["adapter_session_id"]
+        await _acquire(service, run_id=run, selected_session_id=primary, command_id="acquire")
+        await _place(service, run, primary, "open-long", "LONG", "1")
+        added = await _send(
+            service, run_id=run, session_id=primary, command_id="add-secondary",
+            command_type=ReplayV2CommandType.ADD_TRACK,
+            payload={"exchange": "binance", "market_type": "futures", "symbol": "ETHUSDT",
+                     "settlement_asset": "USDT", "subscription_tier": "FULL"},
+        )
+        selected = await _send(
+            service, run_id=run, session_id=primary, command_id="select-secondary",
+            command_type=ReplayV2CommandType.SELECT_TRACK,
+            payload={"track_id": added["data"]["track"]["track_id"], "expected_viewer_revision": 0},
+        )
+        sid = selected["session_id"]
+        await _place(service, run, sid, "open-short", "SHORT", "1")
+        before = (await service.training.get_market_tracks(run))["portfolio"]
+        assert Decimal(before["equity"]) < Decimal(100)
+        payload = {"count": 2} if basis == "STEP_BASE" else {"basis": "BASE_BAR", "count": 2}
+        advance = _command(run, "offsetting-boundary", ReplayV2CommandType[basis],
+                           await service.get_session(sid), payload)
+        result = await service.training.command(run, advance)
+        after = (await service.training.get_market_tracks(run))["portfolio"]
+        assert after["liquidations"] == []
+        assert len(after["positions"]) == 2
+        assert after["cash_balance"] == before["cash_balance"]
+        assert after["equity"] == before["equity"]
+        assert Decimal(after["funding_cashflow"]) == 0
+        funding = {(leg["track_id"], leg["position_side"]): Decimal(leg["accumulated_funding"])
+                   for leg in after["hedge_state"]["position_legs"]}
+        assert funding[("track-1", "LONG")] == -Decimal(100) * Decimal(rate)
+        assert funding[("track-2", "SHORT")] == Decimal(100) * Decimal(rate)
+        assert await service.training.command(run, advance) == result
+        assert (await service.training.audit_account(run))["status"] == "PASS"
+        saved = (await service.training.get_market_tracks(run))["portfolio"]
+    finally:
+        await service.shutdown(step_timeout=1)
+    restored = await _risk_service(database, **options)
+    try:
+        assert (await restored.training.get_market_tracks(run))["portfolio"] == saved
+        assert (await restored.training.audit_account(run))["status"] == "PASS"
+    finally:
+        await restored.shutdown(step_timeout=1)
 
 
 @pytest.mark.parametrize("rate", ["0.001", "-0.001"])
@@ -40,7 +117,7 @@ async def test_fixed_funding_charges_nonzero_hedge_leg(tmp_path, rate):
                     command_type=ReplayV2CommandType.STEP_BASE, payload={"count": 2})
         after = (await service.training.get_market_tracks(run))["portfolio"]
         assert after["fidelity"]["funding"] == "AVAILABLE_APPROX_SANDBOX_FIXED"
-        expected = -Decimal("100") * Decimal(rate)
+        expected = -Decimal(100) * Decimal(rate)
         assert Decimal(after["funding_cashflow"]) == expected
         assert Decimal(after["cash_balance"]) - Decimal(before["cash_balance"]) == expected
         audit = await service.training.audit_account(run)

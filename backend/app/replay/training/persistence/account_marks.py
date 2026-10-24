@@ -1599,7 +1599,7 @@ def sync_contract_components(
             if fork_parent_run_id is not None and fork_parent_track_id is not None:
                 parent_posting = connection.execute(
                     """
-                    SELECT ledger_sequence
+                    SELECT *
                     FROM replay_training_contract_ledger
                     WHERE run_id = ? AND posting_id = ?
                     """,
@@ -1615,12 +1615,9 @@ def sync_contract_components(
                         status_code=409,
                         details={"fallback_applied": False},
                     )
-                fork_metadata = {
-                    "fork_parent_run_id": fork_parent_run_id,
-                    "fork_parent_ledger_sequence": int(
-                        parent_posting["ledger_sequence"]
-                    ),
-                }
+                fork_metadata = ledger_ops.fork_posting_metadata(
+                    parent_posting, fork_parent_run_id,
+                )
             ledger_ops.append_contract_ledger(
                 connection,
                 run_id=run_id,
@@ -1681,6 +1678,21 @@ def sync_contract_components(
                 and rule.rule_fidelity == "HISTORICAL_EXACT_VERSIONED_EXCHANGE_RULE"
             ):
                 cash_delta *= Decimal(rule.contract_size)
+            fork_metadata = {}
+            if fork_parent_run_id is not None and fork_parent_track_id is not None:
+                parent_posting = connection.execute(
+                    "SELECT * FROM replay_training_contract_ledger WHERE run_id=? AND posting_id=?",
+                    (fork_parent_run_id, f"broker:{fork_parent_track_id}:{entry_id}"),
+                ).fetchone()
+                if parent_posting is None:
+                    raise TrainingRunError(
+                        "REVIEW_FORK_ACCOUNT_LEDGER_MISSING",
+                        "forked broker entry has no immutable parent posting",
+                        status_code=409,
+                    )
+                fork_metadata = ledger_ops.fork_posting_metadata(
+                    parent_posting, fork_parent_run_id,
+                )
             ledger_ops.append_contract_ledger(
                 connection,
                 run_id=run_id,
@@ -1701,6 +1713,7 @@ def sync_contract_components(
                     "fill_id": raw.get("fill_id"),
                     "broker_amount": str(raw["amount"]),
                     "contract_size": rule.contract_size,
+                    **fork_metadata,
                 },
                 now_ms=now_ms,
             )

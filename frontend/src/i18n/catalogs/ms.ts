@@ -2142,6 +2142,7 @@ export const ms = {
   "replay.liq.liqPrice": "Harga likuidasi",
   "replay.liq.bankruptcy": "Harga muflis",
   "replay.liq.takeover": "Harga ambil alih",
+  "replay.liq.estimatedFeeAtTrigger": "Anggaran yuran likuidasi ketika dicetuskan",
   "replay.liq.fee": "Yuran likuidasi",
   "replay.liq.l2": "L2 {fidelity} · {levels} tahap · kelihatan {qty} · queue exact: false",
   "replay.liq.fill": "Isian",

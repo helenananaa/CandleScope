@@ -2142,6 +2142,7 @@ export const ar = {
   "replay.liq.liqPrice": "سعر التصفية",
   "replay.liq.bankruptcy": "سعر الإفلاس",
   "replay.liq.takeover": "سعر الاستلام",
+  "replay.liq.estimatedFeeAtTrigger": "رسوم التصفية المقدرة عند التفعيل",
   "replay.liq.fee": "رسوم التصفية",
   "replay.liq.l2": "L2 {fidelity} · {levels} مستويات · ظاهر {qty} · دقة الطابور: false",
   "replay.liq.fill": "تنفيذ",

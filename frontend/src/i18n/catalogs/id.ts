@@ -2143,6 +2143,7 @@ export const id = {
   "replay.liq.liqPrice": "Harga likuidasi",
   "replay.liq.bankruptcy": "Harga kebangkrutan",
   "replay.liq.takeover": "Harga takeover",
+  "replay.liq.estimatedFeeAtTrigger": "Estimasi biaya likuidasi saat terpicu",
   "replay.liq.fee": "Biaya likuidasi",
   "replay.liq.l2": "L2 {fidelity} · {levels} level · terlihat {qty} · queue exact: false",
   "replay.liq.fill": "Terisi",
