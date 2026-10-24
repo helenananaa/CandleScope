@@ -33,7 +33,12 @@ class _ValidatedBase:
 
 
 def checksum(raw):
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    if len(raw) <= 1024 * 1024:
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    value = hashlib.sha256()
+    for start in range(0, len(raw), 64 * 1024):
+        value.update(raw[start:start + 64 * 1024].encode("utf-8"))
+    return value.hexdigest()
 
 
 def same_json(left, right):

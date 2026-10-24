@@ -146,8 +146,12 @@ def pack(value):
     del compressed_bytes
     payload = payload_bytes.decode("ascii")
     del payload_bytes
-    envelope = encoded({"storage_schema": SCHEMA, "decoded_bytes": size,
-        "decoded_sha256": checksum.hexdigest(), "payload": payload})
+    # Base64 only contains JSON-safe ASCII; keep the same canonical key order
+    # without creating a second escaped copy of the complete payload.
+    envelope = "".join((
+        encoded({"decoded_bytes": size, "decoded_sha256": checksum.hexdigest()})[:-1],
+        ',"payload":"', payload, '","storage_schema":', encoded(SCHEMA), "}",
+    ))
     del payload
     # Incompressible values retain the legacy raw representation. Normal large
     # histories avoid allocating their complete raw string and byte copy.

@@ -11,6 +11,20 @@ from app.backtest import native_checkpoint as codec
 from app.backtest.native_replay_storage import ResultJournal, same_json
 
 
+@pytest.mark.parametrize("size", [1024 * 1024, 1024 * 1024 + 1])
+@pytest.mark.parametrize("text", ["a", "观察🙂\n\\\""])
+def test_large_journal_checksum_preserves_exact_utf8_bytes(size, text):
+    from app.backtest.native_replay_storage import checksum
+    raw = (text * (size // len(text) + 1))[:size]
+    assert checksum(raw) == hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def test_large_journal_checksum_still_rejects_invalid_utf8():
+    from app.backtest.native_replay_storage import checksum
+    with pytest.raises(UnicodeEncodeError):
+        checksum("a" * (1024 * 1024 + 1) + "\ud800")
+
+
 @pytest.mark.parametrize("count", [0, 1, 16, 17, 511, 512, 513, 1025])
 def test_streamed_checkpoint_bytes_and_hash_match_the_original_encoder(count):
     shared = {"text": "观察🙂\n\\\"", "numbers": [True, 1, 1.0, -0.0, 1e-7, 1e20]}
