@@ -139,16 +139,23 @@ class PinnedIndicatorHistory:
             )
         # Leave room for a preceding bar, so the ordinary history reader also
         # supplies evidence for a gap at this chunk's left boundary.
-        count = min(
+        capacity = min(
+            500,
             MAX_HISTORY_PAGE_BARS - 1,
             max(1, 8192 // max(1, self.interval_ms // self.base_ms)),
         )
         stop = start_ms
-        for _ in range(count):
+        count = 0
+        for _ in range(capacity):
+            count += 1
             stop = compute_bucket_end_ms(stop, self.interval_ms, interval=self.interval)
             if stop >= stop_before_ms:
                 stop = stop_before_ms
                 break
+        # A calculation range is usually much smaller than a chart page. Pass
+        # its actual bucket count through to the history authority, otherwise
+        # a 19-bar MA can prepare/project 1000 earlier bars and discard them.
+        # Keep one predecessor for gap evidence and the same source/seam rules.
         # History deliberately ends a page at the native/replay authority seam
         # even when its row limit has room. Follow that public cursor rather
         # than treating the omitted native prefix as a different seed.
