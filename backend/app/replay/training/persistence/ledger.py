@@ -203,6 +203,11 @@ def append_contract_ledger(
     state.next_sequence += 1
     state.tail_hash = entry_hash
     state.dirty = True
+    from . import isolated_wallets
+    isolated_wallets.append(
+        connection, run_id=run_id, track_id=track_id, kind=kind,
+        cash_delta=cash_delta, metadata=metadata,
+    )
     if owns_append_state:
         flush_contract_ledger_append_state(
             connection,

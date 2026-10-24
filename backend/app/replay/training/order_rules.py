@@ -722,7 +722,9 @@ def shared_order_capacity_quantity(
             )
             maximum = min(maximum, remaining_notional / (price * contract_size))
         if portfolio.get("margin_mode") == "ISOLATED":
-            allocations = portfolio.get("isolated_allocations")
+            allocations = portfolio.get(
+                "isolated_wallets" if binding.get("position_mode") == "HEDGE" else "isolated_allocations"
+            )
             account = selected_track.get("account")
             if not isinstance(allocations, Mapping) or not isinstance(account, Mapping):
                 raise TypeError("isolated account projection is invalid")
@@ -937,7 +939,9 @@ def assert_shared_settlement_reservation(
                     status_code=409,
                 )
         if portfolio.get("margin_mode") == "ISOLATED":
-            allocations = portfolio.get("isolated_allocations")
+            allocations = portfolio.get(
+                "isolated_wallets" if binding.get("position_mode") == "HEDGE" else "isolated_allocations"
+            )
             track_account = selected_track.get("account")
             if not isinstance(allocations, Mapping) or not isinstance(
                 track_account,

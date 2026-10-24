@@ -3885,7 +3885,7 @@ class TrainingRunService:
                 )
             if portfolio.get("margin_mode") == "ISOLATED":
                 positions = portfolio.get("positions")
-                allocations = portfolio.get("isolated_allocations")
+                allocations = portfolio.get("isolated_wallets")
                 orders = portfolio.get("orders")
                 if (
                     not isinstance(positions, list)

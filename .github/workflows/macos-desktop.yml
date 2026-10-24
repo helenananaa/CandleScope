@@ -88,6 +88,7 @@ jobs:
             tests/test_replay_v2_training_hedge_phase8.py \
             tests/test_replay_v2_training_hedge_phase9.py \
             tests/test_replay_isolated_liquidation_loss.py \
+            tests/test_replay_isolated_wallet.py \
             tests/test_replay_hedge_multitrack_liquidation_fork.py \
             tests/test_replay_risk.py \
             --junitxml=../output/replay-range-regression.xml

@@ -35,7 +35,7 @@ from ..historical_book import (
 )
 from . import account_marks as account_marks_ops
 from . import portfolio as portfolio_ops
-from .isolated_loss_audit import audit_isolated_transfers
+from .isolated_loss_audit import audit_active_isolated_wallets, audit_isolated_transfers
 
 
 def _broker_capital_by_track(ledger_rows, differences, expected_postings=None):
@@ -1730,6 +1730,15 @@ def audit_hedge_account_state(
         + isolated_transfer
     )
     expected_equity = expected_cash + expected_unrealized
+    if account["margin_mode"] == "ISOLATED":
+        wallets = audit_active_isolated_wallets(
+            connection, run_id, ledger_rows, portfolio, differences,
+        )
+        compare_decimal(
+            "portfolio.available_equity",
+            expected_cash - sum(wallets.values(), Decimal(0)),
+            portfolio.get("available_equity"),
+        )
     compare_decimal(
         "portfolio.cash_balance", expected_cash, portfolio.get("cash_balance")
     )
