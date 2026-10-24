@@ -209,6 +209,20 @@ ownership, event-window and transport cases without skips. The separate 35-case
 transport run overlaps this gate; a test-import failure was fixed and retained
 before those successful runs.
 
+Physical replay cursor validation now derives sequence, time and role through
+the same validated account/market ordering used by execution. It no longer
+copies every depth payload before discarding those payloads. Complete input and
+checkpoint hashes still run first, and actual execution continues to detach
+every payload. The batch coordinator also creates its full BAR event graph only
+for the BAR kernel that consumes it; other clocks construct their own events.
+On the same original 16K input, all 131,076 event coordinates match exactly;
+isolated projection timings fell from 3.28/4.48 s to 1.78/1.10 s. Four original
+1,024-bar Renko controls retain the complete result, but show no stable whole-run
+speedup. These measurements do not establish the resource matrix's qualification.
+The change passed 229 installed Pine/Pyne account, BAR/physical-tick, report,
+event-window and durable-recovery cases without skips, including malformed
+admission, equal-time ordering and detached coordinate projections.
+
 Controlled tests cover all nine supported mode/callback combinations, spot cash
 and inventory, pending queues/liquidity, backward seek, replay-service/interpreter-
 worker restart, requested data,

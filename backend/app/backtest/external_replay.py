@@ -22,9 +22,8 @@ def validate_state(wire,state):
         event_cursor=clock.get("event_cursor")
         events = wire["execution_events"]
         if wire.get("pine_v2_print_contract"):
-            from .pine_print_account import events as physical_events
-            events = [{"sequence": row.sequence, "event_time_ms": row.event_time_ms, "role": row.role}
-                      for row in physical_events(wire)]
+            from .pine_print_account import event_coordinates
+            events = event_coordinates(wire)
         if (clock.get("bar_cursor")!=cursor or type(event_cursor) is not int
                 or not 1<=event_cursor<=len(events)
                 or clock.get("last_sequence")!=events[event_cursor-1]["sequence"]):

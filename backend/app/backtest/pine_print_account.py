@@ -12,24 +12,43 @@ AUXILIARY = {"INSTRUMENT_RULES", "MARK_INDEX", "FUNDING"}
 FIDELITIES = {"TRADE_TAPE", "BOOK_ASSISTED", "BOOK_DEPTH", "BOOK_SAMPLED"}
 
 
-def events(wire):
-    """Account events precede market events on ties; source order stays stable."""
-    market = [MarketEvent(**item) for item in wire["execution_events"]]
+def _merged_rows(wire, market):
+    """Order admitted source rows without copying their unused payloads."""
     contract = wire.get("pine_v2_print_contract")
-    if contract is None:
-        return market
     if (contract != CONTRACT or wire.get("account_model") != "LINEAR_PERP_ONE_WAY_V2"
             or wire.get("execution_fidelity") not in FIDELITIES):
         raise BacktestError("FIDELITY_UNSUPPORTED", "invalid Pine V2 physical-clock contract")
     if not market or any(row.role not in {"TRADES", "ORDER_BOOK"} for row in market):
         raise BacktestError("DATA_ROLE_MISSING", "V2 print account requires frozen physical observations")
-    account = [MarketEvent(index + 1, row["time_ms"], row["role"], deepcopy(row["payload"]))
+    account = [MarketEvent(index + 1, row["time_ms"], row["role"], row["payload"])
                for index, row in enumerate(wire["account_events"])]
     if not account or any(row.role not in AUXILIARY for row in account):
         raise BacktestError("DATA_ROLE_MISSING", "V2 print account requires historical account events")
     rows = [(row, 0, index) for index, row in enumerate(account)]
     rows.extend((row, 1, index) for index, row in enumerate(market))
     rows.sort(key=lambda item: (item[0].event_time_ms, item[1], item[2]))
+    return rows
+
+
+def event_coordinates(wire):
+    """Replay cursor metadata, using the exact execution ordering and guards.
+
+    Payload values are already covered by the complete input/checkpoint hashes.
+    This projection owns its dictionaries and exposes no mutable source data.
+    """
+    market = [MarketEvent(**item) for item in wire["execution_events"]]
+    if wire.get("pine_v2_print_contract") is None:
+        return [dict(sequence=row.sequence,event_time_ms=row.event_time_ms,role=row.role) for row in market]
+    return [dict(sequence=index+1,event_time_ms=row.event_time_ms,role=row.role)
+            for index,(row,_,_) in enumerate(_merged_rows(wire,market))]
+
+
+def events(wire):
+    """Account events precede market events on ties; source order stays stable."""
+    market = [MarketEvent(**item) for item in wire["execution_events"]]
+    if wire.get("pine_v2_print_contract") is None:
+        return market
+    rows = _merged_rows(wire,market)
     result = []
     for index, (row, source, _) in enumerate(rows):
         payload = deepcopy(row.payload)

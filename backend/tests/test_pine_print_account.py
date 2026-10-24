@@ -50,6 +50,36 @@ def test_legacy_clock_retains_original_event_coordinates():
     assert "source_sequence" not in rows[1].payload
 
 
+@pytest.mark.parametrize("legacy", [False, True])
+def test_replay_coordinates_match_execution_with_equal_times_and_remain_detached(legacy):
+    source=wire()
+    source["account_events"].append(dict(time_ms=0,role="MARK_INDEX",payload={"mark_price":"112"}))
+    source["execution_events"].append(dict(sequence=7,event_time_ms=0,role="ORDER_BOOK",
+        payload={"bids":[["100","5"]],"asks":[["101","4"]]}))
+    if legacy:source.pop("pine_v2_print_contract")
+    original=deepcopy(source)
+    expected=[dict(sequence=row.sequence,event_time_ms=row.event_time_ms,role=row.role) for row in module.events(source)]
+    actual=module.event_coordinates(source)
+    assert actual==expected
+    actual[0]["sequence"]=-1
+    assert source==original and module.event_coordinates(source)==expected
+
+
+@pytest.mark.parametrize("failure", ["contract", "model", "fidelity", "market-role", "account-role", "empty-market", "empty-account"])
+def test_coordinate_projection_keeps_execution_admission_errors(failure):
+    source=wire()
+    if failure=="contract":source["pine_v2_print_contract"]="unknown"
+    elif failure=="model":source["account_model"]="SPOT_CASH_V1"
+    elif failure=="fidelity":source["execution_fidelity"]="BAR_APPROX"
+    elif failure=="market-role":source["execution_events"][0]["role"]="BARS"
+    elif failure=="account-role":source["account_events"][0]["role"]="TRADES"
+    elif failure=="empty-market":source["execution_events"]=[]
+    else:source["account_events"]=[]
+    with pytest.raises(BacktestError) as execution:module.events(source)
+    with pytest.raises(BacktestError) as projection:module.event_coordinates(source)
+    assert str(execution.value)==str(projection.value)
+
+
 def test_trade_quote_does_not_replace_account_mark_and_funding_uses_contract_units():
     kernel=TradeSimulationKernel(account_model="LINEAR_PERP_ONE_WAY_V2", initial_balance=D(1000),leverage=D(10),funding_mode="HISTORICAL_REQUIRED")
     opening=dict(rules(-2).payload, contract_multiplier="50")

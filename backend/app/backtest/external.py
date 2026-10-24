@@ -255,10 +255,6 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
         check_risk_response(orders, wire, latest)
         return orders.translate(current, event.sequence)
 
-    events = [MarketEvent(sequence=index + 1, event_time_ms=interval.next_ms(bar["time"] * 1000) - 1, role="BARS",
-                          payload={"open_time_ms": bar["time"] * 1000, "close_time_ms": interval.next_ms(bar["time"] * 1000) - 1,
-                                   **{key: str(bar[key]) for key in ("open", "high", "low", "close", "volume")}})
-              for index, bar in enumerate(wire["bars"])]
     execution_passes = None
     if wire.get("pine_print_tick_contract"):
         from .pine_print_tick_execution import run_clock
@@ -284,6 +280,12 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
         latest,history,accounts,execution_passes,clock=run_feedback_clock(kernel,orders,wire,plugin,evaluate,cancelled,deadline,state=clock,target=target)
     elif fidelity == "BAR_APPROX":
         from app.simulation.closing_tick import match_closing_tick
+        # Other clocks construct their own source events. Allocate this full
+        # historical BAR graph only for the kernel that actually consumes it.
+        events = [MarketEvent(sequence=index + 1, event_time_ms=interval.next_ms(bar["time"] * 1000) - 1, role="BARS",
+                              payload={"open_time_ms": bar["time"] * 1000, "close_time_ms": interval.next_ms(bar["time"] * 1000) - 1,
+                                       **{key: str(bar[key]) for key in ("open", "high", "low", "close", "volume")}})
+                  for index, bar in enumerate(wire["bars"])]
         kernel.run(events[cursor:target], strategy, finalize=target==len(wire["bars"]),
             **({"close_callback": lambda bar, seq: match_closing_tick(kernel, bar, seq)} if wire.get("closing_ticks") else {}))
     else:
