@@ -78,6 +78,10 @@ export const zhTW = {
   "pc.enginesHint": "個別探索到的指令碼引擎，可用於圖表運算，不計入上方已安裝外掛。",
 
   ...nativeEnglish,
+  "native.orderComment": "訂單註解",
+  "native.orderAlertMessage": "成交警示文字",
+  "native.orderAlertEnabled": "成交警示啟用",
+  "native.orderFillRole": "成交訂單分支",
   "settings.support.tagline": "開源行情分析工作台",
   "settings.support.title": "遇到問題？",
   "settings.support.description": "描述發生了什麼，並附上診斷檔案，協助我們找出原因。",

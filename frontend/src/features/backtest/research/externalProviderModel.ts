@@ -8,7 +8,13 @@ export function isExternalRevision(revision: StrategyRevisionRecord | undefined)
 
 export function editableResearchRunConfig(config: Record<string, unknown>): Record<string, unknown> {
   const editable = { ...config };
+  if (config.pine_runtime_identity) delete editable.strategy_source;
   for (const field of ["strategy_execution_revision", "external_scope_hash", "external_provider_identity"]) delete editable[field];
+  for (const field of ["chart_book_data_hash", "pine_runtime_identity", "pine_local_data_root", "pine_order_runtime_identity",
+    "pine_fill_callbacks", "pine_process_on_close", "pine_risk_windows", "pine_bar_path_contract", "pine_v2_bar_contract",
+    "pine_history_ticks", "pine_realtime_ticks", "host_policy_revision", "risk_policy", "fill_policy", "tif_supported",
+    "equity_curve_event_interval", "report_schema", "equity_sampling", "equity_curve_mode", "annualization_days", "benchmark_model"])
+    delete editable[field];
   return editable;
 }
 

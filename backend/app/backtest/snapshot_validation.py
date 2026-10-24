@@ -43,7 +43,8 @@ def require_declared_snapshot(preview: dict[str, Any], payload: RunCreateRequest
     if payload.fidelity_mode == "BAR_APPROX":
         return
     capabilities = preview.get("fidelity_capabilities") or []
-    if payload.fidelity_mode not in capabilities and "AGG_TRADE_TAPE" not in capabilities:
+    from .chart_book import BOOK_MODES
+    if payload.fidelity_mode not in capabilities and (payload.fidelity_mode in BOOK_MODES or "AGG_TRADE_TAPE" not in capabilities):
         raise BacktestError(
             "FIDELITY_UNSUPPORTED",
             "this data only supports bar estimate",

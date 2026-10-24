@@ -1,5 +1,5 @@
 import pytest
-from tests.test_native_backtests import runtime, terminal, pytestmark
+from tests.test_native_backtests import runtime as runtime, terminal, pytestmark as pytestmark
 from tests.test_external_strategy_v2 import source, tape
 
 
@@ -94,7 +94,6 @@ def test_installed_unsupported_price_contract_fails_closed(runtime, language, ar
 ''',tick=tick)
     assert record["state"] == "FAILED", record
     assert record["result"] is None
-    # Pine rejects the ambiguous pair during semantic analysis, before the
-    # host's equivalent admission check; both must fail without a report.
-    expected = "combined trigger families are not supported" if language == "pine" and "limit=11" in arguments else error
-    assert expected in str(record["error"])
+    # The current core exports both trigger families. The Host's explicit
+    # price-family admission must still reject the unsupported combination.
+    assert error in str(record["error"])

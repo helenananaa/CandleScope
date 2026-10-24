@@ -1,7 +1,46 @@
 import sys
+import json
 import threading
 import pytest
 from app.backtest.native_session import SessionWorker
+from app.backtest.native import digest
+
+
+@pytest.mark.parametrize("value", [{}, [], {"signed": [-0.0, 0.0], "types": [1, True, 1.0, None],
+    "nested": [{"unicode": "中文\U0001f4c8", "empty": []}, {"leaf": {"n": 2**64}}]}])
+def test_identity_container_copier_preserves_exact_json_and_detaches_every_container(value):
+    from app.backtest.native import encoded
+    from app.backtest.native_session import _json_container_copier
+    raw=encoded(value)
+    clone=_json_container_copier(json.loads(raw))
+    first,second=clone(),clone()
+    assert encoded(first)==encoded(second)==raw
+    def containers(item):
+        if isinstance(item,(dict,list)):
+            yield item
+            for child in (item.values() if isinstance(item,dict) else item):
+                yield from containers(child)
+    first_containers=list(containers(first))
+    second_containers=list(containers(second))
+    assert {id(item) for item in first_containers}.isdisjoint(id(item) for item in second_containers)
+    assert len({id(item) for item in first_containers})==len(first_containers)
+    for item in first_containers:item.clear()
+    assert encoded(second)==encoded(clone())==raw
+
+
+def test_file_size_guard_observes_growth_without_moving_shared_offset():
+    import os
+    import tempfile
+    from app.backtest.native_session import _file_size
+    with tempfile.TemporaryFile() as stream:
+        stream.write(b"first")
+        stream.flush()
+        stream.seek(2)
+        assert _file_size(stream) == os.fstat(stream.fileno()).st_size == 5
+        assert stream.tell() == 2
+        stream.truncate(8192)
+        assert _file_size(stream) == os.fstat(stream.fileno()).st_size == 8192
+        assert stream.tell() == 2
 
 
 def test_timeout_reaps_persistent_child():
@@ -16,6 +55,7 @@ time.sleep(20)
         worker.request({"operation": "advance", "target": 1}, threading.Event(), timeout=.1)
     assert worker.process.poll() is not None
     assert worker.stderr.closed
+    assert not worker._io_thread.is_alive()
 
 
 def test_cancelled_session_reaps_child():
@@ -31,6 +71,7 @@ time.sleep(20)
     with pytest.raises(ValueError, match="NATIVE_CANCELLED"):
         worker.advance(1, event)
     assert worker.process.poll() is not None
+    assert not worker._io_thread.is_alive()
 
 
 @pytest.mark.parametrize("cancel", [False, True])
@@ -43,3 +84,290 @@ def test_evaluator_timeout_or_cancel_reaps_child_without_open_handshake(cancel):
     with pytest.raises(ValueError, match="NATIVE_CANCELLED" if cancel else "NATIVE_TIMEOUT"):
         worker.request({"operation": "execute"}, event, timeout=.1)
     assert worker.process.poll() is not None and worker.stderr.closed
+    assert not worker._io_thread.is_alive()
+
+
+def test_concurrent_close_reaps_child_and_releases_all_streams_once():
+    worker = SessionWorker({"command": [sys.executable, "-u", "-c", "import time; time.sleep(20)"]},
+        {"identity": {}}, threading.Event(), evaluator=True)
+    barrier = threading.Barrier(3)
+    failures = []
+    def close():
+        barrier.wait()
+        try:
+            worker.close()
+        except Exception as exc:
+            failures.append(exc)
+    threads = [threading.Thread(target=close) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    barrier.wait()
+    for thread in threads:
+        thread.join(timeout=5)
+        assert not thread.is_alive()
+    assert failures == []
+    assert worker.process.poll() is not None
+    assert all(stream.closed for stream in (worker.process.stdin, worker.process.stdout, worker.stderr))
+    worker.close()
+
+
+def test_terminated_pipe_close_error_does_not_mask_timeout_or_skip_other_streams():
+    worker = SessionWorker({"command": [sys.executable, "-u", "-c", "import time; time.sleep(20)"]},
+        {"identity": {}}, threading.Event(), evaluator=True)
+    stream = worker.process.stdin
+    class BrokenClose:
+        @property
+        def closed(self):
+            return stream.closed
+        def close(self):
+            stream.close()
+            raise OSError(22, "controlled terminated pipe close")
+    worker.process.stdin = BrokenClose()
+    worker.close()
+    assert worker.process.poll() is not None
+    assert worker.process.stdout.closed and worker.stderr.closed and stream.closed
+    assert worker.close_errors == [{"stream": "stdin", "errno": 22}]
+    worker.close()
+
+
+@pytest.mark.parametrize("contract", [False, True])
+def test_real_worker_binds_full_identity_before_references_and_preserves_public_responses(contract):
+    identity = {"engine": "unchanged", "nested":{"value":"unchanged", "lists":[{"values":[-0.0,0.0,1,True,1.0]}]},
+                **({"session_identity": "candlescope.session-identity/1"} if contract else {})}
+    script = '''import json,sys
+for index,line in enumerate(sys.stdin):
+    request=json.loads(line)
+    if index==0 or "identity_ref" not in request:
+        assert "identity" in request
+        response={"ok":True,"identity":request["identity"],"index":index}
+    else:
+        assert "identity" not in request
+        response={"ok":True,"identity_ref":request["identity_ref"],"index":index}
+    print(json.dumps(response),flush=True)
+'''
+    worker = SessionWorker({"command": [sys.executable, "-u", "-c", script]},
+                           {"identity": identity}, threading.Event(), evaluator=True)
+    try:
+        for index in range(3):
+            response = worker.request({"operation": "execute"}, threading.Event())
+            assert response == {"ok": True, "identity": identity, "index": index}
+            assert json.dumps(response["identity"],sort_keys=True)==json.dumps(identity,sort_keys=True)
+            response["identity"]["nested"]["value"] = "caller mutation"
+            response["identity"]["nested"]["lists"][0]["values"].clear()
+    finally:
+        worker.close()
+
+
+@pytest.mark.parametrize("failure", ["changed", "mixed", "unbound", "unnegotiated"])
+def test_invalid_wire_identity_reference_reaps_the_actual_child(failure):
+    identity = {"engine": "unchanged", **({"session_identity": "candlescope.session-identity/1"}
+                                          if failure != "unnegotiated" else {})}
+    reference = digest(identity)
+    script = f'''import json,sys
+for index,line in enumerate(sys.stdin):
+    request=json.loads(line)
+    if index==0 and {failure!r}!="unbound":
+        result={{"ok":True,"identity":request["identity"]}}
+    else:
+        result={{"ok":True,"identity_ref":{reference!r} if {failure!r}!="changed" else "sha256:changed"}}
+        if {failure!r}=="mixed":result["identity"]={identity!r}
+    print(json.dumps(result),flush=True)
+'''
+    worker = SessionWorker({"command": [sys.executable, "-u", "-c", script]},
+                           {"identity": identity}, threading.Event(), evaluator=True)
+    if failure != "unbound":
+        worker.request({"operation": "execute"}, threading.Event())
+    with pytest.raises(ValueError, match="NATIVE_IDENTITY_MISMATCH"):
+        worker.request({"operation": "execute"}, threading.Event())
+    assert worker.process.poll() is not None and worker.stderr.closed
+
+
+def test_reused_transport_preserves_ordered_responses_and_closes_its_thread():
+    script = '''import json,sys
+for line in sys.stdin:
+    request=json.loads(line)
+    print(json.dumps(dict(ok=True,identity=request['identity'],ordinal=request['ordinal'])),flush=True)
+'''
+    worker = SessionWorker({"command":[sys.executable,"-u","-c",script]},
+                           {"identity":{}},threading.Event(),evaluator=True)
+    transport = worker._io_thread
+    try:
+        for ordinal in range(500):
+            assert worker.request({"operation":"execute","ordinal":ordinal},threading.Event())["ordinal"] == ordinal
+            assert worker._io_thread is transport and transport.is_alive()
+    finally:
+        worker.close()
+    assert not transport.is_alive()
+    assert worker.process.poll() is not None
+    with pytest.raises(ValueError,match="session is closed"):
+        worker.request({"operation":"execute","ordinal":500},threading.Event())
+
+
+def test_concurrent_callers_cannot_mix_inflight_protocol_responses():
+    script = '''import json,sys,time
+for line in sys.stdin:
+    request=json.loads(line)
+    time.sleep(.001)
+    print(json.dumps(dict(ok=True,identity=request['identity'],ordinal=request['ordinal'])),flush=True)
+'''
+    worker = SessionWorker({"command":[sys.executable,"-u","-c",script]},
+                           {"identity":{}},threading.Event(),evaluator=True)
+    failures = []
+    def call(ordinal):
+        try:
+            assert worker.request({"operation":"execute","ordinal":ordinal},threading.Event())["ordinal"] == ordinal
+        except Exception as exc:
+            failures.append(exc)
+    try:
+        threads = [threading.Thread(target=call,args=(ordinal,)) for ordinal in range(12)]
+        for thread in threads: thread.start()
+        for thread in threads:
+            thread.join(timeout=5)
+            assert not thread.is_alive()
+        assert failures == []
+    finally:
+        worker.close()
+    assert not worker._io_thread.is_alive()
+
+
+@pytest.mark.parametrize("blocked_write", [False, True])
+@pytest.mark.parametrize("cancel", [False, True])
+def test_transport_interrupts_blocked_pipe_io_and_preserves_reason(blocked_write, cancel):
+    event = threading.Event()
+    script = "import sys,time; " + ("" if blocked_write else "sys.stdin.readline(); ") + "time.sleep(20)"
+    worker = SessionWorker({"command": [sys.executable, "-u", "-c", script]},
+                           {"identity": {}}, event, evaluator=True)
+    timer = threading.Timer(.2, event.set) if cancel else None
+    if timer:
+        timer.start()
+    try:
+        with pytest.raises(ValueError, match="NATIVE_CANCELLED" if cancel else "NATIVE_TIMEOUT"):
+            worker.request({"operation": "execute", "data": "x" * (2*1024*1024 if blocked_write else 1)},
+                           event, timeout=5 if cancel else .2)
+        assert worker.process.poll() is not None
+        assert all(stream.closed for stream in (worker.process.stdin, worker.process.stdout, worker.stderr))
+        assert not worker._io_thread.is_alive()
+    finally:
+        if timer:
+            timer.cancel()
+        worker.close()
+
+
+def test_transport_reaps_child_that_fills_stderr_without_reply(monkeypatch):
+    from app.backtest import native_session
+    monkeypatch.setattr(native_session, "MAX_BYTES", 4096)
+    script = "import sys,time; sys.stdin.readline(); sys.stderr.write('x'*8192); sys.stderr.flush(); time.sleep(20)"
+    worker = SessionWorker({"command": [sys.executable, "-u", "-c", script]},
+                           {"identity": {}}, threading.Event(), evaluator=True)
+    try:
+        with pytest.raises(ValueError, match="stderr exceeds"):
+            worker.request({"operation": "execute"}, threading.Event(), timeout=5)
+        assert worker.process.poll() is not None and worker.stderr.closed
+        assert not worker._io_thread.is_alive()
+    finally:
+        worker.close()
+
+@pytest.mark.parametrize("failure", [None, "identity", "timeout", "cancel"])
+def test_stream_chain_keeps_each_acknowledgement_and_stops_on_transport_failure(failure):
+    from app.backtest.native_session import STREAM_CONTRACT, SCHEDULE_CONTRACT, TICK_CONTRACT
+    identity = {"external_stream_contract": STREAM_CONTRACT}
+    script = f'''import sys,json,time
+for index,line in enumerate(sys.stdin):
+    request=json.loads(line)
+    if index and {failure!r} in ("timeout","cancel"):time.sleep(20)
+    assert request['bar_cursor']==index and request['intent_base']==index*2
+    response=dict(ok=True,identity=request['identity'],external_stream_contract={STREAM_CONTRACT!r},
+        execution_schedule_contract={SCHEDULE_CONTRACT!r},execution_tick_contract={TICK_CONTRACT!r},
+        bar_cursor=index+1,intent_cursor=(index+1)*2,ordinal=index)
+    if index==1 and {failure!r}=="identity":response['identity']={{'changed':True}}
+    print(json.dumps(response),flush=True)
+'''
+    worker=SessionWorker({"command":[sys.executable,"-u","-c",script]},
+                         {"identity":identity},threading.Event(),evaluator=True)
+    event=threading.Event()
+    timer=threading.Timer(.1,event.set) if failure=="cancel" else None
+    if timer:timer.start()
+    payloads=[dict(operation="stream_commit",external_stream_contract=STREAM_CONTRACT,
+                   bar_cursor=0,intent_base=0) for _ in range(8)]
+    try:
+        if failure:
+            with pytest.raises(ValueError,match={"identity":"NATIVE_IDENTITY_MISMATCH",
+                    "timeout":"NATIVE_TIMEOUT","cancel":"NATIVE_CANCELLED"}[failure]):
+                worker.request_chain(payloads,event,timeout=.2 if failure=="timeout" else 5)
+            assert worker.process.poll() is not None and not worker._io_thread.is_alive()
+        else:
+            results=worker.request_chain(payloads,event)
+            assert [r['ordinal'] for r in results]==list(range(8))
+            assert [r['intent_cursor'] for r in results]==list(range(2,18,2))
+            assert all(r['identity']==identity for r in results)
+            assert all(p['bar_cursor']==0 and p['intent_base']==0 for p in payloads)
+    finally:
+        if timer:timer.cancel()
+        worker.close()
+
+
+@pytest.mark.parametrize("failure", [None, "count", "nested-identity", "contract", "identity", "timeout", "cancel", "oversize"])
+def test_negotiated_chain_bounds_frames_and_validates_all_acknowledgements(monkeypatch, failure):
+    from app.backtest import native_session as transport
+    identity = {"external_stream_contract": transport.STREAM_CONTRACT,
+                "external_stream_chain_contract": transport.STREAM_CHAIN_CONTRACT,
+                "session_identity": transport.SESSION_IDENTITY_CONTRACT}
+    contracts = dict(external_stream_contract=transport.STREAM_CONTRACT,
+                     execution_schedule_contract=transport.SCHEDULE_CONTRACT,
+                     execution_tick_contract=transport.TICK_CONTRACT)
+    script = f'''import sys,json,time
+cursor=0
+contracts={contracts!r}
+for line in sys.stdin:
+    request=json.loads(line)
+    header={{'identity':request['identity']}} if 'identity' in request else {{'identity_ref':request['identity_ref']}}
+    if request['operation']=='stream_open':
+        response=dict(ok=True,**contracts,**header,bar_cursor=0,intent_cursor=0)
+    elif request['operation']=='stream_chain':
+        if {failure!r} in ('timeout','cancel'):time.sleep(20)
+        assert request['bar_cursor']==cursor and request['intent_base']==cursor*2
+        rows=[]
+        for command in request['commands']:
+            assert command['operation']=='stream_commit'
+            cursor+=1
+            rows.append(dict(**contracts,bar_cursor=cursor,intent_cursor=cursor*2,batched=True))
+        if {failure!r}=='count':rows.pop()
+        if {failure!r}=='nested-identity':rows[1]['identity']={{}}
+        if {failure!r}=='contract':rows[1]['execution_tick_contract']='wrong'
+        if {failure!r}=='identity':header={{'identity_ref':'wrong'}}
+        response=dict(ok=True,**contracts,**header,external_stream_chain_contract={transport.STREAM_CHAIN_CONTRACT!r},results=rows)
+    else:
+        assert request['operation']=='stream_commit'
+        assert request['bar_cursor']==cursor and request['intent_base']==cursor*2
+        cursor+=1
+        response=dict(ok=True,**contracts,**header,bar_cursor=cursor,intent_cursor=cursor*2,batched=False)
+    print(json.dumps(response),flush=True)
+'''
+    event = threading.Event()
+    worker = SessionWorker({"command": [sys.executable, "-u", "-c", script]},
+                           {"identity": identity}, event, evaluator=True)
+    timer = None
+    try:
+        worker.request(dict(operation="stream_open", **contracts), event)
+        if failure == "oversize": monkeypatch.setattr(transport, "MAX_BYTES", 4000)
+        if failure == "cancel":
+            timer = threading.Timer(.1, event.set)
+            timer.start()
+        payloads = [dict(operation="stream_commit", external_stream_contract=transport.STREAM_CONTRACT,
+            bar_cursor=0, intent_base=0, **({"padding": "x"*1000} if failure == "oversize" else {})) for _ in range(8)]
+        if failure not in {None, "oversize"}:
+            code = {"identity": "NATIVE_IDENTITY_MISMATCH", "timeout": "NATIVE_TIMEOUT", "cancel": "NATIVE_CANCELLED"}.get(failure, "EXTERNAL_PROTOCOL_ERROR")
+            with pytest.raises(ValueError, match=code):
+                worker.request_chain(payloads, event, timeout=.2 if failure == "timeout" else 5)
+            assert worker.process.poll() is not None and not worker._io_thread.is_alive()
+        else:
+            results = worker.request_chain(payloads, event)
+            assert [result["bar_cursor"] for result in results] == list(range(1, 9))
+            assert all(result["batched"] == (failure is None) for result in results)
+            assert all(result["identity"] == identity for result in results)
+            results[0]["identity"]["session_identity"] = "caller mutation"
+            assert results[1]["identity"] == worker.identity == identity
+            assert all(payload["bar_cursor"] == payload["intent_base"] == 0 for payload in payloads)
+    finally:
+        if timer: timer.cancel()
+        worker.close()

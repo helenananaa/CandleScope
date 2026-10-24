@@ -4,7 +4,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from app.api.v1.backtests import router
-from tests.test_native_backtests import runtime, terminal, pytestmark
+from tests.test_native_backtests import runtime as runtime, terminal, pytestmark as pytestmark
 
 PINE = '''//@version=6
 strategy("Feedback")
@@ -59,8 +59,14 @@ def test_host_matching_feedback_controls_complete_script_and_owns_report(runtime
         assert client.get("/backtests/native/runs").json()["runs"] == []
         assert len(client.get("/backtests/external/runs").json()["runs"]) == 1
         assert client.get(f"/backtests/external/runs/{result['run_id']}/export").json() == result
-        with pytest.raises(ValueError, match="native replay"):
-            host.native.replay.create(result["run_id"])
+        if language == "pine":
+            replay = host.native.replay.create(result["run_id"])
+            assert replay["method"] == "HOST_ACCOUNT_CHECKPOINT"
+            assert replay["cursor"] == 0 and replay["result"] is None
+            assert replay["execution_mode"] == "CANDLESCOPE"
+        else:
+            with pytest.raises(ValueError, match="external replay"):
+                host.native.replay.create(result["run_id"])
 
 
 @pytest.mark.parametrize("language,source", [("pine", PINE.replace('qty=2)', 'qty=2, comment="unsupported")')),

@@ -1,53 +1,244 @@
 """External broker adapter. Never evaluates the native broker ledger."""
-import pine_compat
-from .strategy_time import engine_bars
-from .event_requests import run_with_event_requests
-from candlescope_plugin_sdk.native_strategy import identity, serve, serve_evaluator
+
+import re
 from functools import lru_cache
+
+import pine_compat
+from candlescope_plugin_sdk.native_strategy import identity, serve, serve_evaluator
+
+from .event_requests import run_with_event_requests
+from .host_inputs import chart_metadata, native_request_bars, require_price_grid, require_quote_currency
+from .libraries import library_sources
+from .prefix_transport import CONTRACT as PREFIX_CONTRACT
+from .prefix_transport import PASSES_CONTRACT, CLOCKS_CONTRACT, PrefixInput
+from .strategy_time import engine_bars
+from .entry_risk import options as risk_options, available as risk_available, STOP_CONTRACT
+from .execution_schedule import CONTRACT as SCHEDULE_CONTRACT, TICK_CONTRACT, capabilities as schedule_capabilities, execution_input
+from .request_updates import CONTRACT as REQUEST_UPDATE_CONTRACT, capabilities as request_update_capabilities
+from .request_updates import validate_contract as validate_request_updates, closed_schedule, eligible as request_updates_eligible
+from .external_stream import capabilities as stream_capabilities
+from .event_stream import capabilities as event_capabilities, required as event_required
+
+_prefix = PrefixInput()
+_session = None
+_session_count = 0
 
 
 def describe():
     if not hasattr(pine_compat.Program, "run_external"):
         raise ValueError("EXTERNAL_RUNTIME_UNAVAILABLE: install external-broker/1 runtime")
-    return identity("candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-external/5")
+    return {
+        **identity(
+            "candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-external/13"
+        ),
+        "workbench_control": "candlescope.pine-workbench-control/1",
+        "external_replay": "candlescope.external-replay/1",
+        **schedule_capabilities(),
+        **stream_capabilities(),
+        **request_update_capabilities(),
+        **event_capabilities(),
+        **({"risk_stop_contract": STOP_CONTRACT} if risk_available() else {}),
+        **({"closing_tick_contract": "candlescope.pine-closing-tick/1"}
+           if getattr(pine_compat, "EXTERNAL_CLOSING_TICK_SCHEMA_VERSION", 0) == 1 else {}),
+        "external_orders": getattr(pine_compat, "EXTERNAL_ORDER_SCHEMA_VERSION", 1),
+        "external_sizing": getattr(pine_compat, "EXTERNAL_SIZING_SCHEMA_VERSION", 0),
+        "contract_metadata_schema": getattr(pine_compat, "CONTRACT_METADATA_SCHEMA_VERSION", 0),
+        **({"order_metadata_contract": "candlescope.pine-order-metadata/1"}
+           if getattr(pine_compat, "EXTERNAL_ORDER_METADATA_SCHEMA_VERSION", 0) == 1 else {}),
+        "prefix_append": PREFIX_CONTRACT,
+        "prefix_passes": PASSES_CONTRACT,
+        "prefix_clocks": CLOCKS_CONTRACT,
+        "external_execution_times": getattr(pine_compat, "EXTERNAL_CLOCK_SCHEMA_VERSION", 0) == 1,
+        "external_incremental": callable(getattr(pine_compat.Program, "external_session", None)),
+    }
 
 
 @lru_cache(maxsize=1)
-def prepare(source):
-    return pine_compat.compile_script(source), pine_compat.analyze_script(source).get("inputs", [])
+def prepare(source, libraries=()):
+    kwargs = {"library_sources": dict(libraries)} if libraries else {}
+    return pine_compat.compile_script(source, **kwargs), pine_compat.analyze_script(source, **kwargs)
 
 
-def execute(request):
-    program, inputs = prepare(request["source"])
+
+def request_environment(request):
+    supplied = native_request_bars(
+        request,
+        {
+            f"{item['symbol']}:{item['timeframe']}": engine_bars(item["bars"])
+            for item in request.get("contexts", [])
+        },
+    )
+    tick = request.get("host_settings", {}).get("price_tick")
+    if tick is not None:
+        grid = chart_metadata({"priceTickSize": tick})
+        if "$chart" in supplied and any(
+            supplied["$chart"][key] != grid[key] for key in ("minMove", "priceScale")
+        ):
+            raise ValueError(
+                "EXTERNAL_UNSUPPORTED: context price grid differs from matching price_tick"
+            )
+        supplied["$chart"] = {**supplied.get("$chart", {}), **grid}
+    return supplied
+
+def _execute(request):
+    global _session, _session_count
+    appending = request.get("operation") == "append_prefix"
+    request = _prefix.decode(request)
+    standalone_updates = validate_request_updates(request)
+    if not appending:
+        _session = None
+        _session_count = 0
+    program, analysis = prepare(request["source"], library_sources({"pineLibrarySources": request.get("libraries", {})}))
+    if request.get("request_update_contract") is not None and not request_updates_eligible(analysis):
+        raise ValueError("PINE_REQUEST_UPDATE_UNSUPPORTED: synthetic event-series requests retain their legacy input contract")
+    risk = risk_options(request, analysis)
+    require_price_grid(analysis, request)
+    require_quote_currency(analysis, program.host_requirements(), request, external=True)
+    inputs = analysis.get("inputs", [])
     parameters = {}
     for name, value in request.get("parameters", {}).items():
-        matches = [item for item in inputs if str(item["callSiteId"]) == name or item.get("title") == name]
+        matches = [
+            item for item in inputs if str(item["callSiteId"]) == name or item.get("title") == name
+        ]
         if len(matches) != 1 or str(matches[0]["callSiteId"]) in parameters:
             raise ValueError("EXTERNAL_PARAMETER_INVALID: " + name)
         parameters[str(matches[0]["callSiteId"])] = value
-    passes = request.get("execution_passes")
-    if passes is not None:
-        passes = [[{**item, "bar": engine_bars([item["bar"]])[0],
-            "account": {**item["account"], "time": item["account"]["time"] * 1000},
-            **({"request_data": [{**stream, "bars": engine_bars(stream["bars"])} for stream in item["request_data"]]} if "request_data" in item else {})} for item in group] for group in passes]
-    accounts = [{**item, "time": item["time"] * 1000} for item in request["accounts"]]
-    supplied = {f'{item["symbol"]}:{item["timeframe"]}': engine_bars(item["bars"]) for item in request.get("contexts", [])}
-    tick = request.get("host_settings", {}).get("price_tick")
-    if tick is not None:
-        from fractions import Fraction
-        grid = Fraction(str(tick))
-        if grid <= 0 or max(grid.numerator, grid.denominator) > 4294967295:
-            raise ValueError("EXTERNAL_UNSUPPORTED: tick size exceeds the runtime price grid")
-        supplied["$chart"] = {"minMove":grid.numerator, "priceScale":grid.denominator}
-    result = run_with_event_requests(lambda request_bars: program.run_external(engine_bars(request["bars"]), accounts, input_overrides=parameters or None,
-                                  chart_symbol=request["context"]["symbol"], chart_timeframe=request["context"]["timeframe"], execution_passes=passes,
-                                  request_bars=request_bars), request, supplied, engine_bars, pine_compat)
+    if request.get("operation") == "host_control":
+        environment = request_environment(request)
+        requirements = program.host_requirements()
+        events=event_required(analysis) and any(requirements["execution"].get(name)
+            for name in ("calcOnEveryTick","calcOnEveryHistoryTick"))
+        if requirements.get("account") is None:
+            raise ValueError("EXTERNAL_UNSUPPORTED: Workbench Host execution requires a Pine strategy")
+        return {"contract": "candlescope.pine-workbench-control/1", "execution": requirements["execution"],
+            **({"request_update_contract": REQUEST_UPDATE_CONTRACT} if request_updates_eligible(analysis) or events else {}),
+            **(event_capabilities() if events else {}),
+            **({"default_quantity": requirements["account"]["defaultQuantity"]}
+               if getattr(pine_compat, "EXTERNAL_SIZING_SCHEMA_VERSION", 0) == 1 else {}),
+            **({"risk_rules": program.strategy_risk_configuration(input_overrides=parameters or None,
+                chart_symbol=request["context"]["symbol"], chart_timeframe=request["context"]["timeframe"],
+                request_bars=environment or None)} if risk else {})}
+    features = {
+        item.get("feature", "") for item in analysis.get("compatibility", {}).get("supported", [])
+    }
+    endpoint_sensitive = any(
+        feature
+        in {"barstate.islast", "barstate.islastconfirmedhistory", "last_bar_index", "last_bar_time"}
+        or feature.startswith("chart.")
+        for feature in features
+    ) or bool(re.search(r"\b(last_bar_index|last_bar_time|calc_bars_count)\b", request["source"]))
+    # Growing historical prefixes change dataset-end builtins retroactively.
+    # Only prefix-stable programs can reuse committed execution state.
+    incremental = (
+        callable(getattr(program, "external_session", None))
+        and not endpoint_sensitive
+        and not any(feature.startswith("ticker.") for feature in features)
+    )
+    start = _session_count if incremental and _session is not None else 0
+    clocks = request.get("execution_times")
+    if clocks is not None:
+        if getattr(pine_compat, "EXTERNAL_CLOCK_SCHEMA_VERSION", 0) != 1:
+            raise ValueError("EXTERNAL_CLOCK_UNAVAILABLE: install a runtime with explicit external execution clocks")
+        if (not isinstance(clocks, list) or len(clocks) != len(request["bars"])
+                or any(type(value) is not int or not 0 <= value <= 9_007_199_254_740_991 for value in clocks)):
+            raise ValueError("EXTERNAL_CLOCK_INVALID: one integer millisecond timestamp is required per bar")
+    evaluations = closed_schedule(request, start) if standalone_updates else execution_input(request, start)
+    accounts = [{**item, "time": item["time"] * 1000} for item in request["accounts"][start:]]
+    supplied = request_environment(request)
+    closing = {"closing_ticks": True} if request.get("closing_ticks") is True else {}
+    annotations = {}
+    if request.get("order_metadata_contract") is not None:
+        if (request["order_metadata_contract"] != "candlescope.pine-order-metadata/1"
+            or getattr(pine_compat, "EXTERNAL_ORDER_METADATA_SCHEMA_VERSION", 0) != 1):
+            raise ValueError("EXTERNAL_UNSUPPORTED: unknown order metadata contract")
+        annotations = {"order_metadata": True}
+    try:
+        if incremental:
+            if _session is None:
+                _session = program.external_session(
+                    input_overrides=parameters or None,
+                    chart_symbol=request["context"]["symbol"],
+                    chart_timeframe=request["context"]["timeframe"],
+                    request_bars=supplied,
+                    **closing,
+                    **annotations,
+                    **risk,
+                    **({"scheduled": True} if "execution_schedule" in evaluations else {}),
+                )
+                _session_count = 0
+            result = _session.append(
+                engine_bars(request["bars"][start:]),
+                accounts,
+                **evaluations,
+                **({"execution_times": clocks[start:]} if clocks is not None else {}),
+            )
+            _session_count = len(request["bars"])
+        else:
+            _session = None
+            result = run_with_event_requests(
+                lambda request_bars: program.run_external(
+                    engine_bars(request["bars"]),
+                    accounts,
+                    input_overrides=parameters or None,
+                    chart_symbol=request["context"]["symbol"],
+                    chart_timeframe=request["context"]["timeframe"],
+                    **evaluations,
+                    request_bars=request_bars,
+                    **closing,
+                    **annotations,
+                    **risk,
+                    **({"execution_times": clocks} if clocks is not None else {}),
+                ),
+                request,
+                supplied,
+                engine_bars,
+                pine_compat,
+            )
+    except Exception:
+        _session = None
+        _session_count = 0
+        raise
     if result["output"].get("diagnostics"):
         raise ValueError(str(result["output"]["diagnostics"]))
-    return {"contract": result["protocol"], "pyramiding": result.get("pyramiding", 1), "intents": result["intents"], "graphics": result["output"].get("plots", []),
-            "raw_output": result["output"], "execution_mode": "CANDLESCOPE", "account_authority": "candlescope"}
+    if standalone_updates:
+        # Implicit close-only schedule preserves the public bar-only coordinates.
+        for intent in result["intents"]:
+            intent.pop("pass_index", None)
+    return {
+        "contract": result["protocol"],
+        "pyramiding": result.get("pyramiding", 1),
+        "intents": result["intents"],
+        "graphics": result["output"].get("plots", []),
+        "raw_output": result["output"],
+        **({"risk_rules": result["risk_rules"]} if "risk_rules" in result else {}),
+        "execution_mode": "CANDLESCOPE",
+        "account_authority": "candlescope",
+        **({"execution_schedule_contract": SCHEDULE_CONTRACT} if "execution_schedule" in evaluations else {}),
+        **({"execution_tick_contract": TICK_CONTRACT} if request.get("execution_tick_contract") == TICK_CONTRACT else {}),
+        **({"request_update_contract": REQUEST_UPDATE_CONTRACT} if request.get("request_update_contract") else {}),
+        **({"evaluation_contract": REQUEST_UPDATE_CONTRACT} if request.get("request_update_contract") else {}),
+    }
+
+
+def execute(request):
+    global _session, _session_count, _prefix
+    try:
+        if request.get("operation", "").startswith("stream_"):
+            from .external_stream import execute as stream_execute
+            _session, _session_count, _prefix = None, 0, PrefixInput()
+            return stream_execute(request, prepare, request_environment)
+        from . import external_stream
+        if external_stream._active is not None:
+            raise ValueError("PINE_STREAM_INVALID: legacy evaluation cannot replace an active stream")
+        return _execute(request)
+    except Exception:
+        _session, _session_count, _prefix = None, 0, PrefixInput()
+        from . import external_stream
+        external_stream._active = None
+        raise
 
 
 if __name__ == "__main__":
     import sys
+
     raise SystemExit((serve_evaluator if "--worker" in sys.argv else serve)(describe, execute))

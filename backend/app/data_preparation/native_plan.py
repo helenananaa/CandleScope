@@ -95,9 +95,11 @@ def chart_interval(value):
 
 def plan_inputs(context, dependencies):
     """Deduplicate physical minute-bar acquisition across logical intervals."""
+    from app.backtest.chart_context import ChartContextRequest
     bindings, physical = [], {}
     primary_start, primary_end = context["start_time_ms"], context["end_time_ms"] + 1
     for index, dependency in enumerate([context, *dependencies]):
+        market = ChartContextRequest.from_mapping(dependency)
         spec = parse_interval_spec(dependency["interval"])
         if spec is None or spec.nominal_ms < 60_000:
             raise PreparationError("DEPENDENCY_INTERVAL_UNSUPPORTED", "Native input cannot be constructed from minute bars")
@@ -111,9 +113,11 @@ def plan_inputs(context, dependencies):
             start = warmup_start(spec, start, max(1, warmup))
         if end <= start or start < 0:
             raise PreparationError("DEPENDENCY_RANGE_UNAVAILABLE", "No complete historical bars cover the requested input")
-        binding = {"exchange": dependency["exchange"], "market_type": dependency["market_type"],
-            "symbol": dependency["symbol"], "interval": spec.canonical,
-            "binding_symbol": dependency.get("binding_symbol", f"{dependency['exchange'].upper()}:{dependency['symbol']}"),
+        # Publication and subsequent context resolution must use the same
+        # canonical market identity, including aliases such as usdm -> futures.
+        binding = {"exchange": market.exchange, "market_type": market.market_type,
+            "symbol": market.symbol, "interval": spec.canonical,
+            "binding_symbol": dependency.get("binding_symbol", f"{market.exchange.upper()}:{market.symbol}"),
             "range_mode": "CUSTOM", "fidelity_preference": "FAST", "start_time_ms": start, "end_time_ms": end - 1}
         bindings.append(binding)
         identity = (binding["exchange"], binding["market_type"], binding["symbol"])
@@ -148,7 +152,10 @@ def launch(runtime, intent, inputs, job_id):
     payload = {key: value for key, value in main.items() if key not in {"symbol", "timeframe"}}
     payload.update(language=intent["language"], source=intent["source"], parameters=intent["parameters"],
         libraries=intent["libraries"], contexts=contexts,
-        context={"symbol": main["symbol"], "timeframe": main["timeframe"]})
+        context={"symbol": main["symbol"], "timeframe": main["timeframe"],
+                 **({"metadata": intent["chart_metadata"]} if intent.get("chart_metadata") else {})})
+    if intent.get("currency_rates") is not None:
+        payload["currency_rates"] = intent["currency_rates"]
     contract = NativeRunRequest
     if intent.get("execution") is not None:
         contract = ExternalRunRequest
@@ -162,8 +169,8 @@ def validate_frozen_external(runtime, payload):
     from app.market_dataset.snapshot import MarketDatasetError
     if payload["execution_fidelity"] != "TRADE_TAPE" or payload.get("execution_data") is not None:
         raise PreparationError("INPUT_UNSUPPORTED", "Automatic frozen execution requires archive TRADE_TAPE")
-    if payload.get("libraries") or payload.get("magnifier"):
-        raise PreparationError("EXTERNAL_UNSUPPORTED", "Host matching does not accept native libraries or Magnifier")
+    if payload.get("magnifier"):
+        raise PreparationError("EXTERNAL_UNSUPPORTED", "Host matching requires execution events instead of native Magnifier")
     keys = set()
     for index, item in enumerate([payload, *payload.get("contexts", [])]):
         metadata = payload["context"] if index == 0 else item

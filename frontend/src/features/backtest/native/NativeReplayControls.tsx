@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { t } from "../../../i18n/index.js";
 import { nativeApi, type NativeResult } from "./nativeBacktestApi.js";
+import { pollNativeReplay } from "./nativeReplayPolling.js";
 
 export interface NativeReplayRecord {
   replay_id: string;
@@ -15,8 +16,8 @@ export interface NativeReplayRecord {
   error: { message: string } | null;
 }
 
-export function NativeReplayControls({ runId, replay, onChange }: {
-  runId: string; replay: NativeReplayRecord | null; onChange: (value: NativeReplayRecord | null) => void;
+export function NativeReplayControls({ runId, replay, onChange, hostAccount = false }: {
+  runId: string; replay: NativeReplayRecord | null; onChange: (value: NativeReplayRecord | null) => void; hostAccount?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -33,7 +34,7 @@ export function NativeReplayControls({ runId, replay, onChange }: {
     if (!replay || replay.state !== "RUNNING") return;
     const abort = new AbortController();
     const timer = window.setTimeout(() => {
-      void nativeApi<NativeReplayRecord>(`/native/replays/${replay.replay_id}`, undefined, undefined, abort.signal)
+      void pollNativeReplay(replay, abort.signal)
         .then(onChange).catch((reason) => { if (!abort.signal.aborted) setError(String(reason)); });
     }, 500);
     return () => { window.clearTimeout(timer); abort.abort(); };
@@ -49,9 +50,10 @@ export function NativeReplayControls({ runId, replay, onChange }: {
     finally { setBusy(false); }
   };
   const running = replay?.state === "RUNNING";
-  return <section className="native-replay-controls" aria-label={t("native.replay.title")}>
-    <strong>{t("native.replay.title")}</strong>
-    {replay && <p>{t(replay.method === "FIXED_HORIZON_INCREMENTAL" ? "native.replay.incremental" : "native.replay.method")}</p>}
+  const title = t(hostAccount || replay?.method === "HOST_ACCOUNT_CHECKPOINT" ? "report.replay" : "native.replay.title");
+  return <section className="native-replay-controls" aria-label={title}>
+    <strong>{title}</strong>
+    {replay && <p>{t(replay.method === "HOST_ACCOUNT_CHECKPOINT" ? "native.replay.host" : replay.method === "FIXED_HORIZON_INCREMENTAL" ? "native.replay.incremental" : "native.replay.method")}</p>}
     {!replay ? <button disabled={busy} onClick={() => void command("create")}>{t("native.replay.start")}</button> : <>
       <p role="status">{replay.cursor} / {replay.total} · {replay.state}</p>
       <div className="native-toolbar">

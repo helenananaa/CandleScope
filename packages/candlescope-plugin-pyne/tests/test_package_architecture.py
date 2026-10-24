@@ -31,7 +31,7 @@ def test_package_metadata_pins_only_public_runtime_contracts() -> None:
     assert project["version"] == candlescope_plugin_pyne.__version__
     assert project["requires-python"] == ">=3.11,<3.14"
     assert project["dependencies"] == [
-        "candlescope-plugin-sdk==0.2.0",
+        "candlescope-plugin-sdk>=0.2.0,<0.3.0",
         "pyne-runtime==0.4.1",
     ]
     assert project["scripts"]["candlescope-pyne-runtime"].endswith(":main")

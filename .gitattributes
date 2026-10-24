@@ -59,3 +59,6 @@ backend/app/backtest/strategy/python_author_schemas/** text eol=lf
 packages/candlescope-plugin-pine-compat/**/*.py text eol=lf
 packages/candlescope-plugin-pine-compat/**/*.md text eol=lf
 packages/candlescope-plugin-pine-compat/**/*.toml text eol=lf
+
+# The published Pyne lock is digest-frozen; checkout bytes must match its Git blob.
+packages/candlescope-plugin-pyne/release/release-lock.json text eol=lf

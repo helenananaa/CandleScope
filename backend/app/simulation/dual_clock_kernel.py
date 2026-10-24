@@ -14,6 +14,8 @@ from .kernel import SimulationResult, _decision_record
 from .trade_bar_builder import TradeBarBuilder
 from .trade_kernel import TradeSimulationKernel, _wire_order
 from .linear_perp_account_v2 import LinearPerpetualAccountV2
+from .account_execution import publish_account_liquidation
+from .dual_clock_book import BOOK_MODES, apply_quote, execution_type, report_identity
 
 DualClockStrategyFn = Callable[[tuple[MarketEvent, ...], MarketEvent], list[dict]]
 
@@ -21,6 +23,8 @@ DualClockStrategyFn = Callable[[tuple[MarketEvent, ...], MarketEvent], list[dict
 @dataclass(slots=True)
 class DualClockSimulationKernel:
     signal_interval: str
+    execution_fidelity: str = field(default="AGG_TRADE_EXECUTION", kw_only=True)
+    process_orders_on_close: bool = field(default=False, kw_only=True)
     gap_policy: str = "REJECT"
     max_events: int = 2_000_000
     checkpoint_event_interval: int = 10_000
@@ -48,14 +52,19 @@ class DualClockSimulationKernel:
     decisions: list[dict[str, Any]] = field(default_factory=list)
     execution_event_count: int = 0
     _last_source_sequence: int | None = None
+    _last_book_sequence: int | None = None
+    _physical_event_count: int = 0
     frozen_intents: list[dict] = field(default_factory=list)
     _decision_chain_hash: str = "sha256:GENESIS"
     _decision_count: int = 0
+    _pending_account_callbacks: list[dict] = field(default_factory=list)
+    _account_callback_count: int = 0
 
     def __post_init__(self) -> None:
         self.builder = TradeBarBuilder(self.signal_interval, gap_policy=self.gap_policy)
         self.signal_interval = self.builder.interval
-        self.execution = TradeSimulationKernel(
+        self.execution = execution_type(self.execution_fidelity)(
+            source_kind="AGG_TRADE",
             max_events=self.max_events,
             checkpoint_event_interval=0,
             slippage_bps=self.slippage_bps,
@@ -90,6 +99,14 @@ class DualClockSimulationKernel:
         extended = history_encoder is not None and getattr(history_encoder, "extended", False)
         return {
             "schemaVersion": "candlescope.dual-clock-kernel/1",
+            **({"execution_fidelity": self.execution_fidelity,
+                "last_book_sequence": self._last_book_sequence,
+                "physical_event_count": self._physical_event_count}
+               if self.execution_fidelity != "AGG_TRADE_EXECUTION" else {}),
+            **({"account_fill_callbacks": {"pending": [dict(row) for row in self._pending_account_callbacks],
+                "delivered": self._account_callback_count}}
+                if self._pending_account_callbacks or self._account_callback_count else {}),
+            **({"process_orders_on_close": True} if self.process_orders_on_close else {}),
             "signal_interval": self.signal_interval,
             "gap_policy": self.gap_policy,
             "execution": self.execution.snapshot(history_encoder=history_encoder),
@@ -116,6 +133,8 @@ class DualClockSimulationKernel:
     def restore(self, payload: Mapping[str, Any]) -> None:
         if (
             payload.get("schemaVersion") != "candlescope.dual-clock-kernel/1"
+            or payload.get("execution_fidelity", "AGG_TRADE_EXECUTION") != self.execution_fidelity
+            or bool(payload.get("process_orders_on_close")) != self.process_orders_on_close
             or payload.get("signal_interval") != self.signal_interval
             or payload.get("gap_policy") != self.gap_policy
             or bool(payload.get("scale_stream_decisions") or False)
@@ -125,6 +144,17 @@ class DualClockSimulationKernel:
                 "dual-clock checkpoint identity changed", code="CHECKPOINT_CORRUPT"
             )
         self.execution.restore(payload["execution"])
+        self._last_book_sequence = payload.get("last_book_sequence")
+        self._physical_event_count = payload.get("physical_event_count", 0)
+        if (type(self._physical_event_count) is not int
+                or not 0 <= self._physical_event_count <= self.max_events):
+            raise MarketDatasetError("invalid physical event count", code="CHECKPOINT_CORRUPT")
+        if self.execution_fidelity == "BOOK_ASSISTED":
+            observed = self.execution.last_bid is not None
+            if ((self._last_book_sequence is None) != (not observed)
+                    or (self._last_book_sequence is not None and
+                        (type(self._last_book_sequence) is not int or self._last_book_sequence < 0))):
+                raise MarketDatasetError("invalid chart book cursor", code="CHECKPOINT_CORRUPT")
         self.builder.restore(payload["bar_builder"])
         self.decisions = [dict(item) for item in payload.get("decisions") or []]
         if self.scale_stream_decisions:
@@ -139,6 +169,17 @@ class DualClockSimulationKernel:
             else int(payload["last_source_sequence"])
         )
         self.frozen_intents = list(payload.get("frozen_intents") or [])
+        callbacks = payload.get("account_fill_callbacks") or {}
+        self._pending_account_callbacks = [dict(row) for row in callbacks.get("pending", [])]
+        self._account_callback_count = callbacks.get("delivered", 0)
+        receipts = self.execution._account_execution_receipts
+        pending_ids = [row.get("order_id") for row in self._pending_account_callbacks]
+        if (type(self._account_callback_count) is not int or self._account_callback_count < 0
+                or len(set(pending_ids)) != len(pending_ids)
+                or self._account_callback_count + len(pending_ids) > len(receipts)
+                or any(row.get("order_id") not in receipts or row.get("execution_time_ms") !=
+                    receipts[row["order_id"]]["event_time_ms"] for row in self._pending_account_callbacks)):
+            raise MarketDatasetError("invalid pending account callback", code="CHECKPOINT_CORRUPT")
 
     def run(
         self,
@@ -148,9 +189,19 @@ class DualClockSimulationKernel:
         warmup_events: int = 0,
         finalize: bool = False,
         checkpoint_callback: Callable[[MarketEvent], None] | None = None,
+        fill_callback: Callable[[MarketEvent, MarketEvent], list[dict]] | None = None,
+        tick_callback: Callable[[MarketEvent, MarketEvent], list[dict]] | None = None,
+        close_callback=None,
+        end_time_ms: int | None = None,
     ) -> SimulationResult:
+        if tick_callback is not None and fill_callback is not None:
+            raise MarketDatasetError("tick and fill callbacks must use one strategy clock", code="FIDELITY_UNSUPPORTED")
+        if self.process_orders_on_close and close_callback is None:
+            raise MarketDatasetError("closing-tick handler is required", code="FIDELITY_UNSUPPORTED")
         lazy_curve = getenv("BACKTEST_LAZY_DUAL_CURVE_ENABLED", "1").strip() == "1"
         trades = tuple(event for event in events if event.role == "TRADES")
+        if self.execution_fidelity in BOOK_MODES and len(events) + self._physical_event_count > self.max_events:
+            raise MarketDatasetError("physical book event budget exceeded", code="BUDGET_EXCEEDED")
         if len(trades) > self.max_events:
             raise MarketDatasetError(
                 "trade event budget exceeded", code="BUDGET_EXCEEDED"
@@ -161,10 +212,112 @@ class DualClockSimulationKernel:
                 raise MarketDatasetError(
                     "dual-clock execution requires AGG_TRADE", code="FIDELITY_MISLABEL"
                 )
+        def emit(completed, source):
+            for bar in completed:
+                previous = self.execution._last_event
+                if self.process_orders_on_close:
+                    from .closing_tick import closing_event
+                    self.execution._last_event = closing_event(bar, source.sequence - 1)
+                try:
+                    intents = strategy((bar,), bar)
+                    if bar.sequence <= warmup_events:
+                        intents = []
+                    decision = _decision_record(
+                        intents,
+                        sequence=(getattr(intents, "decision", None) or {}).get("sequence", bar.sequence) if fill_callback or tick_callback else bar.sequence,
+                        watermark_ms=bar.event_time_ms,
+                    )
+                    if fill_callback is not None or tick_callback is not None:
+                        decision.update(trigger="BAR_CLOSE", signal_sequence=bar.sequence)
+                    if self.scale_stream_decisions:
+                        self._decision_chain_hash = "sha256:" + sha256_hex(
+                            {"previous": self._decision_chain_hash, "decision": decision}
+                        )
+                        self._decision_count += 1
+                    else:
+                        self.decisions.append(decision)
+                    if self.execution_model_revision is not None and intents:
+                        self.frozen_intents.append(
+                            {
+                                "sequence": bar.sequence,
+                                "intents": [dict(intent) for intent in intents],
+                            }
+                        )
+                    # The signal precedes this boundary source event. Admission
+                    # happens before its account updates; fills require a trade.
+                    self.execution._enqueue_many(
+                        intents, current_sequence=source.sequence - (2 if self.process_orders_on_close else 1)
+                    )
+                    if self.process_orders_on_close:
+                        close_callback(bar, source.sequence - 1)
+                finally:
+                    if self.process_orders_on_close:
+                        self.execution._last_event = previous
+        def observe_fill(source, settlement=None, *, deferred=False):
+            if settlement is not None and not self.builder.has_forming_bar(source.event_time_ms):
+                self._pending_account_callbacks.append(dict(settlement))
+                return
+            forming = self.builder.forming_bar(source.event_time_ms)
+            intents = fill_callback(source, forming)
+            wire = getattr(intents, "decision", None) or {}
+            decision = _decision_record(intents, sequence=wire.get("sequence", forming.sequence),
+                watermark_ms=source.event_time_ms)
+            decision.update(trigger="ORDER_FILL", signal_sequence=forming.sequence, source_sequence=source.sequence)
+            if settlement is not None:
+                decision.update(execution_kind="ACCOUNT_LIQUIDATION", **settlement, observation_deferred=deferred)
+                self._account_callback_count += 1
+            if self.scale_stream_decisions:
+                self._decision_chain_hash = "sha256:" + sha256_hex({"previous": self._decision_chain_hash, "decision": decision})
+                self._decision_count += 1
+            else:
+                self.decisions.append(decision)
+            self.execution._enqueue_many(intents, current_sequence=source.sequence)
+
+        def with_execution_reports(operation, source):
+            if fill_callback is None:
+                return operation()
+            prior_reporter = self.execution.execution_reporter
+            def report(execution):
+                if prior_reporter is not None:
+                    prior_reporter(execution)
+                if execution.get("fill"):
+                    settlement = ({"order_id": execution["order_id"],
+                        "execution_time_ms": execution["fill"]["event_time_ms"]}
+                        if execution.get("account_liquidation") else None)
+                    observe_fill(source, settlement)
+            self.execution.execution_reporter = report
+            try:
+                return operation()
+            finally:
+                self.execution.execution_reporter = prior_reporter
+
+        def apply_account_event(source):
+            self.execution.account.apply(source)
+            publish_account_liquidation(self.execution)
+
         for trade in events:
-            if trade.role in {"INSTRUMENT_RULES", "MARK_INDEX", "FUNDING"}:
+            if self.execution_fidelity in BOOK_MODES:
+                previous = self.execution._last_event
+                if previous is not None and (trade.sequence <= previous.sequence or trade.event_time_ms < previous.event_time_ms):
+                    raise MarketDatasetError("physical book timeline did not advance", code="DATA_GAP_REJECTED")
+                self._physical_event_count += 1
+            if trade.role == "ORDER_BOOK":
+                # Close the previous bar with the quote visible before this
+                # update. The quote itself never creates a forming-bar tick.
+                emit(self.builder.close_before(trade.event_time_ms), trade)
                 self.execution._last_event = trade
-                self.execution.account.apply(trade)
+                with_execution_reports(lambda: apply_quote(self, trade), trade)
+                if checkpoint_callback is not None:
+                    checkpoint_callback(trade)
+                continue
+            if trade.role in {"INSTRUMENT_RULES", "MARK_INDEX", "FUNDING"}:
+                emit(self.builder.close_before(trade.event_time_ms), trade)
+                self.execution._last_event = trade
+                if trade.role == "FUNDING" and self.execution.market_observer is not None:
+                    self.execution.market_observer(trade)
+                with_execution_reports(lambda: apply_account_event(trade), trade)
+                if self.execution.market_observer is not None:
+                    self.execution.market_observer(trade)
                 if checkpoint_callback is not None:
                     checkpoint_callback(trade)
                 continue
@@ -188,43 +341,39 @@ class DualClockSimulationKernel:
                         code="DATA_GAP_REJECTED",
                     )
 
-            completed = self.builder.push(trade)
-            for bar in completed:
-                intents = strategy((bar,), bar)
-                if bar.sequence <= warmup_events:
-                    intents = []
-                decision = _decision_record(
-                    intents,
-                    sequence=bar.sequence,
-                    watermark_ms=bar.event_time_ms,
-                )
-                if self.scale_stream_decisions:
-                    self._decision_chain_hash = "sha256:" + sha256_hex(
-                        {"previous": self._decision_chain_hash, "decision": decision}
-                    )
-                    self._decision_count += 1
-                else:
-                    self.decisions.append(decision)
-                if self.execution_model_revision is not None and intents:
-                    self.frozen_intents.append(
-                        {
-                            "sequence": bar.sequence,
-                            "intents": [dict(intent) for intent in intents],
-                        }
-                    )
-                # The signal exists immediately before this boundary trade, so
-                # its first eligible print is the current authoritative event.
-                self.execution._enqueue_many(
-                    intents, current_sequence=trade.sequence - 1
-                )
+            emit(self.builder.push(trade), trade)
 
             self.execution._last_event = trade
             if isinstance(self.execution.account, LinearPerpetualAccountV2):
                 self.execution.account.validate_ready()
             else:
                 self.execution.account.mark = Decimal(str(trade.payload["price"]))
-            self.execution._apply_funding(trade)
-            self.execution._match(trade)
+            if self.execution.funding_rate != 0 and self.execution.market_observer is not None:
+                self.execution.market_observer(trade)
+            if fill_callback is not None and self._pending_account_callbacks:
+                for pending in tuple(self._pending_account_callbacks):
+                    observe_fill(trade, pending, deferred=True)
+                    self._pending_account_callbacks.remove(pending)
+            with_execution_reports(lambda: self.execution._apply_funding(trade), trade)
+            if self.execution.market_observer is not None:
+                self.execution.market_observer(trade)
+            with_execution_reports(lambda: self.execution._match(trade), trade)
+            if tick_callback is not None:
+                # This observation sees all prior orders settled on the current
+                # print. Its new orders become eligible only on a later print.
+                forming = self.builder.forming_bar(trade.event_time_ms)
+                intents = tick_callback(trade, forming)
+                wire = getattr(intents, "decision", None) or {}
+                decision = _decision_record(intents, sequence=wire.get("sequence", forming.sequence),
+                    watermark_ms=trade.event_time_ms)
+                decision.update(trigger="REALTIME_TICK", signal_sequence=forming.sequence,
+                    source_sequence=trade.sequence)
+                if self.scale_stream_decisions:
+                    self._decision_chain_hash = "sha256:" + sha256_hex({"previous":self._decision_chain_hash,"decision":decision})
+                    self._decision_count += 1
+                else:
+                    self.decisions.append(decision)
+                self.execution._enqueue_many(intents, current_sequence=trade.sequence)
             sample_curve = (
                 self.equity_curve_mode == "UTC_DAILY_CLOSE_V1"
                 or self.execution_model_revision is None
@@ -252,11 +401,20 @@ class DualClockSimulationKernel:
                     or (self.execution_event_count + 1) % self.equity_curve_event_interval
                     == 0
                 ):
-                    self.execution.equity_curve.append(curve_point)
+                    self.execution._record_equity_point(curve_point)
             self.execution_event_count += 1
             self._last_source_sequence = source_sequence
             if checkpoint_callback is not None:
                 checkpoint_callback(trade)
+        if end_time_ms is not None:
+            if (type(end_time_ms) is not int or (self.execution._last_event is not None
+                    and self.execution._last_event.event_time_ms > end_time_ms)):
+                raise MarketDatasetError('invalid frozen chart endpoint',code='DATA_QUALITY_FAILED')
+            sequence = self.execution._last_event.sequence + 1 if self.execution._last_event is not None else 1
+            # The frozen interval ending is a clock boundary, never a trade or
+            # new book observation. Unfilled orders still need a later print.
+            boundary=MarketEvent(sequence,end_time_ms+1,'CLOCK_BOUNDARY',{})
+            emit(self.builder.close_before(end_time_ms+1),boundary)
         self.execution._append_terminal_curve_point()
         if finalize:
             self.execution.finalize_orders()
@@ -279,8 +437,18 @@ class DualClockSimulationKernel:
             fill_hash, orders = base.fill_hash, base.orders
             rejected, curve = base.rejected, base.equity_curve
             ambiguity = base.ambiguity_count
+        if self._pending_account_callbacks or self._account_callback_count:
+            ledger["account_fill_callbacks"] = {"policy": "OBSERVED_FORMING_BAR_OR_NEXT_TRADE_V1",
+                "delivered": self._account_callback_count,
+                "pending": [dict(row) for row in self._pending_account_callbacks]}
         ledger["signal_event_count"] = self.builder.signal_count
         ledger["execution_event_count"] = self.execution_event_count
+        if self.execution_fidelity in BOOK_MODES:
+            ledger["book_execution"] = {**report_identity(self.execution_fidelity),
+                "fill_policy": self.execution.fill_policy,
+                "physical_event_count": self._physical_event_count,
+                **({"sampled": self.execution.disclosure()}
+                   if self.execution_fidelity == "BOOK_SAMPLED" else {})}
         ledger_hash = sha256_hex(ledger)
         return SimulationResult(
             decision_hash=(
@@ -292,9 +460,7 @@ class DualClockSimulationKernel:
             ledger_hash=ledger_hash,
             report_hash=sha256_hex(
                 {
-                    "fidelity_mode": "AGG_TRADE_EXECUTION",
-                    "source_event_kind": "AGG_TRADE",
-                    "report_label": "AGGREGATED_TRADE_SEQUENCE",
+                    **report_identity(self.execution_fidelity),
                     "fills": fills,
                     "ledger": ledger,
                 }

@@ -1,3 +1,4 @@
+import { reconcilePineScenes } from "./pineDrawingState.js";
 import {
   mergeIndicatorItems,
   replaceIndicatorItemsRange,
@@ -69,6 +70,7 @@ export function filterIndicatorOutputStateByVisibility(
     )
   );
   return {
+    ...(state.drawings ? { drawings: state.drawings.filter((scene) => scene.indicatorId === undefined || visibleIds.has(scene.indicatorId)) } : {}),
     markers: visible(state.markers),
     fills: visible(state.fills),
     hlines: visible(state.hlines),
@@ -273,7 +275,7 @@ function hydrateCachedOutputs(
   return next;
 }
 
-export function indicatorOutputReducer(
+function reduceOutputLanes(
   state: IndicatorOutputState,
   action: IndicatorOutputAction,
 ): IndicatorOutputState {
@@ -333,4 +335,19 @@ export function indicatorOutputReducer(
       return unreachable;
     }
   }
+}
+
+// Native scenes are authoritative snapshots. Never merge geometry by time or
+// retain deleted objects after a patch/range replay.
+export function indicatorOutputReducer(state: IndicatorOutputState, action: IndicatorOutputAction): IndicatorOutputState {
+  const next = reduceOutputLanes(state, action);
+  let drawings = state.drawings;
+  if (action.type === "reset-context") drawings = drawings ? [] : undefined;
+  else if (action.type === "hydrate-cache") drawings = [...new Map(action.entries.map((entry) => [entry.indicatorId, entry])).values()].flatMap((entry) => entry.normalized.drawings || []);
+  else if (action.type === "remove-indicator") drawings = drawings?.filter((scene) => scene.indicatorId !== action.indicatorId);
+  else if (action.type === "compute-results") {
+    drawings = [...(drawings || []).filter((scene) => !action.processedIds?.includes(scene.indicatorId || "")), ...(action.drawings || [])];
+  } else drawings = [...(drawings || []).filter((scene) => scene.indicatorId !== action.indicatorId), ...(action.type === "snapshot" ? action.normalized.drawings || [] : reconcilePineScenes((drawings || []).filter((scene) => scene.indicatorId === action.indicatorId), action.normalized.drawings || []))];
+  if (!state.drawings && !drawings?.length) return next;
+  return { ...next, drawings: drawings || [] };
 }

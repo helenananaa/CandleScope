@@ -79,7 +79,11 @@ class StrategyRevisionRegistry:
 
 
 def build_default_strategy_registry() -> StrategyRevisionRegistry:
+    from .pine_engine import REVISION as PINE_ENGINE_REVISION, PineEngineProvider
     registry = StrategyRevisionRegistry()
+    registry.register(StrategyRevisionDescriptor(revision_id=PINE_ENGINE_REVISION,
+        provider_kind="SCRIPT", factory=PineEngineProvider, label="Pine 引擎",
+        description="真实 Pine 引擎的收盘市价策略；单一入场 ID，宿主账户撮合。", accepts_source=True))
     registry.register(
         StrategyRevisionDescriptor(
             revision_id=BUILTIN_RSI_WILDER_LONG_SHORT_REVISION,

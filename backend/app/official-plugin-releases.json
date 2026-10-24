@@ -19,14 +19,14 @@
     {
       "runtimeId": "candlescope.pine-compat",
       "package": "candlescope-plugin-pine-compat",
-      "version": "0.3.2",
-      "filename": "candlescope-pine-compat-0.3.2-cp312-macos-x86_64.cspkg",
-      "url": "https://github.com/helenananaa/CandleScope/releases/download/candlescope-plugin-pine-compat-v0.3.2/candlescope-pine-compat-0.3.2-cp312-macos-x86_64.cspkg",
-      "sha256": "sha256:a0fed5c50d849d0ab0eb5b45279ca1249d86ed12d7d830a8d3cbba9e87ea4dbb",
-      "size": 4217447,
+      "version": "0.3.3",
+      "filename": "candlescope-pine-compat-0.3.3-cp312-win_amd64.cspkg",
+      "sha256": "sha256:fb25dcc4a7b21cae415254a10050a36dc4017098887c10ef8647f99be3ef1c4d",
+      "size": 5230066,
+      "url": "https://github.com/helenananaa/CandleScope/releases/download/candlescope-plugin-pine-compat-v0.3.3/candlescope-pine-compat-0.3.3-cp312-win_amd64.cspkg",
       "platform": {
-        "system": "Darwin",
-        "machine": "x86_64",
+        "system": "Windows",
+        "machine": "AMD64",
         "implementation": "CPython",
         "pythonVersion": "3.12"
       }
@@ -34,26 +34,11 @@
     {
       "runtimeId": "candlescope.pine-compat",
       "package": "candlescope-plugin-pine-compat",
-      "version": "0.3.2",
-      "filename": "candlescope-pine-compat-0.3.2-cp312-macos-arm64.cspkg",
-      "url": "https://github.com/helenananaa/CandleScope/releases/download/candlescope-plugin-pine-compat-v0.3.2/candlescope-pine-compat-0.3.2-cp312-macos-arm64.cspkg",
-      "sha256": "sha256:69c9a617e95e58d3dd9e5ce14546a1d9be3d6fdedbb9a0c01fa5c04ce92adeb0",
-      "size": 3995918,
-      "platform": {
-        "system": "Darwin",
-        "machine": "arm64",
-        "implementation": "CPython",
-        "pythonVersion": "3.12"
-      }
-    },
-    {
-      "runtimeId": "candlescope.pine-compat",
-      "package": "candlescope-plugin-pine-compat",
-      "version": "0.3.2",
-      "filename": "candlescope-pine-compat-0.3.2-cp312-manylinux_2_17_x86_64.cspkg",
-      "url": "https://github.com/helenananaa/CandleScope/releases/download/candlescope-plugin-pine-compat-v0.3.2/candlescope-pine-compat-0.3.2-cp312-manylinux_2_17_x86_64.cspkg",
-      "sha256": "sha256:f13a23587efbdaed64c407248028c1980a55922b047c480320dc4e4f481f21c7",
-      "size": 4323464,
+      "version": "0.3.3",
+      "filename": "candlescope-pine-compat-0.3.3-cp312-manylinux_2_17_x86_64.cspkg",
+      "sha256": "sha256:1e5c0925301c03a13387a3f1289d81858b3d5686a5986035c698990c9be9ad3c",
+      "size": 5340009,
+      "url": "https://github.com/helenananaa/CandleScope/releases/download/candlescope-plugin-pine-compat-v0.3.3/candlescope-pine-compat-0.3.3-cp312-manylinux_2_17_x86_64.cspkg",
       "platform": {
         "system": "Linux",
         "machine": "x86_64",
@@ -64,14 +49,29 @@
     {
       "runtimeId": "candlescope.pine-compat",
       "package": "candlescope-plugin-pine-compat",
-      "version": "0.3.2",
-      "filename": "candlescope-pine-compat-0.3.2-cp312-win_amd64.cspkg",
-      "url": "https://github.com/helenananaa/CandleScope/releases/download/candlescope-plugin-pine-compat-v0.3.2/candlescope-pine-compat-0.3.2-cp312-win_amd64.cspkg",
-      "sha256": "sha256:b70f4e2bcf1dbf65ae3ce57ce3c28114e846d19f45b48898c025f923415d388a",
-      "size": 4195533,
+      "version": "0.3.3",
+      "filename": "candlescope-pine-compat-0.3.3-cp312-macos-arm64.cspkg",
+      "sha256": "sha256:a91c3b9feca95845b4c53b05638308dc8c4c1800451d1069b71c0314dbc62eca",
+      "size": 4984190,
+      "url": "https://github.com/helenananaa/CandleScope/releases/download/candlescope-plugin-pine-compat-v0.3.3/candlescope-pine-compat-0.3.3-cp312-macos-arm64.cspkg",
       "platform": {
-        "system": "Windows",
-        "machine": "AMD64",
+        "system": "Darwin",
+        "machine": "arm64",
+        "implementation": "CPython",
+        "pythonVersion": "3.12"
+      }
+    },
+    {
+      "runtimeId": "candlescope.pine-compat",
+      "package": "candlescope-plugin-pine-compat",
+      "version": "0.3.3",
+      "filename": "candlescope-pine-compat-0.3.3-cp312-macos-x86_64.cspkg",
+      "sha256": "sha256:fa7ebc20f2dee20d59f64b712aaee327061edb99526bf997c0136ae320344080",
+      "size": 5249248,
+      "url": "https://github.com/helenananaa/CandleScope/releases/download/candlescope-plugin-pine-compat-v0.3.3/candlescope-pine-compat-0.3.3-cp312-macos-x86_64.cspkg",
+      "platform": {
+        "system": "Darwin",
+        "machine": "x86_64",
         "implementation": "CPython",
         "pythonVersion": "3.12"
       }

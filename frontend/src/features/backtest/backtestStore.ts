@@ -54,5 +54,6 @@ export function createBacktestStore(
 }
 
 export function reportHidesApproximate(report: BacktestReport): boolean {
-  return report.fidelity_mode === "BAR_APPROX" && report.report_label !== "APPROXIMATE";
+  return report.fidelity_mode === "BAR_APPROX" &&
+    !["APPROXIMATE", "APPROXIMATE_WITH_SIMULATED_CLOSE"].includes(report.report_label);
 }

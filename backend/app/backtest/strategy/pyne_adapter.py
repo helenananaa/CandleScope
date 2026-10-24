@@ -48,6 +48,9 @@ class PyneHostPlanner:
         self.execution_reporter = execution_reporter
         self.rejections: list[dict[str, Any]] = []
 
+    def bind_kernel(self, kernel) -> None:
+        """Host-specific order ownership adapters may bind the actual ledger."""
+
     def plan(
         self,
         output: StrategyOutput | dict[str, Any] | None,

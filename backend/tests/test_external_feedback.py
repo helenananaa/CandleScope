@@ -1,6 +1,11 @@
 import pytest
-from tests.test_native_backtests import runtime, terminal, pytestmark
+from tests.test_native_backtests import runtime as runtime, terminal, pytestmark as pytestmark
 from tests.test_external_strategy_v2 import tape
+
+
+def requested_rows(event):
+    return ([item["bar"] for item in event["request_updates"]] if "request_updates" in event
+            else event["request_data"][0]["bars"])
 
 PINE = """//@version=6
 strategy("Fill feedback", calc_on_order_fills=true)
@@ -59,18 +64,33 @@ def test_fill_callbacks_use_actual_account_visible_prices_and_next_event(runtime
         assert report["graphics"][0]["values"][1:] == [10,10,15,20,12.5,5,10,15,11.5]
 
 
-def test_fill_profile_requires_incremental_callback_and_explicit_opt_in(runtime):
+def test_pyne_fill_profile_requires_incremental_callback_and_explicit_opt_in(runtime):
     host, payload = runtime
     record = run(host, payload, "pyne", PYNE.replace("def on_fill(ctx, bar):", "def unused(ctx, bar):"), "TRADE_TAPE")
     assert record["state"] == "FAILED" and record["result"] is None
     assert "on_fill" in str(record["error"])
 
 
-def test_bar_only_fill_profile_is_rejected_before_run(runtime):
+def test_bar_fill_profile_requires_source_calc_on_order_fills(runtime):
     host, payload = runtime
-    with pytest.raises(ValueError, match="trade tape"):
+    with pytest.raises(ValueError, match="calc_on_order_fills"):
         host.native.create({**payload, "execution_mode": "CANDLESCOPE", "fill_recalculation": True,
             "host_settings": {"initial_balance": 10000, "slippage_bps": 0, "taker_fee_bps": 0}}, "bad-fill")
+
+
+def test_pine_fill_passes_keep_foreign_symbol_metadata_outside_bar_streams(runtime):
+    from tests.test_native_additional_inputs import additional
+    host, payload = runtime
+    context = {**additional(host,"foreign-grid","ETHUSDT","2m",120000,[100,200,300,400,500]),
+        "symbol":"BINANCE:ETHUSDT","timeframe":"2", "metadata":{"priceTickSize":".25"}}
+    source = PINE + '\nremote=request.security("BINANCE:ETHUSDT","2",close+syminfo.mintick)\nplot(remote)\n'
+    created = host.native.create({**payload, "language":"pine", "source":source, "contexts":[context],
+        "execution_mode":"CANDLESCOPE", "execution_fidelity":"TRADE_TAPE", "execution_data":tape(), "fill_recalculation":True,
+        "host_settings":{"initial_balance":10000,"slippage_bps":0,"taker_fee_bps":0,"price_tick":.1}}, "foreign-fill-metadata")
+    record = terminal(host.native, created["run_id"])
+    assert record["state"] == "COMPLETED", record.get("error")
+    values = record["result"]["graphics"][-1]["values"]
+    assert 100.25 in values and 200.25 in values
 
 
 @pytest.mark.parametrize("language", ["pine", "pyne"])
@@ -147,13 +167,13 @@ def on_fill(ctx, bar):
     groups = report["raw_output"]["execution_passes"]
     first_fill_intents = [item for item in report["raw_output"]["intent_history"] if item.get("bar_index") == 1 and item.get("pass_index") == 0]
     assert [item["action"] for item in first_fill_intents] == ["exit"]
-    assert [p["request_data"][0]["bars"] for p in groups[1][:2]] == [[], []]
-    assert len(groups[1][-1]["request_data"][0]["bars"]) == 1
+    assert [requested_rows(p) for p in groups[1][:2]] == [[], []]
+    assert len(requested_rows(groups[1][-1])) == 1
     assert [fill["event_time_ms"] for fill in report["trades"]] == [60000,70000,120000,130000]
     for group in groups:
         for event in group:
             assert all((bar["time"]+120)*1000 <= event["event_time_ms"]+int(event["confirmed"])
-                       for bar in event["request_data"][0]["bars"])
+                       for bar in requested_rows(event))
     assert report["account_authority"] == "candlescope"
     assert not report["raw_output"]["strategy_output"].get("strategy")
 
@@ -195,6 +215,6 @@ def on_fill(ctx, bar):
     report = record["result"]
     passes = report["raw_output"]["execution_passes"][1]
     assert passes[0]["event_time_ms"] == 119999 and not passes[0]["confirmed"]
-    assert passes[0]["request_data"][0]["bars"] == []
-    assert passes[-1]["confirmed"] and len(passes[-1]["request_data"][0]["bars"]) == 1
+    assert requested_rows(passes[0]) == []
+    assert passes[-1]["confirmed"] and len(requested_rows(passes[-1])) == 1
     assert [fill["event_time_ms"] for fill in report["trades"]] == [119999,130000]

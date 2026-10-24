@@ -965,6 +965,7 @@ export default function ReplayTrainingPageShell({
       indicatorFills={review === null ? indicators.view.fills : reviewIndicators.view.fills}
       indicatorHlines={review === null ? chartHlines : reviewIndicators.view.hlines}
       indicatorBgcolors={review === null ? indicators.view.bgcolors : reviewIndicators.view.bgcolors}
+      indicatorDrawings={review === null ? indicators.view.drawings : reviewIndicators.view.drawings}
       indicatorBarcolors={review === null ? indicators.view.barcolors : reviewIndicators.view.barcolors}
       onRemoveSubPane={review === null ? removeSubPane : null}
       invertScale={cell?.priceScale.invertScale ?? priceScale.invert}

@@ -176,9 +176,36 @@ export function createSteps(options, selected, files, root, output) {
   if (selected.desktop.length) node("desktop", ["--test", `--test-concurrency=${options.workers}`, "desktop/*.test.mjs"]);
   function backend(id, tests, workers) {
     if (!tests.length) return;
-    const args = ["-u", "-m", "pytest", ...tests.map((file) => file.slice("backend/".length)), "-q", "--durations=30", `--junitxml=${path.join(output, `${id}.xml`)}`];
-    if (workers > 1) args.push("-n", String(workers), "--dist=loadfile");
-    steps.push({ id, command: python, args, cwd: path.join(root, "backend") });
+    const commandArgs = (name, paths) => {
+      const args = ["-u", "-m", "pytest", ...paths, "-q", "--durations=30", `--junitxml=${path.join(output, `${name}.xml`)}`];
+      if (workers > 1) args.push("-n", String(workers), "--dist=loadfile");
+      return args;
+    };
+    if (options.profile === "profile" && tests.length === files.backend.length) {
+      // Profile the complete recursive suite in one serial Python process.
+      steps.push({ id, command: python, args: commandArgs(id, ["tests"]), cwd: path.join(root, "backend") });
+      return;
+    }
+    const batches = [];
+    let current = [];
+    // Reserve the longest possible batch suffix and quoting overhead rather
+    // than letting a growing inventory exceed Windows CreateProcess limits.
+    const budgetName = `${id}-${tests.length}`;
+    const length = (paths) => commandArgs(budgetName, paths).reduce((sum, arg) => sum + arg.length + 3, python.length + 3);
+    for (const file of tests) {
+      const relative = file.slice("backend/".length);
+      if (current.length && length([...current, relative]) > 22_000) {
+        batches.push(current);
+        current = [];
+      }
+      if (length([relative]) > 22_000) throw new Error(`Backend test argument exceeds process limit: ${file}`);
+      current.push(relative);
+    }
+    if (current.length) batches.push(current);
+    batches.forEach((paths, index) => {
+      const name = batches.length === 1 ? id : `${id}-${index + 1}`;
+      steps.push({ id: name, command: python, args: commandArgs(name, paths), cwd: path.join(root, "backend") });
+    });
   }
   if (options.workers === 1) backend("backend", selected.backend, 1);
   else {

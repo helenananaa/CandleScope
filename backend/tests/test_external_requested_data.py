@@ -1,5 +1,6 @@
+import json
 import pytest
-from tests.test_native_backtests import runtime, terminal, pytestmark
+from tests.test_native_backtests import runtime as runtime, terminal, pytestmark as pytestmark
 from tests.test_native_additional_inputs import additional
 from tests.test_external_strategy_v2 import tape
 
@@ -40,8 +41,15 @@ def test_requested_data_crosses_only_closed_boundary_and_host_owns_fills(runtime
     def observe(plugin, request, **kwargs):
         if request.get("accounts"):
             boundary = (request["bars"][-1]["time"] + 60)*1000
-            seen.append((boundary, request["contexts"][0]["bars"]))
-            assert all((bar["time"]+120)*1000 <= boundary for bar in request["contexts"][0]["bars"])
+            if request.get("request_update_contract"):
+                assert all(not row["bars"] for row in request["contexts"])
+                visible=[item["bar"] for group in request["request_updates"] for item in group["updates"]]
+                assert all(item["available_at_ms"]<=group["observed_at_ms"]<boundary
+                           for group in request["request_updates"] for item in group["updates"])
+            else:
+                visible=request["contexts"][0]["bars"]
+            seen.append((boundary, visible))
+            assert all((bar["time"]+120)*1000 <= boundary for bar in visible)
         return original(plugin, request, **kwargs)
     host.native.runner = observe
     config = {**payload, "language": "pine" if kind == "pine" else "pyne", "source": SOURCES[kind],
@@ -58,7 +66,10 @@ def test_requested_data_crosses_only_closed_boundary_and_host_owns_fills(runtime
                 events.append(event)
             data["events"] = events
         config["execution_data"] = data
-    record = terminal(host.native, host.native.create(config, kind)["run_id"])
+    # The observing runner starts a process per prefix, including independent
+    # Pine cost scenarios. Allow their shared 120-second execution budget.
+    record = terminal(host.native, host.native.create(config, kind)["run_id"],
+                      timeout=130 if kind == "pine" else 25)
     assert record["state"] == "COMPLETED", record.get("error")
     assert seen[0] == (60000, [])
     assert len(seen[1][1]) == 1
@@ -80,18 +91,36 @@ def test_missing_requested_dataset_never_falls_back(runtime, kind):
     assert record["result"] is None
 
 
-def test_capability_probe_accepts_current_versioned_adapters(runtime):
+@pytest.mark.parametrize("language", ["pine", "pyne"])
+def test_capability_probe_accepts_current_versioned_adapters(runtime, language):
     host, _ = runtime
-    assert all(item["external_available"] for item in host.native.capabilities()["engines"])
+    engine = next(row for row in host.native.capabilities()["engines"] if row["language"] == language)
+    assert engine.get("available") is True and engine.get("external_available") is True, engine
 
 
-def test_lookahead_that_rewrites_previous_host_intents_is_rejected(runtime):
+@pytest.mark.parametrize("causal_updates", [True,False])
+def test_lookahead_that_rewrites_previous_host_intents_is_rejected(runtime, monkeypatch, causal_updates):
+    if not causal_updates:
+        from app.backtest import pine_workbench
+        original=pine_workbench.freeze_control
+        def legacy(native,plugin,wire,payload):
+            original(native,plugin,wire,payload)
+            wire.pop("request_update_contract",None)
+        monkeypatch.setattr(pine_workbench,"freeze_control",legacy)
     host, payload = runtime
     context = {**additional(host,"higher","ETHUSDT","2m",120000,[100,200,300,400,500]),
                "symbol":"BINANCE:ETHUSDT","timeframe":"2"}
     source = SOURCES["pine"].replace('"2", close)', '"2", close, lookahead=barmerge.lookahead_on)').replace('remote > 100','remote > 50')
     record = terminal(host.native, host.native.create({**payload,"source":source,"contexts":[context],
         "execution_mode":"CANDLESCOPE", "host_settings":{"initial_balance":10000,"slippage_bps":0,"taker_fee_bps":0}},"lookahead")["run_id"])
-    assert record["state"] == "FAILED"
-    assert record["error"]["code"] == "EXTERNAL_NONCAUSAL_PREFIX"
-    assert record["result"] is None
+    wire=json.loads(host.native.db.execute("SELECT wire FROM native_inputs WHERE id=?",(record["run_id"],)).fetchone()[0])
+    if causal_updates and wire.get("request_update_contract")=="candlescope.pine-request-updates/1":
+        assert record["state"]=="COMPLETED",record.get("error")
+        result=record["result"]
+        assert result["raw_output"]["strategy_output"]["plots"][0]["values"][:3]==[None,100,100]
+        assert result["raw_output"]["intent_history"][0]["bar_index"]==1
+        assert result["trades"][0]["event_time_ms"]>=120000
+    else:
+        assert record["state"] == "FAILED"
+        assert record["error"]["code"] == "EXTERNAL_NONCAUSAL_PREFIX"
+        assert record["result"] is None

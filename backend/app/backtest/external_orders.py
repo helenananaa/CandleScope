@@ -14,14 +14,28 @@ class ExternalOrders:
     def __init__(self, kernel, *, price_tick=None, fidelity="BAR_APPROX"):
         self.kernel = kernel
         self.bindings, self.details = {}, {}
+        self.staged_bindings = {}
         self.lots, self.allocations = [], []
         self.pyramiding = None
-        self.price_tick = None if price_tick is None else Decimal(str(price_tick))
+        self.metadata_contract = None
+        from .pine_entry_risk import PineEntryRisk
+        self.entry_risk = PineEntryRisk()
+        self.risk_stops = None
+        self._price_tick = None if price_tick is None else Decimal(str(price_tick))
         self.fidelity = fidelity
+        self.execution_reporter = kernel.execution_reporter
         kernel.execution_reporter = self.on_execution
         kernel.order_policy = self.prepare_order
+        if hasattr(kernel, "path_level_provider"):
+            kernel.path_level_provider = self.path_levels
         if hasattr(kernel, "_resting_filter_enabled"):
             kernel._resting_filter_enabled = False
+
+    @property
+    def price_tick(self):
+        if self.kernel.account_model == "LINEAR_PERP_ONE_WAY_V2":
+            return self.kernel.account.tick
+        return self._price_tick
 
     def configure(self, limit):
         if type(limit) is not int or not 1 <= limit <= 64:
@@ -30,32 +44,74 @@ class ExternalOrders:
             raise BacktestError("EXTERNAL_NONCAUSAL_PREFIX", "pyramiding changed during the run")
         self.pyramiding = limit
 
+    def negotiate_metadata(self, contract):
+        from .pine_order_metadata import CONTRACT
+        if contract not in (None, CONTRACT) or (self.metadata_contract is not None and contract != self.metadata_contract):
+            raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine order metadata contract changed")
+        self.metadata_contract = contract
+
+    def path_levels(self):
+        """Visit a dormant trailing activation before ratcheting its watermark."""
+        levels = []
+        for order in tuple(self.kernel._live_orders()):
+            detail = self.details.get(order.order_id, {})
+            if not detail.get("trailing") or detail.get("watermark") is not None:
+                continue
+            position = self.owned(detail["owner"])
+            if not position:
+                continue
+            selected = [lot for lot in self.lots if not detail["owner"] or lot["entry_id"] == detail["owner"]]
+            basis = sum((abs(lot["qty"]) * lot["price"] for lot in selected), ZERO) / abs(position)
+            levels.append(detail.get("trail_price") if detail.get("trail_price") is not None
+                          else basis + (1 if position > 0 else -1) * detail["trail_points"] * self.price_tick)
+        return levels
+
     def owned(self, entry_id=None):
         return sum((lot["qty"] for lot in self.lots if not entry_id or lot["entry_id"] == entry_id), ZERO)
 
     def pending(self, entry_id=None):
         return [order for order in self.kernel.orders if order.status in LIVE
-                and self.bindings.get(order.order_id, (None, None))[1] == "entry"
+                and self.bindings.get(order.order_id, (None, None))[1] in {"entry", "order"}
                 and (not entry_id or self.bindings[order.order_id][0] == entry_id)]
 
     def cancel_order(self, order, reason):
         order.status = "CANCELLED"
         self.kernel._lifecycle(order, "CANCELLED", reason=reason)
+        self.kernel._active_orders.pop(order.order_id, None)
+        release = getattr(self.kernel.account, "release_order_margin", None)
+        if release is not None:
+            release(order.order_id, event_time_ms=self.kernel._last_event.event_time_ms if self.kernel._last_event else 0)
 
     def prepare_order(self, order, event):
         if order.status not in LIVE:
             return False
+        if getattr(self.kernel.account, "liquidation_event", None) is not None:
+            self.cancel_order(order, "ACCOUNT_LIQUIDATION")
+            return False
         detail = self.details.get(order.order_id)
         if detail is None:
             raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "unbound host order")
+        if self.risk_stops is not None and self.risk_stops.blocked and detail["kind"] != "risk_close":
+            self.cancel_order(order, "PINE_RISK_STOP")
+            return False
+        if (detail["kind"] == "risk_close" and event.sequence == detail["submitted_sequence"]
+                and event.event_time_ms <= detail["submitted_time"]):
+            return False
         if detail["kind"] == "entry":
             position, direction = self.kernel.account.position_qty, detail["direction"]
             own_lot = any(lot["order_id"] == order.order_id for lot in self.lots)
             if position * direction > 0 and not own_lot and len(self.lots) >= (self.pyramiding or 1):
                 self.cancel_order(order, "EXTERNAL_PYRAMID_LIMIT")
                 return False
+            detail["remaining"] = self.entry_risk.opening_quantity(detail["remaining"], position, direction)
             # Pending reversals use the live position, never the submission-time size.
             order.qty = detail["remaining"] + (abs(position) if position * direction < 0 else ZERO)
+            if detail.get("oca_cap") is not None:
+                order.qty = min(order.qty, detail["oca_cap"])
+        elif detail["kind"] == "order":
+            # A generic order transacts its remaining quantity, independently
+            # of entry pyramiding and automatic reversal sizing.
+            order.qty = detail["remaining"]
         else:
             position = self.owned(detail["owner"])
             if not position:
@@ -94,13 +150,37 @@ class ExternalOrders:
                     order.stop_price = target
                 else:
                     target = basis + direction * detail["distance"] * self.price_tick * (1 if order.type == "LIMIT" else -1)
-                    if order.type == "LIMIT": order.limit_price = target
-                    else: order.stop_price = target
+                    if order.type == "LIMIT":
+                        order.limit_price = target
+                    else:
+                        order.stop_price = target
                 if target <= 0:
                     raise BacktestError("EXTERNAL_UNSUPPORTED", "distance exit produced a nonpositive price")
+        if order.qty <= 0 and detail["kind"] == "entry":
+            self.cancel_order(order, "PINE_ENTRY_RISK_LIMIT")
         return order.qty > 0
 
     def on_execution(self, event):
+        receipt = event.get("account_liquidation")
+        if receipt is not None:
+            order_id = event["order_id"]
+            self.bindings[order_id] = ("$host:account-liquidation", "liquidation")
+            self.details[order_id] = {"kind": "liquidation", "owner": None,
+                "remaining": Decimal(str(event["fill"]["qty"])), "receipt": receipt}
+        token = event.get("client_tag") or (event.get("intent") or {}).get("client_tag")
+        binding = self.staged_bindings.pop(token, None)
+        if binding is not None and event.get("accepted"):
+            order_id = event["order"]["order_id"]
+            script_id, detail = binding
+            self.bindings[order_id] = (script_id, detail["kind"])
+            self.details[order_id] = detail
+        self._allocate_execution(event)
+        if self.risk_stops is not None:
+            self.risk_stops.after_fill(event)
+        if self.execution_reporter is not None:
+            self.execution_reporter(event)
+
+    def _allocate_execution(self, event):
         fill = event.get("fill")
         if not fill:
             return
@@ -117,7 +197,7 @@ class ExternalOrders:
         for lot in self.lots:
             if remaining_close <= 0:
                 break
-            if kind != "entry" and detail["owner"] and lot["entry_id"] != detail["owner"]:
+            if kind not in {"entry", "order"} and detail["owner"] and lot["entry_id"] != detail["owner"]:
                 continue
             take = min(abs(lot["qty"]), remaining_close)
             lot["qty"] -= (Decimal(1) if lot["qty"] > 0 else Decimal(-1)) * take
@@ -128,7 +208,7 @@ class ExternalOrders:
         self.lots = [lot for lot in self.lots if lot["qty"]]
         opening = qty - closing
         if opening:
-            if kind != "entry":
+            if kind not in {"entry", "order"}:
                 raise BacktestError("EXTERNAL_ACCOUNT_MISMATCH", "exit opened a position")
             lot = next((lot for lot in self.lots if lot["order_id"] == order_id), None)
             price = Decimal(str(fill["price"]))
@@ -138,7 +218,10 @@ class ExternalOrders:
                 lot["price"] = (abs(lot["qty"])*lot["price"] + opening*price)/(abs(lot["qty"])+opening)
                 lot["qty"] += opening*direction
         detail["remaining"] = max(ZERO, detail["remaining"] - (opening if kind == "entry" else qty))
+        if detail.get("oca_cap") is not None:
+            detail["oca_cap"] = max(ZERO, detail["oca_cap"] - qty)
         filled = next(order for order in self.kernel.orders if order.order_id == order_id)
+        self._apply_oca(filled, detail, qty)
         for order in self.kernel.orders:
             if order.order_id == order_id or order.status not in LIVE:
                 continue
@@ -149,20 +232,65 @@ class ExternalOrders:
                 if not order.qty:
                     order.status = "CANCELLED_OCO"
                     self.kernel._lifecycle(order, order.status, reason="EXTERNAL_OCO_REDUCED")
-            if sibling["kind"] != "entry" and not self.owned(sibling["owner"]) and not self.pending(sibling["owner"]):
+            if sibling["kind"] not in {"entry", "order"} and not self.owned(sibling["owner"]) and not self.pending(sibling["owner"]):
                 if order.status in LIVE:
                     self.cancel_order(order, "EXTERNAL_ENTRY_CLOSED")
         if self.owned() != after or after != self.kernel.account.position_qty:
             raise BacktestError("EXTERNAL_ACCOUNT_MISMATCH", "entry allocations differ from host position")
+        from .pine_order_metadata import fill_annotation
+        annotation = fill_annotation(detail.get("metadata"), detail.get("metadata_role", "close"))
         self.allocations.append({"order_id":order_id,"sequence":fill["sequence"],"closed":closed,
             "opened": {"entry_id":script_id,"qty":str(opening)} if opening else None,
-            "position_qty":str(after)})
+            "position_qty":str(after), **({"annotation": annotation} if annotation else {})})
+
+    def _apply_oca(self, filled, detail, qty):
+        group = detail.get("oca_name"), detail.get("oca_type", "none")
+        if not group[0] or group[1] == "none":
+            return
+        for peer in tuple(self.kernel.orders):
+            if peer.order_id == filled.order_id or peer.status not in LIVE:
+                continue
+            meta = self.details[peer.order_id]
+            if (meta.get("oca_name"), meta.get("oca_type", "none")) != group:
+                continue
+            if group[1] == "cancel":
+                self.cancel_order(peer, "SCRIPT_OCA_CANCEL")
+                continue
+            before = peer.qty
+            peer.qty = max(ZERO, before - qty)
+            if meta["kind"] == "entry":
+                meta["oca_cap"] = peer.qty
+            else:
+                meta["remaining"] = peer.qty
+            if not peer.qty:
+                self.cancel_order(peer, "SCRIPT_OCA_REDUCED_TO_ZERO")
+            else:
+                release = getattr(self.kernel.account, "release_order_margin", None)
+                if release is not None:
+                    release(peer.order_id, fraction=(before-peer.qty)/before,
+                        event_time_ms=self.kernel._last_event.event_time_ms if self.kernel._last_event else 0)
+                self.kernel._lifecycle(peer, "OCA_REDUCED", reason=f"SCRIPT_OCA_REDUCE:{before-peer.qty}")
 
     def feedback(self):
         if self.owned() != self.kernel.account.position_qty:
             raise BacktestError("EXTERNAL_ACCOUNT_MISMATCH", "entry allocations differ from host position")
 
+    def exit_reference(self, owner):
+        lots = [lot for lot in self.lots if not owner or lot["entry_id"] == owner]
+        if lots:
+            return sum((abs(lot["qty"]) * lot["price"] for lot in lots), ZERO) / sum((abs(lot["qty"]) for lot in lots), ZERO)
+        # Before an entry fills, admission can only use the observed quote.
+        # prepare_order binds the exit again to actual allocated fills.
+        quote = self.kernel.account.mark
+        if quote is None or not quote.is_finite() or quote <= 0:
+            raise BacktestError("EXTERNAL_UNSUPPORTED", "relative exit admission needs an observed host price")
+        return quote
+
     def translate(self, intents, sequence):
+        if getattr(self.kernel.account, "liquidation_event", None) is not None:
+            return []
+        if self.risk_stops is not None and self.risk_stops.blocked:
+            return []
         kernel, staged = self.kernel, []
         def cancel(script_id=None):
             staged[:] = [row for row in staged if script_id is not None and row[1] != script_id]
@@ -175,28 +303,46 @@ class ExternalOrders:
             return available * Decimal(str(intent.get("qty_percent") or 100)) / 100
         for intent in intents:
             action, script_id = intent["action"], intent["id"]
+            from .pine_order_metadata import declaration
+            metadata = declaration(intent, self.metadata_contract)
+            annotations = {"metadata": metadata} if metadata is not None else {}
             if action in {"cancel", "cancel_all"}:
                 cancel(script_id if action == "cancel" else None)
                 continue
-            if action not in {"entry", "close", "close_all", "exit"}:
+            if action not in {"entry", "order", "close", "close_all", "exit"}:
                 raise BacktestError("EXTERNAL_UNSUPPORTED", "unknown order intent")
             position = kernel.account.position_qty
-            if action == "entry":
+            if action in {"entry", "order"}:
                 cancel(script_id)
                 direction = Decimal(1) if intent["direction"] == "long" else Decimal(-1)
-                if position * direction > 0 and len(self.lots) >= (self.pyramiding or 1):
+                if action == "entry" and position * direction > 0 and len(self.lots) >= (self.pyramiding or 1):
                     continue
                 opening = Decimal(str(intent["qty"]))
-                qty = opening + (abs(position) if position * direction < 0 else ZERO)
+                if action == "entry":
+                    opening = self.entry_risk.opening_quantity(opening, position, direction)
+                qty = opening + (abs(position) if action == "entry" and position * direction < 0 else ZERO)
+                if qty <= 0:
+                    continue
                 limit, stop = intent.get("limit"), intent.get("stop")
+                if action == "entry" and direction not in self.entry_risk.directions:
+                    # A prohibited reversal becomes a market close even when
+                    # the original entry specified a limit/stop price.
+                    limit, stop = None, None
                 # Explicit independent groups prevent the kernel's legacy
                 # limit+stop heuristic from pairing unrelated script entries.
                 order = {"side":"BUY" if direction > 0 else "SELL","qty":str(qty),
                     "oco_group":f"external-entry-{sequence}-{script_id}",
                     "type":"STOP_LIMIT" if limit is not None and stop is not None else "LIMIT" if limit is not None else "STOP" if stop is not None else "MARKET"}
-                if limit is not None: order["limit_price"] = str(limit)
-                if stop is not None: order["stop_price"] = str(stop)
-                staged.append((order,script_id,{"kind":"entry","remaining":opening,"direction":direction}))
+                if limit is not None:
+                    order["limit_price"] = str(limit)
+                if stop is not None:
+                    order["stop_price"] = str(stop)
+                oca_name, oca_type = intent.get("oca_name"), intent.get("oca_type") or "none"
+                if (oca_name is not None and not isinstance(oca_name,str)) or oca_type not in {"none","cancel","reduce"}:
+                    raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "invalid script OCA group")
+                staged.append((order,script_id,{"kind":action,"remaining":opening,"direction":direction,
+                    **annotations, **({"metadata_role": action} if annotations else {}),
+                    **({"oca_name":oca_name,"oca_type":oca_type} if oca_name and oca_type != "none" else {})}))
                 continue
             trail_watermark = None
             trail_triggered = False
@@ -222,7 +368,7 @@ class ExternalOrders:
                         trail_triggered = meta.get("triggered", False)
                 cancel(script_id)
                 if not position:
-                    pending = [(row,meta) for row,sid,meta in staged if meta["kind"] == "entry" and (not owner or owner == sid)]
+                    pending = [(row,meta) for row,sid,meta in staged if meta["kind"] in {"entry","order"} and (not owner or owner == sid)]
                     pending += [({"side":order.side}, self.details[order.order_id]) for order in self.pending(owner)]
                     if pending:
                         direction = Decimal(1) if pending[0][0]["side"] == "BUY" else Decimal(-1)
@@ -231,7 +377,8 @@ class ExternalOrders:
                 continue
             qty = quantity(intent, abs(position))
             base = {"side":"SELL" if position > 0 else "BUY","qty":str(qty),"reduce_only":True}
-            detail = {"kind":"exit" if action == "exit" else "close","owner":owner,"remaining":qty}
+            detail = {"kind":"exit" if action == "exit" else "close","owner":owner,"remaining":qty,
+                **annotations, **({"metadata_role": "close"} if annotations else {})}
             if action != "exit":
                 staged.append(({**base,"type":"MARKET"},script_id,detail))
             else:
@@ -239,23 +386,87 @@ class ExternalOrders:
                 for name,kind,distance in (("limit","LIMIT","profit"),("stop","STOP","loss")):
                     if intent.get(name) is not None or intent.get(distance) is not None:
                         meta = dict(detail)
+                        if annotations:
+                            meta["metadata_role"] = distance
                         if intent.get(distance) is not None:
                             meta["distance"] = Decimal(str(intent[distance]))
-                        # A positive placeholder satisfies order admission. The price is
-                        # bound to actual allocated fills before this order can match.
-                        price = intent.get(name) if intent.get(name) is not None else 1
+                        price = intent.get(name)
+                        if price is None:
+                            direction = Decimal(1) if position > 0 else Decimal(-1)
+                            price = self.exit_reference(owner) + direction * meta["distance"] * self.price_tick * (1 if kind == "LIMIT" else -1)
                         staged.append(({**base,"type":kind,name+"_price":str(price),"oco_group":group},script_id,meta))
                 if intent.get("trail_offset") is not None:
                     meta = {**detail,"trailing":True,"watermark":trail_watermark,"triggered":trail_triggered,
                             **{key:Decimal(str(intent[key])) for key in ("trail_price","trail_points","trail_offset") if intent.get(key) is not None}}
-                    staged.append(({**base,"type":"STOP","stop_price":"1","oco_group":group},script_id,meta))
-        for index,(_,script_id,detail) in enumerate(staged):
-            key = f"ord-{kernel._next_order_id+index}"
-            self.bindings[key] = (script_id, detail["kind"])
-            self.details[key] = detail
+                    if annotations:
+                        meta["metadata_role"] = "trailing"
+                    direction = Decimal(1) if position > 0 else Decimal(-1)
+                    activation = meta.get("trail_price")
+                    if activation is None:
+                        activation = self.exit_reference(owner) + direction * meta["trail_points"] * self.price_tick
+                    reference = trail_watermark if trail_watermark is not None else activation
+                    price = reference - direction * meta["trail_offset"] * self.price_tick
+                    staged.append(({**base,"type":"STOP","stop_price":str(price),"oco_group":group},script_id,meta))
+        for index,(order,script_id,detail) in enumerate(staged):
+            token = f"external-{sequence}-{index}"
+            order["client_tag"] = token
+            self.staged_bindings[token] = (script_id, detail)
         return [row[0] for row in staged]
 
+    def snapshot(self):
+        def encode(value):
+            if isinstance(value, Decimal):
+                return {"$decimal": str(value)}
+            if isinstance(value, dict):
+                return {key: encode(item) for key, item in value.items()}
+            if isinstance(value, (list, tuple)):
+                return [encode(item) for item in value]
+            return value
+        return encode({"schema": "candlescope.external-orders/1", "bindings": self.bindings,
+            "details": self.details, "lots": self.lots, "allocations": self.allocations,
+            "pyramiding": self.pyramiding, "staged_bindings": self.staged_bindings,
+            **({"metadata_contract": self.metadata_contract} if self.metadata_contract else {}),
+            **({"pine_entry_risk": self.entry_risk.configuration} if self.entry_risk.configuration is not None else {})})
+
+    def restore(self, payload):
+        def decode(value):
+            if isinstance(value, dict):
+                if set(value) == {"$decimal"}:
+                    result = Decimal(value["$decimal"])
+                    if not result.is_finite():
+                        raise BacktestError("CHECKPOINT_CORRUPT", "nonfinite order allocation")
+                    return result
+                return {key: decode(item) for key, item in value.items()}
+            if isinstance(value, list):
+                return [decode(item) for item in value]
+            return value
+        if payload.get("schema") != "candlescope.external-orders/1":
+            raise BacktestError("CHECKPOINT_CORRUPT", "order allocation schema differs")
+        value = decode(payload)
+        self.negotiate_metadata(value.get("metadata_contract"))
+        from .pine_order_metadata import declaration, fill_annotation
+        for detail in [*value["details"].values(), *(item[1] for item in value.get("staged_bindings", {}).values())]:
+            if "metadata" in detail:
+                metadata = declaration({"action": detail["kind"], "metadata": detail["metadata"]}, self.metadata_contract)
+                fill_annotation(metadata, detail.get("metadata_role", "close"))
+        if value.get("pine_entry_risk") is not None:
+            self.entry_risk.configure(value["pine_entry_risk"])
+        elif self.entry_risk.configuration is not None:
+            raise BacktestError("CHECKPOINT_CORRUPT", "Pine risk configuration missing")
+        self.bindings = {key: tuple(item) for key, item in value["bindings"].items()}
+        self.details, self.lots, self.allocations = value["details"], value["lots"], value["allocations"]
+        self.pyramiding = value["pyramiding"]
+        self.staged_bindings = {key: tuple(item) for key, item in value.get("staged_bindings", {}).items()}
+        if set(self.bindings) != set(self.details) or any(order.order_id not in self.bindings for order in self.kernel.orders):
+            raise BacktestError("CHECKPOINT_CORRUPT", "host order ownership differs")
+        self.feedback()
+
     def report(self):
+        annotations = {key: {"metadata": dict(detail["metadata"]), "role": detail["metadata_role"]}
+            for key, detail in self.details.items() if detail.get("metadata") is not None}
         return {"model":"HOST_NET_AVERAGE_COST_ENTRY_QUANTITY_FIFO_V1", "price_tick":None if self.price_tick is None else str(self.price_tick),
                 "open_entries":[{**lot,"qty":str(lot["qty"]),"price":str(lot["price"])} for lot in self.lots],
-                "fill_allocations":self.allocations}
+                "fill_allocations":self.allocations,
+                **({"order_annotations": annotations} if annotations else {}),
+                **({"risk_contract":"candlescope.pine-entry-risk/1", "risk_configuration":self.entry_risk.configuration}
+                    if self.entry_risk.configuration is not None else {})}

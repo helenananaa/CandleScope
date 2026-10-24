@@ -287,7 +287,8 @@ def test_reversal_risk_counts_only_new_exposure_after_closing_old_position() -> 
     assert plan[0]["qty"] == "2"
 
 
-def test_v2_reversal_reserves_only_net_incremental_exposure() -> None:
+@pytest.mark.parametrize("balance, admitted", [("15000", True), ("10000", False)])
+def test_v2_reversal_reserves_only_opening_leg_under_current_margin_policy(balance, admitted) -> None:
     events = (
         MarketEvent(
             sequence=1,
@@ -336,6 +337,7 @@ def test_v2_reversal_reserves_only_net_incremental_exposure() -> None:
         funding_mode="OFF",
         leverage=Decimal("10"),
         host_policy_revision=HOST_POLICY_REVISION,
+        initial_balance=Decimal(balance),
     )
 
     def reverse(_visible, event):
@@ -346,11 +348,15 @@ def test_v2_reversal_reserves_only_net_incremental_exposure() -> None:
         return []
 
     result = kernel.run(events, reverse, finalize=True)
-    assert [fill["action"] for fill in result.fills] == [
-        "OPEN_LONG",
-        "REVERSE_TO_SHORT",
-    ]
-    assert kernel.account.position_qty == -1
+    # Working-order collateral is equity minus current position margin. The
+    # closing leg contributes no opening reserve, and its unreleased margin is
+    # not borrowed. At 15000 the one-contract opening leg fits, while reserving
+    # the full two-contract transaction would incorrectly reject it.
+    expected = ["OPEN_LONG", "REVERSE_TO_SHORT"] if admitted else ["OPEN_LONG"]
+    assert [fill["action"] for fill in result.fills] == expected
+    assert kernel.account.position_qty == (-1 if admitted else 1)
+    if not admitted:
+        assert kernel.rejected[-1]["reason"] == "ACCOUNT_BALANCE_INSUFFICIENT"
     assert kernel.account.frozen_order_margin == 0
 
 

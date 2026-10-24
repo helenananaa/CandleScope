@@ -39,6 +39,21 @@ test("replay starts paused with a server cursor and no future account output", (
   assert.doesNotMatch(html, /<svg/);
 });
 
+test("a negotiated Pine Host replay keeps its authority and exposes paused controls", () => {
+  const run: NativeRun = { run_id: "host-replay", execution_mode: "CANDLESCOPE", replay_contract: "candlescope.external-replay/1",
+    state: "COMPLETED", created_at_ms: 1, result: null,
+    runtime_identity: { engine: { package: "pine-compat-runtime", version: "test", code_sha256: "hash" } } };
+  const html = renderToStaticMarkup(<NativeStrategyReport run={run} />);
+  assert.match(html, /native-replay-controls/);
+  assert.ok(html.includes(t("native.replay.empty")));
+  const controls = renderToStaticMarkup(<NativeReplayControls runId={run.run_id} onChange={() => {}} replay={{
+    replay_id: "host", run_id: run.run_id, method: "HOST_ACCOUNT_CHECKPOINT", state: "PAUSED", revision: 1,
+    cursor: 3, total: 10, result: null, snapshots: [], error: null,
+  }} />);
+  assert.ok(controls.includes(t("native.replay.host")));
+  assert.ok(!controls.includes(t("native.replay.method")));
+});
+
 test("a report without replay output keeps controls mounted instead of blanking the panel", () => {
   const run: NativeRun = { run_id: "empty-replay", execution_mode: "NATIVE", state: "COMPLETED", created_at_ms: 1,
     runtime_identity: { engine: { package: "pine-compat-runtime", version: "test", code_sha256: "hash" } }, result: null };

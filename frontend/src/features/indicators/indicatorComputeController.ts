@@ -338,6 +338,7 @@ export function useIndicatorComputeController({
         allBgcolors,
         allBarcolors,
         allSignals,
+        allDrawings,
         newParamSchemas,
       } = collectIndicatorComputeResults(accepted, { parsed: true });
       const indicatorById = new Map(
@@ -368,6 +369,7 @@ export function useIndicatorComputeController({
           bgcolors: allBgcolors,
           barcolors: allBarcolors,
           signals: allSignals,
+          drawings: allDrawings,
           paramSchemas: newParamSchemas,
         });
 

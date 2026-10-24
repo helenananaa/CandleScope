@@ -17,7 +17,7 @@ BAR_TIMEZONE = "UTC"
 
 @dataclass(slots=True)
 class TradeBarBuilder:
-    """Emit only buckets proven complete by a trade in a later bucket."""
+    """Emit buckets once the ordered source clock has passed their end."""
 
     interval: str
     gap_policy: str = "REJECT"
@@ -30,6 +30,7 @@ class TradeBarBuilder:
     _volume: Decimal = field(init=False, default=Decimal("0"))
     signal_count: int = field(init=False, default=0)
     gap_count: int = field(init=False, default=0)
+    _confirmed: bool = field(init=False, default=False, repr=False)
 
     def __post_init__(self) -> None:
         spec = parse_interval_spec(self.interval)
@@ -45,6 +46,15 @@ class TradeBarBuilder:
         self._volume = Decimal("0")
         self.signal_count = 0
         self.gap_count = 0
+        self._confirmed = False
+
+    def close_before(self, observed_time_ms: int) -> tuple[MarketEvent, ...]:
+        """Close a finished bucket before applying a later auxiliary event."""
+        if self._open_ms is not None and not self._confirmed and self._spec.next_ms(self._open_ms) <= observed_time_ms:
+            bar = self._close_current()
+            self._confirmed = True
+            return (bar,)
+        return ()
 
     def push(self, trade: MarketEvent) -> tuple[MarketEvent, ...]:
         if trade.role != "TRADES" or trade.payload.get("source_event_kind") != "AGG_TRADE":
@@ -70,11 +80,14 @@ class TradeBarBuilder:
                         "empty derived-bar bucket rejected",
                         code="DATA_GAP_REJECTED",
                     )
-            completed.append(self._close_current())
+            if not self._confirmed:
+                completed.append(self._close_current())
             self._reset_bucket(bucket, price, qty)
         elif self._open_ms is None:
             self._reset_bucket(bucket, price, qty)
         else:
+            if self._confirmed:
+                raise MarketDatasetError("trade arrived after its bucket was confirmed", code="DATA_GAP_REJECTED")
             assert self._high is not None and self._low is not None
             self._high = max(self._high, price)
             self._low = min(self._low, price)
@@ -96,7 +109,23 @@ class TradeBarBuilder:
             "volume": str(self._volume),
             "signal_count": self.signal_count,
             "gap_count": self.gap_count,
+            **({"confirmed": True} if self._confirmed else {}),
         }
+
+    def has_forming_bar(self, observed_time_ms: int) -> bool:
+        return (not self._confirmed and self._open_ms is not None
+            and self._open_ms <= observed_time_ms < self._spec.next_ms(self._open_ms))
+
+    def forming_bar(self, observed_time_ms: int) -> MarketEvent:
+        """Detach only OHLCV already incorporated by push, at its observation."""
+        if not self.has_forming_bar(observed_time_ms):
+            raise MarketDatasetError("forming observation is outside its bucket", code="LOOKAHEAD_VIOLATION")
+        return MarketEvent(self.signal_count + 1, observed_time_ms, "BARS", {
+            "event_kind": "TRADE_DERIVED_FORMING_BUCKET_V1", "signal_sequence": self.signal_count + 1,
+            "bar_builder": BAR_BUILDER_REVISION, "timezone": BAR_TIMEZONE,
+            "open_time_ms": self._open_ms, "close_time_ms": self._spec.next_ms(self._open_ms) - 1,
+            "open": str(self._open), "high": str(self._high), "low": str(self._low),
+            "close": str(self._close), "volume": str(self._volume)})
 
     def restore(self, payload: Mapping[str, Any]) -> None:
         if (
@@ -114,6 +143,7 @@ class TradeBarBuilder:
         self._volume = Decimal(str(payload.get("volume") or "0"))
         self.signal_count = int(payload.get("signal_count") or 0)
         self.gap_count = int(payload.get("gap_count") or 0)
+        self._confirmed = payload.get("confirmed") is True
 
     def _close_current(self) -> MarketEvent:
         assert self._open_ms is not None
@@ -142,6 +172,7 @@ class TradeBarBuilder:
         )
 
     def _reset_bucket(self, bucket: int, price: Decimal, qty: Decimal) -> None:
+        self._confirmed = False
         self._open_ms = bucket
         self._open = price
         self._high = price
@@ -159,7 +190,10 @@ def derive_complete_trade_bars(
     builder = TradeBarBuilder(interval, gap_policy=gap_policy)
     completed: list[MarketEvent] = []
     for event in events:
-        completed.extend(builder.push(event))
+        if event.role in {"INSTRUMENT_RULES", "MARK_INDEX", "FUNDING"}:
+            completed.extend(builder.close_before(event.event_time_ms))
+        else:
+            completed.extend(builder.push(event))
     return tuple(completed)
 
 

@@ -62,6 +62,31 @@ def module(path, name):
     return value
 
 
+def release_engine_wheel(engine, target, downloads, sources_out):
+    """Ship the qualified release binary, with its exact source and manifest."""
+    if engine.get("patch") or engine.get("patchSha256"):
+        raise ValueError("release wheels cannot be combined with an unapplied source patch")
+    asset = engine["wheels"].get(target)
+    if asset is None:
+        raise ValueError(f"no pinned release wheel for {target}")
+    manifest_path = download(engine["manifest"], downloads)
+    manifest = json.loads(manifest_path.read_text())
+    if (manifest.get("commit") != engine["commit"] or manifest.get("version") != engine["version"]
+            or manifest.get("tag") != "v" + engine["version"] or manifest.get("channel") != "stable"):
+        raise ValueError("desktop engine release identity mismatch")
+    matches = [row for row in manifest.get("assets", []) if row.get("filename") == asset["filename"]]
+    if (len(matches) != 1 or "sha256:" + matches[0]["sha256"] != asset["sha256"]
+            or matches[0]["size"] != asset["size"]):
+        raise ValueError("desktop engine release asset mismatch")
+    wheel = download(asset, downloads)
+    if wheel.stat().st_size != asset["size"]:
+        raise ValueError("desktop engine wheel size mismatch")
+    archive = download(engine["archive"], downloads)
+    for path in (archive, manifest_path):
+        shutil.copy2(path, sources_out / path.name)
+    return wheel
+
+
 def source_digest(directory):
     digest = hashlib.sha256()
     files = [directory / "pyproject.toml", directory / "README.md"]
@@ -96,6 +121,9 @@ def main():
     wheelhouse.mkdir(exist_ok=True)
     engine_wheels = {}
     for name, engine in recipe["engines"].items():
+        if "wheels" in engine:
+            engine_wheels[name] = release_engine_wheel(engine, target, downloads, sources_out)
+            continue
         patch = REPO / engine["patch"]
         if sha(patch) != engine["patchSha256"]:
             raise ValueError(f"tracked patch changed without updating source lock: {patch}")

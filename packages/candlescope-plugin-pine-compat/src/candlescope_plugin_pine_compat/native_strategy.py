@@ -4,6 +4,8 @@ from __future__ import annotations
 import pine_compat
 from .strategy_time import engine_bars, engine_magnifier, chart_records
 from .event_requests import run_with_event_requests
+from .host_inputs import native_request_bars, execution_times, require_price_grid, require_quote_currency
+from .libraries import library_sources
 from candlescope_plugin_sdk.native_strategy import identity, serve
 
 
@@ -20,7 +22,10 @@ def describe():
 
 
 def prepare(request):
-    inputs = pine_compat.analyze_script(request["source"]).get("inputs", [])
+    libraries = dict(library_sources({"pineLibrarySources": request.get("libraries", {})}))
+    analysis = pine_compat.analyze_script(request["source"], library_sources=libraries or None)
+    require_price_grid(analysis, request)
+    inputs = analysis.get("inputs", [])
     overrides = {}
     for name, value in request.get("parameters", {}).items():
         matches = [item for item in inputs if str(item["callSiteId"]) == name or item.get("title") == name]
@@ -31,11 +36,9 @@ def prepare(request):
             raise ValueError(f"NATIVE_INPUT_DUPLICATE: {name}")
         overrides[key] = value
     program = pine_compat.compile_script(request["source"],
-                                        library_sources=request.get("libraries") or None)
+                                        library_sources=libraries or None)
     requirements = program.host_requirements()
-    context = request["context"]
-    supplied = {f"{item['symbol']}:{item['timeframe']}": engine_bars(item["bars"])
-                for item in request.get("contexts", [])}
+    require_quote_currency(analysis, requirements, request)
     execution = requirements.get("execution", {})
     uses_magnifier = execution.get("magnifier") not in (None, "notEnabled", "notRequested", "disabled", False)
     if uses_magnifier and not request.get("magnifier"):
@@ -46,10 +49,12 @@ def prepare(request):
 def execute(request):
     program, overrides, requirements, uses_magnifier = prepare(request)
     context = request["context"]
-    supplied = {f"{item['symbol']}:{item['timeframe']}": engine_bars(item["bars"]) for item in request.get("contexts", [])}
+    supplied = native_request_bars(request, {f"{item['symbol']}:{item['timeframe']}": engine_bars(item["bars"]) for item in request.get("contexts", [])})
+    clocks = execution_times(request["bars"], request.get("execution_times"))
     output = run_with_event_requests(lambda request_bars: program.run(engine_bars(request["bars"]), input_overrides=overrides or None,
                          chart_symbol=context["symbol"], chart_timeframe=context["timeframe"],
-                         request_bars=request_bars, magnifier_bars=engine_magnifier(request.get("magnifier"))),
+                         request_bars=request_bars, magnifier_bars=engine_magnifier(request.get("magnifier")),
+                         **({"execution_times": clocks} if clocks is not None else {})),
                          request, supplied, engine_bars, pine_compat)
     return pack(request, output, requirements, uses_magnifier)
 

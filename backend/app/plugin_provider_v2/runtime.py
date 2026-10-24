@@ -548,6 +548,12 @@ class ProviderExchangePlugin:
             delisted_at_ms=item.get("delistedAtMs"),
             expiry_at_ms=item.get("expiryAtMs"),
             price_tick_size=item.get("priceTickSize", ""),
+            contract_multiplier=item.get("contractMultiplier", ""),
+            contract_value_model=item.get("contractValueModel", ""),
+            quantity_step=item.get("quantityStep", ""),
+            min_quantity=item.get("minQuantity", ""),
+            quantity_origin=item.get("quantityOrigin", ""),
+            quantity_rule_model=item.get("quantityRuleModel", ""),
         )
 
     # Legacy adapter facade. Provider transport dispatch never calls these URLs.

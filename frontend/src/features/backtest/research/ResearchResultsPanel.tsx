@@ -45,6 +45,7 @@ export default function ResearchResultsPanel({ runtime }: { runtime: BacktestRes
                   identity: report.identity,
                   account: report.account,
                   risk_policy: report.risk_policy,
+                  pine_risk_stops: report.pine_risk_stops,
                   execution_assumptions: report.execution_assumptions,
                   hashes: report.hashes,
                   ...(external ? { external_provider: external } : {}),

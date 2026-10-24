@@ -1,7 +1,9 @@
 import { API_BASE } from "../../../services/apiConfig.js";
 import type { FrozenExecutionSettings } from "./nativeExecutionSettings.js";
+import type { NativeCostMatrix } from "./NativeCostSensitivity.js";
 
 export interface NativeResult {
+  cost_sensitivity?: NativeCostMatrix;
   account_authority: string;
   account_model?: string;
   evaluation_contract?: string;
@@ -18,6 +20,7 @@ export interface NativeResult {
   diagnostics: unknown[];
 }
 export interface NativeRun {
+  replay_contract?: string;
   execution_mode?: "NATIVE" | "CANDLESCOPE";
   run_id: string;
   state: string;
@@ -28,7 +31,7 @@ export interface NativeRun {
   error?: { message: string; details?: unknown } | null;
 }
 export interface NativeCapabilities {
-  engines: Array<{ language: string; available: boolean; external_available?: boolean; reason?: string }>;
+  engines: Array<{ language: string; available: boolean; external_available?: boolean; external_replay?: string; reason?: string }>;
 }
 export async function nativeApi<T>(path: string, body?: unknown, key?: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`${API_BASE}/backtests${path}`, {

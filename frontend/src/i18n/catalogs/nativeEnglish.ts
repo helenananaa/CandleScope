@@ -1,6 +1,20 @@
+import { workbenchEnglish } from "./workbenchEnglish.js";
 import { externalProviderEnglish } from "./externalProviderEnglish.js";
 import { supportEnglish } from "./supportEnglish.js";
 export const nativeEnglish = {
+  ...workbenchEnglish,
+  "native.replay.host": "Restore the CandleScope account and pending orders from the checkpoint, then continue through the remaining frozen market events.",
+  "native.inputs.priceTick": "Minimum price increment",
+  "native.inputs.currency": "Quote currency (requires the actual price tick)",
+  "native.inputs.pointValue": "Contract point value",
+  "native.inputs.quantityStep": "Quantity increment (exact decimal)",
+  "native.inputs.minContract": "Minimum quantity",
+  "native.inputs.quantityPrecision": "Quantity decimal places (0-9)",
+  "indicator.pine.currencyRates": "Pine effective currency rates (JSON)",
+  "indicator.pine.currencyRatesHelp": "Supply rates with their actual availability time in Unix milliseconds. Future observations are excluded from earlier queries. Rates are supplied explicitly; no currency market is substituted.",
+  "indicator.pine.quoteCurrency": "Chart quote currency (requires the actual price tick)",
+  "indicator.pine.contexts": "Pine requested markets (JSON)",
+  "indicator.pine.contextsHelp": "Declare the local markets used by dynamic or nested requests. Timeframes use Pine notation (60 = one hour). Specify marketType when needed; missing data must be prepared first.",
   ...externalProviderEnglish,
   "plugin.trust.scriptRuntimeExecution": "The installer creates a separate Python environment and runs the package verification probe. After restart, script code runs as your current user without an OS sandbox. Files, network access and subprocesses are not restricted by the platform plugin permission summary.",
   "report.more": "More",

@@ -204,10 +204,13 @@ def _clone_kernel(kernel: Any, *, _bar_sensitivity=False, **overrides: object) -
         "order_end_policy": kernel.order_end_policy,
         "equity_curve_event_interval": kernel.equity_curve_event_interval,
     }
+    if isinstance(kernel, (SimulationKernel, DualClockSimulationKernel)):
+        common["process_orders_on_close"] = kernel.process_orders_on_close
     common.update(overrides)
     if isinstance(kernel, DualClockSimulationKernel):
         return DualClockSimulationKernel(
             signal_interval=kernel.signal_interval,
+            execution_fidelity=kernel.execution_fidelity,
             gap_policy=kernel.gap_policy,
             max_events=kernel.max_events,
             checkpoint_event_interval=0,
@@ -220,6 +223,9 @@ def _clone_kernel(kernel: Any, *, _bar_sensitivity=False, **overrides: object) -
             **common,
         )
     kind = _BarSensitivityKernel if _bar_sensitivity and type(kernel) is SimulationKernel else SimulationKernel
+    from .pine_chart_kernel import PineChartBarKernel
+    if isinstance(kernel, PineChartBarKernel):
+        kind = type(kernel)
     return kind(
         price_tick=kernel.price_tick,
         qty_step=kernel.qty_step,

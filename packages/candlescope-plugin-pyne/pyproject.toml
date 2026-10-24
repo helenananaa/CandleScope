@@ -25,7 +25,7 @@ classifiers = [
   "Topic :: Software Development :: Libraries :: Application Frameworks",
 ]
 dependencies = [
-  "candlescope-plugin-sdk==0.2.0",
+  "candlescope-plugin-sdk>=0.2.0,<0.3.0",
   "pyne-runtime==0.4.1",
 ]
 

@@ -13,12 +13,13 @@ from dataclasses import fields, replace
 
 from app.core.config import getenv
 from .errors import BacktestError
+from .chart_book import DUAL_MODES
 from .strategy.isolated import IsolatedStrategyProvider
 from .strategy.python_provider import PythonHostProvider
 
 
 def provider_spec(provider, *, fidelity="BAR_APPROX"):
-    flag = "BACKTEST_COLOCATED_DUAL_CLOCK_ENABLED" if fidelity == "AGG_TRADE_EXECUTION" else "BACKTEST_COLOCATED_BAR_ENABLED"
+    flag = "BACKTEST_COLOCATED_DUAL_CLOCK_ENABLED" if fidelity in DUAL_MODES else "BACKTEST_COLOCATED_BAR_ENABLED"
     if getenv(flag, "1").strip() != "1":
         return None
     if type(provider) is IsolatedStrategyProvider and provider._process is None and not provider._terminated:
@@ -116,7 +117,7 @@ def _worker(connection, settings, run_id, spec, events, options, call_deadline, 
         guarded = _GuardedProvider(provider, call_deadline, settings.provider_step_timeout_ms / 1000,
                                    spec["call_timeout"])
         call_deadline.value = 0.0
-        dual = service.get_run(run_id)["fidelity_mode"] == "AGG_TRADE_EXECUTION"
+        dual = service.get_run(run_id)["fidelity_mode"] in DUAL_MODES
         execute_run = service.execute_dual_clock_run if dual else service.execute_bar_run
         completed = execute_run(run_id, events=events, provider=guarded, **options)
         completed["execution_lane"] = "COLOCATED_DUAL_CLOCK_V1" if dual else "COLOCATED_BAR_V1"
