@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from collections.abc import Mapping
+from collections.abc import Awaitable, Mapping
 from typing import Callable, TypeVar
 
 from app.core.config import REPLAY_SETTINGS, ReplaySettings
@@ -97,6 +97,7 @@ async def start_replay_runtime(
     instrument_metadata_resolver: (
         Callable[[str, str, str], Mapping[str, object] | None] | None
     ) = None,
+    instrument_metadata_refresher: Callable[[str, str], Awaitable[object]] | None = None,
 ) -> ReplayRuntime:
     """Start replay only when enabled; disabled mode has no DB or task side effect."""
 
@@ -139,6 +140,8 @@ async def start_replay_runtime(
             service_kwargs["instrument_metadata_resolver"] = (
                 instrument_metadata_resolver
             )
+        if instrument_metadata_refresher is not None:
+            service_kwargs["instrument_metadata_refresher"] = instrument_metadata_refresher
         if raw_trade_archive is None:
             raw_trade_archive = (
                 (

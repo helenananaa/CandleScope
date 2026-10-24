@@ -349,6 +349,37 @@ async def prepare_replay(request: Request, payload: ReplayPreparationPayload):
         raise
 
 
+class ReplayMarketPreparationPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    run_id: str
+    exchange: str
+    market_type: str
+    symbol: str
+
+
+@router.post("/replay-market", status_code=202)
+async def prepare_replay_market(request: Request, payload: ReplayMarketPreparationPayload):
+    """Publish inputs only; normal track planning/commands still own admission."""
+    from app.data_preparation.models import fingerprint
+    from app.replay.training.errors import TrainingRunError
+    instance = service(request)
+    replay = instance.adapter.replay_service
+    try:
+        scope = await replay.training.market_track_history(**payload.model_dump())
+    except TrainingRunError as exc:
+        raise HTTPException(exc.status_code, detail={"code": exc.code, "message": exc.message}) from exc
+    base = Requirement(**{key: scope[key] for key in (
+        "exchange", "market_type", "symbol", "start_ms", "end_ms",
+    )})
+    requirements = [base]
+    if scope["source_kind"] == "AGG_TRADE":
+        requirements.append(base.model_copy(update={"role": "TRADES"}))
+    return await invoke_async(lambda: instance.submit(PreparationRequest(
+        idempotency_key="replay-market-" + fingerprint(scope), consumer="REPLAY",
+        requirements=requirements, intent={"replay_market": scope},
+    )))
+
+
 def service(request: Request):
     instance = getattr(request.app.state, "data_preparation_service", None)
     if instance is None:

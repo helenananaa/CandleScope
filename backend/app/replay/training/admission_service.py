@@ -58,6 +58,7 @@ class TrainingAdmissionService:
         *,
         preparation_id: str | None = None,
         _market_identity: tuple[str, str, str] | None = None,
+        _preparation_market_identity: tuple[str, str, str] | None = None,
         _progressive_initial_horizon_ms: int | None = None,
     ) -> dict[str, object]:
         if not isinstance(request, TrainingRunSetupRequest):
@@ -83,11 +84,19 @@ class TrainingAdmissionService:
                         "preparation belongs to another setup",
                         status_code=409,
                     )
+                run = await self.store.get_run(run_id)
+                if _preparation_market_identity is not None and not run.get("adapter_session_id"):
+                    # Run creation and initial market binding are separate
+                    # durable steps. Resume the identity dependency if a crash
+                    # left the prepared run awaiting its first market.
+                    await self.replay_service.prepare_instrument_metadata(*_preparation_market_identity)
                 return {
                     "protocol": REPLAY_V2_PROTOCOL,
                     "created": False,
-                    "run": await self.store.get_run(run_id),
+                    "run": run,
                 }
+        if _preparation_market_identity is not None:
+            await self.replay_service.prepare_instrument_metadata(*_preparation_market_identity)
         settings = admission_rules_ops.progressive_admission_settings(
             request, _progressive_initial_horizon_ms
         )
@@ -294,6 +303,50 @@ class TrainingAdmissionService:
                 disclose_start=settings["time_disclosure_policy"] == "NONE",
             )
         return catalog
+
+    async def market_track_history(
+        self, run_id: str, *, exchange: str, market_type: str, symbol: str,
+    ) -> dict[str, object]:
+        """Describe missing input acquisition without changing the frozen Run."""
+        run_id = service_validation_ops.identifier(run_id, field_name="run_id")
+        exchange = service_validation_ops.identifier(exchange, field_name="exchange")
+        market_type = service_validation_ops.identifier(market_type, field_name="market_type")
+        symbol = service_validation_ops.identifier(symbol, field_name="symbol")
+        binding = await self.store.run_binding(run_id)
+        admission_rules_ops.assert_same_market_scope(
+            binding=binding, exchange=exchange, market_type=market_type,
+            settlement_asset=str(binding["settlement_asset"]),
+        )
+        await self.replay_service.prepare_instrument_metadata(exchange, market_type, symbol)
+        identity = self._authoritative_instrument_identity(
+            exchange=exchange, market_type=market_type, symbol=symbol,
+        )
+        admission_rules_ops.assert_same_market_scope(
+            binding=binding, exchange=exchange, market_type=market_type,
+            settlement_asset=identity["settlement_asset"],
+        )
+        config = ReplaySessionConfig.from_dict(binding["adapter_config"])
+        if config.base_interval != "1m" or str(binding["source_kind"]) not in {"BAR", "AGG_TRADE"}:
+            raise TrainingRunError(
+                "MARKET_HISTORY_PREPARATION_UNSUPPORTED",
+                "automatic history preparation requires a minute-based BAR or trade run",
+                status_code=409,
+            )
+        start = service_validation_ops._stored_counter(
+            binding["actual_replay_start_ms"], field_name="actual_replay_start_ms",
+        )
+        end = service_validation_ops._stored_counter(
+            binding["actual_replay_end_ms"], field_name="actual_replay_end_ms",
+        )
+        # Include the full frozen horizon, even for a progressively prepared
+        # primary track. No current clock or browser-supplied range can extend it.
+        end = max(end + 1, start + config.horizon_ms)
+        return {
+            "run_id": run_id, "exchange": exchange, "market_type": market_type,
+            "symbol": symbol, "source_kind": str(binding["source_kind"]),
+            "start_ms": max(0, start - config.warmup_bars * 60_000) // 60_000 * 60_000,
+            "end_ms": (end + 59_999) // 60_000 * 60_000,
+        }
 
     async def market_track_plan(
         self,

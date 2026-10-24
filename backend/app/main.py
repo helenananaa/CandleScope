@@ -255,11 +255,18 @@ async def _init_data_manager() -> None:
 async def _init_replay_runtime() -> None:
     """Start replay as an application sibling, independent of live DataEngine."""
 
-    from app.exchanges.symbol_catalog import get_cached_symbol_metadata
+    from app.exchanges.symbol_catalog import (
+        get_cached_symbol_metadata,
+        refresh_exchange_metadata,
+    )
     from app.replay.runtime import start_replay_runtime
+
+    async def refresh_instrument_metadata(exchange: str, market_type: str):
+        return await refresh_exchange_metadata(exchange, market_type=market_type)
 
     runtime = await start_replay_runtime(
         instrument_metadata_resolver=get_cached_symbol_metadata,
+        instrument_metadata_refresher=refresh_instrument_metadata,
     )
     app.state.replay_runtime = runtime
     app.state.replay_service = runtime.service
@@ -629,9 +636,17 @@ async def startup_event() -> None:
         app.state.data_preparation_service = preparation
         await preparation.start()
         from app.data_preparation.replay_context import ReplayHistoryContext
-        if getattr(app.state, "replay_service", None) is not None:
-            app.state.replay_service.history_context = ReplayHistoryContext(preparation)
+        from app.data_preparation.replay_origin import ReplayOriginResolver
         data_manager = getattr(app.state, "data_manager", None)
+        market_runtime = getattr(app.state, "data_engine_runtime", None)
+        if getattr(app.state, "replay_service", None) is not None:
+            app.state.replay_service.history_context = ReplayHistoryContext(
+                preparation,
+                origin_resolver=ReplayOriginResolver(
+                    factory=getattr(market_runtime, "ingestion_factory", None),
+                    policy=getattr(data_manager, "history_policy", None),
+                ),
+            )
         try:
             if data_manager is not None:
                 from app.plugin_market_v2 import DataManagerConsumerPort
