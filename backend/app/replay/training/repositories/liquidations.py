@@ -32,6 +32,7 @@ from ..historical_book import (
 from ..persistence import account_math as account_math_ops
 from ..persistence import account_marks as account_marks_ops
 from ..persistence import ledger as ledger_ops
+from ..persistence import isolated_loss as isolated_loss_ops
 from ..persistence import liquidation as liquidation_ops
 from ..review import (
     ReviewRecorder,
@@ -494,6 +495,7 @@ class TrainingLiquidationRepository:
                 """,
                 (now_ms, run_id, liquidation_id),
             )
+            isolated = isolated_loss_ops.isolated_case(connection, run_id, liquidation_id)
             liquidation_ops.insert_liquidation_step(
                 connection,
                 run_id=run_id,
@@ -501,8 +503,8 @@ class TrainingLiquidationRepository:
                 step_type="COMPLETE",
                 before_snapshot_id=after_snapshot_id,
                 plan={
-                    "terminal_state": "BANKRUPT",
-                    "bankruptcy": True,
+                    "terminal_state": "ACTIVE" if isolated else "BANKRUPT",
+                    "bankruptcy": not isolated,
                     "adl_event_id": adl_event_id,
                 },
                 now_ms=now_ms,
@@ -774,6 +776,14 @@ class TrainingLiquidationRepository:
                 """,
                 (run_id, liquidation_id),
             )
+            if isolated_loss_ops.isolated_case(connection, run_id, liquidation_id):
+                isolated_loss_ops.transfer_deficit(
+                    connection, run_id=run_id, case_id=liquidation_id,
+                    deficit=deficit, now_ms=now_ms,
+                )
+                account_marks_ops.apply_hedge_mark_projection(
+                    connection, run_id=run_id, now_ms=now_ms,
+                )
             after_snapshot_id, _risk = (
                 liquidation_ops.capture_liquidation_risk_snapshot(
                     connection,
@@ -997,9 +1007,12 @@ class TrainingLiquidationRepository:
                 }
             else:
                 next_type = "COMPLETE"
+                account_bankrupt = deficit > 0 and not isolated_loss_ops.isolated_case(
+                    connection, run_id, liquidation_id,
+                )
                 next_plan = {
-                    "terminal_state": "BANKRUPT" if deficit > 0 else "ACTIVE",
-                    "bankruptcy": deficit > 0,
+                    "terminal_state": "BANKRUPT" if account_bankrupt else "ACTIVE",
+                    "bankruptcy": account_bankrupt,
                 }
             connection.execute(
                 """
@@ -1671,7 +1684,11 @@ class TrainingLiquidationRepository:
                         "bankruptcy": deficit > 0,
                     }
                 else:
-                    deficit = max(Decimal(0), -cast(Decimal, risk["equity"]))
+                    deficit = (
+                        isolated_loss_ops.closed_scope_deficit(connection, run_id, liquidation_id)
+                        if isolated_loss_ops.isolated_case(connection, run_id, liquidation_id)
+                        else max(Decimal(0), -cast(Decimal, risk["equity"]))
+                    )
                     next_type = (
                         "BANKRUPTCY_TRANSFER"
                         if deficit > 0

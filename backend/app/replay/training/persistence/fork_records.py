@@ -1473,6 +1473,7 @@ def insert_fork_contract_account(
     copied_kinds = {
         "FUNDING_SETTLEMENT",
         "LIQUIDATION_FEE",
+        "ISOLATED_BANKRUPTCY_TRANSFER",
         "MARGIN_ALLOCATION",
         "MARGIN_RELEASE",
         "POLICY_REVISION",
@@ -1483,8 +1484,7 @@ def insert_fork_contract_account(
         metadata = json.loads(str(entry["metadata_json"]))
         if not isinstance(metadata, dict):
             raise TypeError("parent contract ledger metadata is invalid")
-        metadata["fork_parent_run_id"] = parent_run_id
-        metadata["fork_parent_ledger_sequence"] = int(entry["ledger_sequence"])
+        metadata.update(ledger_ops.fork_posting_metadata(entry, parent_run_id))
         sequence = ledger_ops.append_contract_ledger(
             connection,
             run_id=child_run_id,
@@ -1502,7 +1502,9 @@ def insert_fork_contract_account(
             metadata=metadata,
             now_ms=now_ms,
         )
-        if str(entry["kind"]) in {"FUNDING_SETTLEMENT", "LIQUIDATION_FEE"}:
+        if str(entry["kind"]) in {
+            "FUNDING_SETTLEMENT", "LIQUIDATION_FEE", "ISOLATED_BANKRUPTCY_TRANSFER",
+        }:
             extra_cash += Decimal(str(entry["cash_delta"]))
         if str(entry["kind"]) == "FUNDING_SETTLEMENT":
             settlement = connection.execute(
