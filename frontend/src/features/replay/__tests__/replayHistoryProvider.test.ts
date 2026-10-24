@@ -896,12 +896,12 @@ test("empty coarse charts bootstrap only from a server-provided source-grid curs
 });
 
 test("temporary source transport keeps the page and retries twice; permanent source failures stop", async () => {
-  for (const retryable of [true, false]) {
+  for (const code of ["HISTORY_SOURCE_UNAVAILABLE", "HISTORY_CACHE_BUSY"]) for (const retryable of [true, false]) {
     const urls: string[] = [];
     const runtime = provider(async input => {
       urls.push(String(input));
       return urls.length < 3 ? new Response(JSON.stringify({ protocol: "replay.v3", error: {
-        code: "HISTORY_SOURCE_UNAVAILABLE", message: "read failed", details: { retryable },
+        code, message: "read failed", details: { retryable },
       } }), { status: 503 }) : new Response(JSON.stringify(response()));
     }, [0, 0, 0]);
     const request = runtime.loadBefore({ beforeMs: BOUNDARY_MS, revealedBoundaryMs: BOUNDARY_MS, dataEpoch: DATA_EPOCH });
@@ -911,4 +911,20 @@ test("temporary source transport keeps the page and retries twice; permanent sou
     assert.equal(new Set(urls).size, 1);
     runtime.cancel();
   }
+});
+
+test("persistent cache pressure exhausts two retries without publishing history", async () => {
+  const urls: string[] = [];
+  const runtime = provider(async input => {
+    urls.push(String(input));
+    return new Response(JSON.stringify({ protocol: "replay.v3", error: {
+      code: "HISTORY_CACHE_BUSY", message: "busy", details: { retryable: true },
+    } }), { status: 503 });
+  }, [0, 0, 0, 0]);
+  await assert.rejects(runtime.loadBefore({ beforeMs: BOUNDARY_MS, revealedBoundaryMs: BOUNDARY_MS, dataEpoch: DATA_EPOCH }),
+    (error: unknown) => error instanceof ReplayHistoryProtocolError && error.code === "HISTORY_CACHE_BUSY");
+  assert.equal(urls.length, 3);
+  assert.equal(new Set(urls).size, 1);
+  assert.equal(runtime.historyEpoch, null);
+  runtime.cancel();
 });

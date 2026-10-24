@@ -20,6 +20,7 @@ from app.replay.models import ReplaySessionConfig
 from app.replay.training.errors import TrainingRunError
 from app.replay.training.history import _bound_source_start_ms, _decode_bar_snapshot
 
+from .market_inputs import MarketRows
 from .models import PreparationError, PreparationRequest, Requirement, fingerprint
 from .replay_origin import (
     DAY,
@@ -97,18 +98,36 @@ class ReplayHistoryContext:
         # Every viewport and interval selects the same immutable daily objects.
         # The first/last fragment is clipped to the source, never to a chart.
         deadline = time.monotonic() + self.wait_seconds if deadline is None else deadline
-        rows, cursor = [], requirement.start_ms
+        parts, cursor = [], requirement.start_ms
         while cursor < requirement.end_ms:
             if time.monotonic() >= deadline:
                 raise PreparationError("HISTORY_DOWNLOAD_PENDING", "Earlier history is still preparing; retry to continue", retryable=True)
             start = max(origin.start_ms, cursor // DAY * DAY)
             end = min(origin.frozen_start_ms, (cursor // DAY + 1) * DAY)
             part = requirement.model_copy(update={"start_ms": start, "end_ms": end})
-            rows.extend(row for row in await self._prepared_rows(part, origin=origin, deadline=deadline)
-                        if requirement.start_ms <= row["open_time"] < requirement.end_ms)
+            parts.append(part)
             cursor = end
+        # Submit independent daily selections together. Calendar buckets can
+        # exceed 8192 source minutes, so bound observer tasks as well as the
+        # acquisition service's worker pool. One deadline covers every batch.
+        async def prepare(part):
+            if time.monotonic() >= deadline:
+                raise PreparationError("HISTORY_DOWNLOAD_PENDING", "Earlier history is still preparing; retry to continue", retryable=True)
+            return await self._prepared_rows(part, origin=origin, deadline=deadline)
+
+        selections = []
+        for offset in range(0, len(parts), 8):
+            tasks = [asyncio.create_task(prepare(part)) for part in parts[offset:offset + 8]]
+            try:
+                selections.extend(await asyncio.gather(*tasks))
+            finally:
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                from .storage import finish_before_cancel
+                await finish_before_cancel(asyncio.gather(*tasks, return_exceptions=True))
         await self.assert_origin(origin)
-        return rows
+        return MarketRows.join(selections, requirement.start_ms, requirement.end_ms)
 
     async def _prepared_rows(self, requirement, *, origin=None, deadline=None):
         service = self.preparation
@@ -138,7 +157,7 @@ class ReplayHistoryContext:
                     "Earlier history is still downloading; retry to continue", retryable=True)
             await asyncio.sleep(0.15)
             job = await service.storage(service.repository.get, job["id"])
-        rows = []
+        selections = []
         for item in job["result"]["inputs"]:
             chunk = await service.storage(service.repository.chunk, item["key"], owner=job["id"])
             if chunk is None:
@@ -147,8 +166,30 @@ class ReplayHistoryContext:
             # A covering cache object may be larger than this job's selection.
             chunk = {**chunk, "source_requirement": chunk["requirement"],
                      "requirement": item["requirement"]}
-            rows.extend(await service.storage(service.adapter.read, chunk))
-        return sorted(rows, key=lambda row: row["open_time"])
+            reader = getattr(service.adapter, 'read_shared', service.adapter.read)
+            selections.append(await service.storage(reader, chunk))
+        selections.sort(key=lambda rows: rows[0]['open_time'] if rows else 0)
+        return MarketRows.join(selections, requirement.start_ms, requirement.end_ms)
+
+    async def _frozen_rows(self, repository, snapshot, config, start, end):
+        """Share the immutable archive side of a context/archive seam too."""
+        from .market_inputs import frozen_object
+
+        identity = snapshot.identity
+        revision = snapshot.provenance.source_revision
+        cache = getattr(self.preparation.adapter, 'market_inputs', None)
+
+        def read():
+            return repository.query_bars_at_revision(revision, identity.symbol, config.base_interval,
+                exchange=identity.exchange, market_type=identity.market_type,
+                start_ms=start, end_ms=end - 1, limit=(end - start) // 60_000, order='ASC')
+
+        if cache is None or revision is None:
+            return await asyncio.to_thread(read)
+        source = ('market-revision.v1', snapshot.provenance.source_fingerprint, revision,
+                  identity.exchange, identity.market_type, identity.symbol, config.base_interval, start, end)
+        rows = await self.preparation.storage(cache.get, source, lambda: frozen_object(read()))
+        return MarketRows(rows, ((source, start, end),), cache)
 
     async def complete_projection(self, *, page, binding, persisted, repository):
         """Complete a coarse forming bucket whose prefix predates the warmup."""
@@ -178,11 +219,8 @@ class ReplayHistoryContext:
             rows = await self._rows(Requirement(exchange=identity.exchange,
                 market_type=identity.market_type, symbol=identity.symbol,
                 start_ms=start, end_ms=frozen_start), origin=origin)
-            rows.extend(await asyncio.to_thread(repository.query_bars_at_revision,
-                snapshot.provenance.source_revision, identity.symbol, config.base_interval,
-                exchange=identity.exchange, market_type=identity.market_type,
-                start_ms=frozen_start, end_ms=end - 1,
-                limit=(end - frozen_start) // 60_000, order="ASC"))
+            tail = await self._frozen_rows(repository, snapshot, config, frozen_start, end)
+            rows = MarketRows.join((rows, tail), start, end)
             projected = await asyncio.to_thread(project_context, rows, start, end, mapper,
                                                identity, include_active=True)
         except (PreparationError, ReplayDomainError) as exc:
@@ -254,11 +292,8 @@ class ReplayHistoryContext:
             if end > frozen_start:
                 # Preserve the original revision even if the host later corrects
                 # overlapping bars. Only strictly older context is acquired.
-                rows.extend(await asyncio.to_thread(repository.query_bars_at_revision,
-                    snapshot.provenance.source_revision, identity.symbol, config.base_interval,
-                    exchange=identity.exchange, market_type=identity.market_type,
-                    start_ms=max(start, frozen_start), end_ms=end - 1,
-                    limit=(end - max(start, frozen_start)) // 60_000, order="ASC"))
+                tail = await self._frozen_rows(repository, snapshot, config, max(start, frozen_start), end)
+                rows = MarketRows.join((rows, tail) if rows else (tail,), start, end)
             added = await asyncio.to_thread(project_context, rows, start, end, mapper, identity)
         except (PreparationError, ReplayDomainError) as exc:
             raise TrainingRunError(getattr(exc.code, "value", exc.code), str(exc), status_code=503,
@@ -302,11 +337,8 @@ class ReplayHistoryContext:
             rows = await self._rows(Requirement(exchange=identity.exchange,
                 market_type=identity.market_type, symbol=identity.symbol,
                 start_ms=start, end_ms=frozen_start), origin=origin, deadline=deadline)
-            rows.extend(await asyncio.to_thread(repository.query_bars_at_revision,
-                snapshot.provenance.source_revision, identity.symbol, config.base_interval,
-                exchange=identity.exchange, market_type=identity.market_type,
-                start_ms=frozen_start, end_ms=end - 1,
-                limit=(end - frozen_start) // 60_000, order="ASC"))
+            tail = await self._frozen_rows(repository, snapshot, config, frozen_start, end)
+            rows = MarketRows.join((rows, tail), start, end)
             added = await asyncio.to_thread(project_context, rows, start, end, mapper, identity)
         except (PreparationError, ReplayDomainError) as exc:
             raise TrainingRunError(getattr(exc.code, "value", exc.code), str(exc), status_code=503,
@@ -316,15 +348,12 @@ class ReplayHistoryContext:
                 "has_more": page["has_more"] or len(bars) > limit}
 
 
-def project_context(rows, start, end, mapper, identity, *, include_active=False):
+def _actual_context(rows, start, end, mapper, identity, *, include_active=False):
     if len(rows) != (end - start) // 60_000:
         raise PreparationError("HISTORY_SOURCE_INCOMPLETE", "Earlier history contains missing bars", retryable=True)
     bars = tuple(validate_replay_repository_bar(row, identity=identity, interval="1m",
         interval_ms=60_000, expected_open_ms=start + index * 60_000, now_ms=end)
         for index, row in enumerate(rows))
-    # The builder uses canonical fixed-time grids. Translate a provider-native
-    # phase into that grid for aggregation, then restore actual source times
-    # before the blind/public mapping. No execution input is changed.
     phase = (0 if mapper.monthly_count is not None else mapper.source_bucket_anchor_ms
              - compute_bucket_start_ms(mapper.source_bucket_anchor_ms, mapper.interval_ms,
                                        interval=mapper.interval))
@@ -333,13 +362,46 @@ def project_context(rows, start, end, mapper, identity, *, include_active=False)
     builder = ReplayBarBuilder(base_interval="1m", display_interval=mapper.interval,
                               replay_start_ms=end - phase, warmup_bars=bars,
                               max_closed_bars=max(1, len(bars)))
+    projected = (*builder.closed_bars, *((builder.active_bar,) if include_active and builder.active_bar else ()))
+    if phase:
+        projected = tuple(replace(bar, open_time_ms=bar.open_time_ms + phase,
+            close_time_ms=bar.close_time_ms + phase,
+            first_base_open_ms=bar.first_base_open_ms + phase,
+            last_base_open_ms=bar.last_base_open_ms + phase) for bar in projected)
+    return projected
+
+
+def project_context(rows, start, end, mapper, identity, *, include_active=False):
+    if not isinstance(rows, MarketRows):
+        actual = _actual_context(rows, start, end, mapper, identity, include_active=include_active)
+    else:
+        from decimal import getcontext
+
+        from .market_projection import project_bucket
+
+        arithmetic = getcontext()
+        numeric_policy = (arithmetic.prec, arithmetic.rounding, arithmetic.Emin, arithmetic.Emax, arithmetic.clamp,
+                          tuple(sorted(signal.__name__ for signal, enabled in arithmetic.traps.items() if enabled)))
+        # Cache closed source buckets, not a chart window or public-time result.
+        # Overlapping MA/RSI prefixes and different runs share the same objects.
+        # Partial buckets bind their exact end and stay separate from closed ones.
+        if len(rows) != (end - start) // 60_000:
+            raise PreparationError("HISTORY_SOURCE_INCOMPLETE", "Earlier history contains missing bars", retryable=True)
+        projected, cursor = [], start
+        while cursor < end:
+            ordinal = mapper.actual_bucket_ordinal(mapper.actual_containing_bucket_open(cursor))
+            stop = min(end, mapper.actual_bucket_open(ordinal + 1))
+            selected = rows.rows[(cursor - start) // 60_000:(stop - start) // 60_000]
+            sources = tuple(sorted({key for key, left, right in rows.sources
+                                    if left < stop and right > cursor}))
+            key = ('market-projection.v1', identity.exchange, identity.market_type, identity.symbol,
+                   mapper.interval, mapper.source_bucket_anchor_ms, cursor, stop, include_active, sources, numeric_policy)
+            projected.extend(rows.cache.get(key, lambda selected=selected, cursor=cursor, stop=stop: project_bucket(
+                selected, cursor, stop, mapper, identity, include_active=include_active, fallback=_actual_context)))
+            cursor = stop
+        actual = tuple(projected)
     result = []
-    for bar in (*builder.closed_bars, *((builder.active_bar,) if include_active and builder.active_bar else ())):
-        if phase:
-            bar = replace(bar, open_time_ms=bar.open_time_ms + phase,
-                          close_time_ms=bar.close_time_ms + phase,
-                          first_base_open_ms=bar.first_base_open_ms + phase,
-                          last_base_open_ms=bar.last_base_open_ms + phase)
+    for bar in actual:
         public = mapper.public_from_actual(bar.open_time_ms)
         # Match the replay's source bucket mapping, including blind calendars.
         public_end = mapper.public_bucket_end(public)
