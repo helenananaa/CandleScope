@@ -187,6 +187,17 @@ actual cross-bar or final commit preserve the prior durable cursor/account/repor
 and allow an exact retry. These controlled checks do not qualify the 16K resource
 matrix or packaged application.
 
+Fresh internal stream acknowledgements reuse the transport-validated canonical
+identity fragment when computing their complete legacy SHA-256. Identity/reference
+validation still runs first. Conflicting nested markers, large replies and output
+snapshots use the original full encoder; retained/public mutable checkpoints also
+keep their ordinary dynamic digest. No journal hash format or field changes.
+An isolated comparison over five actual response shapes produced identical full
+hashes and reduced mean time for 15,000 hashes from 0.589 s to 0.348 s. The change
+passed 108 installed stream, ownership, event-window and transport cases without
+skips, including cold replay of complete results. This is not a claim of whole-run
+resource compliance.
+
 Controlled tests cover all nine supported mode/callback combinations, spot cash
 and inventory, pending queues/liquidity, backward seek, replay-service/interpreter-
 worker restart, requested data,

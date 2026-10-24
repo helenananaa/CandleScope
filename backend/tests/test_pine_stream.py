@@ -8,7 +8,7 @@ import pytest
 from app.backtest.errors import BacktestError
 from app.backtest.native import PROTOCOL, invoke, encoded
 from app.backtest.native_session import SessionWorker, STREAM_CONTRACT
-from app.backtest.pine_stream import PineStream, journal_entry, canonical_observations, observations_match, COMPACT_JOURNAL_CONTRACT, JOURNAL_CONTRACT
+from app.backtest.pine_stream import PineStream, digest, _checked_result_digest, journal_entry, canonical_observations, observations_match, COMPACT_JOURNAL_CONTRACT, JOURNAL_CONTRACT
 from app.backtest.strategy.pine_engine import plugin
 
 
@@ -17,6 +17,24 @@ def test_stream_cannot_cross_an_unnegotiated_transport():
     worker.identity = {}
     with pytest.raises(BacktestError, match="not negotiated"):
         worker.request(dict(operation="stream_open", external_stream_contract=STREAM_CONTRACT),threading.Event())
+
+
+@pytest.mark.parametrize("extra", [{}, {"a": {"identity": None}}, {"z": {"identity": None}},
+    {"text": '\\"identity\\":null'}, {"output": {"plots": [{"values": [0.0, -0.0, None]}]}},
+    {"long": "x" * (64 * 1024)}, {"ints": [1, True, 1.0, 2**64], "unicode": "中文\U0001f4c8"}])
+@pytest.mark.parametrize("identity", [None, {}, {"engine": {"revision": 1, "enabled": True, "zero": -0.0},
+    "plugin": {"name": '插件"identity":null', "versions": [1, "1"]}}])
+def test_checked_result_digest_retains_complete_canonical_bytes_and_does_not_mutate(extra,identity):
+    response={"ok": True, "bar_cursor": 2, "intents": [], "identity": identity, **deepcopy(extra)}
+    before=encoded(response)
+    assert _checked_result_digest(response,encoded(identity))==digest(response)
+    assert encoded(response)==before
+
+
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), float("-inf")])
+def test_checked_result_digest_still_rejects_invalid_observed_numbers(invalid):
+    with pytest.raises(ValueError):
+        _checked_result_digest({"identity": {}, "intents": [{"qty": invalid}]},"{}")
 
 
 installed = pytest.mark.skipif(not os.environ.get("NATIVE_TEST_PINE_PYTHON"), reason="requires isolated source worker")

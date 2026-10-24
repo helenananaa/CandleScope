@@ -30,6 +30,24 @@ def digest(value):
                                      ensure_ascii=False, allow_nan=False).encode("utf-8")).hexdigest()
 
 
+def _checked_result_digest(value, identity_json):
+    """Hash a fresh transport-validated reply with the same complete JSON bytes.
+
+    Only the internal request path may reuse the canonical identity validated
+    by SessionWorker. Public/retained mutable values still use normal digest.
+    Large snapshots keep the original encoder to avoid another full text copy.
+    """
+    if "output" in value or "identity" not in value:
+        return digest(value)
+    raw = encoded({**value, "identity": None})
+    marker = '"identity":null'
+    if len(raw) > 64 * 1024 or raw.count(marker) != 1:
+        del raw
+        return digest(value)
+    raw = raw.replace(marker, '"identity":' + identity_json, 1)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 def journal_entry(saved, index):
     """Decode one complete entry; compact journals never drop commands."""
     entry = saved["journal"][index]
@@ -196,7 +214,11 @@ class PineStream:
             self.input_skip = result["input_skip"]
             self.last = result
             if record:
-                self._journal.append(encoded({"command": command, "result_sha256": digest(result)}))
+                # The worker has checked full identity bytes or its negotiated
+                # reference, including every result supplied by request_chain.
+                # Hash before exposing this mutable reply to any caller.
+                result_hash = _checked_result_digest(result, self.worker._identity_json)
+                self._journal.append(encoded({"command": command, "result_sha256": result_hash}))
             return result
         except Exception:
             self.close()
