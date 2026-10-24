@@ -221,6 +221,9 @@ test("aligned maximum quantities survive draft and preview quantization", () => 
     assert.equal(replayQuantityForStep(Number(displayed), "0.00000001"), quantity);
     assert.equal(displayed, replayQuantityForShare(quantity, 1, "0.00000001"));
   }
+  assert.equal(replayQuantityForStep(" .5 ", "0.005"), "0.5");
+  assert.equal(replayQuantityForStep("+0.5", "0.005"), "0.5");
+  assert.equal(replayQuantityForStep("123456789.12345678", "1e-8"), "123456789.12345678");
   assert.equal(replayQuantityForStep(1.009, "0.005"), "1.005");
   assert.equal(replayQuantityForStep(0.000000029, "1e-8"), "0.00000002");
 });
