@@ -157,7 +157,11 @@ class TrainingDisplayService:
             ) from exc
         if display_math not in {"canonical", "viewport-v1"}:
             raise TrainingRunError("INDICATOR_PREFIX_INVALID", "invalid display math policy", status_code=422)
-        from .indicator_viewport import MAX_PREFIX_CHUNK_BARS, ViewportReplayIndicators, math_parameters
+        from .indicator_viewport import (
+            MAX_PREFIX_CHUNK_BARS,
+            ViewportReplayIndicators,
+            math_parameters,
+        )
         work_params = math_parameters(name, params) if display_math == "viewport-v1" else params
         work_key = (
             display_math,
@@ -216,7 +220,10 @@ class TrainingDisplayService:
                     progressive_history_factory=lambda: (
                         self.replay_service.progressive_history
                     ),
-                    max_chunk_bars=(MAX_PREFIX_CHUNK_BARS if display_math == "viewport-v1" and not tape else None),
+                    max_chunk_bars=(
+                        MAX_PREFIX_CHUNK_BARS
+                        if display_math == "viewport-v1" and not tape else None
+                    ),
                 )
                 origin = None
                 if extend_context:
