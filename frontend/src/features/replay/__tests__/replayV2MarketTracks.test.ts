@@ -1061,3 +1061,20 @@ test("account records API binds type, scope, cursor, and page limit", async () =
   assert.match(requests[0] ?? "", /cursor=cursor_1/);
   assert.match(requests[0] ?? "", /limit=25/);
 });
+
+test("isolated cash wallets survive wire parsing separately from allocation principal", () => {
+  const wire = structuredClone(hedgeHybridMarketTracksFixture);
+  const parse = (wallets: unknown) => parseReplayMarketTracksResponse({
+    ...wire, portfolio: { ...wire.portfolio, margin_mode: "ISOLATED",
+      isolated_allocations: { "track-1:LONG": "70", "track-1:SHORT": "70" },
+      isolated_wallets: wallets },
+  }).portfolio;
+  const wallets = { "track-1:LONG": "-30.05", "track-1:SHORT": "169.95" };
+  const parsed = parse(wallets);
+  if (parsed.schema_version !== "replay.training.portfolio.v2") assert.fail();
+  assert.deepEqual(parsed.isolated_wallets, wallets);
+  assert.equal(parsed.isolated_allocations["track-1:LONG"], "70");
+  for (const invalid of [null, [], { "track-1:LONG": "NaN" }, { "track-1:LONG": 70 }]) {
+    assert.throws(() => parse(invalid), /isolated_wallets/);
+  }
+});

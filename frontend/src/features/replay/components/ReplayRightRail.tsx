@@ -475,7 +475,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
   const isolatedAllocation = replayOrderIsolatedAllocation({
     marginMode: contract?.margin_mode,
     positionMode,
-    allocations: contract?.isolated_allocations,
+    allocations: positionMode === "HEDGE" ? contract?.isolated_wallets : contract?.isolated_allocations,
     trackId: selectedTrackId,
     positionSide: activePositionSide,
   });
@@ -1016,7 +1016,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
     const sideAllocation = replayOrderIsolatedAllocation({
       marginMode: contract?.margin_mode,
       positionMode,
-      allocations: contract?.isolated_allocations,
+      allocations: positionMode === "HEDGE" ? contract?.isolated_wallets : contract?.isolated_allocations,
       trackId: selectedTrackId,
       positionSide: targetPositionSide,
     });

@@ -168,3 +168,58 @@ def audit_isolated_transfers(connection, run_id, ledger_rows, differences):
             posting["reference_id"] in known,
         )
     return total
+
+
+def audit_active_isolated_wallets(connection, run_id, ledger_rows, portfolio, differences):
+    """Reconcile each current allocation from its last boundary, independently of the cache."""
+    grouped = {}
+    kinds = {"MARGIN_ALLOCATION", "MARGIN_RELEASE", "TRADING_FEE",
+             "BROKER_REALIZED_PNL", "FUNDING_SETTLEMENT", "LIQUIDATION_FEE",
+             "ISOLATED_BANKRUPTCY_TRANSFER"}
+    for posting in ledger_rows:
+        if posting["kind"] not in kinds:
+            continue
+        meta = json.loads(posting["metadata_json"])
+        if meta.get("fork_ledger_order_incomplete") or (
+            "fork_parent_run_id" in meta and "fork_ledger_order" not in meta
+        ):
+            raise ValueError("legacy fork allocation order unavailable")
+        side = meta.get("position_side")
+        if posting["kind"] == "BROKER_REALIZED_PNL":
+            fill = connection.execute(
+                "SELECT fill_json FROM replay_training_contract_fill WHERE run_id=? AND track_id=? AND fill_id=?",
+                (run_id, posting["track_id"], meta["fill_id"]),
+            ).fetchone()
+            side = json.loads(fill["fill_json"])["position_side"]
+        if side not in {"LONG", "SHORT"}:
+            raise ValueError("isolated receipt side unavailable")
+        key = f"{posting['track_id']}:{side}"
+        order = tuple(meta.get("fork_ledger_order", [1, posting["ledger_sequence"]]))
+        grouped.setdefault(key, []).append((order, posting, meta))
+    expected = {}
+    for key, receipts in grouped.items():
+        value = Decimal(0)
+        for _order, posting, meta in sorted(receipts, key=lambda item: item[0], reverse=True):
+            if posting["kind"] in {"MARGIN_ALLOCATION", "MARGIN_RELEASE"}:
+                if "new_allocation" not in meta or Decimal(meta["new_allocation"]) == 0:
+                    break
+                value += Decimal(meta["new_allocation"]) - Decimal(meta["old_allocation"])
+                if Decimal(meta["old_allocation"]) == 0:
+                    expected[key] = value
+                    break
+            else:
+                value += Decimal(posting["cash_delta"])
+    actual = portfolio.get("isolated_wallets", {})
+    for key in sorted(set(actual) | set(expected)):
+        if key not in actual or key not in expected or Decimal(actual[key]) != expected[key]:
+            differences.append({"field": f"portfolio.isolated_wallets[{key}]",
+                                "expected": str(expected.get(key)), "actual": actual.get(key)})
+    for leg in portfolio["hedge_state"]["position_legs"]:
+        if Decimal(leg["absolute_quantity"]) == 0:
+            continue
+        key = f"{leg['track_id']}:{leg['position_side']}"
+        if Decimal(leg["isolated_wallet"]) != expected.get(key, Decimal(0)):
+            differences.append({"field": f"position_leg[{key}].isolated_wallet",
+                                "expected": str(expected.get(key, Decimal(0))),
+                                "actual": leg["isolated_wallet"]})
+    return expected

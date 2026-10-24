@@ -605,6 +605,7 @@ export interface ReplayTrainingContractPortfolio {
   readonly active_fee_policy: Readonly<Record<string, ReplayV2Json>> | null;
   readonly instrument_rules: readonly Readonly<Record<string, ReplayV2Json>>[];
   readonly isolated_allocations: Readonly<Record<string, ReplayV2Json>>;
+  readonly isolated_wallets?: Readonly<Record<string, ReplayV2Json>>;
   readonly next_funding_time_ms: number | null;
   readonly liquidations: readonly ReplayLiquidationCase[];
   readonly liquidation_recoveries: readonly ReplayLiquidationCase[];
@@ -2690,6 +2691,7 @@ export function parseReplayTrainingPortfolio(value: unknown): ReplayTrainingPort
       "active_fee_policy",
       "instrument_rules",
       "isolated_allocations",
+      ...(Object.hasOwn(value as object, "isolated_wallets") ? ["isolated_wallets"] : []),
       "next_funding_time_ms",
       "liquidations",
       "liquidation_recoveries",
@@ -2924,6 +2926,11 @@ export function parseReplayTrainingPortfolio(value: unknown): ReplayTrainingPort
         : jsonObject(portfolio.active_fee_policy, "portfolio.active_fee_policy"),
       instrument_rules: objectArray(rawRules, "portfolio.instrument_rules"),
       isolated_allocations: jsonObject(portfolio.isolated_allocations, "portfolio.isolated_allocations"),
+      ...(portfolio.isolated_wallets === undefined ? {} : {
+        isolated_wallets: Object.fromEntries(Object.entries(
+          jsonObject(portfolio.isolated_wallets, "portfolio.isolated_wallets"),
+        ).map(([key, amount]) => [key, canonicalDecimal(amount, `portfolio.isolated_wallets.${key}`)])),
+      }),
       next_funding_time_ms: portfolio.next_funding_time_ms === null
         ? null
         : counter(portfolio.next_funding_time_ms, "portfolio.next_funding_time_ms"),

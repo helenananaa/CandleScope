@@ -14,11 +14,33 @@ import socket
 import sys
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
 from pathlib import Path
 
 import uvicorn
+
+
+PARENT_SHUTDOWN_TIMEOUT_SECONDS = 15.0
+
+
+def _arm_shutdown_deadline() -> None:
+    """Replace the host's shutdown deadline when its private pipe closes.
+
+    Uvicorn's lifespan can finish while Python still waits for blocking network
+    workers. A crashed host cannot kill that orphan. Give normal cleanup the
+    same grace period as the desktop supervisor, then exit with a failure code.
+    """
+    def expire() -> None:
+        try:
+            os.write(2, b"desktop shutdown deadline exceeded; forcing sidecar exit\n")
+        finally:
+            os._exit(1)
+
+    timer = threading.Timer(PARENT_SHUTDOWN_TIMEOUT_SECONDS, expire)
+    timer.name = "desktop-shutdown-deadline"
+    timer.daemon = True
+    timer.start()
 
 
 def _parent_chunks() -> Iterator[bytes]:
@@ -59,7 +81,7 @@ def _parent_chunks() -> Iterator[bytes]:
         raise ctypes.WinError(error)
 
 
-def watch_parent(server: Any) -> None:
+def watch_parent(server: Any, *, on_shutdown: Callable[[], None] | None = None) -> None:
     pending = b""
     try:
         for chunk in _parent_chunks():
@@ -69,6 +91,8 @@ def watch_parent(server: Any) -> None:
                 break
     finally:
         server.should_exit = True
+        if on_shutdown is not None:
+            on_shutdown()
 
 
 def bind_desktop_socket(host: str, port: int, *, allow_fallback: bool = True) -> socket.socket:
@@ -126,7 +150,9 @@ def serve(host: str, port: int) -> None:
                 sock.close()
             raise
     server = uvicorn.Server(uvicorn.Config("app.main:app", host=host, port=port))
-    threading.Thread(target=watch_parent, args=(server,), name="desktop-parent-pipe", daemon=True).start()
+    threading.Thread(target=watch_parent, args=(server,),
+                     kwargs={"on_shutdown": _arm_shutdown_deadline},
+                     name="desktop-parent-pipe", daemon=True).start()
 
     async def run() -> None:
         try:

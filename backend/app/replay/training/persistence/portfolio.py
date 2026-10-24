@@ -39,6 +39,7 @@ from ..multitrack import (
     GLOBAL_ORDERING_VERSION,
 )
 from . import account_math as account_math_ops
+from . import isolated_wallets as isolated_wallet_ops
 from . import public_time as public_time_ops
 from . import run_records as run_records_ops
 
@@ -1200,9 +1201,17 @@ def contract_portfolio_projection(
         isolated = {
             str(key): Decimal(str(value)) for key, value in isolated_raw.items()
         }
+        hedge_isolated = (
+            base["position_mode"] == "HEDGE" and account["margin_mode"] == "ISOLATED"
+        )
+        wallets = (
+            isolated_wallet_ops.read(connection, run_id) if hedge_isolated else isolated
+        )
         available = (
             equity - margin_used - reserved
             if str(account["margin_mode"]) == "CROSS"
+            else cash - sum(wallets.values(), Decimal(0))
+            if hedge_isolated
             else equity - sum(isolated.values(), Decimal(0))
         )
         risk_positions: list[dict[str, object]] = []
@@ -1308,7 +1317,9 @@ def contract_portfolio_projection(
                 ),
             )
             allocation = isolated.get(allocation_key, Decimal(0))
-            isolated_equity = allocation + Decimal(str(position["unrealized_pnl"]))
+            isolated_equity = wallets.get(allocation_key, Decimal(0)) + Decimal(
+                str(position["unrealized_pnl"])
+            )
             denominator = (
                 equity if str(account["margin_mode"]) == "CROSS" else isolated_equity
             )
@@ -1381,6 +1392,8 @@ def contract_portfolio_projection(
         available = (
             equity - margin_used - reserved
             if str(account["margin_mode"]) == "CROSS"
+            else cash - sum(wallets.values(), Decimal(0))
+            if hedge_isolated
             else equity - sum(isolated.values(), Decimal(0))
         )
     except (InvalidOperation, KeyError, TypeError, ValueError) as exc:
@@ -1809,6 +1822,10 @@ def contract_portfolio_projection(
             key: decimal_to_string(value, field_name="isolated allocation")
             for key, value in sorted(isolated.items())
         },
+        **({"isolated_wallets": {
+            key: decimal_to_string(value, field_name="isolated wallet")
+            for key, value in sorted(wallets.items())
+        }} if hedge_isolated else {}),
         "next_funding_time_ms": account["next_funding_time_ms"],
         "liquidations": [
             item for item in liquidations if item["state"] != "RECOVERED_AFTER_CANCEL"
