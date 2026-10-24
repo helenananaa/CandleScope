@@ -31,6 +31,7 @@ from .indicator_prefix import CloseIndicatorBar, indicator_bar, validated_render
 
 SCHEMA = "replay.viewport-indicator.v1"
 ANCHOR_STRIDE = 128
+MAX_PREFIX_CHUNK_BARS = 500
 
 
 def math_parameters(name, params):
@@ -213,7 +214,7 @@ class ViewportReplayIndicators:
             if (
                 chunk.start_ms != cursor
                 or chunk.stop_ms > stop
-                or len(chunk.bars) > 500
+                or len(chunk.bars) > MAX_PREFIX_CHUNK_BARS
             ):
                 raise ValueError("indicator reader changed its display cursor")
             validate_chunk(chunk, history.revealed_boundary_ms)

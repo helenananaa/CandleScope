@@ -46,7 +46,7 @@ def market_row(timestamp):
 
 
 @asynccontextmanager
-async def prepared_run(tmp_path, progressive, disclosure):
+async def prepared_run(tmp_path, progressive, disclosure, *, prepare_timeout=5):
     archive = tmp_path / "archive"
 
     def new_replay():
@@ -113,7 +113,7 @@ async def prepared_run(tmp_path, progressive, disclosure):
                 },
             )
         assert response.status_code == 202, response.text
-        job = await terminal(preparation, response.json()["id"])
+        job = await terminal(preparation, response.json()["id"], timeout=prepare_timeout)
         assert job["state"] == "READY", job
         session = job["result"]["run"]["adapter_session_id"]
         yield (
