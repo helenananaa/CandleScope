@@ -169,6 +169,24 @@ same complete 8,192-bar checkpoint (172,038 journal entries and 40,960 live
 observations), three isolated validations averaged 1.31 s before and 1.01 s after.
 That attribution probe is separate from whole-Host resource qualification.
 
+The physical print clock can retain a completed bar's pending commit until the
+next first observation. It sends `commit`, `begin`, then `observe` in one existing
+bounded transport chain, preserving every logical command and checked reply.
+Closing-fill callbacks finish before this deferral. The last observation stays
+at the end of each chain so request-window rebases still return control without
+executing a following command. Finalization, output, discovery handoff and
+checkpoint creation always flush the pending commit; nothing pending is saved.
+Legacy/oversized transport fallback keeps the same individual commands.
+
+This change passed 143 installed stream, ownership, physical/event-tick and
+transport regression cases without skips. Six actual-worker controls compare
+ordinary, closing-fill and Renko execution on trade/depth feeds against immediate
+commits: complete reports, exact checkpoint/journal values, logical command order
+and cold continuation match, while transport frames decrease. Failures after an
+actual cross-bar or final commit preserve the prior durable cursor/account/report
+and allow an exact retry. These controlled checks do not qualify the 16K resource
+matrix or packaged application.
+
 Controlled tests cover all nine supported mode/callback combinations, spot cash
 and inventory, pending queues/liquidity, backward seek, replay-service/interpreter-
 worker restart, requested data,

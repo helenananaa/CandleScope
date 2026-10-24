@@ -67,6 +67,116 @@ def test_batch_avoids_unused_private_checkpoint_with_exact_complete_report_parit
     assert encoded(optimized["result"])==encoded(control["result"])
 
 
+@pytest.mark.parametrize("mode", ["TRADE_TAPE", "BOOK_DEPTH"])
+@pytest.mark.parametrize("profile", ["plain", "closing", "renko"])
+def test_chained_bar_commits_keep_full_reports_journals_and_cold_resume_exact(runtime,monkeypatch,mode,profile):
+    import json
+    import threading
+    from app.backtest import pine_print_tick_execution as execution
+    from app.backtest.external import run_external_host
+    from app.backtest.native import encoded, digest, invoke
+    from app.backtest.native_session import SessionWorker
+    from tests.test_pine_event_realtime import SOURCE as renko_source
+
+    host,main=runtime
+    value=config(main,mode,profile=="closing","LINEAR_PERP_ONE_WAY_V2")
+    if profile=="closing":
+        value["source"]=value["source"].replace("calc_on_every_tick=true",
+            "calc_on_every_tick=true,process_orders_on_close=true").replace("if n==1","if n==5 and barstate.isconfirmed")
+    elif profile=="renko":
+        value["source"]=renko_source
+    run_clock=execution.run_clock
+    def serial_clock(*args,**kwargs):
+        return run_clock(*args,**kwargs,_chain_commits=False)
+    with monkeypatch.context() as patch:
+        patch.setattr(execution,"run_clock",serial_clock)
+        control=terminal(host.native,host.native.create(value,"serial-bar-commit")["run_id"])
+    optimized=terminal(host.native,host.native.create(value,"chained-bar-commit")["run_id"])
+    assert control["state"]==optimized["state"]=="COMPLETED",(control.get("error"),optimized.get("error"))
+    assert encoded(optimized["result"])==encoded(control["result"])
+    wire=host.native.replay._input(control["run_id"])
+    exchange=SessionWorker._exchange_one
+    def capture(chained):
+        frames=[]
+        def measured(worker,raw):
+            request=json.loads(raw)
+            frames.append([command["operation"] for command in request["commands"]]
+                if request["operation"]=="stream_chain" else [request["operation"]])
+            return exchange(worker,raw)
+        with monkeypatch.context() as patch:
+            if not chained: patch.setattr(execution,"run_clock",serial_clock)
+            patch.setattr(SessionWorker,"_exchange_one",measured)
+            result,state=run_external_host(control["runtime_launch"],wire,invoke,threading.Event(),target=3)
+        return result,state,frames
+    before,old_state,old_frames=capture(False)
+    after,new_state,new_frames=capture(True)
+    assert encoded(after)==encoded(before)
+    assert encoded(new_state)==encoded(old_state)
+    assert new_state["clock"]["stream"]["bar_open"] is False
+    assert [operation for frame in new_frames for operation in frame]==[operation for frame in old_frames for operation in frame]
+    assert len(new_frames)<len(old_frames)
+    assert ["stream_commit","stream_begin","stream_observe"] in new_frames
+    # A complete checkpoint made by the original immediate-commit schedule
+    # remains usable by a fresh chained worker, with no pending command saved.
+    restored,_=run_external_host(control["runtime_launch"],wire,invoke,threading.Event(),
+        resume=old_state,target=len(wire["bars"]))
+    restored["bars"]=wire["bars"]
+    restored["report_hash"]=digest(restored)
+    assert encoded(restored)==encoded(control["result"])
+
+
+@pytest.mark.parametrize("failure", ["next_bar", "final_commit"])
+def test_chained_commit_failure_keeps_durable_cursor_and_allows_exact_retry(runtime,monkeypatch,failure):
+    import time
+    from app.backtest.errors import BacktestError
+    from app.backtest.native import encoded
+    from app.backtest.native_replay import NativeReplay
+    from app.backtest.pine_print_tick_execution import PrintTickClock
+    from app.backtest.pine_stream import PineStream
+    host,main=runtime
+    origin=terminal(host.native,host.native.create(config(main,"BOOK_DEPTH",True,"LINEAR_PERP_ONE_WAY_V2"),
+        "commit-failure-origin")["run_id"])
+    assert origin["state"]=="COMPLETED",origin.get("error")
+    replay=host.native.replay
+    created=replay.create(origin["run_id"]);key=created["replay_id"]
+    replay.command(key,created["revision"],"seek",3)
+    middle=settle(replay,key)
+    saved=encoded(replay._host_state(key))
+    replay.shutdown()
+    host.native.replay=replay=NativeReplay(host.native)
+    observed=[]
+    begin=PineStream.begin_and_observe
+    flush=PrintTickClock.flush_commit
+    def failed_begin(stream,*args,**kwargs):
+        result=begin(stream,*args,**kwargs)
+        if kwargs.get("_commit_previous"):
+            observed.append(stream.cursor)
+            raise BacktestError("CONTROLLED_COMMIT_FAILURE","after committing and starting the next bar")
+        return result
+    def failed_flush(clock):
+        pending=clock._pending_commit
+        flush(clock)
+        if pending:
+            observed.append(clock.stream.cursor)
+            raise BacktestError("CONTROLLED_COMMIT_FAILURE","after the final actual commit before publication")
+    with monkeypatch.context() as patch:
+        if failure=="next_bar": patch.setattr(PineStream,"begin_and_observe",failed_begin)
+        else: patch.setattr(PrintTickClock,"flush_commit",failed_flush)
+        replay.command(key,replay.get(key)["revision"],"seek",created["total"])
+        deadline=time.monotonic()+20
+        while time.monotonic()<deadline:
+            with host.native.lock:
+                if key not in replay.jobs: break
+            time.sleep(.02)
+        else: pytest.fail("controlled commit failure did not stop")
+    failed=replay.get(key)
+    assert observed and failed["state"]=="FAILED" and "CONTROLLED_COMMIT_FAILURE" in failed["error"]["message"]
+    assert failed["cursor"]==3 and encoded(failed["result"])==encoded(middle["result"])
+    assert encoded(replay._host_state(key))==saved
+    replay.command(key,failed["revision"],"seek",created["total"])
+    assert encoded(settle(replay,key)["result"])==encoded(origin["result"])
+
+
 @pytest.mark.parametrize("mode",["BAR_APPROX","TRADE_TAPE","BOOK_DEPTH"])
 def test_consumed_job_resume_failure_keeps_committed_account_and_public_resume_detached(runtime,monkeypatch,mode):
     import threading

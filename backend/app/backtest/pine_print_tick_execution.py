@@ -115,9 +115,12 @@ def validate_state(wire,state):
 
 
 class PrintTickClock:
-    def __init__(self,stream,kernel,orders,wire,*,state=None,_compact_groups=False,_owned_state=False):
+    def __init__(self,stream,kernel,orders,wire,*,state=None,_compact_groups=False,_owned_state=False,
+                 _chain_commits=True):
         self.stream,self.kernel,self.orders,self.wire=stream,kernel,orders,wire
         self._compact_groups=_compact_groups
+        self._chain_commits=_chain_commits
+        self._pending_commit=False
         restoring=bool(state)
         state={key:value for key,value in (state or {}).items()
             if key in {"groups","accounts","history","bar_cursor","last_sequence","event_cursor","request_feed"}}
@@ -161,8 +164,10 @@ class PrintTickClock:
         if self.feed is not None:
             evaluation.update(request_observed_at_ms=event.event_time_ms,request_updates=self.feed.advance(event.event_time_ms))
         observation=dict(evaluation=evaluation,context=dict(bar_state="realtime",trigger=trigger,is_new=first))
-        result=(self.stream.begin_and_observe(self.visible,bar_state="realtime",observation=observation,_owned=True)
+        result=(self.stream.begin_and_observe(self.visible,bar_state="realtime",observation=observation,_owned=True,
+                    _commit_previous=self._pending_commit)
                 if first else self.stream.observe(observation,_owned=True))
+        self._pending_commit=False
         current=result["intents"]
         if len(current)>64:
             raise BacktestError("BUDGET_EXCEEDED","at most 64 intents per observed Pine tick")
@@ -180,6 +185,11 @@ class PrintTickClock:
         record_decision(self.kernel,dict(sequence=event.sequence,watermark_ms=event.event_time_ms,intents=intents,
             signal_bar=self.cursor,pass_index=len(self.groups[-1])-1,trigger=trigger.upper()))
         self.kernel._enqueue_many(intents,current_sequence=event.sequence)
+
+    def flush_commit(self):
+        if self._pending_commit:
+            self.stream.commit()
+            self._pending_commit=False
 
     def close_bar(self):
         if self.visible is None:
@@ -199,7 +209,14 @@ class PrintTickClock:
             self.kernel._record_equity_point(dict(sequence=self.last_sequence,event_time_ms=source.event_time_ms,
                 equity=str(self.kernel.account.equity()),position_qty=str(self.kernel.account.position_qty)))
         if self.cursor>=self.stream.input_skip:
-            self.stream.commit()
+            if self._chain_commits:
+                # All closing observations/callbacks have finished. Commit
+                # takes no account input and produces no intents. Defer only
+                # its transport until the next begin/observe, preserving the
+                # complete command order and each checked acknowledgement.
+                self._pending_commit=True
+            else:
+                self.stream.commit()
         if self._compact_groups:
             seal_observation_group(self.groups)
         self.cursor+=1
@@ -207,9 +224,9 @@ class PrintTickClock:
 
 
 def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=False,capture_checkpoint=True,
-              compact_groups=True,_capture_owned=False,_consume_state=False):
+              compact_groups=True,_capture_owned=False,_consume_state=False,_chain_commits=True):
     clock=PrintTickClock(stream,kernel,orders,wire,state=state,_compact_groups=compact_groups,
-        _owned_state=_consume_state)
+        _owned_state=_consume_state,_chain_commits=_chain_commits)
     interval=parse_interval_spec(wire["interval"])
     events=physical_events(wire)
     kernel.source_kind=assert_trade_stream(tuple(event for event in events if event.role=="TRADES"))
@@ -246,6 +263,9 @@ def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=
         clock.last_sequence=event.sequence
         clock.event_cursor+=1
     while clock.cursor<target: clock.close_bar()
+    # No pending command may cross finalization, output, checkpoint or discovery
+    # handoff. A restored clock always starts with the exact committed cursor.
+    clock.flush_commit()
     if target==len(wire["bars"]): kernel.finalize_orders()
     output=stream.output()
     if discovery_only:

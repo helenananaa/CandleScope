@@ -221,12 +221,17 @@ class PineStream:
             self.close()
             raise
 
-    def begin_and_observe(self, bar, *, bar_state, observation, _owned=False):
+    def begin_and_observe(self, bar, *, bar_state, observation, _owned=False, _commit_previous=False):
         # begin has no Host matching callback. Both original protocol commands
         # and their individually checked acknowledgements remain in the journal.
-        result = self._request_many([dict(operation="stream_begin", bar=bar, bar_state=bar_state),
-                                     dict(operation="stream_observe", observation=observation)],
-                                     _owned_commands=_owned)[-1]
+        # An internal clock may also commit its completed previous bar first.
+        # observe is always last: a changed request window must return control
+        # before any further interpreter command can execute.
+        commands = [dict(operation="stream_begin", bar=bar, bar_state=bar_state),
+                    dict(operation="stream_observe", observation=observation)]
+        if _commit_previous:
+            commands.insert(0, dict(operation="stream_commit"))
+        result = self._request_many(commands, _owned_commands=_owned)[-1]
         if result.get("window_status", {}).get("rebase_required"):
             raise WindowRebaseRequired()
         return result
