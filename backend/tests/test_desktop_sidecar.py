@@ -136,6 +136,65 @@ def test_private_pipe_command_and_parent_eof_request_shutdown(monkeypatch, chunk
     assert server.should_exit
 
 
+@pytest.mark.parametrize("shutdown", [b"", b"shutdown\n"], ids=["parent-eof", "shutdown-command"])
+def test_parent_shutdown_finishes_lifespan_but_bounds_stuck_worker_threads(tmp_path, shutdown):
+    endpoint = tmp_path / "endpoint.json"
+    completed = tmp_path / "lifespan-complete"
+    code = """
+import asyncio, os, threading, uvicorn
+from pathlib import Path
+from app import desktop_sidecar
+desktop_sidecar.PARENT_SHUTDOWN_TIMEOUT_SECONDS = .5
+async def app(scope, receive, send):
+    if scope['type'] == 'lifespan':
+        while True:
+            event = await receive()
+            if event['type'] == 'lifespan.startup':
+                threading.Thread(target=threading.Event().wait, daemon=False).start()
+                await send({'type': 'lifespan.startup.complete'})
+            else:
+                await asyncio.sleep(.05)
+                Path(os.environ['TEST_LIFESPAN_COMPLETE']).write_text('flushed')
+                await send({'type': 'lifespan.shutdown.complete'})
+                return
+    else:
+        await send({'type': 'http.response.start', 'status': 200, 'headers': []})
+        await send({'type': 'http.response.body', 'body': b'ready'})
+original = uvicorn.Config
+uvicorn.Config = lambda _, **options: original(app, **options)
+desktop_sidecar.serve('127.0.0.1', 0)
+"""
+    child = subprocess.Popen([sys.executable, "-c", code], stdin=subprocess.PIPE,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             env={**os.environ, "CANDLESCOPE_DESKTOP_BOUND_PORT": "",
+                                  "CANDLESCOPE_DESKTOP_ENDPOINT_FILE": str(endpoint),
+                                  "CANDLESCOPE_DESKTOP_INSTANCE_ID": "stuck-worker-test",
+                                  "TEST_LIFESPAN_COMPLETE": str(completed)})
+    try:
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            assert child.poll() is None
+            if endpoint.exists():
+                port = json.loads(endpoint.read_text())["port"]
+                try:
+                    with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=1) as response:
+                        assert response.read() == b"ready"
+                    break
+                except OSError:
+                    pass
+            time.sleep(.05)
+        else:
+            pytest.fail("sidecar did not become ready")
+        output, error = child.communicate(shutdown, timeout=4)
+        assert completed.read_text() == "flushed"
+        assert child.returncode == 1, (output + error).decode(errors="replace")
+        assert b"desktop shutdown deadline exceeded" in error
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.communicate()
+
+
 @pytest.mark.skipif(os.name != "nt", reason="Windows CRT descriptor lock regression")
 def test_parent_monitor_does_not_block_numpy_dll_initialization():
     code = """

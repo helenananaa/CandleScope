@@ -7,7 +7,7 @@ import sqlite3
 from app.replay.canonical import canonical_sha256
 
 
-TRAINING_SCHEMA_VERSION = 25
+TRAINING_SCHEMA_VERSION = 26
 TRAINING_SCHEMA_ID = "replay.training.v2"
 TIME_COMMITMENT_SCHEMA_VERSION = "replay.time-commitment.v1"
 START_SELECTION_SCHEMA_VERSION = "replay.start-selection.v1"
@@ -2614,6 +2614,14 @@ def _ensure_review_query_indexes(connection: sqlite3.Connection) -> None:
         ON replay_equity_sample(run_id, resolution, bucket_id, source_sequence, revision)""")
 
 
+TRAINING_SCHEMA_V26_ISOLATED_WALLETS = """
+CREATE TABLE IF NOT EXISTS replay_training_isolated_wallet (
+    run_id TEXT PRIMARY KEY REFERENCES replay_training_run(run_id) ON DELETE CASCADE,
+    balances_json TEXT NOT NULL
+);
+"""
+
+
 def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> None:
     """Create v2-owned tables without changing the adapter schema row."""
 
@@ -2633,7 +2641,7 @@ def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> N
     if current == TRAINING_SCHEMA_VERSION:
         _ensure_review_query_indexes(connection)
         return
-    if current in {19, 20, 21, 22, 23, 24}:
+    if current in {19, 20, 21, 22, 23, 24, 25}:
         if current in {19, 20}:
             _execute_script(connection, TRAINING_SCHEMA_V20_INTERVAL_CURVES)
             _execute_script(connection, TRAINING_SCHEMA_V21_INDEXED_INTERVALS)
@@ -2641,6 +2649,9 @@ def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> N
         _execute_script(connection, TRAINING_SCHEMA_V23_MULTI_INTERVALS)
         _execute_script(connection, TRAINING_SCHEMA_V24_HYBRID_EXTENSIONS)
         _execute_script(connection, TRAINING_SCHEMA_V25_INPUT_ADMISSIONS)
+        _execute_script(connection, TRAINING_SCHEMA_V26_ISOLATED_WALLETS)
+        from .persistence.isolated_wallets import migrate
+        migrate(connection, now_ms=now_ms)
         _ensure_hedge_admission_cursor(connection)
         _ensure_review_query_indexes(connection)
         connection.execute(
@@ -2683,6 +2694,7 @@ def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> N
         TRAINING_SCHEMA_V23_MULTI_INTERVALS,
         TRAINING_SCHEMA_V24_HYBRID_EXTENSIONS,
         TRAINING_SCHEMA_V25_INPUT_ADMISSIONS,
+        TRAINING_SCHEMA_V26_ISOLATED_WALLETS,
     ):
         _execute_script(connection, script)
     _ensure_interval_curve_bounds(connection)

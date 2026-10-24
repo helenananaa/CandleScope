@@ -391,6 +391,14 @@ class TrainingMarketRepository:
                 initial_equity=str(run["initial_equity"]),
                 tracks=tracks,
             )
+            if account["position_mode"] == "HEDGE":
+                wallet = Decimal(str(portfolio["isolated_wallets"].get(allocation_key, "0")))
+                if wallet + delta < required:
+                    raise TrainingRunError(
+                        "ISOLATED_MARGIN_IN_USE",
+                        "remaining isolated cash cannot cover active position and order margin",
+                        status_code=409,
+                    )
             if delta > Decimal(str(portfolio["available_equity"])):
                 raise TrainingRunError(
                     "RUN_ACCOUNT_MARGIN_EXCEEDED",

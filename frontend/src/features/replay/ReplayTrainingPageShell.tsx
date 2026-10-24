@@ -38,6 +38,7 @@ import {
   parseIntervalSeconds,
 } from "../../utils/intervals.js";
 import type { IntervalString } from "../../utils/intervals.js";
+import ReplayStatePanel from "./components/ReplayStatePanel.js";
 import ReplayBottomControlDock from "./components/ReplayBottomControlDock.js";
 import ReplayIntegrityReviewPanel from "./components/ReplayIntegrityReviewPanel.js";
 import ReplayTrainingResultsPanel from "./components/ReplayTrainingResultsPanel.js";
@@ -123,39 +124,6 @@ interface ReplayIntervalViewportTransfer {
 }
 
 
-function ReplayStatePanel({ runtime }: { readonly runtime: ReplayRuntime }) {
-  useLocale();
-  if (runtime.phase === "ERROR" || runtime.phase === "ENTRY_ERROR") {
-    return (
-      <div className="chart-area" data-replay-state="error" data-replay-error={runtime.error?.code ?? "REPLAY_RUNTIME_ERROR"}>
-        <div className="error-overlay">
-          <div className="error-icon">!</div>
-          <div className="error-message">
-            <strong>{t("replay.shell.unavailable")}</strong><br />
-            {runtime.error?.code ?? "REPLAY_RUNTIME_ERROR"}: {runtime.error?.message ?? "Unknown replay error"}
-            <small>{t("replay.shell.failClosed")}</small>
-          </div>
-          {runtime.phase === "ERROR" && <button className="retry-btn" type="button" onClick={runtime.actions.retry}>{t("replay.shell.retryCaps")}</button>}
-        </div>
-      </div>
-    );
-  }
-  const labels: Readonly<Record<string, string>> = {
-    IDLE: t("replay.shell.idle"),
-    LOADING_CAPABILITIES: t("replay.shell.loadingCaps"),
-    VALIDATING_SESSION: t("replay.shell.validating"),
-    CONNECTING_SESSION: t("replay.shell.connecting"),
-    STOPPED: t("replay.shell.stopped"),
-  };
-  return (
-    <div className="chart-area" data-replay-state="loading">
-      <div className="error-overlay">
-        <div className="replay-loading-spinner" />
-        <div className="error-message"><strong>{t("replay.shell.replay")}</strong><br />{labels[runtime.phase] ?? t("replay.shell.recovering")}<small>{t("replay.shell.noLiveMock")}</small></div>
-      </div>
-    </div>
-  );
-}
 
 export default function ReplayTrainingPageShell({
   runtime,

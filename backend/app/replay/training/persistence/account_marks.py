@@ -1206,9 +1206,11 @@ def hedge_risk_fingerprint(
         """
         SELECT account.margin_mode, run.position_mode, account.overlay_cash,
                account.isolated_margin_json, account.status,
-               run.current_equity
+               run.current_equity,
+               CASE WHEN account.margin_mode='ISOLATED' THEN wallet.balances_json END AS isolated_wallets
         FROM replay_training_contract_account AS account
         JOIN replay_training_run AS run USING(run_id)
+        LEFT JOIN replay_training_isolated_wallet AS wallet USING(run_id)
         WHERE account.run_id = ?
         """,
         (run_id,),

@@ -213,3 +213,23 @@ test("missing executable becomes a startup error instead of an uncaught child er
   await assert.rejects(supervisor.start(), SidecarStartupError);
   assert.equal(supervisor.diagnostics().running, false);
 });
+
+test("a signal-terminated sidecar reports stopped and does not wait for a second exit", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "candlescope-killed-sidecar-"));
+  const port = await freePort();
+  const source = `require('node:http').createServer((q,r)=>r.end(JSON.stringify({desktop_instance_id:process.env.CANDLESCOPE_DESKTOP_INSTANCE_ID}))).listen(${port},'127.0.0.1');`;
+  const supervisor = new SidecarSupervisor({ command: process.execPath, args: ["-e", source], cwd: root,
+    gracefulStdin: true, healthUrl: `http://127.0.0.1:${port}/health`, healthTimeoutMs: 5000,
+    shutdownTimeoutMs: 10_000, logPath: path.join(root, "sidecar.log") });
+  context.after(() => supervisor.stop());
+  await supervisor.start();
+  const child = supervisor.child;
+  const exited = new Promise(resolve => child.once("exit", resolve));
+  child.kill("SIGKILL");
+  await exited;
+  assert.equal(supervisor.diagnostics().running, false);
+  assert.equal(await Promise.race([
+    supervisor.stop().then(() => "stopped"),
+    new Promise(resolve => { const timer = setTimeout(() => resolve("timed out"), 1000); timer.unref(); }),
+  ]), "stopped");
+});

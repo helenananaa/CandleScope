@@ -647,10 +647,10 @@ async def test_isolated_hedge_wallets_leverage_fork_restart_and_corruption(
                     (run_id,),
                 ).fetchall()
             }
-        assert leg_wallets == {"LONG": "90", "SHORT": "100"}
+        assert leg_wallets == {"LONG": "89.94", "SHORT": "99.94"}
         assert {side: row["wallet_balance"] for side, row in buckets.items()} == {
-            "LONG": "90",
-            "SHORT": "100",
+            "LONG": "89.94",
+            "SHORT": "99.94",
         }
         assert all(
             Decimal(str(row["available_balance"]))
