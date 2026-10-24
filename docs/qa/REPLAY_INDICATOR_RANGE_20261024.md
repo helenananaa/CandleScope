@@ -7,7 +7,7 @@ must not be treated as a measurement of the current implementation.
 ## Confirmed failure and ownership mismatch
 
 Prepared replay EMA(200) requests 1000 warmup bars. The history adapter returned
-up to 999 bars at once, violating both indicator engines' 500-bar input contract
+up to 999 bars at once, violating the viewport engine's 500-bar input contract
 and failing with `indicator reader changed its display cursor`.
 
 Small indicator ranges also inherited a chart page's maximum row limit. A
@@ -18,7 +18,8 @@ would not correct the underlying range/page mismatch.
 
 The adapter now propagates the actual requested bucket count, retaining one
 predecessor for gap evidence. It limits each chunk to the existing 500-bar
-calculation contract and retains calendar stepping, native authority seams,
+viewport calculation contract. Canonical/tape consumers keep their existing page
+capacity. All paths retain calendar stepping, native authority seams,
 source revision checks, revealed bounds, cancellation and resumable anchors.
 No account, execution, checkpoint format or indicator formula changes.
 

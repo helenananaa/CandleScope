@@ -67,7 +67,13 @@ class PinnedIndicatorHistory:
         display_interval: str,
         revealed_boundary_ms: int,
         progressive_history_factory=None,
+        max_chunk_bars: int | None = None,
     ):
+        self.max_chunk_bars = (
+            MAX_HISTORY_PAGE_BARS - 1 if max_chunk_bars is None else max_chunk_bars
+        )
+        if not 1 <= self.max_chunk_bars < MAX_HISTORY_PAGE_BARS:
+            raise ValueError("invalid indicator history chunk budget")
         self.arguments = {
             "binding": binding,
             "persisted": persisted,
@@ -140,7 +146,7 @@ class PinnedIndicatorHistory:
         # Leave room for a preceding bar, so the ordinary history reader also
         # supplies evidence for a gap at this chunk's left boundary.
         capacity = min(
-            500,
+            self.max_chunk_bars,
             MAX_HISTORY_PAGE_BARS - 1,
             max(1, 8192 // max(1, self.interval_ms // self.base_ms)),
         )
