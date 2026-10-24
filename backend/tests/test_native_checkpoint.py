@@ -29,11 +29,13 @@ def test_streamed_checkpoint_preserves_numeric_key_encoding_and_mixed_key_reject
         list(codec.canonical_fragments({1: "converted", "x": False}))
 
 
-@pytest.mark.parametrize("wrapped", [False, True])
-def test_streamed_compression_preserves_the_exact_legacy_envelope(wrapped):
+@pytest.mark.parametrize("shape", ["rows", "delta", "scalar"])
+def test_streamed_compression_preserves_the_exact_legacy_envelope(shape):
     value = {"rows": [{"text": "观察" * 90, "values": [True, 1, 1.0, -0.0]} for _ in range(6000)]}
-    if wrapped:
+    if shape == "delta":
         value = [["set", [], value]]
+    elif shape == "scalar":
+        value = {"text": "观察🙂\n\\\"" * 200000, "number": -0.0}
     raw = encoded(value).encode("utf-8")
     expected = encoded({"storage_schema": codec.SCHEMA, "decoded_bytes": len(raw),
         "decoded_sha256": hashlib.sha256(raw).hexdigest(),

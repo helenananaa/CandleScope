@@ -134,17 +134,25 @@ def pack(value):
             for part in raw:
                 compressed.append(compressor.compress(part))
             raw.clear()
+            del part
         else:
             compressed.append(compressor.compress(fragment))
     if compressor is None:
         return b"".join(raw).decode("utf-8")
     compressed.append(compressor.flush())
+    compressed_bytes = b"".join(compressed)
+    del compressed, compressor
+    payload_bytes = base64.b64encode(compressed_bytes)
+    del compressed_bytes
+    payload = payload_bytes.decode("ascii")
+    del payload_bytes
     envelope = encoded({"storage_schema": SCHEMA, "decoded_bytes": size,
-        "decoded_sha256": checksum.hexdigest(),
-        "payload": base64.b64encode(b"".join(compressed)).decode("ascii")})
+        "decoded_sha256": checksum.hexdigest(), "payload": payload})
+    del payload
     # Incompressible values retain the legacy raw representation. Normal large
     # histories avoid allocating their complete raw string and byte copy.
-    return envelope if len(envelope.encode("utf-8")) < size else encoded(value)
+    stored_size = len(envelope) if envelope.isascii() else len(envelope.encode("utf-8"))
+    return envelope if stored_size < size else encoded(value)
 
 
 def unpack(raw):
