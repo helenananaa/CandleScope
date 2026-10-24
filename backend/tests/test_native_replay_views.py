@@ -257,3 +257,92 @@ def test_executor_metadata_read_still_checks_cold_result_integrity(replay):
     service.native.db.execute("UPDATE native_replay_result_bases SET checksum='broken' WHERE id=?",(record["replay_id"],))
     with pytest.raises(ValueError,match="checksum"):
         service.get(record["replay_id"],_metadata_only=True)
+
+
+def test_restore_replaces_the_complete_result_without_detaching_the_old_view(replay, monkeypatch):
+    service, record, _ = replay
+    key = record["replay_id"]
+    save(service, record, 2, 7)
+    expected = service.get(key)["result"]
+    saved = service.snapshot(key, record["revision"])
+    snapshot_id = saved["snapshots"][0]["snapshot_id"]
+    save(service, saved, 3, 9)
+    service.results.cache.clear()
+    service.views.discard()
+    with monkeypatch.context() as patch:
+        patch.setattr(service.views, "read", lambda *_: pytest.fail("restore detached a result it replaces"))
+        restored = service.restore(key, saved["revision"], snapshot_id)
+    assert restored["cursor"] == 2 and same_json(restored["result"], expected)
+    restored["result"]["plots"][0]["data"][0]["value"] = 999
+    assert same_json(service.get(key)["result"], expected)
+
+
+@pytest.mark.parametrize("damage", ["conflict", "busy", "missing", "checkpoint", "journal", "revision", "input"])
+def test_restore_metadata_path_preserves_admission_integrity_and_failure_atomicity(replay, damage):
+    from app.backtest.errors import BacktestError
+    service, record, _ = replay
+    key = record["replay_id"]
+    save(service, record, 2, 7)
+    saved = service.snapshot(key, record["revision"])
+    snapshot_id = saved["snapshots"][0]["snapshot_id"]
+    revision = saved["revision"]
+    save(service, saved, 3, 9)
+    db = service.native.db
+    expected_type, expected_text = BacktestError, None
+    if damage == "conflict":
+        revision -= 1
+        expected_code = "NATIVE_REPLAY_CONFLICT"
+    elif damage == "busy":
+        service.jobs[key] = threading.Event()
+        expected_code = "NATIVE_REPLAY_BUSY"
+    elif damage == "missing":
+        snapshot_id = "missing"
+        expected_code = "RUN_NOT_FOUND"
+    elif damage == "checkpoint":
+        from app.backtest.native_checkpoint import unpack, pack
+        raw, = db.execute("SELECT record FROM native_replay_snapshots WHERE id=?", (snapshot_id,)).fetchone()
+        checkpoint = unpack(raw)
+        checkpoint["cursor"] += 1
+        db.execute("UPDATE native_replay_snapshots SET record=? WHERE id=?", (pack(checkpoint), snapshot_id))
+        expected_code = "NATIVE_IDENTITY_MISMATCH"
+    elif damage == "journal":
+        db.execute("UPDATE native_replay_result_bases SET checksum='broken' WHERE id=?", (key,))
+        expected_type, expected_text = ValueError, "checksum"
+    elif damage == "input":
+        db.execute("DELETE FROM native_inputs WHERE id=?", (record["run_id"],))
+        service._inputs.clear()
+        expected_code = "NATIVE_REPLAY_INPUT_MISSING"
+    else:
+        raw, = db.execute("SELECT record FROM native_replays WHERE id=?", (key,)).fetchone()
+        header = json.loads(raw)
+        header["_resultRevision"] += 1
+        db.execute("UPDATE native_replays SET record=? WHERE id=?", (encoded(header), key))
+        expected_type, expected_text = ValueError, "revision"
+    db.commit()
+    before = tuple(db.iterdump())
+    service.results.cache.clear()
+    with pytest.raises(expected_type, match=expected_text) as error:
+        service.restore(key, revision, snapshot_id)
+    if expected_type is BacktestError:
+        assert error.value.code == expected_code
+    service.jobs.pop(key, None)
+    assert tuple(db.iterdump()) == before
+
+
+def test_large_public_save_rollback_preserves_committed_cursor_and_complete_result(replay, monkeypatch):
+    from app.backtest import native_replay_storage as storage
+    monkeypatch.setattr(storage, "PUBLIC_CACHE_WRITE_BYTES", 64)
+    service, record, _ = replay
+    key = record["replay_id"]
+    save(service, record, 2, 7)
+    expected = service.get(key)
+    db = service.native.db
+    db.execute("CREATE TRIGGER fail_header BEFORE INSERT ON native_replays BEGIN SELECT RAISE(ABORT, 'injected header failure'); END")
+    db.commit()
+    before = tuple(db.iterdump())
+    record.update(cursor=3, revision=record["revision"]+1, result={"payload": "观察🙂"*500})
+    with pytest.raises(sqlite3.IntegrityError, match="injected header failure"):
+        service._save(record)
+    assert tuple(db.iterdump()) == before
+    assert not service.results.cache and not service.views.entries
+    assert same_json(service.get(key), expected)

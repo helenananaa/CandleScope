@@ -175,3 +175,48 @@ def test_identical_private_base_restore_checks_stored_bytes_and_rejects_stray_de
     with pytest.raises(ValueError,match="journal"):
         journal.save("host:restore",value,compare_base_bytes=True)
     db.close()
+
+
+@pytest.mark.parametrize("write_kind", ["base", "delta", "rebase"])
+def test_large_public_writes_keep_complete_cold_results_without_decoding_a_write_cache(monkeypatch, write_kind):
+    import sqlite3
+    from app.backtest import native_replay_storage as storage
+    monkeypatch.setattr(storage, "PUBLIC_CACHE_WRITE_BYTES", 64)
+    db = sqlite3.connect(":memory:")
+    journal = ResultJournal(db)
+    if write_kind != "base":
+        assert journal.save("public", {"history": ["first"], "numbers": [True, 1, 1.0, -0.0]}) == 0
+    if write_kind == "rebase":
+        monkeypatch.setattr(storage, "MAX_DELTAS", 1)
+    value = {"history": ["first", "观察🙂" * 300], "numbers": [True, 1, 1.0, -0.0]}
+    expected = json.loads(encoded(value))
+    # The previous value is already warm. A large save must only encode/write;
+    # complete reconstruction belongs to the subsequent reader.
+    with monkeypatch.context() as patch:
+        patch.setattr(storage.json, "loads", lambda _: pytest.fail("large write decoded a duplicate cache"))
+        revision = journal.save("public", value)
+    assert "public" not in journal.cache
+    value["history"][1] = "caller mutation"
+    assert same_json(ResultJournal(db).load("public", expected_revision=revision), expected)
+    table = "native_replay_result_deltas" if write_kind == "delta" else "native_replay_result_bases"
+    db.execute(f"UPDATE {table} SET checksum='broken'")
+    with pytest.raises(ValueError, match="checksum"):
+        ResultJournal(db).load("public")
+    db.close()
+
+
+@pytest.mark.parametrize("shortfall", [0, 1])
+def test_public_write_cache_limit_counts_utf8_bytes_and_keeps_small_writes_detached(monkeypatch, shortfall):
+    import sqlite3
+    from app.backtest import native_replay_storage as storage
+    value = {"history": ["观察🙂" * 30]}
+    expected = json.loads(encoded(value))
+    monkeypatch.setattr(storage, "PUBLIC_CACHE_WRITE_BYTES", len(encoded(value).encode("utf-8")) - shortfall)
+    db = sqlite3.connect(":memory:")
+    journal = ResultJournal(db)
+    assert journal.save("public", value) == 0
+    assert ("public" in journal.cache) is (shortfall == 0)
+    value["history"][0] = "caller mutation"
+    assert same_json(journal.load("public"), expected)
+    assert journal.save("public", expected) == 0
+    db.close()

@@ -103,6 +103,10 @@ class NativeReplay:
                 # cached; a cold journal still verifies its checksums first.
                 result = self.results.load(key, expected_revision=result_revision)
                 if _metadata_only:
+                    if result is not None:
+                        # Full reads also require the frozen input. Retain that
+                        # admission check without constructing its public view.
+                        self._input(record["run_id"])
                     record["result"] = None
                     return record
                 if result is not None:
@@ -176,8 +180,8 @@ class NativeReplay:
             self._save(record)
             return record
 
-    def _current(self, key, revision):
-        record = self.get(key)
+    def _current(self, key, revision, *, _metadata_only=False):
+        record = self.get(key, _metadata_only=True) if _metadata_only else self.get(key)
         if record["revision"] != revision:
             raise BacktestError("NATIVE_REPLAY_CONFLICT", "replay changed; refresh before retry")
         return record
@@ -390,7 +394,9 @@ class NativeReplay:
     def restore(self, key, revision, checkpoint_id):
         from .native_checkpoint import unpack, checkpoint_digest
         with self.native.lock:
-            record = self._current(key, revision)
+            # The checkpoint replaces the complete result. Validate the current
+            # journal without also detaching its soon-to-be-replaced public view.
+            record = self._current(key, revision, _metadata_only=True)
             if key in self.jobs:
                 raise BacktestError("NATIVE_REPLAY_BUSY", "pause before restoring a checkpoint")
             row = self.native.db.execute("SELECT record FROM native_replay_snapshots WHERE id=?", (checkpoint_id,)).fetchone()

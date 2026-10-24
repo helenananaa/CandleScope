@@ -19,6 +19,7 @@ from .native_checkpoint import pack, unpack
 SCHEMA = "native.replay-result/1"
 MAX_DELTAS = 64
 PRIVATE_CACHE_WRITE_BYTES = 1024 * 1024
+PUBLIC_CACHE_WRITE_BYTES = 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,11 +211,12 @@ class ResultJournal:
         if row and same_json(previous, value):
             return row[0]
         revision = row[0] + 1 if row else 0
+        cache_write_bytes = PRIVATE_CACHE_WRITE_BYTES if key.startswith("host:") else PUBLIC_CACHE_WRITE_BYTES
         if row is None or revision - row[1] >= MAX_DELTAS:
             raw = pack(value) if key.startswith("host:") else encoded(value)
             self.db.execute("INSERT OR REPLACE INTO native_replay_result_bases VALUES (?,?,?,?,?)", (key, revision, revision, raw, checksum(raw)))
             self.db.execute("DELETE FROM native_replay_result_deltas WHERE id=?", (key,))
-            if key.startswith("host:") and len(raw.encode("utf-8")) > PRIVATE_CACHE_WRITE_BYTES:
+            if len(raw.encode("utf-8")) > cache_write_bytes:
                 self.cache.pop(key, None)
                 return revision
             detached = unpack(raw) if key.startswith("host:") else json.loads(raw)
@@ -223,7 +225,9 @@ class ResultJournal:
             raw = pack(changes) if key.startswith("host:") else encoded(changes)
             self.db.execute("INSERT INTO native_replay_result_deltas VALUES (?,?,?,?)", (key, revision, raw, checksum(raw)))
             self.db.execute("UPDATE native_replay_result_bases SET revision=? WHERE id=?", (revision, key))
-            if key.startswith("host:") and len(raw.encode("utf-8")) > PRIVATE_CACHE_WRITE_BYTES:
+            # The caller already owns the complete result. Large writes stay
+            # durable without decoding another graph just to warm this cache.
+            if len(raw.encode("utf-8")) > cache_write_bytes:
                 self.cache.pop(key, None)
                 return revision
             detached = apply_changes(previous, unpack(raw) if key.startswith("host:") else json.loads(raw))
