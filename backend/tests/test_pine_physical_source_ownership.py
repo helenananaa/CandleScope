@@ -1,5 +1,6 @@
 """Physical facts may be shared inside one run, never its tentative ledger."""
 from copy import deepcopy
+import weakref
 
 import pytest
 
@@ -88,3 +89,31 @@ def test_window_trials_share_only_unchanged_source_facts_with_exact_complete_res
     again=terminal(host.native,host.native.create(value,"new-physical-facts")["run_id"],timeout=90)
     assert again["state"]=="COMPLETED",again.get("error")
     assert encoded(again["result"])==encoded(control["result"])
+
+
+@pytest.mark.parametrize("mode",["TRADE_TAPE","BOOK_DEPTH"])
+def test_finished_clock_releases_source_before_materializing_complete_report(runtime,monkeypatch,mode):
+    host,main=runtime
+    value=config(main,mode,False,"LINEAR_PERP_ONE_WAY_V2")
+    value["source"]=SOURCE
+    build=execution.physical_events
+    materialize=execution.materialize_observation_groups
+    references=[]
+    boundaries=[]
+    class Rows(list):
+        pass
+    def built(wire):
+        rows=Rows(build(wire))
+        references.append(weakref.ref(rows))
+        return rows
+    def checked(groups):
+        # No forced collection: the clock's completed source must already be
+        # unreferenced while complete reports/checkpoints are materialized.
+        assert references and all(reference() is None for reference in references)
+        boundaries.append(len(groups))
+        return materialize(groups)
+    monkeypatch.setattr(execution,"physical_events",built)
+    monkeypatch.setattr(execution,"materialize_observation_groups",checked)
+    actual=terminal(host.native,host.native.create(value,"released-physical-facts")["run_id"],timeout=90)
+    assert actual["state"]=="COMPLETED",actual.get("error")
+    assert len(references)==1 and boundaries==[len(actual["result"]["bars"])]

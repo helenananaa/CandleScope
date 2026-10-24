@@ -207,3 +207,52 @@ def test_many_same_bar_observations_do_not_resend_prior_intents_or_output_histor
         assert stream.output()["output"]["plots"][0]["values"]==[128]
     finally:
         stream.close()
+
+
+@installed
+@pytest.mark.parametrize("compact",[False,True])
+@pytest.mark.parametrize("owned",[False,True])
+def test_restore_checks_each_fresh_receipt_once_and_shares_only_exact_immutable_text(monkeypatch,compact,owned):
+    from app.backtest import pine_stream as module
+    runtime,wire=runtime_for("external_strategy")
+    cancel=threading.Event()
+    stream=PineStream(runtime,wire,dict(source=SOURCE,parameters={},context=dict(symbol="A",timeframe="1")),cancel)
+    recovered=None
+    try:
+        for index in range(2):
+            stream.begin(observation(index,0)["evaluation"]["bar"],bar_state="realtime")
+            for ordinal in range(4): stream.observe(observation(index,ordinal))
+            stream.commit()
+        saved=stream.checkpoint(compact=compact)
+        before=encoded(saved)
+        stream.close()
+        checked,regular,verified=[],[],[]
+        checked_digest,regular_digest=module._checked_result_digest,module.digest
+        def fresh(value,identity):
+            checked.append(value)
+            return checked_digest(value,identity)
+        def regular_hash(value):
+            regular.append(value)
+            return regular_digest(value)
+        def verify(command,result):
+            verified.append(command["operation"])
+            if len(verified)==1:
+                result["identity"]["adapter"]="callback-mutated-response"
+        with monkeypatch.context() as patch:
+            patch.setattr(module,"_checked_result_digest",fresh)
+            patch.setattr(module,"digest",regular_hash)
+            recovered=PineStream.restore(runtime,saved,cancel,verify=verify,_owned_checkpoint=owned)
+        assert len(checked)==len(verified)==len(saved["journal"])==12
+        assert len(regular)==1  # Final checkpoint header; no second per-ACK hash.
+        assert encoded(saved)==before
+        assert recovered.matches_checkpoint(saved)
+        assert recovered._journal is not saved["journal"]
+        if compact:
+            assert all(left is right for left,right in zip(recovered._journal,saved["journal"],strict=True))
+        # Replacing a caller-owned entry cannot change the restored stream.
+        frozen=encoded(recovered.checkpoint(compact=True))
+        saved["journal"][0]="caller replacement" if compact else {"changed":True}
+        assert encoded(recovered.checkpoint(compact=True))==frozen
+    finally:
+        stream.close()
+        if recovered is not None: recovered.close()

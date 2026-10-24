@@ -15,20 +15,27 @@ from .pine_stream import PineStream,observations_match,seal_observation_group,ma
 CONTRACT="candlescope.pine-print-tick/1"
 
 
-def _physical_source(wire):
+class _PhysicalSource:
     """One private source for a logical execution's read-only clock passes.
 
     Discovery discards its ledger, never changes these physical facts, and
     can reuse the same detached V2 payloads. A new execution/seek gets a new
     source. Materialize lazily at the original admission/deadline boundary.
     """
-    rows=None
-    def source():
-        nonlocal rows
-        if rows is None:
-            rows=physical_events(wire)
-        return rows
-    return source
+    def __init__(self,wire):
+        self.wire,self.rows=wire,None
+
+    def __call__(self):
+        if self.rows is None:
+            self.rows=physical_events(self.wire)
+        return self.rows
+
+    def release(self):
+        self.rows=None
+
+
+def _physical_source(wire):
+    return _PhysicalSource(wire)
 
 
 def open_stream(plugin,wire,cancelled,deadline,*,resume=None,_resume_owned=False,_event_source=None):
@@ -281,6 +288,12 @@ def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=
         clock.last_sequence=event.sequence
         clock.event_cursor+=1
     while clock.cursor<target: clock.close_bar()
+    # Only discovery needs the source again. Drop the finished execution's
+    # cache and local reference before materializing its complete output and
+    # checkpoint graphs; a later seek always creates another private source.
+    if not discovery_only and _event_source is not None:
+        _event_source.release()
+    del events
     # No pending command may cross finalization, output, checkpoint or discovery
     # handoff. A restored clock always starts with the exact committed cursor.
     clock.flush_commit()

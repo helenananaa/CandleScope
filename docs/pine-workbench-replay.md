@@ -234,6 +234,22 @@ not establish a stable whole-run speedup or resource qualification.
 The combined installed Pine/Pyne account, clock, report, event-window and
 durable-recovery regression passes all 236 cases without skips (858.58 s).
 
+Cold interpreter restoration now compares each saved receipt with the complete
+fresh hash already computed before exposing its acknowledgement. It still
+executes every command. Compact entries share immutable text with the saved
+checkpoint only after exact canonical-byte comparison; their mutable journal
+lists remain independent. Final physical execution also releases its private
+event source before expanding complete report and checkpoint graphs.
+Four alternating fresh-process replays of the retained 16K midpoint transcript
+(172,038 commands) preserve identical checkpoints and full interpreter output.
+Restore times are 63.62/57.99 s before and 50.53/49.55 s after; resident memory
+after restoration falls from about 243 MB to 160 MB, with 79,327,691 bytes of
+duplicate journal text eliminated. This isolates interpreter restoration and
+does not qualify the complete Host execution/recovery resource workload.
+The follow-up installed Pine/Pyne regression passes all 190 stream, physical-
+source, checkpoint, event-window, account and durable-replay cases without skips
+(693.13 s), including the six new receipt/ownership/lifetime controls.
+
 Controlled tests cover all nine supported mode/callback combinations, spot cash
 and inventory, pending queues/liquidity, backward seek, replay-service/interpreter-
 worker restart, requested data,

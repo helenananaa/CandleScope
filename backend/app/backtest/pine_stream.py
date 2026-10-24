@@ -137,7 +137,7 @@ class PineStream:
             self.close()
             raise
 
-    def _request(self, command, *, record=True, _result=None, _owned_command=False):
+    def _request(self, command, *, record=True, _result=None, _owned_command=False, _result_hashes=None):
         if record and not _owned_command:
             command = deepcopy(command)
         payload = {**self.wire, **command, "external_stream_contract": STREAM_CONTRACT}
@@ -219,6 +219,8 @@ class PineStream:
                 # Hash before exposing this mutable reply to any caller.
                 result_hash = _checked_result_digest(result, self.worker._identity_json)
                 self._journal.append(encoded({"command": command, "result_sha256": result_hash}))
+                if _result_hashes is not None:
+                    _result_hashes.append(result_hash)
             return result
         except Exception:
             self.close()
@@ -227,7 +229,7 @@ class PineStream:
     def begin(self, bar, *, bar_state):
         return self._request(dict(operation="stream_begin", bar=bar, bar_state=bar_state))
 
-    def _request_many(self, commands, *, _owned_commands=False):
+    def _request_many(self, commands, *, _owned_commands=False, _result_hashes=None):
         if not _owned_commands:
             commands = deepcopy(commands)
         payloads = [{**self.wire, **command, "external_stream_contract": STREAM_CONTRACT,
@@ -237,7 +239,7 @@ class PineStream:
             if timeout <= 0:
                 raise BacktestError("NATIVE_TIMEOUT", "Pine stream execution deadline exceeded")
             results = self.worker.request_chain(payloads, self.cancelled, timeout=timeout)
-            return [self._request(command, _result=result, _owned_command=True)
+            return [self._request(command, _result=result, _owned_command=True, _result_hashes=_result_hashes)
                     for command, result in zip(commands, results, strict=True)]
         except Exception:
             self.close()
@@ -316,10 +318,24 @@ class PineStream:
         try:
             for start in range(0, len(saved["journal"]), 8):
                 entries = [journal_entry(saved, index) for index in range(start, min(start+8, len(saved["journal"])))]
-                results = stream._request_many([entry["command"] for entry in entries], _owned_commands=True)
-                for entry, result in zip(entries, results, strict=True):
-                    if digest(result) != entry["result_sha256"]:
+                result_hashes = []
+                results = stream._request_many([entry["command"] for entry in entries], _owned_commands=True,
+                                               _result_hashes=result_hashes)
+                for offset, (entry, result, result_hash) in enumerate(zip(entries, results, result_hashes, strict=True)):
+                    # Reuse the complete fresh hash computed before any caller
+                    # can mutate the checked acknowledgement. Every original
+                    # command still executes and every saved receipt is checked.
+                    if result_hash != entry["result_sha256"]:
                         raise BacktestError("LOOKAHEAD_VIOLATION", "Pine stream replay changed an observed decision")
+                    if saved["contract"] == COMPACT_JOURNAL_CONTRACT:
+                        index = start + offset
+                        original = saved["journal"][index]
+                        if stream._journal[index] != original:
+                            raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine stream checkpoint journal differs")
+                        # Exact canonical bytes were reconstructed and checked.
+                        # Immutable text can share storage with the checkpoint;
+                        # neither journal list exposes the other's containers.
+                        stream._journal[index] = original
                     if verify is not None: verify(entry["command"],result)
             if not stream.matches_checkpoint(saved):
                 raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine stream checkpoint cursor differs")
