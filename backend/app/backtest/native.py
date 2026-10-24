@@ -383,12 +383,34 @@ class NativeBacktests:
         self._save_summary(record)
         self.db.commit()
 
+    def _mark_running(self, run_id):
+        # Only the initial state changes here. Keep the complete frozen input
+        # in SQLite and project the authoritative summary before committing.
+        # Result publication and legacy records retain the ordinary updater.
+        try:
+            row = self.db.execute("""UPDATE runs SET record=json_set(record,'$.state','RUNNING')
+                WHERE id=? AND CASE WHEN json_valid(record) THEN
+                    json_extract(record,'$.state')='QUEUED'
+                    AND json_type(record,'$.config')='object'
+                    AND json_type(record,'$.result')='null' ELSE 0 END
+                RETURNING json_remove(record,'$.config','$.result')""", (run_id,)).fetchone()
+        except sqlite3.OperationalError as exc:
+            if not (str(exc).startswith("no such function: json_")
+                    or str(exc) == 'near "RETURNING": syntax error'):
+                raise
+            row = None
+        if row is None:
+            self._update(run_id, state="RUNNING")
+            return
+        self._save_summary(json.loads(row[0]))
+        self.db.commit()
+
     def _execute(self, run_id, plugin, wire, cancel):
         try:
             with self.lock:
                 if cancel.is_set():
                     return
-                self._update(run_id, state="RUNNING")
+                self._mark_running(run_id)
             external = "host_settings" in wire
             if external:
                 from .external import run_external_host

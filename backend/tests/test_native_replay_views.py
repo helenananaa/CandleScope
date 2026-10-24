@@ -67,17 +67,19 @@ def test_result_and_cursor_changes_never_reuse_an_older_or_future_view(replay):
     assert restored["result"]["plots"][0]["data"][0]["value"] == 3
 
 
-def test_warm_views_cannot_bypass_revision_or_cold_journal_integrity(replay):
+@pytest.mark.parametrize("snapshot", [False, True])
+def test_warm_views_cannot_bypass_revision_or_cold_journal_integrity(replay, snapshot):
     service, record, _ = replay
     save(service, record, 2, 7)
     service.get(record["replay_id"])
     service.results.cache.clear()
     service.native.db.execute("UPDATE native_replay_result_bases SET checksum='invalid' WHERE id=?", (record["replay_id"],))
     with pytest.raises(ValueError, match="checksum"):
-        service.get(record["replay_id"])
+        service.snapshot(record["replay_id"], record["revision"]) if snapshot else service.get(record["replay_id"])
 
 
-def test_warm_views_reject_a_header_pointing_at_a_different_result_revision(replay):
+@pytest.mark.parametrize("snapshot", [False, True])
+def test_warm_views_reject_a_header_pointing_at_a_different_result_revision(replay, snapshot):
     service, record, _ = replay
     save(service, record, 2, 7)
     service.get(record["replay_id"])
@@ -86,7 +88,50 @@ def test_warm_views_reject_a_header_pointing_at_a_different_result_revision(repl
     header["_resultRevision"] += 1
     service.native.db.execute("UPDATE native_replays SET record=?", (encoded(header),))
     with pytest.raises(ValueError, match="revision"):
-        service.get(record["replay_id"])
+        service.snapshot(record["replay_id"], record["revision"]) if snapshot else service.get(record["replay_id"])
+
+
+def test_snapshot_reuses_validated_view_hash_and_returns_independent_containers(replay, monkeypatch):
+    from app.backtest import native_replay_views
+    service, record, _ = replay
+    key = record["replay_id"]
+    save(service, record, 2, 7)
+    original = service.get(key)["result"]
+    with monkeypatch.context() as patch:
+        patch.setattr(native_replay_views, "checkpoint_measure", lambda _: pytest.fail("warm snapshot rehashed public result"))
+        saved = service.snapshot(key, record["revision"])
+    assert same_json(saved["result"], original)
+    saved["result"]["plots"][0]["data"][0]["value"] = 999
+    saved["result"]["bars"][0]["close"] = 999
+    assert same_json(service.get(key)["result"], original)
+
+
+@pytest.mark.parametrize("invalidate", ["body", "cursor", "discard", "evict", "disabled"])
+def test_borrowed_snapshot_hash_cannot_survive_view_invalidation(invalidate, monkeypatch):
+    from app.backtest import native_replay_views
+    views = ResultViews(capacity=0 if invalidate == "disabled" else 1)
+    key, body, bars = ("replay", 2), {"values": [0.0, -0.0, "观察"]}, [{"close": 1.0}]
+    public = views.read(key, body, bars)
+    public["values"][0] = 999
+    if invalidate == "body":
+        body = {"values": [2.0, -0.0, "观察"]}
+    elif invalidate == "cursor":
+        key, bars = ("replay", 3), [{"close": 2.0}]
+    elif invalidate == "discard":
+        views.discard("replay")
+    elif invalidate == "evict":
+        views.read(("other",), {"value": 1}, [])
+    measured = []
+    original = native_replay_views.checkpoint_measure
+    def measure(value):
+        measured.append(True)
+        return original(value)
+    monkeypatch.setattr(native_replay_views, "checkpoint_measure", measure)
+    borrowed = views._borrow(key, body, bars)
+    expected = {**body, "bars": bars}
+    expected["report_hash"] = digest(expected)
+    assert same_json(borrowed, expected) and measured == [True]
+    assert views.bytes <= views.max_bytes and len(views.entries) <= views.capacity
 
 
 def test_retention_is_byte_bounded_and_oversized_views_remain_complete():

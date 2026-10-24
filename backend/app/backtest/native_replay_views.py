@@ -17,8 +17,21 @@ class ResultViews:
     def discard(self, replay_id=None):
         for key in list(self.entries):
             if replay_id is None or key[0] == replay_id:
-                _, raw = self.entries.pop(key)
+                _, raw, _ = self.entries.pop(key)
                 self.bytes -= len(raw)
+
+    def _borrow(self, key, body, bars):
+        """Serialize a validated journal under its lock; never return publicly."""
+        value = {**body, "bars": bars}
+        cached = self.entries.get(key)
+        if cached is not None and cached[0] is body:
+            self.entries.move_to_end(key)
+            value["report_hash"] = cached[2]
+        else:
+            if cached is not None:
+                self.bytes -= len(self.entries.pop(key)[1])
+            value["report_hash"], _ = checkpoint_measure(value)
+        return value
 
     def read(self, key, body, bars):
         cached = self.entries.get(key)
@@ -46,9 +59,9 @@ class ResultViews:
         if self.capacity > 0 and size <= self.max_bytes:
             raw = text.encode("utf-8")
             while self.entries and (len(self.entries) >= self.capacity or self.bytes + size > self.max_bytes):
-                _, (_, removed) = self.entries.popitem(last=False)
+                _, (_, removed, _) = self.entries.popitem(last=False)
                 self.bytes -= len(removed)
-            self.entries[key] = (body, raw)
+            self.entries[key] = (body, raw, value["report_hash"])
             self.bytes += size
             return json.loads(text)
         # The journal and bars are normalized JSON. Oversized public reads need

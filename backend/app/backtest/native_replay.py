@@ -113,9 +113,7 @@ class NativeReplay:
                     view_key = (key, record["run_id"], record["input_hash"], result_revision, record["cursor"])
                     bars = self._input(record["run_id"])["bars"][:record["cursor"]]
                     if _borrow_result:
-                        from .native_checkpoint import checkpoint_digest
-                        result = {**result, "bars": bars}
-                        result["report_hash"] = checkpoint_digest(result)
+                        result = self.views._borrow(view_key, result, bars)
                     else:
                         result = self.views.read(view_key, result, bars)
                 record["result"] = result
