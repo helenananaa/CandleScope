@@ -159,7 +159,7 @@ class NativeReplay:
         with self.native.lock:
             if self.closed:
                 raise BacktestError("NATIVE_REPLAY_CLOSED", "replay service stopped")
-            origin = self.native.get(run_id)
+            origin = self.native._replay_origin(run_id)
             external=origin["execution_mode"]=="CANDLESCOPE"
             if external and origin["config"]["language"]!="pine":
                 raise BacktestError("EXTERNAL_UNSUPPORTED","external replay currently requires the Pine feedback contract")
@@ -263,7 +263,7 @@ class NativeReplay:
         try:
             with self.native.lock:
                 current = self.get(key,_metadata_only=True)
-                origin = self.native.get(current["run_id"])
+                origin = self.native._replay_origin(current["run_id"])
                 # Replay needs the original seal/authority and input settings,
                 # not a second resident copy of the complete batch report or
                 # uploaded physical-event configuration.

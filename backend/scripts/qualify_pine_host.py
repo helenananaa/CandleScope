@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULES = (
-    "test_native_replay_views", "test_native_run_polling", "test_pine_schedule_transport", "test_pine_bar_kernel", "test_pine_bar_workbench",
+    "test_native_replay_origin", "test_native_replay_views", "test_native_run_polling", "test_pine_schedule_transport", "test_pine_bar_kernel", "test_pine_bar_workbench",
     "test_chart_pine_bar_callbacks", "test_pine_chart_kernel", "test_pine_v2_bar_kernel",
     "test_chart_pine_v2_bar", "test_pine_workbench_v2_bar", "test_pine_workbench_preparation",
     "test_pine_legacy_market_identity",

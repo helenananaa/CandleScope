@@ -21,7 +21,8 @@ def replay():
     db.execute("INSERT INTO native_inputs VALUES (?,?)", ("run", encoded(wire)))
     origin = dict(state="COMPLETED", execution_mode="NATIVE", config={"language":"pine"},
                   input_hash=digest(wire), result={"account_authority":"native"})
-    native = SimpleNamespace(db=db, lock=threading.RLock(), get=lambda _: origin)
+    native = SimpleNamespace(db=db, lock=threading.RLock(), get=lambda _: origin,
+                             _replay_origin=lambda _: origin)
     service = NativeReplay(native)
     record = service.create("run")
     yield service, record, wire

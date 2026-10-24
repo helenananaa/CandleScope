@@ -342,6 +342,33 @@ class NativeBacktests:
             return [json.loads(row[0]) for row in self.db.execute(
                 "SELECT s.record FROM native_run_summaries s JOIN runs r ON r.id=s.id ORDER BY r.rowid DESC LIMIT 100")]
 
+    def _replay_origin(self, run_id):
+        """Read the original seal and settings without expanding the batch report."""
+        with self.lock:
+            try:
+                row = self.db.execute("""SELECT json_remove(record,'$.config','$.result'),
+                    json_extract(record,'$.config.language','$.config.interval','$.config.contexts'),
+                    json_type(record,'$.config.language'),json_type(record,'$.config.interval'),json_type(record,'$.config.contexts'),
+                    json_extract(record,'$.result.account_authority','$.result.report_hash'),
+                    json_type(record,'$.config'),json_type(record,'$.result')
+                    FROM runs WHERE id=?""", (run_id,)).fetchone()
+            except sqlite3.OperationalError as exc:
+                if str(exc) != "malformed JSON":
+                    raise
+                # Preserve the ordinary reader's malformed-record exception.
+                return self.get(run_id)
+            if row is None:
+                raise BacktestError("RUN_NOT_FOUND", "native run not found")
+            if row[6:] != ("object", "object"):
+                # Pending runs have no result yet. Creation must still report
+                # NOT_READY; damaged shapes retain the existing error path.
+                return self.get(run_id)
+            origin = json.loads(row[0])
+            origin["config"] = {name: value for name, value, kind in zip(
+                ("language", "interval", "contexts"), json.loads(row[1]), row[2:5]) if kind is not None}
+            origin["result"] = dict(zip(("account_authority", "report_hash"), json.loads(row[5])))
+            return origin
+
     def _save_summary(self, record):
         summary = {key: value for key, value in record.items() if key not in {"result", "config"}}
         self.db.execute("INSERT OR REPLACE INTO native_run_summaries VALUES (?,?)", (record["run_id"], encoded(summary)))
