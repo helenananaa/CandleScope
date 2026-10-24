@@ -89,3 +89,75 @@ def test_owned_playback_preserves_the_persisted_midpoint_and_complete_endpoint(r
     assert encoded(replay._host_state(key)) == before
     replay.command(key, replay.get(key)["revision"], "play")
     assert encoded(settle(replay, key)["result"]) == encoded(origin["result"])
+
+
+def test_completed_seek_releases_its_report_before_public_read_can_acquire_the_lock(runtime, monkeypatch):
+    import weakref
+    from app.backtest.pine_print_tick_execution import ReplayWorker
+    host, main = runtime
+    origin = terminal(host.native, host.native.create(configuration(main, "BOOK_DEPTH"), "publish-ownership")["run_id"])
+    assert origin["state"] == "COMPLETED", origin.get("error")
+    replay = host.native.replay
+    created = replay.create(origin["run_id"])
+    key = created["replay_id"]
+    published, continue_job = threading.Event(), threading.Event()
+    original_lock = host.native.lock
+
+    class PublicationLock:
+        hold_thread = None
+        def __enter__(self):
+            original_lock.acquire()
+            return self
+        def __exit__(self, *args):
+            hold = self.hold_thread == threading.get_ident()
+            if hold:
+                self.hold_thread = None
+            original_lock.release()
+            if hold:
+                published.set()
+                assert continue_job.wait(20), "public reader did not finish"
+
+    class TrackedReport(dict):
+        pass
+
+    lock, reports = PublicationLock(), []
+    execute, save = ReplayWorker.execute, replay._save
+    def observed_execute(*args, **kwargs):
+        report, state = execute(*args, **kwargs)
+        report = TrackedReport(report)
+        reports.append(weakref.ref(report))
+        return report, state
+    def saved(record, **kwargs):
+        result = save(record, **kwargs)
+        if record["state"] == "COMPLETED" and "external_state" in kwargs:
+            lock.hold_thread = threading.get_ident()
+        return result
+
+    with monkeypatch.context() as patch:
+        patch.setattr(host.native, "lock", lock)
+        patch.setattr(ReplayWorker, "execute", observed_execute)
+        patch.setattr(replay, "_save", saved)
+        try:
+            replay.command(key, created["revision"], "seek", created["total"])
+            assert published.wait(20), "seek did not publish"
+            assert len(reports) == 1 and reports[0]() is None
+            assert encoded(replay.get(key)["result"]) == encoded(origin["result"])
+        finally:
+            continue_job.set()
+            settle(replay, key)
+
+
+def test_play_at_completed_endpoint_preserves_the_complete_durable_result(runtime):
+    host, main = runtime
+    origin = terminal(host.native, host.native.create(configuration(main, "BAR_APPROX"), "completed-play")["run_id"])
+    assert origin["state"] == "COMPLETED", origin.get("error")
+    replay = host.native.replay
+    created = replay.create(origin["run_id"])
+    key = created["replay_id"]
+    replay.command(key, created["revision"], "seek", created["total"])
+    final = settle(replay, key)
+    for _ in range(2):
+        replay.command(key, final["revision"], "play")
+        final = settle(replay, key)
+        assert final["state"] == "COMPLETED"
+        assert encoded(final["result"]) == encoded(origin["result"])

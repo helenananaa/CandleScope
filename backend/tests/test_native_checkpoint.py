@@ -77,21 +77,23 @@ def test_detached_normalization_preserves_serialized_values_and_shared_container
     assert 100 not in shared[0]["numbers"]
 
 
+@pytest.mark.parametrize("preserve_aliases", [False, True])
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")])
-def test_detached_normalization_rejects_nonfinite_values(value):
+def test_detached_normalization_rejects_nonfinite_values(value,preserve_aliases):
     with pytest.raises(ValueError):
-        codec.detached_json({"nested": [value]})
+        codec.detached_json({"nested": [value]},preserve_aliases=preserve_aliases)
 
 
+@pytest.mark.parametrize("preserve_aliases", [False, True])
 @pytest.mark.parametrize("kind", [dict, list])
-def test_detached_normalization_rejects_cycles_instead_of_memoizing_them(kind):
+def test_detached_normalization_rejects_cycles_instead_of_memoizing_them(kind,preserve_aliases):
     value = kind()
     if kind is dict:
         value["self"] = value
     else:
         value.append(value)
     with pytest.raises(ValueError, match="Circular"):
-        codec.detached_json(value)
+        codec.detached_json(value,preserve_aliases=preserve_aliases)
 
 
 def test_large_checkpoint_round_trip_preserves_complete_json_without_aliasing():

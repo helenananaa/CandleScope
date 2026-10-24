@@ -327,11 +327,22 @@ class NativeReplay:
                                   state="COMPLETED" if count == record["total"] else "RUNNING" if action == "play" else "PAUSED")
                     self._save(record,**({"external_state":external_state,"external_validation":external_validation,
                         "consume_external_state":action=="seek"} if external else {}))
+                    if count == target:
+                        # The committed journal owns the complete result now.
+                        # Release the job's temporary report before a reader
+                        # can acquire this lock and build its independent view.
+                        # This cursor already has its final state; saving it
+                        # again would only extend the report's lifetime.
+                        current["result"] = None
+                        result = external_state = None
+                        return
                 if action == "play" and cancelled.wait(0.1):
                     return
             with self.native.lock:
                 if not cancelled.is_set():
-                    record = current
+                    # An empty play range still needs to finish RUNNING, but
+                    # the metadata-only starting record has no result to save.
+                    record = self.get(key)
                     record.update(state="COMPLETED" if record["cursor"] == record["total"] else "PAUSED")
                     self._save(record)
         except Exception as exc:

@@ -61,17 +61,19 @@ reuse bounded encoded views, with a fresh detached JSON value for every caller.
 These changes address repeated report-copy overhead; resource qualification still
 requires the complete fresh-process Host matrix and its frozen budgets.
 
-Complete views above the encoded-cache byte limit decode their canonical JSON
-text directly, avoiding a second full UTF-8 buffer that would not be retained.
+Complete views above the encoded-cache byte limit discard admission text before
+copying their normalized JSON containers. Immutable scalars can be reused;
+every mutable occurrence remains independent, including repeated input aliases.
 Non-ASCII cache admission counts exact UTF-8 bytes in bounded chunks; cached
 views retain the original byte limit, eviction rules and detached reads. View
 hashing uses the same strict canonical bytes incrementally. The oversized path
 still returns every field and preserves independent containers and callers.
-This change passed 46 view/encoding unit cases and 18 installed Pine/Pyne replay,
-cold recovery, failure/rollback and HTTP export cases without skips. A separate
-isolated read of the retained 16K complete report preserved its entire value and
-reduced the observed process peak by about 64 MiB; that probe is not whole-Host
-resource qualification.
+The independent-container and terminal-lifecycle changes passed 75 view/encoding,
+installed Pine/Pyne replay and ownership cases, plus 17 installed pause, rollback,
+checkpoint-corruption, HTTP and cold-recovery cases, without skips. An isolated
+read of the same retained 16K complete report preserved its entire value and
+lowered process peak from 698,081,280 to 528,556,032 bytes, while taking 3.88 s
+instead of 2.32 s. This probe is not whole-Host resource qualification.
 
 Full backtest controls likewise poll `/backtests/{native|external}/runs/{id}`
 with `if_state=<cached state>`. An unchanged state returns the existing compact
@@ -138,6 +140,9 @@ releases that exclusively owned, detached temporary state before building the
 public-result cache. The same transaction still covers both writes and the
 cursor; failure restores the prior committed checkpoint for retry. Playback
 retains its next-step state, and default save callers retain their input objects.
+At the requested final cursor, the job releases its temporary report before
+unlocking for public readers. The already committed final state needs no second
+save. Playing again at a completed endpoint preserves the durable full result.
 Final endpoint parity hashes use the same canonical bytes through the incremental
 checkpoint encoder, avoiding overlapping full report strings and UTF-8 buffers.
 

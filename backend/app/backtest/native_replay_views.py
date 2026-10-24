@@ -3,7 +3,7 @@ from collections import OrderedDict
 import json
 
 from .native import MAX_BYTES, encoded
-from .native_checkpoint import checkpoint_digest as digest
+from .native_checkpoint import checkpoint_digest as digest, detached_json
 
 
 class ResultViews:
@@ -45,6 +45,11 @@ class ResultViews:
                 self.bytes -= len(removed)
             self.entries[key] = (body, raw)
             self.bytes += size
-        # Decode on every read so a caller cannot mutate the journal or another
-        # caller's view. No unchanged arrays are walked and hashed again.
-        return json.loads(text)
+            return json.loads(text)
+        # The journal and bars are normalized JSON. Oversized public reads need
+        # independent containers, but can retain immutable scalar values instead
+        # of holding full JSON text while decoding another complete graph.
+        # Do not preserve aliases: mutating one occurrence must leave every
+        # other occurrence, the journal and earlier callers unchanged.
+        del text
+        return detached_json(value, preserve_aliases=False)

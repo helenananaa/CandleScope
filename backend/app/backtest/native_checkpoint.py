@@ -18,11 +18,12 @@ MAX_DECODED_BYTES = 256 * 1024 * 1024
 COMPRESS_FROM_BYTES = 1024 * 1024
 
 
-def detached_json(value):
+def detached_json(value, *, preserve_aliases=True):
     """Normalize owned checkpoint data without expanding shared JSON graphs.
 
-    Mutable containers are detached from the caller. Repeated references within
-    the checkpoint share one detached copy; serialized values stay identical to
+    Mutable containers are detached from the caller. By default repeated references
+    share one detached copy; public views can request independent containers for
+    every occurrence instead. Serialized values stay identical to
     the previous JSON round trip. Non-JSON values retain that round trip's
     default=str and key-conversion semantics.
     """
@@ -41,11 +42,12 @@ def detached_json(value):
         key = id(item)
         if key in active:
             raise ValueError("Circular reference detected")
-        if key in memo:
+        if preserve_aliases and key in memo:
             return memo[key]
         active.add(key)
         result = {} if kind is dict else []
-        memo[key] = result
+        if preserve_aliases:
+            memo[key] = result
         try:
             if kind is dict:
                 result.update((name, clone(child)) for name, child in item.items())

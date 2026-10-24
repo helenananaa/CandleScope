@@ -103,24 +103,42 @@ def test_retention_is_byte_bounded_and_oversized_views_remain_complete():
 
 @pytest.mark.parametrize("text,limit,capacity", [
     ("x"*512, 256, 2), ("观察🙂"*250, 1200, 2), ("x"*32, 4096, 0)])
-def test_uncached_complete_views_decode_text_without_an_extra_full_utf8_buffer(monkeypatch,text,limit,capacity):
+def test_uncached_complete_views_preserve_values_and_independent_containers(text,limit,capacity):
     shared = [{"value": 1}]
     body = {"text": text, "left": shared, "right": shared}
     views = ResultViews(max_bytes=limit, capacity=capacity)
-    loads, observed = json.loads, []
-    def decode(value, *args, **kwargs):
-        observed.append(type(value))
-        return loads(value, *args, **kwargs)
-    monkeypatch.setattr(json, "loads", decode)
     expected = {**body, "bars": []}
     expected["report_hash"] = digest(expected)
     first = views.read(("uncached",), body, [])
-    assert first == expected and observed == [str]
+    assert first == expected
     assert not views.entries and views.bytes == 0
     first["left"][0]["value"] = 99
     assert first["right"][0]["value"] == body["left"][0]["value"] == 1
     assert views.read(("uncached",), body, []) == expected
-    assert observed == [str, str]
+
+
+@pytest.mark.parametrize("capacity", [0, 2])
+def test_complete_view_normalization_matches_strict_json_for_cached_and_uncached_paths(capacity):
+    shared = {"values": (True, 0, 0.0, -0.0, "观察🙂", None)}
+    body = {"left": shared, "right": shared, "numeric_keys": {1: ["one"]}}
+    expected = {**body, "bars": [{"close": 1.5}]}
+    expected["report_hash"] = digest(expected)
+    expected = json.loads(encoded(expected))
+    views = ResultViews(capacity=capacity)
+    actual = views.read(("normalized",), body, [{"close": 1.5}])
+    assert same_json(actual, expected)
+    actual["left"]["values"][0] = False
+    assert actual["right"]["values"][0] is True and shared["values"][0] is True
+    assert same_json(views.read(("normalized",), body, [{"close": 1.5}]), expected)
+
+
+@pytest.mark.parametrize("capacity", [0, 2])
+def test_view_rejects_non_json_scalars_before_copying_or_caching(capacity):
+    from decimal import Decimal
+    views = ResultViews(capacity=capacity)
+    with pytest.raises(TypeError):
+        views.read(("invalid",), {"value": Decimal("1.25")}, [])
+    assert not views.entries and views.bytes == 0
 
 
 @pytest.mark.parametrize("shortfall", [0, 1])
