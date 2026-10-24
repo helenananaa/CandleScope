@@ -66,10 +66,22 @@ def canonical_observations(saved):
 
 def observations_match(saved, groups):
     from .native_replay_storage import same_json
+
+    def reversed_observations():
+        # Compare from the endpoint so the final reset and every live command
+        # need only one decode. Do not build another observation graph beside
+        # the complete checkpoint, or discard any post-reset journal entries.
+        for index in range(len(saved.get("journal", [])) - 1, -1, -1):
+            command = journal_entry(saved, index)["command"]
+            if command.get("operation") == "stream_rebase":
+                break
+            if command.get("operation") == "stream_observe":
+                yield command.get("observation")
+
     missing = object()
     return all(left is not missing and right is not missing and same_json(left, right)
-               for left, right in zip_longest((item for group in groups for item in group),
-                    iter_canonical_observations(saved), fillvalue=missing))
+               for left, right in zip_longest((item for group in reversed(groups) for item in reversed(group)),
+                    reversed_observations(), fillvalue=missing))
 
 
 def seal_observation_group(groups):

@@ -159,6 +159,16 @@ Streaming endpoint hashing then passed 46 canonical-encoding, Pine/Pyne native
 replay and selected physical/history checkpoint cases without skips. Resource
 qualification still requires separate measured receipts under the frozen limits.
 
+Checkpoint observation validation now walks the retained ledger and stream
+journal backwards together, stopping at the final rebase. Every live command
+keeps its envelope check and observations retain exact JSON type/signed-zero
+comparison; no second decoded history is retained. This removes the previous
+second JSON parse of the same live journal suffix. The change passed 94 installed
+stream, ownership, physical-tick and historical-tick cases without skips. On the
+same complete 8,192-bar checkpoint (172,038 journal entries and 40,960 live
+observations), three isolated validations averaged 1.31 s before and 1.01 s after.
+That attribution probe is separate from whole-Host resource qualification.
+
 Controlled tests cover all nine supported mode/callback combinations, spot cash
 and inventory, pending queues/liquidity, backward seek, replay-service/interpreter-
 worker restart, requested data,

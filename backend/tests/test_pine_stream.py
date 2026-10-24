@@ -113,6 +113,39 @@ def test_journal_observations_keep_only_final_rebase_and_require_exact_group_len
     assert not observations_match(saved, [[{"value": True}, {"value": 1}]])
 
 
+@pytest.mark.parametrize("compact", [False, True])
+@pytest.mark.parametrize("reset", [False, True])
+def test_observation_validation_checks_every_live_entry_and_preserves_exact_json_values(compact, reset):
+    entries = [dict(command=dict(operation="stream_observe", observation={"value": value}),
+                    result_sha256="receipt") for value in (1, 1.0, True, 0.0, -0.0)]
+    if reset:
+        entries[:0] = [dict(command=dict(operation="stream_observe", observation={"old": True}),
+                            result_sha256="receipt"),
+                       dict(command=dict(operation="stream_rebase"), result_sha256="receipt")]
+    groups = [[], [{"value": 1}, {"value": 1.0}], [], [{"value": True}, {"value": 0.0}, {"value": -0.0}]]
+
+    def saved(rows):
+        return dict(contract=COMPACT_JOURNAL_CONTRACT if compact else JOURNAL_CONTRACT,
+                    journal=[encoded(row) for row in rows] if compact else rows)
+
+    assert observations_match(saved(entries), groups)
+    for index, replacement in enumerate((True, 1, 1.0, -0.0, 0.0)):
+        changed = [[{"value": value} for value in (1, 1.0, True, 0.0, -0.0)]]
+        changed[0][index]["value"] = replacement
+        assert not observations_match(saved(entries), changed)
+    assert not observations_match(saved(entries), [[{"extra": True}], *groups])
+    assert not observations_match(saved(entries), [*groups, [{"extra": True}]])
+    assert not observations_match(saved(entries), [*groups[:-1], groups[-1][:-1]])
+    assert observations_match(saved([dict(command=dict(operation="stream_commit"), result_sha256="receipt")]), [[], []])
+    # Even a non-observation command at the beginning or end must retain its
+    # valid journal envelope. Early comparison exhaustion cannot skip it.
+    for location in (2 if reset else 0, len(entries)):
+        broken = deepcopy(entries)
+        broken.insert(location, {"command": {"operation": "stream_commit"}})
+        with pytest.raises(BacktestError, match="invalid Pine journal entry"):
+            observations_match(saved(broken), groups)
+
+
 @installed
 @pytest.mark.parametrize("damage", ["json", "receipt", "noncanonical", "missing", "type"])
 def test_compact_checkpoint_rejects_corruption_before_returning_a_restored_stream(damage):
