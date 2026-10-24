@@ -34,7 +34,10 @@ async def test_second_market_preparation_preserves_frozen_run(tmp_path, progress
     replay = ReplayService(
         settings=replace(replay_settings(tmp_path / "replay.db"),
                          replay_history_archive_dir=tmp_path / "history",
-                         max_warmup_bars=5000, max_bar_dataset_rows=100000),
+                         max_warmup_bars=5000, max_bar_dataset_rows=100000,
+                         # This checks history preparation, not lease expiry.
+                         # Keep the controller across asynchronous acquisition.
+                         controller_ttl_seconds=300),
         store=ReplaySQLiteStore(tmp_path / "replay.db"), instrument_metadata_resolver=metadata,
     )
     await replay.start()
