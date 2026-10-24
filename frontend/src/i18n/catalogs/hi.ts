@@ -2142,6 +2142,7 @@ export const hi = {
   "replay.liq.liqPrice": "लिक्विडेशन कीमत",
   "replay.liq.bankruptcy": "दिवालिया कीमत",
   "replay.liq.takeover": "टेकओवर कीमत",
+  "replay.liq.estimatedFeeAtTrigger": "ट्रिगर होने पर अनुमानित लिक्विडेशन शुल्क",
   "replay.liq.fee": "लिक्विडेशन शुल्क",
   "replay.liq.l2": "L2 {fidelity} · {levels} स्तर · दिखाई {qty} · queue exact: false",
   "replay.liq.fill": "फ़िल",

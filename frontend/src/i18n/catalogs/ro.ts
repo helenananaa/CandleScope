@@ -2142,6 +2142,7 @@ export const ro = {
   "replay.liq.liqPrice": "Preț de lichidare",
   "replay.liq.bankruptcy": "Preț de faliment",
   "replay.liq.takeover": "Preț de preluare",
+  "replay.liq.estimatedFeeAtTrigger": "Comision de lichidare estimat la declanșare",
   "replay.liq.fee": "Comision de lichidare",
   "replay.liq.l2": "L2 {fidelity} · {levels} niveluri · vizibil {qty} · queue exact: false",
   "replay.liq.fill": "Execuție",

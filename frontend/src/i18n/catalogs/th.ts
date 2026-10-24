@@ -2142,6 +2142,7 @@ export const th = {
   "replay.liq.liqPrice": "ราคาลิควิเดชัน",
   "replay.liq.bankruptcy": "ราคาล้มละลาย",
   "replay.liq.takeover": "ราคารับช่วง",
+  "replay.liq.estimatedFeeAtTrigger": "ค่าธรรมเนียมลิควิเดชันโดยประมาณเมื่อทริกเกอร์",
   "replay.liq.fee": "ค่าธรรมเนียมลิควิเดชัน",
   "replay.liq.l2": "L2 {fidelity} · {levels} ระดับ · มองเห็น {qty} · queue exact: false",
   "replay.liq.fill": "ฟิลล์",

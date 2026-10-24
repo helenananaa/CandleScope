@@ -2149,6 +2149,7 @@ export const es = {
   "replay.liq.liqPrice": "Precio de liquidación",
   "replay.liq.bankruptcy": "Precio de quiebra",
   "replay.liq.takeover": "Precio de toma de control",
+  "replay.liq.estimatedFeeAtTrigger": "Comisión de liquidación estimada al activarse",
   "replay.liq.fee": "Comisión de liquidación",
   "replay.liq.l2": "L2 {fidelity} · {levels} niveles · visible {qty} · queue exact: false",
   "replay.liq.fill": "Ejecución",

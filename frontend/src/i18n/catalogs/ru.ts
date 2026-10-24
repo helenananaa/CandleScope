@@ -2143,6 +2143,7 @@ export const ru = {
   "replay.liq.liqPrice": "Цена ликвидации",
   "replay.liq.bankruptcy": "Цена банкротства",
   "replay.liq.takeover": "Цена перехвата",
+  "replay.liq.estimatedFeeAtTrigger": "Оценка комиссии ликвидации при срабатывании",
   "replay.liq.fee": "Комиссия ликвидации",
   "replay.liq.l2": "L2 {fidelity} · {levels} уровней · видимо {qty} · queue exact: false",
   "replay.liq.fill": "Исполнение",

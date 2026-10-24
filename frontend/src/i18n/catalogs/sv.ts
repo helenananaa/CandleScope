@@ -2142,6 +2142,7 @@ export const sv = {
   "replay.liq.liqPrice": "Likvidationspris",
   "replay.liq.bankruptcy": "Konkurspris",
   "replay.liq.takeover": "Övertagandepris",
+  "replay.liq.estimatedFeeAtTrigger": "Beräknad likvidationsavgift vid utlösning",
   "replay.liq.fee": "Likvidationsavgift",
   "replay.liq.l2": "L2 {fidelity} · {levels} nivåer · synlig {qty} · kö-exakt: false",
   "replay.liq.fill": "Fyllnad",

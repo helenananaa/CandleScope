@@ -2142,6 +2142,7 @@ export const zhHant = {
   "replay.liq.liqPrice": "強平價",
   "replay.liq.bankruptcy": "破產價",
   "replay.liq.takeover": "接管價",
+  "replay.liq.estimatedFeeAtTrigger": "觸發時估算強平費",
   "replay.liq.fee": "強平費",
   "replay.liq.l2": "L2 {fidelity} · {levels} 檔 · 可見 {qty} · queue exact: false",
   "replay.liq.fill": "成交",

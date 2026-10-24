@@ -2142,6 +2142,7 @@ export const hu = {
   "replay.liq.liqPrice": "Likvidálási ár",
   "replay.liq.bankruptcy": "Csődár",
   "replay.liq.takeover": "Átvételi ár",
+  "replay.liq.estimatedFeeAtTrigger": "Becsült likvidálási díj aktiváláskor",
   "replay.liq.fee": "Likvidálási díj",
   "replay.liq.l2": "L2 {fidelity} · {levels} szint · látható {qty} · sorpontosság: hamis",
   "replay.liq.fill": "Teljesítés",

@@ -2442,6 +2442,7 @@ export const ko = {
   "replay.liq.liqPrice": "강제청산가",
   "replay.liq.bankruptcy": "파산가",
   "replay.liq.takeover": "인수가",
+  "replay.liq.estimatedFeeAtTrigger": "발동 시 예상 강제청산 수수료",
   "replay.liq.fee": "강제청산 수수료",
   "replay.liq.l2": "L2 {fidelity} · {levels}단 · 가시 {qty} · queue exact: false",
   "replay.liq.fill": "체결",

@@ -2468,6 +2468,7 @@ export const zhCN = {
   "replay.liq.liqPrice": "强平价",
   "replay.liq.bankruptcy": "破产价",
   "replay.liq.takeover": "接管价",
+  "replay.liq.estimatedFeeAtTrigger": "触发时估算强平费",
   "replay.liq.fee": "强平费",
   "replay.liq.l2": "L2 {fidelity} · {levels} 档 · 可见 {qty} · queue exact: false",
   "replay.liq.fill": "成交",

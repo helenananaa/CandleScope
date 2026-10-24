@@ -2143,6 +2143,7 @@ export const vi = {
   "replay.liq.liqPrice": "Giá thanh lý",
   "replay.liq.bankruptcy": "Giá phá sản",
   "replay.liq.takeover": "Giá tiếp quản",
+  "replay.liq.estimatedFeeAtTrigger": "Phí thanh lý ước tính khi kích hoạt",
   "replay.liq.fee": "Phí thanh lý",
   "replay.liq.l2": "L2 {fidelity} · {levels} mức · hiện {qty} · queue exact: false",
   "replay.liq.fill": "Khớp",
