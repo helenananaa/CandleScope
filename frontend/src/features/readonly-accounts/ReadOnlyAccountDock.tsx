@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { t, type MessageKey } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import AccountJournal from "./AccountJournal.js";
+import { accountErrorHelp } from "./accountErrors.js";
 import type { LinkedNoteRequest } from "./journalDraft.js";
 import { AccountApiError, accountSession, connectAccount, disconnectAccount, getAccountFacts,
   getAccountStatus, record, resyncAccount, type AccountStatus, type Fact, type FactKind, type FactPage } from "./accountApi.js";
@@ -12,13 +13,6 @@ const TABS: Tab[] = ["overview", "fills", "orders", "bills", "journal"];
 function scalar(value: unknown): string { return typeof value === "string" || typeof value === "number" ? String(value) : "—"; }
 function unit(value: unknown): string { return typeof value === "string" ? value : ""; }
 function rows(value: unknown): Fact[] { return Array.isArray(value) ? value.filter(record) : []; }
-function errorHelp(code: string): MessageKey {
-  if (code === "READONLY_KEY_REQUIRED") return "account.readonlyKeyHelp";
-  if (code === "HEDGE_ACCOUNT_REQUIRED") return "account.hedgeHelp";
-  if (code.includes("KEYCHAIN")) return "account.keychainHelp";
-  if (code.includes("DIFFERENT_ACCOUNT") || code === "ACCOUNT_IDENTITY_CHANGED") return "account.identityHelp";
-  return "account.errorHelp";
-}
 
 export default function ReadOnlyAccountDock({ height, onRequestClose }: { height: number; onRequestClose: () => void }) {
   const locale = useLocale();
@@ -113,7 +107,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose }: { height
       <p className="readonly-account-help">{t("account.boundary", {}, locale)}</p>
       {!available || status?.available === false ? <p>{t("account.desktopRequired", {}, locale)}</p> : <>
         {status?.account && <p className="readonly-account-help">{t("account.lastRead", { time: date(status.account.last_success_ms) }, locale)}</p>}
-        {failure && <div className="readonly-account-error" role="alert"><p>{t(errorHelp(failure), {}, locale)}</p><code>{failure}</code></div>}
+        {failure && <div className="readonly-account-error" role="alert"><p>{t(accountErrorHelp(failure), {}, locale)}</p><code>{failure}</code></div>}
         <div className="readonly-account-actions">
           <button type="button" disabled={busy} onClick={() => setCredentialsOpen(!credentialsOpen)}>{t(status?.account ? "account.rotate" : "account.connect", {}, locale)}</button>
           {status?.account && <><button type="button" disabled={busy} onClick={() => { void action(resyncAccount); }}>{t("account.sync", {}, locale)}</button>
@@ -145,7 +139,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose }: { height
             {status?.gaps.map((gap, index) => <p key={index}>{t("account.gap", {}, locale)} · {scalar(gap.kind)}<br />{date(gap.start_ms)} – {date(gap.end_ms)}</p>)}
           </details>
           <p className="readonly-account-help">{t("account.lastEvent", { time: date(status?.stream.lastReceivedMs) }, locale)}</p>
-          {status?.stream.error && <p>{t("account.errorHelp", {}, locale)} <code>{status.stream.error}</code></p>}
+          {status?.stream.error && <p>{t(accountErrorHelp(status.stream.error), {}, locale)} <code>{status.stream.error}</code></p>}
         </>}
         {tab !== "overview" && tab !== "journal" && <>
           <button type="button" disabled={loadingFacts} onClick={() => { void loadFacts(false); }}>{t(loadingFacts ? "account.loading" : "account.refresh", {}, locale)}</button>

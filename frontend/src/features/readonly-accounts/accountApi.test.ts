@@ -54,6 +54,9 @@ test("connection writes require both desktop authority headers, never URL creden
 
 test("upstream error messages and malformed journal values never enter the UI as accepted data", async () => {
   await environment(async () => {
+    globalThis.fetch = async () => Response.json({ error: { code: "OKX_AUTH_50105", message: "SENTINEL_SECRET" } }, { status: 409 });
+    await assert.rejects(connectAccount({ apiKey: "fixture", secret: "fixture", password: "fixture" }),
+      (error: unknown) => error instanceof AccountApiError && error.code === "OKX_AUTH_50105" && !error.message.includes("SENTINEL"));
     globalThis.fetch = async () => Response.json({ error: { code: "secret SENTINEL", message: "SENTINEL" } }, { status: 409 });
     await assert.rejects(getAccountStatus(), (error: unknown) => error instanceof AccountApiError && error.code === "ACCOUNT_UNAVAILABLE" && !error.message.includes("SENTINEL"));
     globalThis.fetch = async () => Response.json({ versions: [{ noteId: "a".repeat(32), version: 1, payload: { text: {} } }] });

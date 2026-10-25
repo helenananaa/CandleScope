@@ -11,7 +11,7 @@ from .credentials import MacKeychainVault, validate_credentials
 from .normalization import AccountDataError
 from .okx import ReadOnlyOkx, account_identity
 from .repository import AccountRepository
-from .sync import AccountSynchronizer, error_code, three_months_before
+from .sync import TERMINAL_ERRORS, AccountSynchronizer, error_code, three_months_before
 
 
 def saved_network_options() -> dict:
@@ -210,8 +210,7 @@ class ReadOnlyAccountService:
             except Exception as exc:
                 code = error_code(exc)
                 await asyncio.to_thread(self.repository.status,"error",error=code)
-                if code in {"KEYCHAIN_READ_FAILED","KEYCHAIN_RECORD_INVALID","READONLY_KEY_REQUIRED",
-                            "HEDGE_ACCOUNT_REQUIRED","ACCOUNT_AUTHENTICATION_FAILED","ACCOUNT_IDENTITY_CHANGED",
+                if code in TERMINAL_ERRORS or code in {"KEYCHAIN_READ_FAILED","KEYCHAIN_RECORD_INVALID",
                             "OLD_KEYCHAIN_RECORD_CLEANUP_FAILED","MACOS_KEYCHAIN_REQUIRED"}:
                     return
             finally:

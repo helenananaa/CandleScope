@@ -21,6 +21,12 @@ REST_PATHS = {
 SWAP_PATHS = frozenset({"public/instruments", "account/positions", "trade/fills-history",
                         "trade/orders-pending", "trade/orders-history-archive"})
 CHANNELS = frozenset({"orders", "positions", "account"})
+# Keep only documented, bounded provider codes. Raw OKX messages can contain
+# an API key or an IP address and must never become application diagnostics.
+OKX_AUTH_CODES = frozenset({"50100", "50101", "50102", "50103", "50104", "50105",
+                            "50106", "50107", "50110", "50111", "50112", "50113",
+                            "50114", "50119"})
+OKX_AUTH_ERRORS = frozenset("OKX_AUTH_" + code for code in OKX_AUTH_CODES)
 
 
 def readonly_session(*, connector, loop, trust_env: bool):
@@ -119,6 +125,12 @@ class ReadOnlyOkx(CcxtOkx):
         if body is not None:
             raise AccountDataError("READONLY_OPERATION_DENIED")
         return await super().request(path, api, method, params or {}, headers, body, config or {})
+
+    def handle_errors(self, httpCode, reason, url, method, headers, body, response, requestHeaders, requestBody):
+        code = response.get("code") if isinstance(response, Mapping) else None
+        if isinstance(code, str) and code in OKX_AUTH_CODES:
+            raise AccountDataError("OKX_AUTH_" + code)
+        return super().handle_errors(httpCode, reason, url, method, headers, body, response, requestHeaders, requestBody)
 
     async def fetch(self, url, method="GET", headers=None, body=None):
         parsed = urlsplit(url)

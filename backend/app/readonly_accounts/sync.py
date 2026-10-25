@@ -11,7 +11,7 @@ import ccxt
 
 from . import normalization as normal
 from .normalization import AccountDataError, Contract
-from .okx import account_identity
+from .okx import OKX_AUTH_ERRORS, account_identity
 from .repository import AccountRepository
 
 HISTORY = {
@@ -20,7 +20,7 @@ HISTORY = {
     "orders":("privateGetTradeOrdersHistoryArchive","ordId",normal.order),
 }
 TERMINAL_ERRORS = frozenset({"READONLY_KEY_REQUIRED", "HEDGE_ACCOUNT_REQUIRED",
-                            "ACCOUNT_AUTHENTICATION_FAILED", "ACCOUNT_IDENTITY_CHANGED"})
+                            "ACCOUNT_AUTHENTICATION_FAILED", "ACCOUNT_IDENTITY_CHANGED"}) | OKX_AUTH_ERRORS
 
 
 def three_months_before(now_ms: int) -> int:
