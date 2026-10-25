@@ -73,6 +73,15 @@ jobs:
             tests/test_shared_market_inputs.py \
             tests/test_data_preparation.py \
             tests/test_replay_context_origin.py \
+            tests/test_replay_history_archive.py \
+            tests/test_replay_v2_training_history.py \
+            tests/test_replay_history_source_grid.py \
+            tests/test_replay_projection_native_seam.py \
+            tests/test_replay_progressive_history.py \
+            tests/test_replay_indicator_context_columns.py \
+            tests/test_replay_command_display_tail.py \
+            tests/test_replay_shared_market_display.py \
+            tests/test_replay_frontend_history_integration.py \
             tests/test_replay_prepared_context.py \
             tests/test_replay_indicator_context_ranges.py \
             tests/test_replay_indicator_prepared_context.py \
