@@ -254,9 +254,13 @@ class AccountRepository:
                 self._raw(db,"ws:"+channel,key,row,received_ms,"WS")
 
     def save_snapshot(self, kind: str, payload: dict | list, received_ms: int) -> None:
-        if kind not in {"positions", "open_orders", "balances", "contracts"}:
+        if kind not in {"positions", "open_orders", "balances", "contracts", "position_history", "position_history_state"}:
             raise AccountDataError("SNAPSHOT_KIND_INVALID")
         with self.transaction() as db:
+            if kind == "position_history":
+                for row in payload["rows"]:
+                    key = ":".join(str(row.get(field, "")) for field in ("posId", "cTime", "uTime"))
+                    self._raw(db, "position_history", key, row, received_ms, "REST")
             if kind == "contracts":
                 for item in payload:
                     self._raw(db,"contract",item["normalized"]["instrument"],item["raw"],received_ms,"REST")
@@ -266,6 +270,28 @@ class AccountRepository:
         with self.connection() as db:
             return {row["kind"]:{"receivedMs":row["received_ms"],"data":json.loads(row["payload"])}
                     for row in db.execute("SELECT * FROM snapshot")}
+
+    def reconciliation_inputs(self, maximum: int = 20_000) -> dict:
+        # One bounded, consistent view. This is requested on demand, not by the
+        # five-second status poll, and never returns credential references.
+        with self.connection() as db:
+            db.execute("BEGIN")
+            count = db.execute("SELECT COUNT(*) FROM fact").fetchone()[0]
+            if count > maximum:
+                raise AccountDataError("RECONCILIATION_RECORD_LIMIT")
+            rows = db.execute("""SELECT f.kind,f.external_key,f.payload,r.body FROM fact f
+                LEFT JOIN raw_fact r ON r.kind=f.kind AND r.external_key=f.external_key AND r.body_hash=f.raw_hash
+                ORDER BY f.event_ms,f.external_key""").fetchall()
+            if any(row["body"] is None for row in rows):
+                raise AccountDataError("RECONCILIATION_SOURCE_MISSING")
+            account = db.execute("SELECT status,error_code,last_success_ms,requested_from_ms FROM account").fetchone()
+            return {"account": dict(account) if account else None,
+                    "facts": [{"kind": row["kind"], "key": row["external_key"],
+                               "value": json.loads(row["payload"]), "raw": json.loads(row["body"])} for row in rows],
+                    "snapshots": {row["kind"]: {"receivedMs": row["received_ms"], "data": json.loads(row["payload"])}
+                                  for row in db.execute("SELECT * FROM snapshot")},
+                    "coverage": [dict(row) for row in db.execute("SELECT * FROM coverage")],
+                    "gaps": [dict(row) for row in db.execute("SELECT * FROM gap")]}
 
     def facts(self, kind: str, *, before: tuple[int, str] | None = None, limit: int = 100) -> list[dict]:
         if kind not in KINDS or not 1 <= limit <= 500:

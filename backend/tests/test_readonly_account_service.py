@@ -157,6 +157,7 @@ def test_account_routes_require_exact_desktop_origin_session_and_write_csrf(tmp_
         try:
             async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as api:
                 assert (await api.get("/api/v1/readonly-accounts/status")).status_code == 403
+                assert (await api.get("/api/v1/readonly-accounts/reconciliation")).status_code == 403
                 headers = guard.trusted_headers(user_action="account.connect")
                 for name in ("Origin", "X-CandleScope-Plugin-Session", "X-CandleScope-CSRF", "X-CandleScope-User-Action"):
                     invalid = {key: value for key, value in headers.items() if key != name}

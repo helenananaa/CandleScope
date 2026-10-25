@@ -111,6 +111,18 @@ async def facts(request: Request,kind: str,before_time: int | None = None,
         return failure(exc)
 
 
+@router.get("/reconciliation")
+async def reconciliation(request: Request):
+    owner = await service(request)
+    from .reconciliation import reconcile_account
+    try:
+        def compute():
+            return reconcile_account(owner.repository.reconciliation_inputs())
+        return await asyncio.to_thread(compute)
+    except Exception as exc:
+        return failure(exc)
+
+
 @router.get("/journal")
 async def journal(request: Request, before_recorded_ms: int | None = None,
                   before_note_id: str | None = None, before_version: int | None = None,

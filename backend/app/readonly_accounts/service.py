@@ -230,6 +230,7 @@ class ReadOnlyAccountService:
             asyncio.to_thread(repo.snapshots),asyncio.to_thread(repo.counts))
         # Instrument metadata is large and already bound into normalized facts.
         snapshots.pop("contracts",None)
+        snapshots.pop("position_history",None)
         sync = self.synchronizer
         return {"schemaVersion":1,"available":sys.platform == "darwin","venue":"okx",
                 "product":"perpetual","positionMode":"long_short_mode",

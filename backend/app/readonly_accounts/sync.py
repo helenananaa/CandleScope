@@ -77,6 +77,7 @@ class AccountSynchronizer:
         self.now_ms = now_ms or (lambda:int(time.time()*1000))
         self.contracts: dict[str,Contract] = {}
         self.last_full_scan = 0
+        self.last_position_history_ms = 0
         self.queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
         self.changed = asyncio.Event()
         self.stream_status = "waiting"
@@ -276,6 +277,7 @@ class AccountSynchronizer:
         # shorter channel can perpetually restart while a longer one catches up.
         completed = [await self.history(kind,full=full) for kind in (pending or list(HISTORY))]
         if all(completed):
+            await self.position_history(force=full)
             if full:
                 self.last_full_scan = now
                 self.requested_full = False
@@ -284,6 +286,55 @@ class AccountSynchronizer:
             return True
         await asyncio.to_thread(self.repository.status,"syncing")
         return False
+
+    async def position_history(self, *, force: bool = False) -> None:
+        now = self.now_ms()
+        if not force and now - self.last_position_history_ms < 60_000:
+            return
+        self.last_position_history_ms = now
+        floor = three_months_before(now)
+        cursor = None
+        records = {}
+        try:
+            for page in range(20):
+                params = {"instType": "SWAP", "limit": "100"}
+                if cursor is not None:
+                    params["after"] = str(cursor)
+                # OKX returns every row sharing the boundary uTime, so a page
+                # may exceed its requested limit. The total is still bounded.
+                rows = response_rows(await self.client.privateGetAccountPositionsHistory(params), 1000)
+                times = [normal.timestamp(row.get("uTime")) for row in rows]
+                if cursor is not None and any(value >= cursor for value in times):
+                    raise AccountDataError("POSITION_HISTORY_CURSOR_STALLED")
+                for row, updated in zip(rows, times, strict=True):
+                    if row.get("instType") != "SWAP" or updated > now or normal.timestamp(row.get("cTime")) > updated:
+                        raise AccountDataError("POSITION_HISTORY_INVALID")
+                    if floor <= updated <= now:
+                        key = (normal.identifier(row.get("posId")), normal.timestamp(row.get("cTime")), updated)
+                        if key in records and records[key] != row:
+                            raise AccountDataError("POSITION_HISTORY_CONFLICT")
+                        records[key] = row
+                if len(records) > 5000:
+                    raise AccountDataError("POSITION_HISTORY_RECORD_LIMIT")
+                if not rows or min(times) < floor:
+                    payload = {"rows": list(records.values()), "fromMs": floor, "throughMs": now,
+                               "complete": True, "pages": page + 1}
+                    await asyncio.to_thread(self.repository.save_snapshot, "position_history", payload, self.now_ms())
+                    await asyncio.to_thread(self.repository.save_snapshot, "position_history_state",
+                                            {"error": None, "complete": True}, self.now_ms())
+                    return
+                cursor = min(times)
+            raise AccountDataError("POSITION_HISTORY_PAGE_BUDGET")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            code = error_code(exc)
+            if code in TERMINAL_ERRORS:
+                raise
+            # Optional corroborating evidence cannot erase successfully read
+            # fills/bills or make their synchronization appear to have failed.
+            await asyncio.to_thread(self.repository.save_snapshot, "position_history_state",
+                                    {"error": code, "complete": False}, self.now_ms())
 
     async def run(self) -> None:
         tasks = [asyncio.create_task(self.consume())]

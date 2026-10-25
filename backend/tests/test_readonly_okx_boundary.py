@@ -131,3 +131,9 @@ def test_ccxt_private_entrypoints_generate_only_allowed_subscription_frames(monk
         finally:
             await client.close()
     asyncio.run(run())
+
+
+def test_position_history_retains_get_only_perpetual_boundary():
+    validate_rest('account/positions-history','private','GET',{'instType':'SWAP'})
+    with pytest.raises(AccountDataError):validate_rest('account/positions-history','private','POST',{'instType':'SWAP'})
+    with pytest.raises(AccountDataError):validate_rest('account/positions-history','private','GET',{'instType':'FUTURES'})

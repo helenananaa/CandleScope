@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { t, type MessageKey } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
+import AccountReconciliation from "./AccountReconciliation.js";
 import AccountJournal from "./AccountJournal.js";
 import { accountErrorHelp } from "./accountErrors.js";
 import type { LinkedNoteRequest } from "./journalDraft.js";
@@ -8,8 +9,8 @@ import { AccountApiError, accountSession, connectAccount, disconnectAccount, get
   getAccountStatus, record, resyncAccount, type AccountStatus, type Fact, type FactKind, type FactPage } from "./accountApi.js";
 import "./readonlyAccount.css";
 
-type Tab = "overview" | FactKind | "journal";
-const TABS: Tab[] = ["overview", "fills", "orders", "bills", "journal"];
+type Tab = "overview" | FactKind | "journal" | "reconcile";
+const TABS: Tab[] = ["overview", "fills", "orders", "bills", "reconcile", "journal"];
 function scalar(value: unknown): string { return typeof value === "string" || typeof value === "number" ? String(value) : "—"; }
 function unit(value: unknown): string { return typeof value === "string" ? value : ""; }
 function rows(value: unknown): Fact[] { return Array.isArray(value) ? value.filter(record) : []; }
@@ -45,7 +46,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose }: { height
   }, [available]);
   useEffect(() => {
     factRequest.current += 1;
-    if (tab === "overview" || tab === "journal" || !available) return;
+    if (tab === "overview" || tab === "journal" || tab === "reconcile" || !available) return;
     const controller = new AbortController();
     setPage({ items: [], next: null }); setLoadingFacts(true);
     void getAccountFacts(tab, null, controller.signal).then((value) => { if (!controller.signal.aborted) setPage(value); })
@@ -73,7 +74,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose }: { height
     });
   };
   const loadFacts = async (more: boolean) => {
-    if (tab === "overview" || tab === "journal" || loadingFacts) return;
+    if (tab === "overview" || tab === "journal" || tab === "reconcile" || loadingFacts) return;
     setLoadingFacts(true);
     const requestId = ++factRequest.current;
     try {
@@ -141,7 +142,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose }: { height
           <p className="readonly-account-help">{t("account.lastEvent", { time: date(status?.stream.lastReceivedMs) }, locale)}</p>
           {status?.stream.error && <p>{t(accountErrorHelp(status.stream.error), {}, locale)} <code>{status.stream.error}</code></p>}
         </>}
-        {tab !== "overview" && tab !== "journal" && <>
+        {tab !== "overview" && tab !== "journal" && tab !== "reconcile" && <>
           <button type="button" disabled={loadingFacts} onClick={() => { void loadFacts(false); }}>{t(loadingFacts ? "account.loading" : "account.refresh", {}, locale)}</button>
           {tab === "bills" && <p className="readonly-account-help">{t("account.unassignedFunding", {}, locale)}</p>}
           {!loadingFacts && !page.items.length && <p>{t("account.empty", {}, locale)}</p>}
@@ -155,6 +156,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose }: { height
           </article>)}
           {page.next && <button type="button" disabled={loadingFacts} onClick={() => { void loadFacts(true); }}>{t("account.more", {}, locale)}</button>}
         </>}
+        {tab === "reconcile" && <AccountReconciliation />}
         {tab === "journal" && <AccountJournal {...(newNoteRequest ? { newNoteRequest } : {})} onRequestHandled={noteRequestHandled} />}
       </>}
     </div>

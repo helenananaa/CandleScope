@@ -69,7 +69,7 @@ export function accountSession() {
   }
 }
 
-async function request(path: string, method = "GET", payload?: unknown, signal?: AbortSignal): Promise<unknown> {
+export async function accountRequest(path: string, method = "GET", payload?: unknown, signal?: AbortSignal): Promise<unknown> {
   const session = accountSession();
   if (!session) throw new AccountApiError("DESKTOP_SESSION_REQUIRED");
   const headers: Record<string, string> = { "X-CandleScope-Plugin-Session": session.sessionToken };
@@ -97,7 +97,7 @@ async function request(path: string, method = "GET", payload?: unknown, signal?:
 }
 
 export async function getAccountStatus(signal?: AbortSignal): Promise<AccountStatus> {
-  const value = await request("/status", "GET", undefined, signal);
+  const value = await accountRequest("/status", "GET", undefined, signal);
   if (!record(value) || value.schemaVersion !== 1 || value.readOnly !== true || value.venue !== "okx"
     || typeof value.available !== "boolean" || !record(value.snapshots) || !record(value.counts)
     || (value.serviceError !== undefined && !nullableString(value.serviceError))
@@ -123,7 +123,7 @@ export async function getAccountFacts(kind: FactKind, before: FactPage["next"] =
     query.set("before_time", String(before.beforeTime));
     query.set("before_id", before.beforeId);
   }
-  const value = await request(`/facts/${kind}?${query}`, "GET", undefined, signal);
+  const value = await accountRequest(`/facts/${kind}?${query}`, "GET", undefined, signal);
   if (!record(value) || !Array.isArray(value.items) || !value.items.every(record)
     || (value.next !== null && (!record(value.next) || typeof value.next.beforeTime !== "number"
       || !nullableTime(value.next.beforeTime) || typeof value.next.beforeId !== "string"))) throw new AccountApiError("ACCOUNT_RESPONSE_INVALID");
@@ -131,20 +131,20 @@ export async function getAccountFacts(kind: FactKind, before: FactPage["next"] =
 }
 
 export async function connectAccount(credentials: { apiKey: string; secret: string; password: string }): Promise<void> {
-  await request("/connect", "POST", credentials);
+  await accountRequest("/connect", "POST", credentials);
 }
 export async function disconnectAccount(forget: boolean): Promise<void> {
-  await request("/disconnect", "POST", { forget });
+  await accountRequest("/disconnect", "POST", { forget });
 }
 export async function resyncAccount(): Promise<void> {
-  await request("/resync", "POST", {});
+  await accountRequest("/resync", "POST", {});
 }
 export async function getJournal(signal?: AbortSignal): Promise<JournalVersion[]> {
   const rows: JournalVersion[] = [];
   const cursors = new Set<string>();
   let query = "";
   for (let page = 0; page < 100; page++) {
-    const value = await request(`/journal${query}`, "GET", undefined, signal);
+    const value = await accountRequest(`/journal${query}`, "GET", undefined, signal);
     if (!record(value) || !Array.isArray(value.versions) || !value.versions.every(journalVersion)) throw new AccountApiError("ACCOUNT_RESPONSE_INVALID");
     rows.push(...value.versions);
     if (value.next === null) return rows;
@@ -161,7 +161,7 @@ export async function saveJournal(note: {
   noteId: string; baseVersion: number; text: string; tags: string[];
   kind: JournalVersion["payload"]["kind"]; eventMs: number; fillId?: string;
 }): Promise<JournalVersion> {
-  const value = await request("/journal", "POST", note);
+  const value = await accountRequest("/journal", "POST", note);
   if (!journalVersion(value)) throw new AccountApiError("ACCOUNT_RESPONSE_INVALID");
   return value;
 }
