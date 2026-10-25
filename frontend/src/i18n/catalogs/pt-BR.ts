@@ -1,6 +1,8 @@
+import { pineEnglish } from "./pineEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
+  ...pineEnglish,
   "research.external.copyCommand": "Copiar comando de inicialização",
   "research.external.commandCopied": "Comando de inicialização copiado.",
   "research.external.copyFailed": "Não foi possível copiar automaticamente. Selecione e copie o texto do comando.",

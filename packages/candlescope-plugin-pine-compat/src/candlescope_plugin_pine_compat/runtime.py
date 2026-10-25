@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from .sessions import PineSessions
+from .graphics import scene_series
+from .host_inputs import host_inputs, request_environment, diagnostic_code, SOURCE_FIELDS
 
 from candlescope_plugin_sdk import (
     FEATURE_BATCH_EXECUTION_V1,
@@ -37,10 +39,10 @@ from candlescope_plugin_sdk import (
 RUNTIME_ID = "candlescope.pine-compat"
 PLUGIN_NAME = "Pine Compatibility Runtime"
 PLUGIN_PACKAGE = "candlescope-plugin-pine-compat"
-PLUGIN_VERSION = "0.3.2"
+PLUGIN_VERSION = "0.4.0"
 ENGINE_PACKAGE = "pine-compat-runtime"
 ENGINE_MODULE = "pine_compat"
-EXPECTED_ENGINE_VERSION = "0.3.2"
+EXPECTED_ENGINE_VERSION = "0.3.3"
 UNKNOWN_SOURCE_VERSION = "0.0.0+unknown"
 
 PINE_ANALYSIS_SCHEMA_VERSION = 6
@@ -62,22 +64,12 @@ _PALETTE = (
 )
 _HOST_BLOCKED_PREFIXES = (
     "strategy",
-    "request.",
     "syminfo.",
     "timeframe.",
     "session.",
     "ticker.",
-    "label.",
-    "line.",
-    "linefill.",
-    "box.",
-    "table.",
-    "polyline.",
-    "chart.",
-    "import",
-    "library",
 )
-_HOST_BLOCKED_EXACT = {"plotbar", "plotcandle", "plotchar", "plotarrow"}
+_HOST_BLOCKED_EXACT = set()
 _HOST_CHART_SYMBOL_FEATURES = frozenset(
     {"syminfo.prefix", "syminfo.ticker", "syminfo.tickerid"}
 )
@@ -97,19 +89,7 @@ _HOST_CHART_TIMEFRAME_FEATURES = frozenset(
 _PINE_SECONDS_MULTIPLIERS = frozenset({1, 5, 10, 15, 30, 45})
 _PINE_CONTEXT_TOKEN_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _CANDLESCOPE_INTERVAL_RE = re.compile(r"^(\d+)([smhdwM])$")
-_UNMAPPABLE_OUTPUT_KEYS = (
-    "plotChars",
-    "plotArrows",
-    "plotBars",
-    "plotCandles",
-    "labels",
-    "lines",
-    "lineFills",
-    "polylines",
-    "boxes",
-    "tables",
-    "strategy",
-)
+_UNMAPPABLE_OUTPUT_KEYS = ("strategy",)
 _PANE_DISPLAYS = {"display.all", "display.pane"}
 _HIDDEN_DISPLAYS = {"display.none"}
 _UNSUPPORTED_DISPLAYS = {
@@ -246,6 +226,7 @@ def _descriptor() -> RuntimeDescriptor:
                 "bgcolor",
                 "barcolor",
                 "alert",
+                "native-drawings-v1", "plotcandle", "plotbar", "plotchar", "plotarrow", "fill.gradient",
             ],
             "unsupportedRenderKinds": list(_UNMAPPABLE_OUTPUT_KEYS),
             "ui": {
@@ -275,7 +256,7 @@ def pine_chart_symbol(context: Any) -> str | None:
         return None
     if market_type == "spot":
         ticker = symbol
-    elif market_type in {"futures", "swap"}:
+    elif market_type in {"futures", "swap", "usdm", "coinm"}:
         if exchange == "BINANCE":
             ticker = symbol if symbol.endswith(".P") else f"{symbol}.P"
         elif symbol.endswith(("-SWAP", "-PERP", ".P")):
@@ -347,8 +328,17 @@ def _feature_is_host_blocked(
     *,
     chart_symbol: str | None,
     chart_timeframe: str | None,
+    chart_metadata=None,
+    bar_calendars=None,
 ) -> bool:
     normalized = feature.strip().lower()
+    if normalized == "syminfo.timezone" and any(row.get("symbol") == chart_symbol for row in (bar_calendars or {}).get("symbols", [])):
+        return False
+    metadata_fields = {"syminfo.mintick": "minMove", "syminfo.minmove": "minMove",
+                       "syminfo.pricescale": "priceScale", "syminfo.pointvalue": "pointValue",
+                       "syminfo.mincontract": "minContract", "syminfo.currency": "currency"}
+    if normalized in metadata_fields and metadata_fields[normalized] in (chart_metadata or {}):
+        return False
     if normalized in _HOST_CHART_SYMBOL_FEATURES and chart_symbol is not None:
         return False
     if normalized in _HOST_CHART_TIMEFRAME_FEATURES and chart_timeframe is not None:
@@ -359,14 +349,18 @@ def _feature_is_host_blocked(
     )
 
 
-def _analyze_native(source: str, context: Any) -> tuple[dict[str, Any], tuple[Diagnostic, ...]]:
+def _analyze_native(source: str, context: Any, options=None) -> tuple[dict[str, Any], tuple[Diagnostic, ...]]:
     engine, _version = _engine_contract()
-    raw = engine.analyze_script(source)
+    supplied = host_inputs((options or {}).get("pineHost"))
+    libraries = supplied.get("libraries")
+    raw = engine.analyze_script(source, library_sources=libraries) if libraries else engine.analyze_script(source)
     if not isinstance(raw, Mapping):
         raise BridgeError("PINE_ANALYSIS_OUTPUT_INVALID", "Pine analysis must return an object.")
     analysis = dict(raw)
     if analysis.get("executable") and callable(getattr(engine, "compile_script", None)):
-        analysis["hostRequirements"] = engine.compile_script(source).host_requirements()
+        program = engine.compile_script(source, library_sources=libraries)
+        analysis["hostRequirements"] = program.host_requirements()
+        analysis["calculationBarsCount"] = program.calculation_bars_count
     if analysis.get("schemaVersion") != PINE_ANALYSIS_SCHEMA_VERSION:
         raise BridgeError(
             "PINE_SCHEMA_MISMATCH",
@@ -408,6 +402,8 @@ def _analyze_native(source: str, context: Any) -> tuple[dict[str, Any], tuple[Di
             str(item.get("feature") or ""),
             chart_symbol=bindings["chartSymbol"],
             chart_timeframe=bindings["chartTimeframe"],
+            chart_metadata=supplied.get("chartMetadata"),
+            bar_calendars=supplied.get("barCalendars"),
         )
     ]
     if blocked:
@@ -419,7 +415,7 @@ def _analyze_native(source: str, context: Any) -> tuple[dict[str, Any], tuple[Di
                 message=f"CandleScope Pine protocol v1 does not host: {', '.join(features)}",
                 hint=(
                     "The adapter supports indicator batches and realtime sessions; "
-                    "context requests, strategies, imports, and native objects stay disabled."
+                    "Supply required instrument metadata; strategy scripts use the strategy workspace."
                 ),
                 span=_span(blocked[0].get("span")),
                 data={"blockedFeatures": features},
@@ -551,10 +547,10 @@ def _normalize_overrides(params: Mapping[str, Any], analysis: Mapping[str, Any])
                 "PINE_INVALID_PARAMS",
                 f"Pine parameter {key} color integer must fit in u32",
             )
-        if name == "input.source":
+        if name == "input.source" and (not isinstance(value, str) or value not in SOURCE_FIELDS):
             raise BridgeError(
                 "PINE_INVALID_PARAMS",
-                f"Pine parameter {key} cannot override input.source in this host",
+                f"Pine parameter {key} must select a supported OHLCV source",
             )
         if name in {
             "input.string",
@@ -742,6 +738,8 @@ def _param_schema(analysis: Mapping[str, Any], overrides: Mapping[int, Any]) -> 
         for key in ("default", "min", "max", "step", "options"):
             if raw.get(key) is not None:
                 item[key] = raw[key]
+        if name == "input.source":
+            item["options"] = sorted(SOURCE_FIELDS)
         if call_site_id in overrides:
             item["current"] = overrides[call_site_id]
         elif raw.get("default") is not None:
@@ -779,6 +777,7 @@ def _normalize_output(
     *,
     source: str,
     host_times: list[int],
+    host_bars: list[dict[str, Any]],
     analysis: Mapping[str, Any],
     overrides: Mapping[int, Any],
     render_hints: Mapping[str, Any] | None,
@@ -1100,11 +1099,7 @@ def _normalize_output(
         if not isinstance(item, Mapping):
             raise BridgeError("PINE_RUNTIME_OUTPUT_INVALID", "Pine fill must be an object")
         if item.get("gradient"):
-            raise BridgeError(
-                "PINE_HOST_CAPABILITY_UNSUPPORTED",
-                "CandleScope Render IR v1 does not support Pine gradient fills.",
-                hint="Use a solid fill color for this indicator.",
-            )
+            continue  # Drawn by the native scene primitive with its two endpoint series.
         item_id = item.get("id", index)
         settings = _render_settings(item, base_pane=pane, fallback_title=f"Fill {item_id}")
         if not settings["paneVisible"]:
@@ -1230,7 +1225,10 @@ def _normalize_output(
         )
     series = tuple(_line_series(item, histogram=False) for item in lines) + tuple(
         _line_series(item, histogram=True) for item in histograms
-    )
+    ) + scene_series(raw, host_times, host_bars, pane, _render_settings, required=any(
+        str(item.get("feature", "")).startswith(("line.", "label.", "box.", "polyline.", "table.", "linefill.", "plotchar", "plotbar", "plotcandle", "plotarrow"))
+        for item in (analysis.get("compatibility") or {}).get("supported", [])
+    ))
     collections = RenderCollections(
         lines=tuple(lines),
         histograms=tuple(histograms),
@@ -1276,18 +1274,19 @@ def _normalize_output(
 class PineCompatRuntimePlugin(BaseRuntimePlugin):
     """Expose the independently built Pine engine through protocol v1."""
 
-    def __init__(self) -> None:
-        self._sessions = PineSessions()
+    def __init__(self, *, journal_path=None) -> None:
+        self._sessions = PineSessions(journal_path=journal_path)
 
     def shutdown(self) -> None:
         self._sessions.clear()
+        self._sessions.journal.close()
 
     def describe(self) -> RuntimeDescriptor:
         return _descriptor()
 
     def analyze(self, request: AnalyzeRequest) -> AnalyzeResult:
         try:
-            analysis, diagnostics = _analyze_native(request.source, request.context)
+            analysis, diagnostics = _analyze_native(request.source, request.context, request.options)
         except BridgeError as exc:
             return AnalyzeResult(ok=False, executable=False, diagnostics=(exc.diagnostic(),))
         except Exception as exc:
@@ -1335,15 +1334,24 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
 
     def execute_batch(self, request: ExecuteBatchRequest) -> ExecuteBatchResult:
         try:
-            analysis, diagnostics = _analyze_native(request.source, request.context)
+            analysis, diagnostics = _analyze_native(request.source, request.context, request.options)
             error = next((item for item in diagnostics if item.severity == "error"), None)
             if error is not None:
                 return ExecuteBatchResult(ok=False, diagnostics=diagnostics)
             runtime_bars, host_times = _normalize_bars(request)
+            host_bars = runtime_bars
             overrides = _normalize_overrides(request.params, analysis)
             bindings = _host_bindings(request.context)
             engine, _version = _engine_contract()
             options: dict[str, Any] = {"input_overrides": overrides}
+            supplied = host_inputs(request.options.get("pineHost"))
+            environment = request_environment(supplied)
+            if environment:
+                options["request_bars"] = environment
+            if supplied.get("libraries"):
+                options["library_sources"] = supplied["libraries"]
+            if supplied.get("sessionWindows") is not None:
+                options["session_windows"] = supplied["sessionWindows"]
             if bindings["chartSymbol"] is not None:
                 options["chart_symbol"] = bindings["chartSymbol"]
             if bindings["chartTimeframe"] is not None:
@@ -1354,15 +1362,39 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
             ):
                 raise BridgeError("PINE_INVALID_INPUT", "pineSessionId must be 1-128 characters")
             forming = bool(request.bars and not request.bars[-1].is_closed)
+            clock_required = (analysis.get("hostRequirements") or {}).get("execution", {}).get("clock") == "explicitTimestampWhenEvaluated"
+            execution_times = supplied.get("executionTimes")
+            if execution_times is not None and len(execution_times) != len(runtime_bars):
+                raise BridgeError("PINE_EXECUTION_CLOCK_INVALID", "One execution timestamp is required per chart bar.")
+            if clock_required and execution_times is None:
+                raise BridgeError("PINE_EXECUTION_CLOCK_REQUIRED", "Supply executionTimes for scripts using timenow.",
+                                  hint="Historical evaluation needs recorded timestamps; realtime evaluation uses the host observation clock.")
             execution_meta = {"executionMode": "historical-batch", "incremental": False,
                               "formingBar": False, "sessionRetained": False}
             if session_id or forming:
                 raw, execution_meta = self._sessions.execute(
                     engine, request.source, runtime_bars, options,
                     session_id=session_id, forming=forming,
+                    execution_times=execution_times,
+                    providers=supplied.get("contexts", []),
+                    epoch=request.options.get("pineSessionEpoch", "0"),
+                    calculation_bars_count=analysis.get("calculationBarsCount"),
                 )
+                retained_times = execution_meta.pop("hostTimes", None)
+                host_bars = execution_meta.pop("hostBars", runtime_bars)
+                if retained_times is not None:
+                    host_times = retained_times
+                skip = execution_meta.pop("calculationSkip", 0)
             else:
+                if execution_times is not None:
+                    options["execution_times"] = execution_times
                 raw = engine.run_script(request.source, runtime_bars, **options)
+                count = analysis.get("calculationBarsCount")
+                from .window_alignment import calculation_skip
+                skip = calculation_skip(engine, request.source, runtime_bars, options, execution_times, raw, count)
+            if skip:
+                host_times = host_times[skip:]
+                host_bars = host_bars[skip:]
             render_hints = request.options.get("renderHints")
             if not isinstance(render_hints, Mapping):
                 render_hints = None
@@ -1370,13 +1402,18 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                 raw,
                 source=request.source,
                 host_times=host_times,
+                host_bars=host_bars,
                 analysis=analysis,
                 overrides=overrides,
                 render_hints=render_hints,
                 host_bindings=bindings,
             )
             meta.update(execution_meta)
+            meta["hostRequirements"] = analysis.get("hostRequirements")
+            meta["pineAlerts"] = raw.get("alerts", [])
+            meta["symbolMetadataSource"] = "host" if supplied.get("chartMetadata") else "synthetic-defaults"
             meta["closedBarsOnly"] = False
+            self._sessions.commit(session_id)
             return ExecuteBatchResult(
                 ok=True,
                 output=output,
@@ -1400,10 +1437,10 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                 ok=False,
                 diagnostics=(
                     Diagnostic(
-                        code="PINE_BRIDGE_OUTPUT_INVALID",
+                        code=diagnostic_code(exc),
                         severity="error",
                         message=(
-                            "Pine returned output that cannot be represented by Render IR v1."
+                            str(exc)
                         ),
                         hint=str(exc),
                     ),

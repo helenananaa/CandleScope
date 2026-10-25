@@ -39,7 +39,11 @@ export function NativeAdvancedInputs({ value, onChange, language, disabled, exch
         <option value="">{t("native.inputs.none")}</option>{datasets.map((item) => <option key={item.dataset_id} value={item.dataset_id}>{item.name} · {item.symbol} · {item.interval}</option>)}
       </select></label>
       <p>{t("native.inputs.magnifierHint")}</p>
+    </>}
+    {language === "pine" && <>
       <label>{t("native.inputs.libraries")}<textarea disabled={disabled} spellCheck={false} value={value.libraries} onChange={(event) => onChange({ ...value, libraries: event.target.value })} /></label>
+      <label>{t("pine.host.title")}<textarea disabled={disabled} spellCheck={false} value={value.hostInputs || "{}"} onChange={(event) => onChange({ ...value, hostInputs: event.target.value })} /></label>
+      <p>{t("pine.host.hint")}</p>
     </>}
   </details>;
 }

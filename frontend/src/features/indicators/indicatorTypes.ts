@@ -39,6 +39,7 @@ export interface ScriptRuntimeCatalog {
 }
 
 export interface IndicatorDefinition {
+  runtimeNotice?: "pine.host.recovered" | "pine.host.resetNotice" | "pine.host.alertFailed" | null;
   id: string;
   /** Stable identity shared by linked chart groups; computed results remain cell-local. */
   bindingId?: string;
@@ -124,6 +125,7 @@ export type IndicatorAnnotationPoint =
   | (IndicatorAnnotationPointFields & { value: number; time?: number });
 
 export interface IndicatorLine {
+  nativeScene?: Record<string, unknown>;
   data: IndicatorValuePoint[];
   id?: string;
   indicatorId?: string;
@@ -261,6 +263,7 @@ export interface IndicatorUnifiedSeries {
   type: IndicatorSeriesType;
   data: IndicatorValuePoint[];
   style: {
+    nativeScene?: Record<string, unknown>;
     title: string;
     color: string;
     lineWidth: number;
@@ -289,6 +292,7 @@ export interface IndicatorUnifiedAnnotation {
 }
 
 export interface IndicatorPayloadEnvelope {
+  meta?: Record<string, unknown>;
   ok: boolean | null;
   schemaVersion?: number;
   outputSchemaVersion?: number;

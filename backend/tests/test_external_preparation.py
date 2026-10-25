@@ -54,6 +54,7 @@ def environment(tmp_path, *, mismatch=False):
             "contract": "external-broker/1", "intents": intents}
     runtime.native.resolver = lambda language: {"plugin_id": "candlescope.pine-compat", "command": ["fixture"]}
     runtime.native.runner = runner
+    runtime.native.analyze_source = lambda source, libraries=None: {"requirements": {"requests": []}}
     csv = tmp_path / "signals.csv"
     csv.write_text("time,open,high,low,close,volume\n" + "\n".join(
         f"{bar['open_time']},{bar['open']},{bar['high']},{bar['low']},{bar['close']},{bar['volume'] + int(mismatch)}"

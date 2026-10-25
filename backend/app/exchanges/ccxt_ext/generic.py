@@ -1177,6 +1177,9 @@ async def load_ccxt_symbols(
                     listed_at_ms=_timestamp(market.get("created")),
                     expiry_at_ms=_timestamp(market.get("expiry")),
                     price_tick_size=_price_tick_size(exchange, market),
+                    quantity_step=_precision_step(exchange, market, "amount"),
+                    min_quantity=str((market.get("limits") or {}).get("amount", {}).get("min") or ""),
+                    contract_multiplier=str(market.get("contractSize") or ("1" if not market.get("contract") else "")),
                 )
             )
     finally:
@@ -1279,14 +1282,20 @@ def _timestamp(value: Any) -> int | None:
 
 
 def _price_tick_size(exchange: Any, market: dict[str, Any]) -> str:
-    precision = (market.get("precision") or {}).get("price")
+    return _precision_step(exchange, market, "price")
+
+
+def _precision_step(exchange: Any, market: dict[str, Any], field: str) -> str:
+    precision = (market.get("precision") or {}).get(field)
     if isinstance(precision, bool) or precision is None:
         return ""
     try:
         if exchange.precisionMode == ccxt.TICK_SIZE:
             tick = Decimal(str(precision))
-        else:
+        elif exchange.precisionMode == ccxt.DECIMAL_PLACES:
             tick = Decimal(1).scaleb(-int(precision))
+        else:
+            return ""  # Significant digits do not define a constant tick/quantity step.
     except (InvalidOperation, TypeError, ValueError, OverflowError):
         return ""
     if not tick.is_finite() or tick <= 0:

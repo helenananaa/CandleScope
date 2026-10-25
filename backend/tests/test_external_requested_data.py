@@ -85,13 +85,15 @@ def test_capability_probe_accepts_current_versioned_adapters(runtime):
     assert all(item["external_available"] for item in host.native.capabilities()["engines"])
 
 
-def test_lookahead_that_rewrites_previous_host_intents_is_rejected(runtime):
+def test_lookahead_cannot_rewrite_observed_history_or_see_unclosed_provider_data(runtime):
     host, payload = runtime
     context = {**additional(host,"higher","ETHUSDT","2m",120000,[100,200,300,400,500]),
                "symbol":"BINANCE:ETHUSDT","timeframe":"2"}
     source = SOURCES["pine"].replace('"2", close)', '"2", close, lookahead=barmerge.lookahead_on)').replace('remote > 100','remote > 50')
     record = terminal(host.native, host.native.create({**payload,"source":source,"contexts":[context],
         "execution_mode":"CANDLESCOPE", "host_settings":{"initial_balance":10000,"slippage_bps":0,"taker_fee_bps":0}},"lookahead")["run_id"])
-    assert record["state"] == "FAILED"
-    assert record["error"]["code"] == "EXTERNAL_NONCAUSAL_PREFIX"
-    assert record["result"] is None
+    assert record["state"] == "COMPLETED", record.get("error")
+    report = record["result"]
+    assert report["graphics"][0]["values"][:3] == [None, 100, 100]
+    assert report["raw_output"]["intent_history"][0]["bar_index"] == 1
+    assert len(report["trades"]) == 1 and report["trades"][0]["event_time_ms"] >= 120000

@@ -75,7 +75,7 @@ def test_host_mode_rejects_unsupported_orders_without_native_fallback(runtime, l
     assert result["result"] is None
 
 
-def test_host_mode_rejects_prefix_repainting_decisions(runtime):
+def test_host_mode_fixed_horizon_does_not_repaint_islast_on_each_prefix(runtime):
     host, payload = runtime
     source = '''//@version=6
 strategy("Noncausal")
@@ -86,6 +86,7 @@ if barstate.islast
                    host_settings={"initial_balance": 10000, "slippage_bps": 0, "taker_fee_bps": 0})
     record = host.native.create(payload, "noncausal")
     result = terminal(host.native, record["run_id"])
-    assert result["state"] == "FAILED"
-    assert "EXTERNAL_NONCAUSAL_PREFIX" in result["error"]["message"]
-    assert result["result"] is None
+    assert result["state"] == "COMPLETED", result.get("error")
+    report = result["result"]
+    assert [intent["bar_index"] for intent in report["raw_output"]["intent_history"]] == [9]
+    assert report["trades"] == []  # Last-bar order has no later execution event.

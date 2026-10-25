@@ -96,5 +96,4 @@ def test_installed_unsupported_price_contract_fails_closed(runtime, language, ar
     assert record["result"] is None
     # Pine rejects the ambiguous pair during semantic analysis, before the
     # host's equivalent admission check; both must fail without a report.
-    expected = "combined trigger families are not supported" if language == "pine" and "limit=11" in arguments else error
-    assert expected in str(record["error"])
+    assert error in str(record["error"])

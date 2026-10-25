@@ -4,6 +4,7 @@ from __future__ import annotations
 import pine_compat
 from .strategy_time import engine_bars, engine_magnifier, chart_records
 from .event_requests import run_with_event_requests
+from .host_inputs import native_inputs
 from candlescope_plugin_sdk.native_strategy import identity, serve
 
 
@@ -14,13 +15,14 @@ def describe():
             "retain the qualified native installation separately from the indicator plugin"
         )
     result = identity("candlescope-plugin-pine-compat", "pine-compat-runtime",
-                    adapter="pine-native/2")
+                    adapter="pine-native/3")
     result["historical_session"] = "fixed-history/1"
     return result
 
 
 def prepare(request):
-    inputs = pine_compat.analyze_script(request["source"]).get("inputs", [])
+    libraries, _options = native_inputs(request)
+    inputs = pine_compat.analyze_script(request["source"], library_sources=libraries or None).get("inputs", [])
     overrides = {}
     for name, value in request.get("parameters", {}).items():
         matches = [item for item in inputs if str(item["callSiteId"]) == name or item.get("title") == name]
@@ -31,11 +33,8 @@ def prepare(request):
             raise ValueError(f"NATIVE_INPUT_DUPLICATE: {name}")
         overrides[key] = value
     program = pine_compat.compile_script(request["source"],
-                                        library_sources=request.get("libraries") or None)
+                                        library_sources=libraries or None)
     requirements = program.host_requirements()
-    context = request["context"]
-    supplied = {f"{item['symbol']}:{item['timeframe']}": engine_bars(item["bars"])
-                for item in request.get("contexts", [])}
     execution = requirements.get("execution", {})
     uses_magnifier = execution.get("magnifier") not in (None, "notEnabled", "notRequested", "disabled", False)
     if uses_magnifier and not request.get("magnifier"):
@@ -44,17 +43,37 @@ def prepare(request):
 
 
 def execute(request):
+    if request.get("operation") == "analyze":
+        libraries, _options = native_inputs(request)
+        program = pine_compat.compile_script(request["source"], library_sources=libraries or None)
+        analysis = pine_compat.analyze_script(request["source"], library_sources=libraries or None)
+        return {"requirements": program.host_requirements(), "inputs": analysis.get("inputs", [])}
     program, overrides, requirements, uses_magnifier = prepare(request)
     context = request["context"]
-    supplied = {f"{item['symbol']}:{item['timeframe']}": engine_bars(item["bars"]) for item in request.get("contexts", [])}
+    _libraries, options = native_inputs(request)
+    supplied = options.pop("request_bars") or {}
     output = run_with_event_requests(lambda request_bars: program.run(engine_bars(request["bars"]), input_overrides=overrides or None,
                          chart_symbol=context["symbol"], chart_timeframe=context["timeframe"],
-                         request_bars=request_bars, magnifier_bars=engine_magnifier(request.get("magnifier"))),
+                         request_bars=request_bars, magnifier_bars=engine_magnifier(request.get("magnifier")), **options),
                          request, supplied, engine_bars, pine_compat)
     return pack(request, output, requirements, uses_magnifier)
 
 
-def pack(request, output, requirements, uses_magnifier=False):
+def pack(request, output, requirements, uses_magnifier=False, cursor=None):
+    from copy import deepcopy
+    from .window_alignment import align_output
+    output = deepcopy(output)
+    equity_rows = (output.get("strategy") or {}).get("equity", [])
+    if equity_rows:
+        horizon = len(request["bars"]) if cursor is None else cursor
+        skip = max(0, horizon - equity_rows[-1]["barIndex"] - 1)
+        if skip:
+            align_output(output, skip)
+            for name in ("equity", "orders", "trades", "position", "alerts"):
+                for row in output["strategy"].get(name, []):
+                    for key in list(row):
+                        if key in {"barIndex", "entryBarIndex", "exitBarIndex"} and isinstance(row[key], int):
+                            row[key] += skip
     diagnostics = list(output.get("diagnostics", []))
     strategy = output.get("strategy")
     if not isinstance(strategy, dict):

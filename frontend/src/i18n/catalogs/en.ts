@@ -1,7 +1,9 @@
+import { pineEnglish } from "./pineEnglish.js";
 import { externalProviderEnglish } from "./externalProviderEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
+  ...pineEnglish,
   ...externalProviderEnglish,
   "plugin.trust.scriptRuntimeExecution": "The installer creates a separate Python environment and runs the package verification probe. After restart, script code runs as your current user without an OS sandbox. Files, network access and subprocesses are not restricted by the platform plugin permission summary.",
   "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",

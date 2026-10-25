@@ -1,6 +1,6 @@
 """Qualify current bridge/SDK sources against an unchanged published engine.
 
-This is PR compatibility evidence, not event-engine or release qualification.
+This is PR compatibility evidence, not a published bridge release.
 """
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ def main():
                "releaseStatus": candidate["releaseStatus"], "bundle": str(bundle),
                "head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repository, text=True).strip(),
                "engine": lock["wheels"]["pine-compat-runtime"],
-               "event_series_qualification": "not covered by the published engine"}
+               "event_series_qualification": "covered by test_event_strategy when the pinned engine advertises the contract"}
     (output / "source-candidate-receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
 
 

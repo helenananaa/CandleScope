@@ -98,6 +98,19 @@ export default function IndicatorEditor({
   const [draft, setDraft] = useState(() => createScriptEditorDraft(indicator.script, Boolean(indicator.id)));
   const modelId = useId();
   const [language, setLanguage] = useState(indicator?.language || "");
+  const [hostText, setHostText] = useState(() => JSON.stringify(indicator.params?.__pineHost || {}, null, 2));
+  const [sessionEpoch, setSessionEpoch] = useState(() => String(indicator.params?.__pineSessionEpoch || "0"));
+  const [pineAlerts, setPineAlerts] = useState(indicator.params?.__pineAlerts === true);
+  const hostConfig = useMemo(() => {
+    try {
+      const value: unknown = JSON.parse(hostText);
+      if (!optionalRecord(value)) throw new Error("Expected a JSON object");
+      return { value, error: "" };
+    } catch (error) { return { value: {}, error: String(error) }; }
+  }, [hostText]);
+  const editorParams = useMemo(() => ({ ...indicator.params,
+    ...(language === "pine" ? { __pineHost: hostConfig.value, __pineSessionEpoch: sessionEpoch, __pineAlerts: pineAlerts } : {}),
+  }), [indicator.params, language, hostConfig, sessionEpoch, pineAlerts]);
   const [securityMode, setSecurityMode] = useState(() => {
     const requested = indicator?.securityMode || "safe";
     return allowedSecurityModes.includes(requested)
@@ -183,12 +196,12 @@ export default function IndicatorEditor({
   }, [editorProfile?.pineEnhancements, pineHostCapabilities]);
 
   const handlePreview = useCallback(() => {
-    if (readOnly || !selectedLanguage || !editorProfile) return;
+    if (readOnly || !selectedLanguage || !editorProfile || (language === "pine" && hostConfig.error)) return;
     onPreview({
       id: indicator?.id || previewState?.id || null,
       name,
       script,
-      params: indicator?.params || {},
+      params: editorParams,
       description: indicator?.description || "",
       language: selectedLanguage.id,
       ...(editorProfile.pyneEnhancements ? { securityMode } : {}),
@@ -204,15 +217,16 @@ export default function IndicatorEditor({
     script,
     securityMode,
     selectedLanguage,
+    editorParams, hostConfig.error, language,
   ]);
 
   const handleSave = useCallback(() => {
-    if (readOnly || !selectedLanguage || !editorProfile) return;
+    if (readOnly || !selectedLanguage || !editorProfile || (language === "pine" && hostConfig.error)) return;
     void onSave({
       id: indicator?.id || previewState?.id || null,
       name,
       script,
-      params: indicator?.params || {},
+      params: editorParams,
       description: indicator?.description || "",
       language: selectedLanguage.id,
       ...(editorProfile.pyneEnhancements ? { securityMode } : {}),
@@ -228,6 +242,7 @@ export default function IndicatorEditor({
     script,
     securityMode,
     selectedLanguage,
+    editorParams, hostConfig.error, language,
   ]);
 
   const handleLanguageChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
@@ -402,6 +417,17 @@ export default function IndicatorEditor({
           />
         </div>
 
+        {language === "pine" && <details>
+          <summary>{t("pine.host.title")}</summary>
+          <p>{t("pine.host.hint")}</p>
+          <label>{t("pine.host.json")}<textarea value={hostText} readOnly={readOnly} spellCheck={false}
+            style={{ width: "100%", minHeight: 100 }} onChange={(event) => setHostText(event.target.value)} /></label>
+          {hostConfig.error && <p role="alert">{hostConfig.error}</p>}
+          <button type="button" disabled={readOnly} onClick={() => setSessionEpoch(crypto.randomUUID())}>{t("pine.host.reset")}</button>
+          <p>{t("pine.host.resetHint")}</p>
+          <label><input type="checkbox" checked={pineAlerts} disabled={readOnly} onChange={(event) => setPineAlerts(event.target.checked)} />{t("pine.host.alerts")}</label>
+          <p>{t("pine.host.alertHint")}</p>
+        </details>}
         {/* Code editor */}
         {selectedLanguage?.id === FRONTEND_SCRIPT_LANGUAGE && (
           <p className="indicator-editor-frontend-help" style={{ color: "var(--text-muted)", fontSize: "12px" }}>

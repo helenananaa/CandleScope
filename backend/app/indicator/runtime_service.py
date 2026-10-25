@@ -16,6 +16,8 @@ from candlescope_plugin_sdk import (
     FEATURE_BATCH_EXECUTION_V1,
     FEATURE_RENDER_LINE_SERIES_V1,
     Bar,
+    AnalyzeRequest,
+    AnalyzeResult,
     ExecuteBatchRequest,
     ExecuteBatchResult,
     MarketContext,
@@ -47,6 +49,8 @@ logger = logging.getLogger(__name__)
 
 class RuntimeHost(Protocol):
     async def descriptor(self, runtime_id: str) -> RuntimeDescriptor: ...
+
+    async def analyze(self, runtime_id: str, request: AnalyzeRequest) -> AnalyzeResult: ...
 
     async def execute_batch(
         self,
@@ -215,6 +219,10 @@ class IndicatorRuntimeService:
             raise ValueError("max_pending_shadow_tasks must be positive")
         self.routes = routes
         self.host = host
+        self.prepare_inputs = None
+        self.observe_result = None
+        self.release_inputs = None
+        self.stop_inputs = None
         self.legacy_languages = legacy_languages
         self.max_pending_shadow_tasks = int(max_pending_shadow_tasks)
         self._start_lock = asyncio.Lock()
@@ -325,6 +333,8 @@ class IndicatorRuntimeService:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._background_tasks.clear()
+        if self.stop_inputs is not None:
+            await self.stop_inputs()
 
     async def drain_shadow(self) -> None:
         """Wait for current shadow comparisons; intended for gates and tests."""
@@ -628,11 +638,21 @@ class IndicatorRuntimeService:
         try:
             if self.host is None:
                 raise IndicatorRuntimeRoutesError("plugin host is unavailable")
+            if self.prepare_inputs is not None:
+                request, failure_result = await self.prepare_inputs(request, self.host, route.runtime_id)
+                if failure_result is not None:
+                    return await run_indicator(adapt_sidecar, failure_result)
             # Tiny requests keep the established shadow dispatch ordering;
             # historical windows use the bounded CPU pool before IPC begins.
             sdk_request = (request.to_sdk_request() if len(request.bars) <= 64
                            else await run_indicator(request.to_sdk_request))
             result = await self.host.execute_batch(route.runtime_id, sdk_request)
+            if self.observe_result is not None:
+                try:
+                    await self.observe_result(request, result)
+                except Exception:
+                    logger.exception("Indicator result notification failed")
+                    result.meta["notificationStatus"] = "failed"
             payload = await run_indicator(adapt_sidecar, result)
             if not isinstance(payload, dict):
                 raise TypeError("sidecar adapter must return a dict payload")

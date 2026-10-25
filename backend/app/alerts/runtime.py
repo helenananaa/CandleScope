@@ -125,6 +125,9 @@ class AlertRuntimeEngine:
         rule_id = str(rule.get("id") or "").strip()
         if not rule_id:
             return
+        if "pineAlert" in referenced_alert_fields(rule.get("expression")):
+            await self.remove_rule(rule_id)
+            return
         if not self._is_rule_active(rule):
             if self._deactivation_reason(rule) in {"expired", "trigger_limit"}:
                 await run_storage(self.facade.set_enabled, rule_id, False)

@@ -5,7 +5,7 @@ export interface InputDataset {
   first_open_ms: number; last_close_ms: number;
 }
 export interface ContextChoice { dataset: InputDataset; symbol: string }
-export interface AdvancedInputs { contexts: ContextChoice[]; magnifier: InputDataset | null; libraries: string }
+export interface AdvancedInputs { contexts: ContextChoice[]; magnifier: InputDataset | null; libraries: string; hostInputs?: string }
 export const emptyAdvancedInputs = (): AdvancedInputs => ({ contexts: [], magnifier: null, libraries: "{}" });
 export interface MainRange { start_time_ms: number; end_time_ms: number; exchange: string; market_type: string }
 
@@ -23,6 +23,9 @@ export function executionInputs(mode: "NATIVE" | "CANDLESCOPE", hostSettings: Re
 }
 
 export async function freezeAdvancedInputs(selection: AdvancedInputs, language: "pine" | "pyne", main: MainRange, api = nativeApi) {
+  const host_inputs: unknown = JSON.parse(selection.hostInputs || "{}");
+  if (!host_inputs || typeof host_inputs !== "object" || Array.isArray(host_inputs)) throw new Error("PINE_HOST_INPUT_INVALID: expected an object");
+  if (language !== "pine" && Object.keys(host_inputs).length) throw new Error("PINE_HOST_INPUT_INVALID: host inputs require Pine");
   const libraries: unknown = JSON.parse(selection.libraries);
   if (!libraries || typeof libraries !== "object" || Array.isArray(libraries)
       || Object.values(libraries).some((source) => typeof source !== "string")) {
@@ -35,7 +38,7 @@ export async function freezeAdvancedInputs(selection: AdvancedInputs, language: 
   if (new Set(keys).size !== keys.length || selection.contexts.some(({ symbol }) => !symbol.trim())) {
     throw new Error("NATIVE_INPUT_INVALID: empty or duplicate requested context");
   }
-  if (!selection.contexts.length && !selection.magnifier) return { contexts: [], magnifier: null, libraries };
+  if (!selection.contexts.length && !selection.magnifier) return { contexts: [], magnifier: null, libraries, host_inputs };
   const { datasets } = await api<{ datasets: InputDataset[] }>("/datasets");
   const freeze = async (selected: InputDataset, magnifier = false) => {
     const current = datasets.find((item) => item.dataset_id === selected.dataset_id && item.data_epoch === selected.data_epoch);
@@ -52,5 +55,5 @@ export async function freezeAdvancedInputs(selection: AdvancedInputs, language: 
       symbol: symbol.trim(), timeframe: nativeTimeframe(dataset.interval) }))),
     selection.magnifier ? freeze(selection.magnifier, true) : Promise.resolve(null),
   ]);
-  return { contexts, magnifier, libraries };
+  return { contexts, magnifier, libraries, host_inputs };
 }

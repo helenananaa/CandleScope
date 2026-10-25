@@ -281,7 +281,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         const inputs = await freezeAdvancedInputs(advanced, language, {
           start_time_ms: startTime, end_time_ms: endTime - 1, exchange: context.exchange, market_type: context.marketType,
         });
-        const submission = { language, source, parameters: params, libraries: inputs.libraries,
+        const submission = { language, source, parameters: params, libraries: inputs.libraries, host_inputs: inputs.host_inputs,
           ...(automaticExecution === null ? {} : { execution: automaticExecution }),
           contexts: automaticContexts.map((row) => ({ ...row, binding_symbol: row.binding_symbol.trim() || undefined })),
           context: { exchange: context.exchange, market_type: context.marketType, symbol: context.symbol,

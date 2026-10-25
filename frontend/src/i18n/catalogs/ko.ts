@@ -1,6 +1,8 @@
+import { pineEnglish } from "./pineEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  ...pineEnglish,
   "research.external.copyCommand": "시작 명령 복사",
   "research.external.commandCopied": "시작 명령을 복사했습니다.",
   "research.external.copyFailed": "자동 복사를 사용할 수 없습니다. 명령 텍스트를 선택하여 복사하세요.",

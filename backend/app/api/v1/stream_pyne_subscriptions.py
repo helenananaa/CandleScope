@@ -169,6 +169,7 @@ async def handle_pyne_indicator_subscribe(
         consumer_id=stream_consumer_id,
     )
     meta = {
+        "pineSessionOwner": client_id,
         "kind": "script",
         "language": language,
         "exchange": exchange,
@@ -188,6 +189,9 @@ async def handle_pyne_indicator_subscribe(
     if isinstance(seed_query_cache, dict):
         meta["_seedQueryCache"] = seed_query_cache
     client_meta[client_id] = meta
+    release_inputs = getattr(script_runtime_service, "release_inputs", None)
+    if language == "pine" and release_inputs is not None:
+        meta["_releaseRuntimeInputs"] = lambda: release_inputs(stream_consumer_id)
     client_revision_context = (
         dict(data_revision) if isinstance(data_revision, dict) else None
     )
