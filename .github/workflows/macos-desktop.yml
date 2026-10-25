@@ -100,11 +100,7 @@ jobs:
             tests/test_replay_isolated_wallet.py \
             tests/test_replay_hedge_multitrack_liquidation_fork.py \
             tests/test_replay_risk.py \
-            tests/test_readonly_account_normalization.py \
-            tests/test_readonly_okx_boundary.py \
-            tests/test_readonly_account_repository.py \
-            tests/test_readonly_account_sync.py \
-            tests/test_readonly_account_service.py \
+            tests/test_readonly_*.py \
             --junitxml=../output/replay-range-regression.xml
       - name: Verify relocated ZIP and native runtime
         env:
