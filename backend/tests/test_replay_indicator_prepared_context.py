@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import replace
 
@@ -17,6 +18,7 @@ from app.replay.history_archive import ReplayHistoryRepository
 from app.replay.service import ReplayService
 from app.replay.storage import ReplaySQLiteStore
 from app.replay.training.errors import TrainingRunError
+from app.replay.training.indicator_prefix import CanonicalReplayIndicators
 from fastapi import FastAPI
 
 from tests.fixtures.replay.service_fakes import replay_settings
@@ -28,6 +30,36 @@ from tests.test_replay_v2_training_api import _app, _request
 pytestmark = pytest.mark.anyio
 MINUTE = 60_000
 REPLAY_START = START + 1207 * MINUTE
+
+
+@pytest.fixture(autouse=True)
+def one_page_indicator_budget(monkeypatch):
+    # Exercise continuation deterministically, including on fast machines.
+    original = CanonicalReplayIndicators.__init__
+
+    def initialize(self, checkpoints, **options):
+        original(self, checkpoints, **{**options, "max_prefix_pages": 1})
+
+    monkeypatch.setattr(CanonicalReplayIndicators, "__init__", initialize)
+
+
+async def ready_indicator(compute):
+    pending = []
+    async with asyncio.timeout(30):
+        while True:
+            result = await compute()
+            assert result["status"] in {"ready", "preparing"}, result
+            if pending:
+                assert result["seed"] == pending[-1]["seed"]
+            if result["status"] == "ready":
+                return result, pending
+            assert "payload" not in result
+            assert result["prepared_before_ms"] <= result["target_before_ms"]
+            if pending:
+                assert result["target_before_ms"] == pending[-1]["target_before_ms"]
+                assert result["prepared_before_ms"] >= pending[-1]["prepared_before_ms"]
+            pending.append(result)
+            await asyncio.sleep(0.01)
 
 
 def market_row(timestamp):
@@ -190,15 +222,19 @@ async def test_automatic_context_has_one_origin_across_windows_intervals_and_res
                 payload.update(
                     bars=fresh["bars"][-3:], history_epoch=fresh["history_epoch"]
                 )
-            response = await _request(
-                _app(replay),
-                "POST",
-                f"/api/v1/replay/runs/session/{session}/indicator-compute",
-                json=payload,
-            )
-            assert response.status_code == 200, response.text
-            result = response.json()
-            assert result["status"] == "ready", result
+            async def request_indicator():
+                response = await _request(
+                    _app(replay),
+                    "POST",
+                    f"/api/v1/replay/runs/session/{session}/indicator-compute",
+                    json=payload,
+                )
+                assert response.status_code == 200, response.text
+                return response.json()
+
+            result, pending = await ready_indicator(request_indicator)
+            if interval == "1m":
+                assert pending, "The test must cover a partial prefix and its continuation"
             mapper = SourceBucketTimeMapper.create(
                 interval=interval,
                 actual_replay_start_ms=REPLAY_START,
@@ -293,8 +329,10 @@ async def test_release_context_cache_invalidates_saved_math_and_origin(tmp_path)
         assert unversioned.value.code == "HISTORY_EPOCH_MISMATCH"
         page = await replay.training.history_page(session, before_ms=boundary, **query)
         payload.update(bars=page["bars"], history_epoch=page["history_epoch"])
-        first = await replay.training.canonical_indicator_compute(session, **payload)
-        assert first["status"] == "ready"
+        first, pending = await ready_indicator(
+            lambda: replay.training.canonical_indicator_compute(session, **payload)
+        )
+        assert pending
         for job in preparation.repository.list():
             if job["request"]["intent"].get("purpose") == "replay_display_history":
                 preparation.repository.release_finished(job["id"])
@@ -311,8 +349,10 @@ async def test_release_context_cache_invalidates_saved_math_and_origin(tmp_path)
         assert stale.value.code == "HISTORY_EPOCH_MISMATCH"
         page = await replay.training.history_page(session, before_ms=boundary, **query)
         payload.update(bars=page["bars"], history_epoch=page["history_epoch"])
-        second = await replay.training.canonical_indicator_compute(session, **payload)
-        assert second["status"] == "ready"
+        second, pending = await ready_indicator(
+            lambda: replay.training.canonical_indicator_compute(session, **payload)
+        )
+        assert pending
         assert second["seed"]["history_epoch"] != first["seed"]["history_epoch"]
         assert second["prefix_rows_read"] > 0
         assert lines(second["payload"]) != lines(first["payload"])
