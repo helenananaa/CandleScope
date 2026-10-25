@@ -26,14 +26,3 @@ def test_monthly_warmup_uses_calendar_grid_in_leap_year():
     february = int(datetime(2024, 2, 1, tzinfo=timezone.utc).timestamp() * 1000)
     assert warmup_start(parse_interval_spec("1M"), march, 1) == february
     assert march - february == 29 * 86_400_000
-
-
-def test_chart_pyne_warmup_uses_the_actual_compiled_program(tmp_path):
-    runtime = _runtime(tmp_path)
-    try:
-        row = runtime.service.create_strategy_revision({"name": "Warmup test", "language": "PYNE_CHART_V1",
-            "source_text": 'strategy("Warmup")\nslow = sma(close, 20)\nif close > slow\n  target_position(1)',
-            "parameter_schema": []})
-        assert strategy_warmup(runtime, row["revision_id"], {}) == 22
-    finally:
-        runtime.shutdown()

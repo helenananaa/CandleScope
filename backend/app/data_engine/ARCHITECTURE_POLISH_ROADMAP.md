@@ -18,8 +18,8 @@ Status after the current polish pass:
 
 | Phase | Status | Landed result |
 |---|---|---|
-| Phase 1: current truth | Completed | `DATA_FLOW_PATHS.md` documents realtime K-line, backfill, price, builtin indicator, and Pyne/custom paths. Callback comments now clarify that `MarketEvent` enters `BarAggregator`, not DataManager cache directly. |
-| Phase 2: thin route layer | Completed | `api/v1/stream.py` is a thin route shell. K-line streaming lives in `stream_klines.py`; shared WS helpers live in `stream_utils.py`; indicator WS orchestration lives in `stream_indicators.py`; payload/range computation lives in `stream_indicator_payloads.py`; Pyne/custom subscription lifecycle lives in `stream_pyne_subscriptions.py`. |
+| Phase 1: current truth | Completed | `DATA_FLOW_PATHS.md` documents realtime K-line, backfill, price, builtin indicator, and script/custom paths. Callback comments now clarify that `MarketEvent` enters `BarAggregator`, not DataManager cache directly. |
+| Phase 2: thin route layer | Completed | `api/v1/stream.py` is a thin route shell. K-line streaming lives in `stream_klines.py`; shared WS helpers live in `stream_utils.py`; indicator WS orchestration lives in `stream_indicators.py`; payload/range computation lives in `stream_indicator_payloads.py`; script/custom subscription lifecycle lives in `stream_script_subscriptions.py`. |
 | Phase 3: retire compatibility names | Completed | `BinanceIngestionFactory` has been removed. `ExchangeIngestionFactory` is the only supported runtime ingestion factory export. |
 | Phase 4: exchange WS capability routing | Completed | Tests assert Binance kline uses `SessionLayer` while OKX kline uses `SharedWsSessionAdapter` through capability-driven routing. |
 | Phase 5: path-level tests | Completed for the listed guardrails | Tests cover MarketEvent-to-aggregator routing, price updates avoiding `BarAggregator`, factory alias retirement, session routing, and the main WS/indicator paths. |
@@ -78,7 +78,7 @@ Parallel paths stay explicit:
 | Area | Friction | Preferred polish |
 |---|---|---|
 | Legacy naming | The old `BinanceIngestionFactory` name described a Binance-only owner that no longer exists. | Completed: tests and code use `ExchangeIngestionFactory`; the old alias has been removed. |
-| Large route module | `api/v1/stream.py` used to handle K-line WS, multi-interval WS, indicator WS, Pyne custom logic, range patches, heartbeat, and queueing. | Completed: route handlers are thin adapters; long-lived stream logic is split by responsibility. |
+| Large route module | `api/v1/stream.py` used to handle K-line WS, multi-interval WS, indicator WS, Script runtime custom logic, range patches, heartbeat, and queueing. | Completed: route handlers are thin adapters; long-lived stream logic is split by responsibility. |
 | WS session model clarity | `SharedMultiplexHub` is generic but only applies when exchange capabilities opt in. | Completed: capability routing is documented and covered by session-factory tests. |
 | Price vs K-line flow | Price streams are intentionally separate from `BarAggregator`, but the parallel path was less prominent than the K-line path. | Completed: price flow is documented and guarded by tests that assert price updates do not touch K-line aggregation. |
 | Docs scattered by subsystem | Existing READMEs are accurate but did not provide one decision map for future cleanup. | Completed: subsystem READMEs link to this roadmap and the concrete data-flow map. |
@@ -94,7 +94,7 @@ Status: completed.
    - historical repair/backfill
    - price snapshot/subscription
    - indicator builtin
-   - Pyne/custom indicator
+   - script/custom indicator
 2. Document boundary events:
    - `RawMessage`: transport/session output
    - `MarketEvent`: normalized market event from ingestion
@@ -124,14 +124,14 @@ Recommended extraction:
 |---|---|
 | `_dm_single_stream`, `_dm_multi_stream`, event forwarding helpers | `api/v1/stream_klines.py` or `app/streaming/klines.py` |
 | indicator WS command loop | `app/indicator/streaming.py` |
-| Pyne/custom indicator subscription tasks | `app/indicator/pyne_streaming.py` |
+| script/custom indicator subscription tasks | `app/api/v1/stream_script_subscriptions.py` |
 | shared WS send/heartbeat/error helpers | small `app/api/ws_utils.py` |
 
 Rules:
 
 - Keep FastAPI route files as adapters.
 - Keep DataManager as the market-data facade.
-- Keep `IndicatorEngine` and Pyne runtime code out of K-line WS handlers.
+- Keep `IndicatorEngine` and script runtime code out of K-line WS handlers.
 - Do not introduce a new global event bus; DataManager event bus remains the source for bar/price updates.
 
 Exit criteria:

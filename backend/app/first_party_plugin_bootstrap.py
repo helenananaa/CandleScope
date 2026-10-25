@@ -45,7 +45,7 @@ BUNDLED_PLUGIN_MANIFEST_ENV = "CANDLESCOPE_BUNDLED_PLUGIN_MANIFEST"
 DEFAULT_RELEASE_LOCK_PATH = Path(__file__).with_name("official-plugin-releases.json")
 MAX_RELEASE_LOCK_BYTES = 64 * 1024
 MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024
-FIRST_PARTY_RUNTIME_IDS = frozenset({"candlescope.pyne", "candlescope.pine-compat"})
+FIRST_PARTY_RUNTIME_IDS = frozenset({"candlescope.pine-compat"})
 
 _SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
 _RUNTIME_ID = re.compile(r"^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$")

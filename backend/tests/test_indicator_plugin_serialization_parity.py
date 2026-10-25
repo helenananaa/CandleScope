@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
+import json
+from pathlib import Path
 
 from candlescope_plugin_sdk import (
     ExecuteBatchResult,
@@ -12,7 +13,6 @@ from candlescope_plugin_sdk import (
 
 from app.indicator.serialization import (
     serialize_plugin_runtime_result,
-    serialize_pyne_result,
 )
 
 
@@ -70,40 +70,10 @@ def _phase0_records() -> tuple[list[dict], list[dict], list[dict]]:
     return raw_lines, hlines, markers
 
 
-def test_structured_render_ir_rebuilds_the_frozen_pyne_envelope_exactly() -> None:
+def test_structured_render_ir_preserves_the_frozen_transport_envelope() -> None:
     raw_lines, hlines, markers = _phase0_records()
-    flat_lines = [
-        {
-            "id": "plot_1",
-            "name": "Double Close",
-            "color": "#22c55e",
-            "type": "line",
-            "pane": "separate",
-            "lineWidth": 2,
-            "lineStyle": 0,
-            "data": raw_lines[0]["data"],
-        }
-    ]
     output_meta = {"title": "Plugin Baseline", "overlay": False}
     result_meta = {**output_meta, "securityMode": "safe"}
-    raw_output = {
-        "meta": output_meta,
-        "lines": raw_lines,
-        "hlines": hlines,
-        "markers": markers,
-    }
-    legacy = SimpleNamespace(
-        ok=True,
-        error=None,
-        code=None,
-        line=None,
-        column=None,
-        hint=None,
-        lines=flat_lines,
-        output=raw_output,
-        param_schema=[],
-        meta=result_meta,
-    )
     plugin = ExecuteBatchResult(
         ok=True,
         output=RenderOutput(
@@ -133,7 +103,9 @@ def test_structured_render_ir_rebuilds_the_frozen_pyne_envelope_exactly() -> Non
         meta=result_meta,
     )
 
-    assert serialize_plugin_runtime_result(plugin) == serialize_pyne_result(legacy)
+    payload = serialize_plugin_runtime_result(plugin)
+    expected = json.loads((Path(__file__).parent / "fixtures/plugin_runtime/structured-envelope.json").read_text(encoding="utf-8"))
+    assert payload == expected
 
 
 def test_structured_render_ir_preserves_parameters_and_fill_compatibility() -> None:
@@ -240,18 +212,6 @@ def test_duplicate_public_and_structured_series_id_is_rendered_once() -> None:
 def test_empty_structured_collections_preserve_a_meta_only_legacy_result() -> None:
     output_meta = {"title": "Empty", "overlay": False}
     result_meta = {**output_meta, "securityMode": "safe"}
-    legacy = SimpleNamespace(
-        ok=True,
-        error=None,
-        code=None,
-        line=None,
-        column=None,
-        hint=None,
-        lines=[],
-        output={"meta": output_meta},
-        param_schema=[],
-        meta=result_meta,
-    )
     plugin = ExecuteBatchResult(
         ok=True,
         output=RenderOutput(
@@ -261,7 +221,9 @@ def test_empty_structured_collections_preserve_a_meta_only_legacy_result() -> No
         meta=result_meta,
     )
 
-    assert serialize_plugin_runtime_result(plugin) == serialize_pyne_result(legacy)
+    payload = serialize_plugin_runtime_result(plugin)
+    expected = json.loads((Path(__file__).parent / "fixtures/plugin_runtime/empty-envelope.json").read_text(encoding="utf-8"))
+    assert payload == expected
 
 
 def test_structured_histogram_preserves_identity_width_and_per_bar_color() -> None:

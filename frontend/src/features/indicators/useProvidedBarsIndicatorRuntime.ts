@@ -75,7 +75,7 @@ function useLatestRef<T>(value: T): MutableRefObject<T> {
 }
 
 function normalizedScriptLanguage(indicator: IndicatorDefinition): string {
-  return String(indicator.language || "pyne").trim().toLowerCase();
+  return String(indicator.language || "pine").trim().toLowerCase();
 }
 
 export function providedBarsIndicatorSupport(
@@ -98,7 +98,7 @@ export function providedBarsIndicatorSupport(
     return { supported: true, reason: null };
   }
   const language = normalizedScriptLanguage(local);
-  if (language !== "pyne" && language !== "pine" && language !== "frontend-js") {
+  if (language !== "pine" && language !== "frontend-js") {
     return {
       supported: false,
       reason: t("indicator.replayUnsafe", { language: language || t("indicator.unknownRuntime") }),
@@ -131,13 +131,7 @@ export function prepareProvidedBarsIndicator(
     securityMode: _discardedSecurityMode,
     ...withoutSecurityMode
   } = local;
-  return language === "pyne"
-    ? {
-        ...withoutSecurityMode,
-        language,
-        securityMode: "safe",
-      }
-    : {
+  return {
         ...withoutSecurityMode,
         language,
       };

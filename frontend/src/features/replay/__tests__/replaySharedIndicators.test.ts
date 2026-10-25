@@ -208,12 +208,12 @@ test("provided-bars policy forces local safe execution and rejects unknown runti
     id: "custom-pyne",
     name: "Custom",
     kind: "script",
-    language: "pyne",
+    language: "pine",
     script: "plot(close)",
     securityMode: "unsafe",
   });
   assert.equal(pyne?.executionTarget, "local");
-  assert.equal(pyne?.securityMode, "safe");
+  assert.equal(pyne?.securityMode, undefined);
 
   const pine = prepareProvidedBarsIndicator({
     id: "custom-pine",
@@ -243,8 +243,7 @@ test("provided-bars policy forces local safe execution and rejects unknown runti
     "unsafe",
     prepareProvidedBarsIndicator,
   );
-  assert.equal(switchedToPyne.language, "pyne");
-  assert.equal(switchedToPyne.securityMode, "safe");
+  assert.equal(switchedToPyne, pine); // Retired languages cannot replace a valid Pine indicator.
   const rejectedUpdate = applyIndicatorScriptUpdate(
     switchedToPyne,
     "external_runtime(close)",
@@ -497,7 +496,7 @@ test("v2 composition reuses the shared indicator product without hosted/cache re
   assert.match(workspace, /const ensureIndicatorViewport = review === null[\s\S]*indicators\.actions\.ensureVisibleIndicatorRange[\s\S]*reviewIndicators\.actions\.ensureVisibleIndicatorRange/);
   assert.match(workspace, /onViewportRangeChange=\{ensureIndicatorViewport\}/);
   assert.match(workspace, /ensureIndicatorViewport\(range\);[\s\S]*if \(integrityRuntime\.review !== null\) return/);
-  assert.match(workspace, /allowedScriptLanguages=\{\["pyne", "pine", "frontend-js"\]\}/);
+  assert.match(workspace, /allowedScriptLanguages=\{\["pine", "frontend-js"\]\}/);
   assert.doesNotMatch(workspace, /ReplayIndicatorPanel/);
   for (const prop of [
     "indicatorMarkers",

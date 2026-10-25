@@ -103,10 +103,9 @@ from .strategy.host_policy import (
     PlanningContext,
 )
 from .strategy.protocol import StrategyProviderSession
-from .strategy.pyne_adapter import PyneHostPlanner
+from .strategy.host_planner import HostOrderPlanner
 from .strategy.registry import StrategyRevisionRegistry, build_default_strategy_registry
 from .strategy.builtin import build_builtin_provider
-from .strategy.chart_pyne import CHART_PYNE_REVISION, ChartPyneStrategyProvider
 from .strategy.pine_adapter import PineStrategyProvider
 from .strategy.workspace import compile_revision
 from .external_provider.contracts import EXTERNAL_REVISION
@@ -590,9 +589,7 @@ class BacktestService:
                 )
             else:
                 provider = (
-                    ChartPyneStrategyProvider()
-                    if row["base_revision_id"] == CHART_PYNE_REVISION
-                    else (
+                    (
                         PineStrategyProvider()
                         if row["base_revision_id"] == "pine-long-flat-v1"
                         else build_builtin_provider(str(row["base_revision_id"]))
@@ -2693,7 +2690,7 @@ class BacktestService:
                 config = json.loads(str(record["config_json"]))
             except (TypeError, ValueError, json.JSONDecodeError):
                 config = {}
-            planner = PyneHostPlanner(
+            planner = HostOrderPlanner(
                 config, execution_reporter=self._execution_reporter(session)
             )
             adapter.start(
@@ -2793,7 +2790,6 @@ class BacktestService:
                 )
 
             input_modes = feature_names = None
-            chart_batch = None
             python_batch = None
             generic_bar = None
             if getattr(self, "_colocated_worker", False):
@@ -2807,12 +2803,6 @@ class BacktestService:
                 from .strategy.generic_bar import build_generic_bar
                 generic_bar = build_generic_bar(provider, session, adapter,
                     dict(observation_market or {"venue": "local", "symbol": str(record["dataset_id"])}), feature_names)
-                from .strategy.chart_batch import build_chart_batch
-                # The V2 account remaps source clocks to market-only sequences;
-                # the current batch queue is indexed by original source events.
-                if kernel.account_model != "LINEAR_PERP_ONE_WAY_V2":
-                    chart_batch = build_chart_batch(provider, session, events, resume_sequence, observed, warmup_events,
-                                                    legacy_plan_only=planner.config is None)
 
             def strategy(
                 visible: tuple[MarketEvent, ...], event: MarketEvent
@@ -2840,12 +2830,6 @@ class BacktestService:
                     session._accept_frame(frame)
                     wire = provider.step(frame)
                     return planner.plan(wire, context=(None if planner.config is None else _planning_context(kernel, event)))
-                if chart_batch is not None:
-                    wire = chart_batch.observe(event, phase)
-                    return planner.plan(
-                        wire,
-                        context=(None if planner.config is None else _planning_context(kernel, event)),
-                    )
                 bar = dict(event.payload)
                 self._assert_frame_inputs(provider, bar=bar, trade=None, _modes=input_modes)
                 wire = adapter.observe(
@@ -3077,7 +3061,7 @@ class BacktestService:
                 config = json.loads(str(record["config_json"]))
             except (TypeError, ValueError, json.JSONDecodeError):
                 config = {}
-            planner = PyneHostPlanner(
+            planner = HostOrderPlanner(
                 config, execution_reporter=self._execution_reporter(session)
             )
             adapter.start(
@@ -3382,7 +3366,7 @@ class BacktestService:
                 config = json.loads(str(record["config_json"]))
             except (TypeError, ValueError, json.JSONDecodeError):
                 config = {}
-            planner = PyneHostPlanner(
+            planner = HostOrderPlanner(
                 config, execution_reporter=self._execution_reporter(session)
             )
             adapter.start(
@@ -4238,9 +4222,7 @@ class BacktestService:
                         probe = None
                     else:
                         probe = (
-                            ChartPyneStrategyProvider()
-                            if base_revision == CHART_PYNE_REVISION
-                            else (
+                            (
                                 PineStrategyProvider()
                                 if base_revision == "pine-long-flat-v1"
                                 else build_builtin_provider(base_revision)
@@ -4524,7 +4506,7 @@ class BacktestService:
         observed: int,
         kernel: SimulationKernel,
         session: StrategyProviderSession,
-        planner: PyneHostPlanner,
+        planner: HostOrderPlanner,
         event_bytes: int,
         final: bool = False,
     ) -> None:
@@ -4596,7 +4578,7 @@ class BacktestService:
         sequence: int,
         kernel: DualClockSimulationKernel,
         session: StrategyProviderSession,
-        planner: PyneHostPlanner,
+        planner: HostOrderPlanner,
         event_bytes: int,
         final: bool = False,
     ) -> None:
@@ -4670,7 +4652,7 @@ class BacktestService:
         aggregate_state: Mapping[str, object],
         kernel: TradeSimulationKernel,
         session: StrategyProviderSession,
-        planner: PyneHostPlanner,
+        planner: HostOrderPlanner,
         event_bytes: int,
         final: bool = False,
     ) -> None:
@@ -5293,7 +5275,7 @@ def _planning_context(kernel: Any, event: MarketEvent) -> PlanningContext:
 
 
 def _policy_result_overrides(
-    planner: PyneHostPlanner, result: Any
+    planner: HostOrderPlanner, result: Any
 ) -> dict[str, object]:
     policy = planner.report()
     if not policy:

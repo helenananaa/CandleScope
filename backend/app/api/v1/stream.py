@@ -347,7 +347,7 @@ async def indicator_stream(websocket: WebSocket) -> None:
         {"action":"unsubscribe","clientId":"ma1"}
         "ping" -> "pong"
 
-    Builtin indicators are maintained incrementally by IndicatorEngine. Pyne
+    Builtin indicators are maintained incrementally by IndicatorEngine. Script
     scripts are backend-hosted by recomputing the latest bounded history window
     when K-line updates arrive.
     """

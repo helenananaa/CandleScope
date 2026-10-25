@@ -22,7 +22,7 @@ from app.backtest.strategy.protocol import (
     canonical_hash,
 )
 from app.backtest.strategy.python_sidecar import PythonSidecarProvider, assert_wheel_is_offline
-from app.backtest.strategy.pyne_adapter import PyneHostPlanner
+from app.backtest.strategy.host_planner import HostOrderPlanner
 
 
 SCHEMA = FeatureSchema(version="feat/1", names=("close",))
@@ -98,7 +98,7 @@ def test_onnx_fixture_end_to_end_and_host_still_plans() -> None:
     assert output is not None
     assert output.kind == "SIGNAL"
     assert output.payload["direction"] == "LONG"
-    planner = PyneHostPlanner()
+    planner = HostOrderPlanner()
     intents = planner.plan(output)
     assert intents[0]["side"] == "BUY"
     assert session.provider.identity()["reproducibility_class"] == "DETERMINISTIC"

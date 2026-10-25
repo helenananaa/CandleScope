@@ -26,7 +26,7 @@
       "sources": ["backend/app/replay/", "backend/app/api/v1/replay", "frontend/src/features/replay/", "frontend/src/features/replay-launcher/"]
     },
     "backtest": {
-      "backend": ["test_backtest_", "backtest_contract/", "test_simulation_", "test_contract_accounting", "test_book_assisted", "test_trade_tape", "test_strategy_provider", "test_pine_strategy", "test_pyne_strategy", "test_python_", "test_external_model_"],
+      "backend": ["test_backtest_", "backtest_contract/", "test_simulation_", "test_contract_accounting", "test_book_assisted", "test_trade_tape", "test_strategy_provider", "test_pine_strategy", "test_python_", "test_external_model_"],
       "frontend": ["src/features/backtest/"],
       "sources": ["backend/app/backtest/", "backend/app/simulation/", "backend/app/api/v1/backtests", "frontend/src/features/backtest/"]
     },
@@ -36,7 +36,7 @@
       "sources": ["backend/app/research_data/", "backend/app/local_data/", "backend/app/market_dataset/", "backend/app/api/v1/local", "backend/app/api/v1/research", "frontend/src/features/research-data/", "frontend/src/features/strategy-research/", "frontend/src/features/local-data/"]
     },
     "plugins": {
-      "backend": ["test_plugin_", "test_first_party_plugin_", "test_pyne_workbench_"],
+      "backend": ["test_plugin_", "test_first_party_plugin_"],
       "frontend": ["src/features/plugins/"],
       "sources": ["backend/app/plugin_", "frontend/src/features/plugins/"]
     },

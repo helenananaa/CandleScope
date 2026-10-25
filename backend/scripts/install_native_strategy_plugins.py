@@ -1,6 +1,6 @@
 """Install a frozen wheel set and optionally activate native-only plugins.
 
-Does not alter the indicator runtime registry or either independent engine repo.
+Does not alter the indicator runtime registry or the independent engine repo.
 """
 from __future__ import annotations
 
@@ -19,19 +19,14 @@ def main():
     parser.add_argument("--wheelhouse", required=True, type=Path)
     parser.add_argument("--root", type=Path, default=Path(os.environ.get("LOCALAPPDATA", Path.home() / ".local/share")) / "CandleScope/plugins")
     parser.add_argument("--activate", action="store_true")
-    parser.add_argument("--runtime", choices=("all", "pine", "pyne"), default="all",
-                        help="Select one runtime to preserve the other native registry entry.")
+    parser.add_argument("--runtime", choices=("pine",), default="pine",
+                        help="Install the Pine native runtime.")
     args = parser.parse_args()
     wheels = sorted(args.wheelhouse.resolve().glob("*.whl"))
-    required = ("candlescope_plugin_sdk-", "candlescope_plugin_pyne-", "candlescope_plugin_pine_compat-", "pyne_runtime-", "pine_compat_runtime-", "numpy-", "tzdata-")
-    if args.runtime != "all":
-        if args.runtime == "pyne":
-            required = tuple(prefix for prefix in required if "pine_compat" not in prefix)
-        else:
-            required = ("candlescope_plugin_sdk-", "candlescope_plugin_pine_compat-", "pine_compat_runtime-")
-        wheels = [path for path in wheels if any(path.name.startswith(prefix) for prefix in required)]
+    required = ("candlescope_plugin_sdk-", "candlescope_plugin_pine_compat-", "pine_compat_runtime-")
+    wheels = [path for path in wheels if any(path.name.startswith(prefix) for prefix in required)]
     if len(wheels) != len(required) or any(sum(p.name.startswith(prefix) for p in wheels) != 1 for prefix in required):
-        parser.error("wheelhouse must contain exactly one wheel for each selected plugin, SDK, engine, numpy and tzdata")
+        parser.error("wheelhouse must contain exactly one wheel for each selected plugin, SDK and engine")
     manifest = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in wheels}
     bundle = hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()
     installation = args.root.resolve() / "native-installs" / bundle
@@ -42,10 +37,7 @@ def main():
                     "--find-links", str(args.wheelhouse.resolve()), *map(str, wheels)], check=True)
     subprocess.run([str(executable), "-m", "pip", "check"], check=True)
     plugins, identities = [], {}
-    for suffix, runtime_id, package in (("pine_compat", "candlescope.pine-compat", "candlescope-plugin-pine-compat"),
-                                        ("pyne", "candlescope.pyne", "candlescope-plugin-pyne")):
-        if args.runtime != "all" and suffix != {"pine": "pine_compat", "pyne": "pyne"}[args.runtime]:
-            continue
+    for suffix, runtime_id, package in (("pine_compat", "candlescope.pine-compat", "candlescope-plugin-pine-compat"),):
         command = [str(executable), "-I", "-m", f"candlescope_plugin_{suffix}.native_strategy"]
         probe = subprocess.run(command, input='{"operation":"describe"}', text=True, encoding="utf-8", capture_output=True, check=True, timeout=30)
         result = json.loads(probe.stdout)

@@ -8,7 +8,7 @@ import uuid
 from typing import Any
 
 from app.core import config
-from app.core.executors import run_indicator, run_pyne_wait, run_storage
+from app.core.executors import run_indicator, run_script_wait, run_storage
 from app.data_engine.interval_policy import (
     compute_bucket_end_ms,
     compute_bucket_start_ms,
@@ -381,14 +381,14 @@ async def compute_indicator_range_payload_async(
     target_bars = ((end_s - start_s) // interval_s) + 1
     if meta.get("kind") == "script":
         params = meta.get("params") if isinstance(meta.get("params"), dict) else {}
-        language = str(meta.get("language") or "pyne")
+        language = str(meta.get("language") or "pine")
         warmup_bars = _indicator_warmup_bars(language.upper(), params)
-        max_pyne_bars = max(int(config.PYNE_MAX_BARS), 1)
+        max_script_bars = max(int(config.SCRIPT_MAX_BARS), 1)
         estimated_compute_bars = target_bars + warmup_bars
-        if estimated_compute_bars > max_pyne_bars:
-            label = "Pyne" if language == "pyne" else f"{language} runtime"
+        if estimated_compute_bars > max_script_bars:
+            label = "Pine" if language == "pine" else f"{language} runtime"
             raise ValueError(
-                f"Too many {label} bars: {estimated_compute_bars} > {config.PYNE_MAX_BARS}"
+                f"Too many {label} bars: {estimated_compute_bars} > {config.SCRIPT_MAX_BARS}"
             )
         bars = await _query_indicator_compute_bars_async(
             dm,
@@ -752,7 +752,7 @@ def _compute_builtin_range_patch_from_bars(
     return patch
 
 
-def _query_pyne_snapshot_bars(
+def _query_script_snapshot_bars(
     dm: Any,
     meta: dict[str, Any],
     *,
@@ -763,7 +763,7 @@ def _query_pyne_snapshot_bars(
     if bar_time:
         history_limit = min(
             max(history_limit, 1),
-            max(int(config.PYNE_TICK_RECOMPUTE_MAX_BARS), 1),
+            max(int(config.SCRIPT_TICK_RECOMPUTE_MAX_BARS), 1),
         )
 
     if seed_bars is None:
@@ -790,12 +790,6 @@ def _query_pyne_snapshot_bars(
     return list(resolved_bars)
 
 
-def _release_pyne_incremental_meta(meta: dict[str, Any]) -> None:
-    """Drop stale metadata created before incremental execution moved out of process."""
-    for key in ("pyneSessionKey", "pyneSharedSession", "pyneSession", "scriptMode"):
-        meta.pop(key, None)
-
-
 def _script_runtime_request(
     meta: dict[str, Any],
     bars: list[Any],
@@ -803,13 +797,13 @@ def _script_runtime_request(
     transport: str,
 ) -> IndicatorRuntimeRequest:
     pine_options = {}
-    if str(meta.get("language") or "pyne") == "pine" and transport.startswith("websocket."):
+    if str(meta.get("language") or "pine") == "pine" and transport.startswith("websocket."):
         # Identity belongs to this subscription, not source text shared by users.
         if not meta.get("pineRuntimeSessionId"):
             meta["pineRuntimeSessionId"] = uuid.uuid4().hex
         pine_options["pineSessionId"] = meta["pineRuntimeSessionId"]
     return IndicatorRuntimeRequest(
-        language=str(meta.get("language") or "pyne"),
+        language=str(meta.get("language") or "pine"),
         source=str(meta.get("script") or ""),
         exchange=str(meta["exchange"]),
         market_type=str(meta["market_type"]),
@@ -889,7 +883,7 @@ def _compute_plugin_range_patch_from_bars(
         end_s=range_end_s,
     )
     params = meta.get("params") if isinstance(meta.get("params"), dict) else {}
-    language = str(meta.get("language") or "pyne")
+    language = str(meta.get("language") or "pine")
     patch["warmupBars"] = _indicator_warmup_bars(language.upper(), params)
     if target_bars is not None:
         patch["targetBars"] = target_bars
@@ -970,7 +964,7 @@ def _finish_plugin_snapshot_or_patch(
     return payload
 
 
-async def _compute_pyne_snapshot_message_async(
+async def _compute_script_snapshot_message_async(
     client_id: str,
     dm,
     meta: dict,
@@ -980,8 +974,8 @@ async def _compute_pyne_snapshot_message_async(
 ) -> dict:
     """Compute a script-runtime snapshot without blocking the event loop."""
     service = runtime_service or _unbound_indicator_runtime_service
-    bars = await run_pyne_wait(
-        _query_pyne_snapshot_bars,
+    bars = await run_script_wait(
+        _query_script_snapshot_bars,
         dm,
         meta,
         bar_time=bar_time,

@@ -50,7 +50,7 @@ test("copy split duplicates cell configuration into the first unused stable cell
     strategyDraftId: "draft-12345678",
     strategyRevisionId: "revision-1",
     displayName: "Copy me",
-    language: "pyne",
+    language: "pine",
     parameters: { length: 21 },
     rangeMode: "ALL_AVAILABLE",
     customRange: null,

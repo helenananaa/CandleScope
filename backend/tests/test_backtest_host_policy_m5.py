@@ -10,7 +10,7 @@ from app.backtest.errors import BacktestError
 from app.backtest.reports import build_report
 from app.backtest.service import BacktestService
 from app.backtest.strategy.host_policy import HOST_POLICY_REVISION, PlanningContext
-from app.backtest.strategy.pyne_adapter import HostPlan, PyneHostPlanner
+from app.backtest.strategy.host_planner import HostPlan, HostOrderPlanner
 from app.backtest.strategy.protocol import DeterministicFakeProvider
 from app.core.config import load_backtest_settings
 from app.market_dataset.snapshot import MarketEvent
@@ -80,7 +80,7 @@ def test_four_sizing_policies_preserve_provider_decision_and_change_quantity() -
         "EQUITY_PERCENT_V1",
         "RISK_PER_STOP_V1",
     ):
-        plan = PyneHostPlanner(config(policy)).plan(SIGNAL, context=context())
+        plan = HostOrderPlanner(config(policy)).plan(SIGNAL, context=context())
         assert isinstance(plan, HostPlan)
         quantities[policy] = plan[0]["qty"]
         decisions.append(plan.decision)
@@ -94,7 +94,7 @@ def test_four_sizing_policies_preserve_provider_decision_and_change_quantity() -
 
 
 def test_fixed_notional_quantizes_down_and_equity_percent_uses_visible_equity() -> None:
-    fixed = PyneHostPlanner(config("FIXED_NOTIONAL_V1", fixed_notional="100"))
+    fixed = HostOrderPlanner(config("FIXED_NOTIONAL_V1", fixed_notional="100"))
     assert (
         fixed.plan(
             SIGNAL,
@@ -104,9 +104,9 @@ def test_fixed_notional_quantizes_down_and_equity_percent_uses_visible_equity() 
         )[0]["qty"]
         == "3.0"
     )
-    equity = PyneHostPlanner(config("EQUITY_PERCENT_V1", equity_percent="10"))
+    equity = HostOrderPlanner(config("EQUITY_PERCENT_V1", equity_percent="10"))
     first = equity.plan(SIGNAL, context=context(equity=Decimal("1000")))
-    second = PyneHostPlanner(config("EQUITY_PERCENT_V1", equity_percent="10")).plan(
+    second = HostOrderPlanner(config("EQUITY_PERCENT_V1", equity_percent="10")).plan(
         SIGNAL, context=context(equity=Decimal("500"))
     )
     assert first[0]["qty"] == "1"
@@ -114,7 +114,7 @@ def test_fixed_notional_quantizes_down_and_equity_percent_uses_visible_equity() 
 
 
 def test_risk_per_stop_missing_distance_fails_closed_without_fallback() -> None:
-    planner = PyneHostPlanner(config("RISK_PER_STOP_V1", stop_distance=None))
+    planner = HostOrderPlanner(config("RISK_PER_STOP_V1", stop_distance=None))
     plan = planner.plan(SIGNAL, context=context())
     assert plan == []
     assert planner.rejections[0]["reason"] == "ORDER_REJECTED_RISK"
@@ -148,7 +148,7 @@ def test_provider_cannot_mutate_balance_or_bypass_host_risk(
     provider_output: dict[str, object],
 ) -> None:
     visible = context(equity=Decimal("1000"))
-    planner = PyneHostPlanner(config("FIXED_QTY_V1", max_notional="50"))
+    planner = HostOrderPlanner(config("FIXED_QTY_V1", max_notional="50"))
     assert planner.plan(provider_output, context=visible) == []
     assert planner.rejections[-1]["reason_code"] == "RISK_MAX_NOTIONAL"
     assert visible.equity == Decimal("1000")
@@ -174,7 +174,7 @@ def test_each_host_risk_limit_rejects_with_structured_snapshot(
         ctx_values["active_order_count"] = 1
     if reason_code == "RISK_MAX_CUMULATIVE_FEES":
         ctx_values["cumulative_fees"] = Decimal("0.009")
-    planner = PyneHostPlanner(config("FIXED_QTY_V1", **override))
+    planner = HostOrderPlanner(config("FIXED_QTY_V1", **override))
     if reason_code == "RISK_MAX_DRAWDOWN":
         planner.plan(None, context=context(equity=Decimal("1000"), sequence=1))
         ctx_values.update(equity=Decimal("800"), sequence=2)
@@ -189,7 +189,7 @@ def test_each_host_risk_limit_rejects_with_structured_snapshot(
 
 
 def test_daily_loss_enters_versioned_cooldown_and_survives_checkpoint() -> None:
-    planner = PyneHostPlanner(
+    planner = HostOrderPlanner(
         config(
             "FIXED_QTY_V1",
             daily_loss_limit="100",
@@ -202,7 +202,7 @@ def test_daily_loss_enters_versioned_cooldown_and_survives_checkpoint() -> None:
     )
     assert planner.rejections[-1]["reason_code"] == "RISK_DAILY_LOSS"
 
-    restored = PyneHostPlanner(
+    restored = HostOrderPlanner(
         config(
             "FIXED_QTY_V1",
             daily_loss_limit="100",
@@ -218,7 +218,7 @@ def test_daily_loss_enters_versioned_cooldown_and_survives_checkpoint() -> None:
 
 
 def test_min_notional_conflict_and_reduce_only_cross_zero_are_distinct() -> None:
-    too_small = PyneHostPlanner(config("FIXED_QTY_V1", fixed_qty="0.1"))
+    too_small = HostOrderPlanner(config("FIXED_QTY_V1", fixed_qty="0.1"))
     assert too_small.plan(SIGNAL, context=context(min_notional=Decimal("50"))) == []
     assert too_small.rejections[0]["reason"] == "ORDER_REJECTED_RULES"
     assert too_small.rejections[0]["reason_code"] == "MIN_NOTIONAL"
@@ -232,7 +232,7 @@ def test_min_notional_conflict_and_reduce_only_cross_zero_are_distinct() -> None
             "reduce_only": True,
         },
     }
-    crossing = PyneHostPlanner(config("FIXED_QTY_V1"))
+    crossing = HostOrderPlanner(config("FIXED_QTY_V1"))
     assert (
         crossing.plan(
             close,
@@ -255,7 +255,7 @@ def test_reduce_only_can_close_below_minimum_and_ignores_opening_limits() -> Non
             "reduce_only": True,
         },
     }
-    planner = PyneHostPlanner(
+    planner = HostOrderPlanner(
         config(
             "FIXED_QTY_V1",
             max_abs_position_qty="0.01",
@@ -277,7 +277,7 @@ def test_reduce_only_can_close_below_minimum_and_ignores_opening_limits() -> Non
 
 def test_reversal_risk_counts_only_new_exposure_after_closing_old_position() -> None:
     short_signal = {**SIGNAL, "payload": {"direction": "SHORT"}}
-    planner = PyneHostPlanner(
+    planner = HostOrderPlanner(
         config("FIXED_QTY_V1", fixed_qty="1", max_order_risk="11")
     )
     plan = planner.plan(
@@ -370,7 +370,7 @@ def test_planner_checkpoint_and_kernel_projected_position_do_not_drift() -> None
         ),
     )
     kernel = SimulationKernel(host_policy_revision=HOST_POLICY_REVISION)
-    planner = PyneHostPlanner(config("FIXED_QTY_V1"))
+    planner = HostOrderPlanner(config("FIXED_QTY_V1"))
 
     def strategy(_visible, event):
         return planner.plan(
@@ -387,14 +387,14 @@ def test_planner_checkpoint_and_kernel_projected_position_do_not_drift() -> None
     assert kernel.projected_position_qty == 1
     restored_kernel = SimulationKernel(host_policy_revision=HOST_POLICY_REVISION)
     restored_kernel.restore(kernel.snapshot())
-    restored_planner = PyneHostPlanner(config("FIXED_QTY_V1"))
+    restored_planner = HostOrderPlanner(config("FIXED_QTY_V1"))
     restored_planner.restore(planner.snapshot())
     assert restored_kernel.projected_position_qty == kernel.projected_position_qty
     assert restored_planner.snapshot() == planner.snapshot()
 
 
 def test_report_records_risk_policy_rejection_and_maximum_exposure() -> None:
-    planner = PyneHostPlanner(config("FIXED_QTY_V1", max_notional="50"))
+    planner = HostOrderPlanner(config("FIXED_QTY_V1", max_notional="50"))
     planner.plan(SIGNAL, context=context())
     report = build_report(
         {

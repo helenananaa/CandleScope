@@ -42,7 +42,7 @@ on legacy flat fields.
 
 ## Execution Routing
 
-Indicator execution is hosted by default. Existing builtin, Pyne, and custom
+Indicator execution is hosted by default. Existing builtin, Pine, and custom
 script definitions with no `executionTarget`, or with
 `executionTarget: "hosted"`, use the hosted WebSocket plus
 `/indicators/range/batch` history path. The backend owns K-line lookup and can
@@ -176,8 +176,7 @@ rebuilding the scheduler epoch.
 `IndicatorEditor` loads `GET /api/v1/indicators/runtimes` and validates the
 schema before enabling run, save, or fork actions. The language selector is
 generated from routed descriptors. Unknown community languages use Monaco's
-plaintext mode; Pyne completion, theme, and security controls remain optional
-host enhancements rather than a plugin whitelist.
+plaintext mode unless their descriptor declares a supported Monaco language.
 
 Plugins may advertise `meta.ui.languages.<language-id>.monacoLanguage` and
 `starterSource` strings. These are data-only hints and never load plugin-owned

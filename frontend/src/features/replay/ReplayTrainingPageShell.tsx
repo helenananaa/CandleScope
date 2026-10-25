@@ -1187,8 +1187,7 @@ export default function ReplayTrainingPageShell({
         {review === null && indicatorPanelOpen && (
           <div id="replay-indicator-panel" className="replay-shared-indicator-panel">
             <IndicatorPanel
-              allowedScriptLanguages={["pyne", "pine", "frontend-js"]}
-              allowedSecurityModes={["safe"]}
+              allowedScriptLanguages={["pine", "frontend-js"]}
               isOpen
               onClose={() => setIndicatorPanelOpen(false)}
               activeIndicators={indicators.view.activeIndicators}

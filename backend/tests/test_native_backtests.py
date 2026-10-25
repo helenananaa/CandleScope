@@ -14,7 +14,7 @@ from app.backtest.native import NativeBacktests, PROTOCOL, digest
 from app.backtest.runtime import BacktestRuntime
 from app.core.config import load_backtest_settings
 from app.local_data.service import LocalDatasetService, LocalImportOptions
-from tests.test_native_strategy_plugins import plugin, PINE, PYNE
+from tests.test_native_strategy_plugins import plugin, PINE
 pytestmark = pytest.mark.skipif(not os.environ.get("NATIVE_TEST_PYTHON"), reason="requires installed native strategy plugins")
 
 
@@ -49,7 +49,7 @@ def terminal(native, run_id):
     raise AssertionError("native run did not finish")
 
 
-@pytest.mark.parametrize("language,source", [("pine", PINE), ("pyne", PYNE)])
+@pytest.mark.parametrize("language,source", [("pine", PINE)])
 def test_http_real_engine_report_is_not_rematched(runtime, monkeypatch, language, source):
     host, payload = runtime
     def forbidden(*args, **kwargs):

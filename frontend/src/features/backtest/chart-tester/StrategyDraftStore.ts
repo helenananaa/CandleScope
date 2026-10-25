@@ -2,7 +2,7 @@ export const STRATEGY_DRAFT_SCHEMA_VERSION = 1 as const;
 export const STRATEGY_DRAFT_STORE_SCHEMA_VERSION = 1 as const;
 export const STRATEGY_DRAFT_STORAGE_KEY = "candlescope-strategy-drafts-v1";
 
-export type StrategyDraftLanguage = "pyne" | "pine" | "python";
+export type StrategyDraftLanguage = "pine" | "python";
 export type StrategyDraftAutoSaveState = "IDLE" | "SAVING" | "SAVED" | "ERROR";
 
 export interface StrategyDraftCursor {
@@ -57,7 +57,7 @@ function normalizeRecord(value: unknown): StrategyDraftRecord | null {
   const displayName = typeof source.displayName === "string"
     ? source.displayName.trim().slice(0, 120)
     : "";
-  const language = source.language === "pyne" || source.language === "pine" || source.language === "python"
+  const language = source.language === "pine" || source.language === "python"
     ? source.language
     : null;
   const code = typeof source.source === "string" ? source.source : null;

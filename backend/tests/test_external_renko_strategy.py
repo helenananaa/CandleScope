@@ -16,15 +16,6 @@ if bar_index == 3 and brick > previous
 if bar_index == 5 and brick < previous
     strategy.close("L")
 '''
-PYNE_SOURCE = '''strategy("Renko real execution")
-r = ticker.renko(syminfo.tickerid, "Traditional", 3)
-brick = request.security(r, timeframe.period, "close")
-previous = request.security(r, timeframe.period, "close[1]")
-plot(brick, "Brick")
-plot(previous, "Previous")
-strategy.entry_when((bar_index == 3) & (brick > previous), "L", strategy.long, qty=1)
-strategy.close_when((bar_index == 5) & (brick < previous), "L")
-'''
 
 
 def graphic_at(series, index):
@@ -34,7 +25,7 @@ def graphic_at(series, index):
 
 
 @pytest.mark.parametrize("fidelity", ["BAR_APPROX", "TRADE_TAPE"])
-@pytest.mark.parametrize("language,source", [("pine", SOURCE), ("pyne", PYNE_SOURCE)])
+@pytest.mark.parametrize("language,source", [("pine", SOURCE)])
 def test_synthetic_decisions_execute_at_real_market_prices(runtime, fidelity, language, source):
     host, payload = runtime
     config = {**payload, "language":language, "source":source, "execution_mode":"CANDLESCOPE",

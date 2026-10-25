@@ -1,0 +1,358 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "error": null,
+  "lines": [
+    {
+      "id": "plot_1",
+      "name": "Double Close",
+      "color": "#22c55e",
+      "type": "line",
+      "pane": "separate",
+      "lineWidth": 2,
+      "lineStyle": 0,
+      "data": [
+        {
+          "time": 1700000000,
+          "value": 202.0
+        },
+        {
+          "time": 1700000060,
+          "value": 204.0
+        },
+        {
+          "time": 1700000120,
+          "value": 206.0
+        },
+        {
+          "time": 1700000180,
+          "value": 208.0
+        },
+        {
+          "time": 1700000240,
+          "value": 210.0
+        }
+      ]
+    }
+  ],
+  "result": {
+    "meta": {
+      "title": "Plugin Baseline",
+      "overlay": false
+    },
+    "lines": [
+      {
+        "id": "plot_1",
+        "title": "Double Close",
+        "color": "#22c55e",
+        "linewidth": 2,
+        "style": "solid",
+        "pane": "separate",
+        "data": [
+          {
+            "time": 1700000000,
+            "value": 202.0
+          },
+          {
+            "time": 1700000060,
+            "value": 204.0
+          },
+          {
+            "time": 1700000120,
+            "value": 206.0
+          },
+          {
+            "time": 1700000180,
+            "value": 208.0
+          },
+          {
+            "time": 1700000240,
+            "value": 210.0
+          }
+        ]
+      }
+    ],
+    "hlines": [
+      {
+        "price": 210.0,
+        "title": "Threshold",
+        "color": "#f59e0b",
+        "linestyle": "dashed",
+        "linewidth": 1,
+        "pane": "separate"
+      }
+    ],
+    "markers": [
+      {
+        "shape": "circle",
+        "text": "UP",
+        "position": "above",
+        "size": "normal",
+        "color": "#3b82f6",
+        "pane": "separate",
+        "data": [
+          {
+            "time": 1700000000,
+            "shape": "circle",
+            "color": "#3b82f6",
+            "text": "UP",
+            "position": "above",
+            "size": "normal",
+            "pane": "separate"
+          },
+          {
+            "time": 1700000060,
+            "shape": "circle",
+            "color": "#3b82f6",
+            "text": "UP",
+            "position": "above",
+            "size": "normal",
+            "pane": "separate"
+          },
+          {
+            "time": 1700000120,
+            "shape": "circle",
+            "color": "#3b82f6",
+            "text": "UP",
+            "position": "above",
+            "size": "normal",
+            "pane": "separate"
+          },
+          {
+            "time": 1700000180,
+            "shape": "circle",
+            "color": "#3b82f6",
+            "text": "UP",
+            "position": "above",
+            "size": "normal",
+            "pane": "separate"
+          },
+          {
+            "time": 1700000240,
+            "shape": "circle",
+            "color": "#3b82f6",
+            "text": "UP",
+            "position": "above",
+            "size": "normal",
+            "pane": "separate"
+          }
+        ]
+      }
+    ]
+  },
+  "outputSchemaVersion": 2,
+  "series": [
+    {
+      "id": "plot_1",
+      "localId": "plot_1",
+      "indicatorId": null,
+      "pane": "separate",
+      "type": "line",
+      "data": [
+        {
+          "time": 1700000000,
+          "value": 202.0
+        },
+        {
+          "time": 1700000060,
+          "value": 204.0
+        },
+        {
+          "time": 1700000120,
+          "value": 206.0
+        },
+        {
+          "time": 1700000180,
+          "value": 208.0
+        },
+        {
+          "time": 1700000240,
+          "value": 210.0
+        }
+      ],
+      "style": {
+        "title": "Double Close",
+        "color": "#22c55e",
+        "lineWidth": 2,
+        "lineStyle": 0
+      },
+      "scale": "right",
+      "zIndex": 10
+    }
+  ],
+  "annotations": [
+    {
+      "id": "marker_1",
+      "indicatorId": null,
+      "pane": "separate",
+      "type": "marker",
+      "data": [
+        {
+          "time": 1700000000,
+          "shape": "circle",
+          "color": "#3b82f6",
+          "text": "UP",
+          "position": "above",
+          "size": "normal",
+          "pane": "separate"
+        },
+        {
+          "time": 1700000060,
+          "shape": "circle",
+          "color": "#3b82f6",
+          "text": "UP",
+          "position": "above",
+          "size": "normal",
+          "pane": "separate"
+        },
+        {
+          "time": 1700000120,
+          "shape": "circle",
+          "color": "#3b82f6",
+          "text": "UP",
+          "position": "above",
+          "size": "normal",
+          "pane": "separate"
+        },
+        {
+          "time": 1700000180,
+          "shape": "circle",
+          "color": "#3b82f6",
+          "text": "UP",
+          "position": "above",
+          "size": "normal",
+          "pane": "separate"
+        },
+        {
+          "time": 1700000240,
+          "shape": "circle",
+          "color": "#3b82f6",
+          "text": "UP",
+          "position": "above",
+          "size": "normal",
+          "pane": "separate"
+        }
+      ],
+      "style": {
+        "shape": "circle",
+        "color": "#3b82f6",
+        "text": "UP",
+        "position": "above",
+        "size": "normal"
+      },
+      "scale": "series",
+      "zIndex": 30
+    },
+    {
+      "id": "hline_1",
+      "indicatorId": null,
+      "pane": "separate",
+      "type": "hline",
+      "data": [
+        {
+          "value": 210.0
+        }
+      ],
+      "style": {
+        "title": "Threshold",
+        "color": "#f59e0b",
+        "lineStyle": "dashed",
+        "lineWidth": 1
+      },
+      "scale": "right",
+      "zIndex": 20
+    }
+  ],
+  "fills": [],
+  "paneLayout": [
+    {
+      "id": "separate",
+      "type": "indicator",
+      "seriesIds": [
+        "plot_1"
+      ],
+      "annotationIds": [
+        "marker_1",
+        "hline_1"
+      ]
+    },
+    {
+      "id": "main",
+      "type": "main",
+      "seriesIds": [],
+      "annotationIds": []
+    }
+  ],
+  "markers": [
+    {
+      "shape": "circle",
+      "text": "UP",
+      "position": "above",
+      "size": "normal",
+      "color": "#3b82f6",
+      "pane": "separate",
+      "data": [
+        {
+          "time": 1700000000,
+          "shape": "circle",
+          "color": "#3b82f6",
+          "text": "UP",
+          "position": "above",
+          "size": "normal",
+          "pane": "separate"
+        },
+        {
+          "time": 1700000060,
+          "shape": "circle",
+          "color": "#3b82f6",
+          "text": "UP",
+          "position": "above",
+          "size": "normal",
+          "pane": "separate"
+        },
+        {
+          "time": 1700000120,
+          "shape": "circle",
+          "color": "#3b82f6",
+          "text": "UP",
+          "position": "above",
+          "size": "normal",
+          "pane": "separate"
+        },
+        {
+          "time": 1700000180,
+          "shape": "circle",
+          "color": "#3b82f6",
+          "text": "UP",
+          "position": "above",
+          "size": "normal",
+          "pane": "separate"
+        },
+        {
+          "time": 1700000240,
+          "shape": "circle",
+          "color": "#3b82f6",
+          "text": "UP",
+          "position": "above",
+          "size": "normal",
+          "pane": "separate"
+        }
+      ]
+    }
+  ],
+  "hlines": [
+    {
+      "price": 210.0,
+      "title": "Threshold",
+      "color": "#f59e0b",
+      "linestyle": "dashed",
+      "linewidth": 1,
+      "pane": "separate"
+    }
+  ],
+  "meta": {
+    "title": "Plugin Baseline",
+    "overlay": false,
+    "securityMode": "safe"
+  }
+}

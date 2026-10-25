@@ -10,12 +10,10 @@ from collections import defaultdict
 
 import app.backtest.service as service_module
 from app.backtest.service import BacktestService
-from app.backtest.strategy.chart_pyne import CHART_PYNE_REVISION
 from app.backtest.strategy.isolated import IsolatedStrategyProvider
 from app.backtest.reports import verify_report_hash
 from app.core.config import load_backtest_settings
 from app.market_dataset.snapshot import MarketEvent
-from scripts.strategy_benchmark_sources import SMA, RSI
 
 
 def measure(count, name, root, output, v2=False, dense=False, python_batch=False, python_case="SMA", checkpoint_policy=None):
@@ -45,27 +43,24 @@ def measure(count, name, root, output, v2=False, dense=False, python_batch=False
         events.append(MarketEvent(sequence=i, event_time_ms=i*60000, role='BARS', payload={'open':str(price), 'high':str(price+0.5), 'low':str(price-0.5), 'close':str(price), 'volume':'10000'}))
     events = tuple(events)
     data_seconds = time.perf_counter()-start
-    if name == 'PYTHON':
-        os.environ['BACKTEST_PYTHON_TRUSTED_LOCAL_ENABLED'] = '1'
-        bundle_path = Path(__file__).resolve().parents[2] / 'packages/candlescope-backtest-sdk/templates/sma_cross'
-        if python_batch:
-            bundle_path = bundle_path.with_name('sma_cross_batch')
-        if python_case != "SMA":
-            from scripts.generic_strategy_sources import SOURCES
-            template = bundle_path
-            bundle_path = root / "generic-script"
-            bundle_path.mkdir()
-            manifest = json.loads((template / "strategy.json").read_text(encoding="utf-8"))
-            manifest["name"] = "Generic " + python_case
-            if python_case == "ORDERS":
-                manifest["outputModes"] = ["ORDER_INTENT"]
-            (bundle_path / "strategy.json").write_bytes(json.dumps(manifest, indent=2).encode())
-            (bundle_path / "strategy.py").write_bytes(SOURCES[python_case].encode())
-            (bundle_path / "requirements.lock").write_bytes((template / "requirements.lock").read_bytes())
-        bundle = service.create_python_strategy_bundle(directory=str(bundle_path), now_ms=1)
-        revision = service.create_python_strategy_revision(bundle['bundle_id'], now_ms=1)
-    else:
-        revision = service.create_strategy_revision({'name':name, 'language':'PYNE_CHART_V1','source_text':SMA if name=='SMA' else RSI,'parameter_schema':[]})
+    os.environ['BACKTEST_PYTHON_TRUSTED_LOCAL_ENABLED'] = '1'
+    bundle_path = Path(__file__).resolve().parents[2] / 'packages/candlescope-backtest-sdk/templates/sma_cross'
+    if python_batch:
+        bundle_path = bundle_path.with_name('sma_cross_batch')
+    if python_case != "SMA":
+        from scripts.generic_strategy_sources import SOURCES
+        template = bundle_path
+        bundle_path = root / "generic-script"
+        bundle_path.mkdir()
+        manifest = json.loads((template / "strategy.json").read_text(encoding="utf-8"))
+        manifest["name"] = "Generic " + python_case
+        if python_case == "ORDERS":
+            manifest["outputModes"] = ["ORDER_INTENT"]
+        (bundle_path / "strategy.json").write_bytes(json.dumps(manifest, indent=2).encode())
+        (bundle_path / "strategy.py").write_bytes(SOURCES[python_case].encode())
+        (bundle_path / "requirements.lock").write_bytes((template / "requirements.lock").read_bytes())
+    bundle = service.create_python_strategy_bundle(directory=str(bundle_path), now_ms=1)
+    revision = service.create_python_strategy_revision(bundle['bundle_id'], now_ms=1)
     payload = {'strategy_revision_id':revision['revision_id'],'dataset_id':'synthetic-audit','data_epoch':'epoch-audit','snapshot_hash':'sha256:audit','fidelity_mode':'BAR_APPROX','source_event_kind':'BAR','start_time_ms':0,'end_time_ms':(count+1)*60000,'symbol':'BTCUSDT','interval':'1m','output_mode':'TARGET_POSITION','initial_balance':'10000','slippage_bps':'1','taker_fee_bps':'4','maker_fee_bps':'4'}
     if v2:
         payload.update(execution_model_revision='EXECUTION_REALISM_V2')
@@ -79,7 +74,7 @@ def measure(count, name, root, output, v2=False, dense=False, python_batch=False
             payload['python_execution_protocol'] = 'MARKET_BATCH_V1'
     service.smoke_strategy_revision(revision['revision_id'], {**payload, 'end_time_ms': min(payload['end_time_ms'], 7*86400000)}, now_ms=2)
     created = service.create_run(payload, idempotency_key='audit',now_ms=3)
-    provider = (service.build_python_host_provider(revision['revision_id'], parameters={'fast':3,'slow':5}, mode='TRUSTED_LOCAL', trusted_confirmed=True) if name == 'PYTHON' else IsolatedStrategyProvider(CHART_PYNE_REVISION, step_timeout_s=2))
+    provider = service.build_python_host_provider(revision['revision_id'], parameters={'fast':3,'slow':5}, mode='TRUSTED_LOCAL', trusted_confirmed=True)
     originals=[]
     for owner, attr, label in [(provider,'step','script_step'),(service,'_save_bar_checkpoint','checkpoint'),(service,'_persist_completed_run','report_and_persist'),(service_module,'build_cost_sensitivity_matrix','cost_sensitivity'),(service_module.SimulationKernel,'run','kernel_including_callbacks')]:
         originals.append((owner,attr,wrap(owner,attr,label)))
@@ -146,7 +141,7 @@ def measure(count, name, root, output, v2=False, dense=False, python_batch=False
 if __name__=='__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('--bars',type=int,required=True)
-    parser.add_argument('--strategy',choices=['SMA','RSI','PYTHON'],required=True)
+    parser.add_argument('--strategy',choices=['PYTHON'],required=True)
     parser.add_argument('--v2',action='store_true')
     parser.add_argument('--dense',action='store_true')
     parser.add_argument('--checkpoint-policy', choices=['INTERVAL','FINAL_ONLY','NONE'])

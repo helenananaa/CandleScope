@@ -706,7 +706,7 @@ def build_comparison_context(
             "runtimeRevision": revision.get("runtime_revision"),
             "languageAbi": revision.get("language") or revision.get("provider_kind"),
             "hostAdapterRevision": config.get("host_policy_revision")
-            or "PYNE_HOST_ADAPTER_V1",
+            or "HOST_ORDER_PLANNER_V1",
         },
         "randomness": {
             "seed": config.get("seed", 0),

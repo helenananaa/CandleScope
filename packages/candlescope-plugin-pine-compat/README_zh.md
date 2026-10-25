@@ -40,4 +40,4 @@ python -m candlescope_plugin_pine_compat
 官方 0.3.1 wheel 已补齐 `Program.run_external` 和 `Program.historical_session`，
 解决 0.3.0 的回测升级阻塞。冻结 bridge、SDK 和引擎 wheel 并验收后，通过
 `install_native_strategy_plugins.py --runtime pine --activate` 仅升级 Pine 回测，
-保留 Pyne 注册项。安装指标 CSPKG 不会自动注册原生策略回测。
+保留其他注册项。安装指标 CSPKG 不会自动注册原生策略回测。

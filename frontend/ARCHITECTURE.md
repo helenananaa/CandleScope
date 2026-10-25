@@ -34,7 +34,7 @@ been folded into their owning features.
 |---|---|
 | `chart-session/` | Active symbol, exchange, market type, interval, dataset key, custom intervals, exchange capabilities, visible-range storage |
 | `market-data/` | K-line cache, initial history load, left pagination, backfill completion, K-line WebSocket, background prefetch, gap recovery, header market display state |
-| `indicators/` | Active indicators, compute scheduling, hosted indicator WebSocket, output reducer, pane projection, catalog, and Pyne security policy |
+| `indicators/` | Active indicators, compute scheduling, hosted indicator WebSocket, output reducer, pane projection, catalog |
 | `drawings/` | Drawing tool state, primitive interaction, selection, snap, persistence, and lazy drawing engine host |
 | `watchlist/` | Watchlist folders, sidebar layout, subscription tiers, and watchlist price streams |
 | `symbol-search/` | Symbol catalog, favorites, filtering, and modal interaction |

@@ -7,7 +7,7 @@ import { NativeDrawingScene } from "./NativeDrawingScene.js";
 import { nativeDrawings, drawingIndex, drawingColor, drawingCellSpan } from "./nativeDrawingModel.js";
 import type { NativeResult } from "./nativeBacktestApi.js";
 
-for (const language of ["pine","pyne"]) {
+for (const language of ["pine"]) {
   test(`${language} installed runtime objects render all six object families`, () => {
     const result=JSON.parse(readFileSync(new URL(`../../../../tests/fixtures/native/${language}-drawings.json`,import.meta.url),"utf8")) as NativeResult;
     const scene=nativeDrawings(result);
@@ -36,9 +36,8 @@ test("Pine deletion and replay cutoffs select the last visible object state", ()
 
 test("timestamp coordinates honor engine units and chart gaps", () => {
   const bars=[0,60,180].map((time) => ({time,open:1,high:2,low:0,close:1}));
-  assert.equal(drawingIndex(120000,'xloc.bar_time',bars,true),1.5);
-  assert.equal(drawingIndex(120,'bar_time',bars,false),1.5);
-  assert.equal(drawingIndex(2,'bar_index',bars,true),2);
+  assert.equal(drawingIndex(120000,'xloc.bar_time',bars),1.5);
+  assert.equal(drawingIndex(2,'bar_index',bars),2);
   assert.equal(drawingColor('url(https://example.com/tracker)'),'#38bdf8');
 });
 

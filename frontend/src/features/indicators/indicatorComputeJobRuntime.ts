@@ -108,7 +108,7 @@ export function buildIndicatorComputeJobKey({
   const resolution = resolveLocalIndicatorExecution(indicator);
   const execution = resolution.kind === "local" ? resolution.execution : null;
   const normalizedLanguage = execution?.mode === "script"
-    ? String(indicator.language || "pyne").trim().toLowerCase()
+    ? String(indicator.language || "pine").trim().toLowerCase()
     : "";
   const executionIdentity = canonicalStringify({
     indicatorId: indicator.id,

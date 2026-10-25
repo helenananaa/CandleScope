@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 
 test("packaged smoke waits for initial load before navigating on both launches", () => {
@@ -48,7 +48,7 @@ test("packaged smoke waits for initial load before navigating on both launches",
       process.on("exit", () => assert.equal(launches, 2));
     `);
     const result = spawnSync(process.execPath, [
-      "--import", setup, fileURLToPath(new URL("./desktop-package-smoke.mjs", import.meta.url)),
+      "--import", pathToFileURL(setup).href, fileURLToPath(new URL("./desktop-package-smoke.mjs", import.meta.url)),
       "--executable", path.join(root, "CandleScope"), "--playwright-module", module, "--out", output,
     ], { encoding: "utf8", timeout: 30_000 });
     assert.equal(result.status, 0, result.stdout + result.stderr);

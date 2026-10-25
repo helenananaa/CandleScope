@@ -4,8 +4,7 @@ import type * as Monaco from "monaco-editor";
 import "../../../editor/localMonaco.js";
 
 import { registerPineLanguageSupport } from "../../../editor/pineLanguage.js";
-import { registerPyneLanguageSupport } from "../../../editor/pyneLanguage.js";
-import { getPyneEditorOptions, registerPyneTheme } from "../../../editor/pyneTheme.js";
+import { getScriptEditorOptions, registerScriptTheme } from "../../../editor/scriptTheme.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import type { LocaleId } from "../../../i18n/locale.js";
@@ -51,9 +50,9 @@ export default function StrategyScriptWorkspace({
   // Hidden strategies and execution modes remain mounted together. Monaco
   // models must belong to an editor instance, not to a shared language path.
   const modelId = useId();
-  const [editorTheme, setEditorTheme] = useState("pyne-dark");
+  const [editorTheme, setEditorTheme] = useState("script-dark");
   useEffect(() => {
-    const update = () => setEditorTheme(document.documentElement.dataset.theme === "light" ? "vs" : "pyne-dark");
+    const update = () => setEditorTheme(document.documentElement.dataset.theme === "light" ? "vs" : "script-dark");
     update();
     const observer = new MutationObserver(update);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
@@ -61,7 +60,6 @@ export default function StrategyScriptWorkspace({
   }, []);
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof Monaco | null>(null);
-  const pyneCleanupRef = useRef<(() => void) | null>(null);
   const runActionCleanupRef = useRef<Monaco.IDisposable | null>(null);
   const onRunRef = useRef(onRun);
 
@@ -105,16 +103,11 @@ export default function StrategyScriptWorkspace({
   useEffect(() => () => {
     runActionCleanupRef.current?.dispose();
     runActionCleanupRef.current = null;
-    pyneCleanupRef.current?.();
-    pyneCleanupRef.current = null;
   }, []);
 
   const handleBeforeMount = useCallback((monaco: typeof Monaco) => {
-    registerPyneTheme(monaco);
+    registerScriptTheme(monaco);
     if (language === "pine") registerPineLanguageSupport(monaco);
-    else if (language === "pyne" && !pyneCleanupRef.current) {
-      pyneCleanupRef.current = registerPyneLanguageSupport(monaco);
-    }
   }, [language]);
 
   const handleMount = useCallback((
@@ -156,7 +149,7 @@ export default function StrategyScriptWorkspace({
         onMount={handleMount}
         onChange={(value) => onSourceChange(value ?? "")}
         onValidate={publishMarkers}
-        options={getPyneEditorOptions({
+        options={getScriptEditorOptions({
           automaticLayout: true,
           minimap: { enabled: false },
           fontSize: 12,

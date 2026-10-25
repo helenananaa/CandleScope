@@ -5,7 +5,7 @@ import { nativeAvailability, resolveAvailableStrategyMode } from "./useNativeAva
 test("default mode follows actual engine capability, including Pyne-only installations", () => {
   assert.equal(nativeAvailability({ engines: [] }), "unavailable");
   assert.equal(nativeAvailability({ engines: [{ language: "pine", available: false, external_available: true }] }), "unavailable");
-  const supported = nativeAvailability({ engines: [{ language: "pine", available: false }, { language: "pyne", available: true }] });
+  const supported = nativeAvailability({ engines: [{ language: "pine", available: false }, { language: "pine", available: true }] });
   assert.equal(resolveAvailableStrategyMode("NATIVE", supported), "NATIVE");
   for (const state of ["loading", "error", "unavailable"] as const) {
     assert.equal(resolveAvailableStrategyMode("NATIVE", state), "CANDLESCOPE");

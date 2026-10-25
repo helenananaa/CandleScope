@@ -1,4 +1,4 @@
-"""CandleScope-owned BAR matching with actual Pine/Pyne account feedback.
+"""CandleScope-owned BAR matching with actual Pine account feedback.
 
 V2 supports price orders, brackets and separate bar/print execution clocks.
 No native fills are accepted. The kernel remains the only accounting authority.
@@ -22,12 +22,12 @@ from .external_report import closed_trades
 
 def host_identity():
     import app.simulation.kernel as kernel_module
-    files = [Path(__file__), Path(__file__).with_name("native_session.py"), Path(__file__).with_name("external_orders.py"), Path(__file__).with_name("external_report.py"), Path(__file__).with_name("external_market.py"), Path(__file__).with_name("external_feedback.py"), Path(__file__).with_name("external_incremental.py"), *sorted(Path(kernel_module.__file__).parent.rglob("*.py"))]
+    files = [Path(__file__), Path(__file__).with_name("native_session.py"), Path(__file__).with_name("external_orders.py"), Path(__file__).with_name("external_report.py"), Path(__file__).with_name("external_market.py"), Path(__file__).with_name("external_feedback.py"), *sorted(Path(kernel_module.__file__).parent.rglob("*.py"))]
     checksum = hashlib.sha256()
     for path in files:
         checksum.update(path.name.encode())
         checksum.update(path.read_bytes())
-    return {"contract": "external-broker/1", "host_model": "PYNE_FIXED_HISTORY_V12_CLOSED_TRADES", "code_sha256": checksum.hexdigest()}
+    return {"contract": "external-broker/1", "host_model": "HOST_FIXED_HISTORY_V13_CLOSED_TRADES", "code_sha256": checksum.hexdigest()}
 
 
 def account_feedback_profit(account, initial_balance):
@@ -60,13 +60,10 @@ def resolve_external(language):
 def run_external_host(plugin, wire, runner, cancelled):
     from .native import invoke
     from .native_session import SessionWorker
-    if runner is invoke and wire["identity"].get("adapter") in {"pine-external/5", "pyne-external/4", "pyne-external/5"}:
+    if runner is invoke and wire["identity"].get("adapter") in {"pine-external/5"}:
         worker = SessionWorker(plugin, wire, cancelled, evaluator=True)
         try:
             evaluate = lambda _plugin, payload, **kwargs: worker.request(payload, **kwargs)
-            if wire["identity"].get("adapter") == "pyne-external/5":
-                from .external_incremental import IncrementalEvaluator
-                evaluate = IncrementalEvaluator(worker, len(wire["bars"]))
             return _run_external_host(plugin, wire, evaluate, cancelled)
         finally:
             worker.close()

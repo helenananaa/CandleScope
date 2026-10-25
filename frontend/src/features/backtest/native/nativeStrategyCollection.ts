@@ -16,7 +16,7 @@ export function normalizeComparison(value: unknown): NativeComparisonSelection {
 export interface NativeStrategyInstance {
   id: string;
   name: string;
-  language: "pine" | "pyne";
+  language: "pine";
   executionMode?: "NATIVE" | "CANDLESCOPE";
   drafts: Record<string, string>;
   runs: Record<string, string>;
@@ -37,9 +37,10 @@ export function normalizeNativeStrategies(value: unknown): NativeStrategyCollect
     if (!candidate || typeof candidate !== "object") continue;
     const entry = candidate as Record<string, unknown>;
     if (!entry || typeof entry !== "object" || typeof entry.id !== "string" || !entry.id || ids.has(entry.id)) continue;
+    if (entry.language !== "pine") continue;
     ids.add(entry.id);
     const history = entry.runHistory && typeof entry.runHistory === "object" ? Object.fromEntries(Object.entries(entry.runHistory).map(([key, value]) => [key, Array.isArray(value) ? [...new Set((value as unknown[]).filter((id): id is string => typeof id === "string" && !!id))] : []])) : undefined;
-    items.push({ ...(history ? { runHistory: history } : {}), id: entry.id, name: typeof entry.name === "string" ? entry.name.slice(0, 80) : "", language: entry.language === "pyne" ? "pyne" : "pine", drafts: strings(entry.drafts), runs: strings(entry.runs), ...(entry.executionMode === "CANDLESCOPE" ? { executionMode: "CANDLESCOPE" as const } : {}) });
+    items.push({ ...(history ? { runHistory: history } : {}), id: entry.id, name: typeof entry.name === "string" ? entry.name.slice(0, 80) : "", language: "pine", drafts: strings(entry.drafts), runs: strings(entry.runs), ...(entry.executionMode === "CANDLESCOPE" ? { executionMode: "CANDLESCOPE" as const } : {}) });
   }
   if (!items.length && !Array.isArray(raw.items)) items.push({ id: "default", name: "", language: "pine", drafts: {}, runs: {} });
   return { activeId: typeof raw.activeId === "string" && items.some((item) => item.id === raw.activeId) ? raw.activeId : items[0]?.id ?? "", items, ...(raw.comparisons && typeof raw.comparisons === "object" ? { comparisons: Object.fromEntries(Object.entries(raw.comparisons).map(([key, value]) => [key, normalizeComparison(value)])) } : {}) };

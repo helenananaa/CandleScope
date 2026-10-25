@@ -32,7 +32,7 @@ Phase 10 后，`src/app` 拥有应用组合根和 Shell。Phase 11 后，原先�
 |---|---|
 | `chart-session/` | 当前 symbol、exchange、market type、interval、dataset key、自定义周期、交易所 capability、可见范围存储 |
 | `market-data/` | K 线 `SeriesDataFeed`、有界 `SeriesWindowStore`、delta 渲染输入、首屏历史加载、左侧分页、backfill completion、K 线 WebSocket、背景预取、gap recovery、header 行情展示状态 |
-| `indicators/` | active indicators、计算调度、hosted indicator WebSocket、输出 reducer、pane projection、catalog 和 Pyne 安全策略 |
+| `indicators/` | active indicators、计算调度、hosted indicator WebSocket、输出 reducer、pane projection、catalog |
 | `drawings/` | 绘图工具状态、primitive 交互、选择、snap、持久化、lazy drawing engine host |
 | `watchlist/` | 自选列表、侧栏布局、订阅层级、watchlist price stream |
 | `symbol-search/` | symbol catalog、收藏、搜索过滤、modal interaction |

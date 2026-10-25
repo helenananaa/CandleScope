@@ -110,7 +110,7 @@ class _RoutingService:
     def compatibility_source_catalog(self) -> dict[str, Any]:
         return {
             "schemaVersion": 1,
-            "defaultLanguage": "pyne",
+            "defaultLanguage": "pine",
             "languages": [],
             "runtimes": [],
         }
@@ -120,9 +120,9 @@ class _RoutingService:
             "started": self.start_calls > 0 and not self.fail_start,
             "routes": [
                 {
-                    "language": "pyne",
+                    "language": "pine",
                     "mode": "sidecar",
-                    "runtimeId": "candlescope.pyne",
+                    "runtimeId": "candlescope.pine-compat",
                 }
             ],
             "unavailable": [],
@@ -189,7 +189,7 @@ def _patch_startup_dependencies(
         "ensure_first_party_plugins_from_environment",
         lambda **_kwargs: FirstPartyPluginBootstrapResult(
             status="ready",
-            runtime_id="candlescope.pyne",
+            runtime_id="candlescope.pine-compat",
             version="0.2.0",
         ),
     )
@@ -324,7 +324,7 @@ async def test_application_lifecycle_owns_plugin_host_and_health_summary(
         }
         assert health["first_party_plugin_bootstrap"] == {
             "status": "ready",
-            "runtimeId": "candlescope.pyne",
+            "runtimeId": "candlescope.pine-compat",
             "version": "0.2.0",
             "changed": False,
             "downloaded": False,
@@ -332,9 +332,9 @@ async def test_application_lifecycle_owns_plugin_host_and_health_summary(
         assert health["plugin_plane"]["status"] == "ok"
         assert health["indicator_runtime_routing"]["routes"] == [
             {
-                "language": "pyne",
+                "language": "pine",
                 "mode": "sidecar",
-                "runtimeId": "candlescope.pyne",
+                "runtimeId": "candlescope.pine-compat",
             }
         ]
         assert health["indicator_runtime_routing"]["unavailable"] == []

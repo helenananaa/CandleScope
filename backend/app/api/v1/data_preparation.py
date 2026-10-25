@@ -98,7 +98,7 @@ class NativePreparationPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     idempotency_key: str = Field(min_length=8, max_length=128)
     context: ChartContextResolveRequest
-    language: Literal["pine", "pyne"]
+    language: Literal["pine"]
     source: str = Field(min_length=1, max_length=100_000)
     parameters: dict = Field(default_factory=dict)
     contexts: list[NativeDependencyPayload] = Field(default_factory=list, max_length=16)

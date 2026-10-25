@@ -39,7 +39,7 @@ plot(previous, "Previous")
             + ', "R")\n')
 
 
-@pytest.mark.parametrize("language", ["pine", "pyne"])
+@pytest.mark.parametrize("language", ["pine"])
 @pytest.mark.parametrize("synthetic", [False, True])
 def test_original_real_tape_prices_and_closed_trade_statistics(runtime, tmp_path, language, synthetic):
     host, _ = runtime

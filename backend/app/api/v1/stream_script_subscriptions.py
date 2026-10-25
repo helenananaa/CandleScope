@@ -1,4 +1,4 @@
-"""Pyne/custom indicator WebSocket subscription orchestration."""
+"""Script/custom indicator WebSocket subscription orchestration."""
 
 from __future__ import annotations
 
@@ -8,13 +8,13 @@ from collections import OrderedDict
 from typing import Any
 
 from app.api.v1.stream_indicator_payloads import (
-    _compute_pyne_snapshot_message_async,
+    _compute_script_snapshot_message_async,
     _patch_from_snapshot,
     _unbound_indicator_runtime_service,
     confirmed_indicator_seed_bars,
 )
 from app.core import config
-from app.core.operator_origin import effective_pyne_security_mode
+from app.core.operator_origin import effective_script_security_mode
 from app.core.executors import run_storage
 from app.api.v1.stream_utils import validate_ws_interval as _validate_ws_interval
 from app.data_engine.data_manager.models import DataEventType
@@ -31,8 +31,8 @@ from app.indicator.serialization import build_ws_error_payload
 from app.indicator.runtime_service import IndicatorRuntimeService
 
 _stream_custom_store = CustomIndicatorStore()
-_PYNE_SEED_REVISION_ATTEMPTS = 2
-logger = logging.getLogger("candlescope.indicator.pyne_stream")
+_SCRIPT_SEED_REVISION_ATTEMPTS = 2
+logger = logging.getLogger("candlescope.indicator.script_stream")
 
 
 def _revision_token(revision: dict[str, Any] | None) -> str:
@@ -47,7 +47,7 @@ def _revision_token(revision: dict[str, Any] | None) -> str:
     )
 
 
-async def handle_pyne_indicator_subscribe(
+async def handle_script_indicator_subscribe(
     *,
     dm,
     custom_handles: dict[str, Any],
@@ -79,7 +79,7 @@ async def handle_pyne_indicator_subscribe(
     client_server_epoch: str | None = None,
     client_correction_revision: int | str | None = None,
     runtime_service: IndicatorRuntimeService | None = None,
-    pyne_correction_state: dict[str, Any] | None = None,
+    script_correction_state: dict[str, Any] | None = None,
     trusted_origin: bool = False,
     seed_query_cache: dict[tuple[str, str, str, str, int], dict[str, Any]] | None = None,
 ) -> None:
@@ -116,23 +116,23 @@ async def handle_pyne_indicator_subscribe(
         if security_mode is None:
             security_mode = record.get("securityMode")
         if language is None:
-            language = str(record.get("language") or "pyne")
-    security_mode = effective_pyne_security_mode(
+            language = str(record.get("language") or "pine")
+    security_mode = effective_script_security_mode(
         security_mode, trusted=trusted_origin
     )
 
     if not script.strip():
         await send_json(
             build_ws_error_payload(
-                "PYNE_SCRIPT_REQUIRED",
-                "Pyne script is required.",
+                "SCRIPT_REQUIRED",
+                "Script is required.",
                 client_id=client_id,
-                hint="script/custom/pyne 订阅需要传入脚本文本。",
+                hint="script/custom 订阅需要传入脚本文本。",
             )
         )
         return
     if language is None:
-        language = "pyne"
+        language = "pine"
     language = str(language).strip().lower()
     if not language:
         await send_json(
@@ -221,7 +221,7 @@ async def handle_pyne_indicator_subscribe(
             }
         current_revision = range_service.data_revision_for_meta(meta)
         if _revision_token(current_revision) != _revision_token(seed_revision):
-            raise RuntimeError("Pyne seed revision changed before subscribe.")
+            raise RuntimeError("Script seed revision changed before subscribe.")
         if isinstance(client_revision_context, dict):
             for field in ("dirtyRange", "historyInvalid"):
                 if field in client_revision_context:
@@ -244,7 +244,7 @@ async def handle_pyne_indicator_subscribe(
         "market_type": market_type,
         "name": name,
         "customId": custom_id or None,
-        **({"language": language} if language != "pyne" else {}),
+        **({"language": language} if language != "" else {}),
         "seeded": seeded,
         "seedBars": 0,
     }
@@ -395,7 +395,7 @@ async def handle_pyne_indicator_subscribe(
                     or getattr(result, "complete", True) is False
                 ):
                     raise RuntimeError(
-                        "Pyne correction seed history is not ready."
+                        "Script correction seed history is not ready."
                     )
                 return confirmed_indicator_seed_bars(
                     list(result.bars or [])
@@ -404,7 +404,7 @@ async def handle_pyne_indicator_subscribe(
             task = asyncio.create_task(
                 _query_closed_bars(),
                 name=(
-                    f"pyne_correction_seed:{symbol}:{interval}:"
+                    f"script_correction_seed:{symbol}:{interval}:"
                     f"{history_limit}"
                 ),
             )
@@ -458,7 +458,7 @@ async def handle_pyne_indicator_subscribe(
             )
             if not correction_precedes_seed:
                 snapshot_attempts = (
-                    _PYNE_SEED_REVISION_ATTEMPTS
+                    _SCRIPT_SEED_REVISION_ATTEMPTS
                     if range_service is not None
                     else 1
                 )
@@ -478,14 +478,14 @@ async def handle_pyne_indicator_subscribe(
                         frontier_generation=snapshot_frontier_generation,
                     )
                     if shared_seed_bars is None:
-                        candidate = await _compute_pyne_snapshot_message_async(
+                        candidate = await _compute_script_snapshot_message_async(
                             client_id,
                             dm,
                             meta,
                             runtime_service=script_runtime_service,
                         )
                     else:
-                        candidate = await _compute_pyne_snapshot_message_async(
+                        candidate = await _compute_script_snapshot_message_async(
                             client_id,
                             dm,
                             meta,
@@ -616,7 +616,7 @@ async def handle_pyne_indicator_subscribe(
                     raise
                 except Exception:
                     logger.exception(
-                        "Pyne correction refresh failed for %s@%s",
+                        "Script correction refresh failed for %s@%s",
                         symbol,
                         interval,
                     )
@@ -706,14 +706,14 @@ async def handle_pyne_indicator_subscribe(
                 if deferred_time > seed_end:
                     task = asyncio.create_task(
                         _run_realtime_event(deferred_realtime),
-                        name=f"pyne_indicator_deferred_{client_id}",
+                        name=f"script_indicator_deferred_{client_id}",
                     )
                     custom_tasks[client_id] = task
 
     async def _run_realtime_event(event: Any) -> None:
         if meta.get("_disposed"):
             return
-        msg = await _compute_pyne_snapshot_message_async(
+        msg = await _compute_script_snapshot_message_async(
             client_id,
             dm,
             meta,
@@ -812,7 +812,7 @@ async def handle_pyne_indicator_subscribe(
 
             correction_task = asyncio.create_task(
                 _run_after_existing(),
-                name=f"pyne_indicator_correction_{client_id}",
+                name=f"script_indicator_correction_{client_id}",
             )
             custom_tasks[client_id] = correction_task
             return
@@ -850,7 +850,7 @@ async def handle_pyne_indicator_subscribe(
 
         custom_tasks[client_id] = asyncio.create_task(
             _run_realtime_serialized(),
-            name=f"pyne_indicator_{client_id}",
+            name=f"script_indicator_{client_id}",
         )
 
     async def _require_resync(error) -> None:
@@ -879,8 +879,8 @@ async def handle_pyne_indicator_subscribe(
     # by its indicator subscription limit and filters market identity before
     # invoking the per-client correction router above.
     correction_state = (
-        pyne_correction_state
-        if isinstance(pyne_correction_state, dict)
+        script_correction_state
+        if isinstance(script_correction_state, dict)
         else {"handle": None, "callbacks": {}, "snapshot_tasks": OrderedDict()}
     )
     callbacks = correction_state.setdefault("callbacks", {})
@@ -891,7 +891,7 @@ async def handle_pyne_indicator_subscribe(
         "callback": _on_data_event,
         "on_recovery": _require_resync,
     }
-    meta["_pyneCorrectionState"] = correction_state
+    meta["_scriptCorrectionState"] = correction_state
     if correction_state.get("handle") is None:
         async def _fanout_correction(event: Any) -> None:
             event_exchange = str(event.key.exchange).lower().strip()
@@ -911,7 +911,7 @@ async def handle_pyne_indicator_subscribe(
                     await callback(event)
                 except Exception:
                     logger.exception(
-                        "Pyne correction fanout callback failed for %s",
+                        "Script correction fanout callback failed for %s",
                         event_symbol,
                     )
 

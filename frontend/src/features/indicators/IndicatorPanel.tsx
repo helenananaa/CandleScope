@@ -137,7 +137,6 @@ export interface IndicatorPanelProps {
   allowCustomIndicators?: boolean;
   customIndicatorsUnavailableReason?: string;
   allowedScriptLanguages?: readonly string[];
-  allowedSecurityModes?: readonly string[];
   isOpen: boolean;
   onClose(): void;
   activeIndicators: IndicatorDefinition[];
@@ -297,7 +296,6 @@ export default function IndicatorPanel({
   allowCustomIndicators = true,
   customIndicatorsUnavailableReason,
   allowedScriptLanguages,
-  allowedSecurityModes,
   isOpen,
   onClose,
   activeIndicators,
@@ -708,9 +706,6 @@ export default function IndicatorPanel({
             {...(allowedScriptLanguages === undefined
               ? {}
               : { allowedScriptLanguages })}
-            {...(allowedSecurityModes === undefined
-              ? {}
-              : { allowedSecurityModes })}
             key={editorSession}
             indicator={editingIndicator}
             onSave={handleEditorSave}

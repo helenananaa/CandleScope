@@ -135,12 +135,12 @@ function scenarioCells(scenario, cellCount) {
         ]
       : scenario === "S5"
         ? [{
-            id: `capacity-pyne-${index + 1}`,
+            id: `capacity-pine-${index + 1}`,
             name: "Capacity hosted SMA",
             kind: "script",
-            language: "pyne",
+            language: "pine",
             executionTarget: "hosted",
-            script: "plot(ta.sma(close, 50), title='SMA 50')",
+            script: "//@version=6\nindicator('Capacity hosted SMA')\nplot(ta.sma(close, 50), title='SMA 50')",
             params: {},
             visible: true,
           }]

@@ -11,7 +11,7 @@ from app.backtest.strategy.python_market_batch import PythonMarketBatchProvider,
 from app.backtest.strategy.protocol import ObservationFrame, StrategyProviderError, StrategyProviderSession
 from app.backtest.strategy.python_provider import PythonHostProvider
 from app.backtest.colocated import _GuardedProvider
-from tests.test_backtest_chart_batch import events
+from tests.strategy_market_fixtures import events
 from tests.test_backtest_control_plane import _settings, _payload
 from tests.test_backtest_host_policy_m5 import config
 
