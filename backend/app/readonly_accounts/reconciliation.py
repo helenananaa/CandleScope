@@ -136,6 +136,10 @@ def position_check(data, fills, bills, now):
     fresh = (history.get('complete') is True and state.get('complete') is True
              and 0 <= now - snapshot.get('receivedMs', 0) <= 300_000)
     histories = history.get('rows', [])
+    live = data['snapshots'].get('positions', {})
+    anchored = (isinstance(live.get('data'), dict) and isinstance(live['data'].get('positions'), list)
+                and 0 <= now-live.get('receivedMs', 0) <= 300_000)
+    live_positions = live.get('data', {}).get('positions', []) if anchored else []
     groups = defaultdict(list)
     bills_by_id = {item['value']['billId']: item for item in bills}
     for item in fills:
@@ -160,8 +164,13 @@ def position_check(data, fills, bills, now):
             selected = sorted((f for f in groups[key] if start-BOUNDARY_MS <= f['eventTimeMs'] <= end+BOUNDARY_MS), key=lambda f: f['eventTimeMs'])
             cycle['_fills'] = selected
             cycle['fillCount'] = len(selected)
-            if not fresh:
+            if not fresh or not anchored:
                 raise AccountDataError('historyUnavailable')
+            # An open leg can have funding without a closed-history entry.
+            # Do not assign that bill to a historical leg by elimination.
+            if any(p.get('instrument') == key[0] and p.get('marginMode') == key[2]
+                   and number(p, 'contracts') != ZERO for p in live_positions):
+                raise AccountDataError('openingUnknown')
             if h.get('instType') != 'SWAP' or h.get('type') != '2' or h.get('mgnMode') not in {'cross', 'isolated'}:
                 raise AccountDataError('unsupportedPosition')
             if not selected or abs(selected[0]['eventTimeMs']-start) > BOUNDARY_MS or abs(selected[-1]['eventTimeMs']-end) > BOUNDARY_MS:

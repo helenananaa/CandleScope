@@ -46,7 +46,7 @@ def fixture(inverse=False, side='long'):
                'pnl':str(pnl),'fee':str(2*fee),'fundingFee':str(funding),'realizedPnl':str(pnl+2*fee+funding),'liqPenalty':'0','settledPnl':''}
     return {'account':{'status':'synced','last_success_ms':NOW},'facts':facts,'coverage':[
         {'kind':k,'start_ms':START-1000,'end_ms':NOW} for k in ['fills','bills','orders']], 'gaps':[],
-        'snapshots':{'balances':{'receivedMs':NOW,'data':[{'details':[{'ccy':contract.settle,'cashBal':str(balance)}]}]},
+        'snapshots':{'positions':{'receivedMs':NOW,'data':{'positions':[]}},'balances':{'receivedMs':NOW,'data':[{'details':[{'ccy':contract.settle,'cashBal':str(balance)}]}]},
                      'position_history':{'receivedMs':NOW,'data':{'rows':[history],'complete':True}},
                      'position_history_state':{'receivedMs':NOW,'data':{'complete':True}}}}
 
@@ -250,3 +250,15 @@ def test_overview_does_not_load_large_history_or_contract_payloads(tmp_path):
     repo.save_snapshot('balances',[],NOW)
     assert set(repo.snapshots())=={'position_history','contracts','balances'}
     assert set(repo.snapshots(overview=True))=={'balances'}
+
+
+@pytest.mark.parametrize('state',['missing','incomplete','stale','oppositeOpen'])
+def test_unknown_or_open_current_exposure_blocks_historical_funding_inference(state):
+    data=fixture()
+    if state=='missing':del data['snapshots']['positions']
+    elif state=='incomplete':data['snapshots']['positions']['data']={}
+    elif state=='stale':data['snapshots']['positions']['receivedMs']=NOW-300001
+    else:data['snapshots']['positions']['data']['positions']=[{
+        'instrument':'BTC-USDT-SWAP','marginMode':'cross','positionSide':'short','contracts':'2'}]
+    result=report(data)
+    assert result['counts']['assignedFunding']==0 and result['positions'][0]['status']=='partial'
