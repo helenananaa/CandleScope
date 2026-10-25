@@ -1,4 +1,4 @@
-import { diagnosticLocation } from "./nativeDiagnostics.js";
+import { diagnosticLocation, nativeRunFeedback } from "./nativeDiagnostics.js";
 import NativeStrategyComparison from "./NativeStrategyComparison.js";
 import { recordStrategyRun, strategyRunIds, strategyInstanceScope, type NativeStrategyInstance } from "./nativeStrategyCollection.js";
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
@@ -131,8 +131,6 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [errorFocus, setErrorFocus] = useState<{ line: number; column: number } | null>(null);
-  const errorDetails = error || (run?.error ? `${run.error.message}\n${JSON.stringify(run.error.details ?? {}, null, 2)}` : "");
-  const errorLocation = diagnosticLocation(errorDetails, source);
   const [resolution, setResolution] = useState<ChartContextResolution | null>(null);
   const [automatic, setAutomatic] = useState(false);
   const [automaticContexts, setAutomaticContexts] = useState<NativePreparationContext[]>([]);
@@ -345,18 +343,17 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const available = capabilities?.engines.find((item) => item.language === language);
   const engineReady = mode === "NATIVE" ? available?.available : available?.external_available;
   const runDisabled = busy || (mode === "CANDLESCOPE" && fidelity !== "BAR_APPROX" && executionDataState !== "ready") || !engineReady;
-  const status = preparation?.state === "CANCELLED" || run?.state === "CANCELLED" ? "cancelled"
-    : error || run?.state === "FAILED" || run?.state === "INTERRUPTED" ? "failed"
-      : busy ? (run ? "running" : "preparing")
-        : run?.state === "COMPLETED" ? "completed"
-          : resolution && resolution.status !== "READY" ? "needsData" : "idle";
+  const feedbackRun = historicalRun ?? run;
+  const { status, errorDetails } = nativeRunFeedback({ current: run, historical: historicalRun,
+    error, busy, preparationState: preparation?.state, needsData: !!resolution && resolution.status !== "READY" });
+  const errorLocation = !historicalRun || (historicalRun.config?.source === source && historicalRun.config?.language === language)
+    ? diagnosticLocation(errorDetails, source) : null;
   const summary = useMemo(() => reportRun?.result ? reportAnalytics(reportRun.result, reportRun.execution_mode === "CANDLESCOPE") : null, [reportRun]);
   const [codeVisited, setCodeVisited] = useState(!props.docked || tab === "script");
   useEffect(() => { if (tab === "script") setCodeVisited(true); }, [tab]);
   const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
   const percent = (value: number | null | undefined) => value == null || !Number.isFinite(value) ? "—" : `${number.format(value)}%`;
   const returnPercent = summary?.series.at(-1)?.returnPercent ?? null;
-  const errorText = error || run?.error?.message || "";
   const runNow = () => { if (!runDisabled) void start(); };
   const tabKey = (event: KeyboardEvent<HTMLButtonElement>, item: typeof tab) => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
@@ -396,7 +393,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         <strong>{t("strategyReview.status.needsData")}</strong><span>{resolution.status}</span>
         <button type="button" disabled={runDisabled} onClick={() => void start(true)}>{t("native.prepare")}</button>
       </div>}
-      {errorText && <div className="strategy-notice" data-tone="error" role="alert">
+      {errorDetails && <div className="strategy-notice" data-tone="error" role="alert">
         <strong>{t("strategyReview.status.failed")}</strong><span>{errorDetails.includes(t("native.parametersInvalid")) ? t("native.parametersInvalid")
           : errorDetails.includes(t("native.external.originRequired")) ? t("native.external.originRequired") : t("native.executionErrorHelp")}</span>
         {errorLocation && <button type="button" onClick={() => {
@@ -525,7 +522,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
           <span className="strategy-run-status" data-status={item.state === "COMPLETED" ? "completed" : item.state === "FAILED" || item.state === "INTERRUPTED" ? "failed" : item.state === "CANCELLED" ? "cancelled" : "running"}><i aria-hidden="true" />{item.state}</span>
         </button></li>)}
       </ul>}
-      {run?.config?.source && <details><summary>{t("native.source")}</summary><pre>{run.config.source}</pre></details>}
+      {feedbackRun?.config?.source && <details><summary>{t("native.source")}</summary><pre>{feedbackRun.config.source}</pre></details>}
     </div>
     </div>
   </section>;
