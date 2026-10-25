@@ -12,7 +12,7 @@ export interface Reconciliation {
   counts: { positions: number; matchedPositions: number; unmatchedFills: number; funding: number; assignedFunding: number; cash: number };
   fees: { status: Result; checked: number; total: number; issueCount: number; issues: { id: string; reason: ReconciliationReason }[] };
   cash: { currency: string; status: Result; count: number; breaks: number; openingDerived: string | null; change: string | null;
-    closing: string | null; snapshot: string | null; difference: string | null; reason: ReconciliationReason | null; snapshotMs: number | null }[];
+    closing: string | null; snapshot: string | null; difference: string | null; tolerance: string; reason: ReconciliationReason | null; snapshotMs: number | null }[];
   positions: { id: string; instrument: string; positionSide: 'long' | 'short'; marginMode: string; currency: string; status: Result;
     reason: ReconciliationReason | null; startMs: number | null; endMs: number | null; fillCount: number; computedPnl: string | null;
     exchangePnl: string | null; pnlDifference: string | null; tolerance: string | null; fee: string | null; funding: string | null; net: string | null; fundingCount: number }[];
@@ -36,7 +36,7 @@ export function parseReconciliation(v: unknown): Reconciliation {
     || !record(v.fees) || !result(v.fees.status) || !fields(v.fees, ['checked','total','issueCount'], count)
     || !list(v.fees.issues, r => str(r.id) && r.reason !== null && reason(r.reason))
     || !list(v.cash, r => str(r.currency) && result(r.status) && count(r.count) && count(r.breaks) && reason(r.reason) && time(r.snapshotMs)
-      && fields(r, ['openingDerived','change','closing','snapshot','difference'], amount))
+      && fields(r, ['openingDerived','change','closing','snapshot','difference','tolerance'], amount))
     || !list(v.positions, r => fields(r, ['id','instrument','marginMode','currency'], str) && (r.positionSide === 'long' || r.positionSide === 'short')
       && result(r.status) && reason(r.reason) && time(r.startMs) && time(r.endMs) && count(r.fillCount) && count(r.fundingCount)
       && fields(r, ['computedPnl','exchangePnl','pnlDifference','tolerance','fee','funding','net'], amount))

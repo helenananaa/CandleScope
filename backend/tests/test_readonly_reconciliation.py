@@ -203,3 +203,50 @@ def test_history_page_budget_does_not_claim_complete(tmp_path):
         assert 'position_history' not in snapshots
         assert snapshots['position_history_state']['data']['error']=='POSITION_HISTORY_PAGE_BUDGET'
     asyncio.run(run())
+
+
+def test_fills_history_missing_margin_mode_uses_exactly_linked_bill():
+    data=fixture()
+    for item in data['facts']:
+        if item['kind']=='fills':item['raw'].pop('mgnMode')
+    assert report(data)['counts']['assignedFunding']==1
+    data['facts'][1]['raw']['tradeId']='unrelated'
+    result=report(data)
+    assert result['fees']['issues'][0]['reason']=='identityMismatch'
+    assert result['counts']['assignedFunding']==0
+
+
+def test_isolated_collateral_is_not_a_fee_or_profit():
+    data=fixture();history(data)[0]['mgnMode']='isolated'
+    for item in data['facts']:
+        item['raw']['mgnMode']='isolated'
+    opening=data['facts'][1];closing=data['facts'][3];funding=data['facts'][4]
+    for item,collateral in [(opening,Decimal(10)),(closing,Decimal(-10))]:
+        item['raw']['posBalChg']=str(collateral)
+        item['raw']['balChg']=str(Decimal(item['raw']['balChg'])-collateral)
+        item['value']=n.bill(item['raw'])
+    for item in [opening,funding]:item['raw']['bal']=str(Decimal(item['raw']['bal'])-10)
+    result=report(data)
+    assert result['status']=='matched' and result['fees']['checked']==2
+    assert result['cash'][0]['breaks']==0
+    del opening['raw']['posBalChg']
+    assert report(data)['fees']['status']=='partial'
+
+
+def test_tiny_cash_rounding_is_visible_with_explicit_tolerance():
+    data=fixture();balance=data['snapshots']['balances']['data'][0]['details'][0]
+    balance['cashBal']=str(Decimal(balance['cashBal'])+Decimal('0.00000000000001'))
+    result=report(data);row=result['cash'][0]
+    assert row['status']=='matched' and Decimal(row['difference'])==Decimal('0.00000000000001')
+    assert Decimal(row['tolerance'])==Decimal('0.000000000001')
+    balance['cashBal']=str(Decimal(balance['cashBal'])+Decimal('0.0001'))
+    assert report(data)['cash'][0]['reason']=='cashDifference'
+
+
+def test_overview_does_not_load_large_history_or_contract_payloads(tmp_path):
+    repo=AccountRepository(tmp_path)
+    repo.save_snapshot('position_history',{'rows':history(fixture())},NOW)
+    repo.save_snapshot('contracts',[],NOW)
+    repo.save_snapshot('balances',[],NOW)
+    assert set(repo.snapshots())=={'position_history','contracts','balances'}
+    assert set(repo.snapshots(overview=True))=={'balances'}

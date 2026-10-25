@@ -266,10 +266,10 @@ class AccountRepository:
                     self._raw(db,"contract",item["normalized"]["instrument"],item["raw"],received_ms,"REST")
             db.execute("INSERT OR REPLACE INTO snapshot VALUES(?,?,?)", (kind,received_ms,canonical(payload)))
 
-    def snapshots(self) -> dict:
+    def snapshots(self, *, overview: bool = False) -> dict:
         with self.connection() as db:
             return {row["kind"]:{"receivedMs":row["received_ms"],"data":json.loads(row["payload"])}
-                    for row in db.execute("SELECT * FROM snapshot")}
+                    for row in db.execute("SELECT * FROM snapshot" + (" WHERE kind NOT IN ('contracts','position_history')" if overview else ""))}
 
     def reconciliation_inputs(self, maximum: int = 20_000) -> dict:
         # One bounded, consistent view. This is requested on demand, not by the

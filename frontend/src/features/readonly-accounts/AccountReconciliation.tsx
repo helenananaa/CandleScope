@@ -37,7 +37,7 @@ export default function AccountReconciliation() {
       {report.cash.map(row => <article className="readonly-account-card" key={row.currency}><strong>{row.currency} · {label(`account.check.${row.status}`)}</strong>
         {row.reason && <p>{label(`account.check.${row.reason}`)}</p>}<dl>
           {pair('account.check.openingDerived', row.openingDerived)}{pair('account.amount', row.change)}{pair('account.check.closing', row.closing)}
-          {pair('account.cash', row.snapshot)}{pair('account.check.difference', row.difference)}{pair('account.check.breaks', row.breaks)}
+          {pair('account.cash', row.snapshot)}{pair('account.check.difference', row.difference)}{pair('account.check.tolerance', row.tolerance)}{pair('account.check.breaks', row.breaks)}
         </dl><p>{t('account.snapshotTime', { time: date(row.snapshotMs) }, locale)}</p></article>)}
       <h4>{label('account.check.closedPositions')}</h4>
       {report.positions.map((row, i) => <article className="readonly-account-card" key={`${row.id}:${i}`}>

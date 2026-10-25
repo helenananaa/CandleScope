@@ -170,6 +170,11 @@ def test_account_routes_require_exact_desktop_origin_session_and_write_csrf(tmp_
                 assert response.status_code == 200 and response.json()["historyMonths"] == 3
                 for secret in CREDENTIALS.values():
                     assert secret not in response.text
+                response = await api.get("/api/v1/readonly-accounts/reconciliation", headers=headers)
+                assert response.status_code == 200 and response.json()["schemaVersion"] == 1
+                assert response.json()["status"] == "partial"
+                for secret in CREDENTIALS.values():
+                    assert secret not in response.text
                 response = await api.post("/api/v1/readonly-accounts/connect", content='{"secret":"SENTINEL","secret":"second"}', headers=headers)
                 assert response.status_code == 409 and "SENTINEL" not in response.text
                 response = await api.post("/api/v1/readonly-accounts/connect", content="SENTINEL" * 600, headers=headers)

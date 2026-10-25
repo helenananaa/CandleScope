@@ -46,12 +46,15 @@ def fee_check(data, fills, bills):
             raw = bill['raw']
             if (raw.get('type') != '2' or raw.get('instId') != fill['instrument']
                     or raw.get('ordId') != fill['orderId'] or raw.get('tradeId') != fill['tradeId']
-                    or raw.get('ccy') != fill['feeCurrency']):
+                    or raw.get('ccy') != fill['feeCurrency']
+                    or (item['raw'].get('mgnMode') and raw.get('mgnMode') != item['raw']['mgnMode'])):
                 raise AccountDataError('identityMismatch')
             if number(raw, 'fee') != number(fill, 'feeCashChange') or number(raw, 'pnl') != number(fill, 'exchangeRealizedPnl'):
                 raise AccountDataError('amountMismatch')
-            # Trading cash change must contain the reported fee and realized P&L.
-            if number(raw, 'balChg') != number(raw, 'pnl') + number(raw, 'fee'):
+            # Isolated collateral moves between account and position balances.
+            # It is not an expense or realized P&L.
+            collateral = number(raw, 'posBalChg') if raw.get('mgnMode') == 'isolated' else ZERO
+            if number(raw, 'balChg') + collateral != number(raw, 'pnl') + number(raw, 'fee'):
                 raise AccountDataError('amountMismatch')
             checked += 1
         except AccountDataError as exc:
@@ -76,7 +79,7 @@ def cash_check(data, bills):
         rows = groups[currency]
         output = {'currency': currency, 'status': 'partial', 'count': len(rows), 'breaks': 0,
                   'openingDerived': None, 'change': None, 'closing': None, 'snapshot': None,
-                  'difference': None, 'reason': 'missingBills', 'snapshotMs': snapshot.get('receivedMs')}
+                  'difference': None, 'tolerance': '0.000000000001', 'reason': 'missingBills', 'snapshotMs': snapshot.get('receivedMs')}
         try:
             if currency in balances:
                 output['snapshot'] = exact(number(balances[currency], 'cashBal'))
@@ -103,12 +106,27 @@ def cash_check(data, bills):
                 enough = covered(data, 'bills', timestamp(rows[0]['ts']), timestamp(rows[-1]['ts']))
                 # Snapshot and ledger are independent reads. A difference is
                 # displayed, not silently dismissed as a timing race.
-                output['reason'] = 'cashDifference' if difference or output['breaks'] else 'coverageGap' if not enough else None
+                output['reason'] = 'cashDifference' if abs(difference) > decimal(output['tolerance']) or output['breaks'] else 'coverageGap' if not enough else None
                 output['status'] = 'matched' if output['reason'] is None else 'partial'
         except (AccountDataError, KeyError):
             output['reason'] = 'missingAmount'
         result.append(output)
     return result
+
+
+def fill_margin_mode(item, bills_by_id):
+    # fills-history omits mgnMode. An exactly linked trade bill provides it;
+    # never infer cross/isolated from the current account configuration.
+    fill, raw = item['value'], item['raw']
+    explicit = raw.get('mgnMode')
+    if explicit in {'cross', 'isolated'}:
+        return explicit
+    bill = bills_by_id.get(fill['fillId'], {}).get('raw', {})
+    if (bill.get('type') == '2' and bill.get('instId') == fill['instrument']
+            and bill.get('ordId') == fill['orderId'] and bill.get('tradeId') == fill['tradeId']
+            and bill.get('ccy') == fill['feeCurrency'] and bill.get('mgnMode') in {'cross', 'isolated'}):
+        return bill['mgnMode']
+    return None
 
 
 def position_check(data, fills, bills, now):
@@ -119,9 +137,10 @@ def position_check(data, fills, bills, now):
              and 0 <= now - snapshot.get('receivedMs', 0) <= 300_000)
     histories = history.get('rows', [])
     groups = defaultdict(list)
+    bills_by_id = {item['value']['billId']: item for item in bills}
     for item in fills:
         f = item['value']
-        groups[(f['instrument'], f['positionSide'], item['raw'].get('mgnMode'))].append(f)
+        groups[(f['instrument'], f['positionSide'], fill_margin_mode(item, bills_by_id))].append(f)
     cycles, used = [], set()
     instruments = {item['value']['instrument'] for item in fills} | {item['value']['instrument'] for item in bills if item['value']['inSelectedScope']}
     for h in histories:
