@@ -1,4 +1,4 @@
-import { diagnosticLocation, nativeRunFeedback } from "./nativeDiagnostics.js";
+import { diagnosticLocation, nativeRunFeedback, type NativeFeedbackStatus } from "./nativeDiagnostics.js";
 import NativeStrategyComparison from "./NativeStrategyComparison.js";
 import { recordStrategyRun, strategyRunIds, strategyInstanceScope, type NativeStrategyInstance } from "./nativeStrategyCollection.js";
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
@@ -35,6 +35,7 @@ const ignoreCursor = () => undefined;
 type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | "cellScope" | "onClose" | "onLocateTrade" | "onReviewTrade" | "active" | "nativeStrategies" | "onNativeStrategiesChange"> & {
   dataset?: { datasetId: string; dataEpoch: string } | undefined;
   onRunChange?: (run: NativeRun | null) => void;
+  onStatusChange?: (status: NativeFeedbackStatus) => void;
   externalReport?: boolean;
   docked?: boolean;
   onSelectPython?(): void;
@@ -46,6 +47,10 @@ export default function NativeStrategyPanel(props: NativeStrategyPanelProps) {
   const own = useNativeStrategyCollection(props.nativeStrategies, props.onNativeStrategiesChange, props.cellScope);
   const strategies = props.strategies ?? own;
   const { collection, comparing } = strategies;
+  const onStatusChange = props.onStatusChange;
+  useEffect(() => {
+    if (comparing || !collection.items.length) onStatusChange?.("idle");
+  }, [comparing, collection.items.length, onStatusChange]);
   const contextParts = [props.session.exchange, props.session.marketType, props.session.symbol, props.session.interval];
   const context = JSON.stringify(contextParts);
   return <>
@@ -346,6 +351,10 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const feedbackRun = historicalRun ?? run;
   const { status, errorDetails } = nativeRunFeedback({ current: run, historical: historicalRun,
     error, busy, preparationState: preparation?.state, needsData: !!resolution && resolution.status !== "READY" });
+  const onStatusChange = props.onStatusChange;
+  useEffect(() => {
+    if (props.active !== false) onStatusChange?.(status);
+  }, [onStatusChange, props.active, status]);
   const errorLocation = !historicalRun || (historicalRun.config?.source === source && historicalRun.config?.language === language)
     ? diagnosticLocation(errorDetails, source) : null;
   const summary = useMemo(() => reportRun?.result ? reportAnalytics(reportRun.result, reportRun.execution_mode === "CANDLESCOPE") : null, [reportRun]);
