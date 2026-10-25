@@ -3016,6 +3016,14 @@ def build_display_projection(
         if revealed_boundary_ms == snapshot.replay_start_ms
         else revealed_boundary_ms + 1 - snapshot.replay_start_ms
     )
+    # Funding and other account events may stop the durable clock between
+    # base-bar closes. Preserve that cursor, but read only completed base bars
+    # when constructing the chart, including its forming display bucket.
+    actual_end_ms = compute_bucket_start_ms(
+        actual_end_ms,
+        base_interval_ms,
+        interval=config.base_interval,
+    )
     if (
         actual_end_ms < actual_replay_start_ms
         or actual_end_ms < base_interval_ms

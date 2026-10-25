@@ -76,6 +76,7 @@ jobs:
             tests/test_replay_history_archive.py \
             tests/test_replay_v2_training_history.py \
             tests/test_replay_history_source_grid.py \
+            tests/test_replay_projection_native_seam.py \
             tests/test_replay_progressive_history.py \
             tests/test_replay_indicator_context_columns.py \
             tests/test_replay_command_display_tail.py \
