@@ -13,9 +13,12 @@ from .pine_stream import seal_observation_group
 
 
 class HistoryTickClock:
-    def __init__(self, stream, kernel, orders, wire, *, state=None, _compact_groups=False, _owned_state=False):
+    def __init__(self, stream, kernel, orders, wire, *, state=None, _compact_groups=False, _owned_state=False,
+                 _chain_commits=True):
         self.stream, self.kernel, self.orders, self.wire = stream, kernel, orders, wire
         self._compact_groups = _compact_groups
+        self._chain_commits = _chain_commits
+        self._pending_commit = False
         self.feed = from_wire(wire)
         self.positions = {bar["time"]: index for index, bar in enumerate(wire["bars"])}
         restoring = bool(state)
@@ -35,7 +38,6 @@ class HistoryTickClock:
             return
         canonical = self.wire["bars"][index]
         if ordinal == 0:
-            self.stream.begin(canonical, bar_state="historical")
             self.visible = {**canonical, "high": canonical["open"], "low": canonical["open"],
                             "close": canonical["open"], "volume": 0}
             self.index = index
@@ -60,7 +62,14 @@ class HistoryTickClock:
             observed = source.event_time_ms
             evaluation.update(request_observed_at_ms=observed,request_updates=self.feed.advance(observed))
         observation = dict(evaluation=evaluation,context=dict(bar_state="historical",trigger="historical_tick",is_new=True))
-        result = self.stream.observe(observation,_owned=True)
+        # Beginning a bar has no Host callback or account mutation. Share its
+        # transport with the first observation, retaining both checked replies
+        # and journal entries. Observe stays last so request-window discovery
+        # returns control before any further command or Host matching occurs.
+        result = (self.stream.begin_and_observe(canonical,bar_state="historical",observation=observation,_owned=True,
+                    _commit_previous=self._pending_commit)
+                  if ordinal == 0 else self.stream.observe(observation,_owned=True))
+        self._pending_commit = False
         current = result["intents"]
         if len(current)>64:
             raise BacktestError("BUDGET_EXCEEDED", "at most 64 intents per Pine observation")
@@ -81,7 +90,13 @@ class HistoryTickClock:
     def close(self, source):
         index = self.positions[int(source.payload["open_time_ms"])//1000]
         if index >= self.stream.input_skip:
-            self.stream.commit()
+            if self._chain_commits:
+                # Commit consumes no account input and emits no intents. Keep
+                # its original command position before the next begin/observe;
+                # only transport is deferred, never observations or matching.
+                self._pending_commit = True
+            else:
+                self.stream.commit()
         else:
             self.groups.append([])
             account = self.kernel.account
@@ -93,6 +108,14 @@ class HistoryTickClock:
             seal_observation_group(self.groups)
         return []
 
+    def flush_commit(self):
+        if self._pending_commit:
+            self.stream.commit()
+            self._pending_commit = False
+
     def output(self):
+        # Every report, discovery seal and durable checkpoint sees a closed
+        # stream, including a midpoint or the final chart bar.
+        self.flush_commit()
         result = self.stream.output()
         return {**result,"raw_output":result["output"],"graphics":result["output"].get("plots",[])}

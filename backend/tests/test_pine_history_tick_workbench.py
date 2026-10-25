@@ -20,6 +20,119 @@ def config(main,model="v1",*,count=None):
     return value
 
 
+@pytest.mark.parametrize("model",["SPOT_CASH_V1","LINEAR_PERP_ONE_WAY_V1","LINEAR_PERP_ONE_WAY_V2"])
+@pytest.mark.parametrize("profile",["plain","closing","renko"])
+def test_chained_history_begin_preserves_complete_reports_journals_and_cold_restore(runtime,monkeypatch,model,profile):
+    import threading
+    from app.backtest.external import run_external_host
+    from app.backtest.native import encoded,digest,invoke
+    from app.backtest.native_session import SessionWorker
+    from app.backtest.pine_stream import PineStream
+    from app.backtest import pine_history_tick_execution as execution
+    from tests.test_pine_event_realtime import SOURCE as renko_source
+
+    host,main=runtime
+    value=config(main,model)
+    value["cost_sensitivity_mode"]="SKIP"
+    if profile=="closing":
+        value["source"]=value["source"].replace("initial_capital=1000)","initial_capital=1000,process_orders_on_close=true)")
+    elif profile=="renko":
+        value["source"]=renko_source.replace("calc_on_every_tick=true","calc_on_every_history_tick=true")
+    run_clock=execution.run_clock
+    def serial_clock(*args,**kwargs):
+        return run_clock(*args,**kwargs,_chain_commits=False)
+    def serial_begin(stream,bar,*,bar_state,observation,_owned=False,_commit_previous=False):
+        assert not _commit_previous
+        stream.begin(bar,bar_state=bar_state)
+        return stream.observe(observation,_owned=_owned)
+    with monkeypatch.context() as patch:
+        patch.setattr(PineStream,"begin_and_observe",serial_begin)
+        patch.setattr(execution,"run_clock",serial_clock)
+        control=terminal(host.native,host.native.create(value,"history-serial-begin")["run_id"])
+    optimized=terminal(host.native,host.native.create(value,"history-chained-begin")["run_id"])
+    assert control["state"]==optimized["state"]=="COMPLETED",(control.get("error"),optimized.get("error"))
+    assert encoded(optimized["result"])==encoded(control["result"])
+    wire=host.native.replay._input(control["run_id"])
+    exchange=SessionWorker._exchange_one
+    def capture(chained):
+        frames=[]
+        def measured(worker,raw):
+            request=json.loads(raw)
+            frames.append([command["operation"] for command in request["commands"]]
+                if request["operation"]=="stream_chain" else [request["operation"]])
+            return exchange(worker,raw)
+        with monkeypatch.context() as patch:
+            if not chained:
+                patch.setattr(PineStream,"begin_and_observe",serial_begin)
+                patch.setattr(execution,"run_clock",serial_clock)
+            patch.setattr(SessionWorker,"_exchange_one",measured)
+            result,state=run_external_host(control["runtime_launch"],wire,invoke,threading.Event(),target=3)
+        return result,state,frames
+    before,old_state,old_frames=capture(False)
+    after,new_state,new_frames=capture(True)
+    assert encoded(after)==encoded(before)
+    assert encoded(new_state)==encoded(old_state)
+    assert new_state["clock"]["stream"]["bar_open"] is False
+    assert [operation for frame in new_frames for operation in frame]==[operation for frame in old_frames for operation in frame]
+    assert len(new_frames)<len(old_frames)
+    assert ["stream_begin","stream_observe"] in new_frames
+    assert ["stream_commit","stream_begin","stream_observe"] in new_frames
+    restored,_=run_external_host(control["runtime_launch"],wire,invoke,threading.Event(),
+        resume=old_state,target=len(wire["bars"]))
+    restored["bars"]=wire["bars"];restored["report_hash"]=digest(restored)
+    assert encoded(restored)==encoded(control["result"])
+
+
+@pytest.mark.parametrize("failure",["next_begin","final_commit"])
+def test_failed_chained_history_begin_keeps_committed_state_and_retries_exactly(runtime,monkeypatch,failure):
+    import time
+    from app.backtest.errors import BacktestError
+    from app.backtest.native import encoded
+    from app.backtest.native_replay import NativeReplay
+    from app.backtest.pine_stream import PineStream
+    from app.backtest.pine_history_tick_clock import HistoryTickClock
+    host,main=runtime
+    value=config(main,"LINEAR_PERP_ONE_WAY_V2");value["cost_sensitivity_mode"]="SKIP"
+    origin=terminal(host.native,host.native.create(value,"history-begin-failure")["run_id"])
+    assert origin["state"]=="COMPLETED",origin.get("error")
+    replay=host.native.replay
+    created=replay.create(origin["run_id"]);key=created["replay_id"]
+    replay.command(key,created["revision"],"seek",3)
+    middle=settle(replay,key)
+    saved=encoded(replay._host_state(key))
+    replay.shutdown()
+    host.native.replay=replay=NativeReplay(host.native)
+    begin=PineStream.begin_and_observe
+    flush=HistoryTickClock.flush_commit
+    observed=[]
+    def failed_begin(stream,*args,**kwargs):
+        begin(stream,*args,**kwargs)
+        observed.append(stream.cursor)
+        raise BacktestError("CONTROLLED_BEGIN_FAILURE","after both checked replies before Host publication")
+    def failed_flush(clock):
+        pending=clock._pending_commit
+        flush(clock)
+        if pending:
+            observed.append(clock.stream.cursor)
+            raise BacktestError("CONTROLLED_BEGIN_FAILURE","after final commit before Host publication")
+    with monkeypatch.context() as patch:
+        if failure=="next_begin": patch.setattr(PineStream,"begin_and_observe",failed_begin)
+        else: patch.setattr(HistoryTickClock,"flush_commit",failed_flush)
+        replay.command(key,replay.get(key)["revision"],"seek",created["total"])
+        deadline=time.monotonic()+20
+        while time.monotonic()<deadline:
+            with host.native.lock:
+                if key not in replay.jobs: break
+            time.sleep(.02)
+        else: pytest.fail("controlled history begin failure did not stop")
+    failed=replay.get(key)
+    assert observed and failed["state"]=="FAILED" and "CONTROLLED_BEGIN_FAILURE" in failed["error"]["message"]
+    assert failed["cursor"]==3 and encoded(failed["result"])==encoded(middle["result"])
+    assert encoded(replay._host_state(key))==saved
+    replay.command(key,failed["revision"],"seek",created["total"])
+    assert encoded(settle(replay,key)["result"])==encoded(origin["result"])
+
+
 @pytest.mark.parametrize("model",["v1","LINEAR_PERP_ONE_WAY_V1","SPOT_CASH_V1","LINEAR_PERP_ONE_WAY_V2"])
 def test_actual_workbench_routes_four_observations_independently_of_fill_callbacks(runtime,model):
     host,main=runtime

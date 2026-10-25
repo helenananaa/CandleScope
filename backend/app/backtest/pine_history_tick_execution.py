@@ -107,7 +107,7 @@ def prepare_window(stream,plugin,wire,cancelled,deadline,*,_event_source=None):
 
 
 def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=False,capture_checkpoint=True,
-              compact_groups=True,_capture_owned=False,_consume_state=False):
+              compact_groups=True,_capture_owned=False,_consume_state=False,_chain_commits=True):
     from .workbench_sensitivity import check_control
     state=state or {}
     cursor=state.get("bar_cursor",0)
@@ -116,7 +116,7 @@ def run_clock(stream,kernel,orders,wire,*,state=None,target=None,discovery_only=
             or state.get("last_sequence",0)!=kernel.path_sequence):
         raise BacktestError("NATIVE_IDENTITY_MISMATCH","historical Pine stream and ledger cursors differ")
     clock=HistoryTickClock(stream,kernel,orders,wire,state=state,_compact_groups=compact_groups,
-        _owned_state=_consume_state)
+        _owned_state=_consume_state,_chain_commits=_chain_commits)
     if wire.get("pine_v2_bar_contract"):
         from .pine_workbench_v2 import events
         last=bar_event(wire,target-1,0).event_time_ms
