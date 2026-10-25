@@ -25,6 +25,7 @@ const WS_RECONNECT_BASE_DELAY = 2_000;
 const WS_RECONNECT_MAX_DELAY = 60_000;
 const WS_MAX_RECONNECT_ATTEMPTS = 20;
 const WS_PING_INTERVAL = 30_000;
+export const WS_KLINE_FRESHNESS_MS = 30_000;
 const WS_INITIAL_FALLBACK_DELAY = 4_000;
 const POLLING_INTERVAL_MS = 1_000;
 // This timer only checks whether an exact-range repair is due. The feed keeps
@@ -52,6 +53,7 @@ export function planKlineRecoveryCountBack(
 export type KlineWebSocketStatus =
   | "idle"
   | "connecting"
+  | "loading"
   | "live"
   | "fallback"
   | "reconnecting";
@@ -59,6 +61,7 @@ export type KlineWebSocketStatus =
 export interface KlineStreamAcknowledgementState {
   activeIntervals: IntervalString[];
   rejectedIntervals: IntervalString[];
+  lastObservedAt: Record<string, number>;
 }
 
 function canonicalIntervals(intervals: readonly IntervalString[] = []): IntervalString[] {
@@ -74,7 +77,7 @@ function canonicalIntervals(intervals: readonly IntervalString[] = []): Interval
 }
 
 export function createKlineStreamAcknowledgementState(): KlineStreamAcknowledgementState {
-  return { activeIntervals: [], rejectedIntervals: [] };
+  return { activeIntervals: [], rejectedIntervals: [], lastObservedAt: {} };
 }
 
 export function reduceKlineStreamControlMessage(
@@ -111,12 +114,15 @@ export function reduceKlineStreamControlMessage(
   return {
     activeIntervals: Array.from(active),
     rejectedIntervals: Array.from(rejected),
+    lastObservedAt: Object.fromEntries(Object.entries(previous.lastObservedAt)
+      .filter(([interval]) => active.has(interval))),
   };
 }
 
 export function acknowledgeKlineStreamInterval(
   previous: KlineStreamAcknowledgementState,
   interval: IntervalString,
+  nowMs = Date.now(),
 ): KlineStreamAcknowledgementState {
   const canonical = canonicalizeIntervalValue(interval) || String(interval || "").trim();
   if (!canonical) return previous;
@@ -127,6 +133,7 @@ export function acknowledgeKlineStreamInterval(
   return {
     activeIntervals: Array.from(active),
     rejectedIntervals: Array.from(rejected),
+    lastObservedAt: { ...previous.lastObservedAt, [canonical]: nowMs },
   };
 }
 
@@ -138,16 +145,24 @@ export function retainTrackedKlineStreamRejections(
   return {
     activeIntervals: previous.activeIntervals,
     rejectedIntervals: previous.rejectedIntervals.filter((interval) => tracked.has(interval)),
+    lastObservedAt: Object.fromEntries(Object.entries(previous.lastObservedAt)
+      .filter(([interval]) => tracked.has(interval))),
   };
 }
 
 export function getKlineStreamIntervalStatus(
   state: KlineStreamAcknowledgementState,
   interval: IntervalString,
-): Extract<KlineWebSocketStatus, "connecting" | "live" | "fallback"> {
+  nowMs = Date.now(),
+): Extract<KlineWebSocketStatus, "connecting" | "loading" | "live" | "fallback"> {
   if (state.activeIntervals.some((candidate) => (
     intervalsSemanticallyEquivalent(candidate, interval)
-  ))) return "live";
+  ))) {
+    const canonical = canonicalizeIntervalValue(interval) || interval;
+    const observedAt = state.lastObservedAt[canonical];
+    return observedAt !== undefined && nowMs - observedAt >= 0 && nowMs - observedAt < WS_KLINE_FRESHNESS_MS
+      ? "live" : "loading";
+  }
   if (state.rejectedIntervals.some((candidate) => (
     intervalsSemanticallyEquivalent(candidate, interval)
   ))) return "fallback";
@@ -245,6 +260,10 @@ export function useKlineStreamRuntime({
       stopPing();
       pingTimer = setInterval(() => {
         subscription?.sendPing();
+        // A healthy local socket/ACK does not establish a healthy upstream.
+        // Recheck observed data on the existing heartbeat, without treating
+        // an inactive market as proof that its connection is disconnected.
+        applyAcknowledgedStatus();
       }, WS_PING_INTERVAL);
     };
 
@@ -285,6 +304,7 @@ export function useKlineStreamRuntime({
           setTransportStatus((previous) => {
             if (acknowledgedStatus === "live") return "live";
             if (acknowledgedStatus === "fallback") return "fallback";
+            if (acknowledgedStatus === "loading") return "loading";
             return previous === "connecting" || previous === "reconnecting"
               ? previous
               : "fallback";
@@ -313,7 +333,7 @@ export function useKlineStreamRuntime({
           marketType,
           exchange,
           interval: currentIntv,
-          source: "subscription-ack",
+          source: "observed-kline",
         });
         return;
       }
@@ -432,6 +452,8 @@ export function useKlineStreamRuntime({
                   setTransportStatus("live");
                 }
                 if (msg.status === "reconnecting") {
+                  const canonical = canonicalizeIntervalValue(msg.interval || "");
+                  if (canonical) delete acknowledgementState.lastObservedAt[canonical];
                   startPolling();
                   setTransportStatus("reconnecting");
                 }
@@ -449,14 +471,18 @@ export function useKlineStreamRuntime({
               if (!active) return false;
               return handleBackfillCompleted(msg);
             },
-            onKline: ({ interval: msgInterval, tick }) => {
+            onKline: ({ interval: msgInterval, tick, message }) => {
               if (!active) return;
               const currentIntv = intervalRef.current;
 
-              acknowledgementState = acknowledgeKlineStreamInterval(
-                acknowledgementState,
-                msgInterval,
-              );
+              // Historical corrections are useful data, but cannot establish
+              // that the exchange's current candle is still updating.
+              if (message.event_type !== "bar.amended") {
+                acknowledgementState = acknowledgeKlineStreamInterval(
+                  acknowledgementState,
+                  msgInterval,
+                );
+              }
 
               if (msgInterval === "1m" && tick.close != null) {
                 updateRealtimePrice(tick.close);
@@ -473,8 +499,7 @@ export function useKlineStreamRuntime({
               const commitTick = () => {
                 if (!active) return;
                 if (currentIntervalTick) {
-                  stopPolling();
-                  setTransportStatus("live");
+                  applyAcknowledgedStatus();
                   // The active interval shares one window store with the cache;
                   // commitPatchedChartData applies the tick and keeps React
                   // meta (barCount, coverage) in sync. Applying it twice via

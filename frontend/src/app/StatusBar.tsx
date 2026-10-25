@@ -28,6 +28,7 @@ export interface StatusBarProps {
 
 function connectionLabel(status: StatusBarModel): string {
   if (status.connectionStatus === "connected") {
+    if (status.wsStatus && status.wsStatus !== "live") return translateWsStatus(status.wsStatus);
     return t("status.connectedTo", { exchange: status.exchangeLabel });
   }
   if (status.connectionStatus === "loading") {
@@ -47,7 +48,7 @@ function localizedMarketLabel(label: string): string {
 function StatusBar({ status, extensions }: StatusBarProps) {
   useLocale();
   const {
-    connectionStatus,
+    connectionStatus: dataConnectionStatus,
     dataSource,
     exchangeLabel,
     marketLabel,
@@ -59,6 +60,9 @@ function StatusBar({ status, extensions }: StatusBarProps) {
     exchangeCatalogStatus,
     exchangeLimitations = [],
   } = status;
+  const connectionStatus = dataConnectionStatus === "connected" && wsStatus && wsStatus !== "live"
+    ? wsStatus === "disconnected" ? "disconnected" : "loading"
+    : dataConnectionStatus;
   const wsLabel = wsStatus ? translateWsStatus(wsStatus) : wsStatusLabel;
 
   return (
