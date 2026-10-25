@@ -1,5 +1,7 @@
 import type { NativeRun } from "./nativeBacktestApi.js";
 
+export type NativeFeedbackStatus = ReturnType<typeof nativeRunFeedback>["status"];
+
 /** Feedback belongs to the selected history entry, while commands keep their current-run state. */
 export function nativeRunFeedback(input: {
   current: NativeRun | null;

@@ -7,9 +7,11 @@ import { t } from "../../i18n/index.js";
 import { ResearchDataSourceBar } from "../research-data/ResearchDataSourceBar.js";
 import type { ResearchSourceRefV1 } from "../research-data/researchDataTypes.js";
 import type { StrategyResearchVisualState } from "./strategyResearchLaunch.js";
+import type { NativeFeedbackStatus } from "../backtest/native/nativeDiagnostics.js";
 
 export function StrategyResearchShell({
   visualState,
+  nativeStatus,
   source,
   sourceLabel,
   libraryEnabled,
@@ -31,6 +33,7 @@ export function StrategyResearchShell({
   extraSurfaces,
 }: {
   visualState: StrategyResearchVisualState;
+  nativeStatus?: NativeFeedbackStatus | undefined;
   source: ResearchSourceRefV1 | null;
   sourceLabel?: string;
   libraryEnabled: boolean;
@@ -122,7 +125,8 @@ export function StrategyResearchShell({
         )}
         statusBar={(
           <footer className="status-bar" data-testid="strategy-research-status">
-            {t("strategy.status", { state: t(hasData ? statusKeys[visualState] : "research.source.none") })}
+            {t("strategy.status", { state: t(!hasData ? "research.source.none"
+              : nativeStatus ? `strategyReview.status.${nativeStatus}` : statusKeys[visualState]) })}
           </footer>
         )}
       />
