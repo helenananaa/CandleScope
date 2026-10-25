@@ -98,12 +98,17 @@ export default function ReadOnlyAccountDock({ height, onRequestClose }: { height
   const leg = (value: unknown) => value === "long" || value === "short" ? t(`account.${value}`, {}, locale) : t("account.unknown", {}, locale);
 
   return <section className="readonly-account-dock" style={{ height }} aria-label={t("account.title", {}, locale)}>
-    <header><strong>{t("account.title", {}, locale)}</strong><button type="button" aria-label={t("account.closePanel", {}, locale)} onClick={onRequestClose}>×</button></header>
+    <header>
+      <div className="readonly-account-heading"><strong>{t("account.title", {}, locale)}</strong><button type="button" aria-label={t("account.closePanel", {}, locale)} onClick={onRequestClose}>×</button></div>
+      <p className="readonly-account-scope">{t("account.scope", {}, locale)}</p>
+      <div className="readonly-account-identity">
+        <span role="status">{t(stateKey, {}, locale)}</span>
+        {status?.account && <span>UID {status.account.venue_uid}</span>}
+      </div>
+    </header>
     <div className="readonly-account-body">
-      <p>{t("account.scope", {}, locale)}</p>
       <p className="readonly-account-help">{t("account.boundary", {}, locale)}</p>
       {!available || status?.available === false ? <p>{t("account.desktopRequired", {}, locale)}</p> : <>
-        <p role="status">{t(stateKey, {}, locale)}</p>
         {status?.account && <p className="readonly-account-help">{t("account.lastRead", { time: date(status.account.last_success_ms) }, locale)}</p>}
         {failure && <div className="readonly-account-error" role="alert"><p>{t(errorHelp(failure), {}, locale)}</p><code>{failure}</code></div>}
         <div className="readonly-account-actions">

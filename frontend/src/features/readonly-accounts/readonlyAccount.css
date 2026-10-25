@@ -1,5 +1,8 @@
 .readonly-account-dock { display: flex; flex-direction: column; min-height: 0; font-size: 12px; color: var(--text-primary); background: var(--surface-1); }
-.readonly-account-dock header { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; padding: 8px 12px; border-bottom: 1px solid var(--border-subtle); }
+.readonly-account-dock header { flex-shrink: 0; padding: 8px 12px; border-bottom: 1px solid var(--border-subtle); overflow-wrap: anywhere; }
+.readonly-account-heading { display: flex; justify-content: space-between; align-items: center; }
+.readonly-account-identity { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 8px; font-size: 11px; color: var(--text-secondary); }
+.readonly-account-dock .readonly-account-scope { margin: 4px 0; font-size: 11px; }
 .readonly-account-body { overflow: auto; min-height: 0; padding: 8px 12px 16px; overflow-wrap: anywhere; }
 .readonly-account-dock p { margin: 8px 0; line-height: 1.5; }
 .readonly-account-dock h4 { margin: 16px 0 8px; }
