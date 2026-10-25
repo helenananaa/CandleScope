@@ -117,7 +117,8 @@ def run_external_host(plugin, wire, runner, cancelled, **options):
 
 def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=None,
                        deadline=None, _cost_scenario=False, _scenario_runner=None, _pine_stream=None,
-                       _discovery_only=False, _consume_resume=False, _capture_owned=False,_event_source=None):
+                       _discovery_only=False, _consume_resume=False, _capture_owned=False,_event_source=None,
+                       _resume_validation=None):
     if wire.get("host_runtime_identity") != host_identity():
         raise BacktestError("NATIVE_IDENTITY_MISMATCH", "host matching code changed after submission")
     from .workbench_sensitivity import validate_contract, check_control
@@ -178,9 +179,17 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
                             fidelity="PINE_BAR_PATH" if wire.get("pine_bar_path_contract") else fidelity)
     orders.negotiate_metadata(wire.get("order_metadata_contract"))
     clock,last_request,cursor={},None,0
+    if _resume_validation is not None:
+        from .external_replay import _OwnedResumeValidation
+        if (type(_resume_validation) is not _OwnedResumeValidation or not _consume_resume
+                or resume is None or _pine_stream is None):
+            raise BacktestError("EXTERNAL_PROTOCOL_ERROR","owned validation requires an exclusive Pine resume")
     if resume is not None:
         from .external_replay import validate_state
-        validate_state(wire,resume)
+        if _resume_validation is None:
+            validate_state(wire,resume)
+        else:
+            _resume_validation.consume(wire,resume)
         cursor=resume["cursor"]
         if cursor>target:
             raise BacktestError("NATIVE_REPLAY_RANGE","external restore cannot advance backward")

@@ -40,7 +40,7 @@ MODULES = (
     "test_pine_history_tick_workbench", "test_pine_history_tick_clock", "test_pine_history_vertices",
     "test_chart_pine_history_ticks",
     "test_chart_pine_realtime_ticks", "test_pine_realtime_tick_kernel",
-    "test_pine_print_ticks", "test_pine_owned_checkpoint",
+    "test_pine_print_ticks", "test_pine_owned_checkpoint", "test_pine_resume_validation",
     "test_pine_requested_window_stream",
     "test_pine_event_requests", "test_pine_event_stream_transport", "test_chart_pine_event_stream",
     "test_pine_event_realtime", "test_chart_pine_realtime_events_book",

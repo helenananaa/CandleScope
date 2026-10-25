@@ -38,7 +38,8 @@ def _physical_source(wire):
     return _PhysicalSource(wire)
 
 
-def open_stream(plugin,wire,cancelled,deadline,*,resume=None,_resume_owned=False,_event_source=None):
+def open_stream(plugin,wire,cancelled,deadline,*,resume=None,_resume_owned=False,_event_source=None,
+                _resume_validation=None):
     if (wire.get("pine_print_tick_contract")!=CONTRACT or wire.get("execution_fidelity") not in FIDELITIES
             or wire["identity"].get("external_stream_contract")!=STREAM_CONTRACT):
         raise BacktestError("EXTERNAL_UNSUPPORTED","physical Pine ticks require the negotiated print stream")
@@ -69,8 +70,13 @@ def open_stream(plugin,wire,cancelled,deadline,*,resume=None,_resume_owned=False
         except Exception:
             stream.close()
             raise
-    from .external_replay import validate_state
-    validate_state(wire,resume)
+    from .external_replay import validate_state,_OwnedResumeValidation
+    if _resume_validation is None:
+        validate_state(wire,resume)
+    else:
+        if type(_resume_validation) is not _OwnedResumeValidation or not _resume_owned:
+            raise BacktestError("EXTERNAL_PROTOCOL_ERROR","owned validation requires an exclusive Pine resume")
+        _resume_validation.check(wire,resume)
     saved=(resume.get("clock") or {}).get("stream")
     if not isinstance(saved,dict) or saved.get("opening")!=opening or saved.get("wire")!=transport:
         raise BacktestError("NATIVE_IDENTITY_MISMATCH","physical Pine stream checkpoint differs")
@@ -94,6 +100,8 @@ class ReplayWorker:
 
     def execute(self,runner,cancelled,*,resume,target,resume_owned=False,capture_owned=False):
         deadline=time.monotonic()+120
+        from .external_replay import _OwnedResumeValidation
+        validation=_OwnedResumeValidation(self.wire,resume) if resume_owned and resume is not None else None
         source=_physical_source(self.wire)
         saved=(resume or {}).get("clock",{}).get("stream")
         if not (self.stream is not None and isinstance(saved,dict)
@@ -101,13 +109,14 @@ class ReplayWorker:
                 and self.history==resume.get("history")):
             self.close()
             self.stream=open_stream(self.plugin,self.wire,cancelled,deadline,resume=resume,_resume_owned=resume_owned,
-                _event_source=source)
+                _event_source=source,_resume_validation=validation)
         self.stream.cancelled,self.stream.deadline=cancelled,deadline
         del saved
         from .external import _run_external_host
         result,state=_run_external_host(self.plugin,self.wire,runner,cancelled,resume=resume,target=target,
             deadline=deadline,_scenario_runner=runner,_pine_stream=self.stream,
-            _consume_resume=resume_owned and resume is not None,_capture_owned=capture_owned,_event_source=source)
+            _consume_resume=resume_owned and resume is not None,_capture_owned=capture_owned,_event_source=source,
+            _resume_validation=validation)
         self.history=deepcopy(state["history"])
         return result,state
 

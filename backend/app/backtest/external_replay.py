@@ -5,15 +5,44 @@ CONTRACT="candlescope.external-replay/1"
 
 
 def validate_state(wire,state):
-    from .native import digest
     from .native_checkpoint import checkpoint_digest
-    from .external import host_identity
     content={key:value for key,value in state.items() if key!="checksum"}
+    if state.get("checksum")!=checkpoint_digest(content):
+        raise BacktestError("NATIVE_IDENTITY_MISMATCH","external account checkpoint identity differs")
+    _validate_state_content(wire,state)
+
+
+class _OwnedResumeValidation:
+    """One job's read-only reconstruction followed by exclusive consumption.
+
+    Only ReplayWorker's owned-resume path creates this receipt. Reconstruction
+    reads the state without exposing it to callbacks or changing its containers;
+    the ledger then consumes that exact graph. Public/caller-owned resumes still
+    validate independently at both boundaries. Never retain this across jobs.
+    """
+    __slots__ = ("wire", "state")
+
+    def __init__(self,wire,state):
+        validate_state(wire,state)
+        self.wire,self.state=wire,state
+
+    def check(self,wire,state):
+        if self.state is None or self.wire is not wire or self.state is not state:
+            raise BacktestError("NATIVE_IDENTITY_MISMATCH","owned resume validation differs")
+
+    def consume(self,wire,state):
+        self.check(wire,state)
+        self.wire=self.state=None
+
+
+def _validate_state_content(wire,state):
+    from .native import digest
+    from .external import host_identity
     cursor=state.get("cursor")
     if (state.get("contract")!=CONTRACT or state.get("input_hash")!=digest(wire)
             or state.get("host_runtime_identity")!=wire["host_runtime_identity"]
             or wire["host_runtime_identity"]!=host_identity()
-            or state.get("checksum")!=checkpoint_digest(content) or type(cursor) is not int
+            or type(cursor) is not int
             or not 1<=cursor<=len(wire["bars"]) or len(state.get("accounts",[]))!=cursor
             or len((state.get("last_request") or {}).get("bars",[]))!=cursor):
         raise BacktestError("NATIVE_IDENTITY_MISMATCH","external account checkpoint identity differs")
@@ -113,5 +142,8 @@ def make_state(wire,cursor,kernel,orders,accounts,history,latest,clock,last_requ
     value["checksum"]=checkpoint_digest(value)
     if len(pack(value).encode("utf-8"))>MAX_BYTES:
         raise BacktestError("BUDGET_EXCEEDED","external account checkpoint exceeds 64 MiB")
-    validate_state(wire,value)
+    # This exclusively constructed value has just been sealed above. Validate
+    # every semantic invariant without hashing the same unchanged content again.
+    # Public validation always recomputes the checksum from the supplied graph.
+    _validate_state_content(wire,value)
     return value
