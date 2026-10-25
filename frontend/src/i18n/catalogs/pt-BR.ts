@@ -66,6 +66,8 @@ export const ptBR = {
   "account.equity": "Patrimônio",
   "account.cash": "Saldo em caixa",
   "account.newNote": "Novo registro",
+  "account.pendingFillNote": "Preparando uma nova anotação para a execução {id}. Salve primeiro o rascunho atual; o vínculo existente será mantido.",
+  "account.cancelNewNote": "Cancelar nova anotação",
   "account.note": "Anotação",
   "account.plan": "Plano",
   "account.review": "Revisão",

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { draftFromVersion, draftSignature, parseJournalDraft, reconcileJournalDraft } from "./journalDraft.js";
+import { draftFromVersion, draftSignature, newJournalDraft, parseJournalDraft, reconcileJournalDraft, startLinkedJournalDraft } from "./journalDraft.js";
 import type { JournalVersion } from "./accountApi.js";
 
 const first: JournalVersion = { noteId: "a".repeat(32), version: 1, eventMs: 10, recordedMs: 20, fillId: null,
@@ -34,4 +34,49 @@ test("saved entries recover consistently and corrupt timestamps cannot break the
     assert.notEqual(restored.noteId, draft.noteId);
     assert.ok(Number.isFinite(new Date(restored.eventMs).getTime()));
   }
+});
+
+test("adding a fill note creates an independent identity and never reassigns a saved note", () => {
+  const original = { ...first, fillId: "fill-one" };
+  const draft = draftFromVersion(original);
+  const before = structuredClone(draft);
+  for (const fillId of ["fill-one", "fill-two"]) {
+    const next = startLinkedJournalDraft(draft, fillId)!;
+    assert.notEqual(next.noteId, draft.noteId);
+    assert.equal(next.fillId, fillId);
+    assert.equal(next.baseVersion, 0);
+    assert.equal(next.text, "");
+    assert.equal(next.tags, "");
+    assert.equal(next.kind, "note");
+    assert.deepEqual(draft, before);
+  }
+});
+
+test("switching fills retains unsaved edits, empty edited records and pending saves", () => {
+  const saved = draftFromVersion({ ...first, fillId: "fill-one" });
+  const blank = newJournalDraft();
+  for (const draft of [
+    { ...saved, text: "new unsaved observation" }, { ...saved, text: "" },
+    { ...blank, tags: "unsaved tag" }, { ...blank, kind: "plan" as const },
+    { ...saved, pending: { baseVersion: 1, signature: draftSignature(saved) } },
+  ]) {
+    const before = structuredClone(draft);
+    assert.equal(startLinkedJournalDraft(draft, "fill-two"), null);
+    assert.deepEqual(draft, before);
+  }
+  assert.equal(startLinkedJournalDraft(blank, "fill-two")?.fillId, "fill-two");
+});
+
+test("a lost save response is reconciled before starting a note for another fill", () => {
+  const draft = { ...draftFromVersion({ ...first, fillId: "fill-one" }), text: "saved while leaving the panel" };
+  const pending = { ...draft, pending: { baseVersion: 1, signature: draftSignature(draft) } };
+  assert.equal(startLinkedJournalDraft(pending, "fill-two"), null);
+  const committed = { ...first, fillId: "fill-one", version: 2, payload: { ...first.payload, text: draft.text } };
+  const recovered = reconcileJournalDraft(parseJournalDraft(JSON.stringify(pending)), [committed, first]);
+  assert.equal(recovered.fillId, "fill-one");
+  assert.equal(recovered.baseVersion, 2);
+  const next = startLinkedJournalDraft(recovered, "fill-two")!;
+  assert.notEqual(next.noteId, recovered.noteId);
+  assert.equal(next.fillId, "fill-two");
+  assert.equal(committed.fillId, "fill-one");
 });

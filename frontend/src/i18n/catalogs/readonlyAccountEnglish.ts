@@ -64,6 +64,8 @@ export const readonlyAccountEnglish = {
   "account.equity": "Equity",
   "account.cash": "Cash balance",
   "account.newNote": "New entry",
+  "account.pendingFillNote": "Preparing a new note for fill {id}. Your current draft must be saved first; its existing link stays unchanged.",
+  "account.cancelNewNote": "Cancel new note",
   "account.note": "Note",
   "account.plan": "Plan",
   "account.review": "Review",

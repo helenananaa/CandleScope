@@ -1,6 +1,7 @@
 import { record, type JournalVersion } from "./accountApi.js";
 
 export const JOURNAL_DRAFT_KEY = "candlescope.readonly-account.journal-draft.v1";
+export interface LinkedNoteRequest { id: string; fillId: string }
 export interface JournalDraft {
   noteId: string;
   baseVersion: number;
@@ -20,6 +21,13 @@ export function draftSignature(draft: JournalDraft): string {
 }
 export function newJournalDraft(fillId?: string): JournalDraft {
   return { noteId: crypto.randomUUID().replaceAll("-", ""), baseVersion: 0, text: "", tags: "", kind: "note", eventMs: Date.now(), savedSignature: "", ...(fillId ? { fillId } : {}) };
+}
+/** Adding a fill note never changes the identity or association of an existing note. */
+export function startLinkedJournalDraft(draft: JournalDraft, fillId: string): JournalDraft | null {
+  const saved = draftSignature(draft) === draft.savedSignature;
+  const hasChanges = draft.baseVersion > 0 || Boolean(draft.text.trim() || draft.tags.trim()) || draft.kind !== "note";
+  if (draft.pending || (!saved && hasChanges)) return null;
+  return newJournalDraft(fillId);
 }
 export function draftFromVersion(row: JournalVersion): JournalDraft {
   const draft: JournalDraft = { noteId: row.noteId, baseVersion: row.version, text: row.payload.text,

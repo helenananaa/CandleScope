@@ -66,6 +66,8 @@ export const ko = {
   "account.equity": "계좌 자산",
   "account.cash": "현금 잔액",
   "account.newNote": "새 기록",
+  "account.pendingFillNote": "체결 {id}의 새 메모를 준비합니다. 현재 초안을 먼저 저장해야 하며 기존 체결 연결은 유지됩니다.",
+  "account.cancelNewNote": "새 메모 취소",
   "account.note": "메모",
   "account.plan": "계획",
   "account.review": "복기",

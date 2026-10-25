@@ -3,7 +3,7 @@ import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { AccountApiError, getJournal, saveJournal, type JournalVersion } from "./accountApi.js";
 import { JOURNAL_DRAFT_KEY as DRAFT_KEY, draftFromVersion, draftTags, draftSignature as signature, newJournalDraft as newDraft,
-  parseJournalDraft, reconcileJournalDraft, type JournalDraft as Draft } from "./journalDraft.js";
+  parseJournalDraft, reconcileJournalDraft, startLinkedJournalDraft, type LinkedNoteRequest, type JournalDraft as Draft } from "./journalDraft.js";
 
 function readDraft(): Draft {
   try {
@@ -16,7 +16,7 @@ function localDateTime(ms: number): string {
   return new Date(ms - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 }
 
-export default function AccountJournal({ fillId }: { fillId?: string }) {
+export default function AccountJournal({ newNoteRequest, onRequestHandled }: { newNoteRequest?: LinkedNoteRequest; onRequestHandled: () => void }) {
   const locale = useLocale();
   const [draft, setDraft] = useState(readDraft);
   const [versions, setVersions] = useState<JournalVersion[]>([]);
@@ -38,12 +38,19 @@ export default function AccountJournal({ fillId }: { fillId?: string }) {
     return () => controller.abort();
   }, []);
   useEffect(() => {
-    if (fillId) setDraft((current) => ({ ...current, fillId }));
-  }, [fillId]);
-  useEffect(() => {
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); setStorageError(false); }
     catch { setStorageError(true); }
   }, [draft]);
+  useEffect(() => {
+    if (!newNoteRequest || !loaded || saving) return;
+    const next = startLinkedJournalDraft(draft, newNoteRequest.fillId);
+    if (!next) return;
+    // Persist the new identity before consuming the request. Existing unsaved
+    // content must finish its own save (or remain visible on failure) first.
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify(next)); }
+    catch { setStorageError(true); return; }
+    setDraft(next); setError(null); onRequestHandled();
+  }, [draft, loaded, newNoteRequest, onRequestHandled, saving]);
 
   const save = useCallback(async () => {
     if (!loaded || savingRef.current || !draft.text.trim() || signature(draft) === draft.savedSignature) return;
@@ -89,7 +96,9 @@ export default function AccountJournal({ fillId }: { fillId?: string }) {
 
   return <section className="readonly-account-journal">
     <p className="readonly-account-help">{t("account.noteHelp", {}, locale)}</p>
-    <button type="button" disabled={saving || Boolean(draft.text.trim() && !saved)} onClick={() => { setDraft(newDraft()); setError(null); }}>{t("account.newNote", {}, locale)}</button>
+    {newNoteRequest && <div role="status"><p>{t("account.pendingFillNote", { id: newNoteRequest.fillId }, locale)}</p>
+      <button type="button" onClick={onRequestHandled}>{t("account.cancelNewNote", {}, locale)}</button></div>}
+    <button type="button" disabled={Boolean(newNoteRequest) || saving || Boolean(draft.text.trim() && !saved)} onClick={() => { setDraft(newDraft()); setError(null); }}>{t("account.newNote", {}, locale)}</button>
     <label>{t("account.journal", {}, locale)}<select value={draft.kind} onChange={(event) => setDraft({ ...draft, kind: event.target.value as Draft["kind"] })}>
       {(["plan", "note", "review"] as const).map((kind) => <option key={kind} value={kind}>{t(`account.${kind}`, {}, locale)}</option>)}
     </select></label>
@@ -109,6 +118,9 @@ export default function AccountJournal({ fillId }: { fillId?: string }) {
       {versions.filter((item) => item.noteId === row.noteId).sort((a, b) => b.version - a.version).map((item) => <article key={item.version}>
         <strong>{t("account.version", { version: item.version }, locale)}</strong>
         <p className="readonly-account-help">{t("account.recordedTime", { time: date(item.recordedMs) }, locale)}</p>
+        <p className="readonly-account-help">{t("account.eventTime", {}, locale)}: {date(item.eventMs)}</p>
+        {item.fillId && <p className="readonly-account-help">{t("account.linkedFill", { id: item.fillId }, locale)}</p>}
+        {item.payload.tags.length > 0 && <p className="readonly-account-help">{item.payload.tags.join(", ")}</p>}
         <p className="readonly-account-note-text">{item.payload.text}</p>
       </article>)}
     </details>)}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { t, type MessageKey } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import AccountJournal from "./AccountJournal.js";
+import type { LinkedNoteRequest } from "./journalDraft.js";
 import { AccountApiError, accountSession, connectAccount, disconnectAccount, getAccountFacts,
   getAccountStatus, record, resyncAccount, type AccountStatus, type Fact, type FactKind, type FactPage } from "./accountApi.js";
 import "./readonlyAccount.css";
@@ -9,6 +10,7 @@ import "./readonlyAccount.css";
 type Tab = "overview" | FactKind | "journal";
 const TABS: Tab[] = ["overview", "fills", "orders", "bills", "journal"];
 function scalar(value: unknown): string { return typeof value === "string" || typeof value === "number" ? String(value) : "—"; }
+function unit(value: unknown): string { return typeof value === "string" ? value : ""; }
 function rows(value: unknown): Fact[] { return Array.isArray(value) ? value.filter(record) : []; }
 function errorHelp(code: string): MessageKey {
   if (code === "READONLY_KEY_REQUIRED") return "account.readonlyKeyHelp";
@@ -28,7 +30,8 @@ export default function ReadOnlyAccountDock({ height, onRequestClose }: { height
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [page, setPage] = useState<FactPage>({ items: [], next: null });
   const [loadingFacts, setLoadingFacts] = useState(false);
-  const [fillId, setFillId] = useState<string | undefined>();
+  const [newNoteRequest, setNewNoteRequest] = useState<LinkedNoteRequest | undefined>();
+  const noteRequestHandled = useCallback(() => setNewNoteRequest(undefined), []);
   const factRequest = useRef(0);
   const available = accountSession() !== null;
   const date = (ms: number | null | undefined) => typeof ms === "number" && Number.isFinite(ms) ? new Date(ms).toLocaleString(locale) : t("account.unknown", {}, locale);
@@ -129,7 +132,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose }: { height
           <p className="readonly-account-help">{t("account.snapshotTime", { time: date(positionsSnapshot?.receivedMs) }, locale)}</p>
           {!positionData.length && <p>{t("account.empty", {}, locale)}</p>}
           {positionData.map((item, index) => <article className="readonly-account-card" key={`${scalar(item.positionId)}:${index}`}><strong>{scalar(item.instrument)} · {leg(item.positionSide)}</strong><dl>
-            {pair("account.contracts", item.contracts)}{pair("account.entry", item.entryPrice)}{pair("account.mark", item.markPrice)}{pair("account.pnl", item.unrealizedPnl, scalar(item.settleCurrency))}</dl></article>)}
+            {pair("account.contracts", item.contracts)}{pair("account.entry", item.entryPrice)}{pair("account.mark", item.markPrice)}{pair("account.pnl", item.unrealizedPnl, unit(item.settleCurrency))}</dl></article>)}
           <h4>{t("account.openOrders", {}, locale)}</h4>
           <p className="readonly-account-help">{t("account.snapshotTime", { time: date(status?.snapshots.open_orders?.receivedMs) }, locale)}</p>
           {!openOrders.length && <p>{t("account.empty", {}, locale)}</p>}
@@ -150,15 +153,15 @@ export default function ReadOnlyAccountDock({ height, onRequestClose }: { height
           {!loadingFacts && !page.items.length && <p>{t("account.empty", {}, locale)}</p>}
           {page.items.map((item, index) => <article key={`${scalar(item.fillId ?? item.orderId ?? item.billId)}:${index}`} className="readonly-account-card">
             <strong>{scalar(item.instrument)} {leg(item.positionSide)}</strong><p>{date(typeof item.eventTimeMs === "number" ? item.eventTimeMs : null)}</p><dl>
-              {tab === "bills" ? pair("account.amount", item.cashChange, scalar(item.currency)) : <>{pair("account.contracts", item.contracts)}{pair("account.price", item.price)}</>}
-              {item.feeCashChange !== undefined && pair("account.fee", item.feeCashChange, scalar(item.feeCurrency ?? item.currency))}
+              {tab === "bills" ? pair("account.amount", item.cashChange, unit(item.currency)) : <>{pair("account.contracts", item.contracts)}{pair("account.price", item.price)}</>}
+              {item.feeCashChange !== undefined && pair("account.fee", item.feeCashChange, unit(item.feeCurrency ?? item.currency))}
             </dl>
-            {tab === "fills" && <><p>{item.effect === "open" || item.effect === "close" ? t(`account.${item.effect}`, {}, locale) : "—"}</p><button type="button" onClick={() => { setFillId(scalar(item.fillId)); setTab("journal"); }}>{t("account.linkFill", {}, locale)}</button></>}
+            {tab === "fills" && <><p>{item.effect === "open" || item.effect === "close" ? t(`account.${item.effect}`, {}, locale) : "—"}</p><button type="button" onClick={() => { setNewNoteRequest({ id: crypto.randomUUID(), fillId: scalar(item.fillId) }); setTab("journal"); }}>{t("account.linkFill", {}, locale)}</button></>}
             {tab === "bills" && item.inSelectedScope === false && <p className="readonly-account-help">{t("account.otherScope", {}, locale)}</p>}
           </article>)}
           {page.next && <button type="button" disabled={loadingFacts} onClick={() => { void loadFacts(true); }}>{t("account.more", {}, locale)}</button>}
         </>}
-        {tab === "journal" && <AccountJournal {...(fillId ? { fillId } : {})} />}
+        {tab === "journal" && <AccountJournal {...(newNoteRequest ? { newNoteRequest } : {})} onRequestHandled={noteRequestHandled} />}
       </>}
     </div>
   </section>;
