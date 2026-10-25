@@ -263,3 +263,91 @@ def test_canonical_encoder_concurrent_calls_keep_independent_cycle_and_error_sta
     with ThreadPoolExecutor(max_workers=4) as pool:
         results = list(pool.map(encode_many, range(4)))
     assert len(set(results)) == 4
+
+
+@pytest.mark.parametrize("compress", [False, True])
+@pytest.mark.parametrize("shape", ["empty", "scalars", "nested", "large"])
+def test_sealed_pack_keeps_complete_values_checksum_and_input_ownership(monkeypatch, compress, shape):
+    shared = {"text": '观察🙂"\\\n', "values": [None, True, 1, 1.0, -0.0, 2**64], "decimal": "1.2300"}
+    value = {"empty": {}, "scalars": shared, "nested": {"a": shared, "z": [shared, {"checksum": "nested-value"}]},
+             "large": {"rows": [shared] * 1025}}[shape]
+    monkeypatch.setattr(codec, "COMPRESS_FROM_BYTES", 1 if compress else 10**9)
+    before = encoded(value)
+    stored, checksum = codec.pack_with_checksum(value)
+    assert checksum == digest(value)
+    assert encoded(codec.unpack(stored)) == encoded({**value, "checksum": checksum})
+    assert encoded(value) == before and "checksum" not in value
+    # The source and its repeated references never escape in a mutable return.
+    decoded = codec.unpack(stored)
+    if shape == "large":
+        decoded["rows"][0]["values"].append(99)
+        assert 99 not in decoded["rows"][1]["values"] and encoded(value) == before
+
+
+def test_sealed_pack_counts_the_checksum_footer_at_the_original_decoded_boundary(monkeypatch):
+    value = {"text": "观察🙂" * 80}
+    expected = {**value, "checksum": digest(value)}
+    size = len(encoded(expected).encode("utf-8"))
+    monkeypatch.setattr(codec, "COMPRESS_FROM_BYTES", 1)
+    monkeypatch.setattr(codec, "MAX_DECODED_BYTES", size)
+    stored, _ = codec.pack_with_checksum(value)
+    assert encoded(codec.unpack(stored)) == encoded(expected)
+    monkeypatch.setattr(codec, "MAX_DECODED_BYTES", size - 1)
+    with pytest.raises(ValueError, match="decoded size"):
+        codec.pack_with_checksum(value)
+
+
+def test_sealed_pack_envelope_authenticates_the_appended_financial_checksum(monkeypatch):
+    monkeypatch.setattr(codec, "COMPRESS_FROM_BYTES", 1)
+    stored, checksum = codec.pack_with_checksum({"rows": [{"text": "观察" * 100}] * 50})
+    envelope = json.loads(stored)
+    raw = zlib.decompress(base64.b64decode(envelope["payload"]))
+    assert raw.endswith(('"checksum":' + encoded(checksum) + '}').encode("utf-8"))
+    changed = raw.replace(checksum.encode("ascii"), ("sha256:" + "00" * 32).encode("ascii"))
+    assert changed != raw and len(changed) == len(raw)
+    envelope["payload"] = base64.b64encode(zlib.compress(changed, level=1)).decode("ascii")
+    with pytest.raises(ValueError, match="checksum"):
+        codec.unpack(encoded(envelope))
+
+
+@pytest.mark.parametrize("value", [None, [], 1, {"checksum": "already-sealed"}])
+def test_sealed_pack_rejects_an_invalid_root_or_an_existing_checksum(value):
+    with pytest.raises(ValueError, match="unsealed checkpoint dictionary"):
+        codec.pack_with_checksum(value)
+
+
+@pytest.mark.parametrize("kind", [list, dict])
+def test_sealed_pack_rejects_cycles_without_mutating_the_source(kind):
+    child = kind()
+    value = {"rows": child}
+    if kind is list:
+        child.append(value)
+    else:
+        child["parent"] = value
+    with pytest.raises(ValueError, match="Circular"):
+        codec.pack_with_checksum(value)
+    assert "checksum" not in value
+
+
+def test_generic_pack_stored_bytes_keep_the_existing_format_after_seal_refactor():
+    value = {"rows": [{"text": "观察🙂" * 90, "values": [True, 1, 1.0, -0.0]}] * 6000}
+    raw = encoded(value).encode("utf-8")
+    expected = encoded({"storage_schema": codec.SCHEMA, "decoded_bytes": len(raw),
+        "decoded_sha256": hashlib.sha256(raw).hexdigest(),
+        "payload": base64.b64encode(zlib.compress(raw, level=1)).decode("ascii")})
+    assert codec.pack(value) == expected
+
+
+def test_sealed_pack_keeps_the_existing_non_json_type_rejection():
+    from decimal import Decimal
+    value = {"decimal": Decimal("1.2300")}
+    for method in (codec.pack, codec.pack_with_checksum):
+        with pytest.raises(TypeError, match="not JSON serializable"):
+            method(value)
+    assert "checksum" not in value
+
+
+@pytest.mark.parametrize("number", [float("nan"), float("inf"), -float("inf")])
+def test_sealed_pack_keeps_nonfinite_values_out_of_checkpoints(number):
+    with pytest.raises(ValueError):
+        codec.pack_with_checksum({"nested": [number]})

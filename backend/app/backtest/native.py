@@ -423,10 +423,15 @@ class NativeBacktests:
             if result.get("account_authority") != authority:
                 raise BacktestError("NATIVE_PROTOCOL_ERROR", "unexpected account authority")
             result["bars"] = wire["bars"]
-            result["report_hash"] = digest(result)
+            from .native_checkpoint import checkpoint_digest
+            result["report_hash"] = checkpoint_digest(result)
             with self.lock:
                 if not cancel.is_set():
                     self._update(run_id, state="COMPLETED", result=result)
+                # The committed row owns the result now. Release the job's
+                # complete graph before a reader can acquire this lock and
+                # materialize its independent public copy.
+                result = None
         except Exception as exc:
             with self.lock:
                 if not cancel.is_set():

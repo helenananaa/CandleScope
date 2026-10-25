@@ -2,10 +2,11 @@
 import json
 import sqlite3
 import threading
+import weakref
 
 import pytest
 
-from app.backtest.native import NativeBacktests, encoded
+from app.backtest.native import NativeBacktests, digest, encoded
 
 
 @pytest.fixture
@@ -146,3 +147,61 @@ def test_cancelled_job_never_marks_running_or_invokes_an_engine(service, monkeyp
     monkeypatch.setattr(native, "_mark_running", lambda _: pytest.fail("cancelled job marked RUNNING"))
     native._execute("run", {}, {}, native.cancel_events["run"])
     assert tuple(native.db.iterdump()) == before and not native.cancel_events
+
+
+def test_completed_run_releases_its_report_before_public_read_can_acquire_the_lock(service):
+    native, record = queued(service)
+    record['execution_mode'] = 'NATIVE'
+    native.db.execute("UPDATE runs SET record=? WHERE id='run'", (encoded(record),))
+    native.db.commit()
+    cancel = threading.Event()
+    native.cancel_events = {'run': cancel}
+    wire = {'identity': {'engine': 'owned-publication-test'}, 'bars': [{'time': 0, 'close': 2.0}]}
+    expected = {'identity': wire['identity'], 'execution_mode': 'NATIVE',
+                'account_authority': 'pine-compat-runtime', 'values': [True, 1, 1.0, -0.0, None, '观察🙂'],
+                'bars': wire['bars']}
+    expected['report_hash'] = digest(expected)
+    reports = []
+    class TrackedReport(dict):
+        pass
+    def runner(*args, **kwargs):
+        report = TrackedReport({key: value for key, value in expected.items() if key not in {'bars', 'report_hash'}})
+        reports.append(weakref.ref(report))
+        return report
+    native.runner = runner
+    published, continue_job = threading.Event(), threading.Event()
+    original_lock, original_update = native.lock, native._update
+    class PublicationLock:
+        hold_thread = None
+        def __enter__(self):
+            original_lock.acquire()
+            return self
+        def __exit__(self, *args):
+            hold = self.hold_thread == threading.get_ident()
+            if hold:
+                self.hold_thread = None
+            original_lock.release()
+            if hold:
+                published.set()
+                assert continue_job.wait(20), 'public reader did not finish'
+    lock = PublicationLock()
+    native.lock = lock
+    def updated(key, **values):
+        original_update(key, **values)
+        if values.get('state') == 'COMPLETED':
+            lock.hold_thread = threading.get_ident()
+    native._update = updated
+    thread = threading.Thread(target=native._execute, args=('run', {'plugin_id': 'candlescope.pine-compat'}, wire, cancel))
+    thread.start()
+    try:
+        assert published.wait(20), 'run did not publish'
+        retained = len(reports) != 1 or reports[0]() is not None
+        exported = native.get('run', if_state='RUNNING')
+        assert exported['state'] == 'COMPLETED'
+        assert encoded(exported['result']) == encoded(expected)
+        assert not retained, 'writer retained the complete report during public materialization'
+    finally:
+        continue_job.set()
+        thread.join(timeout=20)
+        native.lock = original_lock
+    assert not thread.is_alive()

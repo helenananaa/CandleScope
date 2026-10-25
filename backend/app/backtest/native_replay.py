@@ -381,7 +381,7 @@ class NativeReplay:
 
     def snapshot(self, key, revision):
         from .native import MAX_BYTES
-        from .native_checkpoint import pack, checkpoint_digest, detached_json
+        from .native_checkpoint import pack_with_checksum, detached_json
         with self.native.lock:
             # The checkpoint only serializes this borrowed public body while
             # holding the lock. Detach the returned view after releasing the
@@ -396,8 +396,7 @@ class NativeReplay:
                 # native lock. It never escapes this call or reaches a mutable
                 # execution path; normal callers still receive a detached copy.
                 checkpoint["external_state"]=self._host_state(key,detached=False)
-            checkpoint["checksum"] = checkpoint_digest(checkpoint)
-            stored = pack(checkpoint)
+            stored, _ = pack_with_checksum(checkpoint)
             if len(stored.encode("utf-8")) > MAX_BYTES:
                 raise BacktestError("BUDGET_EXCEEDED", "replay checkpoint exceeds 64 MiB")
             self.native.db.execute("INSERT INTO native_replay_snapshots VALUES (?,?)", (checkpoint_id, stored))

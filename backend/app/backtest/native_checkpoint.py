@@ -123,11 +123,11 @@ def checkpoint_digest(value):
     return checkpoint_measure(value)[0]
 
 
-def pack(value):
+def _pack_fragments(fragments, fallback):
     size, checksum = 0, hashlib.sha256()
     raw, compressed = [], []
     compressor = None
-    for fragment in canonical_fragments(value):
+    for fragment in fragments:
         size += len(fragment)
         if size > MAX_DECODED_BYTES:
             raise ValueError("replay checkpoint decoded size exceeds 256 MiB")
@@ -162,7 +162,42 @@ def pack(value):
     # Incompressible values retain the legacy raw representation. Normal large
     # histories avoid allocating their complete raw string and byte copy.
     stored_size = len(envelope) if envelope.isascii() else len(envelope.encode("utf-8"))
-    return envelope if stored_size < size else encoded(value)
+    return envelope if stored_size < size else fallback()
+
+
+def pack(value):
+    return _pack_fragments(canonical_fragments(value), lambda: encoded(value))
+
+
+def pack_with_checksum(value):
+    """Seal and store a checkpoint in one complete content-encoding pass.
+
+    The financial checksum covers the unchanged canonical content. Its field
+    is appended last in the stored JSON, so compression can consume the body
+    before that checksum is known. The existing envelope hashes every stored
+    decoded byte; existing readers recover the same complete sealed value.
+    Generic pack() keeps its original canonical stored representation.
+    """
+    if type(value) is not dict or "checksum" in value:
+        raise ValueError("unsealed checkpoint dictionary required")
+    sealed = []
+
+    def fragments():
+        content = hashlib.sha256()
+        previous = None
+        for fragment in canonical_fragments(value):
+            content.update(fragment)
+            if previous is not None:
+                yield previous
+            previous = fragment
+        if previous != b"}":
+            raise ValueError("checkpoint dictionary terminator differs")
+        checksum = "sha256:" + content.hexdigest()
+        sealed.append(checksum)
+        yield (("," if value else "") + '"checksum":' + encoded(checksum) + "}").encode("utf-8")
+
+    stored = _pack_fragments(fragments(), lambda: encoded({**value, "checksum": sealed[0]}))
+    return stored, sealed[0]
 
 
 def unpack(raw):
