@@ -79,8 +79,10 @@ class ReadOnlyOkx(CcxtOkx):
             "apiKey": credentials["apiKey"], "secret": credentials["secret"],
             "password": credentials["password"], "enableRateLimit": True, "newUpdates": True,
             "timeout": 15_000, "aiohttp_trust_env": trust_environment,
-            "options": {"defaultType": "swap", "fetchMarkets": {"types": ["swap"]},
-                        "fetchCurrencies": False},
+            # CCXT load_markets checks has, not options, before its authenticated
+            # asset/currencies request. Contract metadata is sufficient here.
+            "has": {"fetchCurrencies": False},
+            "options": {"defaultType": "swap", "fetchMarkets": {"types": ["swap"]}},
         }
         if proxy:
             if proxy.startswith(("socks4://", "socks5://", "socks5h://")):
