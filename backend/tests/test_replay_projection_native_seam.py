@@ -319,8 +319,15 @@ def test_persisted_bar_snapshot_decode_is_reused_across_projection_reads() -> No
     assert history_module._decode_bar_snapshot_blob.cache_info().hits == 1
 
 
-def test_initial_projection_on_exact_display_boundary_seeds_history_context(
+@pytest.mark.parametrize("blind_mode", [False, True])
+@pytest.mark.parametrize("display_interval,components", [("5m", 5), ("15m", 15)])
+@pytest.mark.parametrize("event_offset_ms", [0, 1, MINUTE_MS // 2])
+def test_projection_at_account_event_uses_only_completed_base_bars(
     tmp_path: Path,
+    blind_mode: bool,
+    display_interval: str,
+    components: int,
+    event_offset_ms: int,
 ) -> None:
     root = tmp_path / "archive"
     row_opens = [
@@ -361,11 +368,12 @@ def test_initial_projection_on_exact_display_boundary_seeds_history_context(
         gap_count=0,
     )
     config = replace(
-        replay_config(),
+        replay_config(blind_mode=blind_mode),
         requested_start_ms=replay_start_ms,
         warmup_bars=15,
         horizon_ms=6 * MINUTE_MS,
     )
+    public_start_ms = _ms("2000-01-01T00:00:00") if blind_mode else replay_start_ms
     binding: dict[str, object] = {
         "run_id": "run-1",
         "session_id": "session-1",
@@ -374,7 +382,7 @@ def test_initial_projection_on_exact_display_boundary_seeds_history_context(
         "track_dataset_epoch": snapshot.data_epoch,
         "session_data_epoch": snapshot.data_epoch,
         "run_dataset_epoch": snapshot.data_epoch,
-        "virtual_time_ms": replay_start_ms + MINUTE_MS - 1,
+        "virtual_time_ms": public_start_ms + MINUTE_MS - 1 + event_offset_ms,
         "degraded_reason": None,
         "config": config.to_dict(),
         "exchange": "binance",
@@ -385,35 +393,40 @@ def test_initial_projection_on_exact_display_boundary_seeds_history_context(
         "display_interval": "1m",
     }
     repository = ReplayHistoryRepository(root)
+    persisted = _persisted(
+        snapshot,
+        actual_replay_start_ms=replay_start_ms,
+        synthetic_origin_ms=public_start_ms if blind_mode else None,
+    )
 
     initial = build_display_projection(
         binding=binding,
-        persisted=_persisted(snapshot, actual_replay_start_ms=replay_start_ms),
-        revealed_boundary_ms=replay_start_ms,
+        persisted=persisted,
+        revealed_boundary_ms=public_start_ms + event_offset_ms,
         limit=500,
         data_epoch=snapshot.data_epoch,
-        display_interval=DISPLAY_INTERVAL,
+        display_interval=display_interval,
         repository=repository,
     )
 
     assert initial["has_more"] is False
     assert initial["bars"] == [
         {
-            "open_time_ms": ANCHOR_MS,
-            "close_time_ms": replay_start_ms - 1,
-            "open": "100",
+            "open_time_ms": public_start_ms - components * MINUTE_MS,
+            "close_time_ms": public_start_ms - 1,
+            "open": str(115 - components),
             "high": "115",
-            "low": "99",
+            "low": str(114 - components),
             "close": "114.5",
-            "volume": "150",
-            "quote_volume": "15075",
-            "trades": 105,
-            "taker_buy_base": "60",
-            "taker_buy_quote": "6030",
-            "first_base_open_ms": ANCHOR_MS,
-            "last_base_open_ms": replay_start_ms - MINUTE_MS,
-            "component_count": 15,
-            "expected_components": 15,
+            "volume": str(10 * components),
+            "quote_volume": str(1005 * components),
+            "trades": 7 * components,
+            "taker_buy_base": str(4 * components),
+            "taker_buy_quote": str(402 * components),
+            "first_base_open_ms": public_start_ms - components * MINUTE_MS,
+            "last_base_open_ms": public_start_ms - MINUTE_MS,
+            "component_count": components,
+            "expected_components": components,
             "is_closed": True,
             "synthetic": False,
         }
@@ -421,21 +434,40 @@ def test_initial_projection_on_exact_display_boundary_seeds_history_context(
 
     forming = build_display_projection(
         binding=binding,
-        persisted=_persisted(snapshot, actual_replay_start_ms=replay_start_ms),
-        revealed_boundary_ms=replay_start_ms + MINUTE_MS - 1,
+        persisted=persisted,
+        revealed_boundary_ms=int(binding["virtual_time_ms"]),
         limit=500,
         data_epoch=snapshot.data_epoch,
-        display_interval=DISPLAY_INTERVAL,
+        display_interval=display_interval,
         repository=repository,
     )
     assert len(forming["bars"]) == 1
-    assert forming["bars"][0]["open_time_ms"] == replay_start_ms
+    assert forming["revealed_boundary_ms"] == binding["virtual_time_ms"]
+    assert forming["bars"][0]["open_time_ms"] == public_start_ms
+    assert forming["bars"][0]["last_base_open_ms"] == public_start_ms
+    assert forming["bars"][0]["close"] == "115.5"
     assert forming["bars"][0]["component_count"] == 1
     assert forming["bars"][0]["is_closed"] is False
 
+    # Rounding the chart read must not permit a request ahead of the durable
+    # account cursor, even when it would round to the same completed base bar.
+    with pytest.raises(TrainingRunError) as error:
+        build_display_projection(
+            binding=binding,
+            persisted=persisted,
+            revealed_boundary_ms=int(binding["virtual_time_ms"]) + 1,
+            limit=500,
+            data_epoch=snapshot.data_epoch,
+            display_interval=display_interval,
+            repository=repository,
+        )
+    assert error.value.code == "HISTORY_BOUNDARY_AHEAD"
 
+
+@pytest.mark.parametrize("event_offset_ms", [0, 1, MINUTE_MS // 2])
 def test_projection_uses_pinned_native_bar_only_after_gap_bucket_is_closed(
     tmp_path: Path,
+    event_offset_ms: int,
 ) -> None:
     root = tmp_path / "archive"
     writer = ReplayHistoryArchiveWriter(
@@ -534,7 +566,7 @@ def test_projection_uses_pinned_native_bar_only_after_gap_bucket_is_closed(
         "track_dataset_epoch": snapshot.data_epoch,
         "session_data_epoch": snapshot.data_epoch,
         "run_dataset_epoch": snapshot.data_epoch,
-        "virtual_time_ms": closed_boundary_ms,
+        "virtual_time_ms": closed_boundary_ms + event_offset_ms,
         "degraded_reason": None,
         "config": config.to_dict(),
         "exchange": "binance",
@@ -560,7 +592,7 @@ def test_projection_uses_pinned_native_bar_only_after_gap_bucket_is_closed(
     in_progress = build_display_projection(
         binding=binding,
         persisted=persisted,
-        revealed_boundary_ms=replay_start_ms + MINUTE_MS - 1,
+        revealed_boundary_ms=replay_start_ms + MINUTE_MS - 1 + event_offset_ms,
         limit=10,
         data_epoch=snapshot.data_epoch,
         display_interval=DISPLAY_INTERVAL,
@@ -579,7 +611,7 @@ def test_projection_uses_pinned_native_bar_only_after_gap_bucket_is_closed(
     closed = build_display_projection(
         binding=binding,
         persisted=persisted,
-        revealed_boundary_ms=closed_boundary_ms,
+        revealed_boundary_ms=closed_boundary_ms + event_offset_ms,
         limit=10,
         data_epoch=snapshot.data_epoch,
         display_interval=DISPLAY_INTERVAL,
