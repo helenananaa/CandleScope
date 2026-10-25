@@ -2,6 +2,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const id = {
+  "replay.err.futureInput": "Waktu mulai dan jendela ke depan mencakup candle masa depan. Pilih awal lebih lama atau pendekkan jendela; hanya candle historis tertutup yang tersedia.",
   "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
   "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",
   "native.jumpToError": "Go to line {line}, column {column}",

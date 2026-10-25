@@ -1,6 +1,7 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
+  "replay.err.futureInput": "O início e a janela adiante incluem velas futuras. Escolha um início anterior ou reduza a janela; apenas velas históricas fechadas estão disponíveis.",
   "research.external.copyCommand": "Copiar comando de inicialização",
   "research.external.commandCopied": "Comando de inicialização copiado.",
   "research.external.copyFailed": "Não foi possível copiar automaticamente. Selecione e copie o texto do comando.",

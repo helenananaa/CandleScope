@@ -1,6 +1,7 @@
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  "replay.err.futureInput": "시작 시간과 이후 구간에 미래 봉이 포함됩니다. 더 이른 시작 시간을 선택하거나 구간을 줄이세요. 마감된 과거 봉만 사용할 수 있습니다.",
   "research.external.copyCommand": "시작 명령 복사",
   "research.external.commandCopied": "시작 명령을 복사했습니다.",
   "research.external.copyFailed": "자동 복사를 사용할 수 없습니다. 명령 텍스트를 선택하여 복사하세요.",

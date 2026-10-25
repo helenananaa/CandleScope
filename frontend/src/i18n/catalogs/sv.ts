@@ -2,6 +2,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const sv = {
+  "replay.err.futureInput": "Starttiden och framåtfönstret innehåller framtida staplar. Välj en tidigare start eller korta fönstret; endast avslutade historiska staplar är tillgängliga.",
   "replay.hub.catalogSyncing": "Historiska marknader hämtas från den officiella källan. Alternativet aktiveras automatiskt när det är klart.",
   "replay.watchlist.preparing": "Historiska data laddas ned och verifieras. Första användningen kan ta några minuter.",
   "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",

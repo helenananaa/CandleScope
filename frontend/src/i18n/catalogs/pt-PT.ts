@@ -2,6 +2,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptPT = {
+  "replay.err.futureInput": "O início e a janela à frente incluem velas futuras. Escolha um início anterior ou reduza a janela; só estão disponíveis velas históricas fechadas.",
   "replay.hub.catalogSyncing": "A procurar mercados históricos na fonte oficial. A opção será ativada automaticamente quando estiver pronta.",
   "replay.watchlist.preparing": "A transferir e verificar dados históricos. A primeira utilização poderá demorar alguns minutos.",
   "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",

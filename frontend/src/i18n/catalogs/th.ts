@@ -2,6 +2,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const th = {
+  "replay.err.futureInput": "เวลาเริ่มและช่วงล่วงหน้ารวมแท่งเทียนในอนาคต โปรดเลือกเวลาเริ่มที่เก่ากว่าหรือลดช่วงล่วงหน้า ใช้ได้เฉพาะแท่งเทียนย้อนหลังที่ปิดแล้ว",
   "replay.hub.catalogSyncing": "กำลังค้นหาตลาดย้อนหลังจากแหล่งทางการ ระบบจะเปิดใช้งานโดยอัตโนมัติเมื่อพร้อม",
   "replay.watchlist.preparing": "กำลังดาวน์โหลดและตรวจสอบข้อมูลย้อนหลัง การใช้งานครั้งแรกอาจใช้เวลาสักครู่",
   "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",

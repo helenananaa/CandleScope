@@ -2,6 +2,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const de = {
+  "replay.err.futureInput": "Startzeit und Vorwärtsfenster umfassen zukünftige Kerzen. Wählen Sie einen früheren Start oder ein kürzeres Fenster; nur abgeschlossene historische Kerzen sind verfügbar.",
   "plugin.runtimeInstalled": "Skript-Laufzeit installiert und geprüft. Beenden und öffnen Sie CandleScope erneut, um Indikatoren und unterstützte native Strategien zu aktivieren.",
   "native.executionErrorHelp": "Die Ausführung konnte nicht abgeschlossen werden. Prüfen Sie Skript und Parameter; technische Details stehen unten.",
   "native.jumpToError": "Zu Zeile {line}, Spalte {column}",

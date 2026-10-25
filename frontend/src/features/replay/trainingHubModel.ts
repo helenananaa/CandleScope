@@ -437,8 +437,15 @@ export function evaluateTrainingRunDraft(
 export function evaluateTrainingRunSetupDraft(
   draft: TrainingRunDraft,
   capabilities: ReplayCapabilities,
+  nowMs = Date.now(),
 ): TrainingRunDraftEvaluation {
   const errors: string[] = [];
+  const lastStart = draft.startMode === "MANUAL" ? draft.requestedStartMs
+    : draft.randomScope === "RANGE" ? draft.randomRangeEndMs : null;
+  if (draft.sourceKind === "BAR" && lastStart !== null && Number.isFinite(lastStart)
+    && Math.ceil((lastStart + draft.forwardCacheMs) / 60_000) * 60_000 > Math.floor(nowMs / 60_000) * 60_000) {
+    errors.push(t("replay.err.futureInput"));
+  }
   const source = draft.sourceKind === "BAR"
     ? capabilities.sources.bar
     : capabilities.sources.agg_trade;
