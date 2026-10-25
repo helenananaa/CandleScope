@@ -1,7 +1,9 @@
+import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const fr = {
+  ...readonlyAccountEnglish,
   "plugin.runtimeInstalled": "Moteur de scripts installé et vérifié. Fermez puis rouvrez CandleScope pour activer les indicateurs et les stratégies natives compatibles.",
   "native.executionErrorHelp": "L’exécution n’a pas abouti. Vérifiez le script et les paramètres ; les détails techniques figurent ci-dessous.",
   "native.jumpToError": "Aller à la ligne {line}, colonne {column}",

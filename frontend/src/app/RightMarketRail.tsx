@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useSyncExternalStore } from "react";
+import React, { lazy, Suspense, useCallback, useMemo, useSyncExternalStore } from "react";
 import OrderBookDock from "../features/order-book/OrderBookDock.js";
 import type { OrderBookRuntime } from "../features/order-book/orderBookTypes.js";
 import TradeFlowDock from "../features/trade-flow/TradeFlowDock.js";
@@ -22,11 +22,14 @@ import {
   ProfileRailIcon,
   TapeRailIcon,
   WatchlistRailIcon,
+  AccountRailIcon,
 } from "./marketRailIcons.js";
 import { t, type LocaleId } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
 import type { MarketRailViewDescriptor } from "./marketRailTypes.js";
 import MarketRightRailFrame from "./MarketRightRailFrame.js";
+
+const ReadOnlyAccountDock = lazy(() => import("../features/readonly-accounts/ReadOnlyAccountDock.js"));
 
 export interface RightMarketRailProps {
   watchlist: WatchlistSidebarProps;
@@ -89,6 +92,17 @@ function builtInViews(locale: LocaleId): MarketRailViewDescriptor[] {
       maxHeight: MARKET_DOCK_MAX_HEIGHT,
       collapsedSummary: t("rail.profileSummary", {}, locale),
     },
+    {
+      id: LIVE_RAIL_VIEW_IDS.readonlyAccounts,
+      title: t("account.title", {}, locale),
+      icon: <AccountRailIcon />,
+      order: 50,
+      sizing: "fixed",
+      defaultHeight: 520,
+      minHeight: 280,
+      maxHeight: MARKET_DOCK_MAX_HEIGHT,
+      collapsedSummary: t("account.scope", {}, locale),
+    },
   ];
 }
 
@@ -126,6 +140,11 @@ function RightMarketRail({
   }, [onCloseView, onToggleView, openViewIds, panelCollapsed]);
 
   const renderView = useCallback((viewId: string, height: number) => {
+    if (viewId === LIVE_RAIL_VIEW_IDS.readonlyAccounts) {
+      return <Suspense fallback={<p>{t("account.loading", {}, locale)}</p>}>
+        <ReadOnlyAccountDock height={height} onRequestClose={() => closeView(viewId)} />
+      </Suspense>;
+    }
     if (viewId === LIVE_RAIL_VIEW_IDS.watchlist) {
       return (
         <WatchlistSidebar
@@ -164,7 +183,7 @@ function RightMarketRail({
       );
     }
     return renderExtraView?.(viewId, height) ?? null;
-  }, [closeView, orderBook, renderExtraView, tradeFlow, watchlist]);
+  }, [closeView, locale, orderBook, renderExtraView, tradeFlow, watchlist]);
 
   return (
     <MarketRightRailFrame

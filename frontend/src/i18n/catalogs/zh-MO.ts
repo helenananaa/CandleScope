@@ -1,7 +1,9 @@
+import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhMO = {
+  ...readonlyAccountEnglish,
   "replay.hub.catalogSyncing": "正在同步官方歷史商品目錄，完成後自動啟用。",
   "replay.watchlist.preparing": "正在下載並驗證歷史資料，首次使用可能需要幾分鐘。",
   "plugin.runtimeInstalled": "指標執行環境已安裝並通過驗證。請退出並重新開啟 CandleScope，啟用指標及支援的原生策略。",

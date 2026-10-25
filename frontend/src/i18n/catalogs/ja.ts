@@ -1,6 +1,8 @@
+import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ja = {
+  ...readonlyAccountEnglish,
   "research.external.copyCommand": "起動コマンドをコピー",
   "research.external.commandCopied": "起動コマンドをコピーしました。",
   "research.external.copyFailed": "自動コピーを使用できません。コマンドのテキストを選択してコピーしてください。",

@@ -1,7 +1,9 @@
+import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const he = {
+  ...readonlyAccountEnglish,
   "replay.hub.catalogSyncing": "מתבצע איתור של שווקים היסטוריים מהמקור הרשמי. האפשרות תופעל אוטומטית כשהנתונים יהיו מוכנים.",
   "replay.watchlist.preparing": "מתבצעים הורדה ואימות של נתונים היסטוריים. השימוש הראשון עשוי להימשך כמה דקות.",
   "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
