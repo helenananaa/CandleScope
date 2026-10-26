@@ -41,6 +41,7 @@ import { useReplayCellViewport } from "./useReplayCellViewport.js";
 import { useReplayWorkspacePreferences } from "./replayWorkspacePreferences.js";
 import { replayWorkspaceDrawingCharts, useReplayWorkspaceDrawings } from "./useReplayWorkspaceDrawings.js";
 import { Icon } from "../../components/icons/Icon.js";
+import { replayWorkspaceSelectionCommand } from "./replayWorkspaceSelection.js";
 
 type HostName = "topBar" | "intervalSelector" | "toolbar" | "rightRail" | "featureSurfaces" | "statusBar";
 const HOST_NAMES: HostName[] = ["topBar", "intervalSelector", "toolbar", "rightRail", "featureSurfaces", "statusBar"];
@@ -119,6 +120,11 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
         workspace.actions.updateCellSession(cell.id, { ...cell.session, interval });
         return null;
       },
+      selectTrack: async (trackId) => {
+        // Keep the active chart aligned when position management selects a market.
+        await onOpenTrack(trackId, "current");
+        return controller.actions.selectTrack(trackId);
+      },
       openTrack: onOpenTrack,
       submitTrade: async (type, payload) => {
         return assertTradeAuthority().actions.submitTrade(type, payload);
@@ -162,7 +168,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
   const cellOptions = useMemo(() => ({
     scope,
     drawingScope: chartCellDrawingScopeBase(`replay:${runId}:${workspace.view.activeWorkspaceId}`, workspace.view.document, cell.id),
-    active, integrity: cellIntegrity, frame: ReplayCellFrame, controls, controlViewer: controller, preferences,
+    active, integrity: cellIntegrity, frame: ReplayCellFrame, controls, controlViewer: viewer, preferences,
     priceScale: cell.priceScale,
     onPriceScaleChange: (value: ChartCellState["priceScale"]) => workspace.actions.updateCellPriceScale(cell.id, value),
     onCrosshairMove: (value: MainSeriesCrosshairValue | null) => {
@@ -172,7 +178,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
     onVisibleRangeChange: saveViewport,
     onUserViewportRangeChange: linkUserViewport,
     subscribeIntervalChange: (prepare: (interval: string) => void) => intervalTransfers.register(cell.id, prepare),
-  }), [scope, runId, workspace.view.activeWorkspaceId, workspace.view.document, workspace.actions, cell.id, cell.priceScale, active, cellIntegrity, controls, controller, links, runtime.marketData.actions, saveViewport, linkUserViewport, preferences, intervalTransfers]);
+  }), [scope, runId, workspace.view.activeWorkspaceId, workspace.view.document, workspace.actions, cell.id, cell.priceScale, active, cellIntegrity, controls, viewer, links, runtime.marketData.actions, saveViewport, linkUserViewport, preferences, intervalTransfers]);
   const frame = useMemo(() => ({ active, hosts }), [active, hosts]);
   return <CellFrameContext.Provider value={frame}>
     <span hidden data-replay-cell-diagnostics={cell.id} data-replay-track-id={track.track_id}
@@ -245,22 +251,27 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
   const lastView = useRef(viewer.viewerState);
   if (viewer.marketTracks !== null) lastTracks.current = viewer.marketTracks;
   if (viewer.viewerState !== null) lastView.current = viewer.viewerState;
+  const marketTracks = viewer.marketTracks ?? lastTracks.current;
+  const tracks = useMemo(() => marketTracks?.tracks ?? [], [marketTracks]);
+  const activeTrack = tracks.find((track) => sameMarket(workspace.view.activeCell, track));
+  const selectionCommand = replayWorkspaceSelectionCommand(viewer.viewerState, activeTrack?.track_id,
+    workspace.view.activeCell.session.interval);
+  const adapterPending = viewer.marketTracks?.tracks.find((track) => track.track_id === viewer.viewerState?.selected_track_id)?.adapter_session_id !== runtime.store.sessionId;
   const controller = useMemo(() => ({ ...viewer,
-    marketTracks: viewer.marketTracks ?? lastTracks.current,
+    marketTracks,
     viewerState: viewer.viewerState ?? lastView.current,
     viewerPending: viewer.viewerPending || viewer.viewerState === null
-      || viewer.marketTracks?.tracks.find((track) => track.track_id === viewer.viewerState?.selected_track_id)?.adapter_session_id !== runtime.store.sessionId,
-  }), [viewer, runtime.store.sessionId]);
+      || adapterPending || selectionCommand !== null,
+  }), [viewer, marketTracks, adapterPending, selectionCommand]);
   const integrity = useReplayIntegrityRuntime(runtime, controller, true, true, () => ({
     document: workspace.view.document, windowId: workspace.view.window.id,
     workspaceId: workspace.view.activeWorkspaceId,
   }));
   const drawings = useReplayWorkspaceDrawings(runId, workspace.view.activeWorkspaceId, workspace.view.document, integrity);
   const selectionPending = useRef(false);
+  const [selectionRevision, setSelectionRevision] = useState(0);
   const [selectionAttempt, setSelectionAttempt] = useState(0);
   const failedSelection = useRef<string | null>(null);
-  const tracks = useMemo(() => controller.marketTracks?.tracks ?? [], [controller.marketTracks]);
-  const activeTrack = tracks.find((track) => sameMarket(workspace.view.activeCell, track));
   const controlClock = controller.marketTracks?.global_clock;
   const controlState = replayEffectiveTrainingState(controlClock?.state, runtime.store.state, runtime.store.controllerClientId) ?? "UNAVAILABLE";
   const aiControlBusy = controller.viewerPending || viewer.controlPending !== null || runtime.pendingCommand !== null
@@ -291,17 +302,22 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
   useEffect(() => {
     if (integrity.review !== null) return;
     if (runtime.phase !== "ACTIVE" || !runtime.store.hasAuthoritativeSnapshot || runtime.store.sessionId === null || runtime.store.virtualTimeMs === null) return;
-    if (!activeTrack || viewer.viewerState === null || selectionPending.current || controller.viewerPending || viewer.controlPending) return;
-    if (viewer.viewerState.selected_track_id === activeTrack.track_id) return;
-    const requestKey = `${activeTrack.track_id}:${selectionAttempt}`;
+    if (!selectionCommand || selectionPending.current || adapterPending || viewer.viewerPending || viewer.controlPending || runtime.pendingCommand) return;
+    const requestKey = `${selectionCommand.key}:${selectionAttempt}`;
     if (failedSelection.current === requestKey) return;
     selectionPending.current = true;
-    void viewer.actions.selectTrack(activeTrack.track_id).then(() => {
+    const request = selectionCommand.type === "select_track"
+      ? viewer.actions.selectTrack(selectionCommand.value)
+      : viewer.actions.setDisplayInterval(selectionCommand.value);
+    void request.then(() => {
       setError(null);
-      setSelectionAttempt((attempt) => attempt + 1);
     }).catch((reason: unknown) => { failedSelection.current = requestKey; setError(String(reason)); })
-      .finally(() => { selectionPending.current = false; });
-  }, [activeTrack, viewer, controller.viewerPending, integrity.review, selectionAttempt, runtime.phase, runtime.store.hasAuthoritativeSnapshot, runtime.store.sessionId, runtime.store.virtualTimeMs]);
+      .finally(() => {
+        selectionPending.current = false;
+        // Reconcile the latest active chart after releasing the previous request.
+        setSelectionRevision((revision) => revision + 1);
+      });
+  }, [selectionCommand, viewer, adapterPending, integrity.review, selectionAttempt, selectionRevision, runtime.pendingCommand, runtime.phase, runtime.store.hasAuthoritativeSnapshot, runtime.store.sessionId, runtime.store.virtualTimeMs]);
   // A visible chart requires an advancing track. The server independently pins
   // positions/orders FULL, so hiding a chart never suspends financial processing.
   useEffect(() => {
